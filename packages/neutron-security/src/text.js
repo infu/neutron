@@ -1,4 +1,4 @@
-export function checkForDangerousCode(code) {
+export function checkForDangerousTextCode(code) {
   let dangerous = [];
   let dangerousItems = [
     { term: "stableMemoryStore", regex: /\WstableMemoryStore/ },
@@ -9,7 +9,7 @@ export function checkForDangerousCode(code) {
     { term: "setCertifiedData", regex: /\WsetCertifiedData\W/ },
     { term: "cyclesAdd", regex: /\WcyclesAdd\W/ },
     { term: "createActor", regex: /\WcreateActor\W/ },
-    { term: "actor", regex: /\Wactor\W/ },
+    { term: "actor", regex: /\Wactor\W/, regex_except: /\Wactor\s*{/ },
   ];
 
   let lines = code.split("\n");
@@ -17,6 +17,9 @@ export function checkForDangerousCode(code) {
   for (let i = 0; i < lines.length; i++) {
     for (let item of dangerousItems) {
       if (item.regex.test(lines[i])) {
+        if (item.regex_except && item.regex_except.test(lines[i])) {
+          continue;
+        }
         dangerous.push({
           line: i + 1,
           code: item.term,
@@ -31,16 +34,4 @@ export function checkForDangerousCode(code) {
   }
 
   return dangerous;
-}
-
-export function displayDangerousCode(dangerousCodeArray) {
-  let text = "";
-  for (let entry of dangerousCodeArray) {
-    text += `Found '${entry.code}':
-${entry.line - 1}: ${entry.context.previous}
-${entry.line}: ${entry.context.current}
-${entry.line + 1}: ${entry.context.next}
-`;
-  }
-  return text;
 }

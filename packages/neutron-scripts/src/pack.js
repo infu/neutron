@@ -11,6 +11,7 @@ const defaultIgnore = `
 !dist/*
 !package.json
 `.split("\n");
+
 async function readFile(filePath) {
   const data = await fs.readFile(filePath);
   const content = Array.from(data);
@@ -35,6 +36,7 @@ async function readIgnoreFile(dirPath) {
 
   return ig;
 }
+
 let ig;
 async function walkDir(dirPath, rootPath, flatStructure = {}) {
   const dirents = await fs.readdir(dirPath, { withFileTypes: true });

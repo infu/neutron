@@ -7,8 +7,7 @@
 //   ],
 // };
 
-export const actor_create = (x) =>
-  x.name === "AnnotE" && x.args.find((z) => z.name === "ActorUrlE");
+export const actor = (x) => x?.args?.find((z) => z?.name === "ActorUrlE");
 
 // {
 //   name: "DotE",
