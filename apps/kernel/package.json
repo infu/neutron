@@ -26,6 +26,7 @@
     "esbuild-sass-plugin": "^2.9.0",
     "gzip-js": "^0.3.2",
     "js-sha256": "^0.9.0",
+    "motoko": "^3.6.0",
     "neutron-scripts": "file:../../packages/neutron-scripts",
     "neutron-tools": "file:../../packages/neutron-tools",
     "p-limit": "^4.0.0",

@@ -13,6 +13,7 @@
     "gzip-js": "^0.3.2",
     "ignore": "^5.2.4",
     "js-sha256": "^0.9.0",
+    "motoko": "^3.6.0",
     "msgpack5": "^6.0.2",
     "neutron-tools": "file:../neutron-tools",
     "sha256": "^0.2.0"

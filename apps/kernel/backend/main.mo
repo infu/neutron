@@ -111,7 +111,7 @@ module {
     //         useId: Text;
     //     }) -> async Result.Result<(), Text>
     // };
-    // let _workaround = actor(Principal.toText(Principal.fromActor(this))): actor { http_request_streaming_callback : shared () -> async () };
+    // let test = actor("aaaaa-aaa"): actor { http_request_streaming_callback : shared () -> async () };
 
 
 }

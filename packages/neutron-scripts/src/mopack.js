@@ -3,7 +3,10 @@ import { promisify } from "util";
 import fs, { mkdir, rm } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
-import { checkForDangerousCode } from "neutron-tools/src/dangerous.js";
+import {
+  checkForDangerousCode,
+  displayDangerousCode,
+} from "neutron-tools/src/dangerous.js";
 
 function hashContent(content) {
   const hash = crypto.createHash("sha256");
@@ -74,10 +77,12 @@ async function getDependencies(from, filePath, packages) {
   let danger = checkForDangerousCode(hashfiles[fileHash].content);
   if (danger.length) {
     console.log(
-      "Dangerous code found in",
-      filePath,
-      ". The use of these keywords directly is prohibited in neutron apps: " +
-        danger.join(", ")
+      `!!! Prohibited code found in ${filePath} used by ${path.relative(
+        process.cwd(),
+        from[2]
+      )}
+${displayDangerousCode(danger)}
+      `
     );
   }
 
@@ -96,7 +101,7 @@ async function getDependencies(from, filePath, packages) {
           `${packagePath}.mo`
         );
         dependencies.mods[importName] = await getDependencies(
-          [fileHash, importPath],
+          [fileHash, importPath, filePath],
           packageFullPath,
           packages
         );
@@ -109,7 +114,7 @@ async function getDependencies(from, filePath, packages) {
           );
           // console.log("Secondary package path", packageFullPath);
           dependencies.mods[importName] = await getDependencies(
-            [fileHash, importPath],
+            [fileHash, importPath, filePath],
             packageFullPath,
             packages
           );
@@ -127,7 +132,7 @@ async function getDependencies(from, filePath, packages) {
     } else {
       const fullPath = path.resolve(path.dirname(filePath), `${importPath}.mo`);
       dependencies.mods[importName] = await getDependencies(
-        [fileHash, importPath],
+        [fileHash, importPath, filePath],
         fullPath,
         packages
       );
