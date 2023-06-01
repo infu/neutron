@@ -15,7 +15,9 @@ export function hashContent(content) {
 
 export function removeCommentsAndEmptyLines(content) {
   // Removes comments.
-  const noComments = content.replace(/\/\/.*/g, "");
+  let noComments = content.replace(/\/\*.*?\*.\//gs, "");
+
+  noComments = noComments.replace(/\/\/.*/g, "");
   // Removes lines with only whitespace.
   const noEmptyLines = noComments.replace(/^\s*\n/gm, "");
   return noEmptyLines;
@@ -73,15 +75,17 @@ export function parseImports(content) {
 }
 
 export async function getDependencies(from, filePath, packages, hashfiles) {
+  // WARNING!!! Changing even a comma here may break the whole security
   const content = await fs.readFile(filePath, "utf-8");
 
-  const imports = parseImports(content);
+  const imports = parseImports(removeCommentsAndEmptyLines(content));
   const fileHash = hashContent(content);
 
   const dependencies = { mods: [] };
   if (!hashfiles[fileHash]) {
     hashfiles[fileHash] = {
       content: removeCommentsAndEmptyLines(content),
+      path: filePath,
     };
   }
 
@@ -94,7 +98,7 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
       chalk.red(
         `Prohibited code found in ${filePath} used by ${path.relative(
           process.cwd(),
-          from[2]
+          from ? from[2] : ""
         )}`
       )
     );
@@ -111,7 +115,7 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
         "Prohibited AST node found in",
         filePath,
         "used by",
-        path.relative(process.cwd(), from[2])
+        path.relative(process.cwd(), from ? from[2] : "")
       )
     );
     console.log(
@@ -119,6 +123,8 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
       chalk.bgRed.white(dangerAST.join(", "))
     );
   }
+
+  hashfiles[fileHash].dangers = { text: danger, ast: dangerAST };
 
   dependencies.map = { from, to: fileHash };
 
@@ -142,6 +148,10 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
         );
       } catch (e) {
         try {
+          if (!packages[packagePrefix])
+            throw new Error(
+              ` ${filePath} Imports a package, but it doesn't exist. Something is wrong`
+            );
           // Another way of definding package path
           const packageFullPath = path.join(
             packages[packagePrefix],
@@ -178,3 +188,23 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
 
   return dependencies;
 }
+
+export const walkReplace = (node, hashfiles, usedHashes) => {
+  let reps = [];
+  for (let mod in node.mods) {
+    reps.push(walkReplace(node.mods[mod], hashfiles, usedHashes));
+  }
+  let { from, to } = node.map;
+
+  let newfile = hashfiles[to].content;
+
+  for (let rep of reps) {
+    newfile = replaceImportPaths(newfile, rep[0], rep[1]);
+  }
+
+  let newhash = hashContent(newfile);
+  hashfiles[newhash] = { ...hashfiles[to], content: newfile, final: true };
+
+  usedHashes.push(newhash);
+  return [from?.[1], newhash];
+};

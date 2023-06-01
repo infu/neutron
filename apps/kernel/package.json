@@ -9,7 +9,7 @@
     "mopack": " node ./node_modules/neutron-scripts/src/mopack.js",
     "package": "npm run build && node ./node_modules/neutron-scripts/src/pack.js",
     "boot": "node ./boot.js",
-    "build:boot": "npm run build && npm run mopack && npm run package && npm run boot",
+    "build:boot": "npm run build && node moassemble.js && npm run mopack && npm run package && npm run boot",
     "watch": "node build.js watch",
     "start": "node devserver.js",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -21,7 +21,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@infu/icblast": "file:../../../../vvv-interactive/icblast",
+    "@infu/icblast": "^2.0.40",
     "@reduxjs/toolkit": "^1.9.5",
     "esbuild-sass-plugin": "^2.9.0",
     "gzip-js": "^0.3.2",

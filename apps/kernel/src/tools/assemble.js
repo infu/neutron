@@ -25,7 +25,7 @@ function import_module(modname, conf) {
   no_inject(conf.src);
 
   return `
-import ${modname} "${conf.src}";
+import ${modname} "./${conf.src.replace(".mo", "")}";
     `;
 }
 

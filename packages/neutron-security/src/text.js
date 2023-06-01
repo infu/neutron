@@ -9,7 +9,7 @@ export function checkForDangerousTextCode(code) {
     { term: "setCertifiedData", regex: /\WsetCertifiedData\W/ },
     { term: "cyclesAdd", regex: /\WcyclesAdd\W/ },
     { term: "createActor", regex: /\WcreateActor\W/ },
-    { term: "actor", regex: /\Wactor\W/, regex_except: /\Wactor\s*{/ },
+    { term: "actor", regex: /\Wactor\b(?!\s*\{)/ }, // everything actor except actor {
   ];
 
   let lines = code.split("\n");
@@ -17,9 +17,6 @@ export function checkForDangerousTextCode(code) {
   for (let i = 0; i < lines.length; i++) {
     for (let item of dangerousItems) {
       if (item.regex.test(lines[i])) {
-        if (item.regex_except && item.regex_except.test(lines[i])) {
-          continue;
-        }
         dangerous.push({
           line: i + 1,
           code: item.term,

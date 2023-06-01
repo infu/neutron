@@ -5,7 +5,7 @@
 // INSTEAD EDIT YOUR MODULE or neutron.json
     
     
-import kernel "main.mo";
+import kernel "./main";
     
 
 shared({caller = _installer}) actor class Class() = this {
@@ -64,9 +64,10 @@ shared({caller = _installer}) actor class Class() = this {
     };
     
    
-    private func module_kernel_hello_world(req: kernel.Input_hello_world) : kernel.Output_hello_world {
+        
+      private func module_kernel_hello_world(req: kernel.Input_hello_world) : kernel.Output_hello_world {
           kernel.hello_world(memory_kernel,req)
-    };
+      };
       
 
     

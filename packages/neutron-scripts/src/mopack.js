@@ -10,6 +10,7 @@ import {
   parsePackageString,
   parseImports,
   getDependencies,
+  walkReplace,
 } from "./walk.js";
 const exec = promisify(callbackExec);
 
@@ -41,27 +42,7 @@ const dependencies = await getDependencies(
 
 const usedHashes = [];
 
-const walkReplace = (node) => {
-  let reps = [];
-  for (let mod in node.mods) {
-    reps.push(walkReplace(node.mods[mod]));
-  }
-  let { from, to } = node.map;
-
-  let newfile = hashfiles[to].content;
-
-  for (let rep of reps) {
-    newfile = replaceImportPaths(newfile, rep[0], rep[1]);
-  }
-
-  let newhash = hashContent(newfile);
-  hashfiles[newhash] = { content: newfile };
-
-  usedHashes.push(newhash);
-  return [from?.[1], newhash];
-};
-
-walkReplace(dependencies);
+walkReplace(dependencies, hashfiles, usedHashes);
 
 await rm("./dist/mo", { recursive: true, force: true });
 try {
