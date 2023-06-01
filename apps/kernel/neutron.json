@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "modules": {
+    "kernel": {
+      "src": "main.mo",
+      "share": {
+        "hello_world": {
+          "arg": ["memory_kernel"]
+        }
+      },
+      "func": {
+        "kernel_app": {
+          "type": "shared",
+          "arg": ["memory_kernel"]
+        },
+        "kernel_app_list": {
+          "type": "query",
+          "arg": ["memory_kernel"]
+        },
+        "kernel_static": {
+          "type": "shared",
+          "arg": ["memory_kernel"]
+        },
+        "kernel_static_query": {
+          "type": "query",
+          "arg": ["memory_kernel"]
+        },
+        "http_request": {
+          "type": "query",
+          "allow": "any",
+          "arg": ["memory_kernel", "this.http_request_streaming_callback"]
+        },
+        "http_request_streaming_callback": {
+          "type": "query",
+          "allow": "any",
+          "arg": ["memory_kernel"]
+        },
+        "kernel_use_hello_world": {
+          "type": "query",
+          "arg": ["memory_kernel", "module_kernel_hello_world"]
+        }
+      },
+      "memory": {
+        "kernel": {
+          "version": 1
+        }
+      }
+    }
+  }
+}

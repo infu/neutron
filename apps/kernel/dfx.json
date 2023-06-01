@@ -1,0 +1,12 @@
+{
+  "canisters": {
+    "neutron": {
+      "main": "backend/_neutron.mo"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "mops sources"
+    }
+  }
+}
