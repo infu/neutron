@@ -10,6 +10,8 @@ It opens dialogs in which users can allow or deny certain things like an app fro
 
 ## Install
 
+You should first go to /app/hello and run `npm run package` the scripts that follow are trying to install its binary
+
 ```
 npm install
 dfx deploy
