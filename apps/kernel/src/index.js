@@ -8,10 +8,10 @@ import { Provider } from "react-redux";
 import { Test } from "./Test";
 import { Auth } from "./Auth";
 import { Requests } from "./Requests";
-import { db } from "./rxdb";
-import { collect } from "./tools/collect_modules.js";
+// import { db } from "./rxdb";
 import { config } from "./config.js";
 
+import { install_app } from "./reducer/apps.js";
 import "./expose";
 import "./style.scss";
 import "./registerSw";
@@ -22,13 +22,6 @@ const root = createRoot(container);
 const App = () => {
   const [hash, setHash] = useHash();
   const app = hash.length ? hash.replace("#/", "") : false;
-  let apps = [
-    {
-      link: "/hello",
-      name: "Hello",
-      icon: "/hello/static/icon.png",
-    },
-  ];
 
   return (
     <Provider store={store}>
@@ -36,7 +29,7 @@ const App = () => {
       <Test />
       <Auth />
       <Requests />
-      <AppDrawer apps={apps} />
+      <AppDrawer />
       {app ? (
         <iframe
           className="appiframe"
@@ -51,8 +44,8 @@ const App = () => {
 
 root.render(<App />);
 
-window.install_app = () => {
-  collect();
+window.install_app = async () => {
+  store.dispatch(install_app());
 };
 
 console.log("Neutron id:", config.neutron_id);

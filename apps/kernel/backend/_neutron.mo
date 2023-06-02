@@ -36,18 +36,6 @@ shared({caller = _installer}) actor class Class() = this {
         
 
         
-    public shared({ caller }) func kernel_app(req: kernel.Input_kernel_app) : async kernel.Output_kernel_app {
-        assert(Set.has(authorized, phash, caller));
-        kernel.kernel_app(memory_kernel,req)
-    };
-    
-
-    public query({ caller }) func kernel_app_list(req: kernel.Input_kernel_app_list) : async kernel.Output_kernel_app_list {
-        assert(Set.has(authorized, phash, caller));
-        kernel.kernel_app_list(memory_kernel,req)
-    };
-    
-
     public shared({ caller }) func kernel_static(req: kernel.Input_kernel_static) : async kernel.Output_kernel_static {
         assert(Set.has(authorized, phash, caller));
         kernel.kernel_static(memory_kernel,req)

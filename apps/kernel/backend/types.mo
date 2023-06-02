@@ -5,7 +5,7 @@ module {
 
     public type Mem = {
         files : FilesMap;
-        apps  : AppsMap;
+        // apps  : AppsMap;
     };
 
     public type Store = {
@@ -14,9 +14,9 @@ module {
 
     public type FilesMap = Map.Map<Text, File>;
 
-    public type AppsMap = Map.Map<Text, App>;
+    // public type AppsMap = Map.Map<Text, App>;
 
-    public type App = {name: Text; path: Text; ver: Text; installed: Bool;};
+    // public type App = {name: Text; path: Text; ver: Text; installed: Bool;};
 
 
     public type File = {content: Blob; content_encoding:Text; content_type:Text};

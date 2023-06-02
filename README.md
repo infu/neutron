@@ -15,6 +15,7 @@ Left to do:
 - Create json schema for neutron.json and scripts that validate it
 - Improve app dev experience
 - Documentation
+- Cycles wallet, cycles sending requests
 - Simple wallet app holding/transferring SNS-1 tokens
 - Multi-chunk assets
 - Certified assets

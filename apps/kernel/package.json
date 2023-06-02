@@ -24,7 +24,7 @@
     "@infu/icblast": "^2.0.40",
     "@reduxjs/toolkit": "^1.9.5",
     "esbuild-sass-plugin": "^2.9.0",
-    "gzip-js": "^0.3.2",
+    "fflate": "^0.8.0",
     "js-sha256": "^0.9.0",
     "motoko": "^3.6.0",
     "neutron-scripts": "file:../../packages/neutron-scripts",

@@ -10,7 +10,7 @@ import Map "mo:motoko-hash-map/Map";
 import Set "mo:motoko-hash-map/Set";
 
 import ST "./static";
-import AP "./apps";
+// import AP "./apps";
 import T "./types";
 
 
@@ -22,7 +22,7 @@ module {
     public func memory_kernel() : Memory_kernel {
         {
             files : T.FilesMap = Map.new(thash);
-            apps : T.AppsMap = Map.new(thash);
+            // apps : T.AppsMap = Map.new(thash);
         };
     };
     

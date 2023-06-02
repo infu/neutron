@@ -1,0 +1,19 @@
+{
+  "name": "Hello",
+  "url_name": "hello",
+  "version": 1,
+  "modules": {
+    "kernel": {
+      "src": "main.mo",
+      "share": {
+        "hello_world": {}
+      },
+      "func": {
+        "hello_world": {
+          "type": "query",
+          "arg": []
+        }
+      }
+    }
+  }
+}

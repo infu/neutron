@@ -6,7 +6,8 @@
   "version": "1.0.0",
   "scripts": {
     "build": "node build.js",
-    "package": "npm run build && node ./node_modules/neutron-scripts/src/pack.js",
+    "mopack": " node ./node_modules/neutron-scripts/src/mopack.js",
+    "package": "npm run build && npm run mopack && node ./node_modules/neutron-scripts/src/pack.js",
     "watch": "node build.js watch",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import ignore from "ignore";
 import gzip from "gzip-js";
+import zlib from "zlib";
 
 const msgpack = msgpack5();
 const defaultIgnore = `
@@ -10,12 +11,27 @@ const defaultIgnore = `
 !dist
 !dist/*
 !package.json
+!neutron.json
 `.split("\n");
 
 async function readFile(filePath) {
   const data = await fs.readFile(filePath);
-  const content = Array.from(data);
-  return gzip.zip(content);
+
+  return compressFileToUint8Array(data);
+}
+
+async function compressFileToUint8Array(fileBuffer) {
+  // Compress file
+  const compressedBuffer = zlib.gzipSync(fileBuffer);
+
+  // Convert to Uint8Array
+  const uint8Array = new Uint8Array(
+    compressedBuffer.buffer,
+    compressedBuffer.byteOffset,
+    compressedBuffer.byteLength
+  );
+
+  return uint8Array;
 }
 
 async function readIgnoreFile(dirPath) {

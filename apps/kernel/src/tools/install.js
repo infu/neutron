@@ -1,8 +1,8 @@
 import msgpack from "tiny-msgpack";
-import gzip from "gzip-js";
 import plimit from "p-limit";
 import { mime } from "./mime.js";
 import { hashContent } from "neutron-tools/src/hash.js";
+import { gunzipSync, gzipSync } from "fflate";
 
 export function unpack(pkg) {
   let unpacked = msgpack.decode(pkg);
@@ -14,10 +14,9 @@ async function unzipObject(obj) {
 
   for (let key in newObj) {
     if (newObj[key]) {
-      newObj[key] = new Uint8Array(await gzip.unzip(newObj[key]));
+      newObj[key] = gunzipSync(newObj[key]);
     }
   }
-
   return newObj;
 }
 
@@ -40,7 +39,7 @@ export async function prepare_files(
   app_prefix,
   neutron_canister_id
 ) {
-  let files = await unpack(pkg);
+  let files = pkg;
 
   // files convert to array
   files = Object.keys(files).map((x) => ({ path: x, content: files[x] }));
@@ -86,7 +85,7 @@ export async function upload_files(neutron, files) {
         const content_encoding =
           content_type.indexOf("image/") === -1 ? "gzip" : "plain"; // not sure why plain binary is called 'identity'?
         const processed_file =
-          content_encoding === "gzip" ? gzip.zip(filebin) : filebin;
+          content_encoding === "gzip" ? gzipSync(filebin) : filebin;
 
         const chunks = chunkfile(processed_file);
 

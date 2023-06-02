@@ -9,14 +9,6 @@
         }
       },
       "func": {
-        "kernel_app": {
-          "type": "shared",
-          "arg": ["memory_kernel"]
-        },
-        "kernel_app_list": {
-          "type": "query",
-          "arg": ["memory_kernel"]
-        },
         "kernel_static": {
           "type": "shared",
           "arg": ["memory_kernel"]

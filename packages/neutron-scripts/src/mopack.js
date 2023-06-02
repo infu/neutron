@@ -14,18 +14,12 @@ import {
 } from "./walk.js";
 const exec = promisify(callbackExec);
 
-const dfxJson = await fs.readFile("./dfx.json", "utf-8");
-const dfxConfig = JSON.parse(dfxJson);
-const packtool = dfxConfig?.defaults?.build?.packtool;
-
 const neutronJson = await fs.readFile("./neutron.json", "utf-8");
 const neutronConfig = JSON.parse(neutronJson);
 const modname = Object.keys(neutronConfig.modules)[0];
 const start_file = neutronConfig.modules[modname].src;
 
-let mopsOutput = "";
-
-if (packtool) mopsOutput = await exec(packtool);
+let mopsOutput = await exec("mops sources");
 
 const packagesStr = mopsOutput.stdout.replace(/\n/g, " ").trim();
 

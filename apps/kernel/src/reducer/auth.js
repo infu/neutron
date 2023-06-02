@@ -1,5 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import icblast, { InternetIdentity } from "@infu/icblast";
+import { config } from "../config";
 
 const initialState = {
   value: 0,
@@ -84,4 +85,8 @@ export const getIC = () => {
   return ic;
 };
 
+export const getNeutronCan = async () => {
+  let can = await ic(config.neutron_id);
+  return can;
+};
 export default authSlice.reducer;
