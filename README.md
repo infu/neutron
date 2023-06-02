@@ -8,4 +8,10 @@ Left to do:
 - Improve app dev experience
 - Documentation
 - Simple wallet app holding/transferring SNS-1 tokens
+- Multi-chunk assets
+- Certified assets
+- Canister derived identity
+- Controllers - The canister itself and its derived identity too. This may result in bricking your canister, but that can be solved by storing the derived identity for longer inside browser memory.
+- Neutron dispensers in multiple subnets, so we can cover the whole IC
+
   ...
