@@ -1,3 +1,11 @@
+# Neutron
+
+Decentralized, user-customizable, user-controlled, community-driven operating system running on ICP
+
+Running this is pretty hard right now.
+
+We are developing the chicken and the egg at the same time.
+
 Left to do:
 
 - Figure memory migration

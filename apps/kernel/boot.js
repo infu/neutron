@@ -16,7 +16,7 @@ console.log("This scripts principal: ", identity.getPrincipal().toText());
 let neutron = await ic(neutron_can_id);
 
 console.log(
-  `Set your icblast identity as controller\n dfx canister call neutron transfer_ownership '(principal
+  `Set your icblast identity as controller\n dfx canister call neutron authorized_add '(principal
     "${identity.getPrincipal().toText()}")'\n`
 );
 
@@ -27,8 +27,9 @@ let files = await prepare_files(
   neutron,
   await fs.readFile("./neutron_kernel.1_0_0.neutron"),
   "kernel",
-  "secretmo/",
-  ""
+  "mo/",
+  "",
+  neutron_can_id
 );
 await upload_files(neutron, files);
 
@@ -36,8 +37,9 @@ let files2 = await prepare_files(
   neutron,
   await fs.readFile("../hello/neutron_hello.1_0_0.neutron"),
   "hello",
-  "secretmo/",
-  "hello/"
+  "mo/",
+  "hello/",
+  neutron_can_id
 );
 await upload_files(neutron, files2);
 

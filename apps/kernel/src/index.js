@@ -9,6 +9,9 @@ import { Test } from "./Test";
 import { Auth } from "./Auth";
 import { Requests } from "./Requests";
 import { db } from "./rxdb";
+import { collect } from "./tools/collect_modules.js";
+import { config } from "./config.js";
+
 import "./expose";
 import "./style.scss";
 import "./registerSw";
@@ -47,3 +50,9 @@ const App = () => {
 };
 
 root.render(<App />);
+
+window.install_app = () => {
+  collect();
+};
+
+console.log("Neutron id:", config.neutron_id);

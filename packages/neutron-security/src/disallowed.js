@@ -1,18 +1,4 @@
-// {
-//   name: "AnnotE",
-//   args: [
-//     {
-//       name: "ActorUrlE",
-//     },
-//   ],
-// };
-
 export const actor = (x) => x?.args?.find((z) => z?.name === "ActorUrlE");
-
-// {
-//   name: "DotE",
-//   args: ["cyclesAdd"],
-// };
 
 export const cyclesAdd = (x) =>
   x.name === "DotE" && x.args.find((z) => z === "cyclesAdd");

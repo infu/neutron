@@ -5,11 +5,25 @@
 // INSTEAD EDIT YOUR MODULE or neutron.json
     
     
+import Set "mo:motoko-hash-map/Set";
 import kernel "./main";
     
 
 shared({caller = _installer}) actor class Class() = this {
-    stable var owner = _installer;
+    
+  let { phash } = Set;
+  stable let authorized = Set.fromIter([_installer].vals(), phash);
+
+  public shared({caller}) func authorized_add(id : Principal) : async () {
+    assert(Set.has(authorized, phash, caller));
+    ignore Set.add(authorized, phash, id);
+  };
+
+  public shared({caller}) func authorized_rem(id : Principal) : async () {
+    assert(Set.has(authorized, phash, caller));
+    ignore Set.remove(authorized, phash, id);
+  };
+
     
         
     type Memory_kernel_store = {
@@ -23,25 +37,25 @@ shared({caller = _installer}) actor class Class() = this {
 
         
     public shared({ caller }) func kernel_app(req: kernel.Input_kernel_app) : async kernel.Output_kernel_app {
-        assert(caller == owner);
+        assert(Set.has(authorized, phash, caller));
         kernel.kernel_app(memory_kernel,req)
     };
     
 
     public query({ caller }) func kernel_app_list(req: kernel.Input_kernel_app_list) : async kernel.Output_kernel_app_list {
-        assert(caller == owner);
+        assert(Set.has(authorized, phash, caller));
         kernel.kernel_app_list(memory_kernel,req)
     };
     
 
     public shared({ caller }) func kernel_static(req: kernel.Input_kernel_static) : async kernel.Output_kernel_static {
-        assert(caller == owner);
+        assert(Set.has(authorized, phash, caller));
         kernel.kernel_static(memory_kernel,req)
     };
     
 
     public query({ caller }) func kernel_static_query(req: kernel.Input_kernel_static_query) : async kernel.Output_kernel_static_query {
-        assert(caller == owner);
+        assert(Set.has(authorized, phash, caller));
         kernel.kernel_static_query(memory_kernel,req)
     };
     
@@ -59,7 +73,7 @@ shared({caller = _installer}) actor class Class() = this {
     
 
     public query({ caller }) func kernel_use_hello_world(req: kernel.Input_kernel_use_hello_world) : async kernel.Output_kernel_use_hello_world {
-        assert(caller == owner);
+        assert(Set.has(authorized, phash, caller));
         kernel.kernel_use_hello_world(memory_kernel,module_kernel_hello_world,req)
     };
     

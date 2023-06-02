@@ -14,7 +14,7 @@ async function unzipObject(obj) {
 
   for (let key in newObj) {
     if (newObj[key]) {
-      newObj[key] = await gzip.unzip(newObj[key]);
+      newObj[key] = new Uint8Array(await gzip.unzip(newObj[key]));
     }
   }
 
@@ -32,7 +32,14 @@ export const chunkfile = (ua) => {
   return r;
 };
 
-export async function prepare_files(neutron, pkg, name, mo_prefix, app_prefix) {
+export async function prepare_files(
+  neutron,
+  pkg,
+  name,
+  mo_prefix,
+  app_prefix,
+  neutron_canister_id
+) {
   let files = await unpack(pkg);
 
   // files convert to array
@@ -42,6 +49,15 @@ export async function prepare_files(neutron, pkg, name, mo_prefix, app_prefix) {
   for (let f of files) {
     if (f.path.indexOf("dist/web/") === 0) {
       f.path = f.path.replace("dist/web/", app_prefix);
+      const ext = f.path.split(".").pop();
+      if (ext === "js") {
+        let tmp = new TextDecoder().decode(f.content);
+        tmp = tmp.replace(
+          /\"NEUTRON_ENV_CANISTER_ID\"/gs,
+          `"${neutron_canister_id}"`
+        );
+        f.content = new TextEncoder().encode(tmp);
+      }
     } else if (f.path.indexOf("dist/mo/") === 0) {
       let hash = hashContent(f.content);
       let expected = "dist/mo/" + hash + ".mo";

@@ -12,7 +12,20 @@ export function assemble(conf) {
       .join("\n")}
 
 shared({caller = _installer}) actor class Class() = this {
-    stable var owner = _installer;
+    
+  let { phash } = Set;
+  stable let authorized = Set.fromIter([_installer].vals(), phash);
+
+  public shared({caller}) func authorized_add(id : Principal) : async () {
+    assert(Set.has(authorized, phash, caller));
+    ignore Set.add(authorized, phash, id);
+  };
+
+  public shared({caller}) func authorized_rem(id : Principal) : async () {
+    assert(Set.has(authorized, phash, caller));
+    ignore Set.remove(authorized, phash, id);
+  };
+
     ${Object.keys(conf.modules)
       .map((mod) => create_module(mod, conf.modules[mod]))
       .join("\n")}
@@ -25,6 +38,7 @@ function import_module(modname, conf) {
   no_inject(conf.src);
 
   return `
+import Set "mo:motoko-hash-map/Set";
 import ${modname} "./${conf.src.replace(".mo", "")}";
     `;
 }
@@ -80,7 +94,11 @@ function create_func(name, conf, modname) {
     public ${
       conf.type
     }({ caller }) func ${name}(req: ${modname}.Input_${name}) : async ${modname}.Output_${name} {
-        ${conf.allow !== "any" ? "assert(caller == owner);" : ""}
+        ${
+          conf.allow !== "any"
+            ? "assert(Set.has(authorized, phash, caller));"
+            : ""
+        }
         ${modname}.${name}(${
     conf.arg?.length ? conf.arg.map(no_inject).join(",") + "," : ""
   }req)

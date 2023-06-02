@@ -26,7 +26,9 @@ export const { setAuth } = authSlice.actions;
 
 // anon
 // const ic = icblast({ local: true, local_host: 'http://localhost:8080' });
-let ic = icblast({});
+const ICARG = { local: true, local_host: "http://localhost:8080" };
+
+let ic = icblast(ICARG);
 
 InternetIdentity.create();
 
@@ -41,8 +43,12 @@ export const login =
       if (openAuth) {
         console.log("not authenticated");
         await InternetIdentity.login({
-          //   identityProvider:
-          //     'http://localhost:8080?canisterId=qhbym-qaaaa-aaaaa-aaafq-cai',
+          ...(ICARG.local
+            ? {
+                identityProvider:
+                  "http://qhbym-qaaaa-aaaaa-aaafq-cai.localhost:8080/",
+              }
+            : {}),
         });
       }
     } else {
@@ -57,6 +63,7 @@ export const login =
     );
 
     ic = icblast({
+      ...ICARG,
       // local: true,
       // local_host: 'http://localhost:8080',
       identity,
@@ -68,7 +75,7 @@ export const login =
 // const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const logout = () => (dispatch, getState) => {
-  ic = icblast({});
+  ic = icblast(ICARG);
   dispatch(setAuth({ logged: false, principal: "2vxsx-fae" }));
   InternetIdentity.logout();
 };
