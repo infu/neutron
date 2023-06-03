@@ -16,8 +16,8 @@ const exec = promisify(callbackExec);
 
 const neutronJson = await fs.readFile("./neutron.json", "utf-8");
 const neutronConfig = JSON.parse(neutronJson);
-const modname = Object.keys(neutronConfig.modules)[0];
-const start_file = neutronConfig.modules[modname].src;
+const modname = neutronConfig.id;
+const start_file = neutronConfig.src;
 
 let mopsOutput = await exec("mops sources");
 

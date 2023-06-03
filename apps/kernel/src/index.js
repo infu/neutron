@@ -8,19 +8,19 @@ import { Provider } from "react-redux";
 import { Test } from "./Test";
 import { Auth } from "./Auth";
 import { Requests } from "./Requests";
-// import { db } from "./rxdb";
+import { AppRequest } from "./AppRequest";
+
 import { config } from "./config.js";
 
 import { install_app } from "./reducer/apps.js";
 import "./expose";
 import "./style.scss";
-import "./registerSw";
 
 const container = document.getElementById("root");
 const root = createRoot(container);
 
 const App = () => {
-  const [hash, setHash] = useHash();
+  const [hash] = useHash();
   const app = hash.length ? hash.replace("#/", "") : false;
 
   return (
@@ -29,12 +29,15 @@ const App = () => {
       <Test />
       <Auth />
       <Requests />
+      <AppRequest />
+
       <AppDrawer />
       {app ? (
         <iframe
           className="appiframe"
           src={"/" + app + "/index.html"}
-          credentialless="true"
+          /* @ts-expect-error */
+          credentialless="true" /* eslint-disable-line */
         />
       ) : null}
       {/* credentialless=true makes sure apps won't be able to touch our private keys. Never remove it */}
@@ -44,6 +47,7 @@ const App = () => {
 
 root.render(<App />);
 
+/* @ts-expect-error */
 window.install_app = async () => {
   store.dispatch(install_app());
 };

@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { IoMdApps } from "react-icons/io";
-import { getApps } from "./reducer/apps.js";
+import { TbAtom2Filled } from "react-icons/tb";
+import { getApps, install_app } from "./reducer/apps.js";
+import { IoIosAddCircle } from "react-icons/io";
 
 export function AppDrawer() {
   const dispatch = useDispatch();
@@ -18,8 +19,9 @@ export function AppDrawer() {
   return (
     <>
       <div className="appdrawer-opener" onClick={() => setOpen(true)}>
-        <IoMdApps />
+        <TbAtom2Filled />
       </div>
+
       {open ? (
         <div
           className="backdrop"
@@ -40,11 +42,23 @@ export function AppDrawer() {
                   className="item"
                   style={{}}
                 >
-                  <img src={x.icon} />
+                  <img className="ico" src={x.icon} />
                   <div>{x.name}</div>
                 </div>
               );
             })}
+            <div
+              onClick={() => {
+                setOpen(false);
+                dispatch(install_app());
+              }}
+              className="item"
+              style={{}}
+            >
+              <div className="ico add">
+                <IoIosAddCircle />
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

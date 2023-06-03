@@ -1,12 +1,13 @@
-export async function pickFile() {
+export async function pickFile({ accept = ".neutron" } = {}) {
   return new Promise((resolve, reject) => {
-    const inputElemenet = document.createElement("input");
-    inputElemenet.style.display = "none";
-    inputElemenet.type = "file";
+    const inputElement = document.createElement("input");
+    inputElement.style.display = "none";
+    inputElement.type = "file";
+    inputElement.accept = accept;
 
-    inputElemenet.addEventListener("change", () => {
-      if (inputElemenet.files) {
-        resolve(inputElemenet.files[0]);
+    inputElement.addEventListener("change", () => {
+      if (inputElement.files) {
+        resolve(inputElement.files[0]);
       }
     });
 
@@ -14,14 +15,14 @@ export async function pickFile() {
       reject(new Error("File picker cancelled"));
       document.body.removeEventListener("focus", teardown, true);
       setTimeout(() => {
-        document.body.removeChild(inputElemenet);
+        document.body.removeChild(inputElement);
       }, 1000);
     };
 
     document.body.addEventListener("focus", teardown, true);
 
-    document.body.appendChild(inputElemenet);
-    inputElemenet.click();
+    document.body.appendChild(inputElement);
+    inputElement.click();
   });
 }
 

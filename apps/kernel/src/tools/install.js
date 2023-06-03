@@ -52,7 +52,7 @@ export async function prepare_files(
       if (ext === "js") {
         let tmp = new TextDecoder().decode(f.content);
         tmp = tmp.replace(
-          /\"NEUTRON_ENV_CANISTER_ID\"/gs,
+          /"NEUTRON_ENV_CANISTER_ID"/gs,
           `"${neutron_canister_id}"`
         );
         f.content = new TextEncoder().encode(tmp);
@@ -89,7 +89,7 @@ export async function upload_files(neutron, files) {
 
         const chunks = chunkfile(processed_file);
 
-        let res = await neutron.kernel_static({
+        await neutron.kernel_static({
           store: {
             key: "/" + (path === "index.html" ? "" : path),
             val: {

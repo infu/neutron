@@ -11,7 +11,7 @@ export async function get_app_details(neutron, pkg) {
   );
 
   console.log("App neutron config:", neutronConfig);
-  const urlName = neutronConfig.url_name;
+  const urlName = neutronConfig.id;
   if (
     typeof urlName !== "string" ||
     urlName.length < 4 ||
@@ -33,5 +33,5 @@ export async function get_app_details(neutron, pkg) {
   console.log(files);
 
   let lib = collect();
-  return { files, urlName, neutronConfig, lib };
+  return { files, neutronConfig, lib };
 }

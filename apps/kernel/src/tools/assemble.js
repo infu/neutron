@@ -7,9 +7,8 @@ export function assemble(conf) {
 // YOU WILL GET TYPECHECK ERRORS HERE, BUT YOU CAN'T EDIT IT
 // INSTEAD EDIT YOUR MODULE or neutron.json
     
-    ${Object.keys(conf.modules)
-      .map((mod) => import_module(mod, conf.modules[mod]))
-      .join("\n")}
+  
+    ${import_module(conf)}
 
 shared({caller = _installer}) actor class Class() = this {
     
@@ -26,14 +25,13 @@ shared({caller = _installer}) actor class Class() = this {
     ignore Set.remove(authorized, phash, id);
   };
 
-    ${Object.keys(conf.modules)
-      .map((mod) => create_module(mod, conf.modules[mod]))
-      .join("\n")}
+    ${create_module(conf)}
 }
     `;
 }
 
-function import_module(modname, conf) {
+function import_module(conf) {
+  const modname = conf.id;
   no_inject(modname);
   no_inject(conf.src);
 
@@ -43,7 +41,8 @@ import ${modname} "./${conf.src.replace(".mo", "")}";
     `;
 }
 
-function create_module(modname, conf) {
+function create_module(conf) {
+  const modname = conf.id;
   no_inject(modname);
   if (modname.length < 3)
     throw new Error("Invalid module name (at least 3 characters: " + modname);

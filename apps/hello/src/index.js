@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { exec, expose } from "neutron-tools";
+import { exec } from "neutron-tools";
 import { toState } from "@infu/icblast";
 
 const container = document.getElementById("root");

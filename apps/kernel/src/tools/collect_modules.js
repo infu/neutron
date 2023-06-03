@@ -1,5 +1,3 @@
-import { getIC } from "../reducer/auth";
-import { config } from "../config";
 import plimit from "p-limit";
 import { getNeutronCan } from "../reducer/auth.js";
 

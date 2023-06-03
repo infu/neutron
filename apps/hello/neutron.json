@@ -1,19 +1,15 @@
 {
   "name": "Hello",
-  "url_name": "hello",
+  "id": "hello",
   "version": 1,
-  "modules": {
-    "kernel": {
-      "src": "main.mo",
-      "share": {
-        "hello_world": {}
-      },
-      "func": {
-        "hello_world": {
-          "type": "query",
-          "arg": []
-        }
-      }
+  "src": "main.mo",
+  "share": {
+    "hello_world": {}
+  },
+  "func": {
+    "hello_world": {
+      "type": "query",
+      "arg": []
     }
   }
 }
