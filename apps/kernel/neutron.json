@@ -5,6 +5,9 @@
   "share": {
     "hello_world": {
       "arg": ["memory_kernel"]
+    },
+    "is_authorized": {
+      "arg": ["memory_kernel"]
     }
   },
   "func": {
@@ -29,6 +32,19 @@
     "kernel_use_hello_world": {
       "type": "query",
       "arg": ["memory_kernel", "module_kernel_hello_world"]
+    },
+    "kernel_authorized_add": {
+      "type": "shared",
+      "arg": ["memory_kernel"]
+    },
+    "kernel_authorized_rem": {
+      "type": "shared",
+      "arg": ["memory_kernel"]
+    },
+    "kernel_install_code": {
+      "type": "shared",
+      "async": true,
+      "arg": ["memory_kernel", "this"]
     }
   },
   "memory": {

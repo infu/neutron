@@ -17,7 +17,7 @@ const exec = promisify(callbackExec);
 const neutronJson = await fs.readFile("./neutron.json", "utf-8");
 const neutronConfig = JSON.parse(neutronJson);
 const modname = neutronConfig.id;
-const start_file = neutronConfig.src;
+const entry_file = "./backend/" + neutronConfig.src;
 
 let mopsOutput = await exec("mops sources");
 
@@ -29,7 +29,7 @@ const hashfiles = {};
 
 const dependencies = await getDependencies(
   null,
-  "./backend/" + start_file,
+  entry_file,
   packages,
   hashfiles
 );
@@ -48,8 +48,18 @@ try {
 for (const hash of usedHashes) {
   const filePath = path.join("./dist/mo", `${hash}.mo`);
 
+  if (entry_file === hashfiles[hash].path) {
+    console.log("entry", hash);
+    neutronConfig.entry = hash;
+  }
+
   let newcontent = hashfiles[hash].content;
   if (hashContent(newcontent) !== hash) throw "Hash mismatch";
 
   await fs.writeFile(filePath, newcontent, "utf-8");
 }
+
+await fs.writeFile(
+  "./dist/neutron.json",
+  JSON.stringify(neutronConfig, null, 2)
+);

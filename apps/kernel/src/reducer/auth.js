@@ -85,8 +85,12 @@ export const getIC = () => {
   return ic;
 };
 
+let neutron_can = null;
 export const getNeutronCan = async () => {
-  let can = await ic(config.neutron_id);
-  return can;
+  if (neutron_can) return neutron_can;
+  const candid = await fetch("/pkg/neutron.did").then((x) => x.text());
+  // Icblast doesn't support relative URLs right now
+  neutron_can = await ic(config.neutron_id, candid);
+  return neutron_can;
 };
 export default authSlice.reducer;

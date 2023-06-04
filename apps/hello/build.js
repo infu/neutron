@@ -4,6 +4,7 @@ const config = {
   entryPoints: ["./src/index.js"],
   outfile: "./dist/web/main.js",
   bundle: true,
+  minify: true,
   external: [],
   format: "esm",
   jsx: "automatic",

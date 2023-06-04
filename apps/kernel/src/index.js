@@ -8,7 +8,7 @@ import { Provider } from "react-redux";
 import { Test } from "./Test";
 import { Auth } from "./Auth";
 import { Requests } from "./Requests";
-import { AppRequest } from "./AppRequest";
+import { AppDialogs } from "./AppDialogs";
 
 import { config } from "./config.js";
 
@@ -29,13 +29,13 @@ const App = () => {
       <Test />
       <Auth />
       <Requests />
-      <AppRequest />
+      <AppDialogs />
 
       <AppDrawer />
       {app ? (
         <iframe
           className="appiframe"
-          src={"/" + app + "/index.html"}
+          src={"/app/" + app + "/index.html"}
           /* @ts-expect-error */
           credentialless="true" /* eslint-disable-line */
         />

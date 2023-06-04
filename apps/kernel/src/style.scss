@@ -6,9 +6,9 @@ $active700: #c256ff;
 $active600: #a93dff;
 $active500: #8106ea;
 $active400: #6100cc;
-$active300: #4200b2;
-$active200: #1a0099;
-$active100: #000081;
+$active300: #370977;
+$active200: #2e0759;
+$active100: #190a2a;
 
 $red900: #ffa1ed;
 $red800: #ff76c6;
@@ -194,7 +194,7 @@ iframe.appiframe {
     padding: 8px 16px;
     border-radius: 4px;
     border: 1px solid $active600;
-    background-color: $active400;
+    background-color: $active200;
     color: $active900;
     cursor: pointer;
     &:hover {
@@ -202,6 +202,24 @@ iframe.appiframe {
     }
     &:active {
         background-color: $active400;
+    }
+}
+
+.btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.btn-sec {
+    border: 1px solid $gray800;
+    background-color: $gray200;
+    color: $gray900;
+    &:hover {
+        background-color: $gray400;
+    }
+    &:active {
+        background-color: $gray300;
     }
 }
 
@@ -220,7 +238,7 @@ iframe.appiframe {
     .title {
         font-size: 24px;
         margin-bottom: 16px;
-        color: $teal400;
+        color: $gray900;
     }
 }
 
@@ -260,4 +278,35 @@ iframe.appiframe {
 
 .perm-green {
     color: $green500;
+}
+
+.a-obj {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-gap: 10px;
+}
+
+.a-val {
+    color: $orange900;
+}
+.a-label {
+    color: $gray800;
+}
+
+.a-args {
+    margin-top: 10px;
+    border-top: 1px solid $gray500;
+    padding-top: 10px;
+}
+
+.a-infogrid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-gap: 10px;
+    .label {
+        color: $gray800;
+    }
+    .val {
+        color: $orange900;
+    }
 }

@@ -1,6 +1,10 @@
 import icblast, { fileIdentity } from "@infu/icblast";
 import { unpack, prepare_files, upload_files } from "./src/tools/install.js";
 import fs from "fs/promises";
+import { exec as callbackExec } from "child_process";
+import { promisify } from "util";
+
+const exec = promisify(callbackExec);
 
 let can_ids = await fs.readFile(".dfx/local/canister_ids.json", "utf8");
 let can_ids_json = JSON.parse(can_ids);
@@ -15,10 +19,15 @@ const ic = icblast({
 console.log("This scripts principal: ", identity.getPrincipal().toText());
 let neutron = await ic(neutron_can_id);
 
-console.log(
-  `Set your icblast identity as controller\n dfx canister call neutron authorized_add '(principal
-    "${identity.getPrincipal().toText()}")'\n`
+await exec(
+  `dfx canister call neutron kernel_authorized_add '(principal "${identity
+    .getPrincipal()
+    .toText()}")'\n`
 );
+// console.log(
+//   `Set your icblast identity as controller\n dfx canister call neutron kernel_authorized_add '(principal
+//     "${identity.getPrincipal().toText()}")'\n`
+// );
 
 // Delete everything
 console.log("Clearing old files...");
@@ -28,9 +37,7 @@ console.log("done");
 console.log("Unpacking...");
 let unpackaged;
 try {
-  unpackaged = await unpack(
-    await fs.readFile("./neutron_kernel.1_0_0.neutron")
-  );
+  unpackaged = await unpack(await fs.readFile("./kernel.v1.neutron"));
 } catch (e) {
   console.error(e);
   process.exit(1);

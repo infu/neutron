@@ -24,5 +24,5 @@ Left to do:
 - Neutron dispensers in multiple subnets, so we can cover the whole IC
 - Allow apps to have private memory no other app can overtake without a signature
 - Allow canisters (DAOs) to sign Neutron app packages. Neutron should be able to verify authenticity
-
+- Disable browsers that don't support the security features used.
   ...

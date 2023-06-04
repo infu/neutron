@@ -23,3 +23,15 @@ You may need to let the canister know who is its owner. Instructions are printed
 Open in browser (replace with your canister id)
 
 http://r7inp-6aaaa-aaaaa-aaabq-cai.localhost:8080/
+
+Check what your principal is after logging in and add it
+
+```
+dfx canister call neutron kernel_authorized_add '(principal "52xrw-gaued-e2icl-3r63y-bpl3w-nt4xm-jhfmr-who5g-p2jju-j4243-sqe")'
+```
+
+Make neutron controller of itself (it should be the only controller)
+
+```
+dfx canister update-settings --add-controller q4eej-kyaaa-aaaaa-aaaha-cai neutron
+```

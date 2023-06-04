@@ -46,26 +46,26 @@ export async function prepare_files(
 
   // prefix all files with app_prefix
   for (let f of files) {
-    if (f.path.indexOf("dist/web/") === 0) {
-      f.path = f.path.replace("dist/web/", app_prefix);
+    if (f.path.indexOf("web/") === 0) {
+      f.path = f.path.replace("web/", app_prefix);
       const ext = f.path.split(".").pop();
       if (ext === "js") {
         let tmp = new TextDecoder().decode(f.content);
         tmp = tmp.replace(
-          /"NEUTRON_ENV_CANISTER_ID"/gs,
+          `"NEUTRON_ENV_CANISTER_ID"`,
           `"${neutron_canister_id}"`
         );
         f.content = new TextEncoder().encode(tmp);
       }
-    } else if (f.path.indexOf("dist/mo/") === 0) {
+    } else if (f.path.indexOf("mo/") === 0) {
       let hash = hashContent(f.content);
-      let expected = "dist/mo/" + hash + ".mo";
+      let expected = "mo/" + hash + ".mo";
       if (f.path !== expected) {
         throw new Error(`Invalid mo hash ${expected} != ${f.path}`);
       }
-      f.path = f.path.replace("dist/mo/", mo_prefix);
+      f.path = f.path.replace("mo/", mo_prefix);
     } else {
-      f.path = app_prefix + "pgk/" + f.path;
+      f.path = app_prefix + "pkg/" + f.path;
     }
   }
 

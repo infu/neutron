@@ -8,7 +8,7 @@ import Iter "mo:base/Iter";
 import Nat "mo:base/Nat";
 import Map "mo:motoko-hash-map/Map";
 import Set "mo:motoko-hash-map/Set";
-
+import AAA "./aaa_interface";
 import ST "./static";
 // import AP "./apps";
 import T "./types";
@@ -17,15 +17,37 @@ import T "./types";
 module {
     let { ihash; nhash; thash; phash; calcHash } = Map;
 
+
     // Memory
     public type Memory_kernel = T.Mem;
     public func memory_kernel() : Memory_kernel {
         {
             files : T.FilesMap = Map.new(thash);
+            authorized = Set.new(phash);
             // apps : T.AppsMap = Map.new(thash);
         };
     };
     
+    // stable let authorized = Set.fromIter([_installer].vals(), phash);
+    public type Input_kernel_authorized_add = Principal;
+    public type Output_kernel_authorized_add = ();
+    public func kernel_authorized_add(mem:T.Mem, id : Principal) : () {
+  
+        ignore Set.add(mem.authorized, phash, id);
+    };
+
+    public type Input_kernel_authorized_rem = Principal;
+    public type Output_kernel_authorized_rem = ();
+    public func kernel_authorized_rem(mem:T.Mem, id : Principal) : () {
+        ignore Set.remove(mem.authorized, phash, id);
+    };
+
+    public type Input_is_authorized = Principal;
+    public type Output_is_authorized = Bool;
+    public func is_authorized(mem:T.Mem, id : Principal) : Bool {
+        Set.has(mem.authorized, phash, id);
+    };
+
     // Share function
     public type Input_hello_world = ();
     public type Output_hello_world = Text;
@@ -41,17 +63,17 @@ module {
     };
 
     // Apps
-    public type Input_kernel_app =  AP.AppCmd;
-    public type Output_kernel_app = ();
-    public func kernel_app( mem:T.Mem, cmd:Input_kernel_app) : Output_kernel_app {
-       AP.cmd(mem, cmd);
-    };
+    // public type Input_kernel_app =  AP.AppCmd;
+    // public type Output_kernel_app = ();
+    // public func kernel_app( mem:T.Mem, cmd:Input_kernel_app) : Output_kernel_app {
+    //    AP.cmd(mem, cmd);
+    // };
 
-    public type Input_kernel_app_list = ();
-    public type Output_kernel_app_list = [(Text, T.App)];
-    public func kernel_app_list( mem:T.Mem, req:Input_kernel_app_list) : Output_kernel_app_list {
-        Map.toArray(mem.apps);
-    };
+    // public type Input_kernel_app_list = ();
+    // public type Output_kernel_app_list = [(Text, T.App)];
+    // public func kernel_app_list( mem:T.Mem, req:Input_kernel_app_list) : Output_kernel_app_list {
+    //     Map.toArray(mem.apps);
+    // };
 
     // Static
     public type Input_kernel_static =  ST.StaticCmd;
@@ -101,6 +123,18 @@ module {
       });
     };
     
+    let IC = actor "aaaaa-aa" : AAA.Interface;
+
+    public type Input_kernel_install_code = {wasm: [Nat8]; candid: Text};
+    public type Output_kernel_install_code = ();
+    public func kernel_install_code(mem:T.Mem, self: actor {}, inp: Input_kernel_install_code) : async () {
+         ignore IC.install_code({
+              arg = [];
+              wasm_module = inp.wasm;
+              mode = #upgrade;
+              canister_id = Principal.fromActor(self);
+            })
+    }
     //
 
     // public type ExtensionCanister =actor{

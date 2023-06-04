@@ -27,7 +27,7 @@ export async function get_app_details(neutron, pkg) {
     unpacked,
     urlName,
     "mo/",
-    isKernel ? "" : urlName + "/",
+    isKernel ? "" : "app/" + urlName + "/",
     config.neutron_id
   );
   console.log(files);
