@@ -1,5 +1,6 @@
 {
   "id": "kernel",
+  "name": "Neutron",
   "version": 1,
   "src": "main.mo",
   "share": {

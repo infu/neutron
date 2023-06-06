@@ -146,7 +146,7 @@ export const compile_app =
 
     // compile
     compile_details = mo.wasm("neutron.mo", "ic");
-
+    // dlFileDebug(compile_details.wasm);
     console.log("WASM", compile_details);
 
     dispatch(
@@ -169,16 +169,19 @@ export const install_app = () => async (dispatch, getState) => {
   dispatch(compile_app({ files, neutronConfig }));
 
   await dispatch(appRequest({ id, size, permissions }));
-  dispatch(setInstalling(true));
+  dispatch(setInstalling({ step: 1 }));
   let apps = getState().apps.list;
 
   const appconfig = {
     ...apps,
-    [id]: {
-      link: "/" + id,
-      name: neutronConfig.name,
-      icon: "/app/" + id + "/static/icon.png",
-    },
+    [id]:
+      id === "kernel"
+        ? { link: "/", name: neutronConfig.name, icon: "/static/icon.png" }
+        : {
+            link: "/" + id,
+            name: neutronConfig.name,
+            icon: "/app/" + id + "/static/icon.png",
+          },
   };
   console.log(appconfig);
 
@@ -194,6 +197,7 @@ export const install_app = () => async (dispatch, getState) => {
   });
 
   await upload_files(neutron, files);
+
   await dispatch(getApps());
 
   // change candid
@@ -207,16 +211,31 @@ export const install_app = () => async (dispatch, getState) => {
       },
     },
   });
-
+  dispatch(setInstalling({ step: 2 }));
   // install wasm (Note: this will return right away because inside the management canister call is a one-shot call. It can't be otherwise)
   // Note this wasm doesn't have the new metadata with candid inside
-  await neutron.kernel_install_code({
+
+  console.log("Installing wasm", compile_details);
+
+  let result = await neutron.kernel_install_code({
     wasm: compile_details.wasm,
     candid: compile_details.candid,
   });
 
+  console.log(result);
+
+  dispatch(setInstalling({ step: 3 }));
+  await delay(500);
   dispatch(setInstalled());
-  window.location.hash = "#/" + id;
+  window.location.hash = "#" + appconfig[id].link;
 };
+
+// function dlFileDebug(data) {
+//   var blob = new Blob([data], { type: "octet/stream" });
+//   var url = window.URL.createObjectURL(blob);
+//   window.location.assign(url);
+// }
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default appSlice.reducer;

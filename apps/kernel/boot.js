@@ -6,6 +6,8 @@ import { promisify } from "util";
 
 const exec = promisify(callbackExec);
 
+const conf = JSON.parse(await fs.readFile("./neutron.json", "utf8"));
+
 let can_ids = await fs.readFile(".dfx/local/canister_ids.json", "utf8");
 let can_ids_json = JSON.parse(can_ids);
 let neutron_can_id = can_ids_json.neutron.local;
@@ -52,6 +54,22 @@ let files = await prepare_files(
   neutron_can_id
 );
 await upload_files(neutron, files);
+
+// create apps.json
+const appconfig = {
+  kernel: { link: "/", name: conf.name, icon: "/static/icon.png" },
+};
+
+await neutron.kernel_static({
+  store: {
+    key: "/system/apps.json",
+    val: {
+      content: new TextEncoder().encode(JSON.stringify(appconfig)),
+      content_type: "application/json",
+      content_encoding: "plain",
+    },
+  },
+});
 
 // let unpackaged2 = await unpack(
 //   await fs.readFile("../hello/neutron_hello.1_0_0.neutron")

@@ -1,0 +1,7 @@
+{
+  "canisters": {
+    "upgrader": {
+      "main": "src/main.mo"
+    }
+  }
+}

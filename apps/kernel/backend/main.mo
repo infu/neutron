@@ -10,6 +10,7 @@ import Map "mo:motoko-hash-map/Map";
 import Set "mo:motoko-hash-map/Set";
 import AAA "./aaa_interface";
 import ST "./static";
+import Timer "mo:base/Timer";
 // import AP "./apps";
 import T "./types";
 
@@ -128,13 +129,23 @@ module {
     public type Input_kernel_install_code = {wasm: [Nat8]; candid: Text};
     public type Output_kernel_install_code = ();
     public func kernel_install_code(mem:T.Mem, self: actor {}, inp: Input_kernel_install_code) : async () {
-         ignore IC.install_code({
-              arg = [];
-              wasm_module = inp.wasm;
-              mode = #upgrade;
-              canister_id = Principal.fromActor(self);
-            })
-    }
+ 
+        await UPGRADER.upgrade(inp.wasm);
+        // ignore Timer.setTimer(#seconds(1), func() : async () {
+        //     await IC.install_code({
+        //     arg = [];
+        //     wasm_module = inp.wasm;
+        //     mode = #upgrade;
+        //     canister_id = Principal.fromActor(self);
+        //     });
+        // });
+       
+    };
+
+    let UPGRADER = actor "sbzkb-zqaaa-aaaaa-aaaiq-cai": actor {
+        upgrade : shared (wasm: [Nat8]) -> async ();
+    };
+   
     //
 
     // public type ExtensionCanister =actor{

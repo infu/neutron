@@ -25,7 +25,7 @@ export function removeCommentsAndEmptyLines(content) {
 
 export function replaceImportPaths(content, oldImportPath, newImportPath) {
   const importPattern = new RegExp(
-    `^\\s*import (\\S+) "${oldImportPath}"`,
+    `^\\s*import ([^"]+) "${oldImportPath}"`,
     "gm"
   );
   const replacement = `import $1 "${newImportPath}"`;
@@ -63,7 +63,7 @@ export function parsePackageString(packageString) {
 }
 
 export function parseImports(content) {
-  const importPattern = /^\s*import (\S+) "(\S+)"/gm;
+  const importPattern = /^\s*import ([^"]+) "(\S+)"/gm;
   const imports = {};
 
   let match;

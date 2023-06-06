@@ -26,3 +26,7 @@ Left to do:
 - Allow canisters (DAOs) to sign Neutron app packages. Neutron should be able to verify authenticity
 - Disable browsers that don't support the security features used.
   ...
+
+Workarounds:
+
+- A canister can't self-upgrade without another canister https://forum.dfinity.org/t/self-upgrading-canisters/20486
