@@ -88,8 +88,10 @@ function create_shared_func(name, conf, modname) {
   no_inject(name);
 
   return `
-      private func module_${modname}_${name}(req: ${modname}.Input_${name}) : ${modname}.Output_${name} {
-       ${modname}.${name}(${
+      private func module_${modname}_${name}(req: ${modname}.Input_${name}) : ${
+    conf?.async ? "async " : ""
+  } ${modname}.Output_${name} {
+        ${conf?.async ? "await " : ""} ${modname}.${name}(${
     conf.arg?.length ? conf.arg.map(no_inject).join(",") + "," : ""
   }req)
       };

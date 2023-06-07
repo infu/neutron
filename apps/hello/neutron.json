@@ -4,7 +4,9 @@
   "version": 1,
   "src": "main.mo",
   "share": {
-    "hello_world": {}
+    "hello_local": {
+      "arg": []
+    }
   },
   "func": {
     "hello_world": {

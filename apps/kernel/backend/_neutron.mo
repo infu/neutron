@@ -50,12 +50,6 @@ shared({caller = _installer}) actor class Class() = this {
     };
     
 
-    public query({ caller }) func kernel_use_hello_world(req: kernel.Input_kernel_use_hello_world) : async kernel.Output_kernel_use_hello_world {
-        assert(module_kernel_is_authorized(caller));
-         kernel.kernel_use_hello_world(memory_kernel,module_kernel_hello_world,req)
-    };
-    
-
     public shared({ caller }) func kernel_authorized_add(req: kernel.Input_kernel_authorized_add) : async kernel.Output_kernel_authorized_add {
         assert(module_kernel_is_authorized(caller));
          kernel.kernel_authorized_add(memory_kernel,req)
@@ -75,13 +69,8 @@ shared({caller = _installer}) actor class Class() = this {
     
    
         
-      private func module_kernel_hello_world(req: kernel.Input_hello_world) : kernel.Output_hello_world {
-       kernel.hello_world(memory_kernel,req)
-      };
-      
-
-      private func module_kernel_is_authorized(req: kernel.Input_is_authorized) : kernel.Output_is_authorized {
-       kernel.is_authorized(memory_kernel,req)
+      private func module_kernel_is_authorized(req: kernel.Input_is_authorized) :  kernel.Output_is_authorized {
+         kernel.is_authorized(memory_kernel,req)
       };
       
 

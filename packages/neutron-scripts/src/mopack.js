@@ -12,10 +12,12 @@ import {
   getDependencies,
   walkReplace,
 } from "./walk.js";
+
 const exec = promisify(callbackExec);
 
 const neutronJson = await fs.readFile("./neutron.json", "utf-8");
 const neutronConfig = JSON.parse(neutronJson);
+
 const modname = neutronConfig.id;
 const entry_file = "./backend/" + neutronConfig.src;
 

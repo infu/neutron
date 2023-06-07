@@ -8,6 +8,7 @@
     "build": "node build.js",
     "mopack": " node ./node_modules/neutron-scripts/src/mopack.js",
     "package": "npm run build && node ./node_modules/neutron-scripts/src/pack.js",
+    "validate": "node ./node_modules/neutron-scripts/src/validate.js",
     "boot": "node ./boot.js",
     "build:boot": "npm run build && node moassemble.js && npm run mopack && npm run package && npm run boot",
     "watch": "node build.js watch",

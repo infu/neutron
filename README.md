@@ -1,6 +1,6 @@
 # Neutron
 
-Decentralized, user-customizable, user-controlled, community-driven operating system running on ICP
+Decentralised, user-customizable, user-controlled, community-driven operating system running on ICP
 
 Running this is pretty hard right now.
 
@@ -47,18 +47,17 @@ Additionally, apps get bundled like this (It’s not a good idea to include the 
 When a user tries to install an app they see a dialog with the permissions it requires:
 <img width="751" alt="image" src="https://github.com/infu/neutron/assets/24810/96369968-efe3-443e-a1d1-e8b028bde0f2">
 
-or 
+or
 
 <img width="739" alt="image" src="https://github.com/infu/neutron/assets/24810/5daf42de-2044-43b2-9210-587a3825d924">
-
 
 ## Todo:
 
 - Figure memory migration
 - Create a frontend function checking (using the whitelist), assembling and compiling Motoko
-- Create install UI
+- ~~Create install UI~~
 - Make some demo apps demonstrating functionality
-- Create json schema for neutron.json and scripts that validate it
+- ~~Create json schema for neutron.json and scripts that validate it~~
 - Improve app dev experience
 - Documentation
 - Cycles wallet, cycles sending requests
@@ -71,10 +70,12 @@ or
 - Allow apps to have private memory no other app can overtake without a signature
 - Allow canisters (DAOs) to sign Neutron app packages. Neutron should be able to verify authenticity
 - Disable browsers that don't support the security features used.
+- Neutron recovery phrase (stored inside immutable canister)
+- Neutron recovery UI
+- UI for uninstalling apps
+- Apps using shared functions or another app memory have to specify version requirements
   ...
 
 ## Workarounds:
 
 - A canister can't self-upgrade without another canister https://forum.dfinity.org/t/self-upgrading-canisters/20486
-
-

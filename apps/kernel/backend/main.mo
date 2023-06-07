@@ -49,19 +49,8 @@ module {
         Set.has(mem.authorized, phash, id);
     };
 
-    // Share function
-    public type Input_hello_world = ();
-    public type Output_hello_world = Text;
-    public func hello_world(mem:T.Mem, req: Input_hello_world) : Output_hello_world {
-        "Hello World";
-    };
 
-    // Use shared function
-    public type Input_kernel_use_hello_world = ();
-    public type Output_kernel_use_hello_world = Text;
-    public func kernel_use_hello_world(mem:T.Mem, hello_world_func:Input_hello_world -> Output_hello_world, req: Input_kernel_use_hello_world) : Output_kernel_use_hello_world {
-       hello_world_func();
-    };
+
 
     // Apps
     // public type Input_kernel_app =  AP.AppCmd;

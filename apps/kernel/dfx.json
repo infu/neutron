@@ -8,5 +8,6 @@
     "build": {
       "packtool": "mops sources"
     }
-  }
+  },
+  "dfx": "0.13.1"
 }
