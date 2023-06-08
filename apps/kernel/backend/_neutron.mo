@@ -11,9 +11,7 @@ import kernel "main";
     
 
 shared({caller = _installer}) actor class Class() = this {
-    
-  
-
+ 
     
         
     type Memory_kernel_store = {

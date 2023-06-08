@@ -1,5 +1,5 @@
 import fs from "fs/promises";
-import { assemble } from "./src/tools/assemble.js";
+import { assemble } from "neutron-compiler/src/assemble.js";
 import { exec as callbackExec } from "child_process";
 import { promisify } from "util";
 const exec = promisify(callbackExec);

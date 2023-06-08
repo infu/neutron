@@ -28,6 +28,7 @@
     "fflate": "^0.8.0",
     "js-sha256": "^0.9.0",
     "motoko": "^3.4.0",
+    "neutron-compiler": "file:../../packages/neutron-compiler",
     "neutron-scripts": "file:../../packages/neutron-scripts",
     "neutron-tools": "file:../../packages/neutron-tools",
     "p-limit": "^4.0.0",

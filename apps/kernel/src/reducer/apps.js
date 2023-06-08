@@ -5,8 +5,7 @@ import { getNeutronCan } from "./auth.js";
 import { upload_files } from "../tools/install.js";
 import { configPermissions } from "../lib/perm.js";
 import { collect } from "../tools/collect_modules.js";
-import { assemble } from "../tools/assemble.js";
-import mo from "motoko";
+import { compile } from "neutron-compiler/src/compile.js";
 
 const initialState = {
   list: {},
@@ -121,6 +120,7 @@ export const compile_app =
     // Add new config
     configs[neutronConfig.id] = neutronConfig;
 
+    const mofiles = [];
     // Add new files to library
     for (let { path, content } of files) {
       // if path doesn't start with "mo/" then ignore
@@ -128,24 +128,27 @@ export const compile_app =
 
       let contentText = new TextDecoder().decode(content);
       const p = path.replace("mo/", "");
-      mo.write(p, contentText);
+      // mo.write(p, contentText);
+      mofiles.push({ path: p, content: contentText });
     }
 
     console.log(configs);
 
     // assemble new neutron entrypoint
-    let neutron_mo = assemble(configs);
-    console.log(neutron_mo);
-    mo.write("neutron.mo", neutron_mo);
+    // let neutron_mo = assemble(configs);
+    // console.log(neutron_mo);
+    // mo.write("neutron.mo", neutron_mo);
 
     // load libraries
     for (let { path, content } of mo_lib) {
       const p = path.replace("/mo/", "");
-      mo.write(p, content);
+      mofiles.push({ path: p, content });
+      // mo.write(p, content);
     }
 
     // compile
-    compile_details = mo.wasm("neutron.mo", "ic");
+    // compile_details = mo.wasm("neutron.mo", "ic");
+    compile_details = compile({ mofiles, configs });
     // dlFileDebug(compile_details.wasm);
     console.log("WASM", compile_details);
 
