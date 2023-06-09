@@ -12,7 +12,6 @@ import {
   getDependencies,
   walkReplace,
 } from "./walk.js";
-
 const exec = promisify(callbackExec);
 
 const neutronJson = await fs.readFile("./neutron.json", "utf-8");

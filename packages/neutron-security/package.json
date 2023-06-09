@@ -9,9 +9,11 @@
   "author": "",
   "license": "ISC",
   "description": "",
+  "peerDependencies": {
+    "motoko": "^3.4.0"
+  },
   "dependencies": {
     "chalk": "^5.2.0",
-    "motoko": "^3.6.0",
     "neutron-scripts": "file:../neutron-scripts"
   }
 }

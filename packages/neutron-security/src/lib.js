@@ -1,4 +1,4 @@
-import mo from "motoko";
+// import mo from "motoko";
 import * as disallowed from "./disallowed.js";
 
 export function matchTraverseTree(tree, pattern) {
@@ -14,7 +14,7 @@ export function matchTraverseTree(tree, pattern) {
 
 export function checkForDangerousASTCode(contents) {
   let danger = [];
-  let ast = mo.parseMotoko(contents);
+  let ast = contents;
   for (let pattern in disallowed) {
     let exists = matchTraverseTree(ast, disallowed[pattern]);
     if (exists) danger.push(pattern);

@@ -8,9 +8,15 @@ It assembles all Motoko files and compiles them.
 
 It opens dialogs in which users can allow or deny certain things like an app frontend requesting a call to be signed and allowed.
 
+Stores all assets and serves them thru http
+
 ## Install
 
+Note: This installation process may not work, because things constantly change.
+
 You should first go to /app/hello and run `npm run package` the scripts that follow are trying to install its binary
+
+Upgrades need to go thru another canister. It will handle a few tasks such as recovery, upgrades, verification, starting and stopping. The canister is located at support/upgrader and once deployed its id needs to be placed inside backend/main.mo
 
 ```
 npm install

@@ -6,6 +6,8 @@ import {
   checkForDangerousTextCode,
 } from "neutron-security";
 import path from "path";
+import { whitelist } from "neutron-security/whitelist.js";
+import mo from "motoko";
 
 export function hashContent(content) {
   const hash = crypto.createHash("sha256");
@@ -91,38 +93,39 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
 
   // Dangerous check is intentionally done after removing comments
   let danger = checkForDangerousTextCode(hashfiles[fileHash].content);
-  if (danger.length) {
-    console.log(
-      chalk.red("\u2717"),
-      chalk.yellow(`Text check ::`),
-      chalk.red(
-        `Prohibited code found in ${filePath} used by ${path.relative(
-          process.cwd(),
-          from ? from[2] : ""
-        )}`
-      )
-    );
-    console.log(displayDangerousCode(danger));
-  }
+  // if (danger.length) {
+  //   console.log(
+  //     chalk.red("\u2717"),
+  //     chalk.yellow(`Text check ::`),
+  //     chalk.red(
+  //       `Prohibited code found in ${filePath} ${fileHash} used by ${path.relative(
+  //         process.cwd(),
+  //         from ? from[2] : ""
+  //       )}`
+  //     )
+  //   );
+  //   console.log(displayDangerousCode(danger));
+  // }
 
   // Secondary AST level check
-  let dangerAST = checkForDangerousASTCode(hashfiles[fileHash].content);
-  if (dangerAST.length) {
-    console.log(
-      chalk.red("\u2717"),
-      chalk.yellow("AST check :: "),
-      chalk.red(
-        "Prohibited AST node found in",
-        filePath,
-        "used by",
-        path.relative(process.cwd(), from ? from[2] : "")
-      )
-    );
-    console.log(
-      chalk.white("Disallowed: "),
-      chalk.bgRed.white(dangerAST.join(", "))
-    );
-  }
+  let ast = mo.parseMotoko(hashfiles[fileHash].content);
+  let dangerAST = checkForDangerousASTCode(ast);
+  // if (dangerAST.length) {
+  //   console.log(
+  //     chalk.red("\u2717"),
+  //     chalk.yellow("AST check :: "),
+  //     chalk.red(
+  //       "Prohibited AST node found in",
+  //       filePath,
+  //       "used by",
+  //       path.relative(process.cwd(), from ? from[2] : "")
+  //     )
+  //   );
+  //   console.log(
+  //     chalk.white("Disallowed: "),
+  //     chalk.bgRed.white(dangerAST.join(", "))
+  //   );
+  // }
 
   hashfiles[fileHash].dangers = { text: danger, ast: dangerAST };
 
@@ -204,6 +207,30 @@ export const walkReplace = (node, hashfiles, usedHashes) => {
 
   let newhash = hashContent(newfile);
   hashfiles[newhash] = { ...hashfiles[to], content: newfile, final: true };
+
+  if (!whitelist[newhash]) {
+    if (hashfiles[newhash].dangers.text.length) {
+      console.log(
+        chalk.red("\u2717"),
+        chalk.yellow(`Text check ::`),
+        chalk.red(
+          `Prohibited code found in ${hashfiles[newhash].path} ${newhash}`
+        )
+      );
+      console.log(displayDangerousCode(hashfiles[newhash].dangers.text));
+    }
+    if (hashfiles[newhash].dangers.ast.length) {
+      console.log(
+        chalk.red("\u2717"),
+        chalk.yellow("AST check :: "),
+        chalk.red("Prohibited AST node found in", hashfiles[newhash].path)
+      );
+      console.log(
+        chalk.white("Disallowed: "),
+        chalk.bgRed.white(hashfiles[newhash].dangers.ast.join(", "))
+      );
+    }
+  }
 
   usedHashes.push(newhash);
   return [from?.[1], newhash];

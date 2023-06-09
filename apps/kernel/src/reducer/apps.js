@@ -152,6 +152,11 @@ export const compile_app =
     // dlFileDebug(compile_details.wasm);
     console.log("WASM", compile_details);
 
+    // check currently installed app
+    const danger = compile_details.danger[neutronConfig.id];
+
+    console.log(neutronConfig.id, danger); //TODO: show in UI
+
     dispatch(
       setCompiled({ size: Math.ceil(compile_details.wasm.length / 1024) })
     );

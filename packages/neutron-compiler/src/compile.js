@@ -1,42 +1,14 @@
 import mo from "motoko";
 import { assemble } from "./assemble";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema";
+import { whitelist } from "neutron-security/whitelist.js";
+import { checkForDangerousASTCode } from "neutron-security";
 
 export const compile = ({ mofiles, configs }) => {
-  // collect all mo modules
-  // let mo_lib = await collect();
-
-  // get all app configs
-  // const apps = getState().apps.list;
-
-  // const configs = Object.assign(
-  //   {},
-  //   ...(await Promise.all(
-  //     ["kernel", ...Object.keys(apps)].map((id) =>
-  //       fetch(
-  //         id === "kernel"
-  //           ? "/pkg/neutron.json"
-  //           : "/app/" + id + "/pkg/neutron.json"
-  //       ).then(async (x) => ({
-  //         [id]: await x.json(),
-  //       }))
-  //     )
-  //   ))
-  // );
-
-  // Add new config
-  // configs[neutronConfig.id] = neutronConfig;
-
   // Add new files to library
   for (let { path, content } of mofiles) {
-    // if path doesn't start with "mo/" then ignore
-    //   if (path.indexOf("mo/") !== 0) continue;
-    //   let contentText = new TextDecoder().decode(content);
-    //   const p = path.replace("mo/", "");
     mo.write(path, content);
   }
-
-  //   console.log(configs);
 
   // validate configs
   for (let id in configs) {
@@ -46,24 +18,67 @@ export const compile = ({ mofiles, configs }) => {
       throw new Error(JSON.stringify(errors.map((x) => x.stack)));
   }
 
+  // check all entrypoints for dangerous code
+  let dangers_files = {};
+  for (let id in configs) {
+    const config = configs[id];
+
+    dangers_files[id] = {};
+
+    const recWalk = (modfn) => {
+      if (dangers_files[id][modfn]) return;
+      if (whitelist[modfn]) {
+        console.log(`${modfn} is whitelisted`);
+        return;
+      }
+      const mofile = mo.read(modfn + ".mo");
+      const ast = mo.parseMotoko(mofile);
+
+      let dangers = checkForDangerousASTCode(ast);
+      dangers_files[id][modfn] = dangers;
+
+      // get all imports
+      let imports = extractImports(ast);
+      // for each import, call recWalk
+      for (let impfn of imports) {
+        recWalk(impfn);
+      }
+    };
+
+    recWalk(config.entry);
+  }
+
+  console.log(dangers_files);
+
   // assemble new neutron entrypoint
   let neutron_mo = assemble(configs);
   console.log(neutron_mo);
   mo.write("neutron.mo", neutron_mo);
 
-  // load libraries
-  // for (let { path, content } of mo_lib) {
-  //   const p = path.replace("/mo/", "");
-  //   mo.write(p, content);
-  // }
-
   // compile
-  let compiled = mo.wasm("neutron.mo", "ic");
-  return compiled;
-  // dlFileDebug(compile_details.wasm);
-  // console.log("WASM", compile_details);
-
-  // dispatch(
-  //   setCompiled({ size: Math.ceil(compile_details.wasm.length / 1024) })
-  // );
+  let { wasm, candid } = mo.wasm("neutron.mo", "ic");
+  return { wasm, candid, danger: dangers_files };
 };
+
+function extractImports(ast) {
+  let imports = [];
+
+  function matchTraverseTree(tree) {
+    if (tree.name === "ImportE") {
+      imports.push(tree.args[0]);
+      return;
+    }
+    if (!Array.isArray(tree.args)) return false;
+    for (let node of tree.args) {
+      if (typeof node !== "string") {
+        if (matchTraverseTree(node)) return true;
+      }
+    }
+    return false;
+  }
+  matchTraverseTree(ast);
+
+  imports = imports.filter((x) => (x !== "mo:⛔") & (x !== "mo:prim"));
+
+  return imports;
+}
