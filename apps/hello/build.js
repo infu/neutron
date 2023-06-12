@@ -1,4 +1,5 @@
 import esbuild from "esbuild";
+import copyStaticFiles from "esbuild-copy-static-files";
 
 const config = {
   entryPoints: ["./src/index.js"],
@@ -10,6 +11,16 @@ const config = {
   jsx: "automatic",
   loader: { ".js": "jsx" },
   platform: "browser",
+  plugins: [
+    copyStaticFiles({
+      src: "./public",
+      dest: "./dist/web",
+      dereference: true,
+      errorOnExist: false,
+      preserveTimestamps: true,
+      recursive: true,
+    }),
+  ],
 };
 
 var args = process.argv.slice(2);

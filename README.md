@@ -81,3 +81,7 @@ or
 ## Workarounds:
 
 - A canister can't self-upgrade without another canister https://forum.dfinity.org/t/self-upgrading-canisters/20486
+
+## Install
+
+Check apps/kernel/README.md
