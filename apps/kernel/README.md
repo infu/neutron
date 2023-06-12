@@ -12,11 +12,15 @@ Stores all assets and serves them thru http
 
 ## Install
 
-Note: This installation process may not work, because things constantly change.
+0. Install Internet Identity `dfx start --clean` and `dfx nns install`
 
-You should first go to /app/hello and run `npm run package` the scripts that follow are trying to install its binary
+1. Go to each /package/_ and /apps/_ folder and run `npm i`
 
-Upgrades need to go thru another canister. It will handle a few tasks such as recovery, upgrades, verification, starting and stopping. The canister is located at support/upgrader and once deployed its id needs to be placed inside backend/main.mo
+2. Go to /app/hello and /app/hello2 and run `npm run package`
+
+3. Upgrades need to go thru another canister. It will handle a tasks such as recovery, upgrades, verification, starting and stopping. The canister is located at support/upgrader and once deployed its id needs to be placed inside backend/main.mo (search for UPGRADER)
+
+4. Deploy initial neutron
 
 ```
 npm install
@@ -24,20 +28,19 @@ dfx deploy
 npm run build:boot
 ```
 
-You may need to let the canister know who is its owner. Instructions are printed by boot.js.
+5. Open in browser (replace with your canister id)
 
-Open in browser (replace with your canister id)
+http://be2us-64aaa-aaaaa-qaabq-cai.localhost:8080/
 
-http://r7inp-6aaaa-aaaaa-aaabq-cai.localhost:8080/
-
-Check what your principal is after logging in and add it
+6. Check what your principal is after logging in with Internet Identity and authorize it
 
 ```
-dfx canister call neutron kernel_authorized_add '(principal "52xrw-gaued-e2icl-3r63y-bpl3w-nt4xm-jhfmr-who5g-p2jju-j4243-sqe")'
+dfx canister call neutron kernel_authorized_add '(principal "bisex-y6mfe-l73c7-ey65z-ksirg-xcqp5-ufatc-ljgso-w64p2-v6zsx-lae")'
 ```
 
-Make neutron controller of itself (it should be the only controller)
+7. Make Neutron and Upgrader controllers
 
 ```
-dfx canister update-settings --add-controller q4eej-kyaaa-aaaaa-aaaha-cai neutron
+dfx canister update-settings --add-controller be2us-64aaa-aaaaa-qaabq-cai neutron
+dfx canister update-settings --add-controller bkyz2-fmaaa-aaaaa-qaaaq-cai neutron
 ```

@@ -131,7 +131,7 @@ module {
        
     };
 
-    let UPGRADER = actor "sbzkb-zqaaa-aaaaa-aaaiq-cai": actor {
+    let UPGRADER = actor "bkyz2-fmaaa-aaaaa-qaaaq-cai": actor {
         upgrade : shared (wasm: [Nat8]) -> async ();
     };
    
