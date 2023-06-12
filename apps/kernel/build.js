@@ -1,5 +1,7 @@
 import esbuild from "esbuild";
 import { sassPlugin } from "esbuild-sass-plugin";
+import copyStaticFiles from "esbuild-copy-static-files";
+
 // const neutronModules = {
 //   name: "neutron-modules",
 //   setup: function (build) {
@@ -23,7 +25,17 @@ const config = {
   format: "esm",
   jsx: "automatic",
   loader: { ".js": "jsx" },
-  plugins: [sassPlugin()],
+  plugins: [
+    sassPlugin(),
+    copyStaticFiles({
+      src: "./public",
+      dest: "./dist/web",
+      dereference: true,
+      errorOnExist: false,
+      preserveTimestamps: true,
+      recursive: true,
+    }),
+  ],
   platform: "browser",
 };
 
