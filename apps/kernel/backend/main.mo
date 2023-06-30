@@ -119,21 +119,23 @@ module {
     public type Output_kernel_install_code = ();
     public func kernel_install_code(mem:T.Mem, self: actor {}, inp: Input_kernel_install_code) : async () {
  
-        await UPGRADER.upgrade(inp.wasm);
-        // ignore Timer.setTimer(#seconds(1), func() : async () {
-        //     await IC.install_code({
-        //     arg = [];
-        //     wasm_module = inp.wasm;
-        //     mode = #upgrade;
-        //     canister_id = Principal.fromActor(self);
-        //     });
-        // });
-       
+        // await UPGRADER.upgrade(inp.wasm);
+
+        IC.install_code({
+            arg = [];
+            wasm_module = inp.wasm;
+            mode = #upgrade;
+            canister_id = Principal.fromActor(self);
+            });
+        ignore 3+3;
+
     };
 
-    let UPGRADER = actor "bkyz2-fmaaa-aaaaa-qaaaq-cai": actor {
-        upgrade : shared (wasm: [Nat8]) -> async ();
-    };
+
+   
+    // let UPGRADER = actor "bkyz2-fmaaa-aaaaa-qaaaq-cai": actor {
+    //     upgrade : shared (wasm: [Nat8]) -> async ();
+    // };
    
 
 

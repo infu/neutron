@@ -10,9 +10,9 @@ module {
         // apps  : AppsMap;
     };
 
-    public type Store = {
-        #v1 : Mem;
-    };
+    // public type Store = {
+    //     #v1 : Mem;
+    // };
 
     public type FilesMap = Map.Map<Text, File>;
     public type AuthSet = Set.Set<Principal>;

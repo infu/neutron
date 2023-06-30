@@ -35,12 +35,11 @@ http://be2us-64aaa-aaaaa-qaabq-cai.localhost:8080/
 6. Check what your principal is after logging in with Internet Identity and authorize it
 
 ```
-dfx canister call neutron kernel_authorized_add '(principal "bisex-y6mfe-l73c7-ey65z-ksirg-xcqp5-ufatc-ljgso-w64p2-v6zsx-lae")'
+dfx canister call neutron kernel_authorized_add '(principal "np5fy-hbsbu-5pe7m-wbbyl-5r2ti-il7pz-om6sl-hmyne-jkxn6-c4o3m-wqe")'
 ```
 
-7. Make Neutron and Upgrader controllers
+7. Make Neutron a controller
 
 ```
-dfx canister update-settings --add-controller be2us-64aaa-aaaaa-qaabq-cai neutron
-dfx canister update-settings --add-controller bkyz2-fmaaa-aaaaa-qaaaq-cai neutron
+dfx canister update-settings --add-controller `dfx canister id neutron` neutron
 ```
