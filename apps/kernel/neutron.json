@@ -3,44 +3,48 @@
   "name": "Neutron",
   "version": 1,
   "src": "main.mo",
-  "share": {
-    "is_authorized": {
-      "arg": ["memory_kernel"],
-      "async": false
-    }
-  },
+  "init_arg": [
+    "memory_kernel"
+  ],
   "func": {
+    "kernel_authorized_add": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_authorized_rem": {
+      "type": "update",
+      "async": false
+    },
+    "is_authorized": {
+      "type": "internal",
+      "async": false
+    },
     "kernel_static": {
-      "type": "shared",
-      "arg": ["memory_kernel"]
+      "type": "update",
+      "async": false
     },
     "kernel_static_query": {
       "type": "query",
-      "arg": ["memory_kernel"]
+      "async": false
     },
     "http_request": {
       "type": "query",
-      "allow": "any",
-      "arg": ["memory_kernel", "this.http_request_streaming_callback"]
+      "async": false,
+      "arg": [
+        "caller",
+        "this"
+      ]
     },
     "http_request_streaming_callback": {
       "type": "query",
-      "allow": "any",
-      "arg": ["memory_kernel"]
-    },
-
-    "kernel_authorized_add": {
-      "type": "shared",
-      "arg": ["memory_kernel"]
-    },
-    "kernel_authorized_rem": {
-      "type": "shared",
-      "arg": ["memory_kernel"]
+      "async": false
     },
     "kernel_install_code": {
-      "type": "shared",
-      "arg": ["memory_kernel", "this"],
-      "async": true
+      "type": "update",
+      "async": true,
+      "arg": [
+        "this"
+      ]
     }
   },
   "memory": {

@@ -27,27 +27,12 @@ export const schema = {
       type: "string",
       pattern: "^[a-zA-Z0-9]*$",
     },
-    share: {
-      type: "object",
-      patternProperties: {
-        "^[a-zA-Z_0-9]*$": {
-          type: "object",
-          properties: {
-            arg: {
-              type: "array",
-              items: {
-                type: "string",
-                pattern: "^[a-zA-Z_0-9.]*$",
-              },
-            },
-            async: {
-              type: "boolean",
-            },
-          },
-          additionalProperties: false,
-        },
+    init_arg: {
+      type: "array",
+      items: {
+        type: "string",
+        pattern: "^[a-zA-Z_0-9.]*$",
       },
-      additionalProperties: false,
     },
     func: {
       type: "object",
@@ -57,14 +42,7 @@ export const schema = {
           properties: {
             type: {
               type: "string",
-              enum: ["shared", "query"],
-            },
-            arg: {
-              type: "array",
-              items: {
-                type: "string",
-                pattern: "^[a-zA-Z_0-9.]*$",
-              },
+              enum: ["update", "query", "internal"],
             },
             allow: {
               type: "string",

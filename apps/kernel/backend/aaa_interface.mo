@@ -21,21 +21,12 @@ module {
 
           deposit_cycles : shared { canister_id : canister_id } -> async ();
 
-          // Standard
-          // install_code : shared {
-          //     arg : [Nat8];
-          //     wasm_module : wasm_module;
-          //     mode : { #reinstall; #upgrade; #install };
-          //     canister_id : canister_id;
-          //   } -> async ();
-
-          // Oneway
-          install_code : {
+          install_code : shared {
               arg : [Nat8];
               wasm_module : wasm_module;
               mode : { #reinstall; #upgrade; #install };
               canister_id : canister_id;
-            } -> ();
+            } -> async ();
 
           provisional_create_canister_with_cycles : shared {
               settings : ?canister_settings;

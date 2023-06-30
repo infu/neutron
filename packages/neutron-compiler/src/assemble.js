@@ -14,11 +14,13 @@ export function assemble(confs) {
 
 shared({caller = _installer}) actor class Class() = this {
  
+
+
     ${Object.keys(confs)
       .map((id) => create_module(confs[id]))
       .join("\n")}
       
-    kernel.kernel_authorized_add(memory_kernel, _installer);
+    kernel_init.kernel_authorized_add(_installer);
 }
     `;
 }
@@ -55,7 +57,14 @@ function create_module(conf) {
     stable let memory_store_${memid}:Memory_${memid}_store = #v${ver}(${modname}.memory_${memid}());
 
     let #v${ver}(memory_${memid}) = memory_store_${memid};
-        `;
+
+    let ${modname}_init = ${modname}.Init(${
+                    conf.init_arg?.length
+                      ? conf.init_arg.map(no_inject).join(",")
+                      : ""
+                  });
+
+                  `;
                 })
                 .join("\n")
             : ""
@@ -69,48 +78,40 @@ function create_module(conf) {
             : ""
         }
    
-        ${
-          conf.share
-            ? Object.keys(conf.share)
-                .map((name) =>
-                  create_shared_func(name, conf.share[name], modname)
-                )
-                .join("\n")
-            : ""
-        }
+   
 
     `;
 }
 
-function create_shared_func(name, conf, modname) {
+function create_internal_func(name, conf, modname) {
   no_inject(name);
 
   return `
-      private func module_${modname}_${name}(req: ${modname}.Input_${name}) : ${
+      private func module_${modname}_${name}(req: ${modname}.${name}_Input) : ${
     conf?.async ? "async " : ""
-  } ${modname}.Output_${name} {
-        ${conf?.async ? "await " : ""} ${modname}.${name}(${
-    conf.arg?.length ? conf.arg.map(no_inject).join(",") + "," : ""
-  }req)
+  } ${modname}.${name}_Output {
+        ${conf?.async ? "await " : ""} ${modname}_init.${name}(req)
       };
       `;
 }
 
 function create_func(name, conf, modname) {
+  if (conf.type === "internal")
+    return create_internal_func(name, conf, modname);
   no_inject(name);
 
   return `
     public ${
-      conf.type
-    }({ caller }) func ${name}(req: ${modname}.Input_${name}) : async ${modname}.Output_${name} {
+      conf.type === "query" ? "query" : "shared"
+    }({ caller }) func ${name}(req: ${modname}.${name}_Input) : async ${modname}.${name}_Output {
         ${
           conf.allow !== "any"
-            ? "assert(module_kernel_is_authorized(caller));"
+            ? "assert(kernel_init.is_authorized(caller));"
             : ""
         }
-        ${conf?.async ? "await " : ""} ${modname}.${name}(${
-    conf.arg?.length ? conf.arg.map(no_inject).join(",") + "," : ""
-  }req)
+        ${conf?.async ? "await " : ""} ${modname}_init.${name}(req ${
+    conf.arg?.length ? "," + conf.arg.map(no_inject).join(",") : ""
+  })
     };
     `;
 }

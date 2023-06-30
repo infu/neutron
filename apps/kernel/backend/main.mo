@@ -8,7 +8,6 @@ import Iter "mo:base/Iter";
 import Nat "mo:base/Nat";
 import Map "mo:motoko-hash-map/Map";
 import Set "mo:motoko-hash-map/Set";
-import AAA "./aaa_interface";
 import ST "./static";
 import Timer "mo:base/Timer";
 // import AP "./apps";
@@ -18,136 +17,116 @@ import T "./types";
 module {
     let { ihash; nhash; thash; phash; calcHash } = Map;
 
-
     // Memory
     public type Memory_kernel = T.Mem;
     public func memory_kernel() : Memory_kernel {
         {
             files : T.FilesMap = Map.new(thash);
             authorized = Set.new(phash);
-            // apps : T.AppsMap = Map.new(thash);
         };
     };
     
-    // stable let authorized = Set.fromIter([_installer].vals(), phash);
-    public type Input_kernel_authorized_add = Principal;
-    public type Output_kernel_authorized_add = ();
-    public func kernel_authorized_add(mem:T.Mem, id : Principal) : () {
-  
-        ignore Set.add(mem.authorized, phash, id);
-    };
 
-    public type Input_kernel_authorized_rem = Principal;
-    public type Output_kernel_authorized_rem = ();
-    public func kernel_authorized_rem(mem:T.Mem, id : Principal) : () {
-        ignore Set.remove(mem.authorized, phash, id);
-    };
+    public class Init(mem:T.Mem) {
 
-    public type Input_is_authorized = Principal;
-    public type Output_is_authorized = Bool;
-    public func is_authorized(mem:T.Mem, id : Principal) : Bool {
-        Set.has(mem.authorized, phash, id);
-    };
+        public func /*update*/kernel_authorized_add(id : Principal) : () {
+            Set.add(mem.authorized, phash, id);
+        };
 
+        public func /*update*/kernel_authorized_rem(id : Principal) : () {
+            ignore Set.remove(mem.authorized, phash, id);
+        };
 
+        public func /*internal*/is_authorized(id : Principal) : Bool {
+            Set.has(mem.authorized, phash, id);
+        };
 
+        public func /*update*/kernel_static(cmd: ST.StaticCmd) : () {
+            ST.cmd(mem, cmd);
+        };
 
-    // Apps
-    // public type Input_kernel_app =  AP.AppCmd;
-    // public type Output_kernel_app = ();
-    // public func kernel_app( mem:T.Mem, cmd:Input_kernel_app) : Output_kernel_app {
-    //    AP.cmd(mem, cmd);
-    // };
+        public func /*query*/kernel_static_query(cmd: ST.StaticCmdQuery) : [Text] {
+            ST.cmd_query(mem, cmd);
+        };
+        
+        public func /*query*/http_request(request : Painless.Request, /*caller,this*/ caller:Principal, self: actor {http_request_streaming_callback : Painless.CallbackFunc;}) : Painless.Response {
+            switch(Map.get(mem.files, thash, request.url)) {
+                case (null) { Painless.NotFound("Token not found"); };
+                case (?f) { 
+                    Painless.Request(request, {
+                        chunkFunc = func getChunk(key:Text, index:Nat) : Painless.Chunk {
+                            #end(f.content)
+                        };
+                        cbFunc = self.http_request_streaming_callback;
+                        headers = [
+                            ("Content-type", f.content_type),
+                            ("Content-encoding", f.content_encoding)
+                        ]
+                        }); //("Content-size", Nat32.toText(size)),("Content-type", contentType),("Cache-control", "public,max-age=31536000,immutable"), ("Access-Control-Allow-Origin","*")
 
-    // public type Input_kernel_app_list = ();
-    // public type Output_kernel_app_list = [(Text, T.App)];
-    // public func kernel_app_list( mem:T.Mem, req:Input_kernel_app_list) : Output_kernel_app_list {
-    //     Map.toArray(mem.apps);
-    // };
-
-    // Static
-    public type Input_kernel_static =  ST.StaticCmd;
-    public type Output_kernel_static = ();
-    public func kernel_static(mem:T.Mem, cmd: Input_kernel_static) : Output_kernel_static {
-        ST.cmd(mem, cmd);
-    };
-
-    public type Input_kernel_static_query =  ST.StaticCmdQuery;
-    public type Output_kernel_static_query = [Text];
-    public func kernel_static_query( mem:T.Mem, cmd: Input_kernel_static_query) : Output_kernel_static_query {
-        ST.cmd_query(mem, cmd);
-    };
-    
-    // HTTP
-    public type Input_http_request = Painless.Request;
-    public type Output_http_request = Painless.Response;
-    public func http_request( mem:T.Mem, cbFunc: Painless.CallbackFunc, request : Input_http_request) :  Output_http_request {
-        switch(Map.get(mem.files, thash, request.url)) {
-            case (null) { Painless.NotFound("Token not found"); };
-            case (?f) { 
-                Painless.Request(request, {
-                    chunkFunc = func getChunk(key:Text, index:Nat) : Painless.Chunk {
-                        #end(f.content)
-                    };
-                    cbFunc = cbFunc; //this.http_request_streaming_callback
-                    headers = [
-                        ("Content-type", f.content_type),
-                        ("Content-encoding", f.content_encoding)
-                    ]
-                    }); //("Content-size", Nat32.toText(size)),("Content-type", contentType),("Cache-control", "public,max-age=31536000,immutable"), ("Access-Control-Allow-Origin","*")
-
-            }
-        }
-    };
-    
-    public type Input_http_request_streaming_callback = Painless.Token;
-    public type Output_http_request_streaming_callback = Painless.Callback;
-    public func http_request_streaming_callback( mem:T.Mem, token : Input_http_request_streaming_callback) : Output_http_request_streaming_callback {
-      Painless.Callback(token, {
-          chunkFunc = func getChunk(key:Text, index:Nat) : Painless.Chunk {
-                switch(Map.get(mem.files, thash,  key)) {
-                    case (null) { #none() };
-                    case (?f) { #end(f.content)}
                 }
-            };
-      });
-    };
-    
-    let IC = actor "aaaaa-aa" : AAA.Interface;
-
-    public type Input_kernel_install_code = {wasm: [Nat8]; candid: Text};
-    public type Output_kernel_install_code = ();
-    public func kernel_install_code(mem:T.Mem, self: actor {}, inp: Input_kernel_install_code) : async () {
- 
-        // await UPGRADER.upgrade(inp.wasm);
-
-        IC.install_code({
-            arg = [];
-            wasm_module = inp.wasm;
-            mode = #upgrade;
-            canister_id = Principal.fromActor(self);
+            }
+        };
+        
+        public func /*query*/http_request_streaming_callback(token : Painless.Token) : Painless.Callback {
+            Painless.Callback(token, {
+                chunkFunc = func getChunk(key:Text, index:Nat) : Painless.Chunk {
+                        switch(Map.get(mem.files, thash,  key)) {
+                            case (null) { #none() };
+                            case (?f) { #end(f.content) }
+                        }
+                    };
             });
-        ignore 3+3;
+        };
+        
+        let IC = actor "aaaaa-aa" : actor {
+            install_code : {
+                arg : [Nat8];
+                wasm_module : [Nat8];
+                mode : { #reinstall; #upgrade; #install };
+                canister_id : Principal;
+                } -> ();
+        };
+
+        public func /*update*/kernel_install_code(inp: {wasm: [Nat8]; candid: Text}, /*this*/ self: actor {}) : async () {
+    
+            IC.install_code({
+                arg = [];
+                wasm_module = inp.wasm;
+                mode = #upgrade;
+                canister_id = Principal.fromActor(self);
+                });
+
+        };
 
     };
 
 
-   
-    // let UPGRADER = actor "bkyz2-fmaaa-aaaaa-qaaaq-cai": actor {
-    //     upgrade : shared (wasm: [Nat8]) -> async ();
-    // };
-   
+/*---NEUTRON GENERATED BEGIN---*/
 
-
-    // public type ExtensionCanister =actor{
-    //     nftanvil_use: shared ({
-    //         token:TokenIdentifier;
-    //         aid:AccountIdentifier;
-    //         memo:Nft.Memo;
-    //         useId: Text;
-    //     }) -> async Result.Result<(), Text>
-    // };
-    // let test = actor("aaaaa-aaa"): actor { http_request_streaming_callback : shared () -> async () };
-
-
+public type kernel_authorized_add_Input = (id : Principal);
+public type kernel_authorized_add_Output = ();
+    
+public type kernel_authorized_rem_Input = (id : Principal);
+public type kernel_authorized_rem_Output = ();
+    
+public type is_authorized_Input = (id : Principal);
+public type is_authorized_Output = Bool;
+    
+public type kernel_static_Input = (cmd: ST.StaticCmd);
+public type kernel_static_Output = ();
+    
+public type kernel_static_query_Input = (cmd: ST.StaticCmdQuery);
+public type kernel_static_query_Output = [Text];
+    
+public type http_request_Input = (request : Painless.Request);
+public type http_request_Output = Painless.Response;
+    
+public type http_request_streaming_callback_Input = (token : Painless.Token);
+public type http_request_streaming_callback_Output = Painless.Callback;
+    
+public type kernel_install_code_Input = (inp: {wasm: [Nat8]; candid: Text});
+public type kernel_install_code_Output = ();
+    
+/*---NEUTRON GENERATED END---*/
 }

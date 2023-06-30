@@ -12,6 +12,8 @@ import kernel "main";
 
 shared({caller = _installer}) actor class Class() = this {
  
+
+
     
         
     type Memory_kernel_store = {
@@ -21,59 +23,63 @@ shared({caller = _installer}) actor class Class() = this {
     stable let memory_store_kernel:Memory_kernel_store = #v1(kernel.memory_kernel());
 
     let #v1(memory_kernel) = memory_store_kernel;
-        
+
+    let kernel_init = kernel.Init(memory_kernel);
+
+                  
 
         
-    public shared({ caller }) func kernel_static(req: kernel.Input_kernel_static) : async kernel.Output_kernel_static {
-        assert(module_kernel_is_authorized(caller));
-         kernel.kernel_static(memory_kernel,req)
+    public shared({ caller }) func kernel_authorized_add(req: kernel.kernel_authorized_add_Input) : async kernel.kernel_authorized_add_Output {
+        assert(kernel_init.is_authorized(caller));
+         kernel_init.kernel_authorized_add(req )
     };
     
 
-    public query({ caller }) func kernel_static_query(req: kernel.Input_kernel_static_query) : async kernel.Output_kernel_static_query {
-        assert(module_kernel_is_authorized(caller));
-         kernel.kernel_static_query(memory_kernel,req)
+    public shared({ caller }) func kernel_authorized_rem(req: kernel.kernel_authorized_rem_Input) : async kernel.kernel_authorized_rem_Output {
+        assert(kernel_init.is_authorized(caller));
+         kernel_init.kernel_authorized_rem(req )
     };
     
 
-    public query({ caller }) func http_request(req: kernel.Input_http_request) : async kernel.Output_http_request {
-        
-         kernel.http_request(memory_kernel,this.http_request_streaming_callback,req)
-    };
-    
-
-    public query({ caller }) func http_request_streaming_callback(req: kernel.Input_http_request_streaming_callback) : async kernel.Output_http_request_streaming_callback {
-        
-         kernel.http_request_streaming_callback(memory_kernel,req)
-    };
-    
-
-    public shared({ caller }) func kernel_authorized_add(req: kernel.Input_kernel_authorized_add) : async kernel.Output_kernel_authorized_add {
-        assert(module_kernel_is_authorized(caller));
-         kernel.kernel_authorized_add(memory_kernel,req)
-    };
-    
-
-    public shared({ caller }) func kernel_authorized_rem(req: kernel.Input_kernel_authorized_rem) : async kernel.Output_kernel_authorized_rem {
-        assert(module_kernel_is_authorized(caller));
-         kernel.kernel_authorized_rem(memory_kernel,req)
-    };
-    
-
-    public shared({ caller }) func kernel_install_code(req: kernel.Input_kernel_install_code) : async kernel.Output_kernel_install_code {
-        assert(module_kernel_is_authorized(caller));
-        await  kernel.kernel_install_code(memory_kernel,this,req)
-    };
-    
-   
-        
-      private func module_kernel_is_authorized(req: kernel.Input_is_authorized) :  kernel.Output_is_authorized {
-         kernel.is_authorized(memory_kernel,req)
+      private func module_kernel_is_authorized(req: kernel.is_authorized_Input) :  kernel.is_authorized_Output {
+         kernel_init.is_authorized(req)
       };
       
 
+    public shared({ caller }) func kernel_static(req: kernel.kernel_static_Input) : async kernel.kernel_static_Output {
+        assert(kernel_init.is_authorized(caller));
+         kernel_init.kernel_static(req )
+    };
+    
+
+    public query({ caller }) func kernel_static_query(req: kernel.kernel_static_query_Input) : async kernel.kernel_static_query_Output {
+        assert(kernel_init.is_authorized(caller));
+         kernel_init.kernel_static_query(req )
+    };
+    
+
+    public query({ caller }) func http_request(req: kernel.http_request_Input) : async kernel.http_request_Output {
+        assert(kernel_init.is_authorized(caller));
+         kernel_init.http_request(req ,caller,this)
+    };
+    
+
+    public query({ caller }) func http_request_streaming_callback(req: kernel.http_request_streaming_callback_Input) : async kernel.http_request_streaming_callback_Output {
+        assert(kernel_init.is_authorized(caller));
+         kernel_init.http_request_streaming_callback(req )
+    };
+    
+
+    public shared({ caller }) func kernel_install_code(req: kernel.kernel_install_code_Input) : async kernel.kernel_install_code_Output {
+        assert(kernel_init.is_authorized(caller));
+        await  kernel_init.kernel_install_code(req ,this)
+    };
+    
+   
+   
+
     
       
-    kernel.kernel_authorized_add(memory_kernel, _installer);
+    kernel_init.kernel_authorized_add(_installer);
 }
     
