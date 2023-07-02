@@ -1,0 +1,87 @@
+@import url(style/sanitize.css);
+@import "style/colors";
+@import "style/loader";
+
+BODY {
+    background-color: $gray400;
+    color: $gray800;
+    font-family: sans-serif;
+    font-size: 14px;
+}
+
+.app {
+    padding-top: 49vh;
+    margin: auto;
+    text-align: center;
+    width: 100%;
+    max-width: 500px;
+}
+
+.center-box {
+    padding-top: 49vh;
+    margin: auto;
+    text-align: center;
+    width: 100%;
+    max-width: 500px;
+}
+
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: 1px solid $active600;
+    background-color: $active200;
+    color: $active900;
+    cursor: pointer;
+    &:hover {
+        background-color: $active300;
+    }
+    &:active {
+        background-color: $active400;
+    }
+}
+
+.btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.btn-sec {
+    border: 1px solid $gray800;
+    background-color: $gray200;
+    color: $gray900;
+    &:hover {
+        background-color: $gray400;
+    }
+    &:active {
+        background-color: $gray300;
+    }
+}
+
+.dialog {
+    border: 1px solid $gray500;
+    border-radius: 8px;
+    padding: 32px;
+    z-index: 100;
+    position: fixed;
+    top: 50%;
+    width: 100%;
+    max-width: 600px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-50%);
+    background-color: transparentize($gray200, 0.2);
+    .title {
+        font-size: 24px;
+        margin-bottom: 16px;
+        color: $gray900;
+    }
+}
+
+.btn-actions {
+    margin-top: 16px;
+
+    display: grid;
+    grid-gap: 20px;
+    grid-template-columns: 1fr 1fr;
+}
