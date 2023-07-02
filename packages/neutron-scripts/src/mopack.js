@@ -12,10 +12,7 @@ import {
   getDependencies,
   walkReplace,
 } from "./walk.js";
-import { processConfigAndMain } from "./generate_mo.js";
 const exec = promisify(callbackExec);
-
-await processConfigAndMain();
 
 const neutronJson = await fs.readFile("./neutron.json", "utf-8");
 const neutronConfig = JSON.parse(neutronJson);

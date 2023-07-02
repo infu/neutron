@@ -59,13 +59,13 @@ shared({caller = _installer}) actor class Class() = this {
     
 
     public query({ caller }) func http_request(req: kernel.http_request_Input) : async kernel.http_request_Output {
-        assert(kernel_init.is_authorized(caller));
+        
          kernel_init.http_request(req ,caller,this)
     };
     
 
     public query({ caller }) func http_request_streaming_callback(req: kernel.http_request_streaming_callback_Input) : async kernel.http_request_streaming_callback_Output {
-        assert(kernel_init.is_authorized(caller));
+        
          kernel_init.http_request_streaming_callback(req )
     };
     

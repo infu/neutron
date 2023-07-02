@@ -5,7 +5,8 @@
   "type": "module",
   "version": "1.0.0",
   "scripts": {
-    "build": "node build.js",
+    "build": "node build.js && npm run mogen",
+    "mogen": "node ./node_modules/neutron-scripts/src/mogen.js",
     "mopack": " node ./node_modules/neutron-scripts/src/mopack.js",
     "validate": "node ./node_modules/neutron-scripts/src/validate.js",
     "package": "npm run validate && npm run build && npm run mopack && node ./node_modules/neutron-scripts/src/pack.js",

@@ -49,10 +49,10 @@ module {
             ST.cmd_query(mem, cmd);
         };
         
-        public func /*query*/http_request(request : Painless.Request, /*caller,this*/ caller:Principal, self: actor {http_request_streaming_callback : Painless.CallbackFunc;}) : Painless.Response {
+        public func /*query:unauthorized*/http_request(request : Painless.Request, /*caller,this*/ caller:Principal, self: actor {http_request_streaming_callback : Painless.CallbackFunc;}) : Painless.Response {
             switch(Map.get(mem.files, thash, request.url)) {
                 case (null) { Painless.NotFound("Token not found"); };
-                case (?f) { 
+                case (?f) {
                     Painless.Request(request, {
                         chunkFunc = func getChunk(key:Text, index:Nat) : Painless.Chunk {
                             #end(f.content)
@@ -68,7 +68,7 @@ module {
             }
         };
         
-        public func /*query*/http_request_streaming_callback(token : Painless.Token) : Painless.Callback {
+        public func /*query:unauthorized*/http_request_streaming_callback(token : Painless.Token) : Painless.Callback {
             Painless.Callback(token, {
                 chunkFunc = func getChunk(key:Text, index:Nat) : Painless.Chunk {
                         switch(Map.get(mem.files, thash,  key)) {

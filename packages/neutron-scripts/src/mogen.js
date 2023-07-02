@@ -9,7 +9,7 @@ function removeCommentsAndEmptyLines(content) {
   return noEmptyLines;
 }
 
-export const processConfigAndMain = async () => {
+const processConfigAndMain = async () => {
   const pattern =
     /public\s*func\s*\/\*(.*?)\*\/\s*(\w+)\((.*?)\)\s*:(\s*.*?){/gs;
 
@@ -33,7 +33,12 @@ export const processConfigAndMain = async () => {
 
   for (const match of matches) {
     if (!match[4]) continue;
-    const ftype = match[1];
+    const ffunc = match[1].split(":");
+
+    const ftype = ffunc[0].trim();
+    const unauthorized = ffunc[1]
+      ? ffunc[1].trim() === "unauthorized"
+      : undefined;
 
     const functionName = match[2].trim();
     let inputs = match[3].trim();
@@ -67,6 +72,7 @@ export const processConfigAndMain = async () => {
       type: ftype,
       async,
       arg: commentParts,
+      allow: unauthorized ? "unauthorized" : undefined,
     };
 
     gen += `
@@ -97,3 +103,5 @@ public type ${functionName}_Output = ${output};
   // write new neutron.json
   await fs.writeFile("./neutron.json", JSON.stringify(conf, null, 2), "utf-8");
 };
+
+await processConfigAndMain();

@@ -3,15 +3,18 @@
   "id": "hello",
   "version": 1,
   "src": "main.mo",
-  "share": {
-    "hello_local": {
-      "arg": []
-    }
-  },
+  "init_arg": [
+    "memory_hello"
+  ],
   "func": {
     "hello_world": {
-      "type": "query",
-      "arg": []
+      "type": "update",
+      "async": false
+    }
+  },
+  "memory": {
+    "hello": {
+      "version": 1
     }
   }
 }

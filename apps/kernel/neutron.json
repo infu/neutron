@@ -33,11 +33,13 @@
       "arg": [
         "caller",
         "this"
-      ]
+      ],
+      "allow": "unauthorized"
     },
     "http_request_streaming_callback": {
       "type": "query",
-      "async": false
+      "async": false,
+      "allow": "unauthorized"
     },
     "kernel_install_code": {
       "type": "update",

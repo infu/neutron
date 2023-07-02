@@ -65,7 +65,7 @@ export const App = () => {
             exec("call_dialog", {
               canister: neutron_id,
               method: "hello_world",
-              args: { name: "John" },
+              args: "John",
             })
               .then((x) => setResult(JSON.stringify(toState(x))))
               .catch((err) => {

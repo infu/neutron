@@ -105,7 +105,7 @@ function create_func(name, conf, modname) {
       conf.type === "query" ? "query" : "shared"
     }({ caller }) func ${name}(req: ${modname}.${name}_Input) : async ${modname}.${name}_Output {
         ${
-          conf.allow !== "any"
+          conf.allow !== "unauthorized"
             ? "assert(kernel_init.is_authorized(caller));"
             : ""
         }

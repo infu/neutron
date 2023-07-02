@@ -50,6 +50,13 @@ export const schema = {
             async: {
               type: "boolean",
             },
+            arg: {
+              type: "array",
+              items: {
+                type: "string",
+                pattern: "^[a-zA-Z_0-9.]*$",
+              },
+            },
           },
           additionalProperties: false,
         },
