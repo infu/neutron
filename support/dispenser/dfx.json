@@ -6,6 +6,14 @@
       },
       "source": ["build/"],
       "type": "assets"
+    },
+    "dispenser": {
+      "main": "mo/main.mo"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "mops sources"
     }
   },
   "dfx": "0.14.1",

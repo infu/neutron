@@ -7,6 +7,7 @@ const config = {
   outfile: "./build/main.js",
   bundle: true,
   minify: true,
+  target: "es2020",
   define: {
     global: "window",
   },
