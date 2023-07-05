@@ -71,3 +71,13 @@ await Promise.all(
     })
   )
 ).then((x) => x.flat());
+
+const appconfig = {
+  kernel: { link: "/", name: "Neutron", icon: "/static/icon.png" },
+};
+
+await dispenser.addfile("/system/apps.json", {
+  content: new TextEncoder().encode(JSON.stringify(appconfig)),
+  content_type: "application/json",
+  content_encoding: "plain",
+});

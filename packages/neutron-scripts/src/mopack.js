@@ -28,12 +28,14 @@ const packages = parsePackageString(packagesStr);
 
 const hashfiles = {};
 
+console.log("Processing dependencies...");
 const dependencies = await getDependencies(
   null,
   entry_file,
   packages,
   hashfiles
 );
+console.log("Done processing dependencies.");
 
 const usedHashes = [];
 

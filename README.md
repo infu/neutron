@@ -63,9 +63,11 @@ or
 - Cycles wallet, cycles sending requests
 - Simple wallet app holding/transferring SNS-1 tokens
 - Multi-chunk assets
-- Certified assets
+- ~~Certified assets~~
+- BTree assets, not Hashmap. Searching for files in a directory will be faster
 - Canister-derived identity (?probably not needed)
 - Controllers - The canister itself and its derived identity too. This may result in bricking your canister, but that can be solved by storing the derived identity for longer inside browser memory.
+- ~~Neutron dispenser~~
 - Neutron dispensers in multiple subnets, so we can cover the whole IC
 - Allow apps to have private memory no other app can overtake without a signature
 - Allow canisters (DAOs) to sign Neutron app packages. Neutron should be able to verify authenticity
@@ -82,7 +84,7 @@ or
 
 - A canister can't self-upgrade without another canister https://forum.dfinity.org/t/self-upgrading-canisters/20486
 - Isolated origins https://forum.dfinity.org/t/boundary-node-feature-request-subdomain-principal-ic0-app/20731
- 
+
 ## Install
 
 Check apps/kernel/README.md

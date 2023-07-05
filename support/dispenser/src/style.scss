@@ -24,6 +24,13 @@ BODY {
     width: 100%;
     max-width: 500px;
 }
+.error {
+    color: $red900;
+    padding: 16px;
+}
+.info {
+    color: $blue900;
+}
 
 .btn {
     display: inline-block;
@@ -31,6 +38,20 @@ BODY {
     border-radius: 4px;
     border: 1px solid $active600;
     background-color: $active200;
+    color: $active900;
+    cursor: pointer;
+    &:hover {
+        background-color: $active300;
+    }
+    &:active {
+        background-color: $active400;
+    }
+}
+
+.btn-inline {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 4px;
     color: $active900;
     cursor: pointer;
     &:hover {
