@@ -1,7 +1,8 @@
 {
   "canisters": {
     "neutron": {
-      "main": "backend/_neutron.mo"
+      "main": "backend/_neutron.mo",
+      "type": "motoko"
     }
   },
   "defaults": {

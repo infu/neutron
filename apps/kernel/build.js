@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import { sassPlugin } from "esbuild-sass-plugin";
 import copyStaticFiles from "esbuild-copy-static-files";
+import fs from "fs";
 
 // const neutronModules = {
 //   name: "neutron-modules",
@@ -19,6 +20,7 @@ const config = {
   outfile: "./dist/web/main.js",
   bundle: true,
   minify: true,
+  metafile: true,
   define: {
     global: "window",
   },
@@ -47,5 +49,6 @@ if (args[0] === "watch") {
 
   console.log("Watching local files for changes...");
 } else {
-  esbuild.build(config).catch(() => process.exit(1));
+  let result = await esbuild.build(config).catch(() => process.exit(1));
+  fs.writeFileSync("meta.json", JSON.stringify(result.metafile));
 }

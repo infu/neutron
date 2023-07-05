@@ -83,7 +83,7 @@ const App = () => {
           let ic = icblast({ identity: InternetIdentity.getIdentity() });
           let dispenser = await ic(dispenser_id);
 
-          await dispenser.install({ install: null });
+          await dispenser.install({ reinstall: null });
         }}
       >
         Reinstall Your Neutron

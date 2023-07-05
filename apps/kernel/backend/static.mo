@@ -7,6 +7,8 @@ import Nat "mo:base/Nat";
 import Map "mo:motoko-hash-map/Map";
 import Set "mo:motoko-hash-map/Set";
 import T "./types";
+import Cert "mo:certified-http";
+
 
 module {
     
@@ -24,18 +26,21 @@ module {
         #list: {prefix: Text};
     };
 
-    public func cmd(mem: T.Mem, cmd: StaticCmd) : () {
+    public func cmd(mem: T.Mem, cmd: StaticCmd, cert: Cert.CertifiedHttp<Text>) : () {
         switch(cmd) {
             case(#store({key; val})) {
                 Map.set(mem.files, thash, key, val);
+                cert.put(key, val.content);
             };
             case(#delete({key})) {
                 Map.delete(mem.files, thash, key);
+                cert.delete(key);
             };
             case(#clear({prefix})) {
                 Map.forEach<Text, File>(mem.files, func(key, value) {
                     if (Text.startsWith(key, #text prefix)) {
                          Map.delete(mem.files, thash, key);
+                         cert.delete(key);
                     };
                 });
             };

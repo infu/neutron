@@ -1,5 +1,6 @@
 import Map "mo:motoko-hash-map/Map";
 import Set "mo:motoko-hash-map/Set";
+import Cert "mo:certified-http";
 
 
 module {
@@ -7,6 +8,7 @@ module {
     public type Mem = {
         files : FilesMap;
         authorized : AuthSet;
+        cert: Cert.CertifiedHttpMemory;
         // apps  : AppsMap;
     };
 

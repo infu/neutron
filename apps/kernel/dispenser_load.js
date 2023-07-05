@@ -19,7 +19,9 @@ let dispenser = await ic("wbahd-yaaaa-aaaam-abpaq-cai");
 
 // compile
 let dfx_dir = (await exec("dfx cache show")).stdout.trim();
-let dfx_sources = (await exec("mops sources")).stdout.trim().replace("\n", " ");
+let dfx_sources = (await exec("mops sources")).stdout
+  .trim()
+  .replace(/\n/gs, " ");
 await exec(
   `${dfx_dir}/moc --idl ${dfx_sources} -o _neutron_build backend/_neutron.mo`
 );

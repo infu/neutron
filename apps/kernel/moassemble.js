@@ -12,7 +12,9 @@ fs.writeFile("./backend/_neutron.mo", t);
 
 // create DID
 let dfx_dir = (await exec("dfx cache show")).stdout.trim();
-let dfx_sources = (await exec("mops sources")).stdout.trim().replace("\n", " ");
+let dfx_sources = (await exec("mops sources")).stdout
+  .trim()
+  .replace(/\n/gs, " ");
 await exec(
   `${dfx_dir}/moc --idl ${dfx_sources} -o dist/neutron backend/_neutron.mo`
 );

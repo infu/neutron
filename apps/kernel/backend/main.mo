@@ -12,7 +12,9 @@ import ST "./static";
 import Timer "mo:base/Timer";
 // import AP "./apps";
 import T "./types";
-
+import Cert "mo:certified-http";
+import Int "mo:base/Int";
+import Time "mo:base/Time";
 
 module {
     let { ihash; nhash; thash; phash; calcHash } = Map;
@@ -23,12 +25,22 @@ module {
         {
             files : T.FilesMap = Map.new(thash);
             authorized = Set.new(phash);
+            cert = Cert.init();
         };
     };
     
 
     public class Init(mem:T.Mem) {
+        
+        let cert = Cert.CertifiedHttp<Text>(
+            mem.cert,
+            Text.encodeUtf8,
+        );
 
+        let expiration = 100 * 365 * 24 * 60 * 60 * 1000 * 1000 * 1000; // 100 years in nanoseconds
+
+    
+           
         public func /*update*/kernel_authorized_add(id : Principal) : () {
             Set.add(mem.authorized, phash, id);
         };
@@ -42,7 +54,7 @@ module {
         };
 
         public func /*update*/kernel_static(cmd: ST.StaticCmd) : () {
-            ST.cmd(mem, cmd);
+            ST.cmd(mem, cmd, cert);
         };
 
         public func /*query*/kernel_static_query(cmd: ST.StaticCmdQuery) : [Text] {
@@ -50,6 +62,7 @@ module {
         };
         
         public func /*query:unauthorized*/http_request(request : Painless.Request, /*caller,this*/ caller:Principal, self: actor {http_request_streaming_callback : Painless.CallbackFunc;}) : Painless.Response {
+            
             switch(Map.get(mem.files, thash, request.url)) {
                 case (null) { Painless.NotFound("Token not found"); };
                 case (?f) {
@@ -60,7 +73,8 @@ module {
                         cbFunc = self.http_request_streaming_callback;
                         headers = [
                             ("Content-type", f.content_type),
-                            ("Content-encoding", f.content_encoding)
+                            ("Content-encoding", f.content_encoding),
+                            cert.certificationHeader(request.url)
                         ]
                         }); //("Content-size", Nat32.toText(size)),("Content-type", contentType),("Cache-control", "public,max-age=31536000,immutable"), ("Access-Control-Allow-Origin","*")
 
