@@ -45,7 +45,7 @@ try {
   process.exit(1);
 }
 
-let files = await prepare_files(false, unpackaged, "kernel", "mo/", "", "");
+let files = await prepare_files(unpackaged, "mo/", "");
 
 const limit = plimit(30); // Max concurrent requests
 
@@ -57,7 +57,7 @@ await Promise.all(
       let content_type = mime(path);
       if (!content_type) content_type = "application/octet-stream";
       const content_encoding =
-        content_type.indexOf("image/") === -1 ? "gzip" : "plain"; // not sure why plain binary is called 'identity'?
+        content_type.indexOf("image/") === -1 ? "gzip" : "identity"; // not sure why plain binary is called 'identity'?
       const processed_file =
         content_encoding === "gzip" ? gzipSync(filebin) : filebin;
 
@@ -76,8 +76,8 @@ const appconfig = {
   kernel: { link: "/", name: "Neutron", icon: "/static/icon.png" },
 };
 
-await dispenser.addfile("/system/apps.json", {
+await dispenser.add_file("/system/apps.json", {
   content: new TextEncoder().encode(JSON.stringify(appconfig)),
   content_type: "application/json",
-  content_encoding: "plain",
+  content_encoding: "identity",
 });

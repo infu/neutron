@@ -20,8 +20,9 @@ import Neutron "./lib/neutron";
     private let cmc : CMC.Self = actor ("rkp4c-7iaaa-aaaaa-aaaca-cai");
     private let ic : IC.Self = actor ("aaaaa-aa");
 
+    private type Authorized = Bool;
   
-    stable let regs = BTree.init<Principal, Principal>(?32); // 32 is the order, or the size of each BTree node  
+    stable let regs = BTree.init<Principal, (Principal, Authorized)>(?32); // 32 is the order, or the size of each BTree node  
 
     public type Asset = (Text, Neutron.File);
 
@@ -29,7 +30,8 @@ import Neutron "./lib/neutron";
     stable var wasm : ?Blob = null;
 
     public query({caller}) func find() : async ?Principal {
-         BTree.get<Principal,Principal>(regs, Principal.compare, caller)
+         let ?x = BTree.get<Principal,(Principal, Authorized)>(regs, Principal.compare, caller) else return null;
+         ?x.0;
     };
 
     public shared({caller}) func set_wasm(x : Blob) : async () {
@@ -42,6 +44,22 @@ import Neutron "./lib/neutron";
 
     public shared({caller}) func add_file(key : Text, f : Neutron.File) : async () {
         Vector.add<Asset>(files, (key, f));
+    };
+
+    public shared({caller}) func authorize(p : Principal) : async Result.Result<(), Text> {
+       switch(BTree.get<Principal,(Principal, Authorized)>(regs, Principal.compare, caller)) {
+            case (?(canister_id, authorized)) {
+                //if (authorized == false) return #err("Already authorized");
+                let neutron = actor(Principal.toText(canister_id)) : Neutron.Class;
+                let resp = await neutron.kernel_authorized_add(p);
+
+                ignore BTree.insert<Principal, (Principal, Authorized)>(regs, Principal.compare, caller, (canister_id, true));
+                #ok();
+            };
+            case (null) {
+                return #err("You don't have a canister");
+            };
+       };
     };
 
     // public shared({caller}) func uninstall() : async Result.Result<(), Text> {
@@ -59,11 +77,11 @@ import Neutron "./lib/neutron";
 
 
     public shared({caller}) func install( mode: { #reinstall; #upgrade; #install }) : async Result.Result<Principal, Text> {
-        switch(BTree.get<Principal,Principal>(regs, Principal.compare, caller)) {
-            case (?canister_id) {
+        switch(BTree.get<Principal,(Principal, Authorized)>(regs, Principal.compare, caller)) {
+            case (?(canister_id, authorized)) {
                 let ?w = wasm else return #err("No wasm file");
 
-                await ic.install_code({ arg = to_candid({installer = caller}); wasm_module = w; mode; canister_id });
+                await ic.install_code({ arg = to_candid({installer = Principal.fromActor(this)}); wasm_module = w; mode; canister_id });
                 
                 // Set controller
                 ic.update_settings({canister_id; settings = {
@@ -81,10 +99,12 @@ import Neutron "./lib/neutron";
                 };
 
                 neutron.kernel_static(#store{key="/pkg/id.json"; val={
-                    content = Blob.toArray(Text.encodeUtf8("{id:\"" # Principal.toText(canister_id) #"\"}"));
+                    content = Blob.toArray(Text.encodeUtf8("{\"id\":\"" # Principal.toText(canister_id) #"\"}"));
                     content_type = "application/json";
-                    content_encoding = "plain";
+                    content_encoding = "identity";
                 }});
+
+                ignore BTree.insert<Principal, (Principal, Authorized)>(regs, Principal.compare, caller, (canister_id, false));
 
                 #ok(canister_id);
             };
@@ -97,7 +117,7 @@ import Neutron "./lib/neutron";
 
     public shared({caller}) func create() : async Result.Result<Principal, Text> {
     
-        switch(BTree.get<Principal,Principal>(regs, Principal.compare, caller)) {
+        switch(BTree.get<Principal,(Principal, Authorized)>(regs, Principal.compare, caller)) {
             case (null) ();
             case (?can) return #err("Already created");
         };
@@ -130,7 +150,7 @@ import Neutron "./lib/neutron";
 
                 switch(cmc_resp) {
                     case (#Ok(canister_id)) {
-                        let idx = BTree.insert<Principal, Principal>(regs, Principal.compare, caller, canister_id);
+                        let idx = BTree.insert<Principal, (Principal, Authorized)>(regs, Principal.compare, caller, (canister_id, false));
                         return #ok(canister_id);
                     };
                     case (#Err(e)) {

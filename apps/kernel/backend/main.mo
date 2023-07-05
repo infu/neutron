@@ -53,6 +53,10 @@ module {
             Set.has(mem.authorized, phash, id);
         };
 
+        public func /*query:unauthorized*/kernel_check_authorized((),/*caller*/ caller:Principal) : Bool {
+            Set.has(mem.authorized, phash, caller);
+        };
+
         public func /*update*/kernel_static(cmd: ST.StaticCmd) : () {
             ST.cmd(mem, cmd, cert);
         };
@@ -126,6 +130,9 @@ public type kernel_authorized_rem_Output = ();
     
 public type is_authorized_Input = (id : Principal);
 public type is_authorized_Output = Bool;
+    
+public type kernel_check_authorized_Input = (());
+public type kernel_check_authorized_Output = Bool;
     
 public type kernel_static_Input = (cmd: ST.StaticCmd);
 public type kernel_static_Output = ();

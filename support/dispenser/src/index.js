@@ -11,10 +11,10 @@ import "./style.scss";
 const container = document.getElementById("root");
 const root = createRoot(container);
 
-const App = () => {
+const App = ({ authorize }) => {
   let [account, setAccount] = useState(null);
   let [neutron_id, setNeutronId] = useState(null);
-  let [working, setWorking] = useState(false);
+  let [working, setWorking] = useState(authorize ? true : false);
   let [error, setError] = useState(false);
   let [authenticated, setAuthenticated] = useState(false);
 
@@ -32,6 +32,16 @@ const App = () => {
     }
 
     setAccount(account);
+
+    if (authorize) {
+      try {
+        await dispenser.authorize(authorize);
+        window.location.href = "https://" + canister_id + ".icp0.io/";
+      } catch (e) {
+        setWorking(false);
+        setError(e.message);
+      }
+    }
   };
 
   const login = async () => {
@@ -104,7 +114,8 @@ const App = () => {
                       let canister_id = await dispenser.create();
 
                       await dispenser.install({ install: null });
-                      setNeutronId(canister_id.toText());
+
+                      await refreshAccount();
                     } catch (e) {
                       setError(e.message);
                     }
@@ -147,4 +158,7 @@ const App = () => {
   );
 };
 
-root.render(<App />);
+const urlParams = new URLSearchParams(window.location.search);
+const authorize = urlParams.get("authorize");
+
+root.render(<App authorize={authorize} />);

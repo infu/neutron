@@ -1,6 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
 import icblast, { InternetIdentity } from "@infu/icblast";
-import { config } from "../config";
 
 const initialState = {
   value: 0,
@@ -26,8 +25,8 @@ export const authSlice = createSlice({
 export const { setAuth } = authSlice.actions;
 
 // anon
-// const ic = icblast({ local: true, local_host: 'http://localhost:8080' });
-const ICARG = { local: true, local_host: "http://localhost:8080" };
+const ICARG = {};
+// const ICARG = { local: true, local_host: "http://localhost:8080" };
 
 let ic = icblast(ICARG);
 
@@ -71,6 +70,18 @@ export const login =
     });
 
     dispatch(setAuth({ logged, principal: identity.getPrincipal().toText() }));
+
+    // Check if authorized
+    if (!logged) return;
+    let neutron = await getNeutronCan();
+
+    let authorized = await neutron.kernel_check_authorized(null); //TODO: maybe create another function for this
+    if (!authorized) {
+      // unauthorized
+      window.location.href =
+        "https://widm7-oiaaa-aaaam-abpba-cai.icp0.io/?authorize=" +
+        identity.getPrincipal().toText();
+    }
   };
 
 // const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -89,8 +100,9 @@ let neutron_can = null;
 export const getNeutronCan = async () => {
   if (neutron_can) return neutron_can;
   const candid = await fetch("/pkg/neutron.did").then((x) => x.text());
+  const { id } = await fetch("/pkg/id.json").then((x) => x.json());
   // Icblast doesn't support relative URLs right now
-  neutron_can = await ic(config.neutron_id, candid);
+  neutron_can = await ic(id, candid);
   console.log(neutron_can);
   return neutron_can;
 };

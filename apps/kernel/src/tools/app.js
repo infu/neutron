@@ -1,6 +1,5 @@
 import { collect } from "./collect_modules.js";
 import { unpack, prepare_files } from "./install.js";
-import { config } from "../config.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 
 export async function get_app_details(neutron, pkg) {
@@ -35,12 +34,9 @@ export async function get_app_details(neutron, pkg) {
   const isKernel = urlName === "kernel";
 
   let files = await prepare_files(
-    neutron,
     unpacked,
-    urlName,
     "mo/",
-    isKernel ? "" : "app/" + urlName + "/",
-    config.neutron_id
+    isKernel ? "" : "app/" + urlName + "/"
   );
   console.log(files);
 

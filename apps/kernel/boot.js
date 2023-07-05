@@ -45,14 +45,7 @@ try {
   process.exit(1);
 }
 
-let files = await prepare_files(
-  neutron,
-  unpackaged,
-  "kernel",
-  "mo/",
-  "",
-  neutron_can_id
-);
+let files = await prepare_files(unpackaged, "mo/", "");
 await upload_files(neutron, files);
 
 // create apps.json
@@ -71,18 +64,21 @@ await neutron.kernel_static({
   },
 });
 
+await neutron.kernel_static({
+  store: {
+    key: "/pkg/id.json",
+    val: {
+      content: new TextEncoder().encode(JSON.stringify({ id: neutron_can_id })),
+      content_type: "application/json",
+      content_encoding: "plain",
+    },
+  },
+});
+
 // let unpackaged2 = await unpack(
 //   await fs.readFile("../hello/neutron_hello.1_0_0.neutron")
 // );
 
-// let files2 = await prepare_files(
-//   neutron,
-//   unpackaged2,
-//   "hello",
-//   "mo/",
-//   "hello/",
-//   neutron_can_id
-// );
 // await upload_files(neutron, files2);
 
 // let list = await neutron.kernel_static_query({ list: { prefix: "" } });

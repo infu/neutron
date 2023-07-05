@@ -19,6 +19,14 @@
       "type": "internal",
       "async": false
     },
+    "kernel_check_authorized": {
+      "type": "query",
+      "async": false,
+      "arg": [
+        "caller"
+      ],
+      "allow": "unauthorized"
+    },
     "kernel_static": {
       "type": "update",
       "async": false

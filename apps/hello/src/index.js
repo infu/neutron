@@ -3,7 +3,13 @@ import { createRoot } from "react-dom/client";
 import { exec } from "neutron-tools";
 import { toState } from "@infu/icblast";
 
-const neutron_id = "NEUTRON_ENV_CANISTER_ID";
+let neutron_id;
+
+fetch("/pkg/id.json")
+  .then((x) => x.json())
+  .then(({ id }) => {
+    neutron_id = id;
+  });
 
 const container = document.getElementById("root");
 const root = createRoot(container);

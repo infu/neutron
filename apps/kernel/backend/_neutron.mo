@@ -46,6 +46,12 @@ shared({caller = _installer}) actor class Class() = this {
       };
       
 
+    public query({ caller }) func kernel_check_authorized(req: kernel.kernel_check_authorized_Input) : async kernel.kernel_check_authorized_Output {
+        
+         kernel_init.kernel_check_authorized(req ,caller)
+    };
+    
+
     public shared({ caller }) func kernel_static(req: kernel.kernel_static_Input) : async kernel.kernel_static_Output {
         assert(kernel_init.is_authorized(caller));
          kernel_init.kernel_static(req )

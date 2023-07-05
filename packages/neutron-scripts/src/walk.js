@@ -76,6 +76,8 @@ export function parseImports(content) {
   return imports;
 }
 
+const gdeps = {};
+
 export async function getDependencies(from, filePath, packages, hashfiles) {
   // WARNING!!! Changing even a comma here may break the whole security
   const content = await fs.readFile(filePath, "utf-8");
@@ -83,16 +85,17 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
   const imports = parseImports(removeCommentsAndEmptyLines(content));
   const fileHash = hashContent(content);
   console.log("Processing", filePath);
-  if (hashfiles[fileHash]?.dependencies) {
-    return hashfiles[fileHash].dependencies;
+  if (gdeps[filePath]) {
+    return gdeps[filePath];
   }
 
   // const dependencies = { mods: [] };
+  gdeps[filePath] = { mods: [] };
+
   if (!hashfiles[fileHash]) {
     hashfiles[fileHash] = {
       content: removeCommentsAndEmptyLines(content),
       path: filePath,
-      dependencies: { mods: [] },
     };
   }
 
@@ -134,7 +137,7 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
 
   hashfiles[fileHash].dangers = { text: danger, ast: dangerAST };
 
-  hashfiles[fileHash].dependencies.map = { from, to: fileHash };
+  gdeps[filePath].map = { from, to: fileHash };
 
   for (const importName in imports) {
     const importPath = imports[importName];
@@ -148,13 +151,12 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
           packages[packagePrefix],
           `${packagePath}.mo`
         );
-        hashfiles[fileHash].dependencies.mods[importName] =
-          await getDependencies(
-            [fileHash, importPath, filePath],
-            packageFullPath,
-            packages,
-            hashfiles
-          );
+        gdeps[filePath].mods[importName] = await getDependencies(
+          [fileHash, importPath, filePath],
+          packageFullPath,
+          packages,
+          hashfiles
+        );
       } catch (e) {
         try {
           if (!packages[packagePrefix])
@@ -167,13 +169,12 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
             `${packagePath}/lib.mo`
           );
           // console.log("Secondary package path", packageFullPath);
-          hashfiles[fileHash].dependencies.mods[importName] =
-            await getDependencies(
-              [fileHash, importPath, filePath],
-              packageFullPath,
-              packages,
-              hashfiles
-            );
+          gdeps[filePath].mods[importName] = await getDependencies(
+            [fileHash, importPath, filePath],
+            packageFullPath,
+            packages,
+            hashfiles
+          );
         } catch (e) {
           console.error({
             filePath,
@@ -187,7 +188,7 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
       }
     } else {
       const fullPath = path.resolve(path.dirname(filePath), `${importPath}.mo`);
-      hashfiles[fileHash].dependencies.mods[importName] = await getDependencies(
+      gdeps[filePath].mods[importName] = await getDependencies(
         [fileHash, importPath, filePath],
         fullPath,
         packages,
@@ -196,7 +197,7 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
     }
   }
 
-  return hashfiles[fileHash].dependencies;
+  return gdeps[filePath];
 }
 
 export const walkReplace = (node, hashfiles, usedHashes) => {
@@ -211,8 +212,6 @@ export const walkReplace = (node, hashfiles, usedHashes) => {
   for (let rep of reps) {
     newfile = replaceImportPaths(newfile, rep[0], rep[1]);
   }
-
-  delete hashfiles[to].dependencies;
 
   let newhash = hashContent(newfile);
   hashfiles[newhash] = { ...hashfiles[to], content: newfile, final: true };

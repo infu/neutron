@@ -31,14 +31,7 @@ export const chunkfile = (ua) => {
   return r;
 };
 
-export async function prepare_files(
-  neutron,
-  pkg,
-  name,
-  mo_prefix,
-  app_prefix,
-  neutron_canister_id
-) {
+export async function prepare_files(pkg, mo_prefix, app_prefix) {
   let files = pkg;
 
   // files convert to array
@@ -48,15 +41,6 @@ export async function prepare_files(
   for (let f of files) {
     if (f.path.indexOf("web/") === 0) {
       f.path = f.path.replace("web/", app_prefix);
-      const ext = f.path.split(".").pop();
-      if (ext === "js") {
-        let tmp = new TextDecoder().decode(f.content);
-        tmp = tmp.replace(
-          `"NEUTRON_ENV_CANISTER_ID"`,
-          `"${neutron_canister_id}"`
-        );
-        f.content = new TextEncoder().encode(tmp);
-      }
     } else if (f.path.indexOf("mo/") === 0) {
       let hash = hashContent(f.content);
       let expected = "mo/" + hash + ".mo";
@@ -83,7 +67,7 @@ export async function upload_files(neutron, files) {
         let content_type = mime(path);
         if (!content_type) content_type = "application/octet-stream";
         const content_encoding =
-          content_type.indexOf("image/") === -1 ? "gzip" : "plain"; // not sure why plain binary is called 'identity'?
+          content_type.indexOf("image/") === -1 ? "gzip" : "identity"; // not sure why plain binary is called 'identity'?
         const processed_file =
           content_encoding === "gzip" ? gzipSync(filebin) : filebin;
 

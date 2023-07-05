@@ -10,8 +10,6 @@ import { Auth } from "./Auth";
 import { Requests } from "./Requests";
 import { AppDialogs } from "./AppDialogs";
 
-import { config } from "./config.js";
-
 import { install_app } from "./reducer/apps.js";
 import "./expose";
 import "./style.scss";
@@ -51,5 +49,3 @@ root.render(<App />);
 window.install_app = async () => {
   store.dispatch(install_app());
 };
-
-console.log("Neutron id:", config.neutron_id);

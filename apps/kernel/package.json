@@ -5,10 +5,11 @@
   "type": "module",
   "version": "1.0.0",
   "scripts": {
-    "build": "node build.js && npm run mogen",
+    "build": "node build.js && npm run mogen && node moassemble.js",
     "mopack": "node ./node_modules/neutron-scripts/src/mopack.js",
     "mogen": "node ./node_modules/neutron-scripts/src/mogen.js",
-    "package": "npm run build && node ./node_modules/neutron-scripts/src/pack.js",
+    "dispenser": "npm run build && npm run package && node dispenser_load.js",
+    "package": " npm run build && node ./node_modules/neutron-scripts/src/pack.js",
     "validate": "node ./node_modules/neutron-scripts/src/validate.js",
     "boot": "node ./boot.js",
     "build:boot": "npm run build && node moassemble.js && npm run mopack && npm run package && npm run boot",
