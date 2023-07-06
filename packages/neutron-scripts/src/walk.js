@@ -6,7 +6,7 @@ import {
   checkForDangerousTextCode,
 } from "neutron-security";
 import path from "path";
-import { whitelist } from "neutron-security/whitelist.js";
+import { whitelist } from "../whitelist.js";
 import mo from "motoko";
 
 export function hashContent(content) {

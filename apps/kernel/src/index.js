@@ -11,6 +11,8 @@ import { Requests } from "./Requests";
 import { AppDialogs } from "./AppDialogs";
 
 import { install_app } from "./reducer/apps.js";
+import { neutron_id } from "./config.js";
+
 import "./expose";
 import "./style.scss";
 
@@ -33,7 +35,9 @@ const App = () => {
       {app ? (
         <iframe
           className="appiframe"
-          src={"/app/" + app + "/index.html"}
+          src={
+            "https://" + neutron_id + ".raw.icp0.io/app/" + app + "/index.html"
+          }
           /* @ts-expect-error */
           credentialless="true" /* eslint-disable-line */
         />

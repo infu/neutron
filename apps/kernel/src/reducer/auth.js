@@ -1,5 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import icblast, { InternetIdentity } from "@infu/icblast";
+import { neutron_id } from "../config.js";
 
 const initialState = {
   value: 0,
@@ -100,9 +101,10 @@ let neutron_can = null;
 export const getNeutronCan = async () => {
   if (neutron_can) return neutron_can;
   const candid = await fetch("/pkg/neutron.did").then((x) => x.text());
-  const { id } = await fetch("/pkg/id.json").then((x) => x.json());
+
+  // const { id } = await fetch("/pkg/id.json").then((x) => x.json());
   // Icblast doesn't support relative URLs right now
-  neutron_can = await ic(id, candid);
+  neutron_can = await ic(neutron_id, candid);
   console.log(neutron_can);
   return neutron_can;
 };

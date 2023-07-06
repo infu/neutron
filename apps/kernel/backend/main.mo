@@ -5,11 +5,11 @@ import Principal "mo:base/Principal";
 import Text "mo:base/Text";
 
 import Iter "mo:base/Iter";
-import Nat "mo:base/Nat";
+import Nat "mo:base/Nat"; 
 import Map "mo:motoko-hash-map/Map";
 import Set "mo:motoko-hash-map/Set";
 import ST "./static";
-import Timer "mo:base/Timer";
+import Timer "mo:base/Timer"; 
 // import AP "./apps";
 import T "./types";
 import Cert "mo:certified-http";
@@ -79,6 +79,7 @@ module {
                             ("Content-type", f.content_type),
                             ("Content-encoding", f.content_encoding),
                             cert.certificationHeader(request.url)
+                            // ("X-Frame-Options", "SAMEORIGIN") // Doesn't do anything
                         ]
                         }); //("Content-size", Nat32.toText(size)),("Content-type", contentType),("Cache-control", "public,max-age=31536000,immutable"), ("Access-Control-Allow-Origin","*")
 

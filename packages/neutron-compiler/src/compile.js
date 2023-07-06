@@ -1,7 +1,7 @@
 import mo from "motoko";
 import { assemble } from "./assemble";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema";
-import { whitelist } from "neutron-security/whitelist.js";
+import { whitelist } from "../whitelist.js";
 import { checkForDangerousASTCode } from "neutron-security";
 
 export const compile = ({ mofiles, configs }) => {

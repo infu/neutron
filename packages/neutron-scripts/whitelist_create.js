@@ -69,3 +69,8 @@ await fs.writeFile(
   "./whitelist.js",
   "export const whitelist = " + JSON.stringify(whitelisted, null, 2)
 );
+
+await fs.writeFile(
+  "../neutron-compiler/whitelist.js",
+  "export const whitelist = " + JSON.stringify(whitelisted, null, 2)
+);

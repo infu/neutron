@@ -1,3 +1,4 @@
+import Array "mo:base/Array";
 
 module {
 
