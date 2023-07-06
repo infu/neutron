@@ -14,7 +14,7 @@ const root = createRoot(container);
 const App = ({ authorize }) => {
   let [account, setAccount] = useState(null);
   let [neutron_id, setNeutronId] = useState(null);
-  let [working, setWorking] = useState(authorize ? true : false);
+  let [working, setWorking] = useState(authorize ? "Authorizing" : false);
   let [error, setError] = useState(false);
   let [authenticated, setAuthenticated] = useState(false);
 
@@ -29,18 +29,17 @@ const App = ({ authorize }) => {
     let canister_id = await dispenser.find();
     if (canister_id) {
       setNeutronId(canister_id.toText());
-    }
-
-    setAccount(account);
-
-    if (authorize) {
-      try {
-        await dispenser.authorize(authorize);
-        window.location.href = "https://" + canister_id + ".icp0.io/";
-      } catch (e) {
-        setWorking(false);
-        setError(e.message);
+      if (authorize) {
+        try {
+          await dispenser.authorize(authorize);
+          window.location.href = "https://" + canister_id + ".icp0.io/";
+        } catch (e) {
+          setWorking(false);
+          setError(e.message);
+        }
       }
+    } else {
+      setAccount(account);
     }
   };
 
@@ -69,10 +68,10 @@ const App = ({ authorize }) => {
 
   return (
     <div className="app">
-      <div>Neutron Dispenser</div>
+      <div className="heading">Neutron Dispenser</div>
       {neutron_id ? (
-        <div>
-          Neutron:{" "}
+        <div className="info">
+          Your neutron:{" "}
           <a
             rel="noreferrer"
             target="_blank"
@@ -84,19 +83,19 @@ const App = ({ authorize }) => {
       ) : null}
       {!authenticated ? (
         <div className="btn" onClick={login}>
-          Auth
+          Sign In
         </div>
       ) : (
         <>
           {!neutron_id ? (
-            <div>
+            <div className="info">
               Send at least 0.2 ICP to this account: {account} <br />
               Everything you send is converted to cycles and sent to your
               Neutron canister
             </div>
           ) : null}
           {error ? <div className="error">{error}</div> : null}
-          {working ? <div className="info">Installing...</div> : null}
+          {working ? <div className="info">{working}...</div> : null}
 
           {!working ? (
             <>
@@ -108,7 +107,7 @@ const App = ({ authorize }) => {
                       identity: InternetIdentity.getIdentity(),
                     });
                     let dispenser = await ic(dispenser_id);
-                    setWorking(true);
+                    setWorking("Installing");
                     setError(false);
                     try {
                       let canister_id = await dispenser.create();
@@ -132,7 +131,7 @@ const App = ({ authorize }) => {
                       identity: InternetIdentity.getIdentity(),
                     });
                     let dispenser = await ic(dispenser_id);
-                    setWorking(true);
+                    setWorking("Reinstalling");
                     setError(false);
                     try {
                       await dispenser.install({ reinstall: null });
@@ -148,9 +147,12 @@ const App = ({ authorize }) => {
             </>
           ) : null}
           {!working ? (
-            <div className="btn-inline" onClick={logout}>
-              Logout
-            </div>
+            <>
+              <br />
+              <div className="btn-inline" onClick={logout}>
+                Sign Out
+              </div>
+            </>
           ) : null}
         </>
       )}

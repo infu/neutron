@@ -2,6 +2,16 @@
 @import "style/colors";
 @import "style/loader";
 
+a,
+a.visited {
+    color: $green500;
+    text-decoration: none;
+}
+a:hover {
+    color: $green800;
+    text-decoration: underline;
+}
+
 BODY {
     background-color: $gray400;
     color: $gray800;
@@ -10,11 +20,11 @@ BODY {
 }
 
 .app {
-    padding-top: 49vh;
+    padding-top: 46vh;
     margin: auto;
     text-align: center;
     width: 100%;
-    max-width: 500px;
+    max-width: 520px;
 }
 
 .center-box {
@@ -22,14 +32,15 @@ BODY {
     margin: auto;
     text-align: center;
     width: 100%;
-    max-width: 500px;
+    max-width: 520px;
 }
 .error {
     color: $red900;
     padding: 16px;
 }
 .info {
-    color: $blue900;
+    color: $gray900;
+    padding: 16px 0px;
 }
 
 .btn {
@@ -49,10 +60,11 @@ BODY {
 }
 
 .btn-inline {
+    margin-top: 4px;
     display: inline-block;
     padding: 8px 16px;
     border-radius: 4px;
-    color: $active900;
+    color: $gray900;
     cursor: pointer;
     &:hover {
         background-color: $active300;
@@ -105,4 +117,9 @@ BODY {
     display: grid;
     grid-gap: 20px;
     grid-template-columns: 1fr 1fr;
+}
+
+.heading {
+    padding: 8px 16px;
+    font-size: 24px;
 }

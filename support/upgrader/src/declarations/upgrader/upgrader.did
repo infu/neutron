@@ -1,3 +1,0 @@
-service : {
-  upgrade: (vec nat8, principal) -> ();
-}
