@@ -82,7 +82,7 @@ or
 
 ## Workarounds:
 
-- A canister can't self-upgrade without another canister https://forum.dfinity.org/t/self-upgrading-canisters/20486
+- ~~A canister can't self-upgrade without another canister https://forum.dfinity.org/t/self-upgrading-canisters/20486~~
 - Isolated origins https://forum.dfinity.org/t/boundary-node-feature-request-subdomain-principal-ic0-app/20731
 
 ## Install
