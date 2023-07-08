@@ -18,7 +18,6 @@
   "description": "",
   "dependencies": {
     "@infu/icblast": "^2.0.39",
-    "neutron-hello": "file:../hello",
     "neutron-scripts": "file:../../packages/neutron-scripts",
     "neutron-tools": "file:../../packages/neutron-tools",
     "p-limit": "^4.0.0",

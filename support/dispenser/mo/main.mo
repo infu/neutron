@@ -102,6 +102,7 @@ import Neutron "./lib/neutron";
                     content = Blob.toArray(Text.encodeUtf8("{\"id\":\"" # Principal.toText(canister_id) #"\"}"));
                     content_type = "application/json";
                     content_encoding = "identity";
+                    chunks = 1;
                 }});
 
                 ignore BTree.insert<Principal, (Principal, Authorized)>(regs, Principal.compare, caller, (canister_id, false));

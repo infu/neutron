@@ -65,6 +65,7 @@ await Promise.all(
         content: processed_file,
         content_type,
         content_encoding,
+        chunks: 1,
       });
 
       console.log("Uploaded ", path);
@@ -80,4 +81,5 @@ await dispenser.add_file("/system/apps.json", {
   content: new TextEncoder().encode(JSON.stringify(appconfig)),
   content_type: "application/json",
   content_encoding: "identity",
+  chunks: 1,
 });

@@ -16,6 +16,7 @@ module {
   public type File = {
     content : [Nat8];
     content_type : Text;
+    chunks: Nat;
     content_encoding : Text;
   };
   public type HeaderField = (Text, Text);

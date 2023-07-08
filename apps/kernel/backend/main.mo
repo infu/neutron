@@ -6,41 +6,59 @@ import Text "mo:base/Text";
 
 import Iter "mo:base/Iter";
 import Nat "mo:base/Nat"; 
-import Map "mo:motoko-hash-map/Map";
 import Set "mo:motoko-hash-map/Set";
-import ST "./static";
 import Timer "mo:base/Timer"; 
 // import AP "./apps";
-import T "./types";
 import Cert "mo:certified-http";
 import Int "mo:base/Int";
 import Time "mo:base/Time";
+import Bt "mo:stableheapbtreemap/BTree";
+import Assets "./assets";
+import Array "mo:base/Array";
 
 module {
-    let { ihash; nhash; thash; phash; calcHash } = Map;
+    let { phash } = Set;
+
+    public type AuthSet = Set.Set<Principal>;
 
     // Memory
-    public type Memory_kernel = T.Mem;
+    public type Memory_kernel = {
+        assets : Assets.Init;
+        authorized : AuthSet;
+        cert: Cert.CertifiedHttpMemory;
+    };
+
     public func memory_kernel() : Memory_kernel {
         {
-            files : T.FilesMap = Map.new(thash);
+            assets = Assets.init();
             authorized = Set.new(phash);
             cert = Cert.init();
         };
     };
     
 
-    public class Init(mem:T.Mem) {
-        
-        let cert = Cert.CertifiedHttp<Text>(
-            mem.cert,
-            Text.encodeUtf8,
+    public type StaticCmd = {
+        #store_chunk: {key: Text; chunk_id:Nat; content: Blob};
+        #store: {key: Text; val: File};
+        #delete: {key: Text};
+        #clear: {prefix: Text};
+    };
+    
+    public type StaticCmdQuery = {
+        #list: {prefix: Text};
+    };
+
+
+    public type File = {content: Blob; content_encoding:Text; content_type:Text; chunks: Nat};
+
+
+    public class Init(mem:Memory_kernel) {
+        let assets = Assets.use(mem.assets);
+
+        let cert = Cert.CertifiedHttp(
+            mem.cert
         );
 
-        let expiration = 100 * 365 * 24 * 60 * 60 * 1000 * 1000 * 1000; // 100 years in nanoseconds
-
-    
-           
         public func /*update*/kernel_authorized_add(id : Principal) : () {
             Set.add(mem.authorized, phash, id);
         };
@@ -57,22 +75,69 @@ module {
             Set.has(mem.authorized, phash, caller);
         };
 
-        public func /*update*/kernel_static(cmd: ST.StaticCmd) : () {
-            ST.cmd(mem, cmd, cert);
+        public func /*update*/kernel_static(cmd: StaticCmd) : () {
+            switch(cmd) {
+                case(#store_chunk(x)) {
+                    cert.chunkedSend(x.key, x.chunk_id, x.content);
+                };
+                case(#store({key; val})) {
+                    assert(val.chunks > 0);
+
+                    if (val.chunks == 1) {
+                        assets.db.insert({
+                            id= key;
+                            chunks= val.chunks;
+                            content= [val.content];
+                            content_encoding= val.content_encoding;
+                            content_type = val.content_type;
+                        });
+                        cert.put(key, val.content);
+                        return ();
+                    };
+                    // Allows uploads of large certified files.
+                    cert.chunkedStart(key, val.chunks, func(content: [Blob]) {
+                        // when done
+                        assets.db.insert({
+                            id= key;
+                            chunks= val.chunks;
+                            content= content;
+                            content_encoding= val.content_encoding;
+                            content_type = val.content_type;
+                        });
+                    });
+                   
+                };
+                case(#delete({key})) {
+                    assets.pk.delete(key);
+                    cert.delete(key);
+                };
+                case(#clear({prefix})) {
+                    for ((k, idx) in assets.pk.findIter(prefix, prefix#"~", #fwd)) {
+                        assets.db.deleteIdx(idx);
+                        cert.delete(k);
+                    };
+                };
+            };
         };
 
-        public func /*query*/kernel_static_query(cmd: ST.StaticCmdQuery) : [Text] {
-            ST.cmd_query(mem, cmd);
+        public func /*query*/kernel_static_query(cmd: StaticCmdQuery) : [Text] {
+            switch(cmd) {
+                case(#list({prefix})) {
+                    let res = assets.pk.findIdx(prefix, prefix#"~", #fwd, 3000); // max 3000
+                    Array.map<(Text, Nat), Text>(res, func(x) { x.0 });
+                };
+            };
         };
         
         public func /*query:unauthorized*/http_request(request : Painless.Request, /*caller,this*/ caller:Principal, self: actor {http_request_streaming_callback : Painless.CallbackFunc;}) : Painless.Response {
             
-            switch(Map.get(mem.files, thash, request.url)) {
+            switch(assets.pk.get(request.url)) {
                 case (null) { Painless.NotFound("Token not found"); };
                 case (?f) {
                     Painless.Request(request, {
                         chunkFunc = func getChunk(key:Text, index:Nat) : Painless.Chunk {
-                            #end(f.content)
+                            if (f.chunks > 1) return #more(f.content[0]);
+                            #end(f.content[0]);
                         };
                         cbFunc = self.http_request_streaming_callback;
                         headers = [
@@ -90,16 +155,19 @@ module {
         public func /*query:unauthorized*/http_request_streaming_callback(token : Painless.Token) : Painless.Callback {
             Painless.Callback(token, {
                 chunkFunc = func getChunk(key:Text, index:Nat) : Painless.Chunk {
-                        switch(Map.get(mem.files, thash,  key)) {
-                            case (null) { #none() };
-                            case (?f) { #end(f.content) }
+                        switch(assets.pk.get(key)) {
+                            case (null) #none();
+                            case (?f) { 
+                                if (f.chunks > index) return #more(f.content[index]);
+                                #end(f.content[index]);
+                                }
                         }
                     };
             });
         };
-        
-        let IC = actor "aaaaa-aa" : actor {
-            install_code : {
+
+        let IC = actor "aaaaa-aa" : actor { // one shot
+                install_code : {
                 arg : [Nat8];
                 wasm_module : [Nat8];
                 mode : { #reinstall; #upgrade; #install };
@@ -118,6 +186,7 @@ module {
 
         };
 
+
     };
 
 
@@ -135,10 +204,10 @@ public type is_authorized_Output = Bool;
 public type kernel_check_authorized_Input = (());
 public type kernel_check_authorized_Output = Bool;
     
-public type kernel_static_Input = (cmd: ST.StaticCmd);
+public type kernel_static_Input = (cmd: StaticCmd);
 public type kernel_static_Output = ();
     
-public type kernel_static_query_Input = (cmd: ST.StaticCmdQuery);
+public type kernel_static_query_Input = (cmd: StaticCmdQuery);
 public type kernel_static_query_Output = [Text];
     
 public type http_request_Input = (request : Painless.Request);
