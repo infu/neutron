@@ -10,7 +10,7 @@
   "license": "ISC",
   "description": "",
   "peerDependencies": {
-    "motoko": "^3.4.0"
+    "motoko": "^3.6.0"
   },
   "dependencies": {
     "chalk": "^5.2.0"

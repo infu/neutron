@@ -10,7 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "motoko": "^3.4.0",
+    "motoko": "^3.6.0",
     "neutron-security": "file:../neutron-security",
     "neutron-tools": "file:../neutron-tools"
   }

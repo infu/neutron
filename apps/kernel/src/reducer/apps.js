@@ -200,6 +200,7 @@ export const install_app = () => async (dispatch, getState) => {
         content: new TextEncoder().encode(JSON.stringify(appconfig)),
         content_type: "application/json",
         content_encoding: "identity",
+        chunks: 1,
       },
     },
   });
@@ -216,6 +217,7 @@ export const install_app = () => async (dispatch, getState) => {
         content: new TextEncoder().encode(compile_details.candid),
         content_type: "text/plain",
         content_encoding: "identity",
+        chunks: 1,
       },
     },
   });

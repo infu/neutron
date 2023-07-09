@@ -72,17 +72,30 @@ export async function upload_files(neutron, files) {
           content_encoding === "gzip" ? gzipSync(filebin) : filebin;
 
         const chunks = chunkfile(processed_file);
+        let key = "/" + (path === "index.html" ? "" : path);
 
         await neutron.kernel_static({
           store: {
-            key: "/" + (path === "index.html" ? "" : path),
+            key,
             val: {
               content: chunks[0],
               content_type,
               content_encoding,
+              chunks: chunks.length,
             },
           },
         });
+
+        for (let i = 1; i < chunks.length; i++) {
+          await neutron.kernel_static({
+            store_chunk: {
+              key,
+              content: chunks[i],
+              chunk_id: i,
+            },
+          });
+        }
+
         console.log("Uploaded ", path);
       })
     )

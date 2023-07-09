@@ -25,7 +25,6 @@ let mopsOutput = await exec("mops sources");
 const packagesStr = mopsOutput.stdout.replace(/\n/g, " ").trim();
 
 const packages = parsePackageString(packagesStr);
-
 const hashfiles = {};
 
 console.log("Processing dependencies...");

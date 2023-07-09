@@ -60,6 +60,7 @@ await neutron.kernel_static({
       content: new TextEncoder().encode(JSON.stringify(appconfig)),
       content_type: "application/json",
       content_encoding: "plain",
+      chunks: 1,
     },
   },
 });
@@ -71,6 +72,7 @@ await neutron.kernel_static({
       content: new TextEncoder().encode(JSON.stringify({ id: neutron_can_id })),
       content_type: "application/json",
       content_encoding: "plain",
+      chunks: 1,
     },
   },
 });

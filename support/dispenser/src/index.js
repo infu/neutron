@@ -57,6 +57,7 @@ const App = ({ authorize }) => {
     setAuthenticated(false);
     setWorking(false);
     setError(false);
+    window.location.reload();
   };
 
   useEffect(() => {

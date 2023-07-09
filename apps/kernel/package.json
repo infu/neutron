@@ -8,7 +8,7 @@
     "build": "node build.js && npm run mogen && node moassemble.js",
     "mopack": "node ./node_modules/neutron-scripts/src/mopack.js",
     "mogen": "node ./node_modules/neutron-scripts/src/mogen.js",
-    "dispenser": "npm run build && npm run package && node dispenser_load.js",
+    "dispenser": "npm run build && npm run mopack && npm run package && node dispenser_load.js",
     "package": " npm run build && node ./node_modules/neutron-scripts/src/pack.js",
     "validate": "node ./node_modules/neutron-scripts/src/validate.js",
     "boot": "node ./boot.js",

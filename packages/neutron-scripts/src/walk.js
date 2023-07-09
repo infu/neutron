@@ -72,7 +72,6 @@ export function parseImports(content) {
   while ((match = importPattern.exec(content)) !== null) {
     imports[match[1]] = match[2];
   }
-
   return imports;
 }
 
@@ -147,10 +146,12 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
       if (!packagePath) packagePath = "lib";
       try {
         // Standard way of defining package path
+
         const packageFullPath = path.join(
           packages[packagePrefix],
           `${packagePath}.mo`
         );
+
         gdeps[filePath].mods[importName] = await getDependencies(
           [fileHash, importPath, filePath],
           packageFullPath,
@@ -158,11 +159,18 @@ export async function getDependencies(from, filePath, packages, hashfiles) {
           hashfiles
         );
       } catch (e) {
+        if (importPath.indexOf("certified") !== -1) {
+          console.log(importPath);
+          console.log(e.message);
+          process.exit();
+        }
+
         try {
           if (!packages[packagePrefix])
             throw new Error(
               ` ${filePath} Imports a package, but it doesn't exist. Something is wrong`
             );
+
           // Another way of definding package path
           const packageFullPath = path.join(
             packages[packagePrefix],
