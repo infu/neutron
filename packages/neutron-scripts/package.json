@@ -17,8 +17,9 @@
     "js-sha256": "^0.9.0",
     "motoko": "^3.6.0",
     "msgpack5": "^6.0.2",
-    "neutron-security": "file:../neutron-security",
-    "neutron-tools": "file:../neutron-tools",
+    "neutron-security": "^1.0.0",
+    "neutron-tools": "^1.0.0",
     "sha256": "^0.2.0"
-  }
+  },
+  "gitHead": "e607db1286c4b8f719b7025367907e5773849094"
 }
