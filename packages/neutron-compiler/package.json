@@ -1,6 +1,6 @@
 {
   "name": "neutron-compiler",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "",
   "type": "module",
   "main": "index.js",
@@ -11,8 +11,8 @@
   "license": "ISC",
   "dependencies": {
     "motoko": "^3.6.0",
-    "neutron-security": "^1.0.0",
-    "neutron-tools": "^1.0.0"
+    "neutron-security": "^1.1.0",
+    "neutron-tools": "^1.1.0"
   },
   "gitHead": "e607db1286c4b8f719b7025367907e5773849094"
 }
