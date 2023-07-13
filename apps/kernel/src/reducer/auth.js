@@ -26,8 +26,9 @@ export const authSlice = createSlice({
 export const { setAuth } = authSlice.actions;
 
 // anon
-const ICARG = {};
-// const ICARG = { local: true, local_host: "http://localhost:8080" };
+const ICARG = process.env.LOCAL
+  ? { local: true, local_host: "http://localhost:8080" }
+  : {};
 
 let ic = icblast(ICARG);
 
@@ -106,7 +107,7 @@ export const getNeutronCan = async () => {
   // Icblast doesn't support relative URLs right now
   neutron_can = await ic(neutron_id, candid);
 
-  window.neutron = neutron_can;
+  // window.neutron = neutron_can;
 
   console.log(neutron_can);
   return neutron_can;

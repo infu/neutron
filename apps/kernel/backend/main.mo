@@ -82,20 +82,9 @@ module {
                 };
                 case(#store({key; val})) {
                     assert(val.chunks > 0);
-
-                    if (val.chunks == 1) {
-                        assets.db.insert({
-                            id= key;
-                            chunks= val.chunks;
-                            content= [val.content];
-                            content_encoding= val.content_encoding;
-                            content_type = val.content_type;
-                        });
-                        cert.put(key, val.content);
-                        return ();
-                    };
+                    
                     // Allows uploads of large certified files.
-                    cert.chunkedStart(key, val.chunks, func(content: [Blob]) {
+                    cert.chunkedStart(key, val.chunks, val.content, func(content: [Blob]) {
                         // when done
                         assets.db.insert({
                             id= key;

@@ -23,10 +23,12 @@ const config = {
   metafile: true,
   define: {
     global: "window",
+    "process.env.LOCAL": "false",
   },
   format: "esm",
   jsx: "automatic",
   loader: { ".js": "jsx" },
+
   plugins: [
     sassPlugin(),
     copyStaticFiles({

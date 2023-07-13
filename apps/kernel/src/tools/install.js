@@ -57,7 +57,7 @@ export async function prepare_files(pkg, mo_prefix, app_prefix) {
 }
 
 export async function upload_files(neutron, files) {
-  const limit = plimit(30); // Max concurrent requests
+  const limit = plimit(10); // Max concurrent requests
 
   await Promise.all(
     files.map(async ({ path, content }) =>
@@ -74,19 +74,26 @@ export async function upload_files(neutron, files) {
         const chunks = chunkfile(processed_file);
         let key = "/" + (path === "index.html" ? "" : path);
 
-        await neutron.kernel_static({
-          store: {
-            key,
-            val: {
-              content: chunks[0],
-              content_type,
-              content_encoding,
-              chunks: chunks.length,
+        try {
+          await neutron.kernel_static({
+            store: {
+              key,
+              val: {
+                content: chunks[0],
+                content_type,
+                content_encoding,
+                chunks: chunks.length,
+              },
             },
-          },
-        });
+          });
+        } catch (e) {
+          console.log("Error uploading ", path, e.message);
+
+          throw e;
+        }
 
         for (let i = 1; i < chunks.length; i++) {
+          console.log("Chunked upload", path, i);
           await neutron.kernel_static({
             store_chunk: {
               key,

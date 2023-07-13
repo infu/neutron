@@ -1,8 +1,7 @@
 [dependencies]
-base = "0.7.6"
-ic-certification = "0.1.0"
-motoko-sha = "https://github.com/enzoh/motoko-sha#master"
-certified-http = "0.1.3"
+base = "0.8.3"
+ic-certification = "0.1.1"
+certified-http = "0.1.6"
 stableheapbtreemap = "1.3.0"
 rxmodb = "0.1.4"
 motoko-hash-map = "https://github.com/ZhenyaUsenko/motoko-hash-map#master"

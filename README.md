@@ -8,6 +8,10 @@ Neutron Litepaper: https://ikbpf-hyaaa-aaaam-abnma-cai.icp0.io/Neutron_litepaper
 
 Dispenser (Devs only) https://widm7-oiaaa-aaaam-abpba-cai.icp0.io/
 
+## Templates
+
+Create react app - https://github.com/infu/neuron_react_app
+
 ## Workarounds:
 
 - ~~A canister can't self-upgrade without another canister https://forum.dfinity.org/t/self-upgrading-canisters/20486~~

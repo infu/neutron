@@ -1,0 +1,10 @@
+Jul 12 11:13:17.491 INFO Running dfx start for version 0.14.1, version: 0.14.1
+Jul 12 11:13:17.492 INFO Using shared network 'local' defined in /Users/cool/.config/dfx/networks.json, version: 0.14.1
+Jul 12 11:13:19.483 INFO Initialized replica., version: 0.14.1
+Jul 12 11:13:19.493 INFO Dashboard: http://localhost:62724/_/dashboard, version: 0.14.1
+Jul 12 11:18:28.228 INFO Stopping canister http adapter..., version: 0.14.1
+Jul 12 11:18:28.239 INFO Stopped., version: 0.14.1
+Jul 12 11:18:28.239 INFO Stopping the replica..., version: 0.14.1
+Jul 12 11:18:28.251 INFO Stopped., version: 0.14.1
+Jul 12 11:18:28.251 INFO Stopping icx-proxy..., version: 0.14.1
+Jul 12 11:18:28.251 INFO Stopped., version: 0.14.1
