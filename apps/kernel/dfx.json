@@ -10,9 +10,5 @@
       "packtool": "mops sources"
     }
   },
-  "http": {
-    "enabled": true,
-    "log_level": "debug"
-  },
   "dfx": "0.14.1"
 }
