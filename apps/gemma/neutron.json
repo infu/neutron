@@ -1,0 +1,40 @@
+{
+  "format": 3,
+  "name": "Gemma",
+  "id": "gemma",
+  "version": 201,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Private local Heretic Gemma 4 chat powered by WebGPU",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Resident Heretic Gemma 4 model and shared conversation"
+  },
+  "capabilities": {
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    }
+  },
+  "tiles": [
+    {
+      "id": "chat",
+      "title": "Gemma",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Chat with the resident local Heretic Gemma 4 model"
+    }
+  ],
+  "func": {},
+  "memory": {
+    "gemma": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/gemma/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

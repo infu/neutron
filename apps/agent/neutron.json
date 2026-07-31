@@ -1,0 +1,64 @@
+{
+  "format": 3,
+  "name": "Agent",
+  "id": "agent",
+  "version": 301,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "OpenRouter chat agent with kernel-regulated Neutron tools",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Resident Agent process and shared conversation"
+  },
+  "capabilities": {
+    "agent_entrypoints": {
+      "api": 1,
+      "entrypoints": [
+        "agent_chat"
+      ]
+    },
+    "background_ui_requests": {
+      "api": 1,
+      "categories": [
+        "frontend_tool",
+        "signed_canister_call",
+        "backend_access",
+        "connection"
+      ]
+    },
+    "connections": {
+      "api": 1,
+      "providers": [
+        {
+          "provider": "openrouter",
+          "scopes": []
+        }
+      ]
+    },
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    }
+  },
+  "tiles": [
+    {
+      "id": "chat",
+      "title": "Agent",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Chat with an OpenRouter model that can use Neutron apps"
+    }
+  ],
+  "func": {},
+  "memory": {
+    "agent": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/agent/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

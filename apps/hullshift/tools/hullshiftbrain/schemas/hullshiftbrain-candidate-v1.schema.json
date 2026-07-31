@@ -1,0 +1,558 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hullshift.local/schemas/hullshiftbrain-candidate-v1.schema.json",
+  "title": "HullshiftBrain candidate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "difficulty",
+    "level",
+    "witness",
+    "milestones",
+    "requiredPrecedence",
+    "causalGraph",
+    "metrics",
+    "provenance",
+    "canonicalLevelHash",
+    "topologySignature",
+    "semanticSignature"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "hullshiftbrain-candidate-v1"},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,79}$"},
+    "difficulty": {"type": "integer", "minimum": 0, "maximum": 8},
+    "level": {"$ref": "#/$defs/level"},
+    "witness": {"$ref": "#/$defs/witness"},
+    "milestones": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/milestone"}
+    },
+    "requiredPrecedence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/precedence"}
+    },
+    "causalGraph": {"$ref": "#/$defs/causalGraph"},
+    "metrics": {"$ref": "#/$defs/metrics"},
+    "provenance": {"$ref": "#/$defs/provenance"},
+    "canonicalLevelHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "topologySignature": {"type": "string", "minLength": 1, "maxLength": 512},
+    "semanticSignature": {"type": "string", "minLength": 1, "maxLength": 512}
+  },
+  "$defs": {
+    "token": {"type": "string", "minLength": 1, "maxLength": 80},
+    "milestoneId": {"type": "string", "pattern": "^[a-z][a-z0-9.-]{0,47}$"},
+    "coord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": {"type": "integer", "minimum": 0, "maximum": 15},
+        "y": {"type": "integer", "minimum": 0, "maximum": 15}
+      }
+    },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "symbol"],
+      "properties": {
+        "id": {"$ref": "#/$defs/token"},
+        "symbol": {"type": "string", "minLength": 1, "maxLength": 8}
+      }
+    },
+    "fixture": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind"],
+          "properties": {
+            "id": {"$ref": "#/$defs/token"},
+            "kind": {"const": "disposal"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "channel"],
+          "properties": {
+            "id": {"$ref": "#/$defs/token"},
+            "kind": {"enum": ["plate", "door", "bridge", "gate"]},
+            "channel": {"$ref": "#/$defs/token"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "channel", "initialOn"],
+          "properties": {
+            "id": {"$ref": "#/$defs/token"},
+            "kind": {"const": "relay"},
+            "channel": {"$ref": "#/$defs/token"},
+            "initialOn": {"type": "boolean"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "channel", "initiallyInstalled"],
+          "properties": {
+            "id": {"$ref": "#/$defs/token"},
+            "kind": {"const": "socket"},
+            "channel": {"$ref": "#/$defs/token"},
+            "initiallyInstalled": {"type": "boolean"},
+            "initialCellId": {"$ref": "#/$defs/token"}
+          }
+        }
+      ]
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["terrain"],
+      "properties": {
+        "terrain": {"enum": ["floor", "bulkhead", "vacuum", "fracture"]},
+        "fixture": {"$ref": "#/$defs/fixture"}
+      }
+    },
+    "object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "position"],
+      "properties": {
+        "id": {"$ref": "#/$defs/token"},
+        "kind": {"enum": ["cargo", "reactor-cell"]},
+        "position": {"$ref": "#/$defs/coord"}
+      }
+    },
+    "level": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generatorVersion", "width", "height", "channels", "cells", "playerStart", "objects"],
+      "properties": {
+        "generatorVersion": {"const": "g4"},
+        "width": {"type": "integer", "minimum": 7, "maximum": 16},
+        "height": {"type": "integer", "minimum": 7, "maximum": 16},
+        "channels": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/channel"}
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 49,
+          "maxItems": 256,
+          "items": {"$ref": "#/$defs/cell"}
+        },
+        "playerStart": {"$ref": "#/$defs/coord"},
+        "objects": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {"$ref": "#/$defs/object"}
+        }
+      }
+    },
+    "witness": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {"enum": ["N", "E", "S", "W"]}
+    },
+    "eventTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event"],
+      "properties": {
+        "event": {
+          "enum": [
+            "player-moved",
+            "object-pushed",
+            "relay-toggled",
+            "socket-docked",
+            "fracture-collapsed",
+            "object-removed",
+            "source-changed",
+            "channel-changed",
+            "consumer-changed",
+            "gate-entered"
+          ]
+        },
+        "action": {"enum": ["N", "E", "S", "W"]},
+        "fixtureId": {"$ref": "#/$defs/token"},
+        "objectId": {"$ref": "#/$defs/token"},
+        "objectKind": {"enum": ["cargo", "reactor-cell"]},
+        "channel": {"$ref": "#/$defs/token"},
+        "position": {"$ref": "#/$defs/coord"},
+        "from": {"$ref": "#/$defs/coord"},
+        "to": {"$ref": "#/$defs/coord"},
+        "active": {"type": "boolean"},
+        "sourceKind": {"enum": ["plate", "relay", "socket"]},
+        "consumerKind": {"enum": ["door", "bridge", "gate"]},
+        "powered": {"type": "boolean"},
+        "passable": {"type": "boolean"},
+        "jammed": {"type": "boolean"},
+        "reason": {"enum": ["vacuum", "disposal"]}
+      }
+    },
+    "statePredicate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entityAt"],
+          "properties": {
+            "entityAt": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["entityId", "position"],
+              "properties": {
+                "entityId": {"$ref": "#/$defs/token"},
+                "position": {"$ref": "#/$defs/coord"}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["relayState"],
+          "properties": {
+            "relayState": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["fixtureId", "active"],
+              "properties": {
+                "fixtureId": {"$ref": "#/$defs/token"},
+                "active": {"type": "boolean"}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["socketInstallation"],
+          "properties": {
+            "socketInstallation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["fixtureId", "installed"],
+              "properties": {
+                "fixtureId": {"$ref": "#/$defs/token"},
+                "installed": {"type": "boolean"},
+                "objectId": {"$ref": "#/$defs/token"}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fractureState"],
+          "properties": {
+            "fractureState": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["position", "collapsed"],
+              "properties": {
+                "position": {"$ref": "#/$defs/coord"},
+                "collapsed": {"type": "boolean"}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["objectRemoved"],
+          "properties": {
+            "objectRemoved": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["objectId", "removed"],
+              "properties": {
+                "objectId": {"$ref": "#/$defs/token"},
+                "removed": {"type": "boolean"}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["channelActive"],
+          "properties": {"channelActive": {"$ref": "#/$defs/token"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["channelInactive"],
+          "properties": {"channelInactive": {"$ref": "#/$defs/token"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["consumerState"],
+          "properties": {
+            "consumerState": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["fixtureId"],
+              "anyOf": [
+                {"required": ["powered"]},
+                {"required": ["passable"]},
+                {"required": ["jammed"]}
+              ],
+              "properties": {
+                "fixtureId": {"$ref": "#/$defs/token"},
+                "powered": {"type": "boolean"},
+                "passable": {"type": "boolean"},
+                "jammed": {"type": "boolean"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "guardLeaf": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["beforeState"],
+          "properties": {"beforeState": {"$ref": "#/$defs/statePredicate"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["afterState"],
+          "properties": {"afterState": {"$ref": "#/$defs/statePredicate"}}
+        }
+      ]
+    },
+    "guard": {
+      "oneOf": [
+        {"$ref": "#/$defs/guardLeaf"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["all"],
+          "properties": {
+            "all": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {"$ref": "#/$defs/guard"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["any"],
+          "properties": {
+            "any": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {"$ref": "#/$defs/guard"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["not"],
+          "properties": {"not": {"$ref": "#/$defs/guardLeaf"}}
+        }
+      ]
+    },
+    "trigger": {
+      "oneOf": [
+        {"$ref": "#/$defs/eventTrigger"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["delta"],
+          "properties": {
+            "delta": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["predicate", "from", "to"],
+              "properties": {
+                "predicate": {"$ref": "#/$defs/statePredicate"},
+                "from": {"type": "boolean"},
+                "to": {"type": "boolean"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "milestone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "id", "family", "trigger", "occurrence"],
+      "properties": {
+        "schemaVersion": {"const": "milestone-dsl-v1"},
+        "id": {"$ref": "#/$defs/milestoneId"},
+        "family": {
+          "enum": [
+            "movement",
+            "pushing",
+            "power",
+            "momentary-circuit",
+            "permanent-sources",
+            "consumers",
+            "hazards",
+            "irreversible-terrain",
+            "evacuation"
+          ]
+        },
+        "trigger": {"$ref": "#/$defs/trigger"},
+        "guard": {"$ref": "#/$defs/guard"},
+        "occurrence": {"type": "integer", "minimum": 1, "maximum": 16},
+        "coEmitsWith": {
+          "type": "array",
+          "maxItems": 15,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/milestoneId"}
+        }
+      }
+    },
+    "precedence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": {"$ref": "#/$defs/milestoneId"},
+        "after": {"$ref": "#/$defs/milestoneId"}
+      }
+    },
+    "missionNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "family", "resource", "persistence", "role", "occurrence"],
+      "properties": {
+        "id": {"$ref": "#/$defs/token"},
+        "family": {"$ref": "#/$defs/token"},
+        "resource": {"$ref": "#/$defs/token"},
+        "persistence": {"enum": ["reversible", "persistent", "irreversible"]},
+        "role": {"$ref": "#/$defs/token"},
+        "occurrence": {"type": "integer", "minimum": 1, "maximum": 16}
+      }
+    },
+    "missionEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": {"$ref": "#/$defs/token"},
+        "after": {"$ref": "#/$defs/token"}
+      }
+    },
+    "causalGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["difficulty", "shape", "objectCount", "nodes", "edges"],
+      "properties": {
+        "difficulty": {"type": "integer", "minimum": 0, "maximum": 8},
+        "shape": {"enum": ["chain", "branch-join", "shared-bottleneck", "revisit-heavy"]},
+        "objectCount": {"type": "integer", "minimum": 1, "maximum": 8},
+        "nodes": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {"$ref": "#/$defs/missionNode"}
+        },
+        "edges": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {"$ref": "#/$defs/missionEdge"}
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scorerVersion",
+        "solvableByWitness",
+        "acceptedActions",
+        "pushes",
+        "commitments",
+        "objectAlternations",
+        "balancedDecompositionProxy",
+        "counterintuitivePushProxy",
+        "turningRegrips",
+        "directionChanges",
+        "pushedObjects",
+        "pushDirections",
+        "longestConsequenceFreeRun",
+        "consequenceFreePermille",
+        "interactiveElements",
+        "logicDensityProxy",
+        "requestedDifficulty",
+        "reversePushes",
+        "reverseWalks",
+        "causalShape"
+      ],
+      "properties": {
+        "scorerVersion": {"const": "brain-cheap-v1"},
+        "solvableByWitness": {"const": true},
+        "acceptedActions": {"type": "integer", "minimum": 0, "maximum": 512},
+        "pushes": {"type": "integer", "minimum": 0, "maximum": 512},
+        "commitments": {"type": "integer", "minimum": 0, "maximum": 2048},
+        "objectAlternations": {"type": "integer", "minimum": 0, "maximum": 511},
+        "balancedDecompositionProxy": {"type": "integer", "minimum": 0, "maximum": 511},
+        "counterintuitivePushProxy": {"type": "integer", "minimum": 0, "maximum": 512},
+        "turningRegrips": {"type": "integer", "minimum": 0, "maximum": 511},
+        "directionChanges": {"type": "integer", "minimum": 0, "maximum": 511},
+        "pushedObjects": {"type": "integer", "minimum": 0, "maximum": 8},
+        "pushDirections": {"type": "integer", "minimum": 0, "maximum": 4},
+        "longestConsequenceFreeRun": {"type": "integer", "minimum": 0, "maximum": 512},
+        "consequenceFreePermille": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "interactiveElements": {"type": "integer", "minimum": 0, "maximum": 64},
+        "logicDensityProxy": {"type": "number", "minimum": 0},
+        "requestedDifficulty": {"type": "integer", "minimum": 0, "maximum": 8},
+        "reversePushes": {"type": "integer", "minimum": 0, "maximum": 512},
+        "reverseWalks": {"type": "integer", "minimum": 0, "maximum": 512},
+        "causalShape": {"enum": ["chain", "branch-join", "shared-bottleneck", "revisit-heavy"]},
+        "ablationRemoved": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "ablationPasses": {"type": "integer", "minimum": 0, "maximum": 256},
+        "exactRecertificationRequired": {"const": true}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "masterSeed",
+        "candidateId",
+        "algorithmVersion",
+        "reverseDepth",
+        "brainVersion",
+        "requestedDifficulty",
+        "requiresTypeScriptCertification"
+      ],
+      "properties": {
+        "masterSeed": {"type": "string", "pattern": "^[0-9a-f]{16,64}$"},
+        "candidateId": {"type": "string", "pattern": "^[0-9]+$", "maxLength": 80},
+        "algorithmVersion": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$", "maxLength": 80},
+        "reverseDepth": {"type": "integer", "minimum": 0, "maximum": 512},
+        "brainVersion": {"const": "hullshiftbrain-v1"},
+        "requestedDifficulty": {"type": "integer", "minimum": 0, "maximum": 8},
+        "requiresTypeScriptCertification": {"const": true},
+        "generatedAt": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

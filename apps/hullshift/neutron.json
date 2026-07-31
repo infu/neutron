@@ -1,0 +1,29 @@
+{
+  "format": 3,
+  "name": "Hullshift",
+  "id": "hullshift",
+  "version": 201,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Solve deterministic sci-fi pushing puzzles",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Persist local runs and perform deterministic level analysis"
+  },
+  "capabilities": {
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    }
+  },
+  "tiles": [
+    {
+      "id": "game",
+      "title": "Hullshift",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Push cargo, route power, and escape a damaged spacecraft"
+    }
+  ],
+  "func": {}
+}

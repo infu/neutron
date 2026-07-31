@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.bun.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "composite": false,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": false,
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

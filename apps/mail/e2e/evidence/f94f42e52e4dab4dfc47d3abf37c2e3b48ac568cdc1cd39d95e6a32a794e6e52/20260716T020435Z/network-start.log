@@ -1,0 +1,6 @@
+For background mode, network output will be redirected:
+  stdout: /tmp/neutron-mail-release.PTReKPaM/.icp/cache/networks/local/network-launcher/stdout.log
+  stderr: /tmp/neutron-mail-release.PTReKPaM/.icp/cache/networks/local/network-launcher/stderr.log
+Network started on port 18084
+Seeding ICP and cycles account balances
+To stop the network, run `icp network stop`

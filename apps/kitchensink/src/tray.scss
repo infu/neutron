@@ -1,0 +1,206 @@
+@use "neutron-design-system/styles.scss";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+@layer app {
+  .nt-app.ks-tray-app {
+    --nt-accent: #86d6a5;
+    --nt-accent-muted: #183328;
+    background: var(--nt-bg-panel);
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .ks-tray-pane {
+    border-radius: 0;
+    box-shadow: none;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
+  }
+
+  .ks-tray-header {
+    gap: var(--nt-gap-2);
+    grid-template-columns: 30px minmax(0, 1fr) auto auto;
+    min-height: 58px;
+    padding: var(--nt-pad-3);
+  }
+
+  .ks-tray-heading-icon {
+    align-items: center;
+    background: var(--nt-accent-muted);
+    border-radius: var(--nt-radius-2);
+    color: var(--nt-accent);
+    display: inline-flex;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
+  }
+
+  .ks-tray-heading-icon svg {
+    height: 17px;
+    width: 17px;
+  }
+
+  .ks-tray-heading-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ks-tray-heading-copy strong {
+    color: var(--nt-text-strong);
+    font-size: var(--nt-font-size-label);
+    line-height: 1.2;
+  }
+
+  .ks-tray-heading-copy span,
+  .ks-tray-footer-status,
+  .ks-tray-notification-line time {
+    color: var(--nt-text-faint);
+    font-family: var(--nt-font-mono);
+    font-size: var(--nt-font-size-meta);
+  }
+
+  .ks-tray-close {
+    height: var(--nt-control-sm);
+    width: var(--nt-control-sm);
+  }
+
+  .ks-tray-body {
+    padding: 0;
+  }
+
+  .ks-tray-body > .nt-state {
+    margin: var(--nt-pad-4);
+  }
+
+  .ks-tray-notifications {
+    display: grid;
+    min-width: 0;
+  }
+
+  .ks-tray-notification {
+    align-items: start;
+    background: transparent;
+    box-shadow: inset 0 -1px var(--nt-line-subtle);
+    display: grid;
+    gap: var(--nt-gap-2);
+    grid-template-columns: 7px minmax(0, 1fr) 28px;
+    min-width: 0;
+    padding: var(--nt-pad-3);
+  }
+
+  .ks-tray-notification.is-unread {
+    background: var(--nt-bg-soft);
+  }
+
+  .ks-tray-unread-dot {
+    background: transparent;
+    border-radius: 50%;
+    height: 6px;
+    margin-top: 5px;
+    width: 6px;
+  }
+
+  .ks-tray-notification.is-unread .ks-tray-unread-dot {
+    background: var(--nt-info);
+  }
+
+  .ks-tray-notification-copy {
+    color: var(--nt-text-muted);
+    display: grid;
+    font-size: var(--nt-font-size-label);
+    gap: 4px;
+    line-height: 1.35;
+    min-width: 0;
+  }
+
+  .ks-tray-notification-line {
+    align-items: baseline;
+    display: flex;
+    gap: var(--nt-gap-2);
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .ks-tray-notification-line strong {
+    color: var(--nt-text-strong);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ks-tray-notification-line time {
+    flex: 0 0 auto;
+  }
+
+  .ks-tray-read {
+    height: var(--nt-control-sm);
+    width: var(--nt-control-sm);
+  }
+
+  .ks-tray-read:disabled {
+    background: transparent;
+    color: var(--nt-text-faint);
+    opacity: 0.5;
+  }
+
+  .ks-tray-error {
+    margin: var(--nt-pad-3);
+  }
+
+  .ks-tray-footer {
+    align-items: center;
+    display: grid;
+    gap: var(--nt-gap-2);
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: var(--nt-pad-3);
+  }
+
+  .ks-tray-footer-status {
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-2);
+    min-width: 0;
+  }
+
+  .ks-tray-footer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-2);
+    justify-content: end;
+  }
+
+  @container (max-width: 300px) {
+    .ks-tray-header {
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+    }
+
+    .ks-tray-header > .nt-badge {
+      display: none;
+    }
+
+    .ks-tray-footer {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ks-tray-footer-actions {
+      display: grid;
+      justify-content: stretch;
+    }
+
+    .ks-tray-footer-actions > .nt-button {
+      width: 100%;
+    }
+  }
+}

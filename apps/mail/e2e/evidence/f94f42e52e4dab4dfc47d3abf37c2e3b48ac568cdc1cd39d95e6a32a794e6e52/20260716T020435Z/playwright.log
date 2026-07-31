@@ -1,0 +1,33 @@
+
+> neutron-mail@1.0.0 test:e2e
+> playwright test -c playwright.config.ts --reporter=list,json --workers=1
+
+
+Running 20 tests using 1 worker
+
+(node:3665615) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › e2e/mail.spec.ts:46:3 › Mail — exactly 20 release user flows › 01 first-run slot and delivery setup, one-click Compose recovery, and refresh persistence (10.6s)
+  ✓   2 [chromium] › e2e/mail.spec.ts:66:3 › Mail — exactly 20 release user flows › 02 disabled-slot recovery and all authorized principals recover across replacement (52.5s)
+  ✓   3 [chromium] › e2e/mail.spec.ts:129:3 › Mail — exactly 20 release user flows › 03 empty Inbox exposes the full address, copy action, and receive limits (6.5s)
+  ✓   4 [chromium] › e2e/mail.spec.ts:143:3 › Mail — exactly 20 release user flows › 04 Contact Neutron address canonicalization, duplicate conflict, and Mail discovery (9.8s)
+  ✓   5 [chromium] › e2e/mail.spec.ts:176:3 › Mail — exactly 20 release user flows › 05 compose to a contact, encrypted sender name, Preview, pending send, and Sent (15.7s)
+  ✓   6 [chromium] › e2e/mail.spec.ts:220:3 › Mail — exactly 20 release user flows › 06 real second-Neutron direct send decrypts with authenticated primary sender (34.3s)
+  ✓   7 [chromium] › e2e/mail.spec.ts:354:3 › Mail — exactly 20 release user flows › 07 known and unknown encrypted receive trust survives seamless reload (14.3s)
+  ✓   8 [chromium] › e2e/mail.spec.ts:372:3 › Mail — exactly 20 release user flows › 08 exact rolling-hour unknown throttle rejects eleven and recovers boundedly (17.4s)
+  ✓   9 [chromium] › e2e/mail.spec.ts:385:3 › Mail — exactly 20 release user flows › 09 Contact add/remove reprojects old trust without replacing the message (25.4s)
+  ✓  10 [chromium] › e2e/mail.spec.ts:424:3 › Mail — exactly 20 release user flows › 10 ready tray preserves five headers and exact handoff through a canister outage (1.1m)
+  ✓  11 [chromium] › e2e/mail.spec.ts:453:3 › Mail — exactly 20 release user flows › 11 loaded-header search is bounded and unread filtering follows read state (34.8s)
+  ✓  12 [chromium] › e2e/mail.spec.ts:477:3 › Mail — exactly 20 release user flows › 12 unread list, 50-row pagination, stable Load more, and concurrent New mail (1.3m)
+  ✓  13 [chromium] › e2e/mail.spec.ts:515:3 › Mail — exactly 20 release user flows › 13 safe GFM bounds links, images, tables, code, and hostile Markdown (35.7s)
+  ✓  14 [chromium] › e2e/mail.spec.ts:548:3 › Mail — exactly 20 release user flows › 14 legitimate thread context and contact/unknown replies preserve exact recipients (50.5s)
+  ✓  15 [chromium] › e2e/mail.spec.ts:597:3 › Mail — exactly 20 release user flows › 15 forged cross-correspondent reply reference stays unthreaded in UI (33.6s)
+  ✓  16 [chromium] › e2e/mail.spec.ts:613:3 › Mail — exactly 20 release user flows › 16 remote unsupported/full/rate/stale-key paths preserve content (17.9s)
+  ✓  17 [chromium] › e2e/mail.spec.ts:643:3 › Mail — exactly 20 release user flows › 17 uncertain delivery, exact dedupe retry, and in-flight retry exclusion (11.8s)
+  ✓  18 [chromium] › e2e/mail.spec.ts:668:3 › Mail — exactly 20 release user flows › 18 in-app draft and pending-send guards, failed retry, Edit copy, and Sent routing (19.4s)
+  ✓  19 [chromium] › e2e/mail.spec.ts:786:3 › Mail — exactly 20 release user flows › 19 read/delete/tombstone plus cleanup preview/cancel/conflict/confirm/empty (45.1s)
+  ✓  20 [chromium] › e2e/mail.spec.ts:890:3 › Mail — exactly 20 release user flows › 20 rotate, automatic key preparation, bounded resumable rewrap, and retirement (1.2m)
+
+  Slow test file: [chromium] › e2e/mail.spec.ts (10.9m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  20 passed (10.9m)

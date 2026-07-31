@@ -1,0 +1,45 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-wagyu",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts",
+    "test": "npm run typecheck && npm run package && bun test test && npm run test:motoko",
+    "test:motoko": "bun test/motoko/run.ts",
+    "typecheck": "tsc -b --pretty false",
+    "watch": "bun build.ts watch"
+  },
+  "license": "GPL-3.0-only",
+  "description": "Certified peer-to-peer social protocol for Neutron nodes",
+  "dependencies": {
+    "@icp-sdk/core": "^5.4.0",
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/candid": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "@noble/hashes": "2.2.0",
+    "neutron-design-system": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-icons": "^5.7.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react": "^7.37.5",
+    "neutron-compiler": "^1.1.0",
+    "neutron-motoko-wasm": "^1.1.0",
+    "neutron-scripts": "^1.1.0"
+  }
+}

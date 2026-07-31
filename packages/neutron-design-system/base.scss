@@ -1,0 +1,5 @@
+@use "sass:meta";
+
+@layer nt.base {
+  @include meta.load-css("src/base");
+}

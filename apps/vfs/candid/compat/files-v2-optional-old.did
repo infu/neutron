@@ -1,0 +1,59 @@
+// Synthetic initial decoder used to prove Files' opt-variant fallback rules.
+// These fixture types are not actor methods.
+
+type CompatibilityProbeV2 = record {
+  write_intent : opt variant {
+    create;
+    replace;
+  };
+  mutation_action : opt variant {
+    create_folder;
+    rename;
+    move;
+  };
+  requested_node_kind : opt variant {
+    folder;
+    file;
+  };
+  outcome : opt variant {
+    ok;
+    rejected;
+  };
+  reason : opt variant {
+    invalid;
+    conflict;
+  };
+  returned_node_kind : opt variant {
+    folder;
+    file;
+  };
+  operation_state : opt variant {
+    active;
+    committed;
+    aborted;
+    expired;
+    superseded;
+    unknown;
+  };
+  committed_detail : opt variant {
+    vault;
+    private_write;
+    mutation;
+    remove;
+    abort;
+  };
+  cleanup_state : opt variant {
+    clean;
+    pending;
+  };
+  attachment_frame_kind : opt variant {
+    first;
+    continuation;
+  };
+};
+
+type PlainVariantProbeV2 = variant {
+  known;
+};
+
+service : {};

@@ -1,0 +1,26 @@
+
+> neutron-mail@1.0.0 test:e2e:list
+> playwright test -c playwright.config.ts --list
+
+Listing tests:
+  [chromium] › mail.spec.ts:46:3 › Mail — exactly 20 release user flows › 01 first-run slot and delivery setup, one-click Compose recovery, and refresh persistence
+  [chromium] › mail.spec.ts:66:3 › Mail — exactly 20 release user flows › 02 disabled-slot recovery and all authorized principals recover across replacement
+  [chromium] › mail.spec.ts:129:3 › Mail — exactly 20 release user flows › 03 empty Inbox exposes the full address, copy action, and receive limits
+  [chromium] › mail.spec.ts:143:3 › Mail — exactly 20 release user flows › 04 Contact Neutron address canonicalization, duplicate conflict, and Mail discovery
+  [chromium] › mail.spec.ts:176:3 › Mail — exactly 20 release user flows › 05 compose to a contact, encrypted sender name, Preview, pending send, and Sent
+  [chromium] › mail.spec.ts:220:3 › Mail — exactly 20 release user flows › 06 real second-Neutron direct send decrypts with authenticated primary sender
+  [chromium] › mail.spec.ts:354:3 › Mail — exactly 20 release user flows › 07 known and unknown encrypted receive trust survives seamless reload
+  [chromium] › mail.spec.ts:372:3 › Mail — exactly 20 release user flows › 08 exact rolling-hour unknown throttle rejects eleven and recovers boundedly
+  [chromium] › mail.spec.ts:385:3 › Mail — exactly 20 release user flows › 09 Contact add/remove reprojects old trust without replacing the message
+  [chromium] › mail.spec.ts:424:3 › Mail — exactly 20 release user flows › 10 ready tray preserves five headers and exact handoff through a canister outage
+  [chromium] › mail.spec.ts:453:3 › Mail — exactly 20 release user flows › 11 loaded-header search is bounded and unread filtering follows read state
+  [chromium] › mail.spec.ts:477:3 › Mail — exactly 20 release user flows › 12 unread list, 50-row pagination, stable Load more, and concurrent New mail
+  [chromium] › mail.spec.ts:515:3 › Mail — exactly 20 release user flows › 13 safe GFM bounds links, images, tables, code, and hostile Markdown
+  [chromium] › mail.spec.ts:548:3 › Mail — exactly 20 release user flows › 14 legitimate thread context and contact/unknown replies preserve exact recipients
+  [chromium] › mail.spec.ts:597:3 › Mail — exactly 20 release user flows › 15 forged cross-correspondent reply reference stays unthreaded in UI
+  [chromium] › mail.spec.ts:613:3 › Mail — exactly 20 release user flows › 16 remote unsupported/full/rate/stale-key paths preserve content
+  [chromium] › mail.spec.ts:643:3 › Mail — exactly 20 release user flows › 17 uncertain delivery, exact dedupe retry, and in-flight retry exclusion
+  [chromium] › mail.spec.ts:668:3 › Mail — exactly 20 release user flows › 18 in-app draft and pending-send guards, failed retry, Edit copy, and Sent routing
+  [chromium] › mail.spec.ts:786:3 › Mail — exactly 20 release user flows › 19 read/delete/tombstone plus cleanup preview/cancel/conflict/confirm/empty
+  [chromium] › mail.spec.ts:890:3 › Mail — exactly 20 release user flows › 20 rotate, automatic key preparation, bounded resumable rewrap, and retirement
+Total: 20 tests in 1 file

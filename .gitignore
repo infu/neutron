@@ -1,0 +1,17 @@
+.dfx
+.mops
+node_modules
+dist
+build
+.neutron
+**/.icp/cache/
+*.ndeploy.session.json
+*.ndeploy.session.json.lock
+*.ndeploy.session.json.tmp-*
+*.blast
+*.tsbuildinfo
+playwright-report
+test-results
+tmp/
+.assetgen/
+/wagyu-alpha-*.png

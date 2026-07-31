@@ -1,0 +1,50 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-kernel",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun connections/generate.ts && bun build.ts && npm run mogen && bun moassemble.ts",
+    "certified-assets:candidate-binding": "bun evidence/generate_certified_assets_candidate_binding.ts",
+    "certified-assets:candidate-binding:write": "bun evidence/generate_certified_assets_candidate_binding.ts --write",
+    "certified-assets:qualify": "bun evidence/qualification/supervisor.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "package": "npm run validate && npm run build && npm run mopack && bun ../../packages/neutron-scripts/src/pack.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "watch": "bun build.ts watch",
+    "start": "npm run watch",
+    "test": "bun test && bun test/motoko/run.ts"
+  },
+  "neutron": {
+    "loadLevel": 0
+  },
+  "author": "",
+  "license": "GPL-3.0-only",
+  "description": "",
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/candid": "^3.4.3",
+    "@dfinity/identity": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "icblast": "file:../../../icblast",
+    "neutron-compiler": "^1.1.0",
+    "neutron-motoko-wasm": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-icons": "^5.7.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react": "^7.37.5",
+    "neutron-scripts": "^1.1.0"
+  }
+}

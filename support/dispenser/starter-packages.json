@@ -1,0 +1,53 @@
+{
+  "format": 1,
+  "kernel": {
+    "id": "kernel",
+    "path": "../../apps/kernel/kernel.v0.3.5.neutron"
+  },
+  "apps": [
+    {
+      "id": "files",
+      "path": "../../apps/vfs/files.v0.4.3.neutron"
+    },
+    {
+      "id": "contacts",
+      "path": "../../apps/contacts/contacts.v0.3.1.neutron"
+    },
+    {
+      "id": "kitchensink",
+      "path": "../../apps/kitchensink/kitchensink.v0.3.1.neutron"
+    },
+    {
+      "id": "wagyu",
+      "path": "../../apps/wagyu/wagyu.v0.3.2.neutron"
+    },
+    {
+      "id": "agent",
+      "path": "../../apps/agent/agent.v0.3.1.neutron"
+    },
+    {
+      "id": "jetcreeper",
+      "path": "../../apps/jetcreeper/jetcreeper.v0.3.1.neutron"
+    },
+    {
+      "id": "mail",
+      "path": "../../apps/mail/mail.v0.3.2.neutron"
+    },
+    {
+      "id": "mysubnet",
+      "path": "../../apps/mysubnet/mysubnet.v0.3.1.neutron"
+    },
+    {
+      "id": "wallet",
+      "path": "../../apps/wallet/wallet.v0.3.2.neutron"
+    },
+    {
+      "id": "spreadsheet",
+      "path": "../../apps/spreadsheet/spreadsheet.v0.3.1.neutron"
+    },
+    {
+      "id": "chess",
+      "path": "../../apps/chess/chess.v0.3.1.neutron"
+    }
+  ]
+}

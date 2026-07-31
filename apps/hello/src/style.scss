@@ -1,0 +1,81 @@
+@use "neutron-design-system/styles.scss";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+@layer app {
+  .nt-app.hello-app {
+    --nt-accent: #89e0aa;
+    --nt-accent-muted: #193525;
+    container-type: inline-size;
+    min-height: 100dvh;
+    padding: var(--nt-pad-5);
+  }
+
+  .hello-shell {
+    margin: 0 auto;
+    max-width: 980px;
+    min-height: calc(100dvh - (var(--nt-pad-5) * 2));
+    width: min(100%, 980px);
+  }
+
+  .hello-header {
+    align-items: start;
+  }
+
+  .hello-heading {
+    display: grid;
+    gap: var(--nt-gap-2);
+    min-width: 0;
+  }
+
+  .hello-context {
+    flex: 0 1 240px;
+    font-size: var(--nt-font-size-meta);
+    justify-items: end;
+    text-align: right;
+  }
+
+  .hello-copy {
+    display: grid;
+    gap: var(--nt-gap-4);
+    grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+    min-width: 0;
+  }
+
+  .hello-footer {
+    align-items: stretch;
+    margin-top: auto;
+  }
+
+  .hello-result {
+    flex: 1 1 260px;
+    min-height: var(--nt-control-md);
+    min-width: min(100%, 260px);
+  }
+
+  .hello-result--empty {
+    color: var(--nt-text-faint);
+  }
+
+  @container (max-width: 500px) {
+    .hello-header {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .hello-context {
+      justify-items: start;
+      text-align: left;
+    }
+  }
+
+  @container (max-width: 320px) {
+    .nt-app.hello-app {
+      padding: var(--nt-pad-4);
+    }
+
+    .hello-shell {
+      min-height: calc(100dvh - (var(--nt-pad-4) * 2));
+    }
+  }
+}

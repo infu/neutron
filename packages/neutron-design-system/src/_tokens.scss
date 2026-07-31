@@ -1,0 +1,110 @@
+.nt-app {
+  color-scheme: dark;
+  --nt-font-ui: Inter, "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --nt-font-copy: Inter, "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --nt-font-mono: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+  --nt-bg: #06080b;
+  --nt-bg-panel: #0b0f14;
+  --nt-bg-elevated: #10161c;
+  --nt-bg-soft: #080b0f;
+  --nt-bg-control: #121920;
+  --nt-bg-control-hover: #182129;
+  --nt-bg-control-active: #1e2a33;
+
+  --nt-line-subtle: #182128;
+  --nt-line: #27333c;
+  --nt-line-strong: #3c4b56;
+  --nt-line-focus: #72d5e5;
+
+  --nt-text: #d7e0e5;
+  --nt-text-strong: #f2f6f7;
+  --nt-text-muted: #a7b4bc;
+  --nt-text-faint: #728089;
+  --nt-text-inverse: #06100b;
+
+  --nt-accent: #89e0aa;
+  --nt-accent-muted: #193525;
+  --nt-info: #72d5e5;
+  --nt-info-muted: #15323a;
+  --nt-success: #89e0aa;
+  --nt-success-muted: #183522;
+  --nt-warning: #f3cc72;
+  --nt-warning-muted: #3d3016;
+  --nt-danger: #ff7885;
+  --nt-danger-muted: #421d24;
+  --nt-critical: #f576b6;
+  --nt-critical-muted: #3f1b31;
+
+  --nt-panel-bg: var(--nt-bg-panel);
+  --nt-card-bg: var(--nt-bg-elevated);
+  --nt-button-bg: var(--nt-accent);
+  --nt-button-fg: var(--nt-text-inverse);
+  --nt-input-bg: var(--nt-bg-control);
+  --nt-input-fg: var(--nt-text);
+  --nt-alert-info-bg: var(--nt-info-muted);
+  --nt-alert-warning-bg: var(--nt-warning-muted);
+  --nt-alert-danger-bg: var(--nt-danger-muted);
+  --nt-alert-success-bg: var(--nt-success-muted);
+
+  --nt-radius-1: 1px;
+  --nt-radius-2: 2px;
+  --nt-radius-3: 4px;
+  --nt-radius-control: var(--nt-radius-3);
+  --nt-radius-panel: var(--nt-radius-3);
+
+  --nt-gap-1: 4px;
+  --nt-gap-2: 8px;
+  --nt-gap-3: 12px;
+  --nt-gap-4: 16px;
+  --nt-gap-5: 20px;
+  --nt-gap-6: 24px;
+  --nt-gap-7: 32px;
+
+  --nt-pad-1: 4px;
+  --nt-pad-2: 8px;
+  --nt-pad-3: 12px;
+  --nt-pad-4: 16px;
+  --nt-pad-5: 20px;
+  --nt-pad-6: 24px;
+
+  --nt-control-xs: 26px;
+  --nt-control-sm: 28px;
+  --nt-control-md: 32px;
+  --nt-control-lg: 38px;
+  --nt-icon-sm: 14px;
+  --nt-icon-md: 16px;
+  --nt-icon-lg: 18px;
+
+  --nt-font-size-title: 21px;
+  --nt-font-size-subtitle: 15px;
+  --nt-font-size-body: 14px;
+  --nt-font-size-label: 12px;
+  --nt-font-size-meta: 11px;
+  --nt-font-size-mono: 12px;
+  --nt-line-height-tight: 1.18;
+  --nt-line-height-body: 1.48;
+  --nt-line-height-code: 1.42;
+
+  --nt-duration-fast: 100ms;
+  --nt-duration-normal: 160ms;
+  --nt-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --nt-shadow-raised: 0 18px 48px rgba(0, 0, 0, 0.46);
+  --nt-shadow-hairline: inset 0 1px var(--nt-line-subtle);
+  --nt-shadow-focus: 0 0 0 1px rgba(114, 213, 229, 0.3);
+  --nt-focus-width: 1px;
+  --nt-focus-offset: 2px;
+
+  --nt-scrollbar-track: #080b0f;
+  --nt-scrollbar-hidden-bg: var(--nt-bg);
+  --nt-scrollbar-thumb: #27343d;
+  --nt-scrollbar-thumb-hover: #3c4b56;
+}
+
+.nt-app:where(.nt-app--dense) {
+  --nt-control-md: 30px;
+  --nt-font-size-title: 19px;
+  --nt-font-size-body: 13px;
+  --nt-pad-4: 12px;
+  --nt-gap-4: 12px;
+}

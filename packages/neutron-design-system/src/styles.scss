@@ -1,0 +1,23 @@
+@use "sass:meta";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities;
+
+@layer nt.tokens {
+  @include meta.load-css("tokens");
+}
+
+@layer nt.base {
+  @include meta.load-css("base");
+}
+
+@layer nt.layout {
+  @include meta.load-css("layout");
+}
+
+@layer nt.components {
+  @include meta.load-css("components");
+}
+
+@layer nt.utilities {
+  @include meta.load-css("utilities");
+}

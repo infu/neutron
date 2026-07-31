@@ -1,0 +1,30 @@
+{
+  "name": "neutron-compiler",
+  "version": "1.1.0",
+  "description": "",
+  "type": "module",
+  "main": "src/compile.ts",
+  "exports": {
+    ".": "./src/compile.ts",
+    "./src/*.js": "./src/*.ts",
+    "./src/*.ts": "./src/*.ts",
+    "./whitelist.js": "./whitelist.ts",
+    "./whitelist.ts": "./whitelist.ts"
+  },
+  "scripts": {
+    "test": "bun test/run.ts"
+  },
+  "author": "",
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "fflate": "^0.8.3",
+    "neutron-motoko-wasm": "^1.1.0",
+    "neutron-security": "^1.1.0",
+    "neutron-tools": "^1.1.0"
+  },
+  "devDependencies": {
+    "tiny-msgpack": "^2.2.0"
+  },
+  "gitHead": "e607db1286c4b8f719b7025367907e5773849094"
+}

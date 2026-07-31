@@ -1,0 +1,146 @@
+@use "neutron-design-system/styles.scss";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+@layer app {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    block-size: 100%;
+    min-block-size: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #030a12;
+  }
+
+  .nt-app.mysubnet-app {
+    --nt-bg: #030a12;
+    --nt-text: #d4e9ee;
+    --nt-text-strong: #f4fcff;
+    block-size: 100%;
+    min-block-size: 0;
+    overflow: hidden;
+    background-color: #030a12;
+  }
+
+  .mysubnet-stage,
+  .mysubnet-globe {
+    inline-size: 100%;
+    block-size: 100%;
+    min-block-size: 0;
+  }
+
+  .mysubnet-stage {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    container-name: mysubnet;
+    container-type: size;
+    background-color: #030a12;
+  }
+
+  .mysubnet-globe {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+  }
+
+  .mysubnet-canvas {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    outline: none;
+    touch-action: none;
+  }
+
+  .mysubnet-canvas:focus-visible {
+    outline: 2px solid rgb(130 222 255 / 72%);
+    outline-offset: -4px;
+  }
+
+  .mysubnet-readout {
+    position: absolute;
+    z-index: 2;
+    inset: 14px auto auto 16px;
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    color: #d9edf0;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    pointer-events: none;
+    text-shadow: 0 1px 3px #000, 0 0 12px rgb(0 8 16 / 92%);
+  }
+
+  .mysubnet-readout > div {
+    display: grid;
+    grid-template-columns: 82px minmax(0, 1fr);
+    align-items: baseline;
+    gap: 8px;
+    min-inline-size: 0;
+  }
+
+  .mysubnet-readout dt,
+  .mysubnet-readout dd {
+    overflow: hidden;
+    margin: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mysubnet-readout dt {
+    color: #87b5c0;
+    font-size: 0.61rem;
+    font-weight: 650;
+    text-transform: uppercase;
+  }
+
+  .mysubnet-readout dd {
+    max-inline-size: min(58vw, 300px);
+    color: #effcff;
+    font-size: 0.7rem;
+    font-weight: 720;
+  }
+
+  @container mysubnet (max-width: 420px) {
+    .mysubnet-readout {
+      inset: 10px auto auto 11px;
+      gap: 2px;
+    }
+
+    .mysubnet-readout > div {
+      grid-template-columns: 70px minmax(0, 1fr);
+      gap: 5px;
+    }
+
+    .mysubnet-readout dt {
+      font-size: 0.54rem;
+    }
+
+    .mysubnet-readout dd {
+      max-inline-size: calc(100vw - 96px);
+      font-size: 0.62rem;
+    }
+
+  }
+
+  @container mysubnet (max-width: 320px) {
+    .mysubnet-readout > div {
+      grid-template-columns: 56px minmax(0, 1fr);
+      gap: 4px;
+    }
+
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mysubnet-readout {
+      text-shadow: 0 1px 3px #000;
+    }
+  }
+}

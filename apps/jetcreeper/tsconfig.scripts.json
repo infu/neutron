@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.bun.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "build.ts",
+    "src/abilities.ts",
+    "src/attachments.ts",
+    "src/attachment_effects.ts",
+    "src/auto_combat_systems.ts",
+    "src/autopilot.ts",
+    "src/brain_survival_simulation.ts",
+    "src/boss_escorts.ts",
+    "src/cave.ts",
+    "src/combat_progression_simulation.ts",
+    "src/combat_targeting.ts",
+    "src/enemy_pressure_hyperopt.ts",
+    "src/emergency_assist.ts",
+    "src/encounter_cadence.ts",
+    "src/flight_motion.ts",
+    "src/game_rules.ts",
+    "src/guardian_wing_fire.ts",
+    "src/hud.ts",
+    "src/laser_rules.ts",
+    "src/manual_emergency_sentinel.ts",
+    "src/pilot_lines.ts",
+    "src/palette.ts",
+    "src/pressure_simulation.ts",
+    "src/projectile_visual.ts",
+    "src/remote_bomb.ts",
+    "src/run_difficulty.ts",
+    "src/run_quotes.ts",
+    "src/ship_visual_mode.ts",
+    "src/wingman_countermeasures.ts",
+    "test/**/*.ts",
+    "types/**/*.d.ts"
+  ]
+}

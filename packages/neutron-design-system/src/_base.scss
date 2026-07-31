@@ -1,0 +1,147 @@
+.nt-app {
+  background: var(--nt-bg);
+  accent-color: var(--nt-accent);
+  color: var(--nt-text);
+  font-family: var(--nt-font-ui);
+  font-size: var(--nt-font-size-body);
+  font-synthesis: none;
+  line-height: var(--nt-line-height-body);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  scrollbar-color: var(--nt-scrollbar-hidden-bg) var(--nt-scrollbar-hidden-bg);
+  scrollbar-width: thin;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nt-app:hover {
+  scrollbar-color: var(--nt-scrollbar-thumb) var(--nt-scrollbar-track);
+}
+
+.nt-app::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.nt-app::-webkit-scrollbar-track {
+  background: var(--nt-scrollbar-hidden-bg);
+}
+
+.nt-app::-webkit-scrollbar-thumb {
+  background: var(--nt-scrollbar-hidden-bg);
+  border: 2px solid var(--nt-scrollbar-hidden-bg);
+  border-radius: var(--nt-radius-3);
+}
+
+.nt-app:hover::-webkit-scrollbar-track {
+  background: var(--nt-scrollbar-track);
+}
+
+.nt-app:hover::-webkit-scrollbar-thumb {
+  background: var(--nt-scrollbar-thumb);
+  border-color: var(--nt-scrollbar-track);
+}
+
+.nt-app::-webkit-scrollbar-thumb:hover {
+  background: var(--nt-scrollbar-thumb-hover);
+}
+
+.nt-app::-webkit-scrollbar-corner {
+  background: var(--nt-scrollbar-hidden-bg);
+}
+
+.nt-app:hover::-webkit-scrollbar-corner {
+  background: var(--nt-scrollbar-track);
+}
+
+.nt-app:where(.nt-app--fill) {
+  min-height: 100dvh;
+}
+
+.nt-app :where(button, input, textarea, select) {
+  color: inherit;
+  font: inherit;
+}
+
+.nt-app :where(button) {
+  appearance: none;
+}
+
+.nt-app :where(button, a, input, textarea, select) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nt-app :where(svg) {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.nt-app :where(a) {
+  color: var(--nt-info);
+  text-decoration-color: var(--nt-line);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.nt-app :where(a:hover) {
+  color: var(--nt-text-strong);
+}
+
+.nt-app :where(code, kbd, samp, pre) {
+  font-family: var(--nt-font-mono);
+}
+
+.nt-app :where(:focus-visible) {
+  outline: var(--nt-focus-width) solid var(--nt-line-focus);
+  outline-offset: var(--nt-focus-offset);
+}
+
+.nt-app :where(::selection) {
+  background: var(--nt-info-muted);
+  color: var(--nt-text-strong);
+}
+
+.nt-app :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json) {
+  scrollbar-color: var(--nt-scrollbar-hidden-bg) var(--nt-scrollbar-hidden-bg);
+  scrollbar-width: thin;
+}
+
+.nt-app:hover :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json) {
+  scrollbar-color: var(--nt-scrollbar-thumb) var(--nt-scrollbar-track);
+}
+
+.nt-app :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json)::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.nt-app :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json)::-webkit-scrollbar-track {
+  background: var(--nt-scrollbar-hidden-bg);
+}
+
+.nt-app :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json)::-webkit-scrollbar-thumb {
+  background: var(--nt-scrollbar-hidden-bg);
+  border: 2px solid var(--nt-scrollbar-hidden-bg);
+  border-radius: var(--nt-radius-3);
+}
+
+.nt-app:hover :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json)::-webkit-scrollbar-track {
+  background: var(--nt-scrollbar-track);
+}
+
+.nt-app:hover :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json)::-webkit-scrollbar-thumb {
+  background: var(--nt-scrollbar-thumb);
+  border-color: var(--nt-scrollbar-track);
+}
+
+.nt-app :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json)::-webkit-scrollbar-thumb:hover {
+  background: var(--nt-scrollbar-thumb-hover);
+}
+
+.nt-app :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json)::-webkit-scrollbar-corner {
+  background: var(--nt-scrollbar-hidden-bg);
+}
+
+.nt-app:hover :where(.nt-scroll, .nt-scroll-x, .nt-pane-body, .nt-pre, .nt-table-wrap, .nt-json)::-webkit-scrollbar-corner {
+  background: var(--nt-scrollbar-track);
+}

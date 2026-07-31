@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "agent",
+  "memory": {
+    "agent": {
+      "schemas": {
+        "1": {
+          "hash": "cae3096c6238e7217c0cdd242e1c1094faecf1c85ee92c0b2d13a88b3bf0f134",
+          "entry": "cae3096c6238e7217c0cdd242e1c1094faecf1c85ee92c0b2d13a88b3bf0f134"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

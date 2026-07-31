@@ -1,0 +1,19 @@
+{
+  "name": "neutron-motoko-wasm",
+  "version": "1.1.0",
+  "description": "Vendored wasm_of_ocaml Motoko compiler wrapper for Neutron",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node.js": "./src/node.ts",
+    "./src/*.js": "./src/*.ts",
+    "./src/*.ts": "./src/*.ts",
+    "./compiler/*": "./compiler/*"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "author": "",
+  "license": "Apache-2.0"
+}

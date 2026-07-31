@@ -1,0 +1,91 @@
+// Frozen outer envelope, route bodies, and route result packages carried in
+// PublicIngressRequestV1.payload / PublicIngressResultV1.ok.
+
+type Blob16 = blob;
+type Blob32 = blob;
+
+type WagyuIngressV1 = record {
+  operation_id : Blob16;
+  body_candid : blob;
+};
+
+type FollowBodyV1 = record {
+  expected_revision : nat64;
+  subscription_id : Blob16;
+};
+
+type UnfollowBodyV1 = record {
+  expected_revision : nat64;
+  subscription_id : Blob16;
+};
+
+type DeliveryEventV1 = variant {
+  original : blob;
+  share : blob;
+  tombstone : blob;
+};
+
+type DeliverBodyV1 = record {
+  subscription_id : Blob16;
+  renewal_requested : bool;
+  event : opt DeliveryEventV1;
+};
+
+type LikeBodyV1 = record {
+  certified_like_receipt_candid : blob;
+};
+
+type NoticeRelationV1 = variant { reply; share };
+
+type NoticeBodyV1 = record {
+  relation : opt NoticeRelationV1;
+  target_post_id : Blob32;
+  target_body_hash : Blob32;
+  actor_action_id : Blob32;
+  actor_object_digest : Blob32;
+  actor_object_length : nat32;
+};
+
+type FollowerStateV1 = variant {
+  active : record {
+    subscription_id : Blob16;
+    lease_expires_ns : nat64;
+    delivery_credits : nat16;
+  };
+  inactive : record {
+    last_subscription_id : Blob16;
+  };
+};
+
+type FollowerHeadV1 = record {
+  revision : nat64;
+  state : opt FollowerStateV1;
+};
+
+type WagyuRejectionReasonV1 = variant {
+  invalid;
+  blocked;
+  not_following;
+  unknown_post;
+  expired;
+  full;
+  conflict;
+  incompatible;
+};
+
+type WagyuRouteOutcomeV1 = variant {
+  accepted;
+  duplicate;
+  rejected : record {
+    reason : opt WagyuRejectionReasonV1;
+  };
+};
+
+type WagyuRouteResultV1 = record {
+  outcome : opt WagyuRouteOutcomeV1;
+  local_receipt_time_ns : opt nat64;
+  revision : opt nat64;
+  relationship : opt FollowerHeadV1;
+};
+
+service : {}

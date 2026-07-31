@@ -1,0 +1,389 @@
+{
+  "format": 3,
+  "name": "Kitchen Sink",
+  "id": "kitchensink",
+  "version": 301,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      },
+      "randomness": {
+        "api": 1
+      },
+      "chain_key_signing": {
+        "api": 1
+      },
+      "https_outcalls": {
+        "api": 1
+      },
+      "certified_assets": {
+        "api": 2
+      },
+      "stable_store": {
+        "api": 1
+      }
+    }
+  },
+  "background": {
+    "path": "service.html",
+    "description": "Resident Kitchen Sink tray demo"
+  },
+  "tray": {
+    "title": "Kitchen Sink Tray Demo",
+    "path": "tray.html",
+    "icon": "static/tray-demo.svg"
+  },
+  "tiles": [
+    {
+      "id": "main",
+      "title": "Kitchen Sink",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Interactive Neutron app development workbench"
+    },
+    {
+      "id": "companion",
+      "title": "Shared Counter",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Second tile sharing Kitchen Sink backend state"
+    }
+  ],
+  "dependencies": {
+    "contacts": {
+      "app": "contacts",
+      "min_version": 101,
+      "functions": [
+        "contacts_neutron_revision_v2"
+      ]
+    }
+  },
+  "capabilities": {
+    "public_ingress": {
+      "api": 1,
+      "routes": [
+        {
+          "protocol": "demo_v1",
+          "id": "status",
+          "handler": "public_status",
+          "mode": "query",
+          "caller": "any",
+          "max_request_bytes": 64,
+          "max_response_bytes": 4096
+        }
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Probe one owner-approved ledger method",
+      "reservation_scopes": [
+        "exact"
+      ],
+      "max_concurrency": 1,
+      "max_cycles_per_call": 1000000,
+      "max_cycles_per_day": 10000000
+    },
+    "randomness": {
+      "api": 1
+    },
+    "chain_key_signing": {
+      "api": 1,
+      "slots": [
+        {
+          "id": "receipt_assertions",
+          "algorithm": "ecdsa_secp256k1",
+          "purpose": "Sign Kitchen Sink receipt assertions",
+          "max_assertion_bytes": 4096
+        }
+      ]
+    },
+    "https_outcalls": {
+      "api": 1,
+      "endpoints": [
+        {
+          "id": "example",
+          "url_prefix": "https://example.com/",
+          "methods": [
+            "get",
+            "head"
+          ],
+          "request_headers": [
+            "accept"
+          ],
+          "max_request_bytes": 4096,
+          "max_response_bytes": 32768,
+          "transform": "strip_headers"
+        }
+      ]
+    },
+    "vetkeys": {
+      "api": 1,
+      "description": "Demonstrate an app-isolated Kitchen Sink key slot",
+      "slots": [
+        {
+          "id": "demo_key",
+          "purpose": "Demonstrate app-isolated public key binding"
+        }
+      ]
+    },
+    "scheduled_tasks": {
+      "api": 1,
+      "tasks": [
+        {
+          "id": "daily_tick",
+          "method": "scheduled_tick",
+          "interval_seconds": 86400,
+          "run_on_start": true,
+          "max_backend_calls": 1
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "read_profile",
+        "bump_counter",
+        "read_counter",
+        "random_bytes",
+        "chain_key_public_key",
+        "chain_key_sign_receipt",
+        "https_example",
+        "scheduled_status",
+        "dependency_status",
+        "function_resource_snapshot",
+        "asset_status",
+        "certified_assets_usage",
+        "stable_notes_create",
+        "stable_notes_load",
+        "stable_notes_update",
+        "stable_notes_list",
+        "stable_notes_usage",
+        "stable_notes_delete",
+        "stable_notes_clear_page"
+      ]
+    },
+    "agent_entrypoints": {
+      "api": 1,
+      "entrypoints": [
+        "capability_agent_demo"
+      ]
+    },
+    "background_ui_requests": {
+      "api": 1,
+      "categories": [
+        "frontend_tool",
+        "connection"
+      ]
+    },
+    "ethereum_provider": {
+      "api": 1,
+      "chains": [
+        1
+      ],
+      "methods": [
+        "eth_chainId",
+        "eth_requestAccounts"
+      ]
+    },
+    "connections": {
+      "api": 1,
+      "providers": [
+        {
+          "provider": "openrouter",
+          "scopes": []
+        }
+      ]
+    },
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    },
+    "certified_assets": {
+      "api": 2,
+      "max_entries": 8,
+      "max_committed_bytes": 16384,
+      "max_object_bytes": 4096,
+      "max_pending_stages": 1,
+      "max_staged_bytes": 4096,
+      "max_batch_operations": 2,
+      "max_batch_bytes": 4096,
+      "max_idempotency_receipts": 32,
+      "collections": [
+        {
+          "id": "publication_demo",
+          "mount": "publication_demo",
+          "kind": "publication",
+          "max_object_bytes": 2048
+        },
+        {
+          "id": "immutable_blob_demo",
+          "mount": "blob_demo",
+          "kind": "immutable_blob",
+          "path_prefix": "/v1/immutable/",
+          "max_object_bytes": 2048
+        },
+        {
+          "id": "mutable_blob_demo",
+          "mount": "blob_demo",
+          "kind": "mutable_blob",
+          "path_prefix": "/v1/mutable/",
+          "max_object_bytes": 2048
+        }
+      ]
+    },
+    "stable_store": {
+      "api": 1,
+      "stores": [
+        {
+          "id": "notes",
+          "purpose": "Kitchen Sink revisioned UTF-8 notes demo",
+          "schema_version": 1,
+          "max_entries": 24,
+          "max_key_bytes": 96,
+          "max_value_bytes": 4096,
+          "max_bytes": 32768
+        }
+      ]
+    }
+  },
+  "func": {
+    "public_status": {
+      "type": "query",
+      "async": false
+    },
+    "read_profile": {
+      "type": "query",
+      "async": false
+    },
+    "save_profile": {
+      "type": "update",
+      "async": false
+    },
+    "echo": {
+      "type": "update",
+      "async": false
+    },
+    "add": {
+      "type": "update",
+      "async": false
+    },
+    "bump_counter": {
+      "type": "update",
+      "async": false
+    },
+    "read_counter": {
+      "type": "query",
+      "async": false
+    },
+    "random_bytes": {
+      "type": "update",
+      "async": "async*"
+    },
+    "chain_key_public_key": {
+      "type": "update",
+      "async": "async*"
+    },
+    "chain_key_sign_receipt": {
+      "type": "update",
+      "async": "async*"
+    },
+    "https_example": {
+      "type": "update",
+      "async": "async*"
+    },
+    "backend_probe": {
+      "type": "update",
+      "async": "async*"
+    },
+    "scheduled_tick": {
+      "type": "internal",
+      "async": "async*",
+      "arg": [
+        "task_capabilities"
+      ]
+    },
+    "scheduled_status": {
+      "type": "query",
+      "async": false
+    },
+    "dependency_status": {
+      "type": "query",
+      "async": false
+    },
+    "function_resource_snapshot": {
+      "type": "query",
+      "async": false,
+      "arg": [
+        "caller",
+        "canister_principal",
+        "memory_kitchensink"
+      ]
+    },
+    "stable_notes_create": {
+      "type": "update",
+      "async": false
+    },
+    "stable_notes_load": {
+      "type": "query",
+      "async": false
+    },
+    "stable_notes_update": {
+      "type": "update",
+      "async": false
+    },
+    "stable_notes_list": {
+      "type": "query",
+      "async": false
+    },
+    "stable_notes_usage": {
+      "type": "query",
+      "async": false
+    },
+    "stable_notes_delete": {
+      "type": "update",
+      "async": false
+    },
+    "stable_notes_clear_page": {
+      "type": "update",
+      "async": false
+    },
+    "publish_publication": {
+      "type": "update",
+      "async": false
+    },
+    "delete_publication": {
+      "type": "update",
+      "async": false
+    },
+    "publish_immutable_blob": {
+      "type": "update",
+      "async": false
+    },
+    "put_mutable_blob": {
+      "type": "update",
+      "async": false
+    },
+    "asset_status": {
+      "type": "query",
+      "async": false
+    },
+    "certified_assets_usage": {
+      "type": "query",
+      "async": false
+    }
+  },
+  "memory": {
+    "kitchensink": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/kitchensink/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

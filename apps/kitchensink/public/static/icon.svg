@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Kitchen Sink">
+  <rect width="64" height="64" rx="12" fill="#101820"/>
+  <path d="M14 37h36v8a7 7 0 0 1-7 7H21a7 7 0 0 1-7-7v-8Z" fill="#8fd2ff"/>
+  <path d="M18 35h28a6 6 0 0 0 0-12H35v-5a7 7 0 0 1 14 0" fill="none" stroke="#dce6ef" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="23" cy="44" r="3" fill="#101820"/>
+  <circle cx="33" cy="44" r="3" fill="#101820"/>
+  <circle cx="43" cy="44" r="3" fill="#101820"/>
+</svg>

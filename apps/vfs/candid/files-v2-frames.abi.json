@@ -1,0 +1,107 @@
+{
+  "frame_api": 2,
+  "encoding": {
+    "prefix": "u32be_control_candid_length",
+    "prefix_bytes": 4,
+    "inner_candid_value_count": 1,
+    "payload_slice_origin": "raw_payload_start",
+    "payload_partition": "strict_offset_order_exact_gapless",
+    "write_first_partition": "node_metadata_then_wrapped_keys_then_ordinal_zero_blocks",
+    "write_future_partition": "pinned_blocks_only",
+    "preserve_exact_received_frame_for_fingerprint": true,
+    "reject_trailing_inner_candid_values": true,
+    "reject_unaccounted_payload": true
+  },
+  "decoder": {
+    "control_allocation_bytes": 524288,
+    "type_entries": 256,
+    "recursive_depth": 32,
+    "decoded_elements": 4096
+  },
+  "classes": [
+    {
+      "id": "vault_read",
+      "method": "files_bootstrap_v2",
+      "direction": "output",
+      "control_type": "VaultReadFrameControlV2",
+      "frame_max_bytes": 65536,
+      "control_max_bytes": null
+    },
+    {
+      "id": "vault_write",
+      "method": "files_vault_write_v2",
+      "direction": "input",
+      "control_type": "VaultWriteFrameControlV2",
+      "frame_max_bytes": 65536,
+      "control_max_bytes": null
+    },
+    {
+      "id": "list",
+      "method": "files_list_v2",
+      "direction": "output",
+      "control_type": "ListFrameControlV2",
+      "frame_max_bytes": 524288,
+      "control_max_bytes": null
+    },
+    {
+      "id": "lookup",
+      "method": "files_lookup_v2",
+      "direction": "output",
+      "control_type": "LookupFrameControlV2",
+      "frame_max_bytes": 8192,
+      "control_max_bytes": null
+    },
+    {
+      "id": "read",
+      "method": "files_read_chunk_v2",
+      "direction": "output",
+      "control_type": "ReadBlockFrameControlV2",
+      "frame_max_bytes": 1900000,
+      "control_max_bytes": null
+    },
+    {
+      "id": "mutate",
+      "method": "files_mutate_v2",
+      "direction": "input",
+      "control_type": "MutateFrameControlV2",
+      "frame_max_bytes": 262144,
+      "control_max_bytes": null
+    },
+    {
+      "id": "write_single_first",
+      "method": "files_write_block_v2",
+      "direction": "input",
+      "control_type": "WriteBlockFrameControlV2",
+      "frame_max_bytes": 1900000,
+      "control_max_bytes": 9996
+    },
+    {
+      "id": "write_batch_first",
+      "method": "files_write_block_v2",
+      "direction": "input",
+      "control_type": "WriteBlockFrameControlV2",
+      "frame_max_bytes": 1900000,
+      "control_max_bytes": 196608
+    },
+    {
+      "id": "write_continuation",
+      "method": "files_write_block_v2",
+      "direction": "input",
+      "control_type": "WriteBlockFrameControlV2",
+      "frame_max_bytes": 1900000,
+      "control_max_bytes": 9996
+    }
+  ],
+  "write_geometry": {
+    "normal_plaintext_block_bytes": 1889984,
+    "aes_gcm_tag_bytes": 16,
+    "maximum_ciphertext_block_bytes": 1890000,
+    "maximum_file_bytes": 67108864,
+    "maximum_file_blocks": 36,
+    "maximum_batch_blocks": 36,
+    "maximum_single_frames": 36,
+    "maximum_batch_frames": 7,
+    "single_control_max_bytes": 9996,
+    "batch_first_control_max_bytes": 196608
+  }
+}

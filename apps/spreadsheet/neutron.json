@@ -1,0 +1,46 @@
+{
+  "format": 3,
+  "name": "Spreadsheet",
+  "id": "spreadsheet",
+  "version": 301,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Create and edit agent-friendly spreadsheet workbooks",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Persistent spreadsheet workbook service"
+  },
+  "capabilities": {
+    "background_ui_requests": {
+      "api": 1,
+      "categories": [
+        "frontend_tool"
+      ]
+    },
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    }
+  },
+  "tiles": [
+    {
+      "id": "workbook",
+      "title": "Spreadsheet",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Edit spreadsheet workbooks"
+    }
+  ],
+  "func": {},
+  "memory": {
+    "spreadsheet": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/spreadsheet/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

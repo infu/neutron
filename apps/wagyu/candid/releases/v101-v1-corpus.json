@@ -1,0 +1,56 @@
+{
+  "schema": "wagyu-release-corpus-v1",
+  "app_id": "wagyu",
+  "baseline_version": 101,
+  "supported_predecessor_versions": [],
+  "files": {
+    "fixtures/golden-v1.json": {
+      "bytes": 7447,
+      "sha256": "3cb9fc8fa446d8e7e159129457c86dd3e895ab6b53318cc171174eab1ee05f8f"
+    },
+    "fixtures/v1-values.ts": {
+      "bytes": 12662,
+      "sha256": "628ddb23dfc4b08487339b352377fcacd2b8c83bc51f22e494859463eee4ec88"
+    },
+    "generated/wagyu-owner-self-calls-v1.did.d.ts": {
+      "bytes": 9023,
+      "sha256": "1287088e16b1534ac716b5af51e2aaa0eee4fa325ceb68e6c341d05a81071f0a"
+    },
+    "generated/wagyu-owner-self-calls-v1.did.js": {
+      "bytes": 10343,
+      "sha256": "9198e4a47aeca2825445771bf9f70c16f967dbd161fb8f898a797b053ba66436"
+    },
+    "generated/wagyu-v1.did.d.ts": {
+      "bytes": 11169,
+      "sha256": "b74eddd3c78d74b704b9df0e4f98ed00e29244e1969f4958b922996cd778683a"
+    },
+    "generated/wagyu-v1.did.js": {
+      "bytes": 6113,
+      "sha256": "e196347c8e382b2a970ff897295e011c06aa7294b7625afbbd243d062fff735a"
+    },
+    "nested/action-objects-v1.did": {
+      "bytes": 3350,
+      "sha256": "ef8fd44828e3675008a2d88a0c2cfb970e1f874281e8dc55267997423decb2a3"
+    },
+    "nested/ingress-v1.did": {
+      "bytes": 1762,
+      "sha256": "f17868b2989a46fe783500d718af34bebcd927a986467287f89e2b751e508d36"
+    },
+    "nested/local-pages-v1.did": {
+      "bytes": 3281,
+      "sha256": "62ed267b8afdf9e65bb2bfe5f0c73a6ca39bdee01b498b5683f802af8d99dc43"
+    },
+    "nested/portable-refs-v1.did": {
+      "bytes": 1323,
+      "sha256": "de94125dda6bf934fca2a9f2238464283e7877755fe69f14def6053654a930c1"
+    },
+    "wagyu-owner-self-calls-v1.did": {
+      "bytes": 7651,
+      "sha256": "144af57485c3104895b6f35f98862c824e20c8240dabf0284f7a0c633d0f3141"
+    },
+    "wagyu-v1.did": {
+      "bytes": 9512,
+      "sha256": "6721992c8eabefe0e54f2074867d7a7d273edd8414c1e9966c5542b8d3412f47"
+    }
+  }
+}

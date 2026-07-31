@@ -1,0 +1,11 @@
+{
+  "providers": [
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "description": "OpenRouter models and user-controlled API key",
+      "authorizationOrigin": "https://openrouter.ai",
+      "scopes": []
+    }
+  ]
+}

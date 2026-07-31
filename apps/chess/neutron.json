@@ -1,0 +1,122 @@
+{
+  "format": 3,
+  "name": "Chess",
+  "id": "chess",
+  "version": 301,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Play complete local, browser-computer, and remote chess games",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "background": {
+    "path": "service.html",
+    "description": "Expose live local Chess games to approved Neutron agents"
+  },
+  "capabilities": {
+    "public_ingress": {
+      "api": 1,
+      "routes": [
+        {
+          "protocol": "chess_v1",
+          "id": "exchange",
+          "handler": "chess_remote_exchange_v1",
+          "mode": "update",
+          "caller": "canister",
+          "max_request_bytes": 65536,
+          "max_response_bytes": 32768,
+          "max_calls_per_hour": 240,
+          "required_cycles": 400000000
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "chess_get_game",
+        "chess_remote_push_target",
+        "chess_create_game",
+        "chess_move",
+        "chess_sync_game",
+        "chess_join_game",
+        "chess_action",
+        "chess_undo"
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Send paid Chess commands and pushed state to an owner-approved peer Neutron",
+      "reservation_scopes": [
+        "exact"
+      ],
+      "max_concurrency": 8,
+      "max_cycles_per_call": 400000000,
+      "max_cycles_per_day": 2304000000000
+    }
+  },
+  "tiles": [
+    {
+      "id": "board",
+      "title": "Chess",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Play one complete chess game in this tile"
+    }
+  ],
+  "func": {
+    "chess_get_game": {
+      "type": "query",
+      "async": false
+    },
+    "chess_remote_push_target": {
+      "type": "query",
+      "async": false
+    },
+    "chess_create_game": {
+      "type": "update",
+      "async": false
+    },
+    "chess_move": {
+      "type": "update",
+      "async": "async*"
+    },
+    "chess_sync_game": {
+      "type": "update",
+      "async": "async*"
+    },
+    "chess_join_game": {
+      "type": "update",
+      "async": "async*"
+    },
+    "chess_action": {
+      "type": "update",
+      "async": "async*"
+    },
+    "chess_undo": {
+      "type": "update",
+      "async": false
+    },
+    "chess_remote_exchange_v1": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    }
+  },
+  "memory": {
+    "chess": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/chess/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

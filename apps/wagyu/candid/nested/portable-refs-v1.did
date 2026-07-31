@@ -1,0 +1,56 @@
+// Frozen portable proof/reference packages. Nested action bodies/ref blobs are
+// exact received bytes and must never be recreated by decoding/re-encoding.
+
+type Blob32 = blob;
+type ActionKindV1 = variant { post; share; tombstone; like };
+
+type CertifiedHttpProofV1 = record {
+  certificate_version : nat8;
+  certificate_cbor : blob;
+  witness_cbor : blob;
+  expression_path_cbor : blob;
+  certificate_time_ns : nat64;
+};
+
+type CertifiedActionRefV1 = record {
+  actor : principal;
+  action_kind : opt ActionKindV1;
+  object_digest : Blob32;
+  body_length : nat32;
+  proof_snapshot : CertifiedHttpProofV1;
+};
+
+type CertifiedPostRefV1 = record {
+  author : principal;
+  post_id : Blob32;
+  body_hash : Blob32;
+  body_length : nat32;
+  object_digest : Blob32;
+  proof : CertifiedHttpProofV1;
+};
+
+type CertifiedShareRefV1 = record {
+  sharer : principal;
+  share_id : Blob32;
+  body_length : nat32;
+  object_digest : Blob32;
+  proof : CertifiedHttpProofV1;
+};
+
+type CertifiedShareDeliveryV1 = record {
+  original_post_ref_candid : blob;
+  share_action_candid : blob;
+  share_ref : CertifiedShareRefV1;
+};
+
+type CertifiedLikeReceiptV1 = record {
+  like_action_candid : blob;
+  ref : CertifiedActionRefV1;
+};
+
+type CertifiedTombstoneV1 = record {
+  tombstone_action_candid : blob;
+  ref : CertifiedActionRefV1;
+};
+
+service : {}

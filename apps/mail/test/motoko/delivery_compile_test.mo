@@ -1,0 +1,82 @@
+import Blob "mo:core/Blob";
+import Nat32 "mo:core/Nat32";
+import Nat8 "mo:core/Nat8";
+import Principal "mo:core/Principal";
+import Delivery "../../backend/mailbox/Delivery";
+import DeliveryHash "../../backend/protocol/DeliveryHash";
+import Fixture "Fixture";
+
+func canister(last : Nat8) : Principal {
+    Principal.fromBlob(Blob.fromArray([0, last, 1]));
+};
+
+let recipient = canister(2);
+let frozen = Delivery.keyFingerprint(
+    1,
+    7,
+    Blob.fromArray([1, 2, 3]),
+    Blob.fromArray([4, 5]),
+);
+assert (frozen == Blob.fromArray([
+    0xea, 0xe4, 0xfa, 0x65, 0x81, 0x78, 0x17, 0xe3,
+    0x77, 0x18, 0xcc, 0x3c, 0x9e, 0x26, 0x99, 0x25,
+    0x34, 0xbd, 0x7d, 0x93, 0xf4, 0xbe, 0xa5, 0x2a,
+    0x69, 0x2a, 0xd3, 0x0f, 0x4f, 0xd2, 0xc6, 0x60,
+]));
+let info : Delivery.MailKeyInfoV1 = {
+    protocol_version = 1;
+    suite = 1;
+    delivery_key_epoch = 7;
+    context_public_key = Fixture.repeatBlob(96, 0x31);
+    effective_ibe_identity = Fixture.repeatBlob(32, 0x32);
+    recipient_key_fingerprint = Fixture.repeatBlob(32, 0x22);
+    max_envelope_bytes = Nat32.fromNat(39_199);
+};
+let infoHash = Delivery.publicInfoHash(recipient, info);
+assert (infoHash == Blob.fromArray([
+    0x30, 0xe1, 0x8d, 0xa8, 0xac, 0x0c, 0xe0, 0x3b,
+    0x2f, 0xcd, 0x6d, 0x86, 0x53, 0x3f, 0x5f, 0x6f,
+    0x0b, 0xb4, 0x85, 0x32, 0x9b, 0xd5, 0x53, 0x16,
+    0xbe, 0x3d, 0x55, 0xeb, 0x05, 0x8e, 0x3c, 0x1f,
+]));
+assert (
+    not Blob.equal(
+        infoHash,
+        Delivery.publicInfoHash(canister(3), info),
+    )
+);
+
+let request : Delivery.SendEncryptedRequest = {
+    command_id = Fixture.repeatBlob(16, 0x11);
+    permit_id = Fixture.repeatBlob(32, 0x12);
+    recipient;
+    public_info_hash = infoHash;
+    envelope = Fixture.envelope(1_040, 1, 7, 0x22);
+    local_wrap_epoch = 9;
+    local_wrap_fingerprint = Fixture.repeatBlob(32, 0x23);
+    local_wrapped_cek = Fixture.repeatBlob(168, 0x33);
+};
+let commandHash = Delivery.commandFingerprint(request);
+assert (commandHash == Blob.fromArray([
+    0x25, 0x65, 0x15, 0xb6, 0x48, 0x96, 0xd1, 0xb9,
+    0x4f, 0x27, 0xe9, 0x56, 0x19, 0xb2, 0xf1, 0xc5,
+    0x0a, 0x1f, 0x07, 0xd7, 0xa7, 0x95, 0x08, 0xae,
+    0x46, 0xff, 0x28, 0x2a, 0xdb, 0xca, 0xd0, 0xe7,
+]));
+assert (
+    not Blob.equal(
+        commandHash,
+        Delivery.commandFingerprint({ request with recipient = canister(3) }),
+    )
+);
+
+assert (DeliveryHash.permit(
+    Fixture.repeatBlob(16, 0x90),
+    1,
+    canister(1),
+) == Blob.fromArray([
+    0x27, 0xa0, 0xac, 0x52, 0x4d, 0x6f, 0x61, 0xb0,
+    0x37, 0xeb, 0x61, 0x6a, 0x2b, 0x70, 0x3a, 0xb4,
+    0x79, 0x0b, 0x53, 0x9b, 0x62, 0xb4, 0x6a, 0xf7,
+    0x65, 0xe0, 0xe2, 0x8a, 0xda, 0x4b, 0x71, 0x83,
+]));

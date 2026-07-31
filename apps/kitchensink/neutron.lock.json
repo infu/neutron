@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "kitchensink",
+  "memory": {
+    "kitchensink": {
+      "schemas": {
+        "1": {
+          "hash": "e7f5385c39e9e3c6806ce810ed03ca76fdee67641923ff7ea8c7a4b7f0176cdf",
+          "entry": "e7f5385c39e9e3c6806ce810ed03ca76fdee67641923ff7ea8c7a4b7f0176cdf"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

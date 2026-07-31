@@ -1,0 +1,240 @@
+{
+  "format": 3,
+  "id": "wallet",
+  "name": "Wallet",
+  "version": 302,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Canister-owned ICRC token balances",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "background": {
+    "path": "service.html",
+    "description": "Resident Wallet overview and balance refresh service"
+  },
+  "tray": {
+    "title": "Wallet",
+    "path": "tray.html",
+    "icon": "static/icon.svg"
+  },
+  "dependencies": {
+    "contacts": {
+      "app": "contacts",
+      "min_version": 100,
+      "functions": [
+        "contacts_discover_v1"
+      ]
+    }
+  },
+  "capabilities": {
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "wallet_snapshot",
+        "wallet_catalog",
+        "wallet_contact_destinations",
+        "wallet_refresh_metadata",
+        "wallet_refresh_balances",
+        "wallet_refresh_deposits",
+        "wallet_history_page",
+        "wallet_history_status",
+        "wallet_history_sources",
+        "wallet_history_sync"
+      ]
+    },
+    "scheduled_tasks": {
+      "api": 1,
+      "tasks": [
+        {
+          "id": "ledger_history",
+          "method": "wallet_history_tick",
+          "interval_seconds": 43200,
+          "run_on_start": true,
+          "max_backend_calls": 100
+        }
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Connect to owner-approved ICRC ledger canisters",
+      "reservation_scopes": [
+        "principal",
+        "exact"
+      ],
+      "install_reservations": [
+        {
+          "kind": "principal",
+          "principal": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+        },
+        {
+          "kind": "exact",
+          "principal": "qhbym-qaaaa-aaaaa-aaafq-cai",
+          "method": "get_account_transactions"
+        },
+        {
+          "kind": "principal",
+          "principal": "mxzaz-hqaaa-aaaar-qaada-cai"
+        },
+        {
+          "kind": "exact",
+          "principal": "n5wcd-faaaa-aaaar-qaaea-cai",
+          "method": "get_account_transactions"
+        },
+        {
+          "kind": "exact",
+          "principal": "mqygn-kiaaa-aaaar-qaadq-cai",
+          "method": "get_btc_address"
+        },
+        {
+          "kind": "exact",
+          "principal": "mqygn-kiaaa-aaaar-qaadq-cai",
+          "method": "update_balance"
+        },
+        {
+          "kind": "exact",
+          "principal": "mqygn-kiaaa-aaaar-qaadq-cai",
+          "method": "retrieve_btc_with_approval"
+        },
+        {
+          "kind": "principal",
+          "principal": "xevnm-gaaaa-aaaar-qafnq-cai"
+        },
+        {
+          "kind": "exact",
+          "principal": "xrs4b-hiaaa-aaaar-qafoa-cai",
+          "method": "get_account_transactions"
+        },
+        {
+          "kind": "exact",
+          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
+          "method": "eip_1559_transaction_price"
+        },
+        {
+          "kind": "exact",
+          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
+          "method": "withdraw_erc20"
+        },
+        {
+          "kind": "exact",
+          "principal": "ss2fx-dyaaa-aaaar-qacoq-cai",
+          "method": "icrc1_fee"
+        },
+        {
+          "kind": "exact",
+          "principal": "ss2fx-dyaaa-aaaar-qacoq-cai",
+          "method": "icrc2_approve"
+        },
+        {
+          "kind": "exact",
+          "principal": "ss2fx-dyaaa-aaaar-qacoq-cai",
+          "method": "icrc1_balance_of"
+        },
+        {
+          "kind": "exact",
+          "principal": "s3zol-vqaaa-aaaar-qacpa-cai",
+          "method": "get_account_transactions"
+        }
+      ],
+      "max_concurrency": 20,
+      "max_cycles_per_call": 0,
+      "max_cycles_per_day": 0
+    },
+    "ethereum_provider": {
+      "api": 1,
+      "chains": [
+        1
+      ],
+      "methods": [
+        "eth_requestAccounts",
+        "eth_chainId",
+        "wallet_switchEthereumChain",
+        "eth_call",
+        "eth_getCode",
+        "eth_sendTransaction",
+        "eth_getTransactionReceipt"
+      ]
+    }
+  },
+  "tiles": [
+    {
+      "id": "wallet",
+      "title": "Wallet",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Inspect canister-owned ICRC token balances"
+    }
+  ],
+  "func": {
+    "wallet_snapshot": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_catalog": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_history_page": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_history_status": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_history_sources": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_history_sync": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_history_tick": {
+      "type": "internal",
+      "async": "async*",
+      "arg": [
+        "task_capabilities"
+      ]
+    },
+    "wallet_contact_destinations": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_transfer": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_set_ledgers": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_refresh_metadata": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_refresh_balances": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_refresh_deposits": {
+      "type": "update",
+      "async": "async*"
+    }
+  },
+  "memory": {
+    "wallet": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/wallet/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

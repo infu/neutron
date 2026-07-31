@@ -1,0 +1,196 @@
+{
+  "logical_api": 2,
+  "limits": {
+    "normalized_request_bytes": 65536,
+    "normalized_response_bytes": 65536,
+    "raw_candid_metadata_bytes": 131072,
+    "decoder_allocation_bytes": 524288,
+    "type_entries": 256,
+    "recursive_depth": 32,
+    "decoded_elements": 4096,
+    "committed_nodes_per_receipt": 64,
+    "operation_write_target_nodes": 64,
+    "endpoint_in_flight_blob_bytes": 33554432,
+    "global_in_flight_blob_bytes": 67108864
+  },
+  "public_usage": {
+    "word_type": "nat64",
+    "maximum_word": "18446744073709551615",
+    "current_fields": [
+      "live_entries",
+      "occupied_entry_slots",
+      "committed_body_bytes",
+      "reserved_committed_body_bytes",
+      "allocated_body_bytes",
+      "charged_metadata_bytes",
+      "accepted_staged_bytes",
+      "reserved_staged_bytes",
+      "detached_charged_bytes",
+      "active_stages",
+      "reserved_entry_slots",
+      "receipt_lanes",
+      "general_receipt_lanes",
+      "reserved_general_receipt_lanes",
+      "reserved_revocation_lanes",
+      "filled_revocation_lanes",
+      "receipt_nonce_indexes",
+      "receipt_expiry_indexes",
+      "cleanup_jobs"
+    ],
+    "limit_fields": [
+      "entries",
+      "committed_bytes",
+      "object_bytes",
+      "staged_bytes",
+      "pending_stages",
+      "batch_operations",
+      "batch_bytes",
+      "general_receipts",
+      "revocation_lanes"
+    ]
+  },
+  "reconciliation": {
+    "private_write_target_order": "canonical_ascending_node_id_hi_lo",
+    "private_write_target_minimum_nodes": 1,
+    "private_write_target_maximum_nodes": 64,
+    "committed_nodes_order": "canonical_ascending_node_id_hi_lo",
+    "bootstrap_operation_summary_target": "required_optional_exact_authority",
+    "committed_detail_tags": [
+      "vault",
+      "private_write",
+      "mutation",
+      "remove",
+      "abort"
+    ],
+    "committed_detail_payload": "exact_update_success_record",
+    "committed_detail_null": "incompatible",
+    "abort_target_fields": [
+      "stage_id"
+    ]
+  },
+  "methods": [
+    {
+      "name": "files_bootstrap_v2",
+      "mode": "query",
+      "request_type": "FilesBootstrapRequestV2",
+      "response_type": "FilesBootstrapResponseV2",
+      "result_type": "FilesBootstrapOutputV2",
+      "input_blob": null,
+      "output_blob": {
+        "field": "body",
+        "max_bytes": 65536
+      }
+    },
+    {
+      "name": "files_list_v2",
+      "mode": "query",
+      "request_type": "FilesListRequestV2",
+      "response_type": "FilesListResponseV2",
+      "result_type": "FilesListOutputV2",
+      "input_blob": null,
+      "output_blob": {
+        "field": "body",
+        "max_bytes": 524288
+      }
+    },
+    {
+      "name": "files_lookup_v2",
+      "mode": "query",
+      "request_type": "FilesLookupRequestV2",
+      "response_type": "FilesLookupResponseV2",
+      "result_type": "FilesLookupOutputV2",
+      "input_blob": {
+        "field": "body",
+        "max_bytes": 32
+      },
+      "output_blob": {
+        "field": "body",
+        "max_bytes": 8192
+      }
+    },
+    {
+      "name": "files_read_chunk_v2",
+      "mode": "query",
+      "request_type": "FilesReadChunkRequestV2",
+      "response_type": "FilesReadChunkResponseV2",
+      "result_type": "FilesReadChunkOutputV2",
+      "input_blob": null,
+      "output_blob": {
+        "field": "body",
+        "max_bytes": 1900000
+      }
+    },
+    {
+      "name": "files_operation_status_v2",
+      "mode": "query",
+      "request_type": "FilesOperationStatusRequestV2",
+      "response_type": "FilesOperationStatusResponseV2",
+      "result_type": "FilesOperationStatusResponseV2",
+      "input_blob": null,
+      "output_blob": null
+    },
+    {
+      "name": "files_vault_write_v2",
+      "mode": "update",
+      "request_type": "FilesVaultWriteRequestV2",
+      "response_type": "FilesVaultWriteResponseV2",
+      "result_type": "FilesVaultWriteResponseV2",
+      "input_blob": {
+        "field": "body",
+        "max_bytes": 65536
+      },
+      "output_blob": null
+    },
+    {
+      "name": "files_write_block_v2",
+      "mode": "update",
+      "request_type": "FilesWriteBlockRequestV2",
+      "response_type": "FilesWriteBlockResponseV2",
+      "result_type": "FilesWriteBlockResponseV2",
+      "input_blob": {
+        "field": "body",
+        "max_bytes": 1900000
+      },
+      "output_blob": null
+    },
+    {
+      "name": "files_mutate_v2",
+      "mode": "update",
+      "request_type": "FilesMutateRequestV2",
+      "response_type": "FilesMutateResponseV2",
+      "result_type": "FilesMutateResponseV2",
+      "input_blob": {
+        "field": "body",
+        "max_bytes": 262144
+      },
+      "output_blob": null
+    },
+    {
+      "name": "files_remove_v2",
+      "mode": "update",
+      "request_type": "FilesRemoveRequestV2",
+      "response_type": "FilesRemoveResponseV2",
+      "result_type": "FilesRemoveResponseV2",
+      "input_blob": null,
+      "output_blob": null
+    },
+    {
+      "name": "files_abort_v2",
+      "mode": "update",
+      "request_type": "FilesAbortRequestV2",
+      "response_type": "FilesAbortResponseV2",
+      "result_type": "FilesAbortResponseV2",
+      "input_blob": null,
+      "output_blob": null
+    },
+    {
+      "name": "files_cleanup_v2",
+      "mode": "update",
+      "request_type": "FilesCleanupRequestV2",
+      "response_type": "FilesCleanupResponseV2",
+      "result_type": "FilesCleanupResponseV2",
+      "input_blob": null,
+      "output_blob": null
+    }
+  ]
+}

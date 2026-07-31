@@ -1,0 +1,101 @@
+{
+  "format": 3,
+  "id": "contacts",
+  "name": "Contacts",
+  "version": 301,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Private multi-network contacts for Neutron apps and agents",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Contact discovery and tool host"
+  },
+  "capabilities": {
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "contacts_revision",
+        "contacts_search",
+        "contacts_get",
+        "contacts_resolve",
+        "contacts_save",
+        "contacts_remove"
+      ]
+    }
+  },
+  "tiles": [
+    {
+      "id": "contacts",
+      "title": "Contacts",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Manage people and payment destinations"
+    }
+  ],
+  "func": {
+    "contacts_revision": {
+      "type": "query",
+      "async": false
+    },
+    "contacts_search": {
+      "type": "query",
+      "async": false
+    },
+    "contacts_get": {
+      "type": "query",
+      "async": false
+    },
+    "contacts_resolve": {
+      "type": "query",
+      "async": false
+    },
+    "contacts_save": {
+      "type": "update",
+      "async": false
+    },
+    "contacts_remove": {
+      "type": "update",
+      "async": false
+    },
+    "contacts_discover_v1": {
+      "type": "internal",
+      "async": false,
+      "expose": "apps"
+    },
+    "contacts_neutron_lookup_v2": {
+      "type": "internal",
+      "async": false,
+      "expose": "apps"
+    },
+    "contacts_neutron_search_v2": {
+      "type": "internal",
+      "async": false,
+      "expose": "apps"
+    },
+    "contacts_neutron_revision_v2": {
+      "type": "internal",
+      "async": false,
+      "expose": "apps"
+    }
+  },
+  "memory": {
+    "contacts": {
+      "version": 2,
+      "schemas": {
+        "1": {
+          "src": "memory/contacts/v1.mo"
+        },
+        "2": {
+          "src": "memory/contacts/v2.mo"
+        }
+      },
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "src": "memory/contacts/v1_to_v2.mo"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "format": 3,
+  "name": "vetKeys Fixture",
+  "id": "vetkeys_fixture",
+  "version": 100,
+  "description": "Proof that equal slot names remain isolated between installed apps",
+  "src": "main.mo",
+  "tiles": [
+    {
+      "id": "main",
+      "title": "vetKeys Isolation",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Inspect and verify this fixture's app-isolated key derivation"
+    }
+  ],
+  "capabilities": {
+    "vetkeys": {
+      "api": 1,
+      "description": "Demonstrate an app-isolated private-key namespace",
+      "slots": [
+        {
+          "id": "mailbox",
+          "purpose": "Verify that an equal slot name in another app receives a different key root"
+        }
+      ]
+    }
+  },
+  "func": {}
+}

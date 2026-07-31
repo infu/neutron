@@ -1,0 +1,117 @@
+.nt-app :where(.nt-title) {
+  color: var(--nt-text-strong);
+  font-size: var(--nt-font-size-title);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: var(--nt-line-height-tight);
+  margin: 0;
+  min-width: 0;
+  text-wrap: balance;
+}
+
+.nt-app :where(.nt-subtitle) {
+  color: var(--nt-text-muted);
+  font-size: var(--nt-font-size-subtitle);
+  line-height: var(--nt-line-height-body);
+  margin: 0;
+}
+
+.nt-app :where(.nt-section-title) {
+  color: var(--nt-text-strong);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.nt-app :where(.nt-eyebrow) {
+  color: var(--nt-accent);
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-label);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.nt-app :where(.nt-text) {
+  color: var(--nt-text);
+  font-family: var(--nt-font-copy);
+  line-height: var(--nt-line-height-body);
+  margin: 0;
+}
+
+.nt-app :where(.nt-muted) {
+  color: var(--nt-text-muted);
+}
+
+.nt-app :where(.nt-meta) {
+  color: var(--nt-text-faint);
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-meta);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.nt-app :where(.nt-code) {
+  background: var(--nt-bg-control);
+  border: 0;
+  border-radius: var(--nt-radius-2);
+  color: var(--nt-text);
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-mono);
+  line-height: var(--nt-line-height-code);
+  overflow-wrap: anywhere;
+  padding: 1px 4px;
+}
+
+.nt-app :where(.nt-pre) {
+  background: var(--nt-bg-control);
+  border: 0;
+  border-radius: var(--nt-radius-3);
+  box-shadow: inset 0 1px var(--nt-line-subtle);
+  color: var(--nt-text);
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-mono);
+  line-height: var(--nt-line-height-code);
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+  min-block-size: 0;
+  min-inline-size: 0;
+  overscroll-behavior: contain;
+  overflow: auto;
+  padding: var(--nt-pad-3);
+  scrollbar-gutter: stable;
+  white-space: pre;
+  -webkit-overflow-scrolling: touch;
+}
+
+.nt-app :where(.nt-pre--wrap) {
+  white-space: pre-wrap;
+}
+
+.nt-app :where(.nt-sr-only) {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nt-app :where(.nt-button, .nt-icon-button, .nt-input, .nt-textarea, .nt-select, .nt-checkbox, .nt-radio, .nt-tab, .nt-card, .nt-panel, .nt-disclosure-trigger, .nt-disclosure-icon, .nt-disclosure-chevron) {
+    animation-duration: 1ms;
+    transition-duration: 1ms;
+  }
+
+  .nt-app :where(.nt-button, .nt-icon-button, .nt-card) {
+    transform: none;
+  }
+}

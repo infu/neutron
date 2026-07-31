@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "wallet",
+  "memory": {
+    "wallet": {
+      "schemas": {
+        "1": {
+          "hash": "3046a3189737219f2556a491c9599bd18fcbe8034244e332e5d9e834d1773bc4",
+          "entry": "62a0c18349ac120f7b590a630656ce6d7adeca94846242367aa6733ac04c9b2d"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

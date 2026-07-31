@@ -1,0 +1,20 @@
+import Map "mo:core/Map";
+import Memory "../../backend/memory/mail/v1";
+
+let mem = Memory.init();
+assert (mem.next_local_id == 1);
+assert (mem.next_permit_generation == 1);
+assert (mem.revision == 0 and mem.cleanup_epoch == 0);
+assert (mem.key_info == null and mem.encrypted_settings == null);
+assert (Map.size(mem.inbox) == 0 and mem.inbox_order.size() == 0);
+assert (Map.size(mem.unread) == 0);
+assert (Map.size(mem.outbox) == 0 and mem.outbox_order.size() == 0);
+assert (Map.size(mem.dedupe) == 0 and Map.size(mem.commands) == 0);
+assert (Map.size(mem.permits) == 0 and mem.inbox_tombstones.size() == 0);
+assert (Map.size(mem.inbox_tombstone_index) == 0);
+assert (mem.command_tombstones.size() == 0 and mem.retry_tombstones.size() == 0);
+assert (mem.known_rate_events.size() == 0 and mem.unknown_rate_events.size() == 0);
+assert (mem.inbox_count == 0 and mem.inbox_bytes == 0);
+assert (mem.unknown_inbox_count == 0 and mem.unknown_inbox_bytes == 0);
+assert (mem.outbox_count == 0 and mem.outbox_bytes == 0);
+assert (mem.unread_count == 0);

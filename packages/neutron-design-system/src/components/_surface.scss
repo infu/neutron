@@ -1,0 +1,83 @@
+.nt-app :where(.nt-panel) {
+  background: var(--nt-panel-bg);
+  border-radius: var(--nt-radius-panel);
+  box-sizing: border-box;
+  box-shadow: var(--nt-shadow-hairline);
+  container-type: inline-size;
+  display: grid;
+  gap: var(--nt-gap-4);
+  min-width: 0;
+  padding: var(--nt-pad-4);
+}
+
+.nt-app :where(.nt-panel--flat) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.nt-app :where(.nt-card) {
+  background: var(--nt-card-bg);
+  border-radius: var(--nt-radius-panel);
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--nt-gap-3);
+  min-height: 84px;
+  min-width: 0;
+  padding: var(--nt-pad-4);
+  transition: background-color var(--nt-duration-fast) var(--nt-ease-standard);
+}
+
+.nt-app :where(.nt-card:is(a, button):hover, .nt-card[tabindex]:hover) {
+  background: var(--nt-bg-control-hover);
+}
+
+.nt-app :where(.nt-metric) {
+  background: var(--nt-card-bg);
+  border-radius: var(--nt-radius-panel);
+  box-sizing: border-box;
+  box-shadow: inset 0 1px var(--nt-line);
+  display: grid;
+  gap: var(--nt-gap-2);
+  min-height: 84px;
+  min-width: 0;
+  padding: var(--nt-pad-4);
+}
+
+.nt-app :where(.nt-metric-label) {
+  color: var(--nt-text-faint);
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-meta);
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.nt-app :where(.nt-metric-value) {
+  color: var(--nt-text-strong);
+  font-size: var(--nt-font-size-subtitle);
+  font-weight: 700;
+  line-height: var(--nt-line-height-tight);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nt-app :where(.nt-metric-detail) {
+  color: var(--nt-text-muted);
+  font-size: var(--nt-font-size-meta);
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nt-app :where(.nt-dialog) {
+  background: var(--nt-bg-panel);
+  border-radius: var(--nt-radius-panel);
+  box-sizing: border-box;
+  box-shadow: var(--nt-shadow-hairline), var(--nt-shadow-raised);
+  color: var(--nt-text);
+  display: grid;
+  gap: var(--nt-gap-4);
+  max-width: min(560px, 100%);
+  min-width: 0;
+  padding: var(--nt-pad-5);
+}

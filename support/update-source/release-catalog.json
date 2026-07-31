@@ -1,0 +1,66 @@
+{
+  "format": 1,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "packages": [
+    {
+      "id": "kernel",
+      "directory": "../../apps/kernel"
+    },
+    {
+      "id": "files",
+      "directory": "../../apps/vfs"
+    },
+    {
+      "id": "contacts",
+      "directory": "../../apps/contacts"
+    },
+    {
+      "id": "kitchensink",
+      "directory": "../../apps/kitchensink"
+    },
+    {
+      "id": "wagyu",
+      "directory": "../../apps/wagyu"
+    },
+    {
+      "id": "agent",
+      "directory": "../../apps/agent"
+    },
+    {
+      "id": "jetcreeper",
+      "directory": "../../apps/jetcreeper"
+    },
+    {
+      "id": "mail",
+      "directory": "../../apps/mail"
+    },
+    {
+      "id": "mysubnet",
+      "directory": "../../apps/mysubnet"
+    },
+    {
+      "id": "wallet",
+      "directory": "../../apps/wallet"
+    },
+    {
+      "id": "spreadsheet",
+      "directory": "../../apps/spreadsheet"
+    },
+    {
+      "id": "chess",
+      "directory": "../../apps/chess"
+    },
+    {
+      "id": "hello",
+      "directory": "../../apps/hello"
+    },
+    {
+      "id": "gemma",
+      "directory": "../../apps/gemma"
+    },
+    {
+      "id": "hullshift",
+      "directory": "../../apps/hullshift"
+    }
+  ]
+}

@@ -1,0 +1,312 @@
+{
+  "schema": "neutron.mail.e2e.release-evidence.v1",
+  "verdict": "passed",
+  "createdAt": "2026-07-16T02:04:35Z",
+  "packages": {
+    "mail": {
+      "path": "mail.v1.neutron",
+      "sha256": "f94f42e52e4dab4dfc47d3abf37c2e3b48ac568cdc1cd39d95e6a32a794e6e52"
+    },
+    "kernel": {
+      "path": "kernel.disposable.v1.neutron",
+      "sha256": "b2a7113bb01a4752df1088945c4b6781f769f8d4e44407ca5759efca29b9014b"
+    },
+    "contacts": {
+      "path": "contacts.v2.neutron",
+      "sha256": "a10ff6ce2c3304194c3ee5b19608d967b95414cb092e3059fcf8713b0b6b0764"
+    }
+  },
+  "suite": {
+    "sourceManifestSha256": "4d6e7b1efa2fdc1a823c7b87a9e7aed455fa0ab60cbf9763bc33a9237be1c32a",
+    "reportSha256": "ca0755faf3639cdaf5ada38341ea6ce241258f83ad62303847bac5c75e2101c5",
+    "stats": {
+      "startTime": "2026-07-16T01:53:38.222Z",
+      "duration": 655768.349,
+      "expected": 20,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "flows": [
+      {
+        "title": "01 first-run slot and delivery setup, one-click Compose recovery, and refresh persistence",
+        "file": "mail.spec.ts",
+        "line": 46,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 10627,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "02 disabled-slot recovery and all authorized principals recover across replacement",
+        "file": "mail.spec.ts",
+        "line": 66,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 52536,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "03 empty Inbox exposes the full address, copy action, and receive limits",
+        "file": "mail.spec.ts",
+        "line": 129,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 6462,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "04 Contact Neutron address canonicalization, duplicate conflict, and Mail discovery",
+        "file": "mail.spec.ts",
+        "line": 143,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 9805,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "05 compose to a contact, encrypted sender name, Preview, pending send, and Sent",
+        "file": "mail.spec.ts",
+        "line": 176,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 15684,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "06 real second-Neutron direct send decrypts with authenticated primary sender",
+        "file": "mail.spec.ts",
+        "line": 220,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 34330,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "07 known and unknown encrypted receive trust survives seamless reload",
+        "file": "mail.spec.ts",
+        "line": 354,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 14250,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "08 exact rolling-hour unknown throttle rejects eleven and recovers boundedly",
+        "file": "mail.spec.ts",
+        "line": 372,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 17397,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "09 Contact add/remove reprojects old trust without replacing the message",
+        "file": "mail.spec.ts",
+        "line": 385,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 25358,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "10 ready tray preserves five headers and exact handoff through a canister outage",
+        "file": "mail.spec.ts",
+        "line": 424,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 65278,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "11 loaded-header search is bounded and unread filtering follows read state",
+        "file": "mail.spec.ts",
+        "line": 453,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 34824,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "12 unread list, 50-row pagination, stable Load more, and concurrent New mail",
+        "file": "mail.spec.ts",
+        "line": 477,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 79282,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "13 safe GFM bounds links, images, tables, code, and hostile Markdown",
+        "file": "mail.spec.ts",
+        "line": 515,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 35655,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "14 legitimate thread context and contact/unknown replies preserve exact recipients",
+        "file": "mail.spec.ts",
+        "line": 548,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 50506,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "15 forged cross-correspondent reply reference stays unthreaded in UI",
+        "file": "mail.spec.ts",
+        "line": 597,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 33623,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "16 remote unsupported/full/rate/stale-key paths preserve content",
+        "file": "mail.spec.ts",
+        "line": 613,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 17854,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "17 uncertain delivery, exact dedupe retry, and in-flight retry exclusion",
+        "file": "mail.spec.ts",
+        "line": 643,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 11766,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "18 in-app draft and pending-send guards, failed retry, Edit copy, and Sent routing",
+        "file": "mail.spec.ts",
+        "line": 668,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 19425,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "19 read/delete/tombstone plus cleanup preview/cancel/conflict/confirm/empty",
+        "file": "mail.spec.ts",
+        "line": 786,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 45053,
+            "retry": 0
+          }
+        ]
+      },
+      {
+        "title": "20 rotate, automatic key preparation, bounded resumable rewrap, and retirement",
+        "file": "mail.spec.ts",
+        "line": 890,
+        "ok": true,
+        "results": [
+          {
+            "status": "passed",
+            "duration": 74881,
+            "retry": 0
+          }
+        ]
+      }
+    ]
+  },
+  "disposableNetwork": {
+    "host": "http://raw.localhost:18084",
+    "controlUrl": "http://127.0.0.1:35989",
+    "instance": 0,
+    "primary": "igqk7-g3777-77774-qaaba-cai",
+    "secondary": "ibrml-ld777-77774-qaabq-cai",
+    "initialClock": {
+      "milliseconds": 1784166803976,
+      "iso": "2026-07-16T01:53:23.976Z"
+    },
+    "finalClock": {
+      "milliseconds": 1784207085041,
+      "iso": "2026-07-16T13:04:45.041Z"
+    }
+  },
+  "runner": {
+    "chromium": "Chromium 150.0.7871.46 ",
+    "playwright": "Version 1.61.1"
+  }
+}

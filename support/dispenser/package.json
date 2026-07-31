@@ -1,0 +1,45 @@
+{
+  "name": "dispenser",
+  "version": "1.0.0",
+  "description": "",
+  "main": "build.ts",
+  "type": "module",
+  "scripts": {
+    "build": "bun build.ts",
+    "test": "bun test",
+    "icp:build": "icp build",
+    "icp:deploy": "icp deploy",
+    "icp:deploy:dispenser": "icp deploy dispenser",
+    "icp:deploy:frontend": "icp deploy frontend",
+    "local:deploy": "bun local_deploy.ts",
+    "starter:set": "bun local_deploy.ts --starter-only",
+    "production:deploy": "bun production_deploy.ts",
+    "production:starter:set": "bun production_deploy.ts --starter-only",
+    "production:frontend:deploy": "bun production_deploy.ts --frontend-only",
+    "local:fund": "bun local_fund.ts"
+  },
+  "author": "",
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/candid": "^3.4.3",
+    "@dfinity/identity": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "@dfinity/utils": "4.2.1",
+    "@icp-sdk/canisters": "^3.6.0",
+    "@icp-sdk/core": "^5.4.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@icp-sdk/ic-wasm": "^0.9.11",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react": "^7.37.5"
+  }
+}

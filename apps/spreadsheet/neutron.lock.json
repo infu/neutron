@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "spreadsheet",
+  "memory": {
+    "spreadsheet": {
+      "schemas": {
+        "1": {
+          "hash": "f6b772790105f920452edb27c6ad08e84718e16af4907246c171b78fbeb2360a",
+          "entry": "f6b772790105f920452edb27c6ad08e84718e16af4907246c171b78fbeb2360a"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

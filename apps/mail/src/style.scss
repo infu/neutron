@@ -1,0 +1,387 @@
+@use "neutron-design-system/styles.scss";
+@use "./mail_ui.scss" as mail-ui;
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+@include mail-ui.styles;
+
+@layer app {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .mail-foundation {
+    align-items: center;
+    background: var(--nt-bg, #090c0e);
+    color: var(--nt-text);
+    display: flex;
+    justify-content: center;
+    min-height: 100dvh;
+    padding: 24px;
+  }
+
+  .mail-foundation-panel {
+    align-items: flex-start;
+    display: flex;
+    gap: 14px;
+    max-width: 580px;
+  }
+
+  .mail-foundation-mark {
+    align-items: center;
+    border: 1px solid var(--nt-line-subtle);
+    border-radius: 10px;
+    display: inline-flex;
+    flex: 0 0 42px;
+    height: 42px;
+    justify-content: center;
+  }
+
+  .mail-foundation h1 {
+    font-size: 1.25rem;
+    margin: 0 0 6px;
+  }
+
+  .mail-foundation p,
+  .mail-foundation-copy span {
+    color: var(--nt-text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .mail-foundation--tray {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: center;
+    min-height: 100%;
+    padding: 16px;
+  }
+
+  .mail-foundation-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .mail-tray {
+    --mail-bg: var(--nt-bg, #0b0d10);
+    --mail-panel: var(--nt-bg-panel, #111419);
+    --mail-line: var(--nt-line-subtle, #2b3038);
+    --mail-text: var(--nt-text, #f1f3f5);
+    --mail-muted: var(--nt-text-muted, #9ca5af);
+    --mail-accent: var(--nt-accent, #8bd9ce);
+    background: var(--mail-bg);
+    color: var(--mail-text);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--nt-font-ui, system-ui, sans-serif);
+    font-size: 13px;
+    line-height: 1.4;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .mail-tray *,
+  .mail-tray *::before,
+  .mail-tray *::after {
+    box-sizing: border-box;
+  }
+
+  .mail-tray :where(button:not(.nt-button):not(.nt-icon-button)) {
+    color: inherit;
+    font: inherit;
+  }
+
+  .mail-tray :where(button:not(.nt-button):not(.nt-icon-button):focus-visible) {
+    outline: 2px solid var(--nt-line-focus, #9de0d6);
+    outline-offset: 2px;
+  }
+
+  .mail-tray-header {
+    align-items: center;
+    border-block-end: 1px solid var(--mail-line);
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: space-between;
+    min-height: 48px;
+    padding: 9px 10px 8px 12px;
+  }
+
+  .mail-tray-header h1 {
+    font-size: 14px;
+    letter-spacing: -.01em;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  .mail-tray-stale {
+    color: #e9bf73;
+    display: block;
+    font-size: 10px;
+    margin-block-start: 2px;
+  }
+
+  .mail-tray-error {
+    background: color-mix(in srgb, #e9bf73 8%, transparent);
+    border-block-end: 1px solid var(--mail-line);
+    color: #e9bf73;
+    flex: 0 0 auto;
+    font-size: 11px;
+    padding: 7px 12px;
+  }
+
+  .mail-tray-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .mail-tray-row {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-block-end: 1px solid var(--mail-line);
+    cursor: pointer;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 6px minmax(0, 1fr) auto;
+    min-height: 62px;
+    padding: 9px 12px 9px 9px;
+    text-align: start;
+    width: 100%;
+  }
+
+  .mail-tray-row:hover {
+    background: var(--mail-panel);
+  }
+
+  .mail-tray-row:disabled {
+    cursor: wait;
+    opacity: .65;
+  }
+
+  .mail-tray-unread {
+    background: transparent;
+    border-radius: 50%;
+    height: 6px;
+    width: 6px;
+  }
+
+  .mail-tray-row--unread .mail-tray-unread {
+    background: var(--mail-accent);
+  }
+
+  .mail-tray-row-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .mail-tray-row-copy strong,
+  .mail-tray-row-copy span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mail-tray-row-copy strong {
+    font-size: 12px;
+    font-weight: 540;
+  }
+
+  .mail-tray-row--unread .mail-tray-row-copy strong,
+  .mail-tray-row--unread .mail-tray-row-copy span {
+    font-weight: 680;
+  }
+
+  .mail-tray-row-copy span,
+  .mail-tray-row time {
+    color: var(--mail-muted);
+    font-size: 11px;
+  }
+
+  .mail-tray-empty {
+    align-items: center;
+    color: var(--mail-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    justify-content: center;
+    min-height: 150px;
+    padding: 18px;
+    text-align: center;
+  }
+
+  .mail-tray-empty strong {
+    color: var(--mail-text);
+  }
+
+  .mail-tray-private-note {
+    border-block-start: 1px solid var(--mail-line);
+    color: var(--mail-muted);
+    flex: 0 0 auto;
+    font-size: 10px;
+    margin: 0;
+    padding: 6px 12px;
+  }
+
+  .mail-tray-private-note--error {
+    color: var(--nt-danger, #ff8a86);
+  }
+
+  .mail-tray-footer {
+    border-block-start: 1px solid var(--mail-line);
+    flex: 0 0 auto;
+    padding: 8px 10px;
+  }
+
+  .mail-tray-footer .nt-button {
+    width: 100%;
+  }
+
+  @media (max-width: 299px) {
+    .mail-tray-row time {
+      display: none;
+    }
+
+    .mail-tray-row {
+      grid-template-columns: 6px minmax(0, 1fr);
+    }
+  }
+
+  .mail-markdown {
+    line-height: 1.5;
+    max-width: 72ch;
+    overflow-wrap: anywhere;
+  }
+
+  .mail-safe-link {
+    align-items: baseline;
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    max-width: 100%;
+  }
+
+  .mail-link-label {
+    min-width: 0;
+  }
+
+  .mail-copy-link {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: var(--nt-accent, #8bd9ce);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    max-width: 100%;
+    padding: 1px 3px;
+    text-align: start;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .mail-copy-link-destination {
+    color: var(--nt-text-muted);
+    font-family: var(--nt-font-mono, monospace);
+    font-size: 0.78em;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+
+  .mail-link-disclosure {
+    display: inline-flex;
+    max-width: 100%;
+    position: relative;
+  }
+
+  .mail-link-disclosure > summary {
+    cursor: pointer;
+    display: inline-flex;
+    max-width: 100%;
+  }
+
+  .mail-link-disclosure > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .mail-link-disclosure > summary::before {
+    color: var(--nt-accent, #8bd9ce);
+    content: "↗";
+    flex: 0 0 auto;
+    margin-inline-end: 3px;
+  }
+
+  .mail-link-disclosure-panel {
+    background: var(--nt-surface-2, #171b20);
+    border: 1px solid var(--nt-line, #3b424c);
+    border-radius: 7px;
+    box-shadow: 0 10px 28px rgb(0 0 0 / .35);
+    display: grid;
+    gap: 7px;
+    inset-block-start: calc(100% + 4px);
+    inset-inline-start: 0;
+    max-width: min(32rem, calc(100vw - 32px));
+    min-width: min(18rem, calc(100vw - 32px));
+    padding: 8px;
+    position: absolute;
+    z-index: 8;
+  }
+
+  .mail-link-disclosure-panel bdi {
+    color: var(--nt-text);
+    font-family: var(--nt-font-mono, monospace);
+    font-size: 0.78em;
+    overflow-wrap: anywhere;
+  }
+
+  .mail-link-disclosure-panel .mail-copy-link {
+    justify-self: start;
+  }
+
+  .mail-copy-link:focus-visible {
+    outline: 2px solid var(--nt-line-focus, #9de0d6);
+    outline-offset: 2px;
+  }
+
+  .mail-unsafe-link,
+  .mail-remote-image {
+    border: 1px solid var(--nt-line-subtle);
+    border-radius: 5px;
+    color: var(--nt-text-muted);
+    display: inline-flex;
+    gap: 6px;
+    padding: 2px 5px;
+  }
+
+  .mail-markdown-table,
+  .mail-markdown-code {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .mail-markdown table {
+    border-collapse: collapse;
+  }
+
+  .mail-markdown th,
+  .mail-markdown td {
+    border: 1px solid var(--nt-line-subtle);
+    padding: 4px 7px;
+  }
+
+  @media (forced-colors: active) {
+    .mail-copy-link:focus-visible {
+      outline-color: Highlight;
+    }
+  }
+}

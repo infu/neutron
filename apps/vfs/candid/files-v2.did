@@ -1,0 +1,535 @@
+// Canonical logical Files V2 service contract.
+//
+// The compiler owns the deployed physical labels, but its canonical Files plan
+// maps those labels to these eleven logical methods with structurally identical
+// types and modes.
+//
+// Binary values are ordinary fields in the named request and response records.
+
+type Id128V2 = record {
+  hi : nat64;
+  lo : nat64;
+};
+
+type Digest256V2 = record {
+  a : nat64;
+  b : nat64;
+  c : nat64;
+  d : nat64;
+};
+
+type FilesRejectionReasonV2 = variant {
+  not_ready;
+  invalid_request;
+  not_found;
+  not_file;
+  not_folder;
+  invalid_index;
+  already_exists;
+  stale_revision;
+  stale_content;
+  cursor_stale;
+  id_collision;
+  batch_structure_limit;
+  conflict;
+  quota;
+  busy;
+  aborted;
+  expired;
+  superseded;
+  temporarily_unavailable;
+  incompatible;
+  corrupt_state;
+};
+
+type FilesRejectionV2 = record {
+  reason : opt FilesRejectionReasonV2;
+  retry_after_ns : opt nat64;
+};
+
+type FilesNodeKindV2 = variant {
+  folder;
+  file;
+};
+
+type FilesContentCryptoProfileV2 = variant {
+  aes_256_gcm_files_v2;
+};
+
+type FilesContentDescriptorV2 = record {
+  content_id : Id128V2;
+  block_count : nat32;
+  ciphertext_bytes : nat64;
+  crypto_profile : opt FilesContentCryptoProfileV2;
+};
+
+type FilesNodeBindingV2 = record {
+  node_id : Id128V2;
+  parent_id : Id128V2;
+  kind : opt FilesNodeKindV2;
+  structural_revision : nat64;
+  metadata_revision : nat64;
+  children_revision : nat64;
+  declared_name_scalars : nat16;
+  subtree_height : nat8;
+  max_relative_path_scalars : nat16;
+  subtree_plaintext_bytes : nat64;
+  encrypted_metadata_bytes : nat32;
+  active : bool;
+};
+
+type FilesQuotaSnapshotV2 = record {
+  nodes : nat64;
+  committed_private_plaintext_bytes : nat64;
+  committed_ciphertext_bytes : nat64;
+  staged_ciphertext_bytes : nat64;
+  physical_private_bytes : nat64;
+  cleanup_jobs : nat16;
+};
+
+type FilesPublicUsageCountersV2 = record {
+  live_entries : nat64;
+  occupied_entry_slots : nat64;
+  committed_body_bytes : nat64;
+  reserved_committed_body_bytes : nat64;
+  allocated_body_bytes : nat64;
+  charged_metadata_bytes : nat64;
+  accepted_staged_bytes : nat64;
+  reserved_staged_bytes : nat64;
+  detached_charged_bytes : nat64;
+  active_stages : nat64;
+  reserved_entry_slots : nat64;
+  receipt_lanes : nat64;
+  general_receipt_lanes : nat64;
+  reserved_general_receipt_lanes : nat64;
+  reserved_revocation_lanes : nat64;
+  filled_revocation_lanes : nat64;
+  receipt_nonce_indexes : nat64;
+  receipt_expiry_indexes : nat64;
+  cleanup_jobs : nat64;
+};
+
+type FilesPublicUsageLimitsV2 = record {
+  entries : nat64;
+  committed_bytes : nat64;
+  object_bytes : nat64;
+  staged_bytes : nat64;
+  pending_stages : nat64;
+  batch_operations : nat64;
+  batch_bytes : nat64;
+  general_receipts : nat64;
+  revocation_lanes : nat64;
+};
+
+type FilesPublicUsageV2 = record {
+  current : FilesPublicUsageCountersV2;
+  manifest_limits : FilesPublicUsageLimitsV2;
+  effective_limits : FilesPublicUsageLimitsV2;
+};
+
+type FilesCleanupStateV2 = variant {
+  clean;
+  pending : record {
+    remaining_jobs : nat16;
+  };
+};
+
+type FilesCleanupSummaryV2 = record {
+  remaining_jobs : nat16;
+  has_more : bool;
+  state : opt FilesCleanupStateV2;
+};
+
+type FilesOperationKindV2 = variant {
+  vault;
+  private_write;
+  mutation;
+  remove;
+  abort;
+};
+
+type FilesOperationSummaryV2 = record {
+  request_id : Id128V2;
+  kind : opt FilesOperationKindV2;
+  stage_id : opt nat64;
+  expires_at_ns : opt nat64;
+  target : opt FilesOperationTargetV2;
+};
+
+type FilesVaultStateV2 = variant {
+  absent;
+  present : record {
+    format : nat16;
+    record_revision : nat64;
+    slot_generation : nat64;
+    public_key_fingerprint : Digest256V2;
+    wrapper_frame_bytes : nat32;
+  };
+};
+
+type FilesBootstrapRequestV2 = record {};
+
+type FilesBootstrapResponseV2 = record {
+  outcome : opt variant {
+    ok : record {
+      vault : opt FilesVaultStateV2;
+      quota : FilesQuotaSnapshotV2;
+      public_usage : FilesPublicUsageV2;
+      cleanup : FilesCleanupSummaryV2;
+      active_operations : vec FilesOperationSummaryV2;
+      body_bytes : nat32;
+    };
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesBootstrapOutputV2 = record {
+  value : FilesBootstrapResponseV2;
+  body : blob;
+};
+
+type FilesListCursorV2 = record {
+  parent_id : Id128V2;
+  children_revision : nat64;
+  last_name_tag : Digest256V2;
+};
+
+type FilesListRequestV2 = record {
+  parent_id : Id128V2;
+  expected_structural_revision : opt nat64;
+  cursor : opt FilesListCursorV2;
+  limit : nat16;
+};
+
+type FilesListResponseV2 = record {
+  outcome : opt variant {
+    ok : record {
+      parent_id : Id128V2;
+      structural_revision : nat64;
+      children_revision : nat64;
+      total_children : nat32;
+      loaded_count : nat16;
+      next_cursor : opt FilesListCursorV2;
+      has_more : bool;
+      body_bytes : nat32;
+    };
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesListOutputV2 = record {
+  value : FilesListResponseV2;
+  body : blob;
+};
+
+type FilesLookupLocatorV2 = variant {
+  node : record {
+    node_id : Id128V2;
+  };
+  child : record {
+    parent_id : Id128V2;
+    expected_children_revision : opt nat64;
+  };
+};
+
+type FilesLookupRequestV2 = record {
+  locator : opt FilesLookupLocatorV2;
+  body : blob;
+};
+
+type FilesLookupResponseV2 = record {
+  outcome : opt variant {
+    ok : record {
+      node : FilesNodeBindingV2;
+      content : opt FilesContentDescriptorV2;
+      body_bytes : nat32;
+    };
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesLookupOutputV2 = record {
+  value : FilesLookupResponseV2;
+  body : blob;
+};
+
+type FilesReadChunkRequestV2 = record {
+  node_id : Id128V2;
+  structural_revision : nat64;
+  content_id : Id128V2;
+  index : nat32;
+};
+
+type FilesReadChunkResponseV2 = record {
+  outcome : opt variant {
+    ok : record {
+      node_id : Id128V2;
+      structural_revision : nat64;
+      metadata_revision : nat64;
+      content_id : Id128V2;
+      index : nat32;
+      block_count : nat32;
+      ciphertext_block_bytes : nat32;
+      ciphertext_total_bytes : nat64;
+      frame_kind : opt variant {
+        first;
+        continuation;
+      };
+    };
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesReadChunkOutputV2 = record {
+  value : FilesReadChunkResponseV2;
+  body : blob;
+};
+
+type FilesOperationWriteTargetNodeV2 = record {
+  node_id : Id128V2;
+  content_id : opt Id128V2;
+};
+
+type FilesOperationTargetV2 = variant {
+  vault : record {
+    expected_record_revision : opt nat64;
+  };
+  private_write : record {
+    nodes : vec FilesOperationWriteTargetNodeV2;
+  };
+  mutation : record {
+    node_id : Id128V2;
+  };
+  remove : record {
+    node_id : Id128V2;
+  };
+  abort : record {
+    stage_id : nat64;
+  };
+};
+
+type FilesOperationStatusRequestV2 = record {
+  request_id : Id128V2;
+  target : opt FilesOperationTargetV2;
+};
+
+type FilesFrameBlockMappingV2 = record {
+  frame_ordinal : nat8;
+  content_id : Id128V2;
+  block_index : nat32;
+};
+
+type FilesCommittedNodeV2 = record {
+  node_id : Id128V2;
+  content_id : opt Id128V2;
+  structural_revision : nat64;
+  metadata_revision : nat64;
+};
+
+type FilesVaultWriteOkV2 = record {
+  request_id : Id128V2;
+  record_revision : nat64;
+  initialized : bool;
+};
+
+type FilesWriteBlockOkV2 = record {
+  request_id : Id128V2;
+  stage_id : opt nat64;
+  frame_ordinal : nat8;
+  accepted_frames_bitmap : nat16;
+  committed_nodes : vec FilesCommittedNodeV2;
+  cleanup_state : opt FilesCleanupStateV2;
+};
+
+type FilesMutateOkV2 = record {
+  request_id : Id128V2;
+  node_id : Id128V2;
+  parent_id : Id128V2;
+  structural_revision : nat64;
+  metadata_revision : nat64;
+};
+
+type FilesRemoveOkV2 = record {
+  request_id : Id128V2;
+  node_id : Id128V2;
+  detached_plaintext_bytes : nat64;
+  reclaimed_entries : nat16;
+  reclaimed_ciphertext_bytes : nat64;
+  cleanup_state : opt FilesCleanupStateV2;
+};
+
+type FilesAbortOkV2 = record {
+  request_id : Id128V2;
+  stage_id : nat64;
+  cleanup_state : opt FilesCleanupStateV2;
+};
+
+type FilesCommittedDetailV2 = variant {
+  vault : FilesVaultWriteOkV2;
+  private_write : FilesWriteBlockOkV2;
+  mutation : FilesMutateOkV2;
+  remove : FilesRemoveOkV2;
+  abort : FilesAbortOkV2;
+};
+
+type FilesOperationStateV2 = variant {
+  active : record {
+    stage_id : opt nat64;
+    accepted_frames_bitmap : nat16;
+    frame_block_mapping : vec FilesFrameBlockMappingV2;
+    staged_bytes : nat64;
+    expires_at_ns : opt nat64;
+  };
+  committed : record {
+    detail : opt FilesCommittedDetailV2;
+  };
+  aborted : record {
+    terminal_at_ns : nat64;
+    reconcile_until_ns : nat64;
+  };
+  expired : record {
+    terminal_at_ns : nat64;
+    reconcile_until_ns : nat64;
+  };
+  superseded : record {
+    revision : opt nat64;
+  };
+  unknown;
+};
+
+type FilesOperationStatusResponseV2 = record {
+  outcome : opt variant {
+    ok : record {
+      request_id : Id128V2;
+      target : opt FilesOperationTargetV2;
+      state : opt FilesOperationStateV2;
+      cleanup_state : opt FilesCleanupStateV2;
+    };
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesVaultWriteOperationV2 = variant {
+  initialize;
+  rewrap;
+};
+
+type FilesVaultWriteRequestV2 = record {
+  request_id : Id128V2;
+  operation : opt FilesVaultWriteOperationV2;
+  expected_record_revision : opt nat64;
+  proposed_record_revision : nat64;
+  body_bytes : nat32;
+  body : blob;
+};
+
+type FilesVaultWriteResponseV2 = record {
+  outcome : opt variant {
+    ok : FilesVaultWriteOkV2;
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesWriteBlockRequestV2 = record {
+  request_id : Id128V2;
+  stage_id : opt nat64;
+  frame_ordinal : nat8;
+  final : bool;
+  body_bytes : nat32;
+  body : blob;
+};
+
+type FilesWriteBlockResponseV2 = record {
+  outcome : opt variant {
+    ok : FilesWriteBlockOkV2;
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesMutationActionV2 = variant {
+  create_folder;
+  rename;
+  move;
+};
+
+type FilesMutateRequestV2 = record {
+  request_id : Id128V2;
+  action : opt FilesMutationActionV2;
+  body_bytes : nat32;
+  body : blob;
+};
+
+type FilesMutateResponseV2 = record {
+  outcome : opt variant {
+    ok : FilesMutateOkV2;
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesRemoveRequestV2 = record {
+  request_id : Id128V2;
+  node_id : Id128V2;
+  expected_structural_revision : nat64;
+  expected_parent_id : Id128V2;
+  expected_parent_children_revision : nat64;
+  recursive : bool;
+};
+
+type FilesRemoveResponseV2 = record {
+  outcome : opt variant {
+    ok : FilesRemoveOkV2;
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesAbortRequestV2 = record {
+  request_id : Id128V2;
+  stage_id : nat64;
+};
+
+type FilesAbortResponseV2 = record {
+  outcome : opt variant {
+    ok : FilesAbortOkV2;
+    rejected : FilesRejectionV2;
+  };
+};
+
+type FilesCleanupRequestV2 = record {};
+
+type FilesCleanupResponseV2 = record {
+  outcome : opt variant {
+    ok : record {
+      reclaimed_entries : nat16;
+      reclaimed_ciphertext_bytes : nat64;
+      reclaimed_charged_bytes : nat64;
+      remaining_jobs : nat16;
+      has_more : bool;
+    };
+    rejected : FilesRejectionV2;
+  };
+};
+
+service : {
+  files_bootstrap_v2 :
+    (FilesBootstrapRequestV2) -> (FilesBootstrapOutputV2) query;
+  files_list_v2 :
+    (FilesListRequestV2) -> (FilesListOutputV2) query;
+  files_lookup_v2 :
+    (FilesLookupRequestV2) -> (FilesLookupOutputV2) query;
+  files_read_chunk_v2 :
+    (FilesReadChunkRequestV2) -> (FilesReadChunkOutputV2) query;
+  files_operation_status_v2 :
+    (FilesOperationStatusRequestV2) -> (FilesOperationStatusResponseV2) query;
+  files_vault_write_v2 :
+    (FilesVaultWriteRequestV2) -> (FilesVaultWriteResponseV2);
+  files_write_block_v2 :
+    (FilesWriteBlockRequestV2) -> (FilesWriteBlockResponseV2);
+  files_mutate_v2 :
+    (FilesMutateRequestV2) -> (FilesMutateResponseV2);
+  files_remove_v2 :
+    (FilesRemoveRequestV2) -> (FilesRemoveResponseV2);
+  files_abort_v2 :
+    (FilesAbortRequestV2) -> (FilesAbortResponseV2);
+  files_cleanup_v2 :
+    (FilesCleanupRequestV2) -> (FilesCleanupResponseV2);
+};

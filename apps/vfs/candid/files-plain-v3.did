@@ -1,0 +1,222 @@
+// Plain Files V3 service surface. Paths are canonical absolute paths inside
+// the selected root; callers map /Workspace and /Shared to those root-local
+// paths. Shared bodies live only in the scoped Certified Assets store.
+
+type FilesPlainSpaceV3 = variant { shared_; workspace };
+type FilesPlainContentKindV3 = variant { text; binary };
+type FilesPlainPresentationV3 = variant { inline_text; attachment };
+type FilesPlainEntryKindV3 = variant { file; folder };
+
+type FilesPlainRejectionReasonV3 = variant {
+  not_ready;
+  invalid_request;
+  not_found;
+  not_file;
+  not_folder;
+  already_exists;
+  stale_revision;
+  stale_content;
+  cursor_stale;
+  conflict;
+  quota;
+  busy;
+  temporarily_unavailable;
+  incompatible;
+  corrupt_state;
+};
+
+type FilesPlainRejectionV3 = record {
+  reason : opt FilesPlainRejectionReasonV3;
+  retry_after_ns : opt nat64;
+};
+
+type FilesPlainEntryV3 = record {
+  node_id : nat64;
+  path : text;
+  name : text;
+  kind : opt FilesPlainEntryKindV3;
+  content_kind : opt FilesPlainContentKindV3;
+  byte_length : opt nat64;
+  media_type : opt text;
+  etag_sha256 : opt text;
+  created_at_ns : nat64;
+  modified_at_ns : nat64;
+  revision : nat64;
+  relative_url : opt text;
+};
+
+type FilesPlainCursorV3 = record {
+  after : text;
+  revision : nat64;
+  parent_node_id : nat64;
+};
+
+type FilesPlainListRequestV3 = record {
+  space : opt FilesPlainSpaceV3;
+  path : text;
+  cursor : opt FilesPlainCursorV3;
+  limit : nat16;
+};
+
+type FilesPlainListResponseV3 = record {
+  outcome : opt variant {
+    ok : record {
+      revision : nat64;
+      entries : vec FilesPlainEntryV3;
+      total : nat32;
+      next_cursor : opt FilesPlainCursorV3;
+      has_more : bool;
+    };
+    rejected : FilesPlainRejectionV3;
+  };
+};
+
+type FilesPlainStatRequestV3 = record {
+  space : opt FilesPlainSpaceV3;
+  path : text;
+};
+
+type FilesPlainStatResponseV3 = record {
+  outcome : opt variant {
+    ok : FilesPlainEntryV3;
+    rejected : FilesPlainRejectionV3;
+  };
+};
+
+type FilesPlainReadChunkRequestV3 = record {
+  space : opt FilesPlainSpaceV3;
+  path : text;
+  block_index : nat32;
+};
+
+type FilesPlainReadChunkOutputV3 = record {
+  value : record {
+    outcome : opt variant {
+      ok : record {
+        entry : FilesPlainEntryV3;
+        block_index : nat32;
+        block_count : nat32;
+        body_bytes : nat32;
+      };
+      rejected : FilesPlainRejectionV3;
+    };
+  };
+  body : blob;
+};
+
+type FilesPlainWriteMoveSourceV3 = record {
+  path : text;
+  expected_node_id : nat64;
+  expected_revision : nat64;
+  if_match : opt text;
+};
+
+type FilesPlainWriteBlockRequestV3 = record {
+  request_id : text;
+  space : opt FilesPlainSpaceV3;
+  path : text;
+  stage_id : opt nat64;
+  block_index : nat32;
+  block_count : nat32;
+  total_bytes : nat64;
+  content_kind : opt FilesPlainContentKindV3;
+  media_type : text;
+  etag_sha256 : text;
+  presentation : opt FilesPlainPresentationV3;
+  expected_node_id : opt nat64;
+  expected_revision : opt nat64;
+  if_match : opt text;
+  if_none_match : bool;
+  create_parents : bool;
+  final : bool;
+  safe_name : opt text;
+  begin_nonce : opt blob;
+  commit_nonce : opt blob;
+  delete_nonce : opt blob;
+  move_source : opt FilesPlainWriteMoveSourceV3;
+  body_bytes : nat32;
+  body : blob;
+};
+
+type FilesPlainWriteBlockResponseV3 = record {
+  outcome : opt variant {
+    ok : record {
+      stage_id : opt nat64;
+      committed : bool;
+      entry : opt FilesPlainEntryV3;
+    };
+    rejected : FilesPlainRejectionV3;
+  };
+};
+
+type FilesPlainMkdirRequestV3 = record {
+  request_id : text;
+  space : opt FilesPlainSpaceV3;
+  path : text;
+  recursive : bool;
+};
+
+type FilesPlainMoveRequestV3 = record {
+  request_id : text;
+  space : opt FilesPlainSpaceV3;
+  from : text;
+  to : text;
+  overwrite : bool;
+  expected_node_id : nat64;
+  expected_revision : nat64;
+  if_match : opt text;
+};
+
+type FilesPlainRemoveRequestV3 = record {
+  request_id : text;
+  space : opt FilesPlainSpaceV3;
+  path : text;
+  recursive : bool;
+  expected_node_id : nat64;
+  expected_revision : nat64;
+  if_match : opt text;
+  delete_nonce : opt blob;
+};
+
+type FilesPlainAbortRequestV3 = record {
+  request_id : text;
+  space : opt FilesPlainSpaceV3;
+  stage_id : opt nat64;
+};
+
+type FilesPlainCleanupRequestV3 = record {
+  request_id : text;
+  limit : nat8;
+};
+
+type FilesPlainMutationResponseV3 = record {
+  outcome : opt variant {
+    ok : record {
+      path : text;
+      revision : nat64;
+      changed : nat32;
+    };
+    rejected : FilesPlainRejectionV3;
+  };
+};
+
+service : {
+  files_plain_list_v3 :
+    (FilesPlainListRequestV3) -> (FilesPlainListResponseV3) query;
+  files_plain_stat_v3 :
+    (FilesPlainStatRequestV3) -> (FilesPlainStatResponseV3) query;
+  files_plain_read_chunk_v3 :
+    (FilesPlainReadChunkRequestV3) -> (FilesPlainReadChunkOutputV3) query;
+  files_plain_write_block_v3 :
+    (FilesPlainWriteBlockRequestV3) -> (FilesPlainWriteBlockResponseV3);
+  files_plain_mkdir_v3 :
+    (FilesPlainMkdirRequestV3) -> (FilesPlainMutationResponseV3);
+  files_plain_move_v3 :
+    (FilesPlainMoveRequestV3) -> (FilesPlainMutationResponseV3);
+  files_plain_remove_v3 :
+    (FilesPlainRemoveRequestV3) -> (FilesPlainMutationResponseV3);
+  files_plain_abort_v3 :
+    (FilesPlainAbortRequestV3) -> (FilesPlainMutationResponseV3);
+  files_plain_cleanup_v3 :
+    (FilesPlainCleanupRequestV3) -> (FilesPlainMutationResponseV3);
+};

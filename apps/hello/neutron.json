@@ -1,0 +1,33 @@
+{
+  "format": 3,
+  "name": "Hello",
+  "id": "hello",
+  "version": 201,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "src": "main.mo",
+  "tiles": [
+    {
+      "id": "main",
+      "title": "Hello",
+      "path": "index.html",
+      "icon": "static/icon.png"
+    }
+  ],
+  "func": {
+    "hello_world": {
+      "type": "update",
+      "async": false
+    }
+  },
+  "memory": {
+    "hello": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/hello/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

@@ -1,0 +1,81 @@
+type CanisterInstallMode = variant {
+  install;
+  reinstall;
+  upgrade : opt record {
+    skip_pre_upgrade : opt bool;
+    wasm_memory_persistence : opt variant { keep; replace };
+  };
+};
+type Visibility = variant {
+  controllers;
+  public;
+  allowed_viewers : vec principal;
+};
+service : {
+  upload_chunk : (record { canister_id : principal; chunk : blob }) ->
+    (record { hash : blob });
+  stored_chunks : (record { canister_id : principal }) ->
+    (vec record { hash : blob });
+  install_chunked_code : (record {
+    mode : CanisterInstallMode;
+    target_canister : principal;
+    store_canister : opt principal;
+    chunk_hashes_list : vec record { hash : blob };
+    wasm_module_hash : blob;
+    arg : blob;
+    sender_canister_version : opt nat64;
+  }) -> ();
+  clear_chunk_store : (record { canister_id : principal }) -> ();
+  canister_status : (record { canister_id : principal }) -> (record {
+    status : variant { running; stopping; stopped };
+    version : nat64;
+    cycles : nat;
+    settings : record {
+      controllers : vec principal;
+      compute_allocation : nat;
+      memory_allocation : nat;
+      freezing_threshold : nat;
+      reserved_cycles_limit : nat;
+      log_visibility : Visibility;
+      snapshot_visibility : Visibility;
+      wasm_memory_limit : nat;
+      wasm_memory_threshold : nat;
+      minimum_incoming_canister_call_cycles : nat;
+      environment_variables : vec record { name : text; value : text };
+    };
+    module_hash : opt blob;
+  });
+  stop_canister : (record { canister_id : principal }) -> ();
+  start_canister : (record { canister_id : principal }) -> ();
+  list_canister_snapshots : (record { canister_id : principal }) ->
+    (vec record {
+      id : blob;
+      total_size : nat64;
+      taken_at_timestamp : nat64;
+    });
+  delete_canister_snapshot : (record {
+    canister_id : principal;
+    snapshot_id : blob;
+  }) -> ();
+  update_settings : (record {
+    canister_id : principal;
+    settings : record {
+      controllers : opt vec principal;
+      compute_allocation : opt nat;
+      memory_allocation : opt nat;
+      freezing_threshold : opt nat;
+      reserved_cycles_limit : opt nat;
+      log_visibility : opt variant {
+        controllers;
+        public;
+        allowed_viewers : vec principal;
+      };
+      wasm_memory_limit : opt nat;
+      wasm_memory_threshold : opt nat;
+      environment_variables : opt vec record { name : text; value : text };
+      snapshot_visibility : opt Visibility;
+      minimum_incoming_canister_call_cycles : opt nat;
+    };
+    sender_canister_version : opt nat64;
+  }) -> ();
+};

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hello</title>
+    <link rel="stylesheet" href="./main.css" />
+    <style>
+      html,
+      body {
+        background: #07090c;
+        margin: 0;
+        min-height: 100%;
+        scrollbar-color: #07090c #07090c;
+        scrollbar-width: thin;
+      }
+
+      html:hover,
+      body:hover {
+        scrollbar-color: #25313d #07090c;
+      }
+
+      html::-webkit-scrollbar,
+      body::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+      }
+
+      html::-webkit-scrollbar-track,
+      body::-webkit-scrollbar-track,
+      html::-webkit-scrollbar-thumb,
+      body::-webkit-scrollbar-thumb {
+        background: #07090c;
+      }
+
+      html::-webkit-scrollbar-thumb,
+      body::-webkit-scrollbar-thumb {
+        border: 2px solid #07090c;
+        border-radius: 5px;
+      }
+
+      html:hover::-webkit-scrollbar-thumb,
+      body:hover::-webkit-scrollbar-thumb {
+        background: #25313d;
+      }
+
+      #root {
+        min-height: 100dvh;
+        min-width: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

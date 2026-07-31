@@ -1,0 +1,9 @@
+{
+  "schema": "neutron.connection-provider-support.v1",
+  "providers": [
+    {
+      "provider": "openrouter",
+      "scopes": []
+    }
+  ]
+}

@@ -1,0 +1,229 @@
+{
+  "format": 3,
+  "name": "Mail",
+  "id": "mail",
+  "version": 302,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Private encrypted messages between Neutron canisters",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      },
+      "vetkeys_public": {
+        "api": 1
+      }
+    }
+  },
+  "background": {
+    "path": "service.html",
+    "description": "Private Mail help and resident service foundation"
+  },
+  "tray": {
+    "title": "Mail",
+    "path": "tray.html",
+    "icon": "static/icon.svg"
+  },
+  "tiles": [
+    {
+      "id": "mail",
+      "title": "Mail",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Read and send private Neutron Mail"
+    }
+  ],
+  "dependencies": {
+    "contacts": {
+      "app": "contacts",
+      "min_version": 101,
+      "functions": [
+        "contacts_neutron_lookup_v2",
+        "contacts_neutron_search_v2",
+        "contacts_neutron_revision_v2"
+      ]
+    }
+  },
+  "capabilities": {
+    "public_ingress": {
+      "api": 1,
+      "routes": [
+        {
+          "protocol": "mail_v1",
+          "id": "key_info",
+          "handler": "mail_key_info_v1",
+          "mode": "update",
+          "caller": "canister",
+          "max_request_bytes": 64,
+          "max_response_bytes": 4096,
+          "max_calls_per_hour": 240,
+          "required_cycles": 50000000
+        },
+        {
+          "protocol": "mail_v1",
+          "id": "receive",
+          "handler": "mail_receive_v1",
+          "mode": "update",
+          "caller": "canister",
+          "max_request_bytes": 65536,
+          "max_response_bytes": 1024,
+          "max_calls_per_hour": 240,
+          "required_cycles": 250000000
+        }
+      ]
+    },
+    "vetkeys": {
+      "api": 1,
+      "description": "Encrypt and decrypt private Mail on demand in this browser",
+      "slots": [
+        {
+          "id": "mailbox",
+          "purpose": "Encrypt and decrypt private Mail"
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "mail_pulse",
+        "mail_status",
+        "mail_crypto_status",
+        "mail_crypto_setup",
+        "mail_crypto_rotate",
+        "mail_crypto_rewrap",
+        "mail_list_encrypted",
+        "mail_get_encrypted",
+        "mail_recipients",
+        "mail_settings_encrypted",
+        "mail_settings_set_encrypted",
+        "mail_prepare_recipient",
+        "mail_send_encrypted",
+        "mail_retry",
+        "mail_mark",
+        "mail_delete",
+        "mail_cleanup_preview",
+        "mail_cleanup"
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Connect to owner-approved private Neutron Mail canisters",
+      "reservation_scopes": [
+        "method"
+      ],
+      "install_reservations": [
+        {
+          "kind": "method",
+          "method": "app_mail__mail_v1_update"
+        }
+      ],
+      "max_concurrency": 4,
+      "max_cycles_per_call": 250000000,
+      "max_cycles_per_day": 1000000000000
+    },
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    }
+  },
+  "func": {
+    "mail_status": {
+      "type": "query",
+      "async": false
+    },
+    "mail_pulse": {
+      "type": "query",
+      "async": false
+    },
+    "mail_crypto_status": {
+      "type": "query",
+      "async": false
+    },
+    "mail_crypto_setup": {
+      "type": "update",
+      "async": "async*"
+    },
+    "mail_crypto_rotate": {
+      "type": "update",
+      "async": "async*"
+    },
+    "mail_crypto_rewrap": {
+      "type": "update",
+      "async": false
+    },
+    "mail_list_encrypted": {
+      "type": "query",
+      "async": false
+    },
+    "mail_get_encrypted": {
+      "type": "query",
+      "async": false
+    },
+    "mail_recipients": {
+      "type": "query",
+      "async": false
+    },
+    "mail_settings_encrypted": {
+      "type": "query",
+      "async": false
+    },
+    "mail_settings_set_encrypted": {
+      "type": "update",
+      "async": false
+    },
+    "mail_prepare_recipient": {
+      "type": "update",
+      "async": "async*"
+    },
+    "mail_send_encrypted": {
+      "type": "update",
+      "async": "async*"
+    },
+    "mail_retry": {
+      "type": "update",
+      "async": "async*"
+    },
+    "mail_mark": {
+      "type": "update",
+      "async": false
+    },
+    "mail_delete": {
+      "type": "update",
+      "async": false
+    },
+    "mail_cleanup_preview": {
+      "type": "query",
+      "async": false
+    },
+    "mail_cleanup": {
+      "type": "update",
+      "async": false
+    },
+    "mail_key_info_v1": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "mail_receive_v1": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    }
+  },
+  "memory": {
+    "mail": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/mail/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

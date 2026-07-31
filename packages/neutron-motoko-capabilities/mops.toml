@@ -1,0 +1,6 @@
+[package]
+name = "neutron-capabilities"
+version = "1.0.0"
+description = "Reviewed public leaf types for Neutron backend capabilities"
+repository = "https://github.com/infu/neutron"
+license = "GPL-3.0-only"

@@ -1,0 +1,149 @@
+// Frozen exact passive-object packages served below /protocol/v1/.
+// Blob16 and Blob32 are runtime length constraints over Candid blob.
+
+type Blob16 = blob;
+type Blob32 = blob;
+
+type ActionKindV1 = variant { post; share; tombstone; like };
+
+type ActionHeaderV1 = record {
+  network_id : Blob32;
+  actor : principal;
+  action_kind : opt ActionKindV1;
+};
+
+type ReplyLocatorV1 = record {
+  author : principal;
+  post_id : Blob32;
+  body_hash : Blob32;
+  body_length : nat32;
+  object_digest : Blob32;
+};
+
+type PostBodyV1 = record {
+  header : ActionHeaderV1;
+  author_sequence : nat64;
+  nonce : Blob16;
+  created_at_ns : nat64;
+  body_markdown : text;
+  reply_to : opt ReplyLocatorV1;
+};
+
+type ReplyIndexEntryV1 = record {
+  author : principal;
+  post_id : Blob32;
+  object_digest : Blob32;
+  object_length : nat32;
+  received_at_ns : nat64;
+};
+
+type ReplyIndexV1 = record {
+  network_id : Blob32;
+  post_author : principal;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+  store_generation : nat64;
+  revision : nat64;
+  previous_index_hash : opt Blob32;
+  replies : vec ReplyIndexEntryV1;
+};
+
+type ShareActionV1 = record {
+  header : ActionHeaderV1;
+  share_id : Blob32;
+  share_sequence : nat64;
+  issued_at_ns : nat64;
+  original_author : principal;
+  original_post_id : Blob32;
+  original_body_hash : Blob32;
+  post_ref_digest : Blob32;
+};
+
+type LikeActionV1 = record {
+  header : ActionHeaderV1;
+  like_id : Blob32;
+  issued_at_ns : nat64;
+  post_author : principal;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+};
+
+type TombstoneActionV1 = record {
+  header : ActionHeaderV1;
+  tombstone_id : Blob32;
+  author_sequence : nat64;
+  issued_at_ns : nat64;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+};
+
+type CertifiedHttpProofV1 = record {
+  certificate_version : nat8;
+  certificate_cbor : blob;
+  witness_cbor : blob;
+  expression_path_cbor : blob;
+  certificate_time_ns : nat64;
+};
+
+type CertifiedActionRefV1 = record {
+  actor : principal;
+  action_kind : opt ActionKindV1;
+  object_digest : Blob32;
+  body_length : nat32;
+  proof_snapshot : CertifiedHttpProofV1;
+};
+
+type CertifiedLikeReceiptV1 = record {
+  like_action_candid : blob;
+  ref : CertifiedActionRefV1;
+};
+
+type LikeBatchV1 = record {
+  network_id : Blob32;
+  post_author : principal;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+  batch_number : nat64;
+  previous_batch_digest : opt Blob32;
+  first_accepted_sequence : nat64;
+  last_accepted_sequence : nat64;
+  final_partial : bool;
+  receipts : vec CertifiedLikeReceiptV1;
+};
+
+type LikeHeadV1 = record {
+  network_id : Blob32;
+  post_author : principal;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+  store_generation : nat64;
+  revision : nat64;
+  previous_head_hash : opt Blob32;
+  latest_batch_number : opt nat64;
+  latest_batch_digest : opt Blob32;
+  sealed_batch_count : nat64;
+  sealed_receipt_count : nat64;
+  accepting_likes : bool;
+};
+
+type ProfileAvatarMediaTypeV1 = variant { jpeg; png; webp };
+
+type ProfileV1 = record {
+  network_id : Blob32;
+  node : principal;
+  profile_generation : nat64;
+  revision : nat64;
+  updated_at_ns : nat64;
+  previous_profile_digest : opt Blob32;
+  display_name : text;
+  description : text;
+  capabilities : opt vec text;
+  avatar : opt record {
+    media_type : opt ProfileAvatarMediaTypeV1;
+    width : nat16;
+    height : nat16;
+    bytes : blob;
+  };
+};
+
+service : {}

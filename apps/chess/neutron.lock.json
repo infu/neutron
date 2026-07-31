@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "chess",
+  "memory": {
+    "chess": {
+      "schemas": {
+        "1": {
+          "hash": "078ae7926600dfd6d38e930acb55a7537a5bfc23ded5c3e454d8d7018d25ba5c",
+          "entry": "f090f2f9bd2b0388262d1d018c59ad98ba3c5b07e67e57be7aac491b61143789"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

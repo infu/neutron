@@ -1,0 +1,8 @@
+{
+  "managed": true,
+  "api_url": "http://localhost:18084/",
+  "gateway_url": "http://localhost:18084/",
+  "candid_ui_principal": "iishx-5l777-77774-qaaaa-cai",
+  "proxy_canister_principal": "iptbd-qt777-77774-qaaaq-cai",
+  "root_key": "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c05030201036100aaf6e68ffd561dc013196681ca9a8dd542a003f101b3b9babd0d96b845991f5c1a92d304939f56fbf06cfb31a1baa43d0731cf5466025348da45a68f72e50c9cf56cdc8d1f0f79dff2df115722e8ae8211883805e99120877e1d3ce97f3d6057"
+}

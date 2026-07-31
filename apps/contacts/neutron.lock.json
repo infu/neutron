@@ -1,0 +1,21 @@
+{
+  "format": 2,
+  "app": "contacts",
+  "memory": {
+    "contacts": {
+      "schemas": {
+        "1": {
+          "hash": "07aab8e5a2aa1af874d2fdd6f4e1fa44bdd05bf1bf6da680d637b486c3c4b186",
+          "entry": "0b95459dd1edee6e85f4af3a4296046ac167b42fa37c7fee6a420bbd85b3eb7c"
+        },
+        "2": {
+          "hash": "f2810f832c457a20feea6648ed4bacf30507156ef145ab68bfd4e6805bb8d5a2",
+          "entry": "1948d28cbbbbdf2ed5cbfe8eef7fd7821a3b1dd6af73505e16ee3d6ac45355a5"
+        }
+      },
+      "migrations": {
+        "1->2": "7fb71e8dc59671af575b9ef8dd26af05bcdf78b62cde07c9b54cefe3bdf4f8c5"
+      }
+    }
+  }
+}

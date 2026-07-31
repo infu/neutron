@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.bun.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["bun-types", "node"]
+  },
+  "include": ["./*.ts", "../playwright.config.ts"]
+}

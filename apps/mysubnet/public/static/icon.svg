@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="My Subnet globe">
+  <rect width="64" height="64" rx="5" fill="#061219"/>
+  <circle cx="32" cy="32" r="22" fill="#0a2530" stroke="#67d9bb" stroke-width="2"/>
+  <path d="M10 32h44M32 10c8 7 11 14 11 22S40 47 32 54M32 10c-8 7-11 14-11 22s3 15 11 22M15 21h34M15 43h34" fill="none" stroke="#4b8e80" stroke-width="1.5" opacity=".8"/>
+  <circle cx="43" cy="20" r="4" fill="#9af5d6"/>
+  <circle cx="43" cy="20" r="7" fill="none" stroke="#9af5d6" opacity=".45"/>
+</svg>
+

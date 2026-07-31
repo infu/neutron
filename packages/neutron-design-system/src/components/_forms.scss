@@ -1,0 +1,232 @@
+.nt-app :where(.nt-form) {
+  display: grid;
+  gap: var(--nt-gap-4);
+  min-width: 0;
+}
+
+.nt-app :where(.nt-form-grid) {
+  display: grid;
+  gap: var(--nt-gap-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  min-width: 0;
+}
+
+.nt-app :where(.nt-form-grid--two) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.nt-app :where(.nt-field) {
+  display: grid;
+  gap: var(--nt-gap-2);
+  min-width: 0;
+}
+
+.nt-app :where(.nt-label) {
+  color: var(--nt-text-muted);
+  font-size: var(--nt-font-size-label);
+  font-weight: 690;
+  line-height: 1.25;
+}
+
+.nt-app :where(.nt-help) {
+  color: var(--nt-text-faint);
+  font-size: var(--nt-font-size-meta);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.nt-app :where(.nt-error) {
+  color: var(--nt-danger);
+  font-size: var(--nt-font-size-meta);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.nt-app :where(.nt-required) {
+  color: var(--nt-warning);
+}
+
+.nt-app :where(.nt-fieldset) {
+  background: transparent;
+  border: 0;
+  border-radius: var(--nt-radius-panel);
+  box-sizing: border-box;
+  box-shadow: inset 0 1px var(--nt-line-subtle);
+  display: grid;
+  gap: var(--nt-gap-3);
+  margin: 0;
+  min-width: 0;
+  padding: var(--nt-pad-4);
+}
+
+.nt-app :where(.nt-input, .nt-textarea, .nt-select) {
+  background: var(--nt-input-bg);
+  border: 0;
+  border-radius: var(--nt-radius-control);
+  box-sizing: border-box;
+  box-shadow: inset 0 -1px var(--nt-line);
+  color: var(--nt-input-fg);
+  min-height: var(--nt-control-md);
+  min-width: 0;
+  outline: var(--nt-focus-width) solid transparent;
+  outline-offset: var(--nt-focus-offset);
+  padding: 5px 8px;
+  transition:
+    background-color var(--nt-duration-fast) var(--nt-ease-standard),
+    outline-color var(--nt-duration-fast) var(--nt-ease-standard),
+    box-shadow var(--nt-duration-fast) var(--nt-ease-standard);
+  width: 100%;
+}
+
+.nt-app :where(.nt-select) {
+  padding-inline-end: 30px;
+}
+
+.nt-app :where(.nt-textarea) {
+  line-height: var(--nt-line-height-body);
+  min-height: 94px;
+  resize: vertical;
+}
+
+.nt-app :where(.nt-input::placeholder, .nt-textarea::placeholder) {
+  color: var(--nt-text-faint);
+}
+
+.nt-app .nt-input:focus-visible,
+.nt-app .nt-textarea:focus-visible,
+.nt-app .nt-select:focus-visible {
+  box-shadow: inset 0 -1px var(--nt-line-focus);
+  outline-color: var(--nt-line-focus);
+}
+
+.nt-app :where(.nt-input[aria-invalid="true"], .nt-textarea[aria-invalid="true"], .nt-select[aria-invalid="true"]) {
+  background: var(--nt-danger-muted);
+}
+
+.nt-app .nt-input[aria-invalid="true"]:focus-visible,
+.nt-app .nt-textarea[aria-invalid="true"]:focus-visible,
+.nt-app .nt-select[aria-invalid="true"]:focus-visible {
+  outline-color: var(--nt-danger);
+}
+
+.nt-app :where(.nt-input:disabled, .nt-textarea:disabled, .nt-select:disabled) {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.nt-app :where(.nt-checkbox, .nt-radio) {
+  appearance: none;
+  background: var(--nt-bg-control);
+  border: 0;
+  border-radius: var(--nt-radius-2);
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px var(--nt-line-strong);
+  cursor: pointer;
+  flex: 0 0 auto;
+  height: 14px;
+  margin: 0;
+  outline: var(--nt-focus-width) solid transparent;
+  outline-offset: var(--nt-focus-offset);
+  position: relative;
+  transition:
+    background-color var(--nt-duration-fast) var(--nt-ease-standard),
+    outline-color var(--nt-duration-fast) var(--nt-ease-standard),
+    box-shadow var(--nt-duration-fast) var(--nt-ease-standard);
+  width: 14px;
+}
+
+.nt-app .nt-checkbox:focus-visible,
+.nt-app .nt-radio:focus-visible {
+  outline-color: var(--nt-line-focus);
+}
+
+.nt-app :where(.nt-radio) {
+  border-radius: var(--nt-radius-3);
+}
+
+.nt-app :where(.nt-checkbox:checked, .nt-radio:checked) {
+  background: var(--nt-accent);
+  box-shadow: none;
+}
+
+.nt-app :where(.nt-checkbox:checked::after) {
+  border-bottom: 2px solid var(--nt-text-inverse);
+  border-right: 2px solid var(--nt-text-inverse);
+  content: "";
+  height: 7px;
+  left: 5px;
+  position: absolute;
+  top: 2px;
+  transform: rotate(45deg);
+  width: 3px;
+}
+
+.nt-app :where(.nt-radio:checked::after) {
+  background: var(--nt-text-inverse);
+  border-radius: var(--nt-radius-1);
+  content: "";
+  height: 6px;
+  left: 4px;
+  position: absolute;
+  top: 4px;
+  width: 6px;
+}
+
+.nt-app :where(.nt-checkbox:disabled, .nt-radio:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.nt-app :where(.nt-field [readonly]) {
+  opacity: 0.84;
+}
+
+@media (pointer: coarse) {
+  .nt-app :where(.nt-input, .nt-textarea, .nt-select) {
+    min-height: var(--nt-control-lg);
+  }
+}
+
+.nt-app :where(.nt-input-group) {
+  align-items: stretch;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.nt-app :where(.nt-input-group > .nt-input) {
+  border-radius: 0;
+}
+
+.nt-app :where(.nt-input-prefix, .nt-input-suffix) {
+  align-items: center;
+  background: var(--nt-bg-control-active);
+  border: 0;
+  box-sizing: border-box;
+  color: var(--nt-text-muted);
+  display: inline-flex;
+  min-height: var(--nt-control-md);
+  padding: 0 8px;
+}
+
+.nt-app :where(.nt-input-prefix) {
+  box-shadow: inset -1px 0 var(--nt-line-subtle);
+}
+
+.nt-app :where(.nt-input-suffix) {
+  box-shadow: inset 1px 0 var(--nt-line-subtle);
+}
+
+@container (max-width: 240px) {
+  .nt-app :where(.nt-form-grid--two) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nt-app :where(.nt-input-prefix) {
+  border-radius: var(--nt-radius-control) 0 0 var(--nt-radius-control);
+}
+
+.nt-app :where(.nt-input-suffix) {
+  border-radius: 0 var(--nt-radius-control) var(--nt-radius-control) 0;
+}

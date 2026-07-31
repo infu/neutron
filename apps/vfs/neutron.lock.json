@@ -1,0 +1,21 @@
+{
+  "format": 2,
+  "app": "files",
+  "memory": {
+    "files": {
+      "schemas": {
+        "1": {
+          "hash": "69fac63570daf476f2fe42cd4601583b27afa0203cd6801389d552ff872a69a1",
+          "entry": "16d97303151d8ff71e60d373e08c9cc70ae8534db3c3d33e499af41f61056bd4"
+        },
+        "2": {
+          "hash": "eefc87a5b05f044ba8c43dad0ab16e85d3bd05244965e6670a9f02ff5833e1b8",
+          "entry": "c55d8228973b9addd9fc1cac765265f2bf37ba15ca0869796cfb72e7dfa078d6"
+        }
+      },
+      "migrations": {
+        "1->2": "e61e4c494ad2ea0e541029098ace6db84222751382d638537fe65667f0e4bc44"
+      }
+    }
+  }
+}

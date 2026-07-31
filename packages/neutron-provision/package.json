@@ -1,0 +1,28 @@
+{
+  "name": "neutron-provision",
+  "version": "0.1.0",
+  "description": "Archive-only resumable Neutron provisioner for the IC and supervised PocketIC fleets",
+  "neutronPackageBuildInput": false,
+  "type": "module",
+  "bin": {
+    "neutron-provision": "./src/index.ts"
+  },
+  "scripts": {
+    "provision": "bun src/index.ts",
+    "test": "bun test"
+  },
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/candid": "^3.4.3",
+    "@dfinity/identity": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "@foundry-rs/anvil": "^1.7.1",
+    "@icp-sdk/canisters": "3.6.0",
+    "@icp-sdk/core": "5.4.0",
+    "ethers": "^6.17.0",
+    "icblast": "file:../../../icblast",
+    "neutron-compiler": "^1.1.0",
+    "neutron-tools": "^1.1.0"
+  }
+}

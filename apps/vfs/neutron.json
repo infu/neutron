@@ -1,0 +1,196 @@
+{
+  "format": 3,
+  "name": "Files",
+  "id": "files",
+  "version": 403,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Shared links, protected files, and everyday workspace storage",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "certified_assets": {
+        "api": 2
+      }
+    }
+  },
+  "background": {
+    "path": "service.html",
+    "description": "Files storage and background service"
+  },
+  "capabilities": {
+    "background_ui_requests": {
+      "api": 1,
+      "categories": [
+        "frontend_tool"
+      ]
+    },
+    "vetkeys": {
+      "api": 1,
+      "description": "Protect files kept in Vault",
+      "slots": [
+        {
+          "id": "files_vault",
+          "purpose": "Keep Vault files protected"
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "files_bootstrap_v2",
+        "files_list_v2",
+        "files_lookup_v2",
+        "files_read_chunk_v2",
+        "files_operation_status_v2",
+        "files_vault_write_v2",
+        "files_write_block_v2",
+        "files_mutate_v2",
+        "files_remove_v2",
+        "files_abort_v2",
+        "files_cleanup_v2",
+        "files_plain_list_v3",
+        "files_plain_stat_v3",
+        "files_plain_read_chunk_v3",
+        "files_plain_write_block_v3",
+        "files_plain_mkdir_v3",
+        "files_plain_move_v3",
+        "files_plain_remove_v3",
+        "files_plain_abort_v3",
+        "files_plain_cleanup_v3"
+      ]
+    },
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    },
+    "certified_assets": {
+      "api": 2,
+      "max_entries": 768,
+      "max_committed_bytes": 201326592,
+      "max_object_bytes": 67108864,
+      "max_pending_stages": 1,
+      "max_staged_bytes": 67108864,
+      "max_batch_operations": 1,
+      "max_batch_bytes": 67108864,
+      "max_idempotency_receipts": 2048,
+      "collections": [
+        {
+          "id": "shares",
+          "mount": "shares",
+          "kind": "publication"
+        }
+      ]
+    }
+  },
+  "tiles": [
+    {
+      "id": "files",
+      "title": "Files",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Browse, edit, upload, and organize all your files"
+    }
+  ],
+  "func": {
+    "files_bootstrap_v2": {
+      "type": "query",
+      "async": false
+    },
+    "files_list_v2": {
+      "type": "query",
+      "async": false
+    },
+    "files_lookup_v2": {
+      "type": "query",
+      "async": false
+    },
+    "files_read_chunk_v2": {
+      "type": "query",
+      "async": false
+    },
+    "files_operation_status_v2": {
+      "type": "query",
+      "async": false
+    },
+    "files_vault_write_v2": {
+      "type": "update",
+      "async": false
+    },
+    "files_write_block_v2": {
+      "type": "update",
+      "async": false
+    },
+    "files_mutate_v2": {
+      "type": "update",
+      "async": false
+    },
+    "files_remove_v2": {
+      "type": "update",
+      "async": false
+    },
+    "files_abort_v2": {
+      "type": "update",
+      "async": false
+    },
+    "files_cleanup_v2": {
+      "type": "update",
+      "async": false
+    },
+    "files_plain_list_v3": {
+      "type": "query",
+      "async": false
+    },
+    "files_plain_stat_v3": {
+      "type": "query",
+      "async": false
+    },
+    "files_plain_read_chunk_v3": {
+      "type": "query",
+      "async": false
+    },
+    "files_plain_write_block_v3": {
+      "type": "update",
+      "async": false
+    },
+    "files_plain_mkdir_v3": {
+      "type": "update",
+      "async": false
+    },
+    "files_plain_move_v3": {
+      "type": "update",
+      "async": false
+    },
+    "files_plain_remove_v3": {
+      "type": "update",
+      "async": false
+    },
+    "files_plain_abort_v3": {
+      "type": "update",
+      "async": false
+    },
+    "files_plain_cleanup_v3": {
+      "type": "update",
+      "async": false
+    }
+  },
+  "memory": {
+    "files": {
+      "version": 2,
+      "schemas": {
+        "1": {
+          "src": "memory/files/v1.mo"
+        },
+        "2": {
+          "src": "memory/files/v2.mo"
+        }
+      },
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "src": "memory/files/v1_to_v2.mo"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "schema": "wagyu-candid-golden-v1",
+  "mainnet_root_der": {
+    "byte_length": 133,
+    "sha256": "737ba355e855bd4b61279056603e05501db5e5bad147c6eba7be8c2a13f4b6b3"
+  },
+  "principals": {
+    "actor_a": "rrkah-fqaaa-aaaaa-aaaaq-cai",
+    "actor_b": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+  },
+  "semantic": {
+    "network_id": "6c777193cb352fcf161afad69a6def789c4c6ebdd1fd1a9eb98d54c9a8a01c44",
+    "post_body_hash": "6136ecd5838ee1c6cb00f9b387a8966af87f97ec39363c94c7dadd864502ee03",
+    "post_id": "de126f939e1c981ea2d29c9393fa9ee643167d46ed367ee8a6ca31408b037422",
+    "post_object_digest": "fe5b6d6c29cd0053c74bf2efd403ed2a19448eae3af6470a985ed56973204820",
+    "share_id": "0b052402c5b2dc99c4a7082dfb0d7e5d1fcb8a3a7fe939c8dbc40f4237a38dfc",
+    "share_object_digest": "a47c2ba099bc354ffd7c123a2983a59ca4b16b79ec40564e9adf1fd7a7852e91",
+    "like_id": "231c9607257a273375be14eeb71baa0515332a5e45799753d9933d7106340b3d",
+    "like_object_digest": "c1f0d28abf603d85217fa690686bbcb2624dbe05f2b89de871cd676d659c5631",
+    "tombstone_id": "66d2a3c1cc81c0134e43256903b3e7b700ec53d34620ea795b4a72003c1fe54f",
+    "tombstone_object_digest": "130015c40e832ab8eb10ee539e696cbb473f501cb84131ad6a17f25809ec9b95"
+  },
+  "paths": {
+    "post": "/app/wagyu/_route/protocol/v1/objects/post/sha256/fe5b6d6c29cd0053c74bf2efd403ed2a19448eae3af6470a985ed56973204820",
+    "share": "/app/wagyu/_route/protocol/v1/objects/share/sha256/a47c2ba099bc354ffd7c123a2983a59ca4b16b79ec40564e9adf1fd7a7852e91",
+    "like": "/app/wagyu/_route/protocol/v1/objects/like/sha256/c1f0d28abf603d85217fa690686bbcb2624dbe05f2b89de871cd676d659c5631",
+    "tombstone": "/app/wagyu/_route/protocol/v1/objects/tombstone/sha256/130015c40e832ab8eb10ee539e696cbb473f501cb84131ad6a17f25809ec9b95",
+    "like_head": "/app/wagyu/_route/protocol/v1/heads/likes/de126f939e1c981ea2d29c9393fa9ee643167d46ed367ee8a6ca31408b037422",
+    "reply_index": "/app/wagyu/_route/protocol/v1/heads/replies/de126f939e1c981ea2d29c9393fa9ee643167d46ed367ee8a6ca31408b037422",
+    "profile": "/app/wagyu/_route/protocol/v1/profile"
+  },
+  "default_profile": {
+    "byte_length": 199,
+    "sha256": "c8b434e7bb54b49726e4604400fbe8ee3fc6f51163e43f3b63e21cb09cfafc95",
+    "candid_hex": "4449444c096d716e006d7b6e026b03a9b9d5027fa8e597b3047fdcbad5f7047f6e046c04e78fb0127ab59eb7bd0405eb90e0ec0b0286ec8ad30c7a6e066c0ab69ccd9c03018294a8c80468fc91f4f805718dc6e9f905788c9c85a70602aee6bdf10678a8e9efa90771a2a4b8e20903dbffc6ff0c789980f2d20f07010800010a000000000000000101010000808c4d5c6ef017206c777193cb352fcf161afad69a6def789c4c6ebdd1fd1a9eb98d54c9a8a01c4402000000000000000000000000000000000000"
+  },
+  "packages": {
+    "ActionHeaderV1": { "byte_length": 104, "sha256": "029e85f16a6fa9709ac4c56ce91c4655c958ea16291066aa842cca520dcf5ec5" },
+    "PostBodyV1": { "byte_length": 245, "sha256": "fe5b6d6c29cd0053c74bf2efd403ed2a19448eae3af6470a985ed56973204820" },
+    "ReplyIndexV1": { "byte_length": 314, "sha256": "4dd3306b55fe050a06911b29ed2ebad8dd87f5cb35e2a98ad2e4156004d611e4" },
+    "CertifiedHttpProofV1": { "byte_length": 61, "sha256": "c498e933c1bcfd9d8fbca20a514c0c0afe4a099047f7f22fdbc1a7416532a5de" },
+    "CertifiedActionRefV1": { "byte_length": 172, "sha256": "e3694e5c09c61957063edc43135925beafbf35e555af9c2140b645f8342048d6" },
+    "CertifiedPostRefV1": { "byte_length": 214, "sha256": "9a254bcbb71001e5f2159f45d2407f999491766d572ee91d756b4fe909a1e509" },
+    "ShareActionV1": { "byte_length": 314, "sha256": "a47c2ba099bc354ffd7c123a2983a59ca4b16b79ec40564e9adf1fd7a7852e91" },
+    "CertifiedShareRefV1": { "byte_length": 175, "sha256": "387f15f2d9fc344fdb1bfbca74e9fc8f58021c870622712b696e337e93c69cc0" },
+    "CertifiedShareDeliveryV1": { "byte_length": 727, "sha256": "9e0fcda5d97142deb5282f4bfa0c78c4aca10142650099d044d4affbdc68dc39" },
+    "LikeActionV1": { "byte_length": 261, "sha256": "c1f0d28abf603d85217fa690686bbcb2624dbe05f2b89de871cd676d659c5631" },
+    "CertifiedLikeReceiptV1": { "byte_length": 447, "sha256": "4a9fa58a304b3eafcc49d9dab4db9668652edb752990f7a5d64f3a1ccf19be82" },
+    "ProfileV1": { "byte_length": 308, "sha256": "302687db836629190e81b0320d3776b3165541eb569651040ddddb5959f63d6b" },
+    "TombstoneActionV1": { "byte_length": 257, "sha256": "130015c40e832ab8eb10ee539e696cbb473f501cb84131ad6a17f25809ec9b95" },
+    "CertifiedTombstoneV1": { "byte_length": 444, "sha256": "987b3dc138944e626f2e90b3277936b72aa71f716d6e0270d8dfa7379522f3cd" },
+    "LikeBatchV1": { "byte_length": 650, "sha256": "0c35c56ddf00cb21acb094b066ac3bb1074692913d71da4d27316fe09ec934ba" },
+    "LikeHeadV1": { "byte_length": 307, "sha256": "90d94c6de0b9b542b36faf5a4d94d84d128c630c5ad957f572b360ab2d7e5990" },
+    "PublicIngressRequestV1": { "byte_length": 361, "sha256": "a9d2de04e1b2d2669d40dcd116f7aed182f846507489220db5215998c10a5155" },
+    "PublicIngressResultV1": { "byte_length": 284, "sha256": "1841b1f5c9f8dd1c3c1006aa3c439ddbd89162409f72911e62bcb6278370151d" },
+    "WagyuIngressV1": { "byte_length": 329, "sha256": "61a24de4245543c71a5c3029a5f5af7662b3a34ccbaadec072c54e37165a8d14" },
+    "FollowBodyV1": { "byte_length": 48, "sha256": "4b5faf4040a9181519f3cac0d8f2d521d8448697e7cd0573b73fb98a287b0cce" },
+    "UnfollowBodyV1": { "byte_length": 48, "sha256": "0b8cf31ec75822fa898fe83b096990339e4ce16d81b5246d24fc5d6db5c213fe" },
+    "DeliverBodyV1": { "byte_length": 287, "sha256": "7e20ba601dfd5ac69e4f04157f31776493e25b0c6f25809866c94a1819c8ce7d" },
+    "LikeBodyV1": { "byte_length": 466, "sha256": "60ee591a44c65f5a9bc1200b0d20cca1239ef3a0e1d638d7852ef0bfb2605532" },
+    "NoticeBodyV1": { "byte_length": 201, "sha256": "5f343528bb9c04e78d28aaef08d7b0ca45ca8e87d831fdb3e5f31fdb4713bc31" },
+    "FollowerHeadV1": { "byte_length": 104, "sha256": "b13413552156b0791cde695603956d716872427664df29d12aed68fd92ceb53c" },
+    "WagyuRouteResultV1": { "byte_length": 199, "sha256": "af21e76b84eac1c3922504255bc0af188974c3f044c9a5b20e93a9dfb32d3beb" },
+    "FeedPageRequestV1": { "byte_length": 26, "sha256": "4e974023612dffd4d49995a800a56ca9d706ee5fc1f0a9cbdce23d252e4a85ec" },
+    "FeedCandidateSummaryV1": { "byte_length": 441, "sha256": "6e5f9a193363594c86992bcea791ce6a6efc0f195ead3d7b01a1e56a91281038" },
+    "FeedPageV1": { "byte_length": 149, "sha256": "2c8e636d22ae29c38fe070a43aeb62c7d37da43fdf7dd8db3fb37d4a132f6bbe" },
+    "NotificationSummaryV1": { "byte_length": 318, "sha256": "ca28eebb6f72b209b04cc80f33930d7c5ee690847028eaa16eb96d202eb95534" },
+    "NotificationPageRequestV1": { "byte_length": 26, "sha256": "e0895c13b37abe1fe7a22f301fa2d6be16736d40fd2bd486797c245c434bfd90" },
+    "NotificationPageV1": { "byte_length": 183, "sha256": "3bd94ceab5cd82e324e5e93e68ac9842e5cb63fcd29cd47883faf112bd86f54f" },
+    "NotificationEvidenceRequestV1": { "byte_length": 23, "sha256": "a5fc0d99bfc6c6d3c1fc898ad44b97429bf4b2bf082bd50ffd68a77a8f88f14e" },
+    "NotificationEvidenceV1": { "byte_length": 506, "sha256": "622a3d667e6025ad4cb43f28d38e071c3a15f97f9d0673aa02dc97181ccfc39d" },
+    "SendQuoteRequestV1": { "byte_length": 64, "sha256": "672de9483ee394bc847afacc3a3e3a802be738224110a7c0d9a247de3c83b73b" },
+    "SendQuoteV1": { "byte_length": 135, "sha256": "c39efc2b265d610e86cb05092617ccea78470411461cb3f4d074d59f7637948a" },
+    "ProfileEditRequestV1": { "byte_length": 160, "sha256": "b4a9935e83c25f2799a818fe639116b0108ce84e3e363d82ce660517cfc488fc" },
+    "ProfileEditResultV1": { "byte_length": 154, "sha256": "c5504b944e2542a9fd004f4c80f46f6eb882e641a2be1546ccc107b468f7fa8c" }
+  }
+}

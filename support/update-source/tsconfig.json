@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.bun.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "../../.neutron/tsbuildinfo/update-source.tsbuildinfo",
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"]
+}

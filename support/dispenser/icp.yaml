@@ -1,0 +1,18 @@
+canisters:
+  - name: dispenser
+    build:
+      steps:
+        - type: script
+          commands:
+            - bun ../../packages/neutron-scripts/src/compile_motoko.ts --source mo/main.mo --output "$ICP_WASM_OUTPUT_PATH"
+  - name: frontend
+    recipe:
+      type: "@dfinity/asset-canister@v2.2.1"
+      configuration:
+        dir: build
+        build:
+          - npm run build
+environments:
+  - name: ic
+    network: ic
+    canisters: [dispenser, frontend]

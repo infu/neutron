@@ -1,0 +1,31 @@
+{
+  "format": 3,
+  "target": {
+    "kind": "pocketic",
+    "profile": "minimal",
+    "gateway_port": 8000,
+    "developer_identity_seed": 2,
+    "authorized_principals": [
+      "pbwxr-uqxlv-aiwi3-omw2n-ptdex-kyifb-kdsn6-zdiyd-ggzpu-nrzik-rqe",
+      "4onr3-timjo-fvqqz-nogte-3mmgy-vwjx6-m4aiu-t7s44-lucax-2sxcv-oqe",
+      "zcn6a-xvq5a-qwjzk-t5u67-kt6n7-dejy3-dqivs-zcbn7-mfbko-ha4l5-kqe",
+      "nmfwb-yljje-3pqmm-nucg3-6ubv6-ygorh-f4vzx-ggn37-pu6vb-i3nd6-xae"
+    ],
+    "nodes": [
+      "alpha",
+      "bravo",
+      "charlie"
+    ]
+  },
+  "artifacts": {
+    "kind": "inline",
+    "kernel": {
+      "path": "apps/kernel/kernel.v0.3.5.neutron"
+    },
+    "packages": [
+      {
+        "path": "apps/wagyu/wagyu.v0.3.2.neutron"
+      }
+    ]
+  }
+}

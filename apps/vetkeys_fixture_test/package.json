@@ -1,0 +1,43 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-vetkeys-fixture",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "compare:installed": "bun scripts/compare-installed-bindings.ts",
+    "prove:installed": "bun scripts/prove-installed-origins.ts",
+    "prove:redaction": "bun scripts/prove-installed-origins.ts --redaction",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "test:browser-vectors": "bun test test/browser_library_vectors.test.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && bun scripts/package-fixtures.ts",
+    "test": "npm run typecheck && npm run package && bun test test",
+    "typecheck": "tsc -b --pretty false",
+    "watch": "bun build.ts watch"
+  },
+  "license": "GPL-3.0-only",
+  "description": "Installed-app isolation fixture for Neutron vetKeys.",
+  "dependencies": {
+    "@dfinity/vetkeys": "0.4.0",
+    "neutron-design-system": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/identity": "^3.4.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "neutron-compiler": "^1.1.0",
+    "neutron-provision": "^0.1.0",
+    "neutron-scripts": "^1.1.0"
+  }
+}

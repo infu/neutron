@@ -1,0 +1,30 @@
+{
+  "format": 3,
+  "name": "vetKeys Fixture Peer",
+  "id": "vetkeys_fixture_peer",
+  "version": 100,
+  "description": "Peer proof that equal slot names remain isolated between installed apps",
+  "src": "main.mo",
+  "tiles": [
+    {
+      "id": "main",
+      "title": "vetKeys Isolation Peer",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Inspect and verify this peer fixture's app-isolated key derivation"
+    }
+  ],
+  "capabilities": {
+    "vetkeys": {
+      "api": 1,
+      "description": "Demonstrate a second app-isolated private-key namespace",
+      "slots": [
+        {
+          "id": "mailbox",
+          "purpose": "Verify that an equal slot name in another app receives a different key root"
+        }
+      ]
+    }
+  },
+  "func": {}
+}

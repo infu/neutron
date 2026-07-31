@@ -1,0 +1,17 @@
+{
+  "name": "neutron-cli",
+  "version": "0.1.0",
+  "description": "Neutron package compiler CLI",
+  "type": "module",
+  "bin": {
+    "neutron": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "author": "",
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "neutron-compiler": "^1.1.0"
+  }
+}

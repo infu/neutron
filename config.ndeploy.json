@@ -1,0 +1,106 @@
+{
+  "format": 3,
+  "target": {
+    "kind": "ic",
+    "host": "https://icp-api.io",
+    "identity_id": 0,
+    "subnet": "brlsh-zidhj-3yy3e-6vqbz-7xnih-xeq2l-as5oc-g32c4-i5pdn-2wwof-oae",
+    "payment_icp": "5",
+    "controllers": [],
+    "deployment_evidence": {
+      "source": "ic_registry_certified_v1",
+      "registry_canister": "rwlgt-iiaaa-aaaaa-aaaaa-cai",
+      "root_key_sha256": "737ba355e855bd4b61279056603e05501db5e5bad147c6eba7be8c2a13f4b6b3",
+      "pricing_profile": "application_13_node"
+    }
+  },
+  "artifacts": {
+    "kind": "inline",
+    "kernel": {
+      "path": "apps/kernel/kernel.v0.3.5.neutron",
+      "sha256": "534e0ded262bb5700d92046a4fafad16ccf42473259edd3f18e8a0578347f2ae",
+      "bytes": 1918481,
+      "id": "kernel",
+      "version": 305
+    },
+    "packages": [
+      {
+        "path": "apps/hello/hello.v0.2.1.neutron",
+        "sha256": "82613cc3882c7404e51e09308e27a4885062f5f622663becf18cca0a046b8c27",
+        "bytes": 185021,
+        "id": "hello",
+        "version": 201
+      },
+      {
+        "path": "apps/kitchensink/kitchensink.v0.3.1.neutron",
+        "sha256": "ea44590c1c7fca912e7b2957812fa42e1ad5853bddcdb016830ab8e0022a74ca",
+        "bytes": 372478,
+        "id": "kitchensink",
+        "version": 301
+      },
+      {
+        "path": "apps/gemma/gemma.v0.2.1.neutron",
+        "sha256": "070cae4c5908ddca0faba0b4d1da55bbe10539b5f680b45f80659008edd3781e",
+        "bytes": 146687,
+        "id": "gemma",
+        "version": 201
+      },
+      {
+        "path": "apps/vfs/files.v0.4.3.neutron",
+        "sha256": "b05c5c88d7705cefc2026478002a372f778fe4430f946663bba3003a82f8348d",
+        "bytes": 709431,
+        "id": "files",
+        "version": 403
+      },
+      {
+        "path": "apps/spreadsheet/spreadsheet.v0.3.1.neutron",
+        "sha256": "82ad9b612305fc1f9a5364f563d53e2aa63706befc2888f67a717940f65221a3",
+        "bytes": 224085,
+        "id": "spreadsheet",
+        "version": 301
+      },
+      {
+        "path": "apps/agent/agent.v0.3.1.neutron",
+        "sha256": "544f072f49ae2b131e1159fc92444e732a02cce474336b5fb3f548dda72e7616",
+        "bytes": 303109,
+        "id": "agent",
+        "version": 301
+      },
+      {
+        "path": "apps/chess/chess.v0.3.1.neutron",
+        "sha256": "203989a0cb4c8299989c3a0365d691303419a367348216dfc6ffd44bc671a834",
+        "bytes": 252940,
+        "id": "chess",
+        "version": 301
+      },
+      {
+        "path": "apps/jetcreeper/jetcreeper.v0.3.1.neutron",
+        "sha256": "a24ae6f9c4ad609bd16afcead0da49245bd36f6303d959ddd1229fa2b8eb1275",
+        "bytes": 300389,
+        "id": "jetcreeper",
+        "version": 301
+      },
+      {
+        "path": "apps/contacts/contacts.v0.3.1.neutron",
+        "sha256": "19591c8db038db92c182b70ce0761e855efc1e7e7f37d3b1503866baa11d097a",
+        "bytes": 253319,
+        "id": "contacts",
+        "version": 301
+      },
+      {
+        "path": "apps/mail/mail.v0.3.2.neutron",
+        "sha256": "826385b4f79ba6973b7e33e882bca03c4cfee4aa4930172e7ea18bf482cb52b9",
+        "bytes": 683943,
+        "id": "mail",
+        "version": 302
+      },
+      {
+        "path": "apps/wallet/wallet.v0.3.2.neutron",
+        "sha256": "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43",
+        "bytes": 575530,
+        "id": "wallet",
+        "version": 302
+      }
+    ]
+  }
+}

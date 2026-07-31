@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/neutron-motoko-wasm"
+    },
+    {
+      "path": "./packages/neutron-design-system"
+    },
+    {
+      "path": "./packages/neutron-security"
+    },
+    {
+      "path": "./packages/neutron-tools"
+    },
+    {
+      "path": "./packages/neutron-scripts"
+    },
+    {
+      "path": "./packages/neutron-compiler"
+    },
+    {
+      "path": "./packages/neutron-cli"
+    },
+    {
+      "path": "./packages/neutron-provision"
+    },
+    {
+      "path": "./apps/hello"
+    },
+    {
+      "path": "./apps/kitchensink"
+    },
+    {
+      "path": "./apps/gemma"
+    },
+    {
+      "path": "./apps/vfs"
+    },
+    {
+      "path": "./apps/wagyu"
+    },
+    {
+      "path": "./apps/agent"
+    },
+    {
+      "path": "./apps/chess"
+    },
+    {
+      "path": "./apps/contacts"
+    },
+    {
+      "path": "./apps/mail"
+    },
+    {
+      "path": "./apps/wallet"
+    },
+    {
+      "path": "./support/dispenser"
+    },
+    {
+      "path": "./support/repository"
+    },
+    {
+      "path": "./support/update-source"
+    },
+    {
+      "path": "./apps/kernel"
+    }
+  ]
+}

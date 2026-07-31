@@ -1,0 +1,19 @@
+canisters:
+  - name: update_source
+    build:
+      steps:
+        - type: pre-built
+          url: https://github.com/dfinity/sdk/releases/download/0.32.0/assetstorage.wasm.gz
+          sha256: 04e565b3425fe7510ee16b02adcfe3f01abc9a2725c82a21cb08969241debd62
+    sync:
+      steps:
+        - type: plugin
+          url: https://github.com/dfinity/certified-assets/releases/download/migration-v2.2.1-6b48585/sync_plugin.wasm
+          sha256: ca7cb5666c30d2875f8d5e10535f8a53f97a86c79c263f7d5bdac2fdd1bbf83c
+          dirs:
+            - assets
+
+environments:
+  - name: ic
+    network: ic
+    canisters: [update_source]

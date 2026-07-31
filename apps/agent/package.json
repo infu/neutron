@@ -1,0 +1,39 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-agent",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts",
+    "watch": "bun build.ts watch",
+    "test": "npm run package && bun test"
+  },
+  "author": "",
+  "license": "GPL-3.0-only",
+  "description": "Agent powered by OpenRouter with kernel-regulated Neutron tools",
+  "dependencies": {
+    "@openrouter/ai-sdk-provider": "3.0.0",
+    "ai": "7.0.20",
+    "neutron-design-system": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-icons": "^5.7.0",
+    "zod": "4.1.8"
+  },
+  "devDependencies": {
+    "@dfinity/candid": "^3.4.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "neutron-scripts": "^1.1.0"
+  }
+}

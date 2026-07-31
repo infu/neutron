@@ -1,0 +1,89 @@
+{
+  "format": 1,
+  "kernel": {
+    "path": "apps/kernel/kernel.v0.3.5.neutron",
+    "sha256": "534e0ded262bb5700d92046a4fafad16ccf42473259edd3f18e8a0578347f2ae",
+    "bytes": 1918481,
+    "id": "kernel",
+    "version": 305
+  },
+  "packages": [
+    {
+      "path": "apps/vfs/files.v0.4.3.neutron",
+      "sha256": "b05c5c88d7705cefc2026478002a372f778fe4430f946663bba3003a82f8348d",
+      "bytes": 709431,
+      "id": "files",
+      "version": 403
+    },
+    {
+      "path": "apps/contacts/contacts.v0.3.1.neutron",
+      "sha256": "19591c8db038db92c182b70ce0761e855efc1e7e7f37d3b1503866baa11d097a",
+      "bytes": 253319,
+      "id": "contacts",
+      "version": 301
+    },
+    {
+      "path": "apps/kitchensink/kitchensink.v0.3.1.neutron",
+      "sha256": "ea44590c1c7fca912e7b2957812fa42e1ad5853bddcdb016830ab8e0022a74ca",
+      "bytes": 372478,
+      "id": "kitchensink",
+      "version": 301
+    },
+    {
+      "path": "apps/wagyu/wagyu.v0.3.2.neutron",
+      "sha256": "f75975ea9bcaa9165ae812f84a6914d260bf3fcb8965659da0ec22ecbdd58423",
+      "bytes": 1155566,
+      "id": "wagyu",
+      "version": 302
+    },
+    {
+      "path": "apps/agent/agent.v0.3.1.neutron",
+      "sha256": "544f072f49ae2b131e1159fc92444e732a02cce474336b5fb3f548dda72e7616",
+      "bytes": 303109,
+      "id": "agent",
+      "version": 301
+    },
+    {
+      "path": "apps/jetcreeper/jetcreeper.v0.3.1.neutron",
+      "sha256": "a24ae6f9c4ad609bd16afcead0da49245bd36f6303d959ddd1229fa2b8eb1275",
+      "bytes": 300389,
+      "id": "jetcreeper",
+      "version": 301
+    },
+    {
+      "path": "apps/mail/mail.v0.3.2.neutron",
+      "sha256": "826385b4f79ba6973b7e33e882bca03c4cfee4aa4930172e7ea18bf482cb52b9",
+      "bytes": 683943,
+      "id": "mail",
+      "version": 302
+    },
+    {
+      "path": "apps/mysubnet/mysubnet.v0.3.1.neutron",
+      "sha256": "e99733fa5e219d476b44d9b4a34083fa04af8885b268cf8ab40ff83008ab8589",
+      "bytes": 313999,
+      "id": "mysubnet",
+      "version": 301
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.2.neutron",
+      "sha256": "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43",
+      "bytes": 575530,
+      "id": "wallet",
+      "version": 302
+    },
+    {
+      "path": "apps/spreadsheet/spreadsheet.v0.3.1.neutron",
+      "sha256": "82ad9b612305fc1f9a5364f563d53e2aa63706befc2888f67a717940f65221a3",
+      "bytes": 224085,
+      "id": "spreadsheet",
+      "version": 301
+    },
+    {
+      "path": "apps/chess/chess.v0.3.1.neutron",
+      "sha256": "203989a0cb4c8299989c3a0365d691303419a367348216dfc6ffd44bc671a834",
+      "bytes": 252940,
+      "id": "chess",
+      "version": 301
+    }
+  ]
+}

@@ -1,0 +1,243 @@
+.nt-app :where(.nt-alert) {
+  --nt-feedback-line: var(--nt-info);
+  background: var(--nt-alert-info-bg);
+  border: 0;
+  border-radius: var(--nt-radius-panel);
+  box-shadow: inset 1px 0 var(--nt-feedback-line);
+  color: var(--nt-text);
+  display: grid;
+  gap: var(--nt-gap-2);
+  min-width: 0;
+  padding: var(--nt-pad-4);
+}
+
+.nt-app :where(.nt-alert--warning) {
+  --nt-feedback-line: var(--nt-warning);
+  background: var(--nt-alert-warning-bg);
+}
+
+.nt-app :where(.nt-alert--danger) {
+  --nt-feedback-line: var(--nt-danger);
+  background: var(--nt-alert-danger-bg);
+}
+
+.nt-app :where(.nt-alert--critical) {
+  --nt-feedback-line: var(--nt-critical);
+  background: var(--nt-critical-muted);
+}
+
+.nt-app :where(.nt-alert--success) {
+  --nt-feedback-line: var(--nt-success);
+  background: var(--nt-alert-success-bg);
+}
+
+.nt-app :where(.nt-badge) {
+  align-items: center;
+  background: var(--nt-bg-control);
+  border: 0;
+  border-radius: var(--nt-radius-3);
+  color: var(--nt-text-muted);
+  display: inline-flex;
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-meta);
+  font-weight: 700;
+  gap: var(--nt-gap-1);
+  min-height: 22px;
+  min-width: 0;
+  padding: 0 7px;
+}
+
+.nt-app :where(.nt-badge--info) {
+  background: var(--nt-info-muted);
+  color: var(--nt-info);
+}
+
+.nt-app :where(.nt-badge--success) {
+  background: var(--nt-success-muted);
+  color: var(--nt-success);
+}
+
+.nt-app :where(.nt-badge--warning) {
+  background: var(--nt-warning-muted);
+  color: var(--nt-warning);
+}
+
+.nt-app :where(.nt-badge--danger) {
+  background: var(--nt-danger-muted);
+  color: var(--nt-danger);
+}
+
+.nt-app :where(.nt-badge--critical) {
+  background: var(--nt-critical-muted);
+  color: var(--nt-critical);
+}
+
+.nt-app :where(.nt-tag-list) {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nt-gap-1);
+  min-width: 0;
+}
+
+.nt-app :where(.nt-tag) {
+  align-items: center;
+  background: var(--nt-bg-control);
+  border: 0;
+  border-radius: var(--nt-radius-2);
+  box-sizing: border-box;
+  color: var(--nt-text-muted);
+  display: inline-flex;
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-meta);
+  font-weight: 680;
+  gap: var(--nt-gap-1);
+  line-height: 1.15;
+  min-height: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 2px 6px;
+}
+
+.nt-app :where(.nt-tag--selected) {
+  background: var(--nt-bg-control-active);
+  color: var(--nt-text);
+}
+
+.nt-app :where(.nt-tag--success) {
+  background: var(--nt-success-muted);
+  color: var(--nt-success);
+}
+
+.nt-app :where(.nt-tag--warning) {
+  background: var(--nt-warning-muted);
+  color: var(--nt-warning);
+}
+
+.nt-app :where(.nt-tag--danger) {
+  background: var(--nt-danger-muted);
+  color: var(--nt-danger);
+}
+
+.nt-app :where(.nt-result) {
+  background: var(--nt-bg-control);
+  border: 0;
+  border-radius: var(--nt-radius-panel);
+  box-shadow: inset 0 1px var(--nt-line-subtle);
+  color: var(--nt-text);
+  display: block;
+  min-height: 42px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: var(--nt-pad-3);
+  white-space: pre-wrap;
+}
+
+.nt-app :where(.nt-callout) {
+  background: var(--nt-bg-soft);
+  border: 0;
+  border-radius: var(--nt-radius-panel);
+  box-shadow: inset 0 1px var(--nt-line-subtle);
+  color: var(--nt-text);
+  display: grid;
+  gap: var(--nt-gap-2);
+  min-width: 0;
+  padding: var(--nt-pad-4);
+}
+
+.nt-app :where(.nt-callout--warning) {
+  background: var(--nt-warning-muted);
+}
+
+.nt-app :where(.nt-callout--danger) {
+  background: var(--nt-danger-muted);
+}
+
+.nt-app :where(.nt-state) {
+  --nt-state-line: var(--nt-line);
+  align-content: center;
+  background: var(--nt-bg-soft);
+  border: 0;
+  border-radius: var(--nt-radius-panel);
+  box-shadow: inset 1px 0 var(--nt-state-line);
+  color: var(--nt-text-muted);
+  display: grid;
+  gap: var(--nt-gap-2);
+  justify-items: start;
+  min-height: 96px;
+  min-width: 0;
+  padding: var(--nt-pad-5);
+}
+
+.nt-app :where(.nt-state--empty) {
+  background: var(--nt-bg-soft);
+}
+
+.nt-app :where(.nt-state--error) {
+  --nt-state-line: var(--nt-danger);
+  background: var(--nt-danger-muted);
+  color: var(--nt-text);
+}
+
+.nt-app :where(.nt-state--loading) {
+  --nt-state-line: var(--nt-info);
+  background: var(--nt-info-muted);
+}
+
+.nt-app :where(.nt-state--success) {
+  --nt-state-line: var(--nt-success);
+  background: var(--nt-success-muted);
+}
+
+.nt-app :where(.nt-state--partial) {
+  --nt-state-line: var(--nt-warning);
+  background: var(--nt-warning-muted);
+}
+
+.nt-app :where(.nt-progress) {
+  appearance: none;
+  background: var(--nt-bg-control);
+  border: 0;
+  border-radius: var(--nt-radius-2);
+  box-sizing: border-box;
+  height: 3px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.nt-app :where(.nt-progress::-webkit-progress-bar) {
+  background: var(--nt-bg-control);
+}
+
+.nt-app :where(.nt-progress::-webkit-progress-value) {
+  background: var(--nt-accent);
+}
+
+.nt-app :where(.nt-progress::-moz-progress-bar) {
+  background: var(--nt-accent);
+}
+
+.nt-app :where(.nt-status-dot) {
+  background: var(--nt-info);
+  border-radius: var(--nt-radius-1);
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 7px;
+  width: 7px;
+}
+
+.nt-app :where(.nt-status-dot--success) {
+  background: var(--nt-success);
+}
+
+.nt-app :where(.nt-status-dot--warning) {
+  background: var(--nt-warning);
+}
+
+.nt-app :where(.nt-status-dot--danger) {
+  background: var(--nt-danger);
+}
+
+.nt-app :where(.nt-status-dot--critical) {
+  background: var(--nt-critical);
+}

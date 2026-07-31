@@ -1,0 +1,142 @@
+// Frozen owner-local page, quote, and profile-edit packages.
+
+type Blob32 = blob;
+
+type FeedPageRequestV1 = record {
+  before_sequence : opt nat64;
+  limit : nat16;
+};
+
+type FeedEventKindV1 = variant { original; share; tombstone };
+type VerificationStateV1 = variant {
+  pending;
+  verified;
+  invalid;
+  unavailable;
+};
+
+type FeedCandidateSummaryV1 = record {
+  candidate_id : Blob32;
+  local_sequence : nat64;
+  received_at_ns : nat64;
+  immediate_sender : principal;
+  event_kind : opt FeedEventKindV1;
+  claimed_author : principal;
+  claimed_post_id : Blob32;
+  exact_event_candid : blob;
+  verification : opt VerificationStateV1;
+};
+
+type FeedPageV1 = record {
+  revision : nat64;
+  items : vec FeedCandidateSummaryV1;
+  next_before_sequence : opt nat64;
+};
+
+type DirectedActionSummaryV1 = record {
+  target_post_id : Blob32;
+  target_body_hash : Blob32;
+  action_id : Blob32;
+  object_digest : Blob32;
+  object_length : nat32;
+};
+
+type NotificationKindV1 = variant {
+  new_follower : record { follower_revision : nat64 };
+  like : DirectedActionSummaryV1;
+  reply : DirectedActionSummaryV1;
+  share : DirectedActionSummaryV1;
+};
+
+type NotificationVerificationV1 = variant {
+  transport_authenticated;
+  pending;
+  verified;
+  invalid;
+  unavailable;
+};
+
+type NotificationSummaryV1 = record {
+  local_sequence : nat64;
+  received_at_ns : nat64;
+  actor : principal;
+  kind : opt NotificationKindV1;
+  verification : opt NotificationVerificationV1;
+  read : bool;
+};
+
+type NotificationPageRequestV1 = record {
+  before_sequence : opt nat64;
+  limit : nat16;
+};
+
+type NotificationPageV1 = record {
+  revision : nat64;
+  items : vec NotificationSummaryV1;
+  next_before_sequence : opt nat64;
+};
+
+type NotificationEvidenceRequestV1 = record { local_sequence : nat64 };
+
+type NotificationEvidenceV1 = record {
+  local_sequence : nat64;
+  found : bool;
+  evidence : opt variant {
+    like : record { certified_like_receipt_candid : blob };
+  };
+};
+
+type SendKindV1 = variant { post; reply; share; tombstone };
+
+type SendQuoteRequestV1 = record {
+  send_kind : opt SendKindV1;
+  estimated_object_bytes : nat32;
+  notice_target : opt principal;
+};
+
+type SendQuoteV1 = record {
+  follower_revision : nat64;
+  registered_follower_count : nat32;
+  eligible_delivery_count : nat32;
+  ineligible_follower_count : nat32;
+  eligible_recipient_preview : vec principal;
+  receiver_floor_cycles : nat;
+  author_notice_floor_cycles : nat;
+  estimated_call_and_byte_cycles : nat;
+  estimated_local_publication_cycles : nat;
+  estimated_total_cycles : nat;
+};
+
+type ProfileAvatarMediaTypeV1 = variant { jpeg; png; webp };
+
+type ProfileEditRequestV1 = record {
+  expected_profile_generation : nat64;
+  expected_revision : nat64;
+  display_name : text;
+  description : text;
+  avatar : opt record {
+    media_type : opt ProfileAvatarMediaTypeV1;
+    width : nat16;
+    height : nat16;
+    bytes : blob;
+  };
+};
+
+type ProfileEditResultV1 = record {
+  outcome : opt variant {
+    updated : record {
+      profile_generation : nat64;
+      revision : nat64;
+      body_digest : Blob32;
+    };
+    conflict : record {
+      current_generation : nat64;
+      current_revision : nat64;
+    };
+    rejected : record {
+      reason : opt variant { invalid; full; low_cycles };
+    };
+  };
+};
+
+service : {}

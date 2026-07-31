@@ -1,0 +1,314 @@
+@use "neutron-design-system/styles.scss";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+@layer app {
+  .nt-app.gemma-app {
+    --nt-accent: #89e0aa;
+    --gemma-surface: var(--nt-bg-panel);
+    --gemma-user: var(--nt-bg-control);
+    background: var(--nt-bg);
+  }
+
+  .gemma-shell {
+    box-sizing: border-box;
+    display: grid;
+    gap: var(--nt-gap-4);
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding: var(--nt-pad-4);
+  }
+
+  .gemma-history {
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .gemma-history-scroll {
+    height: 100%;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--nt-line) transparent;
+    scrollbar-width: thin;
+  }
+
+  .gemma-history-inner {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: var(--nt-gap-5);
+    margin: 0 auto;
+    min-height: 100%;
+    padding: var(--nt-pad-3) var(--nt-pad-1) 52px;
+    width: min(100%, 800px);
+  }
+
+  .gemma-message {
+    color: var(--nt-text);
+    font-size: 0.92rem;
+    line-height: 1.58;
+    max-width: min(82%, 680px);
+    min-width: 0;
+  }
+
+  .gemma-message--user {
+    align-self: flex-end;
+    background: var(--gemma-user);
+    border: 0;
+    border-radius: var(--nt-radius-3);
+    box-shadow: inset 0 1px var(--nt-line-subtle);
+    padding: 10px 12px;
+  }
+
+  .gemma-message--assistant {
+    align-self: flex-start;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 1px minmax(0, 1fr);
+    max-width: min(94%, 760px);
+  }
+
+  .gemma-message-mark {
+    align-self: start;
+    background: var(--nt-accent);
+    border-radius: var(--nt-radius-1);
+    height: 1.35em;
+    margin-top: 0.16em;
+    opacity: 0.72;
+    width: 1px;
+  }
+
+  .gemma-message-body {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .gemma-typing {
+    align-items: center;
+    display: inline-flex;
+    gap: 4px;
+    height: 1.45em;
+  }
+
+  .gemma-typing i {
+    animation: gemma-typing 1.15s ease-in-out infinite;
+    background: var(--nt-text-faint);
+    border-radius: var(--nt-radius-1);
+    display: block;
+    height: 4px;
+    width: 4px;
+  }
+
+  .gemma-typing i:nth-child(2) {
+    animation-delay: 120ms;
+  }
+
+  .gemma-typing i:nth-child(3) {
+    animation-delay: 240ms;
+  }
+
+  .gemma-loading {
+    align-items: center;
+    display: flex;
+    gap: 9px;
+    margin: auto;
+    min-height: 32px;
+  }
+
+  .gemma-spinner {
+    animation: gemma-spin 750ms linear infinite;
+    border: 1px solid var(--nt-line-strong);
+    border-radius: var(--nt-radius-2);
+    border-top-color: var(--nt-accent);
+    box-sizing: border-box;
+    height: 14px;
+    width: 14px;
+  }
+
+  .gemma-progress {
+    background: var(--nt-line-subtle);
+    border-radius: var(--nt-radius-1);
+    display: block;
+    height: 2px;
+    overflow: hidden;
+    width: 68px;
+  }
+
+  .gemma-progress > span {
+    background: var(--nt-accent);
+    display: block;
+    height: 100%;
+    min-width: 2px;
+    transition: width 180ms ease-out;
+  }
+
+  .gemma-retry,
+  .gemma-unavailable {
+    align-self: center;
+    margin: auto;
+  }
+
+  .gemma-retry {
+    color: var(--nt-text-muted);
+  }
+
+  .gemma-unavailable {
+    align-items: center;
+    color: var(--nt-danger);
+    display: inline-flex;
+    height: var(--nt-control-md);
+    justify-content: center;
+    width: var(--nt-control-md);
+  }
+
+  .gemma-unavailable > svg {
+    height: var(--nt-icon-md);
+    width: var(--nt-icon-md);
+  }
+
+  .gemma-jump-latest {
+    background: var(--nt-bg-elevated);
+    border: 0;
+    border-radius: var(--nt-radius-3);
+    bottom: var(--nt-gap-2);
+    box-shadow: 0 3px 12px rgb(0 0 0 / 28%);
+    left: 50%;
+    position: absolute;
+    transform: translateX(-50%);
+    z-index: 2;
+  }
+
+  .gemma-jump-latest:not(:disabled):active {
+    transform: translateX(-50%) translateY(1px);
+  }
+
+  .gemma-compose {
+    align-items: end;
+    background: var(--gemma-surface);
+    border: 0;
+    border-radius: var(--nt-radius-3);
+    box-sizing: border-box;
+    box-shadow: inset 0 1px var(--nt-line);
+    display: flex;
+    gap: 8px;
+    margin: 0 auto;
+    padding: var(--nt-pad-2);
+    transition: box-shadow var(--nt-duration-fast) var(--nt-ease-standard);
+    width: min(100%, 800px);
+  }
+
+  .gemma-compose:focus-within {
+    box-shadow: inset 0 1px var(--nt-accent);
+  }
+
+  .gemma-input {
+    background: transparent;
+    border: 0;
+    box-sizing: border-box;
+    color: var(--nt-text);
+    display: block;
+    flex: 1 1 auto;
+    font: inherit;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    margin: 0;
+    max-height: 160px;
+    min-height: 34px;
+    min-width: 0;
+    outline: 0;
+    padding: 6px 7px;
+    resize: none;
+    scrollbar-color: var(--nt-line) transparent;
+    scrollbar-width: thin;
+  }
+
+  .gemma-input::placeholder {
+    color: var(--nt-text-faint);
+  }
+
+  .gemma-input:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .gemma-send {
+    background: var(--nt-accent);
+    border-radius: var(--nt-radius-3);
+    color: #09110d;
+    height: 34px;
+    min-width: 34px;
+  }
+
+  .gemma-send:not(:disabled):hover {
+    background: #9aebba;
+    color: #09110d;
+  }
+
+  .gemma-send:disabled {
+    background: var(--nt-bg-control-active);
+    color: var(--nt-text-faint);
+    opacity: 1;
+  }
+
+  .gemma-send--stop {
+    background: var(--nt-text-strong);
+    color: #18201d;
+  }
+
+  @keyframes gemma-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes gemma-typing {
+    0%,
+    70%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+
+    35% {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+  }
+
+  @media (max-width: 520px) {
+    .gemma-shell {
+      gap: var(--nt-gap-3);
+      padding: var(--nt-pad-3);
+    }
+
+    .gemma-history-inner {
+      gap: 15px;
+      padding-inline: 2px;
+    }
+
+    .gemma-message {
+      max-width: 88%;
+    }
+
+    .gemma-message--assistant {
+      max-width: 98%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gemma-spinner,
+    .gemma-typing i {
+      animation-duration: 2s;
+    }
+
+    .gemma-jump-latest {
+      scroll-behavior: auto;
+    }
+  }
+}

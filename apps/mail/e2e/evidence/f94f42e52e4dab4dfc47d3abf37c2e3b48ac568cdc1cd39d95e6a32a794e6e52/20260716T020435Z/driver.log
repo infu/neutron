@@ -1,0 +1,6 @@
+
+> neutron-mail@1.0.0 test:e2e:driver
+> bun e2e/local_driver.ts
+
+Mail release driver listening on http://127.0.0.1:18791
+Primary igqk7-g3777-77774-qaaba-cai; secondary ibrml-ld777-77774-qaabq-cai; shared clean baseline

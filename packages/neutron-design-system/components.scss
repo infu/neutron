@@ -1,0 +1,5 @@
+@use "sass:meta";
+
+@layer nt.components {
+  @include meta.load-css("src/components");
+}

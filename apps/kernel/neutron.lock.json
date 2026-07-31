@@ -1,0 +1,24 @@
+{
+  "format": 2,
+  "app": "kernel",
+  "memory": {
+    "kernel": {
+      "schemas": {
+        "3": {
+          "hash": "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
+          "entry": "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b"
+        }
+      },
+      "migrations": {}
+    },
+    "kernel_activation": {
+      "schemas": {
+        "1": {
+          "hash": "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
+          "entry": "f2380721e6147d0f0af208a70183e3d8ce6ac19ad533e1367b3f5780305e7ad3"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

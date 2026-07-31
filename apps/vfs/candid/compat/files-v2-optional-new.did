@@ -1,0 +1,71 @@
+// Synthetic later encoder used to prove Files' opt-variant fallback rules.
+// Each `future_*` tag must decode to null under the initial fixture.
+
+type CompatibilityProbeV2 = record {
+  write_intent : opt variant {
+    create;
+    replace;
+    future_write;
+  };
+  mutation_action : opt variant {
+    create_folder;
+    rename;
+    move;
+    future_mutation;
+  };
+  requested_node_kind : opt variant {
+    folder;
+    file;
+    future_node;
+  };
+  outcome : opt variant {
+    ok;
+    rejected;
+    future_outcome;
+  };
+  reason : opt variant {
+    invalid;
+    conflict;
+    future_reason;
+  };
+  returned_node_kind : opt variant {
+    folder;
+    file;
+    future_returned_node;
+  };
+  operation_state : opt variant {
+    active;
+    committed;
+    aborted;
+    expired;
+    superseded;
+    unknown;
+    future_operation_state;
+  };
+  committed_detail : opt variant {
+    vault;
+    private_write;
+    mutation;
+    remove;
+    abort;
+    future_committed_detail;
+  };
+  cleanup_state : opt variant {
+    clean;
+    pending;
+    future_cleanup_state;
+  };
+  attachment_frame_kind : opt variant {
+    first;
+    continuation;
+    future_frame_kind;
+  };
+  advisory : opt text;
+};
+
+type PlainVariantProbeV2 = variant {
+  known;
+  future_plain;
+};
+
+service : {};

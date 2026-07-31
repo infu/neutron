@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "hullshiftbrain-manifest-v1",
+  "status": "local-managed-layout-pilot",
+  "generatorVersion": "g4",
+  "brainVersion": "hullshiftbrain-v1",
+  "masterSeeds": {
+    "difficulty0To2": "0123456789abcdef0123456789abcdef",
+    "difficulty3To8": "0123456789abcdef"
+  },
+  "candidatesPerBand": 1,
+  "candidateCatalogSha256": "65e5e069a4a95c617e75b7a3130f8c77668eeb65196f34b237ce3c648458ef7a",
+  "certifiedCatalogSha256": "999fadd0f9183dce1c4bd8f551ac4762e7aca12b035a3fdc1da17fdb8cb0c67c",
+  "entryCount": 9,
+  "bands": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+  "toolVersions": {
+    "python": "3.12.12",
+    "bun": "1.2.13",
+    "node": "24.11.1",
+    "npm": "11.6.2",
+    "jq": "1.7.1",
+    "solver": "hullshift-exact-g4-v1",
+    "qualityPolicy": "hullshiftbrain-quality-v1"
+  },
+  "source": {
+    "repositoryCommit": "3817b5526a655b991491eb6c3a2065a98fc3c68c",
+    "worktreeDirty": true
+  },
+  "reproduction": [
+    "PYTHONPATH=tools/hullshiftbrain/src python -m hullshiftbrain generate --bands 0:2 --workers 32 --master-seed 0123456789abcdef0123456789abcdef --candidates-per-band 1 --run-dir /tmp/hullshiftbrain-managed-low",
+    "PYTHONPATH=tools/hullshiftbrain/src python -m hullshiftbrain export --run-dir /tmp/hullshiftbrain-managed-low --per-band 1 --out /tmp/hullshiftbrain-managed-low/catalog.json",
+    "PYTHONPATH=tools/hullshiftbrain/src python -m hullshiftbrain generate --bands 3:8 --workers 32 --master-seed 0123456789abcdef --candidates-per-band 1 --run-dir /tmp/hullshiftbrain-managed-high",
+    "PYTHONPATH=tools/hullshiftbrain/src python -m hullshiftbrain export --run-dir /tmp/hullshiftbrain-managed-high --per-band 1 --out /tmp/hullshiftbrain-managed-high/catalog.json",
+    "mkdir -p /tmp/hullshiftbrain-managed-pilot",
+    "jq -s -cS '.[0] as $low | .[1] as $high | {schemaVersion:$low.schemaVersion,generatorVersion:$low.generatorVersion,brainVersion:$low.brainVersion,entries:([$low.entries[] | select(.difficulty <= 2)] + [$high.entries[] | select(.difficulty >= 3)] | sort_by(.difficulty,.id))}' /tmp/hullshiftbrain-managed-low/catalog.json /tmp/hullshiftbrain-managed-high/catalog.json > /tmp/hullshiftbrain-managed-pilot/catalog.json",
+    "sha256sum /tmp/hullshiftbrain-managed-pilot/catalog.json",
+    "bun scripts/certify_brain_catalog.ts /tmp/hullshiftbrain-managed-pilot/catalog.json /tmp/hullshiftbrain-managed-pilot/certified.json",
+    "diff -u <(jq -S . src/generated/hullshiftbrain.g4.catalog.json) <(jq -S . /tmp/hullshiftbrain-managed-pilot/certified.json)",
+    "sha256sum src/generated/hullshiftbrain.g4.catalog.json"
+  ],
+  "entries": [
+    {
+      "difficulty": 0,
+      "id": "brain-d0-b98d17ae45285b61",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1",
+      "levelHash": "b98d17ae45285b6182fba7b96cae0eb8beab8b11936da89b0e5d22aedd3e84b4"
+    },
+    {
+      "difficulty": 1,
+      "id": "brain-d1-15bc7e6d7323bbed",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1",
+      "levelHash": "15bc7e6d7323bbed20d9db7df88fe65a43574a55edda3aad167e10a46727fe27"
+    },
+    {
+      "difficulty": 2,
+      "id": "brain-d2-cc40791fd8b4f5c7",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1",
+      "levelHash": "cc40791fd8b4f5c74241cc523fff26271d6b43a3ca857097347506cbb6efbce9"
+    },
+    {
+      "difficulty": 3,
+      "id": "brain-d3-2d23cefe0306b632",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1.us-freight-exchange",
+      "levelHash": "2d23cefe0306b6328b8c521e6ff5517b00e728141e94e4009c32d44dd4ddac2b"
+    },
+    {
+      "difficulty": 4,
+      "id": "brain-d4-b5b82c0a8e381654",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1.italian-piazza",
+      "levelHash": "b5b82c0a8e38165402e4b020d6ab67d11c834da46579890759b59a27adba0423"
+    },
+    {
+      "difficulty": 5,
+      "id": "brain-d5-c2a294aa100d173d",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1.french-enfilade",
+      "levelHash": "c2a294aa100d173dc2af8b6a940d226105129b0564909dfbcf61ac09f95c67a6"
+    },
+    {
+      "difficulty": 6,
+      "id": "brain-d6-1ce37563dcb5f692",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1.japanese-interchange",
+      "levelHash": "1ce37563dcb5f6926f2f14aca3b4754e743716b418ac5c5986bfda4fa3c88a7c"
+    },
+    {
+      "difficulty": 7,
+      "id": "brain-d7-61d4fca0b3e3f19a",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1.brazilian-braided-plaza",
+      "levelHash": "61d4fca0b3e3f19aba5f30db7954b172a0953d4569db943ddc5a02dea988a2a1"
+    },
+    {
+      "difficulty": 8,
+      "id": "brain-d8-81593d3dde625a76",
+      "candidateId": "0",
+      "algorithmVersion": "backward-beam-v1.greek-siatista",
+      "levelHash": "81593d3dde625a766c5ab1e3555a88386fae3d04ce0def7200f2f11f5fb3eb55"
+    }
+  ]
+}

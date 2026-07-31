@@ -1,0 +1,19 @@
+{
+  "format": 3,
+  "name": "Jetfreeper",
+  "id": "jetcreeper",
+  "version": 301,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "A GPU-powered arcade jet fighter through an endless hostile sector.",
+  "src": "main.mo",
+  "tiles": [
+    {
+      "id": "flight",
+      "title": "Jetfreeper",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Pilot a fighter through asteroids, turrets, and hostile jets."
+    }
+  ],
+  "func": {}
+}

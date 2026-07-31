@@ -1,0 +1,399 @@
+{
+  "format": 3,
+  "id": "kernel",
+  "name": "Neutron",
+  "version": 305,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "src": "main.mo",
+  "init_arg": [
+    "memory_kernel",
+    "memory_kernel_activation",
+    "deployment_id",
+    "active_app_instance_inventory",
+    "canister_principal"
+  ],
+  "func": {
+    "kernel_authorized_add": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_authorized_rem": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "is_authorized": {
+      "type": "internal",
+      "async": false
+    },
+    "kernel_check_authorized": {
+      "type": "query",
+      "async": false,
+      "arg": [
+        "caller"
+      ],
+      "allow": "unauthorized"
+    },
+    "kernel_authorized_recover": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller",
+        "this"
+      ],
+      "allow": "unauthorized"
+    },
+    "kernel_activation": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller",
+        "this"
+      ],
+      "allow": "unauthorized"
+    },
+    "kernel_static": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_static_query": {
+      "type": "query",
+      "async": false
+    },
+    "http_request": {
+      "type": "query",
+      "async": false,
+      "arg": [
+        "this"
+      ],
+      "allow": "unauthorized"
+    },
+    "http_request_streaming_callback": {
+      "type": "query",
+      "async": false,
+      "allow": "unauthorized"
+    },
+    "http_request_update": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller"
+      ],
+      "allow": "unauthorized"
+    },
+    "kernel_https_outcall_transform": {
+      "type": "query",
+      "async": false,
+      "arg": [
+        "caller"
+      ],
+      "allow": "unauthorized"
+    },
+    "kernel_install_begin_checked": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_install_status": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_settings_snapshot": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_certified_assets_scope_info": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_certified_assets_usage": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_certified_assets_diagnostics": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_certified_assets_audit_content_ownership_page": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_certified_assets_audit_catalog_page": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_certified_assets_set_admission_ceilings": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_certified_assets_set_writes_frozen": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_certified_assets_maintenance_page": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_certified_assets_retire_scope": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_publication_entropy_initialize": {
+      "type": "update",
+      "async": "async*"
+    },
+    "kernel_app_usage_snapshot": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_memory_snapshot": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_backend_reservations_snapshot": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_scheduled_tasks_snapshot": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_capabilities_page": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_capability_set_enabled": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_backend_reservations_apply": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller",
+        "this"
+      ]
+    },
+    "kernel_install_reservations_prepare": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_install_pending_reservation_blockers": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_install_pending_reservation_release": {
+      "type": "update",
+      "async": false
+    },
+    "kernel_access_snapshot": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_controller_add": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_controller_rem": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_install_commit": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_install_abort": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_install_wasm_chunks_clear": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_install_wasm_chunk": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_install_code_chunked": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_install_code": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_connections_begin": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller",
+        "this"
+      ]
+    },
+    "kernel_connections_complete": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_connections_list": {
+      "type": "query",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_connections_acquire": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_connections_disconnect": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_vetkeys_list": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_vetkeys_binding": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_vetkeys_reserve": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller",
+        "this"
+      ]
+    },
+    "kernel_vetkeys_enable": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_vetkeys_disable": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_vetkeys_rotate": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_vetkeys_retire_generation": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_vetkeys_transfer": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_vetkeys_retire_slot": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_vetkeys_public_key": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "this"
+      ]
+    },
+    "kernel_vetkeys_derive": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller",
+        "this"
+      ]
+    },
+    "kernel_vetkeys_audit_snapshot": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_vetkeys_admin_snapshot": {
+      "type": "query",
+      "async": false
+    }
+  },
+  "memory": {
+    "kernel": {
+      "version": 3,
+      "schemas": {
+        "3": {
+          "src": "memory/kernel/v3.mo"
+        }
+      }
+    },
+    "kernel_activation": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/activation/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

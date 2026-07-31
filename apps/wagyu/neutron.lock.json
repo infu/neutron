@@ -1,0 +1,25 @@
+{
+  "format": 2,
+  "app": "wagyu",
+  "memory": {
+    "wagyu": {
+      "schemas": {
+        "1": {
+          "hash": "908a1c939bafd2b050e4e739cc9ecdd0f2c4c7d48b4199906534bcf98895f5aa",
+          "entry": "4904c4509faaa08b08ed094be048ca7be0d63b63d08847092b6569b7f6e42325"
+        },
+        "2": {
+          "hash": "1c23929b6aba7a9ffa2d40f7d89c3f698b50ecd7816ef0a0599326c37bf30869",
+          "entry": "2ff0682240b3cd26e42ab6c22cdbc304f67947767e84d847a0db71b2e1bb22f1"
+        },
+        "3": {
+          "hash": "6c01309a1f9cc481e050d97a3c4af4287eeb32bf0bdf91e3fba3ce8e58e97545",
+          "entry": "ac18df72c05461e4b0a1b2fe6e882e27fa417fbfa1772dee02ff0eb0b1603286"
+        }
+      },
+      "migrations": {
+        "1->2": "e5e781c589670187e66bc43b0d89f1e3b57dcb7c7a1356fa6d10786611ac5dac"
+      }
+    }
+  }
+}

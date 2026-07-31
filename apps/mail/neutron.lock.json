@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "mail",
+  "memory": {
+    "mail": {
+      "schemas": {
+        "1": {
+          "hash": "8f1f5f5c68f0564fa100ecb2878eddfd74db755ceb9b68f9606cdd141781d7b2",
+          "entry": "638ac1b5e92e6feb545d7f7fd63d88af85707b8adbbfa75db06e438dca3b7df1"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

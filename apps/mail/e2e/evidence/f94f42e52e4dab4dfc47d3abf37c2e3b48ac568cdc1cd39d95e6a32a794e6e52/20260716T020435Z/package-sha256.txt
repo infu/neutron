@@ -1,0 +1,3 @@
+f94f42e52e4dab4dfc47d3abf37c2e3b48ac568cdc1cd39d95e6a32a794e6e52  mail.v1.neutron
+b2a7113bb01a4752df1088945c4b6781f769f8d4e44407ca5759efca29b9014b  kernel.disposable.v1.neutron
+a10ff6ce2c3304194c3ee5b19608d967b95414cb092e3059fcf8713b0b6b0764  contacts.v2.neutron

@@ -1,0 +1,107 @@
+.nt-app :where(.nt-table) {
+  border-collapse: collapse;
+  color: var(--nt-text);
+  font-size: 13px;
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+.nt-app :where(.nt-table th, .nt-table td) {
+  box-shadow: inset 0 -1px var(--nt-line-subtle);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.nt-app :where(.nt-table th) {
+  color: var(--nt-text-muted);
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-meta);
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.nt-app :where(.nt-table tr:hover td) {
+  background: var(--nt-bg-control);
+}
+
+.nt-app :where(.nt-kv) {
+  display: grid;
+  gap: var(--nt-gap-2);
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0;
+  min-width: 0;
+}
+
+.nt-app :where(.nt-kv dt) {
+  color: var(--nt-text-faint);
+  font-size: var(--nt-font-size-meta);
+  min-width: 0;
+}
+
+.nt-app :where(.nt-kv dd) {
+  color: var(--nt-text);
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nt-app :where(.nt-copy-field) {
+  align-items: stretch;
+  display: grid;
+  gap: var(--nt-gap-2);
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.nt-app :where(.nt-copy-field > .nt-input) {
+  font-family: var(--nt-font-mono);
+}
+
+.nt-app :where(.nt-list) {
+  display: grid;
+  gap: var(--nt-gap-2);
+  list-style-position: outside;
+  margin: 0;
+  min-width: 0;
+  padding-left: 20px;
+}
+
+.nt-app :where(.nt-list > li) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nt-app :where(.nt-json) {
+  background: var(--nt-bg-control);
+  border: 0;
+  border-radius: var(--nt-radius-3);
+  box-shadow: inset 0 1px var(--nt-line-subtle);
+  color: var(--nt-text);
+  display: block;
+  font-family: var(--nt-font-mono);
+  font-size: var(--nt-font-size-mono);
+  line-height: var(--nt-line-height-code);
+  margin: 0;
+  min-block-size: 0;
+  min-inline-size: 0;
+  min-width: 0;
+  overscroll-behavior: contain;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: var(--nt-pad-3);
+  scrollbar-gutter: stable;
+  white-space: pre-wrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+@container (max-width: 360px) {
+  .nt-app :where(.nt-kv) {
+    grid-template-columns: 1fr;
+  }
+
+  .nt-app :where(.nt-copy-field) {
+    grid-template-columns: 1fr;
+  }
+}

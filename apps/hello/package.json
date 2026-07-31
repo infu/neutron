@@ -1,0 +1,38 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-hello",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts",
+    "watch": "bun build.ts watch",
+    "test": "npm run package && bun test"
+  },
+  "author": "",
+  "license": "GPL-3.0-only",
+  "description": "",
+  "dependencies": {
+    "neutron-design-system": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@dfinity/candid": "^3.4.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react": "^7.37.5",
+    "icblast": "file:../../../icblast",
+    "neutron-scripts": "^1.1.0"
+  }
+}

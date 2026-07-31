@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.browser.json",
+  "compilerOptions": {
+    "composite": true
+  },
+  "include": [
+    "../../packages/neutron-tools/src/app_ids.ts",
+    "../../packages/neutron-tools/src/runtime.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "types/**/*.d.ts"
+  ]
+}

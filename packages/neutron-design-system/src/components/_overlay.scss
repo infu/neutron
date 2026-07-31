@@ -1,0 +1,29 @@
+.nt-app :where(.nt-dialog) {
+  inline-size: min(100%, 560px);
+  max-inline-size: 100%;
+}
+
+.nt-app :where(.nt-dialog-body) {
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.nt-app :where(.nt-dialog-actions) {
+  align-items: center;
+  box-shadow: inset 0 1px var(--nt-line-subtle);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nt-gap-2);
+  justify-content: end;
+  min-width: 0;
+  padding-top: var(--nt-pad-3);
+}
+
+@container (max-width: 360px) {
+  .nt-app :where(.nt-dialog-actions) {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

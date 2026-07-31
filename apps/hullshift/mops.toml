@@ -1,0 +1,2 @@
+[dependencies]
+core = "https://github.com/dfinity/motoko-core#v2.6.0"

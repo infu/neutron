@@ -1,0 +1,334 @@
+// Canonical inner Candid controls carried by FilesFrameV2.
+//
+// FilesFrameV2 bytes are:
+//   u32be(control_candid_length) || exact_control_candid || raw_payload
+//
+// Every PayloadSliceV2 offset is relative to the first byte of raw_payload,
+// never to the four-byte prefix or the inner Candid control. For each control,
+// all payload slices recursively reachable from that control must be strictly
+// ordered by offset and form one exact, non-overlapping, gap-free partition of
+// [0, raw_payload_bytes). Empty slices are forbidden. A zero-byte payload has
+// no slices. These invariants are part of the type fixture even though Candid
+// decoding alone cannot enforce them.
+//
+// All potentially growing discriminants start behind `opt`. Null or an
+// unknown mutating discriminant rejects the complete frame as incompatible.
+// Null or an unknown output discriminant discards the complete body.
+
+type Id128V2 = record {
+  hi : nat64;
+  lo : nat64;
+};
+
+type Digest256V2 = record {
+  a : nat64;
+  b : nat64;
+  c : nat64;
+  d : nat64;
+};
+
+type PayloadSliceV2 = record {
+  offset : nat32;
+  length : nat32;
+};
+
+type FrameNodeKindV2 = variant {
+  folder;
+  file;
+};
+
+type FrameContentCryptoProfileV2 = variant {
+  aes_256_gcm_files_v2;
+};
+
+type FrameListCursorV2 = record {
+  parent_id : Id128V2;
+  children_revision : nat64;
+  last_name_tag : Digest256V2;
+};
+
+type FrameNodeSummaryV2 = record {
+  node_id : Id128V2;
+  parent_id : Id128V2;
+  kind : opt FrameNodeKindV2;
+  name_tag : Digest256V2;
+  declared_name_scalars : nat16;
+  structural_revision : nat64;
+  metadata_revision : nat64;
+  children_revision : nat64;
+  subtree_height : nat8;
+  max_relative_path_scalars : nat16;
+  subtree_plaintext_bytes : nat64;
+};
+
+type FrameContentSummaryV2 = record {
+  content_id : Id128V2;
+  block_count : nat32;
+  ciphertext_bytes : nat64;
+  crypto_profile : opt FrameContentCryptoProfileV2;
+};
+
+// Bootstrap output. The IBE wrapper and encrypted root metadata are adjacent
+// raw slices; the remaining vault/root bindings are ordinary bounded Candid.
+type VaultReadFrameControlV2 = record {
+  format : nat16;
+  vault_id : Id128V2;
+  vault_salt : Digest256V2;
+  slot_generation : nat64;
+  public_key_fingerprint : Digest256V2;
+  root_commitment : Digest256V2;
+  record_revision : nat64;
+  root_structural_revision : nat64;
+  root_metadata_revision : nat64;
+  root_children_revision : nat64;
+  ibe_wrapped_root_key : PayloadSliceV2;
+  encrypted_root_metadata : PayloadSliceV2;
+  raw_payload_bytes : nat32;
+};
+
+type VaultInitializeFrameV2 = record {
+  format : nat16;
+  vault_id : Id128V2;
+  vault_salt : Digest256V2;
+  slot_generation : nat64;
+  public_key_fingerprint : Digest256V2;
+  root_commitment : Digest256V2;
+  root_structural_revision : nat64;
+  root_metadata_revision : nat64;
+  root_children_revision : nat64;
+  ibe_wrapped_root_key : PayloadSliceV2;
+  encrypted_root_metadata : PayloadSliceV2;
+};
+
+type VaultRewrapFrameV2 = record {
+  format : nat16;
+  vault_id : Id128V2;
+  vault_salt : Digest256V2;
+  slot_generation : nat64;
+  public_key_fingerprint : Digest256V2;
+  root_commitment : Digest256V2;
+  ibe_wrapped_root_key : PayloadSliceV2;
+};
+
+type VaultWriteFrameControlV2 = record {
+  request_id : Id128V2;
+  expected_record_revision : opt nat64;
+  proposed_record_revision : nat64;
+  operation : opt variant {
+    initialize : VaultInitializeFrameV2;
+    rewrap : VaultRewrapFrameV2;
+  };
+  raw_payload_bytes : nat32;
+};
+
+// Direct-child list output. Item order is backend blind-tag order. Encrypted
+// metadata is the only raw data carried for each row.
+type ListFrameItemV2 = record {
+  node : FrameNodeSummaryV2;
+  content : opt FrameContentSummaryV2;
+  encrypted_metadata : PayloadSliceV2;
+};
+
+type ListFrameControlV2 = record {
+  parent_id : Id128V2;
+  structural_revision : nat64;
+  children_revision : nat64;
+  items : vec ListFrameItemV2;
+  next_cursor : opt FrameListCursorV2;
+  raw_payload_bytes : nat32;
+};
+
+// Exact lookup output. The wrapped content key is present only for a file with
+// active content; it stays in the raw payload beside encrypted metadata.
+type LookupContentFrameV2 = record {
+  summary : FrameContentSummaryV2;
+  wrapped_content_key : PayloadSliceV2;
+};
+
+type LookupFrameControlV2 = record {
+  node : FrameNodeSummaryV2;
+  content : opt LookupContentFrameV2;
+  encrypted_metadata : PayloadSliceV2;
+  raw_payload_bytes : nat32;
+};
+
+// Read output. Index zero is `first` and fuses metadata, wrapped key, and the
+// first ciphertext block. Every other index is `continuation` and contains
+// only that immutable ciphertext block. The outer response frame_kind and all
+// repeated scalar bindings must agree with this inner discriminant.
+type ReadFirstFrameV2 = record {
+  node : FrameNodeSummaryV2;
+  content : FrameContentSummaryV2;
+  encrypted_metadata : PayloadSliceV2;
+  wrapped_content_key : PayloadSliceV2;
+  index : nat32;
+  ciphertext_block : PayloadSliceV2;
+  raw_payload_bytes : nat32;
+};
+
+type ReadContinuationFrameV2 = record {
+  node_id : Id128V2;
+  structural_revision : nat64;
+  metadata_revision : nat64;
+  content_id : Id128V2;
+  index : nat32;
+  block_count : nat32;
+  ciphertext_block_bytes : nat32;
+  ciphertext_total_bytes : nat64;
+  ciphertext_block : PayloadSliceV2;
+  raw_payload_bytes : nat32;
+};
+
+type ReadBlockFrameControlV2 = record {
+  frame : opt variant {
+    first : ReadFirstFrameV2;
+    continuation : ReadContinuationFrameV2;
+  };
+};
+
+// Shared structural plans for one-update mutations and first-frame private
+// writes. Expected revisions are null only for a newly allocated node.
+type NodeTransitionFrameV2 = record {
+  node_id : Id128V2;
+  expected_parent_id : opt Id128V2;
+  proposed_parent_id : Id128V2;
+  requested_kind : opt FrameNodeKindV2;
+  expected_name_tag : opt Digest256V2;
+  proposed_name_tag : Digest256V2;
+  declared_name_scalars : nat16;
+  expected_structural_revision : opt nat64;
+  proposed_structural_revision : nat64;
+  expected_metadata_revision : opt nat64;
+  proposed_metadata_revision : nat64;
+  expected_children_revision : opt nat64;
+  proposed_children_revision : nat64;
+  expected_subtree_height : opt nat8;
+  proposed_subtree_height : nat8;
+  expected_max_relative_path_scalars : opt nat16;
+  proposed_max_relative_path_scalars : nat16;
+  expected_subtree_plaintext_bytes : opt nat64;
+  proposed_subtree_plaintext_bytes : nat64;
+  encrypted_metadata : PayloadSliceV2;
+};
+
+type FolderAggregateTransitionV2 = record {
+  node_id : Id128V2;
+  expected_structural_revision : nat64;
+  expected_children_revision : nat64;
+};
+
+type ChildIndexTransitionV2 = record {
+  parent_id : Id128V2;
+  name_tag : Digest256V2;
+  expected_node_id : opt Id128V2;
+  proposed_node_id : opt Id128V2;
+};
+
+type MutateFrameControlV2 = record {
+  request_id : Id128V2;
+  action : opt variant {
+    create_folder;
+    rename;
+    move;
+  };
+  node : NodeTransitionFrameV2;
+  folder_transitions : vec FolderAggregateTransitionV2;
+  child_index_transitions : vec ChildIndexTransitionV2;
+  raw_payload_bytes : nat32;
+};
+
+// Private write controls. The first frame freezes the complete allocation:
+// one to nine frames for a single-file write and one to seven for an atomic
+// batch. Each WriteFramePlanV2 slice is relative to that plan's own raw
+// payload, so future frames need no body-sized plan copy.
+//
+// frames[0].raw_payload_bytes equals WriteFirstFrameV2.raw_payload_bytes. The
+// ordered union of every node encrypted_metadata slice, every content
+// wrapped_content_key slice, and every frames[0] block slice partitions that
+// complete first payload. For each future frame, its block slices alone
+// partition its raw_payload_bytes. A continuation must equal the pinned plan
+// for its ordinal structurally and byte-for-byte.
+type WriteIntentV2 = variant {
+  create;
+  replace;
+  batch;
+};
+
+type WriteContentPlanV2 = record {
+  content_id : Id128V2;
+  wrapped_content_key : PayloadSliceV2;
+  plaintext_block_lengths : vec nat32;
+  ciphertext_block_lengths : vec nat32;
+  ciphertext_bytes : nat64;
+  crypto_profile : opt FrameContentCryptoProfileV2;
+};
+
+type WriteNodePlanV2 = record {
+  node : NodeTransitionFrameV2;
+  content : opt WriteContentPlanV2;
+};
+
+type WriteBlockSliceV2 = record {
+  content_id : Id128V2;
+  block_index : nat32;
+  ciphertext_bytes : nat32;
+  payload : PayloadSliceV2;
+};
+
+type WriteFramePlanV2 = record {
+  frame_ordinal : nat8;
+  raw_payload_bytes : nat32;
+  blocks : vec WriteBlockSliceV2;
+};
+
+type RetiredContentV2 = record {
+  node_id : Id128V2;
+  content_id : Id128V2;
+  block_count : nat32;
+  ciphertext_bytes : nat64;
+};
+
+type WriteQuotaTransitionV2 = record {
+  expected_node_count : nat64;
+  proposed_node_count : nat64;
+  expected_committed_plaintext_bytes : nat64;
+  proposed_committed_plaintext_bytes : nat64;
+  expected_committed_ciphertext_bytes : nat64;
+  proposed_committed_ciphertext_bytes : nat64;
+  gross_peak_physical_bytes : nat64;
+};
+
+type WriteFirstFrameV2 = record {
+  request_id : Id128V2;
+  intent : opt WriteIntentV2;
+  frame_ordinal : nat8;
+  frame_count : nat8;
+  final : bool;
+  nodes : vec WriteNodePlanV2;
+  folder_transitions : vec FolderAggregateTransitionV2;
+  child_index_transitions : vec ChildIndexTransitionV2;
+  retired_contents : vec RetiredContentV2;
+  quota : WriteQuotaTransitionV2;
+  frames : vec WriteFramePlanV2;
+  raw_payload_bytes : nat32;
+};
+
+type WriteContinuationFrameV2 = record {
+  request_id : Id128V2;
+  stage_id : nat64;
+  frame_ordinal : nat8;
+  final : bool;
+  blocks : vec WriteBlockSliceV2;
+  raw_payload_bytes : nat32;
+};
+
+type WriteBlockFrameControlV2 = record {
+  frame : opt variant {
+    first : WriteFirstFrameV2;
+    continuation : WriteContinuationFrameV2;
+  };
+};
+
+// This empty fixture service lets didc load the named inner package with
+// `--defs`/`--types`. These are controls inside opaque blobs, not actor methods.
+service : {};

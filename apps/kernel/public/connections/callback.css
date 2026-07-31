@@ -1,0 +1,53 @@
+:root {
+  color-scheme: dark;
+  font: 14px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #d9dee7;
+  background: #111318;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+}
+
+main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+}
+
+p {
+  margin: 0;
+}
+
+.status {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #566172;
+  border-top-color: #d9dee7;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.done .status,
+.failed .status {
+  border: 0;
+  animation: none;
+}
+
+.done .status::before {
+  content: "✓";
+  color: #78d6a3;
+}
+
+.failed .status::before {
+  content: "×";
+  color: #ef7c86;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

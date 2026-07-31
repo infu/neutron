@@ -1,0 +1,457 @@
+// Canonical Wagyu V1 interoperability/core service surface.
+// The compiler-generated full app service also includes local owner workflow
+// methods that are not frozen by spec.md. Nested blobs have separate checked
+// contracts under candid/nested/.
+
+type Blob16 = blob;
+type Blob32 = blob;
+
+type ActionKindV1 = variant {
+  post;
+  share;
+  tombstone;
+  like;
+};
+
+type ActionHeaderV1 = record {
+  network_id : Blob32;
+  actor : principal;
+  action_kind : opt ActionKindV1;
+};
+
+type ReplyLocatorV1 = record {
+  author : principal;
+  post_id : Blob32;
+  body_hash : Blob32;
+  body_length : nat32;
+  object_digest : Blob32;
+};
+
+type PostBodyV1 = record {
+  header : ActionHeaderV1;
+  author_sequence : nat64;
+  nonce : Blob16;
+  created_at_ns : nat64;
+  body_markdown : text;
+  reply_to : opt ReplyLocatorV1;
+};
+
+type CertifiedHttpProofV1 = record {
+  certificate_version : nat8;
+  certificate_cbor : blob;
+  witness_cbor : blob;
+  expression_path_cbor : blob;
+  certificate_time_ns : nat64;
+};
+
+type CertifiedActionRefV1 = record {
+  actor : principal;
+  action_kind : opt ActionKindV1;
+  object_digest : Blob32;
+  body_length : nat32;
+  proof_snapshot : CertifiedHttpProofV1;
+};
+
+type CertifiedPostRefV1 = record {
+  author : principal;
+  post_id : Blob32;
+  body_hash : Blob32;
+  body_length : nat32;
+  object_digest : Blob32;
+  proof : CertifiedHttpProofV1;
+};
+
+type ShareActionV1 = record {
+  header : ActionHeaderV1;
+  share_id : Blob32;
+  share_sequence : nat64;
+  issued_at_ns : nat64;
+  original_author : principal;
+  original_post_id : Blob32;
+  original_body_hash : Blob32;
+  post_ref_digest : Blob32;
+};
+
+type CertifiedShareRefV1 = record {
+  sharer : principal;
+  share_id : Blob32;
+  body_length : nat32;
+  object_digest : Blob32;
+  proof : CertifiedHttpProofV1;
+};
+
+type CertifiedShareDeliveryV1 = record {
+  original_post_ref_candid : blob;
+  share_action_candid : blob;
+  share_ref : CertifiedShareRefV1;
+};
+
+type LikeActionV1 = record {
+  header : ActionHeaderV1;
+  like_id : Blob32;
+  issued_at_ns : nat64;
+  post_author : principal;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+};
+
+type CertifiedLikeReceiptV1 = record {
+  like_action_candid : blob;
+  ref : CertifiedActionRefV1;
+};
+
+type ProfileAvatarMediaTypeV1 = variant {
+  jpeg;
+  png;
+  webp;
+};
+
+type ProfileAvatarV1 = record {
+  media_type : opt ProfileAvatarMediaTypeV1;
+  width : nat16;
+  height : nat16;
+  bytes : blob;
+};
+
+type ProfileV1 = record {
+  network_id : Blob32;
+  node : principal;
+  profile_generation : nat64;
+  revision : nat64;
+  updated_at_ns : nat64;
+  previous_profile_digest : opt Blob32;
+  display_name : text;
+  description : text;
+  capabilities : opt vec text;
+  avatar : opt ProfileAvatarV1;
+};
+
+type TombstoneActionV1 = record {
+  header : ActionHeaderV1;
+  tombstone_id : Blob32;
+  author_sequence : nat64;
+  issued_at_ns : nat64;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+};
+
+type CertifiedTombstoneV1 = record {
+  tombstone_action_candid : blob;
+  ref : CertifiedActionRefV1;
+};
+
+type LikeBatchV1 = record {
+  network_id : Blob32;
+  post_author : principal;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+  batch_number : nat64;
+  previous_batch_digest : opt Blob32;
+  first_accepted_sequence : nat64;
+  last_accepted_sequence : nat64;
+  final_partial : bool;
+  receipts : vec CertifiedLikeReceiptV1;
+};
+
+type LikeHeadV1 = record {
+  network_id : Blob32;
+  post_author : principal;
+  post_id : Blob32;
+  post_body_hash : Blob32;
+  store_generation : nat64;
+  revision : nat64;
+  previous_head_hash : opt Blob32;
+  latest_batch_number : opt nat64;
+  latest_batch_digest : opt Blob32;
+  sealed_batch_count : nat64;
+  sealed_receipt_count : nat64;
+  accepting_likes : bool;
+};
+
+type PublicIngressRequestV1 = record {
+  method : text;
+  payload : blob;
+};
+
+type PublicIngressErrorV1 = variant {
+  bad_request;
+  not_found;
+  too_large;
+  unauthorized;
+  rate_limited;
+  busy;
+  low_cycles;
+  revoked;
+  revoked_after_dispatch;
+  handler_failed;
+};
+
+type PublicIngressResultV1 = variant {
+  ok : blob;
+  err : PublicIngressErrorV1;
+};
+
+type WagyuIngressV1 = record {
+  operation_id : Blob16;
+  body_candid : blob;
+};
+
+type FollowBodyV1 = record {
+  expected_revision : nat64;
+  subscription_id : Blob16;
+};
+
+type UnfollowBodyV1 = record {
+  expected_revision : nat64;
+  subscription_id : Blob16;
+};
+
+type DeliveryEventV1 = variant {
+  original : blob;
+  share : blob;
+  tombstone : blob;
+};
+
+type DeliverBodyV1 = record {
+  subscription_id : Blob16;
+  renewal_requested : bool;
+  event : opt DeliveryEventV1;
+};
+
+type LikeBodyV1 = record {
+  certified_like_receipt_candid : blob;
+};
+
+type NoticeRelationV1 = variant {
+  reply;
+  share;
+};
+
+type NoticeBodyV1 = record {
+  relation : opt NoticeRelationV1;
+  target_post_id : Blob32;
+  target_body_hash : Blob32;
+  actor_action_id : Blob32;
+  actor_object_digest : Blob32;
+  actor_object_length : nat32;
+};
+
+type FollowerStateV1 = variant {
+  active : record {
+    subscription_id : Blob16;
+    lease_expires_ns : nat64;
+    delivery_credits : nat16;
+  };
+  inactive : record {
+    last_subscription_id : Blob16;
+  };
+};
+
+type FollowerHeadV1 = record {
+  revision : nat64;
+  state : opt FollowerStateV1;
+};
+
+type WagyuRejectionReasonV1 = variant {
+  invalid;
+  blocked;
+  not_following;
+  unknown_post;
+  expired;
+  full;
+  conflict;
+  incompatible;
+};
+
+type WagyuRouteOutcomeV1 = variant {
+  accepted;
+  duplicate;
+  rejected : record {
+    reason : opt WagyuRejectionReasonV1;
+  };
+};
+
+type WagyuRouteResultV1 = record {
+  outcome : opt WagyuRouteOutcomeV1;
+  local_receipt_time_ns : opt nat64;
+  revision : opt nat64;
+  relationship : opt FollowerHeadV1;
+};
+
+type FeedPageRequestV1 = record {
+  before_sequence : opt nat64;
+  limit : nat16;
+};
+
+type FeedEventKindV1 = variant {
+  original;
+  share;
+  tombstone;
+};
+
+type VerificationStateV1 = variant {
+  pending;
+  verified;
+  invalid;
+  unavailable;
+};
+
+type FeedCandidateSummaryV1 = record {
+  candidate_id : Blob32;
+  local_sequence : nat64;
+  received_at_ns : nat64;
+  immediate_sender : principal;
+  event_kind : opt FeedEventKindV1;
+  claimed_author : principal;
+  claimed_post_id : Blob32;
+  exact_event_candid : blob;
+  verification : opt VerificationStateV1;
+};
+
+type FeedPageV1 = record {
+  revision : nat64;
+  items : vec FeedCandidateSummaryV1;
+  next_before_sequence : opt nat64;
+};
+
+type DirectedActionSummaryV1 = record {
+  target_post_id : Blob32;
+  target_body_hash : Blob32;
+  action_id : Blob32;
+  object_digest : Blob32;
+  object_length : nat32;
+};
+
+type NotificationKindV1 = variant {
+  new_follower : record {
+    follower_revision : nat64;
+  };
+  like : DirectedActionSummaryV1;
+  reply : DirectedActionSummaryV1;
+  share : DirectedActionSummaryV1;
+};
+
+type NotificationVerificationV1 = variant {
+  transport_authenticated;
+  pending;
+  verified;
+  invalid;
+  unavailable;
+};
+
+type NotificationSummaryV1 = record {
+  local_sequence : nat64;
+  received_at_ns : nat64;
+  actor : principal;
+  kind : opt NotificationKindV1;
+  verification : opt NotificationVerificationV1;
+  read : bool;
+};
+
+type NotificationPageRequestV1 = record {
+  before_sequence : opt nat64;
+  limit : nat16;
+};
+
+type NotificationPageV1 = record {
+  revision : nat64;
+  items : vec NotificationSummaryV1;
+  next_before_sequence : opt nat64;
+};
+
+type NotificationEvidenceRequestV1 = record {
+  local_sequence : nat64;
+};
+
+type NotificationEvidenceKindV1 = variant {
+  like : record {
+    certified_like_receipt_candid : blob;
+  };
+};
+
+type NotificationEvidenceV1 = record {
+  local_sequence : nat64;
+  found : bool;
+  evidence : opt NotificationEvidenceKindV1;
+};
+
+type SendKindV1 = variant {
+  post;
+  reply;
+  share;
+  tombstone;
+};
+
+type SendQuoteRequestV1 = record {
+  send_kind : opt SendKindV1;
+  estimated_object_bytes : nat32;
+  notice_target : opt principal;
+};
+
+type SendQuoteV1 = record {
+  follower_revision : nat64;
+  registered_follower_count : nat32;
+  eligible_delivery_count : nat32;
+  ineligible_follower_count : nat32;
+  eligible_recipient_preview : vec principal;
+  receiver_floor_cycles : nat;
+  author_notice_floor_cycles : nat;
+  estimated_call_and_byte_cycles : nat;
+  estimated_local_publication_cycles : nat;
+  estimated_total_cycles : nat;
+};
+
+type ProfileEditAvatarV1 = record {
+  media_type : opt ProfileAvatarMediaTypeV1;
+  width : nat16;
+  height : nat16;
+  bytes : blob;
+};
+
+type ProfileEditRequestV1 = record {
+  expected_profile_generation : nat64;
+  expected_revision : nat64;
+  display_name : text;
+  description : text;
+  avatar : opt ProfileEditAvatarV1;
+};
+
+type ProfileEditRejectionReasonV1 = variant {
+  invalid;
+  full;
+  low_cycles;
+};
+
+type ProfileEditOutcomeV1 = variant {
+  updated : record {
+    profile_generation : nat64;
+    revision : nat64;
+    body_digest : Blob32;
+  };
+  conflict : record {
+    current_generation : nat64;
+    current_revision : nat64;
+  };
+  rejected : record {
+    reason : opt ProfileEditRejectionReasonV1;
+  };
+};
+
+type ProfileEditResultV1 = record {
+  outcome : opt ProfileEditOutcomeV1;
+};
+
+service : {
+  app_wagyu__wagyu_v1_update :
+    (PublicIngressRequestV1) -> (PublicIngressResultV1);
+  wagyu_get_feed_page_v1 :
+    (FeedPageRequestV1) -> (FeedPageV1) query;
+  wagyu_get_notification_page_v1 :
+    (NotificationPageRequestV1) -> (NotificationPageV1) query;
+  wagyu_get_notification_evidence_v1 :
+    (NotificationEvidenceRequestV1) -> (NotificationEvidenceV1) query;
+  wagyu_get_send_quote_v1 :
+    (SendQuoteRequestV1) -> (SendQuoteV1) query;
+  wagyu_profile_edit_v1 :
+    (ProfileEditRequestV1) -> (ProfileEditResultV1);
+}

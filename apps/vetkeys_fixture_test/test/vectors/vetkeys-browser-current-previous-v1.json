@@ -1,0 +1,40 @@
+{
+  "capture": {
+    "appId": "mail",
+    "canisterPrincipal": "efadq-gl777-77774-aaaba-cai",
+    "environment": "local",
+    "keyName": "test_key_1",
+    "library": {
+      "name": "@dfinity/vetkeys",
+      "npmIntegrity": "sha512-MLa5UvseEOVB6HgcKYtIDOZc6De0tdRm61dZlmAVKKqjnZuXoUJqypDbMe30EnofH0JMjvGQP2jGvxGRKC6nGQ==",
+      "version": "0.4.0"
+    },
+    "slotId": "mailbox",
+    "slotUid": "2",
+    "suite": "bls12_381_g2"
+  },
+  "generations": {
+    "current": {
+      "decryptedVetKeyHex": "a720e4450a29cf1263a2ec9ee046ba6b65a5d4188a2ca5555bb2ffb6b71175b25e08ff414389c6a1516d78bde1a9ff0a",
+      "derivationInputHex": "ec0cc44c51c6f28abc46b8fff2dbaa895e705098c80f2d311868028f3f80af66",
+      "encryptedVetKeyHex": "adac5deb3bd35cf015cab21c69f56a475ebbba453ef2b0b3d824274dc6f27567f6df4f8491c400c8ebc560494db808178d0c99a522acac1afb312264b38f040952f7af852e2f538c33b506a4412fd0fc2fe8cdb4ad0fd548d0e38549193a3cb518a7b7fa83a3fa8979763f94aebf658b34fe4533ede0b09be50b1c7637ba6e867c9bb3591b57275915e86520af21a5e989c680143f86fc73cd3a485634b3bd8f2ebbb42d5531b1b55888571372d49c91e25dff57ee9f5fbc1f7714e764613701",
+      "generation": "2",
+      "publicKeyHex": "b79591c94ba8ea617fd35c032cf6773720bb0539f33d8aeeb157c83b16e742cc9cb17932964dc6390e725b9aa19dd5530520b2afb5087a8e91a8fec9231f9a53924b132b1f03018b738400bfee8b1cd4a827385ac0c348e7418057d96e821711",
+      "status": "current"
+    },
+    "previous": {
+      "decryptedVetKeyHex": "972320e7c1a83a8ae802e2588d435763e74d18709586d8f81c542842719ab96c9880f2f4bfb0f359b777e701ba0c1f57",
+      "derivationInputHex": "39e0dcfb73ca053ae503de991587ca27b345a7651d6b19bb3926ef798e1a208d",
+      "encryptedVetKeyHex": "adac5deb3bd35cf015cab21c69f56a475ebbba453ef2b0b3d824274dc6f27567f6df4f8491c400c8ebc560494db808178d0c99a522acac1afb312264b38f040952f7af852e2f538c33b506a4412fd0fc2fe8cdb4ad0fd548d0e38549193a3cb518a7b7fa83a3fa8979763f94aebf658b34fe4533ede0b09be50b1c7637ba6e867c9bb3591b57275915e86520af21a5e99894de8423ad212a986e0d6c5c320731e6b008bc4c40a017e3c840c4304cbd09bf460518e0f0a1c96c01f3f176a7a4d0",
+      "generation": "1",
+      "publicKeyHex": "aaf22fdc145630b75e6e2f69fcf1552e3c4eea4b1360929bd7f6871679c581a522499b1475888f79ed93863594ee341c06b63e71ec35ff08632db1b31554bd576199b8f03627ba47a486e442a147936b1450767c1765833ca45960121ca81c0e",
+      "status": "previous"
+    }
+  },
+  "schema": "neutron.vetkeys.browser-library-vectors",
+  "transport": {
+    "publicKeyHex": "883ee92337ff75a80c7b53ba7024261ac53f3347c3c42e91baac43308335d7f0e0c617a07621ab5ce135dd9d0df67ade",
+    "secretKeyHex": "15fbb76fd0a215cbedfb6200f9b791ad75db9252e3c89140a19a4ab62f8507c0"
+  },
+  "version": 1
+}

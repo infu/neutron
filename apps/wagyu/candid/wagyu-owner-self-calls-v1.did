@@ -1,0 +1,323 @@
+// Owner-only API-1 self-call surface.
+//
+// These methods are selected by the package's preapproved_self_calls
+// capability. Binary values are ordinary nested Candid blob fields; there is
+// no attachment tuple or second transport protocol.
+
+type LocalErrorV1 = variant {
+  not_configured;
+  invalid;
+  conflict;
+  not_found;
+  full;
+  certified_store;
+  proof_invalid;
+  unsupported;
+  busy;
+};
+
+type PublishStageV1 = variant {
+  awaiting_proof;
+  certified_ref_ready;
+  fanout_queued;
+  complete;
+  partial;
+  failed;
+  uncertain;
+};
+
+type PublishSelfResultV1 = record {
+  stage : opt PublishStageV1;
+  post_id_hex : opt text;
+  action_id_hex : opt text;
+  object_digest_hex : opt text;
+  queued_recipient_count : nat32;
+  queued_notice_count : nat32;
+  accepted_recipient_count : nat32;
+  failed_recipient_count : nat32;
+  message : text;
+};
+
+type PublishSelfLocalResultV1 = variant {
+  ok : PublishSelfResultV1;
+  err : LocalErrorV1;
+};
+
+type FeedPageSelfRequestV1 = record {
+  before_sequence : opt nat64;
+  limit : nat16;
+};
+
+type FeedPageSelfValueV1 = record {
+  revision : nat64;
+  item_count : nat16;
+  body_bytes : nat32;
+  body_digest_hex : text;
+};
+
+type FeedPageSelfOutputV1 = record {
+  value : FeedPageSelfValueV1;
+  body : blob;
+};
+
+type NotificationPageSelfRequestV1 = record {
+  before_sequence : opt nat64;
+  limit : nat16;
+};
+
+type NotificationPageSelfValueV1 = record {
+  revision : nat64;
+  item_count : nat16;
+  body_bytes : nat32;
+  body_digest_hex : text;
+};
+
+type NotificationPageSelfOutputV1 = record {
+  value : NotificationPageSelfValueV1;
+  body : blob;
+};
+
+type NotificationEvidenceSelfRequestV1 = record {
+  local_sequence : nat64;
+};
+
+type NotificationEvidenceSelfValueV1 = record {
+  local_sequence : nat64;
+  found : bool;
+  body_bytes : nat32;
+  body_digest_hex : text;
+};
+
+type NotificationEvidenceSelfOutputV1 = record {
+  value : NotificationEvidenceSelfValueV1;
+  body : blob;
+};
+
+type AvatarMediaTypeV1 = variant { jpeg; png; webp };
+
+type ProfileEditAvatarV1 = record {
+  media_type : opt AvatarMediaTypeV1;
+  width : nat16;
+  height : nat16;
+  bytes : blob;
+};
+
+type ProfileEditRequestV1 = record {
+  expected_profile_generation : nat64;
+  expected_revision : nat64;
+  display_name : text;
+  description : text;
+  avatar : opt ProfileEditAvatarV1;
+};
+
+type ProfileEditRejectionReasonV1 = variant {
+  invalid;
+  full;
+  low_cycles;
+};
+
+type ProfileEditOutcomeV1 = variant {
+  updated : record {
+    profile_generation : nat64;
+    revision : nat64;
+    body_digest : blob;
+  };
+  conflict : record {
+    current_generation : nat64;
+    current_revision : nat64;
+  };
+  rejected : record {
+    reason : opt ProfileEditRejectionReasonV1;
+  };
+};
+
+type ProfileEditResultV1 = record {
+  outcome : opt ProfileEditOutcomeV1;
+};
+
+type RelationshipStateV1 = variant {
+  registering;
+  active;
+  credit_low;
+  expired;
+  cleanup_pending;
+  incompatible;
+  blocked;
+};
+
+type RelationshipSummaryV1 = record {
+  node : principal;
+  following : bool;
+  follower : bool;
+  following_state : opt RelationshipStateV1;
+  follower_state : opt RelationshipStateV1;
+  follower_delivery_credits : nat16;
+  follower_lease_expires_ns : opt nat64;
+  following_renewal_requested : bool;
+  following_auto_renew_due : bool;
+  blocked : bool;
+  bond_cycles : nat;
+  protocol : text;
+  compatible : bool;
+};
+
+type RelationshipSummaryLocalResultV1 = variant {
+  ok : RelationshipSummaryV1;
+  err : LocalErrorV1;
+};
+
+type BlockStatusesSelfRequestV1 = record {
+  nodes : vec principal;
+};
+
+type BlockStatusSelfV1 = record {
+  node : principal;
+  blocked : bool;
+};
+
+type BlockStatusesSelfOutputV1 = record {
+  relationship_revision : nat64;
+  items : vec BlockStatusSelfV1;
+};
+
+type FollowSelfRequestV1 = record {
+  node : principal;
+  subscription_id_hex : text;
+};
+
+type NodeRequestV1 = record {
+  node : principal;
+};
+
+type ReplyLocatorSelfV1 = record {
+  author : principal;
+  post_id_hex : text;
+  body_hash_hex : text;
+  body_length : nat32;
+  object_digest_hex : text;
+};
+
+type PostPrepareSelfRequestV1 = record {
+  body_markdown : text;
+  nonce_hex : text;
+  reply_to : opt ReplyLocatorSelfV1;
+};
+
+type SharePrepareSelfRequestV1 = record {
+  nonce_hex : opt text;
+  exact_original_post_ref_candid : blob;
+};
+
+type LikePrepareSelfRequestV1 = record {
+  post_author : principal;
+  post_id_hex : text;
+  post_body_hash_hex : text;
+  post_object_digest_hex : opt text;
+  nonce_hex : text;
+};
+
+type TombstonePrepareSelfRequestV1 = record {
+  post_id_hex : text;
+  nonce_hex : text;
+};
+
+type FinalizeSelfRequestV1 = record {
+  action_id_hex : text;
+  object_digest_hex : text;
+  exact_proof_candid : blob;
+};
+
+type FeedPromoteSelfRequestV1 = record {
+  candidate_id_hex : text;
+  verified_author : principal;
+  verified_post_id_hex : text;
+  verified_body_hash_hex : text;
+  verified_object_digest_hex : text;
+};
+
+type FeedRejectDispositionV1 = variant { invalid; unavailable };
+
+type FeedRejectSelfRequestV1 = record {
+  candidate_id_hex : text;
+  disposition : opt FeedRejectDispositionV1;
+};
+
+type NotificationDispositionSelfV1 = variant {
+  verified;
+  invalid;
+  unavailable;
+};
+
+type VerifiedReplySelfV1 = record {
+  author : principal;
+  post_id_hex : text;
+  body_hash_hex : text;
+  body_length : nat32;
+  object_digest_hex : text;
+  reply_to : ReplyLocatorSelfV1;
+};
+
+type NotificationPromoteSelfRequestV1 = record {
+  local_sequence : nat64;
+  disposition : opt NotificationDispositionSelfV1;
+  verified_reply : opt VerifiedReplySelfV1;
+};
+
+type LikeSealSelfRequestV1 = record {
+  post_id_hex : text;
+  final_partial : bool;
+};
+
+type WithdrawalAdvanceSelfRequestV1 = record {
+  post_id_hex : text;
+  nonce_hex : text;
+};
+
+type Nat64LocalResultV1 = variant {
+  ok : nat64;
+  err : LocalErrorV1;
+};
+
+service : {
+  wagyu_feed_page_self_v1 :
+    (FeedPageSelfRequestV1) -> (FeedPageSelfOutputV1) query;
+  wagyu_notification_page_self_v1 :
+    (NotificationPageSelfRequestV1) -> (NotificationPageSelfOutputV1) query;
+  wagyu_notification_evidence_self_v1 :
+    (NotificationEvidenceSelfRequestV1)
+      -> (NotificationEvidenceSelfOutputV1) query;
+  wagyu_block_statuses_self_v1 :
+    (BlockStatusesSelfRequestV1) -> (BlockStatusesSelfOutputV1) query;
+  wagyu_profile_edit_v1 :
+    (ProfileEditRequestV1) -> (ProfileEditResultV1);
+  wagyu_follow_self_v1 :
+    (FollowSelfRequestV1) -> (RelationshipSummaryLocalResultV1);
+  wagyu_auto_renew_self_v1 :
+    (NodeRequestV1) -> (RelationshipSummaryLocalResultV1);
+  wagyu_post_prepare_self_v1 :
+    (PostPrepareSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_share_prepare_self_v1 :
+    (SharePrepareSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_like_prepare_self_v1 :
+    (LikePrepareSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_tombstone_prepare_self_v1 :
+    (TombstonePrepareSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_post_finalize_self_v1 :
+    (FinalizeSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_share_finalize_self_v1 :
+    (FinalizeSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_like_finalize_self_v1 :
+    (FinalizeSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_tombstone_finalize_self_v1 :
+    (FinalizeSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_feed_promote_self_v1 :
+    (FeedPromoteSelfRequestV1) -> (Nat64LocalResultV1);
+  wagyu_feed_reject_self_v1 :
+    (FeedRejectSelfRequestV1) -> (Nat64LocalResultV1);
+  wagyu_notification_promote_self_v1 :
+    (NotificationPromoteSelfRequestV1) -> (Nat64LocalResultV1);
+  wagyu_like_seal_self_v1 :
+    (LikeSealSelfRequestV1) -> (PublishSelfLocalResultV1);
+  wagyu_withdrawal_advance_self_v1 :
+    (WithdrawalAdvanceSelfRequestV1) -> (PublishSelfLocalResultV1);
+}

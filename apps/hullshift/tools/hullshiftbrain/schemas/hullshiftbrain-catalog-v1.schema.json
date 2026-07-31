@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hullshift.local/schemas/hullshiftbrain-catalog-v1.schema.json",
+  "title": "HullshiftBrain uncertified catalog v1",
+  "description": "Strict Python proposal envelope consumed by the TypeScript certifier.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatorVersion", "brainVersion", "entries"],
+  "properties": {
+    "schemaVersion": {"const": "hullshiftbrain-catalog-v1"},
+    "generatorVersion": {"const": "g4"},
+    "brainVersion": {"const": "hullshiftbrain-v1"},
+    "entries": {
+      "type": "array",
+      "maxItems": 900000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "difficulty",
+          "level",
+          "witness",
+          "milestones",
+          "requiredPrecedence",
+          "provenance",
+          "topologySignature",
+          "semanticSignature",
+          "metrics"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,79}$"},
+          "difficulty": {"type": "integer", "minimum": 0, "maximum": 8},
+          "level": {"$ref": "hullshiftbrain-candidate-v1.schema.json#/$defs/level"},
+          "witness": {"$ref": "hullshiftbrain-candidate-v1.schema.json#/$defs/witness"},
+          "milestones": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {"$ref": "hullshiftbrain-candidate-v1.schema.json#/$defs/milestone"}
+          },
+          "requiredPrecedence": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true,
+            "items": {"$ref": "hullshiftbrain-candidate-v1.schema.json#/$defs/precedence"}
+          },
+          "provenance": {"$ref": "hullshiftbrain-candidate-v1.schema.json#/$defs/provenance"},
+          "topologySignature": {"type": "string", "minLength": 1, "maxLength": 512},
+          "semanticSignature": {"type": "string", "minLength": 1, "maxLength": 512},
+          "metrics": {"$ref": "hullshiftbrain-candidate-v1.schema.json#/$defs/metrics"}
+        }
+      }
+    }
+  }
+}

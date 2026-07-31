@@ -1,0 +1,107 @@
+// This component stylesheet is discovered before style.scss by the module graph.
+// Establish the shared layer order before opening `app`, otherwise that first
+// layer appearance would put app overrides behind the design-system components.
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+@layer app {
+  .hullshift-help-model-gallery {
+    display: grid;
+    gap: var(--nt-gap-3);
+    min-inline-size: 0;
+  }
+
+  .hullshift-help-model-gallery__intro {
+    margin: 0;
+  }
+
+  .hullshift-help-model-gallery__status {
+    margin: 0;
+  }
+
+  .hullshift-help-model-gallery__surface {
+    isolation: isolate;
+    min-inline-size: 0;
+    position: relative;
+  }
+
+  .hullshift-help-model-gallery__canvas {
+    block-size: 100%;
+    display: block;
+    inline-size: 100%;
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+
+  .hullshift-help-model-gallery__grid {
+    display: grid;
+    gap: var(--nt-gap-3);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+    min-inline-size: 0;
+    position: relative;
+    z-index: 0;
+  }
+
+  .hullshift-help-model-card.nt-metric {
+    background: var(--nt-panel-bg);
+    box-shadow: var(--nt-shadow-hairline);
+    display: grid;
+    grid-template-rows: 132px minmax(0, 1fr);
+    min-block-size: 252px;
+    min-inline-size: 0;
+    overflow: hidden;
+    padding: 0;
+    position: relative;
+  }
+
+  .hullshift-help-model-card__art {
+    background: #071017;
+    box-shadow: inset 0 -1px var(--nt-line-subtle);
+    min-block-size: 132px;
+    min-inline-size: 0;
+  }
+
+  .hullshift-help-model-card__copy {
+    align-content: start;
+    background: var(--nt-panel-bg);
+    display: grid;
+    gap: var(--nt-gap-2);
+    min-inline-size: 0;
+    padding: var(--nt-pad-3);
+    position: relative;
+    z-index: 2;
+  }
+
+  .hullshift-help-model-card__copy .nt-metric-value {
+    color: var(--nt-text-strong);
+    font-size: var(--nt-font-size-label);
+    line-height: 1.25;
+    margin: 0;
+  }
+
+  .hullshift-help-model-card__state {
+    justify-self: start;
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .hullshift-help-model-card__copy .nt-metric-detail {
+    color: var(--nt-text-muted);
+    line-height: 1.45;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @container (max-width: 480px) {
+    .hullshift-help-model-gallery__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hullshift-help-model-gallery__canvas {
+      transition: none;
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "info": {
+    "protocol": "neutron-repo-v1",
+    "name": "Neutron example repository",
+    "description": "Static example packages for local repository-manifest development",
+    "provider": {
+      "name": "Example provider",
+      "website": "https://example.invalid/",
+      "terms": "https://example.invalid/terms",
+      "privacy": "https://example.invalid/privacy",
+      "support": "https://example.invalid/support"
+    }
+  },
+  "manifests": [
+    {
+      "id": "demopack",
+      "revision": 1,
+      "name": "Demo Pack",
+      "description": "Hello and Kitchen Sink examples",
+      "packages": [
+        {
+          "file": "../../apps/hello/hello.v0.2.1.neutron",
+          "publisher": {
+            "name": "Example publisher",
+            "website": "https://example.invalid/"
+          },
+          "source": "https://example.invalid/source/hello"
+        },
+        {
+          "file": "../../apps/kitchensink/kitchensink.v0.3.1.neutron",
+          "publisher": {
+            "name": "Example publisher",
+            "website": "https://example.invalid/"
+          },
+          "source": "https://example.invalid/source/kitchensink"
+        }
+      ]
+    },
+    {
+      "id": "hello",
+      "revision": 1,
+      "name": "Hello",
+      "description": "The single Hello example",
+      "packages": [
+        {
+          "file": "../../apps/hello/hello.v0.2.1.neutron",
+          "publisher": {
+            "name": "Example publisher",
+            "website": "https://example.invalid/"
+          },
+          "source": "https://example.invalid/source/hello"
+        }
+      ]
+    }
+  ]
+}

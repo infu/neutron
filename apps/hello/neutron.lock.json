@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "hello",
+  "memory": {
+    "hello": {
+      "schemas": {
+        "1": {
+          "hash": "7d6aaaf590343b1e1fb9dfb1345e474cbffa2d811f54f872f48f08be48db77d5",
+          "entry": "7d6aaaf590343b1e1fb9dfb1345e474cbffa2d811f54f872f48f08be48db77d5"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

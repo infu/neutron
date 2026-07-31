@@ -1,0 +1,94 @@
+{
+  "format": 3,
+  "name": "CA Qualification",
+  "id": "ca_qualification",
+  "version": 100,
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "certified_assets": {
+        "api": 2
+      }
+    }
+  },
+  "func": {
+    "qualification_scope_info": {
+      "type": "query",
+      "async": false
+    },
+    "qualification_begin_stage": {
+      "type": "update",
+      "async": false
+    },
+    "qualification_put_chunk": {
+      "type": "update",
+      "async": false
+    },
+    "qualification_stage_status": {
+      "type": "query",
+      "async": false
+    },
+    "qualification_abort_stage": {
+      "type": "update",
+      "async": false
+    },
+    "qualification_commit_batch": {
+      "type": "update",
+      "async": false
+    },
+    "qualification_record_status": {
+      "type": "query",
+      "async": false
+    },
+    "qualification_maintenance_page": {
+      "type": "update",
+      "async": false
+    },
+    "qualification_usage": {
+      "type": "query",
+      "async": false
+    }
+  },
+  "capabilities": {
+    "certified_assets": {
+      "api": 2,
+      "max_entries": 64,
+      "max_committed_bytes": 134217728,
+      "max_object_bytes": 67108864,
+      "max_pending_stages": 1,
+      "max_staged_bytes": 67108864,
+      "max_batch_operations": 16,
+      "max_batch_bytes": 67108864,
+      "max_idempotency_receipts": 128,
+      "collections": [
+        {
+          "id": "publication",
+          "mount": "download",
+          "kind": "publication",
+          "max_object_bytes": 67108864
+        },
+        {
+          "id": "immutable",
+          "mount": "portable",
+          "kind": "immutable_blob",
+          "path_prefix": "/objects/",
+          "max_object_bytes": 1048576
+        },
+        {
+          "id": "mutable_key",
+          "mount": "portable",
+          "kind": "mutable_blob",
+          "path_prefix": "/heads/",
+          "max_object_bytes": 1048576
+        },
+        {
+          "id": "mutable_exact",
+          "mount": "portable",
+          "kind": "mutable_blob",
+          "exact_path": "/profile",
+          "max_object_bytes": 1048576
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "neutron-update-source",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "npm run typecheck && npm test",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test",
+    "icp:build": "icp build update_source",
+    "icp:deploy": "icp deploy update_source",
+    "publisher:configure": "bun scripts/configure-publisher.ts",
+    "publisher:rotate": "bun scripts/rotate-publisher.ts",
+    "publisher:revoke": "bun scripts/revoke-publisher.ts",
+    "publisher:status": "bun scripts/publisher-status.ts",
+    "publish": "bun scripts/publish.ts",
+    "production:publish": "bun scripts/publish-catalog.ts release-catalog.json"
+  },
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/identity": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "neutron-compiler": "^1.1.0",
+    "neutron-tools": "^1.1.0"
+  },
+  "devDependencies": {
+    "fflate": "^0.8.3",
+    "tiny-msgpack": "^2.2.0"
+  }
+}
