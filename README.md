@@ -1,9 +1,9 @@
-# Neutron
+# Neutron kernel
 
 **Personal cloud computer**
 
-Decentralised, user-customizable, user-controlled, community-driven operating
-system running on ICP.
+Decentralised, user-customizable, user-controlled, community-driven kernel for operating
+systems running on ICP.
 
 Neutron is meant to be fully open. A user owns a Neutron canister, can install
 apps into it, and can deliberately replace the kernel with any `.neutron`
