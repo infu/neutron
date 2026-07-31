@@ -21,7 +21,7 @@
     "@icp-sdk/canisters": "3.6.0",
     "@icp-sdk/core": "5.4.0",
     "ethers": "^6.17.0",
-    "icblast": "file:../../../icblast",
+    "icblast": "^4.3.0",
     "neutron-compiler": "^1.1.0",
     "neutron-tools": "^1.1.0"
   }

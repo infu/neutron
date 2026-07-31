@@ -4,7 +4,6 @@
   "type": "module",
   "license": "GPL-3.0-only",
   "workspaces": [
-    "../icblast",
     "packages/*",
     "apps/*",
     "support/*"

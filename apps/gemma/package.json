@@ -33,7 +33,7 @@
     "esbuild-sass-plugin": "^3.7.0",
     "eslint": "^10.6.0",
     "eslint-plugin-react": "^7.37.5",
-    "icblast": "file:../../../icblast",
+    "icblast": "^4.3.0",
     "neutron-scripts": "^1.1.0"
   }
 }

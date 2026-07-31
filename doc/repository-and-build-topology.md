@@ -53,8 +53,9 @@ cross-workspace checks, and developer commands.
 - `support/update-source/` is the reference developer-owned certified update
   source. Its publisher uses direct authenticated agent calls.
 
-The root workspaces are `packages/*`, `apps/*`, `support/*`, and the sibling
-`../icblast` checkout. npm remains the dependency installer and owns the one
+The root workspaces are `packages/*`, `apps/*`, and `support/*`. The shared
+`icblast` client is installed from its public npm package rather than linked to
+a sibling checkout. npm remains the dependency installer and owns the one
 `package-lock.json`; Bun runs migrated TypeScript scripts and tests. Rust
 components retain their own Cargo manifests and locked builds.
 
