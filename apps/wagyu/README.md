@@ -217,7 +217,7 @@ be checked from the repository root:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.5.neutron \
+  --package apps/kernel/kernel.v0.3.6.neutron \
   --package apps/wagyu/wagyu.v0.3.2.neutron \
   --wasm-out /tmp/neutron-wagyu.wasm \
   --candid-out /tmp/neutron-wagyu.did

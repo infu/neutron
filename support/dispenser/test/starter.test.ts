@@ -26,17 +26,17 @@ test("SushiOS starter list contains the selected distribution apps", async () =>
   expect(selection.packageIds).toEqual(expectedStarterIds);
 
   const archives = await Promise.all(
-    selection.packagePaths.map(async (archivePath) =>
-      new Uint8Array(await readFile(archivePath)),
+    selection.packagePaths.map(
+      async (archivePath) => new Uint8Array(await readFile(archivePath)),
     ),
   );
   const packages = archives.map((archive) => preparePackageInstall(archive));
   expect(packages.map(({ manifest }) => manifest.id)).toEqual(
     expectedStarterIds,
   );
-  expect(
-    packages.map(({ manifest }) => manifest.update_source),
-  ).toEqual(expectedStarterIds.map(() => productionUpdateSource));
+  expect(packages.map(({ manifest }) => manifest.update_source)).toEqual(
+    expectedStarterIds.map(() => productionUpdateSource),
+  );
 
   const packageArtifacts = packages.map(({ manifest }, index) => ({
     path: selection.packagePaths[index]!,
@@ -58,10 +58,7 @@ test("SushiOS starter list contains the selected distribution apps", async () =>
     new TextDecoder().decode(provenanceAsset.val.content),
   ) as {
     format: number;
-    apps: Record<
-      string,
-      { kind: string; package_digest: string }
-    >;
+    apps: Record<string, { kind: string; package_digest: string }>;
   };
   expect(provenance.format).toBe(1);
   expect(Object.keys(provenance.apps).sort()).toEqual(
@@ -88,12 +85,8 @@ test("starter payload is uploaded in chunks and committed atomically", async () 
   expect(uploader).toContain("begin_starter_upload");
   expect(uploader).toContain("add_starter_wasm_chunk");
   expect(uploader).toContain("commit_starter_upload");
-  expect(uploader).toContain(
-    "const uploadEpoch = await actor.begin_starter_upload(spec)",
-  );
-  expect(uploader).toContain(
-    "actor.commit_starter_upload(uploadEpoch)",
-  );
+  expect(uploader).toContain("actor.begin_starter_upload(spec, filesSha256)");
+  expect(uploader).toContain("actor.commit_starter_upload(uploadEpoch)");
   expect(uploader).toContain("assertCommittedStarter");
   expect(uploader).toContain(
     "fixedBackendCallInstallReservationTargetPrincipals",
@@ -102,17 +95,13 @@ test("starter payload is uploaded in chunks and committed atomically", async () 
   expect(uploader).toContain("revision: candid.Nat");
   expect(uploader).toContain("info.revision < 1n");
   expect(backend).toContain("Sha256.fromBlob(#sha256, committedWasm)");
-  expect(backend).toContain(
-    "MAX_STARTER_BACKEND_CALL_TARGETS : Nat = 2_048",
-  );
-  expect(backend).toContain(
-    "spec.backend_call_target_principals.size() >",
-  );
+  expect(backend).toContain("starterFilesSha256(");
+  expect(backend).toContain("current_starter_files_sha256 := ?filesSha256");
+  expect(backend).toContain("MAX_STARTER_BACKEND_CALL_TARGETS : Nat = 2_048");
+  expect(backend).toContain("spec.backend_call_target_principals.size() >");
   expect(backend).toContain("next_starter_upload_epoch : Nat = 0");
   expect(
-    backend.match(
-      /Starter upload epoch does not match the active upload/g,
-    ),
+    backend.match(/Starter upload epoch does not match the active upload/g),
   ).toHaveLength(4);
 
   const commit = backend.slice(
@@ -122,10 +111,11 @@ test("starter payload is uploaded in chunks and committed atomically", async () 
   expect(commit).toContain("Starter Wasm upload is incomplete");
   expect(commit).toContain("Starter file upload is incomplete");
   expect(commit).toContain("Starter Wasm SHA-256 does not match");
+  expect(commit).toContain("Starter file commitment does not match");
   expect(commit.indexOf("wasm = committedWasm")).toBeGreaterThan(
     commit.indexOf("Starter Wasm SHA-256 does not match"),
   );
-  expect(commit.indexOf("files = List.toArray(staged_files)")).toBeGreaterThan(
+  expect(commit.indexOf("files = committedFiles")).toBeGreaterThan(
     commit.indexOf("Starter Wasm SHA-256 does not match"),
   );
   expect(commit.indexOf("backend_call_target_principals =")).toBeGreaterThan(
@@ -135,7 +125,7 @@ test("starter payload is uploaded in chunks and committed atomically", async () 
   expect(commit).toContain("let revision = next_starter_revision + 1");
   expect(commit).toContain("current_starter := ?committed");
   expect(commit.indexOf("current_starter := ?committed")).toBeGreaterThan(
-    commit.indexOf("file_chunks = List.toArray(staged_file_chunks)"),
+    commit.indexOf("file_chunks = committedFileChunks"),
   );
 
   for (const retired of [

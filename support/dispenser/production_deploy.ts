@@ -83,6 +83,7 @@ type ProductionReceipt = {
     wasm_sha256: string;
     files: string;
     file_chunks: string;
+    files_sha256: string | null;
     backend_call_target_principals: string[];
     packages: PackageArtifact[];
   };
@@ -654,11 +655,7 @@ export function parseProductionCanisterIdMapping(
     throw new Error(`${label} must be an object`);
   }
   const keys = Object.keys(value).sort();
-  if (
-    keys.length !== 2 ||
-    keys[0] !== "dispenser" ||
-    keys[1] !== "frontend"
-  ) {
+  if (keys.length !== 2 || keys[0] !== "dispenser" || keys[1] !== "frontend") {
     throw new Error(`${label} must contain exactly dispenser and frontend`);
   }
   if (
@@ -727,6 +724,10 @@ async function writeProductionReceipt({
       wasm_sha256: Buffer.from(starter.wasm_sha256).toString("hex"),
       files: starter.files.toString(),
       file_chunks: starter.file_chunks.toString(),
+      files_sha256:
+        starter.files_sha256.length === 0
+          ? null
+          : Buffer.from(starter.files_sha256[0]).toString("hex"),
       backend_call_target_principals:
         starter.backend_call_target_principals.map((principal) =>
           principal.toText(),

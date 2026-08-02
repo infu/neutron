@@ -1,11 +1,11 @@
 {
   "format": 1,
   "kernel": {
-    "path": "apps/kernel/kernel.v0.3.5.neutron",
-    "sha256": "534e0ded262bb5700d92046a4fafad16ccf42473259edd3f18e8a0578347f2ae",
-    "bytes": 1918481,
+    "path": "apps/kernel/kernel.v0.3.6.neutron",
+    "sha256": "b25948f68ed10f29c984e936ecfd18b95fa8d4cdec0bbd1e944b53b2a371bd8b",
+    "bytes": 1858175,
     "id": "kernel",
-    "version": 305
+    "version": 306
   },
   "packages": [
     {

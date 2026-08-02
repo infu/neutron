@@ -56,7 +56,7 @@ Production-context offline compile:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.5.neutron \
+  --package apps/kernel/kernel.v0.3.6.neutron \
   --package apps/hello/hello.v0.2.1.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did

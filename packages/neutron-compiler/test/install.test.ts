@@ -2555,15 +2555,13 @@ test("static files are gzipped, chunked, and uploaded through generic writer", a
   );
   expect(operation.key).toBe("/app/hello/main.js");
   expect(operation.val.chunks).toBeGreaterThan(1);
+  const compressed = concatChunks([
+    operation.val.content,
+    ...operation.chunks.map((x) => x.content),
+  ]);
+  expect(Array.from(compressed.slice(4, 8))).toEqual([0, 0, 0, 0]);
   expect(
-    text(
-      gunzipSync(
-        concatChunks([
-          operation.val.content,
-          ...operation.chunks.map((x) => x.content),
-        ]),
-      ),
-    ),
+    text(gunzipSync(compressed)),
   ).toBe("abcdef");
 
   const calls: KernelStaticRequest[] = [];
@@ -2829,6 +2827,7 @@ test("install code requests gzip Wasm and roundtrip without changing it", () => 
   });
 
   expect(request.wasm).not.toEqual(wasm);
+  expect(Array.from(request.wasm.slice(4, 8))).toEqual([0, 0, 0, 0]);
   expect(Array.from(gunzipSync(request.wasm))).toEqual(Array.from(wasm));
   expect(request.deployment_id).toBe("deploy00000000000000000000000000");
 });

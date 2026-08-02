@@ -21,7 +21,7 @@ const manifest = JSON.parse(
 
 test("pins the custom Motoko compiler source build", () => {
   expect(manifest.source).toMatchObject({
-    repository: "https://github.com/caffeinelabs/motoko",
+    repository: "https://github.com/infu/neutron_motoko",
     revision: "d7ed0a92b6219d784b7143e0851ed64b55dfc25a",
     build_command: "scripts/build-neutron-moc-wasm <output-directory>",
   });

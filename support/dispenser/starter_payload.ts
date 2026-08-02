@@ -9,11 +9,13 @@ import {
   type StaticFileOperation,
 } from "neutron-compiler/src/install.js";
 import { fixedBackendCallInstallReservationTargetPrincipals } from "neutron-compiler/src/compile.js";
+import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import {
   buildFreshInstallProvenance,
   sha256Hex,
   type PreparedDeployment,
 } from "neutron-provision/src/artifact.js";
+import { starterFileCommitment } from "./starter_file_commitment.ts";
 
 const STARTER_WASM_CHUNK_BYTES = 1_500_000;
 const STARTER_UPLOAD_CONCURRENCY = 6;
@@ -51,19 +53,14 @@ export type StarterInfo = {
   wasm_sha256: Uint8Array;
   files: bigint;
   file_chunks: bigint;
+  files_sha256: [] | [Uint8Array];
   backend_call_target_principals: Principal[];
 };
 
 type MaintenanceActor = {
-  begin_starter_upload: ActorMethod<[StarterUploadSpec], bigint>;
-  add_starter_wasm_chunk: ActorMethod<
-    [bigint, bigint, Uint8Array],
-    undefined
-  >;
-  add_starter_file: ActorMethod<
-    [bigint, string, NeutronFile],
-    undefined
-  >;
+  begin_starter_upload: ActorMethod<[StarterUploadSpec, Uint8Array], bigint>;
+  add_starter_wasm_chunk: ActorMethod<[bigint, bigint, Uint8Array], undefined>;
+  add_starter_file: ActorMethod<[bigint, string, NeutronFile], undefined>;
   add_starter_file_chunk: ActorMethod<
     [bigint, string, bigint, Uint8Array],
     undefined
@@ -101,6 +98,7 @@ export async function stageStarterPayload({
     0,
   );
   const expectedSha256 = hexBytes(deployment.transportWasmSha256);
+  const filesSha256 = hexBytes(starterFileCommitment(operations));
   const backendCallTargetPrincipals =
     fixedBackendCallInstallReservationTargetPrincipals(
       Object.fromEntries(
@@ -122,16 +120,12 @@ export async function stageStarterPayload({
   progress(
     `Beginning atomic starter upload: ${wasmChunks.length} Wasm chunks, ${operations.length} files`,
   );
-  const uploadEpoch = await actor.begin_starter_upload(spec);
+  const uploadEpoch = await actor.begin_starter_upload(spec, filesSha256);
   await mapWithConcurrency(
     wasmChunks,
     STARTER_UPLOAD_CONCURRENCY,
     async (content, index) => {
-      await actor.add_starter_wasm_chunk(
-        uploadEpoch,
-        BigInt(index),
-        content,
-      );
+      await actor.add_starter_wasm_chunk(uploadEpoch, BigInt(index), content);
     },
   );
   progress(`Uploaded ${wasmChunks.length} starter Wasm chunks`);
@@ -168,7 +162,7 @@ export async function stageStarterPayload({
   if (info === undefined) {
     throw new Error("Dispenser did not retain committed starter information");
   }
-  assertCommittedStarter(info, spec);
+  assertCommittedStarter(info, spec, filesSha256);
   progress(
     `Committed ${info.app_ids.length - 1} apps in starter deployment ${info.deployment_id}`,
   );
@@ -178,6 +172,7 @@ export async function stageStarterPayload({
 function assertCommittedStarter(
   info: StarterInfo,
   expected: StarterUploadSpec,
+  expectedFilesSha256: Uint8Array,
 ): void {
   if (
     info.revision < 1n ||
@@ -185,6 +180,8 @@ function assertCommittedStarter(
     info.wasm_bytes !== expected.wasm_bytes ||
     info.files !== expected.files ||
     info.file_chunks !== expected.file_chunks ||
+    info.files_sha256.length !== 1 ||
+    !sameBytes(info.files_sha256[0]!, expectedFilesSha256) ||
     info.app_ids.length !== expected.app_ids.length ||
     info.app_ids.some((id, index) => id !== expected.app_ids[index]) ||
     info.backend_call_target_principals.length !==
@@ -220,6 +217,7 @@ const maintenanceIdl: Parameters<typeof Actor.createActor>[0] = ({
     wasm_sha256: candid.Vec(candid.Nat8),
     files: candid.Nat,
     file_chunks: candid.Nat,
+    files_sha256: candid.Opt(candid.Vec(candid.Nat8)),
     backend_call_target_principals: candid.Vec(candid.Principal),
   });
   return candid.Service({
@@ -236,6 +234,7 @@ const maintenanceIdl: Parameters<typeof Actor.createActor>[0] = ({
           runtime_config_template: runtimeConfigTemplate,
           backend_call_target_principals: candid.Vec(candid.Principal),
         }),
+        candid.Vec(candid.Nat8),
       ],
       [candid.Nat],
       [],
@@ -256,7 +255,7 @@ const maintenanceIdl: Parameters<typeof Actor.createActor>[0] = ({
   });
 };
 
-function starterAssetOperations(
+export function starterAssetOperations(
   deployment: PreparedDeployment,
 ): StaticFileOperation[] {
   const operations = new Map<string, StaticFileOperation>();
@@ -296,8 +295,12 @@ function starterAssetOperations(
   }
   for (const dynamicPath of dynamicAssetPaths) operations.delete(dynamicPath);
   return [...operations.values()].sort(({ key: left }, { key: right }) =>
-    left.localeCompare(right),
+    compareCanonicalText(left, right),
   );
+}
+
+export function starterFilesSha256(deployment: PreparedDeployment): string {
+  return starterFileCommitment(starterAssetOperations(deployment));
 }
 
 export function buildStarterInstallProvenanceAsset(

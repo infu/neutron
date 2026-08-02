@@ -59,7 +59,7 @@ persistent actor class Self<system>(installTargetSubnet : Principal) = this {
         runtime_config_template : RuntimeConfigTemplate;
         backend_call_target_principals : [Principal];
     };
-    public type StarterInfo = {
+    private type CommittedStarterInfo = {
         revision : Nat;
         deployment_id : Text;
         app_ids : [Text];
@@ -69,8 +69,19 @@ persistent actor class Self<system>(installTargetSubnet : Principal) = this {
         file_chunks : Nat;
         backend_call_target_principals : [Principal];
     };
+    public type StarterInfo = {
+        revision : Nat;
+        deployment_id : Text;
+        app_ids : [Text];
+        wasm_bytes : Nat;
+        wasm_sha256 : Blob;
+        files : Nat;
+        file_chunks : Nat;
+        files_sha256 : ?Blob;
+        backend_call_target_principals : [Principal];
+    };
     private type CommittedStarter = {
-        info : StarterInfo;
+        info : CommittedStarterInfo;
         wasm : Blob;
         runtime_config_template : RuntimeConfigTemplate;
         files : [Asset];
@@ -136,6 +147,8 @@ persistent actor class Self<system>(installTargetSubnet : Principal) = this {
     var current_starter : ?CommittedStarter = null;
     var next_starter_upload_epoch : Nat = 0;
     var starter_upload : ?StarterUpload = null;
+    var current_starter_files_sha256 : ?Blob = null;
+    var starter_upload_files_sha256 : ?Blob = null;
     var staged_wasm_chunks = Map.empty<Nat, Blob>();
     var staged_files = List.empty<Asset>();
     var staged_file_chunks = List.empty<AssetChunk>();
@@ -166,12 +179,16 @@ persistent actor class Self<system>(installTargetSubnet : Principal) = this {
     public query func starter() : async ?StarterInfo {
         switch (current_starter) {
             case null null;
-            case (?committed) ?committed.info;
+            case (?committed) ?{
+                committed.info with
+                files_sha256 = current_starter_files_sha256;
+            };
         };
     };
 
     public shared ({ caller }) func begin_starter_upload(
         spec : StarterUploadSpec,
+        filesSha256 : Blob,
     ) : async Nat {
         await assertDispenserController(caller);
         switch (starterUploadSpecError(spec)) {
@@ -180,9 +197,15 @@ persistent actor class Self<system>(installTargetSubnet : Principal) = this {
                 throw Error.reject(message);
             };
         };
+        if (filesSha256.size() != 32) {
+            throw Error.reject(
+                "Starter file commitment must be exactly 32 bytes"
+            );
+        };
         let epoch = next_starter_upload_epoch + 1;
         next_starter_upload_epoch := epoch;
         starter_upload := ?{ epoch; spec };
+        starter_upload_files_sha256 := ?filesSha256;
         staged_wasm_chunks := Map.empty<Nat, Blob>();
         staged_files := List.empty<Asset>();
         staged_file_chunks := List.empty<AssetChunk>();
@@ -315,6 +338,22 @@ persistent actor class Self<system>(installTargetSubnet : Principal) = this {
         if (Sha256.fromBlob(#sha256, committedWasm) != spec.wasm_sha256) {
             throw Error.reject("Starter Wasm SHA-256 does not match");
         };
+        let ?expectedFilesSha256 = starter_upload_files_sha256 else {
+            throw Error.reject(
+                "Starter upload predates file commitments; restart the upload"
+            );
+        };
+        let committedFiles = List.toArray(staged_files);
+        let committedFileChunks = List.toArray(staged_file_chunks);
+        let filesSha256 = switch (
+            starterFilesSha256(committedFiles, committedFileChunks)
+        ) {
+            case (#ok(hash)) hash;
+            case (#err(message)) throw Error.reject(message);
+        };
+        if (filesSha256 != expectedFilesSha256) {
+            throw Error.reject("Starter file commitment does not match");
+        };
 
         // Publish one immutable payload together. Registrations that have
         // reached the paid transfer boundary retain their exact payload even
@@ -335,16 +374,117 @@ persistent actor class Self<system>(installTargetSubnet : Principal) = this {
             info;
             wasm = committedWasm;
             runtime_config_template = spec.runtime_config_template;
-            files = List.toArray(staged_files);
-            file_chunks = List.toArray(staged_file_chunks);
+            files = committedFiles;
+            file_chunks = committedFileChunks;
             initialize_publication_entropy = true;
         };
         next_starter_revision := revision;
         current_starter := ?committed;
+        current_starter_files_sha256 := ?filesSha256;
         starter_upload := null;
+        starter_upload_files_sha256 := null;
         staged_wasm_chunks := Map.empty<Nat, Blob>();
         staged_files := List.empty<Asset>();
         staged_file_chunks := List.empty<AssetChunk>();
+    };
+
+    private func starterFilesSha256(
+        files : [Asset],
+        fileChunks : [AssetChunk],
+    ) : Result.Result<Blob, Text> {
+        let chunksByKey = Map.empty<Text, List.List<(Nat, Blob)>>();
+        for ((key, chunkId, content) in fileChunks.vals()) {
+            let chunks = switch (Map.get(chunksByKey, Text.compare, key)) {
+                case null List.empty<(Nat, Blob)>();
+                case (?existing) existing;
+            };
+            List.add(chunks, (chunkId, content));
+            Map.add(chunksByKey, Text.compare, key, chunks);
+        };
+
+        let sortedFiles = Array.sort<Asset>(
+            files,
+            func(left, right) { Text.compare(left.0, right.0) },
+        );
+        let root = Sha256.Digest(#sha256);
+        root.writeBlob(Text.encodeUtf8("neutron-starter-files-root-v1"));
+        writeCommitmentNat(root, sortedFiles.size());
+        var previousKey : ?Text = null;
+        for ((key, file) in sortedFiles.vals()) {
+            switch (previousKey) {
+                case (?previous) {
+                    if (previous == key) {
+                        return #err(
+                            "Starter upload contains duplicate file paths"
+                        );
+                    };
+                };
+                case null {};
+            };
+            previousKey := ?key;
+            let chunks = switch (Map.get(chunksByKey, Text.compare, key)) {
+                case null [];
+                case (?value) List.toArray(value);
+            };
+            Map.remove(chunksByKey, Text.compare, key);
+            switch (starterFileLeaf(key, file, chunks)) {
+                case (#ok(hash)) root.writeBlob(hash);
+                case (#err(message)) return #err(message);
+            };
+        };
+        if (Map.size(chunksByKey) != 0) {
+            return #err("Starter upload contains chunks for an unknown file");
+        };
+        #ok(root.sum());
+    };
+
+    private func starterFileLeaf(
+        key : Text,
+        file : Neutron.File,
+        chunks : [(Nat, Blob)],
+    ) : Result.Result<Blob, Text> {
+        let sortedChunks = Array.sort<(Nat, Blob)>(
+            chunks,
+            func(left, right) { Nat.compare(left.0, right.0) },
+        );
+        if (file.chunks != sortedChunks.size() + 1) {
+            return #err("Starter file has an invalid chunk count: " # key);
+        };
+        var totalBytes = file.content.size();
+        var expectedChunkId = 1;
+        for ((chunkId, content) in sortedChunks.vals()) {
+            if (chunkId != expectedChunkId) {
+                return #err("Starter file has invalid chunk IDs: " # key);
+            };
+            expectedChunkId += 1;
+            totalBytes += content.size();
+        };
+
+        let digest = Sha256.Digest(#sha256);
+        digest.writeBlob(Text.encodeUtf8("neutron-starter-file-leaf-v1"));
+        writeCommitmentText(digest, key);
+        writeCommitmentText(digest, file.content_type);
+        writeCommitmentText(digest, file.content_encoding);
+        writeCommitmentNat(digest, file.chunks);
+        writeCommitmentNat(digest, totalBytes);
+        digest.writeArray(file.content);
+        for ((_, content) in sortedChunks.vals()) {
+            digest.writeBlob(content);
+        };
+        #ok(digest.sum());
+    };
+
+    private func writeCommitmentText(
+        digest : Sha256.Digest,
+        value : Text,
+    ) {
+        let bytes = Text.encodeUtf8(value);
+        digest.writeBlob(Text.encodeUtf8(Nat.toText(bytes.size()) # ":"));
+        digest.writeBlob(bytes);
+    };
+
+    private func writeCommitmentNat(digest : Sha256.Digest, value : Nat) {
+        digest.writeBlob(Text.encodeUtf8(Nat.toText(value) # "\00"));
     };
 
     public shared ({ caller }) func provision(

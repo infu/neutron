@@ -1,17 +1,17 @@
 {
   "name": "@neutron/motoko-wasm",
   "source": {
-    "repository": "https://github.com/caffeinelabs/motoko",
+    "repository": "https://github.com/infu/neutron_motoko",
     "revision": "d7ed0a92b6219d784b7143e0851ed64b55dfc25a",
     "build_command": "scripts/build-neutron-moc-wasm <output-directory>",
-    "nix_store_output": "/nix/store/0bywc50sal64bi2hhzwz53fwrqzafrzx-moc.wasm",
+    "nix_store_output": "/nix/store/kci9j9b8l6jnzl61aia7h53afaq32k6f-moc.wasm",
     "provenance": "Fresh source builds are authoritative; checkout-local result symlinks are not compiler provenance."
   },
   "loader": "moc.wasm.js",
   "assets": "moc_wasm.bc.wasm.assets",
   "sha256": {
-    "moc.wasm.js": "a18aa9a25e64b9c46cbf71f2a8eed781889f31329a391c1977597d6f73acec9c",
-    "moc.wasm.cjs": "33b6cc8b1ee9577300e55fbe17d998a72af8d39b332934c053d741cb0d1d86a3",
-    "moc_wasm.bc.wasm.assets/code-837df5d576a840b74bf6.wasm": "d606e3a04e1023ce1a99c2fc03ee454af1e59bf07ce4bc665561ceb06a2293ec"
+    "moc.wasm.js": "02abca9f5072eced26c9b448b3abb0850ae8a39a93599c3f3b6e7c7e5bc28c95",
+    "moc.wasm.cjs": "21730b495e50327935e1d9136078f469d9a0d38129bc28e8277bdcd1ada1006d",
+    "moc_wasm.bc.wasm.assets/code-e5709663fa8d7ab272f3.wasm": "6807a1f38a755497e2f5ef0e632359ea053597f8549f9be22074b5222bff543b"
   }
 }

@@ -3359,7 +3359,7 @@ function compressedInstallCodeRequest({
   deploymentId: string;
 }): KernelInstallCodeRequest {
   return {
-    wasm: gzipSync(wasm),
+    wasm: gzipSync(wasm, { mtime: 0 }),
     candid,
     deployment_id: deploymentId,
   };
@@ -3683,7 +3683,7 @@ export function createStaticFileOperation(
     ? keyOrPath
     : `/${keyOrPath === "index.html" ? "" : keyOrPath}`;
   const processedContent =
-    contentEncoding === "gzip" ? gzipSync(content) : content;
+    contentEncoding === "gzip" ? gzipSync(content, { mtime: 0 }) : content;
   const chunks = chunkBytes(processedContent, chunkSize);
   const first = chunks[0];
   if (!first) throw new Error("Failed to chunk static file");

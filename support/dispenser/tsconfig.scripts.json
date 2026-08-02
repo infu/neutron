@@ -14,6 +14,7 @@
     "production_deploy.ts",
     "src/provisioning.ts",
     "starter.ts",
+    "starter_file_commitment.ts",
     "starter_payload.ts",
     "test/**/*.ts",
     "types/esbuild-copy-static-files.d.ts"
