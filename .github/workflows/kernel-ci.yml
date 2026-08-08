@@ -1,0 +1,53 @@
+name: Kernel CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  kernel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show toolchain
+        run: |
+          nix develop --command bash -lc '
+            set -euxo pipefail
+            node --version
+            npm --version
+            bun --version
+            mops --version
+          '
+
+      - name: Install dependencies
+        run: |
+          nix develop --command bash -lc '
+            set -euxo pipefail
+            npm ci
+          '
+
+      - name: Kernel tests
+        run: |
+          nix develop --command bash -lc '
+            set -euxo pipefail
+            npm --workspace neutron-kernel test
+          '
+
+      - name: Kernel package
+        run: |
+          nix develop --command bash -lc '
+            set -euxo pipefail
+            npm --workspace neutron-kernel run package
+          '
