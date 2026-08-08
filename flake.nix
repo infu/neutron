@@ -46,6 +46,7 @@
               pkgs.git
               pkgs.curl
               pkgs.bitcoin
+              pkgs.wasmtime
               mops
             ] ++ linuxPackages;
 
