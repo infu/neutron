@@ -38,16 +38,19 @@ jobs:
             npm ci
           '
 
-      - name: Kernel tests
-        run: |
-          nix develop --command bash -lc '
-            set -euxo pipefail
-            npm --workspace neutron-kernel test
-          '
-
+      # Package first because the kernel test suite validates generated
+      # artifacts produced by the normal packaging pipeline. Do not run a
+      # separate build here: package already performs the build.
       - name: Kernel package
         run: |
           nix develop --command bash -lc '
             set -euxo pipefail
             npm --workspace neutron-kernel run package
+          '
+
+      - name: Kernel tests
+        run: |
+          nix develop --command bash -lc '
+            set -euxo pipefail
+            npm --workspace neutron-kernel test
           '
