@@ -83,8 +83,29 @@ test("one PocketIC config describes the complete local app set", () => {
   });
   const paths = localConfig.artifacts.packages.map(({ path }) => path);
   expect(new Set(paths).size).toBe(paths.length);
-  expect(paths).toContain("apps/vfs/files.v0.4.4.neutron");
+  expect(paths).toContain("apps/vfs/files.v0.4.5.neutron");
   expect(paths).toContain("apps/spreadsheet/spreadsheet.v0.3.1.neutron");
   expect(paths).toContain("apps/hullshift/hullshift.v0.2.1.neutron");
   expect(paths).toContain("apps/mysubnet/mysubnet.v0.3.1.neutron");
+});
+
+test("root validation and packaging cover every locally selected app", async () => {
+  const archivePaths = [
+    localConfig.artifacts.kernel.path,
+    ...localConfig.artifacts.packages.map(({ path: archivePath }) => archivePath),
+  ];
+  for (const archivePath of archivePaths) {
+    const workspace = await readJson<{
+      name: string;
+      scripts: Record<string, string>;
+    }>(path.join(path.dirname(archivePath), "package.json"));
+    expect(workspace.scripts.validate).toBeDefined();
+    expect(workspace.scripts.package).toBeDefined();
+    expect(rootPackage.scripts.validate).toContain(
+      `npm --workspace ${workspace.name} run validate`,
+    );
+    expect(rootPackage.scripts.package).toContain(
+      `npm --workspace ${workspace.name} run package`,
+    );
+  }
 });
