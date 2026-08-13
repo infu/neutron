@@ -7,7 +7,7 @@
   "apps": [
     {
       "id": "files",
-      "path": "../../apps/vfs/files.v0.4.3.neutron"
+      "path": "../../apps/vfs/files.v0.4.4.neutron"
     },
     {
       "id": "contacts",

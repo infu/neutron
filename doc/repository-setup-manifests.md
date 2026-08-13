@@ -338,13 +338,18 @@ The example contains:
 - `demopack`, referencing the local Hello and Kitchen Sink packages; and
 - `hello`, referencing only Hello.
 
-Build the application packages before generating the repository:
+From the repository root, build the application packages before generating the
+repository:
 
 ```sh
 npm --workspace neutron-hello run package
 npm --workspace neutron-kitchensink run package
-npm --workspace neutron-example-repository run build
+npm run repository:generate
 ```
+
+`npm run build:all` runs the repository-wide source build, app packaging, and
+this generation step in dependency order. Repository Wasm compilation remains
+a separate workspace command.
 
 Supplying `REPOSITORY_CANISTER_ID` and `REPOSITORY_DISPENSER_ORIGIN` makes the
 generator print pinned provider links after a repository has been deployed by

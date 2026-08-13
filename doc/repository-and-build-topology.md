@@ -77,6 +77,39 @@ until it is added to that list. Run `npm test` from `../ntmux/` for the separate
 TypeScript, Motoko, and Rust suites. Browser tests are separate because they
 need a live local Neutron and Chromium.
 
+## Root build phases
+
+The root build is split into explicit source-build, app-package, and repository
+generation phases:
+
+```sh
+npm run build
+npm run package
+npm run repository:generate
+```
+
+`npm run build` fans out only to workspaces that expose an independent `build`
+script. App builds create browser output and generated metadata, but do not
+create `.neutron` archives. `npm run package` runs the complete production app
+package workflows and produces those archives. `npm run repository:generate`
+then reads the configured Hello and Kitchen Sink archives, validates their
+contents, and writes `support/repository/mo/GeneratedRepository.mo`.
+
+The repository generator intentionally exposes `generate`, not a workspace
+`build` lifecycle. This keeps the generic workspace fan-out valid on a clean
+checkout where ignored package archives do not exist yet. Run the complete
+ordered pipeline with:
+
+```sh
+npm run build:all
+```
+
+The app package commands include their own app builds, so this comprehensive
+pipeline repeats those app-local builds after the independent workspace build
+phase. Browser and end-to-end suites remain separate test commands;
+`build:all` does not launch Playwright. Repository Wasm compilation remains
+the separate `neutron-example-repository` `build:wasm` command.
+
 ## Package construction
 
 Applications follow one target-neutral package contract. A typical package

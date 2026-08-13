@@ -14,6 +14,34 @@ Backend is in Motoko.
 
 Documentation: http://ntron.net code: devs
 
+## Build commands
+
+Run repository commands from the repository root:
+
+```sh
+npm run build
+npm run package
+npm run repository:generate
+```
+
+`build` runs the independent workspace builds. `package` runs each production
+app's complete packaging workflow and creates its `.neutron` archive.
+`repository:generate` consumes the packaged Hello and Kitchen Sink archives and
+generates the static example repository's Motoko resources. The generator is a
+separate phase because it cannot run before those archives exist.
+
+To run all three phases in dependency order:
+
+```sh
+npm run build:all
+```
+
+App package scripts include their own app build, so `build:all` deliberately
+repeats that app-local stage while also covering independent workspace builds.
+It generates the repository source but does not compile or deploy the example
+repository canister. Browser and end-to-end tests are separate test commands;
+`build:all` does not launch Playwright.
+
 ## Design principles
 
 - Kernel is replacable by users.

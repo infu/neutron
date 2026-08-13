@@ -2,18 +2,13 @@ import esbuild from "esbuild";
 import { chromium } from "@playwright/test";
 import { serve } from "bun";
 import { constants } from "node:fs";
-import { access, mkdir, readdir, writeFile } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildFilesInlineWorkerBundle,
   filesInlineCryptoWorkerPlugin,
 } from "./worker_bundle.ts";
-
-export const FILES_WORKER_BROWSER_EVIDENCE_PATH =
-  ".neutron-worker-browser-evidence.json";
-export const FILES_WORKER_BROWSER_EVIDENCE_SCHEMA =
-  "neutron.files.worker-browser-evidence.v2";
 
 const thisFile = fileURLToPath(import.meta.url);
 export const DEFAULT_BROWSER_FILES_ROOT = resolve(dirname(thisFile), "..");
@@ -30,8 +25,7 @@ export const FILES_WORKER_INITIAL_STATUS = Object.freeze({
   retryFrameCount: 0,
 });
 
-export type FilesWorkerBrowserEvidence = Readonly<{
-  schema: typeof FILES_WORKER_BROWSER_EVIDENCE_SCHEMA;
+export type FilesWorkerBrowserResult = Readonly<{
   engine: Readonly<{
     name: "chromium";
     version: string;
@@ -106,63 +100,9 @@ async function discoverNixPlaywrightChromium(): Promise<string | undefined> {
   return undefined;
 }
 
-export function assertFilesWorkerBrowserEvidence(
-  value: unknown,
-  expectedWorker: { sha256: string; sourceBytes: number },
-): FilesWorkerBrowserEvidence {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value)
-  ) {
-    throw new Error("Files worker browser evidence must be an object");
-  }
-  const evidence = value as Partial<FilesWorkerBrowserEvidence>;
-  if (evidence.schema !== FILES_WORKER_BROWSER_EVIDENCE_SCHEMA) {
-    throw new Error("Files worker browser evidence schema is unsupported");
-  }
-  if (
-    evidence.engine?.name !== "chromium" ||
-    typeof evidence.engine.version !== "string" ||
-    evidence.engine.version.length === 0
-  ) {
-    throw new Error("Files worker browser evidence lacks Chromium identity");
-  }
-  if (
-    evidence.frame?.credentialless !== false ||
-    evidence.frame.indexed_db !== true ||
-    evidence.frame.path !== "/frame"
-  ) {
-    throw new Error(
-      "Files worker browser evidence lacks the persistent frame proof",
-    );
-  }
-  if (
-    evidence.worker?.sha256 !== expectedWorker.sha256 ||
-    evidence.worker.source_bytes !== expectedWorker.sourceBytes ||
-    !sameJson(
-      evidence.worker.initial_status,
-      FILES_WORKER_INITIAL_STATUS,
-    )
-  ) {
-    throw new Error(
-      "Files worker browser evidence does not bind the current worker runtime",
-    );
-  }
-  if (
-    evidence.negative_control?.credentialless_frame_rejected !== true ||
-    evidence.negative_control.reason !== "persistent_resident_required"
-  ) {
-    throw new Error(
-      "Files worker browser evidence lacks the credentialless negative control",
-    );
-  }
-  return evidence as FilesWorkerBrowserEvidence;
-}
-
 export async function verifyFilesWorkerInChromium(
   filesRoot = DEFAULT_BROWSER_FILES_ROOT,
-): Promise<FilesWorkerBrowserEvidence> {
+): Promise<FilesWorkerBrowserResult> {
   const worker = await buildFilesInlineWorkerBundle(filesRoot);
   const harness = await esbuild.build({
     absWorkingDir: filesRoot,
@@ -341,7 +281,6 @@ export async function verifyFilesWorkerInChromium(
     }
 
     return Object.freeze({
-      schema: FILES_WORKER_BROWSER_EVIDENCE_SCHEMA,
       engine: Object.freeze({
         name: "chromium",
         version: browser.version(),
@@ -367,26 +306,8 @@ export async function verifyFilesWorkerInChromium(
   }
 }
 
-export async function writeFilesWorkerBrowserEvidence(
-  filesRoot = DEFAULT_BROWSER_FILES_ROOT,
-): Promise<FilesWorkerBrowserEvidence> {
-  const evidence = await verifyFilesWorkerInChromium(filesRoot);
-  const dist = join(filesRoot, "dist");
-  await mkdir(dist, { recursive: true });
-  await writeFile(
-    join(dist, FILES_WORKER_BROWSER_EVIDENCE_PATH),
-    canonicalJson(evidence),
-    "utf8",
-  );
-  return evidence;
-}
-
 if (import.meta.main) {
-  const write = process.argv.includes("--write");
-  const operation = write
-    ? writeFilesWorkerBrowserEvidence()
-    : verifyFilesWorkerInChromium();
-  operation.then(
+  verifyFilesWorkerInChromium().then(
     (evidence) => {
       console.log(canonicalJson(evidence).trimEnd());
     },
