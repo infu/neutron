@@ -15,7 +15,7 @@
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.6.neutron"
+      "path": "apps/kernel/kernel.v0.3.7.neutron"
     },
     "packages": [
       {

@@ -17,11 +17,11 @@
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.6.neutron",
-      "sha256": "b25948f68ed10f29c984e936ecfd18b95fa8d4cdec0bbd1e944b53b2a371bd8b",
-      "bytes": 1858175,
+      "path": "apps/kernel/kernel.v0.3.7.neutron",
+      "sha256": "f421a10311cf0ebb4775172ee1832d72069888af08a1c76ae8cff93b0279cdaa",
+      "bytes": 1858442,
       "id": "kernel",
-      "version": 306
+      "version": 307
     },
     "packages": [
       {

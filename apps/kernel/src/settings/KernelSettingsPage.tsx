@@ -562,7 +562,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
           ) : null}
           {appUsage.error ? (
             <div className="settings-warning" role="alert">
-              <strong>Cycles-used totals are unavailable.</strong>
+              <strong>App cycle totals are unavailable.</strong>
               <span>
                 {appUsage.data
                   ? `Showing the last successfully loaded totals. ${appUsage.error}`
@@ -583,6 +583,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
               <colgroup>
                 <col className="settings-app-column--app" />
                 <col className="settings-app-column--cycles" />
+                <col className="settings-app-column--cycles-in" />
                 <col className="settings-app-column--update" />
                 <col className="settings-app-column--version" />
                 <col className="settings-app-column--details" />
@@ -592,6 +593,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                 <tr>
                   <th scope="col">App</th>
                   <th scope="col">Cycles used</th>
+                  <th scope="col">Cycles in</th>
                   <th scope="col">Update</th>
                   <th scope="col">Version</th>
                   <th scope="col"><span className="sr-only">Details</span></th>
