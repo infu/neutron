@@ -202,7 +202,12 @@ test("Installed Apps applies low-side 13-node execution pricing with four TC dec
   expect(html).toContain("One-line app description");
   expect(html).toContain("8.0901TC");
   expect(html).toContain(
-    "90,000,000,000 instructions at one cycle per instruction + 60,000,000 update execution base cycles (12 × 5,000,000) + 8,000,000,000,000 message, transfer, and call-base cycles; 9,000,000,000,000 incoming cycles accepted separately"
+    "90,000,000,000 instructions at one cycle per instruction + 60,000,000 update execution base cycles (12 × 5,000,000) + 8,000,000,000,000 message, transfer, and call-base cycles"
+  );
+  expect(html).toContain('data-tid="settings-app-cycles-in"');
+  expect(html).toContain("9.0000TC");
+  expect(html).toContain(
+    "9,000,000,000,000 cycles accepted by this installation through paid public ingress"
   );
   expect(html).toContain("Up to date");
   expect(html).toContain("v0.1.0");

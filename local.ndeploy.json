@@ -15,7 +15,7 @@
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.6.neutron"
+      "path": "apps/kernel/kernel.v0.3.7.neutron"
     },
     "packages": [
       {
@@ -31,7 +31,7 @@
         "path": "apps/hullshift/hullshift.v0.2.1.neutron"
       },
       {
-        "path": "apps/vfs/files.v0.4.3.neutron"
+        "path": "apps/vfs/files.v0.4.5.neutron"
       },
       {
         "path": "apps/spreadsheet/spreadsheet.v0.3.1.neutron"

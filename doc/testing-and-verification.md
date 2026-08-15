@@ -248,6 +248,19 @@ page-thread state.
 App-owned Playwright suites may have additional prerequisites and evidence
 contracts. Read the app's local E2E README before running those suites.
 
+Files keeps its self-contained inline-worker Chromium check outside normal
+packaging:
+
+```sh
+npm --workspace neutron-vfs run release:browser
+```
+
+That command starts a temporary loopback harness, reports the result to
+stdout, and writes no package input or browser-evidence artifact. Neither
+`npm --workspace neutron-vfs run package` nor `npm run build:all` launches it.
+Use `npm --workspace neutron-vfs run test:browser-release` for the focused test
+wrapper.
+
 ## Evidence Discipline
 
 Keep these claims separate:

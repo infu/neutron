@@ -22,11 +22,6 @@ import {
   filesInlineWorkerModule,
 } from "../scripts/worker_bundle.ts";
 import { createDefaultFilesResidentPort } from "../src/vault/index.ts";
-import {
-  FILES_WORKER_BROWSER_EVIDENCE_SCHEMA,
-  FILES_WORKER_INITIAL_STATUS,
-  assertFilesWorkerBrowserEvidence,
-} from "../scripts/worker_browser_release.ts";
 
 const DEFAULT_RESIDENT_METHODS = [
   "status",
@@ -72,6 +67,19 @@ test("default resident factory is lazy, concrete, and exposes the complete port"
   expect(() => port.clearVolatile()).not.toThrow();
 });
 
+test("normal packaging keeps the Playwright release gate separate", async () => {
+  const workspace = JSON.parse(
+    await readFile(join(DEFAULT_FILES_ROOT, "package.json"), "utf8"),
+  ) as { scripts?: Record<string, string> };
+  expect(workspace.scripts?.package).toBeDefined();
+  expect(workspace.scripts?.package).not.toMatch(
+    /(?:release:browser|playwright|chromium)/iu,
+  );
+  expect(workspace.scripts?.["release:browser"]).toBe(
+    "bun scripts/worker_browser_release.ts",
+  );
+});
+
 test("release tree digests bind paths, lengths, and contents", async () => {
   const root = await mkdtemp(join(tmpdir(), "files-release-tree-"));
   try {
@@ -115,43 +123,6 @@ test("release evidence fails closed after source or output drift", () => {
       package_payload_without_evidence: { sha256: "d".repeat(64) },
     })
   ).toThrow(/stale relative to current sources or dist/u);
-});
-
-test("browser evidence is bound to the exact inline worker", () => {
-  const worker = {
-    sha256: "a".repeat(64),
-    sourceBytes: 101_382,
-  };
-  const evidence = {
-    schema: FILES_WORKER_BROWSER_EVIDENCE_SCHEMA,
-    engine: { name: "chromium", version: "Chromium fixture" },
-    frame: { credentialless: false, indexed_db: true, path: "/frame" },
-    worker: {
-      sha256: worker.sha256,
-      source_bytes: worker.sourceBytes,
-      initial_status: FILES_WORKER_INITIAL_STATUS,
-    },
-    negative_control: {
-      credentialless_frame_rejected: true,
-      reason: "persistent_resident_required",
-    },
-  } as const;
-  expect(assertFilesWorkerBrowserEvidence(evidence, worker)).toEqual(evidence);
-  expect(() =>
-    assertFilesWorkerBrowserEvidence(evidence, {
-      ...worker,
-      sha256: "b".repeat(64),
-    })
-  ).toThrow(/does not bind the current worker runtime/u);
-  expect(() =>
-    assertFilesWorkerBrowserEvidence({
-      ...evidence,
-      negative_control: {
-        credentialless_frame_rejected: false,
-        reason: "persistent_resident_required",
-      },
-    }, worker)
-  ).toThrow(/negative control/u);
 });
 
 test("archive verification rejects stale ignored payload bytes and paths", async () => {

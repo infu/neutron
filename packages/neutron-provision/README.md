@@ -48,7 +48,7 @@ PocketIC inline archives are path-only developer inputs:
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.6.neutron"
+      "path": "apps/kernel/kernel.v0.3.7.neutron"
     },
     "packages": [
       {
@@ -106,7 +106,7 @@ IC deployment inputs remain immutable and fully pinned:
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.6.neutron",
+      "path": "apps/kernel/kernel.v0.3.7.neutron",
       "sha256": "<64 lowercase hex characters>",
       "bytes": "<archive byte length>",
       "id": "kernel",

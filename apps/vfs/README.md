@@ -78,12 +78,9 @@ ordinary `Blob` fields in the Files V2 Candid records. Workspace and Shared use
 the separate Files Plain V3 records, whose `Blob` body fields intentionally
 carry plaintext.
 
-The current security and implementation contract is in
-[`todo.files.2.md`](./todo.files.2.md).
-
 ## Release
 
-Files v0.4.3 is manifest version 403 and managed-memory schema 2. It retains
+Files v0.4.5 is manifest version 405 and managed-memory schema 2. It retains
 the immutable schema-1 module and performs one managed `1 -> 2` migration,
 preserving the encrypted Vault state while initializing the new Workspace and
 Shared roots.
@@ -97,10 +94,12 @@ lock, inline crypto worker, and payload bytes, then verifies every unpacked
 archive path and byte. Files release evidence deliberately does not hash
 Kernel source or Kernel Certified Assets qualification artifacts; the Kernel
 qualifies its generic capability independently, while Files tests its own
-integration. A real Chromium gate executes that exact worker in a
+integration. Normal packaging does not launch a browser or embed a
+browser-generated artifact. Run `npm run release:browser` for the
+explicit Playwright release gate that executes the exact inline worker in a
 browser-isolated frame. `npm test` rebuilds and verifies
-`files.v0.4.3.neutron`, so stale ignored output cannot satisfy the package
-tests.
+`files.v0.4.5.neutron` and runs the browser suites separately, so stale ignored
+output cannot satisfy the package tests.
 
 `npm run unicode:check` regenerates both Unicode table artifacts in memory
 from the vendored, checksum-pinned Unicode 16.0 inputs and runs all 99,825 NFC

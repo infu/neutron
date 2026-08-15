@@ -103,19 +103,20 @@ lifecycle, restore, environment, and threat contracts.
 
 Kernel Settings keeps per-app operational information in the **Installed
 Apps** table rather than separate usage and update sections. Each row shows the
-app name and one-line description, cycles used, update state or action from the
-latest Settings refresh, installed semantic version, details control, and
-uninstall control. Opening Settings checks update sources automatically; its
-global refresh action refreshes them again. When multiple verified releases
-are available, **Upgrade all** downloads and verifies the complete set, compiles
-it once, shows one combined approval review, and commits it through one checked
-installation transaction. The cycles-used cell is a low-side
-13-node pricing estimate: installation-lifetime instructions cost one cycle
-each, each measured update execution adds the 5,000,000-cycle execution base,
-authorized and direct-authenticated-ingress updates add the 1,200,000-cycle ingress-reception base, each
-actually dispatched brokered call and measured timer/handler self-call adds the
-260,000-cycle request/response base, and the same base is counted for
-zero-attachment `raw_rand` and uncached management public-key calls. Net
+app name and one-line description, cycles used, cycles in, update state or
+action from the latest Settings refresh, installed semantic version, details
+control, and uninstall control. Opening Settings checks update sources
+automatically; its global refresh action refreshes them again. When multiple
+verified releases are available, **Upgrade all** downloads and verifies the
+complete set, compiles it once, shows one combined approval review, and commits
+it through one checked installation transaction. The cycles-used cell is a
+low-side 13-node pricing estimate: installation-lifetime instructions cost one
+cycle each, each measured update execution adds the 5,000,000-cycle execution
+base, authorized and direct-authenticated-ingress updates add the
+1,200,000-cycle ingress-reception base, each actually dispatched brokered call
+and measured timer/handler self-call adds the 260,000-cycle request/response
+base, and the same base is counted for zero-attachment `raw_rand` and uncached
+management public-key calls. Net
 explicit outgoing transfers are added after refunds. Outgoing reservation
 books only gross explicit attachments and the intended call count; a dispatch
 commit adds the fixed base, a known pre-dispatch cancellation unwinds the
@@ -134,8 +135,11 @@ rate-table-dependent. Each CDK scheduled-task self-call contributes both the
 update-execution base. The shared Motoko global-timer dispatch remains omitted.
 These omissions, unwrapped work, and trapped final samples keep Neutron's
 attribution low-side and non-billing-grade. Queries are excluded and nested
-canister work is independently metered where wrapped. In normal mode, expanding
-a row shows a compact,
+canister work is independently metered where wrapped. The cycles-in cell shows
+the installation-lifetime cycles accepted through the app's paid public
+ingress routes. It is attributed revenue, not a generic canister-balance top-up,
+and does not reduce the cycles-used estimate. In normal mode, expanding a row
+shows a compact,
 kernel-written view of material external access, autonomous/background
 behavior, live capability switches, approved backend targets with revoke
 actions, install-source status, and dependency blockers. Namespaced compiler

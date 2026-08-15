@@ -199,6 +199,10 @@ export function AppSettingsEntry({
           <span className="settings-app-cell-label">Cycles used</span>
           <AppCyclesUsed state={usage} />
         </td>
+        <td className="settings-app-cell settings-app-cell--cycles-in">
+          <span className="settings-app-cell-label">Cycles in</span>
+          <AppCyclesIn state={usage} />
+        </td>
         <td className="settings-app-cell settings-app-cell--update">
           <span className="settings-app-cell-label">Updates</span>
           {update}
@@ -258,7 +262,7 @@ export function AppSettingsEntry({
         hidden={!open}
         id={detailsId}
       >
-        <td colSpan={6}>
+        <td colSpan={7}>
           <div className="settings-app-details">
         {uiMode === "developer" ? (
           <>
@@ -1665,11 +1669,9 @@ function AppCyclesUsed({ state }: { state: AppUsageCellState }) {
   const instructions = state.usage?.lifetimeInstructions ?? 0n;
   const executions = state.usage?.lifetimeExecutions ?? 0n;
   const outgoing = state.usage?.lifetimeOutgoingCycles ?? 0n;
-  const incomingAccepted =
-    state.usage?.lifetimeIncomingCyclesAccepted ?? 0n;
   const executionBase =
     executions * UPDATE_EXECUTION_BASE_CYCLES_13_NODE;
-  const exact = `${formatExactNat(instructions)} instructions at one cycle per instruction + ${formatExactNat(executionBase)} update execution base cycles (${formatExactNat(executions)} × 5,000,000) + ${formatExactNat(outgoing)} message, transfer, and call-base cycles; ${formatExactNat(incomingAccepted)} incoming cycles accepted separately`;
+  const exact = `${formatExactNat(instructions)} instructions at one cycle per instruction + ${formatExactNat(executionBase)} update execution base cycles (${formatExactNat(executions)} × 5,000,000) + ${formatExactNat(outgoing)} message, transfer, and call-base cycles`;
   return (
     <span
       aria-label={`${formatTrillionCycles(combinedAppCycles(state.usage))} cycles used; ${exact}`}
@@ -1678,6 +1680,43 @@ function AppCyclesUsed({ state }: { state: AppUsageCellState }) {
       title={exact}
     >
       {formatTrillionCycles(combinedAppCycles(state.usage))}
+    </span>
+  );
+}
+
+function AppCyclesIn({ state }: { state: AppUsageCellState }) {
+  if (state.kind === "system") {
+    return (
+      <span title="The system app is not included in per-app usage telemetry">
+        —
+      </span>
+    );
+  }
+  if (state.kind === "loading") {
+    return (
+      <span
+        aria-label="Loading cycles in"
+        className="settings-app-usage-loading"
+      >
+        <span aria-hidden="true" className="settings-app-update-spinner" />
+      </span>
+    );
+  }
+  if (state.kind === "unavailable") {
+    return <span title={state.message}>Unavailable</span>;
+  }
+
+  const incomingAccepted =
+    state.usage?.lifetimeIncomingCyclesAccepted ?? 0n;
+  const exact = `${formatExactNat(incomingAccepted)} cycles accepted by this installation through paid public ingress`;
+  return (
+    <span
+      aria-label={`${formatTrillionCycles(incomingAccepted)} cycles in; ${exact}`}
+      className="settings-app-cycle-total"
+      data-tid="settings-app-cycles-in"
+      title={exact}
+    >
+      {formatTrillionCycles(incomingAccepted)}
     </span>
   );
 }

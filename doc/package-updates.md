@@ -71,13 +71,18 @@ node -p "require('./apps/<directory>/package.json').name"
 ~~~
 
 Use the app's complete `package` script rather than invoking `pack.ts`
-directly. Apps may add required schema, browser, memory, or release-evidence
-steps around the common build. A failed package command is a release blocker;
+directly. Apps may add required schema, memory, or release-evidence steps
+around the common build. A failed package command is a release blocker;
 do not publish a partially produced archive.
 
 The package script does not necessarily run the app's complete unit,
 integration, Motoko, or E2E suite. Run and record the tests required by the
 app's release policy separately; the source publisher does not run them.
+
+Files deliberately keeps its Playwright worker check out of `package`. Run
+`npm --workspace neutron-vfs run release:browser` separately when qualifying a
+Files release. The command is pass/fail, writes no browser-evidence artifact,
+and does not supply an input to the package command.
 
 When several apps change, package each changed workspace before publication.
 The resulting actor code is target-neutral, but the archive still embeds

@@ -156,6 +156,7 @@ test("expanded app settings stay readable and tray metrics stay fixed", async ({
   await expect(table.getByRole("columnheader")).toHaveText([
     "App",
     "Cycles used",
+    "Cycles in",
     "Update",
     "Version",
     "Details",
@@ -168,12 +169,18 @@ test("expanded app settings stay readable and tray metrics stay fixed", async ({
   await expect(
     table.locator('[data-tid="settings-app-cycles-used"]'),
   ).toHaveCount(installedAppCount);
-  const cycleTotals = await table
-    .locator('[data-tid="settings-app-cycles-used"]')
-    .allTextContents();
-  expect(
-    cycleTotals.every((value) => /^\d[\d,.]*\.\d{4}TC$/u.test(value.trim())),
-  ).toBe(true);
+  await expect(
+    table.locator('[data-tid="settings-app-cycles-in"]'),
+  ).toHaveCount(installedAppCount);
+  for (const selector of [
+    '[data-tid="settings-app-cycles-used"]',
+    '[data-tid="settings-app-cycles-in"]',
+  ]) {
+    const cycleTotals = await table.locator(selector).allTextContents();
+    expect(
+      cycleTotals.every((value) => /^\d[\d,.]*\.\d{4}TC$/u.test(value.trim())),
+    ).toBe(true);
+  }
 
   const kitchenToggle = page.locator(
     '[data-tid="settings-app-details-toggle-kitchensink"]',
@@ -251,6 +258,62 @@ test("expanded app settings stay readable and tray metrics stay fixed", async ({
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(installedApps).toBeVisible();
+  const mobileCycleLayout = await table
+    .locator('.settings-app-entry:not([data-app-id="kernel"])')
+    .first()
+    .evaluate((row) => {
+      const used = row.querySelector<HTMLElement>(
+        '[data-tid="settings-app-cycles-used"]',
+      );
+      const incoming = row.querySelector<HTMLElement>(
+        '[data-tid="settings-app-cycles-in"]',
+      );
+      const usedCell = used?.closest<HTMLElement>(
+        ".settings-app-cell--cycles",
+      );
+      const incomingCell = incoming?.closest<HTMLElement>(
+        ".settings-app-cell--cycles-in",
+      );
+      if (!used || !incoming || !usedCell || !incomingCell) return null;
+
+      const originalUsed = used.textContent;
+      const originalIncoming = incoming.textContent;
+      used.textContent = "1,000.0000TC";
+      incoming.textContent = "1,000.0000TC";
+
+      const usedRect = used.getBoundingClientRect();
+      const incomingRect = incoming.getBoundingClientRect();
+      const usedCellRect = usedCell.getBoundingClientRect();
+      const incomingCellRect = incomingCell.getBoundingClientRect();
+      const usedStyle = getComputedStyle(used);
+      const incomingStyle = getComputedStyle(incoming);
+      const result = {
+        incomingContained:
+          incomingRect.left >= incomingCellRect.left - 1 &&
+          incomingRect.right <= incomingCellRect.right + 1,
+        incomingOverflow: incomingStyle.overflowX,
+        incomingTextOverflow: incomingStyle.textOverflow,
+        separated: usedRect.right <= incomingRect.left + 1,
+        usedContained:
+          usedRect.left >= usedCellRect.left - 1 &&
+          usedRect.right <= usedCellRect.right + 1,
+        usedOverflow: usedStyle.overflowX,
+        usedTextOverflow: usedStyle.textOverflow,
+      };
+
+      used.textContent = originalUsed;
+      incoming.textContent = originalIncoming;
+      return result;
+    });
+  expect(mobileCycleLayout).toEqual({
+    incomingContained: true,
+    incomingOverflow: "hidden",
+    incomingTextOverflow: "ellipsis",
+    separated: true,
+    usedContained: true,
+    usedOverflow: "hidden",
+    usedTextOverflow: "ellipsis",
+  });
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );

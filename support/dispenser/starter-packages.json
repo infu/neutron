@@ -2,12 +2,12 @@
   "format": 1,
   "kernel": {
     "id": "kernel",
-    "path": "../../apps/kernel/kernel.v0.3.6.neutron"
+    "path": "../../apps/kernel/kernel.v0.3.7.neutron"
   },
   "apps": [
     {
       "id": "files",
-      "path": "../../apps/vfs/files.v0.4.3.neutron"
+      "path": "../../apps/vfs/files.v0.4.5.neutron"
     },
     {
       "id": "contacts",

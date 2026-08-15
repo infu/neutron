@@ -3026,21 +3026,25 @@ button:focus-visible,
     width: 100%;
 
     col:nth-child(1) {
-        width: 34%;
+        width: 28%;
     }
 
     col:nth-child(2),
     col:nth-child(3) {
-        width: 18%;
+        width: 15%;
     }
 
     col:nth-child(4) {
-        width: 12%;
+        width: 16%;
     }
 
-    col:nth-child(5),
-    col:nth-child(6) {
-        width: 9%;
+    col:nth-child(5) {
+        width: 10%;
+    }
+
+    col:nth-child(6),
+    col:nth-child(7) {
+        width: 8%;
     }
 
     thead th {
@@ -3086,12 +3090,14 @@ button:focus-visible,
 }
 
 .settings-app-cell--cycles,
+.settings-app-cell--cycles-in,
 .settings-app-cell--update,
 .settings-app-cell--version {
     overflow-wrap: anywhere;
 }
 
 .settings-app-cell--cycles,
+.settings-app-cell--cycles-in,
 .settings-app-cell--version {
     font-family: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
     font-variant-numeric: tabular-nums;
@@ -3195,6 +3201,11 @@ button:focus-visible,
 
 .settings-app-cycle-total {
     color: var(--k-text);
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -5070,12 +5081,25 @@ button:focus-visible,
 
     .settings-app-list {
         col:nth-child(1) {
-            width: 32%;
+            width: 29%;
         }
 
         col:nth-child(2),
         col:nth-child(3) {
-            width: 19%;
+            width: 17%;
+        }
+
+        col:nth-child(4) {
+            width: 14%;
+        }
+
+        col:nth-child(5) {
+            width: 9%;
+        }
+
+        col:nth-child(6),
+        col:nth-child(7) {
+            width: 7%;
         }
     }
 
@@ -5176,7 +5200,7 @@ button:focus-visible,
 
     .settings-app-row {
         display: grid;
-        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 0.7fr) 30px 30px;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.7fr) 30px 30px;
         min-width: 0;
         padding: 9px 2px 8px;
     }
@@ -5197,6 +5221,7 @@ button:focus-visible,
     }
 
     .settings-app-cell--cycles,
+    .settings-app-cell--cycles-in,
     .settings-app-cell--update,
     .settings-app-cell--version {
         align-content: center;
