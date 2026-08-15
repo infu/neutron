@@ -30,6 +30,13 @@
           linuxPackages = pkgs.lib.optionals pkgs.stdenv.isLinux [
             pkgs.chromium
           ];
+
+          # Mops is distributed through npm rather than nixpkgs. Expose a
+          # mops command inside the development shell so CI and local
+          # development use the same toolchain entry point.
+          mops = pkgs.writeShellScriptBin "mops" ''
+            exec ${pkgs.nodejs_24}/bin/npx --yes --package ic-mops mops "$@"
+          '';
         in
         {
           default = pkgs.mkShell {
@@ -39,6 +46,8 @@
               pkgs.git
               pkgs.curl
               pkgs.bitcoin
+              pkgs.wasmtime
+              mops
             ] ++ linuxPackages;
 
             PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
