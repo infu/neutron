@@ -45,13 +45,9 @@ import {
 import {
   buildFilesInlineWorkerBundle,
 } from "./worker_bundle.ts";
-import {
-  FILES_WORKER_BROWSER_EVIDENCE_PATH,
-  assertFilesWorkerBrowserEvidence,
-} from "./worker_browser_release.ts";
 
 const RELEASE_EVIDENCE_PATH = ".neutron-release-evidence.json";
-const RELEASE_EVIDENCE_SCHEMA = "neutron.files.release-evidence.v3";
+const RELEASE_EVIDENCE_SCHEMA = "neutron.files.release-evidence.v4";
 const PACKAGE_VERIFICATION_SCHEMA = "neutron.files.package-verification.v2";
 const HARD_CUT_ENV = "NEUTRON_FILES_V2_FRESH_REINSTALL";
 const THIRD_PARTY_NOTICE_INDEX_PATH = "legal/THIRD_PARTY_NOTICES.md";
@@ -75,7 +71,6 @@ const FILES_SOURCE_ROOT_FILES = [
   "neutron.json",
   "neutron.lock.json",
   "package.json",
-  "todo.files.2.md",
   "tsconfig.app.json",
   "tsconfig.json",
   "tsconfig.scripts.json",
@@ -92,7 +87,6 @@ const FILES_SOURCE_DIRECTORIES = [
 ] as const;
 
 const REQUIRED_DIST_PATHS = new Set([
-  FILES_WORKER_BROWSER_EVIDENCE_PATH,
   ORDINARY_APP_LICENSE_PATHS[NSAL_LICENSE_ID],
   ORDINARY_APP_NOTICE_PATH,
   THIRD_PARTY_NOTICE_INDEX_PATH,
@@ -156,10 +150,7 @@ export type FilesReleaseEvidence = {
   managed_memory: MemoryLockBinding;
   bundle_contract: {
     inline_worker_sha256: string;
-    chromium_persistent_worker_sha256: string;
-    chromium_version: string;
     default_resident_port_methods: number;
-    browser_persistence_authority: true;
     polling: false;
   };
   package_payload_without_evidence: TreeDigest;
@@ -531,7 +522,6 @@ const FORBIDDEN_BUNDLE_PATTERNS = Object.freeze([
 
 async function assertCleanBundleContract(filesRoot: string): Promise<{
   inlineWorkerSha256: string;
-  chromiumVersion: string;
 }> {
   const [mainJs, serviceJs, worker] = await Promise.all([
     readFile(join(filesRoot, "dist", "web", "main.js"), "utf8"),
@@ -550,17 +540,6 @@ async function assertCleanBundleContract(filesRoot: string): Promise<{
   ) {
     throw new Error("Files service bundle is missing the runnable crypto worker");
   }
-  const browserEvidenceFile = await readCanonicalJson(
-    join(filesRoot, "dist", FILES_WORKER_BROWSER_EVIDENCE_PATH),
-    "Files worker browser evidence",
-  );
-  const browserEvidence = assertFilesWorkerBrowserEvidence(
-    browserEvidenceFile.value,
-    {
-      sha256: worker.sha256,
-      sourceBytes: worker.source.length,
-    },
-  );
   const combined = `${mainJs}\n${serviceJs}`;
   for (const forbidden of FORBIDDEN_BUNDLE_PATTERNS) {
     if (forbidden.pattern.test(combined)) {
@@ -601,7 +580,6 @@ async function assertCleanBundleContract(filesRoot: string): Promise<{
   (port.clearVolatile as () => void)();
   return {
     inlineWorkerSha256: worker.sha256,
-    chromiumVersion: browserEvidence.engine.version,
   };
 }
 
@@ -948,11 +926,7 @@ export async function buildFilesReleaseEvidence(
     managed_memory: releaseState.lock,
     bundle_contract: {
       inline_worker_sha256: bundleContract.inlineWorkerSha256,
-      chromium_persistent_worker_sha256:
-        bundleContract.inlineWorkerSha256,
-      chromium_version: bundleContract.chromiumVersion,
       default_resident_port_methods: RESIDENT_PORT_METHODS.length,
-      browser_persistence_authority: true,
       polling: false,
     },
     package_payload_without_evidence: await digestTree(

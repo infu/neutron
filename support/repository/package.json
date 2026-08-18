@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build.ts",
+    "generate": "bun build.ts",
     "build:wasm": "bun ../../packages/neutron-scripts/src/compile_motoko.ts --source mo/main.mo --output repository.wasm",
     "test": "bun test && bun test/motoko/run.ts"
   },

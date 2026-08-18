@@ -20,7 +20,7 @@
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.6.neutron"
+      "path": "apps/kernel/kernel.v0.3.9.neutron"
     },
     "packages": [
       {

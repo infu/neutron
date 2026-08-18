@@ -15,6 +15,22 @@ deployment.
 
 ## Current Commands
 
+Repository build phases:
+
+```sh
+npm run build
+npm run package
+npm run repository:generate
+
+# Complete ordered pipeline
+npm run build:all
+```
+
+The repository generator consumes packaged Hello and Kitchen Sink archives, so
+it is not part of the independent workspace `build` fan-out. App `package`
+scripts run their app-local build again as part of producing authoritative
+archives.
+
 Fast repository checks:
 
 ```sh
@@ -56,7 +72,7 @@ Production-context offline compile:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.6.neutron \
+  --package apps/kernel/kernel.v0.3.9.neutron \
   --package apps/hello/hello.v0.2.2.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did

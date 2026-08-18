@@ -33,16 +33,21 @@ and must carry their own complete license, notice, and source materials.
 ## Build the example
 
 The checked-in configuration uses the real Hello and Kitchen Sink package
-artifacts. Build those packages first, then generate and compile the repository:
+artifacts. Starting at the repository root, build those packages first, then
+generate and compile the repository:
 
 ```sh
 npm --workspace neutron-hello run package
 npm --workspace neutron-kitchensink run package
-npm --workspace neutron-example-repository run build
+npm run repository:generate
 cd support/repository
 mops install
 npm run build:wasm
 ```
+
+`npm run build:all` sequences the repository-wide build, package, and
+generation phases in that order and stops if any app package validation fails.
+It does not run browser tests, `mops install`, or compile `repository.wasm`.
 
 `build:wasm` uses Neutron's exact vendored Motoko WebAssembly compiler and
 emits `repository.wasm` plus its matching `repository.wasm.did` Candid
@@ -58,11 +63,12 @@ the info/manifests/index deterministically, and generates
 packed manifest version. Hand-authored configuration cannot provide
 or override an ID, version, digest, or size.
 
-To print directly usable links after a canister ID is known:
+To print directly usable links after a canister ID is known, run the root
+command from the repository root:
 
 ```sh
 REPOSITORY_CANISTER_ID=rrkah-fqaaa-aaaaa-aaaaq-cai \
-npm --workspace neutron-example-repository run build
+npm run repository:generate
 ```
 
 The link builder defaults to the production SushiOS dispenser frontend,

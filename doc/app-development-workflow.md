@@ -363,7 +363,7 @@ compilation outside the kernel browser UI:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.6.neutron \
+  --package apps/kernel/kernel.v0.3.9.neutron \
   --package apps/hello/hello.v0.2.2.neutron \
   --package apps/kitchensink/kitchensink.v0.3.2.neutron \
   --wasm-out /tmp/neutron.wasm \

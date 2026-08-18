@@ -221,8 +221,8 @@ JavaScript numbers are rejected before formatting.
 
 All per-app operational information lives in the **Installed Apps** table;
 Settings has no separate instructions, usage, or updates section. The overview
-columns are app, cycles used, updates, installed version, details, and
-uninstall. The app cell shows the app name with a one-line, ellipsized
+columns are app, cycles used, cycles in, updates, installed version, details,
+and uninstall. The app cell shows the app name with a one-line, ellipsized
 app-provided description. The version uses the packed manifest version rendered
 as a semantic version. The details and uninstall controls remain separate
 keyboard-reachable cells, and the kernel row cannot be uninstalled.
@@ -244,6 +244,13 @@ and rolling daily buckets. The estimate omits variable message-byte charges,
 response-callback bases, shared global-timer dispatch, storage, and compute
 allocation, so it is not billing-grade canister burn.
 
+The cycles-in cell joins the same exact installation scope and shows
+`lifetime_incoming_cycles_accepted`, formatted in trillion cycles. It counts
+cycles accepted through the app's paid public-ingress routes, not generic
+canister top-ups or balance changes. This attributed revenue remains separate
+from and does not reduce the cycles-used estimate. Both cycle totals remain
+visible in normal and developer modes.
+
 Each installed-app row has a collapsed details control. In normal mode its
 expanded view is consequence-oriented: it shows concise kernel-written copy
 for material external, public, signing, key, data, connection, and autonomous
@@ -263,7 +270,7 @@ backend functions, raw 30-day and installation usage totals, and full
 provenance digests. Switching mode while a row is open replaces the rendered
 details; the presentation mode does not alter capability enforcement or live
 state. There is no separate global usage ranking or chart; the combined cycle
-total and update control remain visible in the overview row.
+totals and update control remain visible in the overview row.
 
 The kernel does not fetch or render arbitrary manifest JSON in Settings. This
 keeps the view bounded and avoids treating third-party manifest text as trusted

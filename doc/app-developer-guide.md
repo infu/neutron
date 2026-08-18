@@ -2166,7 +2166,7 @@ To compile package files without deploying:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.6.neutron \
+  --package apps/kernel/kernel.v0.3.9.neutron \
   --package apps/my_app/my_app.v0.1.0.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did

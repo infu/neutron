@@ -25,7 +25,7 @@ const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const jsUrl = new URL("../dist/web/main.js", import.meta.url);
 const serviceHtmlUrl = new URL("../dist/web/service.html", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
-const packageUrl = new URL("../files.v0.4.4.neutron", import.meta.url);
+const packageUrl = new URL("../files.v0.4.5.neutron", import.meta.url);
 
 const VAULT_METHODS = [
   "files_bootstrap_v2",
@@ -69,7 +69,7 @@ test("Files package manifest binds Shared, Vault, and Workspace storage", async 
   expect(manifest).toMatchObject({
     id: "files",
     name: "Files",
-    version: 404,
+    version: 405,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     backend: { capabilities: { certified_assets: { api: 2 } } },
@@ -217,7 +217,6 @@ test("Files package contains the backend, memory, schema, and web install paths"
   expect(migrationEntry).toBeDefined();
   for (const path of [
     ".neutron-release-evidence.json",
-    ".neutron-worker-browser-evidence.json",
     "legal/LICENSE.APP.txt",
     "legal/THIRD_PARTY_NOTICES.md",
     NEUTRON_PACKAGE_RECORD_PATH,
@@ -238,6 +237,7 @@ test("Files package contains the backend, memory, schema, and web install paths"
   ]) {
     expect(paths).toContain(path);
   }
+  expect(paths).not.toContain(".neutron-worker-browser-evidence.json");
   expect(paths).not.toContain("main.mo");
   expect(paths).not.toContain("memory/files/v1.mo");
   expect(paths).not.toContain("memory/files/v2.mo");
@@ -255,7 +255,7 @@ test("Files package contains the backend, memory, schema, and web install paths"
   );
 
   const prepared = preparePackageInstall(unpacked);
-  expect(prepared.manifest.version).toBe(404);
+  expect(prepared.manifest.version).toBe(405);
   expect(prepared.packageRecord?.license.id).toBe(
     "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   );
