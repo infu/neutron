@@ -2,7 +2,7 @@
   "format": 3,
   "name": "vetKeys Fixture Peer",
   "id": "vetkeys_fixture_peer",
-  "version": 101,
+  "version": 102,
   "description": "Peer proof that equal slot names remain isolated between installed apps",
   "src": "main.mo",
   "tiles": [

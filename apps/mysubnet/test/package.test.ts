@@ -31,7 +31,7 @@ const dfinityApacheLicenseUrl = new URL(
   "../LICENSE.DFINITY-IC-Apache-2.0",
   import.meta.url,
 );
-const packageUrl = new URL("../mysubnet.v0.3.2.neutron", import.meta.url);
+const packageUrl = new URL("../mysubnet.v0.3.3.neutron", import.meta.url);
 
 const DFINITY_IC_REVISION = "eb55873567bcda6cdcf3c0a573d4db13daaa2c8e";
 
@@ -51,7 +51,7 @@ test("My Subnet declares one safe responsive globe tile", async () => {
     format: 3,
     id: "mysubnet",
     name: "My Subnet",
-    version: 302,
+    version: 303,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [{

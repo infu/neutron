@@ -2,7 +2,7 @@
   "format": 3,
   "name": "vetKeys Fixture",
   "id": "vetkeys_fixture",
-  "version": 101,
+  "version": 102,
   "description": "Proof that equal slot names remain isolated between installed apps",
   "src": "main.mo",
   "tiles": [

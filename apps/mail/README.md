@@ -243,7 +243,7 @@ public-ingress external-traffic windows. Kernel authorization never substitutes
 for the required cycle attachment or changes the captured caller. This kernel
 protection is separate from Mail's own known/unknown-sender and storage
 admission policy.
-The package test verifies that the rebuilt `mail.v0.3.3.neutron`, distribution
+The package test verifies that the rebuilt `mail.v0.3.4.neutron`, distribution
 manifest, and generated schema contain the same complete method set. The
 historical full release-evidence archive
 `f94f42e52e4dab4dfc47d3abf37c2e3b48ac568cdc1cd39d95e6a32a794e6e52`

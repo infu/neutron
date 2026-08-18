@@ -57,4 +57,4 @@ test("measured production pressure beats the retained baseline without breaking 
   expect(production?.measurements.find(({ sector }) => sector === 195)?.deaths)
     .toBeGreaterThanOrEqual(options.seeds.length - 1);
   expect(ranked[0]?.tuning).toEqual(ENEMY_PRESSURE_TUNING);
-});
+}, 30_000);

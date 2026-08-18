@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import { assertManagedMemoryCodeOnlyRelease } from "../../release-test-support/managed_memory.mjs";
 
-test("Spreadsheet 0.3.2 keeps the exact production v1 memory root", async () => {
+test("Spreadsheet 0.3.3 keeps the exact production v1 memory root", async () => {
   await assertManagedMemoryCodeOnlyRelease({
     appId: "spreadsheet",
     memoryId: "spreadsheet",
@@ -9,7 +9,7 @@ test("Spreadsheet 0.3.2 keeps the exact production v1 memory root", async () => 
       "../spreadsheet.v0.3.1.neutron",
       import.meta.url,
     ),
-    candidateArchive: new URL("../spreadsheet.v0.3.2.neutron", import.meta.url),
+    candidateArchive: new URL("../spreadsheet.v0.3.3.neutron", import.meta.url),
     lock: new URL("../neutron.lock.json", import.meta.url),
     production: {
       version: 301,
@@ -17,6 +17,6 @@ test("Spreadsheet 0.3.2 keeps the exact production v1 memory root", async () => 
       sha256:
         "82ad9b612305fc1f9a5364f563d53e2aa63706befc2888f67a717940f65221a3",
     },
-    candidateVersion: 302,
+    candidateVersion: 303,
   });
 });

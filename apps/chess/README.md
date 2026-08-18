@@ -133,4 +133,4 @@ npm test
 
 The package flow builds a self-contained `main.js` with its embedded browser
 worker payload, generates Motoko metadata, validates managed memory and
-capabilities, emits method schemas, and writes `chess.v0.3.2.neutron`.
+capabilities, emits method schemas, and writes `chess.v0.3.3.neutron`.

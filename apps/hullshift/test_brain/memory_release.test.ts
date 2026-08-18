@@ -17,7 +17,7 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-test("Hullshift 0.2.2 has no managed state to initialize or migrate", async () => {
+test("Hullshift 0.2.3 has no managed state to initialize or migrate", async () => {
   const [productionBytes, sourceText] = await Promise.all([
     readFile(new URL("../hullshift.v0.2.1.neutron", import.meta.url)),
     readFile(new URL("../neutron.json", import.meta.url), "utf8"),
@@ -30,7 +30,7 @@ test("Hullshift 0.2.2 has no managed state to initialize or migrate", async () =
   const production = packageManifest(productionBytes);
   const source = JSON.parse(sourceText) as NeutronManifest;
   expect(production).toMatchObject({ id: "hullshift", version: 201 });
-  expect(source).toMatchObject({ id: "hullshift", version: 202 });
+  expect(source).toMatchObject({ id: "hullshift", version: 203 });
   expect(production.memory).toBeUndefined();
   expect(source.memory).toBeUndefined();
 

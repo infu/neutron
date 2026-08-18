@@ -49,9 +49,9 @@ const htmlUrl = new URL("dist/web/index.html", rootUrl);
 const cssUrl = new URL("dist/web/main.css", rootUrl);
 
 const archiveUrls = {
-  vetkeys_fixture: new URL("vetkeys_fixture.v0.1.1.neutron", rootUrl),
+  vetkeys_fixture: new URL("vetkeys_fixture.v0.1.2.neutron", rootUrl),
   vetkeys_fixture_peer: new URL(
-    "vetkeys_fixture_peer.v0.1.1.neutron",
+    "vetkeys_fixture_peer.v0.1.2.neutron",
     rootUrl,
   ),
 } as const;
@@ -103,7 +103,7 @@ test("two exact source manifests declare one same-named isolated slot", async ()
     expect(validate_neutron_conf(manifest).valid).toBe(true);
     expect(manifest).toMatchObject({
       id,
-      version: 101,
+      version: 102,
       src: "main.mo",
       tiles: [{ id: "main", path: "index.html" }],
       capabilities: {
@@ -213,7 +213,7 @@ test("both deterministic archives carry exact manifests, schemas, and ids", asyn
       app: {
         id,
         name: source.name,
-        version: 101,
+        version: 102,
       },
       methods: {},
     });
@@ -229,7 +229,7 @@ test("both deterministic archives carry exact manifests, schemas, and ids", asyn
         `app/${id}/static/icon.svg`,
       ]),
     );
-    expect(prepared.packageRecord?.package).toMatchObject({ id, version: 101 });
+    expect(prepared.packageRecord?.package).toMatchObject({ id, version: 102 });
     expect(prepared.packageRecord?.license.id).toBe(
       "LicenseRef-Neutron-Sovereign-Application-License-1.0",
     );
@@ -316,11 +316,11 @@ test("dual packaging is byte-deterministic and never rewrites either source mani
   expect(first.map(({ id, filename }) => ({ id, filename }))).toEqual([
     {
       id: "vetkeys_fixture",
-      filename: "vetkeys_fixture.v0.1.1.neutron",
+      filename: "vetkeys_fixture.v0.1.2.neutron",
     },
     {
       id: "vetkeys_fixture_peer",
-      filename: "vetkeys_fixture_peer.v0.1.1.neutron",
+      filename: "vetkeys_fixture_peer.v0.1.2.neutron",
     },
   ]);
   for (let index = 0; index < first.length; index += 1) {
@@ -341,8 +341,10 @@ test("dual packaging is byte-deterministic and never rewrites either source mani
     .toEqual([
       "vetkeys_fixture.v0.1.0.neutron",
       "vetkeys_fixture.v0.1.1.neutron",
+      "vetkeys_fixture.v0.1.2.neutron",
       "vetkeys_fixture_peer.v0.1.0.neutron",
       "vetkeys_fixture_peer.v0.1.1.neutron",
+      "vetkeys_fixture_peer.v0.1.2.neutron",
     ]);
 });
 

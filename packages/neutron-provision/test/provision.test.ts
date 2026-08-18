@@ -81,6 +81,8 @@ describe("fresh kernel assets", () => {
         logger: silentLogger,
       });
 
+      expect(requests.some((request) => "clear" in request)).toBe(false);
+
       const stores = requests.flatMap((request) =>
         "store" in request && request.store.key === INSTALL_PROVENANCE_PATH
           ? [request.store]
@@ -105,16 +107,12 @@ describe("fresh kernel assets", () => {
     });
   });
 
-  test("writes each unique final asset once without multi-file batching", async () => {
+  test("writes each final asset once without multi-file batching", async () => {
     await withFixture(async ({ deployment }) => {
       const original = deployment.packages[0]!.files.find(({ path }) =>
         path.startsWith("mo/"),
       );
       if (!original) throw new Error("Test Kernel has no content-addressed module");
-      deployment.packages[0]!.files.push({
-        path: original.path,
-        content: original.content.slice(),
-      });
       const requests: KernelStaticRequest[] = [];
       const actor = {
         async kernel_publication_entropy_initialize(_request: null) {

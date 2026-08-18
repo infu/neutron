@@ -665,8 +665,7 @@ export async function seedFreshKernel({
   logger?: Pick<Console, "log">;
 }): Promise<void> {
   await initializePublicationEntropy(actor);
-  logger.log("Clearing the empty kernel asset namespace");
-  await actor.kernel_static({ clear: { prefix: "" } });
+  logger.log("Seeding the fresh kernel asset namespace");
   await uploadPreparedFiles(actor, uniquePreparedFiles(deployment), {
     ...(concurrency === undefined ? {} : { concurrency }),
     onProgress(progress) {

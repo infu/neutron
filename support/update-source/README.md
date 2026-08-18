@@ -304,7 +304,7 @@ npm run publish -- \
   --canister-id "$UPDATE_SOURCE_CANISTER_ID" \
   --host https://icp-api.io \
   --identity-file "$UPDATE_SOURCE_PUBLISHER_IDENTITY_FILE" \
-  ../../apps/mail/mail.v0.3.3.neutron
+  ../../apps/mail/mail.v0.3.4.neutron
 ```
 
 One command may publish up to 20 packages:

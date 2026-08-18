@@ -106,4 +106,4 @@ npm run typecheck
 npm test
 ```
 
-The final artifact is `mysubnet.v0.3.2.neutron`.
+The final artifact is `mysubnet.v0.3.3.neutron`.

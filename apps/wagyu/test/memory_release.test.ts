@@ -19,7 +19,7 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-test("Wagyu 0.3.3 keeps the exact production v3 memory root", async () => {
+test("Wagyu 0.3.4 keeps the exact production v3 memory root", async () => {
   const [productionBytes, sourceText, lockText] = await Promise.all([
     readFile(new URL("../wagyu.v0.3.2.neutron", import.meta.url)),
     readFile(new URL("../neutron.json", import.meta.url), "utf8"),
@@ -34,7 +34,7 @@ test("Wagyu 0.3.3 keeps the exact production v3 memory root", async () => {
   const source = JSON.parse(sourceText) as NeutronManifest;
   const lock = JSON.parse(lockText) as ReturnType<typeof createMemoryLock>;
   expect(production).toMatchObject({ id: "wagyu", version: 302 });
-  expect(source).toMatchObject({ id: "wagyu", version: 303 });
+  expect(source).toMatchObject({ id: "wagyu", version: 304 });
 
   const productionMemory = requiredMemory(production);
   const sourceMemory = requiredMemory(source);

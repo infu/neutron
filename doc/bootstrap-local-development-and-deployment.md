@@ -70,9 +70,9 @@ Example:
   },
   "artifacts": {
     "kind": "inline",
-    "kernel": { "path": "apps/kernel/kernel.v0.3.9.neutron" },
+    "kernel": { "path": "apps/kernel/kernel.v0.3.10.neutron" },
     "packages": [
-      { "path": "apps/hello/hello.v0.2.2.neutron" }
+      { "path": "apps/hello/hello.v0.2.3.neutron" }
     ]
   }
 }
@@ -123,8 +123,8 @@ context:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.9.neutron \
-  --package apps/hello/hello.v0.2.2.neutron \
+  --package apps/kernel/kernel.v0.3.10.neutron \
+  --package apps/hello/hello.v0.2.3.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```

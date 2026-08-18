@@ -20,11 +20,11 @@
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.9.neutron"
+      "path": "apps/kernel/kernel.v0.3.10.neutron"
     },
     "packages": [
       {
-        "path": "apps/wagyu/wagyu.v0.3.3.neutron"
+        "path": "apps/wagyu/wagyu.v0.3.4.neutron"
       }
     ]
   }

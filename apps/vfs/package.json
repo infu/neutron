@@ -17,7 +17,7 @@
     "release:evidence": "bun scripts/release.ts evidence",
     "release:verify": "bun scripts/release.ts verify",
     "release:reset-memory-lock": "bun scripts/release.ts reset-memory-lock",
-    "package": "npm run release:clean && npm run validate && npm run build && npm run typecheck:clean && npm run mopack && npm run schema && npm run release:evidence && bun ../../packages/neutron-scripts/src/pack.ts && npm run release:verify",
+    "package": "npm run release:clean && npm run validate && npm run build && npm run typecheck:clean && npm run mopack && npm run schema && npm run package:metadata && npm run release:evidence && bun ../../packages/neutron-scripts/src/pack.ts && npm run release:verify",
     "package:fresh": "NEUTRON_FILES_V2_FRESH_REINSTALL=1 npm run release:reset-memory-lock && npm run package",
     "watch": "bun build.ts watch",
     "test": "npm run package && npm run test:ts && npm run test:motoko && npm run test:memory",

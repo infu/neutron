@@ -59,8 +59,8 @@ The app module is not itself a canister actor. The package and compiler flow
 later imports this module, creates persistent memory wrappers, instantiates `Init`,
 and exposes selected methods through generated actor code.
 
-The hello app release is `0.2.2`, stored as the packed top-level manifest value
-`202` and displayed in its filename as `hello.v0.2.2.neutron`. App releases use
+The hello app release is `0.2.3`, stored as the packed top-level manifest value
+`203` and displayed in its filename as `hello.v0.2.3.neutron`. App releases use
 `major * 10_000 + minor * 100 + patch`; memory schema versions below are a
 separate positive-integer lane. Browser-installed replacements must have a
 strictly higher app release. Trusted local whole-canister provisioning may
@@ -363,9 +363,9 @@ compilation outside the kernel browser UI:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.9.neutron \
-  --package apps/hello/hello.v0.2.2.neutron \
-  --package apps/kitchensink/kitchensink.v0.3.2.neutron \
+  --package apps/kernel/kernel.v0.3.10.neutron \
+  --package apps/hello/hello.v0.2.3.neutron \
+  --package apps/kitchensink/kitchensink.v0.3.3.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```
@@ -413,7 +413,7 @@ button that calls it through the kernel dialog flow.
   then renders a button that asks for a kernel-mediated call to that method on
   the Neutron canister itself.
 - `build.ts` creates `dist/web/`, `mopack.ts` creates `dist/mo/` and
-  `dist/neutron.json`, and `pack.ts` creates `hello.v0.2.2.neutron`.
+  `dist/neutron.json`, and `pack.ts` creates `hello.v0.2.3.neutron`.
 
 ### Kitchen Sink App Example
 

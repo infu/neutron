@@ -856,12 +856,12 @@ test("URL package source reaches the existing install review", async ({
   );
 
   const packageUrl =
-    "https://packages.test/vetkeys_fixture.v0.1.1.neutron";
+    "https://packages.test/vetkeys_fixture.v0.1.2.neutron";
   await page.route(packageUrl, async (route) => {
     await route.fulfill({
       contentType: "application/octet-stream",
       headers: { "access-control-allow-origin": "*" },
-      path: "apps/vetkeys_fixture_test/vetkeys_fixture.v0.1.1.neutron",
+      path: "apps/vetkeys_fixture_test/vetkeys_fixture.v0.1.2.neutron",
     });
   });
 
@@ -1749,7 +1749,7 @@ async function installHelloFromBrowser(page: Page): Promise<void> {
   const fileChooserPromise = page.waitForEvent("filechooser");
   await page.locator('[data-tid="launcher-install-package"]').click();
   const fileChooser = await fileChooserPromise;
-  await fileChooser.setFiles("apps/hello/hello.v0.2.2.neutron");
+  await fileChooser.setFiles("apps/hello/hello.v0.2.3.neutron");
 
   await expect(page.locator('[data-tid="install-dialog"]')).toBeVisible();
   await expect(page.locator('[data-tid="install-compiled"]')).toBeVisible({

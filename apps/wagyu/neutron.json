@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wagyu",
   "name": "Wagyu",
-  "version": 303,
+  "version": 304,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Certified peer-to-peer social protocol for Neutron nodes",
   "src": "main.mo",

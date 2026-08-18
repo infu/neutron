@@ -957,7 +957,7 @@ own state, runtime config, authorization, and URL.
 
 ## 13. Versioning, Tests, and Release Boundary
 
-v0.3.2 is the current app release. The public protocol remains `wagyu_v1`, and
+v0.3.4 is the current app release. The public protocol remains `wagyu_v1`, and
 its checked-in `v101-v1` corpus is the frozen V1 baseline for the exact public
 and owner DIDs, nested Candid fixtures, generated bindings, and golden
 encodings. CI requires `didc`, compares generated bindings byte-for-byte, and

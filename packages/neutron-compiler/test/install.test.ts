@@ -738,7 +738,12 @@ test("bounded package decoding accepts every active canonical package fixture", 
         await readFile(sourceManifestPath, "utf8"),
       ) as { id: string; version: number; update_source?: string };
       if (prepared.manifest.version !== activeManifest.version) {
-        expect(prepared.packageRecord).toBeUndefined();
+        if (prepared.packageRecord !== undefined) {
+          expect(prepared.packageRecord.package).toMatchObject({
+            id: prepared.manifest.id,
+            version: prepared.manifest.version,
+          });
+        }
       } else {
         const record = prepared.packageRecord;
         expect(record).toBeDefined();

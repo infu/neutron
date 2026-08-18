@@ -73,7 +73,7 @@ describe("Wagyu V1 checked Candid contracts", () => {
     });
     expect(manifest).toMatchObject({
       id: corpus.app_id,
-      version: 303,
+      version: 304,
     });
     expect(manifest.version).toBeGreaterThanOrEqual(corpus.baseline_version);
 
