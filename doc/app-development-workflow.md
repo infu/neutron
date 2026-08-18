@@ -59,8 +59,8 @@ The app module is not itself a canister actor. The package and compiler flow
 later imports this module, creates persistent memory wrappers, instantiates `Init`,
 and exposes selected methods through generated actor code.
 
-The hello app release is `0.2.1`, stored as the packed top-level manifest value
-`201` and displayed in its filename as `hello.v0.2.1.neutron`. App releases use
+The hello app release is `0.2.2`, stored as the packed top-level manifest value
+`202` and displayed in its filename as `hello.v0.2.2.neutron`. App releases use
 `major * 10_000 + minor * 100 + patch`; memory schema versions below are a
 separate positive-integer lane. Browser-installed replacements must have a
 strictly higher app release. Trusted local whole-canister provisioning may
@@ -293,12 +293,12 @@ The design-system package tests compile the public SCSS entrypoint and enforce
 the current visual policy: dark only, no gradients, radius capped at `5px`,
 scoped selectors, and no remote fonts.
 
-### Validate, Build, `mogen`, `mopack`, And Pack
+### Validate, Build, `mogen`, `mopack`, Add Metadata, And Pack
 
 The hello package script is:
 
 ```json
-"package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts"
+"package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts"
 ```
 
 The current order is:
@@ -316,11 +316,23 @@ The current order is:
    `./backend/<src>`, checks Motoko source for dangerous text and AST patterns,
    rewrites imports to content hashes, writes hash-named modules under
    `dist/mo/`, and writes `dist/neutron.json` with the generated `entry` hash.
+   Automatic mode leaves packages with `update_source` unmarked for
+   provider-hosted HTTPS source delivery. A manual-only or explicitly embedded
+   package receives the generated
+   `package_features: ["archive-only-legal-v1"]` marker. App authors leave that
+   generated field out of source `neutron.json`.
 4. `npm run schema`
    reads the generated Motoko input/output aliases and writes
    `dist/schema.json`, a wrapper-accurate JSON Schema artifact for each public
    app method.
-5. `pack.ts`
+5. `npm run package:metadata`
+   generates and verifies the application notice, governing license,
+   third-party notices, and package record under `dist/legal`. For an app with
+   `update_source`, it also writes the exact generated Complete App Source gzip
+   bytes to `<app>/.neutron/sources/<sha256>.source.v1.msgpack.gz` and records the
+   update source's certified HTTPS URL. Embedded mode instead retains its
+   source and bulk legal material inside the package.
+6. `pack.ts`
    walks every file under `dist/`, gzips each file, MessagePack-encodes the flat
    path-to-bytes object, and writes
    `<id>.v<major>.<minor>.<patch>.neutron`.
@@ -329,6 +341,11 @@ The hello README documents the minimal developer command sequence as a root
 `npm install`, then `npm run package` from `apps/hello`. `npm test` in the
 hello workspace runs Bun tests for the manifest and hello method schema shape,
 then validates the manifest with the shared package validator.
+
+The app-local source artifact is publisher input, not an action for an end user.
+The update-source publisher uploads it together with the package and release
+pointer. Installing, upgrading, or compiling packages in a browser requires no
+source publication by the Sovereign User.
 
 ### Releasing Package Updates
 
@@ -347,8 +364,8 @@ compilation outside the kernel browser UI:
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
   --package apps/kernel/kernel.v0.3.6.neutron \
-  --package apps/hello/hello.v0.2.1.neutron \
-  --package apps/kitchensink/kitchensink.v0.3.1.neutron \
+  --package apps/hello/hello.v0.2.2.neutron \
+  --package apps/kitchensink/kitchensink.v0.3.2.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```
@@ -384,8 +401,8 @@ normal app.
 The hello app is a minimal package with one backend method and one frontend
 button that calls it through the kernel dialog flow.
 
-- `neutron.json` declares `id: "hello"`, `name: "Hello"`, `version: 201`
-  (`0.2.1`),
+- `neutron.json` declares `id: "hello"`, `name: "Hello"`, `version: 202`
+  (`0.2.2`),
   `src: "main.mo"`, one `main` launcher tile, one update function
   `hello_world`, and one memory namespace `hello` at version `1`.
 - `backend/main.mo` stores a mutable `name` value, exposes
@@ -396,7 +413,7 @@ button that calls it through the kernel dialog flow.
   then renders a button that asks for a kernel-mediated call to that method on
   the Neutron canister itself.
 - `build.ts` creates `dist/web/`, `mopack.ts` creates `dist/mo/` and
-  `dist/neutron.json`, and `pack.ts` creates `hello.v0.2.1.neutron`.
+  `dist/neutron.json`, and `pack.ts` creates `hello.v0.2.2.neutron`.
 
 ### Kitchen Sink App Example
 

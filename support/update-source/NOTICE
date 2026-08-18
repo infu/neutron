@@ -1,0 +1,11 @@
+Neutron Update Source
+Copyright 2026 3V Interactive
+
+The first-party update-source scripts and configuration are licensed under the
+Apache License, Version 2.0. See LICENSE in this directory.
+
+The deployed canister uses DFINITY's separately licensed certified-assets
+canister. Published Neutron package archives are separate payloads and retain
+the license and notices carried by each archive. They are not relicensed as
+Apache software by this NOTICE. Other third-party components retain their own
+copyrights, licenses, and notices. See THIRD_PARTY_NOTICES.md.

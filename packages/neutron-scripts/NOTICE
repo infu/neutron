@@ -1,0 +1,9 @@
+Neutron Build and Packaging Scripts
+Copyright 2026 3V Interactive
+
+Licensed under the Apache License, Version 2.0. See LICENSE in this package.
+Generated output is governed only by the licenses of material actually copied
+into that output; merely using these scripts does not license an Application
+under Apache-2.0 or the Neutron Public License.
+
+Third-party components retain their own copyrights, licenses, and notices.

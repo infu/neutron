@@ -147,6 +147,9 @@ module {
 
     public type RequestHostAuthority = GatewayAuthority.RequestAuthority;
 
+    let DEPLOYMENT_BUILD_RECORD_PATH =
+        "/system/deployment-build-record.json";
+
     public type PublicationEntropyInitializeResult = {
         #ok : { fingerprint : Blob };
         #err : { #randomness_failed };
@@ -159,14 +162,27 @@ module {
         path == root or Text.startsWith(path, #text (root # "/"));
     };
 
+    // The install journal is the sole writer for authoritative deployment
+    // evidence. Authorized static-file access may upload its private staging
+    // source, but may never replace or remove the committed target directly.
+    public func isDeploymentBuildRecordStaticTarget(path : Text) : Bool {
+        path == DEPLOYMENT_BUILD_RECORD_PATH;
+    };
+
+    public func staticClearTouchesDeploymentBuildRecord(prefix : Text) : Bool {
+        Text.startsWith(DEPLOYMENT_BUILD_RECORD_PATH, #text prefix);
+    };
+
     // The system namespace stays internal except for its committed public
     // metadata. Package metadata, Motoko sources, the app registry, runtime
-    // deployment config, and install provenance are ordinary HTTP assets.
+    // deployment config, install provenance, and deployment build evidence
+    // are ordinary HTTP assets.
     public func isInternalHttpStatePath(path : Text) : Bool {
         if (not isPathOrDescendant(path, "/system")) return false;
         path != "/system/apps.json" and
         path != "/system/runtime-config.json" and
-        path != "/system/install-provenance.json";
+        path != "/system/install-provenance.json" and
+        path != "/system/deployment-build-record.json";
     };
 
     func sha256ModuleAssetHash(path : Text) : ?Text {
@@ -230,7 +246,8 @@ module {
         if (
             path == "/system/apps.json" or
             path == "/system/runtime-config.json" or
-            path == "/system/install-provenance.json"
+            path == "/system/install-provenance.json" or
+            path == "/system/deployment-build-record.json"
         ) return true;
 
         switch (Text.stripStart(path, #text "/app/")) {
@@ -2068,11 +2085,15 @@ module {
                 case(#store_chunk(x)) {
                     assert(not InstallService.isDispatchMarkerPath(x.key));
                     assert(not isSharedAppRoutePath(x.key));
+                    assert(not isDeploymentBuildRecordStaticTarget(x.key));
+                    assert(not installs.isPendingStagingPath(x.key));
                     cert.chunkedSend(x.key, x.chunk_id, x.content);
                 };
                 case(#store({key; val})) {
                     assert(not InstallService.isDispatchMarkerPath(key));
                     assert(not isSharedAppRoutePath(key));
+                    assert(not isDeploymentBuildRecordStaticTarget(key));
+                    assert(not installs.isPendingStagingPath(key));
                     assert(val.chunks > 0);
                     
                     // Allows uploads of large certified files.
@@ -2093,12 +2114,21 @@ module {
                 };
                 case(#delete({key})) {
                     assert(not InstallService.isDispatchMarkerPath(key));
+                    assert(not isDeploymentBuildRecordStaticTarget(key));
+                    assert(not installs.isPendingStagingPath(key));
                     let priorFile = assets.get(key);
                     ignore assets.delete(key);
                     deleteStaticAssetCertification(key, priorFile);
                 };
                 case(#clear({prefix})) {
-                    for (k in assets.allKeys(prefix).vals()) {
+                    assert(not staticClearTouchesDeploymentBuildRecord(prefix));
+                    let keys = assets.allKeys(prefix);
+                    // Validate the whole clear before its first mutation so a
+                    // broad prefix cannot partially modify a pending journal.
+                    for (k in keys.vals()) {
+                        assert(not installs.isPendingStagingPath(k));
+                    };
+                    for (k in keys.vals()) {
                         if (not InstallService.isDispatchMarkerPath(k)) {
                             let priorFile = assets.get(k);
                             ignore assets.delete(k);

@@ -11,7 +11,7 @@
     "provision": "bun src/index.ts",
     "test": "bun test"
   },
-  "license": "GPL-3.0-only",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
     "@dfinity/candid": "^3.4.3",

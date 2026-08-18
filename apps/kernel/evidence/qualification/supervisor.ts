@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { formatQualificationFailure } from "./failure.ts";
 import { CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE } from "./profile.ts";
 
 export const QUALIFICATION_COMMAND_LIMIT_MS = CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE.maximum_wall_seconds * 1_000;
@@ -114,7 +115,7 @@ if (import.meta.main) {
     path.join(import.meta.dir, "run.ts"),
     "--release",
   ]).catch((error) => {
-    console.error(error instanceof Error ? error.stack : String(error));
+    console.error(formatQualificationFailure(error));
     process.exitCode = 1;
   });
 }

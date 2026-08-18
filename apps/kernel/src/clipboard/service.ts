@@ -6,6 +6,7 @@ import {
 import { showToast } from "../toast/store.ts";
 
 export const MAX_CLIPBOARD_TEXT_BYTES = 256 * 1_024;
+export const MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES = 4 * 1_024 * 1_024;
 
 export type ClipboardAppRequest = {
   role: "tile" | "background" | "tray";
@@ -54,8 +55,16 @@ export function createClipboardService(
   async function writeFromKernelUi(
     text: string,
     userActivated: boolean,
+    maximumBytes = MAX_CLIPBOARD_TEXT_BYTES,
   ): Promise<void> {
-    assertClipboardText(text);
+    if (
+      !Number.isSafeInteger(maximumBytes) ||
+      maximumBytes < 1 ||
+      maximumBytes > MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES
+    ) {
+      throw new Error("Invalid Kernel clipboard byte limit");
+    }
+    assertClipboardText(text, maximumBytes);
     if (!userActivated) {
       throw new KernelPolicyError(
         "USER_INTERACTION_REQUIRED",
@@ -96,9 +105,20 @@ function assertClipboardPayload(payload: JsonValue): string {
   return payload.text;
 }
 
-function assertClipboardText(text: string): void {
+function assertClipboardText(
+  text: string,
+  maximumBytes = MAX_CLIPBOARD_TEXT_BYTES,
+): void {
   if (typeof text !== "string") throw new Error("Clipboard text must be a string");
-  if (new TextEncoder().encode(text).byteLength > MAX_CLIPBOARD_TEXT_BYTES) {
-    throw new Error("Clipboard text exceeds 256 KiB");
+  if (new TextEncoder().encode(text).byteLength > maximumBytes) {
+    throw new Error(
+      `Clipboard text exceeds ${formatClipboardByteLimit(maximumBytes)}`,
+    );
   }
+}
+
+function formatClipboardByteLimit(bytes: number): string {
+  return bytes % (1_024 * 1_024) === 0
+    ? `${bytes / (1_024 * 1_024)} MiB`
+    : `${bytes / 1_024} KiB`;
 }

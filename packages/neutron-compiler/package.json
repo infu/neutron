@@ -15,10 +15,10 @@
     "test": "bun test/run.ts"
   },
   "author": "",
-  "license": "GPL-3.0-only",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
-    "fflate": "^0.8.3",
+    "fflate": "0.8.3",
     "neutron-motoko-wasm": "^1.1.0",
     "neutron-security": "^1.1.0",
     "neutron-tools": "^1.1.0"

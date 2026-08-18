@@ -3,6 +3,7 @@ import {
   updateCheckState,
   useUpdateCheckStore,
 } from "../src/updates/store.ts";
+import type { UpdateReview } from "../src/updates/model.ts";
 
 const source = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 
@@ -93,6 +94,38 @@ test("failure stages remain explicit and success retires candidates", () => {
     1,
   );
   expect(useUpdateCheckStore.getState().selectedAppIds).toEqual(["mail"]);
+
+  const retainedArchiveBytes = Uint8Array.of(1, 2, 3);
+  updateCheckState.review({
+    apps: [],
+    compiledSizeKiB: 1,
+    migrationPlan: {
+      upgrades: [],
+      removedApps: [],
+      destructiveMemoryRoots: [],
+    },
+    diagnostics: [],
+    compatibilityDiagnostics: [],
+    deploymentBuild: {
+      record: {} as UpdateReview["deploymentBuild"]["record"],
+      suppliedPackages: [
+        { archiveBytes: retainedArchiveBytes },
+      ] as unknown as UpdateReview["deploymentBuild"]["suppliedPackages"],
+    },
+  });
+  expect(
+    useUpdateCheckStore.getState().review?.deploymentBuild.suppliedPackages[0]
+      ?.archiveBytes,
+  ).toBe(retainedArchiveBytes);
+  updateCheckState.error("deployment failed", "apply");
+  expect(useUpdateCheckStore.getState()).toMatchObject({
+    phase: "error",
+    compiledSizeKiB: null,
+    review: null,
+    errorStage: "apply",
+  });
+
+  updateCheckState.ready(useUpdateCheckStore.getState().results, 1);
   updateCheckState.success(1);
   expect(useUpdateCheckStore.getState()).toMatchObject({
     phase: "success",

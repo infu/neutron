@@ -13,9 +13,11 @@ import {
   MANIFEST_MAX_FUNCTION_ARGS,
   MANIFEST_MAX_FUNCTIONS,
   MANIFEST_MAX_TILES,
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
   normalizeManifestBackground,
   normalizeManifestDependencies,
   normalizeManifestDisplayMetadata,
+  normalizeManifestPackageFeatures,
   normalizeManifestUpdateSource,
   normalizeManifestTray,
   normalizeManifestTiles,
@@ -49,6 +51,14 @@ import {
   assertAppVersion,
   formatAppVersionLabel,
 } from "neutron-tools/src/version.js";
+import {
+  NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+  NEUTRON_PACKAGE_RECORD_PATH,
+  isNeutronPackageArchiveOnlyPath,
+  neutronPackageRecordArchiveOnlyPaths,
+  readNeutronPackageRecord,
+  type NeutronPackageRecordV1,
+} from "neutron-tools/src/package_record.js";
 import {
   encodeKernelRuntimeConfig,
   KERNEL_RUNTIME_CONFIG_PATH,
@@ -94,10 +104,27 @@ import {
   type NeutronPackageDecodeOptions,
 } from "./package_decoder.ts";
 import {
+  assertNeutronAppSourceBuildInputs,
+  decodeNeutronAppSourceSnapshot,
+} from "./source_snapshot.ts";
+import {
   assertResidentFrameSecurity,
   residentFrameSecurity,
   type ResidentFrameSecurity,
 } from "./resident_frame_security.ts";
+import {
+  DEPLOYMENT_BUILD_RECORD_PATH,
+  assertWasmRecord,
+  createCompleteDeploymentBuildRecord,
+  parseDeploymentBuildRecord,
+  prepareDeterministicWasmTransport,
+  serializeDeploymentBuildRecord,
+  type CompleteDeploymentBuildRecord,
+  type DeploymentBuildRecord,
+  type DeploymentPackageArchiveRecord,
+  type PackageInformationRecordIdentity,
+  type PreparedCompleteDeploymentBuild,
+} from "./deployment_record.ts";
 
 export type {
   CompileConfig,
@@ -129,6 +156,8 @@ const INSTALL_CODE_INGRESS_RESERVE_BYTES = 96 * 1024;
 const INSTALL_CODE_CANDID_OVERHEAD_BYTES = 512;
 const INSTALL_WASM_CHUNK_BYTES = 1024 * 1024;
 const INSTALL_WASM_MAX_CHUNKS = 100;
+/** First Kernel release whose backend admits the reserved legal clear prefix. */
+const KERNEL_LEGAL_CLEAR_BASELINE_VERSION = 307;
 /** Large whole-actor upgrades can spend several minutes compiling on the IC. */
 export const DEFAULT_DEPLOYMENT_ACTIVATION_TIMEOUT_MS = 10 * 60_000;
 const REMOVED_PACKAGE_BUILD_METADATA_PATH = ".neutron-build.json";
@@ -144,8 +173,24 @@ export type PreparedPackageFile = {
   content: Uint8Array;
 };
 
+export type PackageArchiveIdentity = Readonly<{
+  /** SHA-256 of the exact outer `.neutron` bytes. */
+  sha256: string;
+  /** Exact outer `.neutron` byte length. */
+  size: number;
+}>;
+
 export type PreparedPackageInstall = {
   manifest: PackagedNeutronManifest;
+  /** Present only when the archive supplied a verified v1 legal record. */
+  packageRecord?: NeutronPackageRecordV1;
+  /**
+   * Exact user-supplied archive retained for review/export. This is the
+   * caller's Uint8Array, not a second copy; consumers must not mutate it.
+   */
+  archiveBytes?: Uint8Array;
+  /** Present together with archiveBytes and rechecked at batch boundaries. */
+  archiveIdentity?: PackageArchiveIdentity;
   capabilityPlan: CapabilityPlanWireV1;
   capabilityPlanFingerprint: string;
   files: PreparedPackageFile[];
@@ -153,6 +198,35 @@ export type PreparedPackageInstall = {
   isKernel: boolean;
   connectionProviderSupport?: ConnectionProviderSupportCatalog;
 };
+
+type PreparedPackageArchiveSeal = Readonly<{
+  archiveSha256: string;
+  archiveSize: number;
+  preparedStateSha256: string;
+}>;
+
+// A raw archive's decoded install state must remain bound to the bytes the
+// user reviewed. Keeping the seal out-of-band prevents a mutable/spread copy
+// from rewriting both the prepared fields and its claimed fingerprint.
+const preparedPackageArchiveSeals = new WeakMap<
+  PreparedPackageInstall,
+  PreparedPackageArchiveSeal
+>();
+
+type PreparedDeploymentBuildRecordSeal = Readonly<{
+  recordBytes: Uint8Array;
+  candid: string;
+  stable: string;
+}>;
+
+// Retained-package identities and compiler companion artifacts cannot be
+// independently re-derived at dispatch: they come from the checked deployment
+// preparation. Keep their exact review identities out-of-band so only the
+// preparation result can authorize an install, and recheck them before I/O.
+const preparedDeploymentBuildRecordSeals = new WeakMap<
+  CompleteDeploymentBuildRecord,
+  PreparedDeploymentBuildRecordSeal
+>();
 
 export type PackageIdentityExpectation = {
   id: string;
@@ -451,6 +525,11 @@ export type DeployPreparedPackagesInput = {
   removedApps?: string[];
   /** Additional mutable assets committed atomically with registry metadata. */
   stagedAssets?: InstallStagedAsset[];
+  /**
+   * Exact complete record approved before dispatch. When present it is
+   * revalidated, staged, and committed atomically with this deployment.
+   */
+  deploymentBuildRecord?: CompleteDeploymentBuildRecord;
   /** Exact running deployment checked atomically when the journal is recorded. */
   expectedDeploymentId: string;
   /** Maximum wait for the IC to compile and activate the dispatched actor. */
@@ -461,7 +540,7 @@ export type DeployPreparedPackagesInput = {
 
 export type CompileAndDeployPackagesInput = Omit<
   DeployPreparedPackagesInput,
-  "compiled" | "existingApps" | "removedApps"
+  "compiled" | "existingApps" | "removedApps" | "deploymentBuildRecord"
 > & {
   state: KernelPackageState;
   vetKeysEnvironment?: VetKeysEnvironment;
@@ -472,6 +551,25 @@ export type DeployPreparedPackagesResult = {
   apps: AppRegistry;
   compiled: CompileResult;
 };
+
+export type RetainedDeploymentPackageEvidence = Readonly<{
+  version: number;
+  archive: DeploymentPackageArchiveRecord;
+  package_information: PackageInformationRecordIdentity;
+}>;
+
+export type PrepareCompleteDeploymentBuildRecordInput = Readonly<{
+  targetCanisterId: string;
+  packages: readonly PreparedPackageInstall[];
+  state: KernelPackageState;
+  compiled: CompileResult;
+  expectedDeploymentId: string;
+  removedApps?: readonly string[];
+  /** Verified identities carried from the installed deployment record. */
+  retainedPackageEvidence?: Readonly<
+    Record<string, RetainedDeploymentPackageEvidence>
+  >;
+}>;
 
 export type CompilePackagesInput = {
   packages: PreparedPackageInstall[];
@@ -607,18 +705,27 @@ export function preparePackageInstall(
   pkg: Uint8Array | UnpackedNeutronPackage,
   options: PreparePackageInstallOptions = {},
 ): PreparedPackageInstall {
+  const archiveBytes = pkg instanceof Uint8Array ? pkg : undefined;
+  let archiveIdentity: PackageArchiveIdentity | undefined;
   if (options.expectedIdentity) {
     assertPackageIdentityExpectation(options.expectedIdentity);
-    if (pkg instanceof Uint8Array) {
-      assertOuterPackageRawLimit(pkg, options.limits);
-      assertOuterPackageIdentity(pkg, options.expectedIdentity);
-    } else if (
+    if (archiveBytes === undefined && (
       options.expectedIdentity.sha256 !== undefined ||
       options.expectedIdentity.size !== undefined
-    ) {
+    )) {
       throw new Error(
         "Outer package digest and size reconciliation require raw .neutron bytes",
       );
+    }
+  }
+  if (archiveBytes !== undefined) {
+    assertOuterPackageRawLimit(archiveBytes, options.limits);
+    archiveIdentity = Object.freeze({
+      sha256: hashContent(archiveBytes),
+      size: archiveBytes.byteLength,
+    });
+    if (options.expectedIdentity) {
+      assertOuterPackageIdentity(archiveIdentity, options.expectedIdentity);
     }
   }
   const unpacked =
@@ -641,12 +748,85 @@ export function preparePackageInstall(
       );
     }
   }
+  const packageRecord = readNeutronPackageRecord({
+    files: unpacked,
+    manifest,
+  });
+  const archiveOnlyPaths = Object.keys(unpacked).filter(
+    isNeutronPackageArchiveOnlyPath,
+  );
+  const manifestFeatures = normalizeManifestPackageFeatures(manifest);
+  const manifestDeclaresArchiveOnly = manifestFeatures.includes(
+    NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+  );
+  const recordDeclaresArchiveOnly =
+    packageRecord?.features?.includes(
+      NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+    ) ?? false;
+  if (archiveOnlyPaths.length > 0) {
+    if (!manifestDeclaresArchiveOnly || !recordDeclaresArchiveOnly) {
+      throw new Error(
+        `Archive-only package material requires package_features and package-record features to include ${NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE}`,
+      );
+    }
+  } else if (manifestDeclaresArchiveOnly || recordDeclaresArchiveOnly) {
+    throw new Error(
+      `Package feature ${NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE} requires archive-only package material`,
+    );
+  }
+  const hasArchiveOnlySourceSnapshot = Object.hasOwn(
+    unpacked,
+    NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+  );
+  if (
+    hasArchiveOnlySourceSnapshot &&
+    (packageRecord?.source.kind !== "embedded" ||
+      packageRecord.source.path !== NEUTRON_APP_SOURCE_SNAPSHOT_PATH)
+  ) {
+    throw new Error(
+      `Package path ${NEUTRON_APP_SOURCE_SNAPSHOT_PATH} is reserved for the embedded source referenced by ${NEUTRON_PACKAGE_RECORD_PATH}`,
+    );
+  }
+  const declaredArchiveOnlyPaths = new Set(
+    packageRecord === undefined
+      ? []
+      : neutronPackageRecordArchiveOnlyPaths(packageRecord),
+  );
+  for (const packagePath of Object.keys(unpacked)) {
+    if (
+      isNeutronPackageArchiveOnlyPath(packagePath) &&
+      !declaredArchiveOnlyPaths.has(packagePath)
+    ) {
+      throw new Error(
+        `Package path ${packagePath} is reserved for archive-only material referenced by ${NEUTRON_PACKAGE_RECORD_PATH}`,
+      );
+    }
+  }
+  if (packageRecord?.source.kind === "embedded") {
+    try {
+      const snapshot = decodeNeutronAppSourceSnapshot(
+        unpacked[packageRecord.source.path]!,
+        { id: manifest.id, version: manifest.version },
+      );
+      assertNeutronAppSourceBuildInputs(snapshot, packageRecord.build.inputs);
+    } catch (error) {
+      throw new Error(
+        `Invalid Complete App Source snapshot: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+  }
   const isKernel = manifest.id === "kernel";
   const connectionProviderSupport = isKernel
     ? readKernelConnectionProviderSupport(unpacked)
     : undefined;
   const appPrefix = isKernel ? "" : `app/${manifest.id}/`;
-  const files = preparePackageFiles(unpacked, {
+  const installableFiles = Object.fromEntries(
+    Object.entries(unpacked).filter(
+      ([packagePath]) => !isNeutronPackageArchiveOnlyPath(packagePath),
+    ),
+  );
+  const files = preparePackageFiles(installableFiles, {
     moPrefix: "mo/",
     appPrefix,
   });
@@ -658,17 +838,30 @@ export function preparePackageInstall(
       `${KERNEL_RUNTIME_CONFIG_PATH} is reserved for final deployment configuration`,
     );
   }
+  if (
+    isKernel &&
+    files.some(({ path }) => path === DEPLOYMENT_BUILD_RECORD_PATH.slice(1))
+  ) {
+    throw new Error(
+      `${DEPLOYMENT_BUILD_RECORD_PATH} is reserved for the deployment transaction`,
+    );
+  }
   assertManifestWebEntrypoints(unpacked, manifest);
   const capabilityPlan = toCapabilityPlanWireV1(buildCapabilityPlan(manifest));
-  const prepared = {
+  const prepared: PreparedPackageInstall = {
     manifest,
     capabilityPlan,
     capabilityPlanFingerprint: fingerprintCapabilityPlanWireV1(capabilityPlan),
     files,
     appPrefix,
     isKernel,
+    ...(archiveBytes && archiveIdentity
+      ? { archiveBytes, archiveIdentity }
+      : {}),
+    ...(packageRecord ? { packageRecord } : {}),
     ...(connectionProviderSupport ? { connectionProviderSupport } : {}),
   };
+  sealPreparedPackageArchiveState(prepared);
   assertPreparedPackageBatch([prepared]);
   return prepared;
 }
@@ -711,21 +904,21 @@ function assertPackageIdentityExpectation(
 }
 
 function assertOuterPackageIdentity(
-  pkg: Uint8Array,
+  actual: PackageArchiveIdentity,
   expected: PackageIdentityExpectation,
 ): void {
-  if (expected.size !== undefined && pkg.byteLength !== expected.size) {
+  if (expected.size !== undefined && actual.size !== expected.size) {
     throw new Error(
-      `Package size ${pkg.byteLength} does not match expected ${expected.size}`,
+      `Package size ${actual.size} does not match expected ${expected.size}`,
     );
   }
-  if (expected.sha256 !== undefined) {
-    const actual = hashContent(pkg);
-    if (actual !== expected.sha256) {
-      throw new Error(
-        `Package SHA-256 ${actual} does not match expected ${expected.sha256}`,
-      );
-    }
+  if (
+    expected.sha256 !== undefined &&
+    actual.sha256 !== expected.sha256
+  ) {
+    throw new Error(
+      `Package SHA-256 ${actual.sha256} does not match expected ${expected.sha256}`,
+    );
   }
 }
 
@@ -882,6 +1075,7 @@ export function assertPreparedPackageBatch(
   const modules = new Map<string, { content: Uint8Array; owner: string }>();
 
   for (const preparedPackage of packages) {
+    assertPreparedPackageArchiveIdentity(preparedPackage);
     const appId = preparedPackage.manifest.id;
     if (appIds.has(appId)) {
       throw new Error(`Duplicate prepared app id ${appId}`);
@@ -896,8 +1090,15 @@ export function assertPreparedPackageBatch(
         );
       }
       if (file.path.startsWith("mo/")) {
-        if (!HASHED_MOTOKO_PACKAGE_PATH.test(file.path)) {
+        const match = HASHED_MOTOKO_PACKAGE_PATH.exec(file.path);
+        if (!match) {
           throw new Error(`Invalid prepared Motoko module path ${file.path}`);
+        }
+        const actualSha256 = hashContent(file.content);
+        if (actualSha256 !== match[1]) {
+          throw new Error(
+            `Prepared Motoko module ${file.path} content SHA-256 is ${actualSha256}`,
+          );
         }
         const previous = modules.get(file.path);
         if (previous && !equalBytes(previous.content, file.content)) {
@@ -924,9 +1125,111 @@ export function assertPreparedPackageBatch(
   }
 }
 
+/**
+ * Reconcile retained raw bytes at each compile/install boundary. This detects
+ * accidental mutation between package review, user export, and dispatch.
+ */
+export function assertPreparedPackageArchiveIdentity(
+  preparedPackage: PreparedPackageInstall,
+): void {
+  const { archiveBytes, archiveIdentity } = preparedPackage;
+  if (archiveBytes === undefined && archiveIdentity === undefined) return;
+  if (archiveBytes === undefined || archiveIdentity === undefined) {
+    throw new Error(
+      "Prepared package archive bytes and identity must be present together",
+    );
+  }
+  if (!(archiveBytes instanceof Uint8Array)) {
+    throw new Error("Prepared package archive bytes are invalid");
+  }
+  if (
+    !Number.isSafeInteger(archiveIdentity.size) ||
+    archiveIdentity.size < 0 ||
+    !/^[a-f0-9]{64}$/u.test(archiveIdentity.sha256)
+  ) {
+    throw new Error("Prepared package archive identity is invalid");
+  }
+  const seal = preparedPackageArchiveSeals.get(preparedPackage);
+  if (!seal) {
+    throw new Error(
+      "Prepared package with archive bytes is not the authenticated preparation result",
+    );
+  }
+  if (
+    archiveIdentity.size !== seal.archiveSize ||
+    archiveIdentity.sha256 !== seal.archiveSha256
+  ) {
+    throw new Error("Prepared package archive identity changed after review");
+  }
+  if (archiveBytes.byteLength !== archiveIdentity.size) {
+    throw new Error(
+      `Prepared package archive size ${archiveBytes.byteLength} does not match reviewed size ${archiveIdentity.size}`,
+    );
+  }
+  const actualSha256 = hashContent(archiveBytes);
+  if (actualSha256 !== archiveIdentity.sha256) {
+    throw new Error(
+      `Prepared package archive SHA-256 ${actualSha256} does not match reviewed ${archiveIdentity.sha256}`,
+    );
+  }
+  const preparedStateSha256 = preparedPackageStateSha256(preparedPackage);
+  if (preparedStateSha256 !== seal.preparedStateSha256) {
+    throw new Error(
+      `Prepared package ${preparedPackage.manifest.id} contents changed after archive review`,
+    );
+  }
+}
+
+function sealPreparedPackageArchiveState(
+  preparedPackage: PreparedPackageInstall,
+): void {
+  const { archiveBytes, archiveIdentity } = preparedPackage;
+  if (archiveBytes === undefined && archiveIdentity === undefined) return;
+  if (archiveBytes === undefined || archiveIdentity === undefined) {
+    throw new Error(
+      "Prepared package archive bytes and identity must be present together",
+    );
+  }
+  preparedPackageArchiveSeals.set(
+    preparedPackage,
+    Object.freeze({
+      archiveSha256: archiveIdentity.sha256,
+      archiveSize: archiveIdentity.size,
+      preparedStateSha256: preparedPackageStateSha256(preparedPackage),
+    }),
+  );
+}
+
+function preparedPackageStateSha256(
+  preparedPackage: PreparedPackageInstall,
+): string {
+  const files = preparedPackage.files
+    .map(({ path, content }) => ({
+      path,
+      sha256: hashContent(content),
+      bytes: content.byteLength,
+    }))
+    .sort((left, right) => compareCanonicalText(left.path, right.path));
+  return hashContent(
+    canonicalJson({
+      manifest: preparedPackage.manifest,
+      package_record: preparedPackage.packageRecord ?? null,
+      capability_plan: preparedPackage.capabilityPlan,
+      capability_plan_fingerprint:
+        preparedPackage.capabilityPlanFingerprint,
+      files,
+      app_prefix: preparedPackage.appPrefix,
+      is_kernel: preparedPackage.isKernel,
+      connection_provider_support:
+        preparedPackage.connectionProviderSupport ?? null,
+    }),
+  );
+}
+
 function mergeMotokoFiles(...groups: MotokoFile[][]): MotokoFile[] {
   const modules = new Map<string, MotokoFile>();
   for (const file of groups.flat()) {
+    assertMotokoFileContentAddress(file, false);
     const previous = modules.get(file.path);
     if (previous) {
       if (previous.content !== file.content) {
@@ -937,6 +1240,25 @@ function mergeMotokoFiles(...groups: MotokoFile[][]): MotokoFile[] {
     modules.set(file.path, file);
   }
   return [...modules.values()];
+}
+
+function assertMotokoFileContentAddress(
+  file: MotokoFile,
+  requireContentAddress: boolean,
+): void {
+  const match = /^([a-f0-9]{64})\.mo$/u.exec(file.path);
+  if (!match) {
+    if (requireContentAddress) {
+      throw new Error(`Invalid installed Motoko module path ${file.path}`);
+    }
+    return;
+  }
+  const actualSha256 = hashContent(file.content);
+  if (actualSha256 !== match[1]) {
+    throw new Error(
+      `Motoko module ${file.path} content SHA-256 is ${actualSha256}`,
+    );
+  }
 }
 
 function uniquePreparedModuleFiles(
@@ -956,7 +1278,10 @@ function uniquePreparedModuleFiles(
       modules.set(file.path, file);
     }
   }
-  return [...modules.values()];
+  return [...modules.values()].map(({ path, content }) => ({
+    path,
+    content: content.slice(),
+  }));
 }
 
 export function buildPackageCompileInput({
@@ -1015,7 +1340,7 @@ export function buildPackagesCompileInput({
   includeGeneratedSource,
   versionPolicy = "strict-upgrade",
 }: CompilePackagesInput): CompileInput {
-  assertPreparedPackageBatch(packages);
+  assertPreparedPackageBatch([...packages]);
   assertAppVersionTransitions(existingConfigs, packages, versionPolicy);
   let mofiles = mergeMotokoFiles(existingModules);
   const configs: CompileConfig = { ...existingConfigs };
@@ -1110,10 +1435,12 @@ export function applyRuntimeDeploymentConfig(
   const content = encodeKernelRuntimeConfig(config);
   for (const preparedPackage of packages) {
     if (!preparedPackage.isKernel) continue;
+    assertPreparedPackageArchiveIdentity(preparedPackage);
     preparedPackage.files = [
       ...preparedPackage.files.filter(({ path }) => path !== runtimePath),
       { path: runtimePath, content: content.slice() },
     ];
+    sealPreparedPackageArchiveState(preparedPackage);
   }
 }
 
@@ -1274,6 +1601,14 @@ export async function uninstallApp({
     deploymentNonce: createDeploymentNonce(),
     ...(vetKeysEnvironment ? { vetKeysEnvironment } : {}),
   });
+  const preparedBuild = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId,
+    packages: [],
+    state,
+    compiled,
+    expectedDeploymentId,
+    removedApps: [appId],
+  });
   return deployPreparedPackages({
     actor,
     targetCanisterId,
@@ -1282,6 +1617,7 @@ export async function uninstallApp({
     existingApps: state.apps,
     previousModulePaths: state.existingModules.map(({ path }) => path),
     removedApps: [appId],
+    deploymentBuildRecord: preparedBuild.record,
     ...(stagedAssets ? { stagedAssets } : {}),
     expectedDeploymentId,
     ...(onStep ? { onStep } : {}),
@@ -1303,6 +1639,9 @@ export async function readKernelPackageState({
       content: await fetchText(path),
     }),
   );
+  for (const module of existingModules) {
+    assertMotokoFileContentAddress(module, true);
+  }
 
   const registry = normalizeAppRegistry(
     apps ?? (await fetchJson<PartialAppRegistry>("/system/apps.json", {})),
@@ -2360,7 +2699,7 @@ export function buildPackagesInstallAssets({
   candid: string;
   removedApps?: string[];
 }): PackageInstallAssets {
-  assertPreparedPackageBatch(packages);
+  assertPreparedPackageBatch([...packages]);
   const normalizedRemovedApps = normalizeRemovedApps(removedApps, packages);
   let apps = Object.fromEntries(
     Object.entries(normalizeAppRegistry(existingApps)).filter(
@@ -2381,6 +2720,390 @@ export function buildPackagesInstallAssets({
   };
 }
 
+/**
+ * Build the exact review artifact for the state-preserving Kernel upgrade
+ * path. No canister write occurs here; callers can inspect/export the returned
+ * bytes before passing `record` to `deployPreparedPackages`.
+ */
+export function prepareCompleteDeploymentBuildRecord({
+  targetCanisterId,
+  packages,
+  state,
+  compiled,
+  expectedDeploymentId,
+  removedApps = [],
+  retainedPackageEvidence = {},
+}: PrepareCompleteDeploymentBuildRecordInput): PreparedCompleteDeploymentBuild {
+  assertExpectedDeploymentId(expectedDeploymentId);
+  assertCompiledManagedMemoryPlan(compiled);
+  assertPreparedPackageBatch([...packages]);
+  const normalizedRemovedApps = normalizeRemovedApps(removedApps, packages);
+  if (
+    JSON.stringify(normalizedRemovedApps) !==
+    JSON.stringify([...compiled.migrationPlan.removedApps].sort(compareCanonicalText))
+  ) {
+    throw new Error(
+      "Deployment record removed apps do not match the compiler migration plan",
+    );
+  }
+
+  const { apps } = buildPackagesInstallAssets({
+    existingApps: state.apps,
+    packages: [...packages],
+    candid: compiled.candid,
+    removedApps: normalizedRemovedApps,
+  });
+  assertInstallRegistryMatchesCompile(apps, compiled);
+
+  const supplied = new Map(
+    packages.map((preparedPackage) => [
+      preparedPackage.manifest.id,
+      preparedPackage,
+    ]),
+  );
+  const targetIds = new Set(compiled.dependencyPlan.order);
+  for (const appId of Object.keys(retainedPackageEvidence)) {
+    validateInstallAppId(appId);
+    if (!targetIds.has(appId)) {
+      throw new Error(`Retained package evidence names non-target app ${appId}`);
+    }
+    if (supplied.has(appId)) {
+      throw new Error(`Retained package evidence cannot replace supplied app ${appId}`);
+    }
+  }
+
+  const packageIdentities = compiled.dependencyPlan.order.map((appId) => {
+    const target = apps[appId];
+    if (!target) {
+      throw new Error(`Compiler package order names missing target app ${appId}`);
+    }
+    const preparedPackage = supplied.get(appId);
+    if (preparedPackage) {
+      return preparedDeploymentPackageIdentity(preparedPackage);
+    }
+    const evidence = retainedPackageEvidence[appId] ?? {
+      version: target.version,
+      archive: { state: "legacy_unavailable" as const },
+      package_information: { state: "legacy_unavailable" as const },
+    };
+    if (evidence.version !== target.version) {
+      throw new Error(
+        `Retained package evidence for ${appId} is version ${evidence.version}, expected ${target.version}`,
+      );
+    }
+    return {
+      app_id: appId,
+      version: target.version,
+      archive: evidence.archive,
+      package_information: evidence.package_information,
+    };
+  });
+
+  const previousApps = deploymentAppInventoryFromRegistry(state.apps);
+  const previousMemories = compileManagedMemoryInventory(state.existingConfigs);
+  const previousStableSignatureSha256 =
+    state.previousStable === null ? null : hashContent(state.previousStable);
+  if (
+    !sameJsonValue(
+      compiled.previousManagedMemoryInventory,
+      previousMemories,
+    ) ||
+    compiled.previousStableSignatureSha256 !== previousStableSignatureSha256
+  ) {
+    throw new Error(
+      "Deployment build predecessor does not match the compiler baseline",
+    );
+  }
+
+  const prepared = createCompleteDeploymentBuildRecord({
+    compiled,
+    assembler_id: ASSEMBLER_ID,
+    previous: {
+      deployment_id: expectedDeploymentId,
+      stable_signature: state.previousStable,
+      apps: previousApps,
+      memories: previousMemories,
+    },
+    packages: packageIdentities,
+    installation: {
+      target_canister: targetCanisterId,
+      mode: "upgrade",
+      argument: new Uint8Array(),
+      wasm_memory_persistence: "keep",
+    },
+  });
+  const canonicalRecordBytes = serializeDeploymentBuildRecord(prepared.record);
+  if (!equalBytes(canonicalRecordBytes, prepared.recordBytes)) {
+    throw new Error(
+      "Prepared deployment build record bytes are not canonical",
+    );
+  }
+  preparedDeploymentBuildRecordSeals.set(
+    prepared.record,
+    Object.freeze({
+      recordBytes: canonicalRecordBytes.slice(),
+      candid: compiled.candid,
+      stable: compiled.stable,
+    }),
+  );
+  return prepared;
+}
+
+/** Carry bounded package identities from an installed record into a rebuild. */
+export function retainedDeploymentPackageEvidenceFromRecord(
+  value: DeploymentBuildRecord,
+  {
+    targetCanisterId,
+    deploymentId,
+    apps,
+  }: {
+    targetCanisterId: string;
+    deploymentId: string;
+    apps: AppRegistry;
+  },
+): Readonly<Record<string, RetainedDeploymentPackageEvidence>> {
+  const record = parseDeploymentBuildRecord(value);
+  const observedTarget =
+    record.state === "complete"
+      ? record.installation.target_canister
+      : record.observation.target_canister;
+  const observedDeployment =
+    record.state === "complete"
+      ? record.deployment_id
+      : record.observation.deployment_id;
+  const observedApps =
+    record.state === "complete" ? record.target.apps : record.observation.apps;
+  if (
+    observedTarget !==
+      normalizeUpdateSourcePrincipal(
+        targetCanisterId,
+        "installed deployment target canister",
+      ) ||
+    observedDeployment !== deploymentId ||
+    !sameJsonValue(observedApps, deploymentAppInventoryFromRegistry(apps))
+  ) {
+    throw new Error(
+      "Installed deployment record does not match the checked runtime and app registry",
+    );
+  }
+  if (record.state === "complete") {
+    return Object.freeze(
+      Object.fromEntries(
+        record.packages.map(
+          ({ app_id, version, archive, package_information }) => [
+            app_id,
+            { version, archive, package_information },
+          ],
+        ),
+      ),
+    );
+  }
+  return Object.freeze(
+    Object.fromEntries(
+      record.packages.map(
+        ({
+          app_id,
+          version,
+          outer_archive_sha256,
+          package_information_sha256,
+        }) => [
+          app_id,
+          {
+            version,
+            archive:
+              outer_archive_sha256 === null
+                ? { state: "legacy_unavailable" as const }
+                : {
+                    state: "outer_archive_digest_only" as const,
+                    sha256: outer_archive_sha256,
+                  },
+            package_information:
+              package_information_sha256 === null
+                ? { state: "legacy_unavailable" as const }
+                : {
+                    state: "verified" as const,
+                    sha256: package_information_sha256,
+                  },
+          },
+        ],
+      ),
+    ),
+  );
+}
+
+function deploymentAppInventoryFromRegistry(
+  apps: AppRegistry,
+) {
+  return Object.entries(normalizeAppRegistry(apps))
+    .map(([app_id, entry]) => ({
+      app_id,
+      version: entry.version,
+      capability_plan_fingerprint: entry.capability_plan_fingerprint,
+      resident_frame_security: residentFrameSecurity(entry.capability_plan),
+    }))
+    .sort((left, right) => compareCanonicalText(left.app_id, right.app_id));
+}
+
+function preparedDeploymentPackageIdentity(
+  preparedPackage: PreparedPackageInstall,
+) {
+  assertPreparedPackageArchiveIdentity(preparedPackage);
+  const archive: DeploymentPackageArchiveRecord = preparedPackage.archiveIdentity
+    ? {
+        state: "verified",
+        sha256: preparedPackage.archiveIdentity.sha256,
+        bytes: preparedPackage.archiveIdentity.size,
+      }
+    : { state: "legacy_unavailable" };
+  const recordPath = `${preparedPackage.appPrefix}pkg/${NEUTRON_PACKAGE_RECORD_PATH}`;
+  const recordFile = preparedPackage.files.find(({ path }) => path === recordPath);
+  if ((recordFile !== undefined) !== (preparedPackage.packageRecord !== undefined)) {
+    throw new Error(
+      `Prepared package ${preparedPackage.manifest.id} has inconsistent package-information record state`,
+    );
+  }
+  const packageInformation: PackageInformationRecordIdentity = recordFile
+    ? { state: "verified", sha256: hashContent(recordFile.content) }
+    : archive.state === "verified"
+      ? { state: "not_supplied" }
+      : { state: "legacy_unavailable" };
+  return {
+    app_id: preparedPackage.manifest.id,
+    version: preparedPackage.manifest.version,
+    archive,
+    package_information: packageInformation,
+  };
+}
+
+function assertDeploymentBuildRecordMatchesInstall({
+  value,
+  compiled,
+  packages,
+  existingApps,
+  targetCanisterId,
+  expectedDeploymentId,
+  transportWasm,
+}: {
+  value: CompleteDeploymentBuildRecord;
+  compiled: CompileResult;
+  packages: readonly PreparedPackageInstall[];
+  existingApps: AppRegistry;
+  targetCanisterId: string;
+  expectedDeploymentId: string;
+  transportWasm: Uint8Array;
+}): CompleteDeploymentBuildRecord {
+  const reviewed = preparedDeploymentBuildRecordSeals.get(value);
+  if (!reviewed) {
+    throw new Error(
+      "Deployment build record is not the authenticated reviewed preparation result",
+    );
+  }
+  if (compiled.candid !== reviewed.candid) {
+    throw new Error("Compiled Candid changed after deployment review");
+  }
+  if (compiled.stable !== reviewed.stable) {
+    throw new Error("Compiled stable signature changed after deployment review");
+  }
+  const record = parseDeploymentBuildRecord(value);
+  if (record.state !== "complete") {
+    throw new Error("Deployment install requires a complete build record");
+  }
+  const currentBytes = serializeDeploymentBuildRecord(record);
+  if (!equalBytes(currentBytes, reviewed.recordBytes)) {
+    throw new Error("Deployment build record changed after review");
+  }
+  if (record.previous.deployment_id !== expectedDeploymentId) {
+    throw new Error(
+      "Deployment build record does not match the checked predecessor deployment",
+    );
+  }
+
+  const previousApps = deploymentAppInventoryFromRegistry(existingApps);
+  if (!sameJsonValue(record.previous.apps, previousApps)) {
+    throw new Error(
+      "Deployment build record predecessor apps do not match the checked registry",
+    );
+  }
+  if (
+    record.previous.stable_signature_sha256 !==
+      compiled.previousStableSignatureSha256 ||
+    !sameJsonValue(
+      record.previous.memories,
+      compiled.previousManagedMemoryInventory,
+    )
+  ) {
+    throw new Error(
+      "Deployment build record predecessor memory baseline does not match the compiler",
+    );
+  }
+
+  assertWasmRecord(compiled.wasm, transportWasm, record.wasm);
+  const expected = createCompleteDeploymentBuildRecord({
+    compiled,
+    assembler_id: ASSEMBLER_ID,
+    previous: {
+      deployment_id: expectedDeploymentId,
+      // The deploy surface does not retain the predecessor signature bytes.
+      // Its hash was checked against CompileResult above, so omit `previous`
+      // from the independently re-derived field comparison below.
+      stable_signature: null,
+      apps: record.previous.apps,
+      memories: record.previous.memories,
+    },
+    packages: record.packages.map(
+      ({ app_id, version, archive, package_information }) => ({
+        app_id,
+        version,
+        archive,
+        package_information,
+      }),
+    ),
+    installation: {
+      target_canister: targetCanisterId,
+      mode: "upgrade",
+      argument: new Uint8Array(),
+      wasm_memory_persistence: "keep",
+    },
+  }).record;
+  for (const field of [
+    "deployment_id",
+    "build",
+    "packages",
+    "target",
+    "warnings",
+    "installation",
+    "wasm",
+  ] as const) {
+    if (!sameJsonValue(record[field], expected[field])) {
+      throw new Error(
+        `Deployment build record ${field} does not match the exact install`,
+      );
+    }
+  }
+
+  const recordedPackages = new Map(
+    record.packages.map((candidate) => [candidate.app_id, candidate]),
+  );
+  for (const preparedPackage of packages) {
+    const identity = preparedDeploymentPackageIdentity(preparedPackage);
+    const recorded = recordedPackages.get(identity.app_id);
+    if (
+      !recorded ||
+      recorded.version !== identity.version ||
+      !sameJsonValue(recorded.archive, identity.archive) ||
+      !sameJsonValue(
+        recorded.package_information,
+        identity.package_information,
+      )
+    ) {
+      throw new Error(
+        `Deployment build record package identity does not match supplied app ${identity.app_id}`,
+      );
+    }
+  }
+  return record;
+}
+
 export async function compileAndDeployPreparedPackages({
   actor,
   targetCanisterId,
@@ -2394,7 +3117,7 @@ export async function compileAndDeployPreparedPackages({
   onProgress,
   versionPolicy = "strict-upgrade",
 }: CompileAndDeployPackagesInput): Promise<DeployPreparedPackagesResult> {
-  installClearPrefixes(packages, []);
+  installClearPrefixes(packages, [], state.apps);
   const compiled = await compilePackages({
     packages,
     existingModules: state.existingModules,
@@ -2405,6 +3128,13 @@ export async function compileAndDeployPreparedPackages({
     ...(vetKeysEnvironment ? { vetKeysEnvironment } : {}),
     versionPolicy,
   });
+  const preparedBuild = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId,
+    packages,
+    state,
+    compiled,
+    expectedDeploymentId,
+  });
 
   return deployPreparedPackages({
     actor,
@@ -2413,12 +3143,42 @@ export async function compileAndDeployPreparedPackages({
     compiled,
     existingApps: state.apps,
     previousModulePaths: state.existingModules.map(({ path }) => path),
+    deploymentBuildRecord: preparedBuild.record,
     ...(stagedAssets ? { stagedAssets } : {}),
     expectedDeploymentId,
     ...(verifyTimeoutMs !== undefined ? { verifyTimeoutMs } : {}),
     ...(onStep ? { onStep } : {}),
     ...(onProgress ? { onProgress } : {}),
   });
+}
+
+/**
+ * Detach the deployment transaction from caller-owned compile output before
+ * the first canister call can yield control. Typed-array views cannot be
+ * frozen in every supported runtime, so the Wasm receives an explicit
+ * ordinary-buffer copy; the surrounding compile result is recursively sealed
+ * against accidental internal mutation.
+ */
+function snapshotCompileResultForDeployment(
+  compiled: CompileResult,
+): CompileResult {
+  const { wasm, ...metadata } = compiled;
+  const snapshot: CompileResult = {
+    ...structuredClone(metadata),
+    wasm: Uint8Array.from(wasm),
+  };
+  const seen = new WeakSet<object>();
+
+  const seal = (value: unknown): void => {
+    if (value === null || typeof value !== "object") return;
+    if (ArrayBuffer.isView(value) || seen.has(value)) return;
+    seen.add(value);
+    for (const child of Object.values(value)) seal(child);
+    Object.freeze(value);
+  };
+
+  seal(snapshot);
+  return snapshot;
 }
 
 export async function deployPreparedPackages({
@@ -2430,11 +3190,13 @@ export async function deployPreparedPackages({
   previousModulePaths = [],
   removedApps = [],
   stagedAssets = [],
+  deploymentBuildRecord,
   expectedDeploymentId,
   verifyTimeoutMs = DEFAULT_DEPLOYMENT_ACTIVATION_TIMEOUT_MS,
   onStep,
   onProgress,
 }: DeployPreparedPackagesInput): Promise<DeployPreparedPackagesResult> {
+  const deploymentCompiled = snapshotCompileResultForDeployment(compiled);
   assertBackendCallInstallReservationsTarget(
     Object.fromEntries(
       packages.map((preparedPackage) => [
@@ -2444,44 +3206,79 @@ export async function deployPreparedPackages({
     ),
     targetCanisterId,
   );
-  assertCompiledManagedMemoryPlan(compiled);
+  assertCompiledManagedMemoryPlan(deploymentCompiled);
   assertPreparedPackageBatch(packages);
+  if (
+    deploymentBuildRecord !== undefined &&
+    (deploymentBuildRecord === null ||
+      typeof deploymentBuildRecord !== "object")
+  ) {
+    throw new Error(
+      "Deployment install requires a complete reviewed deployment build record",
+    );
+  }
+  if (
+    deploymentBuildRecord === undefined &&
+    requiresCompleteDeploymentBuildRecord(existingApps)
+  ) {
+    throw new Error(
+      `Kernel ${formatAppVersionLabel(existingApps.kernel!.version)} requires a complete reviewed deployment build record`,
+    );
+  }
   const normalizedRemovedApps = normalizeRemovedApps(removedApps, packages);
-  const clearPrefixes = installClearPrefixes(packages, normalizedRemovedApps);
+  const clearPrefixes = installClearPrefixes(
+    packages,
+    normalizedRemovedApps,
+    existingApps,
+  );
   assertExpectedDeploymentId(expectedDeploymentId);
   try {
-    assertInstallCommitBinding(compiled.candid);
+    assertInstallCommitBinding(deploymentCompiled.candid);
   } catch (error) {
     throw new Error(
       `Compiled target must expose the current kernel_install_commit contract: ${errorMessage(error)}`,
     );
   }
-  const installReservations = installReservationsPrepareRequest(
-    packages,
-    compiled.deploymentId,
-  );
-  const installCodeDispatch = prepareInstallCodeDispatch({
-    wasm: compiled.wasm,
-    candid: compiled.candid,
-    deploymentId: compiled.deploymentId,
-  });
   const { apps, appRegistryAsset, candidAsset } = buildPackagesInstallAssets({
     existingApps,
     packages,
-    candid: compiled.candid,
+    candid: deploymentCompiled.candid,
     removedApps: normalizedRemovedApps,
   });
-  assertInstallRegistryMatchesCompile(apps, compiled);
+  assertInstallRegistryMatchesCompile(apps, deploymentCompiled);
+  const preparedTransport = prepareDeterministicWasmTransport(
+    deploymentCompiled.wasm,
+  );
+  const normalizedDeploymentBuildRecord = deploymentBuildRecord
+    ? assertDeploymentBuildRecordMatchesInstall({
+        value: deploymentBuildRecord,
+        compiled: deploymentCompiled,
+        packages,
+        existingApps,
+        targetCanisterId,
+        expectedDeploymentId,
+        transportWasm: preparedTransport.transportWasm,
+      })
+    : undefined;
+  const installReservations = installReservationsPrepareRequest(
+    packages,
+    deploymentCompiled.deploymentId,
+  );
+  const installCodeDispatch = prepareInstallCodeDispatch({
+    transportWasm: preparedTransport.transportWasm,
+    candid: deploymentCompiled.candid,
+    deploymentId: deploymentCompiled.deploymentId,
+  });
   const stableAsset = createTextAsset(
     "/pkg/neutron.most",
-    compiled.stable,
+    deploymentCompiled.stable,
     "text/plain",
   );
   const moduleFiles = uniquePreparedModuleFiles(packages);
   const moduleGcOperation = createModuleGcOperation({
-    deploymentId: compiled.deploymentId,
+    deploymentId: deploymentCompiled.deploymentId,
     previousModulePaths,
-    retainedModulePaths: compiled.modulePaths,
+    retainedModulePaths: deploymentCompiled.modulePaths,
   });
   const mutableFiles = packages.flatMap((preparedPackage) =>
     preparedPackage.files.filter(
@@ -2495,7 +3292,20 @@ export async function deployPreparedPackages({
     ),
   );
 
-  const staged = createStagedAssets(compiled.deploymentId, [
+  for (const file of mutableFiles) {
+    const target = staticKey(file.path);
+    if (target === DEPLOYMENT_BUILD_RECORD_PATH) {
+      throw new Error(`Reserved package asset target ${target}`);
+    }
+  }
+
+  for (const asset of stagedAssets) {
+    if (asset.target === DEPLOYMENT_BUILD_RECORD_PATH) {
+      throw new Error(`Reserved staged asset target ${asset.target}`);
+    }
+  }
+
+  const staged = createStagedAssets(deploymentCompiled.deploymentId, [
     ...mutableFiles.map(({ path, content }) => ({
       target: staticKey(path),
       content,
@@ -2505,7 +3315,7 @@ export async function deployPreparedPackages({
     })),
     {
       target: candidAsset.key,
-      content: new TextEncoder().encode(compiled.candid),
+      content: new TextEncoder().encode(deploymentCompiled.candid),
       contentType: candidAsset.val.content_type,
     },
     {
@@ -2515,9 +3325,20 @@ export async function deployPreparedPackages({
     },
     {
       target: stableAsset.key,
-      content: new TextEncoder().encode(compiled.stable),
+      content: new TextEncoder().encode(deploymentCompiled.stable),
       contentType: stableAsset.val.content_type,
     },
+    ...(normalizedDeploymentBuildRecord
+      ? [
+          {
+            target: DEPLOYMENT_BUILD_RECORD_PATH,
+            content: serializeDeploymentBuildRecord(
+              normalizedDeploymentBuildRecord,
+            ),
+            contentType: "application/json",
+          },
+        ]
+      : []),
     ...stagedAssets,
   ]);
   if (staged.length > KERNEL_INSTALL_MAX_COPIES) {
@@ -2551,22 +3372,24 @@ export async function deployPreparedPackages({
       await uploadStaticFileOperation(actor, moduleGcOperation);
     }
   } catch (error) {
-    await cleanupUnjournaledStaging(actor, compiled.deploymentId);
+    await cleanupUnjournaledStaging(actor, deploymentCompiled.deploymentId);
     throw error;
   }
 
   const journal: InstallJournal = {
-    deployment_id: compiled.deploymentId,
+    deployment_id: deploymentCompiled.deploymentId,
     copies: staged.map(({ source, target }) => ({ source, target })),
     clear_prefixes: clearPrefixes,
-    target_app_inventory: compiled.appInstanceInventory.map((entry) => ({
-      app_id: entry.app_id,
-      version: entry.version,
-      capability_plan_fingerprint: entry.capability_plan_fingerprint,
-      resident_frame_security: encodeResidentFrameSecurity(
-        entry.resident_frame_security,
-      ),
-    })),
+    target_app_inventory: deploymentCompiled.appInstanceInventory.map(
+      (entry) => ({
+        app_id: entry.app_id,
+        version: entry.version,
+        capability_plan_fingerprint: entry.capability_plan_fingerprint,
+        resident_frame_security: encodeResidentFrameSecurity(
+          entry.resident_frame_security,
+        ),
+      }),
+    ),
   };
 
   notifyDeployStep(onStep, "record-journal");
@@ -2587,7 +3410,8 @@ export async function deployPreparedPackages({
       // stale empty query to clear staging after an unacknowledged begin.
       throw new AggregateError(
         [firstFailure, replayFailure],
-        `Checked install journal could not be causally confirmed for ${compiled.deploymentId}; staging was retained: ${errorMessage(replayFailure)}`,
+        `Checked install journal could not be causally confirmed for ${deploymentCompiled.deploymentId}; ` +
+          `staging was retained: ${errorMessage(replayFailure)}`,
       );
     }
   }
@@ -2598,11 +3422,12 @@ export async function deployPreparedPackages({
     } catch (error) {
       notifyDeployStep(onStep, "abort");
       try {
-        await abortUndispatchedInstall(actor, compiled.deploymentId);
+        await abortUndispatchedInstall(actor, deploymentCompiled.deploymentId);
       } catch (cleanupError) {
         throw new AggregateError(
           [error, cleanupError],
-          `Install reservation preparation failed and cleanup could not be confirmed for ${compiled.deploymentId}`,
+          `Install reservation preparation failed and cleanup could not be ` +
+            `confirmed for ${deploymentCompiled.deploymentId}`,
         );
       }
       throw error;
@@ -2623,41 +3448,43 @@ export async function deployPreparedPackages({
     notifyDeployStep(onStep, "verify-runtime");
     const runtime = await waitForRuntime(
       actor,
-      compiled.deploymentId,
+      deploymentCompiled.deploymentId,
       verifyTimeoutMs,
       dispatchFailure,
     );
-    assertCompiledRuntime(runtime, compiled);
+    assertCompiledRuntime(runtime, deploymentCompiled);
 
     if (installCodeDispatch.kind === "chunked") {
-      await clearInstallWasmChunks(actor, compiled.deploymentId);
+      await clearInstallWasmChunks(actor, deploymentCompiled.deploymentId);
     }
 
     notifyDeployStep(onStep, "commit-assets");
-    await commitPreparedDeployment(actor, compiled.deploymentId);
+    await commitPreparedDeployment(actor, deploymentCompiled.deploymentId);
     notifyDeployStep(onStep, "complete");
-    return { apps, compiled };
+    return { apps, compiled: deploymentCompiled };
   } catch (error) {
     if (error instanceof InstallCommitPendingError) {
       throw error;
     }
     const runtime = await readRuntimeInfo(actor);
-    if (runtime?.deployment_id === compiled.deploymentId) {
-      assertCompiledRuntime(runtime, compiled);
+    if (runtime?.deployment_id === deploymentCompiled.deploymentId) {
+      assertCompiledRuntime(runtime, deploymentCompiled);
       if (installCodeDispatch.kind === "chunked") {
-        await clearInstallWasmChunks(actor, compiled.deploymentId);
+        await clearInstallWasmChunks(actor, deploymentCompiled.deploymentId);
       }
-      await commitPreparedDeployment(actor, compiled.deploymentId);
+      await commitPreparedDeployment(actor, deploymentCompiled.deploymentId);
       notifyDeployStep(onStep, "complete");
-      return { apps, compiled };
+      return { apps, compiled: deploymentCompiled };
     }
     if (runtime) {
       if (installCodeDispatch.kind === "chunked") {
-        await clearInstallWasmChunks(actor, compiled.deploymentId);
+        await clearInstallWasmChunks(actor, deploymentCompiled.deploymentId);
       }
       notifyDeployStep(onStep, "abort");
       await actor
-        .kernel_install_abort({ deployment_id: compiled.deploymentId })
+        .kernel_install_abort({
+          deployment_id: deploymentCompiled.deploymentId,
+        })
         .catch(() => undefined);
     }
     throw error;
@@ -2870,9 +3697,26 @@ function normalizeRemovedApps(
 function installClearPrefixes(
   packages: readonly PreparedPackageInstall[],
   removedApps: readonly string[],
+  existingApps: AppRegistry,
 ): string[] {
+  // v0.3.6 and earlier reject every non-/app clear prefix. They also predate
+  // the reserved legal subtree, so the first bridge safely copies its files
+  // without clearing. Once v0.3.7 is the running baseline, clear/copy is one
+  // atomic journal operation and a recordless replacement cannot inherit it.
+  const runningKernelVersion = existingApps.kernel?.version;
+  const supportsBridgeMetadataClears =
+    typeof runningKernelVersion === "number" &&
+    Number.isSafeInteger(runningKernelVersion) &&
+    runningKernelVersion >= KERNEL_LEGAL_CLEAR_BASELINE_VERSION;
+  const clearsKernelLegal =
+    packages.some((preparedPackage) => preparedPackage.isKernel) &&
+    supportsBridgeMetadataClears;
   const prefixes = [
     ...new Set([
+      ...(clearsKernelLegal ? ["/pkg/legal/"] : []),
+      ...(supportsBridgeMetadataClears
+        ? [DEPLOYMENT_BUILD_RECORD_PATH]
+        : []),
       ...packages
         .filter((preparedPackage) => !preparedPackage.isKernel)
         .map((preparedPackage) => `/app/${preparedPackage.manifest.id}/`),
@@ -2881,10 +3725,21 @@ function installClearPrefixes(
   ].sort(compareCanonicalText);
   if (prefixes.length > KERNEL_INSTALL_MAX_CLEAR_PREFIXES_PER_COMMIT) {
     throw new Error(
-      `Install clears ${prefixes.length} app asset prefixes; kernel limit is ${KERNEL_INSTALL_MAX_CLEAR_PREFIXES_PER_COMMIT} per deployment. Install or remove apps across successive deployments`,
+      `Install clears ${prefixes.length} asset prefixes; kernel limit is ${KERNEL_INSTALL_MAX_CLEAR_PREFIXES_PER_COMMIT} per deployment. Install or remove apps across successive deployments`,
     );
   }
   return prefixes;
+}
+
+function requiresCompleteDeploymentBuildRecord(
+  existingApps: AppRegistry,
+): boolean {
+  const version = existingApps.kernel?.version;
+  return (
+    typeof version === "number" &&
+    Number.isSafeInteger(version) &&
+    version >= KERNEL_LEGAL_CLEAR_BASELINE_VERSION
+  );
 }
 
 function assertInstallRegistryMatchesCompile(
@@ -3252,16 +4107,17 @@ type InstallCodeDispatch =
     };
 
 function prepareInstallCodeDispatch({
-  wasm,
+  transportWasm,
   candid,
   deploymentId,
 }: {
-  wasm: Uint8Array;
+  /** Exact deterministic gzip bytes already bound into the build record. */
+  transportWasm: Uint8Array;
   candid: string;
   deploymentId: string;
 }): InstallCodeDispatch {
-  const request = compressedInstallCodeRequest({
-    wasm,
+  const request = installCodeRequestWithTransport({
+    transportWasm,
     candid,
     deploymentId,
   });
@@ -3338,8 +4194,9 @@ export function prepareInstallCodeRequest({
   candid: string;
   deploymentId: string;
 }): KernelInstallCodeRequest {
-  const request = compressedInstallCodeRequest({
-    wasm,
+  const { transportWasm } = prepareDeterministicWasmTransport(wasm);
+  const request = installCodeRequestWithTransport({
+    transportWasm,
     candid,
     deploymentId,
   });
@@ -3349,17 +4206,17 @@ export function prepareInstallCodeRequest({
   return request;
 }
 
-function compressedInstallCodeRequest({
-  wasm,
+function installCodeRequestWithTransport({
+  transportWasm,
   candid,
   deploymentId,
 }: {
-  wasm: Uint8Array;
+  transportWasm: Uint8Array;
   candid: string;
   deploymentId: string;
 }): KernelInstallCodeRequest {
   return {
-    wasm: gzipSync(wasm, { mtime: 0 }),
+    wasm: transportWasm,
     candid,
     deployment_id: deploymentId,
   };
@@ -3432,6 +4289,10 @@ function createStagedAssets(
     .sort((a, b) => compareCanonicalText(a.target, b.target))
     .map((input, index) => ({
       ...input,
+      // Take one immutable transaction snapshot before the first upload
+      // awaits. Callers retain their package/archive byte arrays and may
+      // otherwise mutate a later staged asset through an aliased reference.
+      content: input.content.slice(),
       source: `/system/staging/${deploymentId}/assets/${index}`,
     }));
 }

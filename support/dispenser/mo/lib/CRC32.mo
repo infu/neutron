@@ -1,4 +1,7 @@
-// Credits Aviate-Labs https://github.com/aviate-labs/hash.mo/blob/main/src/CRC32.mo
+// Adapted from Aviate Labs hash.mo CRC32.mo at revision
+// 8f8bd427428fc26ef8a806fa3f1dacbe5e252c9b (Apache-2.0).
+// Modified by Neutron in 2026 for current Motoko Core imports, local array
+// slicing, and the Dispenser's narrower checksum API.
 
 import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";

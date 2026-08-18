@@ -1,4 +1,7 @@
-//Credits Aviate-labs : https://github.com/aviate-labs/encoding.mo/blob/main/src/Binary.mo
+// Adapted from Aviate Labs encoding.mo Binary.mo at revision
+// 2711d18727e954b11afc0d37945608512b5fbce2 (Apache-2.0).
+// Modified by Neutron in 2026 for current Motoko Core imports and the
+// Dispenser's local byte-order API.
 import Array "mo:core/Array";
 import Nat8 "mo:core/Nat8";
 import Nat16 "mo:core/Nat16";

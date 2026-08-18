@@ -63,6 +63,9 @@ export function AccessSettings({
   const [authorizedError, setAuthorizedError] = useState<string | null>(null);
   const [controllerError, setControllerError] = useState<string | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
+  const [pendingControllerAddition, setPendingControllerAddition] = useState<
+    string | null
+  >(null);
   const [pendingRemoval, setPendingRemoval] =
     useState<PendingRemoval | null>(null);
   const loadGeneration = useRef(0);
@@ -110,7 +113,11 @@ export function AccessSettings({
     if (next && !resource.data && !resource.loading) void refresh();
   };
 
-  const addPrincipal = async (kind: AccessKind, value: string) => {
+  const addPrincipal = async (
+    kind: AccessKind,
+    value: string,
+    controllerRiskConfirmed = false,
+  ) => {
     const setFieldError =
       kind === "authorized" ? setAuthorizedError : setControllerError;
     setFieldError(null);
@@ -145,6 +152,11 @@ export function AccessSettings({
       return;
     }
 
+    if (kind === "controller" && !controllerRiskConfirmed) {
+      setPendingControllerAddition(principalText);
+      return;
+    }
+
     setOperation(`${kind}-add`);
     setResource((current) => ({ ...current, error: null }));
     try {
@@ -172,7 +184,15 @@ export function AccessSettings({
       }));
     } finally {
       setOperation(null);
+      if (kind === "controller") {
+        requestAnimationFrame(() => controllerInputRef.current?.focus());
+      }
     }
+  };
+
+  const cancelControllerAddition = () => {
+    setPendingControllerAddition(null);
+    requestAnimationFrame(() => controllerInputRef.current?.focus());
   };
 
   const removePrincipal = async ({ kind, principal }: PendingRemoval) => {
@@ -318,8 +338,16 @@ export function AccessSettings({
 
             <AccessGroup
               busy={operation !== null || !selfController}
-              description="Platform control: upgrade, configure, stop, or delete the canister."
+              description="Equal platform control: replace Wasm, change settings, stop, or delete the canister."
               error={controllerError}
+              guidance={
+                <>
+                  <strong>Self-Controller:</strong> Neutron&apos;s own canister
+                  principal performs checked in-product upgrades and cannot be
+                  removed here. Add an external principal you control for
+                  independent platform management.
+                </>
+              }
               icon={<IoShieldCheckmarkOutline aria-hidden="true" />}
               input={controllerInput}
               inputRef={controllerInputRef}
@@ -338,6 +366,7 @@ export function AccessSettings({
                 setPendingRemoval({ kind: "controller", principal });
               }}
               principals={resource.data.controllers}
+              protectedLabel="Self-Controller"
               protectedPrincipal={resource.data.self_principal}
               protectedTitle="Neutron must remain a controller of itself"
               title="Controllers"
@@ -351,6 +380,18 @@ export function AccessSettings({
           </div>
         ) : null}
       </SettingsDisclosure>
+
+      {pendingControllerAddition ? (
+        <ControllerAdditionDialog
+          onCancel={cancelControllerAddition}
+          onConfirm={() => {
+            const principal = pendingControllerAddition;
+            setPendingControllerAddition(null);
+            void addPrincipal("controller", principal, true);
+          }}
+          principal={pendingControllerAddition}
+        />
+      ) : null}
 
       {pendingRemoval ? (
         <RemovalDialog
@@ -369,6 +410,7 @@ export function AccessGroup({
   currentPrincipal,
   description,
   error,
+  guidance,
   icon,
   input,
   inputRef,
@@ -378,6 +420,7 @@ export function AccessGroup({
   onInput,
   onRemove,
   principals,
+  protectedLabel,
   protectedPrincipal,
   protectedTitle,
   title,
@@ -387,6 +430,7 @@ export function AccessGroup({
   currentPrincipal?: string;
   description: string;
   error: string | null;
+  guidance?: ReactNode;
   icon: ReactNode;
   input: string;
   inputRef: RefObject<HTMLInputElement | null>;
@@ -396,6 +440,7 @@ export function AccessGroup({
   onInput: (value: string) => void;
   onRemove: (principal: string, trigger: HTMLButtonElement) => void;
   principals: string[];
+  protectedLabel?: string;
   protectedPrincipal: string;
   protectedTitle: string;
   title: string;
@@ -414,6 +459,10 @@ export function AccessGroup({
           {limit === undefined ? "" : `/${limit.toString()}`}
         </code>
       </div>
+
+      {guidance ? (
+        <div className="settings-access-guidance">{guidance}</div>
+      ) : null}
 
       <div className="settings-principal-list" role="list">
         {principals.map((principal) => {
@@ -435,6 +484,11 @@ export function AccessGroup({
                 <code title={principal}>{principal}</code>
                 {principal === currentPrincipal ? (
                   <span className="settings-principal-current">(current)</span>
+                ) : null}
+                {principal === protectedPrincipal && protectedLabel ? (
+                  <span className="settings-principal-role">
+                    ({protectedLabel})
+                  </span>
                 ) : null}
               </span>
               <div className="settings-principal-actions">
@@ -501,6 +555,84 @@ export function AccessGroup({
   );
 }
 
+export function ControllerAdditionDialog({
+  onCancel,
+  onConfirm,
+  principal,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  principal: string;
+}) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previous =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    cancelRef.current?.focus();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+
+  return (
+    <>
+      <div aria-hidden="true" className="backdrop" onClick={onCancel} />
+      <div
+        aria-describedby="access-controller-add-description"
+        aria-labelledby="access-controller-add-title"
+        aria-modal="true"
+        className="dialog dialog-danger access-controller-dialog"
+        data-tid="settings-access-controller-add-dialog"
+        onKeyDown={(event) =>
+          confirmationKeyDown(event, dialogRef.current, onCancel)
+        }
+        ref={dialogRef}
+        role="alertdialog"
+      >
+        <div className="title" id="access-controller-add-title">
+          Add controller
+        </div>
+        <div className="call">
+          <code className="access-remove-principal">{principal}</code>
+          <div
+            className="uninstall-warning"
+            id="access-controller-add-description"
+          >
+            This principal will become an equal IC controller. It can replace
+            all installed Wasm, change canister settings, stop or delete the
+            canister, and remove your authority. Kernel permissions cannot
+            restrict an IC controller. Add it only if you control or trust it.
+          </div>
+          <div className="btn-actions uninstall-actions">
+            <button
+              className="btn btn-sec"
+              data-tid="settings-access-controller-add-cancel"
+              onClick={onCancel}
+              ref={cancelRef}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="btn btn-danger"
+              data-tid="settings-access-controller-add-confirm"
+              onClick={onConfirm}
+              type="button"
+            >
+              <IoAdd aria-hidden="true" />
+              Add controller
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function RemovalDialog({
   onCancel,
   onConfirm,
@@ -516,29 +648,6 @@ function RemovalDialog({
 
   useEffect(() => cancelRef.current?.focus(), []);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onCancel();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    if (!controls?.length) return;
-    const first = controls[0];
-    const last = controls[controls.length - 1];
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-
   return (
     <>
       <div aria-hidden="true" className="backdrop" onClick={onCancel} />
@@ -548,7 +657,9 @@ function RemovalDialog({
         aria-modal="true"
         className="dialog dialog-danger access-remove-dialog"
         data-tid="settings-access-remove-dialog"
-        onKeyDown={onKeyDown}
+        onKeyDown={(event) =>
+          confirmationKeyDown(event, dialogRef.current, onCancel)
+        }
         ref={dialogRef}
         role="alertdialog"
       >
@@ -580,6 +691,33 @@ function RemovalDialog({
       </div>
     </>
   );
+}
+
+function confirmationKeyDown(
+  event: KeyboardEvent<HTMLDivElement>,
+  dialog: HTMLElement | null,
+  onCancel: () => void,
+) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    onCancel();
+    return;
+  }
+  if (event.key !== "Tab" || !dialog) return;
+  const controls = dialog.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  );
+  if (!controls.length) return;
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (!first || !last) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function errorMessage(error: unknown): string {

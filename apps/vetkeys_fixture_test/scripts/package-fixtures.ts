@@ -1,12 +1,28 @@
 import msgpack5 from "msgpack5";
 import { gzipSync } from "node:zlib";
-import { readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { generateOrdinaryAppPackageMetadata } from "neutron-scripts/src/package_metadata.ts";
+import {
+  buildThirdPartyNoticeBundle,
+  type BuildThirdPartyNoticeBundleOptions,
+  type ThirdPartyNoticeBundle,
+} from "neutron-scripts/src/third_party_notices.ts";
 import {
   assertAppVersion,
   formatAppVersion,
 } from "neutron-tools/src/version.js";
+import { NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE } from "neutron-tools/src/schema.js";
 
 export const FIXTURE_ARCHIVE_IDS = [
   "vetkeys_fixture",
@@ -28,17 +44,21 @@ const msgpack = msgpack5();
 
 /**
  * Build both install archives without ever replacing the source manifest.
- * The peer has an explicit source manifest and lock. It reuses the already
+ * The peer has an explicit source manifest and notice. It reuses the already
  * compiled, content-addressed backend and web assets, while its packaged
  * manifest receives only the generated backend entry hash.
  */
 export async function buildFixtureArchives(
   rootDir = fileURLToPath(new URL("..", import.meta.url)),
+  sourceRoot = rootDir,
 ): Promise<ArchiveBuild[]> {
   const dist = await readRawTree(path.join(rootDir, "dist"));
   // The fixtures declare no managed memory. Never let a stale generated lock
   // from an older build leak into either archive.
   dist.delete("neutron.lock.json");
+  for (const packagePath of [...dist.keys()]) {
+    if (packagePath.startsWith("legal/")) dist.delete(packagePath);
+  }
   const primaryManifest = parseJson(
     required(dist, "neutron.json"),
     "dist/neutron.json",
@@ -50,7 +70,7 @@ export async function buildFixtureArchives(
   assertBaseMetadata(primaryManifest, primarySchema);
 
   const peerManifest = parseJson(
-    await readFile(path.join(rootDir, "peer", "neutron.json")),
+    await readFile(path.join(sourceRoot, "peer", "neutron.json")),
     "peer/neutron.json",
   );
   assertPeerMetadata(peerManifest);
@@ -63,13 +83,17 @@ export async function buildFixtureArchives(
     throw new Error("Fixture archive versions must be identical");
   }
 
-  const primaryFiles = new Map(dist);
-  const peerFiles = new Map(dist);
-  peerFiles.set(
+  const primaryPayload = new Map(dist);
+  const peerPayload = new Map(dist);
+  peerPayload.set(
     "neutron.json",
-    jsonBytes({ ...peerManifest, entry }),
+    jsonBytes({
+      ...peerManifest,
+      entry,
+      package_features: [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE],
+    }),
   );
-  peerFiles.set(
+  peerPayload.set(
     "schema.json",
     jsonBytes({
       ...primarySchema,
@@ -81,10 +105,72 @@ export async function buildFixtureArchives(
     }),
   );
 
+  let noticePromise: Promise<ThirdPartyNoticeBundle> | undefined;
+  const buildNotices = (
+    options: BuildThirdPartyNoticeBundleOptions,
+  ): Promise<ThirdPartyNoticeBundle> => {
+    noticePromise ??= buildThirdPartyNoticeBundle(options);
+    return noticePromise;
+  };
+  const primaryFiles = await addPackageMetadata({
+    appRoot: sourceRoot,
+    files: primaryPayload,
+    sourceManifestPath: path.join(sourceRoot, "neutron.json"),
+    applicationNoticePath: path.join(sourceRoot, "NOTICE"),
+    buildNotices,
+  });
+  const peerFiles = await addPackageMetadata({
+    appRoot: sourceRoot,
+    files: peerPayload,
+    sourceManifestPath: path.join(sourceRoot, "peer", "neutron.json"),
+    applicationNoticePath: path.join(sourceRoot, "peer", "NOTICE"),
+    buildNotices,
+  });
+
   return [
     buildArchive("vetkeys_fixture", version, primaryFiles),
     buildArchive("vetkeys_fixture_peer", version, peerFiles),
   ];
+}
+
+async function addPackageMetadata({
+  appRoot,
+  files,
+  sourceManifestPath,
+  applicationNoticePath,
+  buildNotices,
+}: Readonly<{
+  appRoot: string;
+  files: ReadonlyMap<string, Uint8Array>;
+  sourceManifestPath: string;
+  applicationNoticePath: string;
+  buildNotices: typeof buildThirdPartyNoticeBundle;
+}>): Promise<Map<string, Uint8Array>> {
+  const temporaryRoot = await mkdtemp(
+    path.join(os.tmpdir(), "neutron-vetkeys-package-"),
+  );
+  const distRoot = path.join(temporaryRoot, "dist");
+  try {
+    await mkdir(distRoot, { recursive: true });
+    for (const [packagePath, content] of [...files].sort(([left], [right]) =>
+      compareNames(left, right),
+    )) {
+      const target = path.join(distRoot, ...packagePath.split("/"));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, content, { flag: "wx" });
+    }
+    await generateOrdinaryAppPackageMetadata({
+      appRoot,
+      repositoryRoot: path.resolve(appRoot, "../.."),
+      distRoot,
+      sourceManifestPath,
+      applicationNoticePath,
+      buildNotices,
+    });
+    return await readRawTree(distRoot);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 }
 
 export async function writeFixtureArchives(
@@ -100,16 +186,9 @@ export async function writeFixtureArchives(
     } finally {
       await rm(temporary, { force: true });
     }
-    for (const entry of await readdir(rootDir, { withFileTypes: true })) {
-      if (
-        entry.isFile() &&
-        entry.name.startsWith(`${build.id}.v`) &&
-        entry.name.endsWith(".neutron") &&
-        entry.name !== build.filename
-      ) {
-        await rm(path.join(rootDir, entry.name));
-      }
-    }
+    // Keep every released fixture archive. Exact filenames select the current
+    // build, while predecessors remain available for upgrade and regression
+    // evidence.
     console.log(`Writing: ${build.filename}`);
     console.log(`Size: ${build.bytes.byteLength}`);
   }
@@ -170,6 +249,12 @@ function assertBaseMetadata(
   if (manifest.id !== "vetkeys_fixture") {
     throw new Error("Primary dist metadata has an unexpected app id");
   }
+  if (
+    JSON.stringify(manifest.package_features) !==
+    JSON.stringify([NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE])
+  ) {
+    throw new Error("Primary dist metadata is missing its package feature gate");
+  }
   const schemaApp = record(schema.app, "primary schema app");
   if (schemaApp.id !== "vetkeys_fixture") {
     throw new Error("Primary schema has an unexpected app id");
@@ -182,6 +267,9 @@ function assertPeerMetadata(manifest: JsonRecord): void {
   }
   if (Object.prototype.hasOwnProperty.call(manifest, "entry")) {
     throw new Error("Peer source manifest must not contain a generated entry");
+  }
+  if (Object.prototype.hasOwnProperty.call(manifest, "package_features")) {
+    throw new Error("Peer source manifest must not contain generated package features");
   }
 }
 

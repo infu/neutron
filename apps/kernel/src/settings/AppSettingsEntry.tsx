@@ -56,6 +56,8 @@ import {
 } from "./capability_registry.ts";
 import type { KernelUiMode } from "../ui_mode.ts";
 import { CertifiedAssetsSettingsControls } from "./CertifiedAssetsSettingsControls.tsx";
+import { InstalledPackageLegalDetails } from "./InstalledPackageLegalDetails.tsx";
+import type { InstalledPackageRecordInspection } from "./installed_package_record.ts";
 
 export function AppSettingsEntry({
   backendReservations,
@@ -66,6 +68,7 @@ export function AppSettingsEntry({
   dependents,
   entry,
   id,
+  legalInspection,
   uiMode,
   usage,
   memories,
@@ -90,6 +93,7 @@ export function AppSettingsEntry({
   dependents: AppDependent[];
   entry: AppRegistryEntry;
   id: string;
+  legalInspection?: InstalledPackageRecordInspection;
   uiMode: KernelUiMode;
   usage: AppUsageCellState;
   memories: KernelRuntimeInfo["memories"];
@@ -260,6 +264,16 @@ export function AppSettingsEntry({
       >
         <td colSpan={6}>
           <div className="settings-app-details">
+        {legalInspection ? (
+          <InstalledPackageLegalDetails
+            appId={id}
+            inspection={legalInspection}
+            {...(provenance
+              ? { provenancePackageSha256: provenance.package_digest }
+              : {})}
+            uiMode={uiMode}
+          />
+        ) : null}
         {uiMode === "developer" ? (
           <>
         <dl className="settings-app-facts">

@@ -8,7 +8,7 @@
     "build:wasm": "bun ../../packages/neutron-scripts/src/compile_motoko.ts --source mo/main.mo --output repository.wasm",
     "test": "bun test && bun test/motoko/run.ts"
   },
-  "license": "GPL-3.0-only",
+  "license": "Apache-2.0",
   "dependencies": {
     "js-sha256": "^0.11.1",
     "neutron-compiler": "^1.1.0",

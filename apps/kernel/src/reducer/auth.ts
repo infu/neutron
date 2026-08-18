@@ -377,6 +377,13 @@ export function getIC(): IcblastClient {
   return ic;
 }
 
+function createDynamicIcblastClient(): IcblastClient {
+  return createIcblast({
+    ...runtimeIcblastOptions(),
+    ...(activeIdentity ? { identity: activeIdentity } : {}),
+  }) as IcblastClient;
+}
+
 function runtimeIcblastOptions(): Record<string, unknown> {
   const deployment = getRuntimeDeployment();
   return {
@@ -451,7 +458,11 @@ export function getNeutronDynamicCan(): Promise<any> {
   if (neutronDynamicCanPromise) return neutronDynamicCanPromise;
 
   const generation = neutronCanGeneration;
-  const generationClient = getIC();
+  // icblast caches actors by canister ID inside each client. The combined
+  // Neutron Candid changes after an app install, update, or uninstall, so a
+  // shared client would return its old actor even after resetNeutronCan()
+  // cleared our own cache. Give every Candid generation its own client.
+  const generationClient = createDynamicIcblastClient();
   const pending = (async () => {
     const candid = await readKernelAssetText("/pkg/neutron.did");
     const actor = await generationClient(getNeutronId(), candid);

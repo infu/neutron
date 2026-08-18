@@ -96,6 +96,7 @@ test("the dynamic self actor is single-flight and generation scoped", async () =
     "if (neutronDynamicCanPromise) return neutronDynamicCanPromise",
   );
   expect(factory).toContain('readKernelAssetText("/pkg/neutron.did")');
+  expect(factory).toContain("createDynamicIcblastClient()");
   expect(factory).toContain("generationClient(getNeutronId(), candid)");
   expect(factory).toContain("generation !== neutronCanGeneration");
   expect(factory).toContain("return getNeutronDynamicCan()");

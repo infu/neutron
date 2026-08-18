@@ -149,7 +149,37 @@ export async function buildQualificationFixtureArchive(input: {
   }
   const packages = await qualificationPackageMap(input.repositoryRoot);
   await packageMotoko({ cwd: targetDirectory, packages });
+  await removeQualificationOnlySourceDeliveryMarker(targetDirectory);
   return packDirectory(targetDirectory);
+}
+
+/**
+ * These local-only synthetic packages exercise Certified Assets behavior; they
+ * are never conveyed or published and deliberately have no legal/source
+ * envelope. `mopack` marks packages without an update source for embedded
+ * source delivery, so remove that production-only negotiation marker before
+ * feeding the fixtures to the current installer.
+ */
+async function removeQualificationOnlySourceDeliveryMarker(
+  packageDirectory: string,
+): Promise<void> {
+  const manifestPath = path.join(packageDirectory, "dist", "neutron.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    package_features?: unknown;
+  };
+  if (
+    !Array.isArray(manifest.package_features) ||
+    manifest.package_features.length !== 1 ||
+    manifest.package_features[0] !== "archive-only-legal-v1"
+  ) {
+    throw new Error(
+      "Qualification fixture has an unexpected source-delivery marker",
+    );
+  }
+  delete manifest.package_features;
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, {
+    mode: 0o600,
+  });
 }
 
 async function executeMogen(

@@ -6,6 +6,7 @@ import type {
 import {
   readPackageAsset,
   readReleaseAsset,
+  readSourceAsset,
   type CertifiedFetch,
 } from "./http.ts";
 import {
@@ -14,6 +15,8 @@ import {
   PACKAGE_MAX_AGE_SECONDS,
   RELEASE_CONTENT_TYPE,
   RELEASE_MAX_AGE_SECONDS,
+  SOURCE_CONTENT_TYPE,
+  SOURCE_MAX_AGE_SECONDS,
   UPDATE_SOURCE_RECEIPT_PROTOCOL,
   UPLOAD_CHUNK_BYTES,
   UPLOAD_CONCURRENCY,
@@ -22,6 +25,7 @@ import {
   packageHeaders,
   releaseHeaders,
   sha256Hex,
+  sourceHeaders,
   type InspectedUpdatePackage,
   type PackageInspector,
 } from "./model.ts";
@@ -34,6 +38,15 @@ export type PublicationOutcome = {
   package_path: string;
   release_path: string;
   release_digest: string;
+  status: "published" | "unchanged";
+  source: SourcePublicationOutcome | null;
+};
+
+export type SourcePublicationOutcome = {
+  url: string;
+  path: string;
+  sha256: string;
+  size: number;
   status: "published" | "unchanged";
 };
 
@@ -53,6 +66,7 @@ export type PublishOptions = {
   port: AssetCanisterPort;
   fetch?: CertifiedFetch;
   read?: (file: string) => Promise<Uint8Array>;
+  readSource?: (file: string) => Promise<Uint8Array>;
   inspect?: PackageInspector;
   now?: () => Date;
   progress?: (message: string) => void;
@@ -62,6 +76,7 @@ type PlannedPackage = {
   package: InspectedUpdatePackage;
   releaseExists: boolean;
   packageExists: boolean;
+  sourceExists: boolean | null;
   unchanged: boolean;
 };
 
@@ -76,8 +91,12 @@ export async function publishPackageFiles(
   }
   const inspected = await inspectPackageFiles(files, {
     ...(options.read ? { read: options.read } : {}),
+    ...(options.readSource ? { readSource: options.readSource } : {}),
     ...(options.inspect ? { inspect: options.inspect } : {}),
   });
+  for (const candidate of inspected) {
+    assertHostedSourceTarget(candidate, options.origin);
+  }
   const existingAssets = options.port.listAssets
     ? indexAssets(await options.port.listAssets())
     : null;
@@ -105,7 +124,7 @@ export async function publishPackageFiles(
     batch_id: committedBatch?.toString() ?? null,
     atomic: true,
     published_at: (options.now ?? (() => new Date()))().toISOString(),
-    packages: plans.map(({ package: candidate, unchanged }) => ({
+    packages: plans.map(({ package: candidate, sourceExists, unchanged }) => ({
       id: candidate.record.id,
       version: candidate.record.version,
       sha256: candidate.record.sha256,
@@ -114,6 +133,15 @@ export async function publishPackageFiles(
       release_path: candidate.releasePath,
       release_digest: sha256Hex(candidate.releaseBytes),
       status: unchanged ? "unchanged" : "published",
+      source: candidate.hostedSource
+        ? {
+            url: candidate.hostedSource.url,
+            path: candidate.hostedSource.path,
+            sha256: candidate.hostedSource.sha256,
+            size: candidate.hostedSource.size,
+            status: sourceExists ? "unchanged" : "published",
+          }
+        : null,
     })),
   };
 }
@@ -180,10 +208,28 @@ async function planPackage(
       `Release '${candidate.record.id}' points to a missing immutable package`,
     );
   }
+  const sourceAsset = candidate.hostedSource
+    ? existingAssets && !existingAssets.has(candidate.hostedSource.path)
+      ? ({ status: "missing" } as const)
+      : await readSourceAsset({
+          origin: options.origin,
+          path: candidate.hostedSource.path,
+          expectedDigest: candidate.hostedSource.sha256,
+          expectedSize: candidate.hostedSource.size,
+          ...(options.fetch ? { fetch: options.fetch } : {}),
+        })
+    : null;
+  if (unchanged && sourceAsset?.status === "missing") {
+    throw new Error(
+      `Release '${candidate.record.id}' points to a missing immutable Complete App Source`,
+    );
+  }
   return {
     package: candidate,
     releaseExists: current.status === "found",
     packageExists: packageAsset.status === "found",
+    sourceExists:
+      sourceAsset === null ? null : sourceAsset.status === "found",
     unchanged,
   };
 }
@@ -209,8 +255,35 @@ async function commitPublication(
   let committed = false;
   try {
     const operations: BatchOperation[] = [];
+    const uploadedSourcePaths = new Set<string>();
     for (const plan of plans) {
       const candidate = plan.package;
+      if (
+        candidate.hostedSource &&
+        !plan.sourceExists &&
+        !uploadedSourcePaths.has(candidate.hostedSource.path)
+      ) {
+        uploadedSourcePaths.add(candidate.hostedSource.path);
+        options.progress?.(`Uploading source ${candidate.record.id}`);
+        const sourceChunks = await uploadChunks(
+          options.port,
+          batchId,
+          candidate.hostedSource.bytes,
+        );
+        operations.push(
+          createAsset(
+            candidate.hostedSource.path,
+            SOURCE_CONTENT_TYPE,
+            sourceHeaders(candidate.hostedSource.sha256),
+            SOURCE_MAX_AGE_SECONDS,
+          ),
+          setAssetContent(
+            candidate.hostedSource.path,
+            candidate.hostedSource.sha256,
+            sourceChunks,
+          ),
+        );
+      }
       if (!plan.packageExists) {
         options.progress?.(`Uploading package ${candidate.record.id}`);
         const packageChunks = await uploadChunks(
@@ -324,6 +397,20 @@ async function verifyPublishedPackage(
       `Published package verification failed for '${candidate.record.id}'`,
     );
   }
+  if (candidate.hostedSource) {
+    const sourceAsset = await readSourceAsset({
+      origin: options.origin,
+      path: candidate.hostedSource.path,
+      expectedDigest: candidate.hostedSource.sha256,
+      expectedSize: candidate.hostedSource.size,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+    });
+    if (sourceAsset.status !== "found") {
+      throw new Error(
+        `Published Complete App Source verification failed for '${candidate.record.id}'`,
+      );
+    }
+  }
 }
 
 function sameRecord(
@@ -337,6 +424,21 @@ function sameRecord(
     left.sha256 === right.sha256 &&
     left.size === right.size
   );
+}
+
+function assertHostedSourceTarget(
+  candidate: InspectedUpdatePackage,
+  configuredOrigin: string,
+): void {
+  const source = candidate.hostedSource;
+  if (!source) return;
+  const origin = new URL(configuredOrigin).origin;
+  const expected = `${origin}${source.path}`;
+  if (source.url !== expected) {
+    throw new Error(
+      `Package '${candidate.record.id}' Complete App Source URL must be ${expected}`,
+    );
+  }
 }
 
 function createAsset(

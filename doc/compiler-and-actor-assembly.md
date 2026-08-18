@@ -65,8 +65,11 @@ reads the committed installation identity from the prior actor rather than
 accepting a new caller-supplied value.
 
 An actor without the current installation-identity and assembler contract is
-not a valid update predecessor for this compiler and requires a clean
-reinstall.
+not a valid update predecessor for this compiler. That rule applies to
+explicitly unsupported development state; it is not permission to replace a
+supported production Neutron through a destructive reinstall. Before releasing
+a changed contract, the release must retain or add a state-preserving path from
+every production predecessor it continues to support.
 
 ## Package Preparation
 
@@ -328,6 +331,21 @@ The deployment ID binds the target manifests, migrations, retirements,
 capabilities, inventories, compiler, environment, installation identity, and
 deployment nonce.
 
+`compiled.wasm` is the raw actor output. The shared transport helper gzip
+compresses it as `fflate@0.8.3:default-level:mtime=0` and returns the exact
+bytes that the installer sends through either the inline or chunked management
+path. Raw and transport hashes are different byte-domain facts. Install and
+provisioning verification compares the live canister module hash with SHA-256
+of that deterministic gzip transport, while retaining the raw output identity
+separately.
+
+The format-1 deployment build record at
+`/system/deployment-build-record.json` maps the ordered package set to these
+compiler, compatibility, install, and hash facts. It is one record for the
+complete actor, not one module hash per app. The GPL bridge and exact record
+flow are documented in
+[License And Deployment Records](./license-and-deployment-records.md#deployment-build-record-v1).
+
 ## Install Transaction
 
 Browser and provisioner installers use the same current lifecycle.
@@ -336,7 +354,11 @@ Browser and provisioner installers use the same current lifecycle.
 
 - preflight the complete target app and resident inventory;
 - compile against the committed predecessor;
+- for a record-capable browser operation, create and expose the complete
+  deployment build record and exact install transport before approval or
+  dispatch;
 - stage hashed Motoko modules and package/static assets;
+- stage the same canonical deployment record with mutable assets;
 - prepare bounded copy/clear and module-GC operations; and
 - choose direct `install_code` or management chunk upload according to ingress
   size.
@@ -355,6 +377,11 @@ kernel_install_begin_checked({
 The journal binds the target deployment, asset copies, clear prefixes, and
 target app inventory. Exact replay is idempotent and is the causal recovery path
 after a lost reply.
+
+The deploy boundary checks the installed Kernel registry before any upload or
+staging. A predecessor at version 307 or later requires an exact complete
+deployment build record. Only a pre-v307 bridge predecessor or a fresh
+provisioner path with no installed Kernel may omit it.
 
 One journal admits at most 4,000 asset copies and 128 clear prefixes. One commit
 may remove at most 64 apps.

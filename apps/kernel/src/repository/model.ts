@@ -1,6 +1,7 @@
 import type {
   AppRegistry,
   KernelRuntimeInfo,
+  PackageArchiveIdentity,
   PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
 import type { CompileConfig } from "neutron-compiler/src/compile.js";
@@ -23,12 +24,23 @@ export type VerifiedRepositoryPackage = {
   rawSize: number;
   publisher?: { name: string; website?: string };
   source?: string;
-  preparedPackage: PreparedPackageInstall;
+  preparedPackage: RepositoryPreparedPackage;
   permissions: readonly Permission[];
   capabilityPlanFingerprint: string;
   capabilityDisclosures: readonly CapabilityInstallDisclosureWireV1[];
   appExplanations: readonly AppPermissionExplanation[];
 };
+
+/**
+ * Repository packages always enter through exact, digest-pinned archive bytes.
+ * Preserve that stronger boundary for pre-dispatch review/export even though
+ * the generic compiler type also supports legacy unpacked inputs.
+ */
+export type RepositoryPreparedPackage = PreparedPackageInstall &
+  Readonly<{
+    archiveBytes: Uint8Array;
+    archiveIdentity: PackageArchiveIdentity;
+  }>;
 
 export type InstalledAppPresence = {
   installed: boolean;

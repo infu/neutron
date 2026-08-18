@@ -5,6 +5,7 @@ import type {
   RepositorySetupReference,
 } from "neutron-tools/repository";
 import type { AttestedInstallOfferRequester } from "../install_offers/types.ts";
+import type { DeploymentBuildReviewInput } from "../install_review/deployment_build_review.ts";
 import type {
   RepositoryReconciliation,
   RepositorySelection,
@@ -56,7 +57,7 @@ type RepositorySetupState = {
   progress: RepositorySetupProgress | null;
   error: string | null;
   errorStage: "load" | "compile" | "install" | null;
-  compiledSize: number | null;
+  deploymentReview: DeploymentBuildReviewInput | null;
 };
 
 const initialState: RepositorySetupState = {
@@ -69,7 +70,7 @@ const initialState: RepositorySetupState = {
   progress: null,
   error: null,
   errorStage: null,
-  compiledSize: null,
+  deploymentReview: null,
 };
 
 export const useRepositorySetupStore = create<RepositorySetupState>(() => ({
@@ -97,7 +98,7 @@ export const repositorySetupState = {
       progress: Object.freeze({ ...progress }),
       error: null,
       errorStage: null,
-      compiledSize: null,
+      deploymentReview: null,
     });
   },
   progress(progress: RepositorySetupProgress): void {
@@ -120,7 +121,7 @@ export const repositorySetupState = {
       progress: null,
       error: null,
       errorStage: null,
-      compiledSize: null,
+      deploymentReview: null,
     });
   },
   selection(rootIds: readonly string[], selection: RepositorySelection): void {
@@ -130,7 +131,7 @@ export const repositorySetupState = {
       selection,
       error: null,
       errorStage: null,
-      compiledSize: null,
+      deploymentReview: null,
     });
   },
   compiling(): void {
@@ -139,16 +140,16 @@ export const repositorySetupState = {
       progress: { label: "Compiling selected applications", current: 0, total: 1 },
       error: null,
       errorStage: null,
-      compiledSize: null,
+      deploymentReview: null,
     });
   },
-  review(compiledSize: number): void {
+  review(deploymentReview: DeploymentBuildReviewInput): void {
     useRepositorySetupStore.setState({
       phase: "review",
       progress: null,
       error: null,
       errorStage: null,
-      compiledSize,
+      deploymentReview,
     });
   },
   installing(): void {
@@ -156,6 +157,7 @@ export const repositorySetupState = {
       phase: "installing",
       error: null,
       errorStage: null,
+      deploymentReview: null,
     });
   },
   success(): void {
@@ -164,6 +166,7 @@ export const repositorySetupState = {
       progress: null,
       error: null,
       errorStage: null,
+      deploymentReview: null,
     });
   },
   error(stage: "load" | "compile" | "install", error: unknown): void {
@@ -172,6 +175,7 @@ export const repositorySetupState = {
       progress: null,
       error: error instanceof Error ? error.message : String(error),
       errorStage: stage,
+      deploymentReview: null,
     });
   },
   clear(): void {

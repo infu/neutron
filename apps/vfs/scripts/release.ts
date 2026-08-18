@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { gunzipSync } from "node:zlib";
 import {
   mkdir,
   readFile,
@@ -10,11 +11,33 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  assertNeutronAppSourceBuildInputs,
+  decodeNeutronAppSourceSnapshot,
+} from "neutron-compiler/src/source_snapshot.ts";
+import {
   unpackNeutronPackage,
 } from "neutron-compiler/src/install.ts";
 import {
   packageArchiveFilename,
 } from "neutron-tools/src/package_archive.js";
+import {
+  NEUTRON_APP_SOURCE_SNAPSHOT_LIMITS,
+  NEUTRON_APP_SOURCE_TRANSPORT_LIMITS,
+  NEUTRON_PACKAGE_RECORD_PATH,
+  neutronAppSourceHttpsUrl,
+  parseNeutronPackageRecord,
+} from "neutron-tools/package_record.js";
+import { canisterOrigin } from "neutron-tools/src/runtime.js";
+import {
+  normalizeManifestUpdateSource,
+  type PackagedNeutronManifest,
+} from "neutron-tools/src/schema.js";
+import {
+  NSAL_LICENSE_ID,
+  ORDINARY_APP_LICENSE_PATHS,
+  ORDINARY_APP_NOTICE_PATH,
+  ordinaryAppSourceArtifactPath,
+} from "neutron-scripts/src/package_metadata.ts";
 import {
   hashContent,
   removeCommentsAndEmptyLines,
@@ -31,6 +54,12 @@ const RELEASE_EVIDENCE_PATH = ".neutron-release-evidence.json";
 const RELEASE_EVIDENCE_SCHEMA = "neutron.files.release-evidence.v3";
 const PACKAGE_VERIFICATION_SCHEMA = "neutron.files.package-verification.v2";
 const HARD_CUT_ENV = "NEUTRON_FILES_V2_FRESH_REINSTALL";
+const THIRD_PARTY_NOTICE_INDEX_PATH = "legal/THIRD_PARTY_NOTICES.md";
+const THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY = "legal/third-party";
+const THIRD_PARTY_NOTICE_MATERIAL_PATH = new RegExp(
+  `^${THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY.replaceAll("/", "\\/")}\/[a-f0-9]{64}\\.txt$`,
+  "u",
+);
 
 const thisFile = fileURLToPath(import.meta.url);
 export const DEFAULT_FILES_ROOT = resolve(dirname(thisFile), "..");
@@ -38,7 +67,7 @@ export const DEFAULT_WORKSPACE_ROOT = resolve(DEFAULT_FILES_ROOT, "../..");
 
 const FILES_SOURCE_ROOT_FILES = [
   ".gitignore",
-  "LICENSE",
+  "NOTICE",
   "README.md",
   "THIRD_PARTY_NOTICES.md",
   "build.ts",
@@ -64,7 +93,10 @@ const FILES_SOURCE_DIRECTORIES = [
 
 const REQUIRED_DIST_PATHS = new Set([
   FILES_WORKER_BROWSER_EVIDENCE_PATH,
-  "THIRD_PARTY_NOTICES.md",
+  ORDINARY_APP_LICENSE_PATHS[NSAL_LICENSE_ID],
+  ORDINARY_APP_NOTICE_PATH,
+  THIRD_PARTY_NOTICE_INDEX_PATH,
+  NEUTRON_PACKAGE_RECORD_PATH,
   "neutron.json",
   "neutron.lock.json",
   "schema.json",
@@ -311,8 +343,131 @@ function allowedDistPath(path: string): boolean {
   return (
     REQUIRED_DIST_PATHS.has(path) ||
     path === RELEASE_EVIDENCE_PATH ||
+    THIRD_PARTY_NOTICE_MATERIAL_PATH.test(path) ||
     /^mo\/[a-f0-9]{64}\.mo$/u.test(path)
   );
+}
+
+async function assertFilesLegalMetadata(
+  filesRoot: string,
+  distRoot: string,
+  paths: readonly string[],
+): Promise<void> {
+  const files: Record<string, Uint8Array> = Object.create(null) as Record<
+    string,
+    Uint8Array
+  >;
+  await Promise.all(
+    paths.map(async (path) => {
+      files[path] = new Uint8Array(await readFile(join(distRoot, path)));
+    }),
+  );
+  const manifest = JSON.parse(
+    Buffer.from(files["neutron.json"]!).toString("utf8"),
+  ) as PackagedNeutronManifest;
+  const record = parseNeutronPackageRecord(
+    files[NEUTRON_PACKAGE_RECORD_PATH]!,
+    { files, manifest },
+  );
+  if (
+    Object.hasOwn(manifest, "package_features") ||
+    record.features !== undefined
+  ) {
+    throw new Error(
+      "Files hosted-source package must not declare archive-only features",
+    );
+  }
+  if (
+    record.license.id !== NSAL_LICENSE_ID ||
+    record.license.texts.length !== 1 ||
+    record.license.texts[0]?.id !== NSAL_LICENSE_ID ||
+    record.license.texts[0]?.path !==
+      ORDINARY_APP_LICENSE_PATHS[NSAL_LICENSE_ID]
+  ) {
+    throw new Error("Files package record must bind the exact NSAL license");
+  }
+  if (record.source.kind !== "https") {
+    throw new Error(
+      "Files package record must offer Complete App Source over HTTPS",
+    );
+  }
+  const updateSource = normalizeManifestUpdateSource(manifest);
+  if (updateSource === undefined) {
+    throw new Error("Files hosted source requires manifest update_source");
+  }
+  const expectedSourceUrl = neutronAppSourceHttpsUrl(
+    canisterOrigin({ canisterId: updateSource }),
+    record.source.sha256,
+  );
+  if (
+    record.source.url !== expectedSourceUrl ||
+    record.source.revision !== `source-sha256:${record.source.sha256}`
+  ) {
+    throw new Error(
+      "Files package record must use its update source's canonical source URL and revision",
+    );
+  }
+  const sourceArtifactPath = ordinaryAppSourceArtifactPath(
+    filesRoot,
+    record.source.sha256,
+  );
+  if (
+    record.source.bytes >
+      NEUTRON_APP_SOURCE_TRANSPORT_LIMITS.compressedBytes
+  ) {
+    throw new Error("Files Complete App Source artifact is too large");
+  }
+  await regularFile(sourceArtifactPath, "Files Complete App Source artifact");
+  const sourceArtifact = new Uint8Array(await readFile(sourceArtifactPath));
+  if (
+    sourceArtifact.byteLength !== record.source.bytes ||
+    sha256(sourceArtifact) !== record.source.sha256
+  ) {
+    throw new Error(
+      "Files Complete App Source artifact differs from its package record",
+    );
+  }
+  let sourceSnapshot: Uint8Array;
+  try {
+    sourceSnapshot = new Uint8Array(
+      gunzipSync(sourceArtifact, {
+        maxOutputLength: NEUTRON_APP_SOURCE_SNAPSHOT_LIMITS.encodedBytes,
+      }),
+    );
+  } catch (cause) {
+    throw new Error("Files Complete App Source artifact is not bounded gzip", {
+      cause,
+    });
+  }
+  const decodedSource = decodeNeutronAppSourceSnapshot(sourceSnapshot, {
+    id: manifest.id,
+    version: manifest.version,
+  });
+  assertNeutronAppSourceBuildInputs(decodedSource, record.build.inputs);
+  const noticePaths = new Set(record.notices.map(({ path }) => path));
+  if (
+    !noticePaths.has(ORDINARY_APP_NOTICE_PATH) ||
+    !noticePaths.has(THIRD_PARTY_NOTICE_INDEX_PATH)
+  ) {
+    throw new Error(
+      "Files package record must bind its application and third-party notices",
+    );
+  }
+
+  const boundLegalPaths = new Set([
+    NEUTRON_PACKAGE_RECORD_PATH,
+    ...record.license.texts.map(({ path }) => path),
+    ...record.notices.map(({ path }) => path),
+  ]);
+  const actualLegalPaths = paths.filter((path) => path.startsWith("legal/"));
+  if (
+    boundLegalPaths.size !== actualLegalPaths.length ||
+    actualLegalPaths.some((path) => !boundLegalPaths.has(path))
+  ) {
+    throw new Error(
+      "Files legal payload must be exactly and completely bound by its package record",
+    );
+  }
 }
 
 async function assertDistShape(
@@ -323,17 +478,6 @@ async function assertDistShape(
     if (!paths.includes(required)) {
       throw new Error(`Files package payload is missing ${required}`);
     }
-  }
-  const packagedNotice = await readFile(
-    join(distRoot, "THIRD_PARTY_NOTICES.md"),
-  );
-  const sourceNotice = await readFile(
-    join(dirname(distRoot), "THIRD_PARTY_NOTICES.md"),
-  );
-  if (!Buffer.from(packagedNotice).equals(sourceNotice)) {
-    throw new Error(
-      "Files package Unicode third-party notice differs from source",
-    );
   }
   for (const path of paths) {
     if (!allowedDistPath(path)) {
@@ -347,6 +491,7 @@ async function assertDistShape(
       }
     }
   }
+  await assertFilesLegalMetadata(dirname(distRoot), distRoot, paths);
 }
 
 const RESIDENT_PORT_METHODS = Object.freeze([

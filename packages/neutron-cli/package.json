@@ -10,7 +10,7 @@
     "test": "bun test"
   },
   "author": "",
-  "license": "GPL-3.0-only",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "neutron-compiler": "^1.1.0"
   }

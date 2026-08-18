@@ -4,10 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 // import ignore from "ignore";
 import zlib from "zlib";
-import {
-  assertAppVersion,
-  parseAppVersion,
-} from "neutron-tools/src/version.js";
+import { assertAppVersion } from "neutron-tools/src/version.js";
 import { packageArchiveFilename } from "neutron-tools/src/package_archive.js";
 
 const msgpack = msgpack5();
@@ -134,47 +131,6 @@ export async function walkDir(
   return flatStructure;
 }
 
-export async function removeOlderPackageArchives(
-  rootDir: string,
-  id: string,
-  version: number,
-): Promise<string[]> {
-  const prefix = `${id}.v`;
-  const suffix = ".neutron";
-  const removed: string[] = [];
-  const entries = await fs.readdir(rootDir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (
-      !entry.isFile() ||
-      !entry.name.startsWith(prefix) ||
-      !entry.name.endsWith(suffix)
-    ) {
-      continue;
-    }
-
-    const archivedVersionText = entry.name.slice(
-      prefix.length,
-      -suffix.length,
-    );
-    let archivedVersion: number;
-    try {
-      archivedVersion = parseAppVersion(archivedVersionText);
-    } catch {
-      if (!/^[1-9][0-9]*$/u.test(archivedVersionText)) continue;
-      await fs.rm(path.join(rootDir, entry.name));
-      removed.push(entry.name);
-      continue;
-    }
-    if (archivedVersion >= version) continue;
-
-    await fs.rm(path.join(rootDir, entry.name));
-    removed.push(entry.name);
-  }
-
-  return removed.sort();
-}
-
 export async function packDirectory(
   rootDir = process.cwd(),
 ): Promise<string> {
@@ -185,7 +141,6 @@ export async function packDirectory(
     throw new Error("neutron.json must include string id and numeric version");
   }
   assertAppVersion(version, "neutron.json version");
-  const id = packageJson.id.replace(/[^a-z0-9]/gi, "_");
   // ig = await readIgnoreFile(rootDir);
 
   const distDir = path.join(rootDir, "dist");
@@ -207,13 +162,9 @@ export async function packDirectory(
   } finally {
     await fs.rm(temporaryPath, { force: true });
   }
-  for (const staleArchive of await removeOlderPackageArchives(
-    rootDir,
-    id,
-    version,
-  )) {
-    console.log("Removed stale package: " + staleArchive);
-  }
+  // Released archives are durable upgrade and publication evidence. Keep
+  // every predecessor beside the newly versioned archive; callers select the
+  // exact current filename from neutron.json, so coexistence is unambiguous.
   return archivePath;
 }
 

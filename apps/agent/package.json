@@ -9,13 +9,15 @@
     "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
     "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
     "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
     "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
-    "package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "watch": "bun build.ts watch",
-    "test": "npm run package && bun test"
+    "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo",
+    "test": "npm run package && bun test && npm run test:memory"
   },
   "author": "",
-  "license": "GPL-3.0-only",
+  "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   "description": "Agent powered by OpenRouter with kernel-regulated Neutron tools",
   "dependencies": {
     "@openrouter/ai-sdk-provider": "3.0.0",

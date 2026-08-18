@@ -26,7 +26,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.6.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.9.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -35,7 +35,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(306);
+  expect(manifest.version).toBe(309);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   expect(manifest.memory.kernel.version).toBe(3);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3"]);
@@ -55,7 +55,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(306);
+  expect(packagedManifest.version).toBe(309);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
@@ -66,6 +66,16 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(3);
+  expect(packagedArchive.manifest.version).toBe(309);
+  expect(packagedArchive.packageRecord).toMatchObject({
+    format: 1,
+    package: { id: "kernel", version: 309 },
+    license: { id: "LicenseRef-Neutron-Public-License-1.0" },
+    source: { kind: "https" },
+  });
+  expect(packagedArchive.packageRecord?.build.inputs.length).toBeGreaterThan(
+    0,
+  );
   expect(
     Object.keys(packagedArchive.manifest.memory?.kernel?.schemas ?? {}),
   ).toEqual(["3"]);
@@ -520,23 +530,27 @@ test("observed runtime replacement retires cached actors before registry reconci
 });
 
 test("manual install and uninstall use a consistent checked deployment baseline", async () => {
-  const source = await readFile(
-    new URL("../src/reducer/apps.ts", import.meta.url),
-    "utf8",
+  const [source, settingsSource, launcherSource] = await Promise.all([
+    readFile(new URL("../src/reducer/apps.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../src/settings/KernelSettingsPage.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../src/workspace/Launcher.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  const manualConsistentRead = source.slice(
+    source.indexOf("async function readConsistentManualInstallBaseline"),
+    source.indexOf("async function ensureInstallJournalSettled"),
   );
-  const consistentRead = source.slice(
-    source.indexOf("async function readConsistentKernelPackageState"),
-    source.indexOf("export async function inspectPendingInstallRecovery"),
-  );
-  expect(consistentRead.match(/kernel_runtime_info\(\)/g)?.length).toBe(2);
-  expect(consistentRead).toContain(
-    "before.deployment_id === after.deployment_id",
-  );
-  expect(consistentRead).toContain(
-    "assertKernelPackageBaselineMatchesRuntime(state, after)",
+  expect(manualConsistentRead.match(/kernel_runtime_info\(\)/g)?.length).toBe(
+    2,
   );
   expect(
-    consistentRead.match(/ensureInstallJournalSettled\(neutron\)/g)?.length,
+    manualConsistentRead.match(/ensureInstallJournalSettled\(neutron\)/g)
+      ?.length,
   ).toBe(2);
 
   const uninstallBody = source.slice(
@@ -547,6 +561,43 @@ test("manual install and uninstall use a consistent checked deployment baseline"
   expect(uninstallBody).toMatch(
     /compileAppUninstall\([\s\S]*?deployPreparedPackages\([\s\S]*?expectedDeploymentId/,
   );
+  const compileIndex = uninstallBody.indexOf("await compileAppUninstall");
+  const buildRecordIndex = uninstallBody.indexOf(
+    "prepareBrowserDeployment",
+  );
+  const reviewIndex = uninstallBody.indexOf("await requestAppUninstall");
+  const cancelledIndex = uninstallBody.indexOf("if (!approved) return null");
+  const reviewedBaselineIndex = uninstallBody.indexOf(
+    "await readConsistentManualInstallBaseline(neutron)",
+    cancelledIndex,
+  );
+  const revalidatedRemovalIndex = uninstallBody.indexOf(
+    "const revalidatedDeployment = await prepareBrowserDeployment",
+  );
+  const stagingIndex = uninstallBody.indexOf('phase: "staging"');
+  const provenanceIndex = uninstallBody.indexOf(
+    "removeInstallProvenanceAssets",
+  );
+  const deployIndex = uninstallBody.indexOf("await deployPreparedPackages");
+  expect(compileIndex).toBeGreaterThan(-1);
+  expect(buildRecordIndex).toBeGreaterThan(compileIndex);
+  expect(reviewIndex).toBeGreaterThan(buildRecordIndex);
+  expect(cancelledIndex).toBeGreaterThan(reviewIndex);
+  expect(reviewedBaselineIndex).toBeGreaterThan(cancelledIndex);
+  expect(revalidatedRemovalIndex).toBeGreaterThan(reviewedBaselineIndex);
+  expect(provenanceIndex).toBeGreaterThan(revalidatedRemovalIndex);
+  expect(stagingIndex).toBeGreaterThan(provenanceIndex);
+  expect(deployIndex).toBeGreaterThan(stagingIndex);
+  expect(uninstallBody).not.toContain("await removeInstallProvenanceAssets");
+  expect(uninstallBody).toContain("deployment.prepared.recordBytes");
+  expect(uninstallBody).toContain(
+    "currentBaseline.fingerprint !== baseline.fingerprint",
+  );
+  expect(uninstallBody).toContain(
+    "deployment.prepared.record.warnings.destructive_memory_roots",
+  );
+  expect(settingsSource).not.toContain("requestAppUninstall");
+  expect(launcherSource).not.toContain("requestAppUninstall");
   expect(
     source.match(/vetKeysEnvironment: runtimeCompilerEnvironment\(\)/g),
   ).toHaveLength(3);
@@ -554,12 +605,60 @@ test("manual install and uninstall use a consistent checked deployment baseline"
     'getRuntimeDeployment().target === "pocketic"',
   );
 
+  const compileBody = source.slice(
+    source.indexOf("export async function compile_app"),
+    source.indexOf("type ManualInstallBaseline"),
+  );
+  const packageCompileIndex = compileBody.indexOf(
+    "await compilePackageInstall",
+  );
+  const deploymentPrepareIndex = compileBody.indexOf(
+    "await prepareBrowserDeployment",
+  );
+  const publishReviewIndex = compileBody.indexOf(
+    "deploymentReview: deployment.review",
+  );
+  expect(packageCompileIndex).toBeGreaterThan(-1);
+  expect(deploymentPrepareIndex).toBeGreaterThan(packageCompileIndex);
+  expect(publishReviewIndex).toBeGreaterThan(deploymentPrepareIndex);
+
   const installBody = source.slice(
     source.indexOf("async function installAppInternal"),
     source.indexOf("function removeAppRuntimeState"),
   );
   expect(installBody).toContain(
     "expectedDeploymentId: compileDetails.expectedDeploymentId",
+  );
+  expect(installBody).toContain(
+    "deploymentBuildRecord: compileDetails.deployment.prepared.record",
+  );
+  const finalReviewIndex = installBody.indexOf("await Promise.all");
+  const baselineRevalidationIndex = installBody.indexOf(
+    "await readConsistentManualInstallBaseline(neutron)",
+    finalReviewIndex,
+  );
+  const evidenceRevalidationIndex = installBody.indexOf(
+    "const revalidatedDeployment = await prepareBrowserDeployment",
+  );
+  const manualStagingIndex = installBody.indexOf('phase: "staging"');
+  const provenanceStageIndex = installBody.indexOf(
+    "manualInstallProvenanceAssets",
+  );
+  const manualDeployIndex = installBody.indexOf(
+    "await deployPreparedPackages",
+  );
+  expect(baselineRevalidationIndex).toBeGreaterThan(finalReviewIndex);
+  expect(evidenceRevalidationIndex).toBeGreaterThan(
+    baselineRevalidationIndex,
+  );
+  expect(provenanceStageIndex).toBeGreaterThan(evidenceRevalidationIndex);
+  expect(manualStagingIndex).toBeGreaterThan(provenanceStageIndex);
+  expect(manualDeployIndex).toBeGreaterThan(manualStagingIndex);
+  expect(installBody).toContain(
+    "compileDetails.deployment.prepared.recordBytes",
+  );
+  expect(source).toContain(
+    "if (!state.compiled?.deploymentReview) return",
   );
 });
 

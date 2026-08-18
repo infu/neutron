@@ -3,4 +3,5 @@ dist
 playwright-report
 test-results
 *.neutron
+!spreadsheet.v0.3.1.neutron
 *.tsbuildinfo

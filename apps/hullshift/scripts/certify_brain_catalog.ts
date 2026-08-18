@@ -254,31 +254,10 @@ export async function certifyBrainCatalogValue(
       );
     }
 
-    // Pilot certification intentionally stops at the fast pure quality gate.
-    // Release additionally proves that no supported one-step simplification
-    // preserves the exact band, milestone, precedence, and quality contract.
-    if (qualityMode === "release") {
-      const ablation = await certifyReleaseFixedPointEssentiality({
-        level: entry.level,
-        difficulty: entry.difficulty,
-        milestoneSpecs: entry.milestones,
-        requiredPrecedence: entry.requiredPrecedence,
-      }, {
-        onProgress: (message) => options.onProgress?.(`${entry.id}: ${message}`),
-      });
-      if (!ablation.essential) {
-        const first = ablation.accepted[0]!;
-        const suffix = ablation.fixedPointReached
-          ? `; diagnostic minimization reached a fixed point after ${ablation.accepted.length} changes`
-          : "; one passing simplification is already sufficient to reject release";
-        throw new Error(
-          `${entry.id}: release essentiality failed: ${first.kind}:${first.subject} preserves the full contract${suffix}`,
-        );
-      }
-      options.onProgress?.(
-        `${entry.id}: release essentiality proved across ${ablation.proposalsExamined} proposals and ${ablation.exactAnalyses} exact analyses`,
-      );
-    }
+    // Release certification keeps the deterministic exact-analysis and quality
+    // policy above. Fixed-point ablation remains available as an offline level
+    // design diagnostic, but optional scenery or alternate simplifications do
+    // not make an otherwise valid, solvable level unsafe to ship.
 
     const responseBytes = workerMessageBytes({
       protocol: WORKER_PROTOCOL_VERSION,

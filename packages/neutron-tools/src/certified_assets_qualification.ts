@@ -90,7 +90,7 @@ export const CERTIFIED_ASSETS_METRIC_DEFINITIONS = [
     unit: "cycles",
     release_limit: "40000000000",
     measurement:
-      "non-negative app-usage delta: instructions plus 5000000 cycles per execution plus lifetime outgoing cycles",
+      "maximum exact single-update non-negative app-usage delta from a chained outer baseline and one unobserved post-update snapshot: instructions plus 5000000 cycles for the one execution plus lifetime outgoing cycles; ordered per-update deltas reconcile exactly with the outer case bracket",
   },
   {
     metric: "allocator_high_water_growth_bytes",

@@ -19,7 +19,7 @@
     "typecheck": "tsc -b --pretty false",
     "watch": "bun build.ts watch"
   },
-  "license": "GPL-3.0-only",
+  "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   "description": "Installed-app isolation fixture for Neutron vetKeys.",
   "dependencies": {
     "@dfinity/vetkeys": "0.4.0",

@@ -83,7 +83,7 @@ The current security and implementation contract is in
 
 ## Release
 
-Files v0.4.3 is manifest version 403 and managed-memory schema 2. It retains
+Files v0.4.4 is manifest version 404 and managed-memory schema 2. It retains
 the immutable schema-1 module and performs one managed `1 -> 2` migration,
 preserving the encrypted Vault state while initializing the new Workspace and
 Shared roots.
@@ -99,11 +99,14 @@ Kernel source or Kernel Certified Assets qualification artifacts; the Kernel
 qualifies its generic capability independently, while Files tests its own
 integration. A real Chromium gate executes that exact worker in a
 browser-isolated frame. `npm test` rebuilds and verifies
-`files.v0.4.3.neutron`, so stale ignored output cannot satisfy the package
+`files.v0.4.4.neutron`, so stale ignored output cannot satisfy the package
 tests.
 
 `npm run unicode:check` regenerates both Unicode table artifacts in memory
 from the vendored, checksum-pinned Unicode 16.0 inputs and runs all 99,825 NFC
 relations in the official normalization corpus. The Unicode License v3 notice
-is in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) and is copied into
-every Files package.
+is in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md). Packaging includes
+it in the record-bound ordinary `legal/**` notice corpus, which is installed as
+certified package metadata. Complete App Source is instead supplied once by the
+provider-hosted, digest-bound HTTPS offer and is not copied into each installed
+canister.

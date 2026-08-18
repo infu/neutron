@@ -24,6 +24,12 @@ export const MANIFEST_MAX_MEMORY_ROOTS = 64;
 export const MANIFEST_MAX_MEMORY_MIGRATIONS_TOTAL = 256;
 export const MANIFEST_MAX_TILES = 32;
 export const MANIFEST_MAX_INIT_ARGS = 64;
+export const MANIFEST_MAX_PACKAGE_FEATURES = 8;
+export const NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE =
+  "archive-only-legal-v1" as const;
+
+export type NeutronPackageFeature =
+  typeof NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE;
 
 const MANAGEMENT_CANISTER_PRINCIPAL = "aaaaa-aa";
 const ANONYMOUS_PRINCIPAL = "2vxsx-fae";
@@ -233,6 +239,7 @@ export type NeutronManifest = {
   id: string;
   name: string;
   version: number;
+  package_features?: NeutronPackageFeature[];
   update_source?: string;
   description?: string;
   src?: string;
@@ -318,6 +325,35 @@ export function normalizeManifestUpdateSource(
         manifest.update_source,
         "manifest update_source",
       );
+}
+
+export function normalizeManifestPackageFeatures(
+  manifest: Pick<NeutronManifest, "id" | "package_features">,
+): readonly NeutronPackageFeature[] {
+  const declaration = manifest.package_features;
+  if (declaration === undefined) return Object.freeze([]);
+  if (
+    manifest.id === "kernel" ||
+    !Array.isArray(declaration) ||
+    declaration.length < 1 ||
+    declaration.length > MANIFEST_MAX_PACKAGE_FEATURES
+  ) {
+    throw new Error(`Invalid package_features declaration for ${manifest.id}`);
+  }
+  const features = declaration.map((feature, index) => {
+    if (feature !== NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE) {
+      throw new Error(`Unknown package feature at package_features[${index}]`);
+    }
+    return feature;
+  });
+  for (let index = 1; index < features.length; index += 1) {
+    if (compareCanonicalText(features[index - 1]!, features[index]!) >= 0) {
+      throw new Error(
+        "package_features must be unique and canonically ordered",
+      );
+    }
+  }
+  return Object.freeze(features);
 }
 
 function unicodeLength(value: string): number {
@@ -777,6 +813,16 @@ export const schema: Schema = {
       type: "integer",
       minimum: APP_VERSION_MIN,
     },
+    package_features: {
+      type: "array",
+      minItems: 1,
+      maxItems: MANIFEST_MAX_PACKAGE_FEATURES,
+      uniqueItems: true,
+      items: {
+        type: "string",
+        enum: [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE],
+      },
+    },
     update_source: {
       type: "string",
       minLength: 8,
@@ -1081,6 +1127,7 @@ export const schema: Schema = {
       then: {
         allOf: [
           { not: { required: ["backend"] } },
+          { not: { required: ["package_features"] } },
           {
             properties: {
               capabilities: {

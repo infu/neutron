@@ -27,16 +27,21 @@ const identity = {
 const actorLoads: Deferred<object>[] = [];
 let actorLoadCount = 0;
 let assetFetchCount = 0;
+let clientFactoryCount = 0;
 
-const client = async (_canister: string, candid?: string): Promise<object> => {
-  expect(candid).toBe("service : {};");
-  actorLoadCount += 1;
-  const next = actorLoads.shift();
-  if (!next) throw new Error("Missing dynamic actor result");
-  return next.promise;
+const createIcblast = () => {
+  clientFactoryCount += 1;
+  let cachedActor: object | null = null;
+  return async (_canister: string, candid?: string): Promise<object> => {
+    if (cachedActor) return cachedActor;
+    expect(candid).toBe("service : {};");
+    actorLoadCount += 1;
+    const next = actorLoads.shift();
+    if (!next) throw new Error("Missing dynamic actor result");
+    cachedActor = await next.promise;
+    return cachedActor;
+  };
 };
-
-const createIcblast = () => client;
 const InternetIdentity = {
   create: () => Promise.resolve(),
   isAuthenticated: async () => false,
@@ -119,6 +124,7 @@ beforeEach(() => {
   actorLoads.length = 0;
   actorLoadCount = 0;
   assetFetchCount = 0;
+  clientFactoryCount = 0;
 });
 
 test("concurrent dynamic actor requests share Candid fetch and compilation", async () => {
@@ -184,4 +190,26 @@ test("reset prevents an old generation actor from entering the new cache", async
   expect(await getNeutronDynamicCan()).toBe(currentActor);
   expect(assetFetchCount).toBe(2);
   expect(actorLoadCount).toBe(2);
+  expect(clientFactoryCount).toBe(2);
+});
+
+test("reset bypasses icblast's actor cache for changed live Candid", async () => {
+  const firstLoad = deferred<object>();
+  actorLoads.push(firstLoad);
+  const firstRequest = getNeutronDynamicCan();
+  await waitForActorLoads(1);
+  const firstActor = { candidGeneration: 1 };
+  firstLoad.resolve(firstActor);
+  expect(await firstRequest).toBe(firstActor);
+
+  resetNeutronCan();
+  const secondLoad = deferred<object>();
+  actorLoads.push(secondLoad);
+  const secondRequest = getNeutronDynamicCan();
+  await waitForActorLoads(2);
+  const secondActor = { candidGeneration: 2 };
+  secondLoad.resolve(secondActor);
+
+  expect(await secondRequest).toBe(secondActor);
+  expect(clientFactoryCount).toBe(2);
 });

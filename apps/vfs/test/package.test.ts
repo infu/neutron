@@ -1,12 +1,21 @@
 import { beforeAll, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 import {
   preparePackageInstall,
   unpackNeutronPackage,
 } from "neutron-compiler/src/install.ts";
 import { generateAppMethodSchemaArtifact } from "neutron-scripts/src/method_schema.js";
+import { hashContent } from "neutron-tools/src/hash.js";
 import { type NeutronManifest } from "neutron-tools/src/schema.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
+import {
+  NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX,
+  NEUTRON_PACKAGE_RECORD_PATH,
+  neutronAppSourceArchiveFilename,
+  neutronPackageRecordArchiveOnlyPaths,
+} from "neutron-tools/package_record.js";
 import { verifyFilesRelease } from "../scripts/release.ts";
 
 const manifestUrl = new URL("../neutron.json", import.meta.url);
@@ -16,7 +25,7 @@ const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const jsUrl = new URL("../dist/web/main.js", import.meta.url);
 const serviceHtmlUrl = new URL("../dist/web/service.html", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
-const packageUrl = new URL("../files.v0.4.3.neutron", import.meta.url);
+const packageUrl = new URL("../files.v0.4.4.neutron", import.meta.url);
 
 const VAULT_METHODS = [
   "files_bootstrap_v2",
@@ -60,7 +69,7 @@ test("Files package manifest binds Shared, Vault, and Workspace storage", async 
   expect(manifest).toMatchObject({
     id: "files",
     name: "Files",
-    version: 403,
+    version: 404,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     backend: { capabilities: { certified_assets: { api: 2 } } },
@@ -190,6 +199,7 @@ test("Files package contains the backend, memory, schema, and web install paths"
     };
   };
   expect(packedManifest.entry).toMatch(/^[a-f0-9]{64}$/u);
+  expect(packedManifest).not.toHaveProperty("package_features");
   expect(packedManifest.memory.files.schemas["1"].entry).toMatch(
     /^[a-f0-9]{64}$/u,
   );
@@ -208,6 +218,10 @@ test("Files package contains the backend, memory, schema, and web install paths"
   for (const path of [
     ".neutron-release-evidence.json",
     ".neutron-worker-browser-evidence.json",
+    "legal/LICENSE.APP.txt",
+    "legal/THIRD_PARTY_NOTICES.md",
+    NEUTRON_PACKAGE_RECORD_PATH,
+    "legal/APPLICATION-NOTICE.txt",
     "neutron.json",
     "neutron.lock.json",
     "schema.json",
@@ -228,11 +242,61 @@ test("Files package contains the backend, memory, schema, and web install paths"
   expect(paths).not.toContain("memory/files/v1.mo");
   expect(paths).not.toContain("memory/files/v2.mo");
   expect(paths).not.toContain("memory/files/v1_to_v2.mo");
+  expect(paths).not.toContain("THIRD_PARTY_NOTICES.md");
+  expect(paths).not.toContain(NEUTRON_APP_SOURCE_SNAPSHOT_PATH);
+  expect(paths.some((path) =>
+    path.startsWith(NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX)
+  )).toBe(false);
+  expect(paths.some((path) =>
+    path.startsWith("legal/third-party/")
+  )).toBe(true);
+  expect(paths.some((path) => path.endsWith(".source.v1.msgpack.gz"))).toBe(
+    false,
+  );
 
   const prepared = preparePackageInstall(unpacked);
-  expect(prepared.manifest.version).toBe(403);
+  expect(prepared.manifest.version).toBe(404);
+  expect(prepared.packageRecord?.license.id).toBe(
+    "LicenseRef-Neutron-Sovereign-Application-License-1.0",
+  );
+  expect(prepared.packageRecord?.features).toBeUndefined();
+  const source = prepared.packageRecord?.source;
+  expect(source?.kind).toBe("https");
+  if (source?.kind !== "https") {
+    throw new Error("Files package must carry an HTTPS source offer");
+  }
+  expect(source.revision).toBe(`source-sha256:${source.sha256}`);
+  expect(source.url).toBe(
+    `https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/` +
+      neutronAppSourceArchiveFilename(source.sha256),
+  );
+  const sourceArtifact = new Uint8Array(
+    await readFile(
+      new URL(
+        `../.neutron/sources/${neutronAppSourceArchiveFilename(source.sha256)}`,
+        import.meta.url,
+      ),
+    ),
+  );
+  expect(sourceArtifact.byteLength).toBe(source.bytes);
+  expect(hashContent(sourceArtifact)).toBe(source.sha256);
+  const sourceSnapshot = new Uint8Array(gunzipSync(sourceArtifact));
+  expect(sourceSnapshot.byteLength).toBeGreaterThan(0);
   const installedPaths = prepared.files.map((file) => file.path);
   expect(installedPaths).toContain("app/files/index.html");
   expect(installedPaths).toContain("app/files/service.html");
   expect(installedPaths).toContain("app/files/service.js");
+  expect(installedPaths).toContain(
+    `app/files/pkg/${NEUTRON_PACKAGE_RECORD_PATH}`,
+  );
+  expect(installedPaths).toContain(
+    "app/files/pkg/legal/APPLICATION-NOTICE.txt",
+  );
+  expect(installedPaths).toContain("app/files/pkg/legal/LICENSE.APP.txt");
+  expect(installedPaths).toContain(
+    "app/files/pkg/legal/THIRD_PARTY_NOTICES.md",
+  );
+  expect(
+    neutronPackageRecordArchiveOnlyPaths(prepared.packageRecord!),
+  ).toEqual([]);
 });

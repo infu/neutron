@@ -2,8 +2,7 @@ import esbuild from "esbuild";
 import { sassPlugin } from "esbuild-sass-plugin";
 import copyStaticFiles from "esbuild-copy-static-files";
 import fs from "node:fs";
-import type { BuildOptions } from "esbuild";
-import { envFlag } from "neutron-tools/src/runtime.js";
+import type { BuildOptions, Metafile, Plugin } from "esbuild";
 import { compilerAssetDirectory } from "neutron-motoko-wasm/node.js";
 import {
   assertAppVersion,
@@ -23,12 +22,22 @@ import { buildAttachmentCapacityEvidence } from "./evidence/attachment_capacity.
 //   },
 // };
 
-const writeMetafile = envFlag(process.env.ESBUILD_META);
 const kernelManifest = JSON.parse(
   fs.readFileSync("./neutron.json", "utf8"),
 ) as { version?: unknown };
 assertAppVersion(kernelManifest.version, "Kernel package version");
 const kernelVersion = formatAppVersion(kernelManifest.version);
+
+const retainMetafilePlugin: Plugin = {
+  name: "retain-kernel-metafile",
+  setup(build) {
+    build.onEnd((result) => {
+      if (result.errors.length === 0 && result.metafile !== undefined) {
+        writeKernelMetafile(result.metafile);
+      }
+    });
+  },
+};
 
 const config: BuildOptions = {
   entryPoints: {
@@ -40,7 +49,7 @@ const config: BuildOptions = {
   bundle: true,
   splitting: true,
   minify: true,
-  metafile: writeMetafile,
+  metafile: true,
   define: {
     global: "window",
     "process.env.NEUTRON_VERSION": JSON.stringify(kernelVersion),
@@ -50,6 +59,7 @@ const config: BuildOptions = {
   loader: { ".js": "jsx", ".ts": "ts", ".tsx": "tsx" },
 
   plugins: [
+    retainMetafilePlugin,
     sassPlugin(),
     copyStaticFiles({
       src: "./public",
@@ -85,9 +95,21 @@ if (args[0] === "watch") {
 
   console.log("Watching local files for changes...");
 } else {
-  const result = await esbuild.build(config).catch(() => process.exit(1));
-  if (result.metafile) {
-    fs.writeFileSync("meta.json", JSON.stringify(result.metafile));
+  await esbuild.build(config).catch(() => process.exit(1));
+}
+
+function writeKernelMetafile(metafile: Metafile): void {
+  const destination = "./meta.json";
+  const temporary = `./.meta.json.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(metafile)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o644,
+    });
+    fs.renameSync(temporary, destination);
+  } finally {
+    fs.rmSync(temporary, { force: true });
   }
 }
 

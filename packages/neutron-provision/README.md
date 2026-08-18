@@ -52,7 +52,7 @@ PocketIC inline archives are path-only developer inputs:
     },
     "packages": [
       {
-        "path": "apps/hello/hello.v0.2.1.neutron"
+        "path": "apps/hello/hello.v0.2.2.neutron"
       }
     ]
   }

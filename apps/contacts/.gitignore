@@ -2,4 +2,5 @@ dist/
 .mops/
 node_modules/
 *.neutron
+!contacts.v0.3.1.neutron
 *.tsbuildinfo

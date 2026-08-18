@@ -25,6 +25,7 @@ import type { NeutronManifest } from "neutron-tools/src/schema.js";
 import { buildCapabilityPlan } from "neutron-tools/src/capabilities/plan.js";
 import { diffCapabilityPlans } from "neutron-tools/src/capabilities/wire.js";
 import { registryApp } from "./app_registry_fixture.ts";
+import { uninstallDeploymentRecordFixture } from "./deployment_record_fixture.ts";
 import type { CapabilitySummary } from "../src/settings/capability_registry.ts";
 
 const repoRoot = path.resolve(
@@ -66,6 +67,66 @@ function fixtureAppInstallRequest(request: FixtureInstallRequest) {
     packageDigest,
   });
 }
+
+test("manual install exposes the exact build review before enabling its final action", () => {
+  const html = renderToStaticMarkup(
+    <AppRequestDialog
+      compiled={{
+        size: 1,
+        deploymentReview: {
+          record: uninstallDeploymentRecordFixture(),
+          suppliedPackages: [],
+        },
+      }}
+      request={fixtureAppInstallRequest({
+        id: "hello",
+        size: 1,
+        capabilityPlanFingerprint: "a".repeat(64),
+        capabilityDisclosures: [],
+        permissions: [],
+      })}
+    />,
+  );
+
+  const reviewIndex = html.indexOf('data-tid="deployment-build-review"');
+  const acceptIndex = html.indexOf('data-tid="install-accept"');
+  expect(reviewIndex).toBeGreaterThan(-1);
+  expect(acceptIndex).toBeGreaterThan(reviewIndex);
+  expect(html).toContain("Deployment ready");
+  expect(html).not.toContain("Raw compiler Wasm");
+  expect(html).not.toContain("Transport Wasm");
+  const accept = html.match(/<button[^>]*data-tid="install-accept"[^>]*>/u)?.[0];
+  expect(accept).toBeDefined();
+  expect(accept).not.toContain("disabled");
+
+  const developerHtml = renderToStaticMarkup(
+    <AppRequestDialog
+      compiled={{
+        size: 1,
+        deploymentReview: {
+          record: uninstallDeploymentRecordFixture(),
+          suppliedPackages: [],
+        },
+      }}
+      request={fixtureAppInstallRequest({
+        id: "hello",
+        size: 1,
+        capabilityPlanFingerprint: "a".repeat(64),
+        capabilityDisclosures: [],
+        permissions: [],
+      })}
+      uiMode="developer"
+    />,
+  );
+  expect(developerHtml).toContain(
+    "Build and installation details",
+  );
+  expect(developerHtml).toContain("Raw compiler Wasm");
+  expect(developerHtml).toContain("Transport Wasm");
+  expect(developerHtml).not.toContain(
+    '<details open=""><summary>Build and installation details</summary>',
+  );
+});
 
 test("launcher exposes a real modal dialog boundary", () => {
   const html = renderToStaticMarkup(<Launcher onClose={() => undefined} open />);

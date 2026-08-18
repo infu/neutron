@@ -29,6 +29,10 @@ import {
   type KernelPackageState,
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
+import {
+  parseDeploymentBuildRecord,
+  type CompleteDeploymentBuildRecord,
+} from "neutron-compiler/src/deployment_record.js";
 import { disposeMotokoCompiler } from "neutron-motoko-wasm";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
 import { removeFrontendAppState } from "./msg_bus.ts";
@@ -80,6 +84,15 @@ import {
   assertAppSurfaceInventoryCapacity,
   assertTargetAppSurfaceCapacity,
 } from "../runtime_limits.ts";
+import {
+  prepareBrowserDeployment,
+  type PreparedBrowserDeployment,
+} from "../install_review/prepare_browser_deployment.ts";
+import {
+  createDeploymentBuildReviewModel,
+  type DeploymentBuildReviewInput,
+} from "../install_review/deployment_build_review.ts";
+import { assertPackageProvenanceCoverage } from "../install_review/provenance_binding.ts";
 
 function runtimeCompilerEnvironment(): "production" | "local" {
   // Runtime deployment is loaded from the Kernel's certified closed config
@@ -145,12 +158,16 @@ export type AppInstallRequestInput = {
   readonly offer?: AppInstallOfferReview;
 };
 
-type AppCompiled = {
+export type AppCompiled = {
   size: number;
+  /** Present on every production compile path; optional only for old view tests. */
+  deploymentReview?: DeploymentBuildReviewInput;
 };
 
 type AppCompileResult = {
+  baselineFingerprint: string;
   compiled: CompileResult;
+  deployment: PreparedBrowserDeployment;
   state: KernelPackageState;
   expectedDeploymentId: string;
 };
@@ -175,6 +192,7 @@ export type AppUninstallRequest = {
   appId: string;
   appName: string;
   memoryIds: string[];
+  deploymentReview: DeploymentBuildReviewInput;
 };
 
 export type AppRegistryStatus = "idle" | "loading" | "ready" | "error";
@@ -216,9 +234,14 @@ export type RepositoryInstallBaseline = {
 export type RepositoryInstallSession = {
   readonly baseline: RepositoryInstallBaseline;
   compile(packages: readonly PreparedPackageInstall[]): Promise<CompileResult>;
+  getPreparedDeployment(
+    packages: readonly PreparedPackageInstall[],
+    compiled: CompileResult,
+  ): PreparedBrowserDeployment;
   deploy(input: {
     packages: readonly PreparedPackageInstall[];
     compiled: CompileResult;
+    deploymentBuildRecord: CompleteDeploymentBuildRecord;
     provenance: Readonly<Record<string, RepositoryInstallProvenance>>;
   }): Promise<AppRegistry>;
   cancel(): void;
@@ -227,9 +250,14 @@ export type RepositoryInstallSession = {
 export type PackageUpdateSession = {
   readonly baseline: RepositoryInstallBaseline;
   compile(packages: readonly PreparedPackageInstall[]): Promise<CompileResult>;
+  getPreparedDeployment(
+    packages: readonly PreparedPackageInstall[],
+    compiled: CompileResult,
+  ): PreparedBrowserDeployment;
   deploy(input: {
     packages: readonly PreparedPackageInstall[];
     compiled: CompileResult;
+    deploymentBuildRecord: CompleteDeploymentBuildRecord;
     provenance: Readonly<Record<string, AppInstallProvenance>>;
   }): Promise<AppRegistry>;
   cancel(): void;
@@ -488,10 +516,14 @@ export function appRequest(req: AppInstallRequestInput): Promise<void> {
 }
 
 export function appApprove(): void {
-  if (!useAppsStore.getState().compiled) return;
+  const state = useAppsStore.getState();
+  if (!state.compiled?.deploymentReview) return;
   callbacks?.resolve();
   callbacks = null;
-  useAppsStore.getState().clearAppRequest();
+  // The exact reviewed record and package bytes remain in the awaiting install
+  // stack; retire the UI copy as soon as the final action is taken.
+  state.setCompiled(null);
+  state.clearAppRequest();
 }
 
 export function appReject(error = new Error("User rejected")): void {
@@ -513,6 +545,40 @@ export function requestAppUninstall(
   if (request.appId === "kernel") {
     throw new Error("The kernel app cannot be uninstalled");
   }
+  if (request.deploymentReview.suppliedPackages.length !== 0) {
+    throw new Error("App uninstall review cannot contain supplied packages");
+  }
+  const deploymentRecord = parseDeploymentBuildRecord(
+    request.deploymentReview.record,
+  );
+  if (deploymentRecord.state !== "complete") {
+    throw new Error("App uninstall requires a complete deployment build record");
+  }
+  if (
+    deploymentRecord.warnings.removed_apps.length !== 1 ||
+    deploymentRecord.warnings.removed_apps[0] !== request.appId
+  ) {
+    throw new Error(
+      "App uninstall request does not match the build record removal plan",
+    );
+  }
+  const recordedMemoryIds = deploymentRecord.warnings.destructive_memory_roots
+    .filter(({ owner }) => owner === request.appId)
+    .map(({ memory_id }) => memory_id)
+    .sort(compareCanonicalText);
+  const requestedMemoryIds = [...new Set(request.memoryIds)].sort(
+    compareCanonicalText,
+  );
+  if (JSON.stringify(recordedMemoryIds) !== JSON.stringify(requestedMemoryIds)) {
+    throw new Error(
+      "App uninstall request does not match the build record memory plan",
+    );
+  }
+  const deploymentReview = Object.freeze({
+    ...request.deploymentReview,
+    record: deploymentRecord,
+  });
+  createDeploymentBuildReviewModel(deploymentReview);
   const apps = useAppsStore.getState().list;
   if (apps[request.appId]) {
     const impact = appDependencyImpact(
@@ -537,6 +603,7 @@ export function requestAppUninstall(
   useAppsStore.getState().setUninstallRequest({
     ...request,
     memoryIds: [...request.memoryIds],
+    deploymentReview,
   });
   return new Promise((resolve) => {
     uninstallCallback = resolve;
@@ -944,7 +1011,7 @@ export async function compile_app({
   installOnly?: boolean;
 }): Promise<AppCompileResult> {
   const neutron = await getNeutronCan();
-  const baseline = await readConsistentKernelPackageState(neutron);
+  const baseline = await readConsistentManualInstallBaseline(neutron);
   const kernelState = baseline.state;
   if (installId !== installSequence) {
     throw new Error("Install request cancelled");
@@ -975,49 +1042,83 @@ export async function compile_app({
     deploymentNonce: createDeploymentNonce(),
     vetKeysEnvironment: runtimeCompilerEnvironment(),
   });
+  const deployment = await prepareBrowserDeployment({
+    targetCanisterId: getRuntimeDeployment().canisterId,
+    packages: [preparedPackage],
+    state: kernelState,
+    compiled,
+    expectedDeploymentId: baseline.expectedDeploymentId,
+    provenance: baseline.provenance,
+    runtime: baseline.runtime,
+  });
 
   if (installId === installSequence) {
     useAppsStore.getState().setCompiled({
       size: Math.ceil(compiled.wasm.length / 1024),
+      deploymentReview: deployment.review,
     });
   }
   return {
+    baselineFingerprint: baseline.fingerprint,
     compiled,
+    deployment,
     state: kernelState,
     expectedDeploymentId: baseline.expectedDeploymentId,
   };
 }
 
-async function readCurrentKernelState(): Promise<{
-  neutron: Awaited<ReturnType<typeof getNeutronCan>>;
+type ManualInstallBaseline = Readonly<{
   state: KernelPackageState;
+  runtime: KernelRuntimeInfo;
   expectedDeploymentId: string;
-}> {
-  const neutron = await getNeutronCan();
-  const { state, expectedDeploymentId } =
-    await readConsistentKernelPackageState(neutron);
-  return { neutron, state, expectedDeploymentId };
-}
+  provenance: InstallProvenance;
+  fingerprint: string;
+}>;
+
+type ManualInstallProvenanceSnapshot = Readonly<{
+  provenance: InstallProvenance;
+  assetFingerprint: string;
+}>;
 
 /**
- * Read package state between two observations of the running deployment. A
- * state read that overlaps another tab's self-upgrade must never be paired with
- * the newer deployment id: that mixed baseline could otherwise pass the
- * checked journal guard while compiling stale registry/assets.
+ * Bracket the complete compiler state and the exact optional provenance asset
+ * with the running deployment. The same snapshot is taken again after the
+ * user reviews the build and before any staging work begins.
  */
-async function readConsistentKernelPackageState(
+async function readConsistentManualInstallBaseline(
   neutron: Awaited<ReturnType<typeof getNeutronCan>>,
-): Promise<{ state: KernelPackageState; expectedDeploymentId: string }> {
+): Promise<ManualInstallBaseline> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await ensureInstallJournalSettled(neutron);
     const before = await neutron.kernel_runtime_info();
-    const state = await readCurrentKernelPackageState(neutron);
+    const [state, provenanceSnapshot] = await Promise.all([
+      readCurrentKernelPackageState(neutron),
+      readManualInstallProvenanceSnapshot(),
+    ]);
     const after = await neutron.kernel_runtime_info();
     const trailingRecovery = await ensureInstallJournalSettled(neutron);
     if (trailingRecovery === "committed") continue;
     if (before.deployment_id === after.deployment_id) {
       assertKernelPackageBaselineMatchesRuntime(state, after);
-      return { state, expectedDeploymentId: after.deployment_id };
+      const fingerprint = hashContent(
+        JSON.stringify(
+          canonicalValue({
+            packageBaseline: packageBaselineFingerprint({
+              state,
+              runtime: after,
+              provenance: provenanceSnapshot.provenance,
+            }),
+            provenanceAsset: provenanceSnapshot.assetFingerprint,
+          }),
+        ),
+      );
+      return Object.freeze({
+        state,
+        runtime: after,
+        expectedDeploymentId: after.deployment_id,
+        provenance: provenanceSnapshot.provenance,
+        fingerprint,
+      });
     }
   }
   throw new Error(
@@ -1389,22 +1490,39 @@ async function readInstallProvenance(): Promise<InstallProvenance> {
   );
 }
 
-async function removeInstallProvenanceAssets(
-  appId: string,
-): Promise<InstallStagedAsset[]> {
+async function readManualInstallProvenanceSnapshot(): Promise<ManualInstallProvenanceSnapshot> {
   const value = await readKernelAssetJson<unknown>(INSTALL_PROVENANCE_PATH);
-  if (value === undefined) return [];
-  let current: InstallProvenance;
+  const assetFingerprint = hashContent(
+    JSON.stringify(
+      canonicalValue({
+        present: value !== undefined,
+        value: value ?? null,
+      }),
+    ),
+  );
   try {
-    current = installProvenanceOrEmpty(value);
-  } catch {
-    // A corrupt optional record must not take away any manual operation. It
-    // contains no valid source claim that can be attributed to this app.
+    return Object.freeze({
+      provenance: installProvenanceOrEmpty(value),
+      assetFingerprint,
+    });
+  } catch (error) {
+    // Preserve the manual repair path, but retain an exact fingerprint so an
+    // invalid historical asset cannot change while the review is open.
     console.warn(
-      "Ignoring an invalid install provenance record during a manual app operation",
+      "Installed package provenance is invalid; retained archive digests will be marked unavailable",
+      error,
     );
-    return [];
+    return Object.freeze({
+      provenance: installProvenanceOrEmpty(undefined),
+      assetFingerprint,
+    });
   }
+}
+
+function removeInstallProvenanceAssets(
+  current: InstallProvenance,
+  appId: string,
+): InstallStagedAsset[] {
   if (!current.apps[appId]) return [];
   return [
     {
@@ -1417,21 +1535,12 @@ async function removeInstallProvenanceAssets(
   ];
 }
 
-async function manualInstallProvenanceAssets(
+function manualInstallProvenanceAssets(
+  current: InstallProvenance,
   appId: string,
   acquisition: "file" | "url",
   packageDigest: string,
-): Promise<InstallStagedAsset[]> {
-  const value = await readKernelAssetJson<unknown>(INSTALL_PROVENANCE_PATH);
-  let current: InstallProvenance;
-  try {
-    current = installProvenanceOrEmpty(value);
-  } catch {
-    console.warn(
-      "Replacing an invalid install provenance record during a manual app install",
-    );
-    current = installProvenanceOrEmpty(undefined);
-  }
+): InstallStagedAsset[] {
   const next = withInstallProvenance(current, {
     [appId]: {
       kind: "manual",
@@ -1484,6 +1593,7 @@ export async function beginPackageInstallSession({
     let cancelRequested = false;
     let compiledAttempt: Readonly<{
       compiled: CompileResult;
+      deployment: PreparedBrowserDeployment;
       packageFingerprint: string;
     }> | null = null;
 
@@ -1528,9 +1638,19 @@ export async function beginPackageInstallSession({
             deploymentNonce: createDeploymentNonce(),
             vetKeysEnvironment: runtimeCompilerEnvironment(),
           });
+          const deployment = await prepareBrowserDeployment({
+            targetCanisterId: getRuntimeDeployment().canisterId,
+            packages,
+            state,
+            compiled,
+            expectedDeploymentId: runtime.deployment_id,
+            provenance,
+            runtime,
+          });
           assertActive();
           compiledAttempt = Object.freeze({
             compiled,
+            deployment,
             packageFingerprint: preparedPackageBatchFingerprint(packages),
           });
           return compiled;
@@ -1541,14 +1661,28 @@ export async function beginPackageInstallSession({
           endCall();
         }
       },
-      async deploy({ packages, compiled, provenance: provenanceEntries }) {
+      getPreparedDeployment(packages, compiled) {
+        assertActive();
+        if (
+          compiledAttempt?.compiled !== compiled ||
+          compiledAttempt.packageFingerprint !==
+            preparedPackageBatchFingerprint(packages)
+        ) {
+          throw new Error(
+            "Package batch changed after compilation. Compile this exact batch again.",
+          );
+        }
+        return compiledAttempt.deployment;
+      },
+      async deploy({
+        packages,
+        compiled,
+        deploymentBuildRecord,
+        provenance: provenanceEntries,
+      }) {
         beginCall();
         const appIds = packages.map(({ manifest }) => manifest.id);
-        useAppsStore.getState().setOperation({
-          kind: mode === "update" ? "update" : "install",
-          ...(appIds.length === 1 ? { appId: appIds[0] } : {}),
-          phase: "staging",
-        });
+        let deployStarted = false;
         useAppsStore.getState().setInstallError(null);
         try {
           if (
@@ -1558,6 +1692,14 @@ export async function beginPackageInstallSession({
           ) {
             throw new Error(
               "Package batch changed after compilation. Compile this exact batch again.",
+            );
+          }
+          if (
+            compiledAttempt.deployment.prepared.record !==
+            deploymentBuildRecord
+          ) {
+            throw new Error(
+              "Deployment build record changed after review. Compile this exact batch again.",
             );
           }
           assertPackageProvenanceCoverage(packages, provenanceEntries);
@@ -1581,22 +1723,52 @@ export async function beginPackageInstallSession({
           }
           assertPackageSessionTargets(mode, currentState, packages);
           assertActive();
+          const targetCanisterId = getRuntimeDeployment().canisterId;
+          const revalidatedDeployment = await prepareBrowserDeployment({
+            targetCanisterId,
+            packages,
+            state: currentState,
+            compiled,
+            expectedDeploymentId: currentRuntime.deployment_id,
+            provenance: currentProvenance,
+            runtime: currentRuntime,
+          });
+          assertActive();
+          if (
+            !equalByteArrays(
+              revalidatedDeployment.prepared.recordBytes,
+              compiledAttempt.deployment.prepared.recordBytes,
+            )
+          ) {
+            throw new Error(
+              "Installed package evidence changed during review. Review the newly compiled deployment before continuing.",
+            );
+          }
+          useAppsStore.getState().setOperation({
+            kind: mode === "update" ? "update" : "install",
+            ...(appIds.length === 1 ? { appId: appIds[0] } : {}),
+            phase: "staging",
+          });
           if (appIds.includes("kernel")) {
             disableAgentMode("Kernel update started");
           }
 
           const nextProvenance = withInstallProvenance(
-            provenance,
+            currentProvenance,
             provenanceEntries,
           );
+          deployStarted = true;
           const { apps } = await deployPreparedPackages({
             actor: neutron,
-            targetCanisterId: getRuntimeDeployment().canisterId,
+            targetCanisterId,
             packages: [...packages],
             compiled,
-            existingApps: state.apps,
-            previousModulePaths: state.existingModules.map(({ path }) => path),
-            expectedDeploymentId: runtime.deployment_id,
+            existingApps: currentState.apps,
+            previousModulePaths: currentState.existingModules.map(
+              ({ path }) => path,
+            ),
+            deploymentBuildRecord,
+            expectedDeploymentId: currentRuntime.deployment_id,
             stagedAssets: [
               {
                 target: INSTALL_PROVENANCE_PATH,
@@ -1638,7 +1810,9 @@ export async function beginPackageInstallSession({
           useAppsStore.getState().setInstalled();
           return apps;
         } catch (error) {
-          await retainFrontendAuthorityAfterDeployFailure(neutron);
+          if (deployStarted) {
+            await retainFrontendAuthorityAfterDeployFailure(neutron);
+          }
           if (cancelRequested) {
             useAppsStore.getState().setOperation(null);
             throw error;
@@ -1719,21 +1893,6 @@ function preparedPackageBatchFingerprint(
   );
 }
 
-function assertPackageProvenanceCoverage(
-  packages: readonly PreparedPackageInstall[],
-  provenance: Readonly<Record<string, AppInstallProvenance>>,
-): void {
-  const packageIds = packages
-    .map(({ manifest }) => manifest.id)
-    .sort(compareCanonicalText);
-  const provenanceIds = Object.keys(provenance).sort(compareCanonicalText);
-  if (JSON.stringify(packageIds) !== JSON.stringify(provenanceIds)) {
-    throw new Error(
-      "Install provenance must describe exactly the compiled package batch.",
-    );
-  }
-}
-
 async function readConsistentRepositoryPackageState(
   neutron: Awaited<ReturnType<typeof getNeutronCan>>,
 ): Promise<{
@@ -1781,17 +1940,48 @@ function packageBaselineFingerprint({
             compareCanonicalText(left.path, right.path),
           ),
         previousStable: state.previousStable,
+        connectionProviderSupport: state.connectionProviderSupport,
         provenance,
         runtime: {
           deploymentId: runtime.deployment_id,
+          assemblerId: runtime.assembler_id,
+          compilerId: runtime.compiler_id,
           apps: runtime.apps
-            .map(({ scope, version, capability_plan_fingerprint }) => ({
-              id: scope.app_id,
-              installationUid: String(scope.installation_uid),
-              version: String(version),
-              capabilityPlanFingerprint: capability_plan_fingerprint,
-            }))
+            .map(
+              ({
+                scope,
+                version,
+                deployment_id,
+                capability_plan_fingerprint,
+                browser_origin_nonce,
+                browser_origin_authority_epoch,
+                resident_frame_security,
+              }) => ({
+                id: scope.app_id,
+                installationUid: String(scope.installation_uid),
+                version: String(version),
+                deploymentId: deployment_id,
+                capabilityPlanFingerprint: capability_plan_fingerprint,
+                browserOriginNonce: browser_origin_nonce,
+                browserOriginAuthorityEpoch: String(
+                  browser_origin_authority_epoch,
+                ),
+                residentFrameSecurity: resident_frame_security,
+              }),
+            )
             .sort((left, right) => compareCanonicalText(left.id, right.id)),
+          memories: (runtime.memories ?? [])
+            .map(({ owner, id, version, schema }) => ({
+              owner,
+              id,
+              version: String(version),
+              schema,
+            }))
+            .sort(
+              (left, right) =>
+                compareCanonicalText(left.owner, right.owner) ||
+                compareCanonicalText(left.id, right.id),
+            ),
         },
       }),
     ),
@@ -1810,7 +2000,17 @@ function canonicalValue(value: unknown): unknown {
   return typeof value === "bigint" ? String(value) : value;
 }
 
-export async function uninstall_app(appId: string): Promise<AppInstallResult> {
+function equalByteArrays(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+
+export async function uninstall_app(
+  appId: string,
+): Promise<AppInstallResult | null> {
   if (appId === "kernel") {
     throw new Error("The kernel app cannot be uninstalled");
   }
@@ -1822,26 +2022,91 @@ export async function uninstall_app(appId: string): Promise<AppInstallResult> {
   }
 }
 
-async function uninstallAppInternal(appId: string): Promise<AppInstallResult> {
+async function uninstallAppInternal(
+  appId: string,
+): Promise<AppInstallResult | null> {
   useAppsStore.getState().setOperation({
     kind: "uninstall",
     appId,
     phase: "preparing",
   });
   useAppsStore.getState().setInstallError(null);
+  let deployStarted = false;
   try {
-    const { neutron, state, expectedDeploymentId } =
-      await readCurrentKernelState();
-    const provenanceAssets = await removeInstallProvenanceAssets(appId);
+    const neutron = await getNeutronCan();
+    const baseline = await readConsistentManualInstallBaseline(neutron);
+    const { state, expectedDeploymentId, runtime } = baseline;
     const compiled = await compileAppUninstall({
       state,
       appId,
       deploymentNonce: createDeploymentNonce(),
       vetKeysEnvironment: runtimeCompilerEnvironment(),
     });
+    const app = state.apps[appId];
+    if (!app) {
+      throw new Error(`${appId} is not installed`);
+    }
+    const targetCanisterId = getRuntimeDeployment().canisterId;
+    const deployment = await prepareBrowserDeployment({
+      compiled,
+      expectedDeploymentId,
+      packages: [],
+      provenance: baseline.provenance,
+      removedApps: [appId],
+      runtime,
+      state,
+      targetCanisterId,
+    });
+    useAppsStore.getState().setOperation(null);
+    const approved = await requestAppUninstall({
+      appId,
+      appName: app.name,
+      memoryIds: deployment.prepared.record.warnings.destructive_memory_roots
+        .filter(({ owner }) => owner === appId)
+        .map(({ memory_id }) => memory_id),
+      deploymentReview: deployment.review,
+    });
+    if (!approved) return null;
+
+    const currentBaseline = await readConsistentManualInstallBaseline(neutron);
+    if (currentBaseline.fingerprint !== baseline.fingerprint) {
+      throw new Error(
+        "Installed app state changed during uninstall review. Review the newly compiled removal before continuing.",
+      );
+    }
+    const revalidatedDeployment = await prepareBrowserDeployment({
+      compiled,
+      expectedDeploymentId: currentBaseline.expectedDeploymentId,
+      packages: [],
+      provenance: currentBaseline.provenance,
+      removedApps: [appId],
+      runtime: currentBaseline.runtime,
+      state: currentBaseline.state,
+      targetCanisterId,
+    });
+    if (
+      !equalByteArrays(
+        revalidatedDeployment.prepared.recordBytes,
+        deployment.prepared.recordBytes,
+      )
+    ) {
+      throw new Error(
+        "Installed package evidence changed during uninstall review. Review the newly compiled removal before continuing.",
+      );
+    }
+    const provenanceAssets = removeInstallProvenanceAssets(
+      currentBaseline.provenance,
+      appId,
+    );
+    useAppsStore.getState().setOperation({
+      kind: "uninstall",
+      appId,
+      phase: "staging",
+    });
+    deployStarted = true;
     const result = await deployPreparedPackages({
       actor: neutron,
-      targetCanisterId: getRuntimeDeployment().canisterId,
+      targetCanisterId,
       packages: [],
       compiled,
       existingApps: state.apps,
@@ -1850,6 +2115,7 @@ async function uninstallAppInternal(appId: string): Promise<AppInstallResult> {
       ...(provenanceAssets.length > 0
         ? { stagedAssets: provenanceAssets }
         : {}),
+      deploymentBuildRecord: deployment.prepared.record,
       expectedDeploymentId,
       onStep(step) {
         setDeployOperation("uninstall", appId, step);
@@ -1868,8 +2134,9 @@ async function uninstallAppInternal(appId: string): Promise<AppInstallResult> {
     return { appId, apps: result.apps };
   } catch (error) {
     const neutron = await getNeutronCan().catch(() => null);
-    if (neutron) await retainFrontendAuthorityAfterDeployFailure(neutron);
-    else if (isAuthorityPendingState(useAppsStore.getState())) {
+    if (neutron && deployStarted) {
+      await retainFrontendAuthorityAfterDeployFailure(neutron);
+    } else if (isAuthorityPendingState(useAppsStore.getState())) {
       retainObservationFailureFence();
     }
     const installError = toInstallError(error);
@@ -1962,6 +2229,14 @@ async function installAppInternal(
     throw new Error("Installed capability plan fingerprint mismatch");
   }
   const packageDigest = hashContent(pkg);
+  const suppliedProvenance = Object.freeze({
+    [id]: Object.freeze({
+      kind: "manual" as const,
+      acquisition: source.kind,
+      package_digest: packageDigest,
+    }),
+  });
+  assertPackageProvenanceCoverage([preparedPackage], suppliedProvenance);
   const compilePromise = compile_app({
     preparedPackage,
     installId,
@@ -2000,19 +2275,50 @@ async function installAppInternal(
   }
   if (installId !== installSequence)
     throw new Error("Install request cancelled");
-  useAppsStore.getState().setOperation({
-    kind: "install",
-    appId: id,
-    phase: "staging",
-  });
-  if (id === "kernel") disableAgentMode("Kernel update started");
 
+  let deployStarted = false;
   try {
-    const provenanceAssets = await manualInstallProvenanceAssets(
+    const currentBaseline = await readConsistentManualInstallBaseline(neutron);
+    if (currentBaseline.fingerprint !== compileDetails.baselineFingerprint) {
+      throw new Error(
+        "Installed app state or provenance changed during review. Review the newly compiled deployment before continuing.",
+      );
+    }
+    const revalidatedDeployment = await prepareBrowserDeployment({
+      targetCanisterId: getRuntimeDeployment().canisterId,
+      packages: [preparedPackage],
+      state: currentBaseline.state,
+      compiled: compileDetails.compiled,
+      expectedDeploymentId: currentBaseline.expectedDeploymentId,
+      provenance: currentBaseline.provenance,
+      runtime: currentBaseline.runtime,
+    });
+    if (
+      !equalByteArrays(
+        revalidatedDeployment.prepared.recordBytes,
+        compileDetails.deployment.prepared.recordBytes,
+      )
+    ) {
+      throw new Error(
+        "Installed package evidence changed during review. Review the newly compiled deployment before continuing.",
+      );
+    }
+    // Re-hash the exact retained archive immediately before staging so browser
+    // memory mutation after review cannot bind different bytes to provenance.
+    assertPackageProvenanceCoverage([preparedPackage], suppliedProvenance);
+    const provenanceAssets = manualInstallProvenanceAssets(
+      currentBaseline.provenance,
       id,
       source.kind,
       packageDigest,
     );
+    useAppsStore.getState().setOperation({
+      kind: "install",
+      appId: id,
+      phase: "staging",
+    });
+    if (id === "kernel") disableAgentMode("Kernel update started");
+    deployStarted = true;
     const { apps: appconfig } = await deployPreparedPackages({
       actor: neutron,
       targetCanisterId: getRuntimeDeployment().canisterId,
@@ -2022,6 +2328,7 @@ async function installAppInternal(
       previousModulePaths: compileDetails.state.existingModules.map(
         ({ path }) => path,
       ),
+      deploymentBuildRecord: compileDetails.deployment.prepared.record,
       expectedDeploymentId: compileDetails.expectedDeploymentId,
       ...(provenanceAssets.length > 0
         ? { stagedAssets: provenanceAssets }
@@ -2053,7 +2360,9 @@ async function installAppInternal(
     return { appId: id, apps: appconfig };
   } catch (error) {
     if (installId === installSequence) {
-      await retainFrontendAuthorityAfterDeployFailure(neutron);
+      if (deployStarted) {
+        await retainFrontendAuthorityAfterDeployFailure(neutron);
+      }
       const installError = toInstallError(error);
       useAppsStore.getState().setOperation(null);
       useAppsStore

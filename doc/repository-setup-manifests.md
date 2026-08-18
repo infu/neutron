@@ -224,7 +224,7 @@ authorization, and a verified app registry load.
    the selected mutable-file count against the kernel's 4,000-copy journal
    limit, and calls `compilePackages()` once for the batch.
 5. **Final install.** `Install N applications` rechecks registry, compiled
-   configuration, runtime deployment identity, stable signature, and private
+   configuration, runtime deployment identity, stable signature, and certified
    provenance. It then calls `deployPreparedPackages()` once. One journal
    stages the selected web/package metadata and provenance, activates one
    combined actor, verifies it, and commits active assets atomically. The same
@@ -365,7 +365,7 @@ package source.
 The fast tests cover strict fragment/schema parsing, capture and expiry,
 certificate-path adapters, repository byte and digest verification, uniform
 package reads, privacy fetch options, installed-state reconciliation,
-dependency closure, private provenance, bounded package decoding, batch
+dependency closure, certified provenance, bounded package decoding, batch
 collisions, checked journal activation, manual-authorization separation,
 dispenser backend separation, and deterministic example generation and Motoko
 lookup behavior.

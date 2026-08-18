@@ -1,6 +1,5 @@
 import {
   Cbor,
-  Certificate,
   LookupPathStatus,
   lookup_path,
   reconstruct,
@@ -8,6 +7,13 @@ import {
   type HttpAgent,
 } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
+import {
+  Certificate as TreeAwareCertificate,
+  LookupPathStatus as TreeAwareLookupPathStatus,
+  type Agent as CoreAgent,
+  type HttpAgent as CoreHttpAgent,
+} from "@icp-sdk/core/agent";
+import { Principal as CorePrincipal } from "@icp-sdk/core/principal";
 import { createHash } from "node:crypto";
 import type { CertifiedHttpObservation, ExactBytes } from "./receipt.ts";
 import {
@@ -59,6 +65,13 @@ const POCKET_IC_503_RETRY_DELAYS_MS = [
 ] as const;
 
 type HeaderField = readonly [string, string];
+type CoreCertificateClockAgent = Pick<
+  CoreHttpAgent,
+  | "getTimeDiffMsecs"
+  | "hasSyncedTime"
+  | "syncTime"
+  | "syncTimeWithSubnet"
+>;
 
 export type CertifiedHttpQueryRequest = Readonly<{
   method: string;
@@ -87,6 +100,35 @@ export type ExpectedCertifiedHttpResponse = Readonly<{
   body: Uint8Array;
   requestHeaders?: readonly HeaderField[];
 }>;
+
+/**
+ * Core Certificate needs only these four clock methods, but types its option
+ * as a complete Agent. Keep the production legacy agent isolated behind this
+ * qualification-only adapter and fail closed for subnet synchronization,
+ * which the canister-principal verification path never requests.
+ */
+function adaptLegacyCertificateAgent(agent: HttpAgent): CoreAgent {
+  const clockAgent: CoreCertificateClockAgent = {
+    getTimeDiffMsecs: () => agent.getTimeDiffMsecs(),
+    hasSyncedTime: () => agent.hasSyncedTime(),
+    syncTime: async (canisterId) => {
+      if (canisterId === undefined) {
+        throw new Error(
+          "Certified HTTP certificate clock sync requires an effective canister ID",
+        );
+      }
+      await agent.syncTime(
+        Principal.fromUint8Array(canisterId.toUint8Array()),
+      );
+    },
+    syncTimeWithSubnet: async (subnetId) => {
+      throw new Error(
+        `Certified HTTP legacy clock adapter cannot synchronize subnet ${subnetId.toText()}`,
+      );
+    },
+  };
+  return clockAgent as unknown as CoreAgent;
+}
 
 /**
  * Verify a response observed through the HTTP gateway. This validates the
@@ -474,11 +516,15 @@ async function verifyPreparedCertifiedHttpResponse(
     decodeCanonicalCbor(proof.witness, "Certified HTTP witness"),
   );
   const principal = Principal.fromText(expected.canisterId);
-  const certificate = await Certificate.create({
+  const certificate = await TreeAwareCertificate.create({
     certificate: proof.certificate,
     rootKey: trustedRootKey,
-    canisterId: principal,
-    ...(certificateAgent === undefined ? {} : { agent: certificateAgent }),
+    principal: {
+      canisterId: CorePrincipal.fromUint8Array(principal.toUint8Array()),
+    },
+    ...(certificateAgent === undefined
+      ? {}
+      : { agent: adaptLegacyCertificateAgent(certificateAgent) }),
   });
   const certifiedData = found(
     certificate.lookup_path([
@@ -1793,10 +1839,10 @@ function treeBytes(value: unknown, maximum: number, label: string): Uint8Array {
 }
 
 function found(
-  value: ReturnType<Certificate["lookup_path"]>,
+  value: ReturnType<TreeAwareCertificate["lookup_path"]>,
   label: string,
 ): Uint8Array {
-  if (value.status !== LookupPathStatus.Found) {
+  if (value.status !== TreeAwareLookupPathStatus.Found) {
     throw new Error(`${label} is absent or pruned`);
   }
   return value.value;

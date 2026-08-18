@@ -77,7 +77,7 @@ compilation, payment, or mutation.
     "kind": "inline",
     "kernel": { "path": "apps/kernel/kernel.v0.3.6.neutron" },
     "packages": [
-      { "path": "apps/hello/hello.v0.2.1.neutron" }
+      { "path": "apps/hello/hello.v0.2.2.neutron" }
     ]
   }
 }
@@ -123,7 +123,7 @@ Rules include:
       "sha256": "<64 lowercase hex>",
       "bytes": "<archive byte length>",
       "id": "kernel",
-      "version": 303
+      "version": 306
     },
     "packages": []
   }

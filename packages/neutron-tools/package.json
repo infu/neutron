@@ -23,6 +23,8 @@
     "./capabilities/*.ts": "./src/capabilities/*.ts",
     "./repository": "./src/repository.ts",
     "./repository.js": "./src/repository.ts",
+    "./package_record": "./src/package_record.ts",
+    "./package_record.js": "./src/package_record.ts",
     "./wasm_metadata": "./src/wasm_metadata.ts",
     "./wasm_metadata.js": "./src/wasm_metadata.ts",
     "./src/*.js": "./src/*.ts",
@@ -32,7 +34,7 @@
     "test": "bun test"
   },
   "author": "",
-  "license": "GPL-3.0-only",
+  "license": "Apache-2.0",
   "dependencies": {
     "@dfinity/principal": "3.4.3",
     "@dfinity/utils": "4.2.1",

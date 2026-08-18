@@ -5,10 +5,12 @@ import { clipboardService } from "../clipboard/service.ts";
 export function CopyButton({
   className = "",
   label,
+  maximumBytes,
   value,
 }: {
   className?: string;
   label: string;
+  maximumBytes?: number;
   value: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -26,6 +28,7 @@ export function CopyButton({
       await clipboardService.writeFromKernelUi(
         value,
         navigator.userActivation?.isActive === true,
+        maximumBytes,
       );
       setCopied(true);
       if (timer.current) clearTimeout(timer.current);

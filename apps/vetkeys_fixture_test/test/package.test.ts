@@ -9,12 +9,22 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   preparePackageInstall,
   unpackNeutronPackage,
 } from "neutron-compiler/src/install.ts";
-import { type NeutronManifest } from "neutron-tools/src/schema.js";
+import {
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+  type NeutronManifest,
+} from "neutron-tools/src/schema.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
+import {
+  NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX,
+  NEUTRON_PACKAGE_RECORD_PATH,
+  neutronPackageRecordArchiveOnlyPaths,
+} from "neutron-tools/package_record.js";
 import {
   FIXTURE_ARCHIVE_IDS,
   buildFixtureArchives,
@@ -25,6 +35,8 @@ const workspacePackageUrl = new URL("package.json", rootUrl);
 const repositoryLockUrl = new URL("../../package-lock.json", rootUrl);
 const manifestUrl = new URL("neutron.json", rootUrl);
 const peerManifestUrl = new URL("peer/neutron.json", rootUrl);
+const noticeUrl = new URL("NOTICE", rootUrl);
+const peerNoticeUrl = new URL("peer/NOTICE", rootUrl);
 const backendUrl = new URL("backend/main.mo", rootUrl);
 const frontendUrl = new URL("src/index.tsx", rootUrl);
 const probeUrl = new URL("src/adversarial_probe.ts", rootUrl);
@@ -37,9 +49,9 @@ const htmlUrl = new URL("dist/web/index.html", rootUrl);
 const cssUrl = new URL("dist/web/main.css", rootUrl);
 
 const archiveUrls = {
-  vetkeys_fixture: new URL("vetkeys_fixture.v0.1.0.neutron", rootUrl),
+  vetkeys_fixture: new URL("vetkeys_fixture.v0.1.1.neutron", rootUrl),
   vetkeys_fixture_peer: new URL(
-    "vetkeys_fixture_peer.v0.1.0.neutron",
+    "vetkeys_fixture_peer.v0.1.1.neutron",
     rootUrl,
   ),
 } as const;
@@ -48,6 +60,10 @@ const metadataPaths = new Set([
   "neutron.json",
   "schema.json",
 ]);
+
+function isPackageMetadataPath(packagePath: string): boolean {
+  return metadataPaths.has(packagePath) || packagePath.startsWith("legal/");
+}
 
 test("root lock records the exact fixture workspace and dependency surface", async () => {
   const [workspacePackage, repositoryLock] = await Promise.all([
@@ -87,7 +103,7 @@ test("two exact source manifests declare one same-named isolated slot", async ()
     expect(validate_neutron_conf(manifest).valid).toBe(true);
     expect(manifest).toMatchObject({
       id,
-      version: 100,
+      version: 101,
       src: "main.mo",
       tiles: [{ id: "main", path: "index.html" }],
       capabilities: {
@@ -181,10 +197,14 @@ test("both deterministic archives carry exact manifests, schemas, and ids", asyn
     const manifest = decodeJson(unpacked["neutron.json"]!);
     const schema = decodeJson(unpacked["schema.json"]!);
     const source = id === "vetkeys_fixture" ? primarySource : peerSource;
+    const expectedNotice = await readFile(
+      id === "vetkeys_fixture" ? noticeUrl : peerNoticeUrl,
+    );
 
     expect(manifest).toEqual({
       ...source,
       entry: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      package_features: [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE],
     });
     expect(unpacked).not.toHaveProperty("neutron.lock.json");
     expect(schema).toEqual({
@@ -193,7 +213,7 @@ test("both deterministic archives carry exact manifests, schemas, and ids", asyn
       app: {
         id,
         name: source.name,
-        version: 100,
+        version: 101,
       },
       methods: {},
     });
@@ -209,6 +229,38 @@ test("both deterministic archives carry exact manifests, schemas, and ids", asyn
         `app/${id}/static/icon.svg`,
       ]),
     );
+    expect(prepared.packageRecord?.package).toMatchObject({ id, version: 101 });
+    expect(prepared.packageRecord?.license.id).toBe(
+      "LicenseRef-Neutron-Sovereign-Application-License-1.0",
+    );
+    expect(prepared.packageRecord?.source).toMatchObject({
+      kind: "embedded",
+      path: NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+    });
+    expect(prepared.packageRecord?.notices.map(({ path }) => path)).toContain(
+      "legal/APPLICATION-NOTICE.txt",
+    );
+    expect(
+      Buffer.from(unpacked["legal/APPLICATION-NOTICE.txt"]!).equals(
+        expectedNotice,
+      ),
+    ).toBe(true);
+    const expectedSourcePrefix = id === "vetkeys_fixture"
+      ? "apps/vetkeys_fixture_test"
+      : "apps/vetkeys_fixture_test/peer";
+    expect(prepared.packageRecord?.build.inputs.map(({ path }) => path)).toEqual(
+      expect.arrayContaining([
+        `${expectedSourcePrefix}/NOTICE`,
+        `${expectedSourcePrefix}/neutron.json`,
+      ]),
+    );
+    const stagedPaths = new Set(prepared.files.map(({ path }) => path));
+    for (const archiveOnlyPath of neutronPackageRecordArchiveOnlyPaths(
+      prepared.packageRecord!,
+    )) {
+      expect(stagedPaths.has(`${prepared.appPrefix}pkg/${archiveOnlyPath}`))
+        .toBe(false);
+    }
   }
 
   expect(decodeJson(archives.vetkeys_fixture["neutron.json"]!).entry).toBe(
@@ -224,7 +276,7 @@ test("archives contain identical compiled assets and no undeclared payload", asy
 
   for (const path of primaryPaths) {
     const allowed =
-      metadataPaths.has(path) ||
+      isPackageMetadataPath(path) ||
       path === "web/index.html" ||
       path === "web/main.css" ||
       path === "web/main.js" ||
@@ -232,7 +284,7 @@ test("archives contain identical compiled assets and no undeclared payload", asy
       /^mo\/[a-f0-9]{64}\.mo$/u.test(path);
     expect(allowed, `unexpected package path ${path}`).toBe(true);
     expect(path).not.toMatch(/\.(?:map|scss|ts|tsx|neutron)$/u);
-    if (!metadataPaths.has(path)) {
+    if (!isPackageMetadataPath(path)) {
       expect(Buffer.from(archives.vetkeys_fixture_peer[path]!)).toEqual(
         Buffer.from(archives.vetkeys_fixture[path]!),
       );
@@ -241,6 +293,10 @@ test("archives contain identical compiled assets and no undeclared payload", asy
   expect(primaryPaths).toEqual(expect.arrayContaining([
     "neutron.json",
     "schema.json",
+    NEUTRON_PACKAGE_RECORD_PATH,
+    `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}LICENSE.APP.txt`,
+    NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+    "legal/APPLICATION-NOTICE.txt",
     "web/index.html",
     "web/main.js",
     "web/main.css",
@@ -260,11 +316,11 @@ test("dual packaging is byte-deterministic and never rewrites either source mani
   expect(first.map(({ id, filename }) => ({ id, filename }))).toEqual([
     {
       id: "vetkeys_fixture",
-      filename: "vetkeys_fixture.v0.1.0.neutron",
+      filename: "vetkeys_fixture.v0.1.1.neutron",
     },
     {
       id: "vetkeys_fixture_peer",
-      filename: "vetkeys_fixture_peer.v0.1.0.neutron",
+      filename: "vetkeys_fixture_peer.v0.1.1.neutron",
     },
   ]);
   for (let index = 0; index < first.length; index += 1) {
@@ -284,7 +340,9 @@ test("dual packaging is byte-deterministic and never rewrites either source mani
   expect((await readdir(rootUrl)).filter((name) => name.endsWith(".neutron")).sort())
     .toEqual([
       "vetkeys_fixture.v0.1.0.neutron",
+      "vetkeys_fixture.v0.1.1.neutron",
       "vetkeys_fixture_peer.v0.1.0.neutron",
+      "vetkeys_fixture_peer.v0.1.1.neutron",
     ]);
 });
 
@@ -308,7 +366,10 @@ test("dual packaging works from a clean dist without a memory lock", async () =>
       { force: true },
     );
 
-    const builds = await buildFixtureArchives(temporaryRoot);
+    const builds = await buildFixtureArchives(
+      temporaryRoot,
+      fileURLToPath(rootUrl),
+    );
     expect(builds.map(({ id }) => id)).toEqual([...FIXTURE_ARCHIVE_IDS]);
     for (const build of builds) {
       const unpacked = unpackNeutronPackage(build.bytes);

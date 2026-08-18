@@ -61,6 +61,7 @@ compiler, shared-tools, or provisioner source change.
 | Understand the package | [App Package Format](./app-package-format.md) |
 | Understand capabilities | [Kernel Capability Inventory](./kernel-capability-inventory.md) |
 | Understand compilation and installation | [Compiler And Actor Assembly](./compiler-and-actor-assembly.md) |
+| Understand license, package, build, and module records | [License And Deployment Records](./license-and-deployment-records.md) |
 | Understand browser messaging | [Kernel-App Message Bus](./kernel-app-communication.md) |
 | Publish certified content | [Certified HTTP And Certified Assets](./kernel-http-v2-and-certified-assets.md) |
 | Release app updates | [App Package Updates](./package-updates.md#maintainer-release-workflow) |
@@ -81,6 +82,9 @@ compiler, shared-tools, or provisioner source change.
   state-preserving interface changes.
 - [Managed Memory Migrations And Uninstall](./memory-migrations-and-uninstall.md)
   describes schema locks, migration graphs, retirement, and deletion.
+- [License And Deployment Records](./license-and-deployment-records.md) records
+  the implemented package-information and deployment-record contracts and the
+  state-preserving v0.3.5/v0.3.6-to-v0.3.7 GPL bridge candidate checklist.
 
 ## App Development
 
@@ -98,8 +102,9 @@ compiler, shared-tools, or provisioner source change.
 - [App And Agent Install Offers](./app-install-offers.md) covers install offers
   without granting an app installation authority.
 - [Package Updates](./package-updates.md) is the canonical version-bump,
-  packaging, update-source publication, verification, and optional starter
-  release workflow, followed by the update protocol reference.
+  packaging, provider-hosted source publication, verification, simultaneous
+  one-click Kernel/app cutover, and optional starter release workflow, followed
+  by the update protocol reference.
 
 ## Capabilities And Data
 

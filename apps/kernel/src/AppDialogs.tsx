@@ -5,15 +5,21 @@ import {
   resolveAppUninstall,
   useAppsStore,
   type AppInstallRequest,
+  type AppCompiled,
   type AppOperation,
   type AppOperationPhase,
+  type AppUninstallRequest,
 } from "./reducer/apps.ts";
 import { useEffect, useRef } from "react";
 import { IoCheckmarkSharp, IoTrashOutline } from "react-icons/io5";
 import { CAPABILITY_CATALOG } from "neutron-tools/src/capabilities/catalog.js";
 import type { CapabilityPlanDiffV1 } from "neutron-tools/src/capabilities/wire.js";
 import { formatAppVersionLabel } from "neutron-tools/src/version.js";
-import { formatBytes, formatCycles, formatExactNat } from "./settings/format.ts";
+import {
+  formatBytes,
+  formatCycles,
+  formatExactNat,
+} from "./settings/format.ts";
 import {
   BACKEND_CALL_PERSISTENCE_DISCLOSURE,
   BACKEND_RESERVATION_SCOPE_DISCLOSURES,
@@ -34,6 +40,7 @@ import {
 import { PermissionConsequences } from "./consent/PermissionConsequences.tsx";
 import { CapabilityChangeSummary } from "./consent/CapabilityChangeSummary.tsx";
 import type { KernelUiMode } from "./ui_mode.ts";
+import { DeploymentBuildReview } from "./install_review/DeploymentBuildReview.tsx";
 
 export function AppDialogs() {
   return (
@@ -86,9 +93,7 @@ export function AppInstall() {
   }
   if (!operation) return null;
   const labels = operationLabels(operation);
-  const currentIndex = labels.findIndex(
-    ([phase]) => phase === operation.phase,
-  );
+  const currentIndex = labels.findIndex(([phase]) => phase === operation.phase);
 
   return (
     <>
@@ -126,7 +131,9 @@ export function AppInstall() {
                     <span className="loader" />
                   ) : null}
                 </span>
-                <span className={complete ? "success" : undefined}>{label}</span>
+                <span className={complete ? "success" : undefined}>
+                  {label}
+                </span>
               </div>
             );
           })}
@@ -138,15 +145,24 @@ export function AppInstall() {
 
 function AppUninstallRequest() {
   const request = useAppsStore((state) => state.uninstallRequest);
+  if (!request) return null;
+  return <AppUninstallRequestDialog request={request} />;
+}
+
+export function AppUninstallRequestDialog({
+  request,
+  uiMode: uiModeOverride,
+}: {
+  request: AppUninstallRequest;
+  uiMode?: KernelUiMode;
+}) {
+  const uiMode = useConsentUiMode(uiModeOverride);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!request) return;
     focusConsentControl(cancelRef.current);
   }, [request]);
-
-  if (!request) return null;
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -208,6 +224,10 @@ function AppUninstallRequest() {
               </div>
             </div>
           ) : null}
+          <DeploymentBuildReview
+            {...request.deploymentReview}
+            uiMode={uiMode}
+          />
           <div className="btn-actions uninstall-actions">
             <button
               className="btn btn-sec"
@@ -275,7 +295,7 @@ export function AppRequestDialog({
   request: rq,
   uiMode: uiModeOverride,
 }: {
-  compiled: { size: number } | null;
+  compiled: AppCompiled | null;
   request: AppInstallRequest;
   uiMode?: KernelUiMode;
 }) {
@@ -309,22 +329,22 @@ export function AppRequestDialog({
         ? "btn-warning"
         : "";
   const backendCalls = rq.permissions.filter(
-    (permission): permission is Extract<
-      Permission,
-      { kind: "backend_calls" }
-    > => permission.kind === "backend_calls",
+    (
+      permission,
+    ): permission is Extract<Permission, { kind: "backend_calls" }> =>
+      permission.kind === "backend_calls",
   );
   const preapprovedSelfCalls = rq.permissions.filter(
-    (permission): permission is Extract<
-      Permission,
-      { kind: "preapproved_self_call" }
-    > => permission.kind === "preapproved_self_call",
+    (
+      permission,
+    ): permission is Extract<Permission, { kind: "preapproved_self_call" }> =>
+      permission.kind === "preapproved_self_call",
   );
   const publicMethods = rq.permissions.filter(
-    (permission): permission is Extract<
-      Permission,
-      { kind: "public_method" }
-    > => permission.kind === "public_method",
+    (
+      permission,
+    ): permission is Extract<Permission, { kind: "public_method" }> =>
+      permission.kind === "public_method",
   );
   const otherPermissions = rq.permissions.filter(
     (permission) =>
@@ -384,14 +404,10 @@ export function AppRequestDialog({
           <ConsentTechnicalDetails
             mode={uiMode}
             summary={
-              uiMode === "developer"
-                ? "Developer details"
-                : "Technical details"
+              uiMode === "developer" ? "Developer details" : "Technical details"
             }
           >
-          <div
-            className="a-infogrid install-summary"
-          >
+            <div className="a-infogrid install-summary">
             <div className="label">Application</div>
             <div className="val">{rq.packageName}</div>
             <div className="label">App id</div>
@@ -432,7 +448,8 @@ export function AppRequestDialog({
                     </div>
                     <div className="label">Executing app</div>
                     <div className="val">
-                      {rq.offer.requester.appName} ({rq.offer.requester.appId})
+                        {rq.offer.requester.appName} ({rq.offer.requester.appId}
+                        )
                     </div>
                     <div className="label">Scoped tool</div>
                     <div className="val instance-id">
@@ -458,7 +475,8 @@ export function AppRequestDialog({
             className="dialog-section"
           >
             <h3 className="section-title">
-              Capability plan — kernel-verified ({rq.capabilityDisclosures.length})
+                Capability plan — kernel-verified (
+                {rq.capabilityDisclosures.length})
             </h3>
             {rq.capabilityDisclosures.length > 0 ? (
               <div className="install-disclosure-list">
@@ -473,8 +491,8 @@ export function AppRequestDialog({
                     </summary>
                     <p className="permission-copy">{disclosure.summary}</p>
                     <p className="permission-copy">
-                      Machine-enforced authority fields only. App-provided prose
-                      is listed separately as unverified.
+                        Machine-enforced authority fields only. App-provided
+                        prose is listed separately as unverified.
                     </p>
                     <pre className="permission-plan-config">
                       {JSON.stringify(
@@ -536,9 +554,9 @@ export function AppRequestDialog({
                 App-provided explanation — unverified
               </h3>
               <div className="app-explanation-note">
-                This text describes the app developer&apos;s intent. The kernel
-                does not verify it and does not use it to determine access or
-                risk.
+                  This text describes the app developer&apos;s intent. The
+                  kernel does not verify it and does not use it to determine
+                  access or risk.
               </div>
               <div className="app-explanation-list">
                 {rq.appExplanations.map((explanation, index) => (
@@ -554,7 +572,9 @@ export function AppRequestDialog({
                         <br />
                         {explanation.text}
                       </>
-                    ) : explanation.text}
+                      ) : (
+                        explanation.text
+                      )}
                   </div>
                 ))}
               </div>
@@ -562,11 +582,19 @@ export function AppRequestDialog({
           ) : null}
           </ConsentTechnicalDetails>
           {compiled ? (
+            <>
             <div className="compile-done" data-tid="install-compiled">
               {uiMode === "developer"
                 ? `Successfully compiled. Wasm size: ${compiled.size} kb`
-                : "Package checks and compilation completed. Ready for your decision."}
+                  : "Package checks and compilation completed. Review the exact deployment before deciding."}
             </div>
+              {compiled.deploymentReview ? (
+                <DeploymentBuildReview
+                  {...compiled.deploymentReview}
+                  uiMode={uiMode}
+                />
+              ) : null}
+            </>
           ) : (
             <div className="compile-loading" data-tid="install-compiling">
               <div className="loader" />
@@ -577,10 +605,10 @@ export function AppRequestDialog({
             <button
               type="button"
               className={`btn ${acceptTone}`}
-              disabled={!compiled}
+              disabled={!compiled?.deploymentReview}
               data-tid="install-accept"
               onClick={() => {
-                if (compiled) appApprove();
+                if (compiled?.deploymentReview) appApprove();
               }}
             >
               {rq.operation === "update" ? "Update" : "Install"}
@@ -601,16 +629,9 @@ export function AppRequestDialog({
   );
 }
 
-function InstallDecisionSummary({
-  request,
-}: {
-  request: AppInstallRequest;
-}) {
+function InstallDecisionSummary({ request }: { request: AppInstallRequest }) {
   return (
-    <div
-      className="consent-install-summary"
-      id="install-permission-summary"
-    >
+    <div className="consent-install-summary" id="install-permission-summary">
       <div>
         <strong>{request.packageName}</strong>
         <span>{formatAppVersionLabel(request.packageVersion)}</span>
@@ -628,7 +649,8 @@ function InstallDecisionSummary({
               ? request.offer.requester.rootAppName
               : request.offer.requester.appName}
           </strong>{" "}
-          from <span className="consent-source-host">{request.offer.source}</span>.
+          from{" "}
+          <span className="consent-source-host">{request.offer.source}</span>.
         </p>
       ) : (
         <p>
@@ -668,14 +690,16 @@ function CapabilityPlanChanges({
               className="val instance-id"
               title={diff.previous.plan_fingerprint}
             >
-              {formatAppVersionLabel(diff.previous.version)} · {diff.previous.plan_fingerprint}
+              {formatAppVersionLabel(diff.previous.version)} ·{" "}
+              {diff.previous.plan_fingerprint}
             </div>
             <div className="label">Target plan</div>
             <div
               className="val instance-id"
               title={diff.target.plan_fingerprint}
             >
-              {formatAppVersionLabel(diff.target.version)} · {diff.target.plan_fingerprint}
+              {formatAppVersionLabel(diff.target.version)} ·{" "}
+              {diff.target.plan_fingerprint}
             </div>
           </div>
           <p className="permission-copy">
@@ -697,7 +721,8 @@ function CapabilityPlanChanges({
                   key={change.id}
                 >
                   <summary>
-                    {changeLabel(change.change)} · {CAPABILITY_CATALOG[change.id].title}
+                    {changeLabel(change.change)} ·{" "}
+                    {CAPABILITY_CATALOG[change.id].title}
                   </summary>
                   {change.before ? (
                     <CapabilityDiffConfig
@@ -843,10 +868,7 @@ function BackendCallsDisclosure({
   permission: BackendCallsPermission;
 }) {
   return (
-    <PermissionFrame
-      kind={permission.kind}
-      level={permissionLevel(permission)}
-    >
+    <PermissionFrame kind={permission.kind} level={permissionLevel(permission)}>
       <h4 className="permission-group-title">Persistent backend-call grants</h4>
       <p className="permission-copy">
         {permission.installReservations?.length
@@ -921,17 +943,17 @@ function BackendCallsDisclosure({
         </div>
       </dl>
       <p className="permission-copy">
-        Every target not granted during installation still requires later
-        kernel approval unless an equivalent valid grant already exists. A
-        matching grant authorizes repeated calls with app-chosen arguments.
+        Every target not granted during installation still requires later kernel
+        approval unless an equivalent valid grant already exists. A matching
+        grant authorizes repeated calls with app-chosen arguments.
       </p>
       <p className="permission-copy permission-persistence">
         {BACKEND_CALL_PERSISTENCE_DISCLOSURE}
       </p>
       <p className="permission-copy permission-persistence">
-        The per-call ceiling applies to gross cycles attached. The daily
-        ceiling counts cycles still charged or unresolved on their original
-        dispatch day; an observed refund reopens that day&apos;s headroom. Neither
+        The per-call ceiling applies to gross cycles attached. The daily ceiling
+        counts cycles still charged or unresolved on their original dispatch
+        day; an observed refund reopens that day&apos;s headroom. Neither
         includes ordinary compute or call execution cost. A zero per-call
         ceiling means backend calls cannot attach cycles.
       </p>
@@ -950,8 +972,8 @@ function PreapprovedSelfCallsDisclosure({
         Preapproved same-app calls ({permissions.length})
       </h4>
       <p className="permission-copy">
-        A live tile or background belonging to this exact app may ask the
-        kernel to sign these same-canister calls without another owner prompt.
+        A live tile or background belonging to this exact app may ask the kernel
+        to sign these same-canister calls without another owner prompt.
       </p>
       <ul className="permission-inventory permission-method-inventory">
         {permissions.map((permission) => (
@@ -973,8 +995,8 @@ function PreapprovedSelfCallsDisclosure({
       </ul>
       <p className="permission-copy">
         Backend owner authorization and live Candid argument validation still
-        apply. Method names are identifiers; their app-defined semantics are
-        not verified by the kernel.
+        apply. Method names are identifiers; their app-defined semantics are not
+        verified by the kernel.
       </p>
     </PermissionFrame>
   );
@@ -1016,7 +1038,11 @@ function formatPermissionByteLimit(value: number): string {
   return `${formatBytes(value)} (${formatExactNat(value)} bytes)`;
 }
 
-export function PermissionDisclosure({ permission }: { permission: Permission }) {
+export function PermissionDisclosure({
+  permission,
+}: {
+  permission: Permission;
+}) {
   const level = permissionLevel(permission);
   switch (permission.kind) {
     case "kernel_replacement":
@@ -1031,7 +1057,9 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
     case "persistent_background_storage":
       return (
         <PermissionFrame kind={permission.kind} level={level}>
-          <h4 className="permission-group-title">Persistent background storage</h4>
+          <h4 className="permission-group-title">
+            Persistent background storage
+          </h4>
           <p className="permission-copy">
             Store data persistently in this app&apos;s isolated browser origin.
           </p>
@@ -1075,8 +1103,12 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           <ul className="permission-inventory">
             {permission.slots.map((slot) => (
               <li key={slot.id}>
-                <strong><code>{slot.id}</code></strong>
-                <span><code>{slot.algorithm}</code></span>
+                <strong>
+                  <code>{slot.id}</code>
+                </strong>
+                <span>
+                  <code>{slot.algorithm}</code>
+                </span>
                 <dl className="permission-facts">
                   <div>
                     <dt>Maximum assertion</dt>
@@ -1094,8 +1126,8 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           </p>
           <p className="permission-copy permission-persistence">
             Every accepted signature spends shared Neutron cycles. If the
-            outcome is unknown, the threshold service may still have produced
-            a valid signature. Each slot has a live on/off control in Settings.
+            outcome is unknown, the threshold service may still have produced a
+            valid signature. Each slot has a live on/off control in Settings.
           </p>
         </PermissionFrame>
       );
@@ -1112,7 +1144,9 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           <ul className="permission-inventory">
             {permission.stores.map((store) => (
               <li key={store.id}>
-                <strong><code>{store.id}</code></strong>
+                <strong>
+                  <code>{store.id}</code>
+                </strong>
                 <span>Schema {store.schemaVersion}</span>
                 <dl className="permission-facts">
                   <div>
@@ -1121,7 +1155,9 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
                   </div>
                   <div>
                     <dt>Key / value limit</dt>
-                    <dd>{store.maxKeyBytes} / {store.maxValueBytes} bytes</dd>
+                    <dd>
+                      {store.maxKeyBytes} / {store.maxValueBytes} bytes
+                    </dd>
                   </div>
                   <div>
                     <dt>Total data limit</dt>
@@ -1163,12 +1199,20 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           <ul className="permission-inventory">
             {permission.endpoints.map((endpoint) => (
               <li key={endpoint.id}>
-                <strong><code>{endpoint.id}</code></strong>
-                <span><code>{endpoint.urlPrefix}</code></span>
+                <strong>
+                  <code>{endpoint.id}</code>
+                </strong>
+                <span>
+                  <code>{endpoint.urlPrefix}</code>
+                </span>
                 <dl className="permission-facts">
                   <div>
                     <dt>Methods</dt>
-                    <dd>{endpoint.methods.map((method) => method.toUpperCase()).join(", ")}</dd>
+                    <dd>
+                      {endpoint.methods
+                        .map((method) => method.toUpperCase())
+                        .join(", ")}
+                    </dd>
                   </div>
                   <div>
                     <dt>Request headers</dt>
@@ -1180,11 +1224,19 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
                   </div>
                   <div>
                     <dt>Request / reply</dt>
-                    <dd>{endpoint.maxRequestBytes} / {endpoint.maxResponseBytes} bytes</dd>
+                    <dd>
+                      {endpoint.maxRequestBytes} / {endpoint.maxResponseBytes}{" "}
+                      bytes
+                    </dd>
                   </div>
                   <div>
                     <dt>Response transform</dt>
-                    <dd>Strip all headers{endpoint.methods.includes("head") ? " and every HEAD body" : ""}</dd>
+                    <dd>
+                      Strip all headers
+                      {endpoint.methods.includes("head")
+                        ? " and every HEAD body"
+                        : ""}
+                    </dd>
                   </div>
                 </dl>
               </li>
@@ -1237,7 +1289,10 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           <dl className="permission-facts">
             <div>
               <dt>Protocol / method</dt>
-              <dd><code>{permission.protocol}</code> / <code>{permission.method}</code></dd>
+              <dd>
+                <code>{permission.protocol}</code> /{" "}
+                <code>{permission.method}</code>
+              </dd>
             </div>
             <div>
               <dt>Call mode</dt>
@@ -1249,7 +1304,10 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
             </div>
             <div>
               <dt>Request / reply</dt>
-              <dd>{permission.maxRequestBytes} / {permission.maxResponseBytes} bytes</dd>
+              <dd>
+                {permission.maxRequestBytes} / {permission.maxResponseBytes}{" "}
+                bytes
+              </dd>
             </div>
             {permission.mode === "update" ? (
               <>
@@ -1257,14 +1315,16 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
                   <div>
                     <dt>Required base charge</dt>
                     <dd>
-                      {formatExactNat(permission.requiredCycles)} cycles accepted
-                      by the kernel and attributed to this app
+                      {formatExactNat(permission.requiredCycles)} cycles
+                      accepted by the kernel and attributed to this app
                     </dd>
                   </div>
                 ) : (
                   <div>
                     <dt>Cycle payment</dt>
-                    <dd>None accepted; this Neutron funds the ingress and app work</dd>
+                    <dd>
+                      None accepted; this Neutron funds the ingress and app work
+                    </dd>
                   </div>
                 )}
                 <div>
@@ -1304,9 +1364,12 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
             : "Supported canister gateway (canister-portable proof)";
         return (
           <PermissionFrame kind={permission.kind} level={level}>
-            <h4 className="permission-group-title">Public certified read route</h4>
+            <h4 className="permission-group-title">
+              Public certified read route
+            </h4>
             <p className="permission-copy">
-              Publish certified responses at <code>{permission.publicPath}</code>{" "}
+              Publish certified responses at{" "}
+              <code>{permission.publicPath}</code>{" "}
               {sharedPath
                 ? "on Neutron’s ordinary public host."
                 : "on this app’s dedicated host."}
@@ -1314,15 +1377,21 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
             <dl className="permission-facts">
               <div>
                 <dt>Mount</dt>
-                <dd><code>{permission.id}</code></dd>
+                <dd>
+                  <code>{permission.id}</code>
+                </dd>
               </div>
               <div>
                 <dt>Surface</dt>
-                <dd>{sharedPath ? "Shared Neutron path" : "Dedicated app host"}</dd>
+                <dd>
+                  {sharedPath ? "Shared Neutron path" : "Dedicated app host"}
+                </dd>
               </div>
               <div>
                 <dt>Public base</dt>
-                <dd><code>{permission.publicPath}</code></dd>
+                <dd>
+                  <code>{permission.publicPath}</code>
+                </dd>
               </div>
               <div>
                 <dt>Methods</dt>
@@ -1334,7 +1403,9 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
               </div>
               <div>
                 <dt>Store</dt>
-                <dd><code>{permission.store}</code></dd>
+                <dd>
+                  <code>{permission.store}</code>
+                </dd>
               </div>
             </dl>
             <p className="permission-copy permission-persistence">
@@ -1345,16 +1416,16 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
             <p className="permission-copy permission-persistence">
               {permission.authorityMode === "exact_neutron_host_v1"
                 ? "The proof is bound to the exact ordinary Neutron Host."
-                : "The proof is portable across supported gateways for this canister, but a verifier must still validate the expected Neutron canister principal."}
-              {" "}Only the collection&apos;s fixed passive response profiles are
+                : "The proof is portable across supported gateways for this canister, but a verifier must still validate the expected Neutron canister principal."}{" "}
+              Only the collection&apos;s fixed passive response profiles are
               allowed; this is not an executable app surface.
             </p>
             <p className="permission-copy permission-persistence">
               <strong>Route disable is separate from write freeze.</strong>{" "}
               Disabling this public route detaches its object responses and
               leaves the policy-specific certified 404. It does not delete the
-              stored collection bodies. Freezing writes separately does not
-              hide already published responses.
+              stored collection bodies. Freezing writes separately does not hide
+              already published responses.
             </p>
           </PermissionFrame>
         );
@@ -1362,7 +1433,9 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
       const sharedPath = permission.surface === "shared_app_path";
       return (
         <PermissionFrame kind={permission.kind} level={level}>
-          <h4 className="permission-group-title">Public POST → backend handler</h4>
+          <h4 className="permission-group-title">
+            Public POST → backend handler
+          </h4>
           <p className="permission-copy">
             Let anyone POST to <code>{permission.publicPath}</code>{" "}
             {sharedPath
@@ -1373,25 +1446,35 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           <dl className="permission-facts">
             <div>
               <dt>Mount</dt>
-              <dd><code>{permission.id}</code></dd>
+              <dd>
+                <code>{permission.id}</code>
+              </dd>
             </div>
             <div>
               <dt>Surface</dt>
-              <dd>{sharedPath ? "Shared Neutron path" : "Dedicated app host"}</dd>
+              <dd>
+                {sharedPath ? "Shared Neutron path" : "Dedicated app host"}
+              </dd>
             </div>
             <div>
               <dt>Public base</dt>
-              <dd><code>{permission.publicPath}</code></dd>
+              <dd>
+                <code>{permission.publicPath}</code>
+              </dd>
             </div>
             <div>
               <dt>Request / reply</dt>
               <dd>
-                {permission.maxRequestBytes} / {permission.maxResponseBytes} bytes
+                {permission.maxRequestBytes} / {permission.maxResponseBytes}{" "}
+                bytes
               </dd>
             </div>
             <div>
               <dt>External limit</dt>
-              <dd>{permission.maxCallsPerHour} accepted non-authorized POST{permission.maxCallsPerHour === 1 ? "" : "s"} per hour</dd>
+              <dd>
+                {permission.maxCallsPerHour} accepted non-authorized POST
+                {permission.maxCallsPerHour === 1 ? "" : "s"} per hour
+              </dd>
             </div>
             <div>
               <dt>Idempotency</dt>
@@ -1418,19 +1501,19 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           <p className="permission-copy permission-persistence">
             Each accepted request runs app backend code, may change canister
             state, and spends Neutron cycles. The kernel bounds request and
-            reply sizes, concurrency, and duplicate keys. Non-authorized
-            callers share the declared external request window; authorized
-            Neutron principals bypass it and do not increment it. Across this
-            app, external POST declarations are capped at 240 admissions and
-            8 MiB of possible replay replies per hour. There is no separate
-            per-handler instruction allowance below the IC message limit, and
-            a forwarded header is never a Neutron identity.
+            reply sizes, concurrency, and duplicate keys. Non-authorized callers
+            share the declared external request window; authorized Neutron
+            principals bypass it and do not increment it. Across this app,
+            external POST declarations are capped at 240 admissions and 8 MiB of
+            possible replay replies per hour. There is no separate per-handler
+            instruction allowance below the IC message limit, and a forwarded
+            header is never a Neutron identity.
           </p>
           {sharedPath ? (
             <p className="permission-copy permission-persistence">
               This kernel-derived path shares Neutron&apos;s ordinary browser
-              origin. Replies keep fixed restrictive security headers and
-              cannot add CORS, cookies, redirects, or executable browser policy.
+              origin. Replies keep fixed restrictive security headers and cannot
+              add CORS, cookies, redirects, or executable browser policy.
             </p>
           ) : null}
         </PermissionFrame>
@@ -1574,8 +1657,8 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           <p className="permission-copy">
             An enabled app version can request its slot key encrypted to an
             originating live browser endpoint, and recovery spends canister
-            cycles. Compatible updates inherit access. Neutron stores namespace and lifecycle
-            metadata, not the private key.
+            cycles. Compatible updates inherit access. Neutron stores namespace
+            and lifecycle metadata, not the private key.
           </p>
           <p className="permission-copy permission-persistence">
             Disabling stops future supported recovery but cannot erase a key
@@ -1600,13 +1683,13 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
           <h4 className="permission-group-title">Scheduled backend task</h4>
           <p className="permission-copy">
             Run <code>{permission.method}</code> as task{" "}
-            <code>{permission.id}</code> every {permission.intervalSeconds}
-            {" "}seconds
+            <code>{permission.id}</code> every {permission.intervalSeconds}{" "}
+            seconds
             {permission.runOnStart ? ", including once after activation" : ""}.
           </p>
           <p className="permission-copy permission-persistence">
-            Each run may make at most {permission.maxBackendCalls} backend
-            call{permission.maxBackendCalls === 1 ? "" : "s"}. The task can be
+            Each run may make at most {permission.maxBackendCalls} backend call
+            {permission.maxBackendCalls === 1 ? "" : "s"}. The task can be
             disabled later in Settings.
           </p>
         </PermissionFrame>
@@ -1624,7 +1707,9 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
     case "ethereum_provider":
       return (
         <PermissionFrame kind={permission.kind} level={level}>
-          <h4 className="permission-group-title">Focused-tile Ethereum provider</h4>
+          <h4 className="permission-group-title">
+            Focused-tile Ethereum provider
+          </h4>
           <div className="permission-fact-label">
             Chains ({permission.chains.length})
           </div>
@@ -1697,7 +1782,9 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
     case "internal_app_function":
       return (
         <PermissionFrame kind={permission.kind} level={level}>
-          <h4 className="permission-group-title">Export app backend function</h4>
+          <h4 className="permission-group-title">
+            Export app backend function
+          </h4>
           <p className="permission-copy">
             Expose internal function <code>{permission.method}</code> to other
             installed apps through the kernel.
@@ -1707,9 +1794,7 @@ export function PermissionDisclosure({ permission }: { permission: Permission })
     case "function_resources":
       return (
         <PermissionFrame kind={permission.kind} level={level}>
-          <h4 className="permission-group-title">
-            Backend function resources
-          </h4>
+          <h4 className="permission-group-title">Backend function resources</h4>
           <p className="permission-copy">
             Inject into <code>{permission.method}</code> ({permission.mode}).
           </p>

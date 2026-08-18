@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   readPackageAsset,
   readReleaseAsset,
+  readSourceAsset,
   updateSourceOrigin,
 } from "../src/http.ts";
 import {
@@ -9,9 +10,12 @@ import {
   PACKAGE_MAX_AGE_SECONDS,
   RELEASE_CONTENT_TYPE,
   RELEASE_MAX_AGE_SECONDS,
+  SOURCE_CONTENT_TYPE,
+  SOURCE_MAX_AGE_SECONDS,
   packageHeaders,
   releaseHeaders,
   sha256Hex,
+  sourceHeaders,
 } from "../src/model.ts";
 import { serializeRepositoryReleaseRecord } from "neutron-tools/src/repository.ts";
 import { MemoryAssetState, storedAsset } from "./memory_asset.ts";
@@ -103,6 +107,90 @@ describe("certified update-source HTTP", () => {
       fetch: state.fetch(origin, 200_000),
     });
     expect(result.status).toBe("found");
+  });
+
+  test("streams immutable gzip source bytes and verifies exact identity", async () => {
+    const state = new MemoryAssetState();
+    const bytes = new Uint8Array(2_200_000);
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = index % 241;
+    }
+    const digest = sha256Hex(bytes);
+    const path = `/repo/v1/sources/${digest}.source.v1.msgpack.gz`;
+    state.seed(
+      path,
+      storedAsset({
+        bytes,
+        contentType: SOURCE_CONTENT_TYPE,
+        headers: sourceHeaders(digest),
+        maxAge: SOURCE_MAX_AGE_SECONDS,
+      }),
+    );
+
+    const result = await readSourceAsset({
+      origin,
+      path,
+      expectedDigest: digest,
+      expectedSize: bytes.byteLength,
+      fetch: state.fetch(origin, 200_000),
+    });
+    expect(result.status).toBe("found");
+  });
+
+  test("rejects decoded HTTP encoding or wrong source identity", async () => {
+    const bytes = new Uint8Array([0x1f, 0x8b, 8, 0]);
+    const digest = sha256Hex(bytes);
+    const path = `/repo/v1/sources/${digest}.source.v1.msgpack.gz`;
+    const headers = new Headers({
+      "Content-Type": SOURCE_CONTENT_TYPE,
+      "Content-Encoding": "gzip",
+      "Content-Length": String(bytes.byteLength),
+      "Cache-Control": "public, max-age=31536000, immutable, no-transform",
+      "Access-Control-Allow-Origin": "*",
+      "X-Content-Type-Options": "nosniff",
+      ETag: `"${digest}"`,
+      "IC-Certificate":
+        "certificate=:YQ==:, tree=:Yg==:, expr_path=:Yw==:, version=2",
+      "IC-CertificateExpression":
+        "default_certification(ValidationArgs{no_request_certification: Empty{}})",
+    });
+    const encodedFetch = (async (input: string | URL | Request) => {
+      const response = new Response(bytes, { status: 200, headers });
+      Object.defineProperty(response, "url", {
+        value: typeof input === "string" ? input : input.toString(),
+      });
+      return response;
+    }) as typeof globalThis.fetch;
+
+    await expect(
+      readSourceAsset({
+        origin,
+        path,
+        expectedDigest: digest,
+        expectedSize: bytes.byteLength,
+        fetch: encodedFetch,
+      }),
+    ).rejects.toThrow("not identity encoded");
+
+    const state = new MemoryAssetState();
+    state.seed(
+      path,
+      storedAsset({
+        bytes,
+        contentType: SOURCE_CONTENT_TYPE,
+        headers: sourceHeaders(digest),
+        maxAge: SOURCE_MAX_AGE_SECONDS,
+      }),
+    );
+    await expect(
+      readSourceAsset({
+        origin,
+        path,
+        expectedDigest: "a".repeat(64),
+        expectedSize: bytes.byteLength + 1,
+        fetch: state.fetch(origin),
+      }),
+    ).rejects.toThrow(`expected ${bytes.byteLength + 1}`);
   });
 
   test("rejects a mutable cache policy and compressed package", async () => {

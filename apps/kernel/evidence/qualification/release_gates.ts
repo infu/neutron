@@ -268,7 +268,9 @@ export async function runPhysicalOneOverManifestGate(
     certifiedAssetsQualificationManifestBytes(manifest);
   return {
     schema: CERTIFIED_ASSETS_ONE_OVER_GATE_SCHEMA,
-    attempted_entries: PHYSICAL_ENTRY_ONE_OVER,
+    attempted_entries:
+      PHYSICAL_ENTRY_ONE_OVER as
+        PhysicalOneOverGateObservation["attempted_entries"],
     maximum_entries: PHYSICAL_ENTRY_MAXIMUM,
     manifest: exactBytes(manifestBytes),
     validation_error: {

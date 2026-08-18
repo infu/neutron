@@ -151,7 +151,7 @@ npm run test:e2e:kitchensink
 
 The package build emits self-contained `main`, `service`, and `tray` web
 assets, generated Motoko modules, the method-schema artifact, and
-`kitchensink.v0.3.1.neutron`. The backend selects only the exact capability leaf
+`kitchensink.v0.3.2.neutron`. The backend selects only the exact capability leaf
 interfaces from `mo:neutron-capabilities`: backend calls, HTTPS outcalls,
 randomness, chain-key assertion signing, `CertifiedAssetsV2`, and Stable Store.
 It never receives a universal kernel capability object.

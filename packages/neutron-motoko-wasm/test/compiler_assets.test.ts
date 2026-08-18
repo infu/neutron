@@ -14,7 +14,8 @@ type CompilerManifest = {
   sha256: Record<string, string>;
 };
 
-const compilerRoot = path.resolve(import.meta.dir, "../compiler");
+const packageRoot = path.resolve(import.meta.dir, "..");
+const compilerRoot = path.join(packageRoot, "compiler");
 const manifest = JSON.parse(
   await fs.readFile(path.join(compilerRoot, "manifest.json"), "utf8"),
 ) as CompilerManifest;
@@ -31,6 +32,47 @@ test("pins the custom Motoko compiler source build", () => {
   expect(manifest.source.provenance).toContain(
     "result symlinks are not compiler provenance",
   );
+});
+
+test("ships the exact composite compiler license materials", async () => {
+  const packageJson = JSON.parse(
+    await fs.readFile(path.join(packageRoot, "package.json"), "utf8"),
+  );
+  expect(packageJson.license).toBe("SEE LICENSE IN LICENSES.md");
+
+  const expected = {
+    LICENSE:
+      "907f6cd96b832f00713d86983eede6ce20e8cf8e3a70d2537f57215b7504db95",
+    "LICENSE.js_of_ocaml":
+      "ade61810946164eda728c580946f52b70e709f3f5dbcba68534b2f41a8104cb6",
+  };
+  for (const [name, expectedDigest] of Object.entries(expected)) {
+    const contents = await fs.readFile(path.join(packageRoot, name));
+    expect(createHash("sha256").update(contents).digest("hex")).toBe(
+      expectedDigest,
+    );
+    expect(contents.toString("utf8").split("\n").length - 1).toBeLessThanOrEqual(
+      675,
+    );
+  }
+
+  const index = await fs.readFile(
+    path.join(packageRoot, "LICENSES.md"),
+    "utf8",
+  );
+  const notice = await fs.readFile(path.join(packageRoot, "NOTICE"), "utf8");
+  for (const text of [index, notice]) {
+    expect(text).toContain("d7ed0a92b6219d784b7143e0851ed64b55dfc25a");
+    expect(text).toContain("e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581");
+    expect(text).toContain("LICENSE.js_of_ocaml");
+  }
+  expect(index).toContain(
+    "https://github.com/infu/neutron_motoko/tree/d7ed0a92b6219d784b7143e0851ed64b55dfc25a",
+  );
+  expect(index).toContain(
+    "https://github.com/ocsigen/js_of_ocaml/tree/e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581",
+  );
+  expect(index).not.toContain("third-party inventory is complete");
 });
 
 test("vendored compiler assets match every pinned SHA-256", async () => {

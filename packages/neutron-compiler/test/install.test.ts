@@ -2,13 +2,20 @@ import { expect, test } from "bun:test";
 import { gzipSync, gunzipSync } from "fflate";
 import msgpack from "tiny-msgpack";
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hashContent } from "neutron-tools/src/hash.js";
 import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import { physicalAppMethodName } from "neutron-tools/src/physical_names.js";
 import type { NeutronBackendCallReservation } from "neutron-tools/src/capabilities/catalog.js";
 import { fingerprintCapabilityPlanWireV1 } from "neutron-tools/src/capabilities/wire.js";
+import {
+  NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX,
+  NEUTRON_PACKAGE_RECORD_PATH,
+  neutronPackageRecordArchiveOnlyPaths,
+} from "neutron-tools/src/package_record.js";
 import {
   createKernelRuntimeConfig,
   IC_RUNTIME_GATEWAY,
@@ -39,14 +46,17 @@ import {
   deployPreparedPackages as deployPreparedPackagesRaw,
   assertKernelPackageBaselineMatchesRuntime,
   assertKernelPackageStateMatchesRuntime,
+  assertPreparedPackageArchiveIdentity,
   mime,
   normalizeAppRegistry,
   planAppRegistryDependencies,
   preparePackageInstall,
+  prepareCompleteDeploymentBuildRecord,
   preparePackageFiles,
   prepareInstallCodeRequest,
   readKernelPackageState,
   recoverPendingInstall,
+  retainedDeploymentPackageEvidenceFromRecord,
   DEFAULT_DEPLOYMENT_ACTIVATION_TIMEOUT_MS,
   NEUTRON_INSTALLED_APP_LIMIT,
   KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT,
@@ -67,6 +77,11 @@ import {
   type PreparedPackageInstall,
   type UnpackedNeutronPackage,
 } from "../src/install.ts";
+import {
+  DEPLOYMENT_BUILD_RECORD_PATH,
+  parseDeploymentBuildRecordJson,
+  prepareDeterministicWasmTransport,
+} from "../src/deployment_record.ts";
 import { assemble, type AssemblyManifest } from "../src/assemble.ts";
 import { writeManagedMemoryRetirements } from "../src/memory_retirements.ts";
 import { trustedInstallationContextFromRootKey } from "../src/installation_context.ts";
@@ -163,6 +178,131 @@ function kernelPackageFiles(): UnpackedNeutronPackage {
   return files;
 }
 
+function kernelPackageFilesAtVersion(version: number): UnpackedNeutronPackage {
+  const files = kernelPackageFiles();
+  const manifest = JSON.parse(text(files["neutron.json"]!));
+  files["neutron.json"] = bytes(JSON.stringify({ ...manifest, version }));
+  return files;
+}
+
+function withValidPackageRecord(
+  files: UnpackedNeutronPackage,
+): UnpackedNeutronPackage {
+  const manifest = JSON.parse(text(files["neutron.json"]!));
+  const isKernel = manifest.id === "kernel";
+  if (!isKernel) {
+    manifest.package_features = [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE];
+    files["neutron.json"] = bytes(JSON.stringify(manifest));
+  }
+  const licensePath = isKernel
+    ? "legal/LICENSE.example.txt"
+    : `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}LICENSE.example.txt`;
+  const noticePath = "legal/APPLICATION-NOTICE.txt";
+  const sourcePath = NEUTRON_APP_SOURCE_SNAPSHOT_PATH;
+  const license = bytes("Example package license\n");
+  const notice = bytes("Concise application notice\n");
+  const source = msgpack.encode({
+    format: 1,
+    package: { id: manifest.id, version: manifest.version },
+    files: [
+      {
+        path: "neutron.json",
+        mode: 0o644,
+        content: files["neutron.json"]!,
+      },
+    ],
+  });
+  files[licensePath] = license;
+  files[noticePath] = notice;
+  if (!isKernel) files[sourcePath] = source;
+  files[NEUTRON_PACKAGE_RECORD_PATH] = bytes(
+    JSON.stringify({
+      format: 1,
+      ...(!isKernel
+        ? { features: [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE] }
+        : {}),
+      package: {
+        id: manifest.id,
+        version: manifest.version,
+        manifest: {
+          path: "neutron.json",
+          sha256: hashContent(files["neutron.json"]!),
+          bytes: files["neutron.json"]!.byteLength,
+        },
+      },
+      license: {
+        id: "LicenseRef-Example-1.0",
+        texts: [
+          {
+            id: "LicenseRef-Example-1.0",
+            path: licensePath,
+            sha256: hashContent(license),
+            bytes: license.byteLength,
+          },
+        ],
+      },
+      source: isKernel
+        ? { kind: "status", status: "not-provided" }
+        : {
+            kind: "embedded",
+            revision: "test-revision",
+            path: sourcePath,
+            sha256: hashContent(source),
+            bytes: source.byteLength,
+          },
+      dependencies: [],
+      notices: [
+        {
+          path: noticePath,
+          sha256: hashContent(notice),
+          bytes: notice.byteLength,
+        },
+      ],
+      memory: null,
+      build: isKernel
+        ? { inputs: [], commands: [] }
+        : {
+            inputs: [
+              {
+                path: "neutron.json",
+                sha256: hashContent(files["neutron.json"]!),
+                bytes: files["neutron.json"]!.byteLength,
+              },
+            ],
+            commands: [
+              {
+                purpose: "package",
+                cwd: ".",
+                argv: ["npm", "run", "package"],
+              },
+            ],
+          },
+    }),
+  );
+  return files;
+}
+
+function replacePackageRecordSource(
+  files: UnpackedNeutronPackage,
+  source: Uint8Array,
+  buildInputs?: readonly Readonly<{
+    path: string;
+    sha256: string;
+    bytes: number;
+  }>[],
+): UnpackedNeutronPackage {
+  const record = JSON.parse(text(files[NEUTRON_PACKAGE_RECORD_PATH]!));
+  files[NEUTRON_APP_SOURCE_SNAPSHOT_PATH] = source;
+  record.source = {
+    ...record.source,
+    sha256: hashContent(source),
+    bytes: source.byteLength,
+  };
+  if (buildInputs !== undefined) record.build.inputs = buildInputs;
+  files[NEUTRON_PACKAGE_RECORD_PATH] = bytes(JSON.stringify(record));
+  return files;
+}
+
 function connectionPackageFiles(
   provider: string,
   scopes: string[] = [],
@@ -238,12 +378,157 @@ test("unpacks package payloads and prepares install paths", () => {
   expect(prepared.manifest.id).toBe("hello");
   expect(prepared.appPrefix).toBe("app/hello/");
   expect(prepared.isKernel).toBe(false);
+  expect(prepared.packageRecord).toBeUndefined();
+  expect(prepared.archiveBytes).toBeUndefined();
+  expect(prepared.archiveIdentity).toBeUndefined();
   expect(prepared.files.map((file) => file.path).sort()).toEqual([
     "app/hello/index.html",
     "app/hello/main.js",
     "app/hello/pkg/neutron.json",
     `mo/${prepared.manifest.entry}.mo`,
   ]);
+});
+
+test("verifies bulk legal/source bytes without installing them as public assets", () => {
+  const app = preparePackageInstall(withValidPackageRecord(helloPackageFiles()));
+  expect(app.packageRecord?.package).toMatchObject({ id: "hello", version: 100 });
+  expect(app.packageRecord?.source.kind).toBe("embedded");
+  expect(app.files.map(({ path }) => path)).toContain(
+    `app/hello/pkg/${NEUTRON_PACKAGE_RECORD_PATH}`,
+  );
+  expect(app.files.map(({ path }) => path)).toContain(
+    "app/hello/pkg/legal/APPLICATION-NOTICE.txt",
+  );
+  expect(app.files.map(({ path }) => path)).not.toContain(
+    `app/hello/pkg/${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}LICENSE.example.txt`,
+  );
+  expect(app.files.map(({ path }) => path)).not.toContain(
+    `app/hello/pkg/${NEUTRON_APP_SOURCE_SNAPSHOT_PATH}`,
+  );
+
+  const kernel = preparePackageInstall(
+    withValidPackageRecord(kernelPackageFiles()),
+  );
+  expect(kernel.packageRecord?.package.id).toBe("kernel");
+  expect(kernel.packageRecord?.source).toEqual({
+    kind: "status",
+    status: "not-provided",
+  });
+  expect(kernel.files.map(({ path }) => path)).toContain(
+    `pkg/${NEUTRON_PACKAGE_RECORD_PATH}`,
+  );
+  expect(kernel.files.map(({ path }) => path)).toContain(
+    "pkg/legal/LICENSE.example.txt",
+  );
+});
+
+test("rejects an unreferenced archive-only source snapshot", () => {
+  const files = withValidPackageRecord(helloPackageFiles());
+  const record = JSON.parse(text(files[NEUTRON_PACKAGE_RECORD_PATH]!));
+  record.source = { kind: "status", status: "not-provided" };
+  record.build = { inputs: [], commands: [] };
+  files[NEUTRON_PACKAGE_RECORD_PATH] = bytes(JSON.stringify(record));
+
+  expect(() => preparePackageInstall(files)).toThrow(
+    `Package path ${NEUTRON_APP_SOURCE_SNAPSHOT_PATH} is reserved for the embedded source referenced by ${NEUTRON_PACKAGE_RECORD_PATH}`,
+  );
+});
+
+test("rejects unreferenced files under the archive-only legal prefix", () => {
+  const files = withValidPackageRecord(helloPackageFiles());
+  const path = `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}unclaimed.txt`;
+  files[path] = bytes("not declared by a package record");
+
+  expect(() => preparePackageInstall(files)).toThrow(
+    `Package path ${path} is reserved for archive-only material referenced by ${NEUTRON_PACKAGE_RECORD_PATH}`,
+  );
+});
+
+test("archive-only packages require matching manifest and record feature gates", () => {
+  {
+    const files = withValidPackageRecord(helloPackageFiles());
+    const manifest = JSON.parse(text(files["neutron.json"]!));
+    delete manifest.package_features;
+    files["neutron.json"] = bytes(JSON.stringify(manifest));
+    const record = JSON.parse(text(files[NEUTRON_PACKAGE_RECORD_PATH]!));
+    record.package.manifest = {
+      path: "neutron.json",
+      sha256: hashContent(files["neutron.json"]!),
+      bytes: files["neutron.json"]!.byteLength,
+    };
+    record.build.inputs = [];
+    files[NEUTRON_PACKAGE_RECORD_PATH] = bytes(JSON.stringify(record));
+    expect(() => preparePackageInstall(files)).toThrow(
+      `package_features and package-record features to include ${NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE}`,
+    );
+  }
+
+  {
+    const files = withValidPackageRecord(helloPackageFiles());
+    const record = JSON.parse(text(files[NEUTRON_PACKAGE_RECORD_PATH]!));
+    delete record.features;
+    files[NEUTRON_PACKAGE_RECORD_PATH] = bytes(JSON.stringify(record));
+    expect(() => preparePackageInstall(files)).toThrow(
+      `features must include ${NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE}`,
+    );
+  }
+
+  {
+    const files = helloPackageFiles();
+    const manifest = JSON.parse(text(files["neutron.json"]!));
+    manifest.package_features = [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE];
+    files["neutron.json"] = bytes(JSON.stringify(manifest));
+    expect(() => preparePackageInstall(files)).toThrow(
+      `Package feature ${NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE} requires archive-only package material`,
+    );
+  }
+});
+
+test("package preparation semantically verifies embedded source and build inputs", () => {
+  const malformed = withValidPackageRecord(helloPackageFiles());
+  replacePackageRecordSource(malformed, bytes("not MessagePack"), []);
+  expect(() => preparePackageInstall(malformed)).toThrow(
+    /Complete App Source snapshot/u,
+  );
+
+  const wrongIdentity = withValidPackageRecord(helloPackageFiles());
+  replacePackageRecordSource(
+    wrongIdentity,
+    msgpack.encode({
+      format: 1,
+      package: { id: "other", version: 100 },
+      files: [{ path: "main.mo", mode: 0o644, content: bytes("module {}") }],
+    }),
+    [],
+  );
+  expect(() => preparePackageInstall(wrongIdentity)).toThrow(
+    /does not match hello v100/u,
+  );
+
+  const wrongBuildInput = withValidPackageRecord(helloPackageFiles());
+  const manifestBytes = wrongBuildInput["neutron.json"]!;
+  replacePackageRecordSource(
+    wrongBuildInput,
+    wrongBuildInput[NEUTRON_APP_SOURCE_SNAPSHOT_PATH]!,
+    [{
+      path: "neutron.json",
+      sha256: "0".repeat(64),
+      bytes: manifestBytes.byteLength,
+    }],
+  );
+  expect(() => preparePackageInstall(wrongBuildInput)).toThrow(
+    /build input neutron\.json SHA-256 does not match/u,
+  );
+});
+
+test("fails closed when an optional package record is present but malformed", () => {
+  const files = helloPackageFiles();
+  files[NEUTRON_PACKAGE_RECORD_PATH] = bytes(
+    JSON.stringify({ format: 1, package: { id: "hello", version: 100 } }),
+  );
+  expect(() => preparePackageInstall(files)).toThrow(
+    `Invalid ${NEUTRON_PACKAGE_RECORD_PATH}:`,
+  );
 });
 
 test("prepares a headless package without synthesizing a tile", () => {
@@ -406,18 +691,20 @@ test("bounded package decoding rejects non-current keys and byte arrays", () => 
 
 test("bounded package decoding accepts every active canonical package fixture", async () => {
   const appRoot = fileURLToPath(new URL("../../../apps/", import.meta.url));
-  const archivePaths = (await readdir(appRoot, { recursive: true })).filter(
-    (path) => {
+  const archivePaths = (
+    await readdir(appRoot, { recursive: true, withFileTypes: true })
+  )
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(appRoot, join(entry.parentPath, entry.name)))
+    .filter((path) => {
       const canonicalPath = path.replaceAll("\\", "/");
-      // Hullshift is outside this slice. Mail e2e evidence is an immutable
-      // historical capture, not an active package fixture to migrate in place.
+      // Mail e2e evidence is an immutable historical capture, not an active
+      // package fixture to migrate in place.
       return (
         canonicalPath.endsWith(".neutron") &&
-        !canonicalPath.startsWith("hullshift/") &&
         !canonicalPath.startsWith("mail/e2e/evidence/")
       );
-    },
-  );
+    });
   expect(
     archivePaths.every(
       (path) => !path.replaceAll("\\", "/").includes("/e2e/evidence/"),
@@ -427,9 +714,108 @@ test("bounded package decoding accepts every active canonical package fixture", 
   expect(archives.length).toBeGreaterThan(0);
   for (const archive of archives.sort(compareCanonicalText)) {
     const packageBytes = new Uint8Array(await readFile(archive));
-    expect(() => preparePackageInstall(packageBytes)).not.toThrow();
+    const prepared = preparePackageInstall(packageBytes);
+    if (prepared.manifest.id === "kernel" && prepared.manifest.version === 307) {
+      expect(prepared.packageRecord?.package).toMatchObject({
+        id: "kernel",
+        version: 307,
+      });
+      expect(prepared.packageRecord?.license.id).toBe("GPL-3.0-only");
+      expect(prepared.packageRecord?.source).toEqual({
+        kind: "status",
+        status: "not-provided",
+      });
+      expect(prepared.packageRecord?.build).toEqual({
+        inputs: [],
+        commands: [],
+      });
+    } else {
+      const appDirectory = relative(appRoot, archive).split(/[\\/]/u)[0]!;
+      const sourceManifestPath = prepared.manifest.id === "vetkeys_fixture_peer"
+        ? join(appRoot, appDirectory, "peer", "neutron.json")
+        : join(appRoot, appDirectory, "neutron.json");
+      const activeManifest = JSON.parse(
+        await readFile(sourceManifestPath, "utf8"),
+      ) as { id: string; version: number; update_source?: string };
+      if (prepared.manifest.version !== activeManifest.version) {
+        expect(prepared.packageRecord).toBeUndefined();
+      } else {
+        const record = prepared.packageRecord;
+        expect(record).toBeDefined();
+        if (record === undefined) throw new Error("expected current package record");
+        expect(record.package).toMatchObject({
+          id: activeManifest.id,
+          version: activeManifest.version,
+        });
+        expect(record.license.id).toBe(
+          activeManifest.id === "kernel"
+            ? "LicenseRef-Neutron-Public-License-1.0"
+            : activeManifest.id === "gemma"
+              ? "Apache-2.0"
+              : "LicenseRef-Neutron-Sovereign-Application-License-1.0",
+        );
+        expect(record.notices.map(({ path }) => path)).toContain(
+          "legal/APPLICATION-NOTICE.txt",
+        );
+        const stagedPaths = new Set(prepared.files.map(({ path }) => path));
+        if (activeManifest.update_source !== undefined) {
+          expect(prepared.manifest.package_features).toBeUndefined();
+          expect(record.features).toBeUndefined();
+          expect(record.license.texts.every(({ path }) =>
+            !path.startsWith(NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX)
+          )).toBe(true);
+          expect(record.source).toMatchObject({ kind: "https" });
+          if (record.source.kind !== "https") {
+            throw new Error("expected current HTTPS source offer");
+          }
+          expect(record.source.url).toStartWith(
+            `https://${activeManifest.update_source}.icp0.io/repo/v1/sources/`,
+          );
+          expect(record.source.url).toEndWith(".source.v1.msgpack.gz");
+          expect(record.notices.map(({ path }) => path)).toContain(
+            "legal/THIRD_PARTY_NOTICES.md",
+          );
+          expect(neutronPackageRecordArchiveOnlyPaths(record)).toEqual([]);
+          for (const embedded of [
+            ...record.license.texts,
+            ...record.notices,
+          ]) {
+            expect(stagedPaths.has(`${prepared.appPrefix}pkg/${embedded.path}`))
+              .toBe(true);
+          }
+        } else {
+          expect(record.license.texts.every(({ path }) =>
+            path.startsWith(NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX)
+          )).toBe(true);
+          expect(record.source).toMatchObject({
+            kind: "embedded",
+            path: NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+          });
+          expect(record.notices.map(({ path }) => path)).toContain(
+            `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}THIRD_PARTY_NOTICES.md`,
+          );
+          for (
+            const archiveOnlyPath of neutronPackageRecordArchiveOnlyPaths(
+              record,
+            )
+          ) {
+            expect(
+              stagedPaths.has(`${prepared.appPrefix}pkg/${archiveOnlyPath}`),
+            ).toBe(false);
+          }
+        }
+        expect(stagedPaths.has(
+          `${prepared.appPrefix}pkg/legal/APPLICATION-NOTICE.txt`,
+        )).toBe(true);
+      }
+    }
+    expect(prepared.archiveBytes).toBe(packageBytes);
+    expect(prepared.archiveIdentity).toEqual({
+      sha256: hashContent(packageBytes),
+      size: packageBytes.byteLength,
+    });
   }
-});
+}, 30_000);
 
 test("remote preparation reconciles outer bytes and authoritative manifest identity", () => {
   const archive = packageBytes(helloPackageFiles());
@@ -439,12 +825,16 @@ test("remote preparation reconciles outer bytes and authoritative manifest ident
     size: archive.byteLength,
     sha256: hashContent(archive),
   };
-  expect(
-    preparePackageInstall(archive, {
-      limits: REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
-      expectedIdentity,
-    }).manifest.id,
-  ).toBe("hello");
+  const prepared = preparePackageInstall(archive, {
+    limits: REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
+    expectedIdentity,
+  });
+  expect(prepared.manifest.id).toBe("hello");
+  expect(prepared.archiveIdentity).toEqual({
+    sha256: expectedIdentity.sha256,
+    size: expectedIdentity.size,
+  });
+  expect(prepared.archiveBytes).toBe(archive);
 
   expect(() =>
     preparePackageInstall(archive, {
@@ -466,6 +856,29 @@ test("remote preparation reconciles outer bytes and authoritative manifest ident
       expectedIdentity: { ...expectedIdentity, sha256: "0".repeat(64) },
     }),
   ).toThrow(/Package SHA-256/);
+});
+
+test("rechecks retained archive bytes before compile and install boundaries", () => {
+  const archive = packageBytes(helloPackageFiles());
+  const prepared = preparePackageInstall(archive);
+  expect(() => assertPreparedPackageArchiveIdentity(prepared)).not.toThrow();
+
+  archive[archive.byteLength - 1] = archive[archive.byteLength - 1]! ^ 1;
+  expect(() => assertPreparedPackageArchiveIdentity(prepared)).toThrow(
+    /does not match reviewed/,
+  );
+
+  const contentPrepared = preparePackageInstall(
+    packageBytes(helloPackageFiles()),
+  );
+  const mutableFile = contentPrepared.files.find(
+    ({ path }) => path === "app/hello/main.js",
+  );
+  if (!mutableFile) throw new Error("Expected prepared frontend file");
+  mutableFile.content[0] = mutableFile.content[0]! ^ 1;
+  expect(() =>
+    buildPackagesCompileInput({ packages: [contentPrepared] }),
+  ).toThrow(/contents changed after archive review/);
 });
 
 test("package preparation rejects unsafe paths and invalid Motoko hashes", () => {
@@ -490,6 +903,14 @@ test("package preparation rejects unsafe paths and invalid Motoko hashes", () =>
       { moPrefix: "mo/", appPrefix: "app/hello/" },
     ),
   ).toThrow(/Invalid mo hash/);
+
+  const prepared = preparePackageInstall(helloPackageFiles());
+  const module = prepared.files.find(({ path }) => path.startsWith("mo/"));
+  if (!module) throw new Error("Expected prepared Motoko module");
+  module.content[0] = module.content[0]! ^ 1;
+  expect(() =>
+    buildPackagesCompileInput({ packages: [prepared] }),
+  ).toThrow(/Prepared Motoko module .* content SHA-256/);
 });
 
 test("ordinary app packages reserve web/_route for shared HTTP routes", () => {
@@ -781,7 +1202,7 @@ test("builds compile input from multiple prepared packages", () => {
 
 test("final compiler environment binds one certified Kernel runtime config", () => {
   const kernelFiles = kernelPackageFiles();
-  const kernel = preparePackageInstall(kernelFiles);
+  const kernel = preparePackageInstall(packageBytes(kernelFiles));
   const runtimePath = KERNEL_RUNTIME_CONFIG_PATH.slice(1);
 
   const canisterId = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -835,6 +1256,14 @@ test("final compiler environment binds one certified Kernel runtime config", () 
   runtimeFiles = kernel.files.filter(({ path }) => path === runtimePath);
   expect(runtimeFiles).toHaveLength(1);
   expect(parseKernelRuntimeConfig(runtimeFiles[0]!.content).target).toBe("ic");
+});
+
+test("Kernel packages cannot supply the deployment-specific build record", () => {
+  const files = kernelPackageFilesAtVersion(307);
+  files[`web${DEPLOYMENT_BUILD_RECORD_PATH}`] = bytes("untrusted record");
+  expect(() => preparePackageInstall(files)).toThrow(
+    /deployment-build-record\.json.*reserved for the deployment transaction/,
+  );
 });
 
 test("deployment attempts use a full 16-byte nonce", () => {
@@ -904,7 +1333,7 @@ test("compile inputs deduplicate identical modules and reject conflicts", () => 
       existingConfigs: {},
       preparedPackage: prepared,
     }),
-  ).toThrow(`Conflicting Motoko module ${modulePath}`);
+  ).toThrow(`Motoko module ${modulePath} content SHA-256`);
 });
 
 test("package batches reject same module path with different bytes", () => {
@@ -924,7 +1353,7 @@ test("package batches reject same module path with different bytes", () => {
   };
 
   expect(() => buildPackagesCompileInput({ packages: [hello, other] })).toThrow(
-    /Conflicting Motoko module/,
+    /Prepared Motoko module .* content SHA-256/,
   );
 });
 
@@ -1000,6 +1429,8 @@ test("compile inputs require a strict upgrade unless local reinstall opts in", (
 });
 
 test("shared kernel package state reader uses injected IO callbacks", async () => {
+  const kernelModule = "module {}";
+  const kernelModulePath = `${hashContent(kernelModule)}.mo`;
   const kernelManifest = {
     format: 3 as const,
     id: "kernel",
@@ -1019,10 +1450,10 @@ test("shared kernel package state reader uses injected IO callbacks", async () =
   const state = await readKernelPackageState({
     listStatic: async (prefix) => {
       expect(prefix).toBe("/mo/");
-      return ["/mo/kernel.mo"];
+      return [`/mo/${kernelModulePath}`];
     },
     fetchText: async (path) => {
-      if (path === "/mo/kernel.mo") return "module {}";
+      if (path === `/mo/${kernelModulePath}`) return kernelModule;
       if (path === "/pkg/neutron.most") return "type Stable = {}";
       throw new Error(`Unexpected text asset ${path}`);
     },
@@ -1047,7 +1478,7 @@ test("shared kernel package state reader uses injected IO callbacks", async () =
   });
 
   expect(state.existingModules).toEqual([
-    { path: "kernel.mo", content: "module {}" },
+    { path: kernelModulePath, content: kernelModule },
   ]);
   expect(Object.keys(state.existingConfigs).sort()).toEqual([
     "hello",
@@ -1058,6 +1489,39 @@ test("shared kernel package state reader uses injected IO callbacks", async () =
   expect(state.apps.hello?.version).toBe(100);
   expect(state.apps).toBe(state.registry);
   expect(state.apps.hello?.tiles).toEqual([]);
+});
+
+test("kernel package state rejects corrupt content-addressed installed modules", async () => {
+  const kernelManifest = {
+    format: 3 as const,
+    id: "kernel",
+    name: "Kernel",
+    version: 100,
+    entry: "kernel",
+  };
+  const expectedPath = `/mo/${hashContent("module {}")}.mo`;
+  await expect(
+    readKernelPackageState({
+      listStatic: async () => [expectedPath],
+      fetchText: async (path) => {
+        if (path === expectedPath) return "module { public func changed() {} }";
+        if (path === "/pkg/neutron.most") return "type Stable = {}";
+        throw new Error(`Unexpected text asset ${path}`);
+      },
+      fetchJson: async (path, fallback) => {
+        if (path === "/system/apps.json") {
+          return { kernel: appRegistryEntry(kernelManifest) } as typeof fallback;
+        }
+        if (path === "/pkg/neutron.json") {
+          return kernelManifest as typeof fallback;
+        }
+        if (path === KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH) {
+          return connectionProviderSupportFixture as typeof fallback;
+        }
+        return fallback;
+      },
+    }),
+  ).rejects.toThrow(/Motoko module .* content SHA-256/);
 });
 
 function strictStateReaderFixture({
@@ -2921,6 +3385,9 @@ test("deploy uses journal-bound management chunks above the ingress limit", asyn
   });
 
   const compressed = concatChunks(uploaded);
+  expect(compressed).toEqual(
+    prepareDeterministicWasmTransport(compiled.wasm).transportWasm,
+  );
   expect(Array.from(gunzipSync(compressed))).toEqual(
     Array.from(compiled.wasm),
   );
@@ -3049,6 +3516,155 @@ test("deploy stages assets, verifies the actor, then commits", async () => {
   expect(calls).toContain("install");
   expect(calls).toContain("commit");
   expect(calls.indexOf("install")).toBeLessThan(calls.indexOf("commit"));
+});
+
+test("deploy snapshots reviewed package content before its first upload await", async () => {
+  const prepared = preparePackageInstall(packageBytes(helloPackageFiles()));
+  const mutable = prepared.files.find(
+    ({ path }) => path === "app/hello/main.js",
+  );
+  if (!mutable) throw new Error("Expected prepared frontend file");
+  const reviewed = mutable.content.slice();
+  const compiled = compiledFixture(prepared);
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+  const stored = new Map<
+    string,
+    { encoding: "gzip" | "identity"; chunks: Uint8Array[] }
+  >();
+  let journal: InstallJournal | undefined;
+  let mutated = false;
+  const kernelStatic = actor.kernel_static.bind(actor);
+  const begin = actor.kernel_install_begin_checked.bind(actor);
+  actor.kernel_static = async (request) => {
+    if ("store" in request) {
+      stored.set(request.store.key, {
+        encoding: request.store.val.content_encoding,
+        chunks: [request.store.val.content.slice()],
+      });
+      if (!mutated && request.store.key.startsWith("/mo/")) {
+        mutable.content[0] = mutable.content[0]! ^ 1;
+        mutated = true;
+      }
+    } else if ("store_chunk" in request) {
+      stored.get(request.store_chunk.key)?.chunks.push(
+        request.store_chunk.content.slice(),
+      );
+    }
+    return kernelStatic(request);
+  };
+  actor.kernel_install_begin_checked = async (request) => {
+    journal = request.journal;
+    return begin(request);
+  };
+
+  await deployPreparedPackages({
+    actor,
+    packages: [prepared],
+    compiled,
+    existingApps: {},
+    expectedDeploymentId: "old-deployment",
+  });
+
+  expect(mutated).toBe(true);
+  const source = journal?.copies.find(
+    ({ target }) => target === "/app/hello/main.js",
+  )?.source;
+  expect(source).toBeDefined();
+  const uploaded = stored.get(source!);
+  expect(uploaded).toBeDefined();
+  const encoded = concatChunks(uploaded!.chunks);
+  const installed =
+    uploaded!.encoding === "gzip" ? gunzipSync(encoded) : encoded;
+  expect(installed).toEqual(reviewed);
+});
+
+test("deploy seals compile identity and runtime expectations before its first upload await", async () => {
+  const prepared = preparePackageInstall(helloPackageFiles());
+  const compiled = compiledFixture(prepared);
+  const reviewed = structuredClone(compiled);
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: reviewed.deploymentId,
+    compiled,
+  });
+  let mutated = false;
+  let journal: InstallJournal | undefined;
+  let dispatchedWasm: Uint8Array | undefined;
+  let committedDeploymentId: string | undefined;
+  const kernelStatic = actor.kernel_static.bind(actor);
+  const begin = actor.kernel_install_begin_checked.bind(actor);
+  const installCode = actor.kernel_install_code.bind(actor);
+  const commit = actor.kernel_install_commit.bind(actor);
+
+  actor.kernel_static = async (request) => {
+    await kernelStatic(request);
+    if (
+      !mutated &&
+      "store" in request &&
+      request.store.key.startsWith("/mo/")
+    ) {
+      compiled.deploymentId = "mutated-deployment";
+      compiled.compilerId = "mutated-compiler";
+      compiled.appInstanceInventory = compiled.appInstanceInventory.map(
+        (entry) => ({ ...entry, version: entry.version + 1 }),
+      );
+      compiled.managedMemoryInventory = [
+        {
+          owner: "hello",
+          id: "mutated",
+          version: 1,
+          schema: "f".repeat(64),
+        },
+      ];
+      compiled.wasm.fill(0xff);
+      mutated = true;
+    }
+  };
+  actor.kernel_install_begin_checked = async (request) => {
+    journal = request.journal;
+    return begin(request);
+  };
+  actor.kernel_install_code = async (request) => {
+    dispatchedWasm = request.wasm.slice();
+    return installCode(request);
+  };
+  actor.kernel_runtime_info = async () => ({
+    deployment_id: reviewed.deploymentId,
+    assembler_id: "neutron_actor_v25",
+    compiler_id: reviewed.compilerId,
+    apps: runtimeInstances(reviewed, reviewed.deploymentId),
+    memories: reviewed.managedMemoryInventory,
+  });
+  actor.kernel_install_commit = async (request) => {
+    committedDeploymentId = request.deployment_id;
+    return commit(request);
+  };
+
+  const result = await deployPreparedPackages({
+    actor,
+    packages: [prepared],
+    compiled,
+    existingApps: {},
+    expectedDeploymentId: "old-deployment",
+  });
+
+  expect(mutated).toBe(true);
+  expect(journal?.deployment_id).toBe(reviewed.deploymentId);
+  expect(journal?.target_app_inventory).toEqual(runtimeAppInventory(reviewed));
+  expect(committedDeploymentId).toBe(reviewed.deploymentId);
+  expect(Array.from(gunzipSync(dispatchedWasm!))).toEqual(
+    Array.from(reviewed.wasm),
+  );
+  expect(result.compiled).not.toBe(compiled);
+  expect(result.compiled).toEqual(reviewed);
+  expect(Object.isFrozen(result.compiled)).toBe(true);
+  expect(Object.isFrozen(result.compiled.appInstanceInventory)).toBe(true);
 });
 
 test("deploy prepares install reservations after the journal and before activation", async () => {
@@ -3604,6 +4220,7 @@ test("deploy rejects staged asset collisions and reserved targets before IO", as
     "/system/apps.json",
     "/mo/forbidden.mo",
     "/system/staging/x",
+    DEPLOYMENT_BUILD_RECORD_PATH,
   ]) {
     const calls: string[] = [];
     const actor = journalActor({
@@ -3656,12 +4273,16 @@ test("deploy rejects an oversized install journal before any upload", async () =
   expect(calls).toEqual([]);
 });
 
-test("deploy rejects too many app asset clears before any upload", async () => {
-  const packages = Array.from(
-    { length: KERNEL_INSTALL_MAX_CLEAR_PREFIXES_PER_COMMIT + 1 },
-    (_, index) =>
-      preparePackageInstall(headlessPackageFiles(`clear_${index}`)),
-  );
+test("Kernel legal and deployment-record clears count toward the bounded prefix inventory", async () => {
+  const kernel = preparePackageInstall(kernelPackageFilesAtVersion(308));
+  const packages = [
+    kernel,
+    ...Array.from(
+      { length: KERNEL_INSTALL_MAX_CLEAR_PREFIXES_PER_COMMIT },
+      (_, index) =>
+        preparePackageInstall(headlessPackageFiles(`clear_${index}`)),
+    ),
+  ];
   const compiled = compiledFixture(...packages);
   const calls: string[] = [];
   const actor = journalActor({
@@ -3675,11 +4296,14 @@ test("deploy rejects too many app asset clears before any upload", async () => {
       actor,
       packages,
       compiled,
-      existingApps: {},
+      existingApps: {
+        kernel: appRegistryEntry({ ...kernel.manifest, version: 307 }),
+      },
+      deploymentBuildRecord: {} as any,
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(
-    /clears 129 app asset prefixes.*limit is 128 per deployment.*successive deployments/i,
+    /clears 130 asset prefixes.*limit is 128 per deployment.*successive deployments/i,
   );
   expect(calls).toEqual([]);
 });
@@ -3970,6 +4594,521 @@ test("deploy preserves kernel root HTML content type while staging", async () =>
   expect(stores.get(rootSource!)?.content_type).toBe("text/html");
 });
 
+test("the v0.3.6 bridge omits the unsupported legal clear and copies its record", async () => {
+  const journal = await captureKernelReplacementJournal(
+    withValidPackageRecord(kernelPackageFilesAtVersion(307)),
+    306,
+  );
+
+  expect(journal.clear_prefixes).toEqual([]);
+  expect(
+    journal.copies
+      .map(({ target }) => target)
+      .filter((target) => target.startsWith("/pkg/legal/"))
+      .sort(compareCanonicalText),
+  ).toEqual([
+    "/pkg/legal/APPLICATION-NOTICE.txt",
+    "/pkg/legal/LICENSE.example.txt",
+    "/pkg/legal/package-record.v1.json",
+  ]);
+});
+
+test("v0.3.7 rejects missing or null records for inline and chunked deployments before I/O", async () => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(307));
+  const candidate = preparePackageInstall(kernelPackageFilesAtVersion(308));
+  const existingApps = { kernel: appRegistryEntry(previous.manifest) };
+  for (const wasm of [
+    Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0),
+    pseudoRandomBytes(2 * 1024 * 1024),
+  ]) {
+    const compiled = { ...completeKernelCompiledFixture(candidate), wasm };
+    for (const deploymentBuildRecord of [undefined, null]) {
+      const calls: string[] = [];
+      const actor = journalActor({
+        calls,
+        deploymentId: compiled.deploymentId,
+        compiled,
+      });
+      await expect(
+        deployPreparedPackages({
+          actor,
+          packages: [candidate],
+          compiled,
+          existingApps,
+          expectedDeploymentId: "c".repeat(32),
+          ...(deploymentBuildRecord === null
+            ? { deploymentBuildRecord: null as never }
+            : {}),
+        }),
+      ).rejects.toThrow(/requires a complete reviewed deployment build record/);
+      expect(calls).toEqual([]);
+    }
+  }
+});
+
+test.each([
+  ["inline", Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)],
+  ["chunked", pseudoRandomBytes(2 * 1024 * 1024)],
+] as const)(
+  "complete build record and exact %s Wasm transport commit in one v0.3.6 bridge journal",
+  async (dispatchKind, wasm) => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(306));
+  const candidate = preparePackageInstall(
+    packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(307))),
+  );
+  const expectedDeploymentId = "c".repeat(32);
+  const compiled = { ...completeKernelCompiledFixture(candidate), wasm };
+  const previousApps = {
+    kernel: appRegistryEntry(previous.manifest),
+  };
+  const state: KernelPackageState = {
+    registry: previousApps,
+    apps: previousApps,
+    existingConfigs: { kernel: previous.manifest },
+    existingModules: [],
+    previousStable: "previous stable signature\n",
+    connectionProviderSupport: connectionProviderSupportFixture,
+  };
+  const preparedBuild = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [candidate],
+    state,
+    compiled,
+    expectedDeploymentId,
+  });
+  if (!candidate.archiveIdentity) {
+    throw new Error("Expected retained raw candidate archive identity");
+  }
+  expect(preparedBuild.record.packages[0]?.archive).toEqual({
+    state: "verified",
+    sha256: candidate.archiveIdentity.sha256,
+    bytes: candidate.archiveIdentity.size,
+  });
+  expect(preparedBuild.record.packages[0]?.package_information.state).toBe(
+    "verified",
+  );
+
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+  const stored = new Map<
+    string,
+    { encoding: "gzip" | "identity"; chunks: Uint8Array[] }
+  >();
+  let journal: InstallJournal | undefined;
+  let dispatchedWasm: Uint8Array | undefined;
+  const uploadedWasmChunks: Uint8Array[] = [];
+  const kernelStatic = actor.kernel_static.bind(actor);
+  const begin = actor.kernel_install_begin_checked.bind(actor);
+  const installCode = actor.kernel_install_code.bind(actor);
+  const uploadWasmChunk = actor.kernel_install_wasm_chunk.bind(actor);
+  actor.kernel_static = async (request) => {
+    if ("store" in request) {
+      stored.set(request.store.key, {
+        encoding: request.store.val.content_encoding,
+        chunks: [request.store.val.content],
+      });
+    } else if ("store_chunk" in request) {
+      stored.get(request.store_chunk.key)?.chunks.push(
+        request.store_chunk.content,
+      );
+    }
+    return kernelStatic(request);
+  };
+  actor.kernel_install_begin_checked = async (request) => {
+    journal = request.journal;
+    return begin(request);
+  };
+  actor.kernel_install_code = async (request) => {
+    dispatchedWasm = request.wasm;
+    return installCode(request);
+  };
+  actor.kernel_install_wasm_chunk = async (request) => {
+    uploadedWasmChunks.push(request.chunk);
+    return uploadWasmChunk(request);
+  };
+
+  await deployPreparedPackages({
+    actor,
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [candidate],
+    compiled,
+    existingApps: previousApps,
+    expectedDeploymentId,
+    deploymentBuildRecord: preparedBuild.record,
+  });
+
+  expect(journal?.clear_prefixes).toEqual([]);
+  const source = journal?.copies.find(
+    ({ target }) => target === DEPLOYMENT_BUILD_RECORD_PATH,
+  )?.source;
+  expect(source).toBeDefined();
+  const storedRecord = stored.get(source!);
+  expect(storedRecord).toBeDefined();
+  const encodedRecord = concatChunks(storedRecord!.chunks);
+  const recordBytes =
+    storedRecord!.encoding === "gzip"
+      ? gunzipSync(encodedRecord)
+      : encodedRecord;
+  expect(recordBytes).toEqual(preparedBuild.recordBytes);
+  expect(parseDeploymentBuildRecordJson(recordBytes)).toEqual(
+    preparedBuild.record,
+  );
+  const exactDispatchedWasm =
+    dispatchKind === "inline"
+      ? dispatchedWasm
+      : concatChunks(uploadedWasmChunks);
+  expect(exactDispatchedWasm).toEqual(preparedBuild.transportWasm);
+  expect(hashContent(exactDispatchedWasm!)).toBe(
+    preparedBuild.record.wasm.transport.sha256,
+  );
+  },
+);
+
+test("deploy rejects supplied-archive and predecessor drift from a sealed record before I/O", async () => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(306));
+  const candidate = preparePackageInstall(
+    packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(307))),
+  );
+  const compiled = completeKernelCompiledFixture(candidate);
+  const existingApps = { kernel: appRegistryEntry(previous.manifest) };
+  const preparedBuild = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [candidate],
+    state: {
+      registry: existingApps,
+      apps: existingApps,
+      existingConfigs: { kernel: previous.manifest },
+      existingModules: [],
+      previousStable: "previous stable signature\n",
+      connectionProviderSupport: connectionProviderSupportFixture,
+    },
+    compiled,
+    expectedDeploymentId: "c".repeat(32),
+  });
+  const replacementFiles = kernelPackageFilesAtVersion(307);
+  replacementFiles["web/index.html"] = bytes("<main>different archive</main>");
+  const replacement = preparePackageInstall(
+    packageBytes(withValidPackageRecord(replacementFiles)),
+  );
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+
+  await expect(
+    deployPreparedPackages({
+      actor,
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      packages: [replacement],
+      compiled,
+      existingApps,
+      expectedDeploymentId: "c".repeat(32),
+      deploymentBuildRecord: preparedBuild.record,
+    }),
+  ).rejects.toThrow(/package identity does not match supplied app kernel/);
+  expect(calls).toEqual([]);
+
+  const mismatchedPredecessor = {
+    ...compiled,
+    previousStableSignatureSha256: "e".repeat(64),
+  };
+  await expect(
+    deployPreparedPackages({
+      actor,
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      packages: [candidate],
+      compiled: mismatchedPredecessor,
+      existingApps,
+      expectedDeploymentId: "c".repeat(32),
+      deploymentBuildRecord: preparedBuild.record,
+    }),
+  ).rejects.toThrow(/predecessor memory baseline does not match the compiler/);
+  expect(calls).toEqual([]);
+});
+
+test("deploy rejects unsealed clones and retained-package evidence mutation before I/O", async () => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(307));
+  const candidate = preparePackageInstall(
+    packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(308))),
+  );
+  const retained = preparePackageInstall(helloPackageFiles());
+  const existingApps = {
+    kernel: appRegistryEntry(previous.manifest),
+    hello: appRegistryEntry(retained.manifest),
+  };
+  const compiledBase = compiledFixture(candidate, retained);
+  const compiled: CompileResult = {
+    ...compiledBase,
+    deploymentId: "a".repeat(32),
+    deploymentNonce: "b".repeat(32),
+    previousStableSignatureSha256: hashContent(
+      "previous stable signature\n",
+    ),
+    dependencyPlan: {
+      order: ["kernel", "hello"],
+      dependenciesByConsumer: { kernel: [], hello: [] },
+      dependentsByProvider: {},
+    },
+  };
+  const preparedBuild = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [candidate],
+    state: {
+      registry: existingApps,
+      apps: existingApps,
+      existingConfigs: {
+        kernel: previous.manifest,
+        hello: retained.manifest,
+      },
+      existingModules: [],
+      previousStable: "previous stable signature\n",
+      connectionProviderSupport: connectionProviderSupportFixture,
+    },
+    compiled,
+    expectedDeploymentId: "c".repeat(32),
+    retainedPackageEvidence: {
+      hello: {
+        version: retained.manifest.version,
+        archive: {
+          state: "outer_archive_digest_only",
+          sha256: "d".repeat(64),
+        },
+        package_information: { state: "legacy_unavailable" },
+      },
+    },
+  });
+  const unsealedClone = structuredClone(preparedBuild.record);
+  const changedRetainedEvidence = structuredClone(preparedBuild.record);
+  const retainedRecord = changedRetainedEvidence.packages.find(
+    ({ app_id }) => app_id === "hello",
+  );
+  if (retainedRecord?.archive.state !== "outer_archive_digest_only") {
+    throw new Error("Expected retained outer-archive digest fixture");
+  }
+  (retainedRecord.archive as { sha256: string }).sha256 = "e".repeat(64);
+
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+  for (const deploymentBuildRecord of [
+    unsealedClone,
+    changedRetainedEvidence,
+  ]) {
+    await expect(
+      deployPreparedPackages({
+        actor,
+        targetCanisterId: TEST_TARGET_CANISTER_ID,
+        packages: [candidate],
+        compiled,
+        existingApps,
+        expectedDeploymentId: "c".repeat(32),
+        deploymentBuildRecord,
+      }),
+    ).rejects.toThrow(/not the authenticated reviewed preparation result/);
+    expect(calls).toEqual([]);
+  }
+});
+
+test("deploy rejects Candid drift from sealed review before I/O", async () => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(307));
+  const candidate = preparePackageInstall(
+    packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(308))),
+  );
+  const compiled = completeKernelCompiledFixture(candidate);
+  const existingApps = { kernel: appRegistryEntry(previous.manifest) };
+  const preparedBuild = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [candidate],
+    state: {
+      registry: existingApps,
+      apps: existingApps,
+      existingConfigs: { kernel: previous.manifest },
+      existingModules: [],
+      previousStable: "previous stable signature\n",
+      connectionProviderSupport: connectionProviderSupportFixture,
+    },
+    compiled,
+    expectedDeploymentId: "c".repeat(32),
+  });
+  compiled.candid = `${compiled.candid}\n`;
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+
+  await expect(
+    deployPreparedPackages({
+      actor,
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      packages: [candidate],
+      compiled,
+      existingApps,
+      expectedDeploymentId: "c".repeat(32),
+      deploymentBuildRecord: preparedBuild.record,
+    }),
+  ).rejects.toThrow(/Candid changed after deployment review/);
+  expect(calls).toEqual([]);
+});
+
+test("deploy rejects stable-signature drift from sealed review before I/O", async () => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(307));
+  const candidate = preparePackageInstall(
+    packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(308))),
+  );
+  const compiled = completeKernelCompiledFixture(candidate);
+  const existingApps = { kernel: appRegistryEntry(previous.manifest) };
+  const preparedBuild = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [candidate],
+    state: {
+      registry: existingApps,
+      apps: existingApps,
+      existingConfigs: { kernel: previous.manifest },
+      existingModules: [],
+      previousStable: "previous stable signature\n",
+      connectionProviderSupport: connectionProviderSupportFixture,
+    },
+    compiled,
+    expectedDeploymentId: "c".repeat(32),
+  });
+  compiled.stable = `${compiled.stable}// changed after review\n`;
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+
+  await expect(
+    deployPreparedPackages({
+      actor,
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      packages: [candidate],
+      compiled,
+      existingApps,
+      expectedDeploymentId: "c".repeat(32),
+      deploymentBuildRecord: preparedBuild.record,
+    }),
+  ).rejects.toThrow(/stable signature changed after deployment review/);
+  expect(calls).toEqual([]);
+});
+
+test("retained package evidence is bound to runtime context and package version", () => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(306));
+  const candidate = preparePackageInstall(
+    packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(307))),
+  );
+  const compiled = completeKernelCompiledFixture(candidate);
+  const previousApps = { kernel: appRegistryEntry(previous.manifest) };
+  const state: KernelPackageState = {
+    registry: previousApps,
+    apps: previousApps,
+    existingConfigs: { kernel: previous.manifest },
+    existingModules: [],
+    previousStable: "previous stable signature\n",
+    connectionProviderSupport: connectionProviderSupportFixture,
+  };
+  const installed = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [candidate],
+    state,
+    compiled,
+    expectedDeploymentId: "c".repeat(32),
+  });
+  const installedApps = { kernel: appRegistryEntry(candidate.manifest) };
+  expect(() =>
+    retainedDeploymentPackageEvidenceFromRecord(installed.record, {
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      deploymentId: "d".repeat(32),
+      apps: installedApps,
+    }),
+  ).toThrow(/does not match the checked runtime and app registry/);
+
+  const evidence = retainedDeploymentPackageEvidenceFromRecord(
+    installed.record,
+    {
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      deploymentId: compiled.deploymentId,
+      apps: installedApps,
+    },
+  );
+  expect(evidence.kernel?.version).toBe(307);
+  const retainedCompile = {
+    ...completeKernelCompiledFixture(candidate),
+    deploymentId: "d".repeat(32),
+    deploymentNonce: "e".repeat(32),
+  };
+  expect(() =>
+    prepareCompleteDeploymentBuildRecord({
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      packages: [],
+      state: {
+        ...state,
+        registry: installedApps,
+        apps: installedApps,
+        existingConfigs: { kernel: candidate.manifest },
+      },
+      compiled: retainedCompile,
+      expectedDeploymentId: compiled.deploymentId,
+      retainedPackageEvidence: {
+        kernel: { ...evidence.kernel!, version: 306 },
+      },
+    }),
+  ).toThrow(/evidence for kernel is version 306, expected 307/);
+});
+
+test("a package-recordful to package-recordless Kernel replacement clears stale legal assets", async () => {
+  // The predecessor's contents do not need to be read: every Kernel
+  // replacement after the bridge clears its legal subtree transactionally.
+  const journal = await captureKernelReplacementJournal(
+    kernelPackageFilesAtVersion(308),
+    307,
+  );
+
+  expect(journal.clear_prefixes).toEqual([
+    "/pkg/legal/",
+    DEPLOYMENT_BUILD_RECORD_PATH,
+  ]);
+  expect(
+    journal.copies
+      .map(({ target }) => target)
+      .filter((target) => target.startsWith("/pkg/legal/")),
+  ).toEqual([]);
+});
+
+test("a package-recordful to package-recordful Kernel replacement clears then copies the new legal set", async () => {
+  const journal = await captureKernelReplacementJournal(
+    withValidPackageRecord(kernelPackageFilesAtVersion(308)),
+    307,
+  );
+
+  expect(journal.clear_prefixes).toEqual([
+    "/pkg/legal/",
+    DEPLOYMENT_BUILD_RECORD_PATH,
+  ]);
+  expect(
+    journal.copies
+      .map(({ target }) => target)
+      .filter((target) => target.startsWith("/pkg/legal/"))
+      .sort(compareCanonicalText),
+  ).toEqual([
+    "/pkg/legal/APPLICATION-NOTICE.txt",
+    "/pkg/legal/LICENSE.example.txt",
+    "/pkg/legal/package-record.v1.json",
+  ]);
+});
+
 test("deploy keeps kernel-package Candid compatibility while committing compiled Candid", async () => {
   const files = kernelPackageFiles();
   files["neutron.did"] = bytes("service : { stale : () -> () }");
@@ -3990,6 +5129,7 @@ test("deploy keeps kernel-package Candid compatibility while committing compiled
 
   await deployPreparedPackages({
     actor,
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
     packages: [prepared],
     compiled,
     existingApps: {},
@@ -4494,7 +5634,7 @@ function compiledFixture(...packages: PreparedPackageInstall[]): CompileResult {
     ]),
   );
   return {
-    wasm: bytes("wasm"),
+    wasm: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0),
     candid: `
 type InstallCommitInput = record { deployment_id : text };
 type InstallCommitResult = variant { blocked; committed; };
@@ -4519,7 +5659,9 @@ service : () -> InstallKernel
       destructiveMemoryRoots: [],
     },
     managedMemoryRetirements: [],
+    previousManagedMemoryInventory: [],
     managedMemoryInventory: [],
+    previousStableSignatureSha256: null,
     capabilityPlans,
     appInstanceInventory: Object.entries(capabilityPlans)
       .map(([app_id, capability]) => ({
@@ -4532,11 +5674,93 @@ service : () -> InstallKernel
         left.app_id < right.app_id ? -1 : left.app_id > right.app_id ? 1 : 0,
       ),
     deploymentId: "deploy00000000000000000000000000",
+    deploymentNonce: null,
+    vetKeysEnvironment: "production",
     compilerId: "moc_test",
     modulePaths: [
       ...new Set(packages.map(({ manifest }) => `${manifest.entry}.mo`)),
     ],
   };
+}
+
+function completeKernelCompiledFixture(
+  prepared: PreparedPackageInstall,
+): CompileResult {
+  const compiled = compiledFixture(prepared);
+  return {
+    ...compiled,
+    deploymentId: "a".repeat(32),
+    deploymentNonce: "b".repeat(32),
+    vetKeysEnvironment: "production",
+    previousStableSignatureSha256: hashContent(
+      "previous stable signature\n",
+    ),
+    dependencyPlan: {
+      order: ["kernel"],
+      dependenciesByConsumer: { kernel: [] },
+      dependentsByProvider: {},
+    },
+  };
+}
+
+async function captureKernelReplacementJournal(
+  files: UnpackedNeutronPackage,
+  existingKernelVersion: number,
+): Promise<InstallJournal> {
+  const prepared = preparePackageInstall(files);
+  const calls: string[] = [];
+  const compiled =
+    existingKernelVersion >= 307
+      ? completeKernelCompiledFixture(prepared)
+      : compiledFixture(prepared);
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+  let captured: InstallJournal | undefined;
+  const begin = actor.kernel_install_begin_checked.bind(actor);
+  actor.kernel_install_begin_checked = async (request) => {
+    captured = request.journal;
+    return begin(request);
+  };
+  const previousManifest = {
+    ...prepared.manifest,
+    version: existingKernelVersion,
+  };
+  const existingApps = {
+    kernel: appRegistryEntry(previousManifest),
+  };
+  const expectedDeploymentId =
+    existingKernelVersion >= 307 ? "c".repeat(32) : "old-deployment";
+  const deploymentBuildRecord =
+    existingKernelVersion >= 307
+      ? prepareCompleteDeploymentBuildRecord({
+          targetCanisterId: TEST_TARGET_CANISTER_ID,
+          packages: [prepared],
+          state: {
+            registry: existingApps,
+            apps: existingApps,
+            existingConfigs: { kernel: previousManifest },
+            existingModules: [],
+            previousStable: "previous stable signature\n",
+            connectionProviderSupport: connectionProviderSupportFixture,
+          },
+          compiled,
+          expectedDeploymentId,
+        }).record
+      : undefined;
+  await deployPreparedPackages({
+    actor,
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [prepared],
+    compiled,
+    existingApps,
+    expectedDeploymentId,
+    ...(deploymentBuildRecord ? { deploymentBuildRecord } : {}),
+  });
+  if (captured === undefined) throw new Error("Install journal was not recorded");
+  return captured;
 }
 
 function journalActor({
@@ -4687,6 +5911,9 @@ function pseudoRandomBytes(size: number): Uint8Array {
     state ^= state >>> 17;
     state ^= state << 5;
     result[index] = state & 0xff;
+  }
+  if (result.length >= 8) {
+    result.set(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
   }
   return result;
 }

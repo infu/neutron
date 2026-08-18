@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE } from "neutron-tools/src/schema.js";
 import { packageMotoko } from "../src/mopack.ts";
 
 test("mopack rejects an unknown top-level manifest field", async () => {
@@ -100,12 +101,152 @@ test("mopack removes a stale packaged lock for apps without managed memory", asy
     await fs.writeFile(rootLockPath, staleLock);
     await fs.writeFile(distLockPath, staleLock);
 
-    await packageMotoko({ cwd, packages: {} });
+    const packaged = await packageMotoko({ cwd, packages: {} });
 
     await expect(fs.stat(distLockPath)).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(await fs.readFile(rootLockPath, "utf8")).toBe(staleLock);
+    expect(packaged.package_features).toEqual([
+      NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+    ]);
+    expect(
+      JSON.parse(await fs.readFile(path.join(cwd, "neutron.json"), "utf8")),
+    ).not.toHaveProperty("package_features");
+    const packagedManifest = JSON.parse(
+      await fs.readFile(path.join(cwd, "dist", "neutron.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(packagedManifest.package_features).toEqual([
+      NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+    ]);
+    const legacyClosedFields = new Set([
+      "background",
+      "backend",
+      "capabilities",
+      "dependencies",
+      "description",
+      "entry",
+      "format",
+      "func",
+      "id",
+      "init_arg",
+      "memory",
+      "name",
+      "src",
+      "tiles",
+      "tray",
+      "update_source",
+      "version",
+    ]);
+    expect(
+      Object.keys(packagedManifest).filter(
+        (field) => !legacyClosedFields.has(field),
+      ),
+    ).toEqual(["package_features"]);
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("mopack leaves Kernel packages unmarked for legacy bootstrap", async () => {
+  const cwd = await fs.mkdtemp(
+    path.join(os.tmpdir(), "neutron-mopack-kernel-feature-"),
+  );
+  try {
+    await fs.mkdir(path.join(cwd, "backend"), { recursive: true });
+    await fs.writeFile(
+      path.join(cwd, "neutron.json"),
+      JSON.stringify({
+        format: 3,
+        id: "kernel",
+        name: "Kernel",
+        version: 100,
+        src: "main.mo",
+      }),
+    );
+    await fs.writeFile(
+      path.join(cwd, "backend", "main.mo"),
+      "module { public class Init() {} }",
+    );
+
+    const packaged = await packageMotoko({ cwd, packages: {} });
+    expect(packaged.package_features).toBeUndefined();
+    expect(
+      JSON.parse(
+        await fs.readFile(path.join(cwd, "dist", "neutron.json"), "utf8"),
+      ),
+    ).not.toHaveProperty("package_features");
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("mopack leaves update-source app manifests readable by legacy Kernels", async () => {
+  const cwd = await fs.mkdtemp(
+    path.join(os.tmpdir(), "neutron-mopack-https-source-"),
+  );
+  try {
+    await fs.mkdir(path.join(cwd, "backend"), { recursive: true });
+    await fs.writeFile(
+      path.join(cwd, "neutron.json"),
+      JSON.stringify({
+        format: 3,
+        id: "test_app",
+        name: "Test App",
+        version: 100,
+        src: "main.mo",
+        update_source: "233tv-xiaaa-aaaay-aacta-cai",
+      }),
+    );
+    await fs.writeFile(
+      path.join(cwd, "backend", "main.mo"),
+      "module { public class Init() {} }",
+    );
+
+    const packaged = await packageMotoko({ cwd, packages: {} });
+
+    expect(packaged.package_features).toBeUndefined();
+    expect(
+      JSON.parse(
+        await fs.readFile(path.join(cwd, "dist", "neutron.json"), "utf8"),
+      ),
+    ).not.toHaveProperty("package_features");
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("mopack preserves explicit embedded-source support", async () => {
+  const cwd = await fs.mkdtemp(
+    path.join(os.tmpdir(), "neutron-mopack-embedded-source-"),
+  );
+  try {
+    await fs.mkdir(path.join(cwd, "backend"), { recursive: true });
+    await fs.writeFile(
+      path.join(cwd, "neutron.json"),
+      JSON.stringify({
+        format: 3,
+        id: "test_app",
+        name: "Test App",
+        version: 100,
+        src: "main.mo",
+        update_source: "233tv-xiaaa-aaaay-aacta-cai",
+      }),
+    );
+    await fs.writeFile(
+      path.join(cwd, "backend", "main.mo"),
+      "module { public class Init() {} }",
+    );
+
+    const packaged = await packageMotoko({
+      cwd,
+      packages: {},
+      sourceDelivery: "embedded",
+    });
+
+    expect(packaged.package_features).toEqual([
+      NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+    ]);
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
   }

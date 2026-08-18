@@ -109,7 +109,16 @@ describe("Certified Assets qualification SampleRuntime", () => {
 
   test("maps another scope's update and freezes the decoded result", async () => {
     const appId = "ca_qualification_aux_3";
+    let executions = 0n;
     const client = new FakePocketIcClient((mode, call) => {
+      if (mode === "query") {
+        expect(call.method).toBe("kernel_app_usage_snapshot");
+        return encodeKernelAppUsage(appId, {
+          instructions: executions * 31n,
+          executions,
+          outgoingCycles: executions * 7n,
+        });
+      }
       expect(mode).toBe("update");
       expect(call.method).toBe(
         physicalAppMethodName(appId, "qualification_abort_stage"),
@@ -120,6 +129,7 @@ describe("Certified Assets qualification SampleRuntime", () => {
           call.payload,
         ),
       ).toEqual([9n]);
+      executions += 1n;
       return new Uint8Array(IDL.encode(
         QualificationMethods.qualification_abort_stage.retTypes,
         [{ ok: null }],
@@ -127,10 +137,33 @@ describe("Certified Assets qualification SampleRuntime", () => {
     });
     const runtime = runtimeFor(appId, client);
 
+    await runtime.call("kernel_app_usage", [null]);
     const result = await runtime.call("qualification_abort_stage", [9n]);
     expect(result).toEqual({ ok: null });
     expect(Object.isFrozen(result)).toBe(true);
-    expect(runtime.observations.candid[0]?.mode).toBe("update");
+    expect(
+      runtime.observations.candid.filter(({ mode }) => mode === "update"),
+    ).toHaveLength(1);
+    expect(runtime.observations.candid).toHaveLength(2);
+    expect(client.calls.map(({ call }) => call.method)).toEqual([
+      "kernel_app_usage_snapshot",
+      physicalAppMethodName(appId, "qualification_abort_stage"),
+      "kernel_app_usage_snapshot",
+    ]);
+    expect(runtime.updateUsageBrackets).toHaveLength(1);
+    expect(runtime.updateUsageBrackets[0]?.method).toBe(
+      physicalAppMethodName(appId, "qualification_abort_stage"),
+    );
+    expect(
+      appUsageExecutions(runtime.updateUsageBrackets[0]!.before, appId),
+    ).toBe(0n);
+    expect(
+      appUsageExecutions(runtime.updateUsageBrackets[0]!.after, appId),
+    ).toBe(1n);
+    expect(Object.isFrozen(runtime.updateUsageBrackets)).toBe(true);
+    expect(Object.isFrozen(runtime.updateUsageBrackets[0])).toBe(true);
+    expect(Object.isFrozen(runtime.updateUsageBrackets[0]!.before)).toBe(true);
+    expect(Object.isFrozen(runtime.updateUsageBrackets[0]!.after)).toBe(true);
   });
 
   test("takes one source-owned usage/diagnostics snapshot through exact methods", async () => {
@@ -302,6 +335,45 @@ function encodeScopeInfo(
       },
     }],
   ));
+}
+
+function encodeKernelAppUsage(
+  appId: CertifiedAssetsQualificationFixtureId,
+  counters: Readonly<{
+    instructions: bigint;
+    executions: bigint;
+    outgoingCycles: bigint;
+  }>,
+): Uint8Array {
+  return new Uint8Array(IDL.encode(KernelAppUsageMethod.retTypes, [{
+    snapshot_version: 2n,
+    current_day: 4n,
+    apps: [{
+      app_id: appId,
+      installation_uid: 1n,
+      lifetime_instructions: counters.instructions,
+      lifetime_executions: counters.executions,
+      lifetime_outgoing_cycles: counters.outgoingCycles,
+      lifetime_incoming_cycles_accepted: 0n,
+      window_instructions: counters.instructions,
+      window_executions: counters.executions,
+      window_outgoing_cycles: counters.outgoingCycles,
+      window_incoming_cycles_accepted: 0n,
+      days: [],
+    }],
+  }]));
+}
+
+function appUsageExecutions(
+  snapshot: unknown,
+  appId: CertifiedAssetsQualificationFixtureId,
+): bigint {
+  const root = snapshot as { apps: Array<{
+    app_id: string;
+    lifetime_executions: bigint;
+  }> };
+  return root.apps.find(({ app_id: candidate }) => candidate === appId)!
+    .lifetime_executions;
 }
 
 function limits() {

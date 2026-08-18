@@ -487,6 +487,41 @@ test("keeps generic words and one reviewed Files type field out of identity chec
   ]);
 });
 
+test("allows the generic starter asset digest only on reviewed Dispenser surfaces", async () => {
+  const workspace = await fixtureWorkspace();
+  await Promise.all([
+    writeFixtureSource(
+      workspace,
+      "support/dispenser/mo/main.mo",
+      "let files_sha256 = digest;",
+    ),
+    writeFixtureSource(
+      workspace,
+      "support/dispenser/production_deploy.ts",
+      "const files_sha256 = digest;",
+    ),
+    writeFixtureSource(
+      workspace,
+      "support/dispenser/starter_payload.ts",
+      "const files_sha256 = digest;",
+    ),
+    writeFixtureSource(
+      workspace,
+      "support/dispenser/unreviewed.ts",
+      "const files_sha256 = digest;",
+    ),
+  ]);
+
+  expect(await checkCoreAppAgnostic(workspace)).toEqual([
+    {
+      file: "support/dispenser/unreviewed.ts",
+      line: 1,
+      rule: "removed_vocabulary",
+      value: "files_sha256",
+    },
+  ]);
+});
+
 test("repository Core production source is app agnostic", async () => {
   expect(await checkCoreAppAgnostic()).toEqual([]);
 });

@@ -5,6 +5,7 @@ import type {
   NeutronFunctionConfig,
   PackagedNeutronManifest,
 } from "neutron-tools/src/schema.js";
+import { hashContent } from "neutron-tools/src/hash.js";
 import {
   availableRepositoryPackageIds,
   reconcileRepositoryPackages,
@@ -38,11 +39,16 @@ function pkg(
     ...(func ? { func } : {}),
   };
   const registryEntry = registryApp(manifest);
+  const archiveBytes = new TextEncoder().encode(`${id}:${version}`);
+  const archiveIdentity = Object.freeze({
+    sha256: hashContent(archiveBytes),
+    size: archiveBytes.byteLength,
+  });
   return {
     id,
     version,
-    digest: "a".repeat(64),
-    rawSize: 10,
+    digest: archiveIdentity.sha256,
+    rawSize: archiveIdentity.size,
     capabilityPlanFingerprint: registryEntry.capability_plan_fingerprint,
     capabilityDisclosures: [],
     permissions: [],
@@ -54,6 +60,8 @@ function pkg(
       manifest,
       capabilityPlan: registryEntry.capability_plan,
       capabilityPlanFingerprint: registryEntry.capability_plan_fingerprint,
+      archiveBytes,
+      archiveIdentity,
     } satisfies PreparedPackageInstall,
   };
 }
@@ -580,6 +588,9 @@ test("repository install owns focus for the whole attempt and reconciles the sto
   expect(dialog).toContain("personal, affiliate, or hidden tracking identifiers");
   expect(dialog).toContain("pkg.publisher.website");
   expect(dialog).toContain('referrerPolicy="no-referrer"');
+  expect(dialog).toContain(
+    "<DeploymentBuildReview {...state.deploymentReview} uiMode={uiMode} />",
+  );
 
   const session = apps.slice(
     apps.indexOf("export async function beginRepositoryInstallSession"),
@@ -587,7 +598,11 @@ test("repository install owns focus for the whole attempt and reconciles the sto
   );
   expect(session).toContain("apps: state.registry");
   expect(session).toContain("state: reconciliationState");
-  expect(session).toContain("existingApps: state.apps");
+  expect(session).toContain("existingApps: currentState.apps");
+  expect(session).toContain("const revalidatedDeployment = await prepareBrowserDeployment");
+  expect(session.indexOf("const revalidatedDeployment")).toBeLessThan(
+    session.indexOf('phase: "staging"'),
+  );
 
   const fingerprint = apps.slice(
     apps.indexOf("function packageBaselineFingerprint"),

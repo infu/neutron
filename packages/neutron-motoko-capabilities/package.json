@@ -2,12 +2,12 @@
   "name": "neutron-motoko-capabilities",
   "private": true,
   "version": "1.0.0",
-  "license": "GPL-3.0-only",
+  "license": "Apache-2.0",
   "description": "Reviewed public Motoko leaf types for Neutron backend capabilities",
   "scripts": {
     "test": "bun test/run.ts && bun test test/public_surface.test.ts"
   },
-  "dependencies": {
+  "devDependencies": {
     "neutron-motoko-wasm": "^1.1.0",
     "neutron-scripts": "^1.1.0"
   }

@@ -1117,9 +1117,9 @@ class IsolatedQualificationPocketIcImpl
       this.instanceId,
       this.#ownedProcess,
     );
-    if (normalized < wall) {
+    if (normalized !== wall) {
       throw new Error(
-        `PocketIC wall-clock normalization expected at least ${wall}, found ${normalized}`,
+        `PocketIC wall-clock normalization expected exactly ${wall}, found ${normalized}`,
       );
     }
     await executeQualificationControlOperation({

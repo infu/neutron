@@ -1,0 +1,16 @@
+Neutron Dispenser
+Copyright 2026 3V Interactive
+
+The first-party Dispenser source is licensed under the Apache License, Version
+2.0. See LICENSE in this directory.
+
+The Dispenser includes modified code from Aviate Labs, flyq/motoko-sha224,
+and Go's SHA implementation. It also uses independently licensed Motoko,
+JavaScript, and CSS components. Their notices are in THIRD_PARTY_NOTICES.md;
+the Motoko Core and Base license exceptions are in LICENSE.Motoko-Core and
+LICENSE.Motoko-Base. The exact enzoh/motoko-sha license and exception are in
+LICENSE.Enzoh-Motoko-SHA.
+
+Bundled Neutron package archives are separate works and retain the license and
+notices carried by each archive; they are not relicensed as Apache software by
+this NOTICE.

@@ -2011,7 +2011,7 @@ npm run package
 The hello app package script is the current model:
 
 ```json
-"package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts"
+"package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts"
 ```
 
 The steps are:
@@ -2028,13 +2028,34 @@ The steps are:
    runs `mops sources`, walks Motoko imports, checks source for dangerous
    patterns, rewrites imports to content hashes, writes `dist/mo/<hash>.mo`,
    and writes `dist/neutron.json` with executable entry hashes plus source-only
-   memory schema hashes.
+   memory schema hashes. Automatic mode uses unmarked, provider-hosted HTTPS
+   source delivery when the app has `update_source`. It adds the closed
+   packaged-only `package_features: ["archive-only-legal-v1"]` installer marker
+   only for a manual-only or explicitly embedded package; do not add that
+   generated field to source `neutron.json`.
 5. `schema`
    reads generated backend aliases and asks icblast to write
    `dist/schema.json` for every public app method.
-6. `pack.ts`
+6. `package:metadata`
+   replaces `dist/legal` with the verified package record, concise application
+   notice, governing license, and derived third-party notices. With
+   `update_source`, it writes the exact generated Complete App Source gzip bytes
+   outside `dist`, at
+   `<app>/.neutron/sources/<sha256>.source.v1.msgpack.gz`, and records the
+   source canister's certified HTTPS URL. Embedded mode retains the bounded
+   source snapshot and bulk legal files inside the package instead.
+7. `pack.ts`
    gzip-compresses every file under `dist/`, MessagePack-encodes them, and
    writes `<id>.v<major>.<minor>.<patch>.neutron`.
+
+For an NSAL release, this tooling includes the exact NSAL text and required
+third-party notices and identifies exact Complete App Source. For a normal
+source-discoverable release, the provider's update-source publisher uploads the
+source artifact; the installed canister receives the license, notices, and
+record but not the source bytes. This is a package and publisher responsibility,
+not a requirement for a Sovereign User to publish on GitHub, operate a source
+host, or hand-author hashes, combined-Wasm identities, or deployment records.
+Private browser assembly remains private.
 
 Because `build` runs `mogen`, backend annotation changes can rewrite
 `neutron.json` after the first validation step. After changing method
@@ -2055,7 +2076,7 @@ before publishing or installing the package.
 For hello, the output is:
 
 ```text
-apps/hello/hello.v0.2.1.neutron
+apps/hello/hello.v0.2.2.neutron
 ```
 
 ### Release A Source-Discoverable Update
@@ -2127,6 +2148,15 @@ behavior under test is Neutron's end-user installer, exercise the browser path:
 6. Wait for browser compilation.
 7. Approve the install dialog. The installed app's first tile opens in the
    current workspace when the package has launchable tiles.
+
+This private browser workflow does not publish the archive, selected package
+set, or generated Wasm to an update source or package registry, and it creates
+no compliance record. Installed runtime and package assets have the anonymous
+HTTP visibility documented in
+[Asset Storage And HTTP Serving](./asset-storage-and-http-serving.md); that
+automatic availability is not an intentional source publication and creates no
+private-user distribution duty under the NPL or NSAL. Production update-source
+publication is the separate maintainer workflow above.
 
 There is no package-level developer CLI install or uninstall command. Browser
 install/uninstall exists to test the reviewed product transaction, not as a

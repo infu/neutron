@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "archive": "./kernel.v0.3.6.neutron",
+  "bytes": 1858175,
+  "sha256": "b25948f68ed10f29c984e936ecfd18b95fa8d4cdec0bbd1e944b53b2a371bd8b",
+  "package": {
+    "format": 3,
+    "id": "kernel",
+    "version": 306,
+    "update_source": "233tv-xiaaa-aaaay-aacta-cai"
+  },
+  "memory": [
+    {
+      "owner": "kernel",
+      "id": "kernel",
+      "version": 3,
+      "schema": "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
+      "entry": "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b"
+    },
+    {
+      "owner": "kernel",
+      "id": "kernel_activation",
+      "version": 1,
+      "schema": "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
+      "entry": "f2380721e6147d0f0af208a70183e3d8ce6ac19ad533e1367b3f5780305e7ad3"
+    }
+  ]
+}

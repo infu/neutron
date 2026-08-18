@@ -41,6 +41,9 @@ import {
   CERTIFIED_ASSETS_BROWSER_CORS_SCHEMA,
 } from "./browser_cors.ts";
 import {
+  CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE,
+} from "./profile.ts";
+import {
   CERTIFIED_ASSETS_HOSTILE_HTTP_GATE_SCHEMA,
   CERTIFIED_ASSETS_HTTP_OBSERVATION_SCHEMA,
   CERTIFIED_ASSETS_MOTOKO_GATES_SCHEMA,
@@ -156,6 +159,63 @@ describe("Certified Assets qualification receipt", () => {
       ),
     ).toBe(
       "6c07c6b8b132350c099f4b0ca34921653cc1308c45bc3e858b392398a09f83b3",
+    );
+  });
+
+  test("adds a fail-closed stage to otherwise blank parser failures", () => {
+    const receipt = validReceipt();
+    const blankCanisterFailure = new Proxy(receipt.samples[0]!, {
+      get(target, property, receiver) {
+        if (property === "canister_id") throw new Error();
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const brokenReceipt = {
+      ...receipt,
+      samples: [blankCanisterFailure, ...receipt.samples.slice(1)],
+    };
+
+    expect(() =>
+      parseCertifiedAssetsQualificationReceipt(brokenReceipt)
+    ).toThrow(
+      "Qualification receipt failed during operational samples: Qualification sample 0 failed during canister identity",
+    );
+  });
+
+  test("contains a thrown error whose message getter is hostile", () => {
+    const receipt = validReceipt();
+    const hostileError = new Proxy(new Error("hidden"), {
+      get(target, property, receiver) {
+        if (property === "message") throw new Error("hostile message getter");
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const hostileCanisterFailure = new Proxy(receipt.samples[0]!, {
+      get(target, property, receiver) {
+        if (property === "canister_id") throw hostileError;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const brokenReceipt = {
+      ...receipt,
+      samples: [hostileCanisterFailure, ...receipt.samples.slice(1)],
+    };
+
+    expect(() =>
+      parseCertifiedAssetsQualificationReceipt(brokenReceipt)
+    ).toThrow(
+      "Qualification receipt failed during operational samples: Qualification sample 0 failed during canister identity",
+    );
+  });
+
+  test("keeps the canonical canister-principal invariant contextual", () => {
+    const receipt = tamperedReceipt((candidate) => {
+      candidate.samples[0]!.canister_id = Principal.managementCanister()
+        .toText();
+    });
+
+    expect(() => parseCertifiedAssetsQualificationReceipt(receipt)).toThrow(
+      "Qualification receipt failed during operational samples: Qualification sample 0 failed during canister identity: qualification sample 0.canister_id is not a canonical canister principal",
     );
   });
 
@@ -296,13 +356,15 @@ describe("Certified Assets qualification receipt", () => {
     ).rejects.toThrow("does not bind the exact manual advance");
 
     const normalizationStart = tamperedReceipt((receipt) => {
+      const lastClock = receipt.bounded_physical_sample.receipt_rollovers.at(-1)!
+        .clock;
       receipt.environment.timeline.wall_normalization.before_ns =
-        (MANUAL_REPLICA_TIME_END_NS + 1n).toString();
+        (BigInt(lastClock.after_ns) - 1n).toString();
     });
     await expect(
       assertCertifiedAssetsQualificationReceipt(normalizationStart),
     ).rejects.toThrow(
-      "does not continue the physical manual-clock timeline",
+      "observed -1ns implicit round drift",
     );
 
     const normalizationTarget = tamperedReceipt((receipt) => {
@@ -358,6 +420,129 @@ describe("Certified Assets qualification receipt", () => {
     await expect(
       assertCertifiedAssetsQualificationReceipt(lateGatewayStart),
     ).rejects.toThrow("gateway phase timeline is invalid");
+  });
+
+  test("binds bounded implicit PocketIC round drift around exact manual advances", async () => {
+    const maximumSetupDrift = BigInt(
+      CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE
+        .maximum_setup_implicit_round_drift_ns,
+    );
+    const maximumDrift = BigInt(
+      CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE
+        .maximum_implicit_round_drift_ns_per_boundary,
+    );
+    expect(maximumSetupDrift).toBe(22_400n);
+    expect(maximumDrift).toBe(1_000n);
+
+    const equality = validReceipt();
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(equality),
+    ).resolves.toBeDefined();
+
+    const smallSetupDrift = tamperedReceipt((receipt) => {
+      setPopulationSetupBoundaryDrift(receipt, 17n);
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(smallSetupDrift),
+    ).resolves.toBeDefined();
+
+    const setupAtBudget = tamperedReceipt((receipt) => {
+      setPopulationSetupBoundaryDrift(receipt, maximumSetupDrift);
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(setupAtBudget),
+    ).resolves.toBeDefined();
+
+    const setupBackward = tamperedReceipt((receipt) => {
+      setPopulationSetupBoundaryDrift(receipt, -1n);
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(setupBackward),
+    ).rejects.toThrow("observed -1ns implicit round drift");
+
+    const setupOverBudget = tamperedReceipt((receipt) => {
+      setPopulationSetupBoundaryDrift(
+        receipt,
+        maximumSetupDrift + 1n,
+      );
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(setupOverBudget),
+    ).rejects.toThrow(
+      `observed ${maximumSetupDrift + 1n}ns implicit round drift`,
+    );
+
+    const smallDrift = tamperedReceipt((receipt) => {
+      setPhysicalClockBoundaryDrift(receipt, 17n, 23n);
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(smallDrift),
+    ).resolves.toBeDefined();
+
+    const driftAtBudget = tamperedReceipt((receipt) => {
+      setPhysicalClockBoundaryDrift(
+        receipt,
+        maximumDrift,
+        maximumDrift,
+      );
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(driftAtBudget),
+    ).resolves.toBeDefined();
+
+    const backward = tamperedReceipt((receipt) => {
+      setPhysicalClockBoundaryDrift(receipt, -1n, 0n);
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(backward),
+    ).rejects.toThrow("observed -1ns implicit round drift");
+
+    const overBudget = tamperedReceipt((receipt) => {
+      setPhysicalClockBoundaryDrift(
+        receipt,
+        maximumDrift + 1n,
+        0n,
+      );
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(overBudget),
+    ).rejects.toThrow(
+      `observed ${maximumDrift + 1n}ns implicit round drift`,
+    );
+
+    const finalOverBudget = tamperedReceipt((receipt) => {
+      setPhysicalClockBoundaryDrift(
+        receipt,
+        0n,
+        maximumDrift + 1n,
+      );
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(finalOverBudget),
+    ).rejects.toThrow(
+      `observed ${maximumDrift + 1n}ns implicit round drift`,
+    );
+
+    const normalizationTargetBackward = tamperedReceipt((receipt) => {
+      const wall = receipt.environment.timeline.wall_normalization;
+      wall.after_ns = (BigInt(wall.target_host_wall_ns) - 1n).toString();
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(
+        normalizationTargetBackward,
+      ),
+    ).rejects.toThrow("wall normalization timeline is invalid");
+
+    const normalizationTargetForward = tamperedReceipt((receipt) => {
+      const wall = receipt.environment.timeline.wall_normalization;
+      wall.after_ns =
+        (BigInt(wall.target_host_wall_ns) + 1n).toString();
+    });
+    await expect(
+      assertCertifiedAssetsQualificationReceipt(
+        normalizationTargetForward,
+      ),
+    ).rejects.toThrow("wall normalization timeline is invalid");
   });
 
   test("brackets every gateway certificate in the gateway phase", async () => {
@@ -640,6 +825,46 @@ function tamperedReceipt(
   return receipt;
 }
 
+function setPhysicalClockBoundaryDrift(
+  receipt: DeepMutable<CertifiedAssetsQualificationReceipt>,
+  initialDriftNs: bigint,
+  finalDriftNs: bigint,
+): void {
+  let precedingNs =
+    BigInt(receipt.bounded_physical_sample.population_clock_start_ns) +
+    initialDriftNs;
+  for (const rollover of receipt.bounded_physical_sample.receipt_rollovers) {
+    const requestedDeltaNs = BigInt(rollover.clock.requested_delta_ns);
+    rollover.clock.before_ns = precedingNs.toString();
+    precedingNs += requestedDeltaNs;
+    rollover.clock.after_ns = precedingNs.toString();
+  }
+  receipt.environment.timeline.wall_normalization.before_ns =
+    (precedingNs + finalDriftNs).toString();
+}
+
+function setPopulationSetupBoundaryDrift(
+  receipt: DeepMutable<CertifiedAssetsQualificationReceipt>,
+  setupDriftNs: bigint,
+): void {
+  const previousStartNs = BigInt(
+    receipt.bounded_physical_sample.population_clock_start_ns,
+  );
+  const nextStartNs =
+    BigInt(receipt.environment.replica_time_start_ns) + setupDriftNs;
+  const shiftNs = nextStartNs - previousStartNs;
+  receipt.bounded_physical_sample.population_clock_start_ns =
+    nextStartNs.toString();
+  for (const rollover of receipt.bounded_physical_sample.receipt_rollovers) {
+    rollover.clock.before_ns =
+      (BigInt(rollover.clock.before_ns) + shiftNs).toString();
+    rollover.clock.after_ns =
+      (BigInt(rollover.clock.after_ns) + shiftNs).toString();
+  }
+  const wall = receipt.environment.timeline.wall_normalization;
+  wall.before_ns = (BigInt(wall.before_ns) + shiftNs).toString();
+}
+
 function clone<T>(value: T): DeepMutable<T> {
   return structuredClone(value) as DeepMutable<T>;
 }
@@ -825,6 +1050,7 @@ function boundedPhysicalSampleObservation() {
     batch_count: PHYSICAL_POPULATION_BATCHES,
     batch_transcript_sha256: batchTranscriptSha256,
     final_entry_count: PHYSICAL_POPULATION_ENTRIES,
+    population_clock_start_ns: REPLICA_TIME_START_NS.toString(),
     receipt_rollovers: receiptRollovers,
     usage_before_overflow: {
       ...CANDID_OBSERVATION,

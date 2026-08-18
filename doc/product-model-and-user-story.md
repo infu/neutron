@@ -75,7 +75,11 @@ A publisher builds and publishes or serves exact package bytes through a
 repository or update source. Current source-update provenance is not a
 publisher signature. The package may propose capabilities and updates, but the
 publisher does not become a controller and cannot silently widen an installed
-app's authority.
+app's authority. For a source-discoverable production app, the provider also
+hosts the package-bound Complete App Source object once. Installing, upgrading,
+or privately compiling that package does not make the Sovereign User a source
+publisher and does not disclose the user's selected package set or combined
+Wasm.
 
 ### App
 
@@ -143,8 +147,9 @@ The review screen presents meaningful changes:
 - typed app dependencies; and
 - memory migrations or retirement.
 
-Approval authorizes that target plan, not future package behavior. Compile and
-install then verify the target actor before committing the new runtime.
+Approval authorizes the compiled target plan, not future package behavior. The
+browser may compile while review is open, but approval remains unavailable until
+compilation succeeds; install then verifies the target actor before commit.
 
 ### 4. Use Apps
 

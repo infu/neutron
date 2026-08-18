@@ -85,10 +85,34 @@ manifest policy such as `update_source`. The update source, local provisioning
 configs, and the Dispenser use the same exact archive bytes when their
 respective selections pin that archive.
 
+Production apps with `update_source` use a legacy-readable package envelope.
+Their governing license and notices use ordinary `legal/**` paths, their source
+record identifies a provider-hosted HTTPS offer, and their packaged manifest
+and record contain no archive-only feature marker. Packaging writes the exact
+generator-produced source gzip object outside `dist` at:
+
+~~~text
+apps/<directory>/.neutron/sources/<sha256>.source.v1.msgpack.gz
+~~~
+
+Keep that generated artifact with the prepared `.neutron` archive through
+publication and postflight. The catalog publisher verifies it and supplies it
+to the update source; app authors and users do not upload source separately.
+
+This envelope is intentionally readable by immutable production Kernel v0.3.5
+and v0.3.6 and by the compatible private v0.3.7 candidate. A compatible
+successor Kernel and all app updates can therefore be published together and
+installed with one **Upgrade all** action. Do not introduce a Kernel-first
+publication phase or a timing window. Explicit embedded-source packages still
+use `package_features: ["archive-only-legal-v1"]`; they are not eligible for
+this legacy-to-current simultaneous production cutover.
+
 ### 3. Keep Tracked Archive References Coherent
 
-The package command removes older local archives for that app after a
-successful pack. Search for old filename references before publishing:
+The package command retains older local archives for that app as immutable
+upgrade and release-history evidence. Search for old filename references
+before publishing so active consumers move to the intended new archive while
+historical consumers remain pinned:
 
 ~~~sh
 rg -n '<id>\.v<old-version>\.neutron' \
@@ -127,18 +151,27 @@ The normal production command is:
 npm run updates:publish
 ~~~
 
-It reads the production catalog, validates every current manifest/archive
-pair, and atomically publishes only changed release pointers and missing
-digest-addressed packages. Packages already present with the same version and
-digest are verified no-ops, so this command is safe when only a subset changed.
-It also requires every catalog manifest and archive to name the catalog's
-production source. Use this wrapper for routine SushiOS production releases.
+It reads the production catalog, validates every current manifest/archive pair,
+and resolves every HTTPS source offer to the exact app-local source artifact.
+For each offered source it verifies the compressed length and digest, bounded
+gunzip and closed source snapshot, package identity, and declared build inputs.
+It does not require recompression by another zlib runtime to reproduce the
+artifact byte for byte. It then atomically publishes missing digest-addressed
+source objects, missing digest-addressed packages, and changed release pointers.
+Packages and source objects already present with the same identities are
+verified no-ops, so this command is safe when only a subset changed. It also
+requires every catalog manifest and archive to name the catalog's production
+source and every hosted-source URL to name that source's canonical certified
+origin. Use this wrapper for routine SushiOS production releases.
 The lower-level generic publisher is reserved for deliberately operated
 non-catalog sources; it does not prove that an archive's manifest
 `update_source` equals its `--canister-id`.
 
-The command prints a JSON receipt. A changed release has a non-null
-`batch_id` and `status: "published"`. Keep that receipt with the release.
+The command prints a `neutron-update-source-publish-v2` JSON receipt. A changed
+release has a non-null `batch_id` and `status: "published"`. Each package row
+also reports its source URL, path, size, digest, and `published` or `unchanged`
+status, or `source: null` when that package makes no HTTPS offer. Keep that
+receipt with the exact package and source artifacts.
 Publication changes the source used by Settings upgrades; it does not install
 the package into existing Neutrons or alter the Dispenser starter.
 The publisher does not build apps or run their tests, has no dry-run or
@@ -153,16 +186,18 @@ postflight result is:
 
 - `batch_id: null`;
 - every selected package has `status: "unchanged"`; and
-- each reported version, size, and SHA-256 matches the local archive.
+- each reported version, size, and SHA-256 matches the local archive; and
+- every reported source has `status: "unchanged"` and matching URL, path, size,
+  and SHA-256.
 
-The publisher performs certified HTTP verification of every public release and
-package during both the publish and no-op runs. A second ad hoc upload or a
-controller call is not a verification step.
+The publisher performs certified HTTP verification of every public release,
+package, and offered source during both the publish and no-op runs. A second ad
+hoc upload or a controller call is not a verification step.
 
-If the first command loses its response after a possible commit, do not rebuild
-or bump again. Rerun the same command against the same archive bytes. The
-publisher reconciles an already-committed identical release as a verified
-no-op and rejects conflicting bytes.
+If the first command loses its response after a possible commit, do not rebuild,
+regenerate source, or bump again. Rerun the same command against the exact same
+archive and source-artifact bytes. The publisher reconciles an already-committed
+identical release as a verified no-op and rejects conflicting or missing bytes.
 
 ### 6. Optionally Update The Dispenser Starter
 
@@ -201,9 +236,12 @@ Wasm digest against `.neutron/dispenser-production.json`.
 - source `neutron.json` has a strictly newer packed version;
 - the full app `package` command completed;
 - the new archive's path, size, digest, ID, and version agree;
-- active tracked archive references no longer point to the removed archive;
-- one source publication committed all intended changed packages;
-- the repeated publication was a verified no-op;
+- every HTTPS source offer has its exact app-local generated gzip artifact;
+- active tracked archive references point to the intended archive while
+  immutable historical references remain unchanged;
+- one atomic source publication committed all intended source objects, packages,
+  and release pointers;
+- the repeated publication was a verified package-and-source no-op;
 - the Dispenser starter was staged once only if future Neutrons need it.
 
 ## Manifest Contract
@@ -246,11 +284,12 @@ installed app.
 
 ## Certified Repository Paths
 
-Update sources share the repository v1 content-addressed package path:
+Update sources share these repository v1 paths:
 
 ~~~text
 /repo/v1/releases/<app-id>.json
 /repo/v1/packages/<sha256>.neutron
+/repo/v1/sources/<sha256>.source.v1.msgpack.gz
 ~~~
 
 The release path contains one small closed JSON record:
@@ -273,7 +312,9 @@ The package path is derived from the digest; a source cannot supply an
 arbitrary download URL.
 
 Release records are mutable latest-version pointers. Digest-addressed packages
-are immutable and retained when a newer pointer is published.
+and any Complete App Source objects offered by their package-information record
+are immutable and retained when a newer pointer is published. The source
+object's digest and size cover the exact generator-produced gzip bytes.
 
 ## Why Checks Use Per-App Assets
 
@@ -373,6 +414,13 @@ advertised package bytes. Archive-entry, decoded-byte, generated-copy, and
 compiler limits are enforced across the complete prepared set rather than
 reset per package.
 
+Because preparation happens for the complete set before any deployment starts,
+the production compatibility rule applies to the whole latest set. The normal
+provider-hosted app envelope is readable by immutable production v0.3.5 and
+v0.3.6 and the compatible private v0.3.7 candidate, so one batch may contain
+both their state-compatible Kernel successor and current app releases. There is
+no hidden Kernel-first install, reload, version picker, or timing window.
+
 ## Atomic Update Deployment
 
 The package install session has separate setup and update policies while
@@ -389,22 +437,26 @@ For the selected update set, the kernel:
 2. resolves dependencies against the proposed final app set;
 3. compiles all packages once;
 4. builds every managed-memory migration path;
-5. shows one combined review;
-6. records one checked deployment journal;
-7. stages runtime, app assets, registry, capabilities, memory, source metadata,
-   and provenance;
-8. activates the combined Wasm and verifies runtime identity;
-9. commits the staged assets together.
+5. creates the complete `/system/deployment-build-record.json` and exact
+   deterministic gzip transport;
+6. shows one combined review with the canonical record available before
+   approval or install-code dispatch;
+7. revalidates that reviewed record and records one checked deployment journal;
+8. stages the same record with runtime, app assets, registry, capabilities,
+   memory, source metadata, and provenance;
+9. activates the exact recorded combined Wasm and verifies runtime identity;
+10. commits the staged assets together.
 
 If preparation or compilation fails, no deployment begins. Once deployment
 begins, the existing checked journal and recovery path remain authoritative.
 The final state is the reviewed app set, not a partially applied replacement.
 
 The review includes installed and target versions, source canister, package
-size and digest, exact capability changes, target access categories,
-dependencies, future source changes, compiler diagnostics, and the
-managed-memory plan. Browser confirmation modals and sandboxed form submission
-are not used.
+size and digest, package-information identity, exact capability changes, target
+access categories, dependencies, future source changes, compiler diagnostics,
+the managed-memory plan, and the whole-deployment raw/transport identities.
+The canonical deployment record is copyable/downloadable before dispatch.
+Browser confirmation modals and sandboxed form submission are not used.
 
 Settings distinguishes these boundaries. A check failure says the sources
 could not be checked. A preparation failure says no updates were applied. A
@@ -430,7 +482,10 @@ memory baseline.
 
 ## Provenance
 
-Successful source updates atomically write a private provenance record:
+Successful source updates atomically write a certified provenance record in
+`/system/install-provenance.json`. That path is publicly readable package
+integrity metadata; it must not contain private credentials, owner identities,
+or controller principals:
 
 ~~~json
 {
@@ -448,6 +503,14 @@ closed `manual` provenance record containing the acquisition kind and exact
 outer-package digest; this lets an equal-version source record be checked for
 equivocation instead of being trusted without evidence. A source update
 replaces that record in the same deployment transaction.
+
+The fixed `legal/package-record.v1.json` package-information sidecar and the
+single `/system/deployment-build-record.json` deployment record are documented
+in [License And Deployment Records](./license-and-deployment-records.md). They
+do not change this update-source release format. The retrieved archive digest
+binds all sidecar bytes; the record-capable Kernel prepares and exposes the
+whole-deployment record before dispatch and stages the same canonical record in
+the checked install transaction.
 
 ## Reference Update Source
 
@@ -495,15 +558,20 @@ Publishing uses authenticated direct-agent Candid update calls, never an
 
 1. validates each .neutron package with the shared bounded installer;
 2. derives identity, version, size, and digest from exact bytes;
-3. reads one paginated Candid metadata snapshot to distinguish definitely
+3. resolves each HTTPS offer to the app-local source artifact and verifies its
+   canonical URL, exact compressed-byte digest and size, bounded gunzip, closed
+   snapshot, package identity, and declared build inputs;
+4. counts package bytes plus each unique source object against the publication
+   byte ceiling;
+5. reads one paginated Candid metadata snapshot to distinguish definitely
    absent exact paths from paths that require certified HTTP preflight;
-4. reads present release/package paths through certified HTTP;
-5. rejects downgrade and equal-version/different-digest publication;
-6. uploads missing immutable package chunks;
-7. stages release records and packages in one asset batch;
-8. commits atomically;
-9. re-fetches and verifies every public release and package;
-10. prints a machine-readable receipt.
+6. reads present release, package, and source paths through certified HTTP;
+7. rejects downgrade and equal-version/different-digest publication;
+8. uploads missing immutable source and package chunks;
+9. stages source objects, packages, and release records in one asset batch;
+10. commits atomically;
+11. re-fetches and verifies every public release, package, and offered source;
+12. prints a source-aware v2 machine-readable receipt.
 
 The metadata snapshot is publisher-only control-plane input. It exists because
 the stock asset canister cannot serve a gateway-verifiable arbitrary missing
@@ -513,10 +581,11 @@ entry merely causes an atomic `CreateAsset` attempt, which fails safely if the
 snapshot was stale. Neutron update checks never call `list`, never fetch a
 catalog, and reveal only their exact installed app IDs through public GETs.
 
-Same-version/same-digest publication is an idempotent verified no-op. Old
-packages are retained. The reference setup permits one Commit publisher and
-documents serialized CI because the asset canister has no publication
-generation compare-and-swap.
+Same-version/same-digest publication is an idempotent verified no-op that also
+re-verifies every HTTPS source object. Old packages and source objects are
+retained. The reference setup permits one Commit publisher and documents
+serialized CI because the asset canister has no publication generation
+compare-and-swap.
 
 Production publication targets an explicitly configured update-source
 canister. Local deployment does not discover or deploy that production project.
@@ -533,9 +602,9 @@ The runtime field is an exact-origin binding, not a transparent alias for the
 production principal. The Kernel uses it only when the selected manifest
 source principal is the canister in that origin. The provision-owned fixture is
 initially seeded only with `/health.txt`; a real local update scenario must
-publish release/package assets to that fixture and build its test package with
-that fixture principal. A production-pinned manifest does not silently redirect
-to a different local canister.
+publish release, package, and offered-source assets to that fixture and build
+its test package with that fixture principal. A production-pinned manifest does
+not silently redirect to a different local canister.
 
 See [the update-source operator README](../support/update-source/README.md) for
 source deployment, permissions, identity rotation, generic-source CLI details,
@@ -545,6 +614,8 @@ monitoring, and recovery.
 
 - packages/neutron-tools/src/schema.ts: manifest source normalization.
 - packages/neutron-tools/src/repository.ts: release codec and paths.
+- packages/neutron-tools/src/package_record.ts: HTTPS source-offer paths,
+  transport limits, and package-information parsing.
 - packages/neutron-compiler/src/install.ts: registry persistence and package
   preparation/deployment.
 - apps/kernel/src/updates/: bounded check, package client, state, preparation,
@@ -572,20 +643,34 @@ The checked-in focused unit and contract tests exercise:
   copy;
 - publisher roles, atomic asset operations, idempotency, downgrade rejection,
   metadata, first-publication absence discovery without an HTTP 404 preflight,
-  HTTP verification, and receipts;
+  bounded source decoding, exact compressed-byte verification, certified HTTP
+  verification, and v2 receipts;
 - existing compiler multi-package atomicity and direct multi-step
   managed-memory migration planning;
+- exact immutable v0.3.5/v0.3.6 embedded browser compiler and assembler
+  closures compiling the private v0.3.7 Kernel plus all 14 current clean
+  HTTPS-source app archives in one real-Chromium batch with zero compiler errors
+  or compatibility diagnostics, with v0.3.7 parser/batch coverage as well;
+- one **Upgrade all** service session that prepares, compiles, reviews, and
+  deploys the Kernel-plus-app selection together from a v0.3.5 installed
+  baseline;
 - Playwright discovery, automatic checking on Settings load, keyboard refresh,
   the manual-only Installed Apps row, absence of a separate check control or
   standalone updates section, and narrow-layout containment.
 
-The current Playwright package-update test covers Settings-triggered check
+The compatibility and service tests prove legacy parsing, real browser
+compilation, and one-batch orchestration; they do not drive each archived
+predecessor UI through a live canister deployment and verify durable state
+afterward. That manual archived-browser end-to-end gate remains required for
+the exact intended successor bytes, and the automated legacy compatibility
+suite must be rerun against that exact successor archive once it is built. The
+current Playwright package-update test covers Settings-triggered check
 lifecycle, refresh, row presentation, and the manual-only case. It does not
-publish a release into the PocketIC fixture or apply a real update. A full
-local fixture publish/read/review/deploy browser scenario remains separate
-release evidence and must not be claimed from the checked-in test name alone.
-Its `:fresh` wrapper first runs the current `local:deploy` destructive
-reinstall and then runs the Internet Identity scenario.
+publish a release into the PocketIC fixture or apply a real update. A full local
+fixture publish/read/review/deploy browser scenario remains separate release
+evidence and must not be claimed from the checked-in test name alone. Its
+`:fresh` wrapper first runs the current `local:deploy` destructive reinstall and
+then runs the Internet Identity scenario.
 
 There is currently no tracked evidence-matrix file for this protocol; a former
 `todo.packageupdate.md` reference pointed at a file that does not exist. Record

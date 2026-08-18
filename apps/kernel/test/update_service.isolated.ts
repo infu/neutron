@@ -8,19 +8,30 @@ import {
   mock,
   test,
 } from "bun:test";
-import type {
-  AppRegistry,
-  CompileResult,
-  PreparedPackageInstall,
+import { gzipSync } from "fflate";
+import msgpack from "tiny-msgpack";
+import {
+  KERNEL_INSTALL_MAX_COPIES,
+  preparePackageInstall,
+  type AppRegistry,
+  type CompileResult,
+  type PreparePackageInstallOptions,
+  type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
+import {
+  DEPLOYMENT_WASM_TRANSPORT_ENCODER,
+  parseDeploymentBuildRecord,
+  serializeDeploymentBuildRecord,
+  type CompleteDeploymentBuildRecord,
+} from "neutron-compiler/src/deployment_record.js";
 import { hashContent } from "neutron-tools/src/hash.js";
 import {
   NEUTRON_REPOSITORY_PROTOCOL,
   type RepositoryReleaseRecord,
 } from "neutron-tools/repository";
-import type { PackagedNeutronManifest } from "neutron-tools/src/schema.js";
 import { createStore } from "zustand/vanilla";
 import { registryApp } from "./app_registry_fixture.ts";
+import type { PreparedBrowserDeployment } from "../src/install_review/prepare_browser_deployment.ts";
 
 const SOURCE = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 const SECOND_SOURCE = "ryjl3-tyaaa-aaaaa-aaaba-cai";
@@ -45,9 +56,14 @@ type Session = {
     runtime: { deployment_id: string };
   };
   compile(packages: readonly PreparedPackageInstall[]): Promise<CompileResult>;
+  getPreparedDeployment(
+    packages: readonly PreparedPackageInstall[],
+    compiled: CompileResult,
+  ): PreparedBrowserDeployment;
   deploy(input: {
     packages: readonly PreparedPackageInstall[];
     compiled: CompileResult;
+    deploymentBuildRecord: CompleteDeploymentBuildRecord;
     provenance: Readonly<Record<string, unknown>>;
   }): Promise<AppRegistry>;
   cancel(): void;
@@ -88,7 +104,7 @@ let fetchPackageImpl: (
 let getDetailsImpl: (
   actor: unknown,
   bytes: Uint8Array,
-  options: unknown,
+  options: PreparePackageInstallOptions,
 ) => Promise<unknown>;
 
 mock.module(
@@ -114,8 +130,11 @@ mock.module(new URL("../src/updates/client.ts", import.meta.url).pathname, () =>
 }));
 
 mock.module(new URL("../src/tools/app.ts", import.meta.url).pathname, () => ({
-  get_app_details: (actor: unknown, bytes: Uint8Array, options: unknown) =>
-    getDetailsImpl(actor, bytes, options),
+  get_app_details: (
+    actor: unknown,
+    bytes: Uint8Array,
+    options: PreparePackageInstallOptions,
+  ) => getDetailsImpl(actor, bytes, options),
 }));
 
 const [{
@@ -309,8 +328,11 @@ describe("update service orchestration", () => {
     });
     appsStore.setState({ list: registry });
     const bytesById = new Map([
-      ["contacts", packageBytes("contacts")],
-      ["mail", packageBytes("mail")],
+      [
+        "contacts",
+        packageArchive("contacts", "Contacts", 101, SECOND_SOURCE),
+      ],
+      ["mail", packageArchive("mail", "Mail", 101, SOURCE)],
     ]);
     const releases = [
       candidate(
@@ -324,19 +346,10 @@ describe("update service orchestration", () => {
     updateCheckState.ready(releases, 1_700_000_000_000);
     updateCheckState.selection(["mail"]);
 
-    const preparedById = new Map(
-      releases.map((candidate) => [
-        candidate.appId,
-        preparedPackage(candidate.appId, candidate.name, 101, candidate.source),
-      ]),
-    );
     const identityExpectations: unknown[] = [];
     getDetailsImpl = async (_actor, bytes, options) => {
       identityExpectations.push(options);
-      const id = new TextDecoder().decode(bytes);
-      const preparedPackage = preparedById.get(id);
-      if (!preparedPackage) throw new Error(`Unknown package bytes for ${id}`);
-      return { neutronConfig: preparedPackage.manifest, preparedPackage };
+      return preparedPackageDetails(bytes, options);
     };
     fetchReleaseImpl = async (source, appId) => {
       const match = releases.find((candidate) => candidate.appId === appId)!;
@@ -348,6 +361,7 @@ describe("update service orchestration", () => {
     const compiled = compiledResult();
     const compileBatches: string[][] = [];
     const deploys: Array<Parameters<Session["deploy"]>[0]> = [];
+    let reviewedDeployment: PreparedBrowserDeployment | null = null;
     let cancelled = 0;
     beginSessionImpl = async () => ({
       baseline: {
@@ -357,6 +371,10 @@ describe("update service orchestration", () => {
       async compile(packages) {
         compileBatches.push(packages.map(({ manifest }) => manifest.id));
         return compiled;
+      },
+      getPreparedDeployment(packages, exactCompiled) {
+        reviewedDeployment = preparedDeploymentFixture(packages, exactCompiled);
+        return reviewedDeployment;
       },
       async deploy(input) {
         deploys.push(input);
@@ -378,6 +396,10 @@ describe("update service orchestration", () => {
       },
     });
     expect(compileBatches).toEqual([["contacts", "mail"]]);
+    expect(reviewedDeployment).not.toBeNull();
+    expect(
+      useUpdateCheckStore.getState().review?.deploymentBuild,
+    ).toBe(reviewedDeployment!.review);
     expect(identityExpectations).toHaveLength(2);
     for (const expectation of identityExpectations) {
       expect(expectation).toMatchObject({
@@ -392,6 +414,9 @@ describe("update service orchestration", () => {
       "mail",
     ]);
     expect(deploys[0]!.compiled).toBe(compiled);
+    expect(deploys[0]!.deploymentBuildRecord).toBe(
+      reviewedDeployment!.prepared.record,
+    );
     expect(deploys[0]!.provenance).toEqual({
       contacts: {
         kind: "update_source",
@@ -409,6 +434,161 @@ describe("update service orchestration", () => {
       },
     });
     expect(cancelled).toBe(0);
+    expect(useUpdateCheckStore.getState()).toMatchObject({
+      phase: "success",
+      selectedAppIds: [],
+      updatedAppCount: 2,
+    });
+  });
+
+  test("Upgrade all from Kernel v0.3.5 deploys the successor plus HTTPS-source app in one batch", async () => {
+    const registry = appRegistry({
+      kernel: { source: SOURCE, version: 305 },
+      hello: { source: SOURCE, version: 202 },
+    });
+    appsStore.setState({ list: registry });
+
+    const kernelBytes = packageArchive(
+      "kernel",
+      "Neutron",
+      308,
+      SOURCE,
+    );
+    const hello = httpsSourcePackageArchive(
+      "hello",
+      "Hello",
+      203,
+      SOURCE,
+    );
+    const bytesById = new Map([
+      ["kernel", kernelBytes],
+      ["hello", hello.archive],
+    ]);
+    const releases = [
+      versionedCandidate(
+        "kernel",
+        "Neutron",
+        SOURCE,
+        305,
+        308,
+        kernelBytes,
+      ),
+      versionedCandidate(
+        "hello",
+        "Hello",
+        SOURCE,
+        202,
+        203,
+        hello.archive,
+      ),
+    ] as const;
+    updateCheckState.ready(releases, 1_700_000_000_000);
+    // Model a user who had only one row selected. Upgrade all must replace
+    // that subset with every available latest release; there is no version
+    // choice and no Kernel-only preparation phase.
+    updateCheckState.selection(["hello"]);
+
+    fetchReleaseImpl = async (source, appId) => {
+      const match = releases.find((candidate) => candidate.appId === appId)!;
+      expect(source).toBe(match.source);
+      return fetchedRelease(source, match.release, match.releaseDigest);
+    };
+    fetchPackageImpl = async (_source, published) =>
+      bytesById.get(published.id)!;
+    const preparedIds: string[] = [];
+    getDetailsImpl = async (_actor, bytes, options) => {
+      const details = preparedPackageDetails(bytes, options);
+      preparedIds.push(details.preparedPackage.manifest.id);
+      if (details.preparedPackage.manifest.id === "hello") {
+        expect(details.preparedPackage.manifest).not.toHaveProperty(
+          "package_features",
+        );
+        expect(details.preparedPackage.packageRecord).toMatchObject({
+          format: 1,
+          source: hello.source,
+        });
+        expect(details.preparedPackage.packageRecord).not.toHaveProperty(
+          "features",
+        );
+        expect(
+          details.preparedPackage.files.some(({ path }) =>
+            path.includes("legal/source/app-source.v1.msgpack")
+          ),
+        ).toBe(false);
+      }
+      return details;
+    };
+
+    const compiled = compiledResult();
+    const compileBatches: PreparedPackageInstall[][] = [];
+    const deploys: Array<Parameters<Session["deploy"]>[0]> = [];
+    const selectionsAtSessionStart: Array<readonly string[]> = [];
+    let sessionStarts = 0;
+    let reviewedDeployments = 0;
+    beginSessionImpl = async () => {
+      sessionStarts += 1;
+      selectionsAtSessionStart.push([
+        ...useUpdateCheckStore.getState().selectedAppIds,
+      ]);
+      return {
+        baseline: {
+          state: { apps: registry },
+          runtime: { deployment_id: "deployment_before" },
+        },
+        async compile(packages) {
+          compileBatches.push([...packages]);
+          return compiled;
+        },
+        getPreparedDeployment(packages, exactCompiled) {
+          reviewedDeployments += 1;
+          return preparedDeploymentFixture(packages, exactCompiled);
+        },
+        async deploy(input) {
+          deploys.push(input);
+          return registry;
+        },
+        cancel() {},
+      };
+    };
+
+    await prepareAllAvailableUpdates();
+
+    expect(selectionsAtSessionStart).toEqual([["hello", "kernel"]]);
+    expect(preparedIds).toEqual(["hello", "kernel"]);
+    expect(sessionStarts).toBe(1);
+    expect(compileBatches).toHaveLength(1);
+    expect(
+      compileBatches[0]!.map(({ manifest }) => [
+        manifest.id,
+        manifest.version,
+      ]),
+    ).toEqual([
+      ["hello", 203],
+      ["kernel", 308],
+    ]);
+    expect(reviewedDeployments).toBe(1);
+    expect(deploys).toHaveLength(0);
+    expect(useUpdateCheckStore.getState()).toMatchObject({
+      phase: "review",
+      selectedAppIds: ["hello", "kernel"],
+      review: {
+        apps: [
+          expect.objectContaining({ appId: "hello", targetVersion: 203 }),
+          expect.objectContaining({ appId: "kernel", targetVersion: 308 }),
+        ],
+      },
+    });
+
+    await applyPreparedUpdates();
+
+    expect(sessionStarts).toBe(1);
+    expect(compileBatches).toHaveLength(1);
+    expect(reviewedDeployments).toBe(1);
+    expect(deploys).toHaveLength(1);
+    expect(deploys[0]!.packages).toEqual(compileBatches[0]!);
+    expect(
+      deploys[0]!.packages.map(({ manifest }) => manifest.id),
+    ).toEqual(["hello", "kernel"]);
     expect(useUpdateCheckStore.getState()).toMatchObject({
       phase: "success",
       selectedAppIds: [],
@@ -462,8 +642,8 @@ describe("update service orchestration", () => {
     });
     appsStore.setState({ list: registry });
     const bytesById = new Map([
-      ["contacts", packageBytes("contacts")],
-      ["mail", packageBytes("mail")],
+      ["contacts", packageArchive("contacts", "Contacts", 101, SOURCE)],
+      ["mail", packageArchive("mail", "Mail", 101, undefined)],
     ]);
     const releases = [
       candidate(
@@ -476,22 +656,14 @@ describe("update service orchestration", () => {
     ] as const;
     updateCheckState.ready(releases, 1_700_000_000_000);
 
-    const targets = new Map([
-      ["contacts", preparedPackage("contacts", "Contacts", 101, SOURCE)],
-      ["mail", preparedPackage("mail", "Mail", 101, undefined)],
-    ]);
     fetchReleaseImpl = async (source, appId) => {
       const checked = releases.find(({ appId: id }) => id === appId)!;
       expect(source).toBe(checked.source);
       return fetchedRelease(source, checked.release, checked.releaseDigest);
     };
     fetchPackageImpl = async (_source, published) => bytesById.get(published.id)!;
-    getDetailsImpl = async (_actor, bytes) => {
-      const id = new TextDecoder().decode(bytes);
-      const preparedPackage = targets.get(id);
-      if (!preparedPackage) throw new Error(`Unknown package bytes for ${id}`);
-      return { neutronConfig: preparedPackage.manifest, preparedPackage };
-    };
+    getDetailsImpl = async (_actor, bytes, options) =>
+      preparedPackageDetails(bytes, options);
 
     const compileBatches: PreparedPackageInstall[][] = [];
     const deploys: Array<Parameters<Session["deploy"]>[0]> = [];
@@ -504,6 +676,7 @@ describe("update service orchestration", () => {
         compileBatches.push([...packages]);
         return compiledResult();
       },
+      getPreparedDeployment,
       async deploy(input) {
         deploys.push(input);
         return registry;
@@ -569,22 +742,31 @@ describe("update service orchestration", () => {
       mail: { source: SOURCE, version: 100 },
     });
     appsStore.setState({ list: registry });
+    const bytesById = new Map([
+      [
+        "contacts",
+        packageArchive("contacts", "Contacts", 101, SECOND_SOURCE),
+      ],
+      ["mail", packageArchive("mail", "Mail", 101, SOURCE)],
+    ]);
     const releases = [
-      candidate("contacts", "Contacts", SECOND_SOURCE, packageBytes("contacts")),
-      candidate("mail", "Mail", SOURCE, packageBytes("mail")),
+      candidate(
+        "contacts",
+        "Contacts",
+        SECOND_SOURCE,
+        bytesById.get("contacts")!,
+      ),
+      candidate("mail", "Mail", SOURCE, bytesById.get("mail")!),
     ] as const;
     updateCheckState.ready(releases, 1_700_000_000_000);
     fetchReleaseImpl = async (source, appId) => {
       const match = releases.find((candidate) => candidate.appId === appId)!;
       return fetchedRelease(source, match.release, match.releaseDigest);
     };
-    fetchPackageImpl = async (_source, published) => packageBytes(published.id);
-    getDetailsImpl = async (_actor, bytes) => {
-      const id = new TextDecoder().decode(bytes);
-      const match = releases.find((candidate) => candidate.appId === id)!;
-      const prepared = preparedPackage(id, match.name, 101, match.source);
-      return { neutronConfig: prepared.manifest, preparedPackage: prepared };
-    };
+    fetchPackageImpl = async (_source, published) =>
+      bytesById.get(published.id)!;
+    getDetailsImpl = async (_actor, bytes, options) =>
+      preparedPackageDetails(bytes, options);
     let committed = 0;
     let cancelled = 0;
     beginSessionImpl = async () => ({
@@ -595,6 +777,7 @@ describe("update service orchestration", () => {
       async compile() {
         return compiledResult();
       },
+      getPreparedDeployment,
       async deploy() {
         // The real package session performs this checked baseline re-read before
         // its first staging write. Model that boundary here so the updater's
@@ -624,6 +807,8 @@ describe("update service orchestration", () => {
       phase: "error",
       errorStage: "apply",
       error: expect.stringContaining("Installed app state changed"),
+      compiledSizeKiB: null,
+      review: null,
     });
   });
 
@@ -654,6 +839,7 @@ describe("update service orchestration", () => {
         compiled += 1;
         return compiledResult();
       },
+      getPreparedDeployment,
       async deploy() {
         deployed += 1;
         return registry;
@@ -715,6 +901,7 @@ describe("update service orchestration", () => {
         compiled += 1;
         return compiledResult();
       },
+      getPreparedDeployment,
       async deploy() {
         deployed += 1;
         return registry;
@@ -748,8 +935,11 @@ describe("update service orchestration", () => {
     });
     appsStore.setState({ list: registry });
     const bytesById = new Map([
-      ["contacts", packageBytes("contacts")],
-      ["mail", packageBytes("mail")],
+      [
+        "contacts",
+        packageArchive("contacts", "Contacts", 101, SECOND_SOURCE),
+      ],
+      ["mail", packageArchive("mail", "Mail", 101, SOURCE)],
     ]);
     const releases = [
       candidate("contacts", "Contacts", SECOND_SOURCE, bytesById.get("contacts")!),
@@ -766,16 +956,12 @@ describe("update service orchestration", () => {
       downloaded.push(published.id);
       return bytesById.get(published.id)!;
     };
-    getDetailsImpl = async (_actor, bytes) => {
-      const id = new TextDecoder().decode(bytes);
-      if (id === "mail") throw new Error("Mail package manifest is invalid");
-      const prepared = preparedPackage(
-        "contacts",
-        "Contacts",
-        101,
-        SECOND_SOURCE,
-      );
-      return { neutronConfig: prepared.manifest, preparedPackage: prepared };
+    getDetailsImpl = async (_actor, bytes, options) => {
+      const details = preparedPackageDetails(bytes, options);
+      if (details.preparedPackage.manifest.id === "mail") {
+        throw new Error("Mail package manifest is invalid");
+      }
+      return details;
     };
     let compiled = 0;
     let deployed = 0;
@@ -789,6 +975,7 @@ describe("update service orchestration", () => {
         compiled += 1;
         return compiledResult();
       },
+      getPreparedDeployment,
       async deploy() {
         deployed += 1;
         return registry;
@@ -815,6 +1002,60 @@ describe("update service orchestration", () => {
         expect.objectContaining({ appId: "contacts", kind: "available" }),
         expect.objectContaining({ appId: "mail", kind: "available" }),
       ],
+      review: null,
+    });
+  });
+
+  test("copy preflight reserves one slot for the deployment build record", async () => {
+    const registry = appRegistry({ mail: { source: SOURCE, version: 100 } });
+    appsStore.setState({ list: registry });
+    const bytes = packageArchive("mail", "Mail", 101, SOURCE);
+    const available = candidate("mail", "Mail", SOURCE, bytes);
+    updateCheckState.ready([available], 1_700_000_000_000);
+    fetchReleaseImpl = async () =>
+      fetchedRelease(SOURCE, available.release, available.releaseDigest);
+    fetchPackageImpl = async () => bytes;
+    const prepared = preparePackageInstall(bytes);
+    prepared.files = Array.from(
+      { length: KERNEL_INSTALL_MAX_COPIES - 4 },
+      (_, index) => ({
+        path: `app/mail/pkg/copy-${index}`,
+        content: new Uint8Array(),
+      }),
+    );
+    getDetailsImpl = async () => ({
+      neutronConfig: prepared.manifest,
+      preparedPackage: prepared,
+    });
+    let compiled = 0;
+    let cancelled = 0;
+    beginSessionImpl = async () => ({
+      baseline: {
+        state: { apps: registry },
+        runtime: { deployment_id: "deployment_before" },
+      },
+      async compile() {
+        compiled += 1;
+        return compiledResult();
+      },
+      getPreparedDeployment,
+      async deploy() {
+        throw new Error("Oversized copy plan must not deploy");
+      },
+      cancel() {
+        cancelled += 1;
+      },
+    });
+
+    await prepareSelectedUpdates();
+
+    expect({ compiled, cancelled }).toEqual({ compiled: 0, cancelled: 1 });
+    expect(useUpdateCheckStore.getState()).toMatchObject({
+      phase: "error",
+      errorStage: "prepare",
+      error: expect.stringContaining(
+        `require ${KERNEL_INSTALL_MAX_COPIES + 1} asset copies`,
+      ),
       review: null,
     });
   });
@@ -848,6 +1089,157 @@ function packageBytes(id: string): Uint8Array {
   return new TextEncoder().encode(id);
 }
 
+function packageArchive(
+  id: string,
+  name: string,
+  version: number,
+  source: string | undefined,
+): Uint8Array {
+  const encoder = new TextEncoder();
+  const moduleContent = encoder.encode(
+    `module { public let fixtureVersion : Nat = ${version} }`,
+  );
+  const entry = hashContent(moduleContent);
+  const files: Record<string, Uint8Array> = {
+    "neutron.json": encoder.encode(
+      JSON.stringify({
+        format: 3,
+        id,
+        name,
+        version,
+        entry,
+        ...(source ? { update_source: source } : {}),
+      }),
+    ),
+    [`mo/${entry}.mo`]: moduleContent,
+  };
+  if (id === "kernel") {
+    files["connection-providers.json"] = encoder.encode(
+      JSON.stringify({
+        schema: "neutron.connection-provider-support.v1",
+        providers: [{ provider: "openrouter", scopes: [] }],
+      }),
+    );
+  }
+  return msgpack.encode(
+    Object.fromEntries(
+      Object.entries(files).map(([path, content]) => [
+        path,
+        gzipSync(content),
+      ]),
+    ),
+  );
+}
+
+function httpsSourcePackageArchive(
+  id: string,
+  name: string,
+  version: number,
+  sourceCanister: string,
+) {
+  const encoder = new TextEncoder();
+  const moduleContent = encoder.encode(
+    `module { public let fixtureVersion : Nat = ${version} }`,
+  );
+  const entry = hashContent(moduleContent);
+  const manifestBytes = encoder.encode(
+    JSON.stringify({
+      format: 3,
+      id,
+      name,
+      version,
+      entry,
+      update_source: sourceCanister,
+    }),
+  );
+  const licenseBytes = encoder.encode("NSAL update-service fixture\n");
+  const applicationNoticeBytes = encoder.encode(
+    "Application notice update-service fixture\n",
+  );
+  const thirdPartyNoticeBytes = encoder.encode(
+    "Third-party notice update-service fixture\n",
+  );
+  const offeredSourceBytes = gzipSync(
+    encoder.encode("deterministic external source artifact fixture"),
+  );
+  const sourceSha256 = hashContent(offeredSourceBytes);
+  const source = Object.freeze({
+    kind: "https" as const,
+    revision: `source-sha256:${sourceSha256}`,
+    url:
+      `https://${sourceCanister}.icp0.io/repo/v1/sources/` +
+      `${sourceSha256}.source.v1.msgpack.gz`,
+    sha256: sourceSha256,
+    bytes: offeredSourceBytes.byteLength,
+  });
+  const embeddedReference = (path: string, content: Uint8Array) => ({
+    path,
+    sha256: hashContent(content),
+    bytes: content.byteLength,
+  });
+  const record = {
+    format: 1,
+    package: {
+      id,
+      version,
+      manifest: embeddedReference("neutron.json", manifestBytes),
+    },
+    license: {
+      id: "LicenseRef-Neutron-Sovereign-Application-License-1.0",
+      texts: [
+        {
+          id: "LicenseRef-Neutron-Sovereign-Application-License-1.0",
+          ...embeddedReference("legal/LICENSE.APP.txt", licenseBytes),
+        },
+      ],
+    },
+    source,
+    dependencies: [],
+    notices: [
+      embeddedReference(
+        "legal/APPLICATION-NOTICE.txt",
+        applicationNoticeBytes,
+      ),
+      embeddedReference(
+        "legal/THIRD_PARTY_NOTICES.md",
+        thirdPartyNoticeBytes,
+      ),
+    ],
+    memory: null,
+    build: { inputs: [], commands: [] },
+  };
+  const files: Record<string, Uint8Array> = {
+    "neutron.json": manifestBytes,
+    [`mo/${entry}.mo`]: moduleContent,
+    "legal/LICENSE.APP.txt": licenseBytes,
+    "legal/APPLICATION-NOTICE.txt": applicationNoticeBytes,
+    "legal/THIRD_PARTY_NOTICES.md": thirdPartyNoticeBytes,
+    "legal/package-record.v1.json": encoder.encode(JSON.stringify(record)),
+  };
+  return Object.freeze({
+    archive: msgpack.encode(
+      Object.fromEntries(
+        Object.entries(files).map(([path, content]) => [
+          path,
+          gzipSync(content),
+        ]),
+      ),
+    ),
+    source,
+  });
+}
+
+function preparedPackageDetails(
+  archiveBytes: Uint8Array,
+  options: PreparePackageInstallOptions = {},
+) {
+  const preparedPackage = preparePackageInstall(archiveBytes, options);
+  return {
+    neutronConfig: preparedPackage.manifest,
+    preparedPackage,
+  };
+}
+
 function release(
   id: string,
   version: number,
@@ -876,45 +1268,26 @@ function candidate(
   source: string,
   bytes: Uint8Array,
 ) {
-  const published = release(appId, 101, bytes);
+  return versionedCandidate(appId, name, source, 100, 101, bytes);
+}
+
+function versionedCandidate(
+  appId: string,
+  name: string,
+  source: string,
+  installed: number,
+  target: number,
+  bytes: Uint8Array,
+) {
+  const published = release(appId, target, bytes);
   return {
     kind: "available" as const,
     appId,
     name,
-    installed: 100,
+    installed,
     source,
     release: published,
     releaseDigest: hashContent(JSON.stringify(published)),
-  };
-}
-
-function preparedPackage(
-  id: string,
-  name: string,
-  version: number,
-  source: string | undefined,
-): PreparedPackageInstall {
-  const manifest = {
-    format: 3,
-    id,
-    name,
-    version,
-    entry: hashContent(`${id}:${version}`),
-    ...(source ? { update_source: source } : {}),
-  } satisfies PackagedNeutronManifest;
-  const entry = registryApp({
-    id,
-    name,
-    version,
-    ...(source ? { update_source: source } : {}),
-  });
-  return {
-    manifest,
-    capabilityPlan: entry.capability_plan,
-    capabilityPlanFingerprint: entry.capability_plan_fingerprint,
-    files: [],
-    appPrefix: `/app/${id}/`,
-    isKernel: false,
   };
 }
 
@@ -936,10 +1309,140 @@ function compiledResult(): CompileResult {
     capabilityPlans: {},
     appInstanceInventory: [],
     managedMemoryInventory: [],
-    deploymentId: "deployment_after",
+    deploymentId: "a".repeat(32),
+    deploymentNonce: "b".repeat(32),
+    vetKeysEnvironment: "local",
     compilerId: "moc_test",
     modulePaths: [],
   } as unknown as CompileResult;
+}
+
+function getPreparedDeployment(
+  packages: readonly PreparedPackageInstall[],
+  compiled: CompileResult,
+): PreparedBrowserDeployment {
+  return preparedDeploymentFixture(packages, compiled);
+}
+
+function preparedDeploymentFixture(
+  packages: readonly PreparedPackageInstall[],
+  compiled: CompileResult,
+): PreparedBrowserDeployment {
+  const supplied = [...packages].sort((left, right) =>
+    left.manifest.id.localeCompare(right.manifest.id),
+  );
+  const kernel = supplied.find(({ manifest }) => manifest.id === "kernel");
+  const ordered = [
+    ...(kernel ? [kernel] : []),
+    ...supplied.filter(({ manifest }) => manifest.id !== "kernel"),
+  ];
+  const packageEntries = [
+    ...(!kernel
+      ? [
+          {
+            app_id: "kernel",
+            version: 100,
+            archive: { state: "legacy_unavailable" as const },
+            package_information: { state: "legacy_unavailable" as const },
+            dependencies: [],
+          },
+        ]
+      : []),
+    ...ordered.map((prepared) => ({
+      app_id: prepared.manifest.id,
+      version: prepared.manifest.version,
+      archive: prepared.archiveIdentity
+        ? {
+            state: "verified" as const,
+            sha256: prepared.archiveIdentity.sha256,
+            bytes: prepared.archiveIdentity.size,
+          }
+        : { state: "legacy_unavailable" as const },
+      package_information: packageInformationIdentity(prepared),
+      dependencies: [],
+    })),
+  ];
+  const targetApps = packageEntries.map(({ app_id, version }) => ({
+    app_id,
+    version,
+    capability_plan_fingerprint:
+      supplied.find(({ manifest }) => manifest.id === app_id)
+        ?.capabilityPlanFingerprint ?? "f".repeat(64),
+    resident_frame_security: "credentialless_opaque_v1" as const,
+  }));
+  const parsed = parseDeploymentBuildRecord({
+    format: 1,
+    state: "complete",
+    deployment_id: compiled.deploymentId,
+    previous: {
+      deployment_id: null,
+      stable_signature_sha256: null,
+      apps: [],
+      memories: [],
+    },
+    build: {
+      compiler_id: compiled.compilerId,
+      assembler_id: "neutron_actor_v25",
+      environment: compiled.vetKeysEnvironment,
+      deployment_nonce: compiled.deploymentNonce,
+      reachable_module_sha256: [],
+    },
+    packages: packageEntries,
+    target: { apps: targetApps, memories: [] },
+    warnings: {
+      diagnostics: [],
+      compatibility_diagnostics: [],
+      memory_changes: [],
+      removed_apps: [],
+      destructive_memory_roots: [],
+    },
+    installation: {
+      target_canister: "rrkah-fqaaa-aaaaa-aaaaq-cai",
+      mode: "upgrade",
+      argument: { sha256: hashContent(new Uint8Array()), bytes: 0 },
+      wasm_memory_persistence: "keep",
+    },
+    wasm: {
+      raw: {
+        sha256: "c".repeat(64),
+        bytes: compiled.wasm.byteLength,
+        representation: "neutron_compile_result_wasm",
+        content_encoding: "identity",
+      },
+      transport: {
+        sha256: "d".repeat(64),
+        bytes: Math.max(1, compiled.wasm.byteLength - 1),
+        representation: "ic_install_wasm_payload",
+        content_encoding: "gzip",
+        encoder: DEPLOYMENT_WASM_TRANSPORT_ENCODER,
+      },
+    },
+  });
+  if (parsed.state !== "complete") throw new Error("Expected complete fixture");
+  const recordBytes = serializeDeploymentBuildRecord(parsed);
+  return Object.freeze({
+    prepared: Object.freeze({
+      record: parsed,
+      recordBytes,
+      transportWasm: Uint8Array.of(1),
+    }),
+    review: Object.freeze({
+      record: parsed,
+      suppliedPackages: Object.freeze([...packages]),
+    }),
+  });
+}
+
+function packageInformationIdentity(prepared: PreparedPackageInstall) {
+  const recordPath =
+    `${prepared.appPrefix}pkg/legal/package-record.v1.json`;
+  const record = prepared.files.find(({ path }) => path === recordPath);
+  return record === undefined
+    ? { state: "not_supplied" as const }
+    : {
+        state: "verified" as const,
+        sha256: hashContent(record.content),
+      };
 }
 
 function deferred<T>() {

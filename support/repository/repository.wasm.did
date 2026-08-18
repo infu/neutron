@@ -1,0 +1,28 @@
+type ReadRequest = record {index: nat;};
+type PackageReadRequest =
+ record {
+   index: nat;
+   sha256: text;
+ };
+type ManifestReadRequest =
+ record {
+   id: text;
+   index: nat;
+ };
+type CertifiedValue =
+ record {
+   chunks: nat;
+   content: blob;
+ };
+type CertifiedRead =
+ record {
+   asset: opt CertifiedValue;
+   certificate: blob;
+   witness: blob;
+ };
+service : {
+  repo_info: (request: ReadRequest) -> (CertifiedRead) query;
+  repo_manifest: (request: ManifestReadRequest) -> (CertifiedRead) query;
+  repo_manifests: (request: ReadRequest) -> (CertifiedRead) query;
+  repo_package: (request: PackageReadRequest) -> (CertifiedRead) query;
+}

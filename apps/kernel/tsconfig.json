@@ -12,6 +12,7 @@
   "include": [
     "build.ts",
     "evidence/**/*.ts",
+    "generate_package_metadata.ts",
     "moassemble.ts",
     "stamp_wasm_metadata.ts",
     "src/**/*.ts",

@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Chess",
   "id": "chess",
-  "version": 301,
+  "version": 302,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Play complete local, browser-computer, and remote chess games",
   "src": "main.mo",

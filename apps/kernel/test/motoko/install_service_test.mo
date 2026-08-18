@@ -10,10 +10,6 @@ import BackendCallsMemory "../../backend/backend_calls/Memory";
 import BackendCallsService "../../backend/backend_calls/Service";
 import BackendCallTypes "../../backend/backend_calls/Types";
 import CapabilityTypes "../../backend/capabilities/Types";
-import Cert "../../backend/certified_http";
-import V2 "../../backend/certified_http_v2";
-import Allocator "../../backend/certified_assets/Allocator";
-import Forest "../../backend/certified_assets/AuthenticatedForest";
 import InstallMemory "../../backend/install/Memory";
 import InstallLimits "../../backend/install/Limits";
 import InstallService "../../backend/install/Service";
@@ -26,7 +22,38 @@ let OLD_DEPLOYMENT = "11111111111111111111111111111111";
 let DEPLOYMENT = "0123456789abcdef0123456789abcdef";
 let NEXT_DEPLOYMENT = "22222222222222222222222222222222";
 let REINSTALL_DEPLOYMENT = "33333333333333333333333333333333";
+let LEGACY_DEPLOYMENT = "44444444444444444444444444444444";
 let ORIGIN_EPOCH : Nat64 = 17;
+let DEPLOYMENT_BUILD_RECORD_PATH =
+    "/system/deployment-build-record.json";
+
+func stagingPrefix(deploymentId : Text) : Text {
+    "/system/staging/" # deploymentId # "/";
+};
+
+func deploymentBuildRecordCopy(
+    deploymentId : Text,
+) : InstallTypes.AssetCopy {
+    {
+        source = stagingPrefix(deploymentId) #
+            "deployment-build-record.json";
+        target = DEPLOYMENT_BUILD_RECORD_PATH;
+    };
+};
+
+func putAsset(
+    store : Assets.Use,
+    id : Text,
+    content : Blob,
+) : () {
+    store.put({
+        id;
+        chunks = 1;
+        content = [content];
+        content_encoding = "identity";
+        content_type = "application/octet-stream";
+    });
+};
 
 assert (InstallLimits.MAX_APP_INSTANCES == 256);
 assert (
@@ -168,11 +195,49 @@ assert (InstallMemory.deploymentCommitted(memory, OLD_DEPLOYMENT));
 
 let validBegin : InstallTypes.BeginInput = {
     deployment_id = DEPLOYMENT;
-    copies = [];
+    copies = [deploymentBuildRecordCopy(DEPLOYMENT)];
     clear_prefixes = [];
     target_app_inventory = targetRuntime;
 };
 assert (InstallService.isValidBeginInput(validBegin));
+assert (InstallService.hasExactlyOneDeploymentBuildRecordCopy(validBegin));
+assert (not InstallService.hasExactlyOneDeploymentBuildRecordCopy({
+    validBegin with copies = [];
+}));
+assert (not InstallService.hasExactlyOneDeploymentBuildRecordCopy({
+    validBegin with copies = [
+        deploymentBuildRecordCopy(DEPLOYMENT),
+        deploymentBuildRecordCopy(DEPLOYMENT),
+    ];
+}));
+assert (not InstallService.hasExactlyOneDeploymentBuildRecordCopy({
+    validBegin with copies = [{
+        source = stagingPrefix(DEPLOYMENT) # "lookalike.json";
+        target = DEPLOYMENT_BUILD_RECORD_PATH # "/extra";
+    }];
+}));
+assert (InstallService.isValidBeginInput({
+    validBegin with clear_prefixes = ["/pkg/legal/"];
+}));
+assert (InstallService.isValidBeginInput({
+    validBegin with clear_prefixes = [
+        "/system/deployment-build-record.json"
+    ];
+}));
+assert (not InstallService.isValidBeginInput({
+    validBegin with clear_prefixes = [
+        "/system/deployment-build-record.json/extra"
+    ];
+}));
+assert (not InstallService.isValidBeginInput({
+    validBegin with clear_prefixes = ["/pkg/"];
+}));
+assert (not InstallService.isValidBeginInput({
+    validBegin with clear_prefixes = ["/pkg/legal"];
+}));
+assert (not InstallService.isValidBeginInput({
+    validBegin with clear_prefixes = ["/pkg/legal/archive/"];
+}));
 
 func capacityAppId(index : Nat) : Text {
     let suffix = Nat.toText(index);
@@ -214,15 +279,50 @@ assert (not InstallService.isValidBeginInput({
     ];
 }));
 
+class CertificationProbe() {
+    public var depth = 0;
+    public var max_depth = 0;
+    public var begin_count = 0;
+    public var finish_count = 0;
+    public var mutation_count = 0;
+    public var publication_count = 0;
+    var dirty = false;
+
+    public func beginV2PublicationBatch() : () {
+        begin_count += 1;
+        depth += 1;
+        if (depth > max_depth) max_depth := depth;
+    };
+
+    public func finishV2PublicationBatch() : Bool {
+        assert (depth > 0);
+        finish_count += 1;
+        depth -= 1;
+        if (depth > 0 or not dirty) return false;
+        dirty := false;
+        publication_count += 1;
+        true;
+    };
+
+    public func putHash(_key : Text, _hash : Blob) : () {
+        mutation_count += 1;
+        dirty := true;
+    };
+
+    public func put(_key : Text, _value : Blob) : () {
+        mutation_count += 1;
+        dirty := true;
+    };
+
+    public func delete(_key : Text) : () {
+        mutation_count += 1;
+        dirty := true;
+    };
+};
+
 let assetMemory = Assets.init();
 let assets = Assets.use(assetMemory);
-let cert = Cert.CertifiedHttp(
-    Cert.init(),
-    Forest.init(
-        Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
-        Allocator.layoutFingerprint(),
-    ),
-);
+let cert = CertificationProbe();
 let backendCalls : BackendCallTypes.Memory = {
     var next_id = 1;
     reservations = Map.empty<Nat, BackendCallTypes.Reservation>();
@@ -251,7 +351,21 @@ func serviceFor(
 };
 
 let oldService = serviceFor(OLD_DEPLOYMENT, committedRuntime);
+let deploymentRecordSource =
+    deploymentBuildRecordCopy(DEPLOYMENT).source;
+assert (not oldService.isPendingStagingPath(deploymentRecordSource));
+assert (not oldService.copySourcesAvailable(validBegin));
+putAsset(assets, deploymentRecordSource, "first-record");
+assert (oldService.copySourcesAvailable(validBegin));
 oldService.begin(validBegin);
+assert (oldService.isPendingStagingPath(deploymentRecordSource));
+assert (oldService.isPendingStagingPath(
+    stagingPrefix(DEPLOYMENT) # "any-upload",
+));
+assert (not oldService.isPendingStagingPath(
+    stagingPrefix(NEXT_DEPLOYMENT) # "any-upload",
+));
+assert (not oldService.isPendingStagingPath(DEPLOYMENT_BUILD_RECORD_PATH));
 let ?pending = oldService.status() else Runtime.trap("Install status missing");
 assert (pending.removed_apps == ["mail"]);
 assert (pending.committed_app_instances == memory.committed_app_instances);
@@ -302,13 +416,17 @@ assert (
 // authority, and deliberately leaves a monotonic allocation gap.
 oldService.abort({ deployment_id = DEPLOYMENT });
 assert (oldService.status() == null);
+assert (not oldService.isPendingStagingPath(deploymentRecordSource));
+assert (assets.get(deploymentRecordSource) == null);
 assert (memory.next_installation_uid == 4);
 assert (memory.committed_app_instances == [mailInitial, walletInitial]);
 assert (InstallMemory.scopeActive(memory, OLD_DEPLOYMENT, mailInitial.scope));
 assert (InstallMemory.scopeActive(memory, OLD_DEPLOYMENT, walletInitial.scope));
 assert (not didCommit);
 
+putAsset(assets, deploymentRecordSource, "committed-record");
 oldService.begin(validBegin);
+assert (oldService.isPendingStagingPath(deploymentRecordSource));
 let ?secondPending = oldService.status() else Runtime.trap("Second status missing");
 let ?secondJournal = memory.pending else Runtime.trap("Second journal missing");
 assert (InstallService.isValidJournal(secondJournal, ORIGIN_EPOCH));
@@ -380,6 +498,7 @@ let changedInstances = activated.commit(
     },
 );
 assert (activated.status() == null);
+assert (not activated.isPendingStagingPath(deploymentRecordSource));
 assert (didCommit);
 assert (didCommitManagedMemory);
 var replayedManagedMemoryCommit = false;
@@ -407,6 +526,11 @@ assert (walletCommitted.scope == walletInitial.scope);
 assert (InstallMemory.scopeActive(memory, DEPLOYMENT, walletCommitted.scope));
 assert (InstallMemory.scopeActive(memory, DEPLOYMENT, helloCommitted.scope));
 assert (InstallMemory.deploymentCommitted(memory, DEPLOYMENT));
+let ?committedDeploymentRecord =
+    assets.get(DEPLOYMENT_BUILD_RECORD_PATH) else {
+        Runtime.trap("Committed deployment record missing");
+    };
+assert (committedDeploymentRecord.content == ["committed-record"]);
 
 // Uninstall and a later reinstall are distinct installations even though the
 // authored app id is the same. The old browser origin cannot be reopened.
@@ -419,10 +543,15 @@ let withoutHello = [
     ),
 ];
 let committedService = serviceFor(DEPLOYMENT, targetRuntime);
+putAsset(
+    assets,
+    deploymentBuildRecordCopy(NEXT_DEPLOYMENT).source,
+    "next-record",
+);
 committedService.begin({
     deployment_id = NEXT_DEPLOYMENT;
-    copies = [];
-    clear_prefixes = [];
+    copies = [deploymentBuildRecordCopy(NEXT_DEPLOYMENT)];
+    clear_prefixes = [DEPLOYMENT_BUILD_RECORD_PATH];
     target_app_inventory = withoutHello;
 });
 let ?modeChangePending = committedService.status() else {
@@ -479,10 +608,15 @@ let reinstalledRuntime = [
         #credentialless_ephemeral_dedicated_v1,
     ),
 ];
+putAsset(
+    assets,
+    deploymentBuildRecordCopy(REINSTALL_DEPLOYMENT).source,
+    "reinstall-record",
+);
 serviceFor(NEXT_DEPLOYMENT, withoutHello).begin({
     deployment_id = REINSTALL_DEPLOYMENT;
-    copies = [];
-    clear_prefixes = [];
+    copies = [deploymentBuildRecordCopy(REINSTALL_DEPLOYMENT)];
+    clear_prefixes = [DEPLOYMENT_BUILD_RECORD_PATH];
     target_app_inventory = reinstalledRuntime;
 });
 let ?reinstallPending = memory.pending else Runtime.trap("Reinstall missing");
@@ -514,49 +648,101 @@ assert (
     helloCommitted.browser_origin_nonce
 );
 
+// Pending journals created by v0.3.6 predate deployment build records. Their
+// structural predicate deliberately remains record-agnostic so an already
+// staged production upgrade can activate and commit after this Kernel lands.
+let legacyMemory = InstallMemory.init();
+let legacyCommittedRuntime = [runtimeApp("legacy", 100, HASH_A)];
+let legacyTargetRuntime = [runtimeApp("legacy", 101, HASH_F)];
+InstallService.initializeFresh(
+    legacyMemory,
+    OLD_DEPLOYMENT,
+    legacyCommittedRuntime,
+    ORIGIN_EPOCH,
+);
+let legacyAssets = Assets.use(Assets.init());
+let legacyCert = CertificationProbe();
+let legacyBackendCalls : BackendCallTypes.Memory = {
+    var next_id = 1;
+    reservations = Map.empty<Nat, BackendCallTypes.Reservation>();
+};
+func legacyServiceFor(
+    deploymentId : Text,
+    active : [InstallTypes.RuntimeApp],
+) : InstallService.Service {
+    InstallService.Service(
+        legacyMemory,
+        legacyAssets,
+        legacyCert,
+        legacyBackendCalls,
+        deploymentId,
+        active,
+        func(_, _) { true },
+        func(_, _) {},
+        func(_, _) {},
+    );
+};
+let legacyOldService = legacyServiceFor(
+    OLD_DEPLOYMENT,
+    legacyCommittedRuntime,
+);
+putAsset(
+    legacyAssets,
+    deploymentBuildRecordCopy(LEGACY_DEPLOYMENT).source,
+    "legacy-bridge-record-source",
+);
+legacyOldService.begin({
+    deployment_id = LEGACY_DEPLOYMENT;
+    copies = [deploymentBuildRecordCopy(LEGACY_DEPLOYMENT)];
+    clear_prefixes = [];
+    target_app_inventory = legacyTargetRuntime;
+});
+let ?generatedLegacyJournal = legacyMemory.pending else {
+    Runtime.trap("Generated legacy bridge journal missing");
+};
+let recordlessLegacyJournal = {
+    generatedLegacyJournal with copies = [];
+};
+legacyMemory.pending := ?recordlessLegacyJournal;
+assert (InstallService.isValidJournal(
+    recordlessLegacyJournal,
+    ORIGIN_EPOCH,
+));
+let recordlessLegacyBegin : InstallTypes.BeginInput = {
+    deployment_id = LEGACY_DEPLOYMENT;
+    copies = [];
+    clear_prefixes = [];
+    target_app_inventory = legacyTargetRuntime;
+};
+assert (not InstallService.hasExactlyOneDeploymentBuildRecordCopy(
+    recordlessLegacyBegin
+));
+assert (legacyOldService.canReplayBegin(recordlessLegacyBegin));
+legacyOldService.begin(recordlessLegacyBegin);
+assert (legacyMemory.pending == ?recordlessLegacyJournal);
+InstallService.initializeFresh(
+    legacyMemory,
+    LEGACY_DEPLOYMENT,
+    legacyTargetRuntime,
+    ORIGIN_EPOCH + 1,
+);
+ignore legacyServiceFor(
+    LEGACY_DEPLOYMENT,
+    legacyTargetRuntime,
+).commit(
+    { deployment_id = LEGACY_DEPLOYMENT },
+    Principal.fromText("aaaaa-aa"),
+    func(_) {},
+);
+assert (legacyMemory.pending == null);
+assert (InstallMemory.deploymentCommitted(
+    legacyMemory,
+    LEGACY_DEPLOYMENT,
+));
+assert (legacyAssets.get(DEPLOYMENT_BUILD_RECORD_PATH) == null);
 // The install service owns the outer certification transaction. Asset
 // clearing/copying, a nested capability commit, module GC, and staging cleanup
 // must all collapse into one root publication.
-class CertificationProbe() {
-    public var depth = 0;
-    public var max_depth = 0;
-    public var begin_count = 0;
-    public var finish_count = 0;
-    public var mutation_count = 0;
-    public var publication_count = 0;
-    var dirty = false;
-
-    public func beginV2PublicationBatch() : () {
-        begin_count += 1;
-        depth += 1;
-        if (depth > max_depth) max_depth := depth;
-    };
-
-    public func finishV2PublicationBatch() : Bool {
-        assert (depth > 0);
-        finish_count += 1;
-        depth -= 1;
-        if (depth > 0 or not dirty) return false;
-        dirty := false;
-        publication_count += 1;
-        true;
-    };
-
-    public func putHash(_key : Text, _hash : Blob) : () {
-        mutation_count += 1;
-        dirty := true;
-    };
-
-    public func put(_key : Text, _value : Blob) : () {
-        mutation_count += 1;
-        dirty := true;
-    };
-
-    public func delete(_key : Text) : () {
-        mutation_count += 1;
-        dirty := true;
-    };
-};
 
 let batchMemory = InstallMemory.init();
 let batchCommittedRuntime = [runtimeApp("batch", 100, HASH_A)];
@@ -575,6 +761,9 @@ let batchTarget = "/app/batch/new.js";
 let batchOld = "/app/batch/old.js";
 let batchModule = "/mo/" # HASH_A # ".mo";
 let batchModuleGc = batchStage # "module-gc";
+let batchRecordSource =
+    deploymentBuildRecordCopy(DEPLOYMENT).source;
+let batchRecordSuffix = DEPLOYMENT_BUILD_RECORD_PATH # "/retained";
 func putBatchAsset(id : Text, content : Blob) : () {
     batchAssets.put({
         id;
@@ -588,6 +777,9 @@ putBatchAsset(batchSource, "new");
 putBatchAsset(batchOld, "old");
 putBatchAsset(batchModule, "module");
 putBatchAsset(batchModuleGc, Text.encodeUtf8(HASH_A # ".mo\n"));
+putBatchAsset(DEPLOYMENT_BUILD_RECORD_PATH, "old-record");
+putBatchAsset(batchRecordSuffix, "must-survive-exact-clear");
+putBatchAsset(batchRecordSource, "new-record");
 
 let batchBackendCalls : BackendCallTypes.Memory = {
     var next_id = 1;
@@ -631,8 +823,14 @@ let batchService = batchServiceFor(
 );
 batchService.begin({
     deployment_id = DEPLOYMENT;
-    copies = [{ source = batchSource; target = batchTarget }];
-    clear_prefixes = ["/app/batch/"];
+    copies = [
+        { source = batchSource; target = batchTarget },
+        deploymentBuildRecordCopy(DEPLOYMENT),
+    ];
+    clear_prefixes = [
+        "/app/batch/",
+        DEPLOYMENT_BUILD_RECORD_PATH,
+    ];
     target_app_inventory = batchTargetRuntime;
 });
 InstallService.initializeFresh(
@@ -652,12 +850,24 @@ assert (certificationProbe.max_depth == 2);
 assert (certificationProbe.begin_count == 2);
 assert (certificationProbe.finish_count == 2);
 assert (certificationProbe.publication_count == 1);
-assert (certificationProbe.mutation_count == 7);
+assert (certificationProbe.mutation_count == 11);
 assert (batchAssets.get(batchOld) == null);
 assert (batchAssets.get(batchTarget) != null);
 assert (batchAssets.get(batchModule) == null);
 assert (batchAssets.get(batchSource) == null);
 assert (batchAssets.get(batchModuleGc) == null);
+let ?batchCommittedRecord =
+    batchAssets.get(DEPLOYMENT_BUILD_RECORD_PATH) else {
+        Runtime.trap("Batch deployment record missing");
+    };
+assert (batchCommittedRecord.content == ["new-record"]);
+let ?batchRetainedRecordSuffix = batchAssets.get(batchRecordSuffix) else {
+    Runtime.trap("Exact deployment-record clear erased a suffix key");
+};
+assert (
+    batchRetainedRecordSuffix.content == ["must-survive-exact-clear"]
+);
+assert (batchAssets.get(batchRecordSource) == null);
 
 // Install-time backend-call defaults are claimed before the one-way
 // install_code dispatch. The journal decides which app scopes changed, so an
@@ -683,6 +893,8 @@ let ?alphaCommitted = InstallMemory.findApp(
 ) else Runtime.trap("Committed alpha instance missing");
 let reservationAssetsMemory = Assets.init();
 let reservationAssets = Assets.use(reservationAssetsMemory);
+let reservationRecordSource =
+    deploymentBuildRecordCopy(DEPLOYMENT).source;
 let reservationCert = CertificationProbe();
 let reservationBackendCalls : BackendCallTypes.Memory = {
     var next_id = 1;
@@ -858,16 +1070,18 @@ let reservationOldService = reservationServiceFor(
 );
 let reservationBegin : InstallTypes.BeginInput = {
     deployment_id = DEPLOYMENT;
-    copies = [];
+    copies = [deploymentBuildRecordCopy(DEPLOYMENT)];
     clear_prefixes = [];
     target_app_inventory = reservationTargetRuntime;
 };
+putAsset(reservationAssets, reservationRecordSource, "aborted-record");
 reservationOldService.begin(reservationBegin);
 ignore prepareReservationDefaults(reservationOldService);
 reservationOldService.abort({ deployment_id = DEPLOYMENT });
 assert (not BackendCallsMemory.hasInstallClaims(reservationBackendCalls));
 assert (reservationOldService.status() == null);
 
+putAsset(reservationAssets, reservationRecordSource, "fenced-record");
 reservationOldService.begin(reservationBegin);
 ignore prepareReservationDefaults(reservationOldService);
 reservationOldService.markDispatched({ deployment_id = DEPLOYMENT });
@@ -877,6 +1091,7 @@ reservationOldService.abortAfterManagementFence({
 assert (not BackendCallsMemory.hasInstallClaims(reservationBackendCalls));
 assert (reservationOldService.status() == null);
 
+putAsset(reservationAssets, reservationRecordSource, "reservation-record");
 reservationOldService.begin(reservationBegin);
 let finalReservationPreparation =
     prepareReservationDefaults(reservationOldService);
@@ -999,6 +1214,11 @@ expectPromotedDuringCleanup := false;
 assert (sawPromotedDuringCleanup);
 assert (not BackendCallsMemory.hasInstallClaims(reservationBackendCalls));
 assert (BackendCallsMemory.list(reservationBackendCalls).size() == 1);
+let ?reservationDeploymentRecord =
+    reservationAssets.get(DEPLOYMENT_BUILD_RECORD_PATH) else {
+        Runtime.trap("Reservation deployment record missing");
+    };
+assert (reservationDeploymentRecord.content == ["reservation-record"]);
 let ?betaCommitted = InstallMemory.findApp(
     reservationMemory.committed_app_instances,
     "beta",

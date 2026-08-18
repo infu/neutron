@@ -26,6 +26,7 @@ import {
   physicalPublicIngressMethodName,
 } from "neutron-tools/src/physical_names.js";
 import { trustedInstallationContextFromRootKey } from "../src/installation_context.ts";
+import { hashContent } from "neutron-tools/src/hash.js";
 
 const moduleHash = (digit: string): string => digit.repeat(64);
 const schema = (entry: string) => ({ entry, hash: entry });
@@ -922,6 +923,14 @@ test("compiler defaults vetKeys to production and binds explicit local selection
   expect(local.deploymentId).not.toBe(production.deploymentId);
   expect(firstAttempt.deploymentId).not.toBe(secondAttempt.deploymentId);
   expect(firstAttempt.deploymentId).not.toBe(production.deploymentId);
+  expect(production.deploymentNonce).toBeNull();
+  expect(production.vetKeysEnvironment).toBe("production");
+  expect(local.deploymentNonce).toBeNull();
+  expect(local.vetKeysEnvironment).toBe("local");
+  expect(firstAttempt.deploymentNonce).toBe("00".repeat(16));
+  expect(firstAttempt.vetKeysEnvironment).toBe("production");
+  expect(production.previousManagedMemoryInventory).toEqual([]);
+  expect(production.previousStableSignatureSha256).toBeNull();
   expect(withSupportedCertificateVersions(production.wasm)).toBe(
     production.wasm,
   );
@@ -995,6 +1004,10 @@ test("compiler accepts only current-format state-preserving upgrades", async () 
     previousStable: current.stable,
   });
   expect(upgraded.compatibilityDiagnostics).toEqual([]);
+  expect(upgraded.previousStableSignatureSha256).toBe(
+    hashContent(current.stable),
+  );
+  expect(upgraded.previousManagedMemoryInventory).toEqual([]);
 
   const localContext = trustedInstallationContextFromRootKey(
     new Uint8Array(133).fill(0x6b),

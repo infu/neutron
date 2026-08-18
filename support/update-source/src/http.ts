@@ -10,6 +10,9 @@ import {
   PACKAGE_CACHE_CONTROL,
   PACKAGE_CONTENT_TYPE,
   RELEASE_CACHE_CONTROL,
+  SOURCE_COMPRESSED_MAX_BYTES,
+  SOURCE_CACHE_CONTROL,
+  SOURCE_CONTENT_TYPE,
   sha256Hex,
 } from "./model.ts";
 
@@ -73,14 +76,57 @@ export async function readPackageAsset(options: {
   fetch?: CertifiedFetch;
   timeoutMs?: number;
 }): Promise<ReadAssetResult> {
-  const result = await readCertifiedAsset({
+  return readImmutableDigestAsset({
     ...options,
     maximumBytes: REPOSITORY_LIMITS.packageBytes,
-    expectedContentType: PACKAGE_CONTENT_TYPE,
-    expectedCacheControl: PACKAGE_CACHE_CONTROL,
+    contentType: PACKAGE_CONTENT_TYPE,
+    cacheControl: PACKAGE_CACHE_CONTROL,
     accept: PACKAGE_CONTENT_TYPE,
+  });
+}
+
+export async function readSourceAsset(options: {
+  origin: string;
+  path: string;
+  expectedDigest: string;
+  expectedSize: number;
+  fetch?: CertifiedFetch;
+  timeoutMs?: number;
+}): Promise<ReadAssetResult> {
+  return readImmutableDigestAsset({
+    ...options,
+    maximumBytes: SOURCE_COMPRESSED_MAX_BYTES,
+    contentType: SOURCE_CONTENT_TYPE,
+    cacheControl: SOURCE_CACHE_CONTROL,
+    accept: SOURCE_CONTENT_TYPE,
+  });
+}
+
+async function readImmutableDigestAsset(options: {
+  origin: string;
+  path: string;
+  expectedDigest: string;
+  expectedSize: number;
+  maximumBytes: number;
+  contentType: string;
+  cacheControl: string;
+  accept: string;
+  fetch?: CertifiedFetch;
+  timeoutMs?: number;
+}): Promise<ReadAssetResult> {
+  const result = await readCertifiedAsset({
+    origin: options.origin,
+    path: options.path,
+    maximumBytes: options.maximumBytes,
+    expectedContentType: options.contentType,
+    expectedCacheControl: options.cacheControl,
+    accept: options.accept,
     cache: "default",
     requireIdentityEncoding: true,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+    ...(options.timeoutMs !== undefined
+      ? { timeoutMs: options.timeoutMs }
+      : {}),
   });
   if (result.status === "missing") return result;
   if (result.bytes.byteLength !== options.expectedSize) {

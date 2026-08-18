@@ -20,49 +20,49 @@
     },
     "packages": [
       {
-        "path": "apps/contacts/contacts.v0.3.1.neutron"
+        "path": "apps/contacts/contacts.v0.3.2.neutron"
       },
       {
-        "path": "apps/wallet/wallet.v0.3.2.neutron"
+        "path": "apps/wallet/wallet.v0.3.3.neutron"
       },
       {
-        "path": "apps/mail/mail.v0.3.2.neutron"
+        "path": "apps/mail/mail.v0.3.3.neutron"
       },
       {
-        "path": "apps/hello/hello.v0.2.1.neutron"
+        "path": "apps/hello/hello.v0.2.2.neutron"
       },
       {
-        "path": "apps/kitchensink/kitchensink.v0.3.1.neutron"
+        "path": "apps/kitchensink/kitchensink.v0.3.2.neutron"
       },
       {
-        "path": "apps/gemma/gemma.v0.2.1.neutron"
+        "path": "apps/gemma/gemma.v0.2.2.neutron"
       },
       {
-        "path": "apps/hullshift/hullshift.v0.2.1.neutron"
+        "path": "apps/hullshift/hullshift.v0.2.2.neutron"
       },
       {
-        "path": "apps/vfs/files.v0.4.3.neutron"
+        "path": "apps/vfs/files.v0.4.4.neutron"
       },
       {
-        "path": "apps/spreadsheet/spreadsheet.v0.3.1.neutron"
+        "path": "apps/spreadsheet/spreadsheet.v0.3.2.neutron"
       },
       {
-        "path": "apps/agent/agent.v0.3.1.neutron"
+        "path": "apps/agent/agent.v0.3.2.neutron"
       },
       {
-        "path": "apps/chess/chess.v0.3.1.neutron"
+        "path": "apps/chess/chess.v0.3.2.neutron"
       },
       {
-        "path": "apps/jetcreeper/jetcreeper.v0.3.1.neutron"
+        "path": "apps/jetcreeper/jetcreeper.v0.3.2.neutron"
       },
       {
-        "path": "apps/mysubnet/mysubnet.v0.3.1.neutron"
+        "path": "apps/mysubnet/mysubnet.v0.3.2.neutron"
       },
       {
-        "path": "apps/vetkeys_fixture_test/vetkeys_fixture.v0.1.0.neutron"
+        "path": "apps/vetkeys_fixture_test/vetkeys_fixture.v0.1.1.neutron"
       },
       {
-        "path": "apps/vetkeys_fixture_test/vetkeys_fixture_peer.v0.1.0.neutron"
+        "path": "apps/vetkeys_fixture_test/vetkeys_fixture_peer.v0.1.1.neutron"
       }
     ]
   }

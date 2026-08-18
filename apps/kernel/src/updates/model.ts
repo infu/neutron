@@ -9,6 +9,7 @@ import type {
   Permission,
 } from "../lib/perm.ts";
 import type { CompileResult } from "neutron-compiler/src/install.js";
+import type { DeploymentBuildReviewInput } from "../install_review/deployment_build_review.ts";
 
 export const UPDATE_CHECK_WAVE_SIZE = 20;
 export const UPDATE_RELEASE_MAX_BYTES = 16 * 1024;
@@ -145,6 +146,7 @@ export type UpdateReviewApp = Readonly<{
 
 export type UpdateReview = Readonly<{
   apps: readonly UpdateReviewApp[];
+  deploymentBuild: DeploymentBuildReviewInput;
   compiledSizeKiB: number;
   migrationPlan: CompileResult["migrationPlan"];
   diagnostics: readonly string[];

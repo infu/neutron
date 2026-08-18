@@ -16,7 +16,7 @@
     "publish": "bun scripts/publish.ts",
     "production:publish": "bun scripts/publish-catalog.ts release-catalog.json"
   },
-  "license": "GPL-3.0-only",
+  "license": "Apache-2.0",
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
     "@dfinity/identity": "^3.4.3",

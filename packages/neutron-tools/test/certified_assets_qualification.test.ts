@@ -74,6 +74,19 @@ describe("generic Certified Assets qualification contract", () => {
       "gateway_publication_range_reassembly",
       "gateway_browser_cors_body_delivery",
     ]);
+    const cycleMetric = CERTIFIED_ASSETS_METRIC_DEFINITIONS.find(
+      ({ metric }) => metric === "low_side_cycle_estimate",
+    )!;
+    expect(cycleMetric.release_limit).toBe("40000000000");
+    expect(cycleMetric.measurement).toContain(
+      "maximum exact single-update non-negative app-usage delta",
+    );
+    expect(cycleMetric.measurement).toContain(
+      "one unobserved post-update snapshot",
+    );
+    expect(cycleMetric.measurement).toContain(
+      "ordered per-update deltas reconcile exactly with the outer case bracket",
+    );
     const churn = CERTIFIED_ASSETS_QUALIFICATION_CASES.find(
       ({ id }) => id === "allocator_churn",
     )!;

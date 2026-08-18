@@ -17,7 +17,6 @@ import { getNeutronId } from "../config.ts";
 import {
   getApps,
   isAuthorityPendingState,
-  requestAppUninstall,
   uninstall_app,
   useAppsStore,
 } from "../reducer/apps.ts";
@@ -85,6 +84,31 @@ import { useKernelUiModeStore } from "../ui_mode.ts";
 import { checkAppUpdates } from "../updates/service.ts";
 import { useUpdateCheckStore } from "../updates/store.ts";
 import { AppInstallRecoveryPanel } from "./AppInstallRecoveryPanel.tsx";
+import {
+  compareInstalledModuleHash,
+  loadCertifiedInstalledModuleHash,
+  type CertifiedInstalledModuleHash,
+} from "./deployment_integrity.ts";
+import {
+  DeploymentModuleHashDetail,
+  DeploymentModuleHashError,
+} from "./DeploymentIntegrityDetails.tsx";
+import {
+  DeploymentBuildRecordDetails,
+  type DeploymentBuildRecordViewState,
+} from "./DeploymentBuildRecordDetails.tsx";
+import {
+  DEPLOYMENT_BUILD_RECORD_PATH,
+  deploymentRecordRuntimeInconsistency,
+  loadInstalledDeploymentBuildRecord,
+  type InstalledDeploymentBuildRecordInspection,
+} from "./deployment_build_record.ts";
+import {
+  installedPackageAssetBasePath,
+  loadInstalledPackageRecordInventory,
+  type InstalledPackageRecordInspection,
+  type InstalledPackageRecordInventory,
+} from "./installed_package_record.ts";
 
 type ResourceState<T> = {
   data: T | null;
@@ -92,10 +116,24 @@ type ResourceState<T> = {
   loading: boolean;
 };
 
+type IntegrityRefreshFence =
+  | Readonly<{ status: "loading" }>
+  | Readonly<{ status: "ready" }>
+  | Readonly<{
+      status: "raced";
+      beforeDeploymentId: string;
+      afterDeploymentId: string;
+    }>
+  | Readonly<{ status: "unavailable"; message: string }>;
+
 const initialResource = <T,>(): ResourceState<T> => ({
   data: null,
   error: null,
   loading: true,
+});
+
+const LOADING_PACKAGE_RECORD = Object.freeze({
+  status: "loading" as const,
 });
 
 export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
@@ -113,6 +151,16 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
     useState<ResourceState<KernelSettingsSnapshot>>(initialResource);
   const [runtime, setRuntime] =
     useState<ResourceState<KernelRuntimeInfo>>(initialResource);
+  const [installedModuleHash, setInstalledModuleHash] =
+    useState<ResourceState<CertifiedInstalledModuleHash>>(initialResource);
+  const [deploymentBuildRecord, setDeploymentBuildRecord] =
+    useState<ResourceState<InstalledDeploymentBuildRecordInspection>>(
+      initialResource,
+    );
+  const [integrityRefreshFence, setIntegrityRefreshFence] =
+    useState<IntegrityRefreshFence>({ status: "loading" });
+  const [packageRecords, setPackageRecords] =
+    useState<ResourceState<InstalledPackageRecordInventory>>(initialResource);
   const [backendReservations, setBackendReservations] =
     useState<ResourceState<BackendCallReservation[]>>(initialResource);
   const [scheduledTasks, setScheduledTasks] =
@@ -140,6 +188,18 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
     const generation = ++refreshGeneration.current;
     setSnapshot((current) => ({ ...current, error: null, loading: true }));
     setRuntime((current) => ({ ...current, error: null, loading: true }));
+    setInstalledModuleHash((current) => ({
+      ...current,
+      error: null,
+      loading: true,
+    }));
+    setDeploymentBuildRecord((current) => ({
+      ...current,
+      error: null,
+      loading: true,
+    }));
+    setIntegrityRefreshFence({ status: "loading" });
+    setPackageRecords({ data: null, error: null, loading: true });
     setBackendReservations((current) => ({
       ...current,
       error: null,
@@ -163,9 +223,25 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
       const registryRefresh = isAuthorityPendingState(currentApps)
         ? Promise.resolve(currentApps.list)
         : getApps();
+      const packageRecordRefresh = registryRefresh.then((registry) =>
+        loadInstalledPackageRecordInventory(registry),
+      );
+      const runtimeBeforeRefresh = actor.then((kernel) =>
+        kernel.kernel_runtime_info(),
+      );
+      const installedModuleHashRefresh = runtimeBeforeRefresh.then(() =>
+        loadCertifiedInstalledModuleHash(),
+      );
+      const deploymentBuildRecordRefresh = runtimeBeforeRefresh.then(() =>
+        loadInstalledDeploymentBuildRecord({ canisterId }),
+      );
+      const runtimeAfterRefresh = Promise.allSettled([
+        installedModuleHashRefresh,
+        deploymentBuildRecordRefresh,
+      ]).then(() => actor.then((kernel) => kernel.kernel_runtime_info()));
       const results = await Promise.allSettled([
         registryRefresh,
-        actor.then((kernel) => kernel.kernel_runtime_info()),
+        runtimeBeforeRefresh,
         loadKernelSettingsSnapshot(actor),
         actor
           .then((kernel) => kernel.kernel_scheduled_tasks_snapshot(null))
@@ -175,20 +251,52 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
         readKernelAssetTextIfExists(INSTALL_PROVENANCE_PATH).then((value) =>
           installProvenanceOrEmpty(value === undefined ? undefined : JSON.parse(value)),
         ),
+        installedModuleHashRefresh,
+        deploymentBuildRecordRefresh,
+        packageRecordRefresh,
+        runtimeAfterRefresh,
         loadKernelAppUsageSnapshot(actor),
       ]);
       if (generation !== refreshGeneration.current) return;
 
       const [
         ,
-        runtimeResult,
+        runtimeBeforeResult,
         snapshotResult,
         scheduledResult,
         capabilitiesResult,
         reservationsResult,
         provenanceResult,
+        installedModuleHashResult,
+        deploymentBuildRecordResult,
+        packageRecordsResult,
+        runtimeAfterResult,
         appUsageResult,
       ] = results;
+      const runtimeResult =
+        runtimeAfterResult?.status === "fulfilled"
+          ? runtimeAfterResult
+          : runtimeBeforeResult;
+      const nextIntegrityFence: IntegrityRefreshFence =
+        runtimeBeforeResult.status !== "fulfilled"
+          ? {
+              status: "unavailable",
+              message: errorMessage(runtimeBeforeResult.reason),
+            }
+          : runtimeAfterResult?.status !== "fulfilled"
+            ? {
+                status: "unavailable",
+                message: errorMessage(runtimeAfterResult?.reason),
+              }
+            : runtimeBeforeResult.value.deployment_id !==
+                runtimeAfterResult.value.deployment_id
+              ? {
+                  status: "raced",
+                  beforeDeploymentId: runtimeBeforeResult.value.deployment_id,
+                  afterDeploymentId: runtimeAfterResult.value.deployment_id,
+                }
+              : { status: "ready" };
+      setIntegrityRefreshFence(nextIntegrityFence);
       setRuntime((current) =>
         runtimeResult.status === "fulfilled"
           ? { data: runtimeResult.value, error: null, loading: false }
@@ -252,6 +360,45 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
               loading: false,
             },
       );
+      setInstalledModuleHash((current) =>
+        installedModuleHashResult?.status === "fulfilled"
+          ? {
+              data: installedModuleHashResult.value,
+              error: null,
+              loading: false,
+            }
+          : {
+              ...current,
+              error: errorMessage(installedModuleHashResult?.reason),
+              loading: false,
+            },
+      );
+      setDeploymentBuildRecord((current) =>
+        deploymentBuildRecordResult?.status === "fulfilled"
+          ? {
+              data: deploymentBuildRecordResult.value,
+              error: null,
+              loading: false,
+            }
+          : {
+              ...current,
+              error: errorMessage(deploymentBuildRecordResult?.reason),
+              loading: false,
+            },
+      );
+      setPackageRecords(() =>
+        packageRecordsResult?.status === "fulfilled"
+          ? {
+              data: packageRecordsResult.value,
+              error: null,
+              loading: false,
+            }
+          : {
+              data: null,
+              error: errorMessage(packageRecordsResult?.reason),
+              loading: false,
+            },
+      );
       const settingsSucceeded = results
         .slice(0, results.length - 1)
         .every((result) => result.status === "fulfilled");
@@ -269,11 +416,13 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
         await checkAppUpdates();
       }
       if (generation !== refreshGeneration.current) return;
-      if (settingsSucceeded) setLastSuccessfulRefresh(Date.now());
+      if (settingsSucceeded && nextIntegrityFence.status === "ready") {
+        setLastSuccessfulRefresh(Date.now());
+      }
     } finally {
       settingsRequestActive.current = false;
     }
-  }, []);
+  }, [canisterId]);
 
   useEffect(() => {
     void refresh();
@@ -282,9 +431,76 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
     };
   }, [refresh]);
 
+  const installedModuleHashComparison = useMemo(() => {
+    if (
+      integrityRefreshFence.status !== "ready" ||
+      !installedModuleHash.data ||
+      installedModuleHash.error !== null ||
+      !runtime.data ||
+      runtime.error !== null ||
+      deploymentBuildRecord.error !== null ||
+      deploymentBuildRecord.data?.status !== "declared"
+    ) {
+      return null;
+    }
+    return compareInstalledModuleHash(
+      installedModuleHash.data,
+      runtime.data.deployment_id,
+      deploymentBuildRecord.data.expectedModuleHash,
+    );
+  }, [
+    deploymentBuildRecord.data,
+    deploymentBuildRecord.error,
+    installedModuleHash.data,
+    installedModuleHash.error,
+    integrityRefreshFence.status,
+    runtime.data,
+    runtime.error,
+  ]);
+  const deploymentRecordRuntimeError = useMemo(() => {
+    if (
+      integrityRefreshFence.status !== "ready" ||
+      !runtime.data ||
+      runtime.error !== null ||
+      deploymentBuildRecord.error !== null ||
+      deploymentBuildRecord.data?.status !== "declared"
+    ) {
+      return null;
+    }
+    return deploymentRecordRuntimeInconsistency(
+      deploymentBuildRecord.data.record,
+      runtime.data,
+    );
+  }, [
+    deploymentBuildRecord.data,
+    deploymentBuildRecord.error,
+    integrityRefreshFence.status,
+    runtime.data,
+    runtime.error,
+  ]);
+
   useEffect(() => {
-    if (runtime.error) setRuntimeOpen(true);
-  }, [runtime.error]);
+    const recordNeedsAttention =
+      deploymentBuildRecord.error !== null ||
+      deploymentBuildRecord.data?.status === "invalid" ||
+      deploymentBuildRecord.data?.status === "unavailable" ||
+      integrityRefreshFence.status === "raced" ||
+      integrityRefreshFence.status === "unavailable" ||
+      deploymentRecordRuntimeError !== null ||
+      installedModuleHashComparison?.status === "deployment_mismatch" ||
+      installedModuleHashComparison?.status === "mismatch";
+    if (runtime.error || installedModuleHash.error || recordNeedsAttention) {
+      setRuntimeOpen(true);
+    }
+  }, [
+    deploymentBuildRecord.data,
+    deploymentBuildRecord.error,
+    deploymentRecordRuntimeError,
+    integrityRefreshFence.status,
+    installedModuleHash.error,
+    installedModuleHashComparison,
+    runtime.error,
+  ]);
 
   const rows = useMemo(
     () => settingsAppRows(apps, runtime.data),
@@ -335,6 +551,10 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
   const refreshing =
     snapshot.loading ||
     runtime.loading ||
+    installedModuleHash.loading ||
+    deploymentBuildRecord.loading ||
+    integrityRefreshFence.status === "loading" ||
+    packageRecords.loading ||
     backendReservations.loading ||
     scheduledTasks.loading ||
     capabilities.loading ||
@@ -342,21 +562,39 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
     provenance.loading ||
     updateCheckPhase === "checking" ||
     registryStatus === "loading";
+  const deploymentBuildRecordView: DeploymentBuildRecordViewState =
+    deploymentBuildRecord.data ??
+    (deploymentBuildRecord.loading
+      ? { status: "loading" }
+      : {
+          status: "unavailable",
+          recordPath: DEPLOYMENT_BUILD_RECORD_PATH,
+          message:
+            deploymentBuildRecord.error ??
+            "Deployment build record inspection did not return a result",
+        });
+  const integrityRefreshRace =
+    integrityRefreshFence.status === "raced"
+      ? {
+          beforeDeploymentId: integrityRefreshFence.beforeDeploymentId,
+          afterDeploymentId: integrityRefreshFence.afterDeploymentId,
+        }
+      : null;
+  const integrityComparisonUnavailableMessage =
+    integrityRefreshFence.status === "unavailable"
+      ? `Could not fence the integrity refresh: ${integrityRefreshFence.message}`
+      : deploymentBuildRecord.error
+        ? `Deployment build record is unavailable: ${deploymentBuildRecord.error}`
+        : installedModuleHash.error
+          ? `Certified live module hash is unavailable: ${installedModuleHash.error}`
+          : runtime.error
+            ? `Runtime identity is unavailable: ${runtime.error}`
+            : null;
 
-  const uninstall = async (
-    appId: string,
-    appName: string,
-    memoryIds: string[],
-  ) => {
-    const approved = await requestAppUninstall({
-      appId,
-      appName,
-      memoryIds,
-    });
-    if (!approved) return;
+  const uninstall = async (appId: string) => {
     try {
-      await uninstall_app(appId);
-      await refresh();
+      const result = await uninstall_app(appId);
+      if (result) await refresh();
     } catch {
       // The shared operation dialog owns the actionable error.
     }
@@ -617,6 +855,16 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                   dependencyGraph.plan === null ||
                   impact.direct.length > 0;
                 const appProvenance = provenance.data?.apps[id];
+                const legalInspection: InstalledPackageRecordInspection =
+                  packageRecords.loading
+                    ? LOADING_PACKAGE_RECORD
+                    : packageRecords.data?.[id] ?? {
+                        status: "unavailable",
+                        recordPath: `${installedPackageAssetBasePath(id)}legal/package-record.v1.json`,
+                        message:
+                          packageRecords.error ??
+                          "Installed package inspection did not return a result",
+                      };
                 const appInstance = appInstances[id];
                 const usage: AppUsageCellState = isKernel
                   ? { kind: "system" }
@@ -655,6 +903,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                     dependents={impact.direct}
                     entry={entry}
                     id={id}
+                    legalInspection={legalInspection}
                     uiMode={uiMode}
                     key={id}
                     memories={memories}
@@ -671,11 +920,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                     }
                     {...(appProvenance ? { provenance: appProvenance } : {})}
                     onUninstall={() =>
-                      void uninstall(
-                        id,
-                        entry.name,
-                        memories.map((memory) => memory.id),
-                      )
+                      void uninstall(id)
                     }
                     onRevokeReservation={(reservation) =>
                       void revokeReservation(reservation)
@@ -750,11 +995,29 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
               onRetry={() => void refresh()}
             />
           ) : null}
+          {installedModuleHash.error ? (
+            <DeploymentModuleHashError
+              message={installedModuleHash.error}
+              onRetry={() => void refresh()}
+            />
+          ) : null}
           {runtime.data ? (
             <dl className="settings-runtime-grid" data-tid="settings-runtime">
               <Detail label="Deployment" value={runtime.data.deployment_id} />
               <Detail label="Compiler" value={runtime.data.compiler_id} />
               <Detail label="Assembler" value={runtime.data.assembler_id} />
+              {installedModuleHash.data ? (
+                <DeploymentModuleHashDetail
+                  hash={installedModuleHash.data.sha256}
+                />
+              ) : (
+                <Detail
+                  label="Installed canister Wasm SHA-256"
+                  value={
+                    installedModuleHash.loading ? "Loading…" : "Unavailable"
+                  }
+                />
+              )}
               <Detail
                 label="RTS"
                 value={snapshot.data?.rts_version ?? "Unavailable"}
@@ -790,6 +1053,19 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
           ) : runtime.loading ? (
             <SectionLoading label="Loading runtime information" />
           ) : null}
+          <DeploymentBuildRecordDetails
+            comparison={
+              deploymentRecordRuntimeError === null
+                ? installedModuleHashComparison
+                : null
+            }
+            comparisonUnavailableMessage={
+              integrityComparisonUnavailableMessage
+            }
+            inspection={deploymentBuildRecordView}
+            refreshRace={integrityRefreshRace}
+            runtimeInconsistency={deploymentRecordRuntimeError}
+          />
         </SettingsDisclosure>
 
         <AgentModeSettings />

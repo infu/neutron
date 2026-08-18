@@ -1,3 +1,12 @@
+/**
+ * Protocol provenance (reviewed 15 August 2026): this local minimal reader is
+ * implemented against the public DFINITY IC Registry interfaces at immutable
+ * revision eb55873567bcda6cdcf3c0a573d4db13daaa2c8e. It does not vendor the
+ * upstream .proto or Rust source files. The Registry transport and key files
+ * inherit IC-1.0; the node, node-operator, and data-center protobuf definitions
+ * inherit Apache-2.0. Exact paths, hashes, and license copies are recorded in
+ * ../THIRD_PARTY_NOTICES.md and ../README.md.
+ */
 import { HttpAgent } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
 
@@ -438,4 +447,3 @@ function isLocalNetwork(): boolean {
     || hostname === "::1"
     || hostname === "[::1]";
 }
-

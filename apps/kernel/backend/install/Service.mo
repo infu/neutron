@@ -22,6 +22,8 @@ module {
     let MAX_MODULE_GC_BYTES = 1_400_000;
     let NAT64_MAX : Nat64 = 18_446_744_073_709_551_615;
     let ORIGIN_NONCE_DOMAIN = "neutron.browser-origin.v2";
+    let DEPLOYMENT_BUILD_RECORD_PATH =
+        "/system/deployment-build-record.json";
     let HEX = [
         "0", "1", "2", "3", "4", "5", "6", "7",
         "8", "9", "a", "b", "c", "d", "e", "f",
@@ -124,6 +126,25 @@ module {
             case (?value) value;
             case null Runtime.trap("Browser-origin epoch is not initialized");
         };
+        // Static uploads finish before begin records the journal. From that
+        // point until commit/abort, its staging snapshot is immutable even to
+        // another authorized browser session. Internal commit/abort cleanup
+        // operates on Assets directly and is therefore not blocked here.
+        public func isPendingStagingPath(path : Text) : Bool {
+            let ?journal = mem.pending else return false;
+            let stage = stagingPrefix(journal.deployment_id);
+            Text.startsWith(path, #text stage);
+        };
+
+        // A new journal must never fence an incomplete upload. Once begin
+        // succeeds, public static mutations are locked until commit/abort, so
+        // prove every declared copy source is already durable beforehand.
+        public func copySourcesAvailable(input : Types.BeginInput) : Bool {
+            for (copy in input.copies.vals()) {
+                if (assets.get(copy.source) == null) return false;
+            };
+            true;
+        };
         // Read-only exact-replay decision used by begin. This is intentionally
         // internal to the install service; the canister API still exposes only
         // the checked update, whose rejection is the assertion below.
@@ -164,6 +185,13 @@ module {
             // invisible capacity hold to wedge every later deployment.
             BackendCallsMemory.removeInstallClaims(backendCalls);
             assert (isValidBeginInput(input));
+            // Every journal first created by this Kernel generation carries
+            // exactly one authoritative deployment record. Restored v0.3.6
+            // pending journals remain valid for activation/commit because
+            // replay and isValidJournal intentionally use the structural
+            // compatibility predicate above instead of this release gate.
+            assert (hasExactlyOneDeploymentBuildRecordCopy(input));
+            assert (copySourcesAvailable(input));
             assert (input.deployment_id != runningDeploymentId);
             // The old actor independently proves stable committed identity
             // against its compiler-generated runtime. The client supplies no
@@ -439,6 +467,10 @@ module {
         };
 
         func clearAssets(prefix : Text) : () {
+            if (prefix == DEPLOYMENT_BUILD_RECORD_PATH) {
+                if (assets.delete(prefix)) cert.delete(prefix);
+                return;
+            };
             for (key in assets.allKeys(prefix).vals()) {
                 ignore assets.delete(key);
                 cert.delete(key);
@@ -467,10 +499,24 @@ module {
             if (Text.startsWith(copy.target, #text "/system/staging/")) return false;
         };
         for (prefix in input.clear_prefixes.vals()) {
-            if (not Text.startsWith(prefix, #text "/app/")) return false;
+            if (
+                prefix != "/pkg/legal/" and
+                prefix != "/system/deployment-build-record.json" and
+                not Text.startsWith(prefix, #text "/app/")
+            ) return false;
             if (Text.contains(prefix, #text "..")) return false;
         };
         true;
+    };
+
+    public func hasExactlyOneDeploymentBuildRecordCopy(
+        input : Types.BeginInput,
+    ) : Bool {
+        var count = 0;
+        for (copy in input.copies.vals()) {
+            if (copy.target == DEPLOYMENT_BUILD_RECORD_PATH) count += 1;
+        };
+        count == 1;
     };
 
     func beginInputMatchesJournal(

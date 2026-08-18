@@ -9,14 +9,15 @@
     "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
     "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
     "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
     "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
-    "package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "test": "npm run package && bun test",
     "typecheck": "tsc -b --pretty false",
     "watch": "bun build.ts watch"
   },
   "author": "",
-  "license": "GPL-3.0-only",
+  "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   "description": "Live IC subnet node globe for Neutron.",
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
@@ -38,4 +39,3 @@
     "neutron-scripts": "^1.1.0"
   }
 }
-

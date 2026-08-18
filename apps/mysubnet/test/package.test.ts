@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
   preparePackageInstall,
@@ -17,7 +18,26 @@ const registrySourceUrl = new URL("../src/registry.ts", import.meta.url);
 const globeSourceUrl = new URL("../src/globe.ts", import.meta.url);
 const appSourceUrl = new URL("../src/index.tsx", import.meta.url);
 const styleSourceUrl = new URL("../src/style.scss", import.meta.url);
-const packageUrl = new URL("../mysubnet.v0.3.1.neutron", import.meta.url);
+const readmeUrl = new URL("../README.md", import.meta.url);
+const thirdPartyNoticesUrl = new URL(
+  "../THIRD_PARTY_NOTICES.md",
+  import.meta.url,
+);
+const dfinityIcLicenseUrl = new URL(
+  "../LICENSE.DFINITY-IC-1.0",
+  import.meta.url,
+);
+const dfinityApacheLicenseUrl = new URL(
+  "../LICENSE.DFINITY-IC-Apache-2.0",
+  import.meta.url,
+);
+const packageUrl = new URL("../mysubnet.v0.3.2.neutron", import.meta.url);
+
+const DFINITY_IC_REVISION = "eb55873567bcda6cdcf3c0a573d4db13daaa2c8e";
+
+function sha256(contents: string): string {
+  return createHash("sha256").update(contents).digest("hex");
+}
 
 async function readManifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -31,7 +51,7 @@ test("My Subnet declares one safe responsive globe tile", async () => {
     format: 3,
     id: "mysubnet",
     name: "My Subnet",
-    version: 301,
+    version: 302,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [{
@@ -110,6 +130,30 @@ test("protobuf reader skips mixed Registry fields safely", () => {
   expect(fields[0]?.value).toBe(300n);
   expect(new TextDecoder().decode(fields[1]?.value as Uint8Array)).toBe("icp");
   expect(new DataView((fields[2]?.value as Uint8Array).buffer).getFloat32(0, true)).toBe(10);
+});
+
+test("Registry protocol provenance is immutable and carries exact licenses", async () => {
+  const [registrySource, readme, notices, icLicense, apacheLicense] =
+    await Promise.all([
+      readFile(registrySourceUrl, "utf8"),
+      readFile(readmeUrl, "utf8"),
+      readFile(thirdPartyNoticesUrl, "utf8"),
+      readFile(dfinityIcLicenseUrl, "utf8"),
+      readFile(dfinityApacheLicenseUrl, "utf8"),
+    ]);
+
+  expect(registrySource).toContain(DFINITY_IC_REVISION);
+  expect(readme).toContain(DFINITY_IC_REVISION);
+  expect(notices).toContain(DFINITY_IC_REVISION);
+  expect(readme).not.toContain("github.com/dfinity/ic/blob/master/");
+  expect(notices).toContain("Internet Computer Community Source License");
+  expect(notices).toContain("Apache-2.0");
+  expect(sha256(icLicense)).toBe(
+    "3ba11e25f86c79b944d0ee682d978b66230e12032eae32fd9d4ce2f327683162",
+  );
+  expect(sha256(apacheLicense)).toBe(
+    "663dab5e2a11fed35cd86d277d83f52cbeac29eb2b08581d10aaacbaa3ced4ef",
+  );
 });
 
 test("bundled Natural Earth topology decodes into valid land rings", () => {

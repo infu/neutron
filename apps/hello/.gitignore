@@ -1,3 +1,4 @@
 node_modules
 dist
 *.neutron
+!hello.v0.2.1.neutron

@@ -7,6 +7,21 @@ paths.
 
 These rules apply to the Kernel and every production app in this repository.
 
+## Recommended License For New Apps
+
+- New Neutron apps should normally use the repository's exact `LICENSE.APP`,
+  the Neutron Sovereign Application License, Version 1.0
+  (`LicenseRef-Neutron-Sovereign-Application-License-1.0`).
+- This is an intentional ecosystem choice: it keeps provider-operated use of
+  the app aligned with user-sovereign systems and prevents a non-user-sovereign
+  platform from simply taking the app while ignoring the NSAL's sovereignty
+  conditions.
+- Use the shared license, application-notice, and offered-source packaging
+  workflow rather than copying, shortening, or paraphrasing the license text.
+- A copyright owner may deliberately choose another license for a specific app,
+  but that exception should be explicit and documented. Do not silently default
+  a new app to MIT, Apache-2.0, GPL, or an inherited workspace license.
+
 ## Preserve And Migrate Memory
 
 - Audit every managed-memory root before releasing an app change.
@@ -60,12 +75,18 @@ The canonical memory contract and examples are in
   ```
 
 - Only one production publisher may run at a time. Review the prepared archives
-  before invoking it; publication has no interactive confirmation.
+  and matching offered-source artifacts before invoking it; publication has no
+  interactive confirmation.
 - Run the same command a second time against the same bytes. The required
-  postflight is `batch_id: null` with every selected package reported as
-  `unchanged`, and matching version, size, and SHA-256.
-- If a publish response is lost, rerun with the exact same archive bytes. Do not
-  rebuild, change bytes, or bump again until the existing outcome is reconciled.
+  receipt-v2 postflight is `batch_id: null`, with every selected package and
+  offered source reported as `unchanged` and matching its version or URL, path,
+  size, and SHA-256 as applicable.
+- If a publish response is lost, rerun with the exact same archive bytes and
+  source-artifact bytes. Do not rebuild, change bytes, or bump again until the
+  existing outcome is reconciled.
+- Publish a compatible Kernel successor and app set in one catalog transaction
+  when they are intended for one **Upgrade all** action. Do not create a timed
+  Kernel-first publication phase.
 - Publishing makes an update discoverable; it does not install it into existing
   Neutrons and does not update the Dispenser starter.
 - Update and stage `support/dispenser/starter-packages.json` separately, and only
@@ -83,8 +104,9 @@ For each changed production app:
 2. Test clean initialization and every supported production migration path.
 3. Bump the app manifest release version.
 4. Run the complete package command and release tests.
-5. Publish to the production update-source canister.
-6. Repeat publication and require the verified no-op receipt.
+5. Publish the package and any offered source artifact atomically through the
+   production update-source workflow.
+6. Repeat publication and require the verified receipt-v2 no-op.
 
 Do not publish first and repair migration, versioning, or package evidence
 afterward.

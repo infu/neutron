@@ -247,10 +247,11 @@ test("retains an immutable Kernel-attested requester through final review state"
     true,
   );
 
-  repositorySetupState.review(42);
+  const deploymentReview = Object.freeze({ marker: "review" }) as never;
+  repositorySetupState.review(deploymentReview);
   expect(useRepositorySetupStore.getState()).toMatchObject({
     phase: "review",
-    compiledSize: 42,
+    deploymentReview,
     offeredBy,
   });
 });

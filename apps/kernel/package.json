@@ -11,7 +11,8 @@
     "certified-assets:qualify": "bun evidence/qualification/supervisor.ts",
     "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
     "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
-    "package": "npm run validate && npm run build && npm run mopack && bun ../../packages/neutron-scripts/src/pack.ts",
+    "package:metadata": "bun generate_package_metadata.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
     "watch": "bun build.ts watch",
     "start": "npm run watch",
@@ -21,7 +22,7 @@
     "loadLevel": 0
   },
   "author": "",
-  "license": "GPL-3.0-only",
+  "license": "SEE LICENSE IN LICENSE",
   "description": "",
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
@@ -38,6 +39,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@icp-sdk/core": "5.4.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "esbuild": "^0.28.1",

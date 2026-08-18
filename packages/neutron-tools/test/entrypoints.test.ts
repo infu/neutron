@@ -30,7 +30,7 @@ test("protocol and kernel entrypoints install no browser listener", async () => 
   }
 });
 
-test("package exposes explicit protocol, app, and kernel roles", async () => {
+test("package exposes explicit protocol, app, kernel, and record roles", async () => {
   const manifest = await Bun.file(
     new URL("../package.json", import.meta.url),
   ).json();
@@ -39,5 +39,7 @@ test("package exposes explicit protocol, app, and kernel roles", async () => {
     "./protocol": "./src/protocol.ts",
     "./app": "./src/app_entry.ts",
     "./kernel": "./src/kernel.ts",
+    "./package_record": "./src/package_record.ts",
+    "./package_record.js": "./src/package_record.ts",
   });
 });

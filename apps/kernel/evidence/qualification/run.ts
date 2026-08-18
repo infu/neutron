@@ -136,6 +136,7 @@ import {
   verifyPortableCorsInChromium,
   type CertifiedAssetsBrowserCorsEvidence,
 } from "./browser_cors.ts";
+import { formatQualificationFailure } from "./failure.ts";
 
 const REPOSITORY_ROOT = path.resolve(import.meta.dir, "../../../..");
 const RECEIPT_PATH = path.join(
@@ -721,78 +722,141 @@ function maximumExactBytes(
   return maximum;
 }
 
-function lowSideCycleEstimate(
+export function lowSideCycleEstimate(
   bracketed: readonly BracketedRuntime[],
 ): bigint {
   assertBracketedRuntimeSet(bracketed);
-  let total = 0n;
+  let maximum = 0n;
+  let meteredUpdateCount = 0;
   for (const bracket of bracketed) {
     const observedUpdates = bracket.runtime.observations.candid.filter(
       ({ mode }) => mode === "update",
-    ).length;
-    const before = appUsageFor(
-      bracket.before.kernel_app_usage,
-      bracket.appId,
-      `before ${bracket.appId}`,
     );
-    const after = appUsageFor(
+    const meteredUpdates = bracket.runtime.updateUsageBrackets;
+    meteredUpdateCount += meteredUpdates.length;
+    if (meteredUpdates.length !== observedUpdates.length) {
+      throw new Error(
+        `Qualification per-update metering for ${bracket.appId} recorded ${meteredUpdates.length} brackets for ${observedUpdates.length} observed updates`,
+      );
+    }
+    const outer = appUsageDelta(
+      bracket.before.kernel_app_usage,
       bracket.after.kernel_app_usage,
       bracket.appId,
-      `after ${bracket.appId}`,
+      `${bracket.appId} case bracket`,
     );
-    if (before === null && after === null) {
-      if (observedUpdates !== 0) {
+    if (
+      outer.executions !== BigInt(observedUpdates.length) ||
+      (observedUpdates.length > 0 && outer.instructions === 0n)
+    ) {
+      throw new Error(
+        `Qualification metering for ${bracket.appId} does not match its ${observedUpdates.length} observed updates`,
+      );
+    }
+
+    const summed: AppUsageDelta = {
+      instructions: 0n,
+      executions: 0n,
+      outgoingCycles: 0n,
+    };
+    for (const [index, metered] of meteredUpdates.entries()) {
+      const observed = observedUpdates[index]!;
+      if (metered.method !== observed.method) {
         throw new Error(
-          `Qualification metering omitted ${observedUpdates} updates for ${bracket.appId}`,
+          `Qualification per-update metering for ${bracket.appId} method ${metered.method} does not match observed update ${observed.method} at index ${index}`,
         );
       }
-      continue;
-    }
-    if (after === null) {
-      throw new Error(
-        `Qualification app usage row disappeared for ${bracket.appId}`,
+      const delta = appUsageDelta(
+        metered.before,
+        metered.after,
+        bracket.appId,
+        `${bracket.appId} update ${index} (${metered.method})`,
       );
+      if (delta.executions !== 1n || delta.instructions === 0n) {
+        throw new Error(
+          `Qualification per-update metering for ${bracket.appId} update ${index} does not contain exactly one positive-instruction execution`,
+        );
+      }
+      summed.instructions += delta.instructions;
+      summed.executions += delta.executions;
+      summed.outgoingCycles += delta.outgoingCycles;
+      const estimate = lowSideCycles(delta);
+      if (estimate > maximum) maximum = estimate;
     }
+
     if (
-      before !== null &&
-      before.installationUid !== after.installationUid
+      summed.instructions !== outer.instructions ||
+      summed.executions !== outer.executions ||
+      summed.outgoingCycles !== outer.outgoingCycles
     ) {
       throw new Error(
-        `Qualification app usage changed installation UID for ${bracket.appId}`,
+        `Qualification per-update metering for ${bracket.appId} does not reconcile with its outer case bracket`,
       );
     }
-    const instructionDelta = nonnegativeDelta(
+  }
+  if (meteredUpdateCount === 0) {
+    throw new Error(
+      "Qualification low-side cycle metric has no metered update",
+    );
+  }
+  return maximum;
+}
+
+type AppUsageDelta = {
+  instructions: bigint;
+  executions: bigint;
+  outgoingCycles: bigint;
+};
+
+function appUsageDelta(
+  beforeValue: unknown,
+  afterValue: unknown,
+  appId: CertifiedAssetsQualificationFixtureId,
+  label: string,
+): AppUsageDelta {
+  const before = appUsageFor(beforeValue, appId, `${label} before`);
+  const after = appUsageFor(afterValue, appId, `${label} after`);
+  if (before === null && after === null) {
+    return { instructions: 0n, executions: 0n, outgoingCycles: 0n };
+  }
+  if (after === null) {
+    throw new Error(
+      `Qualification app usage row disappeared inside ${label}`,
+    );
+  }
+  if (
+    before !== null &&
+    before.installationUid !== after.installationUid
+  ) {
+    throw new Error(
+      `Qualification app usage changed installation UID inside ${label}`,
+    );
+  }
+  return {
+    instructions: nonnegativeDelta(
       before?.instructions ?? 0n,
       after.instructions,
-      `${bracket.appId} lifetime instructions`,
-    );
-    const executionDelta = nonnegativeDelta(
+      `${label} lifetime instructions`,
+    ),
+    executions: nonnegativeDelta(
       before?.executions ?? 0n,
       after.executions,
-      `${bracket.appId} lifetime executions`,
-    );
-    const outgoingCyclesDelta = nonnegativeDelta(
+      `${label} lifetime executions`,
+    ),
+    outgoingCycles: nonnegativeDelta(
       before?.outgoingCycles ?? 0n,
       after.outgoingCycles,
-      `${bracket.appId} lifetime outgoing cycles`,
-    );
-    if (
-      observedUpdates > 0 &&
-      (
-        instructionDelta === 0n ||
-        executionDelta !== BigInt(observedUpdates)
-      )
-    ) {
-      throw new Error(
-        `Qualification metering for ${bracket.appId} does not match its ${observedUpdates} observed updates`,
-      );
-    }
-    total +=
-      instructionDelta +
-      5_000_000n * executionDelta +
-      outgoingCyclesDelta;
-  }
-  return total;
+      `${label} lifetime outgoing cycles`,
+    ),
+  };
+}
+
+function lowSideCycles(delta: AppUsageDelta): bigint {
+  return (
+    delta.instructions +
+    5_000_000n * delta.executions +
+    delta.outgoingCycles
+  );
 }
 
 function allocatorHighWaterGrowth(
@@ -960,6 +1024,8 @@ async function runBoundedPhysicalSample(input: {
       "Physical qualification collection generation is not positive",
     );
   }
+  const populationClockStartNs =
+    await input.environment.readReplicaTimeNs();
 
   const initial = await capturedRuntimeCall(
     runtime,
@@ -1277,6 +1343,7 @@ async function runBoundedPhysicalSample(input: {
       batch_transcript_sha256:
         qualificationPhysicalBatchTranscriptSha256(populationCalls),
       final_entry_count: PHYSICAL_POPULATION_ENTRIES,
+      population_clock_start_ns: populationClockStartNs,
       receipt_rollovers: receiptRollovers,
       usage_before_overflow: usageBeforeOverflow.observation,
       usage_before_overflow_decoded: usageBeforeOverflowDecoded,
@@ -2128,7 +2195,7 @@ if (import.meta.main) {
   try {
     await main();
   } catch (error) {
-    console.error(error instanceof Error ? error.stack : String(error));
+    console.error(formatQualificationFailure(error));
     process.exitCode = 1;
   }
 }

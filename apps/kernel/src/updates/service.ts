@@ -4,11 +4,13 @@ import {
   type CompileResult,
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
+import type { CompleteDeploymentBuildRecord } from "neutron-compiler/src/deployment_record.js";
 import { REPOSITORY_LIMITS } from "neutron-tools/repository";
 import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import { diffCapabilityPlans } from "neutron-tools/src/capabilities/wire.js";
 import { normalizeManifestUpdateSource } from "neutron-tools/src/schema.js";
 import { configInstallDisclosures } from "../lib/perm.ts";
+import { createDeploymentBuildReviewModel } from "../install_review/deployment_build_review.ts";
 import {
   beginPackageInstallSession,
   getAppUpdateSnapshot,
@@ -50,6 +52,7 @@ let activeAbort: AbortController | null = null;
 let activeSession: PackageUpdateSession | null = null;
 let activeCompiled: CompileResult | null = null;
 let activePackages: readonly PreparedPackageInstall[] = [];
+let activeDeploymentBuildRecord: CompleteDeploymentBuildRecord | null = null;
 let activeProvenance: Readonly<
   Record<string, UpdateSourceInstallProvenance>
 > = Object.freeze({});
@@ -429,7 +432,7 @@ export async function prepareSelectedUpdates(
     }
 
     const copyCount =
-      4 +
+      5 +
       packages.reduce(
         (total, pkg) =>
           total +
@@ -446,12 +449,17 @@ export async function prepareSelectedUpdates(
       session.cancel();
       return;
     }
+    const deployment = session.getPreparedDeployment(packages, compiled);
+    // Validate every display/export reconciliation before publishing raw archive
+    // bytes into the review store. A bad record remains a preparation failure.
+    createDeploymentBuildReviewModel(deployment.review);
     const review: UpdateReview = Object.freeze({
       apps: Object.freeze(
         reviewApps.sort((left, right) =>
           compareCanonicalText(left.appId, right.appId),
         ),
       ),
+      deploymentBuild: deployment.review,
       compiledSizeKiB: Math.ceil(compiled.wasm.byteLength / 1024),
       migrationPlan: compiled.migrationPlan,
       diagnostics: Object.freeze(compiled.diagnostics.map(diagnosticText)),
@@ -461,6 +469,7 @@ export async function prepareSelectedUpdates(
     });
     activePackages = Object.freeze([...packages]);
     activeCompiled = compiled;
+    activeDeploymentBuildRecord = deployment.prepared.record;
     activeProvenance = Object.freeze({ ...provenance });
     activeSelectionFingerprint = selectionFingerprint(candidates);
     updateCheckState.review(review);
@@ -469,6 +478,7 @@ export async function prepareSelectedUpdates(
     if (activeSession === session) activeSession = null;
     activeCompiled = null;
     activePackages = [];
+    activeDeploymentBuildRecord = null;
     activeProvenance = Object.freeze({});
     activeSelectionFingerprint = "";
     if (attempt !== generation || isAbortError(error)) return;
@@ -480,13 +490,28 @@ export async function prepareSelectedUpdates(
 
 export async function applyPreparedUpdates(): Promise<void> {
   const state = useUpdateCheckStore.getState();
+  if (state.phase !== "review" || !state.review) return;
   if (
-    state.phase !== "review" ||
-    !state.review ||
     !activeSession ||
     !activeCompiled ||
+    !activeDeploymentBuildRecord ||
     activePackages.length === 0
-  ) return;
+  ) {
+    abandonPreparedSession();
+    updateCheckState.error(
+      "The prepared update expired before deployment. Review it again.",
+      "prepare",
+    );
+    return;
+  }
+  if (state.review.deploymentBuild.record !== activeDeploymentBuildRecord) {
+    abandonPreparedSession();
+    updateCheckState.error(
+      "The deployment build record changed after compilation. Review it again.",
+      "prepare",
+    );
+    return;
+  }
   const candidates = selectedCandidates(state.results, state.selectedAppIds);
   if (selectionFingerprint(candidates) !== activeSelectionFingerprint) {
     abandonPreparedSession();
@@ -499,13 +524,20 @@ export async function applyPreparedUpdates(): Promise<void> {
   const session = activeSession;
   const compiled = activeCompiled;
   const packages = activePackages;
+  const deploymentBuildRecord = activeDeploymentBuildRecord;
   const provenance = activeProvenance;
   updateCheckState.applying();
   try {
-    await session.deploy({ packages, compiled, provenance });
+    await session.deploy({
+      packages,
+      compiled,
+      deploymentBuildRecord,
+      provenance,
+    });
     activeSession = null;
     activeCompiled = null;
     activePackages = [];
+    activeDeploymentBuildRecord = null;
     activeProvenance = Object.freeze({});
     activeSelectionFingerprint = "";
     updateCheckState.success(packages.length);
@@ -513,6 +545,7 @@ export async function applyPreparedUpdates(): Promise<void> {
     activeSession = null;
     activeCompiled = null;
     activePackages = [];
+    activeDeploymentBuildRecord = null;
     activeProvenance = Object.freeze({});
     activeSelectionFingerprint = "";
     updateCheckState.error(safeUpdateError(error), "apply");
@@ -557,6 +590,7 @@ function abandonPreparedSession(): void {
   activeSession = null;
   activeCompiled = null;
   activePackages = [];
+  activeDeploymentBuildRecord = null;
   activeProvenance = Object.freeze({});
   activeSelectionFingerprint = "";
 }

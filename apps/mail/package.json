@@ -9,9 +9,11 @@
     "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
     "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
     "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
     "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
-    "package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts",
-    "test": "npm run typecheck && npm run package && bun test test && npm run test:motoko",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
+    "test": "npm run typecheck && npm run package && bun test test && npm run test:motoko && npm run test:memory",
+    "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo",
     "test:motoko": "bun test/motoko/run.ts",
     "typecheck": "tsc -b --pretty false",
     "test:e2e:typecheck": "tsc -p e2e/tsconfig.json --pretty false",
@@ -22,7 +24,7 @@
     "vetkeys:kat:capture": "bun scripts/capture-vetkeys-kat.ts",
     "watch": "bun build.ts watch"
   },
-  "license": "GPL-3.0-only",
+  "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   "description": "Private encrypted messages between Neutron canisters",
   "dependencies": {
     "@dfinity/principal": "^3.4.3",

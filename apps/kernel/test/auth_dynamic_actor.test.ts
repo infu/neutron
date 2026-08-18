@@ -20,5 +20,5 @@ test("isolated dynamic self-actor cache", async () => {
   ]);
 
   expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
-  expect(`${stdout}\n${stderr}`).toContain("3 pass");
+  expect(`${stdout}\n${stderr}`).toContain("4 pass");
 });

@@ -59,8 +59,16 @@ export type QualificationUsageDiagnosticsSnapshot = Readonly<{
   kernel_app_usage: unknown;
 }>;
 
+export type QualificationUpdateUsageBracket = Readonly<{
+  method: string;
+  before: unknown;
+  after: unknown;
+}>;
+
 export interface QualificationSampleRuntime extends SampleRuntime {
   readonly appId: CertifiedAssetsQualificationFixtureId;
+  readonly updateUsageBrackets:
+    readonly QualificationUpdateUsageBracket[];
   rawHttpRequest(
     request: CertifiedHttpQueryRequest,
   ): Promise<CertifiedHttpQueryResponse>;
@@ -136,6 +144,9 @@ class QualificationSampleRuntimeImpl
   readonly #collectionIds: ReadonlySet<string>;
   readonly #candid: RawCandidObservation[] = [];
   readonly #http: CertifiedHttpObservation[] = [];
+  readonly #updateUsageBrackets: QualificationUpdateUsageBracket[] = [];
+  #updateUsageCursor: unknown;
+  #updateUsageCursorArmed = false;
   #callTail: Promise<void> = Promise.resolve();
 
   constructor(input: QualificationSampleRuntimeInput, client: RawPocketIcClient) {
@@ -188,6 +199,10 @@ class QualificationSampleRuntimeImpl
       candid: Object.freeze([...this.#candid]),
       http: Object.freeze([...this.#http]),
     });
+  }
+
+  get updateUsageBrackets(): readonly QualificationUpdateUsageBracket[] {
+    return Object.freeze([...this.#updateUsageBrackets]);
   }
 
   call(method: SampleLogicalMethod, args: readonly unknown[]): Promise<unknown> {
@@ -368,22 +383,21 @@ class QualificationSampleRuntimeImpl
       method: physicalMethod,
       payload: request,
     };
+    const meterUpdate = mode === "update" && this.#updateUsageCursorArmed;
+    const usageBefore = meterUpdate ? this.#updateUsageCursor : undefined;
     const reply = mode === "query"
       ? await this.#client.queryCanister(this.#instanceId, call)
       : await this.#client.awaitIngressMessage(
           this.#instanceId,
           await this.#client.submitIngressMessage(this.#instanceId, call),
         );
+    const usageAfter = meterUpdate
+      ? await this.#unobservedKernelAppUsageSnapshot()
+      : undefined;
     if (!(reply instanceof Uint8Array)) {
       throw new Error(`PocketIC ${physicalMethod} returned non-byte Candid`);
     }
-    const decoded = IDL.decode(method.retTypes, reply);
-    if (decoded.length !== method.retTypes.length || decoded.length !== 1) {
-      throw new Error(
-        `PocketIC ${physicalMethod} returned the wrong Candid arity`,
-      );
-    }
-    const value = deepFreezeDecoded(decoded[0]);
+    const value = decodeSingleReply(method, reply, physicalMethod);
     this.#candid.push(Object.freeze({
       schema: CERTIFIED_ASSETS_RAW_CANDID_OBSERVATION_SCHEMA,
       mode,
@@ -391,8 +405,55 @@ class QualificationSampleRuntimeImpl
       request: Object.freeze(exactBytes(request)),
       reply: Object.freeze(exactBytes(reply)),
     }));
+    if (
+      mode === "query" &&
+      physicalMethod === "kernel_app_usage_snapshot"
+    ) {
+      this.#updateUsageCursor = value;
+      this.#updateUsageCursorArmed = true;
+    }
+    if (meterUpdate) {
+      this.#updateUsageBrackets.push(Object.freeze({
+        method: physicalMethod,
+        before: usageBefore,
+        after: usageAfter,
+      }));
+      this.#updateUsageCursor = usageAfter;
+    }
     return value;
   }
+
+  async #unobservedKernelAppUsageSnapshot(): Promise<unknown> {
+    const request = new Uint8Array(IDL.encode(
+      KernelAppUsageMethod.argTypes,
+      [null],
+    ));
+    const physicalMethod = "kernel_app_usage_snapshot";
+    const reply = await this.#client.queryCanister(this.#instanceId, {
+      sender: this.#caller,
+      canisterId: this.#canister,
+      method: physicalMethod,
+      payload: request,
+    });
+    if (!(reply instanceof Uint8Array)) {
+      throw new Error(`PocketIC ${physicalMethod} returned non-byte Candid`);
+    }
+    return decodeSingleReply(KernelAppUsageMethod, reply, physicalMethod);
+  }
+}
+
+function decodeSingleReply(
+  method: IDL.FuncClass,
+  reply: Uint8Array,
+  physicalMethod: string,
+): unknown {
+  const decoded = IDL.decode(method.retTypes, reply);
+  if (decoded.length !== method.retTypes.length || decoded.length !== 1) {
+    throw new Error(
+      `PocketIC ${physicalMethod} returned the wrong Candid arity`,
+    );
+  }
+  return deepFreezeDecoded(decoded[0]);
 }
 
 function createRuntime(

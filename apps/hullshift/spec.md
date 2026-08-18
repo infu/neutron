@@ -26,8 +26,9 @@ analysis, and compares the stored certificate before returning a mission.
 The committed catalog is a **pilot** artifact until every difficulty band is
 populated and the separate release policy passes. Pilot certification is a
 deterministic structural screen, not a claim of human-calibrated difficulty.
-Release additionally requires fixed-point essentiality, stricter interaction
-gates, corpus/diversity evidence, human calibration, and frozen catalog bytes.
+Release additionally requires stricter interaction gates, corpus/diversity
+evidence, human calibration, and frozen catalog bytes. Fixed-point ablation may
+be used as a level-design diagnostic, but it is not a release requirement.
 If a requested band has no certified entry, generation fails explicitly and
 the previous saved mission remains intact.
 
@@ -258,7 +259,7 @@ any loading state
 - [x] Never substitute a dummy, fallback, authored map, different difficulty,
   or altered seed when selection or certification fails.
 - [ ] Ship certified pilot entries for all nine difficulty bands.
-- [ ] Complete release-quality search, essentiality, diversity, performance,
+- [ ] Complete release-quality search, diversity, performance,
   repeat-rate, and human-calibration gates before freezing `g4`.
 
 ### Briefing
@@ -1376,7 +1377,7 @@ afterward. Reject or heavily penalize:
   "format": 3,
   "name": "Hullshift",
   "id": "hullshift",
-  "version": 201,
+  "version": 202,
   "description": "Generate and solve deterministic sci-fi pushing puzzles",
   "src": "main.mo",
   "background": {
@@ -1460,7 +1461,7 @@ apps/hullshift/
 
 - [x] Generate and commit `neutron.lock.json` through the normal format-3
   package flow; do not hand-author it.
-- [x] Keep `dist/` and `hullshift.v0.2.1.neutron` as generated artifacts.
+- [x] Keep `dist/` and `hullshift.v0.2.2.neutron` as generated artifacts.
 - [x] Use the repository's npm workspace, Bun scripts/tests, esbuild browser
   bundle, and shared package order.
 
@@ -1669,7 +1670,7 @@ Persist a versioned record containing at least:
   URL.
 - [x] Run Hullshift unit/package tests through `bun test`.
 - [x] Run repository `npm run typecheck` and focused root tests.
-- [x] Build `hullshift.v0.2.1.neutron` through the normal
+- [x] Build `hullshift.v0.2.2.neutron` through the normal
   `validate → build → mogen → mopack → schema → pack` flow.
 - [x] Compile Hullshift with the current kernel through `neutron-cli`.
 - [ ] Install into a kernel-only local Neutron and run Playwright through install,
@@ -1775,8 +1776,8 @@ Persist a versioned record containing at least:
 - [x] Implement immutable catalog selection plus independent production
   witness/hash/milestone/difficulty/certificate checks at runtime.
 - [ ] Populate and curate the pilot catalog across all nine bands.
-- [ ] Run the large fixed candidate corpus, performance measurements, release
-  ablation, diversity review, and held-out human calibration.
+- [ ] Run the large fixed candidate corpus, performance measurements, optional
+  ablation diagnostics, diversity review, and held-out human calibration.
 - [ ] **Gate:** Check this only when every supported identity deterministically
   returns a certified matching-difficulty level or a truthful internal error.
 

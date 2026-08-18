@@ -13,8 +13,10 @@ git rev-parse HEAD
 git -C "$MOTOKO_REPO" rev-parse HEAD
 ```
 
-Do not compare a raw `.wasm` hash with a gzip transport hash. Record the
-filename, byte length, and SHA-256 for every comparison.
+Do not compare a raw `.wasm` hash with a gzip transport hash. Neutron creates
+its install transport with the fixed encoder identity
+`fflate@0.8.3:default-level:mtime=0`. Record the byte domain, filename, byte
+length, and SHA-256 for every comparison.
 
 ## 1. Verify the browser compiler
 
@@ -126,11 +128,17 @@ export NEUTRON_ID='<new-neutron-canister-id>'
 icp canister status -e ic --identity "$ICP_IDENTITY" "$NEUTRON_ID"
 ```
 
-Compare the live module hash with the exact `wasm_module` bytes submitted by
-the provisioning record. Keep the raw compiler output hash and gzip transport
-hash separately, and verify the certified `/canister/<id>/module_hash` path
-when the caller is not an IC controller.
+Compare the live module hash with SHA-256 of the exact deterministic gzip
+`wasm_module` transport bytes submitted by the provisioning record. Do not
+compare it with `rawWasmSha256`. Keep the raw compiler output and transport
+hashes separately, and verify the certified `/canister/<id>/module_hash` path
+when the caller is not an IC controller. This is one canister-level value for
+the complete Kernel-plus-app actor, not one hash per installed app.
 
 The check is complete only when the compiler assets, Dispenser raw Wasm,
 starter archives and transport Wasm, and the newly installed live module all
 match their corresponding source-built artifacts.
+
+For the state-preserving candidate transition from the released `0.3.6` Kernel to
+the GPL-only `0.3.7` bridge, including memory and no-publication constraints,
+use [License And Deployment Records](./license-and-deployment-records.md#historical-v035-and-v036-to-v037-gpl-bridge-candidate-checklist).

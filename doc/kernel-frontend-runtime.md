@@ -278,6 +278,34 @@ kernel in the same install journal. It is a source/integrity record, not an
 update link, subscription, private record, or provider endorsement. Manual
 package replacement clears a stale repository entry and uninstall removes it.
 
+Settings independently inspects the fixed package-information sidecar for
+every registry row: `/pkg/legal/package-record.v1.json` for the Kernel and
+`/app/<id>/pkg/legal/package-record.v1.json` for an app. It first reads the
+bounded record and referenced manifest only, then verifies the record's
+manifest ID, version, dependencies, and memory declaration against that row.
+It does not fetch license texts, notices, memory locks, embedded source, or an
+HTTPS source offer merely to render the table. In normal mode, an explicit
+download action fetches an installed license or notice and verifies its exact
+size and SHA-256 before exposing an inert Blob download. **Download and verify**
+does the same for an HTTPS source offer: it sends no credentials, accepts no
+redirect or transforming HTTP content encoding, enforces the shared 17 MiB
+ceiling and the recorded byte length, verifies SHA-256, and only then starts the
+download.
+Archive-only embedded source remains in the original package and is not offered
+as an installed asset. Developer mode may show the direct source URL, but labels
+that link as unverified. A missing record is labelled legacy/undeclared; a
+present invalid record remains an error and is never treated as a license.
+
+The Runtime section also reads the one public certified deployment record at
+`/system/deployment-build-record.json` and the live certificate-verified IC
+module hash. It validates the record's target canister and same-deployment
+runtime identity/inventories before comparing the live whole-canister hash
+with the record's deterministic gzip transport SHA-256. It exposes the
+canonical JSON for copy/download and keeps missing, unreadable, invalid, stale,
+inconsistent, match, and mismatch states distinct. No installed-app row is
+given its own module hash. The exact record contracts and GPL bridge behavior
+are in [License And Deployment Records](./license-and-deployment-records.md).
+
 Launcher and Settings share one kernel-owned uninstall confirmation and one
 global app-operation state. The confirmation lists owned memory roots when
 known. Verified uninstall performs message-bus cleanup, removes tiles from all
@@ -291,9 +319,55 @@ text, and supports adding or removing either authority. Removing an entry uses
 a destructive confirmation. The active browser principal cannot remove its own
 authorization and is marked `(current)` in the authorized-principals list; the
 same identity is not repeated in the Settings overview. The Neutron canister
-cannot remove itself as controller.
-Controller entries are described as the stronger capability because they can
-replace code, change settings, stop, or delete the canister.
+cannot remove itself as controller and is visibly identified as the
+`Self-Controller`. The Self-Controller performs checked in-product upgrades and
+controller-list changes only after an authorized owner action.
+
+Controller Authority is separate from Kernel owner authorization. Every other
+IC controller has equal management-plane power: it can replace the complete
+Wasm, change or remove controllers, change settings, stop or delete the
+canister, and potentially remove the owner's authority. Entering a controller
+principal therefore opens a default-cancel alert dialog. The Kernel makes no
+controller change until the owner reviews that warning and explicitly selects
+`Add controller`. Every non-Self-Controller entry remains removable through
+the same Settings surface.
+
+#### Independent controller management and Self-Controller recovery
+
+An owner can add a principal they directly control as an external controller.
+That controller provides an independent platform path if the installed Kernel
+cannot perform its checked upgrade path. It is not an additional Neutron user,
+and merely being an IC controller does not grant ordinary Kernel authorization.
+
+Settings is the ordinary way to inspect, add, and remove controllers. A user
+who controls an external controller can also use the platform tooling directly:
+
+```sh
+dfx canister status <neutron-canister-id> --network ic
+dfx canister update-settings <neutron-canister-id> --network ic \
+  --add-controller <principal>
+dfx canister update-settings <neutron-canister-id> --network ic \
+  --remove-controller <principal>
+```
+
+Run those commands with the `dfx` identity for an existing external controller.
+Inspect the controller list before and after every change. Avoid
+`--set-controller` unless replacing the complete list is deliberate: it removes
+controllers not named in that command.
+
+If an external action removes the Self-Controller, Settings can still inspect
+the controller list but cannot change it. Restore checked in-product upgrades
+by using an existing external controller to add the Neutron canister principal
+back to that same canister:
+
+```sh
+dfx canister update-settings <neutron-canister-id> --network ic \
+  --add-controller <neutron-canister-id>
+```
+
+Direct controller replacement bypasses the Kernel's schema, migration,
+dependency, and data-loss checks. Use it only with a reviewed complete Wasm and
+an explicit understanding of the state risk.
 
 The separate `App-isolated keys` disclosure is also collapsed by default and
 loads `kernel_vetkeys_admin_snapshot` only when opened. It groups slots by app
@@ -318,6 +392,7 @@ type AppRegistryEntry = {
   name: string;
   version: number;
   format: 3;
+  update_source?: string;
   description?: string;
   icon: string;
   tiles: Array<{
@@ -338,6 +413,11 @@ type AppRegistryEntry = {
   };
   capability_plan: CapabilityPlanWireV1;
   capability_plan_fingerprint: string;
+  dependencies?: Record<string, {
+    app: string;
+    min_version: number;
+    functions: string[];
+  }>;
   functions: Array<{
     name: string;
     // Exact physical actor method; absent for internal functions and
@@ -347,6 +427,7 @@ type AppRegistryEntry = {
     access: "authorized" | "public" | "internal";
     async: "sync" | "async" | "async*";
     args: string[];
+    expose?: "apps";
   }>;
 };
 ```
@@ -747,19 +828,27 @@ package install workflow:
    CORS, and stream under a 32 MiB ceiling.
 3. Retain those exact bytes for the complete attempt; there is no refetch after
    review.
-4. Unpack and validate the package through shared install helpers.
+4. Unpack and validate the package through shared install helpers. If
+   `legal/package-record.v1.json` is present, validate it; absence retains the
+   documented legacy/undeclared state rather than making the archive invalid.
 5. Compute package size and an immutable structured disclosure snapshot from
    the normalized manifest.
-6. Compile the combined actor in the browser while the user reviews the
-   install request.
-7. After approval, upload immutable modules, stage mutable files, record the
-   journal, and signal sibling tabs to fence their app authority. A compressed
+6. Read a consistency-fenced predecessor, compile the complete combined actor,
+   and create the canonical deployment build record and exact deterministic
+   gzip transport. Expose that sealed record for inspection, copy, or download
+   before install-code dispatch.
+7. After approval of the reviewed result, revalidate the record against the
+   exact package, compiler, predecessor, and transport facts. Upload immutable
+   modules, stage the record with all mutable files, record the journal, and
+   signal sibling tabs to fence their app authority. A compressed
    actor that fits the 2 MiB ingress budget uses `kernel_install_code`;
    otherwise the same compiler path clears the self-controller's management
    chunk store, uploads sequential 1 MiB journal-bound chunks, and calls
    `kernel_install_code_chunked` with only their hashes. It then verifies
    runtime identity, clears temporary chunks, and commits.
-8. Re-read the runtime inventory with an absent journal on both sides of the
+8. Commit the same canonical record atomically with the target registry and
+   package assets after the expected runtime responds. Re-read the runtime
+   inventory with an absent journal on both sides of the
    read, reconcile it exactly with the committed registry, and only then replace
    the local registry and app-instance stores. A second signal lets sibling
    tabs perform the same committed reconciliation immediately.

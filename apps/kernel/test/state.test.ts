@@ -1,5 +1,6 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import { registryApp } from "./app_registry_fixture.ts";
+import { uninstallDeploymentRecordFixture } from "./deployment_record_fixture.ts";
 
 const capabilityPlanFingerprint = "a".repeat(64);
 
@@ -104,13 +105,22 @@ function tick(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function uninstallReview(
+  record = uninstallDeploymentRecordFixture(),
+) {
+  return Object.freeze({
+    record,
+    suppliedPackages: Object.freeze([]),
+  });
+}
+
 beforeEach(() => {
   resolveAppUninstall(false);
   resetUiAttentionState();
   resetStores();
 });
 
-test("app approval waits for compiled wasm state", async () => {
+test("app approval waits for the exact compiled deployment review", async () => {
   const request = appRequest({
     id: "hello",
     packageName: "Hello",
@@ -138,8 +148,19 @@ test("app approval waits for compiled wasm state", async () => {
   useAppsStore.getState().setCompiled({ size: 5 });
   appApprove();
 
+  await tick();
+  expect(resolved).toBe(false);
+  expect(useAppsStore.getState().request?.id).toBe("hello");
+
+  useAppsStore.getState().setCompiled({
+    size: 5,
+    deploymentReview: uninstallReview(),
+  });
+  appApprove();
+
   await expect(request).resolves.toBeUndefined();
   expect(useAppsStore.getState().request).toBeNull();
+  expect(useAppsStore.getState().compiled).toBeNull();
 });
 
 test("app rejection clears compiled and request state", async () => {
@@ -175,21 +196,58 @@ test("install errors are explicit UI state and can be cleared", () => {
 });
 
 test("shared uninstall confirmation resolves and clears its request", async () => {
+  const deploymentRecord = uninstallDeploymentRecordFixture();
+  const deploymentReview = uninstallReview(deploymentRecord);
   const decision = requestAppUninstall({
     appId: "files",
     appName: "Files",
     memoryIds: ["files"],
+    deploymentReview,
   });
 
   expect(useAppsStore.getState().uninstallRequest).toEqual({
     appId: "files",
     appName: "Files",
     memoryIds: ["files"],
+    deploymentReview,
   });
 
   resolveAppUninstall(true);
 
   await expect(decision).resolves.toBe(true);
+  expect(useAppsStore.getState().uninstallRequest).toBeNull();
+});
+
+test("cancelling the shared uninstall confirmation preserves app state", async () => {
+  const apps = {
+    files: registryApp({ id: "files", name: "Files" }),
+  };
+  useAppsStore.getState().setApps(apps);
+  const before = useAppsStore.getState().list;
+  const decision = requestAppUninstall({
+    appId: "files",
+    appName: "Files",
+    memoryIds: ["files"],
+    deploymentReview: uninstallReview(),
+  });
+
+  resolveAppUninstall(false);
+
+  await expect(decision).resolves.toBe(false);
+  expect(useAppsStore.getState().uninstallRequest).toBeNull();
+  expect(useAppsStore.getState().list).toEqual(before);
+  expect(useAppsStore.getState().installError).toBeNull();
+});
+
+test("uninstall confirmation is bound to the exact compiled destruction plan", () => {
+  expect(() =>
+    requestAppUninstall({
+      appId: "files",
+      appName: "Files",
+      memoryIds: [],
+      deploymentReview: uninstallReview(),
+    }),
+  ).toThrow("does not match the build record memory plan");
   expect(useAppsStore.getState().uninstallRequest).toBeNull();
 });
 
@@ -199,6 +257,7 @@ test("kernel uninstall cannot enter the confirmation flow", () => {
       appId: "kernel",
       appName: "Neutron",
       memoryIds: ["kernel"],
+      deploymentReview: uninstallReview(),
     }),
   ).toThrow("kernel app cannot be uninstalled");
 });
@@ -236,6 +295,12 @@ test("shared uninstall confirmation blocks required providers", () => {
       appId: "contacts",
       appName: "Contacts",
       memoryIds: [],
+      deploymentReview: uninstallReview(
+        uninstallDeploymentRecordFixture({
+          appId: "contacts",
+          memoryIds: [],
+        }),
+      ),
     }),
   ).toThrow("Contacts cannot be uninstalled; required by Calendar");
   expect(useAppsStore.getState().uninstallRequest).toBeNull();

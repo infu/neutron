@@ -105,14 +105,38 @@ assert (Kernel.isInternalHttpStatePath("/system/other.json"));
 assert (not Kernel.isInternalHttpStatePath("/system/apps.json"));
 assert (not Kernel.isInternalHttpStatePath("/system/runtime-config.json"));
 assert (not Kernel.isInternalHttpStatePath("/system/install-provenance.json"));
+assert (not Kernel.isInternalHttpStatePath("/system/deployment-build-record.json"));
 assert (not Kernel.isInternalHttpStatePath("/mo/hash.mo"));
 assert (not Kernel.isInternalHttpStatePath("/pkg/neutron.did"));
 assert (not Kernel.isInternalHttpStatePath("/app/hello/pkg/neutron.json"));
 assert (not Kernel.isInternalHttpStatePath("/main.js"));
 
+// The checked install transaction is the only writer for the authoritative
+// deployment record. Package staging remains available under /system/staging,
+// while direct writes/deletes and ancestor clears are rejected by kernel_static.
+assert (Kernel.isDeploymentBuildRecordStaticTarget(
+    "/system/deployment-build-record.json"
+));
+assert (not Kernel.isDeploymentBuildRecordStaticTarget(
+    "/system/deployment-build-record.json/retained"
+));
+assert (not Kernel.isDeploymentBuildRecordStaticTarget(
+    "/system/staging/deployment/deployment-build-record.json"
+));
+assert (Kernel.staticClearTouchesDeploymentBuildRecord(""));
+assert (Kernel.staticClearTouchesDeploymentBuildRecord("/system/"));
+assert (Kernel.staticClearTouchesDeploymentBuildRecord(
+    "/system/deployment-build-record.json"
+));
+assert (not Kernel.staticClearTouchesDeploymentBuildRecord(
+    "/system/deployment-build-record.json/retained"
+));
+assert (not Kernel.staticClearTouchesDeploymentBuildRecord("/app/"));
+
 assert (Kernel.isPackageHttpAssetPath("/system/apps.json"));
 assert (Kernel.isPackageHttpAssetPath("/system/runtime-config.json"));
 assert (Kernel.isPackageHttpAssetPath("/system/install-provenance.json"));
+assert (Kernel.isPackageHttpAssetPath("/system/deployment-build-record.json"));
 assert (Kernel.isPackageHttpAssetPath("/mo/hash.mo"));
 assert (Kernel.isPackageHttpAssetPath("/pkg/neutron.did"));
 assert (Kernel.isPackageHttpAssetPath("/app/hello/pkg/neutron.json"));

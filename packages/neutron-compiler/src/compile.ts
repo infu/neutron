@@ -155,8 +155,16 @@ export type CompileResult = {
   managedMemoryRetirements: ManagedMemoryRetirement[];
   capabilityPlans: Record<string, CompiledCapabilityPlan>;
   appInstanceInventory: CompiledAppInstance[];
+  /** Exact predecessor inventory used for managed-memory planning. */
+  previousManagedMemoryInventory: CompiledManagedMemory[];
   managedMemoryInventory: CompiledManagedMemory[];
+  /** SHA-256 of the exact predecessor stable signature, when one exists. */
+  previousStableSignatureSha256: string | null;
   deploymentId: string;
+  /** Exact caller-supplied transaction nonce bound into deploymentId. */
+  deploymentNonce: string | null;
+  /** Exact compiler target environment bound into deploymentId. */
+  vetKeysEnvironment: VetKeysEnvironment;
   compilerId: string;
   modulePaths: string[];
 };
@@ -238,6 +246,8 @@ async function compileWithMotoko({
     connectionProviderSupport,
   );
   const appInstanceInventory = compileAppInstanceInventory(capabilityPlans);
+  const previousManagedMemoryInventory =
+    compileManagedMemoryInventory(previousConfigs);
   const managedMemoryInventory = compileManagedMemoryInventory(configs);
   const inspectionCompiler = await loadMotoko();
   const compilerId = `moc_${hashContent(inspectionCompiler.version).slice(0, 16)}`;
@@ -352,8 +362,13 @@ async function compileWithMotoko({
     managedMemoryRetirements: targetRetirements,
     capabilityPlans,
     appInstanceInventory,
+    previousManagedMemoryInventory,
     managedMemoryInventory,
+    previousStableSignatureSha256:
+      previousStable === null ? null : hashContent(previousStable),
     deploymentId,
+    deploymentNonce: deploymentNonce ?? null,
+    vetKeysEnvironment,
     compilerId,
     modulePaths: reachableModules
       .map(({ path }) => path)

@@ -153,6 +153,8 @@ export const updateCheckState = {
   applying(): void {
     useUpdateCheckStore.setState({
       phase: "applying",
+      compiledSizeKiB: null,
+      review: null,
       error: null,
       errorStage: null,
     });
@@ -177,6 +179,8 @@ export const updateCheckState = {
   error(error: unknown, errorStage: UpdateErrorStage = "check"): void {
     useUpdateCheckStore.setState({
       phase: "error",
+      compiledSizeKiB: null,
+      review: null,
       error: error instanceof Error ? error.message : String(error),
       errorStage,
     });

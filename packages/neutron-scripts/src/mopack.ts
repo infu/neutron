@@ -10,10 +10,11 @@ import {
   mergeMemoryLock,
   type NeutronMemoryLock,
 } from "neutron-tools/src/memory.js";
-import type {
-  NeutronManifest,
-  NeutronMemoryMigrationConfig,
-  NeutronMemorySchemaConfig,
+import {
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+  type NeutronManifest,
+  type NeutronMemoryMigrationConfig,
+  type NeutronMemorySchemaConfig,
 } from "neutron-tools/src/schema.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 import {
@@ -33,6 +34,12 @@ const exec = promisify(callbackExec);
 export type PackageMotokoOptions = {
   cwd?: string;
   packages?: PackageMap;
+  /**
+   * `auto` keeps packages without an update source self-contained, while
+   * packages delivered by an update source use its HTTPS source offer. The
+   * explicit embedded mode remains available for future package workflows.
+   */
+  sourceDelivery?: "auto" | "https" | "embedded";
 };
 
 type PackageRoot = {
@@ -195,6 +202,28 @@ export async function packageMotoko(
     console.log(`${root.label}: ${entry}`);
   }
 
+  const sourceDelivery = options.sourceDelivery ?? "auto";
+  if (
+    sourceDelivery !== "auto" &&
+    sourceDelivery !== "https" &&
+    sourceDelivery !== "embedded"
+  ) {
+    throw new Error("sourceDelivery must be auto, https, or embedded");
+  }
+  if (
+    manifest.id !== "kernel" &&
+    sourceDelivery === "https" &&
+    manifest.update_source === undefined
+  ) {
+    throw new Error("HTTPS Complete App Source requires update_source");
+  }
+  if (
+    manifest.id !== "kernel" &&
+    (sourceDelivery === "embedded" ||
+      (sourceDelivery === "auto" && manifest.update_source === undefined))
+  ) {
+    manifest.package_features = [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE];
+  }
   assertNeutronManifest(manifest, "package");
   const distMo = path.join(cwd, "dist", "mo");
   await fs.rm(distMo, { recursive: true, force: true });

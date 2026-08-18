@@ -1,3 +1,4 @@
 node_modules
 dist
 *.neutron
+!files.v0.4.3.neutron

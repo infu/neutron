@@ -442,13 +442,13 @@ test("Certified Assets controls load once per generic installation scope", async
     };
     const settle = async (expectedCalls: number) => {
       for (let attempt = 0; attempt < 50; attempt += 1) {
-        await Bun.sleep(0);
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
         if (dirty) {
           dirty = false;
           render();
         }
         if (requests.length === expectedCalls && !dirty) {
-          await Bun.sleep(0);
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
           if (!dirty) return;
         }
       }

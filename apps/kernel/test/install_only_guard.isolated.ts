@@ -32,6 +32,7 @@ mock.module("icblast", () => ({
 
 mock.module("neutron-compiler/src/install.js", () => ({
   appDependencyImpact: () => ({ direct: [], transitive: [] }),
+  assertPreparedPackageArchiveIdentity: () => undefined,
   assertKernelPackageBaselineMatchesRuntime: (
     state: KernelPackageState,
     runtime: { deployment_id: string },
@@ -75,6 +76,36 @@ mock.module("neutron-compiler/src/install.js", () => ({
   readKernelPackageState: async () => compilerState,
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS: {},
 }));
+
+mock.module(
+  new URL(
+    "../src/install_review/prepare_browser_deployment.ts",
+    import.meta.url,
+  ).pathname,
+  () => ({
+    prepareBrowserDeployment: async ({ packages }: { packages: readonly PreparedPackageInstall[] }) => {
+      const record = Object.freeze({ state: "complete" });
+      return Object.freeze({
+        prepared: Object.freeze({
+          record,
+          recordBytes: new Uint8Array([1]),
+          transportWasm: new Uint8Array([2]),
+        }),
+        review: Object.freeze({ record, suppliedPackages: packages }),
+      });
+    },
+  }),
+);
+
+mock.module(
+  new URL(
+    "../src/install_review/deployment_build_review.ts",
+    import.meta.url,
+  ).pathname,
+  () => ({
+    createDeploymentBuildReviewModel: () => Object.freeze({}),
+  }),
+);
 
 const actor = {
   kernel_runtime_info: async () => ({

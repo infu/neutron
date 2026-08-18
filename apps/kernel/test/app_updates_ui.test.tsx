@@ -1,7 +1,19 @@
 import { afterAll, afterEach, expect, mock, test } from "bun:test";
+import { gzipSync } from "fflate";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import msgpack from "tiny-msgpack";
 import { NEUTRON_REPOSITORY_PROTOCOL } from "neutron-tools/repository";
+import { hashContent } from "neutron-tools/src/hash.js";
+import {
+  DEPLOYMENT_WASM_TRANSPORT_ENCODER,
+  parseDeploymentBuildRecord,
+} from "neutron-compiler/src/deployment_record.js";
+import {
+  preparePackageInstall,
+  type PreparedPackageInstall,
+} from "neutron-compiler/src/install.js";
+import type { DeploymentBuildReviewInput } from "../src/install_review/deployment_build_review.ts";
 
 mock.module("icblast", () => ({
   default: Object.assign(() => async () => ({}), {
@@ -280,6 +292,14 @@ test("verified review and apply stay in the consolidated per-app update flow", (
   const html = renderSurface(state);
 
   expect(html).toContain('data-tid="app-update-review-dialog"');
+  expect(html.match(/data-tid="deployment-build-review"/gu)).toHaveLength(1);
+  expect(html).toContain("Deployment ready");
+  expect(html).not.toContain('data-tid="deployment-build-review-download-record"');
+  expect(html).not.toContain(
+    'data-tid="deployment-build-review-download-archive-mail"',
+  );
+  expect(html).not.toContain("Raw compiler Wasm");
+  expect(html).not.toContain("Transport Wasm");
   expect(html).toContain("Review app update");
   expect(html).toContain("verified certified transport");
   expect(html).toContain("not publisher identity or code endorsement");
@@ -289,6 +309,9 @@ test("verified review and apply stay in the consolidated per-app update flow", (
   expect(html).toContain("contacts_search");
   expect(html).toContain("at least v0.1.1");
   expect(html).toContain('data-tid="app-updates-apply"');
+  expect(html.indexOf('data-tid="deployment-build-review"')).toBeLessThan(
+    html.indexOf('data-tid="app-updates-apply"'),
+  );
   expect(html).toContain("Update 1 app");
   expect(html).not.toContain("Update All");
 });
@@ -302,6 +325,7 @@ test("bulk review stays plural and preserves a bulk return target", () => {
   );
 
   expect(html).toContain("Review app updates");
+  expect(html.match(/data-tid="deployment-build-review"/gu)).toHaveLength(1);
   expect(html).toContain("Reviewing upgrades");
   expect(html).toContain("Update 2 apps");
 });
@@ -519,6 +543,7 @@ function reviewState(apps: ReturnType<typeof reviewApp>[]): UpdateState {
     selectedAppIds: apps.map(({ appId }) => appId),
     compiledSizeKiB: 12,
     review: {
+      deploymentBuild: deploymentBuildReview(apps),
       compiledSizeKiB: 12,
       diagnostics: [],
       compatibilityDiagnostics: [],
@@ -530,4 +555,140 @@ function reviewState(apps: ReturnType<typeof reviewApp>[]): UpdateState {
       apps,
     },
   } as unknown as UpdateState;
+}
+
+function deploymentBuildReview(
+  apps: ReturnType<typeof reviewApp>[],
+): DeploymentBuildReviewInput {
+  const suppliedPackages = apps
+    .map(preparedUpdatePackage)
+    .sort((left, right) => left.manifest.id.localeCompare(right.manifest.id));
+  const suppliedKernel = suppliedPackages.find(
+    ({ manifest }) => manifest.id === "kernel",
+  );
+  const orderedSupplied = [
+    ...(suppliedKernel ? [suppliedKernel] : []),
+    ...suppliedPackages.filter(({ manifest }) => manifest.id !== "kernel"),
+  ];
+  const packageEntries = [
+    ...(!suppliedKernel
+      ? [
+          {
+            app_id: "kernel",
+            version: 100,
+            archive: { state: "legacy_unavailable" as const },
+            package_information: { state: "legacy_unavailable" as const },
+            dependencies: [],
+          },
+        ]
+      : []),
+    ...orderedSupplied.map((prepared) => ({
+      app_id: prepared.manifest.id,
+      version: prepared.manifest.version,
+      archive: {
+        state: "verified" as const,
+        sha256: prepared.archiveIdentity!.sha256,
+        bytes: prepared.archiveIdentity!.size,
+      },
+      package_information: { state: "not_supplied" as const },
+      dependencies: [],
+    })),
+  ];
+  const parsed = parseDeploymentBuildRecord({
+    format: 1,
+    state: "complete",
+    deployment_id: "a".repeat(32),
+    previous: {
+      deployment_id: null,
+      stable_signature_sha256: null,
+      apps: [],
+      memories: [],
+    },
+    build: {
+      compiler_id: "moc_test",
+      assembler_id: "neutron_actor_v25",
+      environment: "local",
+      deployment_nonce: "b".repeat(32),
+      reachable_module_sha256: [],
+    },
+    packages: packageEntries,
+    target: {
+      apps: packageEntries.map(({ app_id, version }) => ({
+        app_id,
+        version,
+        capability_plan_fingerprint:
+          suppliedPackages.find(({ manifest }) => manifest.id === app_id)
+            ?.capabilityPlanFingerprint ?? "f".repeat(64),
+        resident_frame_security: "credentialless_opaque_v1",
+      })),
+      memories: [],
+    },
+    warnings: {
+      diagnostics: [],
+      compatibility_diagnostics: [],
+      memory_changes: [],
+      removed_apps: [],
+      destructive_memory_roots: [],
+    },
+    installation: {
+      target_canister: SOURCE,
+      mode: "upgrade",
+      argument: { sha256: hashContent(new Uint8Array()), bytes: 0 },
+      wasm_memory_persistence: "keep",
+    },
+    wasm: {
+      raw: {
+        sha256: "c".repeat(64),
+        bytes: 12 * 1024,
+        representation: "neutron_compile_result_wasm",
+        content_encoding: "identity",
+      },
+      transport: {
+        sha256: "d".repeat(64),
+        bytes: 6 * 1024,
+        representation: "ic_install_wasm_payload",
+        content_encoding: "gzip",
+        encoder: DEPLOYMENT_WASM_TRANSPORT_ENCODER,
+      },
+    },
+  });
+  if (parsed.state !== "complete") throw new Error("Expected complete fixture");
+  return Object.freeze({
+    record: parsed,
+    suppliedPackages: Object.freeze(suppliedPackages),
+  });
+}
+
+function preparedUpdatePackage(
+  app: ReturnType<typeof reviewApp>,
+): PreparedPackageInstall {
+  const encoder = new TextEncoder();
+  const moduleContent = encoder.encode(
+    `module { public let fixtureVersion : Nat = ${app.targetVersion} }`,
+  );
+  const entry = hashContent(moduleContent);
+  const files = {
+    "neutron.json": encoder.encode(
+      JSON.stringify({
+        format: 3,
+        id: app.appId,
+        name: app.name,
+        version: app.targetVersion,
+        entry,
+        ...(app.targetUpdateSource
+          ? { update_source: app.targetUpdateSource }
+          : {}),
+      }),
+    ),
+    [`mo/${entry}.mo`]: moduleContent,
+  };
+  const archiveBytes = msgpack.encode(
+    Object.fromEntries(
+      Object.entries(files).map(([path, content]) => [
+        path,
+        gzipSync(content),
+      ]),
+    ),
+  );
+  return preparePackageInstall(archiveBytes);
 }

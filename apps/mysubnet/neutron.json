@@ -2,7 +2,7 @@
   "format": 3,
   "name": "My Subnet",
   "id": "mysubnet",
-  "version": 301,
+  "version": 302,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "A live globe of the Internet Computer nodes hosting this Neutron canister.",
   "src": "main.mo",

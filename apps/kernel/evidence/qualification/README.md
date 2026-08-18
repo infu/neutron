@@ -52,14 +52,24 @@ environment the runner:
 2. runs the physical phase first: commits 256 one-byte records in 16 batches,
    advances exactly 24 hours plus 1 ns after the eighth receipt, reclaims those
    eight receipts in one bounded page, and rejects the 257th record without
-   state drift;
+   state drift. Pinned PocketIC may add 1 ns for a fixed-time executed round;
+   setup-to-population drift is bounded by 22,400 ns (two maximum 100-chunk
+   installs plus 24 fixed ingresses, each capped at 100 rounds), and from the
+   recorded population start every active manual-clock boundary permits at
+   most 1,000 ns (ten awaited ingresses at 100 rounds). The requested manual
+   advance and observed before/after delta remain exact;
 3. normalizes the replica forward to host wall time, enables automatic
    progress, and only then crosses the raw-query and gateway boundaries;
 4. records exact raw/gateway pairs for every fixed physical witness candidate
    and every gateway-enabled operational read;
 5. executes all 12 operational cases once, using a fresh canister per case and
-   all five scopes for the actor-wide cases, while
-   bracketing calls with exact app-usage and allocator diagnostics;
+   all five scopes for the actor-wide cases, while chaining every update from
+   the outer app-usage baseline through one unobserved post-update snapshot and
+   bracketing each complete case with app-usage and allocator diagnostics. The
+   cycle metric is the maximum exact single-update low-side estimate; every
+   update must contain exactly one positive-instruction execution, match the
+   ordered Candid transcript, and reconcile exactly with the outer instruction,
+   execution, and outgoing-cycle deltas;
 6. verifies portable CORS through Chromium; and
 7. proves same-Wasm upgrade persistence and hostile Range fail-closure.
 

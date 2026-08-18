@@ -7,7 +7,7 @@ import {
 } from "neutron-compiler/src/install.js";
 import { assertAppVersion } from "neutron-tools/src/version.js";
 
-const archive = new URL("../vetkeys_fixture.v0.1.0.neutron", import.meta.url);
+const archive = new URL("../vetkeys_fixture.v0.1.1.neutron", import.meta.url);
 
 test("lifecycle variants retain the app identity while changing only declaration/version", async () => {
   const unpacked = unpackNeutronPackage(
@@ -94,10 +94,17 @@ function buildLifecycleVariant(
       Uint8Array.from(value),
     ]),
   );
+  // This test synthesizes versions which were never conveyed.  Drop the
+  // immutable release envelope instead of leaving its package/source identity
+  // falsely bound to v101 while the synthetic manifest is changed below.
+  for (const path of Object.keys(copied)) {
+    if (path.startsWith("legal/")) delete copied[path];
+  }
   const manifest = decodeJson(copied["neutron.json"], "fixture manifest");
   if (manifest.id !== "vetkeys_fixture") {
     throw new Error("Lifecycle variants require the primary fixture archive");
   }
+  delete manifest.package_features;
   manifest.version = version;
   if (!declaresVetKeys) {
     const capabilities = record(manifest.capabilities, "fixture capabilities");

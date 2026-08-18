@@ -20,7 +20,7 @@ const pilotLinesSourceUrl = new URL("../src/pilot_lines.ts", import.meta.url);
 const runQuotesSourceUrl = new URL("../src/run_quotes.ts", import.meta.url);
 const shipVisualSourceUrl = new URL("../src/ship_visual_mode.ts", import.meta.url);
 const styleSourceUrl = new URL("../src/style.scss", import.meta.url);
-const packageUrl = new URL("../jetcreeper.v0.3.1.neutron", import.meta.url);
+const packageUrl = new URL("../jetcreeper.v0.3.2.neutron", import.meta.url);
 
 async function readManifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -34,7 +34,7 @@ test("Jetfreeper declares one safe frontend tile", async () => {
     format: 3,
     id: "jetcreeper",
     name: "Jetfreeper",
-    version: 301,
+    version: 302,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [{

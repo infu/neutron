@@ -10,12 +10,19 @@ build inputs rather than a mutable recipe or `releases/latest` URL:
 - certified-assets sync plugin `migration-v2.2.1-6b48585`, SHA-256
   `ca7cb5666c30d2875f8d5e10535f8a53f97a86c79c263f7d5bdac2fdd1bbf83c`.
 
-The source publishes only the shared repository v1 paths:
+The source publishes the shared repository v1 paths:
 
 ```text
 /repo/v1/releases/<app-id>.json
 /repo/v1/packages/<sha256>.neutron
+/repo/v1/sources/<sha256>.source.v1.msgpack.gz
 ```
+
+The Neutron-owned update-source scripts and configuration are Apache-2.0.
+`LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md` identify the pinned upstream
+canister and sync-plugin bytes. Published `.neutron` resources and Complete App
+Source objects remain separate payloads and keep their own licenses, notices,
+and source obligations.
 
 A release record is the small mutable pointer to one immutable package:
 
@@ -113,18 +120,18 @@ publisher commands.
 The fixture is not a transparent replacement for an arbitrary production
 principal. Kernel uses the runtime-bound origin only when its canister id
 matches the selected package manifest's `update_source`. The fixture initially
-contains only `/health.txt`; a local release test must publish release/package
-assets through fixture-specific test tooling and use that fixture principal in
-the test package. The mainnet publisher commands below deliberately reject
-loopback hosts.
+contains only `/health.txt`; a local release test must publish release, package,
+and offered-source assets through fixture-specific test tooling and use that
+fixture principal in the test package. The mainnet publisher commands below
+deliberately reject loopback hosts.
 
 The pinned sync plugin initially uploads `assets/health.txt`. A later canister
 deployment that runs the sync step also reconciles the asset directory. Do not
 casually rerun `icp deploy` against a source that contains published packages:
 the sync step may remove assets that are not in `assets/`. Treat canister-code
 deployment and package publication as separate operational procedures.
-Preserve publication receipts and source packages before a canister upgrade,
-then verify or republish them afterward.
+Preserve publication receipts, packages, and matching `.neutron/sources/`
+artifacts before a canister upgrade, then verify or republish them afterward.
 Asset synchronization itself requires Prepare/Commit. If the controller's
 bootstrap Commit grant was removed during publisher setup, the controller must
 temporarily grant itself Commit for the maintenance deployment and then rerun
@@ -135,9 +142,9 @@ publisher configuration to remove that grant again.
 This command is for a fresh, unmapped source canister only. The production
 source below already exists: do not rerun this deployment against its mapping,
 because the asset sync contains only `health.txt` and may delete published
-release/package assets. For an intentional code upgrade, first preserve the
-release receipts and packages and follow the maintenance/grant procedure
-above.
+release, package, and source assets. For an intentional code upgrade, first
+preserve the release receipts, packages, and source artifacts and follow the
+maintenance/grant procedure above.
 
 From `support/update-source`, after confirming that the target environment has
 no existing `update_source` mapping:
@@ -286,14 +293,18 @@ This section documents the lower-level publisher interface for a deliberately
 operated source.
 
 Given an already-built `.neutron` archive, invoke the generic source as its
-configured publisher identity:
+configured publisher identity. When its verified package record offers source
+from this update source, the package command has already written the matching
+digest-addressed artifact under `.neutron/sources/`; the publisher discovers
+it automatically. The app developer and installing user do not upload or
+register source separately.
 
 ```sh
 npm run publish -- \
   --canister-id "$UPDATE_SOURCE_CANISTER_ID" \
   --host https://icp-api.io \
   --identity-file "$UPDATE_SOURCE_PUBLISHER_IDENTITY_FILE" \
-  ../../apps/mail/mail.v0.3.2.neutron
+  ../../apps/mail/mail.v0.3.3.neutron
 ```
 
 One command may publish up to 20 packages:
@@ -323,22 +334,29 @@ bun scripts/publish-catalog.ts path/to/release-catalog.json \
   --identity-file path/to/publisher.json
 ```
 
-Catalog publication changes certified release pointers and package assets
-only. It never installs, reinstalls, or copies installed-app state.
+Catalog publication changes certified release pointers and immutable package
+and source assets only. It never installs, reinstalls, or copies installed-app
+state.
 
 Before making a Candid update, the publisher:
 
 1. prepares every package with Neutron's bounded remote-package decoder;
 2. derives the app ID and packed version from the authoritative inner manifest;
 3. computes the exact outer byte length and SHA-256;
-4. pages one Candid asset-metadata snapshot and checks only the exact target
-   release/package keys in it;
-5. reads paths reported present through certified HTTP;
-6. rejects downgrade or equal-version/different-digest publication;
-7. verifies an already-present digest-addressed package;
-8. chunks missing blobs in bounded waves;
-9. commits every changed package and release pointer in one `commit_batch`;
-10. fetches every public URL again and verifies the complete result.
+4. for an HTTPS source offer, requires the canonical same-origin URL, exact
+   compressed size and SHA-256, and a gzip sidecar that boundedly decodes to a
+   closed source snapshot matching the package ID, version, and build inputs;
+5. counts package bytes plus each unique source digest against the publication
+   byte limit;
+6. pages one Candid asset-metadata snapshot and checks only the exact target
+   release/package/source keys in it;
+7. reads paths reported present through certified HTTP;
+8. rejects downgrade or equal-version/different-digest publication;
+9. verifies already-present digest-addressed packages and source artifacts;
+10. chunks missing blobs in bounded waves;
+11. commits each source, package, and changed release pointer in one
+    `commit_batch`;
+12. fetches every public URL again and verifies the complete result.
 
 The metadata snapshot is not accepted as release or package content. It is a
 publisher-only preflight used to distinguish an absent fixed path from a path
@@ -353,10 +371,14 @@ The command prints progress to stderr and one machine-readable JSON receipt to
 stdout. Keep that receipt with the CI release artifacts.
 
 An exact same-version/same-digest publication is an idempotent verified no-op.
-Old digest-addressed packages are retained. The publisher pages asset keys for
-the preflight above but does not HTTP-download unrelated release records or
-packages. More importantly, a Neutron update check never requests that
-metadata or a source-wide catalog: it asks only for its exact app IDs in waves
+Receipt protocol v2 reports the exact source URL, path, size, digest, and
+`published` or `unchanged` status next to each package. A `batch_id: null`
+receipt therefore proves that source as well as package bytes were checked.
+Old digest-addressed packages and source objects are retained. The publisher
+pages asset keys for the preflight above but does not HTTP-download unrelated
+release records, packages, or source. More importantly, a Neutron update check
+never requests that metadata or a source-wide catalog: it asks only for its
+exact app IDs in waves
 of at most 20. A source can therefore hold hundreds or thousands of packages
 without disclosing that inventory to a checking Neutron.
 
@@ -368,6 +390,7 @@ Release records are identity-encoded JSON and are stored with:
 Content-Type: application/json; charset=utf-8
 Cache-Control: public, max-age=0, must-revalidate
 Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: Content-Length, Content-Type, ETag, IC-Certificate, IC-CertificateExpression
 X-Content-Type-Options: nosniff
 ```
 
@@ -377,26 +400,48 @@ Packages are identity encoded and stored with:
 Content-Type: application/vnd.neutron.package
 Cache-Control: public, max-age=31536000, immutable, no-transform
 Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: Content-Length, Content-Type, ETag, IC-Certificate, IC-CertificateExpression
 X-Content-Type-Options: nosniff
 ```
 
 The publisher stores a certified ETag equal to the supplied SHA-256. Raw access
-and path aliasing are disabled for both asset classes. Large packages
+and path aliasing are disabled for all three asset classes. Large packages
 are uploaded and downloaded in chunks while their final digest covers the
 original uninterrupted `.neutron` bytes.
+
+Complete App Source objects are exact gzip payloads produced by the package
+generator and served without HTTP gzip transformation:
+
+```text
+Content-Type: application/gzip
+Cache-Control: public, max-age=31536000, immutable, no-transform
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: Content-Length, Content-Type, ETag, IC-Certificate, IC-CertificateExpression
+X-Content-Type-Options: nosniff
+```
+
+Their filename, URL, ETag, package-record revision, exact compressed size, and
+SHA-256 all bind the same compressed bytes. Publisher preflight performs a
+bounded gunzip and validates the closed v1 MessagePack source snapshot before
+uploading it; it does not recompress the snapshot and compare zlib-specific
+output. The production asset has no HTTP
+`Content-Encoding` header: the `.gz` file bytes themselves are the hashed
+payload. The browser verifier tolerates an explicit `identity` value from
+another conforming host but rejects transforming encodings.
 
 ## Operations, monitoring, and capacity
 
 Monitor the public data plane and the administrative control plane separately.
 A production availability probe should GET one known release record from the
-verified `https://<canister-id>.icp0.io` origin and then GET the immutable
-package it names. Treat a missing known release, a missing package, a timeout,
-or a digest/size mismatch as an outage. Do not use an arbitrary missing path as
+verified `https://<canister-id>.icp0.io` origin, then GET the immutable package
+it names and any same-origin source object named by that package record. Treat
+a missing known release, package, or offered source, a timeout, or a digest/size
+mismatch as an outage. Do not use an arbitrary missing path as
 a health probe: this stock asset canister does not certify arbitrary `404`
 responses, so a verified gateway can reject the response instead of exposing a
 usable `404`.
 
-For both successful server-side GETs require the complete HTTP certification
+For every successful server-side GET require the complete HTTP certification
 v2 envelope:
 `IC-Certificate` must contain `certificate`, `tree`, `expr_path`, and
 `version=2`, and `IC-CertificateExpression` must be present without
@@ -416,9 +461,10 @@ safe maintenance state but should still alert because releases cannot be
 published. An unexpected controller is critical even without Commit: a
 controller can replace the canister or grant itself publishing authority.
 
-Archive the publisher's stdout receipt, exact `.neutron` inputs, and CI logs for
-every attempt. A receipt is emitted only after post-commit certified HTTP
-verification succeeds; `batch_id: null` means an idempotent, verified no-op.
+Archive the publisher's stdout receipt, exact `.neutron` inputs, matching
+`.neutron/sources/` artifacts, and CI logs for every attempt. A receipt is
+emitted only after post-commit certified HTTP verification succeeds;
+`batch_id: null` means an idempotent, verified no-op.
 Missing receipt or a nonzero exit is a failed release job. Failures before or in
 `commit_batch` expose nothing, but a failure during post-commit verification is
 ambiguous because the atomic batch may already be live. In that case freeze the
@@ -428,19 +474,20 @@ different bytes at the same version.
 Record `icp canister status <canister-id> --json` under the administrative
 identity and alert on low cycle runway or abnormal memory growth. The limits of
 20 packages and 128 MiB apply to one publication, not to the source's lifetime.
-Each new digest-addressed package is retained, so estimate logical retained
-bytes by summing each unique `sha256` and `size` once across archived receipts,
-then compare that trend with canister memory and cycles. Set operator-specific
-warning and critical thresholds early enough to top up or investigate before
-publication or HTTP service is endangered.
+Each new digest-addressed package and source is retained, so estimate logical
+retained bytes by summing each unique `sha256` and `size` once across archived
+receipts, then compare that trend with canister memory and cycles. Set
+operator-specific warning and critical thresholds early enough to top up or
+investigate before publication or HTTP service is endangered.
 
-Routine publication must never delete immutable packages. A future garbage
-collector must be a separate, explicit administrative command with a dry run,
-a bounded deletion set, a retention/grace window, proof that no current release
-record references each digest, and its own signed or archived deletion receipt.
+Routine publication must never delete immutable packages or source objects. A
+future garbage collector must be a separate, explicit administrative command
+with a dry run, a bounded deletion set, a retention/grace window, proof that no
+current or retained package requires each digest, and its own signed or archived
+deletion receipt.
 Until that procedure and recovery policy exist, storage growth is deliberate
-and old packages remain available for in-flight downloads, auditing, and
-reproduction.
+and old packages and sources remain available for in-flight downloads,
+auditing, and reproduction.
 
 ## App manifest
 
@@ -457,6 +504,12 @@ Settings:
 The source is a location, not a trust root. Neutron still performs its normal
 schema checks, compiler validation, capability review, dependency planning,
 managed-memory migration planning, checked journal, and atomic installation.
+Because source-discoverable production apps use ordinary format-3 manifests
+without archive-only markers, the catalog may publish a state-compatible Kernel
+successor and app releases together. Neutrons on immutable production v0.3.5 or
+v0.3.6, as well as the compatible private v0.3.7 candidate, install the latest
+set with one **Upgrade all** action; operators must not create a timed
+Kernel-first publication phase.
 
 ## Rollback and recovery
 
@@ -466,18 +519,18 @@ move a release pointer backward. Retained content-addressed packages support
 auditing and reproduction but are not an authorization to downgrade.
 
 - If validation or upload fails before `commit_batch`, the script deletes the
-  staging batch and no new pointer or package becomes visible.
+  staging batch and no new pointer, package, or source becomes visible.
 - If `commit_batch` rejects, its operations are atomic and nothing is applied.
 - If the post-commit HTTP verification fails, publication may already be live.
   Do not publish a different candidate blindly. Rerun the same command: it is
   idempotent and repeats certified verification.
 - If a release record was corrupted outside this publisher, revoke Commit,
-  inspect the certified record and retained package, then repair it under an
-  explicit administrative incident procedure. The normal publisher refuses to
-  guess past malformed or equivocal state.
-- Garbage collection is intentionally absent. Deleting old packages needs a
-  separate retention policy and proof that no reviewed/recovery workflow still
-  references them.
+  inspect the certified record and retained package/source, then repair it
+  under an explicit administrative incident procedure. The normal publisher
+  refuses to guess past malformed or equivocal state.
+- Garbage collection is intentionally absent. Deleting old packages or sources
+  needs a separate retention policy and proof that no reviewed/recovery
+  workflow still references them.
 
 ## Tests
 
@@ -489,8 +542,12 @@ The focused `npm test` unit and contract suite covers:
 - multi-chunk upload/download;
 - Commit/Prepare/ManagePermissions authorization boundaries;
 - controller rejection, rotation ordering, revocation, and status;
-- atomic two-package publication and failed-commit invisibility;
-- downgrade/equivocation refusal and idempotent republishing;
+- atomic source/package/release publication and failed-commit invisibility;
+- source URL, compressed/uncompressed bounds, bounded gunzip, closed snapshot,
+  build-input, exact compressed-byte size and digest, content-type, and
+  identity-encoding validation;
+- downgrade/equivocation refusal and receipt-v2 idempotent republishing that
+  re-verifies hosted source;
 - first-publication metadata discovery without an uncertified missing-path
   preflight, plus a source with 100 unrelated records without HTTP-fetching
   those records;

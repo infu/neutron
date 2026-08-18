@@ -47,6 +47,9 @@ import {
   physicalPopulationReceiptRollovers,
   type PhysicalPopulationUsageExpectation,
 } from "./physical_population.ts";
+import {
+  CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE,
+} from "./profile.ts";
 
 export const CERTIFIED_ASSETS_QUALIFICATION_RECEIPT_SCHEMA =
   "neutron.kernel.certified-assets-qualification-receipt.v3" as const;
@@ -57,7 +60,7 @@ export const CERTIFIED_ASSETS_RAW_CANDID_OBSERVATION_SCHEMA =
 export const CERTIFIED_ASSETS_HTTP_OBSERVATION_SCHEMA =
   "neutron.kernel.certified-assets-http-v2.v1" as const;
 export const CERTIFIED_ASSETS_BOUNDED_PHYSICAL_OBSERVATION_SCHEMA =
-  "neutron.kernel.certified-assets-bounded-physical-sample.v1" as const;
+  "neutron.kernel.certified-assets-bounded-physical-sample.v2" as const;
 export const CERTIFIED_ASSETS_QUALIFICATION_GATES_SCHEMA =
   "neutron.kernel.certified-assets-qualification-gates.v1" as const;
 export const CERTIFIED_ASSETS_MOTOKO_GATES_SCHEMA =
@@ -82,6 +85,14 @@ const MAX_HEADER_VALUE_BYTES = 96 * 1024;
 const MAX_CANDID_REQUEST_BYTES = metricReleaseLimit("request_candid_bytes");
 const MAX_CANDID_REPLY_BYTES = metricReleaseLimit("reply_candid_bytes");
 const MAX_PROOF_BYTES = metricReleaseLimit("proof_bytes");
+const MAX_IMPLICIT_ROUND_DRIFT_NS = BigInt(
+  CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE
+    .maximum_implicit_round_drift_ns_per_boundary,
+);
+const MAX_SETUP_IMPLICIT_ROUND_DRIFT_NS = BigInt(
+  CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE
+    .maximum_setup_implicit_round_drift_ns,
+);
 const EMPTY_SHA256 = createHash("sha256").digest("hex");
 const REPOSITORY_ROOT = path.resolve(import.meta.dir, "../../../..");
 const PINNED_POCKET_IC_BINARY_SHA256 = new Set(
@@ -169,6 +180,7 @@ export type BoundedPhysicalObservation = Readonly<{
   batch_count: number;
   batch_transcript_sha256: string;
   final_entry_count: number;
+  population_clock_start_ns: string;
   receipt_rollovers: readonly PhysicalReceiptRolloverObservation[];
   usage_before_overflow: RawCandidObservation;
   usage_before_overflow_decoded: PhysicalUsageSummary;
@@ -338,93 +350,124 @@ export type CertifiedAssetsQualificationReceipt = Readonly<{
 export function parseCertifiedAssetsQualificationReceipt(
   value: unknown,
 ): CertifiedAssetsQualificationReceipt {
-  const root = exactRecord(
-    value,
-    [
-      "candidate",
-      "environment",
-      "gates",
-      "bounded_physical_sample",
-      "receipt_sha256",
-      "runner",
-      "samples",
-      "schema",
-      "status",
-    ],
-    "qualification receipt",
-  );
-  if (root.schema !== CERTIFIED_ASSETS_QUALIFICATION_RECEIPT_SCHEMA) {
-    throw new Error("Qualification receipt schema is invalid");
-  }
-  if (root.status !== "passed") {
-    throw new Error("Qualification receipt is pass-only");
-  }
-  const candidate = assertCertifiedAssetsCandidateBinding(root.candidate);
-  const environment = parseEnvironment(root.environment);
-  const runner = parseRunner(root.runner);
-  if (
-    runner.source_sha256 !== candidate.qualification_runner_source_sha256
-  ) {
-    throw new Error(
-      "Qualification receipt runner source differs from its candidate binding",
+  const root = qualificationReceiptParseStage("receipt envelope", () => {
+    const record = exactRecord(
+      value,
+      [
+        "candidate",
+        "environment",
+        "gates",
+        "bounded_physical_sample",
+        "receipt_sha256",
+        "runner",
+        "samples",
+        "schema",
+        "status",
+      ],
+      "qualification receipt",
     );
-  }
-  const samples = parseSamples(root.samples, candidate, environment);
-  const boundedPhysicalSample = parseBoundedPhysicalSample(
-    root.bounded_physical_sample,
-    candidate,
-    environment,
-  );
-  const gates = parseQualificationGates(
-    root.gates,
-    candidate,
-    environment,
-    samples,
-  );
-  if (
-    samples.some(
-      ({ canister_id: canisterId }) =>
-        canisterId === boundedPhysicalSample.canister_id,
-    )
-  ) {
-    throw new Error(
-      "Qualification bounded-physical-sample observation reuses an operational sample canister",
-    );
-  }
-  const dedicatedCanisters = new Set(
-    samples.map(({ canister_id: canisterId }) => canisterId),
-  );
-  dedicatedCanisters.add(boundedPhysicalSample.canister_id);
-  if (dedicatedCanisters.has(gates.same_wasm_upgrade.canister_id)) {
-    throw new Error(
-      "Qualification same-Wasm upgrade gate reuses another evidence canister",
-    );
-  }
-  if (
-    gates.hostile_raw_http.canister_id !==
-    gates.same_wasm_upgrade.canister_id
-  ) {
-    throw new Error(
-      "Qualification hostile raw HTTP gate did not probe the upgraded canister",
-    );
-  }
-  const receiptSha256 = digest(
-    root.receipt_sha256,
-    "qualification receipt.receipt_sha256",
-  );
-  const expected = qualificationReceiptSha256({
-    schema: CERTIFIED_ASSETS_QUALIFICATION_RECEIPT_SCHEMA,
-    status: "passed",
-    candidate,
-    environment,
-    runner,
-    samples,
-    bounded_physical_sample: boundedPhysicalSample,
-    gates,
+    if (record.schema !== CERTIFIED_ASSETS_QUALIFICATION_RECEIPT_SCHEMA) {
+      throw new Error("Qualification receipt schema is invalid");
+    }
+    if (record.status !== "passed") {
+      throw new Error("Qualification receipt is pass-only");
+    }
+    return record;
   });
-  if (receiptSha256 !== expected) {
-    throw new Error("Qualification receipt digest does not match its contents");
-  }
+  const candidate = qualificationReceiptParseStage(
+    "candidate binding",
+    () => assertCertifiedAssetsCandidateBinding(root.candidate),
+  );
+  const environment = qualificationReceiptParseStage(
+    "environment",
+    () => parseEnvironment(root.environment),
+  );
+  const runner = qualificationReceiptParseStage("runner binding", () => {
+    const parsed = parseRunner(root.runner);
+    if (
+      parsed.source_sha256 !== candidate.qualification_runner_source_sha256
+    ) {
+      throw new Error(
+        "Qualification receipt runner source differs from its candidate binding",
+      );
+    }
+    return parsed;
+  });
+  const samples = qualificationReceiptParseStage(
+    "operational samples",
+    () => parseSamples(root.samples, candidate, environment),
+  );
+  const boundedPhysicalSample = qualificationReceiptParseStage(
+    "bounded physical sample",
+    () => parseBoundedPhysicalSample(
+      root.bounded_physical_sample,
+      candidate,
+      environment,
+    ),
+  );
+  const gates = qualificationReceiptParseStage(
+    "qualification gates",
+    () => parseQualificationGates(
+      root.gates,
+      candidate,
+      environment,
+      samples,
+    ),
+  );
+  qualificationReceiptParseStage("evidence canister isolation", () => {
+    if (
+      samples.some(
+        ({ canister_id: canisterId }) =>
+          canisterId === boundedPhysicalSample.canister_id,
+      )
+    ) {
+      throw new Error(
+        "Qualification bounded-physical-sample observation reuses an operational sample canister",
+      );
+    }
+    const dedicatedCanisters = new Set(
+      samples.map(({ canister_id: canisterId }) => canisterId),
+    );
+    dedicatedCanisters.add(boundedPhysicalSample.canister_id);
+    if (dedicatedCanisters.has(gates.same_wasm_upgrade.canister_id)) {
+      throw new Error(
+        "Qualification same-Wasm upgrade gate reuses another evidence canister",
+      );
+    }
+    if (
+      gates.hostile_raw_http.canister_id !==
+      gates.same_wasm_upgrade.canister_id
+    ) {
+      throw new Error(
+        "Qualification hostile raw HTTP gate did not probe the upgraded canister",
+      );
+    }
+  });
+  const receiptSha256 = qualificationReceiptParseStage(
+    "receipt digest",
+    () => {
+      const parsed = digest(
+        root.receipt_sha256,
+        "qualification receipt.receipt_sha256",
+      );
+      const expected = qualificationReceiptSha256({
+        schema: CERTIFIED_ASSETS_QUALIFICATION_RECEIPT_SCHEMA,
+        status: "passed",
+        candidate,
+        environment,
+        runner,
+        samples,
+        bounded_physical_sample: boundedPhysicalSample,
+        gates,
+      });
+      if (parsed !== expected) {
+        throw new Error(
+          "Qualification receipt digest does not match its contents",
+        );
+      }
+      return parsed;
+    },
+  );
   return {
     schema: CERTIFIED_ASSETS_QUALIFICATION_RECEIPT_SCHEMA,
     status: "passed",
@@ -436,6 +479,22 @@ export function parseCertifiedAssetsQualificationReceipt(
     gates,
     receipt_sha256: receiptSha256,
   };
+}
+
+function qualificationReceiptParseStage<Result>(
+  stage: string,
+  parse: () => Result,
+): Result {
+  try {
+    return parse();
+  } catch (error) {
+    const message = qualificationErrorMessage(error);
+    const detail = message === undefined ? "" : `: ${message}`;
+    throw new Error(
+      `Qualification receipt failed during ${stage}${detail}`,
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -625,7 +684,7 @@ function parseEnvironment(
   if (
     BigInt(wallBefore) < BigInt(replicaTimeStart) ||
     BigInt(targetHostWall) <= BigInt(wallBefore) ||
-    BigInt(wallAfter) < BigInt(targetHostWall)
+    wallAfter !== targetHostWall
   ) {
     throw new Error(
       "Qualification environment wall normalization timeline is invalid",
@@ -896,10 +955,8 @@ function parseSamples(
       http,
     };
     } catch (error) {
-      const detail =
-        error instanceof Error && error.message.length > 0
-          ? `: ${error.message}`
-          : "";
+      const message = qualificationErrorMessage(error);
+      const detail = message === undefined ? "" : `: ${message}`;
       throw new Error(
         `Qualification sample ${index} failed during ${phase}${detail}`,
         { cause: error },
@@ -936,6 +993,7 @@ function parseBoundedPhysicalSample(
       "installed_transport_wasm_sha256",
       "overflow_call",
       "overflow_checkpoint",
+      "population_clock_start_ns",
       "present",
       "present_candidate_observations",
       "present_candidates_queried",
@@ -969,6 +1027,16 @@ function parseBoundedPhysicalSample(
       `Qualification bounded physical sample must contain exactly ${PHYSICAL_POPULATION_ENTRIES} entries`,
     );
   }
+  const populationClockStartNs = positiveDecimal(
+    record.population_clock_start_ns,
+    "qualification bounded physical sample.population_clock_start_ns",
+  );
+  assertBoundedImplicitRoundDrift(
+    BigInt(environment.replica_time_start_ns),
+    BigInt(populationClockStartNs),
+    MAX_SETUP_IMPLICIT_ROUND_DRIFT_NS,
+    "Qualification bounded physical population clock setup boundary",
+  );
   if (
     record.present_candidates_queried !==
       PHYSICAL_PRESENT_WITNESS_CANDIDATES.length ||
@@ -1016,19 +1084,17 @@ function parseBoundedPhysicalSample(
   );
   const receiptRollovers = parsePhysicalReceiptRollovers(
     record.receipt_rollovers,
-    environment.replica_time_start_ns,
+    populationClockStartNs,
   );
   const manualReplicaTime =
     receiptRollovers.at(-1)?.clock.after_ns ??
-      environment.replica_time_start_ns;
-  if (
-    environment.timeline.wall_normalization.before_ns !==
-      manualReplicaTime
-  ) {
-    throw new Error(
-      "Qualification wall normalization does not continue the physical manual-clock timeline",
-    );
-  }
+      populationClockStartNs;
+  assertBoundedImplicitRoundDrift(
+    BigInt(manualReplicaTime),
+    BigInt(environment.timeline.wall_normalization.before_ns),
+    MAX_IMPLICIT_ROUND_DRIFT_NS,
+    "Qualification wall normalization physical manual-clock boundary",
+  );
   if (
     usageBeforeOverflow.mode !== "query" ||
     usageBeforeOverflow.method !== PHYSICAL_USAGE_METHOD ||
@@ -1162,6 +1228,7 @@ function parseBoundedPhysicalSample(
     batch_count: PHYSICAL_POPULATION_BATCHES,
     batch_transcript_sha256: batchTranscriptSha256,
     final_entry_count: PHYSICAL_POPULATION_ENTRIES,
+    population_clock_start_ns: populationClockStartNs,
     receipt_rollovers: receiptRollovers,
     usage_before_overflow: usageBeforeOverflow,
     usage_before_overflow_decoded: usageBeforeOverflowDecoded,
@@ -1353,7 +1420,7 @@ function exactUtf8OrBinaryBytes(value: Uint8Array): ExactBytes {
 
 function parsePhysicalReceiptRollovers(
   value: unknown,
-  replicaTimeStartNs: string,
+  populationClockStartNs: string,
 ): readonly PhysicalReceiptRolloverObservation[] {
   const expected = physicalPopulationReceiptRollovers();
   if (!Array.isArray(value) || value.length !== expected.length) {
@@ -1361,7 +1428,7 @@ function parsePhysicalReceiptRollovers(
       "Qualification bounded physical sample does not bind every fixed receipt rollover",
     );
   }
-  let expectedBeforeNs = BigInt(replicaTimeStartNs);
+  let precedingClockBoundaryNs = BigInt(populationClockStartNs);
   return value.map((entry, rolloverIndex) => {
     const label =
       `qualification bounded physical sample.receipt_rollovers[${rolloverIndex}]`;
@@ -1401,15 +1468,20 @@ function parsePhysicalReceiptRollovers(
       clockRecord.after_ns,
       `${label}.clock.after_ns`,
     );
+    assertBoundedImplicitRoundDrift(
+      precedingClockBoundaryNs,
+      BigInt(clockBefore),
+      MAX_IMPLICIT_ROUND_DRIFT_NS,
+      `${label}.clock preceding boundary`,
+    );
     if (
-      BigInt(clockBefore) !== expectedBeforeNs ||
       requestedDelta !== wanted.advance_time_ns.toString() ||
       BigInt(clockAfter) !==
         BigInt(clockBefore) + wanted.advance_time_ns
     ) {
       throw new Error(`${label}.clock does not bind the exact manual advance`);
     }
-    expectedBeforeNs = BigInt(clockAfter);
+    precedingClockBoundaryNs = BigInt(clockAfter);
     const usageBefore = parseCandid(
       record.usage_before,
       `${label}.usage_before`,
@@ -1555,8 +1627,7 @@ function parsePhysicalReceiptRollovers(
       after_batch_count: wanted.after_batch_count,
       clock: {
         before_ns: clockBefore,
-        requested_delta_ns:
-          (CERTIFIED_ASSETS_RECEIPT_RECONCILE_NS + 1n).toString(),
+        requested_delta_ns: requestedDelta,
         after_ns: clockAfter,
       },
       usage_before: usageBefore,
@@ -1568,6 +1639,23 @@ function parsePhysicalReceiptRollovers(
       checkpoint: "general_receipt_ceiling_reclaimed",
     };
   });
+}
+
+function assertBoundedImplicitRoundDrift(
+  precedingNs: bigint,
+  followingNs: bigint,
+  maximumDriftNs: bigint,
+  label: string,
+): void {
+  const observedDriftNs = followingNs - precedingNs;
+  if (
+    observedDriftNs < 0n ||
+    observedDriftNs > maximumDriftNs
+  ) {
+    throw new Error(
+      `${label} observed ${observedDriftNs}ns implicit round drift outside the source-owned 0..${maximumDriftNs}ns bound`,
+    );
+  }
 }
 
 function parseQualificationGates(
@@ -2626,15 +2714,17 @@ function canonicalCanisterId(value: unknown, label: string): string {
   if (typeof value !== "string") {
     throw new Error(`${label} is invalid`);
   }
-  let principal: Principal;
+  let canonical: string;
+  let bytes: Uint8Array;
   try {
-    principal = Principal.fromText(value);
-  } catch {
-    throw new Error(`${label} is invalid`);
+    const principal = Principal.fromText(value);
+    bytes = principal.toUint8Array();
+    canonical = principal.toText();
+  } catch (error) {
+    throw new Error(`${label} is invalid`, { cause: error });
   }
-  const bytes = principal.toUint8Array();
   if (
-    principal.toText() !== value ||
+    canonical !== value ||
     bytes.length < 2 ||
     bytes[bytes.length - 1] !== 1
   ) {
@@ -2776,6 +2866,23 @@ function exactRecord(
     throw new Error(`${label} has an invalid field set`);
   }
   return record;
+}
+
+function qualificationErrorMessage(error: unknown): string | undefined {
+  if (
+    (typeof error !== "object" || error === null) &&
+    typeof error !== "function"
+  ) {
+    return undefined;
+  }
+  try {
+    const message = (error as { message?: unknown }).message;
+    return typeof message === "string" && message.length > 0
+      ? message
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function digest(value: unknown, label: string): string {

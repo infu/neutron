@@ -5,9 +5,11 @@ import Chess "../backend/main";
 import Memory "../backend/memory/chess/v1";
 
 let self = Principal.fromBlob(Blob.fromArray([0, 1, 1]));
+let memory = Memory.init();
+assert (memory.next_generation == 1);
 
 let environment : Chess.AppBackendEnvironment = {
-    stable_memory = { chess = Memory.init() };
+    stable_memory = { chess = memory };
     capabilities = {
         backend_calls = {
             canister_principal = self;
@@ -65,6 +67,26 @@ switch (chess.chess_remote_push_target({ tile_id = "host-tile" })) {
         assert (target.guest == guest);
         assert (target.method == "app_chess__chess_v1_update");
         assert (target.pending_revision == null);
+    };
+    case null assert false;
+};
+
+// The archive transition test proves that 0.3.1 -> 0.3.2 is a compiler #keep
+// operation. Rebuilding the runtime over the same root must retain the hosted
+// game and peer binding instead of calling Memory.init() again.
+let restored = Chess.Init(environment);
+switch (restored.chess_get_game({ tile_id = "host-tile" })) {
+    case (?game) {
+        assert (game.game_id == hostedGameId);
+        assert (game.mode == "remote_host");
+        assert game.remote_connected;
+    };
+    case null assert false;
+};
+switch (restored.chess_remote_push_target({ tile_id = "host-tile" })) {
+    case (?target) {
+        assert (target.game_id == hostedGameId);
+        assert (target.guest == guest);
     };
     case null assert false;
 };

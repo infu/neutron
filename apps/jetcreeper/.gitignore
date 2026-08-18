@@ -1,3 +1,4 @@
 node_modules
 dist
 *.neutron
+!jetcreeper.v0.3.1.neutron

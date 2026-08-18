@@ -72,7 +72,7 @@ Example:
     "kind": "inline",
     "kernel": { "path": "apps/kernel/kernel.v0.3.6.neutron" },
     "packages": [
-      { "path": "apps/hello/hello.v0.2.1.neutron" }
+      { "path": "apps/hello/hello.v0.2.2.neutron" }
     ]
   }
 }
@@ -124,7 +124,7 @@ context:
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
   --package apps/kernel/kernel.v0.3.6.neutron \
-  --package apps/hello/hello.v0.2.1.neutron \
+  --package apps/hello/hello.v0.2.2.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```

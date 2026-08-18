@@ -1,0 +1,11 @@
+Neutron Example Repository
+Copyright 2026 3V Interactive
+
+The first-party repository implementation is licensed under the Apache License,
+Version 2.0. See LICENSE in this directory.
+
+Packages embedded in a generated repository are separate payloads and retain
+the license and notices carried by each package archive. They are not
+relicensed as Apache software by this NOTICE. Third-party components retain
+their own copyrights, licenses, and notices. See THIRD_PARTY_NOTICES.md,
+LICENSE.Motoko-Core, and LICENSE.Motoko-Base.

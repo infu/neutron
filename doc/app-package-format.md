@@ -76,6 +76,41 @@ The archive paths are relative to `dist/`, so package entries are
 Frontend files are optional. A backend-only or otherwise headless package does
 not need `web/index.html`.
 
+The archive may also contain safe auxiliary metadata files. With the reserved
+archive-only exceptions described below, the installer places every
+non-`web/`, non-`mo/` package file below the package's `pkg/` namespace. The
+implemented package-information sidecar uses the fixed archive
+path `legal/package-record.v1.json` instead of adding an unknown field to the
+closed format-3 manifest. It is closed, bounded format-1 JSON that binds the
+package manifest, license texts, source offer or status, dependencies, notices,
+managed-memory lock, and build inputs. Existing packages without the sidecar
+remain valid and are reported as legacy/undeclared; a malformed present record
+fails package preparation. See
+[License And Deployment Records](./license-and-deployment-records.md#package-information-record-v1).
+
+The sidecar is optional product metadata, not a user-maintained legal registry.
+The NPL/NSAL drafts do not require an app author or private installer to
+hand-write hashes or identify the browser-generated package combination or
+combined Wasm. Ordinary first-party app packaging generates the sidecar,
+governing license, concise application notice, complete derived third-party
+notice set, and a closed Complete App Source snapshot automatically.
+
+For an app with `update_source`, the default production form keeps the license
+and notices at ordinary installable `legal/**` paths and writes the exact
+generator-produced Complete App Source gzip bytes outside `dist`, at
+`<app>/.neutron/sources/<sha256>.source.v1.msgpack.gz`. The package record binds
+that artifact and identifies its certified HTTPS URL. The gzip member expands
+to the closed v1 MessagePack source snapshot; its recorded size and SHA-256 bind
+the compressed bytes, not a later recompression. The update-source
+publisher, not the installer or Sovereign User, uploads and retains it. Source
+bytes are therefore not placed in the `.neutron` package or an installed
+Neutron. Private browser assembly does not publish a user's package selection,
+modifications, combined Wasm, hashes, or compliance records.
+
+An app without `update_source` instead uses the explicit embedded form described
+below. That form retains its source and bulk legal material only in the supplied
+archive and requires an archive-only-aware Kernel.
+
 ## Manifest Format
 
 `neutron.json` uses:
@@ -92,7 +127,13 @@ not need `web/index.html`.
 
 Source manifests use `src`. The Motoko packaging step resolves imports,
 content-addresses reachable modules, and writes the packaged `entry` hash into
-`dist/neutron.json`. An installable package must contain `entry`.
+`dist/neutron.json`. In automatic mode, an ordinary app with `update_source`
+uses a provider-hosted HTTPS source offer and receives no package feature marker.
+An ordinary app without `update_source` uses embedded delivery and receives the
+generated `package_features: ["archive-only-legal-v1"]` compatibility marker.
+The packager also supports an explicit embedded override. App authors must not
+maintain the generated field in source `neutron.json`; source validation rejects
+it. Every installable package must contain `entry`.
 
 The closed top-level fields are:
 
@@ -102,6 +143,7 @@ The closed top-level fields are:
 | `id` | Stable app ID |
 | `name` | Owner-visible app name |
 | `version` | Packed release version |
+| `package_features` | Packaged-only closed installer feature markers |
 | `update_source` | Optional canonical update-source canister principal |
 | `description` | Optional owner-visible description |
 | `src` | Source entry path used by the packager |
@@ -116,7 +158,15 @@ The closed top-level fields are:
 | `backend` | Exact backend capability interfaces to inject |
 | `capabilities` | Closed authority declarations |
 
-Unknown fields are rejected.
+Unknown fields are rejected. In particular, immutable production v0.3.5 and
+v0.3.6 and the compatible private v0.3.7 candidate reject the archive-only
+marker before staging any files. A later archive-only-aware Kernel accepts it
+and cross-checks the same feature in the package record against the actual
+reserved archive paths. Production packages that use the HTTPS source offer
+omit both the reserved paths and marker, so those older Kernels can prepare
+them in the same **Upgrade all** batch as a newer Kernel. Keeping any marker out
+of source manifests makes this an automatic packaging safety boundary rather
+than an app-author duty.
 
 ## IDs, Names, And Versions
 
@@ -384,18 +434,24 @@ A conventional app build:
 4. rewrites imports to content-addressed `dist/mo/<sha256>.mo`;
 5. writes packaged `entry` and memory hashes;
 6. writes `dist/neutron.json` and optional lock;
-7. walks `dist` in sorted order without following symlinks;
-8. gzip-compresses every file independently;
-9. encodes the flat MessagePack map; and
-10. writes `<app-id>.v<major.minor.patch>.neutron`.
+7. derives and verifies the legal files and package record in a replaceable
+   `dist/legal` tree and, for HTTPS delivery, writes the exact generated source
+   artifact below the app-local `.neutron/sources/` directory;
+8. walks `dist` in sorted order without following symlinks;
+9. gzip-compresses every file independently;
+10. encodes the flat MessagePack map; and
+11. writes `<app-id>.v<major.minor.patch>.neutron`.
 
-Older archives for the same app are removed after the new archive is written.
+Older archives for the same app are retained as immutable history. Never reuse
+an earlier release version for different bytes.
 
 ## Installation Rewriting
 
 The installer stores ordinary package state under Kernel-owned paths:
 
 - package manifest under `/app/<id>/pkg/neutron.json`;
+- governing license, application and third-party notices, and package record
+  under `/app/<id>/pkg/legal/`;
 - web assets under `/app/<id>/...`;
 - content-addressed Motoko modules under `/mo/<sha256>.mo`;
 - app registry under `/system/apps.json`;
@@ -405,6 +461,19 @@ The installer stores ordinary package state under Kernel-owned paths:
 
 The Kernel package is the only path exception: its manifest is stored at
 `/pkg/neutron.json`.
+
+Normal provider-hosted packages have no reserved bulk source paths. Their
+governing license, notices, and package record use ordinary `legal/**` paths and
+are installed under `/pkg` or `/app/<id>/pkg`; their Complete App Source exists
+only at the digest-bound HTTPS URL and the publisher's app-local source
+artifact. Installing or privately assembling the package does not copy that
+source into the Neutron.
+
+For the explicit embedded form, `legal/archive-only/**` and
+`legal/source/app-source.v1.msgpack` remain archive exceptions rather than
+installed path rewrites. Package preparation verifies them and retains them in
+the supplied `.neutron` archive without staging them under `/pkg` or
+`/app/<id>/pkg`.
 
 These are install-journal targets, not app-authored arbitrary static paths.
 Uninstall clears the app prefix and module GC removes unreferenced hashed

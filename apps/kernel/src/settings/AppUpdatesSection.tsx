@@ -31,6 +31,7 @@ import {
 import { PermissionConsequences } from "../consent/PermissionConsequences.tsx";
 import { CapabilityChangeSummary } from "../consent/CapabilityChangeSummary.tsx";
 import type { KernelUiMode } from "../ui_mode.ts";
+import { DeploymentBuildReview } from "../install_review/DeploymentBuildReview.tsx";
 
 export function AppUpdatesCoordinator({
   fallbackFocusRef,
@@ -100,7 +101,10 @@ export function AppUpdatesFeedback() {
   }
 
   return (
-    <div className="settings-warning settings-app-updates-feedback" role="alert">
+    <div
+      className="settings-warning settings-app-updates-feedback"
+      role="alert"
+    >
       <strong>{errorHeading(state.errorStage)}</strong>
       <span>{state.error}</span>
       {state.errorStage === "apply" ? (
@@ -140,10 +144,8 @@ export function AppUpdatesBulkAction({
   ).length;
   const bulkPreparing =
     state.phase === "preparing" && selectedAvailableCount > 1;
-  const bulkReviewing =
-    state.phase === "review" && selectedAvailableCount > 1;
-  const bulkApplying =
-    state.phase === "applying" && selectedAvailableCount > 1;
+  const bulkReviewing = state.phase === "review" && selectedAvailableCount > 1;
+  const bulkApplying = state.phase === "applying" && selectedAvailableCount > 1;
 
   if (bulkPreparing) {
     return (
@@ -165,12 +167,7 @@ export function AppUpdatesBulkAction({
   if (bulkReviewing || bulkApplying) {
     return (
       <div className="settings-app-updates-toolbar">
-        <button
-          className="btn"
-          disabled
-          ref={returnFocusRef}
-          type="button"
-        >
+        <button className="btn" disabled ref={returnFocusRef} type="button">
           {bulkReviewing ? "Reviewing upgrades" : "Upgrading apps"}
         </button>
       </div>
@@ -432,6 +429,8 @@ function UpdateReviewDialog({
             </span>
           </div>
 
+          <DeploymentBuildReview {...review.deploymentBuild} uiMode={uiMode} />
+
           <div className="app-update-review-list">
             {review.apps.map((app) => (
               <article className="app-update-review-app" key={app.appId}>
@@ -443,9 +442,7 @@ function UpdateReviewDialog({
                   <span>
                     {formatAppVersionLabel(app.installedVersion)}
                     <span aria-hidden="true"> → </span>
-                    <strong>
-                      {formatAppVersionLabel(app.targetVersion)}
-                    </strong>
+                    <strong>{formatAppVersionLabel(app.targetVersion)}</strong>
                   </span>
                 </header>
                 <CapabilityChangeSummary diff={app.capabilityPlanDiff} />
@@ -475,10 +472,7 @@ function UpdateReviewDialog({
                     label="Download"
                     value={formatBytes(app.packageBytes)}
                   />
-                  <ReviewCopyFact
-                    label="Source"
-                    value={app.source}
-                  />
+                    <ReviewCopyFact label="Source" value={app.source} />
                   <ReviewFact
                     label="Package SHA-256"
                     value={app.packageDigest}
@@ -498,8 +492,8 @@ function UpdateReviewDialog({
                       Object.keys(app.dependencies).length === 0
                         ? "None"
                         : `${Object.keys(app.dependencies).length} required ${
-                            Object.values(app.dependencies).filter(({ app }) =>
-                              reviewedAppIds.has(app),
+                              Object.values(app.dependencies).filter(
+                                ({ app }) => reviewedAppIds.has(app),
                             ).length
                           } updated in this batch`
                     }
@@ -532,7 +526,8 @@ function UpdateReviewDialog({
                         .map(([alias, dependency]) => (
                           <li key={alias}>
                             <strong>{alias}</strong> → {dependency.app} · at
-                            least {formatAppVersionLabel(dependency.min_version)}
+                              least{" "}
+                              {formatAppVersionLabel(dependency.min_version)}
                             {reviewedAppIds.has(dependency.app)
                               ? " · updated in this batch"
                               : " · resolved from the installed set"}
@@ -639,11 +634,12 @@ function UpdateReviewDialog({
               summary="Compiler diagnostics"
             >
               <ul>
-                {[...review.diagnostics, ...review.compatibilityDiagnostics].map(
-                  (diagnostic, index) => (
+                {[
+                  ...review.diagnostics,
+                  ...review.compatibilityDiagnostics,
+                ].map((diagnostic, index) => (
                     <li key={index}>{diagnostic}</li>
-                  ),
-                )}
+                ))}
               </ul>
             </ConsentTechnicalDetails>
           ) : null}
@@ -706,13 +702,7 @@ function ReviewFact({
   );
 }
 
-function ReviewCopyFact({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function ReviewCopyFact({ label, value }: { label: string; value: string }) {
   return (
     <>
       <dt>{label}</dt>
@@ -741,9 +731,7 @@ async function copyReviewValue(value: string): Promise<void> {
   }
 }
 
-function errorHeading(
-  stage: UpdateCheckState["errorStage"],
-): string {
+function errorHeading(stage: UpdateCheckState["errorStage"]): string {
   switch (stage) {
     case "prepare":
       return "No updates were applied.";

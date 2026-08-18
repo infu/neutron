@@ -1,3 +1,12 @@
+// Adapted from flyq/motoko-sha224 SHA224.mo at revision
+// 16aa34f4420317e514954b3f89037918a7572b9c (Apache-2.0). That work derives
+// from Enzo Haussecker's DFINITY SHA256.mo at revision
+// 90cbfc3b6c131767027fdd910393a5766208142c (Apache-2.0 with LLVM exception)
+// and Go's crypto/sha256 implementation (BSD-3-Clause).
+// Original source notice: Copyright 2020 DFINITY Stiftung; maintained by
+// Enzo Haussecker <enzo@dfinity.org>.
+// Modified by Neutron in 2026 for current Motoko Core collections and the
+// Dispenser's local API.
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";

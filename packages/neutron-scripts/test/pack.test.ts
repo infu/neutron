@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import msgpack5 from "msgpack5";
-import { packDirectory, removeOlderPackageArchives } from "../src/pack.ts";
+import { packDirectory } from "../src/pack.ts";
 
 const msgpack = msgpack5();
 
@@ -53,41 +53,73 @@ test("packer bytes do not depend on directory creation order", async () => {
   }
 });
 
-test("packer removes only older archives for the same app", async () => {
+test("packer retains predecessor archives after writing a new release", async () => {
   const rootDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), "neutron-pack-archives-"),
+    path.join(os.tmpdir(), "neutron-pack-retained-predecessor-"),
   );
 
   try {
-    await Promise.all(
-      [
-        "files.v1.neutron",
-        "files.v0.1.0.neutron",
-        "files.v0.1.2.neutron",
-        "files.v0.1.3.neutron",
-        "files.v0.1.4.neutron",
-        "files.vold.neutron",
-        "files_backup.v1.neutron",
-        "other.v1.neutron",
-      ].map((name) => fs.writeFile(path.join(rootDir, name), name)),
+    await fs.writeFile(
+      path.join(rootDir, "neutron.json"),
+      JSON.stringify({ id: "retained", version: 102 }),
     );
-    await fs.mkdir(path.join(rootDir, "files.v2.neutron"));
+    await fs.mkdir(path.join(rootDir, "dist"));
+    await fs.writeFile(path.join(rootDir, "dist", "index.html"), "candidate");
+    await fs.writeFile(
+      path.join(rootDir, "retained.v0.1.1.neutron"),
+      "durable predecessor",
+    );
 
-    expect(await removeOlderPackageArchives(rootDir, "files", 103)).toEqual([
-      "files.v0.1.0.neutron",
-      "files.v0.1.2.neutron",
-      "files.v1.neutron",
-    ]);
-    expect((await fs.readdir(rootDir)).sort()).toEqual([
-      "files.v0.1.3.neutron",
-      "files.v0.1.4.neutron",
-      "files.v2.neutron",
-      "files.vold.neutron",
-      "files_backup.v1.neutron",
-      "other.v1.neutron",
-    ]);
+    await packDirectory(rootDir);
+
+    expect(await fs.readFile(
+      path.join(rootDir, "retained.v0.1.1.neutron"),
+      "utf8",
+    )).toBe("durable predecessor");
+    expect(await fs.readdir(rootDir)).toContain("retained.v0.1.2.neutron");
   } finally {
     await fs.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("packer retains app-local and external durable predecessor fixtures", async () => {
+  const repositoryRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "neutron-pack-durable-predecessor-"),
+  );
+  const appRoot = path.join(repositoryRoot, "apps", "kernel");
+  const fixturePath = path.join(
+    repositoryRoot,
+    "packages",
+    "neutron-compiler",
+    "test",
+    "fixtures",
+    "kernel.v0.3.6.neutron",
+  );
+
+  try {
+    await fs.mkdir(path.join(appRoot, "dist"), { recursive: true });
+    await fs.mkdir(path.dirname(fixturePath), { recursive: true });
+    await Promise.all([
+      fs.writeFile(
+        path.join(appRoot, "neutron.json"),
+        JSON.stringify({ id: "kernel", version: 307 }),
+      ),
+      fs.writeFile(path.join(appRoot, "dist", "index.html"), "candidate"),
+      fs.writeFile(
+        path.join(appRoot, "kernel.v0.3.6.neutron"),
+        "disposable app-local archive",
+      ),
+      fs.writeFile(fixturePath, "durable exact predecessor"),
+    ]);
+
+    await packDirectory(appRoot);
+
+    expect(await fs.readFile(fixturePath, "utf8")).toBe(
+      "durable exact predecessor",
+    );
+    expect(await fs.readdir(appRoot)).toContain("kernel.v0.3.6.neutron");
+  } finally {
+    await fs.rm(repositoryRoot, { recursive: true, force: true });
   }
 });
 

@@ -26,7 +26,8 @@
     "dist",
     "src",
     "*.scss",
-    "README.md"
+    "README.md",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json --pretty false",
@@ -35,7 +36,7 @@
     "publish:check": "npm run test && npm pack --dry-run"
   },
   "author": "",
-  "license": "GPL-3.0-only",
+  "license": "Apache-2.0",
   "devDependencies": {
     "sass": "^1.101.0"
   }

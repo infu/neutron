@@ -50,17 +50,20 @@ The manifest declares the kernel app as:
 - `id`: `kernel`
 - `src`: `main.mo`
 - `format`: `3`
-- app release `version`: `100`, displayed as `0.1.0`
+- currently released app baseline `version`: `306`, displayed as `0.3.6`
 - `init_arg`: `memory_kernel`, `memory_kernel_activation`, `deployment_id`, and
-  `active_app_instance_inventory`
-- one package-only `kernel` memory schema at v3 and one package-only
+  `active_app_instance_inventory`, plus `canister_principal`
+- one `kernel` memory schema at v3 and one
   `kernel_activation` schema at v1, both with no predecessor or migration edge
 
-This is the fresh preproduction v3 baseline. The current complete schema is
-defined once in `backend/memory/kernel/v3.mo`; discarded split-root and earlier
-development schemas are not supported inputs. Development canisters using
-those shapes must be reinstalled. There is no earlier migration lineage to keep
-until this baseline is released.
+Versions 3 and 1 are released production memory history. Their schema sources
+and existing `neutron.lock.json` entries are immutable. A code-only Kernel
+release retains both versions and restores the existing roots; it does not add a
+fake migration. Discarded split-root and earlier development-only shapes remain
+unsupported, but that exception is not a release path for an installed
+production Neutron. See
+[Managed Memory Migrations And Uninstall](./memory-migrations-and-uninstall.md)
+and the [v0.3.7 GPL bridge candidate checklist](./license-and-deployment-records.md#historical-v035-and-v036-to-v037-gpl-bridge-candidate-checklist).
 
 `apps/kernel/moassemble.ts` reads `neutron.json`, fills `entry` from `src`, and
 writes `backend/_neutron.mo` through `packages/neutron-compiler/src/assemble.ts`.
@@ -740,8 +743,11 @@ There is no separate static-body actor query.
 - The first chunk is sent with `#store`; later chunks are sent sequentially with
   `#store_chunk`.
 
-The install reducer stores `/system/apps.json`, uploads package files, stores the
-current Candid at `/pkg/neutron.did`, then calls `kernel_install_code`.
+The install reducer prepares `/system/apps.json`, uploads package files, stores
+the current Candid at `/pkg/neutron.did`, and, for a record-capable operation,
+stages the exact pre-dispatch build record at
+`/system/deployment-build-record.json` before calling the inline or chunked
+install-code path.
 
 ### Certified HTTP
 
@@ -835,8 +841,9 @@ and complete committed/target app-instance inventories with kernel-assigned
 installation identities and capability-plan fingerprints.
 
 The client uploads content-addressed `/mo` files early, stages every mutable
-asset under `/system/staging/<deployment-id>/`, records the journal, and sends
-the one-way upgrade. It also stages a bounded cleanup list containing only
+asset under `/system/staging/<deployment-id>/`, including the canonical
+deployment build record when supplied, records the journal, and sends the
+one-way upgrade. It also stages a bounded cleanup list containing only
 modules from the authenticated pre-install baseline that are absent from the
 compiled reachable-module set. The kernel writes a protected dispatch marker
 atomically with the upgrade send. It polls generated `kernel_runtime_info`; an

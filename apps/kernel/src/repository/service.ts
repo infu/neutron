@@ -1,6 +1,7 @@
 import {
   KERNEL_INSTALL_MAX_COPIES,
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
+  assertPreparedPackageArchiveIdentity,
   type CompileResult,
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
@@ -17,6 +18,7 @@ import { formatAppVersionLabel } from "neutron-tools/src/version.js";
 import { configInstallDisclosures } from "../lib/perm.ts";
 import { kernelSetupStorage } from "../bootstrap.ts";
 import type { AttestedInstallOfferRequester } from "../install_offers/types.ts";
+import type { PreparedBrowserDeployment } from "../install_review/prepare_browser_deployment.ts";
 import {
   beginRepositoryInstallSession,
   type RepositoryInstallSession,
@@ -26,6 +28,7 @@ import {
   availableRepositoryPackageIds,
   reconcileRepositoryPackages,
   resolveRepositorySelection,
+  type RepositoryPreparedPackage,
   type VerifiedRepositoryPackage,
 } from "./model.ts";
 import {
@@ -42,6 +45,7 @@ import {
 let activeSession: RepositoryInstallSession | null = null;
 let activeAbort: AbortController | null = null;
 let activeCompiled: CompileResult | null = null;
+let activeDeployment: PreparedBrowserDeployment | null = null;
 let compiledPackageIds: readonly string[] = [];
 let activeExpiryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 let generation = 0;
@@ -213,6 +217,10 @@ export async function loadRepositorySetup(
       ) {
         throw new Error("Prepared package capability plan mismatch");
       }
+      const preparedPackage = requireRepositoryPreparedPackage(
+        details.preparedPackage,
+        expected,
+      );
       packages.push(
         Object.freeze({
           id: expected.id,
@@ -223,7 +231,7 @@ export async function loadRepositorySetup(
             ? { publisher: Object.freeze({ ...expected.publisher }) }
             : {}),
           ...(expected.source ? { source: expected.source } : {}),
-          preparedPackage: details.preparedPackage,
+          preparedPackage,
           capabilityPlanFingerprint: disclosures.planFingerprint,
           capabilityDisclosures: Object.freeze([
             ...disclosures.capabilityDisclosures,
@@ -311,7 +319,7 @@ export async function reviewRepositorySelection(): Promise<void> {
   const attempt = generation;
   const packages = selectedPackages(state.loaded.packages, state.selection.selected);
   const copyCount =
-    4 +
+    5 +
     packages.reduce(
       (total, pkg) =>
         checkedAdd(
@@ -331,13 +339,18 @@ export async function reviewRepositorySelection(): Promise<void> {
     return;
   }
   const ids = packages.map(({ manifest }) => manifest.id).sort();
+  activeCompiled = null;
+  activeDeployment = null;
+  compiledPackageIds = [];
   repositorySetupState.compiling();
   try {
     const compiled = await activeSession.compile(packages);
     if (attempt !== generation) return;
+    const deployment = activeSession.getPreparedDeployment(packages, compiled);
     activeCompiled = compiled;
+    activeDeployment = deployment;
     compiledPackageIds = Object.freeze(ids);
-    repositorySetupState.review(Math.ceil(compiled.wasm.byteLength / 1024));
+    repositorySetupState.review(deployment.review);
   } catch (error) {
     if (attempt !== generation) return;
     repositorySetupState.error("compile", error);
@@ -348,6 +361,7 @@ export function backToRepositorySelection(): void {
   const state = useRepositorySetupStore.getState();
   if (!state.loaded || !state.selection) return;
   activeCompiled = null;
+  activeDeployment = null;
   compiledPackageIds = [];
   repositorySetupState.selection(state.rootIds, state.selection);
 }
@@ -358,8 +372,10 @@ export async function installRepositorySelection(): Promise<void> {
     state.phase !== "review" ||
     !activeSession ||
     !activeCompiled ||
+    !activeDeployment ||
     !state.loaded ||
-    !state.selection
+    !state.selection ||
+    state.deploymentReview !== activeDeployment.review
   ) return;
   try {
     requireCurrentPendingReference(state.reference!);
@@ -369,6 +385,7 @@ export async function installRepositorySelection(): Promise<void> {
   }
   const packages = selectedPackages(state.loaded.packages, state.selection.selected);
   const compiled = activeCompiled;
+  const deployment = activeDeployment;
   const ids = packages.map(({ manifest }) => manifest.id).sort();
   if (JSON.stringify(ids) !== JSON.stringify(compiledPackageIds)) {
     repositorySetupState.error(
@@ -381,14 +398,14 @@ export async function installRepositorySelection(): Promise<void> {
   const provenance = Object.fromEntries(
     state.loaded.packages
       .filter(({ id }) => state.selection!.selected.has(id))
-      .map(({ id, digest }) => [
+      .map(({ id, preparedPackage }) => [
         id,
         {
           kind: "repository" as const,
           repository: reference.repo,
           manifest_id: reference.manifest,
           manifest_digest: reference.digest,
-          package_digest: digest,
+          package_digest: preparedPackage.archiveIdentity.sha256,
         } satisfies RepositoryInstallProvenance,
       ]),
   );
@@ -404,14 +421,23 @@ export async function installRepositorySelection(): Promise<void> {
     return;
   }
   try {
-    await session.deploy({ packages, compiled, provenance });
+    await session.deploy({
+      packages,
+      compiled,
+      deploymentBuildRecord: deployment.prepared.record,
+      provenance,
+    });
     if (attempt !== generation) return;
     clearPendingRepositorySetup(kernelSetupStorage);
     activeCompiled = null;
+    activeDeployment = null;
     compiledPackageIds = [];
     repositorySetupState.success();
   } catch (error) {
     if (attempt === generation) {
+      activeCompiled = null;
+      activeDeployment = null;
+      compiledPackageIds = [];
       try {
         // Final approval pauses expiry so an in-flight transaction is not
         // cancelled halfway through. If deployment fails, resume the original
@@ -456,6 +482,7 @@ function setRoots(roots: Set<string>): void {
   const state = useRepositorySetupStore.getState();
   if (!state.loaded) return;
   activeCompiled = null;
+  activeDeployment = null;
   compiledPackageIds = [];
   const selection = resolveRepositorySelection({
     packages: state.loaded.packages,
@@ -487,6 +514,7 @@ function abandonActiveAttempt(
   activeSession?.cancel();
   activeSession = null;
   activeCompiled = null;
+  activeDeployment = null;
   compiledPackageIds = [];
   if (clearStorage) {
     try {
@@ -634,4 +662,26 @@ function nextPaint(): Promise<void> {
 
 function abortError(): Error {
   return new DOMException("Repository setup was cancelled", "AbortError");
+}
+
+function requireRepositoryPreparedPackage(
+  preparedPackage: PreparedPackageInstall,
+  expected: Readonly<{ id: string; sha256: string; size: number }>,
+): RepositoryPreparedPackage {
+  assertPreparedPackageArchiveIdentity(preparedPackage);
+  const { archiveBytes, archiveIdentity } = preparedPackage;
+  if (!archiveBytes || !archiveIdentity) {
+    throw new Error(
+      `Repository package ${expected.id} did not retain its exact archive bytes`,
+    );
+  }
+  if (
+    archiveIdentity.sha256 !== expected.sha256 ||
+    archiveIdentity.size !== expected.size
+  ) {
+    throw new Error(
+      `Repository package ${expected.id} archive identity changed after validation`,
+    );
+  }
+  return preparedPackage as RepositoryPreparedPackage;
 }

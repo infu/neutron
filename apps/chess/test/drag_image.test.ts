@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { setPieceDragImage } from "../src/drag_image.ts";
 
-test("Chess uses only the transparent piece SVG as its native drag image", () => {
+test("Chess uses only the Unicode piece SVG as its native drag image", () => {
   const piece = {
     getBoundingClientRect: () => ({
       left: 10,

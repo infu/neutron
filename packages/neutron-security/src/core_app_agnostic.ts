@@ -94,6 +94,15 @@ const KERNEL_AGENT_ROLE_FILES = new Set([
 const KERNEL_GENERIC_FILES_TYPE_PROPERTY_FILES = new Set([
   "apps/kernel/src/tools/app.ts",
 ]);
+// `files_sha256` is the digest of the complete generic starter asset set, not
+// a reference to the former Files app. Keep the exception tied to the three
+// reviewed Dispenser wire/verification surfaces so the removed `files_`
+// vocabulary remains forbidden everywhere else.
+const DISPENSER_GENERIC_FILES_DIGEST_FILES = new Set([
+  "support/dispenser/mo/main.mo",
+  "support/dispenser/production_deploy.ts",
+  "support/dispenser/starter_payload.ts",
+]);
 
 export async function checkCoreAppAgnostic(
   workspaceRoot = path.resolve(import.meta.dir, "../../.."),
@@ -270,6 +279,12 @@ function collectPolicyMatches(
     policy.bareMethodPattern,
   );
   for (const match of source.matchAll(policy.removedPattern)) {
+    if (
+      match[1] === "files_sha256" &&
+      DISPENSER_GENERIC_FILES_DIGEST_FILES.has(file)
+    ) {
+      continue;
+    }
     pushMatch(
       issues,
       file,

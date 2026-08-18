@@ -27,6 +27,7 @@ import {
   useConsentUiMode,
 } from "../consent/ConsentPresentation.tsx";
 import { PermissionConsequences } from "../consent/PermissionConsequences.tsx";
+import { DeploymentBuildReview } from "../install_review/DeploymentBuildReview.tsx";
 import type { KernelUiMode } from "../ui_mode.ts";
 
 export function RepositorySetupDialog() {
@@ -137,17 +138,12 @@ export function RepositorySetupDialog() {
         <h2 className="title" id="repository-setup-title">
           {dialogTitle(state.phase)}
         </h2>
-        {state.phase === "pending" ? (
-          <PendingContact uiMode={uiMode} />
-        ) : null}
+        {state.phase === "pending" ? <PendingContact uiMode={uiMode} /> : null}
         {state.phase === "loading" || state.phase === "compiling" ? (
           <RepositoryProgress />
         ) : null}
         {state.phase === "selecting" || state.phase === "review" ? (
-          <RepositoryReview
-            final={state.phase === "review"}
-            uiMode={uiMode}
-          />
+          <RepositoryReview final={state.phase === "review"} uiMode={uiMode} />
         ) : null}
         {state.phase === "error" ? <RepositoryError /> : null}
         {state.phase === "success" ? <RepositorySuccess /> : null}
@@ -178,11 +174,11 @@ function PendingContact({ uiMode }: { uiMode: KernelUiMode }) {
       </dl>
       <div className="repository-notice">
         If you continue, this browser will query that canister as an anonymous
-        caller and verify IC-certified data. Gateways and network infrastructure
-        can still observe request metadata. A provider can issue a unique
-        manifest ID or digest and correlate it with the request. Neutron cannot
-        infer whether an identifier was made for tracking; providers must not
-        encode personal, affiliate, or hidden tracking identifiers in it.
+          caller and verify IC-certified data. Gateways and network
+          infrastructure can still observe request metadata. A provider can
+          issue a unique manifest ID or digest and correlate it with the
+          request. Neutron cannot infer whether an identifier was made for
+          tracking; providers must not encode personal, affiliate, or hidden tracking identifiers in it.
       </div>
       </ConsentTechnicalDetails>
       <div className="repository-third-party">
@@ -344,9 +340,12 @@ function RepositoryReview({
       ) : null}
       {availableCount === 0 ? (
         <div className="repository-nothing" data-tid="repository-nothing">
-          Nothing to install. Every application in this setup is already
-          present and was skipped.
+          Nothing to install. Every application in this setup is already present
+          and was skipped.
         </div>
+      ) : null}
+      {final && state.deploymentReview ? (
+        <DeploymentBuildReview {...state.deploymentReview} uiMode={uiMode} />
       ) : null}
       <div className="btn-actions">
         {availableCount === 0 ? (
@@ -364,7 +363,11 @@ function RepositoryReview({
             <button
               className="btn"
               data-tid="repository-install"
-              disabled={selectedCount === 0 || selection.blockers.length > 0}
+              disabled={
+                selectedCount === 0 ||
+                selection.blockers.length > 0 ||
+                state.deploymentReview === null
+              }
               onClick={() => void installRepositorySelection()}
               type="button"
             >
@@ -403,13 +406,6 @@ function RepositoryReview({
           </>
         )}
       </div>
-      {final && state.compiledSize !== null ? (
-        <div className="compile-done" data-tid="repository-compiled">
-          {uiMode === "developer"
-            ? `Selected batch compiled successfully. Wasm size: ${state.compiledSize} kb`
-            : "Selected applications passed package checks and compilation."}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -419,23 +415,25 @@ function RepositoryHeader({ uiMode }: { uiMode: KernelUiMode }) {
   if (!loaded || !reference) return null;
   const links = (["website", "terms", "privacy", "support"] as const)
     .map((label) => [label, loaded.info.provider[label]] as const)
-    .filter((entry): entry is readonly [typeof entry[0], string] =>
+    .filter(
+      (entry): entry is readonly [(typeof entry)[0], string] =>
       typeof entry[1] === "string",
     );
   return (
     <>
       <section className="repository-normal-summary" data-source="repository">
         <strong>{loaded.info.name}</strong>
-        <span>
-          Provider claim: {loaded.info.provider.name} · unverified
-        </span>
+        <span>Provider claim: {loaded.info.provider.name} · unverified</span>
         <p>
           Neutron verified the repository&apos;s certified response and pinned
-          manifest integrity. That does not verify who published or reviewed
-          the software.
+          manifest integrity. That does not verify who published or reviewed the
+          software.
         </p>
       </section>
-      <ConsentTechnicalDetails mode={uiMode} summary="Repository technical details">
+      <ConsentTechnicalDetails
+        mode={uiMode}
+        summary="Repository technical details"
+      >
       <section className="repository-unverified" data-source="repository">
       <h3>Repository-provided — unverified</h3>
       {offeredBy ? (
@@ -505,7 +503,9 @@ function RepositoryHeader({ uiMode }: { uiMode: KernelUiMode }) {
         />
         <Fact label="Pinned digest" value={reference.digest} mono />
       </dl>
-      {loaded.manifest.description ? <p>{loaded.manifest.description}</p> : null}
+          {loaded.manifest.description ? (
+            <p>{loaded.manifest.description}</p>
+          ) : null}
       </section>
       </ConsentTechnicalDetails>
     </>
@@ -517,11 +517,15 @@ function PackageDetails({
   showPermissions,
   uiMode,
 }: {
-  pkg: NonNullable<ReturnType<typeof useRepositorySetupStore.getState>["loaded"]>["packages"][number];
+  pkg: NonNullable<
+    ReturnType<typeof useRepositorySetupStore.getState>["loaded"]
+  >["packages"][number];
   showPermissions: boolean;
   uiMode: KernelUiMode;
 }) {
-  const dependencies = Object.values(pkg.preparedPackage.manifest.dependencies ?? {});
+  const dependencies = Object.values(
+    pkg.preparedPackage.manifest.dependencies ?? {},
+  );
   return (
     <div className="repository-package-review">
       {showPermissions ? (
@@ -533,7 +537,10 @@ function PackageDetails({
         summary="Package technical details"
       >
       <dl className="repository-facts">
-        <Fact label="Raw size" value={`${pkg.rawSize.toLocaleString()} bytes`} />
+          <Fact
+            label="Raw size"
+            value={`${pkg.rawSize.toLocaleString()} bytes`}
+          />
         <Fact label="SHA-256" value={pkg.digest} mono />
         <Fact
           label="Capability plan"
@@ -551,13 +558,18 @@ function PackageDetails({
           />
         ) : null}
         {pkg.source ? (
-          <LinkFact href={pkg.source} label="Source claim" value={pkg.source} />
+            <LinkFact
+              href={pkg.source}
+              label="Source claim"
+              value={pkg.source}
+            />
         ) : null}
       </dl>
       {pkg.capabilityDisclosures.length > 0 ? (
         <div className="repository-permissions">
           <strong>
-            Kernel-verified capability plan ({pkg.capabilityDisclosures.length})
+              Kernel-verified capability plan (
+              {pkg.capabilityDisclosures.length})
           </strong>
           {pkg.capabilityDisclosures.map((disclosure) => (
             <details key={disclosure.id}>
@@ -584,7 +596,8 @@ function PackageDetails({
         <ul className="repository-dependencies">
           {dependencies.map((dependency) => (
             <li key={dependency.app}>
-              <code>{dependency.app}</code> {formatAppVersionLabel(dependency.min_version)}+
+                <code>{dependency.app}</code>{" "}
+                {formatAppVersionLabel(dependency.min_version)}+
             </li>
           ))}
         </ul>
@@ -623,7 +636,9 @@ function PackageDetails({
 }
 
 function repositoryCapabilityAuthorityConfig(
-  entry: Parameters<typeof PackageDetails>[0]["pkg"]["capabilityDisclosures"][number]["entry"],
+  entry: Parameters<
+    typeof PackageDetails
+  >[0]["pkg"]["capabilityDisclosures"][number]["entry"],
 ): unknown {
   switch (entry.id) {
     case "backend_calls":
@@ -684,13 +699,17 @@ function RepositoryError() {
   const { error, errorStage } = useRepositorySetupStore();
   return (
     <div className="call">
-      <div className="repository-error" data-tid="repository-error" role="alert">
+      <div
+        className="repository-error"
+        data-tid="repository-error"
+        role="alert"
+      >
         {error ?? "Repository setup failed"}
       </div>
       <p>
-        No further repository request will be made unless you reload this
-        setup. Neutron will reconcile any interrupted install journal before
-        the next attempt.
+        No further repository request will be made unless you reload this setup.
+        Neutron will reconcile any interrupted install journal before the next
+        attempt.
       </p>
       <div className="btn-actions">
         <button
@@ -809,8 +828,9 @@ function useOtherDomModalActive(): boolean {
 }
 
 function hasOtherDomModal(): boolean {
-  return [...document.querySelectorAll<HTMLElement>('[aria-modal="true"]')]
-    .some(
+  return [
+    ...document.querySelectorAll<HTMLElement>('[aria-modal="true"]'),
+  ].some(
       (element) =>
         element.dataset.tid !== "repository-setup-dialog" &&
         !element.closest('[data-tid="repository-setup-dialog"]'),

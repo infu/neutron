@@ -1,0 +1,226 @@
+# NPL v0.2 — Core Sovereignty and Kernel-Neutrality Provisions
+
+## One Sovereign User
+
+A **Sovereign User** is exactly one living natural person for whose primary benefit a Personal Canister Environment is provisioned and who possesses its ultimate administrative authority.
+
+A Sovereign User cannot be a DAO, NNS, SNS, corporation, company, partnership, foundation, association, trust, household, family, team, community, token-holder group, membership body, multisignature group, smart contract, canister, artificial agent, legal entity, or other collective or non-natural person.
+
+A provider may not evade the single-user requirement by describing a collective, organization, shared account, governance process, or group of beneficiaries as one User.
+
+A natural person does not qualify merely by acting as a nominee, trustee, officer, delegate, custodian, signatory, or agent for a DAO or another collective. The person must hold the authority for their own personal benefit and must be able to exercise it without instruction, approval, or a binding decision from that collective.
+
+One Sovereign User may control multiple devices, keys, principals, credentials, or recovery credentials, provided that their effective authority belongs exclusively to that same natural person and not jointly to multiple persons.
+
+## No Co-Tenancy
+
+Every Personal Canister Environment must be provisioned exclusively for exactly one Sovereign User.
+
+A provider must not place two or more persons’ personal computing environments in the same canister or Personal Canister Environment.
+
+A provider must not create separate tenant accounts, home environments, private storage domains, application-installation spaces, resource allocations, or administrative domains for multiple persons within one Personal Canister Environment.
+
+This prohibition applies regardless of whether those tenants are described as users, members, seats, profiles, workspaces, subaccounts, vaults, spaces, communities, or by another label.
+
+One Sovereign User may organize their own environment into multiple personal profiles, spaces, or compartments, but those divisions must remain under that one User’s exclusive authority and must not be assigned as independent personal environments to other persons.
+
+Interaction by guests, contacts, friends, collaborators, or remote counterparties is permitted only when it does not create independent tenancy, shared ownership, or a second personal computing environment.
+
+An Application storing interaction data about another person does not, by itself, create Co-Tenancy. The other person must not receive a general-purpose personal environment, independent application control, or shared ownership of the canister.
+
+## Exclusive User Authority
+
+Before ordinary use begins or User Data is stored, every Controller Identity and every deployment-specific Administrative Authority must be controlled exclusively by the Sovereign User.
+
+No authority jointly controlled by multiple natural persons qualifies as User-Controlled Authority.
+
+A developer, distributor, maintainer, DAO, Governance Body, foundation, service provider, Application publisher, or other third party must not remain a Controller Identity or retain an emergency key, veto, rollback power, mandatory-upgrade power, remote kill switch, required co-signature, or equivalent Administrative Authority over the Personal Canister Environment.
+
+A provider may temporarily hold Administrative Authority only to create and initialize a new Personal Canister Environment.
+
+Before ordinary use begins or User Data is stored, the provider must completely and verifiably relinquish that authority or place it entirely under User-Controlled Authority.
+
+The provider must not retain a hidden, dormant, emergency, recovery, or indirect path to regain authority.
+
+## Whole-Wasm Replacement
+
+For as long as NPL-covered software is installed, the Sovereign User must retain a functioning and practical ability to replace the entire installed Wasm.
+
+The User must be able to install technically valid Wasm selected or built by the User, including Wasm that:
+
+1. is not a Neutron Distribution;
+2. is incompatible with the currently installed Kernel;
+3. is not signed, approved, listed, or published by the current maintainer;
+4. is governed or published by another DAO or maintainer; or
+5. is created privately by the User.
+
+Whole-Wasm Replacement must not require the consent, signature, vote, cooperation, continued operation, or authorization of another person.
+
+A Personal Canister Environment may act as its own Controller Identity only when the Sovereign User has an unconditional path to replace the entire Wasm and alter the controller configuration without approval, cooperation, or a secret held by another person.
+
+## The Sovereignty Interface
+
+Every End-User Distribution and every maintained end-user release must include a functioning Sovereignty Interface.
+
+The Sovereignty Interface must be prominently and directly accessible through the Distribution’s ordinary administration or settings interface.
+
+It must not require the User to compile source code, install developer tooling, construct low-level protocol messages, edit undocumented configuration, or use undocumented commands.
+
+A graphical Distribution must provide a graphical Sovereignty Interface.
+
+The interface must allow the User to:
+
+1. inspect the installed Kernel and Distribution name, version, module hash, applicable license, and source location;
+2. inspect all Controller Identities and known Administrative Authorities;
+3. create a backup or export before replacement;
+4. select arbitrary technically valid Wasm from a local file, user-chosen network location, or another documented input;
+5. install Wasm not signed, listed, hosted, recommended, or approved by the current distributor;
+6. choose among reasonably available platform-supported replacement modes;
+7. review material data-loss and compatibility warnings; and
+8. replace or reconfigure Controller Identities so that they remain controlled exclusively by the User.
+
+The alternative installation process must be substantially as accessible as installing an official update.
+
+A distributor cannot provide a one-click button for its own release while forcing users of competing releases to construct raw management-canister calls manually.
+
+## DAO Package Governance Is Allowed
+
+A DAO or other Governance Body may govern a Kernel Package, packaged Distribution, or Application package.
+
+It may:
+
+* decide what an official package contains;
+* vote on releases;
+* maintain a roadmap;
+* control an official repository;
+* sign packages;
+* operate a registry;
+* recommend updates; and
+* discontinue its own packages.
+
+Package Governance is permitted only when:
+
+1. the Governance Body has no Controller Identity or Administrative Authority over the User’s Personal Canister Environment;
+2. the User can install or reject the governed package freely;
+3. the User can install a competing, modified, unsigned, self-built, or differently governed package; and
+4. the User can replace the entire Wasm without the Governance Body’s approval or continued operation.
+
+The DAO may govern **the package**.
+
+It may not govern **the user’s computer**.
+
+## No Targeted Deployment Governance - Daoization
+
+A provider must not configure, distribute, or provide an End-User Distribution in which the NNS, an SNS, a DAO, governance canister, developer, distributor, or another third party holds Targeted Deployment Governance over a Personal Canister Environment.
+
+The User’s ability to replace the Wasm must not depend on a proposal, vote, authorization, package approval, registry decision, or signature issued by such a body.
+
+This applies whether authority is held directly or indirectly through a controlled canister, delegated principal, contract, multisignature arrangement, administrative service, security council, recovery service, or other intermediary.
+
+An arrangement is judged by its practical authority, not by the name given to it.
+
+Calling a party a guardian, recovery service, protocol assistant, package maintainer, co-signer, trustee, or security council does not permit it to retain prohibited authority.
+
+## General Platform Governance Is Different
+
+Governance exercised generally over the Underlying Platform does not constitute Daoization merely because it changes network economics, execution rules, routing, cryptographic facilities, resource limits, or capabilities made generally available to comparable canisters.
+
+This allows Neutron to run on an NNS-governed protocol.
+
+It does not allow a provider to make an NNS proposal, SNS proposal, DAO vote, or application-specific governance process a required step in deciding which Wasm a particular Sovereign User may run.
+
+The License does not claim that the Underlying Platform lacks system-level or emergency authority.
+
+Instead, it prohibits NPL licensees from voluntarily granting, requesting, arranging, accepting, or depending upon deployment-specific third-party authority over the User’s environment.
+
+## Kernel Neutrality
+
+The Kernel must act as neutral infrastructure for Applications.
+
+Its application-facing functions must be limited to general-purpose Capabilities and narrowly defined Kernel Administrative Components.
+
+When the Kernel adds functionality intended for Applications or end users, it must expose that functionality as a documented Capability that independently developed Applications can use on materially equal terms.
+
+The Kernel must not reserve a generally useful function for an Application supplied by the Kernel maintainer, Distribution maintainer, DAO, sponsor, or preferred developer.
+
+## No Ordinary Applications Inside the Kernel
+
+The Kernel must not incorporate, disguise, or implement an Application whose primary purpose could reasonably be supplied as a separately identifiable and installable Application.
+
+An ordinary end-user product does not become part of the Kernel merely because a maintainer labels it a:
+
+* system service;
+* default component;
+* built-in feature;
+* required package; or
+* Kernel module.
+
+The Kernel may include administrative components necessary to configure, inspect, secure, recover, repair, update, or replace the Kernel; manage Applications and permissions; or provide the Sovereignty Interface.
+
+This exception must be interpreted narrowly.
+
+A Kernel Administrative Component must not substantially provide ordinary end-user Application functionality unrelated to its administrative purpose.
+
+## Distributions May Include Apps
+
+A Distribution may include or recommend ordinary Applications, including Applications maintained by the Distribution maintainer or a DAO.
+
+Every bundled Application must:
+
+1. remain separately identifiable from the Kernel;
+2. be removable, replaceable, or rejectable by the Sovereign User;
+3. receive no hidden or exclusive Capability;
+4. follow the same documented rules as similarly situated Applications; and
+5. not be required in order to install a competing Application or exercise the User’s sovereignty rights.
+
+A Distribution can ship an email app.
+
+It cannot make that email app an inseparable or privileged part of the Kernel.
+
+## Capability Non-Discrimination
+
+Any Capability made available to one Application must be available to every similarly situated Application that satisfies the same objective and publicly documented technical, security, privacy, resource, compatibility, and User-consent conditions.
+
+Kernel policy may distinguish Applications according to what they request to do and what the Sovereign User authorizes.
+
+Kernel policy must not distinguish Applications according to who created, funded, signed, published, governed, distributed, or competes with them.
+
+Access to a Capability must not require:
+
+1. approval by the Kernel or Distribution maintainer;
+2. inclusion in a maintainer-controlled registry or allowlist;
+3. a signature issued only by the maintainer or its DAO;
+4. use of a private package identifier or undocumented interface; or
+5. a commercial, governance, or affiliation relationship with the maintainer.
+
+The Kernel may verify integrity, identify code, require explicit User consent, and enforce User-selected trust policies, provided that the User can apply those policies to any Application on equal terms.
+
+## No Privileged System Applications
+
+The Kernel or Distribution must not designate an ordinary Application as privileged, mandatory, protected, irremovable, or system-level in a manner that gives it authority, persistence, placement, data access, performance, or Capabilities unavailable to competing Applications.
+
+Default installation, recommendation, or initial placement is allowed only when:
+
+1. the Application remains removable and replaceable;
+2. the User can change its placement or default role; and
+3. competing Applications can be selected for the same role through the same documented mechanism.
+
+## No Kernel Sherlocking
+
+A Kernel maintainer may create or sponsor Applications that compete with independent Applications.
+
+It must compete through ordinary Applications using the same documented Capabilities and rules.
+
+When a maintainer wants to add a new function at the Kernel layer, it must provide that function as a general Capability.
+
+It must not embed a complete favored Application in the Kernel or reserve the new function for its own Application.
+
+The principle is:
+
+> **The Kernel provides capabilities. Applications provide products.**
+
+## No Neutrality Evasion
+
+A provider may not evade Kernel Neutrality by moving privileged functionality into a nominally separate Application, helper canister, service, package, plugin, or intermediary controlled by the Kernel or Distribution maintainer.
+
+If the helper is unavailable to competing Applications on materially equal terms, it remains a prohibited privilege regardless of which package or canister contains it.

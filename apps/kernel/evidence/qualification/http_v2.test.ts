@@ -29,6 +29,15 @@ const URL_TEXT =
   `http://${CANISTER_ID}.localhost:8000/app/fixture/_route/publication/post`;
 const BODY = Uint8Array.of(1, 2, 3);
 const CONTENT_TAG = new Uint8Array(32).fill(0x44);
+const BLS_DER_PREFIX = new Uint8Array(Buffer.from(
+  "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c05030201036100",
+  "hex",
+));
+
+type DelegationFixture = Readonly<{
+  format: "flat" | "tree";
+  authorizeCanister?: boolean;
+}>;
 
 function expected(
   patch: Partial<ExpectedCertifiedHttpResponse> = {},
@@ -87,6 +96,7 @@ function rawRequest(
 async function validProofFixture(
   nowNs = BigInt(Date.now()) * 1_000_000n,
   wanted = expected(),
+  delegation?: DelegationFixture,
 ): Promise<Readonly<{
   rootKey: Uint8Array;
   response: CertifiedHttpQueryResponse;
@@ -137,25 +147,80 @@ async function validProofFixture(
       [3, unsignedLeb128(nowNs)],
     ],
   ] as unknown as HashTree;
-  const certificateRoot = await reconstruct(certificateTree);
-  const message = concat(
-    Uint8Array.of("ic-state-root".length),
-    new TextEncoder().encode("ic-state-root"),
-    certificateRoot,
-  );
-  const privateKey = new Uint8Array(32);
-  privateKey[31] = 7;
-  const publicKey = bls12_381.getPublicKeyForShortSignatures(privateKey);
-  const signature = bls12_381.signShortSignature(message, privateKey);
-  const derPrefix = Buffer.from(
-    "308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c05030201036100",
-    "hex",
-  );
-  const rootKey = concat(new Uint8Array(derPrefix), publicKey);
-  const certificate = cbor({
+  const rootPrivateKey = blsPrivateKey(7);
+  const subnetPrivateKey = blsPrivateKey(9);
+  const certificateFields: {
+    tree: HashTree;
+    signature: Uint8Array;
+    delegation?: {
+      subnet_id: Uint8Array;
+      certificate: Uint8Array;
+    };
+  } = {
     tree: certificateTree,
-    signature,
-  });
+    signature: await signCertificateTree(
+      certificateTree,
+      delegation === undefined ? rootPrivateKey : subnetPrivateKey,
+    ),
+  };
+  if (delegation !== undefined) {
+    const subnetId = Principal.fromUint8Array(
+      Uint8Array.of(0x51, 0x55, 0x41, 0x4c, 0x01),
+    );
+    const rangePrincipal = delegation.authorizeCanister === false
+      ? Principal.fromUint8Array(Uint8Array.of(0x01))
+      : principal;
+    const rangePrincipalBytes = rangePrincipal.toUint8Array();
+    const encodedRanges = cbor([
+      [rangePrincipalBytes, rangePrincipalBytes],
+    ]);
+    const subnetPublicKey = derPublicKey(subnetPrivateKey);
+    const subnetTree = delegation.format === "flat"
+      ? treeFork(
+        treeLabel(
+          "subnet",
+          treeLabel(
+            subnetId.toUint8Array(),
+            treeFork(
+              treeLabel("canister_ranges", treeLeaf(encodedRanges)),
+              treeLabel("public_key", treeLeaf(subnetPublicKey)),
+            ),
+          ),
+        ),
+        treeLabel("time", treeLeaf(unsignedLeb128(nowNs))),
+      )
+      : treeFork(
+        treeLabel(
+          "canister_ranges",
+          treeLabel(
+            subnetId.toUint8Array(),
+            treeLabel(
+              rangePrincipalBytes,
+              treeLeaf(encodedRanges),
+            ),
+          ),
+        ),
+        treeFork(
+          treeLabel(
+            "subnet",
+            treeLabel(
+              subnetId.toUint8Array(),
+              treeLabel("public_key", treeLeaf(subnetPublicKey)),
+            ),
+          ),
+          treeLabel("time", treeLeaf(unsignedLeb128(nowNs))),
+        ),
+      );
+    certificateFields.delegation = {
+      subnet_id: subnetId.toUint8Array(),
+      certificate: cbor({
+        tree: subnetTree,
+        signature: await signCertificateTree(subnetTree, rootPrivateKey),
+      }),
+    };
+  }
+  const rootKey = derPublicKey(rootPrivateKey);
+  const certificate = cbor(certificateFields);
   const witnessCbor = cbor(witness);
   const expressionPathCbor = cbor(wanted.expressionPath);
   const proofHeader = [
@@ -174,6 +239,53 @@ async function validProofFixture(
       upgrade: [],
     },
   };
+}
+
+function blsPrivateKey(lastByte: number): Uint8Array {
+  const key = new Uint8Array(32);
+  key[31] = lastByte;
+  return key;
+}
+
+function derPublicKey(privateKey: Uint8Array): Uint8Array {
+  return concat(
+    BLS_DER_PREFIX,
+    bls12_381.getPublicKeyForShortSignatures(privateKey),
+  );
+}
+
+async function signCertificateTree(
+  tree: HashTree,
+  privateKey: Uint8Array,
+): Promise<Uint8Array> {
+  const root = await reconstruct(tree);
+  return bls12_381.signShortSignature(
+    concat(
+      Uint8Array.of("ic-state-root".length),
+      new TextEncoder().encode("ic-state-root"),
+      root,
+    ),
+    privateKey,
+  );
+}
+
+function treeFork(left: HashTree, right: HashTree): HashTree {
+  return [1, left, right] as HashTree;
+}
+
+function treeLabel(
+  label: string | Uint8Array,
+  tree: HashTree,
+): HashTree {
+  return [
+    2,
+    typeof label === "string" ? new TextEncoder().encode(label) : label,
+    tree,
+  ] as unknown as HashTree;
+}
+
+function treeLeaf(value: Uint8Array): HashTree {
+  return [3, value] as unknown as HashTree;
 }
 
 function labeledTree(
@@ -385,6 +497,42 @@ describe("Certified HTTP V2 qualification verifier", () => {
         tooDeepExpression,
       ),
     ).rejects.toThrow("CBOR depth bound");
+  });
+
+  test("accepts delegated Flat and Tree canister-range certificates", async () => {
+    for (const format of ["flat", "tree"] as const) {
+      const fixture = await validProofFixture(
+        BigInt(Date.now()) * 1_000_000n,
+        expected(),
+        { format },
+      );
+      await expect(
+        verifyCertifiedHttpQueryResponse(
+          expected(),
+          fixture.rootKey,
+          rawRequest(),
+          fixture.response,
+        ),
+      ).resolves.toMatchObject({ boundary: "raw_query" });
+    }
+  });
+
+  test("rejects a Tree delegation whose shard excludes the canister", async () => {
+    const fixture = await validProofFixture(
+      BigInt(Date.now()) * 1_000_000n,
+      expected(),
+      { format: "tree", authorizeCanister: false },
+    );
+    await expect(
+      verifyCertifiedHttpQueryResponse(
+        expected(),
+        fixture.rootKey,
+        rawRequest(),
+        fixture.response,
+      ),
+    ).rejects.toThrow(
+      "does not include the canister",
+    );
   });
 
   test("uses the synchronized PocketIC agent after replica-time advance", async () => {

@@ -19,7 +19,7 @@
     "local:fund": "bun local_fund.ts"
   },
   "author": "",
-  "license": "GPL-3.0-only",
+  "license": "Apache-2.0",
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
     "@dfinity/candid": "^3.4.3",

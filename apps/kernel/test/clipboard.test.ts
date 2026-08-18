@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   MAX_CLIPBOARD_TEXT_BYTES,
+  MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES,
   createClipboardService,
   type ClipboardAppRequest,
 } from "../src/clipboard/service.ts";
@@ -60,6 +61,42 @@ test("clipboard service validates the exact bounded payload", async () => {
       allowed,
     ),
   ).rejects.toThrow("exceeds 256 KiB");
+});
+
+test("trusted Kernel UI can explicitly copy bounded deployment evidence", async () => {
+  const service = inertService();
+  const largerThanAppPayload = "x".repeat(MAX_CLIPBOARD_TEXT_BYTES + 1);
+  await expect(
+    service.writeFromKernelUi(
+      largerThanAppPayload,
+      true,
+      MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES,
+    ),
+  ).resolves.toBeUndefined();
+  await expect(
+    service.writeFromKernelUi(
+      "x".repeat(MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES + 1),
+      true,
+      MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES,
+    ),
+  ).rejects.toThrow("exceeds 4 MiB");
+  await expect(
+    service.writeFromKernelUi("evidence", true, 0),
+  ).rejects.toThrow("Invalid Kernel clipboard byte limit");
+  await expect(
+    service.writeFromKernelUi(
+      "evidence",
+      true,
+      MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES + 1,
+    ),
+  ).rejects.toThrow("Invalid Kernel clipboard byte limit");
+  await expect(
+    service.writeFromKernelUi(
+      "evidence",
+      false,
+      MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES,
+    ),
+  ).rejects.toMatchObject({ code: "USER_INTERACTION_REQUIRED" });
 });
 
 test("clipboard service does not impose an elapsed-time quota", async () => {

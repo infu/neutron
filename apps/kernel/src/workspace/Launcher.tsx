@@ -19,7 +19,6 @@ import {
 import {
   install_app,
   isAuthorityPendingState,
-  requestAppUninstall,
   uninstall_app,
   useAppsStore,
   type AppInstallSource,
@@ -208,22 +207,16 @@ export function Launcher(props: LauncherProps) {
     }
   };
 
-  const uninstallPackage = async (appId: string, appName: string) => {
+  const uninstallPackage = async (appId: string) => {
     if (
       installRunRef.current ||
       useAppsStore.getState().operationBusy ||
       isAuthorityPendingState(useAppsStore.getState())
     ) return;
-    const accepted = await requestAppUninstall({
-      appId,
-      appName,
-      memoryIds: [],
-    });
-    if (!accepted) return;
     setInstallSource("uninstall");
     try {
-      await uninstall_app(appId);
-      close(true);
+      const result = await uninstall_app(appId);
+      if (result) close(true);
     } catch (error) {
       console.error("Uninstall package failed", error);
     } finally {
@@ -473,7 +466,7 @@ export function Launcher(props: LauncherProps) {
                   aria-label={uninstallTitle}
                   disabled={uninstallDisabled}
                   onClick={() =>
-                    void uninstallPackage(entry.appId, entry.appName)
+                    void uninstallPackage(entry.appId)
                   }
                 >
                   <IoTrashOutline aria-hidden="true" />

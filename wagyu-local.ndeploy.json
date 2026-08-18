@@ -24,7 +24,7 @@
     },
     "packages": [
       {
-        "path": "apps/wagyu/wagyu.v0.3.2.neutron"
+        "path": "apps/wagyu/wagyu.v0.3.3.neutron"
       }
     ]
   }

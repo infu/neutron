@@ -9,14 +9,15 @@
     "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
     "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
     "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
     "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
-    "package": "npm run validate && npm run build && npm run mopack && npm run schema && bun ../../packages/neutron-scripts/src/pack.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "test": "npm run typecheck && npm run package && bun test test && npm run test:motoko",
     "test:motoko": "bun test/motoko/run.ts",
     "typecheck": "tsc -b --pretty false",
     "watch": "bun build.ts watch"
   },
-  "license": "GPL-3.0-only",
+  "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   "description": "Certified peer-to-peer social protocol for Neutron nodes",
   "dependencies": {
     "@icp-sdk/core": "^5.4.0",

@@ -38,7 +38,10 @@ Primary sources:
 The backend stores assets by the exact `Text` key passed to `kernel_static`.
 The normal upload client constructs keys from package-relative paths:
 
-- `preparePackageFiles()` rewrites package paths without a leading slash.
+- `preparePackageFiles()` rewrites installable package paths without a leading
+  slash. Before this step, package preparation verifies and removes any
+  reserved archive-only legal/source paths used by an explicit embedded-source
+  package. Normal provider-hosted packages contain no such paths.
 - `uploadPreparedFiles()` adds the leading slash.
 - The kernel-local `prepare_files()` and `upload_files()` functions delegate to
   the shared package compiler helpers.
@@ -47,21 +50,33 @@ The normal upload client constructs keys from package-relative paths:
 
 For the kernel package, `app_prefix` is empty:
 
-| Package path          | Rewritten path     | Stored key          |
-| --------------------- | ------------------ | ------------------- |
-| `web/index.html`      | `index.html`       | `/`                 |
-| `web/static/icon.png` | `static/icon.png`  | `/static/icon.png`  |
-| `neutron.json`        | `pkg/neutron.json` | `/pkg/neutron.json` |
-| `mo/<hash>.mo`        | `mo/<hash>.mo`     | `/mo/<hash>.mo`     |
+| Package path                   | Rewritten path                      | Stored key                           |
+| ------------------------------ | ----------------------------------- | ------------------------------------ |
+| `web/index.html`               | `index.html`                        | `/`                                  |
+| `web/static/icon.png`          | `static/icon.png`                   | `/static/icon.png`                   |
+| `neutron.json`                 | `pkg/neutron.json`                  | `/pkg/neutron.json`                  |
+| `legal/package-record.v1.json` | `pkg/legal/package-record.v1.json` | `/pkg/legal/package-record.v1.json`  |
+| `legal/APPLICATION-NOTICE.txt` | `pkg/legal/APPLICATION-NOTICE.txt` | `/pkg/legal/APPLICATION-NOTICE.txt`  |
+| `legal/LICENSE*.txt`           | `pkg/legal/LICENSE*.txt`           | `/pkg/legal/LICENSE*.txt`            |
+| `legal/THIRD_PARTY_NOTICES.md` | `pkg/legal/THIRD_PARTY_NOTICES.md` | `/pkg/legal/THIRD_PARTY_NOTICES.md`  |
+| `legal/archive-only/**`        | not staged                          | not stored                           |
+| `legal/source/app-source.v1.msgpack` | not staged                    | not stored                           |
+| `mo/<hash>.mo`                 | `mo/<hash>.mo`                      | `/mo/<hash>.mo`                      |
 
 For a normal app package, `app_prefix` is `app/<id>/`:
 
-| Package path          | Rewritten path              | Stored key                   |
-| --------------------- | --------------------------- | ---------------------------- |
-| `web/index.html`      | `app/<id>/index.html`       | `/app/<id>/index.html`       |
-| `web/static/icon.png` | `app/<id>/static/icon.png`  | `/app/<id>/static/icon.png`  |
-| `neutron.json`        | `app/<id>/pkg/neutron.json` | `/app/<id>/pkg/neutron.json` |
-| `mo/<hash>.mo`        | `mo/<hash>.mo`              | `/mo/<hash>.mo`              |
+| Package path                   | Rewritten path                               | Stored key                                    |
+| ------------------------------ | -------------------------------------------- | --------------------------------------------- |
+| `web/index.html`               | `app/<id>/index.html`                        | `/app/<id>/index.html`                        |
+| `web/static/icon.png`          | `app/<id>/static/icon.png`                   | `/app/<id>/static/icon.png`                   |
+| `neutron.json`                 | `app/<id>/pkg/neutron.json`                  | `/app/<id>/pkg/neutron.json`                  |
+| `legal/package-record.v1.json` | `app/<id>/pkg/legal/package-record.v1.json` | `/app/<id>/pkg/legal/package-record.v1.json`  |
+| `legal/APPLICATION-NOTICE.txt` | `app/<id>/pkg/legal/APPLICATION-NOTICE.txt` | `/app/<id>/pkg/legal/APPLICATION-NOTICE.txt`  |
+| `legal/LICENSE*.txt`           | `app/<id>/pkg/legal/LICENSE*.txt`           | `/app/<id>/pkg/legal/LICENSE*.txt`            |
+| `legal/THIRD_PARTY_NOTICES.md` | `app/<id>/pkg/legal/THIRD_PARTY_NOTICES.md` | `/app/<id>/pkg/legal/THIRD_PARTY_NOTICES.md`  |
+| `legal/archive-only/**`        | not staged                                   | not stored                                    |
+| `legal/source/app-source.v1.msgpack` | not staged                              | not stored                                    |
+| `mo/<hash>.mo`                 | `mo/<hash>.mo`                               | `/mo/<hash>.mo`                               |
 
 The backend does not infer directory indexes or prepend slashes. `http_request`
 canonicalizes the request URL for static serving by stripping query strings and
@@ -164,14 +179,30 @@ Host, query, destination, and origin rules are specified in
 
 ### `/pkg` Metadata
 
-All non-`web/` and non-`mo/` package files are stored under a package metadata
-prefix:
+Installable non-`web/` and non-`mo/` package files are stored under a package
+metadata prefix:
 
 - Kernel package metadata uses `/pkg/<path>`.
 - Normal app package metadata uses `/app/<id>/pkg/<path>`.
 
 The packaged `neutron.json` therefore becomes `/pkg/neutron.json` for the
-kernel and `/app/<id>/pkg/neutron.json` for a normal app.
+kernel and `/app/<id>/pkg/neutron.json` for a normal app. The fixed
+`legal/package-record.v1.json` sidecar follows the same mapping to
+`/pkg/legal/package-record.v1.json` or
+`/app/<id>/pkg/legal/package-record.v1.json`.
+
+Provider-hosted production packages install their governing license and notices
+from ordinary `legal/**` package paths. Their package record identifies a
+generator-produced Complete App Source gzip artifact at the update source's
+certified `/repo/v1/sources/<sha256>.source.v1.msgpack.gz` path. That source
+object is not inside the `.neutron` archive and is never staged in the user's
+canister.
+
+The two reserved groups apply only to the explicit embedded-source form:
+`legal/archive-only/**` holds its bulk legal corpus, and
+`legal/source/app-source.v1.msgpack` holds its bounded Complete App Source
+snapshot. Package preparation verifies their record-bound bytes and source
+semantics before excluding them from the staged file list.
 
 Current browser and CLI consumers read committed metadata through IC HTTP
 response certification version 2:
@@ -179,8 +210,14 @@ response certification version 2:
 - `compile_app()` reads `/pkg/neutron.json` for the kernel manifest.
 - `compile_app()` reads `/app/<id>/pkg/neutron.json` for each installed app
   manifest listed in `/system/apps.json`.
+- Settings structurally reads each installed package-information record and
+  its manifest. It verifies installed license and notice files for a
+  provider-hosted package without fetching its HTTPS source offer. For the
+  explicit embedded form, it labels absent archive-only material as retained in
+  the original package.
 - `install_app()` stores the latest generated Candid text at `/pkg/neutron.did`
-  before calling `kernel_install_code`.
+  and stages the reviewed deployment record before calling the inline or
+  chunked install-code path.
 - The first dynamic self-actor request reads `/pkg/neutron.did` and passes it to
   `icblast`; concurrent requests share that load and later requests reuse the
   identity-generation-scoped actor.
@@ -321,10 +358,12 @@ assets.pk.get(assetUrl(request.url))
 
 Before lookup, the backend keeps `/system/**` HTTP-internal except for exact
 `/system/apps.json`, `/system/install-provenance.json`, and
-`/system/runtime-config.json`. A denied internal
-path and a missing key both return the same fixed `404` body. Committed
+`/system/runtime-config.json`, and `/system/deployment-build-record.json`. A
+denied internal path and a missing key both return the same fixed `404` body.
+Committed
 `/system/apps.json`, `/system/install-provenance.json`,
-`/system/runtime-config.json`, `/mo/**`, `/pkg/**`, and
+`/system/runtime-config.json`, `/system/deployment-build-record.json`,
+`/mo/**`, `/pkg/**`, and
 `/app/<id>/pkg/**` keys are ordinary certified HTTP assets. Present static
 assets return their stored encoding and may use the kernel-owned chunk
 streaming callback. Their exact response profiles, cache rules, request
@@ -348,7 +387,14 @@ Certified HTTP is an integrity mechanism, not an inventory-confidentiality
 boundary. Committed registry/package/compiler assets and a guessed public app
 path such as `/app/hello/index.html` are anonymously requestable. Bootstrap
 claim records, in-flight staging data, and any future non-allowlisted
-`/system/**` records remain HTTP-internal.
+`/system/**` records remain HTTP-internal. The deployment build record is
+public integrity evidence and must not contain owner authorization,
+controllers, credentials, installation UIDs, or browser-origin nonces.
+
+Under the NPL/NSAL private-assembly rules, this automatic runtime availability
+does not by itself make the Sovereign User a distributor or source host. The
+user assumes distribution duties only by affirmatively acting to distribute the
+software itself; ordinary app communication and exchange of User Data do not.
 
 This change does not alter package-repository transport. The separate
 `repo_*` actor API still returns certified query resources and chunks, and its
@@ -475,6 +521,8 @@ The path layout appears intended to separate concerns:
 
 - `/` and `/static/...` are the kernel UI.
 - `/system/apps.json` is the small kernel-owned app registry.
+- `/system/deployment-build-record.json` is the canonical whole-deployment
+  build and install record when one has been committed.
 - `/pkg/...` is kernel package/runtime metadata.
 - `/app/<id>/...` is each installed app's frontend and package metadata.
 - `/mo/<hash>.mo` is a global content-addressed Motoko module store.
@@ -482,8 +530,8 @@ The path layout appears intended to separate concerns:
 Install uploads immutable content-addressed modules early. Mutable files and a
 bounded obsolete-baseline-module list are written only under
 `/system/staging/<deployment-id>/` until the expected actor responds; journal
-commit then promotes/certifies mutable files and removes the validated obsolete
-modules atomically.
+commit then promotes/certifies mutable files, including a prepared deployment
+record when present, and removes the validated obsolete modules atomically.
 
 ## Open Questions And Gaps
 

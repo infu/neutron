@@ -14,12 +14,12 @@
   "manifests": [
     {
       "id": "demopack",
-      "revision": 1,
+      "revision": 2,
       "name": "Demo Pack",
       "description": "Hello and Kitchen Sink examples",
       "packages": [
         {
-          "file": "../../apps/hello/hello.v0.2.1.neutron",
+          "file": "../../apps/hello/hello.v0.2.2.neutron",
           "publisher": {
             "name": "Example publisher",
             "website": "https://example.invalid/"
@@ -27,7 +27,7 @@
           "source": "https://example.invalid/source/hello"
         },
         {
-          "file": "../../apps/kitchensink/kitchensink.v0.3.1.neutron",
+          "file": "../../apps/kitchensink/kitchensink.v0.3.2.neutron",
           "publisher": {
             "name": "Example publisher",
             "website": "https://example.invalid/"
@@ -38,12 +38,12 @@
     },
     {
       "id": "hello",
-      "revision": 1,
+      "revision": 2,
       "name": "Hello",
       "description": "The single Hello example",
       "packages": [
         {
-          "file": "../../apps/hello/hello.v0.2.1.neutron",
+          "file": "../../apps/hello/hello.v0.2.2.neutron",
           "publisher": {
             "name": "Example publisher",
             "website": "https://example.invalid/"

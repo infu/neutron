@@ -8,7 +8,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createRoot } from "react-dom/client";
-import type { IconType } from "react-icons";
 import {
   IoArrowUndoOutline,
   IoCheckmark,
@@ -19,14 +18,6 @@ import {
   IoSwapVerticalOutline,
   IoWarningOutline,
 } from "react-icons/io5";
-import {
-  FaChessBishop,
-  FaChessKing,
-  FaChessKnight,
-  FaChessPawn,
-  FaChessQueen,
-  FaChessRook,
-} from "react-icons/fa6";
 import {
   copyToClipboard,
   isJsonObject,
@@ -62,6 +53,7 @@ import {
 } from "./refresh_latch.ts";
 import { BrowserComputer } from "./browser_computer.ts";
 import { setPieceDragImage } from "./drag_image.ts";
+import { chessPieceSymbol } from "./piece_symbols.ts";
 import {
   MAX_INVITE_CODE_LENGTH,
   createGameId,
@@ -88,14 +80,6 @@ type PieceKind = "K" | "Q" | "R" | "B" | "N" | "P";
 type SetupOpponent = "computer" | "local" | "remote";
 type ColorChoice = ChessColor | "random";
 
-const PIECE_ICONS: Record<PieceKind, IconType> = {
-  K: FaChessKing,
-  Q: FaChessQueen,
-  R: FaChessRook,
-  B: FaChessBishop,
-  N: FaChessKnight,
-  P: FaChessPawn,
-};
 const PIECE_NAMES: Record<PieceKind, string> = {
   K: "king",
   Q: "queen",
@@ -1607,13 +1591,17 @@ function PromotionDialog({
 }
 
 function ChessPiece({ piece }: { piece: PieceCode }) {
-  const PieceIcon = PIECE_ICONS[pieceKind(piece)];
   return (
-    <PieceIcon
+    <svg
       aria-hidden="true"
       className={`chess-piece is-${piece[0] === "w" ? "white" : "black"}`}
       focusable="false"
-    />
+      viewBox="0 0 100 100"
+    >
+      <text dominantBaseline="central" textAnchor="middle" x="50" y="50">
+        {chessPieceSymbol(piece)}
+      </text>
+    </svg>
   );
 }
 

@@ -24,6 +24,12 @@ application-level administrator. Its controller can still replace the code, so
 the repository is static rather than inherently immutable. Setup links pin the
 exact setup-manifest SHA-256 and fail if its bytes later change.
 
+The Neutron-owned repository code is Apache-2.0. A conveyed
+`repository.wasm` must be accompanied by `LICENSE`, `NOTICE`,
+`THIRD_PARTY_NOTICES.md`, `LICENSE.Motoko-Core`, and
+`LICENSE.Motoko-Base`. Embedded `.neutron` resources remain separate payloads
+and must carry their own complete license, notice, and source materials.
+
 ## Build the example
 
 The checked-in configuration uses the real Hello and Kitchen Sink package

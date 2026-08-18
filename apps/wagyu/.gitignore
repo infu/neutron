@@ -1,3 +1,4 @@
 node_modules
 dist
 *.neutron
+!wagyu.v0.3.2.neutron

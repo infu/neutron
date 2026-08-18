@@ -27,10 +27,10 @@ Protocol references:
 
 - https://docs.internetcomputer.org/references/ic-interface-spec/
 - https://docs.internetcomputer.org/references/system-canisters/
-- https://github.com/dfinity/ic/blob/master/rs/registry/transport/proto/ic_registry_transport/pb/v1/transport.proto
-- https://github.com/dfinity/ic/blob/master/rs/protobuf/def/registry/node/v1/node.proto
-- https://github.com/dfinity/ic/blob/master/rs/protobuf/def/registry/node_operator/v1/node_operator.proto
-- https://github.com/dfinity/ic/blob/master/rs/protobuf/def/registry/dc/v1/dc.proto
+- https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/registry/transport/proto/ic_registry_transport/pb/v1/transport.proto
+- https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/protobuf/def/registry/node/v1/node.proto
+- https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/protobuf/def/registry/node_operator/v1/node_operator.proto
+- https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/protobuf/def/registry/dc/v1/dc.proto
 
 ## Updating Upstream Material
 
@@ -55,23 +55,32 @@ consumed by `src/world.ts`.
 ### NNS Registry wire definitions
 
 `src/registry.ts` contains a small protobuf reader based on these authoritative
-IC definitions:
+IC definitions. The reviewed snapshot is DFINITY `ic` revision
+`eb55873567bcda6cdcf3c0a573d4db13daaa2c8e`:
 
 - Registry request and response fields:
-  https://github.com/dfinity/ic/blob/master/rs/registry/transport/proto/ic_registry_transport/pb/v1/transport.proto
+  https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/registry/transport/proto/ic_registry_transport/pb/v1/transport.proto
 - Registry key prefixes:
-  https://github.com/dfinity/ic/blob/master/rs/registry/keys/src/lib.rs
+  https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/registry/keys/src/lib.rs
 - `NodeRecord.node_operator_id`:
-  https://github.com/dfinity/ic/blob/master/rs/protobuf/def/registry/node/v1/node.proto
+  https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/protobuf/def/registry/node/v1/node.proto
 - `NodeOperatorRecord.node_provider_principal_id` and `dc_id`:
-  https://github.com/dfinity/ic/blob/master/rs/protobuf/def/registry/node_operator/v1/node_operator.proto
+  https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/protobuf/def/registry/node_operator/v1/node_operator.proto
 - `DataCenterRecord` and nested `Gps`:
-  https://github.com/dfinity/ic/blob/master/rs/protobuf/def/registry/dc/v1/dc.proto
+  https://github.com/dfinity/ic/blob/eb55873567bcda6cdcf3c0a573d4db13daaa2c8e/rs/protobuf/def/registry/dc/v1/dc.proto
+
+The transport and Registry-key files inherit the Internet Computer Community
+Source License 1.0 through `rs/registry/LICENSE`. The three record-definition
+files inherit the repository-root Apache-2.0 license. Exact source SHA-256
+values and local copies of both upstream licenses are in
+`THIRD_PARTY_NOTICES.md`. No upstream implementation or schema file is bundled
+in this app; `src/registry.ts` is a local reader of the documented wire fields.
 
 Protobuf changes should normally be additive, but review these definitions when
 upgrading Agent JS or when Registry decoding starts returning partial nodes.
-Confirm the field numbers used by `src/registry.ts`, update its decoder and
-fixtures if necessary, and then run:
+Select a new immutable DFINITY revision, confirm the field numbers used by
+`src/registry.ts`, refresh the recorded hashes and license inheritance, update
+the decoder and fixtures if necessary, and then run:
 
 ```sh
 npm run typecheck
@@ -97,4 +106,4 @@ npm run typecheck
 npm test
 ```
 
-The final artifact is `mysubnet.v0.3.1.neutron`.
+The final artifact is `mysubnet.v0.3.2.neutron`.
