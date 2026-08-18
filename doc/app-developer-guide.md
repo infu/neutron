@@ -2076,7 +2076,7 @@ before publishing or installing the package.
 For hello, the output is:
 
 ```text
-apps/hello/hello.v0.2.3.neutron
+apps/hello/hello.v0.2.4.neutron
 ```
 
 ### Release A Source-Discoverable Update
@@ -2166,7 +2166,7 @@ To compile package files without deploying:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.10.neutron \
+  --package apps/kernel/kernel.v0.3.11.neutron \
   --package apps/my_app/my_app.v0.1.0.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did

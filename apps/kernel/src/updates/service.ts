@@ -1,6 +1,7 @@
 import {
   KERNEL_INSTALL_MAX_COPIES,
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
+  mapWithConcurrency,
   type CompileResult,
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
@@ -10,7 +11,6 @@ import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import { diffCapabilityPlans } from "neutron-tools/src/capabilities/wire.js";
 import { normalizeManifestUpdateSource } from "neutron-tools/src/schema.js";
 import { configInstallDisclosures } from "../lib/perm.ts";
-import { createDeploymentBuildReviewModel } from "../install_review/deployment_build_review.ts";
 import {
   beginPackageInstallSession,
   getAppUpdateSnapshot,
@@ -58,6 +58,7 @@ let activeProvenance: Readonly<
 > = Object.freeze({});
 let activeSelectionFingerprint = "";
 let stopReadyRegistryWatch: (() => void) | null = null;
+const UPDATE_PACKAGE_DOWNLOAD_CONCURRENCY = 6;
 
 export async function checkAppUpdates(
   clientOptions: UpdateHttpClientOptions = {},
@@ -315,26 +316,39 @@ export async function prepareSelectedUpdates(
           `${candidate.name} changed after the update check. Refresh Settings before updating.`,
         );
       }
+    }
 
-      const currentRelease = await fetchUpdateRelease(
-        candidate.source,
-        candidate.appId,
-        { ...clientOptions, signal: abort.signal },
-      );
-      if (
-        !currentRelease ||
-        currentRelease.releaseDigest !== candidate.releaseDigest ||
-        !sameRelease(currentRelease.record, candidate.release)
-      ) {
-        throw new Error(
-          `${candidate.name}'s published release changed. Refresh Settings before updating.`,
+    const acquired = await mapWithConcurrency(
+      [...candidates],
+      UPDATE_PACKAGE_DOWNLOAD_CONCURRENCY,
+      async (candidate) => {
+        throwIfAborted(abort.signal);
+        const currentRelease = await fetchUpdateRelease(
+          candidate.source,
+          candidate.appId,
+          { ...clientOptions, signal: abort.signal },
         );
-      }
-      const bytes = await fetchUpdatePackage(
-        candidate.source,
-        currentRelease.record,
-        { ...clientOptions, signal: abort.signal },
-      );
+        if (
+          !currentRelease ||
+          currentRelease.releaseDigest !== candidate.releaseDigest ||
+          !sameRelease(currentRelease.record, candidate.release)
+        ) {
+          throw new Error(
+            `${candidate.name}'s published release changed. Refresh Settings before updating.`,
+          );
+        }
+        const bytes = await fetchUpdatePackage(
+          candidate.source,
+          currentRelease.record,
+          { ...clientOptions, signal: abort.signal },
+        );
+        return Object.freeze({ candidate, currentRelease, bytes });
+      },
+    );
+
+    for (const { candidate, currentRelease, bytes } of acquired) {
+      throwIfAborted(abort.signal);
+      const baseline = session.baseline.state.apps[candidate.appId]!;
       const remainingEntries =
         REPOSITORY_LIMITS.manifestArchiveEntries - archiveEntries;
       const remainingDecoded =
@@ -450,9 +464,6 @@ export async function prepareSelectedUpdates(
       return;
     }
     const deployment = session.getPreparedDeployment(packages, compiled);
-    // Validate every display/export reconciliation before publishing raw archive
-    // bytes into the review store. A bad record remains a preparation failure.
-    createDeploymentBuildReviewModel(deployment.review);
     const review: UpdateReview = Object.freeze({
       apps: Object.freeze(
         reviewApps.sort((left, right) =>

@@ -22,26 +22,26 @@ const KERNEL_307_PREDECESSOR_ARCHIVE_PATH = fileURLToPath(
   new URL("./fixtures/kernel.v0.3.7.neutron", import.meta.url),
 );
 const FINAL_KERNEL_CANDIDATE_ARCHIVE_PATH = fileURLToPath(
-  new URL("../../../apps/kernel/kernel.v0.3.10.neutron", import.meta.url),
+  new URL("../../../apps/kernel/kernel.v0.3.11.neutron", import.meta.url),
 );
 const KERNEL_306_FIXTURE_PATH = fileURLToPath(
   new URL("./fixtures/kernel.v0.3.6.neutron", import.meta.url),
 );
 const CURRENT_PRODUCTION_APP_ARCHIVE_PATHS = [
-  "../../../apps/agent/agent.v0.3.3.neutron",
-  "../../../apps/chess/chess.v0.3.3.neutron",
-  "../../../apps/contacts/contacts.v0.3.3.neutron",
-  "../../../apps/gemma/gemma.v0.2.3.neutron",
-  "../../../apps/hello/hello.v0.2.3.neutron",
-  "../../../apps/hullshift/hullshift.v0.2.3.neutron",
-  "../../../apps/jetcreeper/jetcreeper.v0.3.3.neutron",
-  "../../../apps/kitchensink/kitchensink.v0.3.3.neutron",
-  "../../../apps/mail/mail.v0.3.4.neutron",
-  "../../../apps/mysubnet/mysubnet.v0.3.3.neutron",
-  "../../../apps/spreadsheet/spreadsheet.v0.3.3.neutron",
-  "../../../apps/vfs/files.v0.4.5.neutron",
-  "../../../apps/wagyu/wagyu.v0.3.4.neutron",
-  "../../../apps/wallet/wallet.v0.3.4.neutron",
+  "../../../apps/agent/agent.v0.3.4.neutron",
+  "../../../apps/chess/chess.v0.3.4.neutron",
+  "../../../apps/contacts/contacts.v0.3.4.neutron",
+  "../../../apps/gemma/gemma.v0.2.4.neutron",
+  "../../../apps/hello/hello.v0.2.4.neutron",
+  "../../../apps/hullshift/hullshift.v0.2.4.neutron",
+  "../../../apps/jetcreeper/jetcreeper.v0.3.4.neutron",
+  "../../../apps/kitchensink/kitchensink.v0.3.4.neutron",
+  "../../../apps/mail/mail.v0.3.5.neutron",
+  "../../../apps/mysubnet/mysubnet.v0.3.4.neutron",
+  "../../../apps/spreadsheet/spreadsheet.v0.3.4.neutron",
+  "../../../apps/vfs/files.v0.4.6.neutron",
+  "../../../apps/wagyu/wagyu.v0.3.5.neutron",
+  "../../../apps/wallet/wallet.v0.3.5.neutron",
 ].map((path) => fileURLToPath(new URL(path, import.meta.url)));
 
 type LegacyKernelExecutableFixture = Readonly<{
@@ -227,7 +227,7 @@ function syntheticSuccessorKernelArchive(): Uint8Array {
     unknown
   >;
   files["neutron.json"] = encoder.encode(
-    JSON.stringify({ ...manifest, version: 310 }),
+    JSON.stringify({ ...manifest, version: 311 }),
   );
   return msgpack.encode(
     Object.fromEntries(
@@ -411,11 +411,11 @@ test("the exact v0.3.5, v0.3.6, and v0.3.7 browser compilers compile a clean HTT
 }, 120_000);
 
 test.skipIf(!RUN_CURRENT_RELEASE_ARTIFACT_GATE)(
-  "release-only archived browser compilers compile the exact v0.3.10 candidate and current app archives in one batch",
+  "release-only archived browser compilers compile the exact v0.3.11 candidate and current app archives in one batch",
   async () => {
     if (!HAS_CURRENT_RELEASE_ARTIFACTS) {
       throw new Error(
-        "NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE=1 requires the v0.3.7 predecessor, v0.3.10 candidate, and every current app archive",
+        "NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE=1 requires the v0.3.7 predecessor, v0.3.11 candidate, and every current app archive",
       );
     }
     const kernelArchive = new Uint8Array(

@@ -351,7 +351,14 @@ describe("update service orchestration", () => {
       identityExpectations.push(options);
       return preparedPackageDetails(bytes, options);
     };
+    const allReleaseRequestsStarted = deferred<void>();
+    let releaseRequestsStarted = 0;
     fetchReleaseImpl = async (source, appId) => {
+      releaseRequestsStarted += 1;
+      if (releaseRequestsStarted === releases.length) {
+        allReleaseRequestsStarted.resolve();
+      }
+      await allReleaseRequestsStarted.promise;
       const match = releases.find((candidate) => candidate.appId === appId)!;
       expect(source).toBe(match.source);
       return fetchedRelease(source, match.release, match.releaseDigest);
@@ -386,6 +393,7 @@ describe("update service orchestration", () => {
     });
 
     await prepareAllAvailableUpdates();
+    expect(releaseRequestsStarted).toBe(2);
     expect(useUpdateCheckStore.getState()).toMatchObject({
       phase: "review",
       review: {

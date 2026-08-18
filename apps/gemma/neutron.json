@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Gemma",
   "id": "gemma",
-  "version": 203,
+  "version": 204,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Private local Heretic Gemma 4 chat powered by WebGPU",
   "src": "main.mo",

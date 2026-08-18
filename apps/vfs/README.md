@@ -80,7 +80,7 @@ carry plaintext.
 
 ## Release
 
-Files v0.4.5 is manifest version 405 and managed-memory schema 2. It retains
+Files v0.4.6 is manifest version 406 and managed-memory schema 2. It retains
 the immutable schema-1 module and performs one managed `1 -> 2` migration,
 preserving the encrypted Vault state while initializing the new Workspace and
 Shared roots.
@@ -98,7 +98,7 @@ integration. Normal packaging does not launch a browser or embed a
 browser-generated artifact. Run `npm run release:browser` for the
 explicit Playwright release gate that executes the exact inline worker in a
 browser-isolated frame. `npm test` rebuilds and verifies
-`files.v0.4.5.neutron` and runs the browser suites separately, so stale ignored
+`files.v0.4.6.neutron` and runs the browser suites separately, so stale ignored
 output cannot satisfy the package tests.
 
 `npm run unicode:check` regenerates both Unicode table artifacts in memory

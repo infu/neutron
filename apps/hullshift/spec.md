@@ -1377,7 +1377,7 @@ afterward. Reject or heavily penalize:
   "format": 3,
   "name": "Hullshift",
   "id": "hullshift",
-  "version": 203,
+  "version": 204,
   "description": "Generate and solve deterministic sci-fi pushing puzzles",
   "src": "main.mo",
   "background": {
@@ -1461,7 +1461,7 @@ apps/hullshift/
 
 - [x] Generate and commit `neutron.lock.json` through the normal format-3
   package flow; do not hand-author it.
-- [x] Keep `dist/` and `hullshift.v0.2.3.neutron` as generated artifacts.
+- [x] Keep `dist/` and `hullshift.v0.2.4.neutron` as generated artifacts.
 - [x] Use the repository's npm workspace, Bun scripts/tests, esbuild browser
   bundle, and shared package order.
 
@@ -1670,7 +1670,7 @@ Persist a versioned record containing at least:
   URL.
 - [x] Run Hullshift unit/package tests through `bun test`.
 - [x] Run repository `npm run typecheck` and focused root tests.
-- [x] Build `hullshift.v0.2.3.neutron` through the normal
+- [x] Build `hullshift.v0.2.4.neutron` through the normal
   `validate → build → mogen → mopack → schema → pack` flow.
 - [x] Compile Hullshift with the current kernel through `neutron-cli`.
 - [ ] Install into a kernel-only local Neutron and run Playwright through install,

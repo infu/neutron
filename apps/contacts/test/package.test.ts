@@ -16,7 +16,7 @@ const migrationUrl = new URL(
   "../backend/memory/contacts/v1_to_v2.mo",
   import.meta.url,
 );
-const packageUrl = new URL("../contacts.v0.3.3.neutron", import.meta.url);
+const packageUrl = new URL("../contacts.v0.3.4.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -28,7 +28,7 @@ test("Contacts V2 declares one migrated private memory and five resident tools",
   expect(value).toMatchObject({
     format: 3,
     id: "contacts",
-    version: 303,
+    version: 304,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     capabilities: {
       preapproved_self_calls: {

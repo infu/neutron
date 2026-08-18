@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { NeutronPackageRecordV1 } from "neutron-tools/package_record.js";
 import {
   buildDeploymentReviewArtifact,
@@ -24,7 +24,10 @@ export function DeploymentBuildReview({
   ...input
 }: DeploymentBuildReviewProps) {
   const uiMode = useConsentUiMode(uiModeOverride);
-  const model = createDeploymentBuildReviewModel(input);
+  const model = useMemo(
+    () => createDeploymentBuildReviewModel(input),
+    [input.record, input.retainedPackageRecords, input.suppliedPackages],
+  );
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const download = (

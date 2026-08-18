@@ -147,6 +147,7 @@ const RESERVED_APP_IDS = new Set(["__proto__", "constructor", "prototype"]);
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 /** Must match backend/install/Service.mo's fixed journal validation ceiling. */
 export const KERNEL_INSTALL_MAX_COPIES = 4_000;
+const KERNEL_INSTALL_STAGED_WRITE_CONCURRENCY = 10;
 /** Must match backend/install/Limits.mo's atomic asset-clear ceiling. */
 export const KERNEL_INSTALL_MAX_CLEAR_PREFIXES_PER_COMMIT = 128;
 /** Must match backend/install/Limits.mo's measured atomic removal ceiling. */
@@ -3358,16 +3359,19 @@ export async function deployPreparedPackages({
 
   notifyDeployStep(onStep, "stage-assets");
   try {
-    for (const asset of staged) {
-      await uploadStaticFileOperation(
-        actor,
-        createStaticFileOperation(
-          asset.source,
-          asset.content,
-          asset.contentType ?? mime(asset.target),
+    await mapWithConcurrency(
+      staged,
+      KERNEL_INSTALL_STAGED_WRITE_CONCURRENCY,
+      async (asset) =>
+        uploadStaticFileOperation(
+          actor,
+          createStaticFileOperation(
+            asset.source,
+            asset.content,
+            asset.contentType ?? mime(asset.target),
+          ),
         ),
-      );
-    }
+    );
     if (moduleGcOperation) {
       await uploadStaticFileOperation(actor, moduleGcOperation);
     }
@@ -4636,18 +4640,28 @@ export async function mapWithConcurrency<T, R>(
 
   const results = new Array<R>(items.length);
   let nextIndex = 0;
+  let firstError: unknown;
+  let hasError = false;
+  let stopped = false;
 
   async function worker(): Promise<void> {
-    while (nextIndex < items.length) {
+    while (!stopped && nextIndex < items.length) {
       const index = nextIndex++;
       const item = items[index];
       if (item === undefined) throw new Error(`Missing item at index ${index}`);
-      results[index] = await mapper(item, index);
+      try {
+        results[index] = await mapper(item, index);
+      } catch (error) {
+        if (!hasError) firstError = error;
+        hasError = true;
+        stopped = true;
+      }
     }
   }
 
   const workerCount = Math.min(concurrency, items.length);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  if (hasError) throw firstError;
   return results;
 }
 

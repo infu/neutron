@@ -31,7 +31,7 @@ const htmlUrl = new URL("../dist/web/index.html", import.meta.url);
 const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const trayHtmlUrl = new URL("../dist/web/tray.html", import.meta.url);
 const trayCssUrl = new URL("../dist/web/tray.css", import.meta.url);
-const packageUrl = new URL("../kitchensink.v0.3.3.neutron", import.meta.url);
+const packageUrl = new URL("../kitchensink.v0.3.4.neutron", import.meta.url);
 const decoder = new TextDecoder();
 
 async function readManifest(): Promise<NeutronManifest> {
@@ -61,6 +61,7 @@ function assertAllowedPackagePath(path: string): void {
     path === "legal/package-record.v1.json" ||
     path === "legal/LICENSE.APP.txt" ||
     path === "legal/THIRD_PARTY_NOTICES.md" ||
+    path === "legal/third-party/EXACT-MATERIALS.v1.txt" ||
     /^legal\/third-party\/[a-f0-9]{64}\.txt$/u.test(path) ||
     /^mo\/[a-f0-9]{64}\.mo$/.test(path);
 
@@ -134,7 +135,7 @@ test("kitchen sink declares the complete closed capability lab", async () => {
   expect(manifest).toMatchObject({
     id: "kitchensink",
     name: "Kitchen Sink",
-    version: 303,
+    version: 304,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [

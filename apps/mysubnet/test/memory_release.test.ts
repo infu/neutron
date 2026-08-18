@@ -17,7 +17,7 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-test("My Subnet 0.3.3 has no managed state to initialize or migrate", async () => {
+test("My Subnet 0.3.4 has no managed state to initialize or migrate", async () => {
   const [productionBytes, sourceText] = await Promise.all([
     readFile(new URL("../mysubnet.v0.3.1.neutron", import.meta.url)),
     readFile(new URL("../neutron.json", import.meta.url), "utf8"),
@@ -30,7 +30,7 @@ test("My Subnet 0.3.3 has no managed state to initialize or migrate", async () =
   const production = packageManifest(productionBytes);
   const source = JSON.parse(sourceText) as NeutronManifest;
   expect(production).toMatchObject({ id: "mysubnet", version: 301 });
-  expect(source).toMatchObject({ id: "mysubnet", version: 303 });
+  expect(source).toMatchObject({ id: "mysubnet", version: 304 });
   expect(production.memory).toBeUndefined();
   expect(source.memory).toBeUndefined();
 

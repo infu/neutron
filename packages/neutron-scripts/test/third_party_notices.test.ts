@@ -5,7 +5,7 @@ import path from "node:path";
 import { expect, test } from "bun:test";
 import {
   THIRD_PARTY_NOTICE_INDEX_PATH,
-  THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY,
+  THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH,
   buildThirdPartyNoticeBundle,
 } from "../src/third_party_notices.ts";
 
@@ -216,27 +216,30 @@ test("notice bundle is deterministic, deduplicated, and preserves exact inputs",
       firstBundle.components.find(({ name }) => name === "shared")?.author,
     ).toBeUndefined();
 
-    const mitMaterialPath =
-      `${THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY}/${sha256(first.exactInputs[0]!)}.txt`;
-    expect(new TextDecoder().decode(firstBundle.files[mitMaterialPath])).toBe(
-      first.exactInputs[0]!,
+    const exactMaterials = new TextDecoder().decode(
+      firstBundle.files[THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH],
     );
+    expect(exactMaterials).toContain(first.exactInputs[0]!);
     expect(
       firstBundle.components
         .filter(({ name }) => name === "alpha" || name === "beta")
         .every(({ materials }) =>
-          materials.some(({ path: materialPath }) => materialPath === mitMaterialPath),
+          materials.some(
+            ({ path: materialPath, sha256: materialSha256 }) =>
+              materialPath === THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH &&
+              materialSha256 === sha256(first.exactInputs[0]!),
+          ),
         ),
     ).toBe(true);
-    expect(
-      firstBundle.noticePaths.filter((noticePath) => noticePath === mitMaterialPath),
-    ).toHaveLength(1);
+    expect(firstBundle.noticePaths).toEqual([
+      THIRD_PARTY_NOTICE_INDEX_PATH,
+      THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH,
+    ]);
     for (const exactInput of first.exactInputs) {
-      const materialPath =
-        `${THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY}/${sha256(exactInput)}.txt`;
-      expect(new TextDecoder().decode(firstBundle.files[materialPath])).toBe(
-        exactInput,
+      expect(exactMaterials).toContain(
+        `BEGIN MATERIAL sha256=${sha256(exactInput)} bytes=${new TextEncoder().encode(exactInput).byteLength}`,
       );
+      expect(exactMaterials).toContain(exactInput);
     }
 
     const index = new TextDecoder().decode(
@@ -245,8 +248,8 @@ test("notice bundle is deterministic, deduplicated, and preserves exact inputs",
     expect(index).toContain("Remote services, downloaded models");
     expect(index).toContain('"application/THIRD_PARTY_NOTICES.md"');
     expect(index).toContain('"application/LICENSE.Dependency-1.0"');
-    expect(firstBundle.noticePaths).not.toContain(
-      `${THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY}/${sha256("Bare governing app license must not be a notice\n")}.txt`,
+    expect(exactMaterials).not.toContain(
+      sha256("Bare governing app license must not be a notice\n"),
     );
     expect(index.split("\n").length).toBeLessThanOrEqual(675);
   } finally {
@@ -517,22 +520,24 @@ test("notice bundle captures exact Ionicons 5.5.4 MIT and copyright material", a
       ...fixture,
       mopsSourcesOutput: "",
     });
-    const materialPath =
-      `${THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY}/${ioniconsHash}.txt`;
-    const ioniconsBytes = bundle.files[materialPath];
-    expect(ioniconsBytes?.byteLength).toBe(1099);
-    expect(new TextDecoder().decode(ioniconsBytes)).toContain(
+    const exactMaterials = new TextDecoder().decode(
+      bundle.files[THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH],
+    );
+    expect(exactMaterials).toContain(`sha256=${ioniconsHash} bytes=1099`);
+    expect(exactMaterials).toContain(
       "Copyright (c) 2015-present Ionic (http://ionic.io/)",
     );
-    expect(bundle.noticePaths).toContain(materialPath);
+    expect(bundle.noticePaths).toContain(
+      THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH,
+    );
     expect(
       bundle.components
         .find(({ name }) => name === "react-icons")
         ?.materials.some(
-          ({ sourcePath, sha256: materialHash }) =>
-            sourcePath ===
-              "upstream/ionic-team/ionicons@v5.5.4/LICENSE" &&
-            materialHash === ioniconsHash,
+          ({ sourcePath, sha256: materialHash, path: bundledPath }) =>
+            sourcePath === "upstream/ionic-team/ionicons@v5.5.4/LICENSE" &&
+            materialHash === ioniconsHash &&
+            bundledPath === THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH,
         ),
     ).toBe(true);
 

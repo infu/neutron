@@ -53,7 +53,7 @@ const HARD_CUT_ENV = "NEUTRON_FILES_V2_FRESH_REINSTALL";
 const THIRD_PARTY_NOTICE_INDEX_PATH = "legal/THIRD_PARTY_NOTICES.md";
 const THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY = "legal/third-party";
 const THIRD_PARTY_NOTICE_MATERIAL_PATH = new RegExp(
-  `^${THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY.replaceAll("/", "\\/")}\/[a-f0-9]{64}\\.txt$`,
+  `^${THIRD_PARTY_NOTICE_MATERIAL_DIRECTORY.replaceAll("/", "\\/")}\/(?:[a-f0-9]{64}|EXACT-MATERIALS\\.v1)\\.txt$`,
   "u",
 );
 

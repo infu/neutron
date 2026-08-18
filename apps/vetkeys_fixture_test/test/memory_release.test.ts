@@ -46,7 +46,7 @@ const fixtures: readonly Fixture[] = [
   },
 ];
 
-test("vetKeys 0.1.2 fixtures have no managed state to initialize or migrate", async () => {
+test("vetKeys 0.1.3 fixtures have no managed state to initialize or migrate", async () => {
   const installed: Record<string, PackagedNeutronManifest> = { kernel };
   const target: Record<string, PackagedNeutronManifest> = { kernel };
 
@@ -63,7 +63,7 @@ test("vetKeys 0.1.2 fixtures have no managed state to initialize or migrate", as
     const production = packageManifest(productionBytes);
     const source = JSON.parse(sourceText) as NeutronManifest;
     expect(production).toMatchObject({ id: fixture.id, version: 100 });
-    expect(source).toMatchObject({ id: fixture.id, version: 102 });
+    expect(source).toMatchObject({ id: fixture.id, version: 103 });
     expect(production.memory).toBeUndefined();
     expect(source.memory).toBeUndefined();
 

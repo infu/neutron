@@ -48,6 +48,7 @@ import {
   assertKernelPackageStateMatchesRuntime,
   assertPreparedPackageArchiveIdentity,
   mime,
+  mapWithConcurrency,
   normalizeAppRegistry,
   planAppRegistryDependencies,
   preparePackageInstall,
@@ -3065,6 +3066,28 @@ test("static files are gzipped, chunked, and uploaded through generic writer", a
   }
   expect(moduleStore.store.val.content_encoding).toBe("identity");
   expect(moduleStore.store.val.content).toEqual(module);
+});
+
+test("bounded parallel work waits for in-flight operations before reporting failure", async () => {
+  let active = 0;
+  let maximumActive = 0;
+  const completed: number[] = [];
+
+  await expect(
+    mapWithConcurrency([0, 1, 2, 3], 2, async (item) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, item === 0 ? 1 : 5));
+      active -= 1;
+      if (item === 0) throw new Error("fixture failure");
+      completed.push(item);
+      return item;
+    }),
+  ).rejects.toThrow("fixture failure");
+
+  expect(maximumActive).toBe(2);
+  expect(active).toBe(0);
+  expect(completed).toEqual([1]);
 });
 
 test("wasm assets use the browser streaming compile MIME type", () => {

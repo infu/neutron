@@ -39,7 +39,7 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 310;
+export const KERNEL_NPL_RELEASE_VERSION = 311;
 export const KERNEL_NPL_LICENSE_ID =
   "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
@@ -1157,7 +1157,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.10 (packed version 310)",
+    "Package release: v0.3.11 (packed version 311)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

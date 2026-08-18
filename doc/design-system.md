@@ -400,7 +400,7 @@ Kitchen Sink demonstrates the expected app-developer shape:
   accessible disclosures;
 - copy fields, nested JSON, dense text, and tables for iframe resize checks.
 
-The app package test builds the frontend, writes `kitchensink.v0.3.3.neutron`,
+The app package test builds the frontend, writes `kitchensink.v0.3.4.neutron`,
 verifies `web/main.css` is included, checks package paths against an allowlist,
 and scans packaged text assets for remote or unsafe resource references.
 

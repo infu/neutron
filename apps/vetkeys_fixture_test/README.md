@@ -35,8 +35,8 @@ arbitrary host Bun version.
 The deterministic installable artifacts are:
 
 ```text
-apps/vetkeys_fixture_test/vetkeys_fixture.v0.1.2.neutron
-apps/vetkeys_fixture_test/vetkeys_fixture_peer.v0.1.2.neutron
+apps/vetkeys_fixture_test/vetkeys_fixture.v0.1.3.neutron
+apps/vetkeys_fixture_test/vetkeys_fixture_peer.v0.1.3.neutron
 ```
 
 They share compiled Motoko and web assets, but contain exact, distinct packaged

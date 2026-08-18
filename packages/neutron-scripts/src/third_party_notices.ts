@@ -22,9 +22,6 @@ const MAX_DIRECTORY_ENTRIES_PER_COMPONENT = 20_000;
 const MAX_INDEX_LINES = 675;
 const MAX_MATERIAL_BYTES = 4 * 1024 * 1024;
 const MAX_MOPS_OUTPUT_BYTES = 1024 * 1024;
-// Package records permit 64 notices. Ordinary-app metadata always spends one
-// slot on the first-party application NOTICE, leaving 63 for this bundle.
-const MAX_NOTICE_FILES = 63;
 const MAX_PACKAGE_JSON_BYTES = 1024 * 1024;
 
 const LEGAL_FILE_PATTERN =
@@ -306,7 +303,10 @@ export async function buildThirdPartyNoticeBundle(
   );
   let emittedMaterials = materials;
   let materialBundlePath: string | undefined;
-  if (materials.length + 1 > MAX_NOTICE_FILES) {
+  // One exact-material bundle avoids hundreds of separately staged canister
+  // assets. The index still binds each component, source path, byte length,
+  // and SHA-256 to its exact entry in the bundle.
+  if (materials.length > 0) {
     const bundledBytes = renderExactMaterialBundle(materials);
     materialBundlePath = THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH;
     emittedMaterials = [

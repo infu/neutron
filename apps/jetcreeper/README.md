@@ -127,7 +127,7 @@ npm run package
 npm test
 ```
 
-The final artifact is `jetcreeper.v0.3.3.neutron`.
+The final artifact is `jetcreeper.v0.3.4.neutron`.
 
 Combat changes are measured by deterministic, renderer-free harnesses rather
 than tuned from one lucky run. `enemy_pressure_hyperopt.ts` replays eight fixed

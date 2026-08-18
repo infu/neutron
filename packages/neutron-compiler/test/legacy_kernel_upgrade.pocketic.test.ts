@@ -9,7 +9,7 @@
  *   NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
  *   bun test packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts
  *
- * After the reviewed v0.3.10 archive exists, qualify those exact bytes with:
+ * After the reviewed v0.3.11 archive exists, qualify those exact bytes with:
  *
  *   NEUTRON_RUN_FINAL_KERNEL_CANDIDATE_POCKETIC=1 \
  *   NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256=<reviewed-lowercase-sha256> \
@@ -189,7 +189,7 @@ function concatenateBytes(parts: readonly Uint8Array[]): Uint8Array {
 
 for (const release of LEGACY_KERNEL_RELEASES) {
   pocketIcTest(
-    `synthetic v0.3.10 preserves durable state through the ${release.label} checked self-upgrade`,
+    `synthetic v0.3.11 preserves durable state through the ${release.label} checked self-upgrade`,
     () =>
       runLegacyUpgradeQualification(() =>
         compileLegacyKernelUpgradeFixture(release.version),
@@ -198,7 +198,7 @@ for (const release of LEGACY_KERNEL_RELEASES) {
   );
 
   finalCandidateTest(
-    `the actual packed v0.3.10 archive preserves durable state through the ${release.label} checked self-upgrade`,
+    `the actual packed v0.3.11 archive preserves durable state through the ${release.label} checked self-upgrade`,
     () =>
       runLegacyUpgradeQualification(() =>
         compileFinalCandidateLegacyKernelUpgradeFixture({

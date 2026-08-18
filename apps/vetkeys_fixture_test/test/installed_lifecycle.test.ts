@@ -7,29 +7,29 @@ import {
 } from "neutron-compiler/src/install.js";
 import { assertAppVersion } from "neutron-tools/src/version.js";
 
-const archive = new URL("../vetkeys_fixture.v0.1.2.neutron", import.meta.url);
+const archive = new URL("../vetkeys_fixture.v0.1.3.neutron", import.meta.url);
 
 test("lifecycle variants retain the app identity while changing only declaration/version", async () => {
   const unpacked = unpackNeutronPackage(
     new Uint8Array(await readFile(archive)),
   );
-  const compatible = buildLifecycleVariant(unpacked, 102, true);
-  const removed = buildLifecycleVariant(unpacked, 103, false);
-  const restored = buildLifecycleVariant(unpacked, 104, true);
+  const compatible = buildLifecycleVariant(unpacked, 103, true);
+  const removed = buildLifecycleVariant(unpacked, 104, false);
+  const restored = buildLifecycleVariant(unpacked, 105, true);
 
   expect(compatible.manifest).toMatchObject({
     id: "vetkeys_fixture",
-    version: 102,
+    version: 103,
     capabilities: { vetkeys: { slots: [{ id: "mailbox" }] } },
   });
   expect(removed.manifest).toMatchObject({
     id: "vetkeys_fixture",
-    version: 103,
+    version: 104,
   });
   expect(removed.manifest.capabilities?.vetkeys).toBeUndefined();
   expect(restored.manifest).toMatchObject({
     id: "vetkeys_fixture",
-    version: 104,
+    version: 105,
     capabilities: { vetkeys: { slots: [{ id: "mailbox" }] } },
   });
   expect(compatible.files.map(({ path }) => path)).toEqual(
@@ -96,7 +96,7 @@ function buildLifecycleVariant(
   );
   // This test synthesizes versions which were never conveyed.  Drop the
   // immutable release envelope instead of leaving its package/source identity
-  // falsely bound to v102 while the synthetic manifest is changed below.
+  // falsely bound to v103 while the synthetic manifest is changed below.
   for (const path of Object.keys(copied)) {
     if (path.startsWith("legal/")) delete copied[path];
   }

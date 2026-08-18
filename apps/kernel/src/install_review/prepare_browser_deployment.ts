@@ -16,13 +16,12 @@ import {
 import { hashContent } from "neutron-tools/src/hash.js";
 import type { InstallProvenance } from "../repository/provenance.ts";
 import {
+  DEPLOYMENT_BUILD_RECORD_PATH,
   deploymentRecordExpectedModuleHash,
   deploymentRecordRuntimeInconsistency,
-  loadInstalledDeploymentBuildRecord,
   type InstalledDeploymentBuildRecordInspection,
 } from "../settings/deployment_build_record.ts";
 import {
-  loadInstalledPackageRecordInventory,
   type InstalledPackageRecordInspection,
   type InstalledPackageRecordInventory,
 } from "../settings/installed_package_record.ts";
@@ -78,13 +77,18 @@ export async function prepareBrowserDeployment({
     );
   }
 
+  // Installed legal/build records are optional inspection material, not an
+  // install prerequisite. Settings can load them on demand. Keeping their HTTP
+  // reads out of this path avoids fetching a record and manifest for every
+  // retained app—twice—during an ordinary update. Tests and specialized tools
+  // may still inject readers when exact historical evidence is wanted.
   const [installedDeployment, installedPackages] = await Promise.all([
     readers.loadDeploymentRecord
       ? readers.loadDeploymentRecord()
-      : loadInstalledDeploymentBuildRecord({ canisterId: targetCanisterId }),
-    (readers.loadPackageRecords ?? loadInstalledPackageRecordInventory)(
-      state.apps,
-    ),
+      : Promise.resolve(legacyDeploymentInspection()),
+    readers.loadPackageRecords
+      ? readers.loadPackageRecords(state.apps)
+      : Promise.resolve(Object.freeze({}) as InstalledPackageRecordInventory),
   ]);
   const carried = carriedDeploymentEvidence(
     installedDeployment,
@@ -99,10 +103,7 @@ export async function prepareBrowserDeployment({
   const retainedPackageEvidence: Record<
     string,
     RetainedDeploymentPackageEvidence
-  > = Object.create(null) as Record<
-    string,
-    RetainedDeploymentPackageEvidence
-  >;
+  > = Object.create(null) as Record<string, RetainedDeploymentPackageEvidence>;
   const retainedPackageRecords: Record<
     string,
     RetainedPackageRecordReviewEvidence
@@ -231,9 +232,7 @@ function reconcileRetainedPackageInformation(
   retainedRecords: Record<string, RetainedPackageRecordReviewEvidence>,
 ): RetainedDeploymentPackageEvidence["package_information"] {
   if (!inspection || inspection.status === "loading") {
-    throw new Error(
-      `Installed Package Information Record status for ${appId} is unavailable`,
-    );
+    return carried ?? Object.freeze({ state: "legacy_unavailable" as const });
   }
   if (inspection.status === "invalid" || inspection.status === "unavailable") {
     throw new Error(
@@ -263,10 +262,7 @@ function reconcileRetainedPackageInformation(
         `Installed Package Information Record for ${appId} changed after parsing`,
       );
     }
-    if (
-      carried?.state === "verified" &&
-      carried.sha256 !== exactSha256
-    ) {
+    if (carried?.state === "verified" && carried.sha256 !== exactSha256) {
       throw new Error(
         `Installed Package Information Record for ${appId} conflicts with the deployment record`,
       );
@@ -294,6 +290,13 @@ function reconcileRetainedPackageInformation(
     );
   }
   return carried ?? Object.freeze({ state: "legacy_unavailable" as const });
+}
+
+function legacyDeploymentInspection(): InstalledDeploymentBuildRecordInspection {
+  return Object.freeze({
+    status: "legacy" as const,
+    recordPath: DEPLOYMENT_BUILD_RECORD_PATH,
+  });
 }
 
 function samePackageInformationRecord(
