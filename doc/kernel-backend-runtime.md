@@ -612,9 +612,9 @@ Authorization is a flat set of principals in `mem.core.authorized`.
 - `kernel_authorized_add(id)` to add a principal.
 - `kernel_authorized_rem(id, caller)` to remove a principal other than the
   active caller.
-- `kernel_authorized_recover(id, caller, self)` to let a verified IC controller
+- `kernel_authorized_recover(id, caller)` to let a verified IC controller
   restore kernel authorization without already having kernel authorization.
-- `kernel_activation(request, caller, self)` to arm or consume one dispenser
+- `kernel_activation(request, caller)` to arm or consume one dispenser
   ownership handoff.
 - `is_authorized(id)` as an internal check.
 - `kernel_check_authorized((), caller)` as a public query check for the caller.
@@ -656,8 +656,10 @@ the final ownership link is exposed. The set is an authority list, not a user
 list. Every retained entry receives the same full kernel authority and must be
 trusted accordingly.
 
-`settings/Access.mo` loads controllers lazily with `canister_status` and sends a
-full preserved controller list to `update_settings`. It rejects the anonymous
+`settings/Access.mo` uses the synchronous replicated
+`Principal.isController(caller)` system check for controller-only recovery and
+activation. Operations that need the full controller list load it lazily with
+`canister_status` and send a full preserved list to `update_settings`. It rejects the anonymous
 principal, enforces the IC limit of 10 controllers, serializes controller
 mutations initiated through the kernel, and refuses to remove the Neutron
 canister's own principal. Keeping self as a controller is required for later
@@ -682,7 +684,8 @@ activation never accepts an arbitrary target principal.
 Currently reviewed kernel methods whose generated wrappers permit an
 unauthorized caller are:
 
-- `kernel_authorized_recover` (the backend then verifies IC controller status)
+- `kernel_authorized_recover` (the backend then verifies the actual caller with
+  `Principal.isController`)
 - `kernel_activation` (the backend verifies controller authority for `#set` or
   a one-time bearer and actual caller for `#use`)
 - `kernel_check_authorized`
@@ -908,8 +911,8 @@ The public API is declared in `apps/kernel/neutron.json` and generated in
 | --------------------------------- | --------------- | ------------------------------------------ | -------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
 | `kernel_authorized_add`           | update          | `public shared`                            | required             | none             | Adds a non-anonymous principal and scrubs an anonymous upgrade installer.                                      |
 | `kernel_authorized_rem`           | update          | `public shared`                            | required             | `caller`         | Removes a principal other than the active caller.                                                              |
-| `kernel_authorized_recover`       | update, async*  | `public shared` with `await*`              | controller verified  | `caller`, `this` | Lets an IC controller restore kernel authorization after a status check.                                       |
-| `kernel_activation`               | update, async*  | `public shared` with `await*`              | variant-specific public bootstrap | `caller`, `this` | A controller arms one 32-byte hash with `#set`; a matching one-time `#use` atomically authorizes its actual non-anonymous caller and deletes the hash. |
+| `kernel_authorized_recover`       | update          | `public shared`                            | controller verified  | `caller`         | Lets an IC controller restore kernel authorization after a synchronous controller check.                       |
+| `kernel_activation`               | update          | `public shared`                            | variant-specific public bootstrap | `caller`         | A controller arms one 32-byte hash with `#set`; a matching one-time `#use` atomically authorizes its actual non-anonymous caller and deletes the hash. |
 | `is_authorized`                   | internal        | compiler-namespaced private helper          | not public           | none             | Checks membership in `mem.authorized`.                                                                         |
 | `kernel_check_authorized`         | query           | `public query`                             | allowed unauthorized | `caller`         | Returns whether the caller is authorized.                                                                      |
 | `kernel_access_snapshot`          | update, async*  | `public shared` with `await*`              | required             | `this`           | Returns authorized principals, controllers, self principal, and controller limit.                             |

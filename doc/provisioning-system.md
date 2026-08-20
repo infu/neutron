@@ -75,7 +75,7 @@ compilation, payment, or mutation.
   },
   "artifacts": {
     "kind": "inline",
-    "kernel": { "path": "apps/kernel/kernel.v0.3.11.neutron" },
+    "kernel": { "path": "apps/kernel/kernel.v0.3.12.neutron" },
     "packages": [
       { "path": "apps/hello/hello.v0.2.4.neutron" }
     ]
@@ -119,7 +119,7 @@ Rules include:
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.11.neutron",
+      "path": "apps/kernel/kernel.v0.3.12.neutron",
       "sha256": "<64 lowercase hex>",
       "bytes": "<archive byte length>",
       "id": "kernel",

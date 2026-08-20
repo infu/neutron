@@ -1,6 +1,6 @@
 # Neutron license rewrite plan
 
-**Working date:** 2026-08-14
+**Working date:** 2026-08-20
 
 This document is the requirements ledger, drafting outline, review protocol,
 and completion checklist for the coordinated Neutron licenses. It is not a
@@ -10,21 +10,33 @@ The resulting texts are professional engineering drafts, not a substitute for
 review by counsel qualified in copyright, patent, open-source, and contract
 law in the jurisdictions where Neutron will be distributed or operated.
 
+The original goals below describe the NPL and the modification-and-sharing
+NSAL lineage. They do not imply modification or redistribution grants in the
+separate source-inspectable `LICENSE.APP.USE` alternative added on 20 August
+2026; that license states its narrower grants directly.
+
 ## Deliverables
 
 - `LICENSE`: **Neutron Public License, Version 1.0**
   (`LicenseRef-Neutron-Public-License-1.0`), covering the Kernel and other
   software whose application notice selects it.
-- `LICENSE.APP`: **Neutron Sovereign Application License, Version 1.0**
-  (`LicenseRef-Neutron-Sovereign-Application-License-1.0`), for app authors who
-  protect private personal use while limiting provider-operated use to systems
-  satisfying its self-contained Kernel Sovereignty Standard.
+- `LICENSE.APP`: **Neutron Sovereign Application License, Version 1.1**
+  (`LicenseRef-Neutron-Sovereign-Application-License-1.1`), permitting
+  modification and sharing while limiting every Production Use, including a
+  Sovereign User's private Production Use, to a Qualifying Sovereign System.
+- `LICENSE.APP.1.0`: exact preservation copy of the former NSAL 1.0 text for
+  already-published packages; it is not the default for new apps.
+- `LICENSE.APP.USE`: **Neutron Sovereign Application Use License, Version 1.0**
+  (`LicenseRef-Neutron-Sovereign-Application-Use-License-1.0`), providing
+  Complete App Source for inspection while reserving modification,
+  redistribution, sublicensing, and operation-for-another rights and limiting
+  Production Use to a Qualifying Sovereign System.
 - `LICENSE.GPL-3.0`: unchanged official GPLv3 reference text.
 - `LICENSE.NPL-0.2`: unchanged preservation copy of the superseded NPL draft.
 - `license_review.md`: historical review of NPL v0.2 and the repository state
   before this rewrite.
 
-Neither custom license may exceed **675 physical lines**. The official GPLv3
+No custom license may exceed **675 physical lines**. The official GPLv3
 reference in this repository is 674 lines. If a draft exceeds the cap,
 reorganize definitions, remove repetition, and consolidate remedies rather
 than shrinking readability.

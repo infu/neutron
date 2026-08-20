@@ -22,7 +22,7 @@ const KERNEL_307_PREDECESSOR_ARCHIVE_PATH = fileURLToPath(
   new URL("./fixtures/kernel.v0.3.7.neutron", import.meta.url),
 );
 const FINAL_KERNEL_CANDIDATE_ARCHIVE_PATH = fileURLToPath(
-  new URL("../../../apps/kernel/kernel.v0.3.11.neutron", import.meta.url),
+  new URL("../../../apps/kernel/kernel.v0.3.12.neutron", import.meta.url),
 );
 const KERNEL_306_FIXTURE_PATH = fileURLToPath(
   new URL("./fixtures/kernel.v0.3.6.neutron", import.meta.url),
@@ -227,7 +227,7 @@ function syntheticSuccessorKernelArchive(): Uint8Array {
     unknown
   >;
   files["neutron.json"] = encoder.encode(
-    JSON.stringify({ ...manifest, version: 311 }),
+    JSON.stringify({ ...manifest, version: 312 }),
   );
   return msgpack.encode(
     Object.fromEntries(
@@ -411,11 +411,11 @@ test("the exact v0.3.5, v0.3.6, and v0.3.7 browser compilers compile a clean HTT
 }, 120_000);
 
 test.skipIf(!RUN_CURRENT_RELEASE_ARTIFACT_GATE)(
-  "release-only archived browser compilers compile the exact v0.3.11 candidate and current app archives in one batch",
+  "release-only archived browser compilers compile the exact v0.3.12 candidate and current app archives in one batch",
   async () => {
     if (!HAS_CURRENT_RELEASE_ARTIFACTS) {
       throw new Error(
-        "NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE=1 requires the v0.3.7 predecessor, v0.3.11 candidate, and every current app archive",
+        "NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE=1 requires the v0.3.7 predecessor, v0.3.12 candidate, and every current app archive",
       );
     }
     const kernelArchive = new Uint8Array(

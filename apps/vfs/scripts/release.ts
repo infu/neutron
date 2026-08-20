@@ -33,7 +33,7 @@ import {
   type PackagedNeutronManifest,
 } from "neutron-tools/src/schema.js";
 import {
-  NSAL_LICENSE_ID,
+  LEGACY_NSAL_LICENSE_ID,
   ORDINARY_APP_LICENSE_PATHS,
   ORDINARY_APP_NOTICE_PATH,
   ordinaryAppSourceArtifactPath,
@@ -87,7 +87,7 @@ const FILES_SOURCE_DIRECTORIES = [
 ] as const;
 
 const REQUIRED_DIST_PATHS = new Set([
-  ORDINARY_APP_LICENSE_PATHS[NSAL_LICENSE_ID],
+  ORDINARY_APP_LICENSE_PATHS[LEGACY_NSAL_LICENSE_ID],
   ORDINARY_APP_NOTICE_PATH,
   THIRD_PARTY_NOTICE_INDEX_PATH,
   NEUTRON_PACKAGE_RECORD_PATH,
@@ -369,11 +369,11 @@ async function assertFilesLegalMetadata(
     );
   }
   if (
-    record.license.id !== NSAL_LICENSE_ID ||
+    record.license.id !== LEGACY_NSAL_LICENSE_ID ||
     record.license.texts.length !== 1 ||
-    record.license.texts[0]?.id !== NSAL_LICENSE_ID ||
+    record.license.texts[0]?.id !== LEGACY_NSAL_LICENSE_ID ||
     record.license.texts[0]?.path !==
-      ORDINARY_APP_LICENSE_PATHS[NSAL_LICENSE_ID]
+      ORDINARY_APP_LICENSE_PATHS[LEGACY_NSAL_LICENSE_ID]
   ) {
     throw new Error("Files package record must bind the exact NSAL license");
   }

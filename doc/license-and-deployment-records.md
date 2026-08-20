@@ -127,6 +127,7 @@ corpus at ordinary package paths such as:
 
 ```text
 legal/LICENSE.APP.txt
+legal/LICENSE.APP.USE.txt
 legal/LICENSE.Apache-2.0.txt
 legal/APPLICATION-NOTICE.txt
 legal/THIRD_PARTY_NOTICES.md
@@ -148,6 +149,7 @@ source or an author that deliberately selects it. It uses these reserved paths:
 
 ```text
 legal/archive-only/LICENSE.APP.txt
+legal/archive-only/LICENSE.APP.USE.txt
 legal/archive-only/LICENSE.Apache-2.0.txt
 legal/archive-only/THIRD_PARTY_NOTICES.md
 legal/archive-only/third-party/<sha256>.txt
@@ -454,6 +456,7 @@ Dispenser/starter state, or production canister has been changed.
    bytes: 1918481
    sha256: 534e0ded262bb5700d92046a4fafad16ccf42473259edd3f18e8a0578347f2ae
    ```
+
 2. Verify the exact private bridge candidate:
 
    ```text
@@ -468,6 +471,7 @@ Dispenser/starter state, or production canister has been changed.
    source is not provided and that its build-input and build-command lists are
    empty; no source archive is embedded. Do not label it NPL or publish it as a
    GPL-compliant source release.
+
 3. Keep format 3, the production update-source value, assembler
    `neutron_actor_v25`, and the existing init arguments. Put new metadata in
    sidecars, never unknown manifest fields.

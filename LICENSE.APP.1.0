@@ -1,24 +1,22 @@
 # Neutron Sovereign Application License
 
-Version 1.1, 20 August 2026
+Version 1.0, 15 August 2026
 
-License reference: LicenseRef-Neutron-Sovereign-Application-License-1.1
+License reference: LicenseRef-Neutron-Sovereign-Application-License-1.0
 
 ## License category
 
-This License permits study, modification, and sharing while allowing Production Use only in a Qualifying Sovereign
-System. That condition applies to every person, including a Sovereign User; there is no private-user Production Use
-exception. A good-faith user may recover, export, migrate, or remove software and User Data when qualification fails,
-but may not continue ordinary nonqualifying Production Use. The field-of-use condition is intentional. This License is
-not an OSI-approved Open Source or Free Software license. It is generally incompatible with GPL-only, AGPL-only, and
-other material whose license forbids further or field-of-use restrictions, absent separate permission from all relevant
-rights holders.
+This License limits provider-operated Production Use to a Qualifying Sovereign System while giving a Sovereign User a
+simple private-use protection that requires no compliance investigation, publication, registry, or record. That
+field-of-use condition is intentional. This License is not an OSI-approved Open Source or Free Software license. It is
+generally incompatible with GPL-only, AGPL-only, and other material whose license forbids further or field-of-use
+restrictions, absent separate permission from all relevant rights holders.
 
 ## Preamble
 
-This License lets an Application be studied, changed, shared, and improved while reserving all Production Use for a
-personal software system where the user can choose packages, compile a private personal system, replace the Kernel, and
-receive fair treatment for Applications.
+This License lets an Application be studied, changed, shared, and improved while reserving provider-operated Production
+Use for a personal software system where the user can choose packages, compile a private personal system, replace the
+Kernel, and receive fair treatment for Applications.
 
 It permits assembly with an independently licensed Kernel. When an NPL governs the Kernel, this License coordinates with
 that NPL's Application Assembly Exception. Compiling an Application into the same canister executable as a Kernel does
@@ -31,7 +29,7 @@ The License Category and Preamble explain classification and purpose. The number
 0. Scope, sovereignty standard, NPL safe harbor, and construction
 1. Definitions and the Qualifying Sovereign System test
 2. Copyright and patent grants
-3. Production Use in user-sovereign systems
+3. Production Use and private users
 4. Development, testing, security, and recovery
 5. Copyleft, packages, source, and network operation
 6. Assembly with Kernels and independent dependencies
@@ -137,9 +135,8 @@ The Sovereign User must have a convenient way to view this License and the Kerne
 signature, digest acceptance, registration, receipt, acceptance record, or repeated notice is required. The user does
 not assume a provider's, distributor's, operator's, or App Licensor's duties.
 
-No click-through, signature, registration, or acceptance record is required for licensed Private Assembly or Production
-Use. Section 3's qualification condition nevertheless applies to every licensed Production Use. Nothing reduces fair
-use, fair dealing, exhaustion, or comparable rights.
+Private Assembly and the private use protected by section 3 require no affirmative acceptance procedure. Nothing reduces
+fair use, fair dealing, exhaustion, or comparable rights.
 
 ### 0.4 Construction
 
@@ -311,35 +308,33 @@ To the extent law permits, each App Licensor agrees not to assert moral or simil
 conduct. No trademark, service mark, trade name, logo, publicity, or endorsement right is granted, except accurate
 reproduction of required notices.
 
-## 3. Production Use in user-sovereign systems
+## 3. Production Use and private users
 
-Production Use of an Application Work by any person is permitted only in a Qualifying Sovereign System. There is no
-private-user Production Use exception. Packaging, Conveying, and Private Assembly that is not Production Use may occur
-before or without qualification. A person acting only as an Application distributor need not evaluate a Recipient's
-present or future system.
+Except for a Sovereign User's protected private use, a person may Operate an Application Work for another only in a
+Qualifying Sovereign System. Packaging, Conveying, and Private Assembly may occur before or without qualification. A
+person acting only as an Application distributor need not evaluate a Recipient's present or future system. An operator
+may rely in good faith on the Kernel Provider's current disclosures unless the operator knows they are materially false
+or caused or controls the defect. An operator acting solely in an Application role does not violate this License solely
+because an unknown provider defect means the system did not qualify. After actual knowledge, that protection covers a
+safe wind-down or migration but not new or expanded operation until the defect is cured.
 
-A Sovereign User and a person acting solely in an Application role may rely in good faith on the Kernel Provider's
-current disclosures unless that person knows they are materially false or caused or controls the defect. Such a person
-does not violate this License solely because an unknown provider defect means the system did not qualify. This protection
-ends for ordinary Production Use after actual knowledge of a material qualification failure, but continues for the
-minimum activity reasonably necessary to inspect, export, recover, migrate, delete, safely uninstall, or wind down the
-Application Work and User Data. New or expanded Production Use must wait until the defect is cured.
+A natural person who lawfully receives or independently installs an Application Work may make Private Assembly and
+private Production Use in that person's own deployment without investigating, monitoring, proving, or auditing
+qualification. The user need not publish source or modifications, keep a package or controller history, create a record,
+register anything, run a source service, cure an upstream violation, or migrate merely to preserve permission. Discovery
+of an upstream defect or an independent user change does not terminate that private permission. The user may always
+inspect, export, recover, migrate, delete, or safely uninstall their own software and User Data.
 
-No Sovereign User must investigate, monitor, prove, audit, or document qualification; publish source or modifications;
-keep a package or controller history; create a record; register anything; run a source service; or cure an upstream
-violation. These protections remove compliance work from the user but do not authorize known nonqualifying Production
-Use.
-
-This section does not authorize multi-user hosting, durable third-party tenancy, or knowing coordination with a provider
-to evade this License. It does not excuse the Kernel Provider, Application operator, or other person responsible for a
-violation. A compliance request concerning a provider-controlled defect must be directed to the responsible provider or
-operator, not to a Sovereign User that neither caused nor controls it.
+This protection does not authorize operating for another, multi-user hosting, durable third-party tenancy, or knowing
+coordination with a provider to evade this License. It does not excuse the Kernel Provider, Application operator, or
+other person responsible for a violation. A compliance request must be directed to the responsible provider or operator,
+not to a Sovereign User acting only for that user.
 
 ## 4. Development, testing, security, and recovery
 
-Outside a Qualifying Sovereign System You may copy, build, run, and modify an Application Work as reasonably necessary
-to develop, review, test, integrate, migrate, archive, recover, or perform Security Research on that Application Work.
-Any resulting Production Use must independently satisfy section 3.
+In addition to the private use protected by sections 2 and 3, outside a Qualifying Sovereign System You may copy, build,
+run, and modify an Application Work as reasonably necessary to develop, review, test, integrate, migrate, archive, or
+perform Security Research on that Application Work. Any resulting later use must be independently lawful.
 
 The exception permits automated testing, CI, interoperability testing, authorized attempts to bypass controls in a
 lawfully controlled test environment, incident response, forensics, and recovery testing. Use synthetic, deidentified,
@@ -433,9 +428,9 @@ You must not impose a license term, royalty for exercising granted rights, techn
 authorization, or other measure that further limits a Recipient's rights. The Qualifying Sovereign System condition is
 part of this License and cannot be removed by an ordinary distributor.
 
-You may not invoke anti-circumvention law or a technological-protection claim to prevent licensed conduct in a
-Qualifying Sovereign System, good-faith recovery under section 3, or conduct under section 4. To the extent You hold such
-power, You waive it for those acts.
+You may not invoke anti-circumvention law or a technological-protection claim to prevent licensed private conduct under
+sections 2 and 3, conduct in a Qualifying Sovereign System, or conduct under section 4. To the extent You hold such power,
+You waive it for those acts.
 
 You may charge for copies, support, hosting, indemnity, or warranty solely on Your own behalf. Independent contracts may
 grant more rights, but only all relevant App Licensors may separately authorize non-sovereign Production Use. No service
@@ -465,9 +460,8 @@ deliberate lapse of Qualifying Kernel Terms is a Material Violation.
 
 For a first non-deliberate Material Violation, permissions continue during a thirty-day cure period beginning at the
 earliest of written notice, actual knowledge, or when You reasonably should know. Cure restores full compliance and
-prevents termination. Cure does not retroactively authorize knowing nonqualifying Production Use. A Sovereign User that
-neither caused nor controls a provider defect has no provider cure or documentation duty, but section 3 still limits
-ordinary Production Use after actual knowledge.
+prevents termination. Cure does not retroactively authorize a provider's knowing nonqualifying operation. A Sovereign
+User protected by section 3 has no cure, documentation, or migration duty.
 
 A deliberate, concealed, repeated, or uncured Material Violation suspends permissions from the affected App Licensor for
 the affected Application Work. When You cure, permissions are provisionally reinstated. Reinstatement becomes permanent
@@ -485,10 +479,9 @@ impairment of the User Upgrade Path.
 During that protected period, an otherwise qualifying system remains a Qualifying Sovereign System solely for
 determining permissions under this License.
 
-Termination never ends a license already received by a compliant downstream Recipient. The good-faith inspection,
-export, recovery, migration, deletion, and safe-uninstall rights in sections 3 and 4 survive. They do not authorize
-continued ordinary nonqualifying Production Use. You must not use Your violation to disable or reclaim the user's system
-or User Data.
+Termination never ends a license already received by a compliant downstream Recipient. The good-faith user and
+data-recovery rights in sections 3 and 4 survive. You must not use Your violation to disable or reclaim the user's
+system or User Data.
 
 Every affected Sovereign User and direct package Recipient is an intended beneficiary of source, notice, qualification,
 control, and recovery duties. An affected App Licensor is an intended beneficiary of neutrality and Application-equality
@@ -537,10 +530,10 @@ restricting downstream rights.
 Place this notice in source and a prominent file distributed with the Application:
 
     Copyright [year] [copyright holder]
-    Licensed under the Neutron Sovereign Application License, Version 1.1.
-    SPDX-License-Identifier: LicenseRef-Neutron-Sovereign-Application-License-1.1
-    Production Use by any person is permitted only in a Qualifying Sovereign System.
-    See LICENSE.APP.
+    Licensed under the Neutron Sovereign Application License, Version 1.0.
+    SPDX-License-Identifier: LicenseRef-Neutron-Sovereign-Application-License-1.0
+    Provider-operated Production Use is permitted only in a Qualifying Sovereign System.
+    Private personal use is protected by sections 2 and 3. See LICENSE.APP.
 
 Do not state that a later version of this License applies unless every relevant App Licensor separately and expressly
 grants that choice. Kernel-license qualification is governed by section 0.2 and requires no change to this notice.

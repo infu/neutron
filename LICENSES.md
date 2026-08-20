@@ -18,12 +18,27 @@ The control-plane package boundary is:
 - `packages/neutron-provision`
 - `packages/neutron-security`
 
-## Neutron Sovereign Application License 1.0
+## Neutron Application license choices
 
-Ordinary Neutron Applications use the Neutron Sovereign Application License,
-Version 1.0 (`LicenseRef-Neutron-Sovereign-Application-License-1.0`). The
-license text is in `LICENSE.APP`; each Application's `NOTICE` applies it to
-that Application. The current ordinary Application workspaces are:
+New ordinary Neutron Applications should deliberately choose one of two
+user-sovereign Application licenses:
+
+- `LICENSE.APP` is the Neutron Sovereign Application License, Version 1.1
+  (`LicenseRef-Neutron-Sovereign-Application-License-1.1`). It permits
+  modification and sharing, but all Production Use must occur in a Qualifying
+  Sovereign System.
+- `LICENSE.APP.USE` is the Neutron Sovereign Application Use License, Version
+  1.0 (`LicenseRef-Neutron-Sovereign-Application-Use-License-1.0`). It provides
+  Complete App Source for inspection while reserving modification,
+  redistribution, sublicensing, and operation-for-another rights. Its narrow
+  installation and use grant also requires a Qualifying Sovereign System.
+
+Previously published ordinary Applications remain under the exact Neutron
+Sovereign Application License, Version 1.0
+(`LicenseRef-Neutron-Sovereign-Application-License-1.0`) preserved in
+`LICENSE.APP.1.0`. Their existing `NOTICE` files continue to apply that version
+until a future higher package release deliberately adopts another license. The
+current legacy Application workspaces are:
 
 - `apps/agent`
 - `apps/chess`

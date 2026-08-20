@@ -13,7 +13,9 @@ import {
 } from "neutron-tools/package_record.js";
 import {
   APACHE_2_LICENSE_ID,
+  LEGACY_NSAL_LICENSE_ID,
   NSAL_LICENSE_ID,
+  NSAL_USE_LICENSE_ID,
   ORDINARY_APP_ARCHIVE_ONLY_LICENSE_PATHS,
   ORDINARY_APP_LICENSE_PATHS,
   ORDINARY_APP_NOTICE_PATH,
@@ -39,6 +41,8 @@ type Fixture = Readonly<{
   appRoot: string;
   appRelative: string;
   canonicalNsal: Uint8Array;
+  canonicalLegacyNsal: Uint8Array;
+  canonicalNsalUse: Uint8Array;
   canonicalApache: Uint8Array;
   notice: Uint8Array;
 }>;
@@ -51,10 +55,29 @@ async function writeJson(target: string, value: unknown): Promise<void> {
 function nsalNotice(name = "Fixture App"): string {
   return `${name}\n\n` +
     "Copyright 2026 3V Interactive\n" +
-    "Licensed under the Neutron Sovereign Application License, Version 1.0.\n" +
+    "Licensed under the Neutron Sovereign Application License, Version 1.1.\n" +
     `SPDX-License-Identifier: ${NSAL_LICENSE_ID}\n` +
+    "Production Use by any person is permitted only in a Qualifying Sovereign System.\n" +
+    "See LICENSE.APP.\n";
+}
+
+function legacyNsalNotice(name = "Fixture App"): string {
+  return `${name}\n\n` +
+    "Copyright 2026 3V Interactive\n" +
+    "Licensed under the Neutron Sovereign Application License, Version 1.0.\n" +
+    `SPDX-License-Identifier: ${LEGACY_NSAL_LICENSE_ID}\n` +
     "Provider-operated Production Use is permitted only in a Qualifying Sovereign System.\n" +
     "Private personal use is protected by sections 2 and 3. See LICENSE.APP.\n";
+}
+
+function nsalUseNotice(name = "Fixture App"): string {
+  return `${name}\n\n` +
+    "Copyright 2026 3V Interactive\n" +
+    "Licensed under the Neutron Sovereign Application Use License, Version 1.0.\n" +
+    `SPDX-License-Identifier: ${NSAL_USE_LICENSE_ID}\n` +
+    "Production Use by any person is permitted only in a Qualifying Sovereign System.\n" +
+    "Source is provided for inspection; modification and redistribution are not licensed.\n" +
+    "All rights not expressly granted are reserved. See LICENSE.APP.USE.\n";
 }
 
 function apacheNotice(name = "Fixture App"): string {
@@ -84,7 +107,11 @@ function noticeBundle(): ThirdPartyNoticeBundle {
 
 async function createFixture(
   options: Readonly<{
-    license?: typeof NSAL_LICENSE_ID | typeof APACHE_2_LICENSE_ID;
+    license?:
+      | typeof NSAL_LICENSE_ID
+      | typeof LEGACY_NSAL_LICENSE_ID
+      | typeof NSAL_USE_LICENSE_ID
+      | typeof APACHE_2_LICENSE_ID;
     managedMemory?: boolean;
     httpsSource?: boolean;
   }> = {},
@@ -98,6 +125,12 @@ async function createFixture(
   const canonicalNsal = new Uint8Array(
     await fs.readFile(path.join(sourceRepositoryRoot, "LICENSE.APP")),
   );
+  const canonicalLegacyNsal = new Uint8Array(
+    await fs.readFile(path.join(sourceRepositoryRoot, "LICENSE.APP.1.0")),
+  );
+  const canonicalNsalUse = new Uint8Array(
+    await fs.readFile(path.join(sourceRepositoryRoot, "LICENSE.APP.USE")),
+  );
   const canonicalApache = new Uint8Array(
     await fs.readFile(
       path.join(
@@ -107,7 +140,13 @@ async function createFixture(
     ),
   );
   const notice = textEncoder.encode(
-    license === NSAL_LICENSE_ID ? nsalNotice() : apacheNotice(),
+    license === NSAL_LICENSE_ID
+      ? nsalNotice()
+      : license === LEGACY_NSAL_LICENSE_ID
+        ? legacyNsalNotice()
+        : license === NSAL_USE_LICENSE_ID
+          ? nsalUseNotice()
+          : apacheNotice(),
   );
   const appEntry = "1".repeat(64);
   const schemaHash = "2".repeat(64);
@@ -167,6 +206,8 @@ async function createFixture(
     }),
     fs.writeFile(path.join(root, "package-lock.json"), "{\n  \"lockfileVersion\": 3\n}\n"),
     fs.writeFile(path.join(root, "LICENSE.APP"), canonicalNsal),
+    fs.writeFile(path.join(root, "LICENSE.APP.1.0"), canonicalLegacyNsal),
+    fs.writeFile(path.join(root, "LICENSE.APP.USE"), canonicalNsalUse),
     writeJson(path.join(appRoot, "package.json"), {
       name: "neutron-fixture",
       version: "1.0.0",
@@ -276,7 +317,16 @@ async function createFixture(
       },
     });
   }
-  return { root, appRoot, appRelative, canonicalNsal, canonicalApache, notice };
+  return {
+    root,
+    appRoot,
+    appRelative,
+    canonicalNsal,
+    canonicalLegacyNsal,
+    canonicalNsalUse,
+    canonicalApache,
+    notice,
+  };
 }
 
 function decodedSourcePaths(snapshot: Uint8Array): string[] {
@@ -471,6 +521,37 @@ test("update-source apps emit a legacy-readable HTTPS source offer and external 
     expect(legalPaths).not.toContain("archive-only");
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("metadata selects the exact legacy and use-only app licenses", async () => {
+  for (const license of [
+    LEGACY_NSAL_LICENSE_ID,
+    NSAL_USE_LICENSE_ID,
+  ] as const) {
+    const fixture = await createFixture({ license, httpsSource: true });
+    try {
+      const generated = await generateOrdinaryAppPackageMetadata({
+        appRoot: fixture.appRoot,
+        repositoryRoot: fixture.root,
+        buildNotices: async () => noticeBundle(),
+      });
+      const expected =
+        license === LEGACY_NSAL_LICENSE_ID
+          ? fixture.canonicalLegacyNsal
+          : fixture.canonicalNsalUse;
+      expect(generated.licenseId).toBe(license);
+      expect(generated.license).toEqual(expected);
+      expect(generated.record.license.texts[0]).toMatchObject({
+        id: license,
+        path: ORDINARY_APP_LICENSE_PATHS[license],
+        sha256: hashContent(expected),
+        bytes: expected.byteLength,
+      });
+      expect(generated.record.source.kind).toBe("https");
+    } finally {
+      await fs.rm(fixture.root, { recursive: true, force: true });
+    }
   }
 });
 

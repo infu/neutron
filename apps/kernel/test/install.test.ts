@@ -26,7 +26,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.11.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.12.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -35,7 +35,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(311);
+  expect(manifest.version).toBe(312);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   expect(manifest.memory.kernel.version).toBe(3);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3"]);
@@ -55,7 +55,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(311);
+  expect(packagedManifest.version).toBe(312);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
@@ -66,10 +66,10 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(3);
-  expect(packagedArchive.manifest.version).toBe(311);
+  expect(packagedArchive.manifest.version).toBe(312);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 311 },
+    package: { id: "kernel", version: 312 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });
@@ -106,9 +106,8 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
     wrapper.indexOf("func kernel_activation"),
     wrapper.indexOf("func kernel_static"),
   );
-  expect(activationWrapper).toContain(
-    "await* NeutronKernel.kernel_activation",
-  );
+  expect(activationWrapper).toContain("NeutronKernel.kernel_activation");
+  expect(activationWrapper).not.toContain("await*");
   expect(activationWrapper).not.toContain(
     "assert(NeutronKernel.is_authorized",
   );
@@ -881,15 +880,39 @@ test("kernel access management preserves owner and self-controller recovery", as
     /kernel_authorized_add[\s\S]*?not SettingsAccess\.validPrincipal\(id\)[\s\S]*?Set\.remove\(mem\.core\.authorized, Principal\.compare, id\)/,
   );
   expect(access).toMatch(
-    /authorizeFromController[\s\S]*?contains\(status\.settings\.controllers, caller\)[\s\S]*?Set\.add\(authorized, Principal\.compare, principal\)/,
+    /authorizeFromController[\s\S]*?Principal\.isController\(caller\)[\s\S]*?Set\.add\(authorized, Principal\.compare, principal\)/,
   );
+  const controllerRecovery = access.slice(
+    access.indexOf("public func authorizeFromController"),
+    access.indexOf("public func assertController"),
+  );
+  const activationControllerCheck = access.slice(
+    access.indexOf("public func assertController"),
+    access.indexOf("func addControllerUnlocked"),
+  );
+  expect(controllerRecovery).not.toContain("canister_status");
+  expect(controllerRecovery).not.toContain("await");
+  expect(activationControllerCheck).toContain("Principal.isController(caller)");
+  expect(activationControllerCheck).not.toContain("canister_status");
+  expect(activationControllerCheck).not.toContain("await");
   expect(wrapper).toMatch(
-    /func kernel_authorized_recover[\s\S]*?await\* NeutronKernel\.kernel_authorized_recover/,
+    /func kernel_authorized_recover[\s\S]*?NeutronKernel\.kernel_authorized_recover/,
   );
+  const recoveryWrapper = wrapper.slice(
+    wrapper.indexOf("func kernel_authorized_recover"),
+    wrapper.indexOf("func kernel_activation"),
+  );
+  expect(recoveryWrapper).not.toContain("await*");
   expect(manifest.func.kernel_authorized_recover).toEqual({
     type: "update",
-    async: "async*",
-    arg: ["caller", "this"],
+    async: false,
+    arg: ["caller"],
+    allow: "unauthorized",
+  });
+  expect(manifest.func.kernel_activation).toEqual({
+    type: "update",
+    async: false,
+    arg: ["caller"],
     allow: "unauthorized",
   });
   for (const method of [

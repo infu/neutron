@@ -79,7 +79,7 @@ test("one PocketIC config describes the complete local app set", () => {
   });
   expect(localConfig.artifacts.kind).toBe("inline");
   expect(localConfig.artifacts.kernel).toEqual({
-    path: "apps/kernel/kernel.v0.3.11.neutron",
+    path: "apps/kernel/kernel.v0.3.12.neutron",
   });
   const paths = localConfig.artifacts.packages.map(({ path }) => path);
   expect(new Set(paths).size).toBe(paths.length);

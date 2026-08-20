@@ -3,6 +3,7 @@ import Types "./Types";
 import Array "mo:core/Array";
 import Error "mo:core/Error";
 import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
 import Set "mo:core/Set";
 
 module {
@@ -59,34 +60,21 @@ module {
         public func authorizeFromController(
             principal : Principal,
             caller : Principal,
-            self : actor {},
-        ) : async* () {
+        ) : () {
             if (not validPrincipal(principal)) {
-                throw Error.reject("The anonymous principal cannot be granted access");
+                Runtime.trap("The anonymous principal cannot be granted access");
             };
-            let selfPrincipal = Principal.fromActor(self);
-            let status = await IC.management.canister_status({
-                canister_id = selfPrincipal;
-            });
-            if (not contains(status.settings.controllers, caller)) {
-                throw Error.reject("Only a canister controller can recover access");
+            if (not Principal.isController(caller)) {
+                Runtime.trap("Only a canister controller can recover access");
             };
             Set.add(authorized, Principal.compare, principal);
         };
 
         public func assertController(
             caller : Principal,
-            self : actor {},
-        ) : async* () {
-            if (not validPrincipal(caller)) {
-                throw Error.reject("Only a canister controller can arm activation");
-            };
-            let selfPrincipal = Principal.fromActor(self);
-            let status = await IC.management.canister_status({
-                canister_id = selfPrincipal;
-            });
-            if (not contains(status.settings.controllers, caller)) {
-                throw Error.reject("Only a canister controller can arm activation");
+        ) : () {
+            if (not Principal.isController(caller)) {
+                Runtime.trap("Only a canister controller can arm activation");
             };
         };
 

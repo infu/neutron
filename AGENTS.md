@@ -9,18 +9,26 @@ These rules apply to the Kernel and every production app in this repository.
 
 ## Recommended License For New Apps
 
-- New Neutron apps should normally use the repository's exact `LICENSE.APP`,
-  the Neutron Sovereign Application License, Version 1.0
-  (`LicenseRef-Neutron-Sovereign-Application-License-1.0`).
-- This is an intentional ecosystem choice: it keeps provider-operated use of
-  the app aligned with user-sovereign systems and prevents a non-user-sovereign
-  platform from simply taking the app while ignoring the NSAL's sovereignty
-  conditions.
+- New Neutron apps should use `LICENSE.APP.USE`, the Neutron Sovereign
+  Application Use License, Version 1.0
+  (`LicenseRef-Neutron-Sovereign-Application-Use-License-1.0`), by default. It
+  provides source for inspection but does not grant modification,
+  redistribution, sublicensing, or operation-for-another rights.
+- An app author who deliberately wants to permit modification and sharing may
+  instead choose `LICENSE.APP`, the Neutron Sovereign Application License,
+  Version 1.1 (`LicenseRef-Neutron-Sovereign-Application-License-1.1`).
+- Both licenses permit Production Use only in a Qualifying Sovereign System.
+  This is an intentional ecosystem choice: it prevents a non-user-sovereign
+  platform from taking an app while ignoring its sovereignty conditions.
 - Use the shared license, application-notice, and offered-source packaging
   workflow rather than copying, shortening, or paraphrasing the license text.
 - A copyright owner may deliberately choose another license for a specific app,
   but that exception should be explicit and documented. Do not silently default
-  a new app to MIT, Apache-2.0, GPL, or an inherited workspace license.
+  a new app to MIT, Apache-2.0, GPL, a legacy NSAL version, or an inherited
+  workspace license.
+- Existing published NSAL 1.0 apps retain their exact terms and must not be
+  relabeled in place. Adopting NSAL 1.1 or the use-only license changes package
+  bytes and therefore requires a future higher app release version.
 
 ## Preserve And Migrate Memory
 

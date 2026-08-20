@@ -5,13 +5,20 @@ import path from "node:path";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
-const NSAL_LICENSE = "LicenseRef-Neutron-Sovereign-Application-License-1.0";
+const NSAL_LICENSE = "LicenseRef-Neutron-Sovereign-Application-License-1.1";
+const LEGACY_NSAL_LICENSE =
+  "LicenseRef-Neutron-Sovereign-Application-License-1.0";
+const NSAL_USE_LICENSE =
+  "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0";
 
 // The Kernel is a control-plane workspace, not an ordinary Application. Its
 // release license is checked by the Kernel release/conformance gates. Keep the
 // app-facing boundary here explicit so a new ordinary app cannot silently
 // inherit the root or Kernel license.
-const nsalAppWorkspaces = [
+// These production apps remain on their already-published NSAL 1.0 lineage
+// until a future higher package version deliberately adopts NSAL 1.1 or the
+// use-only alternative. New apps must be classified explicitly below.
+const legacyNsalAppWorkspaces = [
   "apps/agent",
   "apps/chess",
   "apps/contacts",
@@ -28,12 +35,21 @@ const nsalAppWorkspaces = [
   "apps/wallet",
 ];
 
+const nsalAppWorkspaces: string[] = [];
+const nsalUseAppWorkspaces: string[] = [];
+
 const apacheAppWorkspaces = ["apps/gemma"];
 const kernelWorkspaces = ["apps/kernel"];
 
 const expectedLicenses = new Map<string, string>([
   ["", "SEE LICENSE IN LICENSES.md"],
   ...nsalAppWorkspaces.map((workspace) => [workspace, NSAL_LICENSE] as const),
+  ...legacyNsalAppWorkspaces.map(
+    (workspace) => [workspace, LEGACY_NSAL_LICENSE] as const,
+  ),
+  ...nsalUseAppWorkspaces.map(
+    (workspace) => [workspace, NSAL_USE_LICENSE] as const,
+  ),
   ...apacheAppWorkspaces.map((workspace) => [workspace, "Apache-2.0"] as const),
   ...kernelWorkspaces.map(
     (workspace) => [workspace, "SEE LICENSE IN LICENSE"] as const,
@@ -74,6 +90,8 @@ const read = (relativePath: string) =>
 
 const classifiedAppWorkspaces = new Set([
   ...nsalAppWorkspaces,
+  ...legacyNsalAppWorkspaces,
+  ...nsalUseAppWorkspaces,
   ...apacheAppWorkspaces,
   ...kernelWorkspaces,
 ]);
@@ -126,6 +144,7 @@ const assertNotice = async (
   if (notice.trim().length === 0) {
     throw new Error(`${noticePath} must not be empty`);
   }
+  assertContains(notice, "Copyright 2026 3V Interactive", noticePath);
   for (const marker of requiredMarkers) {
     assertContains(notice, marker, noticePath);
   }
@@ -144,6 +163,25 @@ for (const [workspace, expected] of expectedLicenses) {
 }
 
 const npl = await read("LICENSE");
+const nsal = await read("LICENSE.APP");
+assertContains(nsal, NSAL_LICENSE, "LICENSE.APP");
+assertContains(
+  nsal,
+  "Production Use by any person is permitted only in a Qualifying Sovereign System.",
+  "LICENSE.APP",
+);
+const nsalUse = await read("LICENSE.APP.USE");
+assertContains(nsalUse, NSAL_USE_LICENSE, "LICENSE.APP.USE");
+assertContains(
+  nsalUse,
+  "modification and redistribution are not licensed",
+  "LICENSE.APP.USE",
+);
+assertEqual(
+  digest(await read("LICENSE.APP.1.0")),
+  "44cb6531b9001797dced71351728c6acd8b06ccb918987f9127b141b351b17c6",
+  "LICENSE.APP.1.0 SHA-256",
+);
 for (const workspace of nplPackages) {
   assertEqual(await read(`${workspace}/LICENSE`), npl, `${workspace}/LICENSE`);
   await read(`${workspace}/NOTICE`);
@@ -160,12 +198,28 @@ for (const workspace of apachePackages) {
 }
 
 for (const workspace of nsalAppWorkspaces) {
-  await assertNotice(workspace, [NSAL_LICENSE, "See LICENSE.APP"]);
+  await assertNotice(workspace, [
+    NSAL_LICENSE,
+    "Production Use by any person is permitted only",
+    "See LICENSE.APP",
+  ]);
+}
+
+for (const workspace of legacyNsalAppWorkspaces) {
+  await assertNotice(workspace, [LEGACY_NSAL_LICENSE, "See LICENSE.APP"]);
+}
+
+for (const workspace of nsalUseAppWorkspaces) {
+  await assertNotice(workspace, [
+    NSAL_USE_LICENSE,
+    "modification and redistribution are not licensed",
+    "See LICENSE.APP.USE",
+  ]);
 }
 // The peer is a second packaged Application produced by the fixture workspace,
 // but it is deliberately not an npm workspace and therefore has no lock entry.
 await assertNotice("apps/vetkeys_fixture_test/peer", [
-  NSAL_LICENSE,
+  LEGACY_NSAL_LICENSE,
   "See LICENSE.APP",
 ]);
 
@@ -251,6 +305,8 @@ for (const expression of [
 for (const required of [
   "LICENSES.md",
   "LICENSE.APP",
+  "LICENSE.APP.1.0",
+  "LICENSE.APP.USE",
   "packages/neutron-motoko-wasm/LICENSES.md",
   "packages/neutron-motoko-wasm/NOTICE",
   "support/dispenser/THIRD_PARTY_NOTICES.md",
@@ -263,6 +319,8 @@ for (const required of [
 const cappedLicenseTexts = new Set([
   "LICENSE",
   "LICENSE.APP",
+  "LICENSE.APP.1.0",
+  "LICENSE.APP.USE",
   "LICENSE.GPL-3.0",
   "LICENSE.NPL-0.2",
   "apps/gemma/LICENSE",

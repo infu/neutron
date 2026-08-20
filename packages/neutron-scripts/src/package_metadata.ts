@@ -46,15 +46,25 @@ const DETERMINISTIC_GZIP_OPTIONS = Object.freeze({
 });
 
 export const NSAL_LICENSE_ID =
+  "LicenseRef-Neutron-Sovereign-Application-License-1.1" as const;
+export const LEGACY_NSAL_LICENSE_ID =
   "LicenseRef-Neutron-Sovereign-Application-License-1.0" as const;
+export const NSAL_USE_LICENSE_ID =
+  "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0" as const;
 export const APACHE_2_LICENSE_ID = "Apache-2.0" as const;
 export const ORDINARY_APP_LICENSE_PATHS = Object.freeze({
   [NSAL_LICENSE_ID]: "legal/LICENSE.APP.txt",
+  [LEGACY_NSAL_LICENSE_ID]: "legal/LICENSE.APP.txt",
+  [NSAL_USE_LICENSE_ID]: "legal/LICENSE.APP.USE.txt",
   [APACHE_2_LICENSE_ID]: "legal/LICENSE.Apache-2.0.txt",
 } as const);
 export const ORDINARY_APP_ARCHIVE_ONLY_LICENSE_PATHS = Object.freeze({
   [NSAL_LICENSE_ID]:
     `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}LICENSE.APP.txt`,
+  [LEGACY_NSAL_LICENSE_ID]:
+    `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}LICENSE.APP.txt`,
+  [NSAL_USE_LICENSE_ID]:
+    `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}LICENSE.APP.USE.txt`,
   [APACHE_2_LICENSE_ID]:
     `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}LICENSE.Apache-2.0.txt`,
 } as const);
@@ -109,6 +119,8 @@ const sourceCollectionBytes = new WeakMap<
 
 export type OrdinaryAppLicenseId =
   | typeof NSAL_LICENSE_ID
+  | typeof LEGACY_NSAL_LICENSE_ID
+  | typeof NSAL_USE_LICENSE_ID
   | typeof APACHE_2_LICENSE_ID;
 
 export type OrdinaryAppSourceFile = Readonly<{
@@ -1047,11 +1059,21 @@ async function resolveOrdinaryAppLicense({
     path.join(repositoryRoot, "LICENSE.APP"),
     "repository LICENSE.APP",
   );
+  const legacyNsal = await readRequiredFile(
+    path.join(repositoryRoot, "LICENSE.APP.1.0"),
+    "repository LICENSE.APP.1.0",
+  );
+  const nsalUse = await readRequiredFile(
+    path.join(repositoryRoot, "LICENSE.APP.USE"),
+    "repository LICENSE.APP.USE",
+  );
   const apache = await readRequiredFile(
     path.join(repositoryRoot, "packages/neutron-design-system/LICENSE"),
     "canonical Apache-2.0 license",
   );
   assertCanonicalNsal(nsal);
+  assertCanonicalLegacyNsal(legacyNsal);
+  assertCanonicalNsalUse(nsalUse);
   assertCanonicalApache(apache);
 
   if (packageJson.license === NSAL_LICENSE_ID) {
@@ -1067,6 +1089,38 @@ async function resolveOrdinaryAppLicense({
         ? ORDINARY_APP_ARCHIVE_ONLY_LICENSE_PATHS
         : ORDINARY_APP_LICENSE_PATHS)[NSAL_LICENSE_ID],
       content: nsal,
+      notice: appNotice,
+    });
+  }
+  if (packageJson.license === LEGACY_NSAL_LICENSE_ID) {
+    if (appLicense !== null) {
+      throw new Error(
+        "legacy NSAL applications must use the repository LICENSE.APP.1.0 and must not carry a duplicate application LICENSE",
+      );
+    }
+    assertLegacyNsalApplicationNotice(appNotice);
+    return Object.freeze({
+      id: LEGACY_NSAL_LICENSE_ID,
+      path: (archiveOnly
+        ? ORDINARY_APP_ARCHIVE_ONLY_LICENSE_PATHS
+        : ORDINARY_APP_LICENSE_PATHS)[LEGACY_NSAL_LICENSE_ID],
+      content: legacyNsal,
+      notice: appNotice,
+    });
+  }
+  if (packageJson.license === NSAL_USE_LICENSE_ID) {
+    if (appLicense !== null) {
+      throw new Error(
+        "use-only applications must use the single repository LICENSE.APP.USE and must not carry a duplicate application LICENSE",
+      );
+    }
+    assertNsalUseApplicationNotice(appNotice);
+    return Object.freeze({
+      id: NSAL_USE_LICENSE_ID,
+      path: (archiveOnly
+        ? ORDINARY_APP_ARCHIVE_ONLY_LICENSE_PATHS
+        : ORDINARY_APP_LICENSE_PATHS)[NSAL_USE_LICENSE_ID],
+      content: nsalUse,
       notice: appNotice,
     });
   }
@@ -1087,35 +1141,70 @@ async function resolveOrdinaryAppLicense({
     });
   }
   throw new Error(
-    `Ordinary application package.json license must be exactly ${NSAL_LICENSE_ID} or ${APACHE_2_LICENSE_ID}`,
+    `Ordinary application package.json license must be exactly ${NSAL_LICENSE_ID}, ${LEGACY_NSAL_LICENSE_ID}, ${NSAL_USE_LICENSE_ID}, or ${APACHE_2_LICENSE_ID}`,
   );
 }
 
 function assertNsalApplicationNotice(content: Uint8Array): void {
   const text = decodeNotice(content, "NSAL application NOTICE");
-  const requiredSection12Notice =
-    "Copyright 2026 3V Interactive\n" +
-    "Licensed under the Neutron Sovereign Application License, Version 1.0.\n" +
-    `SPDX-License-Identifier: ${NSAL_LICENSE_ID}\n` +
-    "Provider-operated Production Use is permitted only in a Qualifying Sovereign System.\n" +
-    "Private personal use is protected by sections 2 and 3. See LICENSE.APP.";
-  if (!text.includes(requiredSection12Notice)) {
-    throw new Error(
-      "Application NOTICE must contain the exact NSAL section 12 3V Interactive notice",
-    );
-  }
+  assertApplicationCopyrightLine(text, "NSAL application NOTICE");
+  assertNoticeMarkers(text, "NSAL application NOTICE", [
+    "Licensed under the Neutron Sovereign Application License, Version 1.1.",
+    `SPDX-License-Identifier: ${NSAL_LICENSE_ID}`,
+    "Production Use by any person is permitted only in a Qualifying Sovereign System.",
+    "See LICENSE.APP.",
+  ]);
+}
+
+function assertLegacyNsalApplicationNotice(content: Uint8Array): void {
+  const text = decodeNotice(content, "legacy NSAL application NOTICE");
+  assertApplicationCopyrightLine(text, "legacy NSAL application NOTICE");
+  assertNoticeMarkers(text, "legacy NSAL application NOTICE", [
+    "Licensed under the Neutron Sovereign Application License, Version 1.0.",
+    `SPDX-License-Identifier: ${LEGACY_NSAL_LICENSE_ID}`,
+    "Provider-operated Production Use is permitted only in a Qualifying Sovereign System.",
+    "Private personal use is protected by sections 2 and 3. See LICENSE.APP.",
+  ]);
+}
+
+function assertNsalUseApplicationNotice(content: Uint8Array): void {
+  const text = decodeNotice(content, "use-only application NOTICE");
+  assertApplicationCopyrightLine(text, "use-only application NOTICE");
+  assertNoticeMarkers(text, "use-only application NOTICE", [
+    "Licensed under the Neutron Sovereign Application Use License, Version 1.0.",
+    `SPDX-License-Identifier: ${NSAL_USE_LICENSE_ID}`,
+    "Production Use by any person is permitted only in a Qualifying Sovereign System.",
+    "Source is provided for inspection; modification and redistribution are not licensed.",
+    "All rights not expressly granted are reserved. See LICENSE.APP.USE.",
+  ]);
 }
 
 function assertApacheApplicationNotice(content: Uint8Array): void {
   const text = decodeNotice(content, "Apache application NOTICE");
-  const requiredNotice =
-    "Copyright 2026 3V Interactive\n" +
-    "Licensed under the Apache License, Version 2.0.\n" +
-    "SPDX-License-Identifier: Apache-2.0";
-  if (!text.includes(requiredNotice)) {
+  assertApplicationCopyrightLine(text, "Apache application NOTICE");
+  assertNoticeMarkers(text, "Apache application NOTICE", [
+    "Licensed under the Apache License, Version 2.0.",
+    "SPDX-License-Identifier: Apache-2.0",
+  ]);
+}
+
+function assertApplicationCopyrightLine(text: string, label: string): void {
+  if (!/^Copyright [0-9]{4}(?:-[0-9]{4})? [^\r\n\[\]]+$/mu.test(text)) {
     throw new Error(
-      "Apache application NOTICE must contain the exact 3V Interactive Apache-2.0 notice",
+      `${label} must contain a filled Copyright <year> <copyright holder> line`,
     );
+  }
+}
+
+function assertNoticeMarkers(
+  text: string,
+  label: string,
+  markers: readonly string[],
+): void {
+  for (const marker of markers) {
+    if (!text.includes(marker)) {
+      throw new Error(`${label} must contain ${JSON.stringify(marker)}`);
+    }
   }
 }
 
@@ -1381,9 +1470,38 @@ function assertCanonicalNsal(content: Uint8Array): void {
   if (
     !text.includes("# Neutron Sovereign Application License") ||
     !text.includes(`License reference: ${NSAL_LICENSE_ID}`) ||
+    !text.includes("Version 1.1, 20 August 2026") ||
     !text.includes("## 12. Application notice")
   ) {
     throw new Error("Repository LICENSE.APP is not the expected exact NSAL text");
+  }
+}
+
+function assertCanonicalLegacyNsal(content: Uint8Array): void {
+  const text = fatalTextDecoder.decode(content);
+  if (
+    !text.includes("# Neutron Sovereign Application License") ||
+    !text.includes(`License reference: ${LEGACY_NSAL_LICENSE_ID}`) ||
+    !text.includes("Version 1.0, 15 August 2026") ||
+    !text.includes("## 12. Application notice")
+  ) {
+    throw new Error(
+      "Repository LICENSE.APP.1.0 is not the expected exact legacy NSAL text",
+    );
+  }
+}
+
+function assertCanonicalNsalUse(content: Uint8Array): void {
+  const text = fatalTextDecoder.decode(content);
+  if (
+    !text.includes("# Neutron Sovereign Application Use License") ||
+    !text.includes(`License reference: ${NSAL_USE_LICENSE_ID}`) ||
+    !text.includes("Version 1.0, 20 August 2026") ||
+    !text.includes("## 12. Application notice")
+  ) {
+    throw new Error(
+      "Repository LICENSE.APP.USE is not the expected exact use-only text",
+    );
   }
 }
 

@@ -332,10 +332,18 @@ The current order is:
    bytes to `<app>/.neutron/sources/<sha256>.source.v1.msgpack.gz` and records the
    update source's certified HTTPS URL. Embedded mode instead retains its
    source and bulk legal material inside the package.
+
 6. `pack.ts`
    walks every file under `dist/`, gzips each file, MessagePack-encodes the flat
    path-to-bytes object, and writes
    `<id>.v<major>.<minor>.<patch>.neutron`.
+
+For a new app, select either `LICENSE.APP`/NSAL 1.1 when recipients may modify
+and share the app, or `LICENSE.APP.USE` when source should remain inspectable
+but modification and redistribution remain reserved. Both choices restrict
+Production Use to a Qualifying Sovereign System. Previously published NSAL 1.0
+apps retain that exact license until a future higher package release explicitly
+changes it.
 
 The hello README documents the minimal developer command sequence as a root
 `npm install`, then `npm run package` from `apps/hello`. `npm test` in the
@@ -363,7 +371,7 @@ compilation outside the kernel browser UI:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.11.neutron \
+  --package apps/kernel/kernel.v0.3.12.neutron \
   --package apps/hello/hello.v0.2.4.neutron \
   --package apps/kitchensink/kitchensink.v0.3.4.neutron \
   --wasm-out /tmp/neutron.wasm \

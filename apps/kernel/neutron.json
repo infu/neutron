@@ -2,7 +2,7 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 311,
+  "version": 312,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "src": "main.mo",
   "init_arg": [
@@ -38,19 +38,17 @@
     },
     "kernel_authorized_recover": {
       "type": "update",
-      "async": "async*",
+      "async": false,
       "arg": [
-        "caller",
-        "this"
+        "caller"
       ],
       "allow": "unauthorized"
     },
     "kernel_activation": {
       "type": "update",
-      "async": "async*",
+      "async": false,
       "arg": [
-        "caller",
-        "this"
+        "caller"
       ],
       "allow": "unauthorized"
     },

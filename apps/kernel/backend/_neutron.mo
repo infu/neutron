@@ -76,7 +76,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     };
 
 
-    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 311; capability_plan_fingerprint = "aeca4893662cc91e14ef6ddb7d9a473d2cb817603f9bf95a31415c80be3a1411"; resident_frame_security = #credentialless_opaque_v1 }];
+    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 312; capability_plan_fingerprint = "5a17f6ebd184e3dff344503c333e8245e210a5661a0367c602ac3a26c6e65247"; resident_frame_security = #credentialless_opaque_v1 }];
 
 
 
@@ -108,12 +108,12 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
 
 
     public shared({ caller = NeutronCaller }) func kernel_authorized_recover(NeutronRequest: NeutronModule_a6_kernel.kernel_authorized_recover_Input) : async NeutronModule_a6_kernel.kernel_authorized_recover_Output {
-        await* NeutronKernel.kernel_authorized_recover(NeutronRequest ,NeutronCaller,NeutronActor)
+         NeutronKernel.kernel_authorized_recover(NeutronRequest ,NeutronCaller)
     };
 
 
     public shared({ caller = NeutronCaller }) func kernel_activation(NeutronRequest: NeutronModule_a6_kernel.kernel_activation_Input) : async NeutronModule_a6_kernel.kernel_activation_Output {
-        await* NeutronKernel.kernel_activation(NeutronRequest ,NeutronCaller,NeutronActor)
+         NeutronKernel.kernel_activation(NeutronRequest ,NeutronCaller)
     };
 
 

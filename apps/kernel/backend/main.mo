@@ -2055,20 +2055,18 @@ module {
 
         public func /*update:unauthorized*/kernel_authorized_recover(
             id : Principal,
-            /*caller,this*/ caller : Principal,
-            self : actor {},
-        ) : async* () {
-            await* settingsAccess.authorizeFromController(id, caller, self);
+            /*caller*/ caller : Principal,
+        ) : () {
+            settingsAccess.authorizeFromController(id, caller);
         };
 
         public func /*update:unauthorized*/kernel_activation(
             request : ActivationService.Request,
-            /*caller,this*/ caller : Principal,
-            self : actor {},
-        ) : async* ActivationService.Result {
+            /*caller*/ caller : Principal,
+        ) : ActivationService.Result {
             switch (request) {
                 case (#set(hash)) {
-                    await* settingsAccess.assertController(caller, self);
+                    settingsAccess.assertController(caller);
                     activation.set(hash, caller);
                 };
                 case (#use(token)) {

@@ -120,7 +120,7 @@ async function writeOutputFile(filePath: string, content: string | Uint8Array) {
 
 function helpText(): string {
   return `Usage:
-  neutron compile --package kernel.v0.3.11.neutron [--package app.neutron] --wasm-out neutron.wasm --candid-out neutron.did [--vetkeys-environment production]
+  neutron compile --package kernel.v0.3.12.neutron [--package app.neutron] --wasm-out neutron.wasm --candid-out neutron.did [--vetkeys-environment production]
 
 Commands:
   compile  Compile one or more .neutron packages from disk into Wasm and Candid.

@@ -2048,14 +2048,17 @@ The steps are:
    gzip-compresses every file under `dist/`, MessagePack-encodes them, and
    writes `<id>.v<major>.<minor>.<patch>.neutron`.
 
-For an NSAL release, this tooling includes the exact NSAL text and required
-third-party notices and identifies exact Complete App Source. For a normal
-source-discoverable release, the provider's update-source publisher uploads the
-source artifact; the installed canister receives the license, notices, and
-record but not the source bytes. This is a package and publisher responsibility,
-not a requirement for a Sovereign User to publish on GitHub, operate a source
-host, or hand-author hashes, combined-Wasm identities, or deployment records.
-Private browser assembly remains private.
+For an NSAL 1.1 release, this tooling includes the exact `LICENSE.APP` text. For
+an inspectable use-only release, it includes the exact `LICENSE.APP.USE` text.
+Both include required third-party notices and identify exact Complete App
+Source; the use-only source offer grants inspection, not modification or
+redistribution. For a normal source-discoverable release, the provider's
+update-source publisher uploads the source artifact; the installed canister
+receives the license, notices, and record but not the source bytes. This is a
+package and publisher responsibility, not a requirement for a Sovereign User
+to publish on GitHub, operate a source host, or hand-author hashes,
+combined-Wasm identities, or deployment records. Private browser assembly
+remains private.
 
 Because `build` runs `mogen`, backend annotation changes can rewrite
 `neutron.json` after the first validation step. After changing method
@@ -2166,7 +2169,7 @@ To compile package files without deploying:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.11.neutron \
+  --package apps/kernel/kernel.v0.3.12.neutron \
   --package apps/my_app/my_app.v0.1.0.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
