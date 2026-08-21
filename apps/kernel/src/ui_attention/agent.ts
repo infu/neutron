@@ -92,7 +92,7 @@ export type InvocationNode = {
   endpointSessionId: string;
   appId: string;
   installationUid: string;
-  role: "tile" | "background" | "tray";
+  role: "tile" | "background" | "tray" | "media";
   tool: string;
   depth: number;
   status: "active" | "permission_denied" | "complete" | "cancelled";
@@ -494,6 +494,12 @@ export async function requestAgentConsent(
     );
   }
 
+  if (node.role === "media") {
+    throw policyError(
+      "INVOCATION_INVALID",
+      "Media surfaces cannot request agent permissions",
+    );
+  }
   root.challenges += 1;
   node.challengeCount += 1;
   updateRootSummary(node.rootId);

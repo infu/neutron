@@ -319,6 +319,12 @@ function requestSource(endpoint: RegisteredEndpoint): BackendCallRequestSource {
       "Change backend access from an app tile or background request",
     );
   }
+  if (endpoint.context.role === "media") {
+    throw new KernelPolicyError(
+      "USER_INTERACTION_REQUIRED",
+      "Change backend access from an app tile or background request",
+    );
+  }
   return {
     role: "tile",
     tileId: endpoint.context.tileId,

@@ -16,7 +16,7 @@ import {
 export type MsgBusCaller = {
   endpoint: string;
   appId: string;
-  role: "tile" | "background" | "tray";
+  role: "tile" | "background" | "tray" | "media";
   sessionId?: string;
 };
 

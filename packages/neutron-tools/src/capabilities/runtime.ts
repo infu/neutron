@@ -24,6 +24,7 @@ export const RUNTIME_CAPABILITY_KINDS = Object.freeze([
   "connections",
   "persistent_browser_storage",
   "dedicated_resident_origin",
+  "media_sessions",
   "public_ingress",
   "certified_assets",
   "certified_read_routes",
@@ -222,6 +223,17 @@ function runtimeResources(entry: CapabilityPlanEntry): RuntimeResource[] {
             ...entry.config,
             frame_security: "credentialless_ephemeral_dedicated_v1",
           },
+        },
+      ];
+    case "media_sessions":
+      return [
+        {
+          kind: "media_sessions",
+          resource_id: "default",
+          api: entry.api,
+          grant: "owner_runtime_grant",
+          toggleable: true,
+          authority: entry.config,
         },
       ];
     case "public_ingress":

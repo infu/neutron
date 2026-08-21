@@ -13,6 +13,9 @@ import BackendCallTypes "./backend_calls/Types";
 import RandomnessAdapter "./randomness/Adapter";
 import RandomnessService "./randomness/Service";
 import RandomnessTypes "./randomness/Types";
+import MediaSessionsAdapter "./media_sessions/Adapter";
+import MediaSessionsService "./media_sessions/Service";
+import MediaSessionsTypes "./media_sessions/Types";
 import HttpsOutcallsAdapter "./https_outcalls/Adapter";
 import HttpsOutcallsService "./https_outcalls/Service";
 import HttpsOutcallsTypes "./https_outcalls/Types";
@@ -42,7 +45,7 @@ import PublicIngressService "./public_ingress/Service";
 import PublicIngressTypes "./public_ingress/Types";
 import GatewayAuthority "./http_routes/GatewayAuthority";
 import RouteNamespace "./http_routes/Namespace";
-import KernelMemory "./memory/kernel/v3";
+import KernelMemory "./memory/kernel/v4";
 import ActivationMemory "./memory/activation/v1";
 import ActivationService "./activation/Service";
 import Array "mo:core/Array";
@@ -109,6 +112,7 @@ module {
         app_scope : CapabilityTypes.AppScope;
         backend_calls : ?BackendCallTypes.BackendCallsDeclaration;
         randomness : ?RandomnessTypes.Declaration;
+        media_sessions : ?MediaSessionsTypes.Declaration;
         https_outcalls : ?HttpsOutcallsTypes.Declaration;
         chain_key_signing : ?ChainKeySigningTypes.Declaration;
         stable_store : ?StableStoreTypes.Declaration;
@@ -360,6 +364,10 @@ module {
 
     func persistentAppOriginPrefix(browserOriginNonce : Text) : Text {
         "p" # Text.fromIter(Iter.take(browserOriginNonce.chars(), 24));
+    };
+
+    public func mediaSessionOriginPrefix(originNonce : Text) : Text {
+        "m" # Text.fromIter(Iter.take(originNonce.chars(), 24));
     };
 
     public func appIdFromAssetUrl(url : Text) : ?Text {
@@ -684,6 +692,18 @@ module {
             runtimeCapabilityRegistry,
             outgoingCycleAccounting,
         );
+        let mediaSessions = MediaSessionsService.Service(
+            mem.media_sessions,
+            MediaSessionsAdapter.management(),
+            func(appId) {
+                InstallMemory.findApp(mem.install.committed_app_instances, appId)
+            },
+            func(scope) {
+                InstallMemory.scopeActive(mem.install, runningDeploymentId, scope)
+            },
+            runtimeCapabilityRegistry,
+            nowNanos,
+        );
         let httpsOutcallTransformActor : HttpsOutcallsTypes.TransformActor =
             actor (Principal.toText(canisterPrincipal));
         let httpsOutcalls = HttpsOutcallsService.Service(
@@ -932,7 +952,14 @@ module {
                     ("Referrer-Policy", "no-referrer"),
                     (
                         "Permissions-Policy",
-                        "camera=(), geolocation=(), microphone=()",
+                        if (key == "/") {
+                            // The trusted Kernel shell is the broker. Its child
+                            // iframe still needs an exact-origin `allow`
+                            // attribute before either device is available.
+                            "camera=*, geolocation=(), microphone=*"
+                        } else {
+                            "camera=(), geolocation=(), microphone=()"
+                        },
                     ),
                     (
                         Cert.CERTIFICATE_EXPRESSION_HEADER,
@@ -950,6 +977,57 @@ module {
                 ],
                 appAssetSandboxHeaders(policy),
             );
+        };
+
+        func mediaSessionQuery(lease : MediaSessionsTypes.LeaseView) : Text {
+            "app=" # lease.app_id #
+            "&role=media" #
+            "&installation-uid=" # Nat64.toText(lease.installation_uid) #
+            "&resident-frame-security=media-session-v1" #
+            "&browser-origin-nonce=" # lease.origin_nonce #
+            "&browser-origin-authority-epoch=" # Nat64.toText(lease.authority_epoch);
+        };
+
+        func mediaSessionPath(lease : MediaSessionsTypes.LeaseView) : Text {
+            "/app/" # lease.app_id # "/" # lease.entrypoint;
+        };
+
+        func mediaSessionHeaders(
+            key : Text,
+            file : Assets.Doc,
+            bodyHash : Blob,
+            lease : MediaSessionsTypes.LeaseView,
+            kind : Cert.ResidentRequestKind,
+        ) : [Painless.HeaderField] {
+            var camera = false;
+            var microphone = false;
+            for (feature in lease.features.vals()) {
+                switch (feature) {
+                    case (#camera) camera := true;
+                    case (#microphone) microphone := true;
+                };
+            };
+            [
+                ("Content-Type", file.content_type),
+                ("Content-Encoding", file.content_encoding),
+                ("Cache-Control", "no-store"),
+                ("X-Content-Type-Options", "nosniff"),
+                ("Referrer-Policy", "no-referrer"),
+                (
+                    "Permissions-Policy",
+                    "camera=" # (if (camera) "(self)" else "()") #
+                    ", geolocation=(), microphone=" #
+                    (if (microphone) "(self)" else "()"),
+                ),
+                (
+                    "Content-Security-Policy",
+                    "default-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors https://" # canisterId # ".icp0.io http://" # canisterId # ".localhost:8000",
+                ),
+                (
+                    Cert.CERTIFICATE_EXPRESSION_HEADER,
+                    Cert.residentCertificationExpression(kind),
+                ),
+            ];
         };
 
         func certifiedAuthorities(hostLabel : Text) : [Text] {
@@ -1317,6 +1395,99 @@ module {
         let notFoundBodyHash = Cert.hashChunks([notFoundBody]);
         do {
             cert.initialize(notFoundHeaders, notFoundBodyHash);
+        };
+
+        func mediaSessionVariants(
+            lease : MediaSessionsTypes.LeaseView,
+        ) : [Cert.ResidentResponseVariant] {
+            let key = mediaSessionPath(lease);
+            let ?file = assets.get(key) else return [];
+            if (
+                contentTypeBase(file.content_type) != "text/html" or
+                file.chunks != file.content.size()
+            ) return [];
+            let ?bodyHash = cert.assetHash(key) else return [];
+            let kind : Cert.ResidentRequestKind = #html_v1({
+                canonical_query = mediaSessionQuery(lease);
+            });
+            let mediaHostLabel = mediaSessionOriginPrefix(lease.origin_nonce) #
+                "--" # canisterId;
+            Array.map<Text, Cert.ResidentResponseVariant>(
+                certifiedAuthorities(mediaHostLabel),
+                func(authority) {
+                    {
+                        method = "GET";
+                        host = authority;
+                        kind;
+                        status_code = 200;
+                        body_hash = bodyHash;
+                        response_headers = mediaSessionHeaders(
+                            key,
+                            file,
+                            bodyHash,
+                            lease,
+                            kind,
+                        );
+                    };
+                },
+            );
+        };
+
+        func setMediaSessionCertification(
+            lease : MediaSessionsTypes.LeaseView,
+            enabled : Bool,
+        ) : Bool {
+            let variants = mediaSessionVariants(lease);
+            if (variants.size() == 0) return false;
+            let prior = Array.map<Cert.ResidentResponseVariant, Cert.ResidentRequestOwner>(
+                variants,
+                func(variant) {
+                    {
+                        method = variant.method;
+                        host = variant.host;
+                        kind = variant.kind;
+                    };
+                },
+            );
+            cert.apply([#replace_resident({
+                url = mediaSessionPath(lease);
+                prior;
+                next = if (enabled) variants else [];
+            })]);
+            true;
+        };
+
+        func mediaSessionForRequest(
+            request : Painless.Request,
+            canonicalPath : Text,
+        ) : ?MediaSessionsTypes.LeaseView {
+            let ?lease = mediaSessions.current() else return null;
+            if (
+                canonicalPath != mediaSessionPath(lease) or
+                request.url != canonicalPath # "?" # mediaSessionQuery(lease)
+            ) return null;
+            var destination : ?Text = null;
+            for ((name, value) in request.headers.vals()) {
+                if (Text.toLower(name) == "sec-fetch-dest") {
+                    if (destination != null) return null;
+                    destination := ?value;
+                };
+            };
+            if (destination != ?"iframe") return null;
+            let expectedLabel = mediaSessionOriginPrefix(lease.origin_nonce) #
+                "--" # canisterId;
+            switch (requestHostAuthority(request.headers)) {
+                case (#present(authority)) {
+                    if (authority.raw_gateway) return null;
+                    var matched = false;
+                    for (expected in certifiedAuthorities(expectedLabel).vals()) {
+                        if (authority.authority == expected) matched := true;
+                    };
+                    if (not matched) return null;
+                };
+                case _ return null;
+            };
+            ?lease;
         };
 
         let certifiedAssets = CertifiedAssetsService.Service(
@@ -1757,6 +1928,17 @@ module {
                         {
                             app_scope = declaration.app_scope;
                             randomness = declaration.randomness;
+                        };
+                    },
+                )
+            );
+            mediaSessions.configure(
+                Array.map<AppCapabilitiesDeclaration, MediaSessionsTypes.AppDeclaration>(
+                    declarations,
+                    func(declaration) {
+                        {
+                            app_scope = declaration.app_scope;
+                            media_sessions = declaration.media_sessions;
                         };
                     },
                 )
@@ -2639,6 +2821,58 @@ module {
             if (request.method != "GET") {
                 return plainHttpError(405, "Unsupported HTTP request");
             };
+            switch (mediaSessionForRequest(request, url)) {
+                case (?lease) {
+                    let ?file = assets.get(url) else return assetNotFound(url);
+                    if (
+                        file.chunks != file.content.size() or
+                        contentTypeBase(file.content_type) != "text/html"
+                    ) return assetNotFound(url);
+                    let ?bodyHash = cert.assetHash(url) else {
+                        return assetNotFound(url);
+                    };
+                    let kind : Cert.ResidentRequestKind = #html_v1({
+                        canonical_query = mediaSessionQuery(lease);
+                    });
+                    let headers = mediaSessionHeaders(
+                        url,
+                        file,
+                        bodyHash,
+                        lease,
+                        kind,
+                    );
+                    let ?certification = cert.residentCertificationHeader(
+                        url,
+                        request.url,
+                        {
+                            method = request.method;
+                            headers = request.headers;
+                            body = request.body;
+                        },
+                        headers,
+                        bodyHash,
+                    ) else return assetNotFound(url);
+                    let assetRequest : Painless.Request = {
+                        method = request.method;
+                        url;
+                        headers = request.headers;
+                        body = request.body;
+                        certificate_version = request.certificate_version;
+                    };
+                    return Painless.Request(assetRequest, {
+                        chunkFunc = func(_key : Text, _index : Nat) : Painless.Chunk {
+                            if (file.chunks > 1) return #more(file.content[0]);
+                            #end(file.content[0]);
+                        };
+                        cbFunc = self.http_request_streaming_callback;
+                        headers = Array.concat<Painless.HeaderField>(
+                            headers,
+                            [certification],
+                        );
+                    });
+                };
+                case null {};
+            };
             let originPolicy = if (isPackageHttpAssetPath(url)) {
                 // Public package/compiler data has one sandboxed response
                 // policy on every gateway authority. Its v2 proof therefore
@@ -3038,9 +3272,60 @@ module {
                 case (#dedicated_resident_origin) {
                     reconcilePublicStaticAssetsForApp(updated.scope.app_id);
                 };
+                case (#media_sessions) {
+                    if (not updated.enabled) {
+                        mediaSessions.revokeAll();
+                        switch (mediaSessions.takeTerminalCertification()) {
+                            case (?lease) {
+                                ignore setMediaSessionCertification(lease, false);
+                            };
+                            case null {};
+                        };
+                    };
+                };
                 case (_) {};
             };
             updated;
+        };
+
+        public func /*update*/kernel_media_session_begin(
+            input : MediaSessionsTypes.BeginInput,
+            /*caller*/ caller : Principal,
+        ) : async* MediaSessionsTypes.BeginResult {
+            assert (Set.contains(mem.core.authorized, Principal.compare, caller));
+            let result = await* mediaSessions.begin(input);
+            switch (mediaSessions.takeTerminalCertification()) {
+                case (?expired) {
+                    ignore setMediaSessionCertification(expired, false);
+                };
+                case null {};
+            };
+            switch (result) {
+                case (#ok(lease)) {
+                    if (setMediaSessionCertification(lease, true)) {
+                        #ok(lease);
+                    } else {
+                        ignore mediaSessions.close(lease.session_id);
+                        #err(#asset_unavailable);
+                    };
+                };
+                case (#err(error)) #err(error);
+            };
+        };
+
+        public func /*update*/kernel_media_session_close(
+            session_id : Text,
+            /*caller*/ caller : Principal,
+        ) : MediaSessionsTypes.CloseResult {
+            assert (Set.contains(mem.core.authorized, Principal.compare, caller));
+            let result = mediaSessions.close(session_id);
+            switch (mediaSessions.takeTerminalCertification()) {
+                case (?lease) {
+                    ignore setMediaSessionCertification(lease, false);
+                };
+                case null {};
+            };
+            result;
         };
 
         public func /*update*/kernel_backend_reservations_apply(
@@ -3584,6 +3869,12 @@ public type kernel_capabilities_page_Output = CapabilityTypes.CapabilityPage;
 
 public type kernel_capability_set_enabled_Input = (input : CapabilityTypes.CapabilitySetEnabledInput);
 public type kernel_capability_set_enabled_Output = CapabilityTypes.CapabilitySummary;
+
+public type kernel_media_session_begin_Input = (input : MediaSessionsTypes.BeginInput);
+public type kernel_media_session_begin_Output = MediaSessionsTypes.BeginResult;
+
+public type kernel_media_session_close_Input = (session_id : Text);
+public type kernel_media_session_close_Output = MediaSessionsTypes.CloseResult;
 
 public type kernel_backend_reservations_apply_Input = (inp : BackendCallTypes.ReservationApplyInput);
 public type kernel_backend_reservations_apply_Output = [BackendCallTypes.ReservationSummary];

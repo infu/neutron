@@ -343,6 +343,7 @@ module {
             case (#connections) "connections";
             case (#persistent_browser_storage) "persistent_browser_storage";
             case (#dedicated_resident_origin) "dedicated_resident_origin";
+            case (#media_sessions) "media_sessions";
             case (#http_routes) "http_routes";
             case (#certified_read_routes) "certified_read_routes";
             case (#certified_assets) "certified_assets";
@@ -492,6 +493,7 @@ module {
         switch (kind) {
             case (#backend_calls) grant == #owner_runtime_grant;
             case (#connections) grant == #owner_runtime_grant;
+            case (#media_sessions) grant == #owner_runtime_grant;
             case (#http_routes) grant == #declaration;
             case (#certified_read_routes) grant == #declaration;
             case (#certified_assets) grant == #declaration;
@@ -521,6 +523,7 @@ module {
             case (#stable_store) validMountId(value);
             case (#persistent_browser_storage) value == "background";
             case (#dedicated_resident_origin) value == "background";
+            case (#media_sessions) value == "default";
             case (#http_routes) validMountId(value);
             case (#certified_read_routes) validMountId(value);
             case (#certified_assets) value == "default";

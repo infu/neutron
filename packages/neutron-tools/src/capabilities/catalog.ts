@@ -121,6 +121,9 @@ export const BACKEND_CALLS_MAX_CYCLES_PER_DAY = 1_000_000_000_000_000;
 export const BACKEND_CALLS_MAX_INSTALL_RESERVATIONS_PER_APP = 64;
 /** Must match backend_calls/Memory.MAX_TOTAL. */
 export const BACKEND_CALLS_MAX_INSTALL_RESERVATIONS_GLOBAL = 2_048;
+export const MEDIA_SESSION_FEATURES = ["camera", "microphone"] as const;
+export const MEDIA_SESSION_MIN_DURATION_SECONDS = 300;
+export const MEDIA_SESSION_MAX_DURATION_SECONDS = 14_400;
 
 const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_]{1,31}$/;
 const SCOPE_PATTERN = /^[a-zA-Z0-9._:/-]+$/;
@@ -240,6 +243,7 @@ export const DECLARED_CAPABILITY_IDS = [
   "connections",
   "persistent_browser_storage",
   "dedicated_resident_origin",
+  "media_sessions",
   "public_ingress",
   "http_routes",
   "certified_assets",
@@ -590,6 +594,20 @@ export const CAPABILITY_CATALOG = Object.freeze({
     quota: "One isolated resident origin and one current frame binding.",
     audit:
       "Origin allocation, authority rotation, launch denial, and lifecycle outcomes.",
+  }),
+  media_sessions: declared("media_sessions", {
+    delivery: ["frontend_endpoint"],
+    title: "Call camera and microphone",
+    summary:
+      "Open one explicit, short-lived media surface with only the declared devices.",
+    grant: "owner_runtime_grant",
+    escalation: "owner_approval",
+    disable: "broker_enforced",
+    revocation: "live_recheck",
+    quota:
+      "One live media surface per app and globally; each lease lasts 5 minutes to 4 hours within the declared ceiling.",
+    audit:
+      "Bounded metadata-only open, approve, deny, start, close, expire, and failure totals; no signaling, peer, device, or media data.",
   }),
   public_ingress: declared("public_ingress", {
     delivery: ["compiler_registration"],
@@ -1013,6 +1031,14 @@ export type NeutronDedicatedResidentOriginCapabilityConfig = {
   surface: "background";
   mode: "credentialless_ephemeral_v1";
 };
+export type NeutronMediaSessionFeatureV1 =
+  (typeof MEDIA_SESSION_FEATURES)[number];
+export type NeutronMediaSessionsCapabilityConfig = {
+  api: 1;
+  entrypoint: string;
+  features: NeutronMediaSessionFeatureV1[];
+  max_duration_seconds: number;
+};
 export type NeutronResidentFrameSecurityMode =
   | "credentialless_opaque_v1"
   | "credentialless_ephemeral_dedicated_v1"
@@ -1329,6 +1355,7 @@ export type NeutronCapabilitiesConfig = {
   connections?: NeutronConnectionsCapabilityConfig;
   persistent_browser_storage?: NeutronPersistentBrowserStorageCapabilityConfig;
   dedicated_resident_origin?: NeutronDedicatedResidentOriginCapabilityConfig;
+  media_sessions?: NeutronMediaSessionsCapabilityConfig;
   public_ingress?: NeutronPublicIngressCapabilityConfig;
   http_routes?: NeutronHttpRoutesCapabilityConfig;
   certified_assets?: NeutronCertifiedAssetsCapabilityConfig;
@@ -1398,6 +1425,31 @@ function sortedUniqueStrings(
     seen.add(item);
   }
   return [...seen].sort(compareCanonicalText);
+}
+
+function assertSafeRelativeCapabilityAssetPath(
+  value: unknown,
+  label: string,
+): asserts value is string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Invalid ${label}`);
+  }
+  if (value.startsWith("/") || value.includes("\\")) {
+    throw new Error(`Unsafe ${label} ${value}`);
+  }
+  if (value.includes("?") || value.includes("#")) {
+    throw new Error(`Unsafe ${label} ${value}`);
+  }
+  if (
+    value
+      .split("/")
+      .some(
+        (segment) =>
+          segment.length === 0 || segment === "." || segment === "..",
+      )
+  ) {
+    throw new Error(`Unsafe ${label} ${value}`);
+  }
 }
 
 function positiveBoundedInteger(
@@ -2196,6 +2248,44 @@ function normalizeCapabilityDeclarationFields(
       api: 1,
       surface: "background",
       mode: "credentialless_ephemeral_v1",
+    };
+  }
+
+  const mediaSessions = declaration.media_sessions;
+  if (mediaSessions !== undefined) {
+    assertClosed(mediaSessions, "media_sessions capability", [
+      "api",
+      "entrypoint",
+      "features",
+      "max_duration_seconds",
+    ]);
+    assertApi(mediaSessions, "media_sessions");
+    assertSafeRelativeCapabilityAssetPath(
+      mediaSessions.entrypoint,
+      "media_sessions entrypoint",
+    );
+    const features = sortedUniqueStrings(
+      mediaSessions.features,
+      "media_sessions feature",
+      1,
+      MEDIA_SESSION_FEATURES.length,
+      (feature) =>
+        feature === "camera" || feature === "microphone",
+    ) as NeutronMediaSessionFeatureV1[];
+    if (
+      !Number.isSafeInteger(mediaSessions.max_duration_seconds) ||
+      Number(mediaSessions.max_duration_seconds) <
+        MEDIA_SESSION_MIN_DURATION_SECONDS ||
+      Number(mediaSessions.max_duration_seconds) >
+        MEDIA_SESSION_MAX_DURATION_SECONDS
+    ) {
+      throw new Error("Invalid media_sessions max_duration_seconds");
+    }
+    normalized.media_sessions = {
+      api: 1,
+      entrypoint: mediaSessions.entrypoint,
+      features,
+      max_duration_seconds: Number(mediaSessions.max_duration_seconds),
     };
   }
 
@@ -3311,6 +3401,31 @@ function createCapabilityDeclarationFieldsSchema(
           },
         },
         required: ["api", "surface", "mode"],
+        additionalProperties: false,
+      },
+      media_sessions: {
+        type: "object",
+        properties: {
+          api,
+          entrypoint: {
+            type: "string",
+            minLength: 1,
+            pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\).+$",
+          },
+          features: {
+            type: "array",
+            minItems: 1,
+            maxItems: MEDIA_SESSION_FEATURES.length,
+            uniqueItems: true,
+            items: { type: "string", enum: [...MEDIA_SESSION_FEATURES] },
+          },
+          max_duration_seconds: {
+            type: "integer",
+            minimum: MEDIA_SESSION_MIN_DURATION_SECONDS,
+            maximum: MEDIA_SESSION_MAX_DURATION_SECONDS,
+          },
+        },
+        required: ["api", "entrypoint", "features", "max_duration_seconds"],
         additionalProperties: false,
       },
       public_ingress: {

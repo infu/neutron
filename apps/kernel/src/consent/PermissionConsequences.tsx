@@ -66,6 +66,7 @@ export function permissionConsequences(
   const consequences = [
     systemConsequences(permissions),
     delegatedConsequences(permissions),
+    mediaConsequences(permissions),
     networkConsequences(permissions),
     publicConsequences(permissions),
     automaticConsequences(permissions),
@@ -76,6 +77,30 @@ export function permissionConsequences(
   return consequences.sort(
     (left, right) => right.level - left.level || left.title.localeCompare(right.title),
   );
+}
+
+function mediaConsequences(
+  permissions: readonly Permission[],
+): PermissionConsequence | null {
+  const media = firstPermission(permissions, "media_sessions");
+  if (!media) return null;
+  const deviceLabel =
+    media.features.length === 2
+      ? "camera and microphone"
+      : media.features[0] === "camera"
+        ? "camera"
+        : "microphone";
+  return {
+    id: "call-media",
+    level: permissionLevel(media),
+    title: `Use your ${deviceLabel} during calls`,
+    description:
+      "Installation declares the maximum call access. Every session still requires an explicit owner action, a Neutron confirmation, and the browser device prompt.",
+    facts: [
+      `Can open one visible, isolated media surface for at most ${formatInterval(media.maxDurationSeconds)}. Closing it, signing out, disabling or updating the app, or expiry revokes the session.`,
+      "Ordinary app tiles and background frames remain unable to use camera or microphone.",
+    ],
+  };
 }
 
 function systemConsequences(

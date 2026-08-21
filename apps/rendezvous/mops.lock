@@ -1,0 +1,9 @@
+{
+  "version": 3,
+  "mopsTomlDepsHash": "630f3ef3d2e14eeffdb34b1a86307747e9c6cc12dc8d3e255b44867a7f7ba2e3",
+  "deps": {
+    "core": "https://github.com/dfinity/motoko-core#v2.6.0",
+    "neutron-capabilities": "/Users/afat/Dropbox/development/Rivvir/neutron_demo/packages/neutron-motoko-capabilities"
+  },
+  "hashes": {}
+}

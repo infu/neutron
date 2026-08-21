@@ -1,0 +1,242 @@
+{
+  "format": 3,
+  "name": "Rendezvous",
+  "id": "rendezvous",
+  "version": 300,
+  "description": "Peer scheduling between independently owned Neutron canisters",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "dependencies": {
+    "calendar": {
+      "app": "calendar",
+      "min_version": 200,
+      "functions": [
+        "calendar_availability_v1",
+        "calendar_reserve_v1",
+        "calendar_confirm_v1",
+        "calendar_release_v1"
+      ]
+    },
+    "contacts": {
+      "app": "contacts",
+      "min_version": 301,
+      "functions": [
+        "contacts_neutron_lookup_v2",
+        "contacts_neutron_search_v2",
+        "contacts_neutron_revision_v2"
+      ]
+    }
+  },
+  "capabilities": {
+    "media_sessions": {
+      "api": 1,
+      "entrypoint": "media.html",
+      "features": [
+        "camera",
+        "microphone"
+      ],
+      "max_duration_seconds": 3600
+    },
+    "public_ingress": {
+      "api": 1,
+      "routes": [
+        {
+          "protocol": "rendezvous_v1",
+          "id": "exchange",
+          "handler": "rendezvous_remote_exchange_v1",
+          "mode": "update",
+          "caller": "canister",
+          "max_request_bytes": 16384,
+          "max_response_bytes": 16384,
+          "max_calls_per_hour": 240,
+          "required_cycles": 250000000
+        },
+        {
+          "protocol": "rendezvous_signal_v1",
+          "id": "signal",
+          "handler": "rendezvous_remote_signal_v1",
+          "mode": "update",
+          "caller": "canister",
+          "max_request_bytes": 16384,
+          "max_response_bytes": 16384,
+          "max_calls_per_hour": 2400,
+          "required_cycles": 250000000
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "rendezvous_status",
+        "rendezvous_list",
+        "rendezvous_get",
+        "rendezvous_suggest_v1",
+        "rendezvous_contacts_search_v1",
+        "rendezvous_create_offer",
+        "rendezvous_create_contact_offer",
+        "rendezvous_send_offer",
+        "rendezvous_counter",
+        "rendezvous_accept",
+        "rendezvous_decline",
+        "rendezvous_cancel",
+        "rendezvous_retry",
+        "rendezvous_media_select_v1",
+        "rendezvous_media_current_v1",
+        "rendezvous_signal_send_v1",
+        "rendezvous_signal_poll_v1",
+        "rendezvous_media_close_v1"
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Send paid scheduling commands to an owner-selected peer Neutron",
+      "reservation_scopes": [
+        "method"
+      ],
+      "install_reservations": [
+        {
+          "kind": "method",
+          "method": "app_rendezvous__rendezvous_v1_update"
+        },
+        {
+          "kind": "method",
+          "method": "app_rendezvous__rendezvous_signal_v1_update"
+        }
+      ],
+      "max_concurrency": 4,
+      "max_cycles_per_call": 250000000,
+      "max_cycles_per_day": 60000000000
+    }
+  },
+  "background": {
+    "path": "service.html",
+    "description": "Poll local negotiation revision and maintain the actionable tray badge"
+  },
+  "tray": {
+    "title": "Rendezvous",
+    "path": "tray.html",
+    "icon": "static/icon.png"
+  },
+  "tiles": [
+    {
+      "id": "main",
+      "title": "Rendezvous",
+      "path": "index.html",
+      "icon": "static/icon.png"
+    }
+  ],
+  "func": {
+    "rendezvous_status": {
+      "type": "query",
+      "async": false
+    },
+    "rendezvous_list": {
+      "type": "query",
+      "async": false
+    },
+    "rendezvous_get": {
+      "type": "query",
+      "async": false
+    },
+    "rendezvous_suggest_v1": {
+      "type": "query",
+      "async": false
+    },
+    "rendezvous_contacts_search_v1": {
+      "type": "query",
+      "async": false
+    },
+    "rendezvous_create_offer": {
+      "type": "update",
+      "async": false
+    },
+    "rendezvous_create_contact_offer": {
+      "type": "update",
+      "async": false
+    },
+    "rendezvous_send_offer": {
+      "type": "update",
+      "async": "async*"
+    },
+    "rendezvous_counter": {
+      "type": "update",
+      "async": "async*"
+    },
+    "rendezvous_accept": {
+      "type": "update",
+      "async": "async*"
+    },
+    "rendezvous_decline": {
+      "type": "update",
+      "async": "async*"
+    },
+    "rendezvous_cancel": {
+      "type": "update",
+      "async": "async*"
+    },
+    "rendezvous_retry": {
+      "type": "update",
+      "async": "async*"
+    },
+    "rendezvous_media_select_v1": {
+      "type": "update",
+      "async": false
+    },
+    "rendezvous_media_current_v1": {
+      "type": "query",
+      "async": false
+    },
+    "rendezvous_signal_send_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "rendezvous_signal_poll_v1": {
+      "type": "query",
+      "async": false
+    },
+    "rendezvous_media_close_v1": {
+      "type": "update",
+      "async": false
+    },
+    "rendezvous_remote_signal_v1": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "rendezvous_remote_exchange_v1": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    }
+  },
+  "memory": {
+    "rendezvous": {
+      "version": 2,
+      "schemas": {
+        "1": {
+          "src": "memory/rendezvous/v1.mo"
+        },
+        "2": {
+          "src": "memory/rendezvous/v2.mo"
+        }
+      },
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "src": "memory/rendezvous/v1_to_v2.mo"
+        }
+      ]
+    }
+  }
+}

@@ -24,6 +24,8 @@ import {
   clearAgentModeForAuth,
   useAgentModeStore,
 } from "../ui_attention/agent.ts";
+import { MediaSessionOverlay } from "../media_sessions/MediaSessionOverlay.tsx";
+import { cancelAllMediaSessionUi } from "../media_sessions/store.ts";
 
 export function WorkspaceShell() {
   const { logged, authorized, loading, principal, sessionGeneration } =
@@ -112,6 +114,12 @@ export function WorkspaceShell() {
       clearAgentModeForAuth();
     }
   }, [authorized, logged, principal]);
+
+  useEffect(() => {
+    if (!logged || !authorized || loading) {
+      cancelAllMediaSessionUi("The authenticated session ended");
+    }
+  }, [authorized, loading, logged, sessionGeneration]);
 
   const closeSettings = () => {
     setKernelView("workspace");
@@ -330,6 +338,7 @@ export function WorkspaceShell() {
       {/* Let the browser discover visible tile frames before resident work. */}
       <AppBackgroundFrames />
       <Launcher open={launcherOpen} onClose={() => setLauncherOpen(false)} />
+      <MediaSessionOverlay />
     </main>
   );
 }

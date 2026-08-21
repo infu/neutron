@@ -1,0 +1,21 @@
+{
+  "format": 2,
+  "app": "calendar",
+  "memory": {
+    "calendar": {
+      "schemas": {
+        "1": {
+          "hash": "75343b6e51bf57497360f00de812ec486dd2ef237c83cf982f558c5241bdbf84",
+          "entry": "75343b6e51bf57497360f00de812ec486dd2ef237c83cf982f558c5241bdbf84"
+        },
+        "2": {
+          "hash": "9a0d1be7f7d647e44861480c29dcec9ff0179f708008296548e5db69212e0b0c",
+          "entry": "9a0d1be7f7d647e44861480c29dcec9ff0179f708008296548e5db69212e0b0c"
+        }
+      },
+      "migrations": {
+        "1->2": "545311aa327c20e4a29010d807172c224f38d5e799d9686c0bbe3e52214bf5fd"
+      }
+    }
+  }
+}

@@ -1038,6 +1038,14 @@ function formatPermissionByteLimit(value: number): string {
   return `${formatBytes(value)} (${formatExactNat(value)} bytes)`;
 }
 
+function formatPermissionDuration(seconds: number): string {
+  if (seconds % 3_600 === 0) {
+    const hours = seconds / 3_600;
+    return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  }
+  return `${Math.ceil(seconds / 60)} minutes`;
+}
+
 export function PermissionDisclosure({
   permission,
 }: {
@@ -1076,6 +1084,31 @@ export function PermissionDisclosure({
           </p>
         </PermissionFrame>
       );
+    case "media_sessions": {
+      const devices =
+        permission.features.length === 2
+          ? "Camera and microphone"
+          : permission.features[0] === "camera"
+            ? "Camera"
+            : "Microphone";
+      return (
+        <PermissionFrame kind={permission.kind} level={level}>
+          <h4 className="permission-group-title">
+            {devices} during an explicit call
+          </h4>
+          <p className="permission-copy">
+            The app may ask Neutron to open one visible, isolated call surface.
+            Each call requires your action, a Neutron confirmation, and the
+            browser device prompt.
+          </p>
+          <p className="permission-copy permission-persistence">
+            Each session is limited to {formatPermissionDuration(permission.maxDurationSeconds)}.
+            Ordinary app tiles and backgrounds never receive device access.
+          </p>
+          <code>{permission.entrypoint}</code>
+        </PermissionFrame>
+      );
+    }
     case "randomness":
       return (
         <PermissionFrame kind={permission.kind} level={level}>

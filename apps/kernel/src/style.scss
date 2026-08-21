@@ -6229,3 +6229,78 @@ button:focus-visible,
         transform: none;
     }
 }
+.media-session-consent-backdrop {
+  align-items: center;
+  background: rgba(4, 8, 16, 0.72);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 10000;
+}
+
+.media-session-consent {
+  background: var(--card-bg, #151b27);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  color: var(--text, #f7f8fb);
+  max-width: 470px;
+  padding: 28px;
+  width: 100%;
+}
+
+.media-session-eyebrow {
+  color: #75d9b6;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.media-session-consent h2 { margin: 0 0 10px; }
+.media-session-privacy { color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; }
+.media-session-details { display: grid; gap: 8px; margin: 20px 0; }
+.media-session-details div { display: flex; justify-content: space-between; }
+.media-session-details dt { color: rgba(255, 255, 255, 0.62); }
+.media-session-details dd { font-weight: 650; margin: 0; text-transform: capitalize; }
+.media-session-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+.media-session-actions button,
+.media-session-overlay header button { border-radius: 9px; cursor: pointer; padding: 9px 15px; }
+.media-session-actions .primary { background: #4fdbab; border-color: #4fdbab; color: #07120e; font-weight: 700; }
+
+.media-session-overlay {
+  background: #070a0f;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  bottom: 20px;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.55);
+  height: min(520px, calc(100vh - 100px));
+  overflow: hidden;
+  position: fixed;
+  right: 20px;
+  width: min(760px, calc(100vw - 40px));
+  z-index: 9000;
+}
+
+.media-session-overlay header {
+  align-items: center;
+  background: #111722;
+  color: #fff;
+  display: flex;
+  height: 48px;
+  justify-content: space-between;
+  padding: 0 12px 0 16px;
+}
+
+.media-session-overlay header div { align-items: center; display: flex; gap: 9px; }
+.media-session-overlay header span:last-child { color: rgba(255, 255, 255, 0.65); font-size: 0.82rem; text-transform: capitalize; }
+.media-session-overlay header button { background: #c83b4d; border: 0; color: #fff; font-weight: 700; }
+.media-session-live-dot { background: #4fdbab; border-radius: 999px; box-shadow: 0 0 0 4px rgba(79, 219, 171, 0.15); height: 8px; width: 8px; }
+.media-session-frame { border: 0; display: block; height: calc(100% - 48px); width: 100%; }
+
+@media (max-width: 640px) {
+  .media-session-overlay { border-radius: 0; bottom: 0; height: calc(100vh - 48px); right: 0; width: 100vw; }
+}

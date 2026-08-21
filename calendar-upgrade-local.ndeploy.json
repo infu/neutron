@@ -1,0 +1,20 @@
+{
+  "format": 3,
+  "target": {
+    "kind": "pocketic",
+    "profile": "minimal",
+    "gateway_port": 8000,
+    "developer_identity_seed": 2,
+    "authorized_principals": [
+      "pbwxr-uqxlv-aiwi3-omw2n-ptdex-kyifb-kdsn6-zdiyd-ggzpu-nrzik-rqe"
+    ],
+    "nodes": ["calendar-upgrade"]
+  },
+  "artifacts": {
+    "kind": "inline",
+    "kernel": { "path": "apps/kernel/kernel.v0.3.13.neutron" },
+    "packages": [
+      { "path": "apps/calendar/calendar.v0.1.0.neutron" }
+    ]
+  }
+}

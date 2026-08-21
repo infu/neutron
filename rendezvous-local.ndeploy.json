@@ -1,0 +1,24 @@
+{
+  "format": 3,
+  "target": {
+    "kind": "pocketic",
+    "profile": "minimal",
+    "gateway_port": 8000,
+    "developer_identity_seed": 2,
+    "authorized_principals": [
+      "pbwxr-uqxlv-aiwi3-omw2n-ptdex-kyifb-kdsn6-zdiyd-ggzpu-nrzik-rqe",
+      "ae36o-rgy3s-pe3ob-xy4m5-g46zh-hfarh-q6mxt-vnhgl-7o5hr-o23v7-2qe",
+      "qqxqy-hgj7x-ghrdk-cm2s6-p5nt3-vgugh-7e47o-2bco6-c4dag-ujdrc-wqe"
+    ],
+    "nodes": ["alice", "bob"]
+  },
+  "artifacts": {
+    "kind": "inline",
+    "kernel": { "path": "apps/kernel/kernel.v0.3.13.neutron" },
+    "packages": [
+      { "path": "apps/contacts/contacts.v0.3.1.neutron" },
+      { "path": "apps/calendar/calendar.v0.2.0.neutron" },
+      { "path": "apps/rendezvous/rendezvous.v0.3.0.neutron" }
+    ]
+  }
+}

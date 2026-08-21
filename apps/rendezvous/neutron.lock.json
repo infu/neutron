@@ -1,0 +1,21 @@
+{
+  "format": 2,
+  "app": "rendezvous",
+  "memory": {
+    "rendezvous": {
+      "schemas": {
+        "1": {
+          "hash": "47efe9368d114650e9bf63cd051950b250ff5fac6c9a77f36cd936532b86234d",
+          "entry": "f41b3093e596a881bba35e9ea62833b04ec555ce1cd47003e71bd981739fb7f5"
+        },
+        "2": {
+          "hash": "3bcc8ffd30a3b15510b41b8ba4930611d68b359892f9ed055b37cf8d7f2b25ce",
+          "entry": "1ef3e8ea19169671521f78477b79746ad40db21a342b2a0ea2697f2b0b3f7bdc"
+        }
+      },
+      "migrations": {
+        "1->2": "156bde950b0cd9377e18de4097a76d0457d90d3c86dabe14555e00d715f0c74d"
+      }
+    }
+  }
+}

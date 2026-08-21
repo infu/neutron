@@ -21,6 +21,7 @@ func request(
 };
 
 assert (Kernel.supportedHttpCertificationVersion(?2));
+assert (Kernel.mediaSessionOriginPrefix("abcdef0123456789abcdef0123456789") == "mabcdef0123456789abcdef01");
 assert (Kernel.supportedHttpCertificationVersion(?3));
 assert (not Kernel.supportedHttpCertificationVersion(?1));
 assert (not Kernel.supportedHttpCertificationVersion(null));

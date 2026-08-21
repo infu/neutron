@@ -14,6 +14,7 @@ import {
   type NeutronCertifiedAssetsCapabilityConfig,
   type NeutronCertifiedReadRoutesCapabilityConfig,
   type NeutronDedicatedResidentOriginCapabilityConfig,
+  type NeutronMediaSessionsCapabilityConfig,
   type NeutronPersistentBrowserStorageCapabilityConfig,
   type NeutronPublicIngressCapabilityConfig,
   type NeutronRandomnessCapabilityConfig,
@@ -66,6 +67,7 @@ export type DeclaredCapabilityPlanEntry =
       "dedicated_resident_origin",
       NeutronDedicatedResidentOriginCapabilityConfig
     >
+  | DeclaredEntry<"media_sessions", NeutronMediaSessionsCapabilityConfig>
   | DeclaredEntry<"public_ingress", NeutronPublicIngressCapabilityConfig>
   | DeclaredEntry<"http_routes", NeutronHttpRoutesCapabilityConfig>
   | DeclaredEntry<"certified_assets", NeutronCertifiedAssetsCapabilityConfig>;
@@ -465,6 +467,9 @@ export function buildCapabilityPlan(manifest: NeutronManifest): CapabilityPlan {
         capabilities.dedicated_resident_origin,
       ),
     );
+  }
+  if (capabilities.media_sessions) {
+    entries.push(declaredEntry("media_sessions", capabilities.media_sessions));
   }
   if (capabilities.public_ingress) {
     entries.push(declaredEntry("public_ingress", capabilities.public_ingress));

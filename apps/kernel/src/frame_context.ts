@@ -28,10 +28,17 @@ export type TrayFrameContext = {
   instanceId: string;
 };
 
+export type MediaFrameContext = {
+  role: "media";
+  appId: string;
+  sessionId: string;
+};
+
 export type FrameContext =
   | TileFrameContext
   | BackgroundFrameContext
-  | TrayFrameContext;
+  | TrayFrameContext
+  | MediaFrameContext;
 
 export type RegisteredEndpoint = {
   endpointId: string;
@@ -67,6 +74,9 @@ export function endpointIdForContext(context: FrameContext): string {
   }
   if (context.role === "tray") {
     return `app:${context.appId}:tray:instance:${context.instanceId}`;
+  }
+  if (context.role === "media") {
+    return `app:${context.appId}:media:session:${context.sessionId}`;
   }
   return `app:${context.appId}:tile:${context.tileId}:instance:${context.instanceId}`;
 }

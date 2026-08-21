@@ -1,0 +1,47 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-calendar",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
+    "watch": "bun build.ts watch",
+    "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo",
+    "test:domain": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/availability.test.mo && bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/calendar_domain.test.mo && bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/calendar_v2_series.test.mo && bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/migration_v2.test.mo",
+    "test": "npm run package && bun test && npm run test:memory && npm run test:domain"
+  },
+  "author": "",
+  "license": "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",
+  "description": "Private local calendar and availability provider for Neutron apps",
+  "dependencies": {
+    "@fullcalendar/core": "6.1.21",
+    "@fullcalendar/daygrid": "6.1.21",
+    "@fullcalendar/interaction": "6.1.21",
+    "@fullcalendar/list": "6.1.21",
+    "@fullcalendar/react": "6.1.21",
+    "@fullcalendar/timegrid": "6.1.21",
+    "neutron-design-system": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@dfinity/candid": "^3.4.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react": "^7.37.5",
+    "icblast": "^4.3.0",
+    "neutron-scripts": "^1.1.0"
+  }
+}

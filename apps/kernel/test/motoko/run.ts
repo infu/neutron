@@ -33,6 +33,8 @@ const interpretedTests = [
   "http_privacy_test.mo",
   "http_certification_test.mo",
   "memory_v3_schema_test.mo",
+  "memory_v4_schema_test.mo",
+  "media_sessions_service_test.mo",
   "http_post_update_handlers_service_test.mo",
   "https_outcalls_service_test.mo",
   "app_usage_service_test.mo",

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rendezvous media</title>
+  <style>
+    :root { color-scheme: dark; font: 15px system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { background:#070a0f; color:#f6f8fb; display:grid; grid-template-rows:auto 1fr auto; margin:0; min-height:100vh; }
+    header { padding:10px 16px; background:#0d121b; color:#b8c5d6; } header strong { color:#fff; }
+    main { display:grid; grid-template-columns:1fr 1fr; gap:12px; min-height:0; padding:12px; }
+    .video { display:grid; min-height:180px; position:relative; }
+    video,.empty { background:#111722; border-radius:12px; grid-area:1/1; height:100%; min-height:180px; object-fit:cover; width:100%; }
+    #local { transform:scaleX(-1); }
+    .empty { color:#9da9b9; display:grid; place-items:center; padding:20px; text-align:center; }
+    footer { align-items:center; background:#111722; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; padding:12px; }
+    button { background:#243043; border:1px solid #41506a; border-radius:9px; color:#fff; cursor:pointer; padding:9px 14px; }
+    button.end { background:#b72f43; border-color:#d84a5e; }
+    output { color:#b8c5d6; min-width:240px; }
+    [hidden] { display:none !important; }
+    @media (max-width:700px) { main { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <header><strong id="meeting">Rendezvous meeting</strong> · <span id="connection">Not connected</span></header>
+  <main>
+    <section class="video" aria-label="Remote video"><div class="empty" id="remote-empty">Waiting for the other person</div><video id="remote" autoplay playsinline hidden></video></section>
+    <section class="video" aria-label="Your video"><div class="empty" id="local-empty">Choose “Start camera &amp; microphone” to ask your browser.</div><video id="local" autoplay muted playsinline hidden></video></section>
+  </main>
+  <footer>
+    <button id="start" type="button">Start camera & microphone</button>
+    <button id="mic" type="button" disabled>Mute</button>
+    <button id="camera" type="button" disabled>Camera off</button>
+    <button class="end" id="end" type="button">Leave meeting</button>
+    <output id="status" aria-live="polite">Devices are off</output>
+  </footer>
+  <script>/*__RENDEZVOUS_MEDIA_SCRIPT__*/</script>
+</body>
+</html>

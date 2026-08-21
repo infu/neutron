@@ -6,7 +6,7 @@
 
 import NeutronPrim "mo:prim";
 import NeutronModule_a6_kernel "main";
-import NeutronMemorySchema_a6_kernel_r6_kernel_v3 "memory/kernel/v3";
+import NeutronMemorySchema_a6_kernel_r6_kernel_v4 "memory/kernel/v4";
 import NeutronMemorySchema_a6_kernel_r17_kernel_activation_v1 "memory/activation/v1";
 
 
@@ -50,12 +50,12 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
 
 
     type NeutronMemoryType_a6_kernel_r6_kernel = {
-        #v3 : NeutronMemorySchema_a6_kernel_r6_kernel_v3.Mem;
+        #v4 : NeutronMemorySchema_a6_kernel_r6_kernel_v4.Mem;
     };
 
-    let NeutronMemoryStore_a6_kernel_r6_kernel:NeutronMemoryType_a6_kernel_r6_kernel = #v3(NeutronMemorySchema_a6_kernel_r6_kernel_v3.init());
+    let NeutronMemoryStore_a6_kernel_r6_kernel:NeutronMemoryType_a6_kernel_r6_kernel = #v4(NeutronMemorySchema_a6_kernel_r6_kernel_v4.init());
 
-    transient let #v3(NeutronMemory_a6_kernel_r6_kernel) = NeutronMemoryStore_a6_kernel_r6_kernel;
+    transient let #v4(NeutronMemory_a6_kernel_r6_kernel) = NeutronMemoryStore_a6_kernel_r6_kernel;
 
 
     type NeutronMemoryType_a6_kernel_r17_kernel_activation = {
@@ -76,7 +76,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     };
 
 
-    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 312; capability_plan_fingerprint = "5a17f6ebd184e3dff344503c333e8245e210a5661a0367c602ac3a26c6e65247"; resident_frame_security = #credentialless_opaque_v1 }];
+    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 313; capability_plan_fingerprint = "298b3b0f4ba7a2880a041b0b8b4bc1cdf6cb09c45697ee1d097459a7d352e5ec"; resident_frame_security = #credentialless_opaque_v1 }];
 
 
 
@@ -260,6 +260,18 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     public shared({ caller = NeutronCaller }) func kernel_capability_set_enabled(NeutronRequest: NeutronModule_a6_kernel.kernel_capability_set_enabled_Input) : async NeutronModule_a6_kernel.kernel_capability_set_enabled_Output {
         assert(NeutronKernel.is_authorized(NeutronCaller));
          NeutronKernel.kernel_capability_set_enabled(NeutronRequest ,NeutronCaller)
+    };
+
+
+    public shared({ caller = NeutronCaller }) func kernel_media_session_begin(NeutronRequest: NeutronModule_a6_kernel.kernel_media_session_begin_Input) : async NeutronModule_a6_kernel.kernel_media_session_begin_Output {
+        assert(NeutronKernel.is_authorized(NeutronCaller));
+        await* NeutronKernel.kernel_media_session_begin(NeutronRequest ,NeutronCaller)
+    };
+
+
+    public shared({ caller = NeutronCaller }) func kernel_media_session_close(NeutronRequest: NeutronModule_a6_kernel.kernel_media_session_close_Input) : async NeutronModule_a6_kernel.kernel_media_session_close_Output {
+        assert(NeutronKernel.is_authorized(NeutronCaller));
+         NeutronKernel.kernel_media_session_close(NeutronRequest ,NeutronCaller)
     };
 
 
@@ -502,7 +514,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
         assembler_id = "neutron_actor_v25";
         compiler_id = "unknown";
         apps = NeutronKernel.runtime_app_instances("development");
-        memories = [{ id = "kernel"; owner = "kernel"; version = 3; schema = "memory/kernel/v3" }, { id = "kernel_activation"; owner = "kernel"; version = 1; schema = "memory/activation/v1" }];
+        memories = [{ id = "kernel"; owner = "kernel"; version = 4; schema = "memory/kernel/v4" }, { id = "kernel_activation"; owner = "kernel"; version = 1; schema = "memory/activation/v1" }];
       }
     };
 

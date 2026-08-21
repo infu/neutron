@@ -1,0 +1,139 @@
+{
+  "format": 3,
+  "name": "Calendar",
+  "id": "calendar",
+  "version": 200,
+  "description": "Private calendar and local availability for installed Neutron apps",
+  "src": "main.mo",
+  "tiles": [
+    {
+      "id": "main",
+      "title": "Calendar",
+      "path": "index.html",
+      "icon": "static/icon.png"
+    }
+  ],
+  "capabilities": {
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "calendar_list",
+        "calendar_range_v2",
+        "calendar_series_get_v2",
+        "calendar_series_occurrences_v2",
+        "calendar_series_create_v2",
+        "calendar_series_update_v2",
+        "calendar_series_remove_v2",
+        "calendar_occurrence_update_v2",
+        "calendar_occurrence_remove_v2",
+        "calendar_create",
+        "calendar_update",
+        "calendar_remove",
+        "calendar_preferences_get",
+        "calendar_preferences_set"
+      ]
+    }
+  },
+  "func": {
+    "calendar_status": {
+      "type": "query",
+      "async": false
+    },
+    "calendar_list": {
+      "type": "query",
+      "async": false
+    },
+    "calendar_range_v2": {
+      "type": "query",
+      "async": false
+    },
+    "calendar_series_get_v2": {
+      "type": "query",
+      "async": false
+    },
+    "calendar_series_occurrences_v2": {
+      "type": "query",
+      "async": false
+    },
+    "calendar_series_create_v2": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_series_update_v2": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_series_remove_v2": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_occurrence_update_v2": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_occurrence_remove_v2": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_create": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_update": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_remove": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_preferences_get": {
+      "type": "query",
+      "async": false
+    },
+    "calendar_preferences_set": {
+      "type": "update",
+      "async": false
+    },
+    "calendar_availability_v1": {
+      "type": "internal",
+      "async": false,
+      "expose": "apps"
+    },
+    "calendar_reserve_v1": {
+      "type": "internal",
+      "async": false,
+      "expose": "apps"
+    },
+    "calendar_confirm_v1": {
+      "type": "internal",
+      "async": false,
+      "expose": "apps"
+    },
+    "calendar_release_v1": {
+      "type": "internal",
+      "async": false,
+      "expose": "apps"
+    }
+  },
+  "memory": {
+    "calendar": {
+      "version": 2,
+      "schemas": {
+        "1": {
+          "src": "memory/calendar/v1.mo"
+        },
+        "2": {
+          "src": "memory/calendar/v2.mo"
+        }
+      },
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "src": "memory/calendar/v1_to_v2.mo"
+        }
+      ]
+    }
+  }
+}

@@ -1,8 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
-const chromiumArgs =
-  process.env.PLAYWRIGHT_CHROMIUM_ARGS?.split(/\s+/).filter(Boolean) ?? [];
+const chromiumArgs = [
+  "--use-fake-device-for-media-stream",
+  "--use-fake-ui-for-media-stream",
+  ...(process.env.PLAYWRIGHT_CHROMIUM_ARGS?.split(/\s+/).filter(Boolean) ?? []),
+];
 const chromiumLaunchOptions =
   chromiumExecutablePath || chromiumArgs.length > 0
     ? {
