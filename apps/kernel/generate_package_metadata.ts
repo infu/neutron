@@ -39,13 +39,13 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 312;
+export const KERNEL_NPL_RELEASE_VERSION = 313;
 export const KERNEL_NPL_LICENSE_ID =
   "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
 export const KERNEL_RELEASE_MEMORY_LOCK_SHA256 =
-  "0cc3f918b360f3d2f35d0622870e4c02fed414fe9d2638ae5bcbb229782ecd3d";
+  "7d626f4bd1a991db89077768f704ee387a92b709b7102a7394faedfefeeb6611";
 export const KERNEL_NPL_LICENSE_PATH = "legal/LICENSE.NPL-1.0.txt";
 export const KERNEL_APPLICATION_NOTICE_PATH =
   "legal/APPLICATION-NOTICE.txt";
@@ -77,10 +77,10 @@ const KERNEL_RELEASE_SOURCE_MANIFEST_KEYS = Object.freeze([
 ]);
 const KERNEL_MEMORY_SCHEMA_BINDINGS = Object.freeze({
   kernel: Object.freeze({
-    version: 3,
-    schema: "3",
-    hash: "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
-    entry: "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b",
+    version: 4,
+    schema: "4",
+    hash: "c97edc766ffc1e507d42e211321c5ec98419635d8d278de854795ed5d622a2c2",
+    entry: "1d992cdf3e6848138fcc5c31edd76603b3a2ab24531460983bf0c5a8aa95c4bf",
   }),
   kernel_activation: Object.freeze({
     version: 1,
@@ -94,6 +94,8 @@ const KERNEL_RELEASED_SCHEMA_SOURCE_SHA256 = Object.freeze({
     "828b20f8bfdf7b516774ef720eee1514bf917ce7e785917b0a1a62b775a1a1b6",
   "apps/kernel/backend/memory/kernel/v3.mo":
     "1a588ddddaef0c4f1bdcd4f11459e0c9b351e46481ffb81fcaab7eb4ecbfc77f",
+  "apps/kernel/backend/memory/kernel/v4.mo":
+    "d33960d63910eb84f2c61a1becb75a58adc7410dd3429fc28181a5e76f3ccd1d",
 });
 
 const KERNEL_DIST_REQUIRED_FILES = new Set([
@@ -118,6 +120,7 @@ const KERNEL_SOURCE_ROOT_FILES = Object.freeze([
   "flake.nix",
   "package-lock.json",
   "package.json",
+  "playwright.config.ts",
   "tsconfig.base.json",
   "tsconfig.browser.json",
   "tsconfig.bun.json",
@@ -223,6 +226,16 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/src/settings/InstalledPackageLegalDetails.tsx",
   "apps/kernel/src/settings/deployment_build_record.ts",
   "apps/kernel/src/settings/deployment_integrity.ts",
+  "apps/kernel/backend/media_sessions/Adapter.mo",
+  "apps/kernel/backend/media_sessions/Service.mo",
+  "apps/kernel/backend/media_sessions/Types.mo",
+  "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+  "apps/kernel/backend/memory/kernel/v4.mo",
+  "apps/kernel/src/media_sessions/MediaSessionOverlay.tsx",
+  "apps/kernel/src/media_sessions/store.ts",
+  "apps/kernel/test/motoko/media_sessions_service_test.mo",
+  "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+  "doc/media-session-capability.md",
   "apps/kernel/src/settings/installed_package_record.ts",
   "apps/kernel/test/access_settings_ui.test.tsx",
   "apps/kernel/test/deployment_build_record.test.ts",
@@ -296,6 +309,8 @@ export const KERNEL_PACKAGE_BUILD_INPUT_PATHS = Object.freeze([
   "apps/kernel/NOTICE",
   "apps/kernel/backend/memory/activation/v1.mo",
   "apps/kernel/backend/memory/kernel/v3.mo",
+  "apps/kernel/backend/memory/kernel/v4.mo",
+  "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
   "apps/kernel/generate_package_metadata.ts",
   "apps/kernel/moassemble.ts",
   "apps/kernel/mops.toml",
@@ -1099,6 +1114,41 @@ function assertReleasedMemoryManifest(
     }
     const schemas = root.schemas;
     const schema = isRecord(schemas) ? schemas[binding.schema] : undefined;
+    if (memoryId === "kernel") {
+      const v3 = isRecord(schemas) ? schemas["3"] : undefined;
+      const v4 = isRecord(schemas) ? schemas["4"] : undefined;
+      if (
+        !isRecord(schemas) ||
+        Object.keys(schemas).sort(compareCanonicalText).join(",") !== "3,4" ||
+        !isRecord(v3) ||
+        !isRecord(v4)
+      ) {
+        throw new Error("The Kernel release must preserve schemas kernel v3 and v4");
+      }
+      if (
+        packaged &&
+        (v3.hash !== "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477" ||
+          v3.entry !== "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b" ||
+          v4.hash !== binding.hash ||
+          v4.entry !== binding.entry)
+      ) {
+        throw new Error("The Kernel release changed the schema binding for kernel v3 or v4");
+      }
+      if (!Array.isArray(root.migrations) || root.migrations.length !== 1) {
+        throw new Error("The Kernel release must preserve the kernel v3 to v4 migration");
+      }
+      const migration = root.migrations[0];
+      if (
+        !isRecord(migration) ||
+        migration.from !== 3 ||
+        migration.to !== 4 ||
+        migration.src !== "memory/kernel/v3_to_v4.mo" ||
+        (packaged && migration.entry !== "4cb28e64194663c3830eedede498b411b747f2a202cb01544b762dadfe086204")
+      ) {
+        throw new Error("The Kernel release changed the kernel v3 to v4 migration binding");
+      }
+      continue;
+    }
     if (
       !isRecord(schemas) ||
       Object.keys(schemas).length !== 1 ||
@@ -1157,7 +1207,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.12 (packed version 312)",
+    "Package release: v0.3.13 (packed version 313)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

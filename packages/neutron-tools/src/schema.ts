@@ -108,6 +108,8 @@ export {
   type NeutronCertifiedAssetsMutableBlobCollectionConfig,
   type NeutronCertifiedAssetsPublicationCollectionConfig,
   type NeutronDedicatedResidentOriginCapabilityConfig,
+  type NeutronMediaSessionFeatureV1,
+  type NeutronMediaSessionsCapabilityConfig,
   type NeutronResidentFrameSecurityMode,
   type NeutronCertifiedReadAuthorityMode,
   type NeutronCertifiedReadRouteMountConfig,

@@ -678,6 +678,7 @@ function createCapabilityConfiguration(
           buildCapabilityPlan(manifest),
           "dedicated_resident_origin",
         ) ||
+        getCapabilityPlanEntry(buildCapabilityPlan(manifest), "media_sessions") ||
         getCapabilityPlanEntry(
           buildCapabilityPlan(manifest),
           "background_endpoint",
@@ -717,6 +718,10 @@ function createCapabilityConfiguration(
       const connections = getCapabilityPlanEntry(
         plan,
         "connections",
+      )?.config;
+      const mediaSessions = getCapabilityPlanEntry(
+        plan,
+        "media_sessions",
       )?.config;
       const backgroundEndpoint = getCapabilityPlanEntry(
         plan,
@@ -839,6 +844,15 @@ function createCapabilityConfiguration(
                   .join(", ")}] }`,
             )
             .join(", ")}];
+        }`
+            : "null"
+        };
+        media_sessions = ${
+          mediaSessions
+            ? `?{
+          entrypoint = ${motokoTextLiteral(mediaSessions.entrypoint)};
+          features = [${mediaSessions.features.map((feature) => `#${feature}`).join(", ")}];
+          max_duration_seconds = ${mediaSessions.max_duration_seconds};
         }`
             : "null"
         };

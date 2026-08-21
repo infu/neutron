@@ -9,7 +9,7 @@ export const MAX_CLIPBOARD_TEXT_BYTES = 256 * 1_024;
 export const MAX_KERNEL_UI_CLIPBOARD_TEXT_BYTES = 4 * 1_024 * 1_024;
 
 export type ClipboardAppRequest = {
-  role: "tile" | "background" | "tray";
+  role: "tile" | "background" | "tray" | "media";
   focused: boolean;
   userActivated: boolean;
   ownerAuthorized: boolean;

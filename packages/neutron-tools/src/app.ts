@@ -984,6 +984,53 @@ export function copyToClipboard(text: string, timeout = 5): Promise<void> {
   );
 }
 
+export type MediaSessionFeature = "camera" | "microphone";
+
+export type OpenMediaSessionRequest = {
+  features: MediaSessionFeature[];
+  purpose: string;
+  durationSeconds?: number;
+};
+
+export type OpenMediaSessionResult = {
+  sessionId: string;
+  expiresAt: string;
+  features: MediaSessionFeature[];
+};
+
+export function openMediaSession(
+  request: OpenMediaSessionRequest,
+  timeout = 90,
+): Promise<OpenMediaSessionResult> {
+  return exec<OpenMediaSessionResult>(
+    "media_sessions.open",
+    {
+      features: request.features,
+      purpose: request.purpose,
+      ...(request.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: request.durationSeconds }),
+    },
+    timeout,
+  );
+}
+
+export function closeMediaSession(
+  sessionId: string,
+  timeout = 15,
+): Promise<void> {
+  return exec<null>("media_sessions.close", { sessionId }, timeout).then(
+    () => undefined,
+  );
+}
+
+export const capabilities = Object.freeze({
+  media_sessions: Object.freeze({
+    open: openMediaSession,
+    close: closeMediaSession,
+  }),
+});
+
 export function publishAppStateChange(
   topic: string,
   revision: string | number,

@@ -41,7 +41,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v312 NPL package metadata", () => {
+describe("Kernel v313 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -99,7 +99,7 @@ describe("Kernel v312 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(312);
+    expect(packagedManifest.version).toBe(313);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -120,7 +120,7 @@ describe("Kernel v312 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 312");
+    ).toThrow("restricted to Kernel version 313");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -150,7 +150,7 @@ describe("Kernel v312 NPL package metadata", () => {
     const memory = changedMemoryManifest.memory as Record<string, unknown>;
     const kernel = memory.kernel as Record<string, unknown>;
     const schemas = kernel.schemas as Record<string, unknown>;
-    (schemas["3"] as Record<string, unknown>).hash = "0".repeat(64);
+    (schemas["4"] as Record<string, unknown>).hash = "0".repeat(64);
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -180,6 +180,7 @@ describe("Kernel v312 NPL package metadata", () => {
       recursive: true,
     });
     await fs.writeFile(path.join(sensitiveRoot, "apps/kernel/src/.env"), "TOKEN=x");
+    git(sensitiveRoot, ["add", "-f", "apps/kernel/src/.env"]);
     await expect(collectKernelWorkspaceSource(sensitiveRoot)).rejects.toThrow(
       "Sensitive credential-like path",
     );
@@ -267,6 +268,15 @@ async function metadataFixture(): Promise<MetadataFixture> {
     hash: "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
     entry: "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b",
   });
+  Object.assign(packagedKernelSchemas["4"] as Record<string, unknown>, {
+    hash: "c97edc766ffc1e507d42e211321c5ec98419635d8d278de854795ed5d622a2c2",
+    entry: "1d992cdf3e6848138fcc5c31edd76603b3a2ab24531460983bf0c5a8aa95c4bf",
+  });
+  const packagedKernelMigrations = packagedKernel.migrations as Array<
+    Record<string, unknown>
+  >;
+  packagedKernelMigrations[0]!.entry =
+    "4cb28e64194663c3830eedede498b411b747f2a202cb01544b762dadfe086204";
   const packagedActivation = packagedMemory.kernel_activation as Record<
     string,
     unknown
@@ -294,6 +304,7 @@ async function metadataFixture(): Promise<MetadataFixture> {
   for (const schemaPath of [
     "apps/kernel/backend/memory/activation/v1.mo",
     "apps/kernel/backend/memory/kernel/v3.mo",
+    "apps/kernel/backend/memory/kernel/v4.mo",
   ]) {
     contentByPath.set(
       schemaPath,
@@ -381,7 +392,10 @@ async function gitFixture(): Promise<string> {
 }
 
 function git(cwd: string, args: readonly string[]): void {
-  execFileSync("git", args, { cwd, stdio: "pipe" });
+  execFileSync("git", ["-c", "commit.gpgsign=false", ...args], {
+    cwd,
+    stdio: "pipe",
+  });
 }
 
 async function temporaryDirectory(prefix: string): Promise<string> {

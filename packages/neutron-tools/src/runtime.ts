@@ -172,6 +172,81 @@ export function persistentAppFramePrefix({
   return prefix;
 }
 
+export function mediaSessionFramePrefix({
+  originNonce,
+  maxLength = DNS_LABEL_MAX_LENGTH,
+}: {
+  originNonce: string;
+  maxLength?: number;
+}): string {
+  if (!/^[a-f0-9]{64}$/u.test(originNonce)) {
+    throw new Error("Invalid media-session origin nonce");
+  }
+  const prefix = `m${originNonce.slice(0, 24)}`;
+  if (prefix.length > maxLength) {
+    throw new Error("Media-session origin prefix exceeds DNS limits");
+  }
+  return prefix;
+}
+
+export type MediaSessionUrlBinding = Readonly<{
+  installationUid: string;
+  originNonce: string;
+  authorityEpoch: string;
+}>;
+
+/** Build the exact one-document URL certified for an active media lease. */
+export function appMediaSessionUrl({
+  canisterId,
+  appId,
+  entrypoint,
+  binding,
+  local = false,
+  localHost = DEFAULT_LOCAL_HOST,
+}: {
+  canisterId: string;
+  appId: string;
+  entrypoint: string;
+  binding: MediaSessionUrlBinding;
+  local?: boolean;
+  localHost?: string;
+}): string {
+  if (!isValidAppId(appId) || !isSafeRelativeAppAssetPath(entrypoint)) {
+    throw new Error("Invalid media-session app path");
+  }
+  if (
+    !isCanonicalPositiveNat64(binding.installationUid) ||
+    !/^[a-f0-9]{64}$/u.test(binding.originNonce) ||
+    !isCanonicalPositiveNat64(binding.authorityEpoch)
+  ) {
+    throw new Error("Invalid media-session URL binding");
+  }
+  if (local) assertVerifiedLocalAppGateway(localHost);
+  const prefix = mediaSessionFramePrefix({ originNonce: binding.originNonce });
+  const origin = local
+    ? localCanisterOrigin(canisterId, localHost, prefix)
+    : `https://${prefixedCanisterLabel(canisterId, prefix)}.icp0.io`;
+  const search = new URLSearchParams();
+  search.set("app", appId);
+  search.set("role", "media");
+  search.set("installation-uid", binding.installationUid);
+  search.set("resident-frame-security", "media-session-v1");
+  search.set("browser-origin-nonce", binding.originNonce);
+  search.set("browser-origin-authority-epoch", binding.authorityEpoch);
+  return `${origin}/app/${appId}/${entrypoint}?${search.toString()}`;
+}
+
+function isSafeRelativeAppAssetPath(value: string): boolean {
+  return (
+    value.length > 0 &&
+    !value.startsWith("/") &&
+    !value.includes("\\") &&
+    !value.includes("?") &&
+    !value.includes("#") &&
+    value.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..")
+  );
+}
+
 function prefixedCanisterLabel(canisterId: string, prefix: string): string {
   const suffix = `--${canisterId}`;
   const maxPrefixLength = DNS_LABEL_MAX_LENGTH - suffix.length;

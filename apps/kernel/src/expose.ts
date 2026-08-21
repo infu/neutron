@@ -108,6 +108,10 @@ import {
 } from "./ethereum_provider/service.ts";
 import { clipboardService } from "./clipboard/service.ts";
 import {
+  closeActiveMediaSession,
+  requestMediaSession,
+} from "./media_sessions/store.ts";
+import {
   acquireAttachmentCapacity,
   attachmentBytes,
   attachmentError,
@@ -1062,6 +1066,12 @@ defineKernelTool(
         "The agent app is no longer installed",
       );
     }
+    if (!invocation && caller.context.role === "media") {
+      throw new KernelPolicyError(
+        "USER_INTERACTION_REQUIRED",
+        "Install offers cannot originate from a media surface",
+      );
+    }
     const requester: AttestedInstallOfferRequester = invocation
       ? {
           kind: "agent",
@@ -1077,7 +1087,7 @@ defineKernelTool(
           kind: "app",
           appId: caller.context.appId,
           appName: safeDiscoveryText(app.name, 120),
-          surface: caller.context.role,
+          surface: caller.context.role as "tile" | "tray" | "background",
         };
     const owner = {
       logged: auth.logged,
@@ -3198,6 +3208,36 @@ expose("clipboard.write_text", (payload, context) => {
       delegated: invocation !== null,
     }),
   );
+});
+
+// Media devices are never exposed to ordinary app frames. A focused tile may
+// only ask the Kernel to open its declared, short-lived isolated media surface.
+expose("media_sessions.open", (payload, context) => {
+  const endpoint = verifiedEndpoint(context);
+  const auth = useAuthStore.getState();
+  const invocation = resolveInvocation(endpoint, context.invocation);
+  return withCallerConcurrency(endpoint, () =>
+    requestMediaSession(payload, endpoint, {
+      focused: isFocusedTileCaller(endpoint),
+      userActivated: hasTransientUserActivation(),
+      ownerAuthorized: auth.logged && auth.authorized,
+      delegated: invocation !== null,
+    }),
+  );
+});
+
+expose("media_sessions.close", (payload, context) => {
+  const endpoint = verifiedEndpoint(context);
+  if (!isJsonObject(payload) || Object.keys(payload).length !== 1 || typeof payload.sessionId !== "string") {
+    throw new KernelPolicyError("INVALID_REQUEST", "Invalid media close request");
+  }
+  return closeActiveMediaSession({
+    appId: endpoint.context.appId,
+    ...(endpoint.context.role === "media"
+      ? {}
+      : { endpointId: endpoint.endpointId }),
+    sessionId: payload.sessionId,
+  }).then(() => null);
 });
 
 // Browser-wallet providers stay in the trusted top-level page. Apps receive

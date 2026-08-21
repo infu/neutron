@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   appFramePrefix,
   appBackgroundUrl,
+  appMediaSessionUrl,
   appIndexUrl,
   appTrayUrl,
   canisterIdFromUrl,
@@ -10,10 +11,35 @@ import {
   localCanisterOrigin,
   localIdentityProvider,
   scopedLocalIdentityProvider,
+  mediaSessionFramePrefix,
 } from "../src/runtime.ts";
 import { loadTileContext } from "../src/app.ts";
 
 const canisterId = "4caro-hl777-77775-aaaba-cai";
+
+test("media session URLs bind the exact ephemeral origin and lease query", () => {
+  const nonce = "ab".repeat(32);
+  expect(mediaSessionFramePrefix({ originNonce: nonce })).toBe(
+    `m${nonce.slice(0, 24)}`,
+  );
+  expect(
+    appMediaSessionUrl({
+      canisterId,
+      appId: "media_test",
+      entrypoint: "media.html",
+      binding: {
+        installationUid: "42",
+        originNonce: nonce,
+        authorityEpoch: "7",
+      },
+      local: true,
+      localHost: "http://localhost:8000",
+    }),
+  ).toBe(
+    `http://m${nonce.slice(0, 24)}--${canisterId}.localhost:8000/app/media_test/media.html?app=media_test&role=media&installation-uid=42&resident-frame-security=media-session-v1&browser-origin-nonce=${nonce}&browser-origin-authority-epoch=7`,
+  );
+  expect(() => mediaSessionFramePrefix({ originNonce: "abcd" })).toThrow();
+});
 
 test("app frame URLs authenticate the matching kernel shell origin", () => {
   expect(

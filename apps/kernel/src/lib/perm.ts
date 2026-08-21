@@ -11,6 +11,7 @@ import type {
   NeutronHttpRouteMountConfig,
   NeutronHttpRouteSurface,
   NeutronHttpsOutcallMethodV1,
+  NeutronMediaSessionFeatureV1,
 } from "neutron-tools/src/capabilities/catalog.js";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 import {
@@ -67,6 +68,13 @@ export type Permission =
   | {
       readonly source: "kernel";
       readonly kind: "dedicated_resident_origin";
+    }
+  | {
+      readonly source: "kernel";
+      readonly kind: "media_sessions";
+      readonly entrypoint: string;
+      readonly features: readonly NeutronMediaSessionFeatureV1[];
+      readonly maxDurationSeconds: number;
     }
   | {
       readonly source: "kernel";
@@ -317,6 +325,8 @@ export function permissionLevel(permission: Permission): PermissionLevel {
     case "app_dependency":
     case "internal_app_function":
       return 2;
+    case "media_sessions":
+      return 3;
     case "function_resources":
       return permission.resources.reduce<PermissionLevel>(
         (level, resource) =>
@@ -475,6 +485,8 @@ export function permissionKey(permission: Permission): string {
     case "dedicated_resident_origin":
     case "kernel_memory_replacement":
       return permission.kind;
+    case "media_sessions":
+      return `${permission.kind}:${permission.entrypoint}:${permission.features.join(",")}:${permission.maxDurationSeconds}`;
   }
 }
 
@@ -581,6 +593,15 @@ export function capabilityPlanPermissionDisclosures(
         break;
       case "dedicated_resident_origin":
         add({ source: "kernel", kind: "dedicated_resident_origin" });
+        break;
+      case "media_sessions":
+        add({
+          source: "kernel",
+          kind: "media_sessions",
+          entrypoint: entry.config.entrypoint,
+          features: [...entry.config.features],
+          maxDurationSeconds: entry.config.max_duration_seconds,
+        });
         break;
       case "backend_calls":
         add({

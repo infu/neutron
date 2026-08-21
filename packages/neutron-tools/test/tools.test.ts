@@ -26,6 +26,8 @@ import {
   onTileViewRequest,
   offerAppInstall,
   openAppTile,
+  openMediaSession,
+  closeMediaSession,
   publishAppStateChange,
   removeExposedTool,
   toError,
@@ -1324,6 +1326,49 @@ test("clipboard helper uses the private endpoint-bound action", async () => {
   });
   fakeWindow.dispatch({ type: "response", id: request.id, ok: null });
   await expect(pending).resolves.toBeUndefined();
+});
+
+test("media session helpers use private endpoint-bound actions", async () => {
+  const fakeWindow = installFakeWindow();
+  const opening = openMediaSession({
+    features: ["camera", "microphone"],
+    purpose: "Join the planning call",
+    durationSeconds: 1800,
+  }, 0.2);
+  const request = fakeWindow.parent.messages[0]?.message as {
+    id: number;
+    payload: { action: string; payload: unknown };
+  };
+  expect(request.payload).toEqual({
+    action: "media_sessions.open",
+    payload: {
+      features: ["camera", "microphone"],
+      purpose: "Join the planning call",
+      durationSeconds: 1800,
+    },
+  });
+  fakeWindow.dispatch({
+    type: "response",
+    id: request.id,
+    ok: { sessionId: "session", expiresAt: "100", features: ["camera"] },
+  });
+  await expect(opening).resolves.toEqual({
+    sessionId: "session",
+    expiresAt: "100",
+    features: ["camera"],
+  });
+
+  const closing = closeMediaSession("session", 0.2);
+  const close = fakeWindow.parent.messages[1]?.message as {
+    id: number;
+    payload: { action: string; payload: unknown };
+  };
+  expect(close.payload).toEqual({
+    action: "media_sessions.close",
+    payload: { sessionId: "session" },
+  });
+  fakeWindow.dispatch({ type: "response", id: close.id, ok: null });
+  await expect(closing).resolves.toBeUndefined();
 });
 
 test("tray helpers use bounded private endpoint actions", async () => {

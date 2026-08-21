@@ -311,6 +311,13 @@ function sameFrameContext(left: FrameContext, right: FrameContext): boolean {
       left.instanceId === right.instanceId
     );
   }
+  if (left.role === "media" || right.role === "media") {
+    return (
+      left.role === "media" &&
+      right.role === "media" &&
+      left.sessionId === right.sessionId
+    );
+  }
   return (
     left.tileId === right.tileId &&
     left.instanceId === right.instanceId &&

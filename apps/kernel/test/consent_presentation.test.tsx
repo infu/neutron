@@ -101,6 +101,13 @@ const representativePermissions = {
     source: "kernel",
     kind: "dedicated_resident_origin",
   },
+  media_sessions: {
+    source: "kernel",
+    kind: "media_sessions",
+    entrypoint: "media.html",
+    features: ["camera", "microphone"],
+    maxDurationSeconds: 7_200,
+  },
   backend_calls: {
     source: "kernel",
     kind: "backend_calls",

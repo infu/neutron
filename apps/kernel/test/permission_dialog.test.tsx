@@ -475,6 +475,43 @@ test("dedicated resident origin disclosure names the ephemeral credential partit
   expect(html).not.toContain("storage APIs disabled");
 });
 
+test("media session consent discloses devices, per-call prompts, isolation, and expiry", () => {
+  const disclosure = configInstallDisclosures({
+    format: 3,
+    id: "media_app",
+    name: "Media App",
+    version: 100,
+    tiles: [{ id: "main", title: "Main", path: "index.html" }],
+    capabilities: {
+      media_sessions: {
+        api: 1,
+        entrypoint: "call/media.html",
+        features: ["camera", "microphone"],
+        max_duration_seconds: 7_200,
+      },
+    },
+  });
+  const request = fixtureAppInstallRequest({
+    id: "media_app",
+    size: 1,
+    capabilityPlanFingerprint: disclosure.planFingerprint,
+    capabilityDisclosures: disclosure.capabilityDisclosures,
+    permissions: disclosure.permissions,
+    appExplanations: disclosure.appExplanations,
+  });
+
+  const html = renderToStaticMarkup(
+    <AppRequestDialog compiled={{ size: 1 }} request={request} />,
+  );
+  expect(html).toContain('data-capability="media_sessions"');
+  expect(html).toContain('data-kind="media_sessions"');
+  expect(html).toContain("Camera and microphone during an explicit call");
+  expect(html).toContain("browser device prompt");
+  expect(html).toContain("2 hours");
+  expect(html).toContain("Ordinary app tiles and backgrounds never receive device access");
+  expect(html).toContain("Use your camera and microphone during calls");
+});
+
 test("chain-key consent discloses autonomous bounded assertion authority", () => {
   const purpose = "App claims this signs harmless login challenges";
   const disclosure = configInstallDisclosures({

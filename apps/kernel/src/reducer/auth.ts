@@ -133,6 +133,13 @@ export type KernelActor = CertifiedAssetsSettingsActor & {
     app_id: string;
     actions: unknown[];
   }): Promise<unknown>;
+  kernel_media_session_begin(req: {
+    app_id: string;
+    request_id: string;
+    features: Array<{ camera: null } | { microphone: null }>;
+    duration_seconds: bigint;
+  }): Promise<unknown>;
+  kernel_media_session_close(sessionId: string): Promise<unknown>;
   kernel_vetkeys_admin_snapshot(req: null): Promise<unknown>;
   kernel_vetkeys_binding(req: {
     app_id: string;
@@ -880,6 +887,39 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
     already_activated: IDL.Null,
     invalid: IDL.Null,
   });
+  const MediaSessionFeature = IDL.Variant({
+    camera: IDL.Null,
+    microphone: IDL.Null,
+  });
+  const MediaSessionLease = IDL.Record({
+    session_id: IDL.Text,
+    app_id: IDL.Text,
+    installation_uid: IDL.Nat64,
+    app_version: IDL.Nat,
+    plan_fingerprint: IDL.Text,
+    origin_nonce: IDL.Text,
+    entrypoint: IDL.Text,
+    features: IDL.Vec(MediaSessionFeature),
+    created_at: IDL.Nat64,
+    expires_at: IDL.Nat64,
+    authority_epoch: IDL.Nat64,
+  });
+  const MediaSessionBeginResult = IDL.Variant({
+    ok: MediaSessionLease,
+    err: IDL.Variant({
+      invalid_request: IDL.Null,
+      undeclared: IDL.Null,
+      disabled: IDL.Null,
+      busy: IDL.Null,
+      randomness_failed: IDL.Null,
+      asset_unavailable: IDL.Null,
+    }),
+  });
+  const MediaSessionCloseResult = IDL.Variant({
+    ok: IDL.Null,
+    not_found: IDL.Null,
+    denied: IDL.Null,
+  });
 
   return IDL.Service({
     ...CertifiedAssetsSettings.methods,
@@ -913,6 +953,21 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
       [IDL.Null],
       [IDL.Vec(BackendReservationSummary)],
       ["query"],
+    ),
+    kernel_media_session_begin: IDL.Func(
+      [IDL.Record({
+        app_id: IDL.Text,
+        request_id: IDL.Text,
+        features: IDL.Vec(MediaSessionFeature),
+        duration_seconds: IDL.Nat,
+      })],
+      [MediaSessionBeginResult],
+      [],
+    ),
+    kernel_media_session_close: IDL.Func(
+      [IDL.Text],
+      [MediaSessionCloseResult],
+      [],
     ),
     kernel_access_snapshot: IDL.Func(
       [IDL.Null],

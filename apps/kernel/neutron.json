@@ -2,7 +2,7 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 312,
+  "version": 313,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "src": "main.mo",
   "init_arg": [
@@ -165,6 +165,20 @@
       "async": false
     },
     "kernel_capability_set_enabled": {
+      "type": "update",
+      "async": false,
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_media_session_begin": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_media_session_close": {
       "type": "update",
       "async": false,
       "arg": [
@@ -377,12 +391,22 @@
   },
   "memory": {
     "kernel": {
-      "version": 3,
+      "version": 4,
       "schemas": {
         "3": {
           "src": "memory/kernel/v3.mo"
+        },
+        "4": {
+          "src": "memory/kernel/v4.mo"
         }
-      }
+      },
+      "migrations": [
+        {
+          "from": 3,
+          "to": 4,
+          "src": "memory/kernel/v3_to_v4.mo"
+        }
+      ]
     },
     "kernel_activation": {
       "version": 1,

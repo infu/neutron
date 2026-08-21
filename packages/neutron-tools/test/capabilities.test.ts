@@ -222,6 +222,12 @@ function kitchenSinkManifest(): NeutronManifest {
         ],
       },
       persistent_browser_storage: { api: 1, surface: "background" },
+      media_sessions: {
+        api: 1,
+        entrypoint: "call/media.html",
+        features: ["microphone", "camera"],
+        max_duration_seconds: 7_200,
+      },
       public_ingress: {
         api: 1,
         routes: [
@@ -488,6 +494,12 @@ test("buildCapabilityPlan produces one exact declared and derived inventory", ()
   });
   expect(getCapabilityPlanEntry(plan, "randomness")?.config).toEqual({
     api: 1,
+  });
+  expect(getCapabilityPlanEntry(plan, "media_sessions")?.config).toEqual({
+    api: 1,
+    entrypoint: "call/media.html",
+    features: ["camera", "microphone"],
+    max_duration_seconds: 7_200,
   });
   expect(getCapabilityPlanEntry(plan, "chain_key_signing")?.config).toEqual({
     api: 1,
@@ -871,6 +883,53 @@ test("resident frame security is explicit and dedicated modes are exclusive", ()
   ).config.frame_security = "persistent_dedicated_v1";
   expect(() => parseCapabilityPlanWireV1(forged)).toThrow(
     /inconsistent with resident capabilities/,
+  );
+});
+
+test("media sessions are closed, bounded, path-safe, canonical, and wire-stable", () => {
+  const base: NeutronManifest = {
+    format: 3,
+    id: "media_test",
+    name: "Media Test",
+    version: 100,
+    tiles: [{ id: "main", title: "Main", path: "index.html" }],
+    capabilities: {
+      media_sessions: {
+        api: 1,
+        entrypoint: "call/media.html",
+        features: ["microphone", "camera"],
+        max_duration_seconds: 7_200,
+      },
+    },
+  };
+  const wire = toCapabilityPlanWireV1(buildCapabilityPlan(base));
+  expect(getCapabilityPlanEntry(wire, "media_sessions")?.config).toEqual({
+    api: 1,
+    entrypoint: "call/media.html",
+    features: ["camera", "microphone"],
+    max_duration_seconds: 7_200,
+  });
+  expect(parseCapabilityPlanWireV1(wire)).toEqual(wire);
+
+  for (const entrypoint of ["", "/media.html", "../media.html", "a//media.html", "a\\media.html"]) {
+    const invalid = structuredClone(base);
+    invalid.capabilities!.media_sessions!.entrypoint = entrypoint;
+    expect(() => buildCapabilityPlan(invalid)).toThrow(/media_sessions entrypoint/);
+  }
+  for (const duration of [299, 14_401, 7_200.5]) {
+    const invalid = structuredClone(base);
+    invalid.capabilities!.media_sessions!.max_duration_seconds = duration;
+    expect(() => buildCapabilityPlan(invalid)).toThrow(/max_duration_seconds/);
+  }
+  for (const features of [[], ["camera", "camera"], ["geolocation"]]) {
+    const invalid = structuredClone(base) as any;
+    invalid.capabilities.media_sessions.features = features;
+    expect(() => buildCapabilityPlan(invalid)).toThrow(/media_sessions feature/);
+  }
+  const unknown = structuredClone(base) as any;
+  unknown.capabilities.media_sessions.persist = true;
+  expect(() => buildCapabilityPlan(unknown)).toThrow(
+    /Unknown media_sessions capability field persist/,
   );
 });
 
