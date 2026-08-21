@@ -79,13 +79,13 @@ export const LEGACY_KERNEL_RELEASES = [
 export const LEGACY_KERNEL_VERSION = LEGACY_KERNEL_RELEASES[2].version;
 export const LEGACY_KERNEL_ARCHIVE_BYTES = LEGACY_KERNEL_RELEASES[2].bytes;
 export const LEGACY_KERNEL_ARCHIVE_SHA256 = LEGACY_KERNEL_RELEASES[2].sha256;
-export const TEST_CANDIDATE_KERNEL_VERSION = 312;
+export const TEST_CANDIDATE_KERNEL_VERSION = 315;
 export const LEGACY_HELLO_ARCHIVE_BYTES = 185_021;
 export const LEGACY_HELLO_ARCHIVE_SHA256 =
   "82613cc3882c7404e51e09308e27a4885062f5f622663becf18cca0a046b8c27";
 export const LEGACY_KERNEL_ARCHIVE_PATH = LEGACY_KERNEL_RELEASES[2].archivePath;
 export const FINAL_CANDIDATE_KERNEL_ARCHIVE_PATH = fileURLToPath(
-  new URL("../../../apps/kernel/kernel.v0.3.12.neutron", import.meta.url),
+  new URL("../../../apps/kernel/kernel.v0.3.15.neutron", import.meta.url),
 );
 
 export type LegacyKernelIdentityFixture = Readonly<{
@@ -179,7 +179,7 @@ export async function compileLegacyKernelUpgradeFixture(
 }
 
 /**
- * Decode and compile the actual packed v0.3.12 candidate. This never invokes
+ * Decode and compile the actual packed v0.3.15 candidate. This never invokes
  * the packer: the caller must deliberately create and review the archive first.
  */
 export async function compileFinalCandidateLegacyKernelUpgradeFixture({
@@ -250,7 +250,7 @@ async function compileLegacyKernelUpgradeCandidate(
         });
   assertCandidateManifest(identity, candidateKernel);
   if (candidateKernel.packageRecord === undefined) {
-    throw new Error("The v0.3.12 candidate package record was not verified");
+    throw new Error("The v0.3.15 candidate package record was not verified");
   }
   if (expectedCandidateSha256 !== undefined) {
     assertFinalCandidatePackageRecord(candidateKernel);
@@ -303,7 +303,7 @@ function assertFinalCandidatePackageRecord(
     record.build.inputs.length === 0
   ) {
     throw new Error(
-      "The v0.3.12 candidate must carry the reviewed NPL source record",
+      "The v0.3.15 candidate must carry the reviewed NPL source record",
     );
   }
 }
@@ -348,7 +348,7 @@ function assertCandidateManifest(
     manifest.update_source !== identity.package.update_source
   ) {
     throw new Error(
-      "The candidate must be Kernel v0.3.12 in format 3 with the production update source",
+      "The candidate must be Kernel v0.3.15 in format 3 with the production update source",
     );
   }
 }
@@ -436,7 +436,7 @@ export function assertLegacyUpgradeCompileInvariants(
       (declaration.migrations?.length ?? 0) !== 0
     ) {
       throw new Error(
-        `The v0.3.12 candidate changed released memory ${expected.id} v${expected.version}`,
+        `The v0.3.15 candidate changed released memory ${expected.id} v${expected.version}`,
       );
     }
   }
@@ -561,7 +561,7 @@ async function testCandidateArchive(
     throw new Error("The legacy Kernel archive has no neutron.lock.json");
   }
   const offeredSource = encoder.encode(
-    "synthetic v0.3.12 corresponding-source fixture\n",
+    "synthetic v0.3.15 corresponding-source fixture\n",
   );
   const sourceSha256 = sha256Hex(offeredSource);
   const packageRecord = {

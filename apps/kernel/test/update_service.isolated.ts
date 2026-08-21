@@ -1408,7 +1408,7 @@ function preparedDeploymentFixture(
       target_canister: "rrkah-fqaaa-aaaaa-aaaaq-cai",
       mode: "upgrade",
       argument: { sha256: hashContent(new Uint8Array()), bytes: 0 },
-      wasm_memory_persistence: "keep",
+      wasm_memory_persistence: "replace",
     },
     wasm: {
       raw: {

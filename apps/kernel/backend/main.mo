@@ -3262,6 +3262,7 @@ module {
                 deployment_id : Text;
                 chunk_hashes : [Blob];
                 wasm_module_hash : Blob;
+                wasm_memory_persistence : { #keep; #replace };
             },
             /*this*/ self : actor {},
         ) : async* () {
@@ -3281,7 +3282,7 @@ module {
                     arg = [];
                     mode = #upgrade(?{
                         skip_pre_upgrade = null;
-                        wasm_memory_persistence = ?#keep;
+                        wasm_memory_persistence = ?inp.wasm_memory_persistence;
                     });
                     target_canister = Principal.fromActor(self);
                     store_canister = null;
@@ -3303,7 +3304,7 @@ module {
             };
         };
 
-        public func /*update*/kernel_install_code(inp: {wasm: [Nat8]; candid: Text; deployment_id : Text}, /*this*/ self: actor {}) : async* () {
+        public func /*update*/kernel_install_code(inp: {wasm: [Nat8]; candid: Text; deployment_id : Text; wasm_memory_persistence : { #keep; #replace }}, /*this*/ self: actor {}) : async* () {
             assert (InstallMemory.has(mem.install, inp.deployment_id));
             let deployment = { deployment_id = inp.deployment_id };
             installs.markDispatched(deployment);
@@ -3313,7 +3314,7 @@ module {
                     wasm_module = inp.wasm;
                     mode = #upgrade(?{
                         skip_pre_upgrade = null;
-                        wasm_memory_persistence = ?#keep;
+                        wasm_memory_persistence = ?inp.wasm_memory_persistence;
                     });
                     canister_id = Principal.fromActor(self);
                     sender_canister_version = ?Prim.canisterVersion();
@@ -3629,10 +3630,11 @@ public type kernel_install_code_chunked_Input = (inp : {
                 deployment_id : Text;
                 chunk_hashes : [Blob];
                 wasm_module_hash : Blob;
+                wasm_memory_persistence : { #keep; #replace };
             });
 public type kernel_install_code_chunked_Output = ();
 
-public type kernel_install_code_Input = (inp: {wasm: [Nat8]; candid: Text; deployment_id : Text});
+public type kernel_install_code_Input = (inp: {wasm: [Nat8]; candid: Text; deployment_id : Text; wasm_memory_persistence : { #keep; #replace }});
 public type kernel_install_code_Output = ();
 
 public type kernel_connections_begin_Input = (inp : ConnectionTypes.BeginConnectionInput);

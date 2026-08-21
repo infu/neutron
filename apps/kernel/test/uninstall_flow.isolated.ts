@@ -34,6 +34,7 @@ type CompileCall = Readonly<{
   appId: string;
   deploymentNonce: string;
   vetKeysEnvironment: "local" | "production";
+  persistenceMode: "classical" | "enhanced";
 }>;
 
 function deferred<T>(): Deferred<T> {
@@ -65,7 +66,7 @@ let preparedRecordBytes = new Uint8Array([1]);
 let operationPhases: string[] = [];
 let deploymentRecord: CompleteDeploymentBuildRecord;
 let runtimeDeploymentId = BASELINE_DEPLOYMENT_ID;
-let runtimeCompilerId = "neutron-compiler/test";
+let runtimeCompilerId = "moc_classical_test";
 
 mock.module("icblast", () => ({
   default: () => async () => ({}),
@@ -380,7 +381,7 @@ beforeEach(() => {
   provenanceValue = BASELINE_PROVENANCE;
   preparedRecordBytes = new Uint8Array([1]);
   runtimeDeploymentId = BASELINE_DEPLOYMENT_ID;
-  runtimeCompilerId = "neutron-compiler/test";
+  runtimeCompilerId = "moc_classical_test";
   useAppsStore.setState({
     list: {
       kernel: baselineKernel,
@@ -414,6 +415,7 @@ test("uninstall compilation completes before the final confirmation is exposed",
     appId: "mail",
     deploymentNonce: DEPLOYMENT_NONCE,
     vetKeysEnvironment: "local",
+    persistenceMode: "classical",
   });
   expect(baselineAssertions).toBe(1);
   expect(useAppsStore.getState()).toMatchObject({
@@ -548,7 +550,7 @@ test("connection-provider compiler input drift is rejected before staging", asyn
 
 test("same-deployment compiler identity drift is rejected before staging", async () => {
   const { result } = await startReviewedUninstall();
-  runtimeCompilerId = "neutron-compiler/changed";
+  runtimeCompilerId = "moc_classical_changed";
 
   resolveAppUninstall(true);
 

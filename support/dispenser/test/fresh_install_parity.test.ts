@@ -56,7 +56,7 @@ test("fresh Local, IC, and Dispenser paths converge on compiled defaults and ent
   );
   expect(occurrences(seed, "initializePublicationEntropy(actor)")).toBe(1);
   expect(seed.indexOf("initializePublicationEntropy(actor)")).toBeLessThan(
-    seed.indexOf('kernel_static({ clear: { prefix: "" } })'),
+    seed.indexOf("uploadPreparedFiles("),
   );
   assertNoReservationMutation(seed);
 

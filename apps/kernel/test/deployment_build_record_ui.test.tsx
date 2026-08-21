@@ -250,7 +250,7 @@ function completeRecord() {
       target_canister: CANISTER,
       mode: "upgrade" as const,
       argument: { sha256: "5".repeat(64), bytes: 0 },
-      wasm_memory_persistence: "keep" as const,
+      wasm_memory_persistence: "replace" as const,
     },
     wasm: {
       raw: {

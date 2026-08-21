@@ -4,6 +4,7 @@ import {
   type Diagnostic,
   type Motoko,
   type MotokoInspection,
+  type MotokoPersistenceMode,
 } from "neutron-motoko-wasm";
 import {
   checkForDangerousASTCode,
@@ -65,6 +66,59 @@ import {
   type TrustedInstallationContextV1,
 } from "./installation_context.ts";
 
+export const NEUTRON_MOTOKO_COMPILER_FLAGS = Object.freeze([
+  "--legacy-persistence",
+  "--compacting-gc",
+] as const);
+
+export const NEUTRON_MOTOKO_ENHANCED_COMPILER_FLAGS = Object.freeze([
+  "--enhanced-orthogonal-persistence",
+  "--incremental-gc",
+] as const);
+
+export type NeutronPersistenceMode = MotokoPersistenceMode;
+
+const LEGACY_ENHANCED_COMPILER_IDS = new Set([
+  "moc_b27ed45b7c440ba4",
+  "moc_6921f895690abfd3",
+]);
+const LEGACY_CLASSICAL_COMPILER_IDS = new Set(["moc_b95fce3642e89f40"]);
+
+export function persistenceModeFromCompilerId(
+  compilerId: string,
+): NeutronPersistenceMode {
+  if (
+    compilerId.startsWith("moc_enhanced_") ||
+    LEGACY_ENHANCED_COMPILER_IDS.has(compilerId)
+  ) {
+    return "enhanced";
+  }
+  if (
+    compilerId.startsWith("moc_classical_") ||
+    LEGACY_CLASSICAL_COMPILER_IDS.has(compilerId)
+  ) {
+    return "classical";
+  }
+  throw new Error(
+    `Kernel compiler ${compilerId} does not declare a known persistence mode`,
+  );
+}
+
+function neutronCompilerFlags(mode: NeutronPersistenceMode) {
+  return mode === "enhanced"
+    ? NEUTRON_MOTOKO_ENHANCED_COMPILER_FLAGS
+    : NEUTRON_MOTOKO_COMPILER_FLAGS;
+}
+
+function neutronCompilerId(
+  version: string,
+  mode: NeutronPersistenceMode,
+): string {
+  return `moc_${mode}_${hashContent(
+    JSON.stringify({ version, flags: neutronCompilerFlags(mode) }),
+  ).slice(0, 16)}`;
+}
+
 export type MotokoFile = {
   path: string;
   content: string;
@@ -94,6 +148,8 @@ export type CompileInput = {
    * in their result.
    */
   includeGeneratedSource?: boolean;
+  /** Preserve the running canister's Motoko persistence lineage. */
+  persistenceMode?: NeutronPersistenceMode;
   verbose?: boolean;
 };
 
@@ -165,6 +221,8 @@ export type CompileResult = {
   deploymentNonce: string | null;
   /** Exact compiler target environment bound into deploymentId. */
   vetKeysEnvironment: VetKeysEnvironment;
+  /** Motoko persistence/GC mode used for inspection and final emission. */
+  persistenceMode: NeutronPersistenceMode;
   compilerId: string;
   modulePaths: string[];
 };
@@ -216,6 +274,7 @@ async function compileWithMotoko({
   vetKeysEnvironment = "production",
   freshInstallationContext,
   includeGeneratedSource = false,
+  persistenceMode = "classical",
   verbose = false,
 }: CompileInput): Promise<CompileResult> {
   assertVetKeysEnvironment(vetKeysEnvironment);
@@ -250,7 +309,11 @@ async function compileWithMotoko({
     compileManagedMemoryInventory(previousConfigs);
   const managedMemoryInventory = compileManagedMemoryInventory(configs);
   const inspectionCompiler = await loadMotoko();
-  const compilerId = `moc_${hashContent(inspectionCompiler.version).slice(0, 16)}`;
+  await inspectionCompiler.configurePersistence(persistenceMode);
+  const compilerId = neutronCompilerId(
+    inspectionCompiler.version,
+    persistenceMode,
+  );
   const deploymentId = createDeploymentId(
     configs,
     migrationPlan,
@@ -286,6 +349,7 @@ async function compileWithMotoko({
   // and a fresh compiler also gives the final phase a compact, empty VFS.
   await disposeMotokoCompiler();
   const mo = await loadMotoko();
+  await mo.configurePersistence(persistenceMode);
   await resetCompilerFiles(mo);
   for (const { path, content } of reachableModules)
     await mo.write(path, content);
@@ -369,6 +433,7 @@ async function compileWithMotoko({
     deploymentId,
     deploymentNonce: deploymentNonce ?? null,
     vetKeysEnvironment,
+    persistenceMode,
     compilerId,
     modulePaths: reachableModules
       .map(({ path }) => path)

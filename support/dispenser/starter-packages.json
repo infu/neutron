@@ -2,7 +2,7 @@
   "format": 1,
   "kernel": {
     "id": "kernel",
-    "path": "../../apps/kernel/kernel.v0.3.12.neutron"
+    "path": "../../apps/kernel/kernel.v0.3.15.neutron"
   },
   "apps": [
     {

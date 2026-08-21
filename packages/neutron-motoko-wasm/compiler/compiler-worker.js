@@ -8,6 +8,7 @@ const COMPILER_METHODS = new Set([
   "readFile",
   "readDir",
   "setProjectRoot",
+  "gcFlags",
   "addPackage",
   "clearPackage",
   "compileWasm",

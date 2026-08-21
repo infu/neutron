@@ -76,6 +76,7 @@ import {
   type CompileResult,
   type CompiledAppInstance,
   type MotokoFile,
+  type NeutronPersistenceMode,
 } from "./compile.ts";
 import {
   ASSEMBLER_ID,
@@ -315,7 +316,24 @@ export type KernelInstallCodeRequest = {
   wasm: Uint8Array;
   candid: string;
   deployment_id: string;
+  wasm_memory_persistence: CandidWasmMemoryPersistence;
 };
+
+export type CandidWasmMemoryPersistence =
+  | { keep: null }
+  | { replace: null };
+
+export function wasmMemoryPersistenceForMode(
+  mode: NeutronPersistenceMode,
+): "keep" | "replace" {
+  return mode === "enhanced" ? "keep" : "replace";
+}
+
+function candidWasmMemoryPersistence(
+  mode: NeutronPersistenceMode,
+): CandidWasmMemoryPersistence {
+  return mode === "enhanced" ? { keep: null } : { replace: null };
+}
 
 export type KernelInstallWasmChunkRequest = {
   deployment_id: string;
@@ -327,6 +345,7 @@ export type KernelInstallCodeChunkedRequest = {
   deployment_id: string;
   chunk_hashes: Uint8Array[];
   wasm_module_hash: Uint8Array;
+  wasm_memory_persistence: CandidWasmMemoryPersistence;
 };
 
 export type CheckedInstallJournalRequest = {
@@ -491,6 +510,7 @@ export type PackageCompileInput = {
   preparedPackage: PreparedPackageInstall;
   deploymentNonce?: string;
   vetKeysEnvironment?: VetKeysEnvironment;
+  persistenceMode?: NeutronPersistenceMode;
   versionPolicy?: AppVersionTransitionPolicy;
 };
 
@@ -580,6 +600,7 @@ export type CompilePackagesInput = {
   connectionProviderSupport?: ConnectionProviderSupportCatalog;
   deploymentNonce?: string;
   vetKeysEnvironment?: VetKeysEnvironment;
+  persistenceMode?: NeutronPersistenceMode;
   /** Provisioner-only input for a fresh local whole-canister installation. */
   freshInstallationContext?: TrustedInstallationContextV1;
   /** Offline qualification-only binding to the exact assembled actor source. */
@@ -1293,6 +1314,7 @@ export function buildPackageCompileInput({
   preparedPackage,
   deploymentNonce,
   vetKeysEnvironment,
+  persistenceMode,
   versionPolicy = "strict-upgrade",
 }: PackageCompileInput): CompileInput {
   assertPreparedPackageBatch([preparedPackage]);
@@ -1319,6 +1341,7 @@ export function buildPackageCompileInput({
     ...(connectionProviderSupport ? { connectionProviderSupport } : {}),
     ...(deploymentNonce ? { deploymentNonce } : {}),
     ...(vetKeysEnvironment ? { vetKeysEnvironment } : {}),
+    ...(persistenceMode ? { persistenceMode } : {}),
   };
 }
 
@@ -1337,6 +1360,7 @@ export function buildPackagesCompileInput({
   connectionProviderSupport: baselineConnectionProviderSupport,
   deploymentNonce,
   vetKeysEnvironment,
+  persistenceMode,
   freshInstallationContext,
   includeGeneratedSource,
   versionPolicy = "strict-upgrade",
@@ -1369,6 +1393,7 @@ export function buildPackagesCompileInput({
     ...(connectionProviderSupport ? { connectionProviderSupport } : {}),
     ...(deploymentNonce ? { deploymentNonce } : {}),
     ...(vetKeysEnvironment ? { vetKeysEnvironment } : {}),
+    ...(persistenceMode ? { persistenceMode } : {}),
     ...(freshInstallationContext
       ? { freshInstallationContext }
       : {}),
@@ -1450,11 +1475,13 @@ export function buildAppUninstallCompileInput({
   appId,
   deploymentNonce,
   vetKeysEnvironment,
+  persistenceMode,
 }: {
   state: KernelPackageState;
   appId: string;
   deploymentNonce?: string;
   vetKeysEnvironment?: VetKeysEnvironment;
+  persistenceMode?: NeutronPersistenceMode;
 }): CompileInput {
   validateInstallAppId(appId);
   if (appId === "kernel")
@@ -1499,6 +1526,7 @@ export function buildAppUninstallCompileInput({
     connectionProviderSupport: state.connectionProviderSupport,
     ...(deploymentNonce ? { deploymentNonce } : {}),
     ...(vetKeysEnvironment ? { vetKeysEnvironment } : {}),
+    ...(persistenceMode ? { persistenceMode } : {}),
   };
 }
 
@@ -1572,6 +1600,7 @@ export async function compileAppUninstall(input: {
   appId: string;
   deploymentNonce?: string;
   vetKeysEnvironment?: VetKeysEnvironment;
+  persistenceMode?: NeutronPersistenceMode;
 }): Promise<CompileResult> {
   const { compile } = await import("./compile.ts");
   return compile(buildAppUninstallCompileInput(input));
@@ -2830,7 +2859,9 @@ export function prepareCompleteDeploymentBuildRecord({
       target_canister: targetCanisterId,
       mode: "upgrade",
       argument: new Uint8Array(),
-      wasm_memory_persistence: "keep",
+      wasm_memory_persistence: wasmMemoryPersistenceForMode(
+        compiled.persistenceMode,
+      ),
     },
   });
   const canonicalRecordBytes = serializeDeploymentBuildRecord(prepared.record);
@@ -3063,7 +3094,9 @@ function assertDeploymentBuildRecordMatchesInstall({
       target_canister: targetCanisterId,
       mode: "upgrade",
       argument: new Uint8Array(),
-      wasm_memory_persistence: "keep",
+      wasm_memory_persistence: wasmMemoryPersistenceForMode(
+        compiled.persistenceMode,
+      ),
     },
   }).record;
   for (const field of [
@@ -3269,6 +3302,7 @@ export async function deployPreparedPackages({
     transportWasm: preparedTransport.transportWasm,
     candid: deploymentCompiled.candid,
     deploymentId: deploymentCompiled.deploymentId,
+    persistenceMode: deploymentCompiled.persistenceMode,
   });
   const stableAsset = createTextAsset(
     "/pkg/neutron.most",
@@ -4114,16 +4148,19 @@ function prepareInstallCodeDispatch({
   transportWasm,
   candid,
   deploymentId,
+  persistenceMode,
 }: {
   /** Exact deterministic gzip bytes already bound into the build record. */
   transportWasm: Uint8Array;
   candid: string;
   deploymentId: string;
+  persistenceMode: NeutronPersistenceMode;
 }): InstallCodeDispatch {
   const request = installCodeRequestWithTransport({
     transportWasm,
     candid,
     deploymentId,
+    persistenceMode,
   });
   if (installCodeRequestFitsIngress(request)) {
     return { kind: "inline", request };
@@ -4146,6 +4183,7 @@ function prepareInstallCodeDispatch({
       deployment_id: deploymentId,
       chunk_hashes: chunks.map(({ sha256 }) => sha256),
       wasm_module_hash: sha256Bytes(request.wasm),
+      wasm_memory_persistence: candidWasmMemoryPersistence(persistenceMode),
     },
   };
 }
@@ -4193,16 +4231,19 @@ export function prepareInstallCodeRequest({
   wasm,
   candid,
   deploymentId,
+  persistenceMode = "classical",
 }: {
   wasm: Uint8Array;
   candid: string;
   deploymentId: string;
+  persistenceMode?: NeutronPersistenceMode;
 }): KernelInstallCodeRequest {
   const { transportWasm } = prepareDeterministicWasmTransport(wasm);
   const request = installCodeRequestWithTransport({
     transportWasm,
     candid,
     deploymentId,
+    persistenceMode,
   });
   if (!installCodeRequestFitsIngress(request)) {
     throw installCodeIngressError(request);
@@ -4214,15 +4255,18 @@ function installCodeRequestWithTransport({
   transportWasm,
   candid,
   deploymentId,
+  persistenceMode,
 }: {
   transportWasm: Uint8Array;
   candid: string;
   deploymentId: string;
+  persistenceMode: NeutronPersistenceMode;
 }): KernelInstallCodeRequest {
   return {
     wasm: transportWasm,
     candid,
     deployment_id: deploymentId,
+    wasm_memory_persistence: candidWasmMemoryPersistence(persistenceMode),
   };
 }
 

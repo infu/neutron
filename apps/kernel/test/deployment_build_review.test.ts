@@ -305,7 +305,7 @@ function completeRecord(
       target_canister: TARGET_CANISTER,
       mode: "install",
       argument: { sha256: "4".repeat(64), bytes: 0 },
-      wasm_memory_persistence: "keep",
+      wasm_memory_persistence: "replace",
     },
     wasm: {
       raw: {

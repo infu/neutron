@@ -7,6 +7,7 @@ import {
   compile,
   extractImports,
   fixedBackendCallInstallReservationTargetPrincipals,
+  persistenceModeFromCompilerId,
   reachableMotokoFiles,
 } from "../src/compile.ts";
 import { assemble } from "../src/assemble.ts";
@@ -15,6 +16,7 @@ import type { NeutronBackendCallReservation } from "neutron-tools/src/capabiliti
 import {
   assertSupportedCertificateVersions,
   SUPPORTED_CERTIFICATE_VERSIONS_METADATA_V1,
+  wasmCustomSections,
   withSupportedCertificateVersions,
 } from "neutron-tools/src/wasm_metadata.js";
 import {
@@ -836,6 +838,56 @@ test("compile retains exact assembled source only for explicit qualification", a
       compilerId: result.compilerId,
       vetKeysEnvironment: "production",
     }),
+  );
+  expect(
+    wasmCustomSections(
+      result.wasm,
+      "icp:private enhanced-orthogonal-persistence",
+    ),
+  ).toHaveLength(0);
+});
+
+test("compiler binds enhanced persistence into the Wasm and compiler identity", async () => {
+  const entry = moduleHash("f");
+  const result = await compile({
+    configs: {
+      kernel: {
+        format: 3,
+        id: "kernel",
+        name: "Kernel",
+        version: 101,
+        entry,
+      },
+    },
+    persistenceMode: "enhanced",
+    mofiles: [
+      {
+        path: `${entry}.mo`,
+        content: `module {
+          public class Init() {
+            ${kernelCapabilityConfigurationMethod}
+            public func kernel_authorized_add(_caller : Principal) {};
+            public func is_authorized(_caller : Principal) : Bool { true };
+          };
+        }`,
+      },
+    ],
+  });
+
+  expect(result.persistenceMode).toBe("enhanced");
+  expect(result.compilerId).toStartWith("moc_enhanced_");
+  expect(persistenceModeFromCompilerId(result.compilerId)).toBe("enhanced");
+  expect(
+    wasmCustomSections(
+      result.wasm,
+      "icp:private enhanced-orthogonal-persistence",
+    ),
+  ).toHaveLength(1);
+  expect(persistenceModeFromCompilerId("moc_6921f895690abfd3")).toBe(
+    "enhanced",
+  );
+  expect(persistenceModeFromCompilerId("moc_b95fce3642e89f40")).toBe(
+    "classical",
   );
 });
 

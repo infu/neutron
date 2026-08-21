@@ -8,6 +8,8 @@
     "neutron-provision": "./src/index.ts"
   },
   "scripts": {
+    "bridge:classical": "bun src/classical_upgrade_cli.ts --persistence classical",
+    "bridge:persistence": "bun src/classical_upgrade_cli.ts",
     "provision": "bun src/index.ts",
     "test": "bun test"
   },

@@ -78,7 +78,7 @@ export function uninstallDeploymentRecordFixture({
         sha256: hashContent(new Uint8Array()),
         bytes: 0,
       },
-      wasm_memory_persistence: "keep",
+      wasm_memory_persistence: "replace",
     },
     wasm: wasmRecord,
   });

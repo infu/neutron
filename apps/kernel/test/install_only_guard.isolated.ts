@@ -110,6 +110,7 @@ mock.module(
 const actor = {
   kernel_runtime_info: async () => ({
     deployment_id: deploymentId,
+    compiler_id: "moc_classical_test",
     apps: [],
   }),
 };

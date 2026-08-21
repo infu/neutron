@@ -71,6 +71,10 @@ mock.module("neutron-motoko-wasm", () => ({
   disposeMotokoCompiler: async () => undefined,
 }));
 
+mock.module("neutron-compiler/src/compile.js", () => ({
+  persistenceModeFromCompilerId: () => "classical",
+}));
+
 mock.module("neutron-compiler/src/install.js", () => ({
   appDependencyImpact: () => ({ direct: [], transitive: [] }),
   assertPreparedPackageArchiveIdentity: (value: PreparedPackageInstall) => {
@@ -266,7 +270,7 @@ function createRuntime(
   return {
     deployment_id: deploymentId,
     assembler_id: "neutron-assembler/test",
-    compiler_id: "neutron-compiler/test",
+    compiler_id: "moc_classical_test",
     apps: [],
     memories: [],
   };
@@ -431,7 +435,7 @@ test("connection-provider compiler input drift is rejected before provenance sta
 
 test("same-deployment compiler identity drift is rejected before provenance staging", async () => {
   const { result } = await startReviewedInstall();
-  runtime = { ...runtime, compiler_id: "neutron-compiler/changed" };
+  runtime = { ...runtime, compiler_id: "moc_classical_changed" };
 
   appApprove();
   await expect(result).rejects.toThrow(/changed .*review|another tab/iu);

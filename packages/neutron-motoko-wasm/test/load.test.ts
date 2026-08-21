@@ -55,6 +55,7 @@ test("uses and disposes a dedicated browser compiler worker", async () => {
       browserCompilerBaseUrl: "/test-motoko",
       browserCompilerWorkerFactory: workerFactory,
     });
+    await first.configureClassicalCompactingGc();
     await first.write("main.mo", "actor {}");
     const compiled = await first.wasm("main.mo");
 
@@ -62,8 +63,14 @@ test("uses and disposes a dedicated browser compiler worker", async () => {
     expect(compiled.wasm).toEqual(new Uint8Array([0, 97, 115, 109]));
     expect(workers[0]?.methods).toEqual([
       "__version",
+      "gcFlags",
+      "gcFlags",
       "saveFile",
       "compileWasm",
+    ]);
+    expect(workers[0]?.requests.slice(1, 3).map(({ args }) => args)).toEqual([
+      ["classicOP"],
+      ["marking"],
     ]);
 
     await disposeMotokoCompiler();
@@ -78,6 +85,11 @@ test("uses and disposes a dedicated browser compiler worker", async () => {
       "/test-motoko/compiler-worker.js",
       "/test-motoko/compiler-worker.js",
     ]);
+    await second.configurePersistence("enhanced");
+    expect(workers[1]?.requests.slice(1, 3).map(({ args }) => args)).toEqual([
+      ["enhancedOP"],
+      ["incremental"],
+    ]);
     workers[1]?.blockedMethods.add("saveFile");
     const pendingWrite = second.write("cancelled.mo", "actor {}");
     await disposeMotokoCompiler();
@@ -90,6 +102,7 @@ test("uses and disposes a dedicated browser compiler worker", async () => {
 
 test("loads the vendored Wasm compiler and compiles a small actor", async () => {
   const mo = await loadMotoko();
+  await mo.configureClassicalCompactingGc();
   await mo.write("dependency.mo", "module { public let value : Nat32 = 4294967295 }");
   await mo.write(
     "main.mo",
@@ -106,6 +119,13 @@ test("loads the vendored Wasm compiler and compiles a small actor", async () => 
   expect(result.wasm.byteLength).toBe(result.wasm.buffer.byteLength);
   expect(result.candid).toContain("ping");
   expect(result.diagnostics.filter(({ code }) => code === "M0005")).toEqual([]);
+  const module = new WebAssembly.Module(result.wasm.slice().buffer);
+  expect(
+    WebAssembly.Module.customSections(
+      module,
+      "icp:private enhanced-orthogonal-persistence",
+    ),
+  ).toHaveLength(0);
 });
 
 test("interprets Motoko without invoking a host compiler", async () => {
@@ -148,11 +168,13 @@ class FakeCompilerWorker implements BrowserCompilerWorker {
   onmessageerror: ((event: MessageEvent<unknown>) => void) | null = null;
   blockedMethods = new Set<string>();
   methods: string[] = [];
+  requests: FakeCompilerRequest[] = [];
   terminated = false;
 
   postMessage(message: unknown): void {
     const request = message as FakeCompilerRequest;
     this.methods.push(request.method);
+    this.requests.push(request);
     if (this.blockedMethods.has(request.method)) return;
     queueMicrotask(() => {
       if (this.terminated) return;

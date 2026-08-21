@@ -285,6 +285,7 @@ function compileFixture(apps: AppRegistry): CompileResult {
     deploymentId: NEXT_DEPLOYMENT,
     deploymentNonce: "9".repeat(32),
     vetKeysEnvironment: "production",
+    persistenceMode: "classical",
     compilerId: "moc_fixture_next",
     modulePaths: [],
   };
@@ -372,7 +373,7 @@ function priorRecordFixture(
       target_canister: TARGET_CANISTER,
       mode: "upgrade",
       argument: { sha256: hashContent(new Uint8Array()), bytes: 0 },
-      wasm_memory_persistence: "keep",
+      wasm_memory_persistence: "replace",
     },
     wasm: wasmRecord,
   });

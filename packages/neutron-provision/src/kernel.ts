@@ -401,6 +401,10 @@ export const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
           candid: IDL.Text,
           deployment_id: IDL.Text,
           wasm: IDL.Vec(IDL.Nat8),
+          wasm_memory_persistence: IDL.Variant({
+            keep: IDL.Null,
+            replace: IDL.Null,
+          }),
         }),
       ],
       [IDL.Null],
@@ -428,6 +432,10 @@ export const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
           deployment_id: IDL.Text,
           chunk_hashes: IDL.Vec(IDL.Vec(IDL.Nat8)),
           wasm_module_hash: IDL.Vec(IDL.Nat8),
+          wasm_memory_persistence: IDL.Variant({
+            keep: IDL.Null,
+            replace: IDL.Null,
+          }),
         }),
       ],
       [IDL.Null],

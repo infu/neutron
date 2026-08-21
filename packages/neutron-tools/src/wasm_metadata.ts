@@ -136,7 +136,16 @@ export function assertSupportedCertificateVersionsMetadata(
 function supportedCertificateVersionSections(
   wasm: Uint8Array,
 ): Uint8Array[] {
+  return wasmCustomSections(wasm, SUPPORTED_CERTIFICATE_VERSIONS_SECTION_NAME);
+}
+
+/** Read a named custom section without asking the host to compile Memory64 Wasm. */
+export function wasmCustomSections(
+  wasm: Uint8Array,
+  name: string,
+): Uint8Array[] {
   assertWasmHeader(wasm);
+  const requestedName = textEncoder.encode(name);
 
   const values: Uint8Array[] = [];
   let offset = WASM_HEADER.length;
@@ -168,7 +177,7 @@ function supportedCertificateVersionSections(
       if (nameEnd > sectionEnd) {
         throw malformedWasm("custom section name extends past its section");
       }
-      if (bytesEqual(wasm.subarray(nameStart, nameEnd), sectionName)) {
+      if (bytesEqual(wasm.subarray(nameStart, nameEnd), requestedName)) {
         values.push(wasm.subarray(nameEnd, sectionEnd));
       }
     }

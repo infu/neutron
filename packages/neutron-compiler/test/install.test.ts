@@ -5704,6 +5704,7 @@ service : () -> InstallKernel
     deploymentId: "deploy00000000000000000000000000",
     deploymentNonce: null,
     vetKeysEnvironment: "production",
+    persistenceMode: "classical",
     compilerId: "moc_test",
     modulePaths: [
       ...new Set(packages.map(({ manifest }) => `${manifest.entry}.mo`)),

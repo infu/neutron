@@ -129,6 +129,28 @@ export type ManagementActor = {
     [{ canister_id: Principal }],
     Array<{ hash: Uint8Array }>
   >;
+  install_code: ActorMethod<
+    [
+      {
+        mode:
+          | { install: null }
+          | { reinstall: null }
+          | {
+              upgrade: CandidOpt<{
+                skip_pre_upgrade: CandidOpt<boolean>;
+                wasm_memory_persistence: CandidOpt<
+                  { keep: null } | { replace: null }
+                >;
+              }>;
+            };
+        canister_id: Principal;
+        wasm_module: Uint8Array;
+        arg: Uint8Array;
+        sender_canister_version: CandidOpt<bigint>;
+      },
+    ],
+    undefined
+  >;
   install_chunked_code: ActorMethod<
     [
       {
@@ -438,6 +460,19 @@ export const managementIdl: IDL.InterfaceFactory = ({ IDL }) => {
     stored_chunks: IDL.Func(
       [IDL.Record({ canister_id: IDL.Principal })],
       [IDL.Vec(chunkHash)],
+      [],
+    ),
+    install_code: IDL.Func(
+      [
+        IDL.Record({
+          mode: installMode,
+          canister_id: IDL.Principal,
+          wasm_module: IDL.Vec(IDL.Nat8),
+          arg: IDL.Vec(IDL.Nat8),
+          sender_canister_version: IDL.Opt(IDL.Nat64),
+        }),
+      ],
+      [],
       [],
     ),
     install_chunked_code: IDL.Func(

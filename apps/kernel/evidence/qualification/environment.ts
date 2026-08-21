@@ -834,7 +834,7 @@ class IsolatedQualificationPocketIcImpl
             : {
                 upgrade: [{
                   skip_pre_upgrade: [],
-                  wasm_memory_persistence: [{ keep: null }],
+                  wasm_memory_persistence: [{ replace: null }],
                 }],
               },
       target_canister: canister,

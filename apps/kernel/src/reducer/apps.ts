@@ -29,6 +29,7 @@ import {
   type KernelPackageState,
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
+import { persistenceModeFromCompilerId } from "neutron-compiler/src/compile.js";
 import {
   parseDeploymentBuildRecord,
   type CompleteDeploymentBuildRecord,
@@ -848,7 +849,9 @@ async function readConsistentAppRegistry(
   for (let attempt = 0; attempt < 3; attempt += 1) {
     let pendingBefore: PendingInstallJournalError | null = null;
     try {
-      await ensureInstallJournalSettled(neutron);
+      await ensureInstallJournalSettled(neutron, {
+        timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
+      });
     } catch (error) {
       if (!(error instanceof PendingInstallJournalError)) throw error;
       pendingBefore = error;
@@ -863,15 +866,20 @@ async function readConsistentAppRegistry(
       readInstallProvenance(),
     ]);
     const after = await neutron.kernel_runtime_info();
-    let pendingAfter: PendingInstallJournalError | null = null;
-    try {
-      const trailingRecovery = await ensureInstallJournalSettled(neutron);
-      if (trailingRecovery === "committed") continue;
-    } catch (error) {
-      if (!(error instanceof PendingInstallJournalError)) throw error;
-      pendingAfter = error;
+    let pendingAfter = pendingBefore;
+    let finalRuntime = after;
+    if (pendingBefore === null) {
+      try {
+        const trailingRecovery = await ensureInstallJournalSettled(neutron, {
+          timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
+        });
+        if (trailingRecovery === "committed") continue;
+      } catch (error) {
+        if (!(error instanceof PendingInstallJournalError)) throw error;
+        pendingAfter = error;
+      }
+      finalRuntime = await neutron.kernel_runtime_info();
     }
-    const finalRuntime = await neutron.kernel_runtime_info();
     if (
       before.deployment_id !== after.deployment_id ||
       after.deployment_id !== finalRuntime.deployment_id
@@ -935,7 +943,9 @@ async function setCommittedAppsFromRuntime(
   // authority until the independently queried journal is absent on both sides
   // of the read.
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await ensureInstallJournalSettled(neutron);
+    await ensureInstallJournalSettled(neutron, {
+      timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
+    });
     const runtime = await neutron.kernel_runtime_info();
     const trailing = await ensureInstallJournalSettled(neutron);
     if (trailing === "committed") continue;
@@ -1041,6 +1051,9 @@ export async function compile_app({
     preparedPackage,
     deploymentNonce: createDeploymentNonce(),
     vetKeysEnvironment: runtimeCompilerEnvironment(),
+    persistenceMode: persistenceModeFromCompilerId(
+      baseline.runtime.compiler_id,
+    ),
   });
   const deployment = await prepareBrowserDeployment({
     targetCanisterId: getRuntimeDeployment().canisterId,
@@ -1089,14 +1102,18 @@ async function readConsistentManualInstallBaseline(
   neutron: Awaited<ReturnType<typeof getNeutronCan>>,
 ): Promise<ManualInstallBaseline> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await ensureInstallJournalSettled(neutron);
+    await ensureInstallJournalSettled(neutron, {
+      timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
+    });
     const before = await neutron.kernel_runtime_info();
     const [state, provenanceSnapshot] = await Promise.all([
       readCurrentKernelPackageState(neutron),
       readManualInstallProvenanceSnapshot(),
     ]);
     const after = await neutron.kernel_runtime_info();
-    const trailingRecovery = await ensureInstallJournalSettled(neutron);
+    const trailingRecovery = await ensureInstallJournalSettled(neutron, {
+      timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
+    });
     if (trailingRecovery === "committed") continue;
     if (before.deployment_id === after.deployment_id) {
       assertKernelPackageBaselineMatchesRuntime(state, after);
@@ -1128,13 +1145,19 @@ async function readConsistentManualInstallBaseline(
 
 async function ensureInstallJournalSettled(
   neutron: Awaited<ReturnType<typeof getNeutronCan>>,
+  options?: { timeoutMs?: number },
 ): Promise<"none" | "committed"> {
-  const recovery = await recoverPendingInstall(neutron);
+  const recovery = await recoverPendingInstall(neutron, options);
   if (recovery.status === "pending") {
     throw new PendingInstallJournalError(recovery.deploymentId);
   }
   return recovery.status === "committed" ? "committed" : "none";
 }
+
+// Registry loading is passive: probe an already-activated target once, then
+// show the committed apps and the recovery banner instead of polling in the
+// background. The active deploy and explicit Retry paths retain the full wait.
+const PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS = 10;
 
 class PendingInstallJournalError extends Error {
   constructor(readonly deploymentId: string) {
@@ -1637,6 +1660,9 @@ export async function beginPackageInstallSession({
             connectionProviderSupport: state.connectionProviderSupport,
             deploymentNonce: createDeploymentNonce(),
             vetKeysEnvironment: runtimeCompilerEnvironment(),
+            persistenceMode: persistenceModeFromCompilerId(
+              runtime.compiler_id,
+            ),
           });
           const deployment = await prepareBrowserDeployment({
             targetCanisterId: getRuntimeDeployment().canisterId,
@@ -1901,14 +1927,18 @@ async function readConsistentRepositoryPackageState(
   provenance: InstallProvenance;
 }> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await ensureInstallJournalSettled(neutron);
+    await ensureInstallJournalSettled(neutron, {
+      timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
+    });
     const before = await neutron.kernel_runtime_info();
     const [state, provenance] = await Promise.all([
       readCurrentKernelPackageState(neutron),
       readInstallProvenance(),
     ]);
     const after = await neutron.kernel_runtime_info();
-    const trailingRecovery = await ensureInstallJournalSettled(neutron);
+    const trailingRecovery = await ensureInstallJournalSettled(neutron, {
+      timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
+    });
     if (trailingRecovery === "committed") continue;
     if (before.deployment_id === after.deployment_id) {
       assertKernelPackageBaselineMatchesRuntime(state, after);
@@ -2041,6 +2071,7 @@ async function uninstallAppInternal(
       appId,
       deploymentNonce: createDeploymentNonce(),
       vetKeysEnvironment: runtimeCompilerEnvironment(),
+      persistenceMode: persistenceModeFromCompilerId(runtime.compiler_id),
     });
     const app = state.apps[appId];
     if (!app) {

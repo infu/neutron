@@ -634,7 +634,7 @@ function deploymentBuildReview(
       target_canister: SOURCE,
       mode: "upgrade",
       argument: { sha256: hashContent(new Uint8Array()), bytes: 0 },
-      wasm_memory_persistence: "keep",
+      wasm_memory_persistence: "replace",
     },
     wasm: {
       raw: {

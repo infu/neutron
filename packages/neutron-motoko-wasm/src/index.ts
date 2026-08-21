@@ -54,6 +54,7 @@ type RawCompilerMethod =
   | "readFile"
   | "readDir"
   | "setProjectRoot"
+  | "gcFlags"
   | "addPackage"
   | "clearPackage"
   | "compileWasm"
@@ -70,6 +71,8 @@ export type Motoko = {
   delete(path: string): Promise<void>;
   list(directory: string): Promise<string[]>;
   setProjectRoot(path: string): Promise<void>;
+  configurePersistence(mode: MotokoPersistenceMode): Promise<void>;
+  configureClassicalCompactingGc(): Promise<void>;
   addPackage(name: string, directory: string): Promise<void>;
   clearPackages(): Promise<void>;
   parseMotoko(content: string, enableRecovery?: boolean): Promise<Node>;
@@ -81,6 +84,8 @@ export type Motoko = {
     nextSignature: string,
   ): Promise<StableCompatibilityResult>;
 };
+
+export type MotokoPersistenceMode = "classical" | "enhanced";
 
 export type BrowserCompilerWorker = {
   onmessage: ((event: MessageEvent<unknown>) => void) | null;
@@ -384,6 +389,22 @@ function wrapAsyncCompiler(raw: {
     },
     async setProjectRoot(path) {
       await invoke("setProjectRoot", false, [path]);
+    },
+    async configurePersistence(mode) {
+      if (mode === "classical") {
+        await invoke("gcFlags", false, ["classicOP"]);
+        await invoke("gcFlags", false, ["marking"]);
+        return;
+      }
+      if (mode === "enhanced") {
+        await invoke("gcFlags", false, ["enhancedOP"]);
+        await invoke("gcFlags", false, ["incremental"]);
+        return;
+      }
+      throw new Error(`Unsupported Motoko persistence mode ${String(mode)}`);
+    },
+    async configureClassicalCompactingGc() {
+      await this.configurePersistence("classical");
     },
     async addPackage(name, directory) {
       await invoke("addPackage", false, [name, directory]);

@@ -11,6 +11,11 @@ if (import.meta.main) {
 
 export { main } from "./cli.ts";
 export { runAdopt } from "./adopt.ts";
+export {
+  controllerClassicalUpgradeActor,
+  controllerPersistenceUpgradeActor,
+  type ControllerUpgradePersistence,
+} from "./classical_upgrade.ts";
 export * from "./deployed_kernel_observation.ts";
 export * from "./deployment_evidence.ts";
 export * from "./ic_registry_evidence.ts";
