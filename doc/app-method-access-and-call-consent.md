@@ -89,15 +89,38 @@ surplus is refunded.
 
 ## Why App Frames Use The Kernel
 
-Third-party tiles run in credentialless sandboxed iframes. A background uses
-the compiled opaque, credentialless-ephemeral dedicated, or persistent
-dedicated mode specified in
-[Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
-None receives the kernel origin or can read the kernel frontend's Internet
-Identity credentials.
+Third-party surfaces never receive the Kernel origin. Under the exact v26
+runtime, an ordinary package is eligible for originful surfaces only after a
+selected package proves readiness with the packer-owned
+`.neutron/browser-surface-origins.v1.json` marker or the inherently new
+`browser_permissions` declaration and the checked install transaction records
+the app in the certified surface-origin sidecar. The Kernel combines the app
+installation's browser nonce with each surface key to derive a separate exact
+origin for each tile ID, tray, and ordinary background. Those surfaces use
+credentialless `sandbox="allow-scripts allow-same-origin"` frames; instances
+of the same tile ID intentionally share that tile's origin.
 
-Therefore an app frame normally asks the kernel over the source-bound message
-bus to perform a call. The kernel:
+Historical packages without readiness evidence, the v25 upgrade bridge, and
+the unsupported-browser fallback retain the released credentialless opaque
+frame policy: `sandbox="allow-scripts"` and `origin: "null"`. Dedicated
+backgrounds continue to use the compiled opaque, credentialless-ephemeral, or
+persistent mode specified in
+[Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
+No mode gives app script the Kernel's origin or access to the Kernel
+frontend's Internet Identity credentials.
+
+Browser-feature delegation is separate from frontend call consent. It is
+denied by default. An app can declare only the closed V1 `camera` and
+`microphone` features for exact tile IDs in `browser_permissions`; the normal
+install or update review displays that request. Once accepted, the Kernel
+intersects the Host-bound child policy with the exact iframe `allow` policy,
+and the tile calls browser APIs such as `getUserMedia()` directly. The browser
+or operating system may still prompt or deny access. No media session, lease,
+or per-use call passes through the Kernel backend, and V1 delegates neither
+feature to tray or background surfaces.
+
+When an app frame needs the authenticated owner identity for a canister call,
+it asks the Kernel over the source-bound message bus. The Kernel:
 
 1. Derives the requesting app and endpoint from the registered frame or private
    `MessagePort`.

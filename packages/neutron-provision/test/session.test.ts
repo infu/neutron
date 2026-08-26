@@ -4,7 +4,10 @@ import { chmod, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { SUPPORTED_CERTIFICATE_VERSIONS_METADATA_V1 } from "neutron-tools/src/wasm_metadata.js";
-import { ASSEMBLER_ID } from "neutron-compiler/src/assemble.js";
+import {
+  ASSEMBLER_ID,
+  LEGACY_V25_ASSEMBLER_ID,
+} from "neutron-compiler/src/assemble.js";
 import { MAX_PACKAGE_ARCHIVES } from "../src/artifact.ts";
 import {
   createDeploymentEvidenceV1,
@@ -324,7 +327,23 @@ describe("provision journal integrity and schema compatibility", () => {
     );
     await writeRaw(sessionPath, obsoleteAssembler);
     await expect(readSession(sessionPath)).rejects.toThrow(
-      `runtime.assemblerId must be the current ${ASSEMBLER_ID}`,
+      `runtime.assemblerId must be ${ASSEMBLER_ID} or its exact ${LEGACY_V25_ASSEMBLER_ID} predecessor`,
+    );
+  });
+
+  test("preserves a durable exact-v25 adoption receipt", async () => {
+    const root = await temporaryRoot(roots);
+    const sessionPath = path.join(root, "config.ndeploy.session.json");
+    const journal = validAdoptionJournal();
+    journal.adoption!.runtime.assemblerId = LEGACY_V25_ASSEMBLER_ID;
+    journal.adoption!.fingerprint = adoptionReceiptFingerprint(
+      journal.adoption!,
+    );
+    await persistEvidenceArtifacts(sessionPath);
+    await writeSession(sessionPath, journal, NOW);
+
+    expect((await readSession(sessionPath))?.adoption?.runtime.assemblerId).toBe(
+      LEGACY_V25_ASSEMBLER_ID,
     );
   });
 

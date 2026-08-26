@@ -61,6 +61,11 @@ initial.configure([
     registration(scope, planA, #backend_calls, "default", backendAuthority),
     registration(scope, planA, #scheduled_tasks, "sync", taskAuthority),
 ]);
+assert (initial.authorityRevision() == 0);
+initial.advanceAuthorityRevision();
+assert (initial.authorityRevision() == 1);
+initial.advanceAuthorityRevision();
+assert (initial.authorityRevision() == 2);
 
 // Transient configuration is not authority before commit reconciliation.
 assert (not initial.allowed(scope, #backend_calls, "default"));

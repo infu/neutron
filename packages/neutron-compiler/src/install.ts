@@ -2,6 +2,7 @@ import { gzipSync } from "fflate";
 import { isValidAppId } from "neutron-tools/src/app_ids.js";
 import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import { hashContent } from "neutron-tools/src/hash.js";
+import { isValidTileId } from "neutron-tools/src/tile_ids.js";
 import { assertNeutronManifest } from "neutron-tools/src/memory.js";
 import {
   LOCAL_SYMBOL_MAX_LENGTH,
@@ -60,6 +61,10 @@ import {
   type NeutronPackageRecordV1,
 } from "neutron-tools/src/package_record.js";
 import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  parseBrowserSurfaceOriginsPackageMarker,
+} from "neutron-tools/src/package_surface_origins.js";
+import {
   encodeKernelRuntimeConfig,
   KERNEL_RUNTIME_CONFIG_PATH,
   type KernelRuntimeConfig,
@@ -80,7 +85,12 @@ import {
 } from "./compile.ts";
 import {
   ASSEMBLER_ID,
+  assemblerForFreshKernelVersion,
+  assertAssemblerSupportsBrowserPermissions,
+  BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID,
+  LEGACY_V25_ASSEMBLER_ID,
   NEUTRON_INSTALLED_APP_LIMIT,
+  normalizeBrowserSurfaceOriginAppIds,
   type VetKeysEnvironment,
 } from "./assemble.ts";
 import type { TrustedInstallationContextV1 } from "./installation_context.ts";
@@ -101,6 +111,7 @@ import {
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
   assertSafeArchivePath,
   decodeNeutronPackageArchive,
+  isCanonicalAbsoluteInstallTarget,
   type NeutronPackageDecodeLimits,
   type NeutronPackageDecodeOptions,
 } from "./package_decoder.ts";
@@ -148,6 +159,11 @@ const RESERVED_APP_IDS = new Set(["__proto__", "constructor", "prototype"]);
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 /** Must match backend/install/Service.mo's fixed journal validation ceiling. */
 export const KERNEL_INSTALL_MAX_COPIES = 4_000;
+// One unit is one browser-facing file projected onto one ordinary surface.
+// Each unit expands to at most ten Host+destination response owners. Keeping
+// this actor-wide install input bounded prevents a valid package shape from
+// exhausting the certified forest during its atomic copy transaction.
+export const KERNEL_BROWSER_SURFACE_CERTIFICATION_UNITS_MAX = 1_024;
 const KERNEL_INSTALL_STAGED_WRITE_CONCURRENCY = 10;
 /** Must match backend/install/Limits.mo's atomic asset-clear ceiling. */
 export const KERNEL_INSTALL_MAX_CLEAR_PREFIXES_PER_COMMIT = 128;
@@ -165,6 +181,8 @@ export const DEFAULT_DEPLOYMENT_ACTIVATION_TIMEOUT_MS = 10 * 60_000;
 const REMOVED_PACKAGE_BUILD_METADATA_PATH = ".neutron-build.json";
 export const KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH =
   "/pkg/connection-providers.json";
+export const BROWSER_SURFACE_ORIGINS_PATH =
+  "/system/browser-surface-origins.json";
 export const KERNEL_CONNECTION_PROVIDER_SUPPORT_ARCHIVE_PATH =
   "connection-providers.json";
 
@@ -184,6 +202,12 @@ export type PackageArchiveIdentity = Readonly<{
 
 export type PreparedPackageInstall = {
   manifest: PackagedNeutronManifest;
+  /**
+   * Package generation proved this ordinary app is safe on v26 origins.
+   * Always present on authenticated preparation results; optional only to
+   * keep review-only structural consumers source-compatible.
+   */
+  browserSurfaceOriginsReady?: boolean;
   /** Present only when the archive supplied a verified v1 legal record. */
   packageRecord?: NeutronPackageRecordV1;
   /**
@@ -219,6 +243,7 @@ type PreparedDeploymentBuildRecordSeal = Readonly<{
   recordBytes: Uint8Array;
   candid: string;
   stable: string;
+  browserSurfaceOriginAppIds: readonly string[];
 }>;
 
 // Retained-package identities and compiler companion artifacts cannot be
@@ -457,6 +482,7 @@ export type KernelRuntimeInfo = {
   deployment_id: string;
   assembler_id: string;
   compiler_id: string;
+  capability_authority_revision?: [] | [bigint | number];
   apps: AppInstance[];
   memories: {
     id: string;
@@ -505,6 +531,9 @@ export type InstallStagedAsset = {
 export type PackageCompileInput = {
   existingModules: MotokoFile[];
   existingConfigs: CompileConfig;
+  existingApps: AppRegistry;
+  /** Checked sidecar IDs whose retained adoption authority is preserved. */
+  existingBrowserSurfaceOriginAppIds: readonly string[];
   existingStable?: string | null;
   connectionProviderSupport?: ConnectionProviderSupportCatalog;
   preparedPackage: PreparedPackageInstall;
@@ -520,7 +549,9 @@ export type AppVersionTransitionPolicy =
 
 export type PackageInstallAssets = {
   apps: AppRegistry;
+  browserSurfaceOriginAppIds: string[];
   appRegistryAsset: StaticFileOperation;
+  browserSurfaceOriginsAsset: StaticFileOperation;
   candidAsset: StaticFileOperation;
 };
 
@@ -541,6 +572,7 @@ export type DeployPreparedPackagesInput = {
   packages: PreparedPackageInstall[];
   compiled: CompileResult;
   existingApps: AppRegistry;
+  existingBrowserSurfaceOriginAppIds: readonly string[];
   /** Module paths observed in the checked pre-deployment baseline. */
   previousModulePaths?: readonly string[];
   removedApps?: string[];
@@ -561,7 +593,11 @@ export type DeployPreparedPackagesInput = {
 
 export type CompileAndDeployPackagesInput = Omit<
   DeployPreparedPackagesInput,
-  "compiled" | "existingApps" | "removedApps" | "deploymentBuildRecord"
+  | "compiled"
+  | "existingApps"
+  | "existingBrowserSurfaceOriginAppIds"
+  | "removedApps"
+  | "deploymentBuildRecord"
 > & {
   state: KernelPackageState;
   vetKeysEnvironment?: VetKeysEnvironment;
@@ -596,6 +632,9 @@ export type CompilePackagesInput = {
   packages: PreparedPackageInstall[];
   existingModules?: MotokoFile[];
   existingConfigs?: CompileConfig;
+  existingApps: AppRegistry;
+  /** Checked sidecar IDs whose retained adoption authority is preserved. */
+  existingBrowserSurfaceOriginAppIds: readonly string[];
   existingStable?: string | null;
   connectionProviderSupport?: ConnectionProviderSupportCatalog;
   deploymentNonce?: string;
@@ -606,6 +645,15 @@ export type CompilePackagesInput = {
   /** Offline qualification-only binding to the exact assembled actor source. */
   includeGeneratedSource?: boolean;
   versionPolicy?: AppVersionTransitionPolicy;
+};
+
+export type FreshCompilePackagesInput = {
+  packages: PreparedPackageInstall[];
+  deploymentNonce?: string;
+  vetKeysEnvironment?: VetKeysEnvironment;
+  persistenceMode?: NeutronPersistenceMode;
+  freshInstallationContext?: TrustedInstallationContextV1;
+  includeGeneratedSource?: boolean;
 };
 
 type RandomByteSource = {
@@ -628,6 +676,10 @@ export type KernelPackageState = {
   registry: AppRegistry;
   /** The same strict registry; retained as the deployment-facing field. */
   apps: AppRegistry;
+  /** Strict canonical contents of the v26 browser-origin authority sidecar. */
+  browserSurfaceOriginAppIds: string[];
+  /** Whether the v26 authority sidecar exists, distinct from an empty list. */
+  browserSurfaceOriginsSidecarPresent: boolean;
   existingConfigs: CompileConfig;
   existingModules: MotokoFile[];
   previousStable: string | null;
@@ -638,7 +690,6 @@ export type KernelPackageStateReader = {
   listStatic(prefix: string): Promise<string[]>;
   fetchText(path: string): Promise<string>;
   fetchJson<T>(path: string, fallback: T): Promise<T>;
-  apps?: AppRegistry;
 };
 
 export function unpackNeutronPackage(
@@ -758,6 +809,22 @@ export function preparePackageInstall(
     );
   }
   const manifest = readPackageManifest(unpacked);
+  const isKernel = manifest.id === "kernel";
+  const hasBrowserSurfaceOriginsMarker =
+    parseBrowserSurfaceOriginsPackageMarker(
+      Object.hasOwn(unpacked, NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH)
+        ? unpacked[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]
+        : undefined,
+    );
+  if (isKernel && hasBrowserSurfaceOriginsMarker) {
+    throw new Error(
+      `${NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH} is reserved for ordinary app packages`,
+    );
+  }
+  const browserSurfaceOriginsReady =
+    !isKernel &&
+    (hasBrowserSurfaceOriginsMarker ||
+      manifest.capabilities?.browser_permissions !== undefined);
   if (options.expectedIdentity) {
     if (manifest.id !== options.expectedIdentity.id) {
       throw new Error(
@@ -838,7 +905,6 @@ export function preparePackageInstall(
       );
     }
   }
-  const isKernel = manifest.id === "kernel";
   const connectionProviderSupport = isKernel
     ? readKernelConnectionProviderSupport(unpacked)
     : undefined;
@@ -872,6 +938,7 @@ export function preparePackageInstall(
   const capabilityPlan = toCapabilityPlanWireV1(buildCapabilityPlan(manifest));
   const prepared: PreparedPackageInstall = {
     manifest,
+    browserSurfaceOriginsReady,
     capabilityPlan,
     capabilityPlanFingerprint: fingerprintCapabilityPlanWireV1(capabilityPlan),
     files,
@@ -994,10 +1061,20 @@ export function preparePackageFiles(
     if (
       appPrefix !== "" &&
       (packagePath === "web/_route" ||
-        packagePath.startsWith("web/_route/"))
+        packagePath.startsWith("web/_route/") ||
+        packagePath === "web/pkg" ||
+        packagePath.startsWith("web/pkg/"))
     ) {
       throw new Error(
-        `Package path ${packagePath} is reserved for shared app routes`,
+        `Package path ${packagePath} is reserved for Kernel-owned app metadata`,
+      );
+    }
+    if (
+      appPrefix === "" &&
+      (packagePath === "web/app" || packagePath.startsWith("web/app/"))
+    ) {
+      throw new Error(
+        `Kernel package path ${packagePath} cannot write an app asset subtree`,
       );
     }
 
@@ -1071,6 +1148,27 @@ function isSharedAppRouteStaticTarget(path: string): boolean {
   return match !== null && isValidAppId(match[1]);
 }
 
+function preparedPackageBrowserSurfaceOriginsReady(
+  preparedPackage: PreparedPackageInstall,
+): boolean {
+  const marker = preparedPackage.files.find(
+    ({ path }) =>
+      path ===
+      `${preparedPackage.appPrefix}pkg/${NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH}`,
+  );
+  const hasMarker = parseBrowserSurfaceOriginsPackageMarker(marker?.content);
+  if (preparedPackage.isKernel && hasMarker) {
+    throw new Error(
+      `${NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH} is reserved for ordinary app packages`,
+    );
+  }
+  return (
+    !preparedPackage.isKernel &&
+    (hasMarker ||
+      preparedPackage.manifest.capabilities?.browser_permissions !== undefined)
+  );
+}
+
 export function motokoFilesFromPreparedFiles(
   files: PreparedPackageFile[],
   moPrefix = "mo/",
@@ -1099,6 +1197,38 @@ export function assertPreparedPackageBatch(
   for (const preparedPackage of packages) {
     assertPreparedPackageArchiveIdentity(preparedPackage);
     const appId = preparedPackage.manifest.id;
+    const isKernel = appId === "kernel";
+    const expectedAppPrefix = isKernel ? "" : `app/${appId}/`;
+    if (preparedPackage.isKernel !== isKernel) {
+      throw new Error(`Prepared package ${appId} has inconsistent Kernel identity`);
+    }
+    if (preparedPackage.appPrefix !== expectedAppPrefix) {
+      throw new Error(
+        `Prepared package ${appId} has invalid app prefix ${preparedPackage.appPrefix}`,
+      );
+    }
+    const expectedCapabilityPlan = toCapabilityPlanWireV1(
+      buildCapabilityPlan(preparedPackage.manifest),
+    );
+    if (
+      !sameJsonValue(preparedPackage.capabilityPlan, expectedCapabilityPlan) ||
+      preparedPackage.capabilityPlanFingerprint !==
+        fingerprintCapabilityPlanWireV1(expectedCapabilityPlan)
+    ) {
+      throw new Error(
+        `Prepared package ${appId} capability plan does not match its manifest`,
+      );
+    }
+    const expectedBrowserSurfaceOriginsReady =
+      preparedPackageBrowserSurfaceOriginsReady(preparedPackage);
+    if (
+      preparedPackage.browserSurfaceOriginsReady !==
+      expectedBrowserSurfaceOriginsReady
+    ) {
+      throw new Error(
+        `Prepared package ${appId} browser-surface origin readiness does not match its package metadata`,
+      );
+    }
     if (appIds.has(appId)) {
       throw new Error(`Duplicate prepared app id ${appId}`);
     }
@@ -1106,6 +1236,14 @@ export function assertPreparedPackageBatch(
 
     for (const file of preparedPackage.files) {
       assertSafePreparedFilePath(file.path);
+      if (
+        appId === "kernel" &&
+        (file.path === "app" || file.path.startsWith("app/"))
+      ) {
+        throw new Error(
+          `Prepared Kernel package path ${file.path} cannot write an app asset subtree`,
+        );
+      }
       if (appId !== "kernel" && isSharedAppRouteStaticTarget(file.path)) {
         throw new Error(
           `Prepared package path ${file.path} is reserved for shared app routes`,
@@ -1134,8 +1272,20 @@ export function assertPreparedPackageBatch(
         );
         continue;
       }
+      if (appId !== "kernel" && !file.path.startsWith(expectedAppPrefix)) {
+        throw new Error(
+          `Prepared package ${appId} path ${file.path} is outside ${expectedAppPrefix}`,
+        );
+      }
 
       const target = staticKey(file.path);
+      if (
+        appId === "kernel" &&
+        (target === "/system/apps.json" ||
+          target === BROWSER_SURFACE_ORIGINS_PATH)
+      ) {
+        throw new Error(`Reserved package asset target ${target}`);
+      }
       const previous = mutableTargets.get(target);
       if (previous) {
         throw new Error(
@@ -1143,6 +1293,52 @@ export function assertPreparedPackageBatch(
         );
       }
       mutableTargets.set(target, appId);
+    }
+  }
+}
+
+/**
+ * Apply the certification fanout ceiling only once the target assembler and
+ * exact v26 adoption set are known. Pre-v26 actors create no installation
+ * surface response variants, so applying this during archive preparation
+ * would reject packages that remain valid on the released v25 path.
+ */
+export function assertPreparedPackageBrowserSurfaceFanout(
+  packages: PreparedPackageInstall[],
+  assemblerId: typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID,
+  browserSurfaceOriginAppIds: readonly string[],
+): void {
+  assertPreparedPackageBatch(packages);
+  if (assemblerId === LEGACY_V25_ASSEMBLER_ID) return;
+  if (assemblerId !== BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID) {
+    throw new Error(`Unsupported assembler ${assemblerId}`);
+  }
+
+  const adopted = new Set(browserSurfaceOriginAppIds);
+  let units = 0;
+  for (const preparedPackage of packages) {
+    const appId = preparedPackage.manifest.id;
+    if (appId === "kernel" || !adopted.has(appId)) continue;
+    const ordinarySurfaces =
+      (preparedPackage.manifest.tiles?.length ?? 0) +
+      (preparedPackage.manifest.tray ? 1 : 0) +
+      (preparedPackage.manifest.background &&
+      residentFrameSecurity(preparedPackage.capabilityPlan) ===
+        "credentialless_opaque_v1"
+        ? 1
+        : 0);
+    const packagePrefix = `${preparedPackage.appPrefix}pkg/`;
+    const browserAssets = preparedPackage.files.filter(
+      ({ path }) =>
+        path.startsWith(preparedPackage.appPrefix) &&
+        !path.startsWith(packagePrefix),
+    ).length;
+    units += ordinarySurfaces * browserAssets;
+    if (units > KERNEL_BROWSER_SURFACE_CERTIFICATION_UNITS_MAX) {
+      throw new Error(
+        `Selected packages require ${units} browser-surface certification units; ` +
+          `kernel limit is ${KERNEL_BROWSER_SURFACE_CERTIFICATION_UNITS_MAX}`,
+      );
     }
   }
 }
@@ -1239,6 +1435,8 @@ function preparedPackageStateSha256(
       capability_plan: preparedPackage.capabilityPlan,
       capability_plan_fingerprint:
         preparedPackage.capabilityPlanFingerprint,
+      browser_surface_origins_ready:
+        preparedPackage.browserSurfaceOriginsReady,
       files,
       app_prefix: preparedPackage.appPrefix,
       is_kernel: preparedPackage.isKernel,
@@ -1309,6 +1507,8 @@ function uniquePreparedModuleFiles(
 export function buildPackageCompileInput({
   existingModules,
   existingConfigs,
+  existingApps,
+  existingBrowserSurfaceOriginAppIds,
   existingStable,
   connectionProviderSupport: baselineConnectionProviderSupport,
   preparedPackage,
@@ -1323,6 +1523,12 @@ export function buildPackageCompileInput({
     ...existingConfigs,
     [preparedPackage.manifest.id]: preparedPackage.manifest,
   };
+  const browserSurfaceOriginAppIds = compileBrowserSurfaceOriginAppIds({
+    configs,
+    packages: [preparedPackage],
+    existingApps,
+    existingBrowserSurfaceOriginAppIds,
+  });
   const connectionProviderSupport = selectedConnectionProviderSupport(
     [preparedPackage],
     baselineConnectionProviderSupport,
@@ -1336,6 +1542,7 @@ export function buildPackageCompileInput({
       motokoFilesFromPreparedFiles(preparedPackage.files),
     ),
     configs,
+    browserSurfaceOriginAppIds,
     previousConfigs: existingConfigs,
     previousStable: existingStable ?? null,
     ...(connectionProviderSupport ? { connectionProviderSupport } : {}),
@@ -1348,14 +1555,22 @@ export function buildPackageCompileInput({
 export async function compilePackageInstall(
   input: PackageCompileInput,
 ): Promise<CompileResult> {
+  const compileInput = buildPackageCompileInput(input);
+  assertPreparedPackageBrowserSurfaceFanout(
+    [input.preparedPackage],
+    ASSEMBLER_ID,
+    compileInput.browserSurfaceOriginAppIds ?? [],
+  );
   const { compile } = await import("./compile.ts");
-  return compile(buildPackageCompileInput(input));
+  return compile(compileInput);
 }
 
 export function buildPackagesCompileInput({
   packages,
   existingModules = [],
   existingConfigs = {},
+  existingApps,
+  existingBrowserSurfaceOriginAppIds,
   existingStable = null,
   connectionProviderSupport: baselineConnectionProviderSupport,
   deploymentNonce,
@@ -1384,10 +1599,17 @@ export function buildPackagesCompileInput({
   assertCompileConnectionProviderSupport(configs, connectionProviderSupport);
   assertStableStoreSchemaTransitions(existingConfigs, configs);
   assertCertifiedAssetsTransitions(existingConfigs, configs);
+  const browserSurfaceOriginAppIds = compileBrowserSurfaceOriginAppIds({
+    configs,
+    packages,
+    existingApps,
+    existingBrowserSurfaceOriginAppIds,
+  });
 
   return {
     mofiles,
     configs,
+    browserSurfaceOriginAppIds,
     previousConfigs: existingConfigs,
     previousStable: existingStable,
     ...(connectionProviderSupport ? { connectionProviderSupport } : {}),
@@ -1399,6 +1621,82 @@ export function buildPackagesCompileInput({
       : {}),
     ...(includeGeneratedSource ? { includeGeneratedSource: true } : {}),
   };
+}
+
+function compileBrowserSurfaceOriginAppIds({
+  configs,
+  packages,
+  existingApps,
+  existingBrowserSurfaceOriginAppIds,
+}: {
+  configs: CompileConfig;
+  packages: readonly PreparedPackageInstall[];
+  existingApps: AppRegistry;
+  existingBrowserSurfaceOriginAppIds: readonly string[];
+}): string[] {
+  const priorApps = normalizeAppRegistry(existingApps);
+  const priorBrowserSurfaceOriginAppIds =
+    normalizeBrowserSurfaceOriginAppIds(
+      existingBrowserSurfaceOriginAppIds,
+      Object.keys(priorApps),
+    );
+  return deriveBrowserSurfaceOriginAppIds({
+    existingBrowserSurfaceOriginAppIds: priorBrowserSurfaceOriginAppIds,
+    selectedAppIds: selectedBrowserSurfaceOriginAppIds(packages),
+    targetAppIds: Object.keys(configs),
+  });
+}
+
+function selectedBrowserSurfaceOriginAppIds(
+  packages: readonly PreparedPackageInstall[],
+): string[] {
+  return packages
+    .filter(({ browserSurfaceOriginsReady }) =>
+      browserSurfaceOriginsReady === true
+    )
+    .map(({ manifest }) => manifest.id);
+}
+
+/**
+ * Derive the exact fresh-deployment origin cohort from authenticated package
+ * preparation. V25 remains empty; v26 adopts only selected ordinary packages
+ * that carry the canonical generation marker or declare browser permissions.
+ */
+export function browserSurfaceOriginAppIdsForSelectedPackages(
+  packages: readonly PreparedPackageInstall[],
+  assemblerId: typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID,
+): string[] {
+  assertPreparedPackageBatch([...packages]);
+  assertAssemblerSupportsBrowserPermissions(
+    assemblerId,
+    packages.map(({ manifest }) => manifest),
+  );
+  if (assemblerId === LEGACY_V25_ASSEMBLER_ID) return [];
+  if (assemblerId !== BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID) {
+    throw new Error(`Unsupported assembler ${String(assemblerId)}`);
+  }
+  return selectedBrowserSurfaceOriginAppIds(packages).sort(
+    compareCanonicalText,
+  );
+}
+
+function deriveBrowserSurfaceOriginAppIds({
+  existingBrowserSurfaceOriginAppIds,
+  selectedAppIds,
+  targetAppIds,
+}: {
+  existingBrowserSurfaceOriginAppIds: readonly string[];
+  selectedAppIds: readonly string[];
+  targetAppIds: Iterable<string>;
+}): string[] {
+  const available = new Set(targetAppIds);
+  const targets = new Set(
+    existingBrowserSurfaceOriginAppIds.filter((appId) => available.has(appId)),
+  );
+  for (const appId of selectedAppIds) {
+    if (appId !== "kernel") targets.add(appId);
+  }
+  return normalizeBrowserSurfaceOriginAppIds([...targets], available);
 }
 
 function selectedConnectionProviderSupport(
@@ -1448,8 +1746,81 @@ export function assertAppVersionTransitions(
 export async function compilePackages(
   input: CompilePackagesInput,
 ): Promise<CompileResult> {
+  const compileInput = buildPackagesCompileInput(input);
+  assertPreparedPackageBrowserSurfaceFanout(
+    input.packages,
+    ASSEMBLER_ID,
+    compileInput.browserSurfaceOriginAppIds ?? [],
+  );
   const { compile } = await import("./compile.ts");
-  return compile(buildPackagesCompileInput(input));
+  return compile(compileInput);
+}
+
+/** Compile one fresh package set with the generation required by its Kernel. */
+export async function compileFreshPackages({
+  packages,
+  deploymentNonce,
+  vetKeysEnvironment,
+  persistenceMode,
+  freshInstallationContext,
+  includeGeneratedSource,
+}: FreshCompilePackagesInput): Promise<CompileResult> {
+  const kernels = packages.filter(({ isKernel }) => isKernel);
+  if (kernels.length !== 1) {
+    throw new Error(
+      `Fresh compilation requires exactly one kernel package; found ${kernels.length}`,
+    );
+  }
+  if (!packages[0]?.isKernel) {
+    throw new Error(
+      "Fresh compilation requires the kernel package to be first",
+    );
+  }
+  const assemblerId = assemblerForFreshKernelVersion(
+    packages[0].manifest.version,
+  );
+  assertAssemblerSupportsBrowserPermissions(
+    assemblerId,
+    packages.map(({ manifest }) => manifest),
+  );
+  const input = buildPackagesCompileInput({
+    packages,
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
+    versionPolicy: "allow-same-version",
+    ...(deploymentNonce ? { deploymentNonce } : {}),
+    ...(vetKeysEnvironment ? { vetKeysEnvironment } : {}),
+    ...(persistenceMode ? { persistenceMode } : {}),
+    ...(freshInstallationContext ? { freshInstallationContext } : {}),
+    ...(includeGeneratedSource ? { includeGeneratedSource: true } : {}),
+  });
+  assertPreparedPackageBrowserSurfaceFanout(
+    packages,
+    assemblerId,
+    input.browserSurfaceOriginAppIds ?? [],
+  );
+  const { compile, compileLegacyV25Compatibility } = await import(
+    "./compile.ts"
+  );
+  const compiled =
+    assemblerId === BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID
+      ? await compile(input)
+      : await compileLegacyV25Compatibility(
+          withoutBrowserSurfaceOriginSelection(input),
+        );
+  if (compiled.assemblerId !== assemblerId) {
+    throw new Error(
+      `Fresh compiler emitted ${compiled.assemblerId}; expected ${assemblerId}`,
+    );
+  }
+  return compiled;
+}
+
+function withoutBrowserSurfaceOriginSelection(
+  input: CompileInput,
+): Omit<CompileInput, "browserSurfaceOriginAppIds"> {
+  const { browserSurfaceOriginAppIds: _v26Selection, ...legacyInput } = input;
+  return legacyInput;
 }
 
 /** Bind a universal Kernel archive immediately before its assets are seeded. */
@@ -1521,6 +1892,12 @@ export function buildAppUninstallCompileInput({
   return {
     mofiles: state.existingModules,
     configs,
+    browserSurfaceOriginAppIds: compileBrowserSurfaceOriginAppIds({
+      configs,
+      packages: [],
+      existingApps: state.apps,
+      existingBrowserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
+    }),
     previousConfigs: state.existingConfigs,
     previousStable: state.previousStable,
     connectionProviderSupport: state.connectionProviderSupport,
@@ -1645,6 +2022,7 @@ export async function uninstallApp({
     packages: [],
     compiled,
     existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
     previousModulePaths: state.existingModules.map(({ path }) => path),
     removedApps: [appId],
     deploymentBuildRecord: preparedBuild.record,
@@ -1658,7 +2036,6 @@ export async function readKernelPackageState({
   listStatic,
   fetchText,
   fetchJson,
-  apps,
 }: KernelPackageStateReader): Promise<KernelPackageState> {
   const modulePaths = await listStatic("/mo/");
   const existingModules = await mapWithConcurrency(
@@ -1674,13 +2051,21 @@ export async function readKernelPackageState({
   }
 
   const registry = normalizeAppRegistry(
-    apps ?? (await fetchJson<PartialAppRegistry>("/system/apps.json", {})),
+    await fetchJson<PartialAppRegistry>("/system/apps.json", {}),
   );
   if (!registry.kernel) {
     throw new Error(
       "Installed app registry is missing the kernel package manifest entry",
     );
   }
+  const rawBrowserSurfaceOrigins = await fetchJson<unknown | undefined>(
+    BROWSER_SURFACE_ORIGINS_PATH,
+    undefined,
+  );
+  const browserSurfaceOriginAppIds = parseBrowserSurfaceOriginsSidecar(
+    rawBrowserSurfaceOrigins,
+    Object.keys(registry),
+  );
   const appIds = Object.keys(registry).sort(compareCanonicalText);
   const configEntries = await mapWithConcurrency(appIds, 10, async (id) => {
     const path =
@@ -1751,6 +2136,9 @@ export async function readKernelPackageState({
   return {
     registry,
     apps: registry,
+    browserSurfaceOriginAppIds,
+    browserSurfaceOriginsSidecarPresent:
+      rawBrowserSurfaceOrigins !== undefined,
     existingConfigs,
     existingModules,
     previousStable,
@@ -1766,24 +2154,30 @@ export function assertKernelPackageStateMatchesRuntime(
   state: KernelPackageState,
   runtime: KernelRuntimeInfo,
 ): void {
-  assertKernelPackageStateMatchesRuntimeGeneration(state, runtime);
+  assertKernelPackageStateMatchesRuntimeGeneration(state, runtime, false);
 }
 
 /**
- * Bind the pre-compile package baseline to the exact current assembler.
+ * Bind the pre-compile package baseline to the current assembler or its one
+ * explicit bridge predecessor. A v25-built Kernel can install the frontend
+ * that carries v26; the next checked install must then activate v26.
  */
 export function assertKernelPackageBaselineMatchesRuntime(
   state: KernelPackageState,
   runtime: KernelRuntimeInfo,
 ): void {
-  assertKernelPackageStateMatchesRuntimeGeneration(state, runtime);
+  assertKernelPackageStateMatchesRuntimeGeneration(state, runtime, true);
 }
 
 function assertKernelPackageStateMatchesRuntimeGeneration(
   state: KernelPackageState,
   runtime: KernelRuntimeInfo,
+  allowV26BaselineBridge: boolean,
 ): void {
-  if (runtime.assembler_id !== ASSEMBLER_ID) {
+  if (
+    runtime.assembler_id !== ASSEMBLER_ID &&
+    !(allowV26BaselineBridge && isExactV25Bridge(runtime.assembler_id))
+  ) {
     throw new Error(
       `Runtime assembler generation ${runtime.assembler_id} does not match ${ASSEMBLER_ID}`,
     );
@@ -1792,6 +2186,30 @@ function assertKernelPackageStateMatchesRuntimeGeneration(
   const registry = normalizeAppRegistry(state.registry);
   if (!sameJsonValue(registry, normalizeAppRegistry(state.apps))) {
     throw new Error("Kernel package state registries do not match");
+  }
+  const browserSurfaceOriginAppIds = normalizeBrowserSurfaceOriginAppIds(
+    state.browserSurfaceOriginAppIds,
+    Object.keys(registry),
+  );
+  const expectsBrowserSurfaceOriginsSidecar =
+    runtime.assembler_id === BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID;
+  if (
+    state.browserSurfaceOriginsSidecarPresent !==
+    expectsBrowserSurfaceOriginsSidecar
+  ) {
+    throw new Error(
+      expectsBrowserSurfaceOriginsSidecar
+        ? "The current runtime is missing its browser-surface origins sidecar"
+        : `Assembler ${runtime.assembler_id} cannot contain a browser-surface origins sidecar`,
+    );
+  }
+  if (
+    !expectsBrowserSurfaceOriginsSidecar &&
+    browserSurfaceOriginAppIds.length !== 0
+  ) {
+    throw new Error(
+      `Assembler ${runtime.assembler_id} cannot own v26 browser-surface origin authority`,
+    );
   }
   const expected = Object.entries(registry)
     .map(([app_id, entry]) => ({
@@ -2030,6 +2448,49 @@ export function normalizeAppRegistry(
     normalized[appId] = normalizeAppRegistryEntry(appId, entry);
   }
   return normalized;
+}
+
+export type BrowserSurfaceOriginsSidecarV1 = Readonly<{
+  format: 1;
+  app_ids: readonly string[];
+}>;
+
+/** Absence is the exact pre-v26 state; present files are closed and canonical. */
+export function parseBrowserSurfaceOriginsSidecar(
+  value: unknown,
+  installedAppIds: Iterable<string>,
+): string[] {
+  if (value === undefined) return [];
+  if (
+    !isRecord(value) ||
+    Object.keys(value).length !== 2 ||
+    value.format !== 1 ||
+    !Object.prototype.hasOwnProperty.call(value, "app_ids") ||
+    !Array.isArray(value.app_ids) ||
+    value.app_ids.length > NEUTRON_INSTALLED_APP_LIMIT
+  ) {
+    throw new Error("Invalid browser-surface origins sidecar");
+  }
+  const normalized = normalizeBrowserSurfaceOriginAppIds(
+    value.app_ids as string[],
+    installedAppIds,
+  );
+  if (JSON.stringify(value.app_ids) !== JSON.stringify(normalized)) {
+    throw new Error("Browser-surface origins sidecar is not canonical");
+  }
+  return normalized;
+}
+
+export function browserSurfaceOriginsSidecar(
+  appIds: readonly string[],
+  installedAppIds: Iterable<string>,
+): BrowserSurfaceOriginsSidecarV1 {
+  return Object.freeze({
+    format: 1 as const,
+    app_ids: Object.freeze(
+      normalizeBrowserSurfaceOriginAppIds(appIds, installedAppIds),
+    ),
+  });
 }
 
 export function normalizeAppRegistryEntry(
@@ -2656,12 +3117,7 @@ function normalizeRegistryTiles(
     }
 
     const id = tile.id;
-    if (
-      typeof id !== "string" ||
-      id.length < 1 ||
-      id.length > 30 ||
-      !/^[a-z_0-9]+$/.test(id)
-    ) {
+    if (!isValidTileId(id)) {
       throw new Error(`Invalid registry tile id for ${appId}`);
     }
     if (ids.has(id))
@@ -2699,55 +3155,92 @@ function normalizeRegistryTiles(
 
 export function buildPackageInstallAssets({
   existingApps,
-  manifest,
+  existingBrowserSurfaceOriginAppIds,
+  preparedPackage,
   candid,
 }: {
   existingApps: AppRegistry;
-  manifest: PackagedNeutronManifest;
+  existingBrowserSurfaceOriginAppIds: readonly string[];
+  preparedPackage: PreparedPackageInstall;
   candid: string;
 }): PackageInstallAssets {
-  const apps = updateAppRegistry(normalizeAppRegistry(existingApps), manifest);
+  return buildPackagesInstallAssets({
+    existingApps,
+    existingBrowserSurfaceOriginAppIds,
+    packages: [preparedPackage],
+    candid,
+  });
+}
+
+export function buildPackagesInstallAssets({
+  existingApps,
+  existingBrowserSurfaceOriginAppIds,
+  packages,
+  candid,
+  removedApps = [],
+}: {
+  existingApps: AppRegistry;
+  existingBrowserSurfaceOriginAppIds: readonly string[];
+  packages: PreparedPackageInstall[];
+  candid: string;
+  removedApps?: string[];
+}): PackageInstallAssets {
+  assertPreparedPackageBatch([...packages]);
+  const priorBrowserSurfaceOriginAppIds =
+    normalizeBrowserSurfaceOriginAppIds(
+      existingBrowserSurfaceOriginAppIds,
+      Object.keys(normalizeAppRegistry(existingApps)),
+    );
+  const normalizedRemovedApps = normalizeRemovedApps(removedApps, packages);
+  const apps = buildTargetAppRegistry({
+    existingApps,
+    manifests: packages.map(({ manifest }) => manifest),
+    removedApps: normalizedRemovedApps,
+  });
+  const browserSurfaceOriginAppIds = deriveBrowserSurfaceOriginAppIds({
+    existingBrowserSurfaceOriginAppIds: priorBrowserSurfaceOriginAppIds,
+    selectedAppIds: selectedBrowserSurfaceOriginAppIds(packages),
+    targetAppIds: Object.keys(apps),
+  });
   return {
     apps,
+    browserSurfaceOriginAppIds,
     appRegistryAsset: createJsonAsset(
       "/system/apps.json",
       apps,
+      "application/json",
+    ),
+    browserSurfaceOriginsAsset: createJsonAsset(
+      BROWSER_SURFACE_ORIGINS_PATH,
+      browserSurfaceOriginsSidecar(
+        browserSurfaceOriginAppIds,
+        Object.keys(apps),
+      ),
       "application/json",
     ),
     candidAsset: createTextAsset("/pkg/neutron.did", candid, "text/plain"),
   };
 }
 
-export function buildPackagesInstallAssets({
+function buildTargetAppRegistry({
   existingApps,
-  packages,
-  candid,
+  manifests,
   removedApps = [],
 }: {
   existingApps: AppRegistry;
-  packages: PreparedPackageInstall[];
-  candid: string;
-  removedApps?: string[];
-}): PackageInstallAssets {
-  assertPreparedPackageBatch([...packages]);
-  const normalizedRemovedApps = normalizeRemovedApps(removedApps, packages);
-  let apps = Object.fromEntries(
+  manifests: readonly PackagedNeutronManifest[];
+  removedApps?: readonly string[];
+}): AppRegistry {
+  const removed = new Set(removedApps);
+  let apps: AppRegistry = Object.fromEntries(
     Object.entries(normalizeAppRegistry(existingApps)).filter(
-      ([id]) => !normalizedRemovedApps.includes(id),
+      ([appId]) => !removed.has(appId),
     ),
   );
-  for (const preparedPackage of packages) {
-    apps = updateAppRegistry(apps, preparedPackage.manifest);
+  for (const manifest of manifests) {
+    apps = updateAppRegistry(apps, manifest);
   }
-  return {
-    apps,
-    appRegistryAsset: createJsonAsset(
-      "/system/apps.json",
-      apps,
-      "application/json",
-    ),
-    candidAsset: createTextAsset("/pkg/neutron.did", candid, "text/plain"),
-  };
+  return apps;
 }
 
 /**
@@ -2764,9 +3257,14 @@ export function prepareCompleteDeploymentBuildRecord({
   removedApps = [],
   retainedPackageEvidence = {},
 }: PrepareCompleteDeploymentBuildRecordInput): PreparedCompleteDeploymentBuild {
+  assertCurrentAssemblerCompileResult(compiled);
   assertExpectedDeploymentId(expectedDeploymentId);
   assertCompiledManagedMemoryPlan(compiled);
-  assertPreparedPackageBatch([...packages]);
+  assertPreparedPackageBrowserSurfaceFanout(
+    [...packages],
+    compiled.assemblerId,
+    compiled.browserSurfaceOriginAppIds,
+  );
   const normalizedRemovedApps = normalizeRemovedApps(removedApps, packages);
   if (
     JSON.stringify(normalizedRemovedApps) !==
@@ -2777,13 +3275,18 @@ export function prepareCompleteDeploymentBuildRecord({
     );
   }
 
-  const { apps } = buildPackagesInstallAssets({
+  const { apps, browserSurfaceOriginAppIds } = buildPackagesInstallAssets({
     existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
     packages: [...packages],
     candid: compiled.candid,
     removedApps: normalizedRemovedApps,
   });
-  assertInstallRegistryMatchesCompile(apps, compiled);
+  assertInstallRegistryMatchesCompile(
+    apps,
+    browserSurfaceOriginAppIds,
+    compiled,
+  );
 
   const supplied = new Map(
     packages.map((preparedPackage) => [
@@ -2876,6 +3379,9 @@ export function prepareCompleteDeploymentBuildRecord({
       recordBytes: canonicalRecordBytes.slice(),
       candid: compiled.candid,
       stable: compiled.stable,
+      browserSurfaceOriginAppIds: Object.freeze([
+        ...compiled.browserSurfaceOriginAppIds,
+      ]),
     }),
   );
   return prepared;
@@ -3036,6 +3542,16 @@ function assertDeploymentBuildRecordMatchesInstall({
   if (compiled.stable !== reviewed.stable) {
     throw new Error("Compiled stable signature changed after deployment review");
   }
+  if (
+    !sameJsonValue(
+      compiled.browserSurfaceOriginAppIds,
+      reviewed.browserSurfaceOriginAppIds,
+    )
+  ) {
+    throw new Error(
+      "Compiled browser-surface origin authority changed after deployment review",
+    );
+  }
   const record = parseDeploymentBuildRecord(value);
   if (record.state !== "complete") {
     throw new Error("Deployment install requires a complete build record");
@@ -3156,6 +3672,8 @@ export async function compileAndDeployPreparedPackages({
     packages,
     existingModules: state.existingModules,
     existingConfigs: state.existingConfigs,
+    existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
     existingStable: state.previousStable,
     connectionProviderSupport: state.connectionProviderSupport,
     deploymentNonce: createDeploymentNonce(),
@@ -3176,6 +3694,7 @@ export async function compileAndDeployPreparedPackages({
     packages,
     compiled,
     existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
     previousModulePaths: state.existingModules.map(({ path }) => path),
     deploymentBuildRecord: preparedBuild.record,
     ...(stagedAssets ? { stagedAssets } : {}),
@@ -3215,12 +3734,23 @@ function snapshotCompileResultForDeployment(
   return snapshot;
 }
 
+function assertCurrentAssemblerCompileResult(
+  compiled: Pick<CompileResult, "assemblerId">,
+): void {
+  if (compiled.assemblerId !== ASSEMBLER_ID) {
+    throw new Error(
+      `State-preserving deployment requires current assembler ${ASSEMBLER_ID}`,
+    );
+  }
+}
+
 export async function deployPreparedPackages({
   actor,
   targetCanisterId,
   packages,
   compiled,
   existingApps,
+  existingBrowserSurfaceOriginAppIds,
   previousModulePaths = [],
   removedApps = [],
   stagedAssets = [],
@@ -3231,6 +3761,7 @@ export async function deployPreparedPackages({
   onProgress,
 }: DeployPreparedPackagesInput): Promise<DeployPreparedPackagesResult> {
   const deploymentCompiled = snapshotCompileResultForDeployment(compiled);
+  assertCurrentAssemblerCompileResult(deploymentCompiled);
   assertBackendCallInstallReservationsTarget(
     Object.fromEntries(
       packages.map((preparedPackage) => [
@@ -3241,7 +3772,11 @@ export async function deployPreparedPackages({
     targetCanisterId,
   );
   assertCompiledManagedMemoryPlan(deploymentCompiled);
-  assertPreparedPackageBatch(packages);
+  assertPreparedPackageBrowserSurfaceFanout(
+    packages,
+    deploymentCompiled.assemblerId,
+    deploymentCompiled.browserSurfaceOriginAppIds,
+  );
   if (
     deploymentBuildRecord !== undefined &&
     (deploymentBuildRecord === null ||
@@ -3273,13 +3808,24 @@ export async function deployPreparedPackages({
       `Compiled target must expose the current kernel_install_commit contract: ${errorMessage(error)}`,
     );
   }
-  const { apps, appRegistryAsset, candidAsset } = buildPackagesInstallAssets({
+  const {
+    apps,
+    browserSurfaceOriginAppIds,
+    appRegistryAsset,
+    browserSurfaceOriginsAsset,
+    candidAsset,
+  } = buildPackagesInstallAssets({
     existingApps,
+    existingBrowserSurfaceOriginAppIds,
     packages,
     candid: deploymentCompiled.candid,
     removedApps: normalizedRemovedApps,
   });
-  assertInstallRegistryMatchesCompile(apps, deploymentCompiled);
+  assertInstallRegistryMatchesCompile(
+    apps,
+    browserSurfaceOriginAppIds,
+    deploymentCompiled,
+  );
   const preparedTransport = prepareDeterministicWasmTransport(
     deploymentCompiled.wasm,
   );
@@ -3335,6 +3881,7 @@ export async function deployPreparedPackages({
   }
 
   for (const asset of stagedAssets) {
+    assertSafeStagedAsset(asset);
     if (asset.target === DEPLOYMENT_BUILD_RECORD_PATH) {
       throw new Error(`Reserved staged asset target ${asset.target}`);
     }
@@ -3357,6 +3904,11 @@ export async function deployPreparedPackages({
       target: appRegistryAsset.key,
       content: new TextEncoder().encode(JSON.stringify(apps)),
       contentType: appRegistryAsset.val.content_type,
+    },
+    {
+      target: browserSurfaceOriginsAsset.key,
+      content: browserSurfaceOriginsAsset.val.content,
+      contentType: browserSurfaceOriginsAsset.val.content_type,
     },
     {
       target: stableAsset.key,
@@ -3782,8 +4334,14 @@ function requiresCompleteDeploymentBuildRecord(
 
 function assertInstallRegistryMatchesCompile(
   apps: AppRegistry,
+  browserSurfaceOriginAppIds: readonly string[],
   compiled: CompileResult,
 ): void {
+  assertBrowserSurfaceOriginAppIdsMatch(
+    apps,
+    browserSurfaceOriginAppIds,
+    compiled.browserSurfaceOriginAppIds,
+  );
   const registryInventory = Object.entries(apps)
     .map(([id, entry]) => ({
       id,
@@ -3819,6 +4377,28 @@ function assertInstallRegistryMatchesCompile(
   if (JSON.stringify(registryInventory) !== JSON.stringify(compiledInventory)) {
     throw new Error(
       "Install registry capability plans do not match compile output",
+    );
+  }
+}
+
+export function assertBrowserSurfaceOriginAppIdsMatch(
+  apps: AppRegistry,
+  actual: readonly string[],
+  expected: readonly string[],
+): void {
+  const actualIds = normalizeBrowserSurfaceOriginAppIds(
+    actual,
+    Object.keys(apps),
+  );
+  const expectedIds = normalizeBrowserSurfaceOriginAppIds(
+    expected,
+    Object.keys(apps),
+  );
+  if (
+    JSON.stringify(actualIds) !== JSON.stringify(expectedIds)
+  ) {
+    throw new Error(
+      "Browser-surface origin sidecar does not match compile output",
     );
   }
 }
@@ -4327,7 +4907,7 @@ function createStagedAssets(
 ): StagedAsset[] {
   const byTarget = new Map<string, StagedAssetInput>();
   for (const input of inputs) {
-    assertSafeStagedAsset(input);
+    assertValidStagedAsset(input);
     if (byTarget.has(input.target)) {
       throw new Error(`Duplicate mutable install target ${input.target}`);
     }
@@ -4346,18 +4926,24 @@ function createStagedAssets(
 }
 
 function assertSafeStagedAsset(input: StagedAssetInput): void {
-  if (!(input.content instanceof Uint8Array)) {
-    throw new Error(`Invalid staged asset content for ${input.target}`);
-  }
-  assertSafeAbsoluteInstallTarget(input.target);
+  assertValidStagedAsset(input);
   if (
     input.target === "/mo" ||
     input.target.startsWith("/mo/") ||
+    input.target === "/app" ||
+    input.target.startsWith("/app/") ||
     input.target === "/system/staging" ||
     input.target.startsWith("/system/staging/")
   ) {
     throw new Error(`Reserved staged asset target ${input.target}`);
   }
+}
+
+function assertValidStagedAsset(input: StagedAssetInput): void {
+  if (!(input.content instanceof Uint8Array)) {
+    throw new Error(`Invalid staged asset content for ${input.target}`);
+  }
+  assertSafeAbsoluteInstallTarget(input.target);
   if (
     input.contentType !== undefined &&
     (input.contentType.length === 0 ||
@@ -4369,11 +4955,9 @@ function assertSafeStagedAsset(input: StagedAssetInput): void {
 }
 
 function assertSafeAbsoluteInstallTarget(target: string): void {
-  if (target === "/") return;
-  if (typeof target !== "string" || !target.startsWith("/")) {
+  if (!isCanonicalAbsoluteInstallTarget(target)) {
     throw new Error(`Invalid staged asset target ${String(target)}`);
   }
-  assertSafeArchivePath(target.slice(1));
 }
 
 function assertExpectedDeploymentId(value: string): void {
@@ -4413,8 +4997,11 @@ async function cleanupUnjournaledStaging(
 }
 
 function staticKey(path: string): string {
-  if (path.startsWith("/")) return path;
-  return `/${path === "index.html" ? "" : path}`;
+  const target = path.startsWith("/")
+    ? path
+    : `/${path === "index.html" ? "" : path}`;
+  assertSafeAbsoluteInstallTarget(target);
+  return target;
 }
 
 async function waitForRuntime(
@@ -4498,7 +5085,7 @@ export async function recoverPendingInstall(
       status.deployment_id,
       timeoutMs,
     );
-    if (runtime.assembler_id !== ASSEMBLER_ID) {
+    if (!isRecoverablePendingInstallAssembler(runtime.assembler_id)) {
       return { status: "pending", deploymentId: status.deployment_id };
     }
     const runtimeAppInstances = parseAppInstanceInventory(
@@ -4526,6 +5113,20 @@ export async function recoverPendingInstall(
   // so timing out must remain non-destructive. The initiating deployment path
   // can still abort its own journal after it has established failure.
   return { status: "pending", deploymentId: status.deployment_id };
+}
+
+function isRecoverablePendingInstallAssembler(assemblerId: string): boolean {
+  // Recovery only commits an already-dispatched journal after the deployment
+  // and complete app-instance inventory match. This one-generation bridge
+  // finishes v25 work; it does not compile or adopt v26 browser origins.
+  return assemblerId === ASSEMBLER_ID || isExactV25Bridge(assemblerId);
+}
+
+function isExactV25Bridge(assemblerId: string): boolean {
+  return (
+    ASSEMBLER_ID === "neutron_actor_v26" &&
+    assemblerId === LEGACY_V25_ASSEMBLER_ID
+  );
 }
 
 const delay = (milliseconds: number): Promise<void> =>
@@ -4588,9 +5189,7 @@ export function createStaticFileOperation(
     : "identity",
   chunkSize = DEFAULT_CHUNK_SIZE,
 ): StaticFileOperation {
-  const key = keyOrPath.startsWith("/")
-    ? keyOrPath
-    : `/${keyOrPath === "index.html" ? "" : keyOrPath}`;
+  const key = staticKey(keyOrPath);
   const processedContent =
     contentEncoding === "gzip" ? gzipSync(content, { mtime: 0 }) : content;
   const chunks = chunkBytes(processedContent, chunkSize);
@@ -4655,6 +5254,7 @@ export async function uploadStaticFileOperation(
   neutron: KernelStaticWriter,
   operation: StaticFileOperation,
 ): Promise<void> {
+  assertSafeAbsoluteInstallTarget(operation.key);
   await neutron.kernel_static({
     store: {
       key: operation.key,
@@ -4734,21 +5334,38 @@ export function mime(filename: string): string {
     gif: "image/gif",
     bmp: "image/bmp",
     webp: "image/webp",
+    avif: "image/avif",
     ico: "image/x-icon",
     svg: "image/svg+xml",
     html: "text/html",
     css: "text/css",
     js: "application/javascript",
+    mjs: "application/javascript",
     json: "application/json",
+    webmanifest: "application/manifest+json",
     wasm: "application/wasm",
     xml: "application/xml",
     txt: "text/plain",
     md: "text/markdown",
+    vtt: "text/vtt",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    otf: "font/otf",
     mp4: "video/mp4",
     webm: "video/webm",
     ogg: "video/ogg",
+    ogv: "video/ogg",
+    mov: "video/quicktime",
     mp3: "audio/mpeg",
     wav: "audio/wav",
+    m4a: "audio/mp4",
+    aac: "audio/aac",
+    flac: "audio/flac",
+    oga: "audio/ogg",
+    opus: "audio/ogg",
+    weba: "audio/webm",
+    eot: "application/vnd.ms-fontobject",
   };
 
   return types[extension] ?? "application/octet-stream";

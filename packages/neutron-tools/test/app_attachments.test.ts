@@ -8,7 +8,7 @@ const originalWindow = globalThis.window;
 const canisterId = "4caro-hl777-77775-aaaba-cai";
 const kernelOrigin = `https://${canisterId}.icp0.io`;
 const appHref =
-  `https://ahello--${canisterId}.icp0.io/app/hello/index.html`;
+  `https://ahelloa--${canisterId}.icp0.io/app/hello/index.html`;
 
 function installFakeWindow(): {
   dispatch(port: MessagePort): void;

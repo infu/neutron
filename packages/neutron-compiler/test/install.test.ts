@@ -17,6 +17,10 @@ import {
   neutronPackageRecordArchiveOnlyPaths,
 } from "neutron-tools/src/package_record.js";
 import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  browserSurfaceOriginsPackageMarkerBytes,
+} from "neutron-tools/src/package_surface_origins.js";
+import {
   createKernelRuntimeConfig,
   IC_RUNTIME_GATEWAY,
   IC_RUNTIME_IDENTITY_PROVIDER,
@@ -37,6 +41,9 @@ import {
   buildPackageInstallAssets,
   buildPackagesCompileInput,
   buildPackagesInstallAssets,
+  compilePackages,
+  browserSurfaceOriginAppIdsForSelectedPackages,
+  browserSurfaceOriginsSidecar,
   applyRuntimeDeploymentConfig,
   buildAppUninstallCompileInput,
   appRegistryEntry,
@@ -46,10 +53,13 @@ import {
   deployPreparedPackages as deployPreparedPackagesRaw,
   assertKernelPackageBaselineMatchesRuntime,
   assertKernelPackageStateMatchesRuntime,
+  assertPreparedPackageBatch,
+  assertPreparedPackageBrowserSurfaceFanout,
   assertPreparedPackageArchiveIdentity,
   mime,
   mapWithConcurrency,
   normalizeAppRegistry,
+  parseBrowserSurfaceOriginsSidecar,
   planAppRegistryDependencies,
   preparePackageInstall,
   prepareCompleteDeploymentBuildRecord,
@@ -59,10 +69,12 @@ import {
   recoverPendingInstall,
   retainedDeploymentPackageEvidenceFromRecord,
   DEFAULT_DEPLOYMENT_ACTIVATION_TIMEOUT_MS,
+  BROWSER_SURFACE_ORIGINS_PATH,
   NEUTRON_INSTALLED_APP_LIMIT,
   KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT,
   KERNEL_INSTALL_MAX_CLEAR_PREFIXES_PER_COMMIT,
   KERNEL_INSTALL_MAX_COPIES,
+  KERNEL_BROWSER_SURFACE_CERTIFICATION_UNITS_MAX,
   KERNEL_CONNECTION_PROVIDER_SUPPORT_ARCHIVE_PATH,
   KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH,
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
@@ -83,7 +95,12 @@ import {
   parseDeploymentBuildRecordJson,
   prepareDeterministicWasmTransport,
 } from "../src/deployment_record.ts";
-import { assemble, type AssemblyManifest } from "../src/assemble.ts";
+import {
+  ASSEMBLER_ID,
+  assemble,
+  LEGACY_V25_ASSEMBLER_ID,
+  type AssemblyManifest,
+} from "../src/assemble.ts";
 import { writeManagedMemoryRetirements } from "../src/memory_retirements.ts";
 import { trustedInstallationContextFromRootKey } from "../src/installation_context.ts";
 
@@ -159,7 +176,27 @@ function helloPackageFiles(): UnpackedNeutronPackage {
     "web/index.html": bytes("<main></main>"),
     "web/main.js": bytes("console.log('hello')"),
     [`mo/${hash}.mo`]: moduleContent,
+    [NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]:
+      browserSurfaceOriginsPackageMarkerBytes(),
   };
+}
+
+function withBrowserSurfaceOriginsMarker(
+  files: UnpackedNeutronPackage,
+): UnpackedNeutronPackage {
+  return {
+    ...files,
+    [NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]:
+      browserSurfaceOriginsPackageMarkerBytes(),
+  };
+}
+
+function withoutBrowserSurfaceOriginsMarker(
+  files: UnpackedNeutronPackage,
+): UnpackedNeutronPackage {
+  const result = { ...files };
+  delete result[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH];
+  return result;
 }
 
 const connectionProviderSupportFixture = {
@@ -169,6 +206,7 @@ const connectionProviderSupportFixture = {
 
 function kernelPackageFiles(): UnpackedNeutronPackage {
   const files = helloPackageFiles();
+  delete files[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH];
   const manifest = JSON.parse(text(files["neutron.json"]!));
   files["neutron.json"] = bytes(
     JSON.stringify({ ...manifest, id: "kernel", name: "Kernel" }),
@@ -373,12 +411,15 @@ function packageFilesWithInstallReservations(
 }
 
 test("unpacks package payloads and prepares install paths", () => {
-  const unpacked = unpackNeutronPackage(packageBytes(helloPackageFiles()));
+  const unpacked = unpackNeutronPackage(
+    packageBytes(withoutBrowserSurfaceOriginsMarker(helloPackageFiles())),
+  );
   const prepared = preparePackageInstall(unpacked);
 
   expect(prepared.manifest.id).toBe("hello");
   expect(prepared.appPrefix).toBe("app/hello/");
   expect(prepared.isKernel).toBe(false);
+  expect(prepared.browserSurfaceOriginsReady).toBe(false);
   expect(prepared.packageRecord).toBeUndefined();
   expect(prepared.archiveBytes).toBeUndefined();
   expect(prepared.archiveIdentity).toBeUndefined();
@@ -388,6 +429,87 @@ test("unpacks package payloads and prepares install paths", () => {
     "app/hello/pkg/neutron.json",
     `mo/${prepared.manifest.entry}.mo`,
   ]);
+});
+
+test("captures only canonical package-generation origin readiness", () => {
+  const marked = preparePackageInstall(
+    withBrowserSurfaceOriginsMarker(helloPackageFiles()),
+  );
+  expect(marked.browserSurfaceOriginsReady).toBe(true);
+  expect(marked.files.map(({ path }) => path)).toContain(
+    `app/hello/pkg/${NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH}`,
+  );
+
+  const malformed = helloPackageFiles();
+  malformed[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH] = bytes(
+    '{"format":2}\n',
+  );
+  expect(() => preparePackageInstall(malformed)).toThrow(
+    `Invalid ${NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH} package marker`,
+  );
+
+  const kernelWithMarker = withBrowserSurfaceOriginsMarker(
+    kernelPackageFiles(),
+  );
+  expect(() => preparePackageInstall(kernelWithMarker)).toThrow(
+    "reserved for ordinary app packages",
+  );
+});
+
+test("browser permissions implicitly opt a package into surface origins", () => {
+  const files = withoutBrowserSurfaceOriginsMarker(helloPackageFiles());
+  const manifest = JSON.parse(text(files["neutron.json"]!));
+  files["neutron.json"] = bytes(
+    JSON.stringify({
+      ...manifest,
+      tiles: [
+        {
+          id: "main",
+          title: "Media",
+          path: "index.html",
+          icon: "index.html",
+        },
+      ],
+      capabilities: {
+        browser_permissions: {
+          api: 1,
+          tiles: [{ id: "main", features: ["camera"] }],
+        },
+      },
+    }),
+  );
+
+  const prepared = preparePackageInstall(files);
+  expect(prepared.browserSurfaceOriginsReady).toBe(true);
+  expect(
+    buildPackagesInstallAssets({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [prepared],
+      candid: "service : {}",
+    }).browserSurfaceOriginAppIds,
+  ).toEqual(["hello"]);
+});
+
+test("fresh origin selection adopts only ready ordinary packages", () => {
+  const kernel = preparePackageInstall(kernelPackageFiles());
+  const legacy = preparePackageInstall(headlessPackageFiles("legacy_app"));
+  const marked = preparePackageInstall(
+    withBrowserSurfaceOriginsMarker(headlessPackageFiles("marked_app")),
+  );
+
+  expect(
+    browserSurfaceOriginAppIdsForSelectedPackages(
+      [kernel, marked, legacy],
+      ASSEMBLER_ID,
+    ),
+  ).toEqual(["marked_app"]);
+  expect(
+    browserSurfaceOriginAppIdsForSelectedPackages(
+      [kernel, marked, legacy],
+      LEGACY_V25_ASSEMBLER_ID,
+    ),
+  ).toEqual([]);
 });
 
 test("verifies bulk legal/source bytes without installing them as public assets", () => {
@@ -593,7 +715,7 @@ test("bounded package decoding preflights raw bytes, entries, and paths", () => 
   ).toThrow(/raw limit/);
   expect(() =>
     unpackNeutronPackage(archive, { limits: { maxEntries: 3 } }),
-  ).toThrow(/has 4 entries/);
+  ).toThrow(/has 5 entries/);
 
   const longPath = `${"a".repeat(20)}.txt`;
   expect(() =>
@@ -883,7 +1005,11 @@ test("rechecks retained archive bytes before compile and install boundaries", ()
   if (!mutableFile) throw new Error("Expected prepared frontend file");
   mutableFile.content[0] = mutableFile.content[0]! ^ 1;
   expect(() =>
-    buildPackagesCompileInput({ packages: [contentPrepared] }),
+    buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [contentPrepared],
+    }),
   ).toThrow(/contents changed after archive review/);
 });
 
@@ -915,25 +1041,34 @@ test("package preparation rejects unsafe paths and invalid Motoko hashes", () =>
   if (!module) throw new Error("Expected prepared Motoko module");
   module.content[0] = module.content[0]! ^ 1;
   expect(() =>
-    buildPackagesCompileInput({ packages: [prepared] }),
+    buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [prepared],
+    }),
   ).toThrow(/Prepared Motoko module .* content SHA-256/);
 });
 
-test("ordinary app packages reserve web/_route for shared HTTP routes", () => {
-  for (const path of ["web/_route", "web/_route/status.json"]) {
+test("ordinary app packages reserve Kernel-owned web namespaces", () => {
+  for (const path of [
+    "web/_route",
+    "web/_route/status.json",
+    "web/pkg",
+    "web/pkg/index.html",
+  ]) {
     expect(() =>
       preparePackageFiles(
         { [path]: bytes("reserved") },
         { moPrefix: "mo/", appPrefix: "app/hello/" },
       ),
-    ).toThrow(`${path} is reserved for shared app routes`);
+    ).toThrow(`${path} is reserved for Kernel-owned app metadata`);
 
     expect(() =>
       preparePackageInstall({
         ...helloPackageFiles(),
         [path]: bytes("reserved"),
       }),
-    ).toThrow(`${path} is reserved for shared app routes`);
+    ).toThrow(`${path} is reserved for Kernel-owned app metadata`);
   }
 
   const kernelFiles = kernelPackageFiles();
@@ -955,6 +1090,8 @@ test("ordinary app packages reserve web/_route for shared HTTP routes", () => {
     buildPackageCompileInput({
       existingModules: [],
       existingConfigs: {},
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       preparedPackage: forged,
     }),
   ).toThrow(
@@ -974,6 +1111,8 @@ test("ordinary app packages reserve web/_route for shared HTTP routes", () => {
       buildPackageCompileInput({
         existingModules: [],
         existingConfigs: {},
+        existingApps: {},
+        existingBrowserSurfaceOriginAppIds: [],
         preparedPackage: crossAppForged,
       }),
     ).toThrow(
@@ -995,9 +1134,66 @@ test("ordinary app packages reserve web/_route for shared HTTP routes", () => {
     buildPackageCompileInput({
       existingModules: [],
       existingConfigs: {},
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       preparedPackage: forgedKernel,
     }),
-  ).not.toThrow();
+  ).toThrow(
+    "Prepared Kernel package path app/victim_app/_route/status.json cannot write an app asset subtree",
+  );
+
+  const kernelWithAppAsset = kernelPackageFiles();
+  kernelWithAppAsset["web/app/victim/index.html"] = bytes("forbidden");
+  expect(() => preparePackageInstall(kernelWithAppAsset)).toThrow(
+    "Kernel package path web/app/victim/index.html cannot write an app asset subtree",
+  );
+
+  for (const path of [
+    "web/system/apps.json",
+    "web/system/browser-surface-origins.json",
+  ]) {
+    expect(() =>
+      preparePackageInstall({
+        ...kernelPackageFiles(),
+        [path]: bytes("forbidden"),
+      }),
+    ).toThrow(`Reserved package asset target /${path.slice("web/".length)}`);
+  }
+});
+
+test("prepared package batches bind identity, capability plan, and app assets", () => {
+  const prepared = preparePackageInstall(helloPackageFiles());
+  expect(() => assertPreparedPackageBatch([prepared])).not.toThrow();
+
+  expect(() =>
+    assertPreparedPackageBatch([
+      {
+        ...prepared,
+        files: [
+          ...prepared.files,
+          { path: "app/victim/main.js", content: bytes("cross-app") },
+        ],
+      },
+    ]),
+  ).toThrow(
+    "Prepared package hello path app/victim/main.js is outside app/hello/",
+  );
+
+  expect(() =>
+    assertPreparedPackageBatch([
+      { ...prepared, appPrefix: "app/victim/" },
+    ]),
+  ).toThrow("Prepared package hello has invalid app prefix app/victim/");
+
+  expect(() =>
+    assertPreparedPackageBatch([{ ...prepared, isKernel: true }]),
+  ).toThrow("Prepared package hello has inconsistent Kernel identity");
+
+  expect(() =>
+    assertPreparedPackageBatch([
+      { ...prepared, capabilityPlanFingerprint: "0".repeat(64) },
+    ]),
+  ).toThrow("Prepared package hello capability plan does not match its manifest");
 });
 
 test("package preparation and registry normalization reject unsafe app ids", () => {
@@ -1087,17 +1283,18 @@ test("package preparation requires declared tray entrypoint and icon", () => {
 
 test("builds compile input by merging installed state and pending package", () => {
   const prepared = preparePackageInstall(helloPackageFiles());
+  const existingKernel = {
+    format: 3 as const,
+    id: "kernel",
+    name: "Kernel",
+    version: 100,
+    entry: "main",
+  };
   const input = buildPackageCompileInput({
     existingModules: [{ path: "main.mo", content: "module {}" }],
-    existingConfigs: {
-      kernel: {
-        format: 3 as const,
-        id: "kernel",
-        name: "Kernel",
-        version: 100,
-        entry: "main",
-      },
-    },
+    existingConfigs: { kernel: existingKernel },
+    existingApps: { kernel: appRegistryEntry(existingKernel) },
+    existingBrowserSurfaceOriginAppIds: [],
     preparedPackage: prepared,
   });
 
@@ -1128,7 +1325,11 @@ test("compile input rejects providers and scopes absent from the selected Kernel
     connectionPackageFiles("openrouter"),
   );
   expect(() =>
-    buildPackagesCompileInput({ packages: [kernel, supported] }),
+    buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [kernel, supported],
+    }),
   ).not.toThrow();
 
   const unsupportedProvider = preparePackageInstall(
@@ -1136,6 +1337,8 @@ test("compile input rejects providers and scopes absent from the selected Kernel
   );
   expect(() =>
     buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       packages: [kernel, unsupportedProvider],
     }),
   ).toThrow(
@@ -1146,7 +1349,11 @@ test("compile input rejects providers and scopes absent from the selected Kernel
     connectionPackageFiles("openrouter", ["unsupported_scope"]),
   );
   expect(() =>
-    buildPackagesCompileInput({ packages: [kernel, unsupportedScope] }),
+    buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [kernel, unsupportedScope],
+    }),
   ).toThrow(
     "Provider 'openrouter' does not support scope 'unsupported_scope' for App connector_app",
   );
@@ -1165,6 +1372,10 @@ test("compile input rejects providers and scopes absent from the selected Kernel
       existingConfigs: {
         connector_app: supported.manifest,
       },
+      existingApps: {
+        connector_app: appRegistryEntry(supported.manifest),
+      },
+      existingBrowserSurfaceOriginAppIds: [],
     }),
   ).toThrow(
     "Unsupported connection provider 'openrouter' for App connector_app",
@@ -1176,7 +1387,11 @@ test("builds compile input from multiple prepared packages", () => {
   const kernelEntry = JSON.parse(text(kernelFiles["neutron.json"]!)).entry;
   const kernel = preparePackageInstall(kernelFiles);
   const hello = preparePackageInstall(helloPackageFiles());
-  const input = buildPackagesCompileInput({ packages: [kernel, hello] });
+  const input = buildPackagesCompileInput({
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
+    packages: [kernel, hello],
+  });
 
   expect(kernel.isKernel).toBe(true);
   expect(kernel.appPrefix).toBe("");
@@ -1196,6 +1411,8 @@ test("builds compile input from multiple prepared packages", () => {
     new Uint8Array(133).fill(0x4c),
   );
   const localInput = buildPackagesCompileInput({
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     packages: [kernel, hello],
     deploymentNonce: "01".repeat(16),
     vetKeysEnvironment: "local",
@@ -1293,11 +1510,16 @@ test("multi-package entry points reject duplicate app ids", () => {
   };
 
   expect(() =>
-    buildPackagesCompileInput({ packages: [prepared, duplicate] }),
+    buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [prepared, duplicate],
+    }),
   ).toThrow("Duplicate prepared app id hello");
   expect(() =>
     buildPackagesInstallAssets({
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       packages: [prepared, duplicate],
       candid: "service : {}",
     }),
@@ -1311,8 +1533,76 @@ test("package batches reject duplicate mutable targets before construction", () 
     content: bytes("different"),
   });
 
-  expect(() => buildPackagesCompileInput({ packages: [prepared] })).toThrow(
+  expect(() =>
+    buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [prepared],
+    }),
+  ).toThrow(
     "Duplicate mutable install target /app/hello/main.js",
+  );
+});
+
+test("package batches bound browser-surface certification fanout", async () => {
+  const surfacePackage = (browserAssetCount: number) => {
+    const files = helloPackageFiles();
+    const manifest = JSON.parse(text(files["neutron.json"]!));
+    files["neutron.json"] = bytes(
+      JSON.stringify({
+        ...manifest,
+        tiles: Array.from({ length: MANIFEST_MAX_TILES }, (_, index) => ({
+          id: `tile_${index}`,
+          title: `Tile ${index}`,
+          path: "index.html",
+          icon: "index.html",
+        })),
+      }),
+    );
+    for (let index = 2; index < browserAssetCount; index += 1) {
+      files[`web/asset-${index}.js`] = bytes(`export default ${index}`);
+    }
+    return preparePackageInstall(files);
+  };
+
+  expect(KERNEL_BROWSER_SURFACE_CERTIFICATION_UNITS_MAX).toBe(1_024);
+  const withinV26Limit = surfacePackage(32);
+  const validOnlyOnV25 = surfacePackage(33);
+  // Archive preparation is generation-independent. The released v25 actor
+  // creates no installation-surface response variants, so its valid package
+  // shape must not be rejected by a v26-only certification ceiling.
+  expect(() => assertPreparedPackageBatch([validOnlyOnV25])).not.toThrow();
+  expect(() =>
+    assertPreparedPackageBrowserSurfaceFanout(
+      [validOnlyOnV25],
+      LEGACY_V25_ASSEMBLER_ID,
+      [],
+    ),
+  ).not.toThrow();
+  expect(() =>
+    assertPreparedPackageBrowserSurfaceFanout(
+      [withinV26Limit],
+      ASSEMBLER_ID,
+      ["hello"],
+    ),
+  ).not.toThrow();
+  expect(() =>
+    assertPreparedPackageBrowserSurfaceFanout(
+      [validOnlyOnV25],
+      ASSEMBLER_ID,
+      ["hello"],
+    ),
+  ).toThrow(
+    "Selected packages require 1056 browser-surface certification units; kernel limit is 1024",
+  );
+  await expect(
+    compilePackages({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [validOnlyOnV25],
+    }),
+  ).rejects.toThrow(
+    "Selected packages require 1056 browser-surface certification units; kernel limit is 1024",
   );
 });
 
@@ -1327,6 +1617,8 @@ test("compile inputs deduplicate identical modules and reject conflicts", () => 
       { path: modulePath, content: text(module.content) },
     ],
     existingConfigs: {},
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     preparedPackage: prepared,
   });
   expect(deduplicated.mofiles).toHaveLength(1);
@@ -1337,6 +1629,8 @@ test("compile inputs deduplicate identical modules and reject conflicts", () => 
         { path: modulePath, content: "module { let changed = 1 }" },
       ],
       existingConfigs: {},
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       preparedPackage: prepared,
     }),
   ).toThrow(`Motoko module ${modulePath} content SHA-256`);
@@ -1344,23 +1638,23 @@ test("compile inputs deduplicate identical modules and reject conflicts", () => 
 
 test("package batches reject same module path with different bytes", () => {
   const hello = preparePackageInstall(helloPackageFiles());
-  const other = {
-    ...hello,
-    manifest: { ...hello.manifest, id: "other", name: "Other" },
-    appPrefix: "app/other/",
-    files: hello.files.map((file) =>
-      file.path.startsWith("mo/")
-        ? { ...file, content: bytes("different module") }
-        : {
-            ...file,
-            path: file.path.replace("app/hello/", "app/other/"),
-          },
-    ),
-  };
-
-  expect(() => buildPackagesCompileInput({ packages: [hello, other] })).toThrow(
-    /Prepared Motoko module .* content SHA-256/,
+  const otherFiles = helloPackageFiles();
+  const otherManifest = JSON.parse(text(otherFiles["neutron.json"]!));
+  otherFiles["neutron.json"] = bytes(
+    JSON.stringify({ ...otherManifest, id: "other", name: "Other" }),
   );
+  const other = preparePackageInstall(otherFiles);
+  const otherModule = other.files.find((file) => file.path.startsWith("mo/"));
+  if (!otherModule) throw new Error("Expected prepared Motoko module");
+  otherModule.content = bytes("different module");
+
+  expect(() =>
+    buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      packages: [hello, other],
+    }),
+  ).toThrow(/Prepared Motoko module .* content SHA-256/);
 });
 
 test("compile inputs require a strict upgrade unless local reinstall opts in", () => {
@@ -1374,11 +1668,16 @@ test("compile inputs require a strict upgrade unless local reinstall opts in", (
       version: 103,
     },
   };
+  const existingApps = {
+    hello: appRegistryEntry(existingConfigs.hello),
+  };
 
   expect(() =>
     buildPackageCompileInput({
       existingModules: [],
       existingConfigs,
+      existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
       preparedPackage: prepared,
     }),
   ).toThrow("Refusing to downgrade hello from v0.1.3 to v0.1.2");
@@ -1386,14 +1685,21 @@ test("compile inputs require a strict upgrade unless local reinstall opts in", (
     buildPackagesCompileInput({
       packages: [prepared],
       existingConfigs,
+      existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
     }),
   ).toThrow("Refusing to downgrade hello from v0.1.3 to v0.1.2");
 
   const sameVersionConfigs = { hello: { ...prepared.manifest } };
+  const sameVersionApps = {
+    hello: appRegistryEntry(sameVersionConfigs.hello),
+  };
   expect(() =>
     buildPackageCompileInput({
       existingModules: [],
       existingConfigs: sameVersionConfigs,
+      existingApps: sameVersionApps,
+      existingBrowserSurfaceOriginAppIds: [],
       preparedPackage: prepared,
     }),
   ).toThrow(
@@ -1403,6 +1709,8 @@ test("compile inputs require a strict upgrade unless local reinstall opts in", (
     buildPackagesCompileInput({
       packages: [prepared],
       existingConfigs: sameVersionConfigs,
+      existingApps: sameVersionApps,
+      existingBrowserSurfaceOriginAppIds: [],
     }),
   ).toThrow(
     "hello v0.1.2 is already installed; choose a package with a higher version",
@@ -1412,6 +1720,8 @@ test("compile inputs require a strict upgrade unless local reinstall opts in", (
     buildPackageCompileInput({
       existingModules: [],
       existingConfigs: sameVersionConfigs,
+      existingApps: sameVersionApps,
+      existingBrowserSurfaceOriginAppIds: [],
       preparedPackage: prepared,
       versionPolicy: "allow-same-version",
     }),
@@ -1420,6 +1730,8 @@ test("compile inputs require a strict upgrade unless local reinstall opts in", (
     buildPackagesCompileInput({
       packages: [prepared],
       existingConfigs: sameVersionConfigs,
+      existingApps: sameVersionApps,
+      existingBrowserSurfaceOriginAppIds: [],
       versionPolicy: "allow-same-version",
     }),
   ).not.toThrow();
@@ -1428,6 +1740,8 @@ test("compile inputs require a strict upgrade unless local reinstall opts in", (
     buildPackageCompileInput({
       existingModules: [],
       existingConfigs,
+      existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
       preparedPackage: prepared,
       versionPolicy: "allow-same-version",
     }),
@@ -1491,6 +1805,7 @@ test("shared kernel package state reader uses injected IO callbacks", async () =
     "kernel",
   ]);
   expect(state.registry.hello?.version).toBe(100);
+  expect(state.registry.hello).not.toHaveProperty("browser_surface_origins");
   expect(state.registry.kernel?.version).toBe(100);
   expect(state.apps.hello?.version).toBe(100);
   expect(state.apps).toBe(state.registry);
@@ -1533,13 +1848,16 @@ test("kernel package state rejects corrupt content-addressed installed modules",
 function strictStateReaderFixture({
   registry,
   manifests,
+  browserSurfaceOriginAppIds,
   previousStable = "type Stable = {}",
 }: {
   registry: AppRegistry;
   manifests: Record<string, unknown>;
+  browserSurfaceOriginAppIds?: readonly string[];
   previousStable?: string | Error;
 }) {
   return {
+    browserSurfaceOriginAppIds,
     listStatic: async () => [],
     fetchText: async (path: string) => {
       if (path !== "/pkg/neutron.most") {
@@ -1550,6 +1868,15 @@ function strictStateReaderFixture({
     },
     fetchJson: async <T>(path: string, fallback: T): Promise<T> => {
       if (path === "/system/apps.json") return registry as T;
+      if (
+        path === BROWSER_SURFACE_ORIGINS_PATH &&
+        browserSurfaceOriginAppIds !== undefined
+      ) {
+        return browserSurfaceOriginsSidecar(
+          browserSurfaceOriginAppIds,
+          Object.keys(registry),
+        ) as T;
+      }
       if (path === KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH) {
         return connectionProviderSupportFixture as T;
       }
@@ -1557,6 +1884,51 @@ function strictStateReaderFixture({
     },
   };
 }
+
+test("kernel package state distinguishes legacy absence from a v26 sidecar", async () => {
+  const kernel = {
+    format: 3 as const,
+    id: "kernel",
+    name: "Kernel",
+    version: 100,
+    entry: "kernel",
+  };
+  const hello = {
+    format: 3 as const,
+    id: "hello",
+    name: "Hello",
+    version: 100,
+    entry: "hello",
+  };
+
+  for (const {
+    sidecar,
+    expectedIds,
+    expectedPresent,
+  } of [
+    { sidecar: undefined, expectedIds: [], expectedPresent: false },
+    { sidecar: [], expectedIds: [], expectedPresent: true },
+    { sidecar: ["hello"], expectedIds: ["hello"], expectedPresent: true },
+  ] as const) {
+    const state = await readKernelPackageState(
+      strictStateReaderFixture({
+        registry: {
+          kernel: appRegistryEntry(kernel),
+          hello: appRegistryEntry(hello),
+        },
+        ...(sidecar === undefined
+          ? {}
+          : { browserSurfaceOriginAppIds: sidecar }),
+        manifests: {
+          "/pkg/neutron.json": kernel,
+          "/app/hello/pkg/neutron.json": hello,
+        },
+      }),
+    );
+    expect(state.browserSurfaceOriginAppIds).toEqual([...expectedIds]);
+    expect(state.browserSurfaceOriginsSidecarPresent).toBe(expectedPresent);
+  }
+});
 
 test("kernel package state rejects registry and package manifest mismatch", async () => {
   const kernel = {
@@ -1668,10 +2040,13 @@ test("kernel package state rejects a missing prior stable signature", async () =
 });
 
 test("builds registry and candid assets for deployment", () => {
-  const prepared = preparePackageInstall(helloPackageFiles());
+  const prepared = preparePackageInstall(
+    withBrowserSurfaceOriginsMarker(helloPackageFiles()),
+  );
   const assets = buildPackageInstallAssets({
     existingApps: {},
-    manifest: prepared.manifest,
+    existingBrowserSurfaceOriginAppIds: [],
+    preparedPackage: prepared,
     candid: "service : {}",
   });
 
@@ -1697,8 +2072,187 @@ test("builds registry and candid assets for deployment", () => {
   });
   expect(assets.appRegistryAsset.key).toBe("/system/apps.json");
   expect(text(assets.appRegistryAsset.val.content)).toContain('"hello"');
+  expect(assets.browserSurfaceOriginAppIds).toEqual(["hello"]);
+  expect(text(assets.browserSurfaceOriginsAsset.val.content)).toBe(
+    JSON.stringify({ format: 1, app_ids: ["hello"] }),
+  );
   expect(assets.candidAsset.key).toBe("/pkg/neutron.did");
   expect(text(assets.candidAsset.val.content)).toBe("service : {}");
+});
+
+test("rolls browser surface origins forward only for ready package writes", () => {
+  const preparedHeadless = (
+    id: string,
+    version = 100,
+    ready = false,
+  ) => {
+    const files = headlessPackageFiles(id);
+    const manifest = JSON.parse(text(files["neutron.json"]!));
+    files["neutron.json"] = bytes(JSON.stringify({ ...manifest, version }));
+    return preparePackageInstall(
+      ready ? withBrowserSurfaceOriginsMarker(files) : files,
+    );
+  };
+  const retainedLegacyPackage = preparedHeadless("retained_legacy");
+  const retainedMarkedPackage = preparedHeadless("retained_marked");
+  const updatedLegacyPackage = preparedHeadless("updated_legacy");
+  const kernelManifest = {
+    format: 3,
+    id: "kernel",
+    name: "Kernel",
+    version: 100,
+    entry: "kernel",
+  } as const;
+  const kernel = appRegistryEntry(kernelManifest);
+  const retainedLegacy = appRegistryEntry(retainedLegacyPackage.manifest);
+  const retainedMarked = appRegistryEntry(retainedMarkedPackage.manifest);
+  const updatedLegacy = appRegistryEntry(updatedLegacyPackage.manifest);
+  const update = preparedHeadless("updated_legacy", 101);
+  const fresh = preparedHeadless("fresh_app", 100, true);
+  const existingApps = {
+    kernel,
+    retained_legacy: retainedLegacy,
+    retained_marked: retainedMarked,
+    updated_legacy: updatedLegacy,
+  };
+  const existingConfigs = {
+    kernel: kernelManifest,
+    retained_legacy: retainedLegacyPackage.manifest,
+    retained_marked: retainedMarkedPackage.manifest,
+    updated_legacy: updatedLegacyPackage.manifest,
+  };
+  const firstCompile = buildPackagesCompileInput({
+    packages: [fresh, update],
+    existingApps,
+    existingBrowserSurfaceOriginAppIds: ["retained_marked"],
+    existingConfigs,
+  });
+  expect(firstCompile.browserSurfaceOriginAppIds).toEqual([
+    "fresh_app",
+    "retained_marked",
+  ]);
+
+  const firstInstall = buildPackagesInstallAssets({
+    existingApps,
+    existingBrowserSurfaceOriginAppIds: ["retained_marked"],
+    packages: [fresh, update],
+    candid: "service : {}",
+  });
+  const first = firstInstall.apps;
+
+  expect(firstInstall.browserSurfaceOriginAppIds).toEqual([
+    "fresh_app",
+    "retained_marked",
+  ]);
+
+  const kernelOnly = buildPackagesInstallAssets({
+    existingApps: first,
+    existingBrowserSurfaceOriginAppIds:
+      firstInstall.browserSurfaceOriginAppIds,
+    packages: [preparePackageInstall(kernelPackageFilesAtVersion(101))],
+    candid: "service : {}",
+  });
+  expect(kernelOnly.browserSurfaceOriginAppIds).toEqual([
+    "fresh_app",
+    "retained_marked",
+  ]);
+
+  const later = preparedHeadless("later_app", 100, true);
+  const firstConfigs = {
+    ...existingConfigs,
+    updated_legacy: update.manifest,
+    fresh_app: fresh.manifest,
+  };
+  const secondCompile = buildPackagesCompileInput({
+    packages: [later],
+    existingApps: first,
+    existingBrowserSurfaceOriginAppIds:
+      firstInstall.browserSurfaceOriginAppIds,
+    existingConfigs: firstConfigs,
+  });
+  expect(secondCompile.browserSurfaceOriginAppIds).toEqual([
+    "fresh_app",
+    "later_app",
+    "retained_marked",
+  ]);
+  const secondInstall = buildPackagesInstallAssets({
+    existingApps: first,
+    existingBrowserSurfaceOriginAppIds:
+      firstInstall.browserSurfaceOriginAppIds,
+    packages: [later],
+    candid: "service : {}",
+  });
+  const second = secondInstall.apps;
+
+  expect(secondInstall.browserSurfaceOriginAppIds).toEqual([
+    "fresh_app",
+    "later_app",
+    "retained_marked",
+  ]);
+
+  const uninstall = buildAppUninstallCompileInput({
+    state: {
+      registry: second,
+      apps: second,
+      browserSurfaceOriginAppIds:
+        secondInstall.browserSurfaceOriginAppIds,
+      browserSurfaceOriginsSidecarPresent: true,
+      existingConfigs: { ...firstConfigs, later_app: later.manifest },
+      existingModules: [],
+      previousStable: "type Legacy = ();",
+      connectionProviderSupport: connectionProviderSupportFixture,
+    },
+    appId: "fresh_app",
+  });
+  expect(uninstall.browserSurfaceOriginAppIds).toEqual([
+    "later_app",
+    "retained_marked",
+  ]);
+});
+
+test("strictly normalizes the browser surface origins sidecar", () => {
+  const prepared = preparePackageInstall(headlessPackageFiles("marked_app"));
+  const entry = buildPackageInstallAssets({
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
+    preparedPackage: prepared,
+    candid: "service : {}",
+  }).apps.marked_app!;
+  expect(normalizeAppRegistry({ marked_app: entry }).marked_app).toEqual(entry);
+
+  expect(parseBrowserSurfaceOriginsSidecar(undefined, ["marked_app"])).toEqual(
+    [],
+  );
+  expect(
+    parseBrowserSurfaceOriginsSidecar(
+      { format: 1, app_ids: ["marked_app"] },
+      ["marked_app"],
+    ),
+  ).toEqual(["marked_app"]);
+  for (const invalid of [
+    null,
+    {},
+    { format: 2, app_ids: [] },
+    { format: 1, app_ids: ["marked_app", "marked_app"] },
+    { format: 1, app_ids: ["missing"] },
+    { format: 1, app_ids: [], extra: true },
+    { format: 1, app_ids: Array.from({ length: 257 }, () => "marked_app") },
+  ]) {
+    expect(() =>
+      parseBrowserSurfaceOriginsSidecar(invalid, ["marked_app"]),
+    ).toThrow(/browser-surface origin/i);
+  }
+  const kernel = appRegistryEntry({
+    format: 3,
+    id: "kernel",
+    name: "Kernel",
+    version: 100,
+  });
+  expect(() =>
+    normalizeAppRegistry({
+      kernel: { ...kernel, unexpected_surface_authority: 1 } as never,
+    }),
+  ).toThrow(/Unknown registry field unexpected_surface_authority/);
 });
 
 test("package update source persists through installation and registry normalization", () => {
@@ -1732,6 +2286,7 @@ test("multi-package registry construction rejects ambiguous removals", () => {
   const build = (removedApps: string[]) =>
     buildPackagesInstallAssets({
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       packages: [prepared],
       candid: "service : {}",
       removedApps,
@@ -1781,6 +2336,7 @@ test("roughly 200 arbitrary headless apps install and remove in bounded batches"
     );
     apps = buildPackagesInstallAssets({
       existingApps: apps,
+      existingBrowserSurfaceOriginAppIds: [],
       packages: batch,
       candid: "service : {}",
     }).apps;
@@ -1811,6 +2367,7 @@ test("roughly 200 arbitrary headless apps install and remove in bounded batches"
   ) {
     apps = buildPackagesInstallAssets({
       existingApps: apps,
+      existingBrowserSurfaceOriginAppIds: [],
       packages: [],
       candid: "service : {}",
       removedApps: ordinaryIds.slice(
@@ -2226,6 +2783,8 @@ test("uninstall preflight blocks providers and permits consumers", () => {
   const state = {
     registry: {},
     apps: {},
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: true,
     existingModules: [],
     existingConfigs: { kernel, contacts, calendar },
     previousStable: null,
@@ -2331,6 +2890,8 @@ test("uninstall preflight reports nested dependency impact", () => {
       state: {
         registry: {},
         apps: {},
+        browserSurfaceOriginAppIds: [],
+        browserSurfaceOriginsSidecarPresent: true,
         existingModules: [],
         existingConfigs: { kernel, files, search, editor },
         previousStable: null,
@@ -3096,6 +3657,30 @@ test("wasm assets use the browser streaming compile MIME type", () => {
   );
 });
 
+test("browser surface assets use destination-compatible MIME types", () => {
+  for (const [path, expected] of [
+    ["module.mjs", "application/javascript"],
+    ["font.woff", "font/woff"],
+    ["font.woff2", "font/woff2"],
+    ["font.ttf", "font/ttf"],
+    ["font.otf", "font/otf"],
+    ["site.webmanifest", "application/manifest+json"],
+    ["image.avif", "image/avif"],
+    ["captions.vtt", "text/vtt"],
+    ["audio.m4a", "audio/mp4"],
+    ["audio.aac", "audio/aac"],
+    ["audio.flac", "audio/flac"],
+    ["audio.oga", "audio/ogg"],
+    ["audio.opus", "audio/ogg"],
+    ["audio.weba", "audio/webm"],
+    ["video.ogv", "video/ogg"],
+    ["video.mov", "video/quicktime"],
+    ["font.eot", "application/vnd.ms-fontobject"],
+  ] as const) {
+    expect(mime(path)).toBe(expected);
+  }
+});
+
 test("kernel package state binds exactly to the active assembler and app inventory", () => {
   const kernel = {
     format: 3 as const,
@@ -3118,6 +3703,8 @@ test("kernel package state binds exactly to the active assembler and app invento
   const state: KernelPackageState = {
     registry,
     apps: registry,
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: true,
     existingConfigs: { kernel, hello },
     existingModules: [],
     previousStable: "type Stable = {}",
@@ -3125,7 +3712,7 @@ test("kernel package state binds exactly to the active assembler and app invento
   };
   const runtime = {
     deployment_id: "0123456789abcdef0123456789abcdef",
-    assembler_id: "neutron_actor_v25",
+    assembler_id: "neutron_actor_v26",
     compiler_id: "moc_test",
     apps: Object.entries(registry)
       .sort(([left], [right]) =>
@@ -3146,6 +3733,57 @@ test("kernel package state binds exactly to the active assembler and app invento
   expect(() =>
     assertKernelPackageStateMatchesRuntime(state, runtime),
   ).not.toThrow();
+  expect(() =>
+    assertKernelPackageStateMatchesRuntime(
+      { ...state, browserSurfaceOriginsSidecarPresent: false },
+      runtime,
+    ),
+  ).toThrow(/missing its browser-surface origins sidecar/);
+  const v25State = {
+    ...state,
+    browserSurfaceOriginsSidecarPresent: false,
+  };
+  expect(() =>
+    assertKernelPackageBaselineMatchesRuntime(v25State, {
+      ...runtime,
+      assembler_id: "neutron_actor_v25",
+    }),
+  ).not.toThrow();
+  expect(() =>
+    assertKernelPackageBaselineMatchesRuntime(state, {
+      ...runtime,
+      assembler_id: "neutron_actor_v25",
+    }),
+  ).toThrow(
+    /Assembler neutron_actor_v25 cannot contain a browser-surface origins sidecar/,
+  );
+  const markedState = {
+    ...state,
+    browserSurfaceOriginAppIds: ["hello"],
+  };
+  expect(() =>
+    assertKernelPackageStateMatchesRuntime(markedState, runtime),
+  ).not.toThrow();
+  expect(() =>
+    assertKernelPackageBaselineMatchesRuntime(
+      {
+        ...markedState,
+        browserSurfaceOriginsSidecarPresent: false,
+      },
+      {
+        ...runtime,
+        assembler_id: "neutron_actor_v25",
+      },
+    ),
+  ).toThrow(
+    /Assembler neutron_actor_v25 cannot own v26 browser-surface origin authority/,
+  );
+  expect(() =>
+    assertKernelPackageStateMatchesRuntime(state, {
+      ...runtime,
+      assembler_id: "neutron_actor_v25",
+    }),
+  ).toThrow(/assembler generation/);
   expect(() =>
     assertKernelPackageBaselineMatchesRuntime(state, {
       ...runtime,
@@ -3258,6 +3896,8 @@ test("runtime memory verification keys equal local ids by owner", () => {
   const state: KernelPackageState = {
     registry,
     apps: registry,
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: true,
     existingConfigs: { alpha, beta_app: beta, kernel },
     existingModules: [],
     previousStable: "type Stable = {}",
@@ -3265,7 +3905,7 @@ test("runtime memory verification keys equal local ids by owner", () => {
   };
   const runtime = {
     deployment_id: deploymentId,
-    assembler_id: "neutron_actor_v25",
+    assembler_id: "neutron_actor_v26",
     compiler_id: "moc_test",
     apps: Object.entries(registry).map(([app_id, entry], index) => ({
       scope: { app_id, installation_uid: BigInt(index + 1) },
@@ -3360,6 +4000,7 @@ test("deploy rejects a backend-call reservation for its target before I/O", asyn
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(
@@ -3409,6 +4050,7 @@ test("deploy uses journal-bound management chunks above the ingress limit", asyn
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -3462,6 +4104,7 @@ test("failed chunked activation clears the management store before abort", async
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
       verifyTimeoutMs: 1,
     }),
@@ -3503,6 +4146,7 @@ test("chunk upload failure aborts without waiting for runtime activation", async
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/upload failed before activation was dispatched/);
@@ -3527,6 +4171,7 @@ test("deploy stages assets, verifies the actor, then commits", async () => {
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -3595,6 +4240,7 @@ test("deploy snapshots reviewed package content before its first upload await", 
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -3664,7 +4310,7 @@ test("deploy seals compile identity and runtime expectations before its first up
   };
   actor.kernel_runtime_info = async () => ({
     deployment_id: reviewed.deploymentId,
-    assembler_id: "neutron_actor_v25",
+    assembler_id: "neutron_actor_v26",
     compiler_id: reviewed.compilerId,
     apps: runtimeInstances(reviewed, reviewed.deploymentId),
     memories: reviewed.managedMemoryInventory,
@@ -3679,6 +4325,7 @@ test("deploy seals compile identity and runtime expectations before its first up
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -3745,6 +4392,7 @@ test("deploy prepares install reservations after the journal and before activati
     packages: [zeta, alpha],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -3799,6 +4447,7 @@ test("deploy rejects a target that lacks the current install commit", async () =
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(
@@ -3840,6 +4489,7 @@ service : () -> IncompatibleKernel
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/install commit binding mismatch.*input arity/i);
@@ -3880,6 +4530,7 @@ test("deploy replays an ambiguously acknowledged reservation preparation before 
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -3932,6 +4583,7 @@ test("failed reservation preparation confirms pre-dispatch abort without runtime
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/reservation preparation unavailable/i);
@@ -3976,6 +4628,7 @@ test("failed reservation preparation reports unconfirmed cleanup without dispatc
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/cleanup could not be confirmed/i);
@@ -4017,6 +4670,7 @@ test("failed reservation preparation never trusts a stale empty cleanup query", 
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/cleanup could not be confirmed/i);
@@ -4055,6 +4709,7 @@ test("a blocked current commit remains pending and cannot report deploy success"
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/commit is blocked.*remains pending/i);
@@ -4095,6 +4750,7 @@ test("deploy replays a lost current commit reply", async () => {
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).resolves.toMatchObject({ compiled });
@@ -4125,6 +4781,7 @@ test("current commit cannot report success while its journal remains pending", a
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/could not be causally confirmed/i);
@@ -4154,6 +4811,7 @@ test("current commit never trusts a stale empty status after two failed updates"
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/could not be causally confirmed/i);
@@ -4188,6 +4846,7 @@ test("a multi-package deployment uses one journal, activation, and commit", asyn
     packages: [hello, other],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -4224,6 +4883,7 @@ test("deploy commits caller-supplied staged assets in the same journal", async (
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
     stagedAssets: [
       {
@@ -4246,6 +4906,8 @@ test("deploy rejects staged asset collisions and reserved targets before IO", as
   const compiled = compiledFixture(prepared);
   for (const target of [
     "/system/apps.json",
+    BROWSER_SURFACE_ORIGINS_PATH,
+    "/app/hello/extra.js",
     "/mo/forbidden.mo",
     "/system/staging/x",
     DEPLOYMENT_BUILD_RECORD_PATH,
@@ -4262,6 +4924,7 @@ test("deploy rejects staged asset collisions and reserved targets before IO", as
         packages: [prepared],
         compiled,
         existingApps: {},
+        existingBrowserSurfaceOriginAppIds: [],
         expectedDeploymentId: "old-deployment",
         stagedAssets: [{ target, content: bytes("x") }],
       }),
@@ -4288,6 +4951,7 @@ test("deploy rejects an oversized install journal before any upload", async () =
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
       stagedAssets: Array.from(
         { length: KERNEL_INSTALL_MAX_COPIES },
@@ -4327,6 +4991,7 @@ test("Kernel legal and deployment-record clears count toward the bounded prefix 
       existingApps: {
         kernel: appRegistryEntry({ ...kernel.manifest, version: 307 }),
       },
+      existingBrowserSurfaceOriginAppIds: [],
       deploymentBuildRecord: {} as any,
       expectedDeploymentId: "old-deployment",
     }),
@@ -4352,6 +5017,7 @@ test("deploy rejects too many app removals before any upload", async () => {
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
       removedApps: Array.from(
         { length: KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT + 1 },
@@ -4385,6 +5051,7 @@ test("deployment records an expected-baseline journal before activation", async 
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -4422,6 +5089,7 @@ test("journal begin failures stop before activation", async () => {
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/kernel_install_begin_checked/);
@@ -4460,6 +5128,7 @@ test("deploy clears partial staging when an upload fails before journaling", asy
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow("staging upload failed");
@@ -4490,6 +5159,7 @@ test("deploy retains staging after two unacknowledged journal failures", async (
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow("journal write failed");
@@ -4531,6 +5201,7 @@ test("deploy proceeds when the exact journal replay acknowledges a lost first re
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).resolves.toMatchObject({ compiled });
@@ -4572,6 +5243,7 @@ test("deploy retains staging when journal replies are lost and status is stale",
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow("journal response lost");
@@ -4584,6 +5256,55 @@ test("deploy retains staging when journal replies are lost and status is stale",
   expect(Array.isArray(status) ? status[0]?.deployment_id : undefined).toBe(
     compiled.deploymentId,
   );
+});
+
+test("deploy rejects browser-surface origin authority drift before I/O", async () => {
+  const prepared = preparePackageInstall(helloPackageFiles());
+  const compiled = compiledFixture(prepared);
+  const retainedCalls: string[] = [];
+  const retainedActor = journalActor({
+    calls: retainedCalls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+  await expect(
+    deployPreparedPackages({
+      actor: retainedActor,
+      packages: [],
+      compiled,
+      existingApps: { hello: appRegistryEntry(prepared.manifest) },
+      existingBrowserSurfaceOriginAppIds: [],
+      expectedDeploymentId: "old-deployment",
+    }),
+  ).rejects.toThrow(
+    "Browser-surface origin sidecar does not match compile output",
+  );
+  expect(retainedCalls).toEqual([]);
+
+  const suppressed = {
+    ...compiledFixture(prepared),
+    browserSurfaceOriginAppIds: [],
+  };
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: suppressed.deploymentId,
+    compiled: suppressed,
+  });
+
+  await expect(
+    deployPreparedPackages({
+      actor,
+      packages: [prepared],
+      compiled: suppressed,
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      expectedDeploymentId: "old-deployment",
+    }),
+  ).rejects.toThrow(
+    "Browser-surface origin sidecar does not match compile output",
+  );
+  expect(calls).toEqual([]);
 });
 
 test("deploy preserves kernel root HTML content type while staging", async () => {
@@ -4614,6 +5335,7 @@ test("deploy preserves kernel root HTML content type while staging", async () =>
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -4641,6 +5363,58 @@ test("the v0.3.6 bridge omits the unsupported legal clear and copies its record"
   ]);
 });
 
+test("state-preserving deployment rejects a legacy assembler before I/O", async () => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(307));
+  const candidate = preparePackageInstall(kernelPackageFilesAtVersion(308));
+  const existingApps = { kernel: appRegistryEntry(previous.manifest) };
+  const compiled: CompileResult = {
+    ...completeKernelCompiledFixture(candidate),
+    assemblerId: LEGACY_V25_ASSEMBLER_ID,
+  };
+  const state: KernelPackageState = {
+    registry: existingApps,
+    apps: existingApps,
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: false,
+    existingConfigs: { kernel: previous.manifest },
+    existingModules: [],
+    previousStable: "previous stable signature\n",
+    connectionProviderSupport: connectionProviderSupportFixture,
+  };
+
+  expect(() =>
+    prepareCompleteDeploymentBuildRecord({
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      packages: [candidate],
+      state,
+      compiled,
+      expectedDeploymentId: "c".repeat(32),
+    }),
+  ).toThrow(
+    `State-preserving deployment requires current assembler ${ASSEMBLER_ID}`,
+  );
+
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+  await expect(
+    deployPreparedPackages({
+      actor,
+      packages: [candidate],
+      compiled,
+      existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
+      expectedDeploymentId: "c".repeat(32),
+    }),
+  ).rejects.toThrow(
+    `State-preserving deployment requires current assembler ${ASSEMBLER_ID}`,
+  );
+  expect(calls).toEqual([]);
+});
+
 test("v0.3.7 rejects missing or null records for inline and chunked deployments before I/O", async () => {
   const previous = preparePackageInstall(kernelPackageFilesAtVersion(307));
   const candidate = preparePackageInstall(kernelPackageFilesAtVersion(308));
@@ -4663,6 +5437,7 @@ test("v0.3.7 rejects missing or null records for inline and chunked deployments 
           packages: [candidate],
           compiled,
           existingApps,
+          existingBrowserSurfaceOriginAppIds: [],
           expectedDeploymentId: "c".repeat(32),
           ...(deploymentBuildRecord === null
             ? { deploymentBuildRecord: null as never }
@@ -4692,6 +5467,8 @@ test.each([
   const state: KernelPackageState = {
     registry: previousApps,
     apps: previousApps,
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: false,
     existingConfigs: { kernel: previous.manifest },
     existingModules: [],
     previousStable: "previous stable signature\n",
@@ -4765,6 +5542,7 @@ test.each([
     packages: [candidate],
     compiled,
     existingApps: previousApps,
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId,
     deploymentBuildRecord: preparedBuild.record,
   });
@@ -4809,6 +5587,8 @@ test("deploy rejects supplied-archive and predecessor drift from a sealed record
     state: {
       registry: existingApps,
       apps: existingApps,
+      browserSurfaceOriginAppIds: [],
+      browserSurfaceOriginsSidecarPresent: false,
       existingConfigs: { kernel: previous.manifest },
       existingModules: [],
       previousStable: "previous stable signature\n",
@@ -4836,6 +5616,7 @@ test("deploy rejects supplied-archive and predecessor drift from a sealed record
       packages: [replacement],
       compiled,
       existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "c".repeat(32),
       deploymentBuildRecord: preparedBuild.record,
     }),
@@ -4853,6 +5634,7 @@ test("deploy rejects supplied-archive and predecessor drift from a sealed record
       packages: [candidate],
       compiled: mismatchedPredecessor,
       existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "c".repeat(32),
       deploymentBuildRecord: preparedBuild.record,
     }),
@@ -4873,6 +5655,7 @@ test("deploy rejects unsealed clones and retained-package evidence mutation befo
   const compiledBase = compiledFixture(candidate, retained);
   const compiled: CompileResult = {
     ...compiledBase,
+    browserSurfaceOriginAppIds: [],
     deploymentId: "a".repeat(32),
     deploymentNonce: "b".repeat(32),
     previousStableSignatureSha256: hashContent(
@@ -4890,6 +5673,8 @@ test("deploy rejects unsealed clones and retained-package evidence mutation befo
     state: {
       registry: existingApps,
       apps: existingApps,
+      browserSurfaceOriginAppIds: [],
+      browserSurfaceOriginsSidecarPresent: false,
       existingConfigs: {
         kernel: previous.manifest,
         hello: retained.manifest,
@@ -4938,6 +5723,7 @@ test("deploy rejects unsealed clones and retained-package evidence mutation befo
         packages: [candidate],
         compiled,
         existingApps,
+        existingBrowserSurfaceOriginAppIds: [],
         expectedDeploymentId: "c".repeat(32),
         deploymentBuildRecord,
       }),
@@ -4959,6 +5745,8 @@ test("deploy rejects Candid drift from sealed review before I/O", async () => {
     state: {
       registry: existingApps,
       apps: existingApps,
+      browserSurfaceOriginAppIds: [],
+      browserSurfaceOriginsSidecarPresent: false,
       existingConfigs: { kernel: previous.manifest },
       existingModules: [],
       previousStable: "previous stable signature\n",
@@ -4982,6 +5770,7 @@ test("deploy rejects Candid drift from sealed review before I/O", async () => {
       packages: [candidate],
       compiled,
       existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "c".repeat(32),
       deploymentBuildRecord: preparedBuild.record,
     }),
@@ -5002,6 +5791,8 @@ test("deploy rejects stable-signature drift from sealed review before I/O", asyn
     state: {
       registry: existingApps,
       apps: existingApps,
+      browserSurfaceOriginAppIds: [],
+      browserSurfaceOriginsSidecarPresent: false,
       existingConfigs: { kernel: previous.manifest },
       existingModules: [],
       previousStable: "previous stable signature\n",
@@ -5025,6 +5816,7 @@ test("deploy rejects stable-signature drift from sealed review before I/O", asyn
       packages: [candidate],
       compiled,
       existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "c".repeat(32),
       deploymentBuildRecord: preparedBuild.record,
     }),
@@ -5042,6 +5834,8 @@ test("retained package evidence is bound to runtime context and package version"
   const state: KernelPackageState = {
     registry: previousApps,
     apps: previousApps,
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: false,
     existingConfigs: { kernel: previous.manifest },
     existingModules: [],
     previousStable: "previous stable signature\n",
@@ -5161,6 +5955,7 @@ test("deploy keeps kernel-package Candid compatibility while committing compiled
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -5190,6 +5985,7 @@ test("deploy does not globally delete modules after releasing its journal", asyn
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
   });
 
@@ -5237,6 +6033,7 @@ test("deploy stages only obsolete baseline modules for atomic commit cleanup", a
     packages: [prepared],
     compiled,
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId: "old-deployment",
     previousModulePaths: [retired, retained, retired],
   });
@@ -5266,6 +6063,7 @@ test("deploy rejects invalid baseline module cleanup paths before upload", async
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
       previousModulePaths: ["not-content-addressed.mo"],
     }),
@@ -5314,6 +6112,7 @@ test("deploy rejects crafted stable retirement metadata before any IO", async ()
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/retirement metadata does not match/);
@@ -5363,6 +6162,7 @@ test("deploy rejects crafted declared retirement metadata before any IO", async 
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
     }),
   ).rejects.toThrow(/retirement metadata does not match/);
@@ -5386,6 +6186,7 @@ test("failed actor activation aborts staging without changing active metadata", 
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
       verifyTimeoutMs: 1,
     }),
@@ -5423,6 +6224,7 @@ test("a trapped migration leaves one two-app journal recovery without a partial 
       packages: [hello, other],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
       verifyTimeoutMs: 1,
     }),
@@ -5461,6 +6263,7 @@ test("runtime verification timeout retains the install dispatch error", async ()
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
       verifyTimeoutMs: 1,
     });
@@ -5493,6 +6296,7 @@ test("deploy observer failures do not alter activation", async () => {
       packages: [prepared],
       compiled,
       existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
       expectedDeploymentId: "old-deployment",
       onStep() {
         throw new Error("observer failed");
@@ -5623,6 +6427,73 @@ test("pending journal recovery reports a blocked current commit as pending", asy
   expect(calls).not.toContain("abort");
 });
 
+test("v26 recovery commits only an exact active v25 journal target", async () => {
+  const prepared = preparePackageInstall(helloPackageFiles());
+  const compiled = compiledFixture(prepared);
+  const deploymentId = "deploy00000000000000000000000000";
+
+  const exactCalls: string[] = [];
+  const exact = journalActor({
+    calls: exactCalls,
+    deploymentId,
+    compiled,
+  });
+  await exact.kernel_install_begin_checked({
+    expected_deployment_id: "old-deployment",
+    journal: {
+      deployment_id: deploymentId,
+      copies: [],
+      clear_prefixes: [],
+      target_app_inventory: runtimeAppInventory(compiled),
+    },
+  });
+  const exactRuntimeInfo = exact.kernel_runtime_info.bind(exact);
+  exact.kernel_runtime_info = async () => ({
+    ...(await exactRuntimeInfo()),
+    assembler_id: "neutron_actor_v25",
+  });
+
+  await expect(recoverPendingInstall(exact, { timeoutMs: 1 })).resolves.toEqual(
+    { status: "committed", deploymentId },
+  );
+  expect(exactCalls).toContain("commit");
+
+  const mismatchCalls: string[] = [];
+  const mismatch = journalActor({
+    calls: mismatchCalls,
+    deploymentId,
+    compiled,
+  });
+  await mismatch.kernel_install_begin_checked({
+    expected_deployment_id: "old-deployment",
+    journal: {
+      deployment_id: deploymentId,
+      copies: [],
+      clear_prefixes: [],
+      target_app_inventory: runtimeAppInventory(compiled),
+    },
+  });
+  const mismatchRuntimeInfo = mismatch.kernel_runtime_info.bind(mismatch);
+  mismatch.kernel_runtime_info = async () => {
+    const runtime = await mismatchRuntimeInfo();
+    return {
+      ...runtime,
+      assembler_id: "neutron_actor_v25",
+      apps: runtime.apps.map((app, index) =>
+        index === 0
+          ? { ...app, browser_origin_authority_epoch: 99n }
+          : app,
+      ),
+    };
+  };
+
+  await expect(
+    recoverPendingInstall(mismatch, { timeoutMs: 1 }),
+  ).resolves.toEqual({ status: "pending", deploymentId });
+  expect(mismatchCalls).not.toContain("commit");
+  expect(mismatchCalls).not.toContain("abort");
+});
+
 test("pending journal recovery does not commit a stale assembler generation", async () => {
   const prepared = preparePackageInstall(helloPackageFiles());
   const compiled = compiledFixture(prepared);
@@ -5690,6 +6561,10 @@ service : () -> InstallKernel
     previousManagedMemoryInventory: [],
     managedMemoryInventory: [],
     previousStableSignatureSha256: null,
+    browserSurfaceOriginAppIds: packages
+      .filter(({ isKernel }) => !isKernel)
+      .map(({ manifest }) => manifest.id)
+      .sort(compareCanonicalText),
     capabilityPlans,
     appInstanceInventory: Object.entries(capabilityPlans)
       .map(([app_id, capability]) => ({
@@ -5706,6 +6581,7 @@ service : () -> InstallKernel
     vetKeysEnvironment: "production",
     persistenceMode: "classical",
     compilerId: "moc_test",
+    assemblerId: ASSEMBLER_ID,
     modulePaths: [
       ...new Set(packages.map(({ manifest }) => `${manifest.entry}.mo`)),
     ],
@@ -5770,6 +6646,8 @@ async function captureKernelReplacementJournal(
           state: {
             registry: existingApps,
             apps: existingApps,
+            browserSurfaceOriginAppIds: [],
+            browserSurfaceOriginsSidecarPresent: false,
             existingConfigs: { kernel: previousManifest },
             existingModules: [],
             previousStable: "previous stable signature\n",
@@ -5785,6 +6663,7 @@ async function captureKernelReplacementJournal(
     packages: [prepared],
     compiled,
     existingApps,
+    existingBrowserSurfaceOriginAppIds: [],
     expectedDeploymentId,
     ...(deploymentBuildRecord ? { deploymentBuildRecord } : {}),
   });
@@ -5860,7 +6739,7 @@ function journalActor({
     async kernel_runtime_info() {
       return {
         deployment_id: deploymentId,
-        assembler_id: "neutron_actor_v25",
+        assembler_id: "neutron_actor_v26",
         compiler_id: compiled?.compilerId ?? "test",
         apps: runtimeInstances(compiled, deploymentId),
         memories: [],

@@ -125,6 +125,7 @@ let registry : CapabilityTypes.RuntimeRegistry = {
 func certification(memory : Types.Memory) : Service.Certification {
     let tree = Cert.PersistentCertificationTree(
         memory.authenticated_forest,
+        func() {},
     );
     func commit() : Bool {
         switch (Forest.commit(memory.authenticated_forest)) {

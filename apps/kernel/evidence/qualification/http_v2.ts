@@ -14,6 +14,9 @@ import {
   type HttpAgent as CoreHttpAgent,
 } from "@icp-sdk/core/agent";
 import { Principal as CorePrincipal } from "@icp-sdk/core/principal";
+import {
+  isCanonicalAbsoluteInstallTarget,
+} from "neutron-compiler/src/package_decoder.js";
 import { createHash } from "node:crypto";
 import type { CertifiedHttpObservation, ExactBytes } from "./receipt.ts";
 import {
@@ -1645,24 +1648,10 @@ function decodeExpressionPath(value: Uint8Array): string[] {
 }
 
 function canonicalPathSegments(value: string): string[] {
-  if (
-    !value.startsWith("/") ||
-    value.includes("//") ||
-    value.includes("?") ||
-    value.includes("#") ||
-    value.includes("%") ||
-    value.includes("\\")
-  ) {
+  if (!isCanonicalAbsoluteInstallTarget(value)) {
     throw new Error("Certified HTTP path is not canonical");
   }
-  const segments = value === "/" ? [""] : value.slice(1).split("/");
-  if (
-    segments.length > 15 ||
-    segments.some((segment) => segment === "." || segment === "..")
-  ) {
-    throw new Error("Certified HTTP path has invalid segments");
-  }
-  return segments;
+  return value === "/" ? [""] : value.slice(1).split("/");
 }
 
 function representationIndependentRequestHash(

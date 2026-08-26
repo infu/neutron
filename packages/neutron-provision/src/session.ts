@@ -11,7 +11,10 @@ import { link, lstat, mkdir, open, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Principal } from "@dfinity/principal";
-import { ASSEMBLER_ID } from "neutron-compiler/src/assemble.js";
+import {
+  ASSEMBLER_ID,
+  LEGACY_V25_ASSEMBLER_ID,
+} from "neutron-compiler/src/assemble.js";
 import { isValidAppId } from "neutron-tools/src/app_ids.js";
 import {
   assertSupportedCertificateVersionsMetadata,
@@ -30,7 +33,11 @@ import {
   type DeploymentEvidenceV1,
   type DeploymentObservationV1,
 } from "./deployment_evidence.ts";
-import { TRANSACTION_PAYLOAD_VERSION } from "./payload.ts";
+import {
+  LEGACY_TRANSACTION_PAYLOAD_VERSION,
+  TRANSACTION_PAYLOAD_VERSION,
+  type TransactionPayloadVersion,
+} from "./payload.ts";
 import {
   assertPocketIcRuntimeDescriptor,
   type PocketIcRuntimeDescriptor,
@@ -58,7 +65,7 @@ type ExclusiveLockContents = {
 };
 
 export type TransactionPayloadReference = {
-  version: typeof TRANSACTION_PAYLOAD_VERSION;
+  version: TransactionPayloadVersion;
   sha256: string;
   bytes: number;
 };
@@ -1283,10 +1290,13 @@ function assertValidAdoptionReceipt(
   );
   nonEmptyString(runtime.deploymentId, `${label}.runtime.deploymentId`, 512);
   nonEmptyString(runtime.compilerId, `${label}.runtime.compilerId`, 512);
-  if (runtime.assemblerId !== ASSEMBLER_ID) {
+  if (
+    runtime.assemblerId !== ASSEMBLER_ID &&
+    runtime.assemblerId !== LEGACY_V25_ASSEMBLER_ID
+  ) {
     invalid(
       label,
-      `runtime.assemblerId must be the current ${ASSEMBLER_ID}`,
+      `runtime.assemblerId must be ${ASSEMBLER_ID} or its exact ${LEGACY_V25_ASSEMBLER_ID} predecessor`,
     );
   }
   assertValidAdoptionPackages(runtime.packages, `${label}.runtime.packages`);
@@ -1973,7 +1983,10 @@ function assertValidDeploymentArtifacts(
   }
   const payload = record(plan.payload, `${label}.payload`);
   exactKeys(payload, ["version", "sha256", "bytes"], [], `${label}.payload`);
-  if (payload.version !== TRANSACTION_PAYLOAD_VERSION) {
+  if (
+    payload.version !== LEGACY_TRANSACTION_PAYLOAD_VERSION &&
+    payload.version !== TRANSACTION_PAYLOAD_VERSION
+  ) {
     invalid(label, "uses unsupported transaction payload version");
   }
   sha256String(payload.sha256, `${label}.payload.sha256`);

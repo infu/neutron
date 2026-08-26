@@ -10,6 +10,7 @@ import {
 import type { BackendCallReservation } from "../backend_calls/service.ts";
 import {
   publicIngressResourceId,
+  type NeutronBrowserPermissionTileConfig,
   type NeutronCertifiedAssetsCapabilityConfig,
   type NeutronChainKeySigningSlotV1,
   type NeutronHttpsOutcallEndpointV1,
@@ -29,7 +30,11 @@ import type {
 import {
   BACKEND_CALL_PERSISTENCE_DISCLOSURE,
   BACKEND_RESERVATION_SCOPE_DISCLOSURES,
+  BROWSER_PERMISSION_FEATURE_DISCLOSURES,
+  BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
   DEDICATED_RESIDENT_ORIGIN_DISCLOSURE,
+  browserPermissionFeaturesTitle,
+  browserPermissionRequestDisclosure,
   certifiedAssetsCollectionDisclosure,
   capabilityPlanPermissions,
   permissionLevel,
@@ -128,6 +133,7 @@ export function AppSettingsEntry({
     entry,
     "dedicated_resident_origin",
   );
+  const browserPermissions = declaredCapability(entry, "browser_permissions");
   const preapprovedSelfCalls =
     declaredCapability(entry, "preapproved_self_calls")?.methods ?? [];
   const agentEntrypoints =
@@ -457,6 +463,12 @@ export function AppSettingsEntry({
                     {capability.id === "public_ingress" ? (
                       <PublicIngressSettingsDetails routes={publicIngressRoutes} />
                     ) : null}
+                    {capability.id === "browser_permissions" &&
+                    browserPermissions ? (
+                      <BrowserPermissionsSettingsDetails
+                        tiles={browserPermissions.tiles}
+                      />
+                    ) : null}
                     {resources.map((resource) => (
                       <CapabilityRuntimeRow
                         activeGrantCount={
@@ -513,7 +525,7 @@ export function AppSettingsEntry({
                     ? "persistent browser storage"
                     : dedicatedResidentOrigin
                       ? "ephemeral credential partition"
-                      : "credentialless opaque origin",
+                      : "credentialless isolated origin",
                 ]}
                 title="Background endpoint"
               />
@@ -939,6 +951,15 @@ function NormalAppDetails({
     permissions,
     "persistent_background_storage",
   )[0];
+  const browserPermissions = permissionsOf(
+    permissions,
+    "browser_permissions",
+  )[0];
+  const browserPermissionTitle = browserPermissions
+    ? browserPermissionFeaturesTitle(
+        browserPermissions.tiles.flatMap(({ features }) => features),
+      )
+    : "Device access";
   const dedicatedResidentOrigin = declaredCapability(
     entry,
     "dedicated_resident_origin",
@@ -987,6 +1008,33 @@ function NormalAppDetails({
       ) : null}
 
       <div className="settings-app-normal-grid">
+        {browserPermissions ? (
+          <NormalPermissionCard
+            description="Declared open tiles can ask the browser for device access. Installing the app does not activate a device."
+            kind="browser_permissions"
+            title={browserPermissionTitle}
+          >
+            <div className="settings-app-normal-lines">
+              {browserPermissions.tiles.flatMap(({ id, features }) =>
+                features.map((feature) => (
+                  <NormalPermissionLine
+                    description={browserPermissionRequestDisclosure(
+                      id,
+                      feature,
+                    )}
+                    key={`${id}:${feature}`}
+                    title={`${BROWSER_PERMISSION_FEATURE_DISCLOSURES[feature].title} · tile ${id}`}
+                  />
+                )),
+              )}
+              <NormalPermissionLine
+                description={BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE}
+                title="Delegation lifetime"
+              />
+            </div>
+          </NormalPermissionCard>
+        ) : null}
+
         {backendCalls || backendReservations.length > 0 ? (
           <NormalPermissionCard
             description={normalBackendDescription(backendCalls)}
@@ -1877,6 +1925,38 @@ function HttpRouteSettingsDetails({
           />
         );
       })}
+    </>
+  );
+}
+
+function BrowserPermissionsSettingsDetails({
+  tiles,
+}: {
+  tiles: readonly NeutronBrowserPermissionTileConfig[];
+}) {
+  return (
+    <>
+      {tiles.flatMap(({ id, features }) =>
+        features.map((feature) => (
+          <AppDetailItem
+            description={browserPermissionRequestDisclosure(id, feature)}
+            fullDescription
+            key={`${id}:${feature}`}
+            meta={[
+              `tile ${id}`,
+              `feature ${feature}`,
+              "browser decision remains authoritative",
+            ]}
+            title={BROWSER_PERMISSION_FEATURE_DISCLOSURES[feature].title}
+          />
+        )),
+      )}
+      <AppDetailItem
+        description={BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE}
+        fullDescription
+        meta={["structural declaration", "no runtime toggle"]}
+        title="Delegation lifetime"
+      />
     </>
   );
 }

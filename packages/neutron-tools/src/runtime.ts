@@ -1,10 +1,14 @@
 import { isValidAppId } from "./app_ids.ts";
+import { sha256 } from "js-sha256";
+import { isValidTileId } from "./tile_ids.ts";
 
 export const DEFAULT_LOCAL_HOST = "http://localhost:8000";
 export const LOCAL_II_FRONTEND_CANISTER_ID =
   "uqzsh-gqaaa-aaaaq-qaada-cai";
 
 const DNS_LABEL_MAX_LENGTH = 63;
+const INSTALLATION_APP_SURFACE_DOMAIN =
+  "neutron.app-browser-surface-origin.v1";
 
 export function envFlag(value: unknown): boolean {
   return (
@@ -81,10 +85,10 @@ export function canisterOrigin({
 
 /**
  * Derive the only parent origin that may act as the kernel for an app frame.
- * Opaque-mode app frames use an isolated verified subdomain; frames belonging
- * to an app with a dedicated resident may use the verified unprefixed canister
- * origin, which is also the trusted shell origin. Unverified raw/custom
- * gateways are not valid parent-authentication surfaces.
+ * Accepted app documents may use a legacy app prefix, an installation-surface
+ * prefix, a dedicated-resident prefix, or the legacy unprefixed canister URL.
+ * Every accepted form maps back to the verified Kernel shell origin;
+ * unverified raw and custom gateways are not authentication surfaces.
  */
 export function kernelParentOriginFromAppUrl(
   href: string | URL,
@@ -95,40 +99,80 @@ export function kernelParentOriginFromAppUrl(
   } catch {
     return null;
   }
-  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-
-  const canisterId = canisterIdFromUrl(url);
-  if (!canisterId) return null;
-  const port = url.port ? `:${url.port}` : "";
-  const hostname = url.hostname.toLowerCase();
-
-  // Raw gateways deliberately skip response verification. They are not a
-  // valid parent-authentication surface for Neutron app frames.
+  const appUrl = verifiedAppGatewayUrl(url);
+  if (!appUrl) return null;
   if (
-    hostname.endsWith(".raw.icp0.io") ||
-    hostname.endsWith(".raw.ic0.app") ||
-    hostname.endsWith(".raw.icp.net")
+    appUrl.prefix !== null &&
+    appUrl.prefix !== appFramePrefix({ appId: appUrl.appId }) &&
+    !/^[ip][a-f0-9]{24}$/u.test(appUrl.prefix)
   ) return null;
+  return appUrl.parentOrigin;
+}
 
-  const mainnetSuffix = ".icp0.io";
-  if (hostname.endsWith(mainnetSuffix)) {
-    const firstLabel = hostname.split(".")[0] ?? "";
-    if (firstLabel.endsWith(`--${canisterId}`)) {
-      return `${url.protocol}//${canisterId}${mainnetSuffix}${port}`;
-    }
-    return url.origin;
+type AppWindowLocation = Readonly<{
+  location: Readonly<{ href: string }>;
+}>;
+
+const kernelParentOriginsByAppWindow = new WeakMap<object, string | null>();
+
+/**
+ * Cache the authenticated Kernel parent from an app window's launch URL.
+ * History API route changes must not change the parent identity after launch.
+ */
+export function kernelParentOriginFromAppWindow(
+  appWindow: AppWindowLocation,
+): string | null {
+  if (kernelParentOriginsByAppWindow.has(appWindow)) {
+    return kernelParentOriginsByAppWindow.get(appWindow) ?? null;
   }
-
-  if (url.port === "8000" && hostname.endsWith(".localhost")) {
-    const labels = hostname.split(".");
-    const first = labels[0] ?? "";
-    if (first === canisterId || first.endsWith(`--${canisterId}`)) {
-      const suffix = labels.slice(1).join(".");
-      return `${url.protocol}//${canisterId}${suffix ? `.${suffix}` : ""}${port}`;
-    }
+  let origin: string | null = null;
+  try {
+    origin = kernelParentOriginFromAppUrl(appWindow.location.href);
+  } catch {
+    // Unreadable or invalid launch locations fail closed.
   }
+  kernelParentOriginsByAppWindow.set(appWindow, origin);
+  return origin;
+}
 
-  return null;
+type VerifiedAppGatewayUrl = Readonly<{
+  appId: string;
+  canisterId: string;
+  prefix: string | null;
+  parentOrigin: string;
+}>;
+
+function verifiedAppGatewayUrl(url: URL): VerifiedAppGatewayUrl | null {
+  if (url.username !== "" || url.password !== "") return null;
+  const path = /^\/app\/([^/]+)\//u.exec(url.pathname);
+  const appId = path?.[1];
+  if (!appId || !isValidAppId(appId)) return null;
+
+  const hostname = url.hostname.toLowerCase();
+  const mainnet =
+    url.protocol === "https:" &&
+    url.port === ""
+      ? /^([^.]+)\.icp0\.io$/u.exec(hostname)
+      : null;
+  const local =
+    url.protocol === "http:" &&
+    url.port === "8000"
+      ? /^([^.]+)\.localhost$/u.exec(hostname)
+      : null;
+  const gateway = mainnet || local;
+  const firstLabel = gateway?.[1];
+  if (!firstLabel) return null;
+
+  const labels = firstLabel.split("--");
+  if (labels.length > 2) return null;
+  const canisterId = labels.at(-1);
+  if (!canisterId || !isCanisterIdLike(canisterId)) return null;
+  const prefix = labels.length === 2 ? labels[0]! : null;
+  if (prefix === "") return null;
+  const parentOrigin = mainnet
+    ? `https://${canisterId}.icp0.io`
+    : `http://${canisterId}.localhost:8000`;
+  return Object.freeze({ appId, canisterId, prefix, parentOrigin });
 }
 
 export function appFramePrefix({
@@ -157,17 +201,94 @@ export function persistentAppFramePrefix({
   browserOriginNonce: string;
   maxLength?: number;
 }): string {
-  if (!/^[a-f0-9]{32}$/u.test(browserOriginNonce)) {
-    throw new Error("Invalid browser-origin nonce");
-  }
   // Ninety-six bits of the kernel-assigned nonce keep the DNS label compact
   // enough to coexist with the canister suffix while making an app reinstall
   // a different browser origin. App identity remains source-bound by the
   // kernel and request path; this label is a storage partition identifier,
   // never an authority token or secret.
-  const prefix = `p${browserOriginNonce.slice(0, 24)}`;
+  return nonceAppFramePrefix(
+    "p",
+    browserOriginNonce,
+    maxLength,
+    "browser-origin",
+  );
+}
+
+export type InstallationAppSurfaceKey =
+  | `tile:${string}`
+  | "tray"
+  | "background";
+
+export function installationAppSurfaceNonce({
+  surfaceBaseNonce,
+  surfaceKey,
+}: {
+  surfaceBaseNonce: string;
+  surfaceKey: InstallationAppSurfaceKey;
+}): string {
+  if (!/^[a-f0-9]{32}$/u.test(surfaceBaseNonce)) {
+    throw new Error("Invalid browser surface-base nonce");
+  }
+  assertInstallationAppSurfaceKey(surfaceKey);
+  const hash = sha256.create();
+  hash.update(lengthPrefixedUtf8(INSTALLATION_APP_SURFACE_DOMAIN));
+  hash.update(lengthPrefixedUtf8(surfaceBaseNonce));
+  hash.update(lengthPrefixedUtf8(surfaceKey));
+  return hash.hex().slice(0, 32);
+}
+
+export function installationAppSurfacePrefix({
+  surfaceBaseNonce,
+  surfaceKey,
+  maxLength = DNS_LABEL_MAX_LENGTH,
+}: {
+  surfaceBaseNonce: string;
+  surfaceKey: InstallationAppSurfaceKey;
+  maxLength?: number;
+}): string {
+  return nonceAppFramePrefix(
+    "i",
+    installationAppSurfaceNonce({ surfaceBaseNonce, surfaceKey }),
+    maxLength,
+    "browser surface-origin",
+  );
+}
+
+function assertInstallationAppSurfaceKey(
+  surfaceKey: InstallationAppSurfaceKey,
+): void {
+  if (
+    surfaceKey === "tray" ||
+    surfaceKey === "background" ||
+    (surfaceKey.startsWith("tile:") &&
+      isValidTileId(surfaceKey.slice("tile:".length)))
+  ) return;
+  throw new Error("Invalid installation app surface key");
+}
+
+function lengthPrefixedUtf8(value: string): Uint8Array {
+  return lengthPrefixedBytes(new TextEncoder().encode(value));
+}
+
+function lengthPrefixedBytes(value: Uint8Array): Uint8Array {
+  const result = new Uint8Array(4 + value.byteLength);
+  new DataView(result.buffer).setUint32(0, value.byteLength, false);
+  result.set(value, 4);
+  return result;
+}
+
+function nonceAppFramePrefix(
+  discriminator: "i" | "p",
+  nonce: string,
+  maxLength: number,
+  label: "browser-origin" | "browser surface-origin",
+): string {
+  if (!/^[a-f0-9]{32}$/u.test(nonce)) {
+    throw new Error(`Invalid ${label} nonce`);
+  }
+  const prefix = `${discriminator}${nonce.slice(0, 24)}`;
   if (prefix.length > maxLength) {
-    throw new Error("Persistent app origin prefix exceeds DNS limits");
+    throw new Error(`${label} app origin prefix exceeds DNS limits`);
   }
   return prefix;
 }
@@ -185,6 +306,8 @@ function appCanisterOrigin({
   canisterId,
   appId,
   browserOriginNonce,
+  surfaceBaseNonce,
+  browserSurfaceKey,
   unprefixed,
   local,
   localHost,
@@ -192,17 +315,41 @@ function appCanisterOrigin({
   canisterId: string;
   appId: string;
   browserOriginNonce?: string;
+  surfaceBaseNonce?: string;
+  browserSurfaceKey?: InstallationAppSurfaceKey;
   unprefixed?: boolean;
   local: boolean;
   localHost: string;
 }): string {
+  if (!isValidAppId(appId)) {
+    throw new Error(`Invalid app id '${appId}' for app origin`);
+  }
   if (local) assertVerifiedLocalAppGateway(localHost);
+  if (
+    Number(Boolean(unprefixed)) +
+      Number(browserOriginNonce !== undefined) +
+      Number(surfaceBaseNonce !== undefined) >
+    1
+  ) {
+    throw new Error("App origin selectors are mutually exclusive");
+  }
+  if (
+    (surfaceBaseNonce === undefined) !==
+    (browserSurfaceKey === undefined)
+  ) {
+    throw new Error("Installation origin requires one exact app surface");
+  }
   if (unprefixed) {
     return canisterOrigin({ canisterId, local, localHost });
   }
-  const prefix = browserOriginNonce
-    ? persistentAppFramePrefix({ browserOriginNonce })
-    : appFramePrefix({ appId });
+  const prefix = surfaceBaseNonce !== undefined
+    ? installationAppSurfacePrefix({
+        surfaceBaseNonce,
+        surfaceKey: browserSurfaceKey!,
+      })
+    : browserOriginNonce !== undefined
+      ? persistentAppFramePrefix({ browserOriginNonce })
+      : appFramePrefix({ appId });
   if (local) return localCanisterOrigin(canisterId, localHost, prefix);
   return `https://${prefixedCanisterLabel(canisterId, prefix)}.icp0.io`;
 }
@@ -213,7 +360,11 @@ function assertVerifiedLocalAppGateway(localHost: string): void {
     gateway.hostname === "127.0.0.1" || gateway.hostname === "0.0.0.0"
       ? "localhost"
       : gateway.hostname.toLowerCase();
-  if (hostname !== "localhost" || gateway.port !== "8000") {
+  if (
+    gateway.protocol !== "http:" ||
+    hostname !== "localhost" ||
+    gateway.port !== "8000"
+  ) {
     throw new Error(
       "Verified local app origins require the localhost gateway on port 8000",
     );
@@ -226,11 +377,51 @@ export function isDedicatedAppOrigin(
   appId: string,
   browserOriginNonce?: string,
 ): boolean {
-  const url = new URL(href);
+  if (!isValidAppId(appId)) return false;
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return false;
+  }
+  const appUrl = verifiedAppGatewayUrl(url);
+  if (
+    !appUrl ||
+    appUrl.canisterId !== canisterId ||
+    appUrl.appId !== appId
+  ) return false;
   const prefix = browserOriginNonce
+    !== undefined
     ? persistentAppFramePrefix({ browserOriginNonce })
     : appFramePrefix({ appId });
-  return url.hostname.split(".")[0] === prefixedCanisterLabel(canisterId, prefix);
+  return appUrl.prefix === prefix;
+}
+
+export function isInstallationAppOrigin(
+  href: string | URL,
+  canisterId: string,
+  appId: string,
+  surfaceBaseNonce: string,
+  surfaceKey: InstallationAppSurfaceKey,
+): boolean {
+  if (!isValidAppId(appId)) return false;
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return false;
+  }
+  const prefix = installationAppSurfacePrefix({
+    surfaceBaseNonce,
+    surfaceKey,
+  });
+  const appUrl = verifiedAppGatewayUrl(url);
+  return Boolean(
+    appUrl &&
+      appUrl.canisterId === canisterId &&
+      appUrl.appId === appId &&
+      appUrl.prefix === prefix,
+  );
 }
 
 export function appIndexUrl({
@@ -240,6 +431,7 @@ export function appIndexUrl({
   tileId,
   instanceId,
   workspace,
+  surfaceBaseNonce,
   unprefixed = false,
   local = false,
   localHost = DEFAULT_LOCAL_HOST,
@@ -250,6 +442,7 @@ export function appIndexUrl({
   tileId?: string;
   instanceId?: string;
   workspace?: number;
+  surfaceBaseNonce?: string;
   unprefixed?: boolean;
   local?: boolean;
   localHost?: string;
@@ -263,6 +456,12 @@ export function appIndexUrl({
   const origin = appCanisterOrigin({
     canisterId,
     appId,
+    ...(surfaceBaseNonce !== undefined
+      ? {
+          surfaceBaseNonce,
+          browserSurfaceKey: installationAppTileSurfaceKey(tileId),
+        }
+      : {}),
     unprefixed,
     local,
     localHost,
@@ -276,6 +475,7 @@ export function appBackgroundUrl({
   appId,
   path,
   residentBinding,
+  surfaceBaseNonce,
   local = false,
   localHost = DEFAULT_LOCAL_HOST,
 }: {
@@ -283,6 +483,7 @@ export function appBackgroundUrl({
   appId: string;
   path: string;
   residentBinding?: DedicatedResidentBackgroundBinding;
+  surfaceBaseNonce?: string;
   local?: boolean;
   localHost?: string;
 }): string {
@@ -304,6 +505,12 @@ export function appBackgroundUrl({
     appId,
     ...(residentBinding
       ? { browserOriginNonce: residentBinding.browserOriginNonce }
+      : {}),
+    ...(surfaceBaseNonce !== undefined
+      ? {
+          surfaceBaseNonce,
+          browserSurfaceKey: "background" as const,
+        }
       : {}),
     local,
     localHost,
@@ -351,6 +558,7 @@ export function appTrayUrl({
   appId,
   path,
   instanceId,
+  surfaceBaseNonce,
   unprefixed = false,
   local = false,
   localHost = DEFAULT_LOCAL_HOST,
@@ -359,6 +567,7 @@ export function appTrayUrl({
   appId: string;
   path: string;
   instanceId: string;
+  surfaceBaseNonce?: string;
   unprefixed?: boolean;
   local?: boolean;
   localHost?: string;
@@ -370,12 +579,27 @@ export function appTrayUrl({
   const origin = appCanisterOrigin({
     canisterId,
     appId,
+    ...(surfaceBaseNonce !== undefined
+      ? {
+          surfaceBaseNonce,
+          browserSurfaceKey: "tray" as const,
+        }
+      : {}),
     unprefixed,
     local,
     localHost,
   });
 
   return `${origin}/app/${appId}/${path}?${search.toString()}`;
+}
+
+export function installationAppTileSurfaceKey(
+  tileId: string | undefined,
+): InstallationAppSurfaceKey {
+  if (!tileId || !isValidTileId(tileId)) {
+    throw new Error("Installation-origin tile URL requires a valid tile id");
+  }
+  return `tile:${tileId}`;
 }
 
 export function neutronUrl({

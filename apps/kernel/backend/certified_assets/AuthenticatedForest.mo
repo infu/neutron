@@ -39,6 +39,9 @@ module {
     public let COMMIT_DOMAIN = "neutron.certified-forest.commit.v1\00";
     public let DETACHED_TOKEN_DOMAIN =
         "neutron.certified-forest.detached-token.v1\00";
+    public let HTTP_EXPR_LABEL = "http_expr";
+    public let HTTP_EXPR_QUARANTINE_LABEL =
+        "neutron_retired_http_expr_v316";
 
     public type Color = { #red; #black };
     public type NodeId = Nat;
@@ -928,11 +931,16 @@ module {
         };
     };
 
-    public func attach(memory : Memory, token : Detached) : {
+    func attachDetachedAt(
+        memory : Memory,
+        token : Detached,
+        absolutePath : [Blob],
+    ) : {
         #ok;
         #err : Error;
     } {
         if (not writable(memory)) return #err(#unhealthy);
+        if (not validPath(absolutePath)) return #err(#invalid_path);
         let ?map = detachedMap(memory, token) else return #err(#stale_token);
         if (map.size == 0) return #err(#not_found);
         // Preflight before the first mutation.  `putAt` is also used for
@@ -942,7 +950,7 @@ module {
             lookupValueAt(
                 memory,
                 memory.header.response_root,
-                token.absolute_path,
+                absolutePath,
                 0,
             )
         ) {
@@ -954,7 +962,7 @@ module {
             preflightPut(
                 memory,
                 memory.header.response_root,
-                token.absolute_path,
+                absolutePath,
                 0,
             )
         ) {
@@ -969,7 +977,7 @@ module {
             putAt(
                 memory,
                 memory.header.response_root,
-                token.absolute_path,
+                absolutePath,
                 0,
                 #subtree(mapRef(map)),
             )
@@ -992,6 +1000,34 @@ module {
                 #ok;
             };
         };
+    };
+
+    public func attach(memory : Memory, token : Detached) : {
+        #ok;
+        #err : Error;
+    } {
+        attachDetachedAt(memory, token, token.absolute_path);
+    };
+
+    public func httpExprQuarantinePathV316() : [Blob] {
+        [Text.encodeUtf8(HTTP_EXPR_QUARANTINE_LABEL)];
+    };
+
+    // Relocates only a detached `http_expr` root beneath the reserved
+    // top-level quarantine. This deliberately narrow primitive cannot graft
+    // an arbitrary subtree back into HTTP authority or ahead of
+    // `http_assets` in the combined certification tree.
+    public func attachHttpExprQuarantineV316(
+        memory : Memory,
+        token : Detached,
+    ) : {
+        #ok;
+        #err : Error;
+    } {
+        if (token.absolute_path != [Text.encodeUtf8(HTTP_EXPR_LABEL)]) {
+            return #err(#invalid_path);
+        };
+        attachDetachedAt(memory, token, httpExprQuarantinePathV316());
     };
 
     // Lifecycle cleanup removes leaves through bounded detached point

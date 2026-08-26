@@ -30,6 +30,7 @@ const interpretedTests = [
   "connections_service_test.mo",
   "frontend_runtime_admission_test.mo",
   "gateway_authority_test.mo",
+  "http_canonical_paths_test.mo",
   "http_privacy_test.mo",
   "http_certification_test.mo",
   "memory_v3_schema_test.mo",

@@ -5,11 +5,18 @@ import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import {
   DEFAULT_NEUTRON_PACKAGE_DECODE_LIMITS,
+  browserSurfaceOriginAppIdsForSelectedPackages,
   preparePackageInstall,
-  unpackNeutronPackage,
 } from "neutron-compiler/src/install.js";
 import { isValidAppId } from "neutron-tools/src/app_ids.js";
+import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import {
+  ASSEMBLER_ID,
+  assemblerForFreshKernelVersion,
+  LEGACY_V25_ASSEMBLER_ID,
+} from "neutron-compiler/src/assemble.js";
+import {
+  assertFreshPackageRoles,
   assertPreparedDeploymentWasmMetadata,
   assertWasmDeploymentLimits,
   chunkWasm,
@@ -22,7 +29,11 @@ import {
 } from "./artifact.ts";
 import { assertSupportedCertificateVersions } from "neutron-tools/src/wasm_metadata.js";
 
-export const TRANSACTION_PAYLOAD_VERSION = 3;
+export const TRANSACTION_PAYLOAD_VERSION = 4;
+export const LEGACY_TRANSACTION_PAYLOAD_VERSION = 3;
+export type TransactionPayloadVersion =
+  | typeof LEGACY_TRANSACTION_PAYLOAD_VERSION
+  | typeof TRANSACTION_PAYLOAD_VERSION;
 const RETIRED_TRANSACTION_PAYLOAD_VERSIONS = [2] as const;
 
 const SESSION_SUFFIX = ".ndeploy.session.json";
@@ -35,26 +46,6 @@ const MAX_PACKAGE_ARCHIVES_BYTES = 256 * 1024 * 1024;
 const MAX_TEXT_BYTES = 32 * 1024 * 1024;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
-type TransactionPayloadHeader = {
-  schema: typeof TRANSACTION_PAYLOAD_VERSION;
-  packages: Array<{
-    id: string;
-    version: number;
-    sha256: string;
-    bytes: number;
-  }>;
-  compilerId: string;
-  deploymentId: string;
-  rawWasmSha256: string;
-  rawWasmBytes: number;
-  transportWasmSha256: string;
-  transportWasmBytes: number;
-  candidSha256: string;
-  candidBytes: number;
-  stableSha256: string;
-  stableBytes: number;
-};
-
 export type SerializedTransactionPayload = {
   version: typeof TRANSACTION_PAYLOAD_VERSION;
   sha256: string;
@@ -64,8 +55,10 @@ export type SerializedTransactionPayload = {
 export function transactionPayloadPath(
   sessionPath: string,
   payloadSha256: string,
+  version: TransactionPayloadVersion = TRANSACTION_PAYLOAD_VERSION,
 ): string {
   assertSha256(payloadSha256, "transaction payload SHA-256");
+  assertTransactionPayloadVersion(version);
   const resolved = path.resolve(sessionPath);
   if (!resolved.endsWith(SESSION_SUFFIX)) {
     throw new Error(
@@ -77,7 +70,7 @@ export function transactionPayloadPath(
     path.dirname(resolved),
     ".neutron",
     "provision",
-    `${stem}-${payloadSha256}.payload-v${TRANSACTION_PAYLOAD_VERSION}`,
+    `${stem}-${payloadSha256}.payload-v${version}`,
   );
 }
 
@@ -87,6 +80,41 @@ export function serializeTransactionPayload(
   // This is the last purely local gate before a payload can be persisted and
   // referenced by a paid or destructive production transaction.
   assertPreparedDeploymentWasmMetadata(deployment);
+  const assemblerId = deployment.compiled.assemblerId;
+  if (
+    assemblerId !== ASSEMBLER_ID &&
+    assemblerId !== LEGACY_V25_ASSEMBLER_ID
+  ) {
+    throw new Error(`Unsupported transaction assembler ${String(assemblerId)}`);
+  }
+  assertFreshPackageRoles(deployment.packages);
+  const expectedAssemblerId = assemblerForFreshKernelVersion(
+    deployment.packages[0]!.manifest.version,
+  );
+  if (assemblerId !== expectedAssemblerId) {
+    throw new Error(
+      `Transaction assembler ${assemblerId} does not match selected Kernel ${deployment.packages[0]!.manifest.version}`,
+    );
+  }
+  const expectedBrowserSurfaceOriginAppIds =
+    browserSurfaceOriginAppIdsForSelectedPackages(
+      deployment.packages,
+      assemblerId,
+    );
+  if (
+    JSON.stringify(deployment.compiled.browserSurfaceOriginAppIds) !==
+    JSON.stringify(expectedBrowserSurfaceOriginAppIds)
+  ) {
+    throw new Error(
+      "Transaction payload browser-surface origins do not match the selected packages",
+    );
+  }
+  return serializeTransactionPayloadV4(deployment);
+}
+
+function serializeTransactionPayloadV4(
+  deployment: PreparedDeployment,
+): SerializedTransactionPayload {
   if (
     deployment.packages.length !== deployment.packageArchives.length ||
     deployment.packages.length !== deployment.packageArtifacts.length
@@ -97,7 +125,7 @@ export function serializeTransactionPayload(
   }
   const candid = new TextEncoder().encode(deployment.compiled.candid);
   const stable = new TextEncoder().encode(deployment.compiled.stable);
-  const header: TransactionPayloadHeader = {
+  const header = {
     schema: TRANSACTION_PAYLOAD_VERSION,
     packages: deployment.packageArtifacts.map((artifact) => ({
       id: artifact.id,
@@ -107,6 +135,9 @@ export function serializeTransactionPayload(
     })),
     compilerId: deployment.compiled.compilerId,
     deploymentId: deployment.compiled.deploymentId,
+    assemblerId: deployment.compiled.assemblerId,
+    browserSurfaceOriginAppIds:
+      deployment.compiled.browserSurfaceOriginAppIds,
     rawWasmSha256: deployment.rawWasmSha256,
     rawWasmBytes: deployment.compiled.wasm.byteLength,
     transportWasmSha256: deployment.transportWasmSha256,
@@ -165,7 +196,11 @@ export function serializeTransactionPayload(
   }
 
   // Validate our own output before it can become an external transaction journal.
-  parseTransactionPayload(bytes, deployment.packageArtifacts);
+  parseTransactionPayload(
+    bytes,
+    deployment.packageArtifacts,
+    TRANSACTION_PAYLOAD_VERSION,
+  );
   return {
     version: TRANSACTION_PAYLOAD_VERSION,
     sha256: sha256Hex(bytes),
@@ -176,14 +211,21 @@ export function serializeTransactionPayload(
 export async function readTransactionPayload({
   sessionPath,
   expectedSha256,
+  expectedVersion = TRANSACTION_PAYLOAD_VERSION,
   packageProvenance,
 }: {
   sessionPath: string;
   expectedSha256: string;
+  expectedVersion?: TransactionPayloadVersion;
   packageProvenance: PackageArtifact[];
 }): Promise<PreparedDeployment> {
   assertSha256(expectedSha256, "expected transaction payload SHA-256");
-  const filename = transactionPayloadPath(sessionPath, expectedSha256);
+  assertTransactionPayloadVersion(expectedVersion);
+  const filename = transactionPayloadPath(
+    sessionPath,
+    expectedSha256,
+    expectedVersion,
+  );
   const bytes = await readPrivateFile(filename);
   const actualSha256 = sha256Hex(bytes);
   if (actualSha256 !== expectedSha256) {
@@ -191,7 +233,7 @@ export async function readTransactionPayload({
       `Transaction payload digest mismatch: ${actualSha256} != ${expectedSha256}`,
     );
   }
-  return parseTransactionPayload(bytes, packageProvenance);
+  return parseTransactionPayload(bytes, packageProvenance, expectedVersion);
 }
 
 /** Durably publish a validated, content-addressed payload without replacement. */
@@ -205,7 +247,11 @@ export async function persistTransactionPayload(
   if (sha256Hex(payload.bytes) !== payload.sha256) {
     throw new Error("Serialized transaction payload digest is invalid");
   }
-  const filename = transactionPayloadPath(sessionPath, payload.sha256);
+  const filename = transactionPayloadPath(
+    sessionPath,
+    payload.sha256,
+    payload.version,
+  );
   const directory = path.dirname(filename);
   await ensureSecureDirectory(directory);
   const temporary = `${filename}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
@@ -238,8 +284,9 @@ export async function persistTransactionPayload(
 export async function removeTransactionPayload(
   sessionPath: string,
   payloadSha256: string,
+  version: TransactionPayloadVersion = TRANSACTION_PAYLOAD_VERSION,
 ): Promise<void> {
-  const filename = transactionPayloadPath(sessionPath, payloadSha256);
+  const filename = transactionPayloadPath(sessionPath, payloadSha256, version);
   let metadata;
   try {
     metadata = await lstat(filename);
@@ -274,11 +321,15 @@ export async function sweepUnreferencedTransactionPayloads(
   const location = transactionPayloadLocation(sessionPath);
   if (!(await secureDirectoryExists(location.directory))) return 0;
 
+  const supportedVersions = [
+    LEGACY_TRANSACTION_PAYLOAD_VERSION,
+    TRANSACTION_PAYLOAD_VERSION,
+  ].join("|");
   const finalPattern = new RegExp(
-    `^${escapeRegExp(location.stem)}-([0-9a-f]{64})\\.payload-v${TRANSACTION_PAYLOAD_VERSION}$`,
+    `^${escapeRegExp(location.stem)}-([0-9a-f]{64})\\.payload-v(?:${supportedVersions})$`,
   );
   const temporaryPattern = new RegExp(
-    `^${escapeRegExp(location.stem)}-([0-9a-f]{64})\\.payload-v${TRANSACTION_PAYLOAD_VERSION}\\.tmp-[1-9][0-9]*-[0-9a-f]{12}$`,
+    `^${escapeRegExp(location.stem)}-([0-9a-f]{64})\\.payload-v(?:${supportedVersions})\\.tmp-[1-9][0-9]*-[0-9a-f]{12}$`,
   );
   const retiredVersions = RETIRED_TRANSACTION_PAYLOAD_VERSIONS.join("|");
   const retiredPattern = new RegExp(
@@ -307,6 +358,7 @@ export async function sweepUnreferencedTransactionPayloads(
 export function parseTransactionPayload(
   bytes: Uint8Array,
   packageProvenance?: PackageArtifact[],
+  expectedVersion?: TransactionPayloadVersion,
 ): PreparedDeployment {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
     throw new Error("Transaction payload is empty");
@@ -342,27 +394,40 @@ export function parseTransactionPayload(
   }
   offset += headerBytes;
   const header = record(parsed, "transaction payload header");
+  const schema = header.schema;
+  if (
+    schema !== LEGACY_TRANSACTION_PAYLOAD_VERSION &&
+    schema !== TRANSACTION_PAYLOAD_VERSION
+  ) {
+    throw new Error(`Unsupported transaction payload schema ${String(schema)}`);
+  }
+  if (expectedVersion !== undefined && schema !== expectedVersion) {
+    throw new Error(
+      `Transaction payload schema ${schema} does not match journal version ${expectedVersion}`,
+    );
+  }
+  const headerKeys = [
+    "schema",
+    "packages",
+    "compilerId",
+    "deploymentId",
+    "rawWasmSha256",
+    "rawWasmBytes",
+    "transportWasmSha256",
+    "transportWasmBytes",
+    "candidSha256",
+    "candidBytes",
+    "stableSha256",
+    "stableBytes",
+  ];
+  if (schema === TRANSACTION_PAYLOAD_VERSION) {
+    headerKeys.push("assemblerId", "browserSurfaceOriginAppIds");
+  }
   exactKeys(
     header,
-    [
-      "schema",
-      "packages",
-      "compilerId",
-      "deploymentId",
-      "rawWasmSha256",
-      "rawWasmBytes",
-      "transportWasmSha256",
-      "transportWasmBytes",
-      "candidSha256",
-      "candidBytes",
-      "stableSha256",
-      "stableBytes",
-    ],
+    headerKeys,
     "transaction payload header",
   );
-  if (header.schema !== TRANSACTION_PAYLOAD_VERSION) {
-    throw new Error(`Unsupported transaction payload schema ${String(header.schema)}`);
-  }
   if (
     !Array.isArray(header.packages) ||
     header.packages.length === 0 ||
@@ -429,17 +494,44 @@ export function parseTransactionPayload(
       sha256: digest,
       bytes: archiveBytes,
     };
-    const unpacked = unpackNeutronPackage(archive);
-    const prepared = preparePackageInstall(unpacked, {
-      expectedIdentity: { id: artifact.id, version: artifact.version },
+    const prepared = preparePackageInstall(archive, {
+      expectedIdentity: {
+        id: artifact.id,
+        version: artifact.version,
+        sha256: artifact.sha256,
+        size: artifact.bytes,
+      },
     });
     packageArchives.push(archive);
     packageArtifacts.push(artifact);
     return prepared;
   });
-  if (packages.filter(({ isKernel }) => isKernel).length !== 1) {
-    invalid("transaction payload header.packages", "must contain exactly one kernel");
+  assertFreshPackageRoles(packages);
+  const assemblerId =
+    schema === LEGACY_TRANSACTION_PAYLOAD_VERSION
+      ? LEGACY_V25_ASSEMBLER_ID
+      : parsePayloadAssemblerId(header.assemblerId);
+  if (
+    schema === TRANSACTION_PAYLOAD_VERSION &&
+    assemblerId !==
+      assemblerForFreshKernelVersion(packages[0]!.manifest.version)
+  ) {
+    invalid(
+      "transaction payload header.assemblerId",
+      `does not match selected Kernel ${packages[0]!.manifest.version}`,
+    );
   }
+  const expectedBrowserSurfaceOriginAppIds =
+    schema === LEGACY_TRANSACTION_PAYLOAD_VERSION
+      ? []
+      : browserSurfaceOriginAppIdsForSelectedPackages(packages, assemblerId);
+  const browserSurfaceOriginAppIds =
+    schema === LEGACY_TRANSACTION_PAYLOAD_VERSION
+      ? []
+      : parsePayloadBrowserSurfaceOriginAppIds(
+          header.browserSurfaceOriginAppIds,
+          expectedBrowserSurfaceOriginAppIds,
+        );
   const compilerId = boundedString(
     header.compilerId,
     "transaction payload header.compilerId",
@@ -546,6 +638,8 @@ export function parseTransactionPayload(
       stable,
       compilerId,
       deploymentId,
+      assemblerId,
+      browserSurfaceOriginAppIds,
     },
     wasmMetadata,
     transportWasm,
@@ -555,6 +649,66 @@ export function parseTransactionPayload(
     stableSha256,
     chunks,
   };
+}
+
+function parsePayloadAssemblerId(
+  value: unknown,
+): typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID {
+  if (value !== ASSEMBLER_ID && value !== LEGACY_V25_ASSEMBLER_ID) {
+    invalid(
+      "transaction payload header.assemblerId",
+      "must name exact assembler v25 or v26",
+    );
+  }
+  return value;
+}
+
+function assertTransactionPayloadVersion(
+  value: unknown,
+): asserts value is TransactionPayloadVersion {
+  if (
+    value !== LEGACY_TRANSACTION_PAYLOAD_VERSION &&
+    value !== TRANSACTION_PAYLOAD_VERSION
+  ) {
+    throw new Error(`Unsupported transaction payload version ${String(value)}`);
+  }
+}
+
+function parsePayloadBrowserSurfaceOriginAppIds(
+  value: unknown,
+  expected: readonly string[],
+): string[] {
+  if (!Array.isArray(value) || value.length > MAX_PACKAGE_ARCHIVES) {
+    invalid(
+      "transaction payload header.browserSurfaceOriginAppIds",
+      "must be a bounded array",
+    );
+  }
+  const ids = value.map((candidate, index) => {
+    if (
+      typeof candidate !== "string" ||
+      candidate === "kernel" ||
+      !isValidAppId(candidate)
+    ) {
+      invalid(
+        `transaction payload header.browserSurfaceOriginAppIds[${index}]`,
+        "must be a non-Kernel app id",
+      );
+    }
+    return candidate;
+  });
+  const canonical = [...ids].sort(compareCanonicalText);
+  if (
+    new Set(ids).size !== ids.length ||
+    JSON.stringify(ids) !== JSON.stringify(canonical) ||
+    JSON.stringify(ids) !== JSON.stringify(expected)
+  ) {
+    invalid(
+      "transaction payload header.browserSurfaceOriginAppIds",
+      "must exactly match the selected origin-ready package ids",
+    );
+  }
+  return ids;
 }
 
 async function readPrivateFile(filename: string): Promise<Uint8Array> {

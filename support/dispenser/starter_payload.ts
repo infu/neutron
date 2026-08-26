@@ -1,6 +1,7 @@
 import { Actor, type ActorMethod, type HttpAgent } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
 import {
+  assertBrowserSurfaceOriginAppIdsMatch,
   buildPackagesInstallAssets,
   createJsonAsset,
   createStaticFileOperation,
@@ -9,6 +10,7 @@ import {
   type StaticFileOperation,
 } from "neutron-compiler/src/install.js";
 import { fixedBackendCallInstallReservationTargetPrincipals } from "neutron-compiler/src/compile.js";
+import { supportsBrowserSurfaceOrigins } from "neutron-compiler/src/assemble.js";
 import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import {
   buildFreshInstallProvenance,
@@ -278,12 +280,27 @@ export function starterAssetOperations(
   }
   const packageAssets = buildPackagesInstallAssets({
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     packages: deployment.packages,
     candid: deployment.compiled.candid,
   });
+  if (supportsBrowserSurfaceOrigins(deployment.compiled.assemblerId)) {
+    assertBrowserSurfaceOriginAppIdsMatch(
+      packageAssets.apps,
+      packageAssets.browserSurfaceOriginAppIds,
+      deployment.compiled.browserSurfaceOriginAppIds,
+    );
+  } else if (deployment.compiled.browserSurfaceOriginAppIds.length !== 0) {
+    throw new Error(
+      "A v25 starter deployment cannot authorize browser-surface origins",
+    );
+  }
   for (const operation of [
     packageAssets.candidAsset,
     packageAssets.appRegistryAsset,
+    ...(supportsBrowserSurfaceOrigins(deployment.compiled.assemblerId)
+      ? [packageAssets.browserSurfaceOriginsAsset]
+      : []),
     buildStarterInstallProvenanceAsset(deployment),
     createTextAsset(
       "/pkg/neutron.most",

@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import {
-  compilePackages,
+  compileFreshPackages,
   preparePackageInstall,
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
@@ -58,7 +58,7 @@ async function compileCommand(args: string[], logger: Logger): Promise<void> {
     stringValue(parsed.values["vetkeys-environment"]) ?? "production",
   );
   const packages = await readPreparedPackages(packagePaths);
-  const compiled = await compilePackages({
+  const compiled = await compileFreshPackages({
     packages,
     vetKeysEnvironment,
   });
@@ -66,6 +66,7 @@ async function compileCommand(args: string[], logger: Logger): Promise<void> {
   await writeOutputFile(candidOut, compiled.candid);
 
   logger.log(`Compiled ${packages.length} package(s)`);
+  logger.log(`Assembler: ${compiled.assemblerId}`);
   logger.log(`Wasm: ${wasmOut}`);
   logger.log(`Candid: ${candidOut}`);
 }

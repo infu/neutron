@@ -10,9 +10,15 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import type { CompileResult } from "neutron-compiler/src/compile.js";
+import {
+  ASSEMBLER_ID,
+  LEGACY_V25_ASSEMBLER_ID,
+} from "neutron-compiler/src/assemble.js";
+import { isValidAppId } from "neutron-tools/src/app_ids.js";
+import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 
-const CACHE_FORMAT = 2;
-const CACHE_DOMAIN = "neutron-compiled-actor-cache-v2";
+const CACHE_FORMAT = 3;
+const CACHE_DOMAIN = "neutron-compiled-actor-cache-v3";
 const CACHE_FILES = [
   "metadata.json",
   "neutron.did",
@@ -27,7 +33,13 @@ const MAX_IDENTIFIER_BYTES = 4096;
 
 export type CacheableCompileResult = Pick<
   CompileResult,
-  "wasm" | "candid" | "stable" | "deploymentId" | "compilerId"
+  | "wasm"
+  | "candid"
+  | "stable"
+  | "deploymentId"
+  | "compilerId"
+  | "assemblerId"
+  | "browserSurfaceOriginAppIds"
 >;
 
 export type LocalCompiledActorCacheOptions = {
@@ -51,14 +63,16 @@ type CachedFileMetadata = {
 };
 
 type CompiledCacheMetadata = {
-  format: 2;
+  format: 3;
   cacheKey: string;
   target: "local";
   compilerFingerprint: string;
   packageArchiveSha256: string[];
   installationNetworkIdHex: string;
   compilerId: string;
+  assemblerId: typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID;
   deploymentId: string;
+  browserSurfaceOriginAppIds: string[];
   wasm: CachedFileMetadata;
   candid: CachedFileMetadata;
   stable: CachedFileMetadata;
@@ -175,7 +189,9 @@ async function readCacheEntry(
       candid: decodeUtf8(candidBytes, "cached Candid"),
       stable: decodeUtf8(stableBytes, "cached stable schema"),
       compilerId: metadata.compilerId,
+      assemblerId: metadata.assemblerId,
       deploymentId: metadata.deploymentId,
+      browserSurfaceOriginAppIds: metadata.browserSurfaceOriginAppIds,
     };
   } catch (error) {
     await discardInvalidEntry(entryDirectory, error, logger);
@@ -206,7 +222,9 @@ async function writeCacheEntry({
     packageArchiveSha256: [...expected.packageArchiveSha256],
     installationNetworkIdHex: expected.installationNetworkIdHex,
     compilerId: compiled.compilerId,
+    assemblerId: compiled.assemblerId,
     deploymentId: compiled.deploymentId,
+    browserSurfaceOriginAppIds: [...compiled.browserSurfaceOriginAppIds],
     wasm: fileMetadata("neutron.wasm", compiled.wasm),
     candid: fileMetadata("neutron.did", candid),
     stable: fileMetadata("neutron.most", stable),
@@ -320,7 +338,9 @@ function parseMetadata(source: string): CompiledCacheMetadata {
       "packageArchiveSha256",
       "installationNetworkIdHex",
       "compilerId",
+      "assemblerId",
       "deploymentId",
+      "browserSurfaceOriginAppIds",
       "wasm",
       "candid",
       "stable",
@@ -351,7 +371,11 @@ function parseMetadata(source: string): CompiledCacheMetadata {
       "installationNetworkIdHex",
     ),
     compilerId: requiredIdentifier(value.compilerId, "compilerId"),
+    assemblerId: requiredAssemblerId(value.assemblerId),
     deploymentId: requiredIdentifier(value.deploymentId, "deploymentId"),
+    browserSurfaceOriginAppIds: requiredBrowserSurfaceOriginAppIds(
+      value.browserSurfaceOriginAppIds,
+    ),
     wasm: requiredFileMetadata(value.wasm, "wasm", "neutron.wasm"),
     candid: requiredFileMetadata(value.candid, "candid", "neutron.did"),
     stable: requiredFileMetadata(value.stable, "stable", "neutron.most"),
@@ -441,6 +465,39 @@ function requiredIdentifier(value: unknown, label: string): string {
   return value;
 }
 
+function requiredAssemblerId(
+  value: unknown,
+): typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID {
+  if (value !== ASSEMBLER_ID && value !== LEGACY_V25_ASSEMBLER_ID) {
+    throw new Error("assemblerId is not a supported compiler generation");
+  }
+  return value;
+}
+
+function requiredBrowserSurfaceOriginAppIds(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 256) {
+    throw new Error("browserSurfaceOriginAppIds must be a bounded array");
+  }
+  const ids = value.map((appId) => {
+    if (
+      typeof appId !== "string" ||
+      appId === "kernel" ||
+      !isValidAppId(appId)
+    ) {
+      throw new Error("browserSurfaceOriginAppIds contains an invalid app id");
+    }
+    return appId;
+  });
+  const canonical = [...ids].sort(compareCanonicalText);
+  if (
+    new Set(ids).size !== ids.length ||
+    JSON.stringify(ids) !== JSON.stringify(canonical)
+  ) {
+    throw new Error("browserSurfaceOriginAppIds must be unique and canonical");
+  }
+  return ids;
+}
+
 function assertCompileResult(compiled: CacheableCompileResult): void {
   if (!(compiled.wasm instanceof Uint8Array) || compiled.wasm.byteLength < 1) {
     throw new Error("Compiled actor Wasm is empty");
@@ -458,7 +515,9 @@ function assertCompileResult(compiled: CacheableCompileResult): void {
     }
   }
   requiredIdentifier(compiled.compilerId, "compilerId");
+  requiredAssemblerId(compiled.assemblerId);
   requiredIdentifier(compiled.deploymentId, "deploymentId");
+  requiredBrowserSurfaceOriginAppIds(compiled.browserSurfaceOriginAppIds);
 }
 
 function equalCompileOutputs(
@@ -470,7 +529,10 @@ function equalCompileOutputs(
     left.candid === right.candid &&
     left.stable === right.stable &&
     left.compilerId === right.compilerId &&
-    left.deploymentId === right.deploymentId
+    left.assemblerId === right.assemblerId &&
+    left.deploymentId === right.deploymentId &&
+    JSON.stringify(left.browserSurfaceOriginAppIds) ===
+      JSON.stringify(right.browserSurfaceOriginAppIds)
   );
 }
 

@@ -40,6 +40,10 @@ module {
             );
         };
 
+        public func entriesFrom(key : Text) : Iter.Iter<(PKKey, Doc)> {
+            Map.entriesFrom(store, Text.compare, key);
+        };
+
         public func keys(prefix : Text, limit : Nat) : [PKKey] {
             let result = List.empty<PKKey>();
             label matching for ((key, _) in entries(prefix)) {

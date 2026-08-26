@@ -95,6 +95,7 @@ const compilableKernel = `
         { app_id = appId; installation_uid = 1 }
       };
       public func runtime_app_instances(_deploymentId : Text) : [AppInstance] { [] };
+      public func capability_authority_revision() : Nat64 { 0 };
       public func scope_active(_scope : AppScope) : Bool { true };
       public func configure_frontend_surface_counts(
         _counts : { app_instances : Nat; resident_frames : Nat },
@@ -102,6 +103,9 @@ const compilableKernel = `
       public func configure_app_capabilities<Declaration, Configuration>(
         _declarations : [Declaration],
         _configuration : Configuration,
+      ) {};
+      public func configure_app_browser_surfaces<Declaration>(
+        _declarations : [Declaration],
       ) {};
       public type CapabilityKind = {
         #backend_calls;

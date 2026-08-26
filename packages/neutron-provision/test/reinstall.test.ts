@@ -5,7 +5,10 @@ import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { ASSEMBLER_ID } from "neutron-compiler/src/assemble.js";
+import {
+  ASSEMBLER_ID,
+  LEGACY_V25_ASSEMBLER_ID,
+} from "neutron-compiler/src/assemble.js";
 import { preparePackageInstall } from "neutron-compiler/src/install.js";
 import { hashContent } from "neutron-tools/src/hash.js";
 import {
@@ -24,7 +27,10 @@ import {
   persistDeploymentProofBundle,
   type DeploymentEvidenceProviderV1,
 } from "../src/deployment_evidence.ts";
-import { serializeTransactionPayload } from "../src/payload.ts";
+import {
+  serializeTransactionPayload,
+  TRANSACTION_PAYLOAD_VERSION,
+} from "../src/payload.ts";
 import type { BlastIdentity } from "../src/identity.ts";
 import {
   buildSessionPlan,
@@ -200,7 +206,10 @@ describe("whole-canister reinstall", () => {
 
   test("reinstalls from an adoption receipt without fabricating payment origin", async () => {
     await withFixture(async (fixture) => {
-      const adoption = adoptionReceipt(fixture.source);
+      const adoption = adoptionReceipt(
+        fixture.source,
+        LEGACY_V25_ASSEMBLER_ID,
+      );
       const journal: ProvisionJournal = {
         schema: 3,
         configSha256: CONFIG_SHA256,
@@ -219,6 +228,8 @@ describe("whole-canister reinstall", () => {
       );
 
       expect(result.plan.sourceSessionFingerprint).toBe(adoption.fingerprint);
+      expect(result.plan.payload.version).toBe(TRANSACTION_PAYLOAD_VERSION);
+      expect(fixture.target.compiled.assemblerId).toBe(ASSEMBLER_ID);
       expect(result.session.origin).toBeUndefined();
       expect(result.session.adoption).toEqual(adoption);
       expect(result.session.schema).toBe(3);
@@ -743,6 +754,7 @@ function identity(): BlastIdentity {
 
 function adoptionReceipt(
   source: PreparedDeployment,
+  assemblerId: string = ASSEMBLER_ID,
 ): AdoptionReceipt {
   const base: Omit<AdoptionReceipt, "fingerprint"> = {
     kind: "adopted",
@@ -760,8 +772,8 @@ function adoptionReceipt(
     runtime: {
       deploymentId: source.compiled.deploymentId,
       compilerId: source.compiled.compilerId,
-      assemblerId: ASSEMBLER_ID,
-      packages: [{ id: "kernel", version: 100 }],
+      assemblerId,
+      packages: [{ id: "kernel", version: 316 }],
     },
     access: {
       snapshotVersion: "1",
@@ -822,7 +834,7 @@ function deployment(
       {
         path: `/repo/apps/kernel/kernel.${name}.neutron`,
         id: "kernel",
-        version: 100,
+        version: 316,
         sha256: sha256Hex(archive),
         bytes: archive.byteLength,
       },
@@ -833,6 +845,8 @@ function deployment(
       stable: `stable-${name}`,
       deploymentId: sha256Hex(new TextEncoder().encode(name)).slice(0, 32),
       compilerId: "compiler-test",
+      assemblerId: ASSEMBLER_ID,
+      browserSurfaceOriginAppIds: [],
     },
     wasmMetadata: assertSupportedCertificateVersions(rawWasm),
     transportWasm,
@@ -873,7 +887,7 @@ function testKernelArchive(): Uint8Array {
         format: 3,
         id: "kernel",
         name: "Test Kernel",
-        version: 100,
+        version: 316,
         entry,
         func: { hello_world: { type: "update", async: false } },
       }),
@@ -922,7 +936,9 @@ function encodeMessagePackBinary(value: Uint8Array): Uint8Array {
 async function activePayloads(sessionPath: string): Promise<string[]> {
   const directory = path.join(path.dirname(sessionPath), ".neutron", "provision");
   try {
-    return (await readdir(directory)).filter((name) => name.endsWith(".payload-v3"));
+    return (await readdir(directory)).filter((name) =>
+      /\.payload-v(?:3|4)$/u.test(name),
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;

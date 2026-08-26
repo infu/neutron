@@ -1,4 +1,8 @@
 import { Gunzip } from "fflate";
+import {
+  CERTIFIED_HTTP_PATH_SEGMENT_BYTES_MAX_V2,
+  CERTIFIED_HTTP_PATH_SEGMENTS_MAX_V2,
+} from "neutron-tools/src/capabilities/catalog.js";
 
 const MIB = 1024 * 1024;
 const GZIP_STREAM_INPUT_CHUNK_BYTES = 4 * 1024;
@@ -143,6 +147,39 @@ export function assertSafeArchivePath(
   ) {
     throw new Error(`Unsafe package path ${packagePath}`);
   }
+}
+
+/** Mirrors certified_http_v2.validCanonicalPath for install journal targets. */
+export function isCanonicalAbsoluteInstallTarget(
+  target: unknown,
+): target is string {
+  if (
+    typeof target !== "string" ||
+    target.length === 0 ||
+    !target.startsWith("/") ||
+    target.includes("?") ||
+    target.includes("#") ||
+    target.includes("%") ||
+    target.includes("\\") ||
+    target.includes("//") ||
+    /[\u0000-\u001f\u007f]/u.test(target)
+  ) {
+    return false;
+  }
+
+  let segmentCount = 0;
+  for (const segment of target.split("/")) {
+    if (segment === "." || segment === "..") return false;
+    if (
+      segment !== "" &&
+      (new TextEncoder().encode(segment).byteLength >
+        CERTIFIED_HTTP_PATH_SEGMENT_BYTES_MAX_V2 ||
+        ++segmentCount > CERTIFIED_HTTP_PATH_SEGMENTS_MAX_V2)
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function normalizeDecodeLimits(

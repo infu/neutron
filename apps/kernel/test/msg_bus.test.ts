@@ -13,8 +13,12 @@ import { disconnectMsgBus } from "neutron-tools/app";
 import {
   connectFrameEndpoint,
   getRegisteredEndpoint,
+  installFrameEndpointHandshake,
+  isFrameEndpointReady,
+  markFrameEndpointLoaded,
   registerFrameContext,
 } from "../src/frame_context.ts";
+import { MSG_BUS_FRAME_READY } from "neutron-tools/src/frame_handshake.js";
 import type {
   AttachmentExecEnvelope,
   AttachmentResponseEnvelope,
@@ -175,6 +179,8 @@ type FakeWindow = {
 };
 
 const unregisters: Array<() => void> = [];
+const TEST_FRAME_ORIGIN = "https://installed-app.example";
+let activeFakeWindow: FakeWindow | null = null;
 
 test("app uninstall clears grants, pending requests, and audit entries", async () => {
   const caller = {
@@ -229,7 +235,28 @@ function installFakeWindow(): FakeWindow {
     configurable: true,
     value: fakeWindow,
   });
+  installFrameEndpointHandshake(
+    fakeWindow as unknown as Pick<Window, "addEventListener">,
+  );
+  activeFakeWindow = fakeWindow;
   return fakeWindow;
+}
+
+function authenticateLoadedTestFrame(
+  source: Window,
+  origin = TEST_FRAME_ORIGIN,
+): void {
+  const fakeWindow = activeFakeWindow;
+  if (!fakeWindow) throw new Error("Test frame window was not installed");
+  if (typeof source.postMessage !== "function") {
+    Object.defineProperty(source, "postMessage", {
+      configurable: true,
+      value: () => undefined,
+    });
+  }
+  expect(markFrameEndpointLoaded(source)).toBe("retired");
+  fakeWindow.dispatch(MSG_BUS_FRAME_READY, source, origin);
+  expect(isFrameEndpointReady(source)).toBe(true);
 }
 
 function createToolEndpoint(
@@ -275,9 +302,10 @@ function registerTile(source: Window, appId: string, instanceId: string) {
       instanceId,
       workspace: 1,
     },
-    { origin: "null" },
+    { origin: TEST_FRAME_ORIGIN },
   );
   unregisters.push(unregister);
+  authenticateLoadedTestFrame(source);
   const endpoint = getRegisteredEndpoint(
     `app:${appId}:tile:main:instance:${instanceId}`,
   );
@@ -290,9 +318,10 @@ function registerTray(source: Window, appId: string, instanceId: string) {
   const unregister = registerFrameContext(
     source,
     { role: "tray", appId, instanceId },
-    { origin: "null" },
+    { origin: TEST_FRAME_ORIGIN },
   );
   unregisters.push(unregister);
+  authenticateLoadedTestFrame(source);
   const endpoint = getRegisteredEndpoint(
     `app:${appId}:tray:instance:${instanceId}`,
   );
@@ -305,9 +334,9 @@ function registerBackground(source: Window, appId: string): () => void {
   const unregister = registerFrameContext(
     source,
     { role: "background", appId },
-    { origin: "null" },
+    { origin: TEST_FRAME_ORIGIN },
   );
-  connectFrameEndpoint(source);
+  authenticateLoadedTestFrame(source);
   return unregister;
 }
 
@@ -347,6 +376,7 @@ afterEach(() => {
   selfCallAgent = undefined;
   submitSelfCallUpdate = undefined;
   validateMethodInputOverride = undefined;
+  activeFakeWindow = null;
   clearInstallOffer("Test cleanup");
   removeAllCallRequests();
   while (unregisters.length) unregisters.pop()?.();
@@ -594,7 +624,7 @@ test("declared cancellation control remains available at ordinary lane saturatio
           name,
           arguments: { requestId },
         },
-        { source, origin: "null" },
+        { source, origin: TEST_FRAME_ORIGIN },
       ),
     );
 
@@ -1152,11 +1182,11 @@ test("scoped binary self calls bind invocation provenance and revoke closed", as
     } as unknown as Window;
     unregisters.push(
       registerFrameContext(source, context, {
-        origin: "null",
+        origin: TEST_FRAME_ORIGIN,
         appScope: { appId, installationUid },
       }),
     );
-    expect(connectFrameEndpoint(source)).toBe(true);
+    authenticateLoadedTestFrame(source);
     if (!appPort) throw new Error("Scoped self-call port was not transferred");
     appPort.start();
     const endpointId =
@@ -1496,8 +1526,12 @@ test("private-port attachment calls transfer buffers through the broker", async 
         if (transfer[0]) appPort = transfer[0] as MessagePort;
       },
     } as unknown as Window;
-    unregisters.push(registerFrameContext(source, context, { origin: "null" }));
-    expect(connectFrameEndpoint(source)).toBe(true);
+    unregisters.push(
+      registerFrameContext(source, context, {
+        origin: TEST_FRAME_ORIGIN,
+      }),
+    );
+    authenticateLoadedTestFrame(source);
     if (!appPort) throw new Error("app port was not transferred");
     const endpoint = getRegisteredEndpoint(
       context.role === "background"
@@ -1690,11 +1724,11 @@ test("one-use delegation preserves scoped provenance for a nested attachment cal
     } as unknown as Window;
     unregisters.push(
       registerFrameContext(source, context, {
-        origin: "null",
+        origin: TEST_FRAME_ORIGIN,
         appScope: { appId: context.appId, installationUid },
       }),
     );
-    expect(connectFrameEndpoint(source)).toBe(true);
+    authenticateLoadedTestFrame(source);
     if (!appPort) throw new Error("app port was not transferred");
     const endpoint = getRegisteredEndpoint(
       context.role === "background"
@@ -1888,6 +1922,7 @@ test("one-use delegation preserves scoped provenance for a nested attachment cal
 });
 
 test("app state changes stay source-bound and within one app", async () => {
+  installFakeWindow();
   const messages = (source: Window) =>
     (source as unknown as { sent: unknown[] }).sent;
   const source = () => {
@@ -1920,7 +1955,7 @@ test("app state changes stay source-bound and within one app", async () => {
     registerFrameContext(
       publisher,
       { role: "background", appId: "contacts" },
-      { origin: "null" },
+      { origin: TEST_FRAME_ORIGIN },
     ),
     registerFrameContext(
       sameAppTile,
@@ -1931,7 +1966,7 @@ test("app state changes stay source-bound and within one app", async () => {
         instanceId: "same",
         workspace: 1,
       },
-      { origin: "null" },
+      { origin: TEST_FRAME_ORIGIN },
     ),
     registerFrameContext(
       otherAppTile,
@@ -1942,18 +1977,18 @@ test("app state changes stay source-bound and within one app", async () => {
         instanceId: "other",
         workspace: 1,
       },
-      { origin: "null" },
+      { origin: TEST_FRAME_ORIGIN },
     ),
   );
-  expect(connectFrameEndpoint(publisher)).toBe(true);
-  expect(connectFrameEndpoint(sameAppTile)).toBe(true);
-  expect(connectFrameEndpoint(otherAppTile)).toBe(true);
+  authenticateLoadedTestFrame(publisher);
+  authenticateLoadedTestFrame(sameAppTile);
+  authenticateLoadedTestFrame(otherAppTile);
 
   expect(
     executeExposedAction(
       "app.state.publish",
       { topic: "contacts", revision: "9" },
-      { source: publisher, origin: "null" },
+      { source: publisher, origin: TEST_FRAME_ORIGIN },
     ),
   ).toEqual({ delivered: 1 });
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1973,7 +2008,7 @@ test("app state changes stay source-bound and within one app", async () => {
       executeExposedAction(
         "app.state.publish",
         { topic: "contacts", revision: String(revision) },
-        { source: publisher, origin: "null" },
+        { source: publisher, origin: TEST_FRAME_ORIGIN },
       ),
     ).toEqual({ delivered: 1 });
   }
@@ -1986,7 +2021,7 @@ test("app state changes stay source-bound and within one app", async () => {
     executeExposedAction(
       "app.state.publish",
       { topic: "contacts", revision: "10", appId: "wallet" },
-      { source: publisher, origin: "null" },
+      { source: publisher, origin: TEST_FRAME_ORIGIN },
     ),
   ).toThrow("Invalid app state change");
 });
@@ -2597,7 +2632,7 @@ test("a scoped agent invocation presents an owner-attributed install offer", asy
       },
       {
         appScope: { appId, installationUid },
-        origin: "null",
+        origin: TEST_FRAME_ORIGIN,
       },
     ),
   );
@@ -2607,12 +2642,12 @@ test("a scoped agent invocation presents an owner-attributed install offer", asy
       { role: "background", appId },
       {
         appScope: { appId, installationUid },
-        origin: "null",
+        origin: TEST_FRAME_ORIGIN,
       },
     ),
   );
-  expect(connectFrameEndpoint(tileSource)).toBe(true);
-  expect(connectFrameEndpoint(backgroundSource)).toBe(true);
+  authenticateLoadedTestFrame(tileSource);
+  authenticateLoadedTestFrame(backgroundSource);
   const tile = getRegisteredEndpoint(
     `app:${appId}:tile:chat:instance:root`,
   );
@@ -2693,7 +2728,7 @@ test("endpoint discovery reports the exact transient tray instance", async () =>
         endpoint: "app:mail:tray:instance:panel-seven",
         appId: "mail",
         role: "tray",
-        connected: false,
+        connected: true,
         instanceId: "panel-seven",
       },
     ]),

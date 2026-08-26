@@ -5,7 +5,10 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { ASSEMBLER_ID } from "neutron-compiler/src/assemble.js";
+import {
+  ASSEMBLER_ID,
+  supportsBrowserSurfaceOrigins,
+} from "neutron-compiler/src/assemble.js";
 import {
   buildPackagesInstallAssets,
   KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH,
@@ -14,6 +17,10 @@ import {
   type KernelStaticRequest,
 } from "neutron-compiler/src/install.js";
 import { hashContent } from "neutron-tools/src/hash.js";
+import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  browserSurfaceOriginsPackageMarkerBytes,
+} from "neutron-tools/src/package_surface_origins.js";
 import {
   assertSupportedCertificateVersions,
   SUPPORTED_CERTIFICATE_VERSIONS_METADATA_V1,
@@ -39,6 +46,8 @@ import {
   IcpTransferBadFeeError,
 } from "../src/ic_client.ts";
 import {
+  LEGACY_TRANSACTION_PAYLOAD_VERSION,
+  TRANSACTION_PAYLOAD_VERSION,
   parseTransactionPayload,
   persistTransactionPayload,
   serializeTransactionPayload,
@@ -62,6 +71,211 @@ const SUBNET = Principal.selfAuthenticating(new Uint8Array(32).fill(7)).toText()
 const CANISTER = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 
 describe("fresh kernel assets", () => {
+  test("payload v4 is explicit while a v3 resume remains an unmarked v25 bridge", async () => {
+    await withFixture(async ({ deployment }) => {
+      const serialized = serializeTransactionPayload(deployment);
+      expect(serialized.version).toBe(TRANSACTION_PAYLOAD_VERSION);
+      const current = parseTransactionPayload(
+        serialized.bytes,
+        deployment.packageArtifacts,
+        TRANSACTION_PAYLOAD_VERSION,
+      );
+      expect(current.compiled.assemblerId).toBe(ASSEMBLER_ID);
+      expect(current.compiled.browserSurfaceOriginAppIds).toEqual([]);
+
+      const legacyBytes = rewriteTransactionPayloadHeader(
+        serialized.bytes,
+        (header) => {
+          header.schema = LEGACY_TRANSACTION_PAYLOAD_VERSION;
+          delete header.assemblerId;
+          delete header.browserSurfaceOriginAppIds;
+        },
+      );
+      const legacy = parseTransactionPayload(
+        legacyBytes,
+        deployment.packageArtifacts,
+        LEGACY_TRANSACTION_PAYLOAD_VERSION,
+      );
+      expect(legacy.compiled.assemblerId).toBe("neutron_actor_v25");
+      expect(legacy.compiled.browserSurfaceOriginAppIds).toEqual([]);
+      expect(() =>
+        parseTransactionPayload(
+          legacyBytes,
+          deployment.packageArtifacts,
+          TRANSACTION_PAYLOAD_VERSION,
+        ),
+      ).toThrow("does not match journal version");
+
+      const invalidLegacy = rewriteTransactionPayloadHeader(
+        serialized.bytes,
+        (header) => {
+          header.schema = LEGACY_TRANSACTION_PAYLOAD_VERSION;
+        },
+      );
+      expect(() => parseTransactionPayload(invalidLegacy)).toThrow(
+        "browserSurfaceOriginAppIds",
+      );
+      const invalidCurrent = rewriteTransactionPayloadHeader(
+        serialized.bytes,
+        (header) => {
+          delete header.browserSurfaceOriginAppIds;
+        },
+      );
+      expect(() => parseTransactionPayload(invalidCurrent)).toThrow(
+        "browserSurfaceOriginAppIds",
+      );
+      const wrongCurrentAssembler = rewriteTransactionPayloadHeader(
+        serialized.bytes,
+        (header) => {
+          header.assemblerId = "neutron_actor_v25";
+        },
+      );
+      expect(() => parseTransactionPayload(wrongCurrentAssembler)).toThrow(
+        "does not match selected Kernel 316",
+      );
+
+      const provenance = buildFreshInstallProvenance(legacy);
+      const valid = freshKernelVerificationFixture({
+        deployment: legacy,
+        provenance,
+        assemblerId: "neutron_actor_v25",
+      });
+      await verifyFreshKernel({
+        actor: valid.actor,
+        canisterId: CANISTER,
+        host: "https://icp-api.io",
+        deployment: legacy,
+        fetchImpl: valid.fetchImpl,
+      });
+
+      const unexpectedLegacySidecar = freshKernelVerificationFixture({
+        deployment: legacy,
+        provenance,
+        browserSurfaceOriginsSidecarPresent: true,
+        assemblerId: "neutron_actor_v25",
+      });
+      await expect(
+        verifyFreshKernel({
+          actor: unexpectedLegacySidecar.actor,
+          canisterId: CANISTER,
+          host: "https://icp-api.io",
+          deployment: legacy,
+          fetchImpl: unexpectedLegacySidecar.fetchImpl,
+        }),
+      ).rejects.toThrow("cannot contain");
+
+      const missingCurrentSidecar = freshKernelVerificationFixture({
+        deployment,
+        provenance: buildFreshInstallProvenance(deployment),
+        browserSurfaceOriginsSidecarPresent: false,
+      });
+      await expect(
+        verifyFreshKernel({
+          actor: missingCurrentSidecar.actor,
+          canisterId: CANISTER,
+          host: "https://icp-api.io",
+          deployment,
+          fetchImpl: missingCurrentSidecar.fetchImpl,
+        }),
+      ).rejects.toThrow("missing its browser-surface origins sidecar");
+
+      const wrongGeneration = freshKernelVerificationFixture({
+        deployment: legacy,
+        provenance,
+      });
+      await expect(
+        verifyFreshKernel({
+          actor: wrongGeneration.actor,
+          canisterId: CANISTER,
+          host: "https://icp-api.io",
+          deployment: legacy,
+          fetchImpl: wrongGeneration.fetchImpl,
+        }),
+      ).rejects.toThrow(
+        "Runtime assembler neutron_actor_v26 does not match neutron_actor_v25",
+      );
+    });
+  });
+
+  test("payload round-trip preserves the exact ready-package origin cohort", async () => {
+    await withFixture(async ({ deployment }) => {
+      const legacyArchive = testOrdinaryAppArchive("legacy_app", false);
+      const markedArchive = testOrdinaryAppArchive("marked_app", true);
+      const legacy = preparePackageInstall(legacyArchive);
+      const marked = preparePackageInstall(markedArchive);
+      const selected = {
+        ...deployment,
+        packages: [...deployment.packages, legacy, marked],
+        packageArchives: [
+          ...deployment.packageArchives,
+          legacyArchive,
+          markedArchive,
+        ],
+        packageArtifacts: [
+          ...deployment.packageArtifacts,
+          {
+            path: "/repo/apps/legacy/legacy.v0.1.0.neutron",
+            id: "legacy_app",
+            version: 100,
+            sha256: sha256Hex(legacyArchive),
+            bytes: legacyArchive.byteLength,
+          },
+          {
+            path: "/repo/apps/marked/marked.v0.1.0.neutron",
+            id: "marked_app",
+            version: 100,
+            sha256: sha256Hex(markedArchive),
+            bytes: markedArchive.byteLength,
+          },
+        ],
+        compiled: {
+          ...deployment.compiled,
+          browserSurfaceOriginAppIds: ["marked_app"],
+        },
+      } satisfies PreparedDeployment;
+
+      const serialized = serializeTransactionPayload(selected);
+      const restored = parseTransactionPayload(
+        serialized.bytes,
+        selected.packageArtifacts,
+        TRANSACTION_PAYLOAD_VERSION,
+      );
+      expect(restored.compiled.browserSurfaceOriginAppIds).toEqual([
+        "marked_app",
+      ]);
+
+      const forged = rewriteTransactionPayloadHeader(
+        serialized.bytes,
+        (header) => {
+          header.browserSurfaceOriginAppIds = ["legacy_app"];
+        },
+      );
+      expect(() =>
+        parseTransactionPayload(
+          forged,
+          selected.packageArtifacts,
+          TRANSACTION_PAYLOAD_VERSION,
+        ),
+      ).toThrow("must exactly match the selected origin-ready package ids");
+
+      const legacyPayload = rewriteTransactionPayloadHeader(
+        serialized.bytes,
+        (header) => {
+          header.schema = LEGACY_TRANSACTION_PAYLOAD_VERSION;
+          delete header.assemblerId;
+          delete header.browserSurfaceOriginAppIds;
+        },
+      );
+      expect(
+        parseTransactionPayload(
+          legacyPayload,
+          selected.packageArtifacts,
+          LEGACY_TRANSACTION_PAYLOAD_VERSION,
+        ).compiled.browserSurfaceOriginAppIds,
+      ).toEqual([]);
+    });
+  });
+
   test("seeds exact package archive provenance", async () => {
     await withFixture(async ({ deployment }) => {
       const requests: KernelStaticRequest[] = [];
@@ -104,6 +318,42 @@ describe("fresh kernel assets", () => {
             request.store_chunk.key === INSTALL_PROVENANCE_PATH,
         ),
       ).toHaveLength(0);
+      expect(
+        requests.filter(
+          (request) =>
+            "store" in request &&
+            request.store.key === "/system/browser-surface-origins.json",
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
+  test("rejects changed prepared package state before any fresh seed write", async () => {
+    await withFixture(async ({ deployment }) => {
+      deployment.packages[0]!.files.push({
+        path: "app/victim/main.js",
+        content: new TextEncoder().encode("cross-app"),
+      });
+      let calls = 0;
+      const actor = {
+        async kernel_publication_entropy_initialize(_request: null) {
+          calls += 1;
+          return { ok: { fingerprint: new Uint8Array(32) } } as const;
+        },
+        async kernel_static(_request: KernelStaticRequest) {
+          calls += 1;
+        },
+      } as unknown as KernelActor;
+
+      await expect(
+        seedFreshKernel({
+          actor,
+          canisterId: CANISTER,
+          deployment,
+          logger: silentLogger,
+        }),
+      ).rejects.toThrow("contents changed after archive review");
+      expect(calls).toBe(0);
     });
   });
 
@@ -1128,9 +1378,9 @@ async function createFixture(): Promise<Fixture> {
     packageArchives: [archive],
     packageArtifacts: [
       {
-        path: "/repo/apps/kernel/kernel.v0.1.1.neutron",
+        path: "/repo/apps/kernel/kernel.v0.3.16.neutron",
         id: "kernel",
-        version: 100,
+        version: 316,
         sha256: sha256Hex(archive),
         bytes: archive.byteLength,
       },
@@ -1141,6 +1391,8 @@ async function createFixture(): Promise<Fixture> {
       stable: "stable-types",
       deploymentId: "de".repeat(16),
       compilerId: "compiler-test",
+      assemblerId: ASSEMBLER_ID,
+      browserSurfaceOriginAppIds: [],
     } as PreparedDeployment["compiled"],
     wasmMetadata: assertSupportedCertificateVersions(rawWasm),
     transportWasm: wasm,
@@ -1281,10 +1533,15 @@ const silentLogger = { log() {} };
 
 function freshKernelVerificationFixture({
   deployment,
+  assemblerId = ASSEMBLER_ID,
+  browserSurfaceOriginsSidecarPresent =
+    supportsBrowserSurfaceOrigins(deployment.compiled.assemblerId),
   ...input
 }: {
   deployment: PreparedDeployment;
   provenance?: unknown;
+  assemblerId?: string;
+  browserSurfaceOriginsSidecarPresent?: boolean;
 }): {
   actor: KernelPackageInstaller;
   fetchImpl: typeof fetch;
@@ -1292,6 +1549,7 @@ function freshKernelVerificationFixture({
 } {
   const assets = buildPackagesInstallAssets({
     existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     packages: deployment.packages,
     candid: deployment.compiled.candid,
   });
@@ -1299,6 +1557,14 @@ function freshKernelVerificationFixture({
   if (!kernel) throw new Error("Test deployment is missing its kernel package");
   const bodies = new Map<string, string>();
   bodies.set("/system/apps.json", JSON.stringify(assets.apps));
+  if (browserSurfaceOriginsSidecarPresent) {
+    bodies.set(
+      assets.browserSurfaceOriginsAsset.key,
+      new TextDecoder().decode(
+        assets.browserSurfaceOriginsAsset.val.content,
+      ),
+    );
+  }
   bodies.set("/pkg/neutron.json", JSON.stringify(kernel.manifest));
   bodies.set("/pkg/neutron.did", deployment.compiled.candid);
   bodies.set("/pkg/neutron.most", deployment.compiled.stable);
@@ -1368,7 +1634,7 @@ function freshKernelVerificationFixture({
     async kernel_runtime_info() {
       return {
         deployment_id: deployment.compiled.deploymentId,
-        assembler_id: ASSEMBLER_ID,
+        assembler_id: assemblerId,
         compiler_id: deployment.compiled.compilerId,
         apps: [
           {
@@ -1407,6 +1673,46 @@ function freshKernelVerificationFixture({
   return { actor, fetchImpl, requestedPaths };
 }
 
+function rewriteTransactionPayloadHeader(
+  bytes: Uint8Array,
+  mutate: (header: Record<string, unknown>) => void,
+): Uint8Array {
+  const magic = new TextEncoder().encode("NEUTRON-PROVISION-PAYLOAD\0");
+  const lengthOffset = magic.byteLength;
+  const headerOffset = lengthOffset + 4;
+  const headerBytes = new DataView(
+    bytes.buffer,
+    bytes.byteOffset + lengthOffset,
+    4,
+  ).getUint32(0, false);
+  const header = JSON.parse(
+    new TextDecoder().decode(
+      bytes.subarray(headerOffset, headerOffset + headerBytes),
+    ),
+  ) as Record<string, unknown>;
+  mutate(header);
+  const rewrittenHeader = new TextEncoder().encode(JSON.stringify(header));
+  const result = new Uint8Array(
+    headerOffset +
+      rewrittenHeader.byteLength +
+      bytes.byteLength -
+      headerOffset -
+      headerBytes,
+  );
+  result.set(magic);
+  new DataView(result.buffer, lengthOffset, 4).setUint32(
+    0,
+    rewrittenHeader.byteLength,
+    false,
+  );
+  result.set(rewrittenHeader, headerOffset);
+  result.set(
+    bytes.subarray(headerOffset + headerBytes),
+    headerOffset + rewrittenHeader.byteLength,
+  );
+  return result;
+}
+
 function testKernelArchive(): Uint8Array {
   const module = new TextEncoder().encode(
     'module { public class Init() { public func hello_world() : Text { "ok" } } }',
@@ -1418,7 +1724,7 @@ function testKernelArchive(): Uint8Array {
         format: 3,
         id: "kernel",
         name: "Test Kernel",
-        version: 100,
+        version: 316,
         entry,
         func: {
           hello_world: { type: "update", async: false },
@@ -1429,6 +1735,42 @@ function testKernelArchive(): Uint8Array {
     "web/main.js": new TextEncoder().encode("console.log('test')"),
     [`mo/${entry}.mo`]: module,
     "connection-providers.json": testKernelConnectionProviderSupport(),
+  };
+  const chunks: Uint8Array[] = [Uint8Array.of(0x80 | Object.keys(files).length)];
+  for (const [filename, content] of Object.entries(files)) {
+    chunks.push(encodeMessagePackString(filename));
+    chunks.push(encodeMessagePackBinary(new Uint8Array(gzipSync(content))));
+  }
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
+function testOrdinaryAppArchive(id: string, ready: boolean): Uint8Array {
+  const encoder = new TextEncoder();
+  const module = encoder.encode(
+    'module { public class Init() { public func hello_world() : Text { "ok" } } }',
+  );
+  const entry = hashContent(module);
+  const files: Record<string, Uint8Array> = {
+    "neutron.json": encoder.encode(
+      JSON.stringify({
+        format: 3,
+        id,
+        name: id.replaceAll("_", " "),
+        version: 100,
+        entry,
+        func: {
+          hello_world: { type: "update", async: false },
+        },
+      }),
+    ),
+    "web/index.html": encoder.encode(`<main>${id}</main>`),
+    [`mo/${entry}.mo`]: module,
+    ...(ready
+      ? {
+          [NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]:
+            browserSurfaceOriginsPackageMarkerBytes(),
+        }
+      : {}),
   };
   const chunks: Uint8Array[] = [Uint8Array.of(0x80 | Object.keys(files).length)];
   for (const [filename, content] of Object.entries(files)) {

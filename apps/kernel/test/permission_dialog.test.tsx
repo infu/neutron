@@ -3,7 +3,10 @@ import path from "node:path";
 import { afterEach, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AppRequestDialog } from "../src/AppDialogs.tsx";
+import {
+  AppRequestDialog,
+  PermissionDisclosure,
+} from "../src/AppDialogs.tsx";
 import { safeInstallOfferUrl } from "../src/install_offers/InstallOfferDialog.tsx";
 import {
   BackendCallRequest,
@@ -473,6 +476,80 @@ test("dedicated resident origin disclosure names the ephemeral credential partit
   expect(html).not.toContain("Persistent background storage");
   expect(html).not.toContain("Store data persistently");
   expect(html).not.toContain("storage APIs disabled");
+});
+
+test("browser permission install disclosure is exact and never claims capture", () => {
+  const disclosure = configInstallDisclosures({
+    format: 3,
+    id: "media_app",
+    name: "Media App",
+    version: 100,
+    tiles: [{ id: "call", title: "Call" }],
+    capabilities: {
+      browser_permissions: {
+        api: 1,
+        tiles: [
+          { id: "call", features: ["microphone", "camera"] },
+        ],
+      },
+    },
+  });
+  const request = fixtureAppInstallRequest({
+    id: "media_app",
+    size: 1,
+    capabilityPlanFingerprint: disclosure.planFingerprint,
+    capabilityDisclosures: disclosure.capabilityDisclosures,
+    permissions: disclosure.permissions,
+    appExplanations: disclosure.appExplanations,
+  });
+
+  const html = renderToStaticMarkup(
+    <AppRequestDialog compiled={{ size: 1 }} request={request} />,
+  );
+  expect(html).toContain('data-capability="browser_permissions"');
+  expect(html).toContain('data-kind="browser_permissions"');
+  expect(html).toContain('data-level="3"');
+  expect(html).toContain("dialog-danger");
+  expect(html).toContain("Browser camera and microphone access");
+  expect(html).toContain(
+    "Allow tile `call` to request access to cameras on this device",
+  );
+  expect(html).toContain(
+    "Allow tile `call` to request access to microphones on this device",
+  );
+  expect(html).toContain("The browser may show its own prompt");
+  expect(html).toContain("Installing this app does not activate");
+  expect(html).toContain("including while its workspace is hidden");
+  expect(html).toContain("browser&#x27;s device indicator remains authoritative");
+  expect(html).toContain("approved upgrades");
+  expect(html).toContain("Browser and site settings can separately deny it");
+  expect(html).not.toContain("currently active");
+});
+
+test("browser permission headline names only the declared feature", () => {
+  const cameraHtml = renderToStaticMarkup(
+    <PermissionDisclosure
+      permission={{
+        source: "kernel",
+        kind: "browser_permissions",
+        tiles: [{ id: "call", features: ["camera"] }],
+      }}
+    />,
+  );
+  const microphoneHtml = renderToStaticMarkup(
+    <PermissionDisclosure
+      permission={{
+        source: "kernel",
+        kind: "browser_permissions",
+        tiles: [{ id: "call", features: ["microphone"] }],
+      }}
+    />,
+  );
+
+  expect(cameraHtml).toContain("Browser camera access");
+  expect(cameraHtml).not.toContain("microphone access");
+  expect(microphoneHtml).toContain("Browser microphone access");
+  expect(microphoneHtml).not.toContain("camera access");
 });
 
 test("chain-key consent discloses autonomous bounded assertion authority", () => {
@@ -1236,6 +1313,54 @@ test("update consent shows an exact installed-to-target capability diff", () => 
   expect(html).not.toContain("Old unverified explanation");
   expect(html).not.toContain("New unverified explanation");
   expect(html).not.toContain("Unverified purpose");
+});
+
+test("browser permission updates show the exact feature change", () => {
+  const manifest = (
+    version: number,
+    features: Array<"camera" | "microphone">,
+  ): NeutronManifest => ({
+    format: 3,
+    id: "media_update",
+    name: "Media Update",
+    version,
+    tiles: [{ id: "call", title: "Call" }],
+    capabilities: {
+      browser_permissions: {
+        api: 1,
+        tiles: [{ id: "call", features }],
+      },
+    },
+  });
+  const previous = manifest(100, ["camera"]);
+  const target = manifest(101, ["microphone", "camera"]);
+  const disclosure = configInstallDisclosures(target);
+  const request = fixtureAppInstallRequest({
+    id: target.id,
+    size: 10,
+    operation: "update",
+    capabilityPlanFingerprint: disclosure.planFingerprint,
+    capabilityPlanDiff: diffCapabilityPlans(
+      buildCapabilityPlan(previous),
+      buildCapabilityPlan(target),
+    ),
+    capabilityDisclosures: disclosure.capabilityDisclosures,
+    permissions: disclosure.permissions,
+  });
+
+  const html = renderToStaticMarkup(
+    <AppRequestDialog compiled={{ size: 5 }} request={request} />,
+  );
+  expect(html).toContain('data-change="changed"');
+  expect(html).toContain("Changed · Browser device access");
+  expect(html).toContain("Installed authority config");
+  expect(html).toContain("Target authority config");
+  expect(html).toContain('&quot;camera&quot;');
+  expect(html).toContain('&quot;microphone&quot;');
+  expect(html).toContain(
+    "Allow tile `call` to request access to microphones on this device",
+  );
+  expect(html).not.toContain("currently active");
 });
 
 test("update consent identifies a version-only plan change", () => {

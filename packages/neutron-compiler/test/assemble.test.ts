@@ -14,10 +14,15 @@ import {
   publicIngressResourceId,
 } from "neutron-tools/src/capabilities/catalog.js";
 import {
+  ASSEMBLER_ID,
+  BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID,
   assemble,
+  assembleLegacyV25,
+  LEGACY_V25_ASSEMBLER_ID,
   NEUTRON_INSTALLED_APP_LIMIT,
   NEUTRON_RESIDENT_BACKGROUND_LIMIT,
   NEUTRON_SCHEDULED_TASK_LIMIT,
+  supportsBrowserSurfaceOrigins,
 } from "../src/assemble.ts";
 import type { AssemblyManifest } from "../src/assemble.ts";
 import { trustedInstallationContextFromRootKey } from "../src/installation_context.ts";
@@ -63,6 +68,70 @@ const kernelConfig: AssemblyManifest = {
     },
   },
 };
+
+test("browser surface origins require the v26 assembler", () => {
+  expect(ASSEMBLER_ID).toBe(BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID);
+  expect(
+    supportsBrowserSurfaceOrigins(BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID),
+  ).toBe(true);
+  expect(supportsBrowserSurfaceOrigins("neutron_actor_v25")).toBe(false);
+  expect(supportsBrowserSurfaceOrigins("neutron_actor_unknown")).toBe(false);
+  const source = assemble({ kernel: kernelConfig });
+  expect(source).not.toContain(
+    "configure_app_browser_surfaces",
+  );
+  expect(source).toContain("capability_authority_revision : ?Nat64");
+  expect(source).toContain("capability_authority_revision = null");
+  expect(source).not.toContain(
+    `${initName("kernel")}.capability_authority_revision()`,
+  );
+  const revisionSource = assemble({
+    kernel: {
+      ...kernelConfig,
+      func: {
+        ...kernelConfig.func,
+        capability_authority_revision: {
+          type: "internal",
+          async: false,
+        },
+      },
+    },
+  });
+  expect(revisionSource).toContain(
+    `capability_authority_revision = ?${initName("kernel")}.capability_authority_revision()`,
+  );
+});
+
+test("exact v25 compatibility assembly cannot configure browser origins", () => {
+  const source = assembleLegacyV25({ kernel: kernelConfig });
+  expect(source).toContain(
+    `assembler_id = "${LEGACY_V25_ASSEMBLER_ID}"`,
+  );
+  expect(source).not.toContain("configure_app_browser_surfaces");
+  expect(source).not.toContain("capability_authority_revision");
+
+  expect(() =>
+    assembleLegacyV25({
+      kernel: kernelConfig,
+      media: {
+        format: 3,
+        id: "media",
+        name: "Media",
+        version: 100,
+        entry: "media",
+        tiles: [{ id: "call", title: "Call" }],
+        capabilities: {
+          browser_permissions: {
+            api: 1,
+            tiles: [{ id: "call", features: ["camera"] }],
+          },
+        },
+      },
+    }),
+  ).toThrow(
+    `App media declares browser_permissions, which requires Kernel 316 or newer with assembler ${BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID}`,
+  );
+});
 
 const helloConfig: AssemblyManifest = {
   format: 3,
@@ -569,6 +638,7 @@ test("assembler emits modern persistent Motoko actor shape", () => {
   expect(source).toContain(
     `apps = ${initName("kernel")}.runtime_app_instances("development")`,
   );
+  expect(source).not.toContain("installation_origin_nonce");
   expect(source).toContain(
     `transient let ${scopeName("hello")} = ${initName("kernel")}.app_scope("hello", "development")`,
   );
@@ -586,7 +656,7 @@ test("assembler emits modern persistent Motoko actor shape", () => {
   expect(source).toContain(
     `${initName("kernel")}.configure_capability_registry([], NeutronActor)`,
   );
-  expect(source).toContain('assembler_id = "neutron_actor_v25"');
+  expect(source).toContain('assembler_id = "neutron_actor_v26"');
   expect(source).toContain(
     "let NeutronTrustedInstallationNetworkIdV1 : Blob = \"\\6c\\77",
   );
@@ -2144,6 +2214,72 @@ test("assembler binds resident frame security to each exact app scope", () => {
   expect(source).toContain("vetkeys = null");
   expect(source).toContain("connections = null");
   expect(source).not.toContain(environmentName("gemma"));
+});
+
+test("assembler projects every browser surface without frontend browser grants", () => {
+  const source = assemble(
+    {
+      media: {
+        format: 3,
+        id: "media",
+        name: "Media",
+        version: 100,
+        entry: "media",
+        tiles: [
+          { id: "zeta", title: "Zeta", path: "zeta.html" },
+          { id: "alpha", title: "Alpha", path: "alpha.html" },
+        ],
+        tray: { title: "Media tray", path: "tray.html", icon: "tray.svg" },
+        background: { path: "background.html" },
+        capabilities: {
+          browser_permissions: {
+            api: 1,
+            tiles: [
+              { id: "zeta", features: ["microphone", "camera"] },
+              { id: "alpha", features: ["camera"] },
+            ],
+          },
+        },
+      },
+      kernel: kernelConfig,
+      dedicated: {
+        format: 3,
+        id: "dedicated",
+        name: "Dedicated",
+        version: 100,
+        entry: "dedicated",
+        tiles: [{ id: "main", title: "Main", path: "index.html" }],
+        background: { path: "resident.html" },
+        capabilities: {
+          dedicated_resident_origin: {
+            api: 1,
+            surface: "background",
+            mode: "credentialless_ephemeral_v1",
+          },
+        },
+      },
+    },
+    { browserSurfaceOriginAppIds: ["media"] },
+  );
+  const configuration = source.match(
+    /configure_app_browser_surfaces\(\[(.*?)\]\);/s,
+  )?.[1];
+  expect(configuration).toBeDefined();
+  expect(configuration!.indexOf(`app_scope = ${scopeName("dedicated")}`))
+    .toBeLessThan(configuration!.indexOf(`app_scope = ${scopeName("kernel")}`));
+  expect(configuration!.indexOf(`app_scope = ${scopeName("kernel")}`))
+    .toBeLessThan(configuration!.indexOf(`app_scope = ${scopeName("media")}`));
+  expect(configuration).toContain(`app_scope = ${scopeName("kernel")};\n        surface_origins = false;\n        tiles = [];\n        tray = false;\n        ordinary_background = false;`);
+  expect(configuration).toContain(`app_scope = ${scopeName("dedicated")};\n        surface_origins = false;\n        tiles = [{\n          id = "main";\n        }];\n        tray = false;\n        ordinary_background = false;`);
+  expect(configuration).toContain(`app_scope = ${scopeName("media")};\n        surface_origins = true;\n        tiles = [{\n          id = "alpha";\n        }, {\n          id = "zeta";\n        }];\n        tray = true;\n        ordinary_background = true;`);
+
+  const backendConfiguration = source.match(
+    /configure_app_capabilities\(\[(.*?)\], \{/s,
+  )?.[1];
+  expect(backendConfiguration).toBeDefined();
+  expect(backendConfiguration).not.toContain("browser_permissions");
+  expect(configuration).not.toContain("browser_permissions");
+  expect(source).not.toContain("kind = #browser_permissions");
 });
 
 test("assembler emits exact declarations for connection-only apps", () => {

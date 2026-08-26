@@ -1,16 +1,18 @@
-import type {
-  NeutronBackendCallReservation,
-  NeutronBackendCallReservationScope,
-  NeutronBackgroundUiRequest,
-  NeutronCertifiedAssetsCollectionConfig,
-  NeutronCertifiedReadAuthorityMode,
-  NeutronCertifiedReadRouteMountConfig,
-  NeutronChainKeySigningAlgorithmV1,
-  NeutronEthereumProviderMethod,
-  NeutronHttpRouteMethod,
-  NeutronHttpRouteMountConfig,
-  NeutronHttpRouteSurface,
-  NeutronHttpsOutcallMethodV1,
+import {
+  BROWSER_PERMISSION_FEATURES,
+  type NeutronBackendCallReservation,
+  type NeutronBackendCallReservationScope,
+  type NeutronBackgroundUiRequest,
+  type NeutronBrowserPermissionFeature,
+  type NeutronCertifiedAssetsCollectionConfig,
+  type NeutronCertifiedReadAuthorityMode,
+  type NeutronCertifiedReadRouteMountConfig,
+  type NeutronChainKeySigningAlgorithmV1,
+  type NeutronEthereumProviderMethod,
+  type NeutronHttpRouteMethod,
+  type NeutronHttpRouteMountConfig,
+  type NeutronHttpRouteSurface,
+  type NeutronHttpsOutcallMethodV1,
 } from "neutron-tools/src/capabilities/catalog.js";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 import {
@@ -54,6 +56,36 @@ export const BACKEND_CALL_PERSISTENCE_DISCLOSURE =
 export const DEDICATED_RESIDENT_ORIGIN_DISCLOSURE =
   "isolated resident origin with ephemeral credential partition";
 
+export const BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE =
+  "An approved tile may keep using a camera or microphone while it remains open, including while its workspace is hidden. Closing or reloading the tile, updating or uninstalling the app, logging out, or losing authorization tears down that live tile. The browser's device indicator remains authoritative. The approved declaration remains available to later approved upgrades until a later update removes it or the app is uninstalled. Browser and site settings can separately deny it.";
+
+export const BROWSER_PERMISSION_FEATURE_DISCLOSURES = {
+  camera: { title: "Camera", devices: "cameras" },
+  microphone: { title: "Microphone", devices: "microphones" },
+} as const satisfies Record<
+  NeutronBrowserPermissionFeature,
+  { readonly title: string; readonly devices: string }
+>;
+
+export function browserPermissionRequestDisclosure(
+  tileId: string,
+  feature: NeutronBrowserPermissionFeature,
+): string {
+  return `Allow tile \`${tileId}\` to request access to ${BROWSER_PERMISSION_FEATURE_DISCLOSURES[feature].devices} on this device. The browser may show its own prompt.`;
+}
+
+export function browserPermissionFeaturesTitle(
+  features: readonly NeutronBrowserPermissionFeature[],
+): string {
+  const titles = BROWSER_PERMISSION_FEATURES
+    .filter((feature) => features.includes(feature))
+    .map((feature) => BROWSER_PERMISSION_FEATURE_DISCLOSURES[feature].title);
+  if (titles.length === 0) return "Device access";
+  return titles
+    .map((title, index) => index === 0 ? title : title.toLowerCase())
+    .join(" and ");
+}
+
 /**
  * Closed set of facts that the kernel can derive from the normalized package.
  * No app-authored prose is representable in this union.
@@ -67,6 +99,14 @@ export type Permission =
   | {
       readonly source: "kernel";
       readonly kind: "dedicated_resident_origin";
+    }
+  | {
+      readonly source: "kernel";
+      readonly kind: "browser_permissions";
+      readonly tiles: readonly {
+        readonly id: string;
+        readonly features: readonly NeutronBrowserPermissionFeature[];
+      }[];
     }
   | {
       readonly source: "kernel";
@@ -357,6 +397,7 @@ export function permissionLevel(permission: Permission): PermissionLevel {
     case "agent_entrypoint":
     case "vetkeys":
     case "scheduled_task":
+    case "browser_permissions":
       return 3;
     case "ethereum_provider":
       return permission.methods.includes("eth_sendTransaction") ? 3 : 2;
@@ -460,6 +501,10 @@ export function permissionKey(permission: Permission): string {
       return `${permission.kind}:${permission.provider}:${
         permission.scopes.join(",")
       }`;
+    case "browser_permissions":
+      return `${permission.kind}:${JSON.stringify(
+        permission.tiles.map(({ id, features }) => [id, features]),
+      )}`;
     case "internal_app_function":
       return `${permission.kind}:${permission.method}`;
     case "function_resources":
@@ -581,6 +626,16 @@ export function capabilityPlanPermissionDisclosures(
         break;
       case "dedicated_resident_origin":
         add({ source: "kernel", kind: "dedicated_resident_origin" });
+        break;
+      case "browser_permissions":
+        add({
+          source: "kernel",
+          kind: "browser_permissions",
+          tiles: entry.config.tiles.map(({ id, features }) => ({
+            id,
+            features: [...features],
+          })),
+        });
         break;
       case "backend_calls":
         add({

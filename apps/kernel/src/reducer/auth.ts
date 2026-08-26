@@ -614,6 +614,7 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
     deployment_id: IDL.Text,
     assembler_id: IDL.Text,
     compiler_id: IDL.Text,
+    capability_authority_revision: IDL.Opt(IDL.Nat64),
     apps: IDL.Vec(AppInstance),
     memories: IDL.Vec(RuntimeMemory),
   });

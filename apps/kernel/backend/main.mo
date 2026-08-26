@@ -4,6 +4,7 @@ import ConnectionsMemory "./connections/Memory";
 import ConnectionsService "./connections/Service";
 import ConnectionTypes "./connections/Types";
 import InstallMemory "./install/Memory";
+import BrowserOrigin "./install/BrowserOrigin";
 import InstallService "./install/Service";
 import InstallTypes "./install/Types";
 import FrontendRuntimeAdmission "./frontend_runtime/Admission";
@@ -72,6 +73,7 @@ import Assets "./assets";
 
 module {
     let MAX_STATIC_LIST_KEYS = 20_000;
+    public let MAX_BROWSER_SURFACE_CERTIFICATION_UNITS : Nat = 1_024;
     let MAX_INSTALL_WASM_CHUNK_BYTES = 1_048_576;
     let MAX_INSTALL_WASM_CHUNKS = 100;
     let SHA256_BYTES = 32;
@@ -80,6 +82,7 @@ module {
         CertV2.CERTIFIED_HTTP_PATH_SEGMENTS_MAX_V2;
     let MAX_HTTP_HEADERS = 64;
     let MAX_HTTP_HEADER_BYTES = 16_384;
+    let KERNEL_RESPONSE_POLICY_V316_MIN_VERSION = 316;
     let LOWER_HEX_DIGITS : [Text] = [
         "0", "1", "2", "3", "4", "5", "6", "7",
         "8", "9", "a", "b", "c", "d", "e", "f",
@@ -125,6 +128,28 @@ module {
         vetkeys_environment : VetKeyTypes.Environment;
         chain_key_signing_keys : ChainKeySigningTypes.KeyConfiguration;
     };
+
+    public type BrowserTileSurfaceDeclaration = {
+        id : Text;
+    };
+
+    public type AppBrowserSurfacesDeclaration = {
+        app_scope : CapabilityTypes.AppScope;
+        surface_origins : Bool;
+        tiles : [BrowserTileSurfaceDeclaration];
+        tray : Bool;
+        ordinary_background : Bool;
+    };
+
+    type BrowserSurfacePolicy = {
+        app_scope : CapabilityTypes.AppScope;
+        host_label : Text;
+    };
+
+    type BrowserDocumentAuthority = {
+        host_label : Text;
+        authority : Text;
+    };
     
 
     public type StaticCmd = {
@@ -142,10 +167,16 @@ module {
         #deny;
         #kernel;
         #opaque_app;
+        #installation_app;
         #persistent_app;
     };
 
     public type RequestHostAuthority = GatewayAuthority.RequestAuthority;
+
+    type AppAssetHostLabel = {
+        #deny;
+        #allow : ?Text;
+    };
 
     let DEPLOYMENT_BUILD_RECORD_PATH =
         "/system/deployment-build-record.json";
@@ -173,13 +204,45 @@ module {
         Text.startsWith(DEPLOYMENT_BUILD_RECORD_PATH, #text prefix);
     };
 
+    let APP_REGISTRY_PATH = "/system/apps.json";
+
+    let BROWSER_SURFACE_ORIGINS_PATH =
+        "/system/browser-surface-origins.json";
+
+    public func isAppRegistryStaticTarget(path : Text) : Bool {
+        path == APP_REGISTRY_PATH;
+    };
+
+    public func staticClearTouchesAppRegistry(prefix : Text) : Bool {
+        Text.startsWith(APP_REGISTRY_PATH, #text prefix);
+    };
+
+    public func isBrowserSurfaceOriginsStaticTarget(path : Text) : Bool {
+        path == BROWSER_SURFACE_ORIGINS_PATH;
+    };
+
+    public func staticClearTouchesBrowserSurfaceOrigins(prefix : Text) : Bool {
+        Text.startsWith(BROWSER_SURFACE_ORIGINS_PATH, #text prefix);
+    };
+
+    func isSeedOncePublicRegistryStaticTarget(path : Text) : Bool {
+        isAppRegistryStaticTarget(path) or
+        isBrowserSurfaceOriginsStaticTarget(path);
+    };
+
+    func staticClearTouchesSeedOncePublicRegistry(prefix : Text) : Bool {
+        staticClearTouchesAppRegistry(prefix) or
+        staticClearTouchesBrowserSurfaceOrigins(prefix);
+    };
+
     // The system namespace stays internal except for its committed public
-    // metadata. Package metadata, Motoko sources, the app registry, runtime
-    // deployment config, install provenance, and deployment build evidence
-    // are ordinary HTTP assets.
+    // metadata. Package metadata, Motoko sources, the public registries,
+    // runtime deployment config, install provenance, and deployment build
+    // evidence are ordinary HTTP assets.
     public func isInternalHttpStatePath(path : Text) : Bool {
         if (not isPathOrDescendant(path, "/system")) return false;
-        path != "/system/apps.json" and
+        not isAppRegistryStaticTarget(path) and
+        not isBrowserSurfaceOriginsStaticTarget(path) and
         path != "/system/runtime-config.json" and
         path != "/system/install-provenance.json" and
         path != "/system/deployment-build-record.json";
@@ -244,12 +307,17 @@ module {
         if (isPathOrDescendant(path, "/mo")) return true;
         if (isPathOrDescendant(path, "/pkg")) return true;
         if (
-            path == "/system/apps.json" or
+            isAppRegistryStaticTarget(path) or
+            isBrowserSurfaceOriginsStaticTarget(path) or
             path == "/system/runtime-config.json" or
             path == "/system/install-provenance.json" or
             path == "/system/deployment-build-record.json"
         ) return true;
 
+        isAppPackageHttpAssetPath(path);
+    };
+
+    public func isAppPackageHttpAssetPath(path : Text) : Bool {
         switch (Text.stripStart(path, #text "/app/")) {
             case null false;
             case (?relative) {
@@ -265,6 +333,144 @@ module {
                 };
             };
         };
+    };
+
+    // An adopted app's installed package/source bytes remain fetchable as data,
+    // but cannot become script, worker, or document code if their portable
+    // proof is replayed on its new origin. Retained pre-v26 apps and root
+    // Kernel compiler paths keep their already-certified authored MIME types.
+    public func httpAssetResponseContentType(
+        path : Text,
+        authored : Text,
+        passiveAppPackage : Bool,
+    ) : Text {
+        if (passiveAppPackage and isAppPackageHttpAssetPath(path)) {
+            "application/octet-stream";
+        } else authored;
+    };
+
+    public func installationRuntimeConfigRequestAllowed(
+        requestUrl : Text,
+        canonicalUrl : Text,
+        destination : ?Text,
+    ) : Bool {
+        requestUrl == canonicalUrl and
+        canonicalUrl == "/system/runtime-config.json" and
+        destination == ?"empty";
+    };
+
+    public func portablePackageRequestAllowed(
+        requestUrl : Text,
+        canonicalUrl : Text,
+        headers : [Painless.HeaderField],
+        currentInstallationSurface : Bool,
+    ) : Bool {
+        if (validatedHttpAssetPath(requestUrl) != ?canonicalUrl) return false;
+        switch (requestHostAuthority(headers)) {
+            case (#invalid) false;
+            // Released package/compiler data was Host-independent. Preserve
+            // requests made without Host in direct/custom tooling.
+            case (#missing) true;
+            case (#present(authority)) {
+                // Public package/compiler bytes deliberately retain their
+                // released portable proof for every syntactically valid custom
+                // gateway and query alias. On a current installation surface,
+                // admit only the exact passive runtime configuration fetch;
+                // every other portable path remains unavailable there.
+                if (isInstallationAppHostLabel(authority.host_label)) {
+                    currentInstallationSurface and
+                    installationRuntimeConfigRequestAllowed(
+                        requestUrl,
+                        canonicalUrl,
+                        uniqueFetchDestination(headers),
+                    );
+                } else true;
+            };
+        };
+    };
+
+    public func uniqueFetchDestination(
+        headers : [Painless.HeaderField],
+    ) : ?Text {
+        var destination : ?Text = null;
+        for ((name, value) in headers.vals()) {
+            if (Text.toLower(name) == "sec-fetch-dest") {
+                if (destination != null) return null;
+                destination := ?value;
+            };
+        };
+        destination;
+    };
+
+    type BrowserGatewayEnvironment = {
+        surface_origin : Text;
+        kernel_origin : Text;
+    };
+
+    func browserGatewayEnvironment(
+        surfaceHostLabel : Text,
+        kernelHostLabel : Text,
+        authority : Text,
+    ) : ?BrowserGatewayEnvironment {
+        let ?surfaceAuthority = GatewayAuthority.parseCanonical(authority) else {
+            return null;
+        };
+        if (surfaceAuthority.host_label != surfaceHostLabel) return null;
+        let (scheme, suffix) = if (
+            authority == surfaceHostLabel # ".icp0.io"
+        ) {
+            ("https://", ".icp0.io")
+        } else if (authority == surfaceHostLabel # ".localhost:8000") {
+            ("http://", ".localhost:8000")
+        } else return null;
+        let kernelAuthority = kernelHostLabel # suffix;
+        let ?parsedKernelAuthority = GatewayAuthority.parseCanonical(
+            kernelAuthority
+        ) else return null;
+        if (parsedKernelAuthority.host_label != kernelHostLabel) return null;
+        ?{
+            surface_origin = scheme # authority;
+            kernel_origin = scheme # kernelAuthority;
+        };
+    };
+
+    public func installationDocumentCspForAuthority(
+        surfaceHostLabel : Text,
+        appId : Text,
+        kernelHostLabel : Text,
+        authority : Text,
+    ) : ?Text {
+        if (not CapabilityScope.validAppId(appId)) return null;
+        let ?environment = browserGatewayEnvironment(
+            surfaceHostLabel,
+            kernelHostLabel,
+            authority,
+        ) else return null;
+        let appPath = "/app/" # appId # "/";
+        ?(
+            "sandbox allow-scripts allow-same-origin; script-src " #
+            "'unsafe-inline' 'unsafe-eval' blob: " #
+            environment.surface_origin # appPath # "; object-src 'none'; " #
+            "worker-src blob: " # environment.surface_origin # appPath #
+            "; frame-ancestors " #
+            environment.kernel_origin
+        );
+    };
+
+    public func residentDocumentCspForAuthority(
+        surfaceHostLabel : Text,
+        kernelHostLabel : Text,
+        authority : Text,
+    ) : ?Text {
+        let ?environment = browserGatewayEnvironment(
+            surfaceHostLabel,
+            kernelHostLabel,
+            authority,
+        ) else return null;
+        ?(
+            "sandbox allow-scripts allow-same-origin; frame-ancestors " #
+            environment.kernel_origin
+        );
     };
 
     public func isSharedAppRoutePath(path : Text) : Bool {
@@ -294,8 +500,8 @@ module {
         // Fragments are never part of an HTTP request target. Percent escapes
         // and backslashes are forbidden in the certified path so path
         // splitting cannot disagree with the gateway's canonical expression
-        // path. Publications may ignore query aliases; portable blobs reject
-        // a non-empty query before route lookup.
+        // path. Each route decides whether its certified request policy admits
+        // a query alias; public package/compiler data deliberately does.
         if (Text.contains(url, #char '#')) return null;
         let path = stripAfter(url, '?');
         if (
@@ -362,6 +568,23 @@ module {
         "p" # Text.fromIter(Iter.take(browserOriginNonce.chars(), 24));
     };
 
+    public func isInstallationAppHostLabel(hostLabel : Text) : Bool {
+        let parts = Text.split(hostLabel, #text "--");
+        let ?prefix = parts.next() else return false;
+        let ?_suffix = parts.next() else return false;
+        if (
+            prefix.size() != 25 or not Text.startsWith(prefix, #char 'i')
+        ) return false;
+        let ?nonce = Text.stripStart(prefix, #char 'i') else return false;
+        for (char in nonce.chars()) {
+            if (not (
+                (char >= '0' and char <= '9') or
+                (char >= 'a' and char <= 'f')
+            )) return false;
+        };
+        true;
+    };
+
     public func appIdFromAssetUrl(url : Text) : ?Text {
         switch (Text.stripStart(url, #text "/app/")) {
             case (null) null;
@@ -375,6 +598,10 @@ module {
                 };
             };
         };
+    };
+
+    public func hasOriginScopedStaticCertification(key : Text) : Bool {
+        appIdFromAssetUrl(key) != null;
     };
 
     // Pure host classification is public for the Motoko security fixture.
@@ -408,6 +635,34 @@ module {
         };
     };
 
+    public func appAssetOriginPolicyWithInstallation(
+        hostLabel : ?Text,
+        canisterId : Text,
+        appId : Text,
+        browserOriginNonce : Text,
+        dedicatedResidentOrigin : Bool,
+        installationSurfaceLabels : [Text],
+    ) : HttpAssetOriginPolicy {
+        switch (hostLabel) {
+            case (?host) {
+                for (surfaceLabel in installationSurfaceLabels.vals()) {
+                    if (host == surfaceLabel and Text.endsWith(
+                        surfaceLabel,
+                        #text ("--" # canisterId),
+                    )) return #installation_app;
+                };
+            };
+            case null {};
+        };
+        appAssetOriginPolicy(
+            hostLabel,
+            canisterId,
+            appId,
+            browserOriginNonce,
+            dedicatedResidentOrigin,
+        );
+    };
+
     public func appAssetOriginPolicyForHeaders(
         headers : [Painless.HeaderField],
         canisterId : Text,
@@ -415,15 +670,45 @@ module {
         browserOriginNonce : Text,
         dedicatedResidentOrigin : Bool,
     ) : HttpAssetOriginPolicy {
-        switch (requestHostAuthority(headers)) {
-            case (#invalid) #deny;
-            case (#missing) appAssetOriginPolicy(
-                null,
+        switch (appAssetHostLabelForHeaders(headers)) {
+            case (#deny) #deny;
+            case (#allow(hostLabel)) appAssetOriginPolicy(
+                hostLabel,
                 canisterId,
                 appId,
                 browserOriginNonce,
                 dedicatedResidentOrigin,
             );
+        };
+    };
+
+    public func appAssetOriginPolicyForHeadersWithInstallation(
+        headers : [Painless.HeaderField],
+        canisterId : Text,
+        appId : Text,
+        browserOriginNonce : Text,
+        dedicatedResidentOrigin : Bool,
+        installationSurfaceLabels : [Text],
+    ) : HttpAssetOriginPolicy {
+        switch (appAssetHostLabelForHeaders(headers)) {
+            case (#deny) #deny;
+            case (#allow(hostLabel)) appAssetOriginPolicyWithInstallation(
+                hostLabel,
+                canisterId,
+                appId,
+                browserOriginNonce,
+                dedicatedResidentOrigin,
+                installationSurfaceLabels,
+            );
+        };
+    };
+
+    func appAssetHostLabelForHeaders(
+        headers : [Painless.HeaderField],
+    ) : AppAssetHostLabel {
+        switch (requestHostAuthority(headers)) {
+            case (#invalid) #deny;
+            case (#missing) #allow(null);
             case (#present(authority)) {
                 // Host parsing establishes canonical syntax only. This
                 // runtime surface separately admits the two verified gateway
@@ -436,13 +721,7 @@ module {
                         authority.host_label,
                     )
                 ) return #deny;
-                appAssetOriginPolicy(
-                    ?authority.host_label,
-                    canisterId,
-                    appId,
-                    browserOriginNonce,
-                    dedicatedResidentOrigin,
-                );
+                #allow(?authority.host_label);
             };
         };
     };
@@ -573,8 +852,20 @@ module {
 
     public func appAssetSandboxHeaders(
         policy : HttpAssetOriginPolicy,
+        _html : Bool,
     ) : [Painless.HeaderField] {
         switch (policy) {
+            // Kernel documents are valid only as top-level shells. Without an
+            // ancestor restriction, an originful app can self-navigate its
+            // sandboxed frame to active Kernel content and regain Kernel-origin
+            // storage. Applying the restriction to every Kernel response also
+            // closes authored SVG/XML and future active-document MIME types.
+            case (#kernel) {
+                [(
+                    "Content-Security-Policy",
+                    "frame-ancestors 'none'",
+                )];
+            };
             case (#opaque_app) [
                 ("Content-Security-Policy", "sandbox allow-scripts")
             ];
@@ -598,8 +889,58 @@ module {
                 Prim.canisterVersion(),
             );
         };
+        // initializeFresh has already bound any pending target to this exact
+        // compiler-generated deployment. Detect a selected Kernel generation
+        // from that validated journal, without trusting frontend state or a
+        // capability configuration that has not committed yet.
+        let activatingKernelInstall = switch (mem.install.pending) {
+            case (?journal) {
+                journal.deployment_id == runningDeploymentId and
+                InstallMemory.findApp(
+                    InstallService.changedInstances(
+                        journal.committed_app_instances,
+                        journal.target_app_instances,
+                    ),
+                    "kernel",
+                ) != null;
+            };
+            case null false;
+        };
+        func targetKernelVersion() : ?Nat {
+            for (app in activeAppInstanceInventory.vals()) {
+                if (app.app_id == "kernel") return ?app.version;
+            };
+            null;
+        };
+        func committedKernelVersion() : ?Nat {
+            let ?instance = InstallMemory.findApp(
+                mem.install.committed_app_instances,
+                "kernel",
+            ) else return null;
+            ?instance.version;
+        };
+        let requiresKernelResponsePolicyV316Cutover =
+            activatingKernelInstall and
+            (switch (targetKernelVersion()) {
+                case (?target) {
+                    target >= KERNEL_RESPONSE_POLICY_V316_MIN_VERSION and
+                    (switch (committedKernelVersion()) {
+                        case (?committed) {
+                            committed < KERNEL_RESPONSE_POLICY_V316_MIN_VERSION
+                        };
+                        case null true;
+                    });
+                };
+                case null false;
+            });
         let assets = Assets.use(mem.core.assets);
         let residentBackgroundPaths = Map.empty<Text, Text>();
+        let browserSurfacesByApp =
+            Map.empty<Text, [BrowserSurfacePolicy]>();
+        let browserSurfacesByHostLabel =
+            Map.empty<Text, BrowserSurfacePolicy>();
+        let browserSurfaceOriginApps = Map.empty<Text, ()>();
+        var installBrowserSurfaceCertificationUnitsRemaining : ?Nat = null;
         let capabilityRegistry = CapabilityRegistry.Service(
             mem.capability_registry,
             func(scope) {
@@ -756,6 +1097,69 @@ module {
         );
         let canisterId = Principal.toText(canisterPrincipal);
 
+        func validBrowserTileId(value : Text) : Bool {
+            if (value.size() < 1 or value.size() > 30) return false;
+            for (char in value.chars()) {
+                if (not (
+                    (char >= 'a' and char <= 'z') or
+                    (char >= '0' and char <= '9') or
+                    char == '_'
+                )) return false;
+            };
+            true;
+        };
+
+        func browserSurfaces(appId : Text) : [BrowserSurfacePolicy] {
+            switch (Map.get(browserSurfacesByApp, Text.compare, appId)) {
+                case (?surfaces) surfaces;
+                case null [];
+            };
+        };
+
+        func browserSurfaceLabels(appId : Text) : [Text] {
+            Array.map<BrowserSurfacePolicy, Text>(
+                browserSurfaces(appId),
+                func(surface) { surface.host_label },
+            );
+        };
+
+        func browserSurfaceForHeaders(
+            headers : [Painless.HeaderField],
+            appId : Text,
+        ) : ?BrowserSurfacePolicy {
+            let ?surface = browserSurfaceForAnyHeaders(headers) else {
+                return null;
+            };
+            if (surface.app_scope.app_id == appId) ?surface else null;
+        };
+
+        func browserSurfaceForAnyHeaders(
+            headers : [Painless.HeaderField],
+        ) : ?BrowserSurfacePolicy {
+            let #present(authority) = requestHostAuthority(headers) else {
+                return null;
+            };
+            if (
+                authority.authority != GatewayAuthority.icAuthority(
+                    authority.host_label,
+                ) and
+                authority.authority != GatewayAuthority.localAuthority(
+                    authority.host_label,
+                )
+            ) return null;
+            let ?surface = Map.get(
+                browserSurfacesByHostLabel,
+                Text.compare,
+                authority.host_label,
+            ) else return null;
+            if (not InstallMemory.scopeActive(
+                mem.install,
+                runningDeploymentId,
+                surface.app_scope,
+            )) return null;
+            ?surface;
+        };
+
         func dedicatedResidentOriginActive(
             instance : InstallTypes.AppInstance,
         ) : Bool {
@@ -853,6 +1257,9 @@ module {
                 add("audio");
             } else if (Text.startsWith(mime, #text "video/")) {
                 add("video");
+                // The historical .ogg mapping is ambiguous; continue to
+                // serve it to both HTML audio and video elements.
+                if (mime == "video/ogg") add("audio");
             } else if (mime == "text/vtt") {
                 add("track");
             } else if (
@@ -864,6 +1271,17 @@ module {
             List.toArray(result);
         };
 
+        func installationSubresourceDestinations(
+            contentType : Text,
+        ) : [Text] {
+            if (contentTypeBase(contentType) == "text/html") {
+                // Fetching HTML as data is inert. Keep iframe admission on
+                // the separate installation-document branch.
+                return ["empty"];
+            };
+            residentSubresourceDestinations(contentType, false);
+        };
+
         func residentRequestKindForRequest(
             requestUrl : Text,
             canonicalPath : Text,
@@ -871,14 +1289,7 @@ module {
             contentType : Text,
             instance : InstallTypes.AppInstance,
         ) : ?Cert.ResidentRequestKind {
-            var destination : ?Text = null;
-            for ((name, value) in headers.vals()) {
-                if (Text.toLower(name) == "sec-fetch-dest") {
-                    if (destination != null) return null;
-                    destination := ?value;
-                };
-            };
-            let ?selected = destination else return null;
+            let ?selected = uniqueFetchDestination(headers) else return null;
             if (selected == "iframe") {
                 let ?residentPath = residentBackgroundPath(instance) else {
                     return null;
@@ -909,16 +1320,129 @@ module {
             null;
         };
 
+        func installationRequestKindForRequest(
+            headers : [Painless.HeaderField],
+            contentType : Text,
+        ) : ?Cert.ResidentRequestKind {
+            let ?selected = uniqueFetchDestination(headers) else return null;
+            if (selected == "iframe") {
+                if (contentTypeBase(contentType) == "text/html") {
+                    return ?#installation_html_v1;
+                };
+                return null;
+            };
+            for (allowed in installationSubresourceDestinations(
+                contentType,
+            ).vals()) {
+                if (selected == allowed) {
+                    return ?#subresource_v1({ destination = selected });
+                };
+            };
+            null;
+        };
+
+        let deniedBrowserFeatures =
+            "camera=(), geolocation=(), microphone=()";
+        // The parent document supplies only the browser-level ceiling. Exact
+        // per-tile delegation is narrowed by the iframe `allow` attribute.
+        // The app document can use a delegated feature itself, but cannot
+        // delegate it onward to another origin.
+        let kernelBrowserFeaturesPolicy =
+            "camera=*, geolocation=(), microphone=*";
+        let installationBrowserFeaturesPolicy =
+            "camera=(self), geolocation=(), microphone=(self)";
+
         func certifiedResponseHeaders(
             key : Text,
             file : Assets.Doc,
             policy : HttpAssetOriginPolicy,
+            browserSurface : ?BrowserSurfacePolicy,
+            documentAuthority : ?BrowserDocumentAuthority,
             bodyHash : Blob,
             expressionOverride : ?Text,
         ) : [Painless.HeaderField] {
+            let adoptedApp = switch (appIdFromAssetUrl(key)) {
+                case (?appId) {
+                    Map.get(
+                        browserSurfaceOriginApps,
+                        Text.compare,
+                        appId,
+                    ) != null;
+                };
+                case null false;
+            };
+            let passiveAppPackage =
+                (
+                    InstallMemory.deploymentCommitted(
+                        mem.install,
+                        runningDeploymentId,
+                    ) or
+                    installBrowserSurfaceCertificationUnitsRemaining != null
+                ) and
+                adoptedApp and
+                isAppPackageHttpAssetPath(key);
+            let responseContentType = httpAssetResponseContentType(
+                key,
+                file.content_type,
+                passiveAppPackage,
+            );
+            let html = contentTypeBase(responseContentType) == "text/html";
+            let permissionsPolicy = switch (policy, browserSurface) {
+                case (#kernel, _) {
+                    if (html) kernelBrowserFeaturesPolicy
+                    else deniedBrowserFeatures;
+                };
+                case (#installation_app, ?_) {
+                    if (html) installationBrowserFeaturesPolicy
+                    else deniedBrowserFeatures;
+                };
+                case _ deniedBrowserFeatures;
+            };
+            let sandboxHeaders : [Painless.HeaderField] = switch (policy) {
+                case (#installation_app) {
+                    if (html) {
+                        let ?surface = browserSurface else Runtime.trap(
+                            "Installation document has no surface policy"
+                        );
+                        let ?authority = documentAuthority else {
+                            Runtime.trap(
+                                "Installation document has no exact authority"
+                            )
+                        };
+                        let ?csp = installationDocumentCspForAuthority(
+                            surface.host_label,
+                            surface.app_scope.app_id,
+                            canisterId,
+                            authority.authority,
+                        ) else Runtime.trap(
+                            "Installation document has an invalid authority"
+                        );
+                        [(
+                            "Content-Security-Policy",
+                            csp,
+                        )];
+                    } else [];
+                };
+                case (#persistent_app) {
+                    if (html) {
+                        let ?authority = documentAuthority else Runtime.trap(
+                            "Resident document has no exact authority"
+                        );
+                        let ?csp = residentDocumentCspForAuthority(
+                            authority.host_label,
+                            canisterId,
+                            authority.authority,
+                        ) else Runtime.trap(
+                            "Resident document has an invalid authority"
+                        );
+                        [("Content-Security-Policy", csp)];
+                    } else [];
+                };
+                case _ appAssetSandboxHeaders(policy, html);
+            };
             Array.concat<Painless.HeaderField>(
                 [
-                    ("Content-Type", file.content_type),
+                    ("Content-Type", responseContentType),
                     ("Content-Encoding", file.content_encoding),
                     (
                         "Cache-Control",
@@ -932,23 +1456,17 @@ module {
                     ("Referrer-Policy", "no-referrer"),
                     (
                         "Permissions-Policy",
-                        "camera=(), geolocation=(), microphone=()",
+                        permissionsPolicy,
                     ),
                     (
                         Cert.CERTIFICATE_EXPRESSION_HEADER,
                         switch (expressionOverride) {
                             case (?expression) expression;
-                            case null {
-                                if (isPackageHttpAssetPath(key)) {
-                                    Cert.PORTABLE_CERTIFICATION_EXPRESSION
-                                } else {
-                                    Cert.HOST_BOUND_CERTIFICATION_EXPRESSION
-                                };
-                            };
+                            case null Cert.HOST_BOUND_CERTIFICATION_EXPRESSION;
                         },
                     ),
                 ],
-                appAssetSandboxHeaders(policy),
+                sandboxHeaders,
             );
         };
 
@@ -990,18 +1508,23 @@ module {
                 )
             ) return [];
 
-            func portablePackageVariants() : [Cert.CertificationVariant] {
+            func packageVariants() : [Cert.CertificationVariant] {
+                // Package/compiler bytes are intentionally public and retain
+                // the released Host-independent proof so custom gateways and
+                // query aliases keep working. Executable installation
+                // documents instead rely on their Host/destination-bound
+                // response and same-app CSP path; honest installation-host
+                // routing rejects this portable fallback.
                 [{
-                    // Empty is an internal owner sentinel for the portable
-                    // request expression, which omits Host but still binds
-                    // the method and empty request body.
                     host = "";
                     response_headers = certifiedResponseHeaders(
                         key,
                         file,
                         #opaque_app,
-                        bodyHash,
                         null,
+                        null,
+                        bodyHash,
+                        ?Cert.PORTABLE_CERTIFICATION_EXPRESSION,
                     );
                 }];
             };
@@ -1009,7 +1532,7 @@ module {
             switch (appIdFromAssetUrl(key)) {
                 case null {
                     if (isPackageHttpAssetPath(key)) {
-                        return portablePackageVariants();
+                        return packageVariants();
                     };
                     Array.map<Text, Cert.CertificationVariant>(
                         certifiedAuthorities(canisterId),
@@ -1020,6 +1543,8 @@ module {
                                     key,
                                     file,
                                     #kernel,
+                                    null,
+                                    null,
                                     bodyHash,
                                     null,
                                 );
@@ -1036,7 +1561,7 @@ module {
                         return [];
                     };
                     if (isPackageHttpAssetPath(key)) {
-                        return portablePackageVariants();
+                        return packageVariants();
                     };
                     let hasDedicatedOrigin =
                         dedicatedResidentOriginActive(instance);
@@ -1054,6 +1579,8 @@ module {
                             key,
                             file,
                             #opaque_app,
+                            null,
+                            null,
                             bodyHash,
                             null,
                         ),
@@ -1067,6 +1594,8 @@ module {
                                 key,
                                 file,
                                 #opaque_app,
+                                null,
+                                null,
                                 bodyHash,
                                 null,
                             ),
@@ -1110,135 +1639,96 @@ module {
             let ?instance = InstallMemory.findApp(instances, appId) else {
                 return [];
             };
-            if (not dedicatedResidentOriginActive(instance)) return [];
-
-            let kinds = List.empty<Cert.ResidentRequestKind>();
+            let result = List.empty<Cert.ResidentResponseVariant>();
             let mime = contentTypeBase(file.content_type);
+            let installationKinds = List.empty<Cert.ResidentRequestKind>();
             if (mime == "text/html") {
-                if (residentBackgroundPath(instance) == ?key) {
-                    List.add(kinds, #html_v1({
-                        canonical_query = dedicatedResidentQuery(instance);
-                    }));
-                };
-            } else {
-                let allowPersistentWorkers =
-                    instance.resident_frame_security ==
-                        #persistent_dedicated_v1;
-                for (destination in residentSubresourceDestinations(
-                    file.content_type,
-                    allowPersistentWorkers,
-                ).vals()) {
-                    List.add(
-                        kinds,
-                        #subresource_v1({ destination }),
-                    );
-                };
+                List.add(installationKinds, #installation_html_v1);
             };
-            let selectedKinds = List.toArray(kinds);
-            if (selectedKinds.size() == 0) return [];
-
-            let hostLabel =
-                persistentAppOriginPrefix(instance.browser_origin_nonce) #
-                "--" # canisterId;
-            let authorities = certifiedAuthorities(hostLabel);
-            Array.tabulate<Cert.ResidentResponseVariant>(
-                authorities.size() * selectedKinds.size(),
-                func(index) {
-                    let kind = selectedKinds[
-                        index % selectedKinds.size()
-                    ];
-                    {
-                        method = "GET";
-                        host = authorities[index / selectedKinds.size()];
-                        kind;
-                        status_code = 200;
-                        body_hash = bodyHash;
-                        response_headers = certifiedResponseHeaders(
-                            key,
-                            file,
-                            #persistent_app,
-                            bodyHash,
-                            ?Cert.residentCertificationExpression(kind),
-                        );
-                    };
-                },
-            );
-        };
-
-        func residentStaticCertificationOwners(
-            key : Text,
-            file : Assets.Doc,
-        ) : [Cert.ResidentRequestOwner] {
-            let ?appId = appIdFromAssetUrl(key) else return [];
-            let result = List.empty<Cert.ResidentRequestOwner>();
-            func addInstance(instance : InstallTypes.AppInstance) : () {
-                if (
-                    instance.scope.app_id != appId or
-                    instance.resident_frame_security ==
-                        #credentialless_opaque_v1
-                ) return;
-                let kinds = List.empty<Cert.ResidentRequestKind>();
-                if (contentTypeBase(file.content_type) == "text/html") {
-                    if (residentBackgroundPath(instance) == ?key) {
-                        List.add(kinds, #html_v1({
-                            canonical_query =
-                                dedicatedResidentQuery(instance);
-                        }));
-                    };
-                } else {
-                    // Removal uses the persistent superset so an
-                    // ephemeral-mode transition also removes any prior
-                    // service/shared-worker leaves.
-                    for (destination in residentSubresourceDestinations(
-                        file.content_type,
-                        true,
-                    ).vals()) {
-                        List.add(
-                            kinds,
-                            #subresource_v1({ destination }),
-                        );
-                    };
-                };
-                let hostLabel =
-                    persistentAppOriginPrefix(
-                        instance.browser_origin_nonce
-                    ) # "--" # canisterId;
-                for (authority in certifiedAuthorities(hostLabel).vals()) {
-                    for (kind in List.values(kinds)) {
+            for (destination in installationSubresourceDestinations(
+                file.content_type,
+            ).vals()) {
+                List.add(
+                    installationKinds,
+                    #subresource_v1({ destination }),
+                );
+            };
+            for (surface in browserSurfaces(appId).vals()) {
+                for (authority in certifiedAuthorities(
+                    surface.host_label,
+                ).vals()) {
+                    for (kind in List.values(installationKinds)) {
                         List.add(result, {
                             method = "GET";
                             host = authority;
                             kind;
+                            status_code = 200 : Nat16;
+                            body_hash = bodyHash;
+                            response_headers = certifiedResponseHeaders(
+                                key,
+                                file,
+                                #installation_app,
+                                ?surface,
+                                ?{
+                                    host_label = surface.host_label;
+                                    authority;
+                                },
+                                bodyHash,
+                                ?Cert.residentCertificationExpression(kind),
+                            );
                         });
                     };
                 };
             };
-            for (
-                instance in mem.install.committed_app_instances.vals()
-            ) addInstance(instance);
-            switch (InstallMemory.instancesForDeployment(
-                mem.install,
-                runningDeploymentId,
-            )) {
-                case (?instances) {
-                    for (instance in instances.vals()) {
-                        var duplicate = false;
-                        for (
-                            committed in
-                            mem.install.committed_app_instances.vals()
-                        ) {
-                            if (
-                                committed.scope == instance.scope and
-                                committed.browser_origin_nonce ==
-                                    instance.browser_origin_nonce and
-                                committed.browser_origin_authority_epoch ==
-                                    instance.browser_origin_authority_epoch
-                            ) duplicate := true;
-                        };
-                        if (not duplicate) addInstance(instance);
+
+            if (dedicatedResidentOriginActive(instance)) {
+                let residentKinds = List.empty<Cert.ResidentRequestKind>();
+                if (mime == "text/html") {
+                    if (residentBackgroundPath(instance) == ?key) {
+                        List.add(residentKinds, #html_v1({
+                            canonical_query = dedicatedResidentQuery(instance);
+                        }));
+                    };
+                } else {
+                    let allowPersistentWorkers =
+                        instance.resident_frame_security ==
+                            #persistent_dedicated_v1;
+                    for (destination in residentSubresourceDestinations(
+                        file.content_type,
+                        allowPersistentWorkers,
+                    ).vals()) {
+                        List.add(
+                            residentKinds,
+                            #subresource_v1({ destination }),
+                        );
                     };
                 };
-                case null {};
+                let hostLabel = persistentAppOriginPrefix(
+                    instance.browser_origin_nonce,
+                ) # "--" # canisterId;
+                for (authority in certifiedAuthorities(hostLabel).vals()) {
+                    for (kind in List.values(residentKinds)) {
+                        List.add(result, {
+                            method = "GET";
+                            host = authority;
+                            kind;
+                            status_code = 200 : Nat16;
+                            body_hash = bodyHash;
+                            response_headers = certifiedResponseHeaders(
+                                key,
+                                file,
+                                #persistent_app,
+                                null,
+                                ?{
+                                    host_label = hostLabel;
+                                    authority;
+                                },
+                                bodyHash,
+                                ?Cert.residentCertificationExpression(kind),
+                            );
+                        });
+                    };
+                };
             };
             List.toArray(result);
         };
@@ -1385,7 +1875,15 @@ module {
             assert (not isSharedAppRoutePath(key));
             let prior = staticCertificationOwners(key);
             let ?file = assets.get(key) else {
-                return [#remove({ url = key; requests = prior })];
+                let mutations = List.empty<Cert.Mutation>();
+                List.add(mutations, #remove({ url = key; requests = prior }));
+                if (hasOriginScopedStaticCertification(key)) {
+                    List.add(mutations, #replace_origin_scoped({
+                        url = key;
+                        next = [];
+                    }));
+                };
+                return List.toArray(mutations);
             };
             let next = Array.map<Cert.CertificationVariant, Cert.ResponseVariant>(
                 publicCertificationVariants(key, file, bodyHash),
@@ -1399,10 +1897,6 @@ module {
                     };
                 },
             );
-            let residentPrior = residentStaticCertificationOwners(
-                key,
-                file,
-            );
             let residentNext = residentCertificationVariants(
                 key,
                 file,
@@ -1410,13 +1904,12 @@ module {
             );
             let mutations = List.empty<Cert.Mutation>();
             List.add(mutations, #replace({ url = key; prior; next }));
-            if (
-                residentPrior.size() > 0 or residentNext.size() > 0
-            ) List.add(mutations, #replace_resident({
+            if (hasOriginScopedStaticCertification(key)) {
+                List.add(mutations, #replace_origin_scoped({
                     url = key;
-                    prior = residentPrior;
                     next = residentNext;
                 }));
+            };
             List.toArray(mutations);
         };
 
@@ -1456,6 +1949,22 @@ module {
         };
 
         func certifyPublicAsset(key : Text, bodyHash : Blob) : () {
+            switch (installBrowserSurfaceCertificationUnitsRemaining) {
+                case (?remaining) {
+                    if (not isPackageHttpAssetPath(key)) {
+                        switch (appIdFromAssetUrl(key)) {
+                            case (?appId) {
+                                let units = browserSurfaces(appId).size();
+                                assert (units <= remaining);
+                                installBrowserSurfaceCertificationUnitsRemaining :=
+                                    ?(remaining - units);
+                            };
+                            case null {};
+                        };
+                    };
+                };
+                case null {};
+            };
             cert.apply(staticCertificationMutations(key, bodyHash));
         };
 
@@ -1468,6 +1977,7 @@ module {
                     switch (cert.assetHash(key)) {
                         case (?bodyHash) {
                             if (
+                                appIdFromAssetUrl(key) == null and
                                 publicStaticAssetCertificationIsCurrent(
                                     key,
                                     bodyHash,
@@ -1494,6 +2004,114 @@ module {
         // install or actor upgrade.
         func reconcilePublicStaticAssetsForApp(appId : Text) : () {
             reconcilePublicStaticAssetsAtPrefix("/app/" # appId # "/");
+        };
+
+        // After the structural v316 cutover, rebuild only Kernel-owned assets.
+        // Ordered seeks jump over the potentially large app, module, package,
+        // and internal-system stores. App/module/package response subtrees are
+        // grafted back intact; the five public system documents are explicit.
+        func reconcileRetainedKernelStaticAssets() : () {
+            func forEachKernelAsset(visit : Text -> ()) : () {
+                var candidateCount = 0;
+                func visitKnown(key : Text) : () {
+                    assert (appIdFromAssetUrl(key) == null);
+                    candidateCount += 1;
+                    assert (candidateCount <= MAX_STATIC_LIST_KEYS);
+                    visit(key);
+                };
+                func visitFiltered(key : Text) : () {
+                    if (
+                        isPackageHttpAssetPath(key) or
+                        isInternalHttpStatePath(key) or
+                        isSharedAppRoutePath(key)
+                    ) return;
+                    visitKnown(key);
+                };
+                func visitRange(start : Text, stop : ?Text) : () {
+                    label range for ((key, _) in assets.entriesFrom(start)) {
+                        switch (stop) {
+                            case (?boundary) {
+                                if (Text.compare(key, boundary) != #less) {
+                                    break range;
+                                };
+                            };
+                            case null {};
+                        };
+                        visitFiltered(key);
+                    };
+                };
+
+                visitRange("/", ?"/app/");
+                // `/app/` itself has no app-id owner and is therefore a Kernel
+                // response; only its strict descendants belong to the skipped
+                // archive range.
+                visitFiltered("/app/");
+                visitRange("/app0", ?"/mo/");
+                visitRange("/mo0", ?"/pkg/");
+                visitRange("/pkg0", ?"/system/");
+                visitRange("/system0", null);
+                for (
+                    key in Cert.KERNEL_RESPONSE_POLICY_REBUILD_SYSTEM_PATHS_V316.vals()
+                ) visitKnown(key);
+            };
+
+            // Reclaim every known predecessor branch before adding any new
+            // response spine. This keeps the one-time cutover self-funding on
+            // production-shaped forests while unknown branches stay isolated.
+            forEachKernelAsset(func(key : Text) {
+                if (Cert.validCanonicalPath(key)) {
+                    cert.removeQuarantinedKernelStaticExpressionV316(key);
+                };
+            });
+            forEachKernelAsset(func(key : Text) {
+                if (not Cert.validCanonicalPath(key)) {
+                    // A restored pre-V26 key cannot enter current mutation
+                    // admission. Its predecessor expression is already
+                    // quarantined and therefore cannot authorize HTTP.
+                    cert.deleteRestoredLegacyStaticAssetHash(key);
+                    return;
+                };
+                let ?bodyHash = cert.assetHash(key) else return;
+                cert.apply(staticCertificationMutations(key, bodyHash));
+            });
+        };
+
+        func retainedResponsePolicyAppIds() : [Text] {
+            let ids = Map.empty<Text, ()>();
+            func add(instances : [InstallTypes.AppInstance]) : () {
+                for (instance in instances.vals()) {
+                    let appId = instance.scope.app_id;
+                    if (appId != "kernel") {
+                        Map.add(ids, Text.compare, appId, ());
+                    };
+                };
+            };
+            add(mem.install.committed_app_instances);
+            switch (mem.install.pending) {
+                case (?journal) add(journal.target_app_instances);
+                case null {};
+            };
+            Iter.toArray(Map.keys(ids));
+        };
+
+        // Actor activation publishes restored certification before the later
+        // install commit can be retried or blocked. Retire stale Kernel
+        // response leaves synchronously in initialization, before this actor
+        // can answer HTTP queries. A trap rolls the whole canister upgrade
+        // back to its predecessor and its prior certified root.
+        do {
+            if (requiresKernelResponsePolicyV316Cutover) {
+                cert.beginV2PublicationBatch();
+                if (cert.cutoverKernelResponsePolicyV316(
+                    runningDeploymentId,
+                    retainedResponsePolicyAppIds(),
+                    notFoundHeaders,
+                    notFoundBodyHash,
+                )) {
+                    reconcileRetainedKernelStaticAssets();
+                };
+                ignore cert.finishV2PublicationBatch();
+            };
         };
 
         // Incremental installs change the actor deployment id even when an
@@ -1536,10 +2154,24 @@ module {
             cert.apply(List.toArray(mutations));
         };
 
-        func deleteStaticAssetCertification(
-            key : Text,
-            priorFile : ?Assets.Doc,
-        ) : () {
+        func reconcileResidentOriginPolicy(appId : Text) : () {
+            // Capability toggles run outside install commit. Open the same
+            // nestable publication transaction used by install so the one
+            // aggregate forest-work meter covers this whole app scan too.
+            cert.beginV2PublicationBatch();
+            reconcilePublicStaticAssetsForApp(appId);
+            ignore cert.finishV2PublicationBatch();
+        };
+
+        func deleteStaticAssetCertification(key : Text) : () {
+            if (not Cert.validCanonicalPath(key)) {
+                // Stable state restored from a pre-V26 actor may contain a
+                // key that current certification admission rejects. Remove
+                // only its stored hash; an empty-segment alias can share the
+                // legacy expression branch with a canonical sibling.
+                cert.deleteRestoredLegacyStaticAssetHash(key);
+                return;
+            };
             cert.deleteAssetHash(key);
             // Cleanup may encounter a legacy/stale static value beneath the
             // reserved route namespace. Remove its stored body hash,
@@ -1550,18 +2182,11 @@ module {
                 url = key;
                 requests = staticCertificationOwners(key);
             }));
-            switch (priorFile) {
-                case (?file) {
-                    let residentRequests =
-                        residentStaticCertificationOwners(key, file);
-                    if (residentRequests.size() > 0) {
-                        List.add(mutations, #remove_resident({
-                            url = key;
-                            requests = residentRequests;
-                        }));
-                    };
-                };
-                case null {};
+            if (hasOriginScopedStaticCertification(key)) {
+                List.add(mutations, #replace_origin_scoped({
+                    url = key;
+                    next = [];
+                }));
             };
             cert.apply(List.toArray(mutations));
         };
@@ -1573,8 +2198,10 @@ module {
             mem.backend_calls,
             runningDeploymentId,
             activeAppInstanceInventory,
+            func() { Prim.canisterVersion() },
             backendCalls.supportsScope,
             certifyPublicAsset,
+            deleteStaticAssetCertification,
             func(removedApps : [InstallTypes.AppInstance], changedBy : Principal) {
                 certifiedAssets.commitConfiguration();
                 httpPostUpdateHandlers.commitConfiguration();
@@ -1606,6 +2233,97 @@ module {
             activationMem,
             mem.core.authorized,
         );
+
+        public func configure_app_browser_surfaces(
+            declarations : [AppBrowserSurfacesDeclaration],
+        ) : () {
+            Map.clear(browserSurfacesByApp);
+            Map.clear(browserSurfacesByHostLabel);
+            Map.clear(browserSurfaceOriginApps);
+            let ?instances = InstallMemory.instancesForDeployment(
+                mem.install,
+                runningDeploymentId,
+            ) else Runtime.trap("App-instance inventory is unavailable");
+            assert (declarations.size() == instances.size());
+            var appIndex = 0;
+            for (declaration in declarations.vals()) {
+                let instance = instances[appIndex];
+                assert (
+                    declaration.app_scope == instance.scope and
+                    (
+                        not declaration.surface_origins or
+                        instance.scope.app_id != "kernel"
+                    ) and
+                    declaration.tiles.size() <= 32 and
+                    (
+                        not declaration.ordinary_background or
+                        instance.resident_frame_security ==
+                            #credentialless_opaque_v1
+                    )
+                );
+                let policies = List.empty<BrowserSurfacePolicy>();
+                if (declaration.surface_origins) {
+                    Map.add(
+                        browserSurfaceOriginApps,
+                        Text.compare,
+                        instance.scope.app_id,
+                        (),
+                    );
+                };
+                func addSurface(key : Text) : () {
+                    let hostLabel = BrowserOrigin.surfacePrefix(
+                        instance.browser_origin_nonce,
+                        key,
+                    ) # "--" # canisterId;
+                    assert (Map.get(
+                        browserSurfacesByHostLabel,
+                        Text.compare,
+                        hostLabel,
+                    ) == null);
+                    let policy : BrowserSurfacePolicy = {
+                        app_scope = instance.scope;
+                        host_label = hostLabel;
+                    };
+                    Map.add(
+                        browserSurfacesByHostLabel,
+                        Text.compare,
+                        hostLabel,
+                        policy,
+                    );
+                    List.add(policies, policy);
+                };
+                if (
+                    declaration.surface_origins and
+                    declaration.ordinary_background
+                ) {
+                    addSurface("background");
+                };
+                var previousTileId : ?Text = null;
+                for (tile in declaration.tiles.vals()) {
+                    assert (validBrowserTileId(tile.id));
+                    switch (previousTileId) {
+                        case (?previous) {
+                            assert (Text.compare(previous, tile.id) == #less);
+                        };
+                        case null {};
+                    };
+                    previousTileId := ?tile.id;
+                    if (declaration.surface_origins) {
+                        addSurface("tile:" # tile.id);
+                    };
+                };
+                if (declaration.surface_origins and declaration.tray) {
+                    addSurface("tray");
+                };
+                Map.add(
+                    browserSurfacesByApp,
+                    Text.compare,
+                    instance.scope.app_id,
+                    List.toArray(policies),
+                );
+                appIndex += 1;
+            };
+        };
 
         public func configure_app_capabilities(
             declarations : [AppCapabilitiesDeclaration],
@@ -2012,6 +2730,10 @@ module {
             instances;
         };
 
+        public func /*internal*/capability_authority_revision() : Nat64 {
+            capabilityRegistry.authorityRevision();
+        };
+
         public func committed_app_scope(
             appId : Text,
         ) : ?CapabilityTypes.AppScope {
@@ -2078,20 +2800,21 @@ module {
         };
 
         public func /*update*/kernel_static(cmd: StaticCmd) : () {
+            // Staging completes before install-begin. Once a checked journal
+            // exists, only its internal commit/abort path may mutate assets.
+            assert(installs.publicStaticMutationsAllowed());
             cert.beginV2PublicationBatch();
             switch(cmd) {
                 case(#store_chunk(x)) {
                     assert(not InstallService.isDispatchMarkerPath(x.key));
                     assert(not isSharedAppRoutePath(x.key));
                     assert(not isDeploymentBuildRecordStaticTarget(x.key));
-                    assert(not installs.isPendingStagingPath(x.key));
                     cert.chunkedSend(x.key, x.chunk_id, x.content);
                 };
                 case(#store({key; val})) {
                     assert(not InstallService.isDispatchMarkerPath(key));
                     assert(not isSharedAppRoutePath(key));
                     assert(not isDeploymentBuildRecordStaticTarget(key));
-                    assert(not installs.isPendingStagingPath(key));
                     assert(val.chunks > 0);
                     
                     // Allows uploads of large certified files.
@@ -2099,13 +2822,25 @@ module {
                         content : [Blob],
                         bodyHash : Blob,
                     ) {
-                        assets.put({
+                        let next : Assets.Doc = {
                             id= key;
                             chunks= val.chunks;
                             content= content;
                             content_encoding= val.content_encoding;
                             content_type = val.content_type;
-                        });
+                        };
+                        if (isSeedOncePublicRegistryStaticTarget(key)) {
+                            // Fresh provisioning may seed authoritative public
+                            // registries once.
+                            // Afterwards only the checked install journal may
+                            // change it; exact retry bytes remain idempotent.
+                            switch (assets.get(key)) {
+                                case (?current) assert (current == next);
+                                case null assets.put(next);
+                            };
+                        } else {
+                            assets.put(next);
+                        };
                         certifyPublicAsset(key, bodyHash);
                     });
                    
@@ -2113,24 +2848,18 @@ module {
                 case(#delete({key})) {
                     assert(not InstallService.isDispatchMarkerPath(key));
                     assert(not isDeploymentBuildRecordStaticTarget(key));
-                    assert(not installs.isPendingStagingPath(key));
-                    let priorFile = assets.get(key);
+                    assert(not isSeedOncePublicRegistryStaticTarget(key));
                     ignore assets.delete(key);
-                    deleteStaticAssetCertification(key, priorFile);
+                    deleteStaticAssetCertification(key);
                 };
                 case(#clear({prefix})) {
                     assert(not staticClearTouchesDeploymentBuildRecord(prefix));
+                    assert(not staticClearTouchesSeedOncePublicRegistry(prefix));
                     let keys = assets.allKeys(prefix);
-                    // Validate the whole clear before its first mutation so a
-                    // broad prefix cannot partially modify a pending journal.
-                    for (k in keys.vals()) {
-                        assert(not installs.isPendingStagingPath(k));
-                    };
                     for (k in keys.vals()) {
                         if (not InstallService.isDispatchMarkerPath(k)) {
-                            let priorFile = assets.get(k);
                             ignore assets.delete(k);
-                            deleteStaticAssetCertification(k, priorFile);
+                            deleteStaticAssetCertification(k);
                         };
                     };
                 };
@@ -2531,12 +3260,13 @@ module {
                     )) {
                         return #deny;
                     };
-                    appAssetOriginPolicyForHeaders(
+                    appAssetOriginPolicyForHeadersWithInstallation(
                         headers,
                         canisterId,
                         appId,
                         instance.browser_origin_nonce,
                         dedicatedResidentOriginActive(instance),
+                        browserSurfaceLabels(appId),
                     );
                 };
             };
@@ -2595,9 +3325,10 @@ module {
             };
             if (isInternalHttpStatePath(url)) return assetNotFound(url);
 
-            // The v2 CEL expression selects no query parameters. Host-bound
-            // publications ignore a query alias; portable blobs reject a
-            // non-empty query before any object lookup.
+            // Certified Assets routes enforce their own Host and closed query
+            // policy before static fallback. Executable app assets below are
+            // Host/destination-bound; public package/compiler data retains its
+            // explicit portable compatibility profile.
             switch (requestHostAuthority(request.headers)) {
                 case (#present(authority)) {
                     switch (certifiedAssets.resolve(
@@ -2639,11 +3370,30 @@ module {
             if (request.method != "GET") {
                 return plainHttpError(405, "Unsupported HTTP request");
             };
-            let originPolicy = if (isPackageHttpAssetPath(url)) {
-                // Public package/compiler data has one sandboxed response
-                // policy on every gateway authority. Its v2 proof therefore
-                // remains valid on non-default local ports without weakening
-                // exact-Host proofs for executable web assets or app routes.
+            let requestedBrowserSurface = browserSurfaceForAnyHeaders(
+                request.headers,
+            );
+            let packageAsset = isPackageHttpAssetPath(url);
+            let portablePackageRequest = packageAsset and
+                portablePackageRequestAllowed(
+                    request.url,
+                    url,
+                    request.headers,
+                    requestedBrowserSurface != null,
+                );
+            if (packageAsset) {
+                switch (requestHostAuthority(request.headers)) {
+                    case (#invalid) return assetNotFound(url);
+                    case (#present(authority)) {
+                        if (
+                            isInstallationAppHostLabel(authority.host_label) and
+                            not portablePackageRequest
+                        ) return assetNotFound(url);
+                    };
+                    case (#missing) {};
+                };
+            };
+            let originPolicy = if (packageAsset) {
                 #opaque_app;
             } else {
                 httpAssetOriginPolicy(
@@ -2663,46 +3413,80 @@ module {
                     if (file.chunks != file.content.size()) {
                         return assetNotFound(url);
                     };
-                    let residentKind : ?Cert.ResidentRequestKind = if (
-                        originPolicy == #persistent_app
+                    let originKind : ?Cert.ResidentRequestKind = switch (
+                        originPolicy
                     ) {
-                        let ?appId = appIdFromAssetUrl(url) else {
-                            return assetNotFound(url);
-                        };
-                        let ?instance = InstallMemory.findApp(
-                            mem.install.committed_app_instances,
-                            appId,
-                        ) else return assetNotFound(url);
-                        if (
-                            not dedicatedResidentOriginActive(instance) or
-                            not dedicatedResidentAssetRequestBound(
+                        case (#persistent_app) {
+                            let ?appId = appIdFromAssetUrl(url) else {
+                                return assetNotFound(url);
+                            };
+                            let ?instance = InstallMemory.findApp(
+                                mem.install.committed_app_instances,
+                                appId,
+                            ) else return assetNotFound(url);
+                            if (
+                                not dedicatedResidentOriginActive(instance) or
+                                not dedicatedResidentAssetRequestBound(
+                                    request.url,
+                                    url,
+                                    request.headers,
+                                    file.content_type,
+                                    instance,
+                                )
+                            ) return assetNotFound(url);
+                            let ?kind = residentRequestKindForRequest(
                                 request.url,
                                 url,
                                 request.headers,
                                 file.content_type,
                                 instance,
-                            )
-                        ) return assetNotFound(url);
-                        let ?kind = residentRequestKindForRequest(
-                            request.url,
-                            url,
-                            request.headers,
-                            file.content_type,
-                            instance,
-                        ) else return assetNotFound(url);
-                        ?kind;
-                    } else {
-                        null;
+                            ) else return assetNotFound(url);
+                            ?kind;
+                        };
+                        case (#installation_app) {
+                            let ?appId = appIdFromAssetUrl(url) else {
+                                return assetNotFound(url);
+                            };
+                            let ?surface = browserSurfaceForHeaders(
+                                request.headers,
+                                appId,
+                            ) else return assetNotFound(url);
+                            let ?kind = installationRequestKindForRequest(
+                                request.headers,
+                                file.content_type,
+                            ) else return assetNotFound(url);
+                            ?kind;
+                        };
+                        case _ null;
                     };
                     let ?bodyHash = cert.assetHash(url) else {
                         return assetNotFound(url);
                     };
-                    let headers = certifiedResponseHeaders(
+                    let originDocumentAuthority = if (
+                        (
+                            originPolicy == #installation_app or
+                            originPolicy == #persistent_app
+                        ) and
+                        contentTypeBase(file.content_type) == "text/html"
+                    ) {
+                        let #present(authority) = requestHostAuthority(
+                            request.headers
+                        ) else return assetNotFound(url);
+                        ?{
+                            host_label = authority.host_label;
+                            authority = authority.authority;
+                        };
+                    } else null;
+                    var headers = certifiedResponseHeaders(
                         url,
                         file,
                         originPolicy,
+                        if (originPolicy == #installation_app) {
+                            requestedBrowserSurface;
+                        } else null,
+                        originDocumentAuthority,
                         bodyHash,
-                        switch (residentKind) {
+                        switch (originKind) {
                             case (?kind) {
                                 ?Cert.residentCertificationExpression(kind);
                             };
@@ -2714,7 +3498,7 @@ module {
                         headers = request.headers;
                         body = request.body;
                     };
-                    let certificate = switch (residentKind) {
+                    var certificate = switch (originKind) {
                         case (?_) cert.residentCertificationHeader(
                             url,
                             request.url,
@@ -2728,6 +3512,34 @@ module {
                             headers,
                             bodyHash,
                         );
+                    };
+                    if (
+                        certificate == null and
+                        portablePackageRequest and
+                        originKind == null and
+                        packageAsset
+                    ) {
+                        let portableHeaders = certifiedResponseHeaders(
+                            url,
+                            file,
+                            #opaque_app,
+                            null,
+                            null,
+                            bodyHash,
+                            ?Cert.PORTABLE_CERTIFICATION_EXPRESSION,
+                        );
+                        switch (cert.certificationHeader(
+                            url,
+                            certifiedRequest,
+                            portableHeaders,
+                            bodyHash,
+                        )) {
+                            case (?portableCertificate) {
+                                headers := portableHeaders;
+                                certificate := ?portableCertificate;
+                            };
+                            case null {};
+                        };
                     };
                     let ?certification = certificate else {
                         return assetNotFound(url);
@@ -3033,13 +3845,17 @@ module {
                     );
                 };
                 case (#persistent_browser_storage) {
-                    reconcilePublicStaticAssetsForApp(updated.scope.app_id);
+                    reconcileResidentOriginPolicy(updated.scope.app_id);
                 };
                 case (#dedicated_resident_origin) {
-                    reconcilePublicStaticAssetsForApp(updated.scope.app_id);
+                    reconcileResidentOriginPolicy(updated.scope.app_id);
                 };
                 case (_) {};
             };
+            // Publish the new browser-observable generation only after every
+            // capability-specific reconciliation above has succeeded. A trap
+            // rolls the complete update message back.
+            capabilityRegistry.advanceAuthorityRevision();
             updated;
         };
 
@@ -3174,7 +3990,11 @@ module {
                 caller,
                 canisterPrincipal,
             ));
+            assert (installBrowserSurfaceCertificationUnitsRemaining == null);
+            installBrowserSurfaceCertificationUnitsRemaining :=
+                ?MAX_BROWSER_SURFACE_CERTIFICATION_UNITS;
             ignore installs.commit(inp, caller, managedMemoryCommit);
+            installBrowserSurfaceCertificationUnitsRemaining := null;
             assert (capabilityRegistry.commitConfiguration(caller));
             certifiedAssets.syncRuntimeState();
             reconcileResidentBackgroundEntrypoints();
@@ -3480,6 +4300,9 @@ module {
 
 
 /*---NEUTRON GENERATED BEGIN---*/
+
+public type capability_authority_revision_Input = ();
+public type capability_authority_revision_Output = Nat64;
 
 public type kernel_authorized_add_Input = (id : Principal);
 public type kernel_authorized_add_Output = ();

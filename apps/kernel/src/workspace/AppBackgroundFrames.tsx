@@ -5,9 +5,23 @@ import {
 } from "neutron-tools/src/runtime.js";
 import type { AppRegistryEntry } from "neutron-compiler/src/install.js";
 import type { AppInstanceProjection } from "../app_scope.ts";
+import {
+  appFrameAuthorityCurrent,
+  appFrameEndpointAuthority,
+  CREDENTIALLESS_APP_FRAME_PROPS,
+  credentiallessOriginfulFrameSupported,
+  OPAQUE_APP_FRAME_SANDBOX,
+  ORIGINFUL_APP_FRAME_SANDBOX,
+  ordinaryAppFramePolicy,
+  prepareOrdinaryAppFrame,
+  type AppFrameEndpointAuthority,
+  type CredentiallessIFrame,
+  type CredentiallessWindow,
+} from "../app_frame_security.ts";
 import { getNeutronId } from "../config.ts";
 import {
   isFrameEndpointReady,
+  markFrameEndpointLoaded,
   registerFrameContext,
   subscribeEndpointChanges,
 } from "../frame_context.ts";
@@ -43,12 +57,17 @@ export const INITIAL_RESIDENT_FRAME_READINESS: ResidentFrameReadiness =
 
 export function advanceResidentFrameReadiness(
   current: ResidentFrameReadiness,
-  event: "connected" | "deadline",
+  event: "connected" | "disconnected" | "deadline",
 ): ResidentFrameReadiness {
   if (event === "connected") {
     return current.phase === "ready"
       ? current
       : Object.freeze({ attempt: current.attempt, phase: "ready" });
+  }
+  if (event === "disconnected") {
+    return current.phase === "ready"
+      ? Object.freeze({ attempt: current.attempt, phase: "waiting" })
+      : current;
   }
   if (current.phase !== "waiting") return current;
   return current.attempt === 0
@@ -61,6 +80,9 @@ export function AppBackgroundFrames() {
   const appInstances = useAppsStore((state) => state.appInstances);
   const runtimeGenerations = useAppsStore((state) => state.runtimeGenerations);
   const authorityPending = useAppsStore(isAuthorityPendingState);
+  const browserSurfaceOriginAppIds = useAppsStore(
+    (state) => state.browserSurfaceOriginAppIds,
+  );
   const backgroundApps = runnableBackgroundFrameEntries(
     apps,
     appInstances,
@@ -71,11 +93,14 @@ export function AppBackgroundFrames() {
     <div className="app-background-frames" aria-hidden="true">
       {backgroundApps.map(([appId, app]) => (
         <AppBackgroundFrame
-          key={`${backgroundKey(appId, app, appInstances[appId]!)}:${appInstances[appId]!.scope.installationUid}:${runtimeGenerations[appId] ?? 0}`}
+          key={`${backgroundKey(appId, app, appInstances[appId]!, browserSurfaceOriginAppIds.includes(appId))}:${appInstances[appId]!.scope.installationUid}:${runtimeGenerations[appId] ?? 0}`}
           appId={appId}
           app={app}
           appInstance={appInstances[appId]!}
           appGeneration={runtimeGenerations[appId] ?? 0}
+          browserSurfaceOriginAdopted={browserSurfaceOriginAppIds.includes(
+            appId,
+          )}
         />
       ))}
     </div>
@@ -87,16 +112,19 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
   app,
   appInstance,
   appGeneration,
+  browserSurfaceOriginAdopted,
 }: {
   appId: string;
   app: AppRegistryEntry;
   appInstance: AppInstanceProjection;
   appGeneration: number;
+  browserSurfaceOriginAdopted: boolean;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const launchedFrameRef = useRef<{
     key: string;
     source: Window;
+    origin: string;
   } | null>(null);
   const [preflightFailure, setPreflightFailure] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<ResidentFrameReadiness>(
@@ -126,49 +154,77 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
           appInstance.browserOriginAuthorityEpoch,
       }
     : undefined;
-  const src = assertRuntimeFrameUrl(
-    appBackgroundUrl({
-      canisterId,
-      appId,
-      path: background.path,
-      ...(residentBinding
-        ? { residentBinding }
-        : {}),
-      local: deployment.local,
-      ...(deployment.localHost ? { localHost: deployment.localHost } : {}),
-    }),
-    true,
-    deployment,
-  );
-  const security = backgroundFrameSecurity(
-    appId,
-    app,
-    src,
-    canisterId,
-    appInstance.browserOriginNonce,
-    appInstance.browserOriginAuthorityEpoch,
-  );
-  const endpointAuthority = useMemo(
+  const ordinaryFramePolicy = useMemo(
     () =>
-      Object.freeze({
-        appId,
-        appVersion: app.version,
-        appGeneration,
-        capabilityPlanFingerprint: app.capability_plan_fingerprint,
-        deploymentId: appInstance.deploymentId,
-        installationUid,
-        binding: security.binding,
-      }),
+      dedicated
+        ? null
+        : ordinaryAppFramePolicy({
+            appId,
+            app,
+            appInstance,
+            endpoint: { role: "background", path: background.path },
+            deployment,
+            browserSurfaceOriginAdopted,
+          }),
     [
-      app.capability_plan_fingerprint,
-      app.version,
+      app,
+      appId,
+      appInstance,
+      background.path,
+      browserSurfaceOriginAdopted,
+      dedicated,
+      deployment,
+    ],
+  );
+  const residentSrc = dedicated
+    ? assertRuntimeFrameUrl(
+        appBackgroundUrl({
+          canisterId,
+          appId,
+          path: background.path,
+          ...(residentBinding ? { residentBinding } : {}),
+          local: deployment.local,
+          ...(deployment.localHost ? { localHost: deployment.localHost } : {}),
+        }),
+        true,
+        deployment,
+      )
+    : null;
+  const src = ordinaryFramePolicy?.src ?? residentSrc;
+  if (!src) throw new Error("Background frame has no runtime URL");
+  const residentSecurity = residentSrc
+    ? backgroundFrameSecurity(
+        appId,
+        app,
+        residentSrc,
+        canisterId,
+        appInstance.browserOriginNonce,
+        appInstance.browserOriginAuthorityEpoch,
+      )
+    : null;
+  const endpointAuthority = useMemo(
+    () => {
+      const ordinaryAuthority = appFrameEndpointAuthority({
+        appId,
+        app,
+        appInstance,
+        appGeneration,
+        browserSurfaceOriginAdopted,
+      });
+      return Object.freeze({
+        ...ordinaryAuthority,
+        ...(residentSecurity ? { binding: residentSecurity.binding } : {}),
+      });
+    },
+    [
+      app,
       appGeneration,
       appId,
-      appInstance.deploymentId,
-      installationUid,
-      security.binding.mode,
-      security.binding.browserOriginNonce,
-      security.binding.browserOriginAuthorityEpoch,
+      appInstance,
+      browserSurfaceOriginAdopted,
+      residentSecurity?.binding.mode,
+      residentSecurity?.binding.browserOriginNonce,
+      residentSecurity?.binding.browserOriginAuthorityEpoch,
     ],
   );
   const launchFailure =
@@ -180,26 +236,41 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
   useLayoutEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
-    const launchKey = [
-      src,
-      security.binding.mode,
-      security.binding.browserOriginNonce,
-      security.binding.browserOriginAuthorityEpoch,
-    ].join("\0");
+    const launchKey = residentSecurity
+      ? [
+          src,
+          residentSecurity.binding.mode,
+          residentSecurity.binding.browserOriginNonce,
+          residentSecurity.binding.browserOriginAuthorityEpoch,
+        ].join("\0")
+      : `${src}\0ordinary`;
     let source = iframe.contentWindow;
+    let origin = launchedFrameRef.current?.origin ?? "null";
     if (
       !source ||
       launchedFrameRef.current?.source !== source ||
       launchedFrameRef.current.key !== launchKey
     ) {
       try {
-        // The initial about:blank Window inherits the final iframe flags.
-        // Check it before assigning the app URL so an unsupported ephemeral
-        // implementation can never execute app HTML or start a Worker.
-        source = assertBackgroundFramePreflight(
-          iframe,
-          security.binding.mode,
-        );
+        if (ordinaryFramePolicy) {
+          const prepared = prepareOrdinaryAppFrame(
+            iframe,
+            ordinaryFramePolicy,
+          );
+          source = prepared.source;
+          origin = prepared.origin;
+        } else if (residentSecurity) {
+          // The initial about:blank Window inherits the final iframe flags.
+          // Check it before assigning the app URL so an unsupported ephemeral
+          // implementation can never execute app HTML or start a Worker.
+          source = assertBackgroundFramePreflight(
+            iframe,
+            residentSecurity.binding.mode,
+          );
+          origin = residentSecurity.origin;
+        } else {
+          throw new Error("Background frame security is unavailable");
+        }
       } catch (error) {
         iframe.removeAttribute("src");
         setPreflightFailure(
@@ -209,7 +280,7 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
         );
         return;
       }
-      launchedFrameRef.current = { key: launchKey, source };
+      launchedFrameRef.current = { key: launchKey, source, origin };
     }
     setPreflightFailure(null);
     const unregister = registerFrameContext(
@@ -222,18 +293,38 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
         appVersion: app.version,
         appGeneration,
         appScope: { appId, installationUid },
-        origin: security.origin,
-        residentSecurityBinding: security.binding,
+        origin,
+        ...(residentSecurity
+          ? { residentSecurityBinding: residentSecurity.binding }
+          : {}),
         isAuthorityCurrent: () =>
-          residentFrameAuthorityCurrent(
+          backgroundFrameAuthorityCurrent(
             endpointAuthority,
             useAppsStore.getState(),
           ),
-      }
+      },
     );
     if (iframe.getAttribute("src") !== src) iframe.setAttribute("src", src);
     let active = true;
     let readinessTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const armReadinessDeadline = (): void => {
+      if (!active || readinessTimer !== undefined) return;
+      readinessTimer = globalThis.setTimeout(() => {
+        readinessTimer = undefined;
+        if (!active || markReady()) return;
+        if (
+          !backgroundFrameAuthorityCurrent(
+            endpointAuthority,
+            useAppsStore.getState(),
+          )
+        ) {
+          return;
+        }
+        setReadiness((current) =>
+          advanceResidentFrameReadiness(current, "deadline"),
+        );
+      }, RESIDENT_FRAME_READY_TIMEOUT_MS);
+    };
     const markReady = (): boolean => {
       if (!active || !isFrameEndpointReady(source)) return false;
       if (readinessTimer !== undefined) {
@@ -245,28 +336,20 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
       );
       return true;
     };
-    const unsubscribeEndpoints = subscribeEndpointChanges(markReady);
-    if (!markReady()) {
-      readinessTimer = globalThis.setTimeout(() => {
-        readinessTimer = undefined;
-        if (!active || markReady()) return;
-        if (
-          !residentFrameAuthorityCurrent(
-            endpointAuthority,
-            useAppsStore.getState(),
-          )
-        ) {
-          return;
-        }
-        setReadiness((current) =>
-          advanceResidentFrameReadiness(current, "deadline"),
-        );
-      }, RESIDENT_FRAME_READY_TIMEOUT_MS);
-    }
+    const refreshReadiness = (): boolean => {
+      if (markReady()) return true;
+      setReadiness((current) =>
+        advanceResidentFrameReadiness(current, "disconnected"),
+      );
+      armReadinessDeadline();
+      return false;
+    };
+    const unsubscribeEndpoints = subscribeEndpointChanges(refreshReadiness);
+    refreshReadiness();
     const unsubscribeAuthority = useAppsStore.subscribe((state) => {
       if (
         active &&
-        !residentFrameAuthorityCurrent(endpointAuthority, state)
+        !backgroundFrameAuthorityCurrent(endpointAuthority, state)
       ) {
         active = false;
         unregister();
@@ -286,11 +369,12 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
     appGeneration,
     appId,
     installationUid,
-    security.origin,
-    security.credentialless,
-    security.binding.mode,
-    security.binding.browserOriginNonce,
-    security.binding.browserOriginAuthorityEpoch,
+    ordinaryFramePolicy,
+    residentSecurity?.origin,
+    residentSecurity?.credentialless,
+    residentSecurity?.binding.mode,
+    residentSecurity?.binding.browserOriginNonce,
+    residentSecurity?.binding.browserOriginAuthorityEpoch,
     endpointAuthority,
     readiness.attempt,
     src,
@@ -303,6 +387,17 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
       className="app-background-frame"
       data-tid="app-background-frame"
       data-app-id={appId}
+      onLoad={() => {
+        if (iframeRef.current?.getAttribute("src") !== src) return;
+        const result = markFrameEndpointLoaded(
+          iframeRef.current?.contentWindow ?? null,
+        );
+        if (result !== "preserved") {
+          setReadiness((current) =>
+            advanceResidentFrameReadiness(current, "disconnected"),
+          );
+        }
+      }}
       data-resident-launch={
         launchFailure
           ? "blocked"
@@ -315,11 +410,11 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
       {...(launchFailure
         ? { "data-resident-launch-error": launchFailure }
         : {})}
-      sandbox={security.sandbox}
+      {...(residentSecurity ? { sandbox: residentSecurity.sandbox } : {})}
       title={`${app.name} background`}
       tabIndex={-1}
-      {...(security.credentialless
-        ? ({ credentialless: "true" } as Record<string, string>)
+      {...(ordinaryFramePolicy || residentSecurity?.credentialless
+        ? CREDENTIALLESS_APP_FRAME_PROPS
         : {})}
     />
   );
@@ -360,7 +455,7 @@ export function backgroundFrameSecurity(
         binding,
         credentialless: false,
         origin: new URL(src).origin,
-        sandbox: "allow-scripts allow-same-origin",
+        sandbox: ORIGINFUL_APP_FRAME_SANDBOX,
       }
     : mode ===
         ResidentFrameSecurityMode.CREDENTIALLESS_EPHEMERAL_DEDICATED_V1
@@ -368,13 +463,13 @@ export function backgroundFrameSecurity(
           binding,
           credentialless: true,
           origin: new URL(src).origin,
-          sandbox: "allow-scripts allow-same-origin",
+          sandbox: ORIGINFUL_APP_FRAME_SANDBOX,
         }
       : {
           binding,
           credentialless: true,
           origin: "null",
-          sandbox: "allow-scripts",
+          sandbox: OPAQUE_APP_FRAME_SANDBOX,
         };
 }
 
@@ -382,16 +477,10 @@ export type BackgroundFrameSecurity = Readonly<{
   binding: ResidentFrameSecurityBinding;
   credentialless: boolean;
   origin: string;
-  sandbox: "allow-scripts" | "allow-scripts allow-same-origin";
+  sandbox:
+    | typeof OPAQUE_APP_FRAME_SANDBOX
+    | typeof ORIGINFUL_APP_FRAME_SANDBOX;
 }>;
-
-type CredentiallessWindow = Window & {
-  readonly credentialless?: unknown;
-};
-
-type CredentiallessIFrame = HTMLIFrameElement & {
-  credentialless?: unknown;
-};
 
 export function assertBackgroundFramePreflight(
   iframe: HTMLIFrameElement,
@@ -414,7 +503,7 @@ export function assertBackgroundFramePreflight(
     if (
       mode ===
         ResidentFrameSecurityMode.CREDENTIALLESS_EPHEMERAL_DEDICATED_V1 &&
-      source.credentialless !== true
+      !credentiallessOriginfulFrameSupported(iframe)
     ) {
       throw new Error(
         "This browser does not provide the required credentialless resident Window",
@@ -450,6 +539,7 @@ export function backgroundKey(
   appId: string,
   app: AppRegistryEntry,
   appInstance: AppInstanceProjection,
+  browserSurfaceOriginAdopted: boolean,
 ): string {
   const mode = residentFrameSecurityMode(app);
   if (appInstance.residentFrameSecurity !== mode) {
@@ -465,21 +555,21 @@ export function backgroundKey(
     appInstance.capabilityPlanFingerprint,
     appInstance.deploymentId,
     appInstance.scope.installationUid,
+    browserSurfaceOriginAdopted ? "surface-v26" : "surface-v25",
     mode,
     appInstance.browserOriginNonce,
     appInstance.browserOriginAuthorityEpoch,
   ].join(":");
 }
 
-type ResidentFrameEndpointAuthority = Readonly<{
-  appId: string;
-  appVersion: number;
-  appGeneration: number;
-  capabilityPlanFingerprint: string;
-  deploymentId: string;
-  installationUid: string;
-  binding: ResidentFrameSecurityBinding;
+type BackgroundFrameEndpointAuthority = AppFrameEndpointAuthority & Readonly<{
+  binding?: ResidentFrameSecurityBinding;
 }>;
+
+type ResidentFrameEndpointAuthority = BackgroundFrameEndpointAuthority &
+  Readonly<{
+    binding: ResidentFrameSecurityBinding;
+  }>;
 
 type AppsStateSnapshot = ReturnType<typeof useAppsStore.getState>;
 
@@ -487,32 +577,60 @@ export function residentFrameAuthorityCurrent(
   expected: ResidentFrameEndpointAuthority,
   state: AppsStateSnapshot,
 ): boolean {
-  if (isAuthorityPendingState(state)) return false;
-  const app = state.list[expected.appId];
-  const instance = state.appInstances[expected.appId];
+  if (!backgroundFrameBaseAuthorityCurrent(expected, state)) return false;
+  const app = state.list[expected.appId]!;
+  const instance = state.appInstances[expected.appId]!;
   if (
-    !app ||
-    !instance ||
-    app.version !== expected.appVersion ||
-    app.capability_plan_fingerprint !== expected.capabilityPlanFingerprint ||
-    (state.runtimeGenerations[expected.appId] ?? 0) !==
-      expected.appGeneration ||
-    instance.scope.appId !== expected.appId ||
-    instance.scope.installationUid !== expected.installationUid ||
-    instance.version !== expected.appVersion ||
-    instance.deploymentId !== expected.deploymentId ||
-    instance.capabilityPlanFingerprint !==
-      expected.capabilityPlanFingerprint ||
     instance.browserOriginNonce !== expected.binding.browserOriginNonce ||
     instance.browserOriginAuthorityEpoch !==
       expected.binding.browserOriginAuthorityEpoch ||
     instance.residentFrameSecurity !== expected.binding.mode
-  ) {
-    return false;
-  }
+  ) return false;
   try {
     return residentFrameSecurityMode(app) === expected.binding.mode;
   } catch {
     return false;
   }
+}
+
+export function ordinaryBackgroundFrameAuthorityCurrent(
+  expected: BackgroundFrameEndpointAuthority,
+  state: AppsStateSnapshot,
+): boolean {
+  if (!backgroundFrameBaseAuthorityCurrent(expected, state)) return false;
+  const app = state.list[expected.appId]!;
+  const instance = state.appInstances[expected.appId]!;
+  try {
+    return (
+      instance.residentFrameSecurity ===
+        ResidentFrameSecurityMode.CREDENTIALLESS_OPAQUE_V1 &&
+      residentFrameSecurityMode(app) ===
+        ResidentFrameSecurityMode.CREDENTIALLESS_OPAQUE_V1
+    );
+  } catch {
+    return false;
+  }
+}
+
+function backgroundFrameAuthorityCurrent(
+  expected: BackgroundFrameEndpointAuthority,
+  state: AppsStateSnapshot,
+): boolean {
+  return expected.binding
+    ? residentFrameAuthorityCurrent(
+        expected as ResidentFrameEndpointAuthority,
+        state,
+      )
+    : ordinaryBackgroundFrameAuthorityCurrent(expected, state);
+}
+
+function backgroundFrameBaseAuthorityCurrent(
+  expected: BackgroundFrameEndpointAuthority,
+  state: AppsStateSnapshot,
+): boolean {
+  return appFrameAuthorityCurrent(
+    expected,
+    state,
+    isAuthorityPendingState(state),
+  );
 }

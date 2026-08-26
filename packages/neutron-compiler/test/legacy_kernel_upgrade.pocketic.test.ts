@@ -9,7 +9,13 @@
  *   NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
  *   bun test packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts
  *
- * After the reviewed v0.3.15 archive exists, qualify those exact bytes with:
+ * Qualify non-reuse across a real management snapshot restore with:
+ *
+ *   NEUTRON_RUN_BROWSER_ORIGIN_SNAPSHOT_POCKETIC=1 \
+ *   NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
+ *   bun test packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts
+ *
+ * After the reviewed v0.3.16 archive exists, qualify those exact bytes with:
  *
  *   NEUTRON_RUN_FINAL_KERNEL_CANDIDATE_POCKETIC=1 \
  *   NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256=<reviewed-lowercase-sha256> \
@@ -30,24 +36,55 @@ import { expect, test } from "bun:test";
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
 import { createHash } from "node:crypto";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import {
+  execFile as execFileCallback,
+  spawn,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
+import {
+  cp,
+  copyFile,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { gunzipSync, gzipSync } from "node:zlib";
+import msgpack from "tiny-msgpack";
 import { prepareDeterministicWasmTransport } from "../src/deployment_record.ts";
 import {
   assertKernelPackageStateMatchesRuntime,
   buildPackagesInstallAssets,
+  compileAndDeployPreparedPackages,
+  compileFreshPackages,
   compilePackages,
   deployPreparedPackages,
   motokoFilesFromPreparedFiles,
+  prepareCompleteDeploymentBuildRecord,
+  preparePackageInstall,
   readKernelPackageState,
+  recoverPendingInstall,
+  uninstallApp,
   type AppInstance,
   type CompileResult,
+  type DeployPreparedPackagesResult,
   type InstallStagedAsset,
+  type KernelPackageState,
+  type PreparedPackageInstall,
+  type UnpackedNeutronPackage,
 } from "../src/install.ts";
 import { physicalAppMethodName } from "neutron-tools/src/physical_names.js";
+import {
+  NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE,
+  NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX,
+  NEUTRON_PACKAGE_RECORD_PATH,
+} from "neutron-tools/src/package_record.js";
 import { assertSupportedCertificateVersions } from "neutron-tools/src/wasm_metadata.js";
 import {
   LEGACY_KERNEL_RELEASES,
@@ -63,10 +100,16 @@ const pocketIcTest = RUN ? test : test.skip;
 const RUN_FINAL_CANDIDATE =
   process.env.NEUTRON_RUN_FINAL_KERNEL_CANDIDATE_POCKETIC === "1";
 const finalCandidateTest = RUN_FINAL_CANDIDATE ? test : test.skip;
+const RUN_BROWSER_ORIGIN_SNAPSHOT =
+  process.env.NEUTRON_RUN_BROWSER_ORIGIN_SNAPSHOT_POCKETIC === "1";
+const browserOriginSnapshotTest = RUN_BROWSER_ORIGIN_SNAPSHOT
+  ? test
+  : test.skip;
 const PINNED_POCKET_IC_SHA256 =
   "f5009e61bcbff297435a67a8ef9fc02178ebb9ab3ee1ec3ac81f4fc3d49319c4";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const execFile = promisify(execFileCallback);
 
 type DirectPocketIcClient = {
   deleteInstance(instanceId: number): Promise<void>;
@@ -138,6 +181,122 @@ function observeInstallDispatch(
   });
 }
 
+type PausedInstallDispatch = Readonly<{
+  actor: any;
+  reached: Promise<void>;
+  release(): void;
+  captured():
+    | Readonly<{ kind: "inline"; request: any }>
+    | Readonly<{
+        kind: "chunked";
+        chunks: readonly any[];
+        request: any;
+      }>;
+}>;
+
+function pauseInstallDispatch(actor: any): PausedInstallDispatch {
+  let resolveReached!: () => void;
+  let resolveRelease!: () => void;
+  const reached = new Promise<void>((resolve) => {
+    resolveReached = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    resolveRelease = resolve;
+  });
+  let intercepted = false;
+  let inlineRequest: any;
+  let chunkedRequest: any;
+  const chunks: any[] = [];
+
+  return {
+    actor: new Proxy(actor, {
+      get(target, property, receiver) {
+        const original = Reflect.get(target, property, receiver);
+        if (property === "kernel_install_wasm_chunk") {
+          return async (request: any) => {
+            chunks.push(structuredClone(request));
+            return Reflect.apply(original, target, [request]);
+          };
+        }
+        if (
+          property === "kernel_install_code" ||
+          property === "kernel_install_code_chunked"
+        ) {
+          return async (...args: unknown[]) => {
+            if (intercepted) {
+              throw new Error("Install dispatch pause was entered twice");
+            }
+            intercepted = true;
+            if (property === "kernel_install_code") {
+              inlineRequest = structuredClone(args[0]);
+            } else {
+              chunkedRequest = structuredClone(args[0]);
+            }
+            resolveReached();
+            await released;
+            return Reflect.apply(original, target, args);
+          };
+        }
+        return typeof original === "function"
+          ? original.bind(target)
+          : original;
+      },
+    }),
+    reached,
+    release: resolveRelease,
+    captured() {
+      if (inlineRequest !== undefined && chunkedRequest === undefined) {
+        return { kind: "inline", request: inlineRequest };
+      }
+      if (inlineRequest === undefined && chunkedRequest !== undefined) {
+        return { kind: "chunked", chunks, request: chunkedRequest };
+      }
+      throw new Error("Paused install dispatch is unavailable or ambiguous");
+    },
+  };
+}
+
+async function resumeCapturedPendingInstall(
+  actor: any,
+  paused: PausedInstallDispatch,
+  deploymentId: string,
+): Promise<void> {
+  const captured = paused.captured();
+  if (captured.kind === "inline") {
+    await actor.kernel_install_code(captured.request).catch(() => undefined);
+  } else {
+    await actor.kernel_install_wasm_chunks_clear({
+      deployment_id: deploymentId,
+    });
+    for (const chunk of captured.chunks) {
+      await actor.kernel_install_wasm_chunk(chunk);
+    }
+    await actor
+      .kernel_install_code_chunked(captured.request)
+      .catch(() => undefined);
+  }
+  expect(
+    await recoverPendingInstall(actor, { timeoutMs: 120_000 }),
+  ).toEqual({ status: "committed", deploymentId });
+}
+
+async function waitForPausedInstallDispatch<T>(
+  paused: PausedInstallDispatch,
+  deployment: Promise<T>,
+): Promise<void> {
+  await Promise.race([
+    paused.reached,
+    deployment.then(
+      () => {
+        throw new Error("Deployment completed before install dispatch paused");
+      },
+      (cause: unknown) => {
+        throw cause;
+      },
+    ),
+  ]);
+}
+
 function observedInstallTransport(
   observed: ObservedInstallDispatch,
 ): Uint8Array {
@@ -189,7 +348,7 @@ function concatenateBytes(parts: readonly Uint8Array[]): Uint8Array {
 
 for (const release of LEGACY_KERNEL_RELEASES) {
   pocketIcTest(
-    `synthetic v0.3.15 preserves durable state through the ${release.label} checked self-upgrade`,
+    `generated v0.3.16 preserves durable state through the ${release.label} checked self-upgrade`,
     () =>
       runLegacyUpgradeQualification(() =>
         compileLegacyKernelUpgradeFixture(release.version),
@@ -198,7 +357,7 @@ for (const release of LEGACY_KERNEL_RELEASES) {
   );
 
   finalCandidateTest(
-    `the actual packed v0.3.15 archive preserves durable state through the ${release.label} checked self-upgrade`,
+    `the reviewed v0.3.16 archive preserves durable state through the ${release.label} checked self-upgrade`,
     () =>
       runLegacyUpgradeQualification(() =>
         compileFinalCandidateLegacyKernelUpgradeFixture({
@@ -209,6 +368,799 @@ for (const release of LEGACY_KERNEL_RELEASES) {
       ),
     300_000,
   );
+}
+
+browserOriginSnapshotTest(
+  "restored pre-begin and pending-dispatch branches never reuse browser origins",
+  runBrowserOriginSnapshotQualification,
+  900_000,
+);
+
+async function runBrowserOriginSnapshotQualification(): Promise<void> {
+  const provision = await loadProvisionHarness();
+  const binary = requiredPocketIcBinary();
+  expect(sha256Hex(new Uint8Array(await readFile(binary)))).toBe(
+    PINNED_POCKET_IC_SHA256,
+  );
+
+  const temporaryRoot = await mkdtemp(
+    path.join(tmpdir(), "neutron-browser-origin-snapshot-pocketic-"),
+  );
+  let server: ChildProcessWithoutNullStreams | undefined;
+  let client: DirectPocketIcClient | undefined;
+  let instanceId: number | undefined;
+
+  try {
+    const packages = await prepareBrowserOriginSnapshotPackages(temporaryRoot);
+    const initialPackages = [
+      packages.kernel.prepared,
+      packages.authorityV100.prepared,
+    ];
+    const initial = await compileFreshPackages({ packages: initialPackages });
+
+    const launched = await launchPocketIc(binary, temporaryRoot);
+    server = launched.server;
+    client = new provision.PocketIcRestClient(launched.controlUrl, {
+      requestTimeoutMs: 120_000,
+    }) as DirectPocketIcClient;
+    const created = await createApplicationInstance(
+      launched.controlUrl,
+      path.join(temporaryRoot, "state"),
+    );
+    instanceId = created.instanceId;
+
+    const deployer = testPrincipal(81);
+    const direct = new DirectPocketIcCalls(client, instanceId);
+    const canisterId = await direct.createCanister(
+      deployer,
+      created.defaultEffectiveCanisterId,
+    );
+    await direct.installInitial(canisterId, deployer, initial);
+    await direct.setControllers(canisterId, deployer, [deployer, canisterId]);
+
+    const actor = provision.createDirectPocketIcKernelActor({
+      controlUrl: launched.controlUrl,
+      instanceId,
+      canisterId: canisterId.toText(),
+      caller: deployer,
+      client,
+    });
+    await provision.seedFreshKernel({
+      actor,
+      canisterId: canisterId.toText(),
+      deployment: freshDeployment(
+        [packages.kernel, packages.authorityV100],
+        initial,
+      ),
+      concurrency: 32,
+      logger: silentLogger,
+    });
+
+    const baselineState = freshPackageState(initialPackages, initial);
+    const baselineRuntime = await actor.kernel_runtime_info();
+    const baselineAuthority = requiredAppInstance(
+      normalizeAppInstances(baselineRuntime.apps),
+      "origin_authority",
+    );
+    expect(baselineAuthority.resident_frame_security).toBe(
+      "credentialless_opaque_v1",
+    );
+
+    const snapshot = await direct.takeSnapshot(canisterId, deployer);
+
+    const authorityBranch = await compileAndDeployPreparedPackages({
+      actor,
+      targetCanisterId: canisterId.toText(),
+      packages: [packages.authorityV101.prepared],
+      state: baselineState,
+      expectedDeploymentId: initial.deploymentId,
+      verifyTimeoutMs: 120_000,
+    });
+    const authorityState = advancePackageState(
+      baselineState,
+      [packages.authorityV101.prepared],
+      authorityBranch,
+    );
+    const discardedAuthority = requiredAppInstance(
+      normalizeAppInstances((await actor.kernel_runtime_info()).apps),
+      "origin_authority",
+    );
+    expect(discardedAuthority.scope.installation_uid).toBe(
+      baselineAuthority.scope.installation_uid,
+    );
+    expect(discardedAuthority.resident_frame_security).toBe(
+      "credentialless_ephemeral_dedicated_v1",
+    );
+    expect(discardedAuthority.browser_origin_nonce).not.toBe(
+      baselineAuthority.browser_origin_nonce,
+    );
+
+    const firstInstall = await compileAndDeployPreparedPackages({
+      actor,
+      targetCanisterId: canisterId.toText(),
+      packages: [packages.hello.prepared],
+      state: authorityState,
+      expectedDeploymentId: authorityBranch.compiled.deploymentId,
+      verifyTimeoutMs: 120_000,
+    });
+    const firstInstallState = advancePackageState(
+      authorityState,
+      [packages.hello.prepared],
+      firstInstall,
+    );
+    const discardedFirstInstall = requiredAppInstance(
+      normalizeAppInstances((await actor.kernel_runtime_info()).apps),
+      "hello",
+    );
+
+    const uninstalled = await uninstallApp({
+      actor,
+      targetCanisterId: canisterId.toText(),
+      state: firstInstallState,
+      appId: "hello",
+      expectedDeploymentId: firstInstall.compiled.deploymentId,
+    });
+    const uninstalledState = advancePackageState(
+      firstInstallState,
+      [],
+      uninstalled,
+      ["hello"],
+    );
+    expect(
+      normalizeAppInstances((await actor.kernel_runtime_info()).apps).some(
+        ({ scope }) => scope.app_id === "hello",
+      ),
+    ).toBe(false);
+
+    const reinstalled = await compileAndDeployPreparedPackages({
+      actor,
+      targetCanisterId: canisterId.toText(),
+      packages: [packages.hello.prepared],
+      state: uninstalledState,
+      expectedDeploymentId: uninstalled.compiled.deploymentId,
+      verifyTimeoutMs: 120_000,
+    });
+    const discardedReinstall = requiredAppInstance(
+      normalizeAppInstances((await actor.kernel_runtime_info()).apps),
+      "hello",
+    );
+    expect(discardedReinstall.scope.installation_uid).not.toBe(
+      discardedFirstInstall.scope.installation_uid,
+    );
+    expect(discardedReinstall.browser_origin_nonce).not.toBe(
+      discardedFirstInstall.browser_origin_nonce,
+    );
+
+    await direct.loadSnapshot(canisterId, deployer, snapshot.id);
+    expect((await actor.kernel_runtime_info()).deployment_id).toBe(
+      initial.deploymentId,
+    );
+
+    const restoredAuthorityBranch = await deployExactTransition({
+      actor,
+      canisterId,
+      packages: [packages.authorityV101.prepared],
+      state: baselineState,
+      compiled: authorityBranch.compiled,
+      expectedDeploymentId: initial.deploymentId,
+    });
+    const restoredAuthorityState = advancePackageState(
+      baselineState,
+      [packages.authorityV101.prepared],
+      restoredAuthorityBranch,
+    );
+    const restoredAuthority = requiredAppInstance(
+      normalizeAppInstances((await actor.kernel_runtime_info()).apps),
+      "origin_authority",
+    );
+    expect(restoredAuthority.scope.installation_uid).toBe(
+      baselineAuthority.scope.installation_uid,
+    );
+    expect(restoredAuthority.resident_frame_security).toBe(
+      "credentialless_ephemeral_dedicated_v1",
+    );
+    expect(restoredAuthority.browser_origin_authority_epoch).not.toBe(
+      discardedAuthority.browser_origin_authority_epoch,
+    );
+    expect(restoredAuthority.browser_origin_nonce).not.toBe(
+      discardedAuthority.browser_origin_nonce,
+    );
+    expect(restoredAuthority.browser_origin_nonce).not.toBe(
+      baselineAuthority.browser_origin_nonce,
+    );
+
+    const restoredInstallBranch = await deployExactTransition({
+      actor,
+      canisterId,
+      packages: [packages.hello.prepared],
+      state: restoredAuthorityState,
+      compiled: firstInstall.compiled,
+      expectedDeploymentId: authorityBranch.compiled.deploymentId,
+    });
+    const restoredInstall = requiredAppInstance(
+      normalizeAppInstances((await actor.kernel_runtime_info()).apps),
+      "hello",
+    );
+    expect(restoredInstall.scope.installation_uid).not.toBe(
+      discardedFirstInstall.scope.installation_uid,
+    );
+    expect(restoredInstall.scope.installation_uid).not.toBe(
+      discardedReinstall.scope.installation_uid,
+    );
+    expect(restoredInstall.browser_origin_nonce).not.toBe(
+      discardedFirstInstall.browser_origin_nonce,
+    );
+    expect(restoredInstall.browser_origin_nonce).not.toBe(
+      discardedReinstall.browser_origin_nonce,
+    );
+
+    const restoredFullState = advancePackageState(
+      restoredAuthorityState,
+      [packages.hello.prepared],
+      restoredInstallBranch,
+    );
+    const paused = pauseInstallDispatch(actor);
+    const pendingDeployment = compileAndDeployPreparedPackages({
+      actor: paused.actor,
+      targetCanisterId: canisterId.toText(),
+      packages: [
+        packages.authorityV102.prepared,
+        packages.pendingOrigin.prepared,
+      ],
+      state: restoredFullState,
+      expectedDeploymentId: restoredInstallBranch.compiled.deploymentId,
+      verifyTimeoutMs: 120_000,
+    });
+    const pendingSnapshotState = await (async () => {
+      try {
+        // deployPreparedPackages awaits kernel_install_begin_checked before it
+        // reaches either paused dispatch method. A present status therefore
+        // proves the exact deployment journal is durable before the snapshot.
+        await waitForPausedInstallDispatch(paused, pendingDeployment);
+        const pendingStatus = await actor.kernel_install_status(null);
+        expect(pendingStatus).not.toEqual([]);
+        return {
+          snapshot: await direct.takeSnapshot(canisterId, deployer),
+          status: pendingStatus,
+        };
+      } finally {
+        paused.release();
+      }
+    })();
+
+    const discardedPendingBranch = await pendingDeployment;
+    const discardedPendingApps = normalizeAppInstances(
+      (await actor.kernel_runtime_info()).apps,
+    );
+    const discardedPendingAuthority = requiredAppInstance(
+      discardedPendingApps,
+      "origin_authority",
+    );
+    const discardedPendingInstall = requiredAppInstance(
+      discardedPendingApps,
+      "pending_origin",
+    );
+    expect(discardedPendingAuthority.scope.installation_uid).toBe(
+      restoredAuthority.scope.installation_uid,
+    );
+    expect(discardedPendingAuthority.resident_frame_security).toBe(
+      "credentialless_opaque_v1",
+    );
+    expect(discardedPendingAuthority.browser_origin_authority_epoch).not.toBe(
+      restoredAuthority.browser_origin_authority_epoch,
+    );
+
+    await direct.loadSnapshot(
+      canisterId,
+      deployer,
+      pendingSnapshotState.snapshot.id,
+    );
+    expect((await actor.kernel_runtime_info()).deployment_id).toBe(
+      restoredInstallBranch.compiled.deploymentId,
+    );
+    expect(await actor.kernel_install_status(null)).toEqual(
+      pendingSnapshotState.status,
+    );
+
+    // The restored journal already owns its complete staged snapshot. Resume
+    // the exact captured inline/chunked dispatch instead of restaging through
+    // the deliberately frozen public static API.
+    await resumeCapturedPendingInstall(
+      actor,
+      paused,
+      discardedPendingBranch.compiled.deploymentId,
+    );
+    const restoredPendingApps = normalizeAppInstances(
+      (await actor.kernel_runtime_info()).apps,
+    );
+    const restoredPendingAuthority = requiredAppInstance(
+      restoredPendingApps,
+      "origin_authority",
+    );
+    const restoredPendingInstall = requiredAppInstance(
+      restoredPendingApps,
+      "pending_origin",
+    );
+    expect(restoredPendingInstall.scope.installation_uid).not.toBe(
+      discardedPendingInstall.scope.installation_uid,
+    );
+    expect(restoredPendingInstall.browser_origin_nonce).not.toBe(
+      discardedPendingInstall.browser_origin_nonce,
+    );
+    expect(restoredPendingAuthority.scope.installation_uid).toBe(
+      discardedPendingAuthority.scope.installation_uid,
+    );
+    expect(restoredPendingAuthority.browser_origin_authority_epoch).not.toBe(
+      discardedPendingAuthority.browser_origin_authority_epoch,
+    );
+    expect(restoredPendingAuthority.browser_origin_nonce).not.toBe(
+      discardedPendingAuthority.browser_origin_nonce,
+    );
+
+    // One external install establishes the canister. Every branch transition
+    // above goes through the Kernel's checked #upgrade/#keep transaction.
+    expect(direct.externalInstallModes).toEqual(["install"]);
+  } finally {
+    if (client !== undefined && instanceId !== undefined) {
+      await client.deleteInstance(instanceId).catch(() => undefined);
+    }
+    if (server !== undefined) await stopPocketIc(server);
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+type PreparedArchive = Readonly<{
+  archive: Uint8Array;
+  prepared: PreparedPackageInstall;
+}>;
+
+async function prepareBrowserOriginSnapshotPackages(
+  temporaryRoot: string,
+): Promise<
+  Readonly<{
+    kernel: PreparedArchive;
+    authorityV100: PreparedArchive;
+    authorityV101: PreparedArchive;
+    authorityV102: PreparedArchive;
+    hello: PreparedArchive;
+    pendingOrigin: PreparedArchive;
+  }>
+> {
+  const kernel = await prepareWorkingTreeKernelPackage(temporaryRoot);
+  const authorityV100 = preparedTestArchive(
+    residentAuthorityPackageFiles(100, false),
+  );
+  const authorityV101 = preparedTestArchive(
+    residentAuthorityPackageFiles(101, true),
+  );
+  const authorityV102 = preparedTestArchive(
+    residentAuthorityPackageFiles(102, false),
+  );
+  const pendingOrigin = preparedTestArchive(pendingOriginPackageFiles());
+  const helloArchive = new Uint8Array(
+    await readFile(
+      new URL("../../../apps/hello/hello.v0.2.1.neutron", import.meta.url),
+    ),
+  );
+  return {
+    kernel,
+    authorityV100,
+    authorityV101,
+    authorityV102,
+    pendingOrigin,
+    hello: {
+      archive: helloArchive,
+      prepared: preparePackageInstall(helloArchive),
+    },
+  };
+}
+
+function pendingOriginPackageFiles(): UnpackedNeutronPackage {
+  const moduleContent = encoder.encode("module { public class Init() {} }");
+  const entry = sha256Hex(moduleContent);
+  const files: UnpackedNeutronPackage = {
+    "neutron.json": encoder.encode(
+      JSON.stringify({
+        format: 3,
+        id: "pending_origin",
+        name: "Pending origin",
+        version: 100,
+        entry,
+        tiles: [
+          {
+            id: "main",
+            title: "Pending origin",
+            path: "index.html",
+            icon: "static/icon.svg",
+          },
+        ],
+      }),
+    ),
+    "web/index.html": encoder.encode(
+      "<!doctype html><title>Pending origin fixture</title>",
+    ),
+    "web/static/icon.svg": encoder.encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>',
+    ),
+    [`mo/${entry}.mo`]: moduleContent,
+  };
+  addTestPackageRecord(files, false);
+  return files;
+}
+
+async function prepareWorkingTreeKernelPackage(
+  temporaryRoot: string,
+): Promise<PreparedArchive> {
+  // Keep the compiler project independent from the scripts project. These
+  // computed imports exist only in this explicitly opted-in qualification.
+  const scriptsSource = "../../neutron-scripts/src/";
+  const [{ packageMotoko }, { parsePackageString }] = await Promise.all([
+    import(scriptsSource + "mopack.ts"),
+    import(scriptsSource + "walk.ts"),
+  ]);
+  const kernelRoot = fileURLToPath(
+    new URL("../../../apps/kernel/", import.meta.url),
+  );
+  const temporaryKernel = path.join(temporaryRoot, "working-kernel");
+  await cp(
+    path.join(kernelRoot, "backend"),
+    path.join(temporaryKernel, "backend"),
+    { recursive: true },
+  );
+  await Promise.all([
+    copyFile(
+      path.join(kernelRoot, "neutron.json"),
+      path.join(temporaryKernel, "neutron.json"),
+    ),
+    copyFile(
+      path.join(kernelRoot, "neutron.lock.json"),
+      path.join(temporaryKernel, "neutron.lock.json"),
+    ),
+  ]);
+
+  const { stdout } = await execFile("mops", ["sources"], {
+    cwd: kernelRoot,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  const parsedSourcePackages = parsePackageString(stdout) as Record<
+    string,
+    string
+  >;
+  const sourcePackages = Object.fromEntries(
+    Object.entries(parsedSourcePackages).map(([name, sourcePath]) => [
+      name,
+      path.resolve(kernelRoot, sourcePath),
+    ]),
+  );
+  await packageMotoko({ cwd: temporaryKernel, packages: sourcePackages });
+
+  const dist = path.join(temporaryKernel, "dist");
+  const files: UnpackedNeutronPackage = {
+    "neutron.json": new Uint8Array(
+      await readFile(path.join(dist, "neutron.json")),
+    ),
+    "neutron.lock.json": new Uint8Array(
+      await readFile(path.join(dist, "neutron.lock.json")),
+    ),
+    "connection-providers.json": new Uint8Array(
+      await readFile(
+        path.join(kernelRoot, "connections/provider-support.generated.json"),
+      ),
+    ),
+    "web/index.html": encoder.encode(
+      "<!doctype html><title>Kernel test</title>",
+    ),
+  };
+  const moduleRoot = path.join(dist, "mo");
+  for (const filename of (await readdir(moduleRoot)).sort()) {
+    files[`mo/${filename}`] = new Uint8Array(
+      await readFile(path.join(moduleRoot, filename)),
+    );
+  }
+  addTestPackageRecord(files, true);
+  return preparedTestArchive(files);
+}
+
+function residentAuthorityPackageFiles(
+  version: number,
+  dedicated: boolean,
+): UnpackedNeutronPackage {
+  const moduleContent = encoder.encode("module { public class Init() {} }");
+  const entry = sha256Hex(moduleContent);
+  const files: UnpackedNeutronPackage = {
+    "neutron.json": encoder.encode(
+      JSON.stringify({
+        format: 3,
+        id: "origin_authority",
+        name: "Origin authority",
+        version,
+        entry,
+        background: { path: "service.html" },
+        ...(dedicated
+          ? {
+              capabilities: {
+                dedicated_resident_origin: {
+                  api: 1,
+                  surface: "background",
+                  mode: "credentialless_ephemeral_v1",
+                },
+              },
+            }
+          : {}),
+      }),
+    ),
+    "web/service.html": encoder.encode(
+      "<!doctype html><title>Resident authority fixture</title>",
+    ),
+    [`mo/${entry}.mo`]: moduleContent,
+  };
+  addTestPackageRecord(files, false);
+  return files;
+}
+
+function addTestPackageRecord(
+  files: UnpackedNeutronPackage,
+  isKernel: boolean,
+): void {
+  const manifest = JSON.parse(decoder.decode(files["neutron.json"]!)) as {
+    id: string;
+    version: number;
+    memory?: Record<string, unknown>;
+    package_features?: string[];
+  };
+  if (!isKernel) {
+    manifest.package_features = [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE];
+    files["neutron.json"] = encoder.encode(JSON.stringify(manifest));
+  }
+  const licensePath = isKernel
+    ? "legal/LICENSE.test.txt"
+    : `${NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX}LICENSE.test.txt`;
+  const noticePath = "legal/APPLICATION-NOTICE.txt";
+  const license = encoder.encode("PocketIC qualification fixture license\n");
+  const notice = encoder.encode("PocketIC qualification fixture\n");
+  files[licensePath] = license;
+  files[noticePath] = notice;
+
+  let source: Uint8Array | undefined;
+  if (!isKernel) {
+    source = msgpack.encode({
+      format: 1,
+      package: { id: manifest.id, version: manifest.version },
+      files: [
+        {
+          path: "neutron.json",
+          mode: 0o644,
+          content: files["neutron.json"]!,
+        },
+      ],
+    });
+    files[NEUTRON_APP_SOURCE_SNAPSHOT_PATH] = source;
+  }
+
+  const lock = files["neutron.lock.json"];
+  files[NEUTRON_PACKAGE_RECORD_PATH] = encoder.encode(
+    JSON.stringify({
+      format: 1,
+      ...(!isKernel
+        ? { features: [NEUTRON_PACKAGE_ARCHIVE_ONLY_FEATURE] }
+        : {}),
+      package: {
+        id: manifest.id,
+        version: manifest.version,
+        manifest: embeddedTestFile("neutron.json", files["neutron.json"]!),
+      },
+      license: {
+        id: "LicenseRef-PocketIC-Test-1.0",
+        texts: [
+          {
+            id: "LicenseRef-PocketIC-Test-1.0",
+            ...embeddedTestFile(licensePath, license),
+          },
+        ],
+      },
+      source: isKernel
+        ? { kind: "status", status: "not-provided" }
+        : {
+            kind: "embedded",
+            revision: "browser-origin-snapshot-test",
+            ...embeddedTestFile(NEUTRON_APP_SOURCE_SNAPSHOT_PATH, source!),
+          },
+      dependencies: [],
+      notices: [embeddedTestFile(noticePath, notice)],
+      memory:
+        lock === undefined
+          ? null
+          : { lock: embeddedTestFile("neutron.lock.json", lock) },
+      build: isKernel
+        ? { inputs: [], commands: [] }
+        : {
+            inputs: [embeddedTestFile("neutron.json", files["neutron.json"]!)],
+            commands: [
+              {
+                purpose: "package",
+                cwd: ".",
+                argv: ["npm", "run", "package"],
+              },
+            ],
+          },
+    }),
+  );
+}
+
+function embeddedTestFile(pathname: string, content: Uint8Array) {
+  return {
+    path: pathname,
+    sha256: sha256Hex(content),
+    bytes: content.byteLength,
+  };
+}
+
+function preparedTestArchive(files: UnpackedNeutronPackage): PreparedArchive {
+  const archive = msgpack.encode(
+    Object.fromEntries(
+      Object.entries(files)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([pathname, content]) => [pathname, gzipSync(content)]),
+    ),
+  );
+  return { archive, prepared: preparePackageInstall(archive) };
+}
+
+function freshDeployment(
+  packages: readonly PreparedArchive[],
+  compiled: CompileResult,
+): unknown {
+  const transportWasm = new Uint8Array(gzipSync(compiled.wasm));
+  return {
+    packages: packages.map(({ prepared }) => prepared),
+    packageArchives: packages.map(({ archive }) => archive),
+    packageArtifacts: packages.map(({ archive, prepared }) => ({
+      path: `working-tree/${prepared.manifest.id}.neutron`,
+      id: prepared.manifest.id,
+      version: prepared.manifest.version,
+      sha256: sha256Hex(archive),
+      bytes: archive.byteLength,
+    })),
+    compiled,
+    wasmMetadata: assertSupportedCertificateVersions(compiled.wasm),
+    transportWasm,
+    rawWasmSha256: sha256Hex(compiled.wasm),
+    transportWasmSha256: sha256Hex(transportWasm),
+    candidSha256: sha256Hex(encoder.encode(compiled.candid)),
+    stableSha256: sha256Hex(encoder.encode(compiled.stable)),
+    chunks: chunkWasm(transportWasm),
+  };
+}
+
+function freshPackageState(
+  packages: readonly PreparedPackageInstall[],
+  compiled: CompileResult,
+): KernelPackageState {
+  const installed = buildPackagesInstallAssets({
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
+    packages: [...packages],
+    candid: compiled.candid,
+  });
+  const kernel = packages.find(({ isKernel }) => isKernel);
+  if (kernel?.connectionProviderSupport === undefined) {
+    throw new Error("Working-tree Kernel has no connection-provider catalog");
+  }
+  return {
+    registry: installed.apps,
+    apps: installed.apps,
+    browserSurfaceOriginAppIds: installed.browserSurfaceOriginAppIds,
+    browserSurfaceOriginsSidecarPresent: true,
+    existingConfigs: Object.fromEntries(
+      packages.map(({ manifest }) => [manifest.id, manifest]),
+    ),
+    existingModules: motokoFilesFromPreparedFiles(
+      packages.flatMap(({ files }) => files),
+    ),
+    previousStable: compiled.stable,
+    connectionProviderSupport: kernel.connectionProviderSupport,
+  };
+}
+
+function legacyPackageState(
+  fixture: LegacyUpgradeCompileFixture,
+): KernelPackageState {
+  const connectionProviderSupport =
+    fixture.legacyKernel.connectionProviderSupport;
+  if (connectionProviderSupport === undefined) {
+    throw new Error("Legacy Kernel has no connection-provider catalog");
+  }
+  return {
+    registry: fixture.existingApps,
+    apps: fixture.existingApps,
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: false,
+    existingConfigs: {
+      kernel: fixture.legacyKernel.manifest,
+      hello: fixture.hello.manifest,
+    },
+    existingModules: motokoFilesFromPreparedFiles([
+      ...fixture.legacyKernel.files,
+      ...fixture.hello.files,
+    ]),
+    previousStable: fixture.initial.stable,
+    connectionProviderSupport,
+  };
+}
+
+function advancePackageState(
+  state: KernelPackageState,
+  packages: readonly PreparedPackageInstall[],
+  result: DeployPreparedPackagesResult,
+  removedApps: readonly string[] = [],
+): KernelPackageState {
+  const removed = new Set(removedApps);
+  const configs = Object.fromEntries(
+    Object.entries(state.existingConfigs).filter(([id]) => !removed.has(id)),
+  );
+  for (const { manifest } of packages) configs[manifest.id] = manifest;
+
+  const modules = new Map(
+    state.existingModules.map((module) => [module.path, module]),
+  );
+  for (const module of motokoFilesFromPreparedFiles(
+    packages.flatMap(({ files }) => files),
+  )) {
+    modules.set(module.path, module);
+  }
+  const retainedPaths = new Set(result.compiled.modulePaths);
+  const existingModules = [...modules.values()].filter(({ path: modulePath }) =>
+    retainedPaths.has(modulePath),
+  );
+
+  return {
+    registry: result.apps,
+    apps: result.apps,
+    browserSurfaceOriginAppIds: result.compiled.browserSurfaceOriginAppIds,
+    browserSurfaceOriginsSidecarPresent: true,
+    existingConfigs: configs,
+    existingModules,
+    previousStable: result.compiled.stable,
+    connectionProviderSupport: state.connectionProviderSupport,
+  };
+}
+
+async function deployExactTransition({
+  actor,
+  canisterId,
+  packages,
+  state,
+  compiled,
+  expectedDeploymentId,
+}: {
+  actor: any;
+  canisterId: Principal;
+  packages: PreparedPackageInstall[];
+  state: KernelPackageState;
+  compiled: CompileResult;
+  expectedDeploymentId: string;
+}): Promise<DeployPreparedPackagesResult> {
+  const deploymentBuildRecord = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId: canisterId.toText(),
+    packages,
+    state,
+    compiled,
+    expectedDeploymentId,
+  }).record;
+  return deployPreparedPackages({
+    actor,
+    targetCanisterId: canisterId.toText(),
+    packages,
+    compiled,
+    existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
+    previousModulePaths: state.existingModules.map(
+      ({ path: modulePath }) => modulePath,
+    ),
+    deploymentBuildRecord,
+    expectedDeploymentId,
+    verifyTimeoutMs: 120_000,
+  });
 }
 
 async function runLegacyUpgradeQualification(
@@ -353,12 +1305,7 @@ async function runLegacyUpgradeQualification(
       "initial app registry",
     );
 
-    const existingApps = buildPackagesInstallAssets({
-      existingApps: {},
-      packages: [fixture.legacyKernel, fixture.hello],
-      candid: fixture.initial.candid,
-    }).apps;
-    expect(initialRegistry).toEqual(existingApps);
+    expect(initialRegistry).toEqual(fixture.existingApps);
     const nextProvenance = {
       format: 1,
       apps: {
@@ -389,16 +1336,29 @@ async function runLegacyUpgradeQualification(
       ownerActor,
       installDispatch,
     );
+    const initialState = legacyPackageState(fixture);
+    const deploymentBuildRecord = prepareCompleteDeploymentBuildRecord({
+      targetCanisterId: canisterId.toText(),
+      packages: [fixture.candidateKernel],
+      state: initialState,
+      compiled: fixture.upgraded,
+      expectedDeploymentId: fixture.initial.deploymentId,
+    }).record;
     const steps: string[] = [];
     const deployed = await deployPreparedPackages({
       actor: observedOwnerActor,
       targetCanisterId: canisterId.toText(),
       packages: [fixture.candidateKernel],
       compiled: fixture.upgraded,
-      existingApps,
-      previousModulePaths: fixture.initial.modulePaths,
+      existingApps: initialState.apps,
+      existingBrowserSurfaceOriginAppIds:
+        initialState.browserSurfaceOriginAppIds,
+      previousModulePaths: initialState.existingModules.map(
+        ({ path: modulePath }) => modulePath,
+      ),
       expectedDeploymentId: fixture.initial.deploymentId,
       stagedAssets,
+      deploymentBuildRecord,
       verifyTimeoutMs: 120_000,
       onStep: (step) => steps.push(step),
     });
@@ -539,8 +1499,12 @@ async function runLegacyUpgradeQualification(
       packages: [],
       existingModules: recoveredState.existingModules,
       existingConfigs: recoveredState.existingConfigs,
+      existingApps: recoveredState.apps,
+      existingBrowserSurfaceOriginAppIds:
+        recoveredState.browserSurfaceOriginAppIds,
       existingStable: recoveredState.previousStable,
       connectionProviderSupport: recoveredState.connectionProviderSupport,
+      persistenceMode: fixture.release.persistenceMode,
     });
     expect(unchangedCompile.compatibilityDiagnostics).toEqual([]);
     expect(unchangedCompile.migrationPlan).toEqual(
@@ -569,7 +1533,7 @@ async function runLegacyUpgradeQualification(
 
     // The harness makes exactly one external management installation: the
     // initial install. The second transition was dispatched by the running
-    // Kernel's checked journal and hard-coded #upgrade/#keep path.
+    // Kernel's checked journal with its released persistence lineage.
     expect(direct.externalInstallModes).toEqual(["install"]);
   } finally {
     if (client !== undefined && instanceId !== undefined) {
@@ -654,6 +1618,82 @@ class DirectPocketIcCalls {
       caller,
       effectiveCanister(canisterId),
     );
+  }
+
+  async takeSnapshot(
+    canisterId: Principal,
+    caller: Principal,
+  ): Promise<{
+    id: Uint8Array;
+    taken_at_timestamp: bigint;
+    total_size: bigint;
+  }> {
+    await this.managementCall(
+      "stop_canister",
+      [{ canister_id: canisterId }],
+      caller,
+      effectiveCanister(canisterId),
+    );
+    try {
+      return (await this.managementCall(
+        "take_canister_snapshot",
+        [
+          {
+            canister_id: canisterId,
+            replace_snapshot: [],
+            sender_canister_version: [],
+            uninstall_code: [],
+          },
+        ],
+        caller,
+        effectiveCanister(canisterId),
+      )) as {
+        id: Uint8Array;
+        taken_at_timestamp: bigint;
+        total_size: bigint;
+      };
+    } finally {
+      await this.managementCall(
+        "start_canister",
+        [{ canister_id: canisterId }],
+        caller,
+        effectiveCanister(canisterId),
+      );
+    }
+  }
+
+  async loadSnapshot(
+    canisterId: Principal,
+    caller: Principal,
+    snapshotId: Uint8Array,
+  ): Promise<void> {
+    await this.managementCall(
+      "stop_canister",
+      [{ canister_id: canisterId }],
+      caller,
+      effectiveCanister(canisterId),
+    );
+    try {
+      await this.managementCall(
+        "load_canister_snapshot",
+        [
+          {
+            canister_id: canisterId,
+            snapshot_id: snapshotId,
+            sender_canister_version: [],
+          },
+        ],
+        caller,
+        effectiveCanister(canisterId),
+      );
+    } finally {
+      await this.managementCall(
+        "start_canister",
+        [{ canister_id: canisterId }],
+        caller,
+        effectiveCanister(canisterId),
+      );
+    }
   }
 
   async moduleHash(
@@ -851,7 +1891,7 @@ class DirectPocketIcCalls {
         {
           method: "GET",
           url: path,
-          headers: [],
+          headers: [["Host", `${canisterId.toText()}.localhost:8000`]],
           body: new Uint8Array(),
           certificate_version: [2],
         },
@@ -997,6 +2037,12 @@ function testManagementIdl(): IDL.ServiceClass {
     minimum_incoming_canister_call_cycles: IDL.Opt(IDL.Nat),
   });
   const chunkHash = IDL.Record({ hash: IDL.Vec(IDL.Nat8) });
+  const canister = IDL.Record({ canister_id: IDL.Principal });
+  const snapshot = IDL.Record({
+    id: IDL.Vec(IDL.Nat8),
+    taken_at_timestamp: IDL.Nat64,
+    total_size: IDL.Nat64,
+  });
   return IDL.Service({
     provisional_create_canister_with_cycles: IDL.Func(
       [
@@ -1024,6 +2070,31 @@ function testManagementIdl(): IDL.ServiceClass {
     canister_status: IDL.Func(
       [IDL.Record({ canister_id: IDL.Principal })],
       [IDL.Record({ module_hash: IDL.Opt(IDL.Vec(IDL.Nat8)) })],
+      [],
+    ),
+    stop_canister: IDL.Func([canister], [], []),
+    start_canister: IDL.Func([canister], [], []),
+    take_canister_snapshot: IDL.Func(
+      [
+        IDL.Record({
+          canister_id: IDL.Principal,
+          replace_snapshot: IDL.Opt(IDL.Vec(IDL.Nat8)),
+          sender_canister_version: IDL.Opt(IDL.Nat64),
+          uninstall_code: IDL.Opt(IDL.Bool),
+        }),
+      ],
+      [snapshot],
+      [],
+    ),
+    load_canister_snapshot: IDL.Func(
+      [
+        IDL.Record({
+          canister_id: IDL.Principal,
+          snapshot_id: IDL.Vec(IDL.Nat8),
+          sender_canister_version: IDL.Opt(IDL.Nat64),
+        }),
+      ],
+      [],
       [],
     ),
     clear_chunk_store: IDL.Func(

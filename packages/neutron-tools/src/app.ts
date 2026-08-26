@@ -1,7 +1,7 @@
 import { Principal } from "@dfinity/principal";
 import {
   canisterIdFromUrl,
-  kernelParentOriginFromAppUrl,
+  kernelParentOriginFromAppWindow,
 } from "./runtime.js";
 import { normalizeUntrustedText } from "./schema.js";
 import {
@@ -478,6 +478,7 @@ function installPortListener(port: MessagePort): void {
 }
 
 export function installMessageListener(targetWindow = getWindow()): void {
+  kernelParentOriginFromAppWindow(targetWindow);
   if (installedWindow === targetWindow) return;
   targetWindow.addEventListener("message", handleMessage);
   installedWindow = targetWindow;
@@ -614,11 +615,7 @@ function waitForKernelPort(): Promise<MessagePort> {
 }
 
 function expectedKernelParentOrigin(): string | null {
-  try {
-    return kernelParentOriginFromAppUrl(getWindow().location.href);
-  } catch {
-    return null;
-  }
+  return kernelParentOriginFromAppWindow(getWindow());
 }
 
 function announceFrameReady(): void {

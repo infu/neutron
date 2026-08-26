@@ -20,7 +20,7 @@ type MonitorWindow = Pick<
 
 type MonitorDocument = Pick<
   Document,
-  "addEventListener" | "removeEventListener" | "visibilityState"
+  "addEventListener" | "removeEventListener"
 >;
 
 export type RuntimeAuthorityMonitorOptions = {
@@ -39,9 +39,11 @@ export type RuntimeAuthorityMonitorOptions = {
 /**
  * Keep an open shell bound to the canister actor it reconciled. Same-browser
  * commits signal immediately; a single low-frequency journal/runtime probe
- * covers other devices and missed signals. Probes coalesce, only run while a
- * tab is visible, and only trigger the expensive registry/assets read after a
- * change or an uncertainty fence.
+ * covers other devices and missed signals. Probes coalesce and only trigger
+ * the expensive registry/assets read after a change or an uncertainty fence.
+ * The low-frequency probe also runs while a tab is hidden because resident
+ * frames remain live there and a cross-device toggle has no same-browser
+ * signal to deliver.
  */
 export function startRuntimeAuthorityMonitor(
   options: RuntimeAuthorityMonitorOptions = {},
@@ -64,9 +66,8 @@ export function startRuntimeAuthorityMonitor(
   let reloadRequested = false;
   let appOnlyDeploymentId: string | null = null;
 
-  const run = (force = false): void => {
+  const run = (): void => {
     if (stopped) return;
-    if (!force && hostDocument.visibilityState !== "visible") return;
     if (inFlight) {
       runAgain = true;
       return;
@@ -79,7 +80,9 @@ export function startRuntimeAuthorityMonitor(
           (result.status === "current" || result.status === "changed") &&
           result.deploymentId === appOnlyDeploymentId;
         const externallyChanged =
-          result.status === "changed" && !reconciledAppOnlyDeployment;
+          result.status === "changed" &&
+          result.change === "runtime" &&
+          !reconciledAppOnlyDeployment;
         if (
           !reloadRequested &&
           !authorityPending() &&
@@ -99,7 +102,7 @@ export function startRuntimeAuthorityMonitor(
         if (inFlight === pending) inFlight = null;
         if (runAgain && !stopped) {
           runAgain = false;
-          run(true);
+          run();
         }
       });
   };
@@ -116,12 +119,12 @@ export function startRuntimeAuthorityMonitor(
       // A changed actor observed without that proof reloads conservatively.
       appOnlyDeploymentId = signal.deploymentId;
     }
-    run(true);
+    run();
   });
   hostWindow.addEventListener("focus", onFocus);
   hostDocument.addEventListener("visibilitychange", onVisibility);
   const interval = hostWindow.setInterval(() => run(), pollIntervalMs);
-  run(true);
+  run();
 
   return () => {
     stopped = true;

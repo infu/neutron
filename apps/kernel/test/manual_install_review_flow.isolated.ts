@@ -76,6 +76,7 @@ mock.module("neutron-compiler/src/compile.js", () => ({
 }));
 
 mock.module("neutron-compiler/src/install.js", () => ({
+  BROWSER_SURFACE_ORIGINS_PATH: "/system/browser-surface-origins.json",
   appDependencyImpact: () => ({ direct: [], transitive: [] }),
   assertPreparedPackageArchiveIdentity: (value: PreparedPackageInstall) => {
     if (
@@ -103,6 +104,7 @@ mock.module("neutron-compiler/src/install.js", () => ({
     return deployGate.promise;
   },
   normalizeAppRegistry: (registry: unknown) => registry,
+  parseBrowserSurfaceOriginsSidecar: () => [],
   planAppRegistryDependencies: () => ({}),
   preparePackageInstall: () => {
     throw new Error("Unexpected package preparation");
@@ -255,6 +257,8 @@ function createCompilerState(stable = "actor {}"): KernelPackageState {
   return Object.freeze({
     registry: Object.freeze({}),
     apps: Object.freeze({}),
+    browserSurfaceOriginAppIds: Object.freeze([]),
+    browserSurfaceOriginsSidecarPresent: true,
     existingConfigs: Object.freeze({}),
     existingModules: Object.freeze([
       Object.freeze({ path: "mo/retained.mo", content: "module {}" }),
@@ -482,6 +486,9 @@ test("approval dispatches the exact record exposed by the final review", async (
   expect(deployCalls[0]?.deploymentBuildRecord).toBe(review.record);
   expect(deployCalls[0]?.compiled).toBe(compiled);
   expect(deployCalls[0]?.packages[0]).toBe(preparedPackage);
+  expect(deployCalls[0]?.existingBrowserSurfaceOriginAppIds).toBe(
+    compilerState.browserSurfaceOriginAppIds,
+  );
   expect(deployCalls[0]?.stagedAssets).toHaveLength(1);
 
   deployGate.reject(new Error("stop after deployment boundary"));
@@ -546,6 +553,9 @@ test("package session dispatches the exact reviewed record after evidence identi
   expect(stagingTransitions).toBe(1);
   expect(deployCalls[0]?.deploymentBuildRecord).toBe(
     deployment.prepared.record,
+  );
+  expect(deployCalls[0]?.existingBrowserSurfaceOriginAppIds).toBe(
+    compilerState.browserSurfaceOriginAppIds,
   );
 
   deployGate.reject(new Error("stop after package-session dispatch boundary"));

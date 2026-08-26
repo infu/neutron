@@ -123,6 +123,7 @@ test("kernel IDL preserves resident-frame authority in journals and runtime stat
     deployment_id: "after",
     assembler_id: "assembler",
     compiler_id: "compiler",
+    capability_authority_revision: [4n],
     apps: [
       {
         scope: { app_id: "persistent", installation_uid: 7n },
@@ -227,20 +228,30 @@ test("kernel install status preserves canonical Candid opt arrays", () => {
   if (status === undefined) {
     throw new Error("kernel_install_status IDL is missing");
   }
+  const appInstance = {
+    scope: { app_id: "persistent", installation_uid: 7n },
+    version: 3n,
+    deployment_id: "after",
+    capability_plan_fingerprint: "persistent-plan",
+    browser_origin_nonce: "00".repeat(16),
+    browser_origin_authority_epoch: 9n,
+    resident_frame_security: { persistent_dedicated_v1: null } as const,
+  };
   const pending = {
     deployment_id: "after",
     copy_count: 0n,
     clear_count: 0n,
     removed_apps: [],
-    committed_app_instances: [],
-    target_app_instances: [],
+    committed_app_instances: [appInstance],
+    target_app_instances: [appInstance],
   };
 
   expect(
     IDL.decode(status.retTypes, IDL.encode(status.retTypes, [[]]))[0],
   ).toEqual([]);
   expect(
-    IDL.decode(status.retTypes, IDL.encode(status.retTypes, [[pending]]))[0],
+    IDL.decode(status.retTypes, IDL.encode(status.retTypes, [[pending]]))[0] as
+      unknown,
   ).toEqual([pending]);
 });
 

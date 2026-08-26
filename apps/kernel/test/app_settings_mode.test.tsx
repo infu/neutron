@@ -163,6 +163,46 @@ test("resident settings distinguish an ephemeral credential partition from persi
   }
 });
 
+test("browser permissions are read-only exact declarations in Settings", () => {
+  const mediaEntry = registryApp({
+    id: "media_app",
+    name: "Media App",
+    tiles: [{ id: "call", title: "Call" }],
+    capabilities: {
+      browser_permissions: {
+        api: 1,
+        tiles: [
+          { id: "call", features: ["microphone", "camera"] },
+        ],
+      },
+    },
+  });
+
+  const normal = renderStaticEntry("normal", "media_app", mediaEntry);
+  expect(normal).toContain('data-permission-kind="browser_permissions"');
+  expect(normal).toContain("Camera and microphone");
+  expect(normal).toContain("Camera · tile call");
+  expect(normal).toContain("Microphone · tile call");
+  expect(normal).toContain("The browser may show its own prompt");
+  expect(normal).toContain("Installing the app does not activate a device");
+  expect(normal).toContain("including while its workspace is hidden");
+  expect(normal).toContain("browser&#x27;s device indicator remains authoritative");
+  expect(normal).toContain("Browser and site settings can separately deny it");
+
+  const developer = renderStaticEntry("developer", "media_app", mediaEntry);
+  expect(developer).toContain("Browser device access");
+  expect(developer).toContain("tile call");
+  expect(developer).toContain("feature camera");
+  expect(developer).toContain("feature microphone");
+  expect(developer).toContain("no runtime toggle");
+
+  for (const html of [normal, developer]) {
+    expect(html).not.toContain('data-capability-kind="browser_permissions"');
+    expect(html).not.toContain("Turn off Camera");
+    expect(html).not.toContain("currently active");
+  }
+});
+
 test("headless apps use the trusted fallback icon without fetching a missing tile asset", () => {
   const headless = registryApp({
     id: "headless_app",

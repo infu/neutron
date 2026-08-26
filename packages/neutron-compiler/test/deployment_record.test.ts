@@ -35,7 +35,7 @@ function completeRecord(): Record<string, unknown> {
     },
     build: {
       compiler_id: "moc_deadbeef01234567",
-      assembler_id: "neutron_actor_v25",
+      assembler_id: "neutron_actor_v26",
       environment: "production",
       deployment_nonce: deploymentId("c"),
       reachable_module_sha256: [sha("f"), sha("e")],
@@ -346,7 +346,7 @@ describe("complete deployment records", () => {
           destructiveMemoryRoots: [],
         },
       },
-      assembler_id: "neutron_actor_v25",
+      assembler_id: "neutron_actor_v26",
       previous: {
         deployment_id: deploymentId("b"),
         stable_signature: "actor { stable var value : Nat = 0 }",

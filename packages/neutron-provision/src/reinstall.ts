@@ -316,6 +316,7 @@ export async function runReinstall(
       deployment = await readTransactionPayload({
         sessionPath: options.sessionPath,
         expectedSha256: state.plan.payload.sha256,
+        expectedVersion: state.plan.payload.version,
         packageProvenance: state.plan.packages,
       });
       assertDeploymentMatchesPlan(deployment, state.plan);
@@ -358,6 +359,7 @@ export async function runReinstall(
       await removeTransactionPayload(
         options.sessionPath,
         state.plan.payload.sha256,
+        state.plan.payload.version,
       );
       delete onDisk.active;
       await writeSession(options.sessionPath, onDisk, now());
@@ -488,6 +490,7 @@ async function prepareLocalOperation({
     const deployment = await readTransactionPayload({
       sessionPath: options.sessionPath,
       expectedSha256: currentState.plan.payload.sha256,
+      expectedVersion: currentState.plan.payload.version,
       packageProvenance: currentState.plan.packages,
     });
     assertPreparedDeploymentMatchesExpectedArtifacts(
@@ -774,7 +777,11 @@ async function finishCompletedReinstallCleanup(
     ) {
       throw new Error("Provision journal changed before completed reinstall cleanup");
     }
-    await removeTransactionPayload(sessionPath, active.state.plan.payload.sha256);
+    await removeTransactionPayload(
+      sessionPath,
+      active.state.plan.payload.sha256,
+      active.state.plan.payload.version,
+    );
     delete journal.active;
     await writeSession(sessionPath, journal, now());
     logger.log("Removed completed reinstall transaction payload");

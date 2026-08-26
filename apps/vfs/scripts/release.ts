@@ -21,6 +21,10 @@ import {
   packageArchiveFilename,
 } from "neutron-tools/src/package_archive.js";
 import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  parseBrowserSurfaceOriginsPackageMarker,
+} from "neutron-tools/src/package_surface_origins.js";
+import {
   NEUTRON_APP_SOURCE_SNAPSHOT_LIMITS,
   NEUTRON_APP_SOURCE_TRANSPORT_LIMITS,
   NEUTRON_PACKAGE_RECORD_PATH,
@@ -956,9 +960,16 @@ export async function assertArchiveMatchesDist(
   const unpacked = unpackNeutronPackage(archiveBytes);
   const archivePaths = Object.keys(unpacked).sort();
   const distPaths = (await collectDistPaths(distRoot)).sort();
-  if (archivePaths.join("\0") !== distPaths.join("\0")) {
+  const expectedArchivePaths = [
+    ...distPaths,
+    NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  ].sort();
+  if (archivePaths.join("\0") !== expectedArchivePaths.join("\0")) {
     throw new Error("Files archive path set differs from the current dist tree");
   }
+  parseBrowserSurfaceOriginsPackageMarker(
+    unpacked[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH],
+  );
   for (const path of distPaths) {
     const archived = unpacked[path];
     if (!archived) throw new Error(`Files archive is missing ${path}`);

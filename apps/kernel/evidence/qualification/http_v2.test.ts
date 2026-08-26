@@ -603,6 +603,25 @@ describe("Certified HTTP V2 qualification verifier", () => {
     ).rejects.toThrow("reject query aliases");
   });
 
+  test("uses the certified install-target path contract", () => {
+    const fourteenSegments = `/${Array.from({ length: 14 }, (_, index) =>
+      `s${index}`
+    ).join("/")}`;
+    const fifteenSegments = `${fourteenSegments}/overflow`;
+
+    expect(exactExpressionPath(fourteenSegments)).toHaveLength(16);
+    expect(exactExpressionPath(`${fourteenSegments}/`)).toHaveLength(17);
+    expect(() => exactExpressionPath(fifteenSegments)).toThrow(
+      "Certified HTTP path is not canonical",
+    );
+    expect(() => exactExpressionPath("/control\u0001path")).toThrow(
+      "Certified HTTP path is not canonical",
+    );
+    expect(() => exactExpressionPath("/delete\u007fpath")).toThrow(
+      "Certified HTTP path is not canonical",
+    );
+  });
+
   test("bounds gateway materialization and snapshots mutable trust inputs", async () => {
     const fixture = await validProofFixture();
     let release!: (response: Response) => void;

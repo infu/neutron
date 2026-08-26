@@ -35,7 +35,10 @@ const {
   appApprove,
   appReject,
   appRequest,
+  assertCurrentBrowserSurfaceOriginAssembler,
   clearInstallError,
+  isAuthorityPendingState,
+  parseBrowserSurfaceOriginAuthoritySnapshot,
   requestAppUninstall,
   resolveAppUninstall,
   useAppsStore,
@@ -88,6 +91,12 @@ function resetStores(): void {
   while (unregisterCallEndpoints.length) unregisterCallEndpoints.pop()?.();
   useAppsStore.setState({
     list: {},
+    appInstances: {},
+    runtimeGenerations: {},
+    runtimeAssemblerId: null,
+    runtimeCapabilityAuthorityRevision: null,
+    authorityRevision: 0,
+    browserSurfaceOriginAppIds: [],
     registryStatus: "idle",
     registryError: null,
     registryUpdatedAt: null,
@@ -97,6 +106,8 @@ function resetStores(): void {
     operation: null,
     operationBusy: false,
     installError: null,
+    pendingInstallRecovery: null,
+    runtimeAuthorityFence: null,
   });
   useRequestStore.setState({ calls: {} });
 }
@@ -237,6 +248,186 @@ test("cancelling the shared uninstall confirmation preserves app state", async (
   expect(useAppsStore.getState().uninstallRequest).toBeNull();
   expect(useAppsStore.getState().list).toEqual(before);
   expect(useAppsStore.getState().installError).toBeNull();
+});
+
+test("browser surface-origin adoption invalidates only changed app runtimes", () => {
+  const apps = {
+    alpha: registryApp({ id: "alpha", name: "Alpha" }),
+    bravo: registryApp({ id: "bravo", name: "Bravo" }),
+  };
+  useAppsStore.getState().setApps(apps, {
+    browserSurfaceOriginAppIds: ["bravo"],
+  });
+  const before = { ...useAppsStore.getState().runtimeGenerations };
+
+  useAppsStore.getState().setApps(apps, {
+    browserSurfaceOriginAppIds: ["alpha", "bravo"],
+  });
+  const adopted = useAppsStore.getState();
+  expect(adopted.browserSurfaceOriginAppIds).toEqual(["alpha", "bravo"]);
+  expect(adopted.runtimeGenerations.alpha).toBe((before.alpha ?? 0) + 1);
+  expect(adopted.runtimeGenerations.bravo).toBe(before.bravo);
+
+  const adoptedGeneration = adopted.runtimeGenerations.alpha;
+  useAppsStore.getState().setRegistryLoading();
+  const revisionBeforeFailure = useAppsStore.getState().authorityRevision;
+  useAppsStore.getState().setRegistryError("temporary refresh failure");
+  expect(useAppsStore.getState().authorityRevision).toBe(
+    revisionBeforeFailure + 1,
+  );
+  expect(useAppsStore.getState().runtimeAuthorityFence).toEqual({
+    deploymentId: null,
+    reason: "observation_failed",
+  });
+  expect(isAuthorityPendingState(useAppsStore.getState())).toBe(true);
+  useAppsStore.getState().setApps(apps);
+  expect(useAppsStore.getState().browserSurfaceOriginAppIds).toEqual([
+    "alpha",
+    "bravo",
+  ]);
+  expect(useAppsStore.getState().runtimeGenerations.alpha).toBe(
+    adoptedGeneration,
+  );
+  useAppsStore.getState().setRuntimeAuthorityFence(null);
+
+  useAppsStore.getState().setApps({ bravo: apps.bravo }, {
+    browserSurfaceOriginAppIds: ["bravo"],
+  });
+  expect(useAppsStore.getState().browserSurfaceOriginAppIds).toEqual([
+    "bravo",
+  ]);
+  expect(useAppsStore.getState().runtimeGenerations.bravo).toBe(before.bravo);
+});
+
+test("runtime capability revisions participate in the authority CAS", () => {
+  const apps = {
+    hello: registryApp({ id: "hello", name: "Hello" }),
+    files: registryApp({ id: "files", name: "Files" }),
+  };
+  useAppsStore.getState().setApps(apps, {
+    runtimeCapabilityAuthorityRevision: "3",
+  });
+  const baseline = useAppsStore.getState().authorityRevision;
+  const generations = { ...useAppsStore.getState().runtimeGenerations };
+
+  useAppsStore.getState().setApps(apps, {
+    runtimeCapabilityAuthorityRevision: "4",
+  });
+  expect(useAppsStore.getState().runtimeCapabilityAuthorityRevision).toBe(
+    "4",
+  );
+  expect(useAppsStore.getState().authorityRevision).toBe(baseline + 1);
+  expect(useAppsStore.getState().runtimeGenerations.hello).toBe(
+    (generations.hello ?? 0) + 1,
+  );
+  expect(useAppsStore.getState().runtimeGenerations.files).toBe(
+    (generations.files ?? 0) + 1,
+  );
+
+  useAppsStore.getState().setApps(apps, {
+    runtimeCapabilityAuthorityRevision: "4",
+  });
+  expect(useAppsStore.getState().authorityRevision).toBe(baseline + 1);
+
+  useAppsStore.getState().setApps(apps, { invalidateAppIds: ["hello"] });
+  expect(useAppsStore.getState().authorityRevision).toBe(baseline + 2);
+});
+
+test("sidecar authority is exact for the v25 bridge and v26 runtime", () => {
+  const apps = {
+    alpha: registryApp({ id: "alpha", name: "Alpha" }),
+    bravo: registryApp({ id: "bravo", name: "Bravo" }),
+  };
+  expect(
+    parseBrowserSurfaceOriginAuthoritySnapshot(
+      undefined,
+      apps,
+      "neutron_actor_v25",
+    ),
+  ).toEqual([]);
+  expect(() =>
+    parseBrowserSurfaceOriginAuthoritySnapshot(
+      { format: 1, app_ids: [] },
+      apps,
+      "neutron_actor_v25",
+    ),
+  ).toThrow("v25 runtime cannot own");
+  expect(
+    parseBrowserSurfaceOriginAuthoritySnapshot(
+      { format: 1, app_ids: [] },
+      apps,
+      "neutron_actor_v26",
+    ),
+  ).toEqual([]);
+  expect(
+    parseBrowserSurfaceOriginAuthoritySnapshot(
+      { format: 1, app_ids: ["alpha", "bravo"] },
+      apps,
+      "neutron_actor_v26",
+    ),
+  ).toEqual(["alpha", "bravo"]);
+  expect(() =>
+    parseBrowserSurfaceOriginAuthoritySnapshot(
+      undefined,
+      apps,
+      "neutron_actor_v26",
+    ),
+  ).toThrow("sidecar is missing");
+  expect(() =>
+    parseBrowserSurfaceOriginAuthoritySnapshot(
+      { format: 1, app_ids: ["bravo", "alpha"] },
+      apps,
+      "neutron_actor_v26",
+    ),
+  ).toThrow("not canonical");
+
+  expect(() =>
+    assertCurrentBrowserSurfaceOriginAssembler("neutron_actor_v25"),
+  ).toThrow("did not activate neutron_actor_v26");
+  expect(() =>
+    assertCurrentBrowserSurfaceOriginAssembler("future-assembler"),
+  ).toThrow("did not activate neutron_actor_v26");
+  expect(() =>
+    assertCurrentBrowserSurfaceOriginAssembler("neutron_actor_v26"),
+  ).not.toThrow();
+});
+
+test("content-identical authority refresh preserves app and instance identity", () => {
+  const app = registryApp({ id: "hello", name: "Hello" });
+  const instance = Object.freeze({
+    scope: Object.freeze({ appId: "hello", installationUid: "7" }),
+    version: app.version,
+    deploymentId: "same-deployment",
+    capabilityPlanFingerprint: app.capability_plan_fingerprint,
+    browserOriginNonce: "01".repeat(16),
+    browserOriginAuthorityEpoch: "1",
+    residentFrameSecurity: "credentialless_opaque_v1" as const,
+  });
+  useAppsStore.getState().setApps({ hello: app }, {
+    appInstances: { hello: instance },
+    browserSurfaceOriginAppIds: ["hello"],
+  });
+  const before = useAppsStore.getState();
+
+  useAppsStore.getState().setApps({ hello: { ...app } }, {
+    appInstances: {
+      hello: { ...instance, scope: { ...instance.scope } },
+    },
+    browserSurfaceOriginAppIds: ["hello"],
+  });
+  const after = useAppsStore.getState();
+
+  expect(after.list).toBe(before.list);
+  expect(after.list.hello).toBe(before.list.hello);
+  expect(after.appInstances).toBe(before.appInstances);
+  expect(after.appInstances.hello).toBe(before.appInstances.hello);
+  expect(after.browserSurfaceOriginAppIds).toBe(
+    before.browserSurfaceOriginAppIds,
+  );
+  expect(after.runtimeGenerations).toBe(before.runtimeGenerations);
+  expect(after.runtimeGenerations.hello).toBe(
+    before.runtimeGenerations.hello,
+  );
 });
 
 test("uninstall confirmation is bound to the exact compiled destruction plan", () => {

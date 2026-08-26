@@ -1064,6 +1064,122 @@ test("manifest supports one safe resident background process", () => {
   ).toThrow(/mutually exclusive/);
 });
 
+test("browser permissions are closed, canonical, and bound to exact tiles", () => {
+  const manifest: NeutronManifest = {
+    format: 3,
+    id: "media_app",
+    name: "Media App",
+    version: 100,
+    tiles: [
+      { id: "secondary", title: "Secondary", path: "call.html" },
+      { id: "main", title: "Main", path: "call.html" },
+    ],
+    capabilities: {
+      browser_permissions: {
+        api: 1,
+        tiles: [
+          { id: "secondary", features: ["microphone"] },
+          { id: "main", features: ["microphone", "camera"] },
+        ],
+      },
+    },
+  };
+
+  expect(validateManifest(manifest).errors).toEqual([]);
+  expect(normalizeManifestCapabilities(manifest).browser_permissions).toEqual({
+    api: 1,
+    tiles: [
+      { id: "main", features: ["camera", "microphone"] },
+      { id: "secondary", features: ["microphone"] },
+    ],
+  });
+
+  const invalidDeclarations: unknown[] = [
+    { api: 1 },
+    { api: 1, tiles: [{ id: "main" }] },
+    { api: 2, tiles: [{ id: "main", features: ["camera"] }] },
+    { api: 1, tiles: [] },
+    {
+      api: 1,
+      tiles: Array.from({ length: 17 }, (_, index) => ({
+        id: `tile_${index}`,
+        features: ["camera"],
+      })),
+    },
+    { api: 1, tiles: [{ id: "main", features: [] }] },
+    {
+      api: 1,
+      tiles: [{ id: "main", features: ["camera", "camera"] }],
+    },
+    { api: 1, tiles: [{ id: "main", features: ["geolocation"] }] },
+    {
+      api: 1,
+      tiles: [{ id: "main", features: ["camera"], allow: "*" }],
+    },
+    {
+      api: 1,
+      tiles: [{ id: "main", features: ["camera"] }],
+      origin: "https://example.com",
+    },
+  ];
+  for (const browser_permissions of invalidDeclarations) {
+    const candidate = {
+      ...manifest,
+      capabilities: { browser_permissions },
+    } as NeutronManifest;
+    expect(validateManifest(candidate).valid).toBe(false);
+    expect(() => normalizeManifestCapabilities(candidate)).toThrow();
+  }
+
+  const headless = structuredClone(manifest);
+  delete headless.tiles;
+  expect(validateManifest(headless).valid).toBe(false);
+  expect(() => normalizeManifestCapabilities(headless)).toThrow(
+    "browser_permissions references undeclared tile main",
+  );
+
+  const duplicateTile = structuredClone(manifest);
+  duplicateTile.capabilities!.browser_permissions!.tiles = [
+    { id: "main", features: ["camera"] },
+    { id: "main", features: ["microphone"] },
+  ];
+  // uniqueItems cannot reject distinct objects with the same id.
+  expect(validateManifest(duplicateTile).valid).toBe(true);
+  expect(() => normalizeManifestCapabilities(duplicateTile)).toThrow(
+    "Duplicate browser_permissions tile main",
+  );
+
+  const duplicateDeclaredTile = structuredClone(manifest);
+  duplicateDeclaredTile.tiles = [
+    { id: "main", title: "Main" },
+    { id: "main", title: "Duplicate" },
+  ];
+  duplicateDeclaredTile.capabilities!.browser_permissions!.tiles = [
+    { id: "main", features: ["camera"] },
+  ];
+  expect(() => normalizeManifestCapabilities(duplicateDeclaredTile)).toThrow(
+    "Duplicate tile id main",
+  );
+
+  const malformedDeclaredTile = structuredClone(manifest);
+  malformedDeclaredTile.tiles![0]!.id = "Secondary";
+  expect(validateManifest(malformedDeclaredTile).valid).toBe(false);
+  expect(() => normalizeManifestCapabilities(malformedDeclaredTile)).toThrow(
+    "Invalid tile id Secondary",
+  );
+
+  const missingTile = structuredClone(manifest);
+  missingTile.capabilities!.browser_permissions!.tiles = [
+    { id: "missing", features: ["camera"] },
+  ];
+  // Draft-07 JSON Schema cannot express this cross-array reference; the
+  // canonical runtime normalizer remains authoritative.
+  expect(validateManifest(missingTile).valid).toBe(true);
+  expect(() => normalizeManifestCapabilities(missingTile)).toThrow(
+    "browser_permissions references undeclared tile missing",
+  );
+});
+
 test("manifest tray is singular, bounded, and requires a background", () => {
   const manifest = {
     id: "mail_app",

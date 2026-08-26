@@ -41,7 +41,6 @@ export type RegisteredEndpoint = {
   appGeneration?: number;
   appScope?: AppScope;
   origin?: string;
-  residentSecurityBinding?: ResidentFrameSecurityBinding;
   isAuthorityCurrent?: () => boolean;
   port?: MessagePort;
   sessionId?: string;
@@ -60,6 +59,7 @@ const endpoints = new Map<string, RegisteredEndpoint>();
 const portListeners = new Set<EndpointPortListener>();
 const changeListeners = new Set<EndpointChangeListener>();
 const handshakeWindows = new WeakSet<object>();
+const loadedFrames = new WeakSet<object>();
 
 export function endpointIdForContext(context: FrameContext): string {
   if (context.role === "background") {
@@ -116,13 +116,6 @@ export function registerFrameContext(
       : {}),
     ...(options.appScope ? { appScope: options.appScope } : {}),
     ...(options.origin ? { origin: options.origin } : {}),
-    ...(options.residentSecurityBinding
-      ? {
-          residentSecurityBinding: Object.freeze({
-            ...options.residentSecurityBinding,
-          }),
-        }
-      : {}),
     ...(options.isAuthorityCurrent
       ? { isAuthorityCurrent: options.isAuthorityCurrent }
       : {}),
@@ -132,33 +125,23 @@ export function registerFrameContext(
   }
   const previousSourceEndpoint = frames.get(source);
   const previousIdEndpoint = endpoints.get(endpoint.endpointId);
-  previousSourceEndpoint?.port?.close();
-  if (previousIdEndpoint !== previousSourceEndpoint) {
-    previousIdEndpoint?.port?.close();
-  }
-  if (
-    previousSourceEndpoint &&
-    endpoints.get(previousSourceEndpoint.endpointId) === previousSourceEndpoint
-  ) {
-    endpoints.delete(previousSourceEndpoint.endpointId);
-  }
-  if (
-    previousIdEndpoint &&
-    frames.get(previousIdEndpoint.source) === previousIdEndpoint
-  ) {
-    frames.delete(previousIdEndpoint.source);
+  const retiredEndpoints = new Set(
+    [previousSourceEndpoint, previousIdEndpoint].filter(
+      (candidate): candidate is RegisteredEndpoint => candidate !== undefined,
+    ),
+  );
+  for (const retired of retiredEndpoints) {
+    detachEndpointRegistration(retired);
+    disconnectEndpointPort(retired, false);
   }
   frames.set(source, endpoint);
   endpoints.set(endpoint.endpointId, endpoint);
   notifyEndpointChange();
   requestFrameEndpointConnection(endpoint);
   return () => {
-    endpoint.port?.close();
-    if (frames.get(source) === endpoint) frames.delete(source);
-    if (endpoints.get(endpoint.endpointId) === endpoint) {
-      endpoints.delete(endpoint.endpointId);
-      notifyEndpointChange();
-    }
+    const detached = detachEndpointRegistration(endpoint);
+    disconnectEndpointPort(endpoint, false);
+    if (detached) notifyEndpointChange();
   };
 }
 
@@ -166,7 +149,7 @@ export function waitForFrameEndpointPort(
   endpoint: RegisteredEndpoint,
   timeoutSeconds: number,
 ): Promise<MessagePort> {
-  if (!endpointAuthorityCurrent(endpoint)) {
+  if (!endpointRegistered(endpoint) || !endpointAuthorityCurrent(endpoint)) {
     return Promise.reject(
       new Error(`Endpoint '${endpoint.endpointId}' authority is no longer current`),
     );
@@ -228,7 +211,7 @@ export function connectFrameEndpoint(
   ) {
     return false;
   }
-  if (endpoint.residentSecurityBinding && !authenticatedFrameReady) {
+  if (endpoint.context.role === "background" && !authenticatedFrameReady) {
     return false;
   }
   if (!endpointAuthorityCurrent(endpoint)) {
@@ -244,6 +227,10 @@ export function connectFrameEndpoint(
   endpoint.sessionId = sessionId;
   channel.port1.addEventListener("message", (event) => {
     if (endpoint.port !== channel.port1 || endpoint.sessionId !== sessionId) {
+      return;
+    }
+    if (!endpointRegistered(endpoint)) {
+      disconnectEndpointPort(endpoint);
       return;
     }
     if (!endpointAuthorityCurrent(endpoint)) {
@@ -276,10 +263,48 @@ export function ensureFrameEndpointConnected(
   return connectFrameEndpoint(source, authenticatedFrameReady);
 }
 
+/**
+ * The first load preserves either READY/load ordering. Later loads retire the
+ * old document's port: opaque tiles and trays reconnect directly, backgrounds
+ * remain READY-gated, and exact-origin frames receive an exact-target probe.
+ */
+export type FrameEndpointLoadResult = "preserved" | "retired";
+
+export function markFrameEndpointLoaded(
+  source: Window | null,
+): FrameEndpointLoadResult {
+  if (!source) return "retired";
+  const endpoint = frames.get(source);
+  if (!endpoint) return "retired";
+  const reloaded = loadedFrames.has(source);
+  loadedFrames.add(source);
+  if (!endpoint.origin || endpoint.origin === "null") {
+    if (reloaded) disconnectEndpointPort(endpoint);
+    const connected = ensureFrameEndpointConnected(source);
+    if (!connected) requestFrameEndpointConnection(endpoint);
+    return connected ? "preserved" : "retired";
+  }
+  if (reloaded) {
+    disconnectEndpointPort(endpoint);
+    requestFrameEndpointConnection(endpoint);
+    return "retired";
+  }
+  if (endpoint.port && endpointAuthorityCurrent(endpoint)) {
+    return "preserved";
+  }
+  disconnectEndpointPort(endpoint);
+  requestFrameEndpointConnection(endpoint);
+  return "retired";
+}
+
 export function isFrameEndpointReady(source: Window | null): boolean {
   if (!source) return false;
   const endpoint = frames.get(source);
-  return Boolean(endpoint?.port && endpointAuthorityCurrent(endpoint));
+  return Boolean(
+    endpoint?.port &&
+      endpointRegistered(endpoint) &&
+      endpointAuthorityCurrent(endpoint),
+  );
 }
 
 export function installFrameEndpointHandshake(
@@ -292,17 +317,27 @@ export function installFrameEndpointHandshake(
     const endpoint = resolveRegisteredEndpoint(message.source);
     if (!endpoint) return;
     if (endpoint.origin && message.origin !== endpoint.origin) return;
-    ensureFrameEndpointConnected(endpoint.source, true);
+    acceptAuthenticatedFrameReady(endpoint);
   });
   handshakeWindows.add(targetWindow);
+}
+
+function acceptAuthenticatedFrameReady(
+  endpoint: RegisteredEndpoint,
+): boolean {
+  if (!endpointRegistered(endpoint) || !endpointAuthorityCurrent(endpoint)) {
+    disconnectEndpointPort(endpoint);
+    return false;
+  }
+  return ensureFrameEndpointConnected(endpoint.source, true);
 }
 
 function requestFrameEndpointConnection(endpoint: RegisteredEndpoint): void {
   if (!endpointAuthorityCurrent(endpoint)) return;
   if (typeof endpoint.source.postMessage !== "function") return;
   // A newly-created iframe still contains an about:blank document inherited
-  // from the Kernel. Dedicated and opaque app origins must not be probed until
-  // navigation has replaced that document: targeting the future origin here
+  // from the Kernel. Cross-origin and opaque app documents must not be probed
+  // until navigation has replaced it: targeting the future origin here
   // is rejected by the browser and can leave the resident without its private
   // message-bus port. The loaded app announces readiness proactively, while
   // retained frames whose location is already correct still receive a probe.
@@ -321,12 +356,35 @@ function endpointAuthorityCurrent(endpoint: RegisteredEndpoint): boolean {
   }
 }
 
-function disconnectEndpointPort(endpoint: RegisteredEndpoint): void {
+function endpointRegistered(endpoint: RegisteredEndpoint): boolean {
+  return (
+    frames.get(endpoint.source) === endpoint &&
+    endpoints.get(endpoint.endpointId) === endpoint
+  );
+}
+
+function detachEndpointRegistration(endpoint: RegisteredEndpoint): boolean {
+  let detached = false;
+  if (frames.get(endpoint.source) === endpoint) {
+    frames.delete(endpoint.source);
+    detached = true;
+  }
+  if (endpoints.get(endpoint.endpointId) === endpoint) {
+    endpoints.delete(endpoint.endpointId);
+    detached = true;
+  }
+  return detached;
+}
+
+function disconnectEndpointPort(
+  endpoint: RegisteredEndpoint,
+  notify = true,
+): void {
   const hadPort = endpoint.port !== undefined || endpoint.sessionId !== undefined;
   endpoint.port?.close();
   delete endpoint.port;
   delete endpoint.sessionId;
-  if (hadPort) notifyEndpointChange();
+  if (hadPort && notify) notifyEndpointChange();
 }
 
 function hasKnownDifferentOrigin(source: Window, expected?: string): boolean {

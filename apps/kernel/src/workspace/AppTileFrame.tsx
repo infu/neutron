@@ -1,21 +1,22 @@
-import { memo, useLayoutEffect, useRef, useState } from "react";
-import { appIndexUrl } from "neutron-tools/src/runtime.js";
-import { getNeutronId } from "../config.ts";
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ensureFrameEndpointConnected,
+  markFrameEndpointLoaded,
   registerFrameContext,
 } from "../frame_context.ts";
+import {
+  appFrameAuthorityCurrent,
+  appFrameEndpointAuthority,
+  CREDENTIALLESS_APP_FRAME_PROPS,
+  ordinaryAppFramePolicy,
+  prepareOrdinaryAppFrame,
+} from "../app_frame_security.ts";
 import {
   isAuthorityPendingState,
   useAppsStore,
 } from "../reducer/apps.ts";
 import type { TileInstance, WorkspaceId } from "./types.ts";
-import { usesUnprefixedAppFrameOrigin } from "../capabilities/plan.ts";
 import { nextStartedTileRuntime } from "./tile_frame_lifecycle.ts";
-import {
-  assertRuntimeFrameUrl,
-  getRuntimeDeployment,
-} from "../runtime_deployment.ts";
+import { getRuntimeDeployment } from "../runtime_deployment.ts";
 
 export const AppTileFrame = memo(function AppTileFrame({
   active,
@@ -27,11 +28,19 @@ export const AppTileFrame = memo(function AppTileFrame({
   workspaceId: WorkspaceId;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const launchedFrameRef = useRef<{
+    runtimeIdentity: string;
+    source: Window;
+    origin: string;
+  } | null>(null);
   const app = useAppsStore((state) => state.list[tile.appId]);
   const appInstance = useAppsStore(
     (state) => state.appInstances[tile.appId],
   );
   const authorityPending = useAppsStore(isAuthorityPendingState);
+  const browserSurfaceOriginAdopted = useAppsStore(
+    (state) => state.browserSurfaceOriginAppIds.includes(tile.appId),
+  );
   const appInstalled = Boolean(app && appInstance && !authorityPending);
   const appGeneration = useAppsStore(
     (state) => state.runtimeGenerations[tile.appId] ?? 0,
@@ -39,24 +48,59 @@ export const AppTileFrame = memo(function AppTileFrame({
   const appVersion = app?.version ?? 0;
   const installationUid = appInstance?.scope.installationUid;
   const deployment = getRuntimeDeployment();
-  const unprefixed = usesUnprefixedAppFrameOrigin(app);
-  const src = assertRuntimeFrameUrl(
-    appIndexUrl({
-      canisterId: getNeutronId(),
-      appId: tile.appId,
-      path: tile.path,
-      tileId: tile.tileId,
-      instanceId: tile.id,
-      workspace: workspaceId,
-      unprefixed,
-      local: deployment.local,
-      ...(deployment.localHost ? { localHost: deployment.localHost } : {}),
-    }),
-    !unprefixed,
-    deployment,
+  const framePolicy = useMemo(
+    () =>
+      app && appInstance && !authorityPending
+        ? ordinaryAppFramePolicy({
+            appId: tile.appId,
+            app,
+            appInstance,
+            endpoint: {
+              role: "tile",
+              path: tile.path,
+              tileId: tile.tileId,
+              instanceId: tile.id,
+              workspace: workspaceId,
+            },
+            deployment,
+            browserSurfaceOriginAdopted,
+          })
+        : null,
+    [
+      app,
+      appInstance,
+      authorityPending,
+      browserSurfaceOriginAdopted,
+      deployment,
+      tile.appId,
+      tile.id,
+      tile.path,
+      tile.tileId,
+      workspaceId,
+    ],
+  );
+  const endpointAuthority = useMemo(
+    () =>
+      app && appInstance && !authorityPending
+        ? appFrameEndpointAuthority({
+            appId: tile.appId,
+            app,
+            appInstance,
+            appGeneration,
+            browserSurfaceOriginAdopted,
+          })
+        : null,
+    [
+      app,
+      appGeneration,
+      appInstance,
+      authorityPending,
+      browserSurfaceOriginAdopted,
+      tile.appId,
+    ],
   );
   const runtimeIdentity = appInstalled
-    ? `${appVersion}:${appGeneration}:${installationUid ?? "unbound"}:${src}`
+    ? `${appVersion}:${appGeneration}:${installationUid ?? "unbound"}:${browserSurfaceOriginAdopted ? "surface-v26" : "surface-v25"}:${framePolicy?.src ?? "unbound"}`
     : null;
   const loadedRuntimeRef = useRef<string | null>(null);
   const [startedRuntime, setStartedRuntime] = useState<string | null>(null);
@@ -73,8 +117,32 @@ export const AppTileFrame = memo(function AppTileFrame({
   }, [active, runtimeIdentity]);
 
   useLayoutEffect(() => {
-    if (!active || !frameStarted || !appInstalled || !appInstance) return;
-    const source = iframeRef.current?.contentWindow ?? null;
+    if (
+      !active ||
+      !frameStarted ||
+      !appInstalled ||
+      !appInstance ||
+      !framePolicy ||
+      !endpointAuthority ||
+      !runtimeIdentity
+    ) return;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    let launched = launchedFrameRef.current;
+    if (
+      !launched ||
+      launched.runtimeIdentity !== runtimeIdentity ||
+      launched.source !== iframe.contentWindow
+    ) {
+      const prepared = prepareOrdinaryAppFrame(iframe, framePolicy);
+      launched = {
+        runtimeIdentity,
+        source: prepared.source,
+        origin: prepared.origin,
+      };
+      launchedFrameRef.current = launched;
+    }
+    const source = launched.source;
     const unregister = registerFrameContext(
       source,
       {
@@ -91,13 +159,22 @@ export const AppTileFrame = memo(function AppTileFrame({
           appId: tile.appId,
           installationUid: appInstance.scope.installationUid,
         },
-        origin: "null",
+        origin: launched.origin,
+        isAuthorityCurrent: () => {
+          const state = useAppsStore.getState();
+          return appFrameAuthorityCurrent(
+            endpointAuthority,
+            state,
+            isAuthorityPendingState(state),
+          );
+        },
       },
     );
-    // Initial documents connect from onLoad. A retained frame has already
-    // loaded, so reconnect its fresh endpoint immediately on reactivation.
+    if (iframe.getAttribute("src") !== framePolicy.src) {
+      iframe.setAttribute("src", framePolicy.src);
+    }
     if (loadedRuntimeRef.current === runtimeIdentity) {
-      ensureFrameEndpointConnected(source);
+      markFrameEndpointLoaded(source);
     }
     return unregister;
   }, [
@@ -106,16 +183,19 @@ export const AppTileFrame = memo(function AppTileFrame({
     frameStarted,
     appGeneration,
     appVersion,
+    endpointAuthority,
+    framePolicy,
     installationUid,
     runtimeIdentity,
-    src,
     tile.appId,
     tile.id,
     tile.tileId,
     workspaceId,
   ]);
 
-  if (!appInstalled || !frameStarted || !runtimeIdentity) return null;
+  if (!appInstalled || !frameStarted || !runtimeIdentity || !framePolicy) {
+    return null;
+  }
 
   return (
     <iframe
@@ -127,15 +207,16 @@ export const AppTileFrame = memo(function AppTileFrame({
       data-tile-id={tile.tileId}
       data-instance-id={tile.id}
       onLoad={() => {
+        if (iframeRef.current?.getAttribute("src") !== framePolicy.src) return;
         loadedRuntimeRef.current = runtimeIdentity;
         if (active) {
-          ensureFrameEndpointConnected(iframeRef.current?.contentWindow ?? null);
+          markFrameEndpointLoaded(
+            iframeRef.current?.contentWindow ?? null,
+          );
         }
       }}
-      sandbox="allow-scripts"
-      src={src}
       title={tile.title}
-      {...({ credentialless: "true" } as Record<string, string>)}
+      {...CREDENTIALLESS_APP_FRAME_PROPS}
     />
   );
 });

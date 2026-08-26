@@ -2,6 +2,10 @@ import { expect, test } from "bun:test";
 import { hashContent } from "neutron-tools/src/hash.js";
 import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import {
+  browserSurfaceOriginsPackageMarkerBytes,
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+} from "neutron-tools/src/package_surface_origins.js";
+import {
   appRegistryEntry,
   buildPackagesInstallAssets,
   KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT,
@@ -62,6 +66,7 @@ test("two hundred neutral headless apps cross install, runtime, Settings, and ba
   let manifests: Record<string, AssemblyManifest> = {
     kernel: kernelManifest,
   };
+  let browserSurfaceOriginAppIds: string[] = [];
   const installBatchSizes: number[] = [];
 
   for (
@@ -78,11 +83,14 @@ test("two hundred neutral headless apps cross install, runtime, Settings, and ba
       registry,
       batch.map(({ manifest }) => manifest),
     );
-    registry = buildPackagesInstallAssets({
+    const installAssets = buildPackagesInstallAssets({
       existingApps: registry,
+      existingBrowserSurfaceOriginAppIds: browserSurfaceOriginAppIds,
       packages: batch,
       candid: "service : {}",
-    }).apps;
+    });
+    registry = installAssets.apps;
+    browserSurfaceOriginAppIds = installAssets.browserSurfaceOriginAppIds;
     manifests = {
       ...manifests,
       ...Object.fromEntries(
@@ -96,6 +104,7 @@ test("two hundred neutral headless apps cross install, runtime, Settings, and ba
 
   expect(installBatchSizes).toEqual([128, 72]);
   expect(Object.keys(registry)).toHaveLength(ORDINARY_APP_COUNT + 1);
+  expect(browserSurfaceOriginAppIds).toEqual(ordinaryIds);
   projectRuntimeAndSettings(registry, installationUids);
 
   const boundaryAppCount =
@@ -181,12 +190,16 @@ test("two hundred neutral headless apps cross install, runtime, Settings, and ba
       offset + KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT,
     );
     removalBatchSizes.push(removedApps.length);
-    registry = buildPackagesInstallAssets({
+    const uninstallAssets = buildPackagesInstallAssets({
       existingApps: registry,
+      existingBrowserSurfaceOriginAppIds: browserSurfaceOriginAppIds,
       packages: [],
       candid: "service : {}",
       removedApps,
-    }).apps;
+    });
+    registry = uninstallAssets.apps;
+    browserSurfaceOriginAppIds =
+      uninstallAssets.browserSurfaceOriginAppIds;
     const removed = new Set(removedApps);
     manifests = Object.fromEntries(
       Object.entries(manifests).filter(([id]) => !removed.has(id)),
@@ -199,11 +212,14 @@ test("two hundred neutral headless apps cross install, runtime, Settings, and ba
 
   expect(removalBatchSizes).toEqual([64, 64, 64, 8]);
   expect(Object.keys(registry)).toEqual(["kernel"]);
+  expect(browserSurfaceOriginAppIds).toEqual([]);
 });
 
 function headlessPackage(id: string): UnpackedNeutronPackage {
   return {
     "neutron.json": encoder.encode(JSON.stringify(syntheticManifest(id))),
+    [NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]:
+      browserSurfaceOriginsPackageMarkerBytes(),
     [`mo/${HEADLESS_MODULE_HASH}.mo`]: HEADLESS_MODULE,
   };
 }

@@ -5,6 +5,7 @@ import {
   assertCertifiedAssetsTransitions,
   assertStableStoreSchemaTransitions,
   compile,
+  compileLegacyV25Compatibility,
   extractImports,
   fixedBackendCallInstallReservationTargetPrincipals,
   persistenceModeFromCompilerId,
@@ -32,6 +33,36 @@ import { hashContent } from "neutron-tools/src/hash.js";
 
 const moduleHash = (digit: string): string => digit.repeat(64);
 const schema = (entry: string) => ({ entry, hash: entry });
+
+test("exact v25 compatibility rejects browser permissions before compilation", () => {
+  const media: PackagedNeutronManifest = {
+    format: 3,
+    id: "media",
+    name: "Media",
+    version: 100,
+    entry: moduleHash("a"),
+    tiles: [
+      {
+        id: "main",
+        title: "Media",
+        path: "index.html",
+        icon: "icon.png",
+      },
+    ],
+    capabilities: {
+      browser_permissions: {
+        api: 1,
+        tiles: [{ id: "main", features: ["camera"] }],
+      },
+    },
+  };
+
+  expect(() =>
+    compileLegacyV25Compatibility({ mofiles: [], configs: { media } }),
+  ).toThrow(
+    "App media declares browser_permissions, which requires Kernel 316 or newer with assembler neutron_actor_v26",
+  );
+});
 
 test("compiler rejects backend-call install reservations for the target actor", () => {
   const target = "r7inp-6aaaa-aaaaa-aaabq-cai";
@@ -421,6 +452,7 @@ const kernelCapabilityConfigurationMethod = `
     { app_id = appId; installation_uid = 1 }
   };
   public func runtime_app_instances(_deploymentId : Text) : [AppInstance] { [] };
+  public func capability_authority_revision() : Nat64 { 0 };
   public func scope_active(_scope : AppScope) : Bool { true };
   public type PublicIngressCyclesCapability = {
     available : () -> Nat;
@@ -445,6 +477,7 @@ const kernelCapabilityConfigurationMethod = `
       };
     },
   ) {};
+  public func configure_app_browser_surfaces<T>(_declarations : [T]) {};
   public func configure_frontend_surface_counts(
     _counts : { app_instances : Nat; resident_frames : Nat },
   ) {};
@@ -1004,7 +1037,7 @@ test("compiler defaults vetKeys to production and binds explicit local selection
       ),
     }),
   ).rejects.toThrow("only the compiled IC mainnet root key");
-});
+}, 15_000);
 
 test("compiler accepts only current-format state-preserving upgrades", async () => {
   const kernelEntry = moduleHash("d");
@@ -2658,7 +2691,7 @@ test("compiler stages live-root uninstall and permits immediate same-id reinstal
     "@neutron-managed-memory-retirements-v2 [{",
   );
   expect(replaced.compatibilityDiagnostics).toEqual([]);
-});
+}, 15_000);
 
 test("compiler keeps uninstall available for apps without managed memory", async () => {
   const kernelEntry = moduleHash("a");

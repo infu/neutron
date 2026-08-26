@@ -5,7 +5,10 @@ import {
   trustedInstallationContextFromRootKey,
   trustedInstallationNetworkIdHex,
 } from "neutron-compiler/src/installation_context.js";
+import { supportsBrowserSurfaceOrigins } from "neutron-compiler/src/assemble.js";
 import {
+  assertBrowserSurfaceOriginAppIdsMatch,
+  assertKernelPackageBaselineMatchesRuntime,
   assertKernelPackageStateMatchesRuntime,
   type KernelPackageInstaller,
 } from "neutron-compiler/src/install.js";
@@ -470,6 +473,11 @@ export async function verifyLocalFreshKernel({
       `Runtime compiler ${runtime.compiler_id} does not match ${deployment.compiled.compilerId}`,
     );
   }
+  if (runtime.assembler_id !== deployment.compiled.assemblerId) {
+    throw new Error(
+      `Runtime assembler ${runtime.assembler_id} does not match ${deployment.compiled.assemblerId}`,
+    );
+  }
   const expectedAssetKeys = freshKernelAssetKeys(deployment);
   const actualAssetKeys = [...installedAssetKeys].sort();
   if (
@@ -496,7 +504,16 @@ export async function verifyLocalFreshKernel({
     expectedModuleContents: freshKernelModuleContents(deployment),
     fetchImpl,
   });
-  assertKernelPackageStateMatchesRuntime(state, runtime);
+  if (supportsBrowserSurfaceOrigins(deployment.compiled.assemblerId)) {
+    assertKernelPackageStateMatchesRuntime(state, runtime);
+  } else {
+    assertKernelPackageBaselineMatchesRuntime(state, runtime);
+  }
+  assertBrowserSurfaceOriginAppIdsMatch(
+    state.apps,
+    state.browserSurfaceOriginAppIds,
+    deployment.compiled.browserSurfaceOriginAppIds,
+  );
 
   const origin = localCanisterOrigin(canisterId, gatewayUrl);
   const [id, candid, stable, provenance, runtimeConfigSource, browserHtml] = await Promise.all([

@@ -100,15 +100,6 @@ export function hasPersistentBackgroundStorage(
   );
 }
 
-export function usesUnprefixedAppFrameOrigin(
-  app: CapabilityPlanCarrier | null | undefined,
-): boolean {
-  return (
-    residentFrameSecurityMode(app) !==
-    ResidentFrameSecurityMode.CREDENTIALLESS_OPAQUE_V1
-  );
-}
-
 export function residentFrameSecurityMode(
   app: CapabilityPlanCarrier | null | undefined,
 ): ResidentFrameSecurityMode {

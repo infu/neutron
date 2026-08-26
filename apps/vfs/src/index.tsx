@@ -64,6 +64,7 @@ import {
   FILES_UI_TRANSFER_TOOL,
   FilesBlobUrlRegistry,
   FilesSerialUploadQueue,
+  filesCanonicalPublicOrigin,
   normalizeFilesPath,
   normalizeFilesPolicyPath,
   validateFilesPolicyName,
@@ -1088,6 +1089,21 @@ export function isFilesPublicRelativeUrl(value: string): boolean {
     /^\/app\/files\/_route\/shares\/[0-9a-f]{64}\/([A-Za-z0-9._-]{1,100})$/u,
   );
   return match !== null && match[1] !== "." && match[1] !== "..";
+}
+
+export function filesCanonicalPublicLink(
+  relativeUrl: string,
+  tileHref: string,
+): string {
+  if (!isFilesPublicRelativeUrl(relativeUrl)) {
+    throw new Error("Files returned an invalid public link");
+  }
+  const publicOrigin = filesCanonicalPublicOrigin(tileHref);
+  const publicUrl = new URL(relativeUrl, publicOrigin);
+  if (publicUrl.origin !== publicOrigin) {
+    throw new Error("Files returned a link for another site");
+  }
+  return publicUrl.href;
 }
 
 export function App({
@@ -2548,15 +2564,8 @@ export function App({
     if (!entry.publicUrl) return;
     const generation = privateRequestGenerationRef.current;
     try {
-      if (!isFilesPublicRelativeUrl(entry.publicUrl)) {
-        throw new Error("Files returned an invalid public link");
-      }
-      const publicUrl = new URL(entry.publicUrl, window.location.origin);
-      if (publicUrl.origin !== window.location.origin) {
-        throw new Error("Files returned a link for another site");
-      }
       await copyToClipboard(
-        publicUrl.href,
+        filesCanonicalPublicLink(entry.publicUrl, window.location.href),
       );
       if (!privateRequestIsCurrent(generation)) return;
       setCopiedLinkPath(entry.path);
