@@ -143,6 +143,7 @@ The review screen presents meaningful changes:
 - certified publication/storage quotas;
 - browser-wallet methods and chains;
 - provider connections;
+- camera or microphone access for exact tiles;
 - persistent or dedicated resident origins;
 - typed app dependencies; and
 - memory migrations or retirement.
@@ -161,6 +162,11 @@ The browser message bus uses private ports, so apps use the SDK without
 receiving direct access to Kernel stores or other frames. Backend capability
 handles are injected directly into the generated actor and scoped to the exact
 installation.
+
+An approved tile that declares camera or microphone access calls the browser's
+media APIs directly. The Kernel supplies only the certified child policy and
+exact iframe delegation; it does not proxy the stream, run a media session, or
+replace the browser's permission prompt and device indicators.
 
 Apps can call their own backend with native nested binary values. User review
 shows binary path, size, and digest instead of rendering arbitrary bytes.
@@ -189,13 +195,19 @@ Both unchanged and updated app IDs retain their `AppScope`. An update binds the
 existing scope to the new version, plan, deployment, and app generation and
 reconciles changed resources. Browser-origin identity also remains stable
 unless its resident security mode changes. Remove and re-add is the operation
-that creates a new UID. App-owned semantic work that cannot be bounded inside
-the atomic commit remains the app's responsibility after activation.
+that creates a new UID. A code replacement or capability change still
+invalidates mounted frames and transient frontend grants even when the
+underlying installation origin is retained. App-owned semantic work that cannot
+be bounded inside the atomic commit remains the app's responsibility after
+activation.
 
 ### 7. Disable Or Remove
 
 Disabling a runtime capability changes the live registry and revocation epoch.
-The broker checks that state on use and after asynchronous calls.
+The broker checks that state on use and after asynchronous calls. A successful
+toggle also changes the runtime capability-authority revision observed by the
+trusted frontend, which tears down every app frame and transient grant before
+reloading current authority.
 
 Removing an app retires its:
 

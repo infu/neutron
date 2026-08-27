@@ -1162,12 +1162,12 @@ async function setCommittedAppsFromRuntime(
   expectedBrowserSurfaceOriginAppIds: readonly string[],
   options: { invalidateAppIds?: readonly string[] } = {},
 ): Promise<void> {
-  const authorityRevision = useAppsStore.getState().authorityRevision;
   // Runtime info exposes the exact running actor, which is the staged target
   // between activation and commit. Never turn that projection into browser
   // authority until the independently queried journal is absent on both sides
   // of the read.
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const authorityRevision = useAppsStore.getState().authorityRevision;
     await ensureInstallJournalSettled(neutron, {
       timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
     });
@@ -1207,7 +1207,9 @@ async function setCommittedAppsFromRuntime(
         "Committed browser-surface origin authority does not match the compiled deployment",
       );
     }
-    assertRuntimeAuthorityRevision(authorityRevision);
+    if (useAppsStore.getState().authorityRevision !== authorityRevision) {
+      continue;
+    }
     if (useAppsStore.getState().pendingInstallRecovery !== null) {
       useAppsStore.getState().setRuntimeAuthorityFence({
         deploymentId: finalRuntime.deployment_id,
@@ -1733,12 +1735,12 @@ async function reconcileCompletedPendingInstall(
     reason: "runtime_changed",
   });
   useAppsStore.getState().setPendingInstallRecovery(null);
+  await resetNeutronCanBinding();
+  await getApps();
   announceRuntimeAuthorityChange({
     deploymentId,
     phase: "committed",
   });
-  await resetNeutronCanBinding();
-  await getApps();
 }
 
 export async function abortPendingInstallRecovery(
@@ -2103,17 +2105,17 @@ export async function beginPackageInstallSession({
             },
           });
 
-          announceRuntimeAuthorityChange({
-            deploymentId: compiled.deploymentId,
-            phase: "committed",
-            kernelUpdated: appIds.includes("kernel"),
-          });
           await setCommittedAppsFromRuntime(
             neutron,
             apps,
             compiled.browserSurfaceOriginAppIds,
             mode === "update" ? { invalidateAppIds: appIds } : {},
           );
+          announceRuntimeAuthorityChange({
+            deploymentId: compiled.deploymentId,
+            phase: "committed",
+            kernelUpdated: appIds.includes("kernel"),
+          });
           if (mode === "update") {
             for (const appId of appIds) {
               if (appId !== "kernel") removeAppRuntimeState(appId, false);
@@ -2453,15 +2455,15 @@ async function uninstallAppInternal(
         announceActivationStep(step, compiled.deploymentId, false);
       },
     });
-    announceRuntimeAuthorityChange({
-      deploymentId: result.compiled.deploymentId,
-      phase: "committed",
-    });
     await setCommittedAppsFromRuntime(
       neutron,
       result.apps,
       result.compiled.browserSurfaceOriginAppIds,
     );
+    announceRuntimeAuthorityChange({
+      deploymentId: result.compiled.deploymentId,
+      phase: "committed",
+    });
     removeAppRuntimeState(appId, true);
     await resetNeutronCanBinding();
     await delay(300);
@@ -2680,11 +2682,6 @@ async function installAppInternal(
       },
     });
 
-    announceRuntimeAuthorityChange({
-      deploymentId: compileDetails.compiled.deploymentId,
-      phase: "committed",
-      kernelUpdated: id === "kernel",
-    });
     await setCommittedAppsFromRuntime(
       neutron,
       appconfig,
@@ -2693,6 +2690,11 @@ async function installAppInternal(
         invalidateAppIds: decisionOperation === "update" ? [id] : [],
       },
     );
+    announceRuntimeAuthorityChange({
+      deploymentId: compileDetails.compiled.deploymentId,
+      phase: "committed",
+      kernelUpdated: id === "kernel",
+    });
     if (decisionOperation === "update" && id !== "kernel") {
       removeAppRuntimeState(id, false);
     }

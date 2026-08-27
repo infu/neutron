@@ -585,8 +585,8 @@ untrusted iframe. The paths are stable:
 /app/<app-id>/<tray.path>?app=<app-id>&role=tray&instance=<instance-id>
 ```
 
-Current ordinary app packages are marked by the packer as compatible with the
-v26 browser-surface contract. A package that declares
+Ordinary app packages produced by the current packer are marked as compatible
+with the browser-surface-origin contract. A package that declares
 `capabilities.browser_permissions` also inherently requires that contract. The
 compiler records adopted installations in the certified
 `/system/browser-surface-origins.json` sidecar; this is generic package
@@ -612,7 +612,7 @@ credentialless originful framing, the frontend removes `allow-same-origin` and
 any browser-feature delegation before navigation, so the frame falls back to
 an opaque origin.
 
-Unadopted historical packages keep their released v25 compatibility path.
+Unadopted historical packages keep their released opaque compatibility path.
 Their ordinary surfaces use the app-id-prefixed hostname; a historical package
 with a dedicated resident background may use the unprefixed Kernel hostname
 for its tile and tray URLs. In either case the container and response sandbox
@@ -648,6 +648,15 @@ reserved for a confirmed running target. Other Settings remain usable, but
 install, update, uninstall, and app-specific Settings mutations stay disabled
 until recovery completes or a safely undispatched journal is discarded.
 
+The runtime query also returns the actor-local capability-authority revision
+when the selected assembler supports it. Each successful runtime capability
+toggle advances that revision. The observation loop compares it alongside the
+assembler, deployment, and app-instance inventory; any change fences current
+authority, resets the actor binding, increments every app generation, and
+removes all frame and transient runtime state before reloading the certified
+registry. The deployment ID distinguishes a replacement actor whose local
+revision counter starts again.
+
 Open tabs coordinate this boundary on a kernel-origin-only
 `BroadcastChannel`, with a same-origin `storage` event fallback. The initiating
 tab signals once after checked journal creation and again after commit; a safe
@@ -669,7 +678,7 @@ workers, lazy assets, or installed-package inventory.
 
 Adopted tiles, trays, and ordinary backgrounds use the credentialless
 installation origins above; only unadopted historical surfaces retain opaque
-v25 framing. A background may instead use one of the two mutually exclusive
+compatibility framing. A background may instead use one of the two mutually exclusive
 dedicated resident modes: credentialless-ephemeral or persistent. Their exact
 initial iframe request, Host/query binding, origin rotation, subresource
 destinations, and browser preflight rules are specified in

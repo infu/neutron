@@ -89,8 +89,9 @@ surplus is refunded.
 
 ## Why App Frames Use The Kernel
 
-Third-party surfaces never receive the Kernel origin. Under the exact v26
-runtime, an ordinary package is eligible for originful surfaces only after a
+Third-party surfaces never receive the Kernel origin. Under the
+browser-surface-origin runtime, an ordinary package is eligible for originful
+surfaces only after a
 selected package proves readiness with the packer-owned
 `.neutron/browser-surface-origins.v1.json` marker or the inherently new
 `browser_permissions` declaration and the checked install transaction records
@@ -100,9 +101,10 @@ origin for each tile ID, tray, and ordinary background. Those surfaces use
 credentialless `sandbox="allow-scripts allow-same-origin"` frames; instances
 of the same tile ID intentionally share that tile's origin.
 
-Historical packages without readiness evidence, the v25 upgrade bridge, and
-the unsupported-browser fallback retain the released credentialless opaque
-frame policy: `sandbox="allow-scripts"` and `origin: "null"`. Dedicated
+Historical packages without readiness evidence, the explicit predecessor
+upgrade bridge, and the unsupported-browser fallback retain the released
+credentialless opaque frame policy: `sandbox="allow-scripts"` and
+`origin: "null"`. Dedicated
 backgrounds continue to use the compiled opaque, credentialless-ephemeral, or
 persistent mode specified in
 [Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).

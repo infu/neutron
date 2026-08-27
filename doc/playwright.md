@@ -102,6 +102,19 @@ npm run test:e2e:local:fresh
 The `:fresh` command performs the destructive local reinstall before running
 the Internet Identity scenario. Use `--headed` for manual observation.
 
+Browser media and document-policy behavior has a separate self-contained
+Chromium qualification:
+
+```sh
+npm run test:browser-media
+```
+
+It uses temporary loopback origins and fake media devices to check explicit
+camera/microphone delegation, denial, child-policy narrowing, Kernel
+`frame-ancestors`, and passive package-response replay. Run it inside
+`nix develop` or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE`; it does not require a
+deployed Neutron.
+
 ## Interactive Codex Browser Work
 
 Playwright MCP is opt-in:

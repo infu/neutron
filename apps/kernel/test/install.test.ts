@@ -26,7 +26,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.16.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.17.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -35,7 +35,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(316);
+  expect(manifest.version).toBe(317);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   expect(manifest.memory.kernel.version).toBe(3);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3"]);
@@ -55,7 +55,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(316);
+  expect(packagedManifest.version).toBe(317);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
@@ -66,10 +66,10 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(3);
-  expect(packagedArchive.manifest.version).toBe(316);
+  expect(packagedArchive.manifest.version).toBe(317);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 316 },
+    package: { id: "kernel", version: 317 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });
@@ -800,6 +800,35 @@ test("frontend deployments signal sibling tabs at activation and commit", async 
   expect(activationHelper).toContain('step !== "install-code"');
   expect(activationHelper).toContain('phase: "pending"');
   expect(source.match(/phase: "committed"/g)?.length).toBeGreaterThanOrEqual(4);
+
+  const completionBodies = [
+    source.slice(
+      source.indexOf("export async function beginPackageInstallSession"),
+      source.indexOf("function assertPackageSessionTargets"),
+    ),
+    source.slice(
+      source.indexOf("async function uninstallAppInternal"),
+      source.indexOf("export async function install_app"),
+    ),
+    source.slice(
+      source.indexOf("async function installAppInternal"),
+      source.indexOf("function removeAppRuntimeState"),
+    ),
+    source.slice(
+      source.indexOf("async function reconcileCompletedPendingInstall"),
+      source.indexOf("export async function abortPendingInstallRecovery"),
+    ),
+  ];
+  for (const body of completionBodies) {
+    const verified = body.indexOf(
+      body.includes("setCommittedAppsFromRuntime")
+        ? "await setCommittedAppsFromRuntime("
+        : "await getApps()",
+    );
+    const committedSignal = body.indexOf("announceRuntimeAuthorityChange({");
+    expect(verified).toBeGreaterThan(-1);
+    expect(committedSignal).toBeGreaterThan(verified);
+  }
 });
 
 test("observed runtime replacement retires cached actors before registry reconciliation", async () => {
@@ -860,8 +889,8 @@ test("frontend authority commits reject stale continuations and legacy postfligh
   const sidecarParse = postflight.indexOf(
     "parseBrowserSurfaceOriginAuthoritySnapshot(",
   );
-  const postflightGuard = postflight.indexOf(
-    "assertRuntimeAuthorityRevision(authorityRevision)",
+  const postflightRetry = postflight.indexOf(
+    "useAppsStore.getState().authorityRevision !== authorityRevision",
   );
   const postflightCommit = postflight.indexOf(
     "useAppsStore.getState().setApps(apps",
@@ -872,8 +901,8 @@ test("frontend authority commits reject stale continuations and legacy postfligh
   expect(postflightRevision).toBeGreaterThan(-1);
   expect(assemblerCheck).toBeGreaterThan(postflightRevision);
   expect(sidecarParse).toBeGreaterThan(assemblerCheck);
-  expect(postflightGuard).toBeGreaterThan(sidecarParse);
-  expect(postflightCommit).toBeGreaterThan(postflightGuard);
+  expect(postflightRetry).toBeGreaterThan(sidecarParse);
+  expect(postflightCommit).toBeGreaterThan(postflightRetry);
   expect(postflightUnfence).toBeGreaterThan(postflightCommit);
 });
 

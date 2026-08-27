@@ -25,7 +25,7 @@ npm run security:check
 | `packages/neutron-motoko-capabilities` | The Motoko capability types and their bounded public surface |
 | `packages/neutron-motoko-wasm` | Browser compiler initialization and compiler-package behavior |
 | `packages/neutron-security` | Motoko source-policy fixtures |
-| `packages/neutron-compiler` | Package preparation, `neutron_actor_v25` assembly, memory planning, capability projection, fresh compiler isolation, install journals, chunked Wasm installation, and atomic commit behavior |
+| `packages/neutron-compiler` | Package preparation, active and predecessor-compatible assembly, memory planning, capability and browser-surface projection, fresh compiler isolation, install journals, chunked Wasm installation, and atomic commit behavior |
 | `packages/neutron-provision` | Format-3 deployment configs, schema-3 private sessions, PocketIC supervision, IC create/adopt/reinstall flows, exact production artifact pins, local path-only archives, fleet deployment, and recovery |
 | `apps/kernel` | Authorization, consent, MessagePort routing, self-call binary binding, capability services, install state, certified HTTP, Settings, workspaces, trays, connections, browser wallets, Agent Mode, and runtime invalidation |
 | App workspaces | Each app's manifest, backend, frontend, exposed tools, package shape, and app-specific protocol behavior |
@@ -62,7 +62,7 @@ The current package contract is:
 - a separately versioned managed-memory lock;
 - bounded archive, entry, decompression, path, and module-hash checks;
 - at most 255 ordinary apps plus the Kernel; and
-- exact assembler identity `neutron_actor_v25`.
+- an exact assembler identity selected and recorded by the compiler.
 
 Compiler tests cover headless packages, typed app dependencies, managed-memory
 migrations and retirement, capability quotas, physical method names, scheduled
@@ -101,6 +101,23 @@ The tests cover:
 - the separate generic tool-attachment protocol.
 
 See [Kernel-App Communication](./kernel-app-communication.md).
+
+### Browser surfaces and media
+
+Run the standalone Chromium qualification from the repository root:
+
+```sh
+npm run test:browser-media
+```
+
+It requires a runnable Chromium; use `nix develop` or set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE`. The qualification proves browser behavior for
+explicit camera/microphone delegation and denial, child-document policy
+narrowing, Kernel `frame-ancestors` containment, and passive package-response
+replay. Unit and integration fixtures separately cover manifest normalization,
+exact tile binding, installation-derived origins, credentialless fallback,
+Host/path/destination admission, CSP and Permissions Policy headers, certified
+surface variants, sidecar lifecycle, and frame invalidation.
 
 ### Certified Assets and authored POST routes
 
@@ -218,6 +235,7 @@ npm run test:e2e:kitchensink
 npm run test:e2e:kitchensink:fresh
 npm run test:e2e:package-updates
 npm run test:e2e:package-updates:fresh
+npm run test:browser-media
 ```
 
 The `:fresh` commands run the format-3 provisioner's destructive local
@@ -238,6 +256,9 @@ Current browser specs exercise:
   behavior;
 - Motoko compiler worker startup and isolation; and
 - malformed app requests and permission-dialog containment.
+
+The standalone browser-media command is a focused qualification runner rather
+than a Playwright spec in the normal E2E suite.
 
 The browser Motoko compiler runs in a dedicated Worker. Each compile operation
 starts from a fresh worker service; within that operation the inspection

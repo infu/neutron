@@ -26,8 +26,8 @@ v0.3.7 implementation. The NPL/NSAL drafts do not require a Sovereign User or
 app author to create, sign, publish, register, retain, or audit these records or
 hashes, and they do not make a certified live-module match a license condition.
 The licenses permit the browser-generated package composition and combined Wasm
-to remain private. The current record-capable v0.3.7 product nevertheless makes
-its deployment record public after a later in-product install, exposing package
+to remain private. The record-capable v0.3.7 candidate nevertheless makes its
+deployment record public after a later in-product install, exposing package
 IDs, versions, and integrity identities but not archive bytes or generated Wasm.
 That disclosure is optional product behavior, not a license prerequisite.
 
@@ -224,7 +224,7 @@ filter as if it were present in that immutable archive.
 
 Automated compatibility evidence uses the exact v0.3.5 and v0.3.6 embedded
 browser compiler/assembler closures in real Chromium to compile the private
-v0.3.7 Kernel and all 14 current clean HTTPS-source app archives as one batch
+v0.3.7 Kernel and the then-selected clean HTTPS-source app archives as one batch
 with zero compiler errors or compatibility diagnostics; v0.3.7 also has exact
 parser/batch coverage. The update service separately proves one
 prepare/compile/review/deploy session from a v0.3.5 baseline. Those tests do not
@@ -416,9 +416,9 @@ private v0.3.7 candidate. It does not publish packages or change the Dispenser,
 and it is not a required intermediate step in the simultaneous production
 successor-and-app cutover described above.
 
-Current automated evidence is green for the exact archived v0.3.5 and v0.3.6
+The recorded automated evidence is green for the exact archived v0.3.5 and v0.3.6
 compiler/PocketIC upgrade lanes. The final v0.3.7 qualification suite also
-passes against the current generator and candidate binding. Its exact
+passes against its recorded generator and candidate binding. Its exact
 checked-in evidence is:
 
 ```text

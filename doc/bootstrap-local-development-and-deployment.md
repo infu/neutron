@@ -70,9 +70,9 @@ Example:
   },
   "artifacts": {
     "kind": "inline",
-    "kernel": { "path": "apps/kernel/kernel.v0.3.12.neutron" },
+    "kernel": { "path": "path/to/kernel.neutron" },
     "packages": [
-      { "path": "apps/hello/hello.v0.2.4.neutron" }
+      { "path": "path/to/app.neutron" }
     ]
   }
 }
@@ -123,15 +123,14 @@ context:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.12.neutron \
-  --package apps/hello/hello.v0.2.4.neutron \
+  --package path/to/kernel.neutron \
+  --package path/to/app.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```
 
 Local compilation belongs to the attached provisioner because it binds the
-exact PocketIC root key into the current `neutron_actor_v25` installation
-identity.
+exact PocketIC root key into the assembler-selected installation identity.
 
 ## Reinstall Flow
 

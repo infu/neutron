@@ -610,8 +610,9 @@ Installed apps are served under:
 /app/<app-id>/<tile-path>
 ```
 
-The kernel loads each opened app tile in a credentialless iframe. Current app
-packages carry a packer-authored browser-surface marker, so a v26 Kernel gives
+The kernel loads each opened app tile in a credentialless iframe. Ordinary app
+packages produced by the current packer carry a browser-surface readiness
+marker, so the browser-surface-origin Kernel gives
 each declared tile an origin derived from the installation nonce and exact
 `tile:<id>` surface key. The frame uses
 `sandbox="allow-scripts allow-same-origin"`, while certified Host/path and
@@ -2143,10 +2144,10 @@ npm test
 
 before publishing or installing the package.
 
-For hello, the output is:
+The output filename is derived from the app ID and release in its manifest:
 
 ```text
-apps/hello/hello.v0.2.4.neutron
+<app-directory>/<app-id>.v<major>.<minor>.<patch>.neutron
 ```
 
 ### Release A Source-Discoverable Update
@@ -2236,8 +2237,8 @@ To compile package files without deploying:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.12.neutron \
-  --package apps/my_app/my_app.v0.1.0.neutron \
+  --package path/to/kernel.neutron \
+  --package path/to/app.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```
@@ -2361,8 +2362,8 @@ hash.
 
 - There is no published app-template generator yet. Copy `apps/hello` for now.
 - The production-context compile-only CLI exists as source under
-  `packages/neutron-cli`. Trusted local `neutron_actor_v25` compilation and
-  deployment are owned by the format-3 provisioner because it authenticates
+  `packages/neutron-cli`. Trusted local compilation and deployment are owned by
+  the format-3 provisioner because it authenticates
   the PocketIC root context. A trusted package workflow must emit the archive
   before the provisioner can consume it.
 - Apps may own multiple managed memory roots. Their manifest ids are local to

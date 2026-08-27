@@ -154,7 +154,7 @@ and verified before any plan field is used.
 The `link` field is retained as navigation metadata. The current kernel UI
 does not launch apps by hash route. `Launcher.tsx` flattens each non-kernel
 registry entry's `tiles[]` into openable tile actions. Selecting a tile creates
-a workspace tile instance. On an exact v26 runtime, an app listed in
+a workspace tile instance. On the browser-surface-origin runtime, an app listed in
 `/system/browser-surface-origins.json` loads its tile from an
 installation-owned, per-tile hostname:
 
@@ -182,7 +182,8 @@ An unmarked historical package that does not declare `browser_permissions`
 does not appear in the sidecar. It retains its released legacy URL selection
 (an unprefixed or `a<dns-app-id>a` hostname, as applicable),
 `sandbox="allow-scripts"`, opaque `origin: "null"`, and no browser-feature
-delegation. The exact v25 assembly bridge uses that same legacy policy. The
+delegation. The explicit predecessor assembly bridge uses that same legacy
+policy. The
 Kernel does not infer adoption from an app ID, version, route, or unrelated
 capability.
 
@@ -207,8 +208,9 @@ destination, and origin rules are specified in
 
 ### `/system/browser-surface-origins.json` Authority Sidecar
 
-The v26 frontend treats `/system/browser-surface-origins.json` as the public,
-certified list of ordinary apps that may use installation-owned surface
+The browser-surface-origin frontend treats
+`/system/browser-surface-origins.json` as the public, certified list of ordinary
+apps that may use installation-owned surface
 origins. Its closed canonical shape is:
 
 ```json
@@ -219,18 +221,19 @@ origins. Its closed canonical shape is:
 ```
 
 The list must contain only unique, currently installed non-Kernel app IDs in
-canonical order. Exact v26 runtime authority requires the sidecar even when the
-list is empty; absence is valid only for the exact v25 bridge. A malformed,
-missing, stale, or registry-inconsistent v26 sidecar fails closed instead of
-making any app originful.
+canonical order. The browser-surface-origin runtime requires the sidecar even
+when the list is empty; absence is valid only for the explicit predecessor
+bridge. A malformed, missing, stale, or registry-inconsistent required sidecar
+fails closed instead of making any app originful.
 
 Origin adoption is package-derived and app-agnostic. A selected ordinary app
 package is eligible when it contains the exact packer-owned
 `.neutron/browser-surface-origins.v1.json` marker or declares the inherently
 new `browser_permissions` capability. The current packer adds the marker to
 future ordinary app archives; immutable historical archives remain unmarked
-and opaque. A checked v26 install commits the selected package files, surface
-response policies, `/system/apps.json`, and this sidecar atomically. It keeps
+and opaque. A checked browser-surface-origin install commits the selected
+package files, surface response policies, `/system/apps.json`, and this sidecar
+atomically. It keeps
 already-adopted IDs through unrelated transactions and approved upgrades, and
 removes an ID on uninstall.
 
@@ -602,7 +605,7 @@ The path layout appears intended to separate concerns:
 
 - `/` and `/static/...` are the kernel UI.
 - `/system/apps.json` is the small kernel-owned app registry.
-- `/system/browser-surface-origins.json` is the public v26 authority sidecar
+- `/system/browser-surface-origins.json` is the public browser-surface authority sidecar
   listing installed ordinary apps adopted onto installation-owned surface
   origins.
 - `/system/deployment-build-record.json` is the canonical whole-deployment

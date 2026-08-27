@@ -48,8 +48,9 @@ cross-workspace checks, and developer commands.
   developer-local Neutron deployment mechanism.
 - `support/repository/` is the static `neutron-repo-v1` example provider and
   deterministic resource generator.
-- `support/local-ledgers/` holds local ledger assets. It has no `package.json`,
-  so it is part of the tree but not an npm workspace.
+- `packages/neutron-provision/src/local_fixtures.ts`,
+  `local_chain_fixtures.ts`, and the provisioner-owned `assets/` directory hold
+  the app-neutral local fixture logic and pinned fixture inputs.
 - `support/update-source/` is the reference developer-owned certified update
   source. Its publisher uses direct authenticated agent calls.
 

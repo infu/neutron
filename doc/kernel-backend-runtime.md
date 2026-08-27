@@ -34,7 +34,8 @@ exports:
 
 - `Init`, a class that receives the managed kernel schema `Mem`, the generated
   activation schema, generated running deployment id, and complete generated
-  app-instance inventory, then exposes the module's runtime functions;
+  app-instance inventory plus the canister principal, then exposes the module's
+  runtime functions;
 - Generated input/output type aliases consumed by the actor wrapper.
 
 The deployed actor lives in `apps/kernel/backend/_neutron.mo`, which is marked
@@ -50,7 +51,8 @@ The manifest declares the kernel app as:
 - `id`: `kernel`
 - `src`: `main.mo`
 - `format`: `3`
-- currently released app baseline `version`: `306`, displayed as `0.3.6`
+- packed release version: read from `apps/kernel/neutron.json`; this guide does
+  not pin the active release
 - `init_arg`: `memory_kernel`, `memory_kernel_activation`, `deployment_id`, and
   `active_app_instance_inventory`, plus `canister_principal`
 - one `kernel` memory schema at v3 and one
@@ -135,11 +137,19 @@ therefore cannot delete the predecessor deployment's usable credential.
 
 The `mem.install` field also stores one browser-origin epoch captured from
 `Prim.canisterVersion()` when the fresh app-instance inventory is initialized.
-Browser-origin nonces hash that stable epoch with app id and installation uid:
-ordinary upgrades retain it, app reinstall changes the uid, and a full canister
-reinstall changes the IC canister version. This avoids an async randomness call
-during actor initialization while preventing origin reuse across either
-replacement boundary.
+Browser-origin nonces bind that stable epoch, app ID, installation UID, and
+issuance canister version. Ordinary upgrades retain committed identities;
+removing and adding an app allocates a new UID, and a full canister reinstall
+changes the IC canister version.
+
+New installation UIDs are allocated from a bounded lane derived from the
+non-rollbackable canister version. Immediately before sending an upgrade,
+`markDispatched` reissues the pending target in the current version lane in the
+same message that certifies the dispatch marker. For transactions whose
+predecessor implements this rule, restoring a snapshot taken before dispatch
+cannot reuse an installation UID or origin nonce that a discarded branch
+already activated. This uses no asynchronous randomness call during actor
+initialization.
 
 `Assets.Doc` stores the static asset key, chunk count, blob chunks, content
 encoding, and content type. `Assets.use(init)` wraps the Core map with the small
@@ -153,9 +163,14 @@ The generated actor is a modern `persistent actor class` with Motoko's
 ```motoko
 import NeutronModule_a6_kernel "<kernel module>";
 import NeutronMemorySchema_a6_kernel_r6_kernel_v3 "<kernel schema>";
+import NeutronMemorySchema_a6_kernel_r17_kernel_activation_v1
+    "<kernel activation schema>";
 
 type NeutronMemoryType_a6_kernel_r6_kernel = {
     #v3 : NeutronMemorySchema_a6_kernel_r6_kernel_v3.Mem;
+};
+type NeutronMemoryType_a6_kernel_r17_kernel_activation = {
+    #v1 : NeutronMemorySchema_a6_kernel_r17_kernel_activation_v1.Mem;
 };
 
 let NeutronMemoryStore_a6_kernel_r6_kernel :
@@ -164,10 +179,16 @@ let NeutronMemoryStore_a6_kernel_r6_kernel :
 
 transient let #v3(NeutronMemory_a6_kernel_r6_kernel) =
     NeutronMemoryStore_a6_kernel_r6_kernel;
+let NeutronMemoryStore_a6_kernel_r17_kernel_activation :
+    NeutronMemoryType_a6_kernel_r17_kernel_activation =
+    #v1(NeutronMemorySchema_a6_kernel_r17_kernel_activation_v1.init());
+transient let #v1(NeutronMemory_a6_kernel_r17_kernel_activation) =
+    NeutronMemoryStore_a6_kernel_r17_kernel_activation;
 transient let NeutronActiveAppInstanceInventory =
     [<generated active app instances>];
 transient let NeutronKernel = NeutronModule_a6_kernel.Init(
     NeutronMemory_a6_kernel_r6_kernel,
+    NeutronMemory_a6_kernel_r17_kernel_activation,
     "<generated deployment id>",
     NeutronActiveAppInstanceInventory,
     NeutronPrim.principalOfActor(NeutronActor),
@@ -218,6 +239,13 @@ UTC-day cycle ceiling, while zero-cycle calls remain free of a temporal request
 counter. Awaiting broker operations capture an actor-local
 registry epoch lease; disable followed by re-enable cannot revive an operation
 that was already suspended under the old epoch.
+
+The registry also owns an actor-local `Nat64` capability-authority revision.
+Each successful owner toggle advances it only after capability-specific
+reconciliation succeeds. The generated runtime query returns it alongside the
+deployment ID; the frontend treats either value changing as global app-frame
+and transient-grant invalidation. A replacement actor may start the local
+counter again because its deployment ID must also change.
 
 `backend/scheduler/` owns static timer setup, transient overlap state, and
 per-run backend-call budget and lease activation. It has no separate persisted
@@ -779,6 +807,17 @@ package/compiler metadata remains public integrity-protected data, while
 non-allowlisted `/system/**` state remains HTTP-internal. Qualification remains
 the status recorded in the canonical certified-assets document.
 
+The same static HTTP service owns ordinary browser-surface origins. The
+assembler configures the exact adopted app set and one derived hostname per
+tile ID, tray, and ordinary background. Certification binds an installation
+document to the matching app subtree, exact Host, `Sec-Fetch-Dest: iframe`, CSP,
+Permissions Policy, and Kernel-only `frame-ancestors`; subresources have a
+separate MIME/destination allowlist. Installation hosts cannot execute Kernel,
+other-app, package-metadata, top-level-document, or unwanted worker responses.
+Camera and microphone are only the response-policy ceiling: the frontend still
+must delegate an exact declared tile through its iframe `allow` attribute, and
+media never enters this backend.
+
 ### Management Canister Self-Upgrade
 
 `main.mo` uses the focused management-canister interface in
@@ -941,7 +980,8 @@ The public API is declared in `apps/kernel/neutron.json` and generated in
 | `kernel_vetkeys_admin_snapshot`     | query          | `public query`                             | required             | none             | Returns the bounded trusted Settings projection and coarse vetKeys audit.                                      |
 | `kernel_settings_snapshot`        | query           | `public query`                             | required             | none             | Returns cycle balance and unit-explicit local Motoko runtime metrics.                                          |
 | `kernel_app_usage_snapshot`        | query          | `public query`                             | required             | none             | Returns bounded exact-installation instruction, execution, outgoing-cycle (fixed ingress/call bases plus net explicit transfers), and accepted-incoming-cycle totals with sparse rolling 30 UTC-day buckets for Settings. |
-| `kernel_runtime_info`             | generated query | reserved generated method                  | required             | none             | Reports exact running deployment and managed memory metadata.                                                  |
+| `capability_authority_revision`   | internal        | compiler-namespaced private helper         | not public           | none             | Returns the actor-local revision advanced after a successful runtime capability toggle.                        |
+| `kernel_runtime_info`             | generated query | reserved generated method                  | required             | none             | Reports exact running deployment, assembler, app/browser authority, capability-authority revision, and managed-memory metadata. |
 
 Generated public methods always return `async` actor responses. The manifest's
 `async` mode controls whether the generated wrapper calls the module method

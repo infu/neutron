@@ -5,8 +5,9 @@ executable source of truth is the closed catalog in
 `packages/neutron-tools/src/capabilities/catalog.ts`, together with its
 compiler projection and Kernel runtime services.
 
-Neutron currently has 17 authored capability kinds and 10 derived kinds.
-Every runtime resource is installation-scoped.
+The tables below enumerate the authored and derived capability kinds implemented
+by the catalog. Every runtime resource is installation-scoped; the executable
+catalog, rather than a copied count in this guide, is authoritative.
 
 ```text
 manifest declaration or structural fact
@@ -49,6 +50,7 @@ and finite bounds.
 | `background_ui_requests` | Let a resident request exact Kernel dialog categories | Four closed categories; Kernel retains user interaction |
 | `ethereum_provider` | Use exact EIP-1193 methods on exact chains | Focused owner activation, EIP-6963 provider selection, bounded session |
 | `connections` | Connect a resident background to exact trusted providers/scopes | Provider catalog/adapter, PKCE, one credential per `(AppScope, provider)` |
+| `browser_permissions` | Let exact tiles request selected browser device features directly | API 1, exact declared tile IDs, closed camera/microphone set, certified child policy plus iframe delegation, browser-controlled prompt |
 | `persistent_browser_storage` | Give one resident an installation-dedicated persistent origin | Exact background surface, nonce/epoch rotation, certified initial document |
 | `dedicated_resident_origin` | Give one resident a credentialless ephemeral dedicated origin | Exact background surface and one current origin binding |
 | `public_ingress` | Expose bounded public Candid protocol routes | Compiler-bound route and handler, caller policy, body/rate/cycle limits |
@@ -208,6 +210,20 @@ Discovery is EIP-6963 only. If several browser wallets announce themselves,
 the Kernel asks the owner to choose and binds that provider object to the
 session. Names and reverse-DNS strings are display hints, not trust.
 
+## Browser Device Permissions
+
+`browser_permissions` is a frontend-only declaration. API 1 maps at most 16
+declared tile IDs to `camera`, `microphone`, or both. The compiler rejects an
+unknown tile ID, and trays and backgrounds cannot receive this declaration.
+
+Approval lets the exact tile ask the browser for the selected feature; it does
+not start capture or override browser and operating-system permission. The
+Kernel intersects a certified, Host-bound Permissions Policy with the iframe's
+exact-origin `allow` value. The tile then calls browser APIs such as
+`navigator.mediaDevices.getUserMedia()` directly. Media bytes, streams, browser
+prompts, and prompt decisions do not pass through or get audited by the Kernel
+backend.
+
 ## Capability Lifecycle
 
 All catalog entries use the staged-installation lifecycle:
@@ -226,6 +242,11 @@ stores at most 64 runtime capability resources per app installation and 8,192
 actor-wide. Audit is metadata-only; payloads, credentials, keys, assertions,
 and certified bodies are not retained there.
 
+Successful runtime capability toggles also advance the actor's capability
+authority revision. The trusted frontend observes that revision together with
+the deployment identity and invalidates every mounted app frame and transient
+runtime grant when it changes.
+
 ## Scale And Admission
 
 | Resource | Current bound |
@@ -237,6 +258,8 @@ and certified bodies are not retained there.
 | Scheduled tasks per app | 2 |
 | Runtime capability resources per app | 64 |
 | Runtime capability resources actor-wide | 8,192 |
+| Browser-permission tile declarations per app | 16 |
+| Browser-surface certification units per deployment | 1,024 |
 | Connection provider records actor-wide | 256 |
 | Declared vetKey slots actor-wide | 128 |
 | Backend-call install defaults actor-wide | 2,048 |

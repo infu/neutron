@@ -131,7 +131,7 @@ maintainers before becoming roadmap commitments.
 
 ### MessagePort And Browser Isolation
 
-- Under the exact v26 runtime, a selected ordinary package becomes eligible
+- Under the browser-surface-origin runtime, a selected ordinary package becomes eligible
   for originful surfaces only when it contains the generic packer-owned
   `.neutron/browser-surface-origins.v1.json` marker or declares the inherently
   new `browser_permissions` capability. The checked install transaction
@@ -142,7 +142,7 @@ maintainers before becoming roadmap commitments.
   ID, tray, and ordinary background from its browser nonce. Those surfaces run
   in credentialless `sandbox="allow-scripts allow-same-origin"` iframes while
   remaining cross-origin from the Kernel. Historical packages without the
-  readiness evidence, the v25 bridge, and the unsupported-browser fallback
+  readiness evidence, the explicit predecessor bridge, and the unsupported-browser fallback
   retain credentialless `sandbox="allow-scripts"` frames with opaque
   `origin: "null"`. Backgrounds may instead use one of the mutually exclusive
   credentialless-ephemeral or persistent dedicated modes specified in
@@ -216,9 +216,9 @@ maintainers before becoming roadmap commitments.
 - A commit publishes one immutable, monotonic starter revision. A funded
   registration retains that exact Wasm/runtime/files value across awaits even
   if a controller publishes a newer current starter, then releases the heavy
-  value after seeding. The current production payload is Kernel plus eleven
-  apps, with source-bearing manifests tied to the certified production
-  updater; exact inventory and IDs are in
+  value after seeding. The selected production payload contains the Kernel and
+  source-bearing app manifests tied to the certified production updater; its
+  authoritative inventory is in
   [Dispenser And Provisioning](./dispenser-and-provisioning.md).
 - Completed Neutrons retain only their own canister principal as IC controller.
 - `kernel_activation` is one public update with `#set(hash)` and `#use(code)`.

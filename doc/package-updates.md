@@ -652,10 +652,10 @@ The checked-in focused unit and contract tests exercise:
   verification, and v2 receipts;
 - existing compiler multi-package atomicity and direct multi-step
   managed-memory migration planning;
-- exact immutable v0.3.5/v0.3.6 embedded browser compiler and assembler
-  closures compiling the private v0.3.7 Kernel plus all 14 current clean
+- exact immutable predecessor browser compiler and assembler closures compiling
+  the historical private bridge candidate plus the catalog-selected clean
   HTTPS-source app archives in one real-Chromium batch with zero compiler errors
-  or compatibility diagnostics, with v0.3.7 parser/batch coverage as well;
+  or compatibility diagnostics, with bridge parser/batch coverage as well;
 - one **Upgrade all** service session that prepares, compiles, reviews, and
   deploys the Kernel-plus-app selection together from a v0.3.5 installed
   baseline;
@@ -669,7 +669,7 @@ predecessor UI through a live canister deployment and verify durable state
 afterward. That manual archived-browser end-to-end gate remains required for
 the exact intended successor bytes, and the automated legacy compatibility
 suite must be rerun against that exact successor archive once it is built. The
-current Playwright package-update test covers Settings-triggered check
+Playwright package-update test covers Settings-triggered check
 lifecycle, refresh, row presentation, and the manual-only case. It does not
 publish a release into the PocketIC fixture or apply a real update. A full local
 fixture publish/read/review/deploy browser scenario remains separate release
