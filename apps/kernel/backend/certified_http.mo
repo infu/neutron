@@ -18,6 +18,7 @@ import V2 "./certified_http_v2";
 import Subtrees "./certified_subtrees";
 import AuthenticatedForest "./certified_assets/AuthenticatedForest";
 import Allocator "./certified_assets/Allocator";
+import CapabilityScope "./capabilities/Scope";
 import GatewayAuthority "./http_routes/GatewayAuthority";
 
 module {
@@ -61,6 +62,10 @@ module {
   // binds the exact kernel-authored resident query.
   public type ResidentRequestKind = {
     #subresource_v1 : { destination : Text };
+    // Installation-owned app HTML uses the same Host + Fetch Metadata CEL as
+    // resident subresources, but admits exactly the iframe destination and no
+    // authority-bearing query fields.
+    #installation_html_v1;
     #html_v1 : { canonical_query : Text };
   };
 
@@ -119,10 +124,40 @@ module {
       prior : [ResidentRequestOwner];
       next : [ResidentResponseVariant];
     };
+    // Static app assets rotate their browser authority as one URL-scoped
+    // unit. This resets only the two resident expression branches; ordinary
+    // Host-bound and Certified Assets expressions at the URL remain intact.
+    #replace_origin_scoped : {
+      url : Text;
+      next : [ResidentResponseVariant];
+    };
     #remove_resident : {
       url : Text;
       requests : [ResidentRequestOwner];
     };
+  };
+
+  // Every producer of an HTTP certification key must share this exact path
+  // grammar. Export it through the certification facade so install admission
+  // cannot drift from the tree mutation and proof boundaries.
+  public func validCanonicalPath(path : Text) : Bool {
+    V2.validCanonicalPath(path);
+  };
+
+  // Legacy and resident publishers share the same exact-path namespace as V2.
+  // Validate every URL as one batch before owner-key construction or routing.
+  public func validLegacyMutationPaths(mutations : [Mutation]) : Bool {
+    for (mutation in mutations.vals()) {
+      let url = switch (mutation) {
+        case (#replace(value)) value.url;
+        case (#remove(value)) value.url;
+        case (#replace_resident(value)) value.url;
+        case (#replace_origin_scoped(value)) value.url;
+        case (#remove_resident(value)) value.url;
+      };
+      if (not validCanonicalPath(url)) return false;
+    };
+    true;
   };
 
   // Executable web assets and app routes certify Host: their CSP can differ
@@ -145,6 +180,69 @@ module {
     V2.RESIDENT_HTML_CERTIFICATION_EXPRESSION_V1;
 
   public let NOT_FOUND_EXPRESSION = "default_certification(ValidationArgs{certification:Certification{no_request_certification:Empty{},response_certification:ResponseCertification{response_header_exclusions:ResponseHeaderList{headers:[]}}}})";
+  // A predecessor response tree is retained outside `http_expr` during the
+  // v316 policy cutover. Keeping it attached avoids both an unbounded actor-
+  // init disposal and a new durable cleanup schema; no HTTP v2 expression can
+  // name this top-level label.
+  public let KERNEL_RESPONSE_POLICY_REBUILD_SYSTEM_PATHS_V316 : [Text] = [
+    "/system/apps.json",
+    "/system/browser-surface-origins.json",
+    "/system/runtime-config.json",
+    "/system/install-provenance.json",
+    "/system/deployment-build-record.json",
+  ];
+  func kernelResponsePolicyV316MarkerLabel() : Blob {
+    Blob.fromArray([255]);
+  };
+  public func kernelResponsePolicyV316QuarantinePath() : [Blob] {
+    AuthenticatedForest.httpExprQuarantinePathV316();
+  };
+  public func kernelResponsePolicyV316MarkerPath() : [Blob] {
+    // Expression-path URL labels are UTF-8. This invalid UTF-8 byte therefore
+    // cannot collide with a quarantined predecessor branch.
+    Array.concat<Blob>(
+      kernelResponsePolicyV316QuarantinePath(),
+      [kernelResponsePolicyV316MarkerLabel()],
+    );
+  };
+  // A persistent background replaces the ordinary installation background:
+  // 32 tiles plus tray yield 33 installation surfaces (330 JavaScript variants
+  // across two authorities and five destinations), while the persistent origin
+  // adds 14 variants, for a closed whole-asset maximum of 344.
+  public let ORIGIN_RESPONSE_VARIANTS_MAX : Nat = 344;
+
+  // One update may nest several certification publishers (install assets,
+  // Certified Assets configuration, and lifecycle reconciliation) beneath one
+  // outer publication batch. Bound their combined authenticated-tree work so
+  // individually bounded subtree removals cannot add up without limit. This is
+  // transient transaction state: a trap rolls back every mutation in the
+  // canister message, so no stable schema or recovery journal is required.
+  public let PUBLICATION_BATCH_WORK_MAX : Nat = 4_194_304;
+
+  public func originResponseVariantCountAllowed(count : Nat) : Bool {
+    count <= ORIGIN_RESPONSE_VARIANTS_MAX;
+  };
+
+  public func publicationBatchWorkAllowed(work : Nat) : Bool {
+    work <= PUBLICATION_BATCH_WORK_MAX;
+  };
+
+  // Node visits account for balanced-map traversal. Allocation/reuse and
+  // rotations account for writes that are not visits; reclamation is weighted
+  // twice because bounded subtree disposal first validates and then destroys
+  // every node. Map arena operations are charged by the same rule.
+  public func authenticatedForestMutationWork(
+    counters : AuthenticatedForest.OperationCounters,
+  ) : Nat {
+    counters.node_visits +
+    counters.rotations +
+    counters.nodes_allocated +
+    counters.nodes_reused +
+    (2 * counters.nodes_reclaimed) +
+    counters.maps_allocated +
+    counters.maps_reused +
+    (2 * counters.maps_reclaimed);
+  };
   func emptyBlob() : Blob { Blob.fromArray([]) };
   func httpExpr() : Blob { Text.encodeUtf8("http_expr") };
   func exactLabel() : Blob { Text.encodeUtf8("<$>") };
@@ -283,6 +381,9 @@ module {
       case (#subresource_v1(_)) {
         RESIDENT_SUBRESOURCE_CERTIFICATION_EXPRESSION;
       };
+      case (#installation_html_v1) {
+        RESIDENT_SUBRESOURCE_CERTIFICATION_EXPRESSION;
+      };
       case (#html_v1(_)) RESIDENT_HTML_CERTIFICATION_EXPRESSION;
     };
   };
@@ -329,6 +430,7 @@ module {
         assert(validResidentSubresourceDestination(destination));
         (destination, null);
       };
+      case (#installation_html_v1) ("iframe", null);
       case (#html_v1({ canonical_query })) {
         assert(validResidentCanonicalQuery(canonical_query));
         ("iframe", ?canonical_query);
@@ -392,6 +494,7 @@ module {
   ) : ?Blob {
     let selectedQuery = switch (kind) {
       case (#subresource_v1(_)) null;
+      case (#installation_html_v1) null;
       case (#html_v1(_)) {
         let ?queryText = selectedResidentQuery(requestUrl) else return null;
         ?queryText;
@@ -716,17 +819,39 @@ module {
     );
   };
 
+  func residentExpressionBranchPath(
+    url : Text,
+    expression : Text,
+  ) : [Blob] {
+    appendPath(
+      exactExpressionPath(url),
+      [SHA256.fromBlob(#sha256, Text.encodeUtf8(expression))],
+    );
+  };
+
+  func residentExpressionBranchPaths(url : Text) : [[Blob]] {
+    [
+      residentExpressionBranchPath(
+        url,
+        RESIDENT_SUBRESOURCE_CERTIFICATION_EXPRESSION,
+      ),
+      residentExpressionBranchPath(
+        url,
+        RESIDENT_HTML_CERTIFICATION_EXPRESSION,
+      ),
+    ];
+  };
+
   func residentPublicRequestPath(
     url : Text,
     owner : ResidentRequestOwner,
   ) : [Blob] {
     appendPath(
-      exactExpressionPath(url),
+      residentExpressionBranchPath(
+        url,
+        residentCertificationExpression(owner.kind),
+      ),
       [
-        SHA256.fromBlob(
-          #sha256,
-          Text.encodeUtf8(residentCertificationExpression(owner.kind)),
-        ),
         residentRequestHash(owner, emptyBlob()),
       ],
     );
@@ -793,6 +918,7 @@ module {
       case (#subresource_v1({ destination })) {
         validResidentSubresourceDestination(destination);
       };
+      case (#installation_html_v1) true;
       case (#html_v1({ canonical_query })) {
         validResidentCanonicalQuery(canonical_query);
       };
@@ -800,7 +926,7 @@ module {
   };
 
   func validRequestKey(key : CertificationRequestKey) : Bool {
-    key.url != "" and key.host != "" and validRequestOwner({
+    V2.validCanonicalPath(key.url) and key.host != "" and validRequestOwner({
       method = key.method;
       host = key.host;
     });
@@ -914,6 +1040,7 @@ module {
       case (#subresource_v1({ destination })) {
         "subresource_v1:" # destination;
       };
+      case (#installation_html_v1) "installation_html_v1";
       case (#html_v1({ canonical_query })) {
         "html_v1:" # canonical_query;
       };
@@ -922,6 +1049,36 @@ module {
     lengthDelimited(owner.method) #
     lengthDelimited(owner.host) #
     lengthDelimited(kind);
+  };
+
+  func validateResidentResponseVariants(
+    url : Text,
+    variants : [ResidentResponseVariant],
+  ) : () {
+    assert(originResponseVariantCountAllowed(variants.size()));
+    let responses = Map.empty<Text, ()>();
+    for (variant in variants.vals()) {
+      let owner = residentResponseOwner(variant);
+      assert(validResidentRequestOwner(owner));
+      // Resident static assets are successful responses. Proof lookup receives
+      // the selected headers/body from the handler and intentionally fixes the
+      // status to 200, so do not admit an unreachable response leaf here.
+      assert(variant.status_code == 200);
+      assert(variant.body_hash.size() == 32);
+      assert(hasExactExpression(
+        variant.response_headers,
+        residentCertificationExpression(owner.kind),
+      ));
+      let ownerKey = residentRequestOwnerKey(url, owner);
+      let key = ownerKey #
+        V2.lowercaseHex(responseHash(
+          variant.response_headers,
+          variant.status_code,
+          variant.body_hash,
+        ));
+      assert(Map.get(responses, Text.compare, key) == null);
+      Map.add(responses, Text.compare, key, ());
+    };
   };
 
   func v2RequestOwnerKey(owner : V2RequestOwner) : Text {
@@ -1037,10 +1194,13 @@ module {
     };
 
     public func apply(mutations : [Mutation]) : () {
+      assert(validLegacyMutationPaths(mutations));
       // Validate in O(n log n). `prior` and `next` may name the same
       // request within one replacement, but neither list may duplicate itself
       // and no request may be owned by two separate mutations in one batch.
       let batchOwners = Map.empty<Text, ()>();
+      let originScopedUrls = Map.empty<Text, ()>();
+      let granularResidentUrls = Map.empty<Text, ()>();
       func addUnique(target : Map.Map<Text, ()>, key : Text) : () {
         assert(Map.get(target, Text.compare, key) == null);
         Map.add(target, Text.compare, key, ());
@@ -1053,12 +1213,20 @@ module {
         addUnique(batchOwners, key);
         Map.add(localOwners, Text.compare, key, ());
       };
+      func addGranularResidentUrl(url : Text) : () {
+        assert(Map.get(originScopedUrls, Text.compare, url) == null);
+        Map.add(granularResidentUrls, Text.compare, url, ());
+      };
+      func addOriginScopedUrl(url : Text) : () {
+        assert(Map.get(originScopedUrls, Text.compare, url) == null);
+        assert(Map.get(granularResidentUrls, Text.compare, url) == null);
+        Map.add(originScopedUrls, Text.compare, url, ());
+      };
 
       var index = 0;
       while (index < mutations.size()) {
         switch (mutations[index]) {
           case (#replace(replacement)) {
-            assert(replacement.url != "");
             assert(
               replacement.prior.size() > 0 or
               replacement.next.size() > 0
@@ -1104,7 +1272,6 @@ module {
             };
           };
           case (#remove(removal)) {
-            assert(removal.url != "");
             assert(removal.requests.size() > 0);
             let localOwners = Map.empty<Text, ()>();
             var ownerIndex = 0;
@@ -1118,7 +1285,7 @@ module {
             };
           };
           case (#replace_resident(replacement)) {
-            assert(replacement.url != "");
+            addGranularResidentUrl(replacement.url);
             assert(
               replacement.prior.size() > 0 or
               replacement.next.size() > 0
@@ -1131,33 +1298,37 @@ module {
               addUnique(priorOwners, key);
               addBatchOwner(localOwners, key);
             };
+            validateResidentResponseVariants(
+              replacement.url,
+              replacement.next,
+            );
             let nextOwners = Map.empty<Text, ()>();
-            let nextResponses = Map.empty<Text, ()>();
             for (variant in replacement.next.vals()) {
               let owner = residentResponseOwner(variant);
-              assert(validResidentRequestOwner(owner));
-              assert(variant.body_hash.size() == 32);
-              assert(hasExactExpression(
-                variant.response_headers,
-                residentCertificationExpression(owner.kind),
-              ));
               let key = residentRequestOwnerKey(replacement.url, owner);
               if (Map.get(nextOwners, Text.compare, key) == null) {
                 Map.add(nextOwners, Text.compare, key, ());
                 addBatchOwner(localOwners, key);
               };
-              addUnique(
-                nextResponses,
-                key # V2.lowercaseHex(responseHash(
-                  variant.response_headers,
-                  variant.status_code,
-                  variant.body_hash,
-                )),
+            };
+          };
+          case (#replace_origin_scoped(replacement)) {
+            addOriginScopedUrl(replacement.url);
+            validateResidentResponseVariants(
+              replacement.url,
+              replacement.next,
+            );
+            let localOwners = Map.empty<Text, ()>();
+            for (variant in replacement.next.vals()) {
+              let key = residentRequestOwnerKey(
+                replacement.url,
+                residentResponseOwner(variant),
               );
+              addBatchOwner(localOwners, key);
             };
           };
           case (#remove_resident(removal)) {
-            assert(removal.url != "");
+            addGranularResidentUrl(removal.url);
             assert(removal.requests.size() > 0);
             let localOwners = Map.empty<Text, ()>();
             for (owner in removal.requests.vals()) {
@@ -1235,6 +1406,19 @@ module {
               );
             };
           };
+          case (#replace_origin_scoped(replacement)) {
+            for (path in residentExpressionBranchPaths(
+              replacement.url
+            ).vals()) {
+              ct.delete(path);
+            };
+            for (variant in replacement.next.vals()) {
+              ct.put(
+                residentPublicResponsePath(replacement.url, variant),
+                emptyBlob(),
+              );
+            };
+          };
           case (#remove_resident(removal)) {
             for (owner in removal.requests.vals()) {
               ct.delete(residentPublicRequestPath(
@@ -1251,6 +1435,7 @@ module {
       url : Text,
       variant : ResponseCertificationVariant,
     ) : Bool {
+      if (not V2.validCanonicalPath(url)) return false;
       ct.lookup(publicResponsePath(url, variant)) != null;
     };
 
@@ -1258,6 +1443,7 @@ module {
       url : Text,
       variant : ResidentResponseVariant,
     ) : Bool {
+      if (not V2.validCanonicalPath(url)) return false;
       ct.lookup(residentPublicResponsePath(url, variant)) != null;
     };
 
@@ -1575,8 +1761,14 @@ module {
   // is reserved for current http_assets body hashes.
   public class PersistentCertificationTree(
     forest : AuthenticatedForest.Memory,
+    afterMutation : () -> (),
   ) {
-    let MAX_STATIC_EXPRESSION_BRANCH_NODES : Nat = 64;
+    let MAX_STATIC_REQUEST_BRANCH_NODES : Nat = 64;
+    // One asset may have 34 declared installation surfaces, two certified
+    // gateway authorities, and several Fetch Metadata destinations. Keep the
+    // whole-asset and origin resets bounded, but above that closed publisher
+    // maximum.
+    let MAX_STATIC_ASSET_TREE_NODES : Nat = 1_024;
     let MAX_V2_REQUEST_BRANCH_NODES : Nat = 16;
 
     func trapForest(operation : Text, error : AuthenticatedForest.Error) : None {
@@ -1588,7 +1780,7 @@ module {
 
     func putLeaf(path : [Blob]) : () {
       switch (AuthenticatedForest.put(forest, path, emptyBlob())) {
-        case (#ok(_)) {};
+        case (#ok(_)) afterMutation();
         case (#err(error)) trapForest("put", error);
       };
     };
@@ -1624,55 +1816,66 @@ module {
 
     func deleteLeaf(path : [Blob]) : () {
       switch (AuthenticatedForest.delete(forest, path)) {
-        case (#ok(_)) {};
+        case (#ok(_)) afterMutation();
         case (#err(error)) trapForest("delete", error);
       };
     };
 
-    func removeStaticRequestBranch(path : [Blob]) : () {
+    func removeStaticBranch(
+      path : [Blob],
+      maxNodes : Nat,
+      operation : Text,
+    ) : () {
       switch (AuthenticatedForest.detach(forest, path)) {
         case (#err(#not_found)) {};
-        case (#err(error)) trapForest("detach static request branch", error);
+        case (#err(error)) trapForest("detach " # operation, error);
         case (#ok(token)) {
+          afterMutation();
           switch (
             AuthenticatedForest.discardDetachedBounded(
               forest,
               token,
-              MAX_STATIC_EXPRESSION_BRANCH_NODES,
+              maxNodes,
             )
           ) {
-            case (#ok(_)) {};
+            case (#ok(_)) afterMutation();
             case (#err(error)) {
-              trapForest("discard static request branch", error);
+              trapForest("discard " # operation, error);
             };
           };
         };
       };
+    };
+
+    func removeStaticRequestBranch(path : [Blob]) : () {
+      removeStaticBranch(
+        path,
+        MAX_STATIC_REQUEST_BRANCH_NODES,
+        "static request branch",
+      );
+    };
+
+    func removeOriginScopedExpressionBranch(path : [Blob]) : () {
+      removeStaticBranch(
+        path,
+        MAX_STATIC_ASSET_TREE_NODES,
+        "origin-scoped expression branch",
+      );
     };
 
     func removeV2Request(path : [Blob]) : () {
-      switch (AuthenticatedForest.detach(forest, path)) {
-        case (#err(#not_found)) {};
-        case (#err(error)) trapForest("detach V2 request", error);
-        case (#ok(token)) {
-          switch (
-            AuthenticatedForest.discardDetachedBounded(
-              forest,
-              token,
-              MAX_V2_REQUEST_BRANCH_NODES,
-            )
-          ) {
-            case (#ok(_)) {};
-            case (#err(error)) {
-              trapForest("discard V2 request", error);
-            };
-          };
-        };
-      };
+      removeStaticBranch(
+        path,
+        MAX_V2_REQUEST_BRANCH_NODES,
+        "V2 request",
+      );
     };
 
     public func apply(mutations : [Mutation]) : () {
+      assert(validLegacyMutationPaths(mutations));
       let batchOwners = Map.empty<Text, ()>();
+      let originScopedUrls = Map.empty<Text, ()>();
+      let granularResidentUrls = Map.empty<Text, ()>();
       func addUnique(target : Map.Map<Text, ()>, key : Text) : () {
         assert(Map.get(target, Text.compare, key) == null);
         Map.add(target, Text.compare, key, ());
@@ -1685,10 +1888,18 @@ module {
         addUnique(batchOwners, key);
         Map.add(localOwners, Text.compare, key, ());
       };
+      func addGranularResidentUrl(url : Text) : () {
+        assert(Map.get(originScopedUrls, Text.compare, url) == null);
+        Map.add(granularResidentUrls, Text.compare, url, ());
+      };
+      func addOriginScopedUrl(url : Text) : () {
+        assert(Map.get(originScopedUrls, Text.compare, url) == null);
+        assert(Map.get(granularResidentUrls, Text.compare, url) == null);
+        Map.add(originScopedUrls, Text.compare, url, ());
+      };
       for (mutation in mutations.vals()) {
         switch (mutation) {
           case (#replace(replacement)) {
-            assert(replacement.url != "");
             assert(
               replacement.prior.size() > 0 or
               replacement.next.size() > 0
@@ -1728,7 +1939,7 @@ module {
             };
           };
           case (#remove(removal)) {
-            assert(removal.url != "" and removal.requests.size() > 0);
+            assert(removal.requests.size() > 0);
             let localOwners = Map.empty<Text, ()>();
             for (owner in removal.requests.vals()) {
               assert(validRequestOwner(owner));
@@ -1738,7 +1949,7 @@ module {
             };
           };
           case (#replace_resident(replacement)) {
-            assert(replacement.url != "");
+            addGranularResidentUrl(replacement.url);
             assert(
               replacement.prior.size() > 0 or
               replacement.next.size() > 0
@@ -1751,33 +1962,38 @@ module {
               addUnique(priorOwners, key);
               addBatchOwner(localOwners, key);
             };
+            validateResidentResponseVariants(
+              replacement.url,
+              replacement.next,
+            );
             let nextOwners = Map.empty<Text, ()>();
-            let nextResponses = Map.empty<Text, ()>();
             for (variant in replacement.next.vals()) {
               let owner = residentResponseOwner(variant);
-              assert(validResidentRequestOwner(owner));
-              assert(variant.body_hash.size() == 32);
-              assert(hasExactExpression(
-                variant.response_headers,
-                residentCertificationExpression(owner.kind),
-              ));
               let key = residentRequestOwnerKey(replacement.url, owner);
               if (Map.get(nextOwners, Text.compare, key) == null) {
                 Map.add(nextOwners, Text.compare, key, ());
                 addBatchOwner(localOwners, key);
               };
-              addUnique(
-                nextResponses,
-                key # V2.lowercaseHex(responseHash(
-                  variant.response_headers,
-                  variant.status_code,
-                  variant.body_hash,
-                )),
+            };
+          };
+          case (#replace_origin_scoped(replacement)) {
+            addOriginScopedUrl(replacement.url);
+            validateResidentResponseVariants(
+              replacement.url,
+              replacement.next,
+            );
+            let localOwners = Map.empty<Text, ()>();
+            for (variant in replacement.next.vals()) {
+              let key = residentRequestOwnerKey(
+                replacement.url,
+                residentResponseOwner(variant),
               );
+              addBatchOwner(localOwners, key);
             };
           };
           case (#remove_resident(removal)) {
-            assert(removal.url != "" and removal.requests.size() > 0);
+            assert(removal.requests.size() > 0);
+            addGranularResidentUrl(removal.url);
             let localOwners = Map.empty<Text, ()>();
             for (owner in removal.requests.vals()) {
               assert(validResidentRequestOwner(owner));
@@ -1849,6 +2065,19 @@ module {
                 ));
                 Map.add(reset, Text.compare, key, ());
               };
+              putLeaf(residentPublicResponsePath(
+                replacement.url,
+                variant,
+              ));
+            };
+          };
+          case (#replace_origin_scoped(replacement)) {
+            for (path in residentExpressionBranchPaths(
+              replacement.url
+            ).vals()) {
+              removeOriginScopedExpressionBranch(path);
+            };
+            for (variant in replacement.next.vals()) {
               putLeaf(residentPublicResponsePath(
                 replacement.url,
                 variant,
@@ -2074,7 +2303,10 @@ module {
           expressionPrefixPath(basePath),
         )
       ) {
-        case (#ok(value)) value;
+        case (#ok(value)) {
+          afterMutation();
+          value;
+        };
         case (#err(error)) {
           trapForest("detach V2 mount", error);
         };
@@ -2114,7 +2346,10 @@ module {
                   token,
                   relativePath(token, v2LeafPath(leaf)),
                 )) {
-                  case (#ok(result)) token := result.token;
+                  case (#ok(result)) {
+                    token := result.token;
+                    afterMutation();
+                  };
                   case (#err(error)) {
                     trapForest(
                       "delete disabled retired absence leaf",
@@ -2132,7 +2367,10 @@ module {
                   expressionPrefixPath(input.base_path),
                 )
               ) {
-                case (#ok(value)) value;
+                case (#ok(value)) {
+                  afterMutation();
+                  value;
+                };
                 case (#err(error)) {
                   trapForest("detach retired V2 mount", error);
                 };
@@ -2146,7 +2384,10 @@ module {
                   token,
                   relativePath(token, v2LeafPath(leaf)),
                 )) {
-                  case (#ok(result)) token := result.token;
+                  case (#ok(result)) {
+                    token := result.token;
+                    afterMutation();
+                  };
                   case (#err(error)) {
                     trapForest("delete retired absence leaf", error);
                   };
@@ -2170,7 +2411,7 @@ module {
         };
       };
       switch (AuthenticatedForest.attach(forest, detached)) {
-        case (#ok) {};
+        case (#ok) afterMutation();
         case (#err(error)) trapForest("attach V2 mount", error);
       };
     };
@@ -2221,7 +2462,10 @@ module {
                 token,
                 relativePath(token, v2LeafPath(leaf)),
               )) {
-                case (#ok(result)) token := result.token;
+                case (#ok(result)) {
+                  token := result.token;
+                  afterMutation();
+                };
                 case (#err(error)) {
                   trapForest("delete detached V2 leaf", error);
                 };
@@ -2238,7 +2482,10 @@ module {
                   ),
                   emptyBlob(),
                 )) {
-                  case (#ok(result)) token := result.token;
+                  case (#ok(result)) {
+                    token := result.token;
+                    afterMutation();
+                  };
                   case (#err(error)) {
                     trapForest("put detached V2 leaf", error);
                   };
@@ -2253,7 +2500,10 @@ module {
                 token,
                 relativePath(token, v2LeafPath(leaf)),
               )) {
-                case (#ok(result)) token := result.token;
+                case (#ok(result)) {
+                  token := result.token;
+                  afterMutation();
+                };
                 case (#err(error)) {
                   trapForest("delete detached V2 leaf", error);
                 };
@@ -2268,7 +2518,7 @@ module {
 
     public func discardDetachedV2(detached : DetachedV2) : () {
       switch (AuthenticatedForest.discardDetached(forest, detached)) {
-        case (#ok) {};
+        case (#ok) afterMutation();
         case (#err(error)) trapForest("discard detached V2 mount", error);
       };
     };
@@ -2277,6 +2527,7 @@ module {
       url : Text,
       variant : ResponseCertificationVariant,
     ) : Bool {
+      if (not V2.validCanonicalPath(url)) return false;
       AuthenticatedForest.lookup(
         forest,
         publicResponsePath(url, variant),
@@ -2287,6 +2538,7 @@ module {
       url : Text,
       variant : ResidentResponseVariant,
     ) : Bool {
+      if (not V2.validCanonicalPath(url)) return false;
       AuthenticatedForest.lookup(
         forest,
         residentPublicResponsePath(url, variant),
@@ -2298,7 +2550,7 @@ module {
       id : Text,
     ) : () {
       switch (AuthenticatedForest.removeNamedRoot(forest, kind, id)) {
-        case (#ok(_)) {};
+        case (#ok(_)) afterMutation();
         case (#err(error)) trapForest("remove named root", error);
       };
     };
@@ -2310,7 +2562,7 @@ module {
       result : AuthenticatedForest.NamedRootResult,
     ) : () {
       switch (result) {
-        case (#ok(_)) {};
+        case (#ok(_)) afterMutation();
         case (#err(#not_found)) removeNamedRoot(kind, id);
         case (#err(error)) trapForest(operation, error);
       };
@@ -2494,27 +2746,207 @@ module {
     };
 
     public func removeStaticExpressionTree(url : Text) : () {
-      switch (
-        AuthenticatedForest.detach(forest, exactExpressionPath(url))
-      ) {
-        case (#err(#not_found)) {};
-        case (#err(error)) trapForest("detach static expression tree", error);
-        case (#ok(token)) {
-          switch (
-            AuthenticatedForest.discardDetachedBounded(
-              forest,
-              token,
-              MAX_STATIC_EXPRESSION_BRANCH_NODES,
-            )
-          ) {
-            case (#ok(_)) {};
+      assert(validCanonicalPath(url));
+      removeStaticBranch(
+        exactExpressionPath(url),
+        MAX_STATIC_ASSET_TREE_NODES,
+        "static expression tree",
+      );
+    };
+
+    // One-time v316 response-policy boundary. Retain only installation-owned
+    // app trees and the package profiles whose semantics did not change, then
+    // move the entire predecessor Kernel namespace outside
+    // `http_expr`. The quarantined tree stays authenticated and auditable, but
+    // can no longer reconstruct an HTTP response proof.
+    public func cutoverKernelResponsePolicyV316(
+      deploymentId : Text,
+      retainedAppIds : [Text],
+      notFoundHeaders : [HeaderField],
+      notFoundBodyHash : Blob,
+    ) : Bool {
+      assert(retainedAppIds.size() <= 512);
+      assert(notFoundBodyHash.size() == 32);
+      assert(hasExactExpression(notFoundHeaders, NOT_FOUND_EXPRESSION));
+      let markerValue = Text.encodeUtf8(deploymentId);
+      assert(markerValue.size() >= 1 and markerValue.size() <= 256);
+      let quarantinePath = kernelResponsePolicyV316QuarantinePath();
+      let markerPath = kernelResponsePolicyV316MarkerPath();
+      let notFoundResponse = responseHash(
+        notFoundHeaders,
+        404,
+        notFoundBodyHash,
+      );
+      let currentNotFoundPath = notFoundLeafPath(notFoundResponse);
+
+      switch (AuthenticatedForest.pathKind(
+        forest,
+        quarantinePath,
+      )) {
+        case (#subtree) {
+          switch (AuthenticatedForest.lookup(forest, markerPath)) {
+            case (#found(value)) assert(value == markerValue);
+            case (#absent) Runtime.trap(
+              "Response-policy quarantine has no completion marker",
+            );
             case (#err(error)) {
-              trapForest("discard static expression tree", error);
+              trapForest("inspect cutover marker", error);
+            };
+          };
+          switch (AuthenticatedForest.lookup(
+            forest,
+            currentNotFoundPath,
+          )) {
+            case (#found(value)) {
+              assert(value == emptyBlob());
+              return false;
+            };
+            case (#absent) Runtime.trap(
+              "Completed response-policy cutover has no current 404",
+            );
+            case (#err(error)) {
+              trapForest("inspect cutover 404", error);
             };
           };
         };
+        case (#absent) {};
+        case (#leaf) Runtime.trap(
+          "Kernel response-policy quarantine is not a subtree",
+        );
+        case (#err(error)) {
+          trapForest("inspect response-policy quarantine", error);
+        };
       };
+
+      // The released predecessor always has one bounded root wildcard branch.
+      // Reclaim it before allocating the replacement tree so the structural
+      // cutover does not require arbitrary spare arena capacity.
+      switch (AuthenticatedForest.pathKind(
+        forest,
+        [httpExpr(), wildcardLabel()],
+      )) {
+        case (#subtree) {};
+        case (#absent) Runtime.trap(
+          "Predecessor response policy has no root wildcard branch",
+        );
+        case (#leaf) Runtime.trap(
+          "Predecessor root wildcard branch is not a subtree",
+        );
+        case (#err(error)) {
+          trapForest("inspect predecessor root wildcard", error);
+        };
+      };
+      removeStaticBranch(
+        [httpExpr(), wildcardLabel()],
+        MAX_STATIC_ASSET_TREE_NODES,
+        "predecessor root wildcard branch",
+      );
+      // Keep the predecessor root structurally nonempty even when every other
+      // branch is retained. The wildcard reclamation above supplies this node,
+      // and the invalid UTF-8 label is never a valid HTTP expression path.
+      switch (AuthenticatedForest.put(
+        forest,
+        [httpExpr(), kernelResponsePolicyV316MarkerLabel()],
+        markerValue,
+      )) {
+        case (#ok(result)) {
+          assert(result.inserted and result.prior == null);
+          afterMutation();
+        };
+        case (#err(error)) {
+          trapForest("write response-policy completion marker", error);
+        };
+      };
+
+      let retainedPaths = List.empty<[Blob]>();
+      List.add(retainedPaths, expressionPrefixPath("/mo"));
+      List.add(retainedPaths, expressionPrefixPath("/pkg"));
+      let appIds = Map.empty<Text, ()>();
+      for (appId in retainedAppIds.vals()) {
+        assert(CapabilityScope.validAppId(appId));
+        assert(appId != "kernel");
+        assert(Map.get(appIds, Text.compare, appId) == null);
+        Map.add(appIds, Text.compare, appId, ());
+        List.add(
+          retainedPaths,
+          expressionPrefixPath("/app/" # appId),
+        );
+      };
+      let retained = List.empty<DetachedV2>();
+      for (path in List.values(retainedPaths)) {
+        switch (AuthenticatedForest.detach(forest, path)) {
+          case (#ok(token)) {
+            afterMutation();
+            List.add(retained, token);
+          };
+          case (#err(#not_found)) {};
+          case (#err(error)) {
+            trapForest("detach retained response subtree", error);
+          };
+        };
+      };
+
+      let predecessor = switch (AuthenticatedForest.detach(
+        forest,
+        [httpExpr()],
+      )) {
+        case (#ok(token)) {
+          afterMutation();
+          token;
+        };
+        case (#err(error)) {
+          trapForest("detach predecessor response namespace", error);
+        };
+      };
+
+      switch (AuthenticatedForest.attachHttpExprQuarantineV316(
+        forest,
+        predecessor,
+      )) {
+        case (#ok) afterMutation();
+        case (#err(error)) {
+          trapForest("quarantine predecessor response namespace", error);
+        };
+      };
+
+      for (token in List.values(retained)) {
+        switch (AuthenticatedForest.attach(forest, token)) {
+          case (#ok) afterMutation();
+          case (#err(error)) {
+            trapForest("reattach retained response subtree", error);
+          };
+        };
+      };
+
+      putLeaf(currentNotFoundPath);
+      true;
     };
+
+    // Reclaim a known Kernel asset's predecessor expression branch before its
+    // current response is rebuilt. Unknown/orphan branches remain safely
+    // quarantined, while ordinary upgrades do not duplicate all retained
+    // Kernel response nodes against the finite forest arena.
+    public func removeQuarantinedKernelStaticExpressionV316(
+      url : Text,
+    ) : () {
+      assert(validCanonicalPath(url));
+      let quarantinePath = kernelResponsePolicyV316QuarantinePath();
+      let expressionPath = exactExpressionPath(url);
+      assert(
+        expressionPath.size() > 1 and
+        expressionPath[0] == httpExpr()
+      );
+      let relative = Array.tabulate<Blob>(
+        expressionPath.size() - 1,
+        func(index) { expressionPath[index + 1] },
+      );
+      removeStaticBranch(
+        appendPath(quarantinePath, relative),
+        MAX_STATIC_ASSET_TREE_NODES,
+        "quarantined Kernel static expression tree",
+      );
+    };
+
   };
 
   public class CertifiedHttp(
@@ -2523,10 +2955,46 @@ module {
   ) {
     let ct = CertTree.Ops(certStore);
     let chunked = Map.empty<Text, ChunkedCallback>();
-    let publicTree : PersistentCertificationTree =
-      PersistentCertificationTree(forest);
     var publicationBatchPrior : ?Blob = null;
     var publicationBatchDepth : Nat = 0;
+    var publicationBatchForestWorkStart : ?Nat = null;
+    var publicationBatchAssetHashOperations : Nat = 0;
+
+    func currentPublicationBatchWork() : ?Nat {
+      let ?start = publicationBatchForestWorkStart else return null;
+      let current = authenticatedForestMutationWork(forest.counters);
+      if (current < start) {
+        Runtime.trap(
+          "Authenticated HTTP forest counters reset during publication batch",
+        );
+      };
+      ?(current - start + publicationBatchAssetHashOperations);
+    };
+
+    func enforcePublicationBatchWorkBound() : () {
+      let ?work = currentPublicationBatchWork() else return;
+      if (not publicationBatchWorkAllowed(work)) {
+        Runtime.trap(
+          "HTTP certification publication batch exceeded its work bound",
+        );
+      };
+    };
+
+    func chargeAssetHashMutation() : () {
+      if (publicationBatchDepth == 0) return;
+      publicationBatchAssetHashOperations += 1;
+      enforcePublicationBatchWorkBound();
+    };
+
+    public func publicationBatchWork() : ?Nat {
+      currentPublicationBatchWork();
+    };
+
+    let publicTree : PersistentCertificationTree =
+      PersistentCertificationTree(
+        forest,
+        enforcePublicationBatchWorkBound,
+      );
 
     func forestRoot() : Blob {
       switch (AuthenticatedForest.rootHash(forest)) {
@@ -2574,7 +3042,12 @@ module {
     public func beginV2PublicationBatch() : () {
       if (publicationBatchDepth == 0) {
         assert(publicationBatchPrior == null);
+        assert(publicationBatchForestWorkStart == null);
         publicationBatchPrior := ?combinedRoot();
+        publicationBatchForestWorkStart := ?authenticatedForestMutationWork(
+          forest.counters,
+        );
+        publicationBatchAssetHashOperations := 0;
       };
       publicationBatchDepth += 1;
     };
@@ -2583,6 +3056,7 @@ module {
       if (publicationBatchDepth == 0) {
         Runtime.trap("No HTTP certification publication batch is active");
       };
+      enforcePublicationBatchWorkBound();
       publicationBatchDepth -= 1;
       if (publicationBatchDepth > 0) return false;
       let ?prior = publicationBatchPrior else {
@@ -2590,6 +3064,8 @@ module {
       };
       // Clear first; a trap rolls the entire canister message back.
       publicationBatchPrior := null;
+      publicationBatchForestWorkStart := null;
+      publicationBatchAssetHashOperations := 0;
       commitForestAndPublish(prior);
     };
 
@@ -2622,24 +3098,31 @@ module {
           );
         };
       };
-      if (forestRoot() == AuthenticatedForest.emptyHash()) {
-        let response = responseHash(notFoundHeaders, 404, notFoundBodyHash);
-        switch (
-          AuthenticatedForest.put(
+      let response = responseHash(notFoundHeaders, 404, notFoundBodyHash);
+      let notFoundPath = notFoundLeafPath(response);
+      switch (AuthenticatedForest.lookup(forest, notFoundPath)) {
+        case (#found(value)) assert(value == emptyBlob());
+        case (#absent) {
+          switch (AuthenticatedForest.put(
             forest,
-            notFoundLeafPath(response),
+            notFoundPath,
             emptyBlob(),
-          )
-        ) {
-          case (#ok(_)) {};
-          case (#err(error)) {
-            Runtime.trap(
-              "Authenticated HTTP 404 initialization failed: " #
-              debug_show(error),
-            );
+          )) {
+            case (#ok(_)) {};
+            case (#err(error)) {
+              Runtime.trap(
+                "Authenticated HTTP 404 initialization failed: " #
+                debug_show(error),
+              );
+            };
           };
+          commitForest();
         };
-        commitForest();
+        case (#err(error)) {
+          Runtime.trap(
+            "Authenticated HTTP 404 restore failed: " # debug_show(error),
+          );
+        };
       };
       // Certified data is not stable across upgrade. Restore the one canonical
       // combined root in O(1) after validating the persistent forest header.
@@ -2705,6 +3188,16 @@ module {
       Map.add(chunked, Text.compare, key, state);
     };
 
+    // Install begin uses this transient admission check to ensure an older
+    // durable value at the same staging key cannot be journaled while its
+    // multi-chunk replacement is still in flight.
+    public func hasPendingChunked(key : Text) : Bool {
+      switch (Map.get(chunked, Text.compare, key)) {
+        case (?_) true;
+        case null false;
+      };
+    };
+
     func chunkedClear(key : Text) : () {
       Map.remove(chunked, Text.compare, key);
     };
@@ -2713,6 +3206,7 @@ module {
     // certifies that hash together with the exact request/response metadata.
     public func putHash(key : Text, value : Blob) : () {
       assert(value.size() == 32);
+      chargeAssetHashMutation();
       let prior = attachedMutationPrior();
       ct.put([Text.encodeUtf8("http_assets"), Text.encodeUtf8(key)], value);
       ignore publishAssetRootIfChanged(prior);
@@ -2737,6 +3231,7 @@ module {
     ) : () {
       let prior = attachedMutationPrior();
       publicTree.publish(url, bodyHash, variants);
+      enforcePublicationBatchWorkBound();
       if (variants.size() > 0) {
         ignore finishAttachedMutation(prior);
       };
@@ -2752,6 +3247,7 @@ module {
       if (mutations.size() == 0) return;
       let prior = attachedMutationPrior();
       publicTree.apply(mutations);
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
     };
 
@@ -2770,6 +3266,7 @@ module {
       if (mutations.size() == 0) return false;
       let prior = attachedMutationPrior();
       publicTree.applyV2(mutations);
+      enforcePublicationBatchWorkBound();
       finishAttachedMutation(prior);
     };
 
@@ -2782,6 +3279,7 @@ module {
         basePath,
         nextWildcard,
       );
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
       detached;
     };
@@ -2792,6 +3290,7 @@ module {
     ) : Bool {
       let prior = attachedMutationPrior();
       publicTree.attachV2(detached, currentWildcard);
+      enforcePublicationBatchWorkBound();
       finishAttachedMutation(prior);
     };
 
@@ -2821,6 +3320,7 @@ module {
       if (inputs.size() == 0) return [];
       let prior = attachedMutationPrior();
       let detached = publicTree.retireV2(inputs);
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
       detached;
     };
@@ -2832,6 +3332,7 @@ module {
     ) : () {
       let prior = attachedMutationPrior();
       publicTree.syncMountCatalog(id, basePath, detached);
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
     };
 
@@ -2848,6 +3349,7 @@ module {
         exact,
         detached,
       );
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
     };
 
@@ -2880,12 +3382,14 @@ module {
     public func removeV2MountCatalog(id : Text) : () {
       let prior = attachedMutationPrior();
       publicTree.removeMountCatalog(id);
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
     };
 
     public func removeV2CollectionCatalog(id : Text) : () {
       let prior = attachedMutationPrior();
       publicTree.removeCollectionCatalog(id);
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
     };
 
@@ -2953,16 +3457,55 @@ module {
       publicTree.hasV2Leaf(key);
     };
 
+    public func cutoverKernelResponsePolicyV316(
+      deploymentId : Text,
+      retainedAppIds : [Text],
+      notFoundHeaders : [HeaderField],
+      notFoundBodyHash : Blob,
+    ) : Bool {
+      if (publicationBatchDepth == 0) {
+        Runtime.trap(
+          "Kernel response-policy cutover requires a publication batch",
+        );
+      };
+      let changed = publicTree.cutoverKernelResponsePolicyV316(
+        deploymentId,
+        retainedAppIds,
+        notFoundHeaders,
+        notFoundBodyHash,
+      );
+      enforcePublicationBatchWorkBound();
+      changed;
+    };
+
+    public func removeQuarantinedKernelStaticExpressionV316(
+      url : Text,
+    ) : () {
+      if (publicationBatchDepth == 0) {
+        Runtime.trap(
+          "Quarantined Kernel response cleanup requires a publication batch",
+        );
+      };
+      publicTree.removeQuarantinedKernelStaticExpressionV316(
+        url,
+      );
+      enforcePublicationBatchWorkBound();
+    };
+
     public func unpublish(url : Text) : () {
       let prior = attachedMutationPrior();
       publicTree.removeStaticExpressionTree(url);
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
     };
 
     public func delete(key : Text) : () {
+      assert(V2.validCanonicalPath(key));
+      chargeAssetHashMutation();
       let prior = attachedMutationPrior();
       ct.delete([Text.encodeUtf8("http_assets"), Text.encodeUtf8(key)]);
       publicTree.removeStaticExpressionTree(key);
+      enforcePublicationBatchWorkBound();
       ignore finishAttachedMutation(prior);
     };
 
@@ -2970,9 +3513,20 @@ module {
     // shared by several certified Hosts at the same URL and must be removed
     // through request-scoped mutations instead.
     public func deleteAssetHash(key : Text) : () {
+      chargeAssetHashMutation();
       let prior = attachedMutationPrior();
       ct.delete([Text.encodeUtf8("http_assets"), Text.encodeUtf8(key)]);
       ignore publishAssetRootIfChanged(prior);
+    };
+
+    // Delete one restored pre-V26 hash without feeding a now-invalid path into
+    // current V2/legacy mutation admission. Empty path segments collapse in
+    // the legacy expression tree, so that branch may be shared with a current
+    // canonical sibling and must remain untouched here. The negative assertion
+    // prevents this narrow compatibility path from becoming a live publisher.
+    public func deleteRestoredLegacyStaticAssetHash(key : Text) : () {
+      assert(not validCanonicalPath(key));
+      deleteAssetHash(key);
     };
 
     public func pruneAll() : () {
@@ -3020,6 +3574,7 @@ module {
       responseHeaders : [HeaderField],
       bodyHash : Blob,
     ) : ?HeaderField {
+      if (not V2.validCanonicalPath(url)) return null;
       if (not hasExactExpression(
         responseHeaders,
         HOST_BOUND_CERTIFICATION_EXPRESSION,
@@ -3065,7 +3620,8 @@ module {
       bodyHash : Blob,
     ) : ?HeaderField {
       if (
-        canonicalPath == "" or request.method != "GET" or
+        not V2.validCanonicalPath(canonicalPath) or
+        request.method != "GET" or
         request.body.size() != 0 or bodyHash.size() != 32
       ) return null;
       let urlParts = Text.split(requestUrl, #char '?');
@@ -3092,10 +3648,13 @@ module {
           responseHeaders,
           RESIDENT_SUBRESOURCE_CERTIFICATION_EXPRESSION,
         )) {
-          if (not validResidentSubresourceDestination(destination)) {
+          if (destination == "iframe") {
+            #installation_html_v1;
+          } else if (not validResidentSubresourceDestination(destination)) {
             return null;
+          } else {
+            #subresource_v1({ destination });
           };
-          #subresource_v1({ destination });
         } else if (hasExactExpression(
           responseHeaders,
           RESIDENT_HTML_CERTIFICATION_EXPRESSION,
@@ -3360,10 +3919,10 @@ module {
       responseHeaders : [HeaderField],
       bodyHash : Blob,
     ) : ?HeaderField {
-      if (not hasExactExpression(
-        responseHeaders,
-        NOT_FOUND_EXPRESSION,
-      )) return null;
+      if (
+        not V2.validCanonicalPath(url) or
+        not hasExactExpression(responseHeaders, NOT_FOUND_EXPRESSION)
+      ) return null;
       let response = responseHash(responseHeaders, 404, bodyHash);
       let leaf = notFoundLeafPath(response);
       if (

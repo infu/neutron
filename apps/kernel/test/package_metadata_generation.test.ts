@@ -41,7 +41,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v315 NPL package metadata", () => {
+describe("Kernel v317 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -99,7 +99,7 @@ describe("Kernel v315 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(315);
+    expect(packagedManifest.version).toBe(317);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -120,7 +120,7 @@ describe("Kernel v315 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 315");
+    ).toThrow("restricted to Kernel version 317");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,

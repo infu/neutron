@@ -32,6 +32,7 @@ import {
 } from "../schema.ts";
 import { compareCanonicalText } from "../canonical.ts";
 import { assertAppVersion } from "../version.ts";
+import { isValidTileId } from "../tile_ids.ts";
 
 export const CAPABILITY_PLAN_WIRE_VERSION = 1 as const;
 export const CAPABILITY_PLAN_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/;
@@ -686,7 +687,7 @@ function parseTileEndpoints(config: unknown): CapabilityPlanEntry {
   const ids = new Set<string>();
   const endpoints = config.endpoints.map((endpoint) => {
     assertClosed(endpoint, "tile endpoint", ["id", "path"]);
-    if (typeof endpoint.id !== "string" || !/^[a-z_0-9]+$/.test(endpoint.id)) {
+    if (!isValidTileId(endpoint.id)) {
       throw new Error("Invalid tile endpoint id");
     }
     assertSafeRelativeAssetPath(endpoint.path, "tile endpoint path");
@@ -841,7 +842,15 @@ export function parseCapabilityPlanWireV1(
       .filter((entry) => entry.provenance === "declared")
       .map((entry) => [entry.id, entry.config]),
   ) as NormalizedNeutronCapabilitiesConfig;
-  assertCapabilityComposition(declarations);
+  const tileEndpoints = entries.find(
+    (entry) => entry.id === "tile_endpoints",
+  );
+  assertCapabilityComposition(declarations, {
+    tileIds:
+      tileEndpoints?.id === "tile_endpoints"
+        ? tileEndpoints.config.endpoints.map(({ id }) => id)
+        : [],
+  });
   const certifiedAssets = entries.find(
     (entry) => entry.id === "certified_assets",
   );

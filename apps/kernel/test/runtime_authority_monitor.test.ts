@@ -1,10 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   hasFrontendToolGrant,
   grantFrontendToolSession,
   clearFrontendToolSessionGrants,
 } from "../src/reducer/msg_bus.ts";
 import {
+  normalizeRuntimeCapabilityAuthorityRevision,
   observeRuntimeAuthority,
   retainFrontendAuthorityAfterDeployFailure,
   useAppsStore,
@@ -62,11 +64,15 @@ function runtime(deploymentId: string) {
 
 type AuthorityActor = Parameters<typeof observeRuntimeAuthority>[0];
 
-function actor(input: {
-  deploymentId?: string;
-  pendingDeploymentId?: string;
-  statusError?: Error;
-} = {}): AuthorityActor {
+function actor(
+  input: {
+    deploymentId?: string;
+    assemblerId?: string;
+    capabilityAuthorityRevision?: bigint;
+    pendingDeploymentId?: string;
+    statusError?: Error;
+  } = {},
+): AuthorityActor {
   return {
     kernel_install_status: async () => {
       if (input.statusError) throw input.statusError;
@@ -82,7 +88,17 @@ function actor(input: {
         },
       ];
     },
-    kernel_runtime_info: async () => runtime(input.deploymentId ?? "deploy-old"),
+    kernel_runtime_info: async () => ({
+      ...runtime(input.deploymentId ?? "deploy-old"),
+      assembler_id: input.assemblerId ?? "assembler",
+      ...(input.capabilityAuthorityRevision === undefined
+        ? {}
+        : {
+            capability_authority_revision: [
+              input.capabilityAuthorityRevision,
+            ] as [bigint],
+          }),
+    }),
   };
 }
 
@@ -92,6 +108,9 @@ afterEach(() => {
     list: {},
     appInstances: {},
     runtimeGenerations: {},
+    runtimeAssemblerId: null,
+    runtimeCapabilityAuthorityRevision: null,
+    authorityRevision: 0,
     operation: null,
     pendingInstallRecovery: null,
     runtimeAuthorityFence: null,
@@ -101,20 +120,77 @@ afterEach(() => {
 test("runtime observations distinguish current, changed, and pending authority", async () => {
   const current = { hello: instance("deploy-old") };
   await expect(
-    observeRuntimeAuthority(actor(), current),
+    observeRuntimeAuthority(actor(), current, "assembler"),
   ).resolves.toEqual({ status: "current", deploymentId: "deploy-old" });
   await expect(
-    observeRuntimeAuthority(actor({ deploymentId: "deploy-next" }), current),
-  ).resolves.toEqual({ status: "changed", deploymentId: "deploy-next" });
+    observeRuntimeAuthority(
+      actor({ deploymentId: "deploy-next" }),
+      current,
+      "assembler",
+    ),
+  ).resolves.toEqual({
+    status: "changed",
+    deploymentId: "deploy-next",
+    change: "runtime",
+  });
+  await expect(
+    observeRuntimeAuthority(
+      actor({ assemblerId: "unsupported-assembler" }),
+      current,
+      "assembler",
+    ),
+  ).resolves.toEqual({
+    status: "changed",
+    deploymentId: "deploy-old",
+    change: "runtime",
+  });
+  await expect(
+    observeRuntimeAuthority(
+      actor({ capabilityAuthorityRevision: 4n }),
+      current,
+      "assembler",
+      "3",
+    ),
+  ).resolves.toEqual({
+    status: "changed",
+    deploymentId: "deploy-old",
+    change: "capabilities",
+  });
   await expect(
     observeRuntimeAuthority(
       actor({ pendingDeploymentId: "deploy-pending" }),
       current,
+      "assembler",
     ),
   ).resolves.toEqual({
     status: "pending",
     deploymentId: "deploy-pending",
   });
+});
+
+test("current runtimes require a bounded capability authority revision", () => {
+  expect(
+    normalizeRuntimeCapabilityAuthorityRevision({
+      assembler_id: "neutron_actor_v25",
+    }),
+  ).toBeNull();
+  expect(
+    normalizeRuntimeCapabilityAuthorityRevision({
+      assembler_id: "neutron_actor_v26",
+      capability_authority_revision: [5n],
+    }),
+  ).toBe("5");
+  expect(() =>
+    normalizeRuntimeCapabilityAuthorityRevision({
+      assembler_id: "neutron_actor_v26",
+    }),
+  ).toThrow("missing its capability authority revision");
+  expect(() =>
+    normalizeRuntimeCapabilityAuthorityRevision({
+      assembler_id: "neutron_actor_v26",
+      capability_authority_revision: [-1n],
+    }),
+  ).toThrow("revision is invalid");
 });
 
 test("failed post-activation deploys retain a fail-closed recovery fence", async () => {
@@ -262,7 +338,7 @@ test("monitor coalesces refreshes and signals stale authority while hidden", asy
   visibilityState = "hidden";
   (intervalCallback as (() => void) | null)?.();
   await drainMicrotasks();
-  expect(refreshCount).toBe(1);
+  expect(refreshCount).toBe(2);
 
   refreshResult = { status: "pending", deploymentId: "deploy-next" };
   (signalListener as ((signal: RuntimeAuthoritySignal) => void) | null)?.(
@@ -270,22 +346,26 @@ test("monitor coalesces refreshes and signals stale authority while hidden", asy
   );
   await drainMicrotasks();
   expect(staleDeployments).toEqual(["deploy-next"]);
-  expect(refreshCount).toBe(2);
+  expect(refreshCount).toBe(3);
   expect(reloadCount).toBe(0);
 
-  refreshResult = { status: "changed", deploymentId: "deploy-next" };
+  refreshResult = {
+    status: "changed",
+    deploymentId: "deploy-next",
+    change: "runtime",
+  };
   (signalListener as ((signal: RuntimeAuthoritySignal) => void) | null)?.(
     signal("deploy-next", "committed", true),
   );
   await drainMicrotasks();
   expect(staleDeployments).toEqual(["deploy-next", "deploy-next"]);
-  expect(refreshCount).toBe(3);
+  expect(refreshCount).toBe(4);
   expect(reloadCount).toBe(1);
 
   visibilityState = "visible";
   documentListeners.get("visibilitychange")?.();
   await drainMicrotasks();
-  expect(refreshCount).toBe(4);
+  expect(refreshCount).toBe(5);
 
   stop();
   expect(intervalCallback).toBeNull();
@@ -330,7 +410,20 @@ test("monitor reloads once when an external deployment changes the live shell", 
   await drainMicrotasks();
   expect(reloadCount).toBe(0);
 
-  refreshResult = { status: "changed", deploymentId: "deploy-external" };
+  refreshResult = {
+    status: "changed",
+    deploymentId: "deploy-old",
+    change: "capabilities",
+  };
+  (intervalCallback as (() => void) | null)?.();
+  await drainMicrotasks();
+  expect(reloadCount).toBe(0);
+
+  refreshResult = {
+    status: "changed",
+    deploymentId: "deploy-external",
+    change: "runtime",
+  };
   (intervalCallback as (() => void) | null)?.();
   await drainMicrotasks();
   expect(reloadCount).toBe(1);
@@ -378,7 +471,11 @@ test("monitor keeps a shell live for a signaled app-only deployment", async () =
   });
   await drainMicrotasks();
 
-  refreshResult = { status: "changed", deploymentId: "deploy-app-only" };
+  refreshResult = {
+    status: "changed",
+    deploymentId: "deploy-app-only",
+    change: "runtime",
+  };
   (signalListener as ((signal: RuntimeAuthoritySignal) => void) | null)?.(
     signal("deploy-app-only", "committed", false),
   );
@@ -394,6 +491,31 @@ test("runtime authority signals are exact and canister-bound", () => {
   expect(
     parseRuntimeAuthoritySignal({ ...value, unexpected: true }, "aaaaa-aa"),
   ).toBeNull();
+});
+
+test("settings toggles revoke locally, signal siblings, then store runtime authority", () => {
+  const settings = readFileSync(
+    new URL("../src/settings/KernelSettingsPage.tsx", import.meta.url),
+    "utf8",
+  );
+  const start = settings.indexOf(
+    "const updated = await setCapabilityRegistryEnabled",
+  );
+  const end = settings.indexOf("} catch (reason)", start);
+  const committedToggle = settings.slice(start, end);
+  expect(start).toBeGreaterThan(-1);
+  expect(committedToggle).toContain("invalidateAppIds: [capability.appId]");
+  expect(committedToggle).toContain("announceRuntimeAuthorityChange({");
+  expect(committedToggle).toContain("await refreshRuntimeAuthority()");
+  expect(committedToggle.indexOf("appsState.setApps")).toBeLessThan(
+    committedToggle.indexOf("announceRuntimeAuthorityChange"),
+  );
+  expect(committedToggle.indexOf("announceRuntimeAuthorityChange")).toBeLessThan(
+    committedToggle.indexOf("await refreshRuntimeAuthority()"),
+  );
+  expect(committedToggle.indexOf("await refreshRuntimeAuthority()")).toBeLessThan(
+    committedToggle.indexOf("setCapabilities"),
+  );
 });
 
 function signal(

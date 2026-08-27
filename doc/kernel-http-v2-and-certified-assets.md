@@ -511,6 +511,44 @@ reclaims storage already made safe by generic record and scope lifecycle.
 There is no automatic cleanup timer; complete reclamation advances through
 repeated bounded foreground, app, or Settings maintenance pages.
 
+## Installation-Owned Ordinary App Origins
+
+The certified static-asset service also owns the response contract for ordinary
+tile, tray, and non-dedicated background origins. These are package assets, not
+Certified Assets collection records.
+
+The checked installer writes the canonical
+`/system/browser-surface-origins.json` sidecar from package readiness evidence.
+For each adopted app, the assembler derives one hostname per tile ID plus the
+optional tray and ordinary background from the installation's browser nonce and
+surface key. The literal Kernel app is excluded. An in-place update retains the
+origin; uninstall and later reinstall receives a new installation identity.
+
+Every derived Host is bound to the corresponding app's `/app/<id>/` subtree.
+The initial HTML response requires iframe navigation and limits
+`frame-ancestors` to the exact Kernel origin. Subresources require a MIME- and
+`Sec-Fetch-Dest`-compatible certified response. Top-level documents, service
+workers, shared workers, other app or Kernel assets, package metadata, stale
+nonces, and raw or custom gateway authorities fail closed as executable
+content. Same-app package metadata may remain passively fetchable as
+`application/octet-stream`. The only
+cross-subtree exception is a passive, no-query programmatic fetch of the exact
+runtime configuration; it cannot be replayed as executable content.
+
+The Kernel document supplies the browser-wide camera/microphone ceiling. An app
+document narrows that policy to its own origin, and the trusted frontend adds an
+exact-origin iframe `allow` value only for features declared by that tile's
+`browser_permissions` entry. The browser still owns prompts, device indicators,
+and site-level denial. No media stream or permission session reaches the
+backend.
+
+Supported frames are credentialless with
+`sandbox="allow-scripts allow-same-origin"`. If the frontend cannot prove the
+required credentialless behavior before navigation, it removes same-origin and
+feature delegation and uses the opaque `allow-scripts` compatibility sandbox.
+Historical packages without the generated readiness marker retain the same
+opaque path.
+
 ## Dedicated Resident Origins
 
 The certified HTTP implementation also serves Kernel-controlled resident

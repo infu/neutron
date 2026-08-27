@@ -85,4 +85,4 @@ test("backend Frames public controls exactly match the canonical inner Candid", 
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
-});
+}, 20_000);

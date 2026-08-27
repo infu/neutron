@@ -5,7 +5,7 @@ import {
   type MsgBusEndpointId,
   type MsgBusInvocationMetadata,
 } from "./app.ts";
-import { kernelParentOriginFromAppUrl } from "./runtime.js";
+import { kernelParentOriginFromAppWindow } from "./runtime.js";
 
 const EXEC_TYPE = "neutron:msgbus:attachment:exec";
 const RESPONSE_TYPE = "neutron:msgbus:attachment:response";
@@ -271,6 +271,7 @@ function assertOptionalDelegationToken(
 
 export function installAttachmentWindowListener(): void {
   if (typeof window === "undefined") return;
+  kernelParentOriginFromAppWindow(window);
   if (attachmentListenerWindow === window) return;
   attachmentListenerWindow = window;
   window.addEventListener("message", (event: MessageEvent) => {
@@ -747,11 +748,7 @@ function isConnectEnvelope(value: unknown): boolean {
 }
 
 function expectedKernelParentOrigin(): string | null {
-  try {
-    return kernelParentOriginFromAppUrl(window.location.href);
-  } catch {
-    return null;
-  }
+  return kernelParentOriginFromAppWindow(window);
 }
 
 function isMessageId(value: unknown): value is number {

@@ -73,6 +73,19 @@ The archive paths are relative to `dist/`, so package entries are
 `neutron.json`, `mo/<sha256>.mo`, `web/...`, and optionally
 `neutron.lock.json`.
 
+The packer adds one reserved archive-only readiness marker to every ordinary
+app package:
+
+```text
+.neutron/browser-surface-origins.v1.json
+```
+
+It is generated metadata, not an app capability or a file authors place in
+`dist`. The Kernel package never carries it, and an authored collision fails
+packaging. The installer uses its exact canonical bytes to distinguish packages
+built for installation-owned browser-surface origins from immutable historical
+archives that retain the opaque-frame compatibility path.
+
 Frontend files are optional. A backend-only or otherwise headless package does
 not need `web/index.html`.
 
@@ -251,6 +264,7 @@ environment for the exact installation.
 - background UI request categories;
 - browser-wallet methods and chains;
 - provider connections;
+- camera and microphone access for exact tile IDs;
 - persistent or ephemeral resident origins;
 - public Candid ingress;
 - bounded HTTP POST mounts; and
@@ -438,9 +452,11 @@ A conventional app build:
    `dist/legal` tree and, for HTTPS delivery, writes the exact generated source
    artifact below the app-local `.neutron/sources/` directory;
 8. walks `dist` in sorted order without following symlinks;
-9. gzip-compresses every file independently;
-10. encodes the flat MessagePack map; and
-11. writes `<app-id>.v<major.minor.patch>.neutron`.
+9. rejects an authored browser-surface marker and injects the canonical marker
+   for an ordinary app;
+10. gzip-compresses every file independently;
+11. encodes the flat MessagePack map; and
+12. writes `<app-id>.v<major.minor.patch>.neutron`.
 
 Older archives for the same app are retained as immutable history. Never reuse
 an earlier release version for different bytes.
@@ -450,6 +466,8 @@ an earlier release version for different bytes.
 The installer stores ordinary package state under Kernel-owned paths:
 
 - package manifest under `/app/<id>/pkg/neutron.json`;
+- the generated browser-surface readiness marker under
+  `/app/<id>/pkg/.neutron/browser-surface-origins.v1.json`;
 - governing license, application and third-party notices, and package record
   under `/app/<id>/pkg/legal/`;
 - web assets under `/app/<id>/...`;

@@ -2,7 +2,7 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 315,
+  "version": 317,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "src": "main.mo",
   "init_arg": [
@@ -13,6 +13,10 @@
     "canister_principal"
   ],
   "func": {
+    "capability_authority_revision": {
+      "type": "internal",
+      "async": false
+    },
     "kernel_authorized_add": {
       "type": "update",
       "async": false

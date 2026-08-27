@@ -10,6 +10,7 @@ const deploymentId = "authenticated-runtime-baseline";
 let compilerState: KernelPackageState;
 let compileCalls: Array<{
   existingConfigs: KernelPackageState["existingConfigs"];
+  existingBrowserSurfaceOriginAppIds: readonly string[];
   connectionProviderSupport: KernelPackageState["connectionProviderSupport"];
   preparedPackage: PreparedPackageInstall;
   vetKeysEnvironment: "local" | "production";
@@ -31,6 +32,7 @@ mock.module("icblast", () => ({
 }));
 
 mock.module("neutron-compiler/src/install.js", () => ({
+  BROWSER_SURFACE_ORIGINS_PATH: "/system/browser-surface-origins.json",
   appDependencyImpact: () => ({ direct: [], transitive: [] }),
   assertPreparedPackageArchiveIdentity: () => undefined,
   assertKernelPackageBaselineMatchesRuntime: (
@@ -49,12 +51,15 @@ mock.module("neutron-compiler/src/install.js", () => ({
   },
   compilePackageInstall: (input: {
     existingConfigs: KernelPackageState["existingConfigs"];
+    existingBrowserSurfaceOriginAppIds: readonly string[];
     connectionProviderSupport: KernelPackageState["connectionProviderSupport"];
     preparedPackage: PreparedPackageInstall;
     vetKeysEnvironment: "local" | "production";
   }) => {
     compileCalls.push({
       existingConfigs: input.existingConfigs,
+      existingBrowserSurfaceOriginAppIds:
+        input.existingBrowserSurfaceOriginAppIds,
       connectionProviderSupport: input.connectionProviderSupport,
       preparedPackage: input.preparedPackage,
       vetKeysEnvironment: input.vetKeysEnvironment,
@@ -68,6 +73,7 @@ mock.module("neutron-compiler/src/install.js", () => ({
     throw new Error("Unexpected deployment");
   },
   normalizeAppRegistry: (registry: unknown) => registry,
+  parseBrowserSurfaceOriginsSidecar: () => [],
   planAppRegistryDependencies: () => ({}),
   preparePackageInstall: () => {
     throw new Error("Unexpected package preparation");
@@ -159,6 +165,8 @@ function baseline(
   return {
     registry: {},
     apps: {},
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: true,
     existingConfigs: installed,
     existingModules: [],
     previousStable: null,
@@ -224,6 +232,8 @@ test("ordinary owner-entered updates remain permitted", async () => {
   expect(compileCalls).toEqual([
     {
       existingConfigs: compilerState.existingConfigs,
+      existingBrowserSurfaceOriginAppIds:
+        compilerState.browserSurfaceOriginAppIds,
       connectionProviderSupport: compilerState.connectionProviderSupport,
       preparedPackage,
       vetKeysEnvironment: "local",

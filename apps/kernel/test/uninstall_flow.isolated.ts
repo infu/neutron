@@ -83,6 +83,7 @@ mock.module("icblast", () => ({
 }));
 
 mock.module("neutron-compiler/src/install.js", () => ({
+  BROWSER_SURFACE_ORIGINS_PATH: "/system/browser-surface-origins.json",
   appDependencyImpact: () => ({ direct: [], transitive: [] }),
   assertPreparedPackageArchiveIdentity: () => undefined,
   assertPreparedPackageBatch: () => undefined,
@@ -113,6 +114,7 @@ mock.module("neutron-compiler/src/install.js", () => ({
     return deployGate.promise;
   },
   normalizeAppRegistry: (registry: unknown) => registry,
+  parseBrowserSurfaceOriginsSidecar: () => [],
   planAppRegistryDependencies: () => ({}),
   preparePackageInstall: () => {
     throw new Error("Unexpected package preparation");
@@ -257,6 +259,8 @@ function createCompilerState(): KernelPackageState {
   return Object.freeze({
     registry: apps,
     apps,
+    browserSurfaceOriginAppIds: Object.freeze(["mail"]),
+    browserSurfaceOriginsSidecarPresent: true,
     existingConfigs: Object.freeze({
       kernel: { name: "Neutron" },
       mail: { name: "Mail from authenticated baseline" },
@@ -677,6 +681,9 @@ test("approval is the only boundary that deploys the reviewed uninstall artifact
   });
   expect(deployCalls[0]?.compiled).toBe(compiled);
   expect(deployCalls[0]?.deploymentBuildRecord).toBe(deploymentRecord);
+  expect(deployCalls[0]?.existingBrowserSurfaceOriginAppIds).toBe(
+    compilerState.browserSurfaceOriginAppIds,
+  );
   expect(operationPhases).toContain("staging");
   expect(deployCalls[0]?.stagedAssets).toHaveLength(1);
   const provenanceAsset = deployCalls[0]?.stagedAssets?.[0];

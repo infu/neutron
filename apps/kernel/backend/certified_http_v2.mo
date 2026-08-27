@@ -75,6 +75,9 @@ module {
   // segment plus the exact request and selected leaf. This cap keeps every
   // production proof within AuthenticatedForest.witnessMany's 32-path bound.
   public let CERTIFIED_HTTP_PATH_SEGMENTS_MAX_V2 : Nat = 14;
+  // Keep URL labels within the authenticated forest's released per-label
+  // bound. Total URL bytes are bounded separately by the HTTP router.
+  public let CERTIFIED_HTTP_PATH_SEGMENT_BYTES_MAX_V2 : Nat = 1_024;
 
   public type HostMode = {
     #exact : Text;
@@ -392,6 +395,10 @@ module {
     for (segment in Text.split(path, #char '/')) {
       if (segment == "." or segment == "..") return false;
       if (segment != "") {
+        if (
+          Text.encodeUtf8(segment).size() >
+          CERTIFIED_HTTP_PATH_SEGMENT_BYTES_MAX_V2
+        ) return false;
         segments += 1;
         if (segments > CERTIFIED_HTTP_PATH_SEGMENTS_MAX_V2) return false;
       };

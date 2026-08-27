@@ -93,11 +93,48 @@ export type AssembleOptions = {
    * initializer for an actor that already owns the persistent v1 field.
    */
   installationContext?: TrustedInstallationContextV1 | null;
+  /** Apps whose installed asset subtrees own browser-surface origins. */
+  browserSurfaceOriginAppIds?: readonly string[];
 };
 
 export type VetKeysEnvironment = "production" | "local";
 
-export const ASSEMBLER_ID = "neutron_actor_v25";
+/** Exact generation that introduced the browser-surface origin contract. */
+export const BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID = "neutron_actor_v26";
+export const ASSEMBLER_ID = BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID;
+export const LEGACY_V25_ASSEMBLER_ID = "neutron_actor_v25";
+export const V26_FRESH_KERNEL_MIN_VERSION = 316;
+
+export function assemblerForFreshKernelVersion(
+  kernelVersion: number,
+):
+  | typeof BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID
+  | typeof LEGACY_V25_ASSEMBLER_ID {
+  return kernelVersion < V26_FRESH_KERNEL_MIN_VERSION
+    ? LEGACY_V25_ASSEMBLER_ID
+    : BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID;
+}
+
+/** Enforce the one manifest feature that cannot be represented by v25. */
+export function assertAssemblerSupportsBrowserPermissions(
+  assemblerId: typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID,
+  manifests: readonly Pick<NeutronManifest, "id" | "capabilities">[],
+): void {
+  if (assemblerId !== LEGACY_V25_ASSEMBLER_ID) return;
+  const declared = manifests.find(
+    ({ capabilities }) => capabilities?.browser_permissions !== undefined,
+  );
+  if (declared !== undefined) {
+    throw new Error(
+      `App ${declared.id} declares browser_permissions, which requires Kernel ${V26_FRESH_KERNEL_MIN_VERSION} or newer with assembler ${BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID}`,
+    );
+  }
+}
+
+export function supportsBrowserSurfaceOrigins(assemblerId: string): boolean {
+  return assemblerId === BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID;
+}
+
 /** One actor-wide ceiling, including the Kernel app. */
 export const NEUTRON_INSTALLED_APP_LIMIT = 256;
 /** Browser and backend admission both reserve at most this many residents. */
@@ -134,6 +171,26 @@ export function assemble(
   confs: AssemblyConfig,
   options: AssembleOptions = {},
 ): string {
+  return assembleGeneration(confs, options, ASSEMBLER_ID);
+}
+
+/**
+ * Reproduce the exact predecessor assembler contract for a fresh deployment
+ * targeting a pre-v316 Kernel. This intentionally has no browser-origin input:
+ * v25 Kernel packages do not expose the v26 configuration initializer.
+ */
+export function assembleLegacyV25(
+  confs: AssemblyConfig,
+  options: Omit<AssembleOptions, "browserSurfaceOriginAppIds"> = {},
+): string {
+  return assembleGeneration(confs, options, LEGACY_V25_ASSEMBLER_ID);
+}
+
+function assembleGeneration(
+  confs: AssemblyConfig,
+  options: AssembleOptions,
+  assemblerId: typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID,
+): string {
   if (options.migrationPlan) {
     assertMemoryMigrationPlan(options.migrationPlan);
   }
@@ -143,6 +200,7 @@ export function assemble(
   );
   const validatedDependencyPlan = validate_config(confs);
   const unorderedManifests = get_manifests(confs);
+  assertAssemblerSupportsBrowserPermissions(assemblerId, unorderedManifests);
   const dependencyPlan = options.dependencyPlan ?? validatedDependencyPlan;
   if (
     options.dependencyPlan &&
@@ -152,6 +210,13 @@ export function assemble(
     throw new Error("Dependency plan does not match the assembly manifests");
   }
   const manifests = orderManifests(unorderedManifests, dependencyPlan.order);
+  const browserSurfaceOriginAppIds =
+    assemblerId === ASSEMBLER_ID
+      ? normalizeBrowserSurfaceOriginAppIds(
+          options.browserSurfaceOriginAppIds ?? [],
+          manifests.map(({ id }) => id),
+        )
+      : [];
   const runtimeApps = createRuntimeApps(manifests);
   const memories = activeMemories(manifests);
   const migrationPlan = options.migrationPlan ?? {
@@ -234,7 +299,7 @@ ${createAppScopes(runtimeApps, deploymentId)}
 
 ${createFrontendSurfaceCounts(manifests)}
 
-${createCapabilityConfiguration(
+${assemblerId === ASSEMBLER_ID ? `${createBrowserSurfaceConfiguration(manifests, browserSurfaceOriginAppIds)}\n\n` : ""}${createCapabilityConfiguration(
   appManifests,
   vetKeysEnvironment,
 )}
@@ -261,6 +326,8 @@ ${createRuntimeInfo(
   memories,
   deploymentId,
   options.compilerId ?? "unknown",
+  assemblerId,
+  kernelManifest.func?.capability_authority_revision?.type === "internal",
 )}
 
     ${KERNEL_INIT}.kernel_authorized_add(${INSTALLER});
@@ -628,6 +695,62 @@ function createFrontendSurfaceCounts(manifests: AssemblyManifest[]): string {
       app_instances = ${manifests.length};
       resident_frames = ${residentFrames};
     });`;
+}
+
+export function normalizeBrowserSurfaceOriginAppIds(
+  appIds: readonly string[],
+  manifestIds: Iterable<string>,
+): string[] {
+  const available = new Set(manifestIds);
+  const normalized = new Set<string>();
+  for (const appId of appIds) {
+    if (appId === "kernel") {
+      throw new Error("The Kernel cannot use an app browser-surface origin");
+    }
+    if (!available.has(appId)) {
+      throw new Error(`Browser-surface origin app ${appId} is not assembled`);
+    }
+    if (normalized.has(appId)) {
+      throw new Error(`Duplicate browser-surface origin app ${appId}`);
+    }
+    normalized.add(appId);
+  }
+  return [...normalized].sort(compareCanonicalText);
+}
+
+function createBrowserSurfaceConfiguration(
+  manifests: AssemblyManifest[],
+  browserSurfaceOriginAppIds: readonly string[],
+): string {
+  // The empty target is also the exact v25 compatibility shape. Omitting the
+  // additive initializer lets the current compiler reconstruct a released
+  // predecessor actor without pretending that it adopted v26 origins.
+  if (browserSurfaceOriginAppIds.length === 0) return "";
+  const originApps = new Set(browserSurfaceOriginAppIds);
+  const declarations = [...manifests]
+    .sort((left, right) => compareCanonicalText(left.id, right.id))
+    .map((manifest) => {
+      const plan = buildCapabilityPlan(manifest);
+      const tiles = (
+        getCapabilityPlanEntry(plan, "tile_endpoints")?.config.endpoints ?? []
+      )
+        .map(({ id }) => `{
+          id = ${motokoTextLiteral(id)};
+        }`)
+        .join(", ");
+      const ordinaryBackground =
+        getCapabilityPlanEntry(plan, "background_endpoint")?.config
+          .frame_security === "credentialless_opaque_v1";
+      const tray = getCapabilityPlanEntry(plan, "tray_endpoint") !== undefined;
+      return `{
+        app_scope = ${appScopeName(manifest.id)};
+        surface_origins = ${originApps.has(manifest.id)};
+        tiles = [${tiles}];
+        tray = ${tray};
+        ordinary_background = ${ordinaryBackground};
+      }`;
+    });
+  return `    ${KERNEL_INIT}.configure_app_browser_surfaces([${declarations.join(",\n")}]);`;
 }
 
 function createAppCallsEnvironmentGroup(
@@ -1488,9 +1611,12 @@ function createRuntimeInfo(
   memories: MemoryOwner[],
   deploymentId: string,
   compilerId: string,
+  assemblerId: typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID,
+  exposesCapabilityAuthorityRevision: boolean,
 ): string {
   no_inject(deploymentId);
   no_inject(compilerId);
+  no_inject(assemblerId);
   const memoryEntries = memories
     .map(
       ({ manifest, memoryId, memory }) =>
@@ -1502,6 +1628,7 @@ function createRuntimeInfo(
       deployment_id : Text;
       assembler_id : Text;
       compiler_id : Text;
+      ${assemblerId === ASSEMBLER_ID ? "capability_authority_revision : ?Nat64;" : ""}
       apps : [{
         scope : { app_id : Text; installation_uid : Nat64 };
         version : Nat;
@@ -1520,8 +1647,9 @@ function createRuntimeInfo(
       assert(${KERNEL_INIT}.is_authorized(NeutronCaller));
       {
         deployment_id = "${deploymentId}";
-        assembler_id = "${ASSEMBLER_ID}";
+        assembler_id = "${assemblerId}";
         compiler_id = "${compilerId}";
+        ${assemblerId === ASSEMBLER_ID ? `capability_authority_revision = ${exposesCapabilityAuthorityRevision ? `?${KERNEL_INIT}.capability_authority_revision()` : "null"};` : ""}
         apps = ${KERNEL_INIT}.runtime_app_instances(${motokoTextLiteral(deploymentId)});
         memories = [${memoryEntries}];
       }

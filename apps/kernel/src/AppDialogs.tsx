@@ -23,7 +23,11 @@ import {
 import {
   BACKEND_CALL_PERSISTENCE_DISCLOSURE,
   BACKEND_RESERVATION_SCOPE_DISCLOSURES,
+  BROWSER_PERMISSION_FEATURE_DISCLOSURES,
+  BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
   DEDICATED_RESIDENT_ORIGIN_DISCLOSURE,
+  browserPermissionFeaturesTitle,
+  browserPermissionRequestDisclosure,
   certifiedAssetsCollectionDisclosure,
   functionResourceLabel,
   permissionKey,
@@ -1076,6 +1080,37 @@ export function PermissionDisclosure({
           </p>
         </PermissionFrame>
       );
+    case "browser_permissions": {
+      const browserPermissionTitle = browserPermissionFeaturesTitle(
+        permission.tiles.flatMap(({ features }) => features),
+      );
+      return (
+        <PermissionFrame kind={permission.kind} level={level}>
+          <h4 className="permission-group-title">
+            Browser {browserPermissionTitle.toLowerCase()} access
+          </h4>
+          <p className="permission-copy">
+            Installing this app does not activate a camera or microphone. Its
+            declared open tiles may request only the access listed below.
+          </p>
+          <ul className="permission-inventory">
+            {permission.tiles.flatMap(({ id, features }) =>
+              features.map((feature) => (
+                <li key={`${id}:${feature}`}>
+                  <strong>
+                    {BROWSER_PERMISSION_FEATURE_DISCLOSURES[feature].title}
+                  </strong>
+                  <span>{browserPermissionRequestDisclosure(id, feature)}</span>
+                </li>
+              )),
+            )}
+          </ul>
+          <p className="permission-copy permission-persistence">
+            {BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE}
+          </p>
+        </PermissionFrame>
+      );
+    }
     case "randomness":
       return (
         <PermissionFrame kind={permission.kind} level={level}>

@@ -72,8 +72,8 @@ Production-context offline compile:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.12.neutron \
-  --package apps/hello/hello.v0.2.4.neutron \
+  --package path/to/kernel.neutron \
+  --package path/to/app.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```
@@ -85,8 +85,9 @@ installs the complete configured actor.
 ## Current Boundaries
 
 - `packages/neutron-scripts` validates, builds, packs, and archives apps.
-- `packages/neutron-compiler` prepares packages, assembles
-  `neutron_actor_v25`, compiles it, and plans checked browser installs.
+- `packages/neutron-compiler` prepares packages, selects the supported
+  assembler contract, compiles the complete actor, and plans checked browser
+  installs.
 - `packages/neutron-provision` owns format-3 deployment config, schema-3
   journals, IC create/adopt/reinstall, the supervised PocketIC environment,
   fleet reinstall, authorization, fixtures, and verification.

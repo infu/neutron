@@ -25,6 +25,7 @@ Primary sources:
 - `apps/kernel/src/index.tsx`
 - `apps/kernel/src/workspace/Launcher.tsx`
 - `apps/kernel/src/workspace/AppTileFrame.tsx`
+- `packages/neutron-tools/src/runtime.ts`
 - `packages/neutron-provision/src/provision.ts`
 - `packages/neutron-provision/src/local_deploy.ts`
 - `packages/neutron-provision/src/runtime_config.ts`
@@ -74,13 +75,14 @@ For a normal app package, `app_prefix` is `app/<id>/`:
 | `legal/APPLICATION-NOTICE.txt` | `app/<id>/pkg/legal/APPLICATION-NOTICE.txt` | `/app/<id>/pkg/legal/APPLICATION-NOTICE.txt`  |
 | `legal/LICENSE*.txt`           | `app/<id>/pkg/legal/LICENSE*.txt`           | `/app/<id>/pkg/legal/LICENSE*.txt`            |
 | `legal/THIRD_PARTY_NOTICES.md` | `app/<id>/pkg/legal/THIRD_PARTY_NOTICES.md` | `/app/<id>/pkg/legal/THIRD_PARTY_NOTICES.md`  |
+| `.neutron/browser-surface-origins.v1.json` | `app/<id>/pkg/.neutron/browser-surface-origins.v1.json` | `/app/<id>/pkg/.neutron/browser-surface-origins.v1.json` |
 | `legal/archive-only/**`        | not staged                                   | not stored                                    |
 | `legal/source/app-source.v1.msgpack` | not staged                              | not stored                                    |
 | `mo/<hash>.mo`                 | `mo/<hash>.mo`                               | `/mo/<hash>.mo`                               |
 
 The backend does not infer directory indexes or prepend slashes. `http_request`
-canonicalizes the request URL for static serving by stripping query strings and
-fragments, then looks up that canonical asset key. This lets tile iframe URLs
+separates an admitted query string from the canonical asset path, rejects
+fragments, and then looks up that exact asset key. This lets tile iframe URLs
 carry app/tile/instance context in query parameters while still serving the
 stored `/app/<id>/<path>` asset.
 
@@ -152,30 +154,96 @@ and verified before any plan field is used.
 The `link` field is retained as navigation metadata. The current kernel UI
 does not launch apps by hash route. `Launcher.tsx` flattens each non-kernel
 registry entry's `tiles[]` into openable tile actions. Selecting a tile creates
-a workspace tile instance and `AppTileFrame.tsx` loads:
+a workspace tile instance. On the browser-surface-origin runtime, an app listed in
+`/system/browser-surface-origins.json` loads its tile from an
+installation-owned, per-tile hostname:
 
 ```text
-https://a<dns-app-id>a--<neutron_id>.icp0.io/app/<id>/<tile.path>?app=<id>&tile=<tile-id>&instance=<instance-id>&workspace=<workspace>
+https://i<surface-nonce>--<neutron_id>.icp0.io/app/<id>/<tile.path>?app=<id>&tile=<tile-id>&instance=<instance-id>&workspace=<workspace>
 ```
 
-The same stable app-specific hostname scheme is used by the standard local
-gateway on `localhost:8000`. Raw gateway hosts, custom local proxy app origins,
-and alternate ports are rejected because their exact Host authority has no
-certified response leaf.
-Underscores in the app id become hyphens in the DNS label. Requests arriving on
-an app-prefixed hostname may read only that app's `/app/<id>/` subtree; kernel
-and other-app paths return 404. Unprefixed kernel origins continue to serve
-public app HTML, scripts, icons, and committed app package metadata under
-`/app/<id>/pkg/**`. Kernel registry entries always
-normalize to `tiles: []`, so the default kernel does not appear as a normal app
-tile in the launcher.
+The Kernel derives `surface-nonce` from the app installation's existing
+`browser_origin_nonce` and the exact surface key, and uses its first 96 bits as
+the 24 lowercase hexadecimal characters after `i`. Each tile ID, the tray, and
+the ordinary background have different origins; instances of one tile ID share
+that tile origin. An in-place upgrade that retains the installation nonce keeps
+these origins stable, while uninstall/reinstall and an authority transition
+that rotates the nonce replace them. The same scheme is used by the standard
+local gateway on `localhost:8000`.
 
-Ordinary and unprefixed app-asset responses preserve opaque
-tile/tray/background execution. Dedicated resident backgrounds instead use one
-of the credentialless-ephemeral or persistent policies, with an exact
-nonce-prefixed Host and certified initial-document request. The complete CSP,
-Host, query, destination, and origin rules are specified in
+These frames remain credentialless. A supported browser receives
+`sandbox="allow-scripts allow-same-origin"`; any exact tile browser-permission
+declaration is delegated separately by the iframe policy. If the required
+credentialless behavior cannot be proved before navigation, the Kernel keeps
+the surface URL but removes `allow-same-origin` and browser-feature delegation,
+so the document remains opaque.
+
+An unmarked historical package that does not declare `browser_permissions`
+does not appear in the sidecar. It retains its released legacy URL selection
+(an unprefixed or `a<dns-app-id>a` hostname, as applicable),
+`sandbox="allow-scripts"`, opaque `origin: "null"`, and no browser-feature
+delegation. The explicit predecessor assembly bridge uses that same legacy
+policy. The
+Kernel does not infer adoption from an app ID, version, route, or unrelated
+capability.
+
+An `i<surface-nonce>` Host selects one compiled app installation and surface
+and may execute or load subresources only from that app's `/app/<id>/`
+subtree. Other-app and Kernel paths, stale nonces, wrong destinations, raw or
+custom gateways, and alternate ports fail closed. The one cross-subtree rule
+is a passive, programmatic fetch of the exact no-query
+`/system/runtime-config.json` URL with exactly one `Sec-Fetch-Dest: empty`; it
+does not grant document or worker authority. Unprefixed Kernel origins
+continue to serve public app HTML, scripts, icons, and committed package
+metadata under `/app/<id>/pkg/**`, but those public app documents are never
+installation origin authority. Kernel registry entries always normalize to
+`tiles: []`, so the default Kernel does not appear as a normal app tile in the
+launcher.
+
+Dedicated resident backgrounds continue to use their separate
+credentialless-ephemeral or persistent policies, with an exact nonce-prefixed
+Host and certified initial-document request. Their CSP, Host, query,
+destination, and origin rules are specified in
 [Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
+
+### `/system/browser-surface-origins.json` Authority Sidecar
+
+The browser-surface-origin frontend treats
+`/system/browser-surface-origins.json` as the public, certified list of ordinary
+apps that may use installation-owned surface
+origins. Its closed canonical shape is:
+
+```json
+{
+  "format": 1,
+  "app_ids": ["<sorted installed non-kernel app ids>"]
+}
+```
+
+The list must contain only unique, currently installed non-Kernel app IDs in
+canonical order. The browser-surface-origin runtime requires the sidecar even
+when the list is empty; absence is valid only for the explicit predecessor
+bridge. A malformed, missing, stale, or registry-inconsistent required sidecar
+fails closed instead of making any app originful.
+
+Origin adoption is package-derived and app-agnostic. A selected ordinary app
+package is eligible when it contains the exact packer-owned
+`.neutron/browser-surface-origins.v1.json` marker or declares the inherently
+new `browser_permissions` capability. The current packer adds the marker to
+future ordinary app archives; immutable historical archives remain unmarked
+and opaque. A checked browser-surface-origin install commits the selected
+package files, surface response policies, `/system/apps.json`, and this sidecar
+atomically. It keeps
+already-adopted IDs through unrelated transactions and approved upgrades, and
+removes an ID on uninstall.
+
+The sidecar contains no installation UID, browser-origin nonce, authority
+epoch, credential, or secret. It is served as ordinary certified HTTP v2
+metadata on public non-installation authorities, while installation-surface
+Hosts cannot fetch it. After fresh provisioning seeds it once, direct static
+store retries must match the existing bytes and direct delete or broad-clear
+operations cannot change it; subsequent changes belong to the checked install
+journal.
 
 ### `/pkg` Metadata
 
@@ -357,13 +425,13 @@ assets.pk.get(assetUrl(request.url))
 ```
 
 Before lookup, the backend keeps `/system/**` HTTP-internal except for exact
-`/system/apps.json`, `/system/install-provenance.json`, and
-`/system/runtime-config.json`, and `/system/deployment-build-record.json`. A
-denied internal path and a missing key both return the same fixed `404` body.
-Committed
-`/system/apps.json`, `/system/install-provenance.json`,
-`/system/runtime-config.json`, `/system/deployment-build-record.json`,
-`/mo/**`, `/pkg/**`, and
+`/system/apps.json`, `/system/browser-surface-origins.json`,
+`/system/install-provenance.json`, `/system/runtime-config.json`, and
+`/system/deployment-build-record.json`. A denied internal path and a missing
+key both return the same fixed `404` body. Committed `/system/apps.json`,
+`/system/browser-surface-origins.json`, `/system/install-provenance.json`,
+`/system/runtime-config.json`, `/system/deployment-build-record.json`, `/mo/**`,
+`/pkg/**`, and
 `/app/<id>/pkg/**` keys are ordinary certified HTTP assets. Present static
 assets return their stored encoding and may use the kernel-owned chunk
 streaming callback. Their exact response profiles, cache rules, request
@@ -374,11 +442,26 @@ specified in
 The `http_assets/<key>` tree retains the complete stored-body hash used when
 publishing the public certified response. It is not exposed through a separate
 static-read Candid method. Certification state survives actor upgrades, so
-initialization and install commit never scan or republish existing package
-assets. Each staged package file is certified once when it is promoted, using
-the exact capability state that the same atomic commit will publish. An
+ordinary initialization and install commit do not scan or republish existing
+package assets. Each staged package file is certified once when it is promoted,
+using the exact capability state that the same atomic commit will publish. An
 explicit resident-origin policy toggle may reconcile that one app's package
 prefix; it does not touch app-scoped certified asset records.
+
+Kernel 316 has one structural exception because its child-response security
+headers change. During the exact pre-316-to-316 activation boundary, the
+backend grafts each installed app subtree plus the complete `/mo` and `/pkg`
+subtrees back unchanged. It moves every remaining predecessor expression below
+the fixed `neutron_retired_http_expr_v316` top-level label, which the HTTP v2
+protocol cannot select because a response expression path must begin with
+`http_expr`. A non-URL sentinel records completion even when no retired branch
+remains. Initialization first reclaims every known Kernel expression from that
+quarantine, then rebuilds those responses from their existing body hashes and
+installs the current 404. Unknown predecessor branches remain authenticated but
+HTTP-inaccessible. The whole cutover occurs in the activation publication
+batch; a bound or capacity trap rolls the actor upgrade back to the predecessor
+without publishing a partial root. It adds no managed-memory root or response
+body copy.
 Consequently, a kernel upgrade with 100 installed apps has no work proportional
 to those apps' certified record counts or body bytes; only bounded app/mount
 metadata and the package files of the app being changed enter its install path.
@@ -494,8 +577,9 @@ or local development. After installing the complete actor it:
    bytes for one path;
 4. uploads each unique file through `uploadPreparedFiles()`;
 5. writes `/pkg/neutron.did`, `/system/apps.json`,
-   `/system/install-provenance.json`, `/pkg/neutron.most`, and `/pkg/id.json` as
-   separate file operations; and
+   `/system/browser-surface-origins.json`,
+   `/system/install-provenance.json`, `/pkg/neutron.most`, and `/pkg/id.json`
+   as separate file operations; and
 6. verifies those files and the browser entrypoint through certified HTTP.
 
 Concurrency changes scheduling only. Local reinstall currently schedules up to
@@ -521,6 +605,9 @@ The path layout appears intended to separate concerns:
 
 - `/` and `/static/...` are the kernel UI.
 - `/system/apps.json` is the small kernel-owned app registry.
+- `/system/browser-surface-origins.json` is the public browser-surface authority sidecar
+  listing installed ordinary apps adopted onto installation-owned surface
+  origins.
 - `/system/deployment-build-record.json` is the canonical whole-deployment
   build and install record when one has been committed.
 - `/pkg/...` is kernel package/runtime metadata.

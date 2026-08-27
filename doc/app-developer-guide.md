@@ -610,8 +610,18 @@ Installed apps are served under:
 /app/<app-id>/<tile-path>
 ```
 
-The kernel loads each opened app tile in a credentialless iframe. A package can
-declare multiple frontend tiles in `neutron.json`:
+The kernel loads each opened app tile in a credentialless iframe. Ordinary app
+packages produced by the current packer carry a browser-surface readiness
+marker, so the browser-surface-origin Kernel gives
+each declared tile an origin derived from the installation nonce and exact
+`tile:<id>` surface key. The frame uses
+`sandbox="allow-scripts allow-same-origin"`, while certified Host/path and
+`frame-ancestors` policy keeps that origin confined to the app's asset subtree
+and the Kernel parent. A browser that cannot prove credentialless originful
+framing falls back to a script-only opaque sandbox. Historical archives without
+the marker remain on that legacy opaque path until a current package update is
+installed; the compatibility decision does not depend on an app id or version.
+A package can declare multiple frontend tiles in `neutron.json`:
 
 ```json
 "tiles": [
@@ -631,6 +641,53 @@ leading slash, backslash, empty segment, `.`, or `..`.
 
 The app should interact with the kernel only through the `neutron-tools/app`
 helper API.
+
+### Request Camera Or Microphone From A Tile
+
+Browser device access is default-deny. Declare each exact tile and the closed
+set of features it may request:
+
+```json
+{
+  "capabilities": {
+    "browser_permissions": {
+      "api": 1,
+      "tiles": [
+        {
+          "id": "main",
+          "features": ["camera", "microphone"]
+        }
+      ]
+    }
+  }
+}
+```
+
+Only `camera` and `microphone` are accepted, and every listed id must match a
+declared tile. The install or update review shows the exact tile-feature
+mapping. Installing the declaration allows that open tile to ask the browser;
+it does not start capture, guarantee browser approval, or grant the feature to
+another tile, a tray, or a background.
+
+Use the ordinary browser API directly from the tile, normally in response to a
+user action:
+
+```ts
+const stream = await navigator.mediaDevices.getUserMedia({
+  audio: true,
+  video: true,
+});
+
+// Attach stream to local media elements or a peer connection.
+// Stop every acquired track when the call or tile lifecycle ends.
+for (const track of stream.getTracks()) track.stop();
+```
+
+The Kernel narrows the iframe `allow` attribute to the declared features and
+that tile's exact installation origin; its certified Permissions Policy limits
+them to the app document itself. The browser owns the device prompt, indicator,
+and site settings. Media bytes stay in the frontend browser APIs: there is no
+Kernel backend media session, lease, stream proxy, or app-facing capture call.
 
 ## Use The Shared Design System
 
@@ -772,7 +829,8 @@ for the complete policy.
 
 ### Use A Browser Ethereum Provider
 
-Browser extensions do not inject providers into Neutron's opaque app iframes.
+Browser extensions do not reliably inject providers into Neutron's isolated
+app iframes.
 Declare the exact chains and EIP-1193 methods the tile needs instead:
 
 ```json
@@ -846,13 +904,15 @@ while the user is logged in and authorized. It stays mounted across workspace
 switches and tile close/reopen, and reloads when the app version or background
 path changes.
 
-Without a dedicated capability the background is credentialless with an opaque
-origin. Choose `dedicated_resident_origin` for a credentialless ephemeral
-dedicated origin, such as when a Worker needs same-origin script loading, or
-choose `persistent_browser_storage` for ordinary persistent origin storage.
-Those capabilities are mutually exclusive. Their exact manifest shapes,
-certified initial-document binding, browser checks, rotation, and subresource
-policy are specified in
+In a current marked package, a background without a dedicated resident
+capability uses its own credentialless installation origin and
+`sandbox="allow-scripts allow-same-origin"`; an unadopted historical background
+retains its credentialless opaque mode. The existing
+`dedicated_resident_origin` capability selects the specialized credentialless
+ephemeral resident contract, while `persistent_browser_storage` selects the
+persistent resident contract. Those capabilities are mutually exclusive. Their
+exact manifest shapes, certified initial-document binding, browser checks,
+rotation, and subresource policy are specified in
 [Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
 
 Expose methods from a tile, tray, or background entrypoint:
@@ -1075,14 +1135,15 @@ view token arrived. Perform those actions through normal controls and consent
 paths. Unsubscribe with the returned `stop` function when the handler's UI
 lifecycle ends.
 
-Tiles remain credentialless opaque frames. A background uses the compiled
-opaque, credentialless-ephemeral dedicated, or persistent dedicated mode
-described in
+Current marked tiles and ordinary backgrounds use credentialless
+installation-nonce origins; only unadopted historical packages retain the
+opaque compatibility path. A background may instead use the
+credentialless-ephemeral or persistent dedicated mode described in
 [Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
-The kernel transfers a private `MessagePort` to each registered frame and
-derives caller identity from that registration. A background iframe may create
-a dedicated worker for WebGPU or other heavy work; do not use a service worker
-as the resident lifecycle primitive.
+The kernel transfers a private `MessagePort` only after matching both the
+registered source window and, for an originful frame, its exact expected
+origin. A background iframe may create a dedicated worker for WebGPU or other
+heavy work; do not use a service worker as the resident lifecycle primitive.
 
 ## Add An App Tray
 
@@ -1106,8 +1167,12 @@ clear it. Updating the badge cannot notify, focus, open, move, or otherwise
 change shell UI. The tray declaration itself adds no permission.
 
 Clicking the kernel-rendered toolbar button containing the app-provided icon
-mounts `tray.html` in a fresh, credentialless, script-only sandbox. The
-transient endpoint is
+mounts `tray.html` in a fresh credentialless frame. A current marked package
+uses the tray's installation-derived origin with
+`sandbox="allow-scripts allow-same-origin"`; an unadopted historical package
+keeps its opaque `sandbox="allow-scripts"` compatibility path. Neither tray
+path receives camera or microphone delegation, because `browser_permissions`
+names exact tiles only. The transient endpoint is
 `app:<appId>:tray:instance:<instanceId>` and disappears when the popover closes,
 so fetch state from the resident process on every mount. Calls from the tray to
 its own background use the normal same-app message bus without approval. A tray
@@ -2046,7 +2111,10 @@ The steps are:
    source snapshot and bulk legal files inside the package instead.
 7. `pack.ts`
    gzip-compresses every file under `dist/`, MessagePack-encodes them, and
-   writes `<id>.v<major>.<minor>.<patch>.neutron`.
+   writes `<id>.v<major>.<minor>.<patch>.neutron`. For an ordinary app it also
+   inserts the reserved
+   `.neutron/browser-surface-origins.v1.json` package-generation marker. Do not
+   author that path in `dist`; a collision is rejected.
 
 For an NSAL 1.1 release, this tooling includes the exact `LICENSE.APP` text. For
 an inspectable use-only release, it includes the exact `LICENSE.APP.USE` text.
@@ -2076,10 +2144,10 @@ npm test
 
 before publishing or installing the package.
 
-For hello, the output is:
+The output filename is derived from the app ID and release in its manifest:
 
 ```text
-apps/hello/hello.v0.2.4.neutron
+<app-directory>/<app-id>.v<major>.<minor>.<patch>.neutron
 ```
 
 ### Release A Source-Discoverable Update
@@ -2169,8 +2237,8 @@ To compile package files without deploying:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.12.neutron \
-  --package apps/my_app/my_app.v0.1.0.neutron \
+  --package path/to/kernel.neutron \
+  --package path/to/app.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```
@@ -2240,7 +2308,9 @@ Current important gaps:
   whole-canister provisioning may redeploy the same version, while every path
   rejects downgrades;
 - persistent cross-app grants and browser resource quotas are still follow-up
-  work; current frontend grants are one-call or session scoped;
+  work; camera and microphone are separately gated by exact per-tile
+  `browser_permissions`, while current frontend message-bus grants are one-call
+  or session scoped;
 - package publisher signatures remain separate from the implemented memory
   ownership and schema-hash checks.
 
@@ -2250,12 +2320,15 @@ before making calls.
 
 ## Package Contents
 
-A `.neutron` file is a MessagePack map. Each key is a relative path from
-`dist/`, and each value is gzip-compressed file bytes.
+A `.neutron` file is a MessagePack map. Ordinary content keys are relative
+paths from `dist/`, and each value is gzip-compressed file bytes. The packer
+also inserts its reserved browser-surface generation marker for an ordinary
+app; it is installer metadata, not an app-granted capability.
 
 Typical paths for an app with one browser tile and managed memory are:
 
 ```text
+.neutron/browser-surface-origins.v1.json
 neutron.json
 web/index.html
 web/main.js
@@ -2269,6 +2342,10 @@ Headless apps may omit `web/` entirely. Apps without managed memory may omit
 
 During install:
 
+- the exact browser-surface marker makes a newly selected ordinary package
+  eligible for installation-nonce tile, tray, and ordinary-background origins;
+  a historical archive without it remains legacy opaque unless it declares
+  `browser_permissions`, which inherently requires the new origin contract;
 - present `web/*` assets become `/app/<id>/*`;
 - `neutron.json` becomes `/app/<id>/pkg/neutron.json`;
 - `mo/<sha256>.mo` becomes `/mo/<sha256>.mo`;
@@ -2285,8 +2362,8 @@ hash.
 
 - There is no published app-template generator yet. Copy `apps/hello` for now.
 - The production-context compile-only CLI exists as source under
-  `packages/neutron-cli`. Trusted local `neutron_actor_v25` compilation and
-  deployment are owned by the format-3 provisioner because it authenticates
+  `packages/neutron-cli`. Trusted local compilation and deployment are owned by
+  the format-3 provisioner because it authenticates
   the PocketIC root context. A trusted package workflow must emit the archive
   before the provisioner can consume it.
 - Apps may own multiple managed memory roots. Their manifest ids are local to
@@ -2299,8 +2376,10 @@ hash.
   implemented.
 - Migration functions are intentionally synchronous and bounded; large data
   changes need a compatible schema or an app-specific online transition.
-- Persistent cross-app grants, resource quotas, and browser feature gating are
-  not implemented; current grants last for one call or the page session.
+- Persistent cross-app grants and browser resource quotas are not implemented;
+  current message-bus grants last for one call or the page session. Camera and
+  microphone feature gating is implemented through exact per-tile
+  `browser_permissions` plus browser-owned prompting.
 - Browser install error-state coverage exists as a follow-up, even though the
   happy path is covered by Playwright.
 - Some developer scripts are still repo-relative. The roadmap is to remove

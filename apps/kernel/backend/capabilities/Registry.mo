@@ -32,6 +32,10 @@ module {
         // continuation. The map is bounded by the same validated runtime
         // catalogue as declarations and is deliberately not app state.
         let epochs = Map.empty<Text, Nat>();
+        // Runtime-wide frontend authority generation. It is intentionally
+        // actor-local: every code replacement has a new deployment id, while
+        // successful in-actor toggles advance this value monotonically.
+        var authorityRevisionValue : Nat64 = 0;
         var configured = false;
 
         do { assert (validateMemory(mem)) };
@@ -251,6 +255,15 @@ module {
             };
             Map.add(mem.entries, Text.compare, entryKey, updated);
             ?summary(updated);
+        };
+
+        public func advanceAuthorityRevision() : () {
+            assert (authorityRevisionValue < MAX_COUNTER);
+            authorityRevisionValue += 1;
+        };
+
+        public func authorityRevision() : Nat64 {
+            authorityRevisionValue;
         };
 
         // One terminal event per broker operation. Counters saturate instead

@@ -15,6 +15,7 @@ import {
   type KernelPackageState,
   type KernelRuntimeInfo,
 } from "neutron-compiler/src/install.js";
+import { ASSEMBLER_ID } from "neutron-compiler/src/assemble.js";
 import {
   parseNeutronPackageRecordStructure,
   type NeutronPackageRecordV1,
@@ -235,6 +236,8 @@ function stateFixture(ids: readonly string[]): KernelPackageState {
   return Object.freeze({
     registry: apps,
     apps,
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: false,
     existingConfigs: Object.freeze({}),
     existingModules: [],
     previousStable: null,
@@ -279,6 +282,7 @@ function compileFixture(apps: AppRegistry): CompileResult {
     managedMemoryRetirements: [],
     capabilityPlans,
     appInstanceInventory: targetApps(apps),
+    browserSurfaceOriginAppIds: [],
     previousManagedMemoryInventory: [],
     managedMemoryInventory: [],
     previousStableSignatureSha256: null,
@@ -287,6 +291,7 @@ function compileFixture(apps: AppRegistry): CompileResult {
     vetKeysEnvironment: "production",
     persistenceMode: "classical",
     compilerId: "moc_fixture_next",
+    assemblerId: ASSEMBLER_ID,
     modulePaths: [],
   };
 }

@@ -11,6 +11,7 @@ import Cert "../certified_http";
 import BackendCallsMemory "../backend_calls/Memory";
 import BackendCallTypes "../backend_calls/Types";
 import Sha256 "mo:sha2/Sha256";
+import BrowserOrigin "BrowserOrigin";
 import Limits "Limits";
 import Memory "Memory";
 import Types "Types";
@@ -32,9 +33,9 @@ module {
     public type Certification = {
         beginV2PublicationBatch : () -> ();
         finishV2PublicationBatch : () -> Bool;
+        hasPendingChunked : Text -> Bool;
         putHash : (Text, Blob) -> ();
         put : (Text, Blob) -> ();
-        delete : Text -> ();
     };
 
     public type ReservationPreparation = {
@@ -67,6 +68,7 @@ module {
                 [],
                 active,
                 runningDeploymentId,
+                freshOriginEpoch,
                 freshOriginEpoch,
             );
             assert (isCanonicalAppInstanceInventory(
@@ -118,22 +120,18 @@ module {
         backendCalls : BackendCallTypes.Memory,
         runningDeploymentId : Text,
         activeAppInstanceInventory : [Types.RuntimeApp],
+        currentCanisterVersion : () -> Nat64,
         backendScopeAllowed : (CapabilityTypes.AppScope, Text) -> Bool,
         publishAsset : (Text, Blob) -> (),
+        deleteAssetCertification : Text -> (),
         onCommit : ([Types.AppInstance], Principal) -> (),
     ) {
         let originEpoch = switch (mem.browser_origin_epoch) {
             case (?value) value;
             case null Runtime.trap("Browser-origin epoch is not initialized");
         };
-        // Static uploads finish before begin records the journal. From that
-        // point until commit/abort, its staging snapshot is immutable even to
-        // another authorized browser session. Internal commit/abort cleanup
-        // operates on Assets directly and is therefore not blocked here.
-        public func isPendingStagingPath(path : Text) : Bool {
-            let ?journal = mem.pending else return false;
-            let stage = stagingPrefix(journal.deployment_id);
-            Text.startsWith(path, #text stage);
+        public func publicStaticMutationsAllowed() : Bool {
+            mem.pending == null;
         };
 
         // A new journal must never fence an incomplete upload. Once begin
@@ -141,7 +139,10 @@ module {
         // prove every declared copy source is already durable beforehand.
         public func copySourcesAvailable(input : Types.BeginInput) : Bool {
             for (copy in input.copies.vals()) {
-                if (assets.get(copy.source) == null) return false;
+                if (
+                    cert.hasPendingChunked(copy.source) or
+                    assets.get(copy.source) == null
+                ) return false;
             };
             true;
         };
@@ -206,6 +207,15 @@ module {
                 mem.next_installation_uid,
                 mem.committed_app_instances,
             ));
+            let issuanceCanisterVersion = currentCanisterVersion();
+            let laneStart = installationUidLaneStart(issuanceCanisterVersion);
+            if (mem.next_installation_uid < laneStart) {
+                mem.next_installation_uid := laneStart;
+            };
+            assert (
+                mem.next_installation_uid <=
+                installationUidLaneNextLimit(issuanceCanisterVersion)
+            );
             let allocationStartUid = mem.next_installation_uid;
             let target = reconcileTarget(
                 mem,
@@ -213,6 +223,11 @@ module {
                 input.target_app_inventory,
                 input.deployment_id,
                 originEpoch,
+                issuanceCanisterVersion,
+            );
+            assert (
+                mem.next_installation_uid <=
+                installationUidLaneNextLimit(issuanceCanisterVersion)
             );
             let removed = removedInstances(
                 mem.committed_app_instances,
@@ -368,14 +383,23 @@ module {
             changed;
         };
 
-        // Persist this marker in the same canister message that queues the
-        // one-way management install. A later abort may otherwise erase the
-        // journal while that already-queued upgrade is still waiting to run.
+        // Reissue provisional browser authority in the same message that
+        // persists the dispatch marker and queues the one-way management
+        // install. A snapshot restored after begin therefore cannot dispatch
+        // an installation uid, nonce, or rotated authority epoch that a
+        // discarded branch already activated. Install-time backend-call claims
+        // remain valid because they are intentionally keyed by app id with the
+        // inert installation uid zero until the target actor finalizes them.
         public func markDispatched(input : Types.DeploymentInput) : () {
             let ?journal = mem.pending else Runtime.trap("Install journal is missing");
             assert (journal.deployment_id == input.deployment_id);
             let path = dispatchMarkerPath(journal.deployment_id);
             assert (assets.get(path) == null);
+            let reissued = reissuePendingTargetForDispatch(
+                journal,
+                currentCanisterVersion(),
+            );
+            mem.pending := ?reissued;
             assets.put({
                 id = path;
                 chunks = 1;
@@ -386,6 +410,63 @@ module {
             cert.put(path, DISPATCH_MARKER);
         };
 
+        func reissuePendingTargetForDispatch(
+            journal : Types.Journal,
+            dispatchCanisterVersion : Nat64,
+        ) : Types.Journal {
+            assert (isValidJournal(journal, originEpoch));
+            assert (
+                mem.committed_app_instances ==
+                journal.committed_app_instances
+            );
+            assert (
+                expectedNextInstallationUid(journal) ==
+                Nat64.toNat(mem.next_installation_uid)
+            );
+
+            let laneStart = installationUidLaneStart(
+                dispatchCanisterVersion
+            );
+            // Resetting the provisional allocator is safe only when no
+            // committed identity occupies this non-rollbackable version lane.
+            // The target has not activated and the dispatch marker is absent,
+            // so identities minted by begin have never carried authority.
+            for (committed in journal.committed_app_instances.vals()) {
+                assert (committed.scope.installation_uid < laneStart);
+            };
+            mem.next_installation_uid := laneStart;
+            let target = reconcileTarget(
+                mem,
+                journal.committed_app_instances,
+                runtimeProjection(journal.target_app_instances),
+                journal.deployment_id,
+                originEpoch,
+                dispatchCanisterVersion,
+            );
+            assert (
+                mem.next_installation_uid <=
+                installationUidLaneNextLimit(dispatchCanisterVersion)
+            );
+            let reissued : Types.Journal = {
+                journal with
+                allocation_start_uid = laneStart;
+                removed_apps = Array.map<Types.AppInstance, Text>(
+                    removedInstances(
+                        journal.committed_app_instances,
+                        target,
+                    ),
+                    func(instance) { instance.scope.app_id },
+                );
+                target_app_instances = target;
+            };
+            assert (isValidJournal(reissued, originEpoch));
+            assert (
+                expectedNextInstallationUid(reissued) ==
+                Nat64.toNat(mem.next_installation_uid)
+            );
+            reissued;
+        };
+
         public func clearDispatchAfterCallError(
             input : Types.DeploymentInput,
         ) : () {
@@ -393,7 +474,7 @@ module {
             assert (journal.deployment_id == input.deployment_id);
             let path = dispatchMarkerPath(journal.deployment_id);
             ignore assets.delete(path);
-            cert.delete(path);
+            deleteAssetCertification(path);
         };
 
         public func isDispatched(input : Types.DeploymentInput) : Bool {
@@ -461,19 +542,19 @@ module {
                     assert (count <= MAX_MODULE_GC_ENTRIES);
                     assert (isModulePath(path));
                     let key = "/mo/" # path;
-                    if (assets.delete(key)) cert.delete(key);
+                    if (assets.delete(key)) deleteAssetCertification(key);
                 };
             };
         };
 
         func clearAssets(prefix : Text) : () {
             if (prefix == DEPLOYMENT_BUILD_RECORD_PATH) {
-                if (assets.delete(prefix)) cert.delete(prefix);
+                if (assets.delete(prefix)) deleteAssetCertification(prefix);
                 return;
             };
             for (key in assets.allKeys(prefix).vals()) {
                 ignore assets.delete(key);
-                cert.delete(key);
+                deleteAssetCertification(key);
             };
         };
     };
@@ -494,11 +575,15 @@ module {
 
         let stage = stagingPrefix(input.deployment_id);
         for (copy in input.copies.vals()) {
+            if (
+                not Cert.validCanonicalPath(copy.source) or
+                not Cert.validCanonicalPath(copy.target)
+            ) return false;
             if (not Text.startsWith(copy.source, #text stage)) return false;
-            if (not Text.startsWith(copy.target, #char '/')) return false;
             if (Text.startsWith(copy.target, #text "/system/staging/")) return false;
         };
         for (prefix in input.clear_prefixes.vals()) {
+            if (not Cert.validCanonicalPath(prefix)) return false;
             if (
                 prefix != "/pkg/legal/" and
                 prefix != "/system/deployment-build-record.json" and
@@ -690,7 +775,9 @@ module {
             if (instance.version < MIN_APP_VERSION) return false;
             if (not isRunningDeploymentId(instance.deployment_id)) return false;
             if (not isFingerprint(instance.capability_plan_fingerprint)) return false;
-            if (not isOriginNonce(instance.browser_origin_nonce)) return false;
+            if (not BrowserOrigin.isValidNonce(instance.browser_origin_nonce)) {
+                return false;
+            };
             if (instance.browser_origin_authority_epoch == 0) return false;
             if (
                 instance.browser_origin_nonce != originNonce(
@@ -755,6 +842,7 @@ module {
         target : [Types.RuntimeApp],
         deploymentId : Text,
         originEpoch : Nat64,
+        issuanceCanisterVersion : Nat64,
     ) : [Types.AppInstance] {
         assert (isCanonicalRuntimeAppInventory(target));
         Array.map<Types.RuntimeApp, Types.AppInstance>(
@@ -778,16 +866,10 @@ module {
                                     existing.browser_origin_authority_epoch;
                             };
                         } else {
-                            if (
-                                existing.browser_origin_authority_epoch ==
-                                NAT64_MAX
-                            ) {
-                                Runtime.trap(
-                                    "Browser-origin authority epoch exhausted"
-                                );
-                            };
-                            let nextEpoch =
-                                existing.browser_origin_authority_epoch + 1;
+                            let nextEpoch = nextBrowserOriginAuthorityEpoch(
+                                existing.browser_origin_authority_epoch,
+                                issuanceCanisterVersion,
+                            );
                             {
                                 scope = existing.scope;
                                 browser_origin_nonce = originNonce(
@@ -903,8 +985,8 @@ module {
                             (
                                 committed.browser_origin_authority_epoch ==
                                 NAT64_MAX or
-                                target.browser_origin_authority_epoch !=
-                                committed.browser_origin_authority_epoch + 1
+                                target.browser_origin_authority_epoch <=
+                                committed.browser_origin_authority_epoch
                             )
                         ) or
                         target.version < committed.version
@@ -946,6 +1028,49 @@ module {
         true;
     };
 
+    // A successful update increments the IC's non-rollbackable canister
+    // version. Reserving one complete app-inventory lane per begin therefore
+    // keeps identities minted after a snapshot restore disjoint from every
+    // identity that a discarded branch could have minted in one begin.
+    public func installationUidLaneStart(canisterVersion : Nat64) : Nat64 {
+        let laneSize = Nat64.fromNat(Limits.MAX_APP_INSTANCES + 1);
+        // Reserve enough room for all 256 target applications and for the
+        // allocator's exclusive next value without overflowing Nat64.
+        if (
+            canisterVersion >
+            (NAT64_MAX - laneSize) / laneSize
+        ) {
+            Runtime.trap("Browser-origin installation uid lane exhausted");
+        };
+        canisterVersion * laneSize + 1;
+    };
+
+    // Highest valid exclusive allocator value after assigning every app in a
+    // single canister-version lane. Allocated installation uids are strictly
+    // below this bound; equality is valid only after all 256 slots were used.
+    public func installationUidLaneNextLimit(
+        canisterVersion : Nat64,
+    ) : Nat64 {
+        installationUidLaneStart(canisterVersion) +
+        Nat64.fromNat(Limits.MAX_APP_INSTANCES);
+    };
+
+    public func nextBrowserOriginAuthorityEpoch(
+        existing : Nat64,
+        canisterVersion : Nat64,
+    ) : Nat64 {
+        if (existing == NAT64_MAX or canisterVersion == NAT64_MAX) {
+            Runtime.trap("Browser-origin authority epoch exhausted");
+        };
+        let afterExisting = existing + 1;
+        let afterCanisterVersion = canisterVersion + 1;
+        if (afterExisting > afterCanisterVersion) {
+            afterExisting;
+        } else {
+            afterCanisterVersion;
+        };
+    };
+
     func originNonce(
         originEpoch : Nat64,
         appId : Text,
@@ -971,16 +1096,6 @@ module {
         };
         assert (result.size() == 32);
         result;
-    };
-
-    func isOriginNonce(value : Text) : Bool {
-        if (value.size() != 32) return false;
-        for (char in value.chars()) {
-            if (not ((char >= '0' and char <= '9') or (char >= 'a' and char <= 'f'))) {
-                return false;
-            };
-        };
-        true;
     };
 
     func isCanonicalRemovedApps(appIds : [Text]) : Bool {

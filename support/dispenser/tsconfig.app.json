@@ -6,6 +6,7 @@
   },
   "include": [
     "../../packages/neutron-tools/src/app_ids.ts",
+    "../../packages/neutron-tools/src/tile_ids.ts",
     "../../packages/neutron-tools/src/runtime.ts",
     "src/**/*.ts",
     "src/**/*.tsx",

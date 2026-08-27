@@ -1,8 +1,12 @@
 import type { Identity } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
 import { parseKernelRuntimeConfig } from "neutron-tools/src/runtime_config.js";
+import { supportsBrowserSurfaceOrigins } from "neutron-compiler/src/assemble.js";
 import {
+  assertBrowserSurfaceOriginAppIdsMatch,
+  assertKernelPackageBaselineMatchesRuntime,
   assertKernelPackageStateMatchesRuntime,
+  BROWSER_SURFACE_ORIGINS_PATH,
   buildPackagesInstallAssets,
   createJsonAsset,
   createTextAsset,
@@ -279,6 +283,7 @@ export async function runProvision(
       deployment = await readTransactionPayload({
         sessionPath: options.sessionPath,
         expectedSha256: plan.payload.sha256,
+        expectedVersion: plan.payload.version,
         packageProvenance: plan.packages,
       });
       assertPreparedDeploymentMatchesExpectedArtifacts(
@@ -373,6 +378,7 @@ export async function runProvision(
         deployment = await readTransactionPayload({
           sessionPath: options.sessionPath,
           expectedSha256: active.plan.payload.sha256,
+          expectedVersion: active.plan.payload.version,
           packageProvenance: active.plan.packages,
         });
         assertPreparedDeploymentMatchesExpectedArtifacts(
@@ -588,6 +594,7 @@ export async function runProvision(
       await removeTransactionPayload(
         options.sessionPath,
         active.plan.payload.sha256,
+        active.plan.payload.version,
       );
       delete activeJournal.active;
       await writeSession(options.sessionPath, activeJournal, now());
@@ -664,6 +671,9 @@ export async function seedFreshKernel({
   concurrency?: number;
   logger?: Pick<Console, "log">;
 }): Promise<void> {
+  // Validate and bind the complete package-derived target before the first
+  // update call or static write can change a fresh canister.
+  const assets = freshKernelInstallAssets(deployment);
   await initializePublicationEntropy(actor);
   logger.log("Seeding the fresh kernel asset namespace");
   await uploadPreparedFiles(actor, uniquePreparedFiles(deployment), {
@@ -672,13 +682,11 @@ export async function seedFreshKernel({
       if (progress.type === "file") logger.log(`Uploaded ${progress.key}`);
     },
   });
-  const assets = buildPackagesInstallAssets({
-    existingApps: {},
-    packages: deployment.packages,
-    candid: deployment.compiled.candid,
-  });
   await uploadStaticFileOperation(actor, assets.candidAsset);
   await uploadStaticFileOperation(actor, assets.appRegistryAsset);
+  if (supportsBrowserSurfaceOrigins(deployment.compiled.assemblerId)) {
+    await uploadStaticFileOperation(actor, assets.browserSurfaceOriginsAsset);
+  }
   await uploadStaticFileOperation(
     actor,
     createJsonAsset(
@@ -701,6 +709,29 @@ export async function seedFreshKernel({
   logger.log("Seeded certified package assets");
 }
 
+function freshKernelInstallAssets(deployment: PreparedDeployment) {
+  const assets = buildPackagesInstallAssets({
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
+    packages: deployment.packages,
+    candid: deployment.compiled.candid,
+  });
+  if (!supportsBrowserSurfaceOrigins(deployment.compiled.assemblerId)) {
+    if (deployment.compiled.browserSurfaceOriginAppIds.length !== 0) {
+      throw new Error(
+        "A pre-v26 fresh deployment cannot authorize browser-surface origins",
+      );
+    }
+    return assets;
+  }
+  assertBrowserSurfaceOriginAppIdsMatch(
+    assets.apps,
+    assets.browserSurfaceOriginAppIds,
+    deployment.compiled.browserSurfaceOriginAppIds,
+  );
+  return assets;
+}
+
 /** Complete final key set produced by `seedFreshKernel`. */
 export function freshKernelAssetKeys(
   deployment: PreparedDeployment,
@@ -716,6 +747,9 @@ export function freshKernelAssetKeys(
     INSTALL_PROVENANCE_PATH,
     "/pkg/neutron.most",
     "/pkg/id.json",
+    ...(supportsBrowserSurfaceOrigins(deployment.compiled.assemblerId)
+      ? [BROWSER_SURFACE_ORIGINS_PATH]
+      : []),
   ]) {
     keys.add(key);
   }
@@ -809,6 +843,11 @@ export async function verifyFreshKernel({
       `Runtime compiler ${runtime.compiler_id} does not match ${deployment.compiled.compilerId}`,
     );
   }
+  if (runtime.assembler_id !== deployment.compiled.assemblerId) {
+    throw new Error(
+      `Runtime assembler ${runtime.assembler_id} does not match ${deployment.compiled.assemblerId}`,
+    );
+  }
   const state = await readKernelPackageState({
     actor,
     canisterId,
@@ -816,7 +855,16 @@ export async function verifyFreshKernel({
     local: false,
     fetchImpl,
   });
-  assertKernelPackageStateMatchesRuntime(state, runtime);
+  if (supportsBrowserSurfaceOrigins(deployment.compiled.assemblerId)) {
+    assertKernelPackageStateMatchesRuntime(state, runtime);
+  } else {
+    assertKernelPackageBaselineMatchesRuntime(state, runtime);
+  }
+  assertBrowserSurfaceOriginAppIdsMatch(
+    state.apps,
+    state.browserSurfaceOriginAppIds,
+    deployment.compiled.browserSurfaceOriginAppIds,
+  );
   const [id, candid, stable, installProvenance, runtimeConfigSource, browserHtml] = await Promise.all([
     fetchKernelJson<{ id?: unknown }>({
       canisterId,
@@ -1123,7 +1171,11 @@ async function finishCompletedCreationCleanup(
     ) {
       throw new Error("Provision journal changed before completed creation cleanup");
     }
-    await removeTransactionPayload(sessionPath, active.state.plan.payload.sha256);
+    await removeTransactionPayload(
+      sessionPath,
+      active.state.plan.payload.sha256,
+      active.state.plan.payload.version,
+    );
     delete journal.active;
     await writeSession(sessionPath, journal, now());
     logger.log("Removed completed creation transaction payload");

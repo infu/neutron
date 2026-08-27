@@ -5,10 +5,21 @@ import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
+import SHA256 "mo:sha2/Sha256";
 import Cert "../../backend/certified_http";
 import V2 "../../backend/certified_http_v2";
 import Allocator "../../backend/certified_assets/Allocator";
 import Forest "../../backend/certified_assets/AuthenticatedForest";
+
+assert (Cert.ORIGIN_RESPONSE_VARIANTS_MAX == 344);
+assert (Cert.originResponseVariantCountAllowed(344));
+assert (not Cert.originResponseVariantCountAllowed(345));
+assert (Cert.publicationBatchWorkAllowed(Cert.PUBLICATION_BATCH_WORK_MAX));
+assert (
+    not Cert.publicationBatchWorkAllowed(
+        Cert.PUBLICATION_BATCH_WORK_MAX + 1,
+    )
+);
 
 let officialRequestHash = Blob.fromArray([
     0x10, 0x79, 0x64, 0x53, 0x46, 0x6e, 0xfb, 0x3e,
@@ -283,9 +294,11 @@ staticTree.publish(sharedUrl, routeBodyBHash, [{
 assert (staticTree.has(sharedUrl, getA));
 assert (staticTree.has(sharedUrl, getB));
 
-// Public package/compiler data uses the same method/body request hash on every
+// Generic portable blobs use the same method/body request hash on every
 // gateway authority. Empty Host is an internal tree-owner sentinel; it is not
-// accepted by the public request-key deletion API.
+// accepted by the public request-key deletion API. Package/compiler data uses
+// this explicit public compatibility profile; executable app authority is
+// instead bounded by the selected subtree, Host/destination proof, and CSP.
 let portableHeaders : [Cert.HeaderField] = [
     ("Content-Type", "text/plain"),
     (
@@ -307,6 +320,502 @@ portableTree.apply([#replace({
     next = [portableGet];
 })]);
 assert (portableTree.has("/mo/hash.mo", portableGet));
+
+// Selected origin adoption replaces the one Host-independent package owner,
+// so an older active-MIME response leaf cannot survive beside the passive
+// application/octet-stream + nosniff response.
+let passivePortableHeaders : [Cert.HeaderField] = [
+    ("Content-Type", "application/octet-stream"),
+    ("X-Content-Type-Options", "nosniff"),
+    (
+        Cert.CERTIFICATE_EXPRESSION_HEADER,
+        Cert.PORTABLE_CERTIFICATION_EXPRESSION,
+    ),
+];
+let passivePortableGet : Cert.ResponseCertificationVariant = {
+    portableGet with response_headers = passivePortableHeaders;
+};
+let portableUrl = "/app/hello/pkg/worker.js";
+let portableOwner : Cert.RequestOwner = { method = "GET"; host = "" };
+let portableReplacementTree = Cert.PublicCertificationTree(Cert.init());
+portableReplacementTree.apply([#replace({
+    url = portableUrl;
+    prior = [];
+    next = [portableGet];
+})]);
+portableReplacementTree.apply([#replace({
+    url = portableUrl;
+    prior = [portableOwner];
+    next = [passivePortableGet];
+})]);
+assert (not portableReplacementTree.has(portableUrl, portableGet));
+assert (portableReplacementTree.has(portableUrl, passivePortableGet));
+let portableReplacementForest = Forest.init(
+    Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
+    Allocator.layoutFingerprint(),
+);
+let persistentPortableReplacementTree = Cert.PersistentCertificationTree(
+    portableReplacementForest,
+    func() {},
+);
+persistentPortableReplacementTree.apply([#replace({
+    url = portableUrl;
+    prior = [];
+    next = [portableGet];
+})]);
+persistentPortableReplacementTree.apply([#replace({
+    url = portableUrl;
+    prior = [portableOwner];
+    next = [passivePortableGet];
+})]);
+let #ok(_) = Forest.commit(portableReplacementForest) else {
+    Runtime.trap("portable package replacement commit failed");
+};
+assert (not persistentPortableReplacementTree.has(portableUrl, portableGet));
+assert (persistentPortableReplacementTree.has(
+    portableUrl,
+    passivePortableGet,
+));
+
+// A retained Kernel asset may outlive the package path that originally wrote
+// it. Replacing its exact Host request owner must retire the previously
+// certified active-content response and leave only the response carrying the
+// current frame-ancestor restriction.
+let legacyKernelAssetHeaders : [Cert.HeaderField] = [
+    ("Content-Type", "image/svg+xml"),
+    (
+        Cert.CERTIFICATE_EXPRESSION_HEADER,
+        Cert.HOST_BOUND_CERTIFICATION_EXPRESSION,
+    ),
+];
+let hardenedKernelAssetHeaders : [Cert.HeaderField] = [
+    ("Content-Type", "image/svg+xml"),
+    (
+        Cert.CERTIFICATE_EXPRESSION_HEADER,
+        Cert.HOST_BOUND_CERTIFICATION_EXPRESSION,
+    ),
+    ("Content-Security-Policy", "frame-ancestors 'none'"),
+];
+let legacyKernelAsset : Cert.ResponseCertificationVariant = {
+    method = "GET";
+    host = hostA;
+    status_code = 200;
+    body_hash = routeBodyAHash;
+    response_headers = legacyKernelAssetHeaders;
+};
+let hardenedKernelAsset : Cert.ResponseCertificationVariant = {
+    legacyKernelAsset with response_headers = hardenedKernelAssetHeaders;
+};
+let kernelMigrationForest = Forest.init(
+    Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
+    Allocator.layoutFingerprint(),
+);
+let kernelMigrationTree = Cert.PersistentCertificationTree(
+    kernelMigrationForest,
+    func() {},
+);
+let retainedKernelAssetUrl = "/obsolete-widget.svg";
+kernelMigrationTree.apply([#replace({
+    url = retainedKernelAssetUrl;
+    prior = [];
+    next = [legacyKernelAsset];
+})]);
+kernelMigrationTree.apply([#replace({
+    url = retainedKernelAssetUrl;
+    prior = [{ method = "GET"; host = hostA }];
+    next = [hardenedKernelAsset];
+})]);
+let #ok(_) = Forest.commit(kernelMigrationForest) else {
+    Runtime.trap("retained Kernel response replacement commit failed");
+};
+assert (not kernelMigrationTree.has(
+    retainedKernelAssetUrl,
+    legacyKernelAsset,
+));
+assert (kernelMigrationTree.has(
+    retainedKernelAssetUrl,
+    hardenedKernelAsset,
+));
+
+// The v316 actor-activation boundary must not infer predecessor expression
+// ownership. It retains only complete app/package namespaces, installs the
+// current root 404, and moves the rest of the predecessor response tree
+// outside `http_expr` in one batch. Known public system documents are then
+// reclaimed and rebuilt one at a time by actor initialization.
+let cutoverForest = Forest.init(
+    Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
+    Allocator.layoutFingerprint(),
+);
+let cutoverTree = Cert.PersistentCertificationTree(
+    cutoverForest,
+    func() {},
+);
+let cutoverEmpty : Blob = Blob.fromArray([]);
+func syntheticExpressionLeaf(
+    expressionPath : [Blob],
+) : [Blob] {
+    Array.concat<Blob>(
+        expressionPath,
+        [routeBodyAHash, routeBodyBHash, routeBodyANewHash],
+    );
+};
+func seedExpressionLeaf(path : [Blob]) : () {
+    assert (
+        Forest.put(cutoverForest, path, cutoverEmpty) ==
+        #ok({ inserted = true; prior = null })
+    );
+};
+
+let retainedAppExact = syntheticExpressionLeaf(
+    Cert.exactExpressionPath("/app/files/index.html"),
+);
+let retainedMountBase = "/app/files/_route/public";
+let retainedAppWildcard = syntheticExpressionLeaf(
+    Cert.wildcardExpressionPath(retainedMountBase),
+);
+let retainedPackage = syntheticExpressionLeaf(
+    Cert.exactExpressionPath("/pkg/neutron.json"),
+);
+let retainedModule = syntheticExpressionLeaf(
+    Cert.exactExpressionPath(
+        "/mo/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mo",
+    ),
+);
+for (leaf in [
+    retainedAppExact,
+    retainedAppWildcard,
+    retainedPackage,
+    retainedModule,
+].vals()) seedExpressionLeaf(leaf);
+
+assert (
+    Cert.KERNEL_RESPONSE_POLICY_REBUILD_SYSTEM_PATHS_V316 == [
+        "/system/apps.json",
+        "/system/browser-surface-origins.json",
+        "/system/runtime-config.json",
+        "/system/install-provenance.json",
+        "/system/deployment-build-record.json",
+    ]
+);
+for (
+    url in Cert.KERNEL_RESPONSE_POLICY_REBUILD_SYSTEM_PATHS_V316.vals()
+) {
+    seedExpressionLeaf(syntheticExpressionLeaf(
+        Cert.exactExpressionPath(url),
+    ));
+};
+
+let retiredKernelLeaf = syntheticExpressionLeaf(
+    Cert.exactExpressionPath("/obsolete-widget.svg"),
+);
+let retiredKernelWildcard = syntheticExpressionLeaf(
+    Cert.wildcardExpressionPath("/legacy-api"),
+);
+let unretainedAppLeaf = syntheticExpressionLeaf(
+    Cert.exactExpressionPath("/app/other/index.html"),
+);
+let kernelAppRootLeaf = syntheticExpressionLeaf(
+    Cert.exactExpressionPath("/app/"),
+);
+let systemDescendantLeaf = syntheticExpressionLeaf(
+    Cert.exactExpressionPath("/system/apps.json/child"),
+);
+let systemWildcardLeaf = syntheticExpressionLeaf(
+    Cert.wildcardExpressionPath("/system/apps.json"),
+);
+for (leaf in [
+    retiredKernelLeaf,
+    retiredKernelWildcard,
+    unretainedAppLeaf,
+    kernelAppRootLeaf,
+    systemDescendantLeaf,
+    systemWildcardLeaf,
+].vals()) seedExpressionLeaf(leaf);
+
+let cutoverNotFoundHeaders : [Cert.HeaderField] = [
+    ("Content-Type", "text/plain; charset=utf-8"),
+    ("Cache-Control", "no-store"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("Referrer-Policy", "no-referrer"),
+    (
+        "Permissions-Policy",
+        "camera=(), geolocation=(), microphone=()",
+    ),
+    (
+        Cert.CERTIFICATE_EXPRESSION_HEADER,
+        Cert.NOT_FOUND_EXPRESSION,
+    ),
+];
+let cutoverNotFoundBodyHash = Cert.hashChunks([Text.encodeUtf8("Not found")]);
+let predecessorNotFoundBodyHash = Cert.hashChunks([
+    Text.encodeUtf8("Predecessor not found"),
+]);
+let notFoundPrefix : [Blob] = [
+    Text.encodeUtf8("http_expr"),
+    Text.encodeUtf8("<*>"),
+    SHA256.fromBlob(
+        #sha256,
+        Text.encodeUtf8(Cert.NOT_FOUND_EXPRESSION),
+    ),
+    cutoverEmpty,
+];
+func notFoundLeaf(bodyHash : Blob) : [Blob] {
+    Array.concat<Blob>(notFoundPrefix, [Cert.responseHash(
+        cutoverNotFoundHeaders,
+        404,
+        bodyHash,
+    )]);
+};
+let predecessorNotFoundLeaf = notFoundLeaf(
+    predecessorNotFoundBodyHash,
+);
+let currentNotFoundLeaf = notFoundLeaf(cutoverNotFoundBodyHash);
+seedExpressionLeaf(predecessorNotFoundLeaf);
+
+cutoverTree.syncMountCatalog(
+    "files:public",
+    retainedMountBase,
+    null,
+);
+let #ok(cutoverBaseline) = Forest.commit(cutoverForest) else {
+    Runtime.trap("response-policy cutover baseline commit failed");
+};
+assert (
+    cutoverTree.mountCatalogMatches(
+        "files:public",
+        retainedMountBase,
+        null,
+    ) == #present
+);
+
+let cutoverHttpAssets = Cert.init();
+let cutover = Cert.CertifiedHttp(cutoverHttpAssets, cutoverForest);
+cutover.beginV2PublicationBatch();
+cutover.putHash("/obsolete-widget.svg", routeBodyAHash);
+cutover.putHash("/app/files/index.html", routeBodyBHash);
+assert (cutover.assetHash("/obsolete-widget.svg") == ?routeBodyAHash);
+assert (cutover.assetHash("/app/files/index.html") == ?routeBodyBHash);
+
+let cutoverDeployment = "0123456789abcdef0123456789abcdef";
+assert (cutover.cutoverKernelResponsePolicyV316(
+    cutoverDeployment,
+    ["files"],
+    cutoverNotFoundHeaders,
+    cutoverNotFoundBodyHash,
+));
+let cutoverQuarantine = Cert.kernelResponsePolicyV316QuarantinePath();
+let cutoverMarker = Cert.kernelResponsePolicyV316MarkerPath();
+let quarantinedKernelLeaf = Array.concat<Blob>(
+    cutoverQuarantine,
+    Array.tabulate<Blob>(
+        retiredKernelLeaf.size() - 1,
+        func(index) { retiredKernelLeaf[index + 1] },
+    ),
+);
+assert (
+    Forest.pathKind(cutoverForest, quarantinedKernelLeaf) == #leaf
+);
+assert (
+    Forest.pathKind(cutoverForest, cutoverMarker) == #leaf
+);
+for (
+    url in Cert.KERNEL_RESPONSE_POLICY_REBUILD_SYSTEM_PATHS_V316.vals()
+) {
+    let systemLeaf = syntheticExpressionLeaf(Cert.exactExpressionPath(url));
+    let quarantinedSystemLeaf = Array.concat<Blob>(
+        cutoverQuarantine,
+        Array.tabulate<Blob>(
+            systemLeaf.size() - 1,
+            func(index) { systemLeaf[index + 1] },
+        ),
+    );
+    assert (
+        Forest.pathKind(cutoverForest, quarantinedSystemLeaf) == #leaf
+    );
+    cutover.removeQuarantinedKernelStaticExpressionV316(url);
+    assert (
+        Forest.pathKind(cutoverForest, quarantinedSystemLeaf) == #absent
+    );
+};
+cutover.removeQuarantinedKernelStaticExpressionV316(
+    "/obsolete-widget.svg",
+);
+assert (Forest.pathKind(cutoverForest, quarantinedKernelLeaf) == #absent);
+let #ok(cutoverCommitted) = Forest.commit(cutoverForest) else {
+    Runtime.trap("response-policy cutover commit failed");
+};
+assert (
+    cutoverCommitted.commit_sequence ==
+    cutoverBaseline.commit_sequence + 1
+);
+assert (cutoverCommitted.attached_root_changed);
+assert (Forest.deepValidate(cutoverForest));
+
+for (leaf in [
+    retainedAppExact,
+    retainedAppWildcard,
+    retainedPackage,
+    retainedModule,
+].vals()) {
+    assert (Forest.lookup(cutoverForest, leaf) == #found(cutoverEmpty));
+};
+for (url in Cert.KERNEL_RESPONSE_POLICY_REBUILD_SYSTEM_PATHS_V316.vals()) {
+    assert (
+        Forest.lookup(
+            cutoverForest,
+            syntheticExpressionLeaf(Cert.exactExpressionPath(url)),
+        ) == #absent
+    );
+};
+for (leaf in [
+    retiredKernelLeaf,
+    retiredKernelWildcard,
+    unretainedAppLeaf,
+    kernelAppRootLeaf,
+    systemDescendantLeaf,
+    systemWildcardLeaf,
+    predecessorNotFoundLeaf,
+].vals()) {
+    assert (Forest.lookup(cutoverForest, leaf) == #absent);
+};
+assert (
+    Forest.lookup(cutoverForest, currentNotFoundLeaf) ==
+    #found(cutoverEmpty)
+);
+assert (
+    cutoverTree.mountCatalogMatches(
+        "files:public",
+        retainedMountBase,
+        null,
+    ) == #present
+);
+assert (cutover.assetHash("/obsolete-widget.svg") == ?routeBodyAHash);
+assert (cutover.assetHash("/app/files/index.html") == ?routeBodyBHash);
+assert (
+    Forest.pathKind(cutoverForest, cutoverQuarantine) == #subtree
+);
+assert (
+    Forest.lookup(cutoverForest, cutoverMarker) ==
+    #found(Text.encodeUtf8(cutoverDeployment))
+);
+
+let cutoverRoot = cutoverCommitted.response_root_hash;
+assert (not cutover.cutoverKernelResponsePolicyV316(
+    cutoverDeployment,
+    ["files"],
+    cutoverNotFoundHeaders,
+    cutoverNotFoundBodyHash,
+));
+let #ok(cutoverIdempotent) = Forest.commit(cutoverForest) else {
+    Runtime.trap("idempotent response-policy cutover commit failed");
+};
+assert (not cutoverIdempotent.attached_root_changed);
+assert (cutoverIdempotent.response_root_hash == cutoverRoot);
+assert (
+    cutoverIdempotent.commit_sequence == cutoverCommitted.commit_sequence
+);
+assert (cutover.assetHash("/obsolete-widget.svg") == ?routeBodyAHash);
+assert (cutover.assetHash("/app/files/index.html") == ?routeBodyBHash);
+
+// A predecessor containing only the root 404 and retained namespaces would
+// otherwise collapse its `http_expr` root as the last retained branch is
+// detached. The early marker keeps that root movable and remains the exact
+// idempotence marker after every other branch is grafted back live.
+let emptyQuarantineForest = Forest.init(
+    Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
+    Allocator.layoutFingerprint(),
+);
+for (leaf in [
+    retainedAppExact,
+    retainedPackage,
+    retainedModule,
+    predecessorNotFoundLeaf,
+].vals()) {
+    assert (
+        Forest.put(emptyQuarantineForest, leaf, cutoverEmpty) ==
+        #ok({ inserted = true; prior = null })
+    );
+};
+let #ok(_) = Forest.commit(emptyQuarantineForest) else {
+    Runtime.trap("minimal predecessor baseline commit failed");
+};
+let emptyQuarantine = Cert.CertifiedHttp(
+    Cert.init(),
+    emptyQuarantineForest,
+);
+emptyQuarantine.beginV2PublicationBatch();
+assert (emptyQuarantine.cutoverKernelResponsePolicyV316(
+    cutoverDeployment,
+    ["files"],
+    cutoverNotFoundHeaders,
+    cutoverNotFoundBodyHash,
+));
+let #ok(emptyQuarantineCommitted) = Forest.commit(emptyQuarantineForest) else {
+    Runtime.trap("empty response-policy quarantine commit failed");
+};
+assert (emptyQuarantineCommitted.attached_root_changed);
+assert (Forest.deepValidate(emptyQuarantineForest));
+assert (
+    Forest.pathKind(emptyQuarantineForest, cutoverQuarantine) == #subtree
+);
+assert (
+    Forest.lookup(emptyQuarantineForest, cutoverMarker) ==
+    #found(Text.encodeUtf8(cutoverDeployment))
+);
+assert (
+    Forest.lookup(emptyQuarantineForest, currentNotFoundLeaf) ==
+    #found(cutoverEmpty)
+);
+for (leaf in [retainedAppExact, retainedPackage, retainedModule].vals()) {
+    assert (
+        Forest.lookup(emptyQuarantineForest, leaf) ==
+        #found(cutoverEmpty)
+    );
+};
+assert (not emptyQuarantine.cutoverKernelResponsePolicyV316(
+    cutoverDeployment,
+    ["files"],
+    cutoverNotFoundHeaders,
+    cutoverNotFoundBodyHash,
+));
+let #ok(emptyQuarantineRetry) = Forest.commit(emptyQuarantineForest) else {
+    Runtime.trap("empty response-policy quarantine retry commit failed");
+};
+assert (not emptyQuarantineRetry.attached_root_changed);
+assert (
+    emptyQuarantineRetry.response_root_hash ==
+    emptyQuarantineCommitted.response_root_hash
+);
+
+// A multi-chunk overwrite is transiently visible to install admission even
+// when an older durable asset exists at the same key. Completion clears the
+// fence before invoking the storage callback.
+let chunkFenceForest = Forest.init(
+    Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
+    Allocator.layoutFingerprint(),
+);
+let chunkFence = Cert.CertifiedHttp(Cert.init(), chunkFenceForest);
+let chunkFenceKey = "/system/staging/deployment/assets/0";
+var chunkFenceCompleted = false;
+// Keep publication deferred because the interpreter has no canister certified
+// data API; production install uploads already run beneath an outer batch.
+chunkFence.beginV2PublicationBatch();
+assert (not chunkFence.hasPendingChunked(chunkFenceKey));
+chunkFence.chunkedStart(
+    chunkFenceKey,
+    2,
+    routeBodyA,
+    func(chunks, bodyHash) {
+        assert (not chunkFence.hasPendingChunked(chunkFenceKey));
+        assert (chunks == [routeBodyA, routeBodyB]);
+        assert (bodyHash == Cert.hashChunks(chunks));
+        chunkFenceCompleted := true;
+    },
+);
+assert (chunkFence.hasPendingChunked(chunkFenceKey));
+chunkFence.chunkedSend(chunkFenceKey, 1, routeBodyB);
+assert (chunkFenceCompleted);
+assert (not chunkFence.hasPendingChunked(chunkFenceKey));
 
 // Dedicated resident proofs bind browser destination on every nonce-host
 // response. The executable HTML profile additionally binds the one canonical
@@ -471,6 +980,64 @@ assert (
     ) != ?residentWorkerHash
 );
 
+// Installation-owned HTML binds Host and the exact iframe destination while
+// deliberately leaving ordinary launch-context query parameters out of the
+// certified request. It reuses the existing subresource CEL bytes so adding
+// the request kind does not alter the persisted response-policy contract.
+let installationHtmlKind : Cert.ResidentRequestKind =
+    #installation_html_v1;
+let installationHost =
+    "i0123456789abcdef01234567--aaaaa-aa.icp0.io";
+let installationHtmlOwner : Cert.ResidentRequestOwner = {
+    method = "GET";
+    host = installationHost;
+    kind = installationHtmlKind;
+};
+let installationHtmlHash = Cert.residentRequestHash(
+    installationHtmlOwner,
+    emptyRequestBody,
+);
+assert (
+    Cert.residentCertificationExpression(installationHtmlKind) ==
+    Cert.RESIDENT_SUBRESOURCE_CERTIFICATION_EXPRESSION
+);
+assert (
+    Cert.residentRequestHashForRequest(
+        installationHtmlKind,
+        "GET",
+        "/app/files/index.html?app=files&tile=call",
+        [
+            ("Host", installationHost),
+            ("Sec-Fetch-Dest", "iframe"),
+        ],
+        emptyRequestBody,
+    ) == ?installationHtmlHash
+);
+assert (
+    Cert.residentRequestHashForRequest(
+        installationHtmlKind,
+        "GET",
+        "/app/files/index.html?app=other&tile=other",
+        [
+            ("Host", installationHost),
+            ("Sec-Fetch-Dest", "iframe"),
+        ],
+        emptyRequestBody,
+    ) == ?installationHtmlHash
+);
+assert (
+    Cert.residentRequestHashForRequest(
+        installationHtmlKind,
+        "GET",
+        "/app/files/index.html?app=files&tile=call",
+        [
+            ("Host", installationHost),
+            ("Sec-Fetch-Dest", "document"),
+        ],
+        emptyRequestBody,
+    ) != ?installationHtmlHash
+);
+
 let residentHtmlHeaders : [Cert.HeaderField] = [
     ("Content-Type", "text/html; charset=utf-8"),
     (
@@ -486,6 +1053,191 @@ let residentHtmlVariant : Cert.ResidentResponseVariant = {
     body_hash = routeBodyAHash;
     response_headers = residentHtmlHeaders;
 };
+let residentHtmlAlternative : Cert.ResidentResponseVariant = {
+    residentHtmlVariant with body_hash = routeBodyBHash;
+};
+let installationHtmlHeaders : [Cert.HeaderField] = [
+    ("Content-Type", "text/html; charset=utf-8"),
+    (
+        Cert.CERTIFICATE_EXPRESSION_HEADER,
+        Cert.RESIDENT_SUBRESOURCE_CERTIFICATION_EXPRESSION,
+    ),
+];
+let installationHtmlVariant : Cert.ResidentResponseVariant = {
+    method = "GET";
+    host = installationHost;
+    kind = installationHtmlKind;
+    status_code = 200;
+    body_hash = routeBodyAHash;
+    response_headers = installationHtmlHeaders;
+};
+
+let residentWorkerVariant : Cert.ResidentResponseVariant = {
+    method = "GET";
+    host = residentHost;
+    kind = residentWorkerKind;
+    status_code = 200;
+    body_hash = routeBodyBHash;
+    response_headers = installationHtmlHeaders;
+};
+
+// Derive the closed maximum for one JavaScript asset: persistent background
+// mode replaces the ordinary installation background, leaving 32 tiles plus
+// tray (33 surfaces) across two authorities and five installation destinations
+// (330 owners), plus one persistent origin across two authorities and seven
+// destinations (14 owners). The count anchors the whole-asset reset bound used
+// by install cleanup.
+let fanoutInstallationKinds : [Cert.ResidentRequestKind] = [
+    #subresource_v1({ destination = "empty" }),
+    #subresource_v1({ destination = "script" }),
+    #subresource_v1({ destination = "worker" }),
+    #subresource_v1({ destination = "audioworklet" }),
+    #subresource_v1({ destination = "paintworklet" }),
+];
+let fanoutPersistentKinds : [Cert.ResidentRequestKind] = [
+    #subresource_v1({ destination = "empty" }),
+    #subresource_v1({ destination = "script" }),
+    #subresource_v1({ destination = "worker" }),
+    #subresource_v1({ destination = "sharedworker" }),
+    #subresource_v1({ destination = "serviceworker" }),
+    #subresource_v1({ destination = "audioworklet" }),
+    #subresource_v1({ destination = "paintworklet" }),
+];
+let fanoutInstallationSurfaceCount = 33;
+let fanoutAuthorityCount = 2;
+let fanoutInstallationVariantCount = fanoutInstallationSurfaceCount *
+    fanoutAuthorityCount * fanoutInstallationKinds.size();
+func fanoutVariants(bodyHash : Blob) : [Cert.ResidentResponseVariant] {
+    Array.tabulate<Cert.ResidentResponseVariant>(
+        Cert.ORIGIN_RESPONSE_VARIANTS_MAX,
+        func(index) {
+            let installation = index < fanoutInstallationVariantCount;
+            let localIndex = if (installation) index else
+                index - fanoutInstallationVariantCount;
+            let kinds = if (installation) fanoutInstallationKinds else
+                fanoutPersistentKinds;
+            let kindIndex = localIndex % kinds.size();
+            let authorityIndex = (localIndex / kinds.size()) %
+                fanoutAuthorityCount;
+            let surfaceIndex = localIndex /
+                (kinds.size() * fanoutAuthorityCount);
+            let hostLabel = if (installation) {
+                "fanout" # Nat.toText(surfaceIndex) # "--aaaaa-aa";
+            } else {
+                "p0123456789abcdef01234567--aaaaa-aa";
+            };
+            {
+                method = "GET";
+                host = hostLabel # (
+                    if (authorityIndex == 0) ".icp0.io"
+                    else ".localhost:8000"
+                );
+                kind = kinds[kindIndex];
+                status_code = 200;
+                body_hash = bodyHash;
+                response_headers = installationHtmlHeaders;
+            };
+        },
+    );
+};
+let initialFanoutVariants = fanoutVariants(routeBodyBHash);
+assert (fanoutInstallationVariantCount == 330);
+assert (initialFanoutVariants.size() == 344);
+assert (
+    initialFanoutVariants.size() == Cert.ORIGIN_RESPONSE_VARIANTS_MAX
+);
+// Persistent-forest mechanics are independent of the declared variant count.
+// Exercise a representative cross-surface set here; the exact closed maximum
+// is checked above without making every unit-test run build and rotate a
+// several-hundred-leaf authenticated tree.
+let boundedFanoutVariants = Array.tabulate<Cert.ResidentResponseVariant>(
+    8,
+    func(index) { initialFanoutVariants[index] },
+);
+let rotatedFanoutVariants = Array.map<
+    Cert.ResidentResponseVariant,
+    Cert.ResidentResponseVariant,
+>(boundedFanoutVariants, func(variant) {
+    { variant with body_hash = routeBodyAHash };
+});
+let fanoutUrl = "/app/files/fanout.js";
+let fanoutForest = Forest.init(
+    Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
+    Allocator.layoutFingerprint(),
+);
+let fanoutTree = Cert.PersistentCertificationTree(fanoutForest, func() {});
+Forest.resetOperationCounters(fanoutForest);
+let fanoutWorkStart = Cert.authenticatedForestMutationWork(
+    fanoutForest.counters,
+);
+fanoutTree.apply([#replace_origin_scoped({
+    url = fanoutUrl;
+    next = boundedFanoutVariants;
+})]);
+let fanoutPublishWork = Cert.authenticatedForestMutationWork(
+    fanoutForest.counters,
+) - fanoutWorkStart;
+assert (fanoutPublishWork > 0);
+assert (Cert.publicationBatchWorkAllowed(fanoutPublishWork));
+let #ok(_) = Forest.commit(fanoutForest) else {
+    Runtime.trap("fanout forest publication commit failed");
+};
+assert (fanoutTree.hasResident(fanoutUrl, boundedFanoutVariants[0]));
+assert (fanoutTree.hasResident(
+    fanoutUrl,
+    boundedFanoutVariants[boundedFanoutVariants.size() - 1],
+));
+fanoutTree.apply([#replace_origin_scoped({
+    url = fanoutUrl;
+    next = rotatedFanoutVariants;
+})]);
+let #ok(_) = Forest.commit(fanoutForest) else {
+    Runtime.trap("fanout forest rotation commit failed");
+};
+assert (not fanoutTree.hasResident(fanoutUrl, boundedFanoutVariants[0]));
+assert (fanoutTree.hasResident(fanoutUrl, rotatedFanoutVariants[0]));
+assert (fanoutTree.hasResident(
+    fanoutUrl,
+    rotatedFanoutVariants[rotatedFanoutVariants.size() - 1],
+));
+fanoutTree.removeStaticExpressionTree(fanoutUrl);
+let #ok(_) = Forest.commit(fanoutForest) else {
+    Runtime.trap("fanout forest deletion commit failed");
+};
+assert (not fanoutTree.hasResident(fanoutUrl, rotatedFanoutVariants[0]));
+assert (not fanoutTree.hasResident(
+    fanoutUrl,
+    rotatedFanoutVariants[rotatedFanoutVariants.size() - 1],
+));
+
+// The batch meter includes the separate body-hash tree and remains owned by
+// the outermost batch. Inner publishers cannot reset or publish around it.
+let meteredForest = Forest.init(
+    Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
+    Allocator.layoutFingerprint(),
+);
+let metered = Cert.CertifiedHttp(Cert.init(), meteredForest);
+metered.beginV2PublicationBatch();
+assert (metered.publicationBatchWork() == ?0);
+metered.putHash("/app/files/metered.js", routeBodyAHash);
+assert (metered.publicationBatchWork() == ?1);
+metered.beginV2PublicationBatch();
+metered.deleteAssetHash("/app/files/metered.js");
+let ?afterHashWork = metered.publicationBatchWork() else {
+    Runtime.trap("publication batch meter disappeared");
+};
+assert (afterHashWork == 2);
+metered.apply([#replace_origin_scoped({
+    url = "/app/files/metered.js";
+    next = [initialFanoutVariants[0]];
+})]);
+let ?afterPublicWork = metered.publicationBatchWork() else {
+    Runtime.trap("publication batch forest work disappeared");
+};
+assert (afterPublicWork > afterHashWork);
+assert (not metered.finishV2PublicationBatch());
+assert (metered.publicationBatchWork() == ?afterPublicWork);
+
 let residentTree = Cert.PublicCertificationTree(Cert.init());
 residentTree.apply([
     #replace({
@@ -496,7 +1248,16 @@ residentTree.apply([
     #replace_resident({
         url = "/app/files/service.html";
         prior = [];
-        next = [residentHtmlVariant];
+        next = [
+            residentHtmlVariant,
+            residentHtmlAlternative,
+            residentWorkerVariant,
+        ];
+    }),
+    #replace_resident({
+        url = "/app/files/index.html";
+        prior = [];
+        next = [installationHtmlVariant];
     }),
 ]);
 assert (
@@ -505,6 +1266,18 @@ assert (
         residentHtmlVariant,
     )
 );
+assert (residentTree.hasResident(
+    "/app/files/service.html",
+    residentHtmlAlternative,
+));
+assert (residentTree.hasResident(
+    "/app/files/service.html",
+    residentWorkerVariant,
+));
+assert (residentTree.hasResident(
+    "/app/files/index.html",
+    installationHtmlVariant,
+));
 // The same URL may retain an ordinary Host-only expression, but no weak
 // request hash exists for the nonce Host.
 assert (residentTree.has("/app/files/service.html", getA));
@@ -512,22 +1285,45 @@ assert (not residentTree.has(
     "/app/files/service.html",
     responseVariant("GET", residentHost, 200, routeBodyAHash),
 ));
-residentTree.apply([#remove_resident({
+// A static-origin reset drops every stale Host/destination/query owner below
+// both resident expression hashes without disturbing the ordinary Host-only
+// response at this exact URL or resident responses at another URL.
+residentTree.apply([#replace_origin_scoped({
     url = "/app/files/service.html";
-    requests = [residentOwner];
+    next = [installationHtmlVariant];
 })]);
 assert (not residentTree.hasResident(
     "/app/files/service.html",
     residentHtmlVariant,
 ));
+assert (not residentTree.hasResident(
+    "/app/files/service.html",
+    residentWorkerVariant,
+));
+assert (residentTree.hasResident(
+    "/app/files/service.html",
+    installationHtmlVariant,
+));
 assert (residentTree.has("/app/files/service.html", getA));
+assert (residentTree.hasResident(
+    "/app/files/index.html",
+    installationHtmlVariant,
+));
+residentTree.apply([#remove_resident({
+    url = "/app/files/index.html";
+    requests = [installationHtmlOwner];
+})]);
+assert (not residentTree.hasResident(
+    "/app/files/index.html",
+    installationHtmlVariant,
+));
 
 let persistentResidentForest = Forest.init(
     Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
     Allocator.layoutFingerprint(),
 );
 let persistentResidentTree =
-    Cert.PersistentCertificationTree(persistentResidentForest);
+    Cert.PersistentCertificationTree(persistentResidentForest, func() {});
 persistentResidentTree.apply([
     #replace({
         url = "/app/files/service.html";
@@ -537,7 +1333,16 @@ persistentResidentTree.apply([
     #replace_resident({
         url = "/app/files/service.html";
         prior = [];
-        next = [residentHtmlVariant];
+        next = [
+            residentHtmlVariant,
+            residentHtmlAlternative,
+            residentWorkerVariant,
+        ];
+    }),
+    #replace_resident({
+        url = "/app/files/index.html";
+        prior = [];
+        next = [installationHtmlVariant];
     }),
 ]);
 let residentForestCommit = Forest.commit(persistentResidentForest);
@@ -554,24 +1359,59 @@ assert (persistentResidentTree.hasResident(
     "/app/files/service.html",
     residentHtmlVariant,
 ));
+assert (persistentResidentTree.hasResident(
+    "/app/files/service.html",
+    residentHtmlAlternative,
+));
+assert (persistentResidentTree.hasResident(
+    "/app/files/service.html",
+    residentWorkerVariant,
+));
+assert (persistentResidentTree.hasResident(
+    "/app/files/index.html",
+    installationHtmlVariant,
+));
 assert (not persistentResidentTree.has(
     "/app/files/service.html",
     responseVariant("GET", residentHost, 200, routeBodyAHash),
 ));
-persistentResidentTree.apply([#remove_resident({
+persistentResidentTree.apply([#replace_origin_scoped({
     url = "/app/files/service.html";
-    requests = [residentOwner];
+    next = [installationHtmlVariant];
 })]);
 let #ok(_) = Forest.commit(persistentResidentForest) else {
-    Runtime.trap("resident forest removal commit failed");
+    Runtime.trap("resident forest origin reset commit failed");
 };
 assert (not persistentResidentTree.hasResident(
     "/app/files/service.html",
     residentHtmlVariant,
 ));
+assert (not persistentResidentTree.hasResident(
+    "/app/files/service.html",
+    residentWorkerVariant,
+));
+assert (persistentResidentTree.hasResident(
+    "/app/files/service.html",
+    installationHtmlVariant,
+));
 assert (persistentResidentTree.has(
     "/app/files/service.html",
     getA,
+));
+assert (persistentResidentTree.hasResident(
+    "/app/files/index.html",
+    installationHtmlVariant,
+));
+persistentResidentTree.apply([#remove_resident({
+    url = "/app/files/index.html";
+    requests = [installationHtmlOwner];
+})]);
+let #ok(_) = Forest.commit(persistentResidentForest) else {
+    Runtime.trap("installation HTML forest removal commit failed");
+};
+assert (not persistentResidentTree.hasResident(
+    "/app/files/index.html",
+    installationHtmlVariant,
 ));
 
 // ---------------------------------------------------------------------------
@@ -751,6 +1591,73 @@ assert (
     ) ==
     ?Nat.toText(routeBodyA.size())
 );
+
+// URL-scoped resident resets are expression-specific: a Certified Assets V2
+// request branch at the same exact URL survives both replacement and removal.
+let retainedV2Set = publicationSingle[0];
+let retainedV2Response = retainedV2Set.responses[0];
+let originScopedV2Tree = Cert.PublicCertificationTree(Cert.init());
+assert (originScopedV2Tree.applyV2([#replace({
+    prior = [];
+    next = [retainedV2Set];
+})]));
+originScopedV2Tree.apply([#replace_origin_scoped({
+    url = publicationPath;
+    next = [residentHtmlVariant, installationHtmlVariant];
+})]);
+assert (originScopedV2Tree.hasV2(
+    retainedV2Set.owner,
+    retainedV2Response,
+));
+originScopedV2Tree.apply([#replace_origin_scoped({
+    url = publicationPath;
+    next = [];
+})]);
+assert (not originScopedV2Tree.hasResident(
+    publicationPath,
+    residentHtmlVariant,
+));
+assert (not originScopedV2Tree.hasResident(
+    publicationPath,
+    installationHtmlVariant,
+));
+assert (originScopedV2Tree.hasV2(
+    retainedV2Set.owner,
+    retainedV2Response,
+));
+
+let originScopedV2Forest = Forest.init(
+    Text.encodeUtf8(V2.responsePolicyTableCanonicalV1()),
+    Allocator.layoutFingerprint(),
+);
+let originScopedPersistentV2Tree =
+    Cert.PersistentCertificationTree(originScopedV2Forest, func() {});
+originScopedPersistentV2Tree.applyV2([#replace({
+    prior = [];
+    next = [retainedV2Set];
+})]);
+originScopedPersistentV2Tree.apply([#replace_origin_scoped({
+    url = publicationPath;
+    next = [residentHtmlVariant, installationHtmlVariant];
+})]);
+originScopedPersistentV2Tree.apply([#replace_origin_scoped({
+    url = publicationPath;
+    next = [];
+})]);
+let #ok(_) = Forest.commit(originScopedV2Forest) else {
+    Runtime.trap("origin-scoped V2 retention commit failed");
+};
+assert (originScopedPersistentV2Tree.hasV2Leaf(
+    Cert.v2LeafKey(retainedV2Set.owner, retainedV2Response)
+));
+assert (not originScopedPersistentV2Tree.hasResident(
+    publicationPath,
+    residentHtmlVariant,
+));
+assert (not originScopedPersistentV2Tree.hasResident(
+    publicationPath,
+    installationHtmlVariant,
+));
 
 let chunkA : Blob = "aaa";
 let chunkB : Blob = "bbbbb";

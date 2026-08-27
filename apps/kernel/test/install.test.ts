@@ -26,7 +26,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.15.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.17.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -35,7 +35,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(315);
+  expect(manifest.version).toBe(317);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   expect(manifest.memory.kernel.version).toBe(3);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3"]);
@@ -55,7 +55,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(315);
+  expect(packagedManifest.version).toBe(317);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
@@ -66,10 +66,10 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(3);
-  expect(packagedArchive.manifest.version).toBe(315);
+  expect(packagedArchive.manifest.version).toBe(317);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 315 },
+    package: { id: "kernel", version: 317 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });
@@ -97,7 +97,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(wrapper).toContain(
     'import NeutronMemorySchema_a6_kernel_r17_kernel_activation_v1 "memory/activation/v1"',
   );
-  expect(wrapper).toContain('assembler_id = "neutron_actor_v25"');
+  expect(wrapper).toContain('assembler_id = "neutron_actor_v26"');
   expect(wrapper).toContain(
     '{ id = "kernel_activation"; owner = "kernel"; version = 1; schema = "memory/activation/v1" }',
   );
@@ -145,6 +145,291 @@ test("certified-assets capability toggles rotate stable write authority", async 
   expect(service).toMatch(
     /public func rotateStoreAuthority[\s\S]*?store_authority_epoch = epoch;[\s\S]*?collections;/,
   );
+});
+
+test("pending install journals freeze public static mutations", async () => {
+  const main = await readFile(
+    new URL("../backend/main.mo", import.meta.url),
+    "utf8",
+  );
+  const start = main.indexOf("public func /*update*/kernel_static");
+  const commandSwitch = main.indexOf("switch(cmd)", start);
+  expect(start).toBeGreaterThan(-1);
+  expect(commandSwitch).toBeGreaterThan(start);
+  expect(main.slice(start, commandSwitch)).toContain(
+    "assert(installs.publicStaticMutationsAllowed())",
+  );
+});
+
+test("resident-origin toggles reconcile only the affected app subtree", async () => {
+  const main = await readFile(
+    new URL("../backend/main.mo", import.meta.url),
+    "utf8",
+  );
+  expect(main).toMatch(
+    /func reconcileResidentOriginPolicy[\s\S]*?cert\.beginV2PublicationBatch\(\)[\s\S]*?reconcilePublicStaticAssetsForApp\(appId\)[\s\S]*?cert\.finishV2PublicationBatch\(\)/,
+  );
+  const reconcile = main.slice(
+    main.indexOf("func reconcileResidentOriginPolicy"),
+    main.indexOf("func deleteStaticAssetCertification"),
+  );
+  expect(reconcile).not.toContain("runtime-config.json");
+  expect(main).not.toContain('"wagyu"');
+  for (const kind of [
+    "#persistent_browser_storage",
+    "#dedicated_resident_origin",
+  ]) {
+    const start = main.indexOf(`case (${kind})`);
+    expect(start).toBeGreaterThan(-1);
+    expect(main.slice(start, start + 240)).toContain(
+      "reconcileResidentOriginPolicy(updated.scope.app_id)",
+    );
+  }
+});
+
+test("capability toggles publish runtime authority only after reconciliation", async () => {
+  const main = await readFile(
+    new URL("../backend/main.mo", import.meta.url),
+    "utf8",
+  );
+  const start = main.indexOf("func setCapabilityEnabled(");
+  const end = main.indexOf(
+    "public func /*update*/kernel_backend_reservations_apply",
+    start,
+  );
+  const toggle = main.slice(start, end);
+  expect(toggle).toContain("capabilityRegistry.setEnabled(input, caller)");
+  expect(toggle).toContain("capabilityRegistry.advanceAuthorityRevision()");
+  expect(toggle.indexOf("switch (updated.kind)")).toBeLessThan(
+    toggle.indexOf("capabilityRegistry.advanceAuthorityRevision()"),
+  );
+  expect(toggle.indexOf("capabilityRegistry.advanceAuthorityRevision()")).toBeLessThan(
+    toggle.lastIndexOf("updated;"),
+  );
+});
+
+test("installation CSP is exact to the certified gateway environment", async () => {
+  const main = await readFile(
+    new URL("../backend/main.mo", import.meta.url),
+    "utf8",
+  );
+  const start = main.indexOf("func browserGatewayEnvironment");
+  const end = main.indexOf("public func isSharedAppRoutePath", start);
+  const csp = main.slice(start, end);
+  expect(csp).toContain('let appPath = "/app/" # appId # "/"');
+  expect(csp).toContain('authority == surfaceHostLabel # ".icp0.io"');
+  expect(csp).toContain(
+    'authority == surfaceHostLabel # ".localhost:8000"',
+  );
+  expect(csp).toContain("else return null");
+  expect(csp).toContain(
+    '"sandbox allow-scripts allow-same-origin; script-src "',
+  );
+  expect(csp).toContain('"\'unsafe-inline\' \'unsafe-eval\' blob: "');
+  expect(csp).toContain('"; object-src \'none\'; "');
+  expect(csp).toContain('"worker-src blob: "');
+  expect(csp).toContain("environment.surface_origin # appPath");
+  expect(csp).toContain("environment.kernel_origin");
+  expect(csp).toContain("public func residentDocumentCspForAuthority");
+  expect(csp).toContain(
+    '"sandbox allow-scripts allow-same-origin; frame-ancestors "',
+  );
+  expect(csp).not.toContain("gemma");
+
+  const headersStart = main.indexOf("func certifiedResponseHeaders");
+  const headersEnd = main.indexOf(
+    "func certifiedAuthorities",
+    headersStart,
+  );
+  const headers = main.slice(headersStart, headersEnd);
+  expect(headers).toContain("documentAuthority : ?BrowserDocumentAuthority");
+  expect(headers).toContain(
+    "installationDocumentCspForAuthority(\n                            surface.host_label",
+  );
+  expect(headers).toContain("case (#persistent_app)");
+  expect(headers).toContain("residentDocumentCspForAuthority(");
+
+  const variantsStart = main.indexOf(
+    "for (surface in browserSurfaces(appId).vals())",
+  );
+  const variantsEnd = main.indexOf(
+    "if (dedicatedResidentOriginActive(instance))",
+    variantsStart,
+  );
+  expect(main.slice(variantsStart, variantsEnd)).toMatch(
+    /for \(authority in certifiedAuthorities[\s\S]*?#installation_app,[\s\S]*?\?surface,[\s\S]*?host_label = surface\.host_label;[\s\S]*?authority;/,
+  );
+  const residentVariantsStart = main.indexOf(
+    "let hostLabel = persistentAppOriginPrefix",
+    variantsEnd,
+  );
+  const residentVariantsEnd = main.indexOf(
+    "List.toArray(result)",
+    residentVariantsStart,
+  );
+  expect(main.slice(residentVariantsStart, residentVariantsEnd)).toMatch(
+    /#persistent_app,[\s\S]*?host_label = hostLabel;[\s\S]*?authority;/,
+  );
+  expect(main).toMatch(
+    /let originDocumentAuthority = if \([\s\S]*?#persistent_app[\s\S]*?requestHostAuthority\([\s\S]*?host_label = authority\.host_label;[\s\S]*?certifiedResponseHeaders\([\s\S]*?originDocumentAuthority,/,
+  );
+});
+
+test("selected app package proofs are retired into a passive MIME profile", async () => {
+  const main = await readFile(
+    new URL("../backend/main.mo", import.meta.url),
+    "utf8",
+  );
+  expect(main).toContain(
+    "if (passiveAppPackage and isAppPackageHttpAssetPath(path))",
+  );
+  const headersStart = main.indexOf("func certifiedResponseHeaders");
+  const headersEnd = main.indexOf("func certifiedAuthorities", headersStart);
+  const headers = main.slice(headersStart, headersEnd);
+  expect(headers).toContain(
+    "let responseContentType = httpAssetResponseContentType(",
+  );
+  expect(headers).toMatch(
+    /let adoptedApp = switch \(appIdFromAssetUrl\(key\)\)[\s\S]*?browserSurfaceOriginApps,[\s\S]*?appId,[\s\S]*?\) != null/,
+  );
+  expect(headers).toMatch(
+    /let passiveAppPackage =\s+\(\s*InstallMemory\.deploymentCommitted\([\s\S]*?\) or\s+installBrowserSurfaceCertificationUnitsRemaining != null\s+\) and\s+adoptedApp and\s+isAppPackageHttpAssetPath\(key\)/,
+  );
+  expect(headers).toContain(
+    "file.content_type,\n                passiveAppPackage,",
+  );
+  expect(headers).toContain('(\"Content-Type\", responseContentType)');
+  expect(headers).toContain('(\"X-Content-Type-Options\", \"nosniff\")');
+
+  expect(main).not.toContain("func reconcileSelectedAppPackageAssets");
+  const commitStart = main.indexOf("func commitInstall<system>");
+  const commitEnd = main.indexOf("public func /*update*/kernel_install_abort", commitStart);
+  const commit = main.slice(commitStart, commitEnd);
+  const enableCopyTimeProfile = commit.indexOf(
+    "installBrowserSurfaceCertificationUnitsRemaining :=\n                ?MAX_BROWSER_SURFACE_CERTIFICATION_UNITS",
+  );
+  const copyAssets = commit.indexOf("ignore installs.commit(inp");
+  const disableCopyTimeProfile = commit.indexOf(
+    "installBrowserSurfaceCertificationUnitsRemaining := null",
+  );
+  expect(enableCopyTimeProfile).toBeGreaterThan(-1);
+  expect(copyAssets).toBeGreaterThan(enableCopyTimeProfile);
+  expect(disableCopyTimeProfile).toBeGreaterThan(copyAssets);
+  expect(commit.indexOf("cert.finishV2PublicationBatch()"))
+    .toBeGreaterThan(disableCopyTimeProfile);
+});
+
+test("Kernel activation retires every retained Kernel-profile response", async () => {
+  const [main, assets] = await Promise.all([
+    readFile(new URL("../backend/main.mo", import.meta.url), "utf8"),
+    readFile(new URL("../backend/assets.mo", import.meta.url), "utf8"),
+  ]);
+
+  const sandboxHeaders = main.slice(
+    main.indexOf("public func appAssetSandboxHeaders"),
+    main.indexOf("public class Init"),
+  );
+  const kernelPolicy = sandboxHeaders.slice(
+    sandboxHeaders.indexOf("case (#kernel)"),
+    sandboxHeaders.indexOf("case (#opaque_app)"),
+  );
+  expect(kernelPolicy).toContain('"frame-ancestors \'none\'"');
+  expect(kernelPolicy).not.toContain("if (html)");
+
+  const reconciliation = main.slice(
+    main.indexOf("func reconcileRetainedKernelStaticAssets"),
+    main.indexOf("func reconcileResidentBackgroundEntrypoints"),
+  );
+  expect(assets).toContain("Map.entriesFrom(store, Text.compare, key)");
+  expect(reconciliation).toContain("assets.entriesFrom(start)");
+  expect(reconciliation).toContain('visitRange("/", ?"/app/")');
+  expect(reconciliation).toContain('visitFiltered("/app/")');
+  expect(reconciliation).toContain('visitRange("/app0", ?"/mo/")');
+  expect(reconciliation).toContain('visitRange("/mo0", ?"/pkg/")');
+  expect(reconciliation).toContain('visitRange("/pkg0", ?"/system/")');
+  expect(reconciliation).toContain('visitRange("/system0", null)');
+  expect(reconciliation).toContain("isPackageHttpAssetPath(key)");
+  expect(reconciliation).toContain("isInternalHttpStatePath(key)");
+  expect(reconciliation).toContain("isSharedAppRoutePath(key)");
+  expect(reconciliation).toContain(
+    "Cert.KERNEL_RESPONSE_POLICY_REBUILD_SYSTEM_PATHS_V316",
+  );
+  expect(reconciliation).toContain(
+    "cert.removeQuarantinedKernelStaticExpressionV316(key)",
+  );
+  expect(reconciliation.match(/forEachKernelAsset\(func/g)).toHaveLength(2);
+  expect(reconciliation).toContain(
+    "candidateCount <= MAX_STATIC_LIST_KEYS",
+  );
+  expect(reconciliation).toMatch(
+    /not Cert\.validCanonicalPath\(key\)[\s\S]*?cert\.deleteRestoredLegacyStaticAssetHash\(key\)/u,
+  );
+  expect(reconciliation).toContain("staticCertificationMutations(");
+  expect(reconciliation).not.toContain(
+    "publicStaticAssetCertificationIsCurrent(key, bodyHash)",
+  );
+
+  const init = main.slice(
+    main.indexOf("public class Init("),
+    main.indexOf("public func /*update*/kernel_install_commit"),
+  );
+  const initializeFresh = init.indexOf("InstallService.initializeFresh(");
+  const activationGate = init.indexOf("let activatingKernelInstall");
+  const versionGate = init.indexOf(
+    "let requiresKernelResponsePolicyV316Cutover",
+  );
+  const restoreCertification = init.indexOf("cert.initialize(");
+  const activationCutoverComment = init.indexOf(
+    "Actor activation publishes restored certification",
+  );
+  const activationBatch = init.indexOf(
+    "cert.beginV2PublicationBatch()",
+    activationCutoverComment,
+  );
+  const activationReconcile = init.indexOf(
+    "reconcileRetainedKernelStaticAssets()",
+    activationCutoverComment,
+  );
+  const activationFinish = init.indexOf(
+    "cert.finishV2PublicationBatch()",
+    activationCutoverComment,
+  );
+  const installServiceConstruction = init.indexOf("let installs =");
+  expect(initializeFresh).toBeGreaterThan(-1);
+  expect(activationGate).toBeGreaterThan(initializeFresh);
+  expect(versionGate).toBeGreaterThan(activationGate);
+  const gate = init.slice(
+    activationGate,
+    init.indexOf("let assets =", activationGate),
+  );
+  expect(gate).toContain("journal.deployment_id == runningDeploymentId");
+  expect(gate).toContain("InstallService.changedInstances(");
+  expect(gate).toContain('"kernel"');
+  expect(gate).toContain(
+    "target >= KERNEL_RESPONSE_POLICY_V316_MIN_VERSION",
+  );
+  expect(gate).toContain(
+    "committed < KERNEL_RESPONSE_POLICY_V316_MIN_VERSION",
+  );
+  expect(restoreCertification).toBeGreaterThan(activationGate);
+  expect(activationBatch).toBeGreaterThan(restoreCertification);
+  expect(activationReconcile).toBeGreaterThan(activationBatch);
+  expect(activationFinish).toBeGreaterThan(activationReconcile);
+  expect(installServiceConstruction).toBeGreaterThan(activationFinish);
+
+  const commit = main.slice(
+    main.indexOf("func commitInstall<system>"),
+    main.indexOf("public func /*update*/kernel_install_abort"),
+  );
+  const outerBatch = commit.indexOf("cert.beginV2PublicationBatch()");
+  const promotion = commit.indexOf(
+    "ignore installs.commit(inp, caller, managedMemoryCommit)",
+  );
+  const finishBatch = commit.lastIndexOf("cert.finishV2PublicationBatch()");
+  expect(outerBatch).toBeGreaterThan(-1);
+  expect(promotion).toBeGreaterThan(outerBatch);
+  expect(finishBatch).toBeGreaterThan(promotion);
+  expect(commit).not.toContain("reconcileRetainedKernelStaticAssets()");
 });
 
 test("certified reads and POST handlers have independent runtime toggles", async () => {
@@ -441,6 +726,12 @@ test("checked install APIs are hard-cutover and fail closed", async () => {
     /kernel_static[\s\S]*?isDispatchMarkerPath\(x\.key\)[\s\S]*?isDispatchMarkerPath\(key\)[\s\S]*?case\(#delete[\s\S]*?isDispatchMarkerPath\(key\)[\s\S]*?case\(#clear[\s\S]*?isDispatchMarkerPath\(k\)/,
   );
   expect(main).toMatch(
+    /kernel_static[\s\S]*?isSeedOncePublicRegistryStaticTarget\(key\)[\s\S]*?current == next[\s\S]*?case\(#delete[\s\S]*?not isSeedOncePublicRegistryStaticTarget\(key\)[\s\S]*?case\(#clear[\s\S]*?not staticClearTouchesSeedOncePublicRegistry\(prefix\)/,
+  );
+  expect(main).toMatch(
+    /BROWSER_SURFACE_ORIGINS_PATH[\s\S]*?\/system\/browser-surface-origins\.json[\s\S]*?isSeedOncePublicRegistryStaticTarget[\s\S]*?isAppRegistryStaticTarget\(path\)[\s\S]*?isBrowserSurfaceOriginsStaticTarget\(path\)/,
+  );
+  expect(main).toMatch(
     /staticCertificationMutation[\s\S]*?assert \(not isSharedAppRoutePath\(key\)\)/,
   );
   expect(main).toMatch(
@@ -464,7 +755,7 @@ test("frontend app state is cleared only after the atomic install commit", async
     source.indexOf("export async function install_app"),
   );
   const committedUninstallIndex = uninstallBody.indexOf(
-    "await setCommittedAppsFromRuntime(neutron, result.apps)",
+    "await setCommittedAppsFromRuntime(",
   );
   expect(committedUninstallIndex).toBeGreaterThan(-1);
   expect(
@@ -479,7 +770,7 @@ test("frontend app state is cleared only after the atomic install commit", async
     source.indexOf("function removeAppRuntimeState"),
   );
   const setAppsIndex = installBody.indexOf(
-    "await setCommittedAppsFromRuntime(neutron, appconfig",
+    "await setCommittedAppsFromRuntime(",
   );
   const deployIndex = installBody.indexOf(
     "await deployPreparedPackages",
@@ -509,6 +800,35 @@ test("frontend deployments signal sibling tabs at activation and commit", async 
   expect(activationHelper).toContain('step !== "install-code"');
   expect(activationHelper).toContain('phase: "pending"');
   expect(source.match(/phase: "committed"/g)?.length).toBeGreaterThanOrEqual(4);
+
+  const completionBodies = [
+    source.slice(
+      source.indexOf("export async function beginPackageInstallSession"),
+      source.indexOf("function assertPackageSessionTargets"),
+    ),
+    source.slice(
+      source.indexOf("async function uninstallAppInternal"),
+      source.indexOf("export async function install_app"),
+    ),
+    source.slice(
+      source.indexOf("async function installAppInternal"),
+      source.indexOf("function removeAppRuntimeState"),
+    ),
+    source.slice(
+      source.indexOf("async function reconcileCompletedPendingInstall"),
+      source.indexOf("export async function abortPendingInstallRecovery"),
+    ),
+  ];
+  for (const body of completionBodies) {
+    const verified = body.indexOf(
+      body.includes("setCommittedAppsFromRuntime")
+        ? "await setCommittedAppsFromRuntime("
+        : "await getApps()",
+    );
+    const committedSignal = body.indexOf("announceRuntimeAuthorityChange({");
+    expect(verified).toBeGreaterThan(-1);
+    expect(committedSignal).toBeGreaterThan(verified);
+  }
 });
 
 test("observed runtime replacement retires cached actors before registry reconciliation", async () => {
@@ -526,6 +846,64 @@ test("observed runtime replacement retires cached actors before registry reconci
   expect(fence).toBeGreaterThan(-1);
   expect(reset).toBeGreaterThan(fence);
   expect(reconcile).toBeGreaterThan(reset);
+});
+
+test("frontend authority commits reject stale continuations and legacy postflight", async () => {
+  const source = await readFile(
+    new URL("../src/reducer/apps.ts", import.meta.url),
+    "utf8",
+  );
+  const snapshot = source.slice(
+    source.indexOf("async function loadAppRegistrySnapshot"),
+    source.indexOf("export type RuntimeAuthorityObservation"),
+  );
+  const snapshotRevision = snapshot.indexOf(
+    "const authorityRevision = useAppsStore.getState().authorityRevision",
+  );
+  const snapshotGuard = snapshot.indexOf(
+    "assertRuntimeAuthorityRevision(authorityRevision)",
+  );
+  const snapshotCommit = snapshot.indexOf(
+    "useAppsStore.getState().setApps(apps",
+  );
+  const snapshotUnfence = snapshot.lastIndexOf(
+    "setRuntimeAuthorityFence(null)",
+  );
+  expect(snapshotRevision).toBeGreaterThan(-1);
+  expect(snapshotGuard).toBeGreaterThan(snapshotRevision);
+  expect(snapshotCommit).toBeGreaterThan(snapshotGuard);
+  expect(snapshotUnfence).toBeGreaterThan(snapshotCommit);
+
+  const postflight = source.slice(
+    source.indexOf("async function setCommittedAppsFromRuntime"),
+    source.indexOf(
+      "export function assertCurrentBrowserSurfaceOriginAssembler",
+    ),
+  );
+  const postflightRevision = postflight.indexOf(
+    "const authorityRevision = useAppsStore.getState().authorityRevision",
+  );
+  const assemblerCheck = postflight.indexOf(
+    "assertCurrentBrowserSurfaceOriginAssembler(finalRuntime.assembler_id)",
+  );
+  const sidecarParse = postflight.indexOf(
+    "parseBrowserSurfaceOriginAuthoritySnapshot(",
+  );
+  const postflightRetry = postflight.indexOf(
+    "useAppsStore.getState().authorityRevision !== authorityRevision",
+  );
+  const postflightCommit = postflight.indexOf(
+    "useAppsStore.getState().setApps(apps",
+  );
+  const postflightUnfence = postflight.lastIndexOf(
+    "setRuntimeAuthorityFence(null)",
+  );
+  expect(postflightRevision).toBeGreaterThan(-1);
+  expect(assemblerCheck).toBeGreaterThan(postflightRevision);
+  expect(sidecarParse).toBeGreaterThan(assemblerCheck);
+  expect(postflightRetry).toBeGreaterThan(sidecarParse);
+  expect(postflightCommit).toBeGreaterThan(postflightRetry);
+  expect(postflightUnfence).toBeGreaterThan(postflightCommit);
 });
 
 test("manual install and uninstall use a consistent checked deployment baseline", async () => {
@@ -626,7 +1004,7 @@ test("manual install and uninstall use a consistent checked deployment baseline"
     source.indexOf("function removeAppRuntimeState"),
   );
   expect(installBody).toContain(
-    "expectedDeploymentId: compileDetails.expectedDeploymentId",
+    "expectedDeploymentId: currentBaseline.expectedDeploymentId",
   );
   expect(installBody).toContain(
     "deploymentBuildRecord: compileDetails.deployment.prepared.record",
@@ -677,9 +1055,14 @@ test("an interrupted install keeps recovery in Settings without blocking the she
   expect(getAppsBody).toContain("readConsistentAppRegistry(neutron)");
   const consistentRegistry = appsSource.slice(
     appsSource.indexOf("async function readConsistentAppRegistry"),
-    appsSource.indexOf("export async function compile_app"),
+    appsSource.indexOf(
+      "export function parseBrowserSurfaceOriginAuthoritySnapshot",
+    ),
   );
-  expect(consistentRegistry.match(/kernel_runtime_info\(\)/g)?.length).toBe(4);
+  expect(consistentRegistry.match(/kernel_runtime_info\(\)/g)?.length).toBe(3);
+  expect(consistentRegistry).toContain(
+    "readKernelAssetJson<unknown>(BROWSER_SURFACE_ORIGINS_PATH)",
+  );
   expect(consistentRegistry).toContain(
     "timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS",
   );

@@ -17,6 +17,7 @@ import { getNeutronId } from "../config.ts";
 import {
   getApps,
   isAuthorityPendingState,
+  refreshRuntimeAuthority,
   uninstall_app,
   useAppsStore,
 } from "../reducer/apps.ts";
@@ -84,6 +85,8 @@ import { useKernelUiModeStore } from "../ui_mode.ts";
 import { checkAppUpdates } from "../updates/service.ts";
 import { useUpdateCheckStore } from "../updates/store.ts";
 import { AppInstallRecoveryPanel } from "./AppInstallRecoveryPanel.tsx";
+import { committedFrontendDeploymentId } from "../runtime_authority.ts";
+import { announceRuntimeAuthorityChange } from "../runtime_authority_signal.ts";
 import {
   compareInstalledModuleHash,
   loadCertifiedInstalledModuleHash,
@@ -621,6 +624,25 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
         capability,
         enabled,
       );
+      // The update response proves the backend toggle and every specialized
+      // reconciliation committed. Retire this app's local ports first, then
+      // synchronously notify sibling tabs before doing any UI refresh work.
+      const appsState = useAppsStore.getState();
+      appsState.setApps(appsState.list, {
+        appInstances: appsState.appInstances,
+        invalidateAppIds: [capability.appId],
+      });
+      const deploymentId = committedFrontendDeploymentId();
+      if (deploymentId) {
+        announceRuntimeAuthorityChange({
+          deploymentId,
+          phase: "committed",
+        });
+      }
+      // Do not rely on this tab receiving its own BroadcastChannel message.
+      // Reconcile the authoritative runtime revision now; a failed query keeps
+      // the fail-closed fence installed for the next monitor retry.
+      await refreshRuntimeAuthority();
       setCapabilities((current) => ({
         data: current.data
           ? replaceCapabilitySummary(current.data, updated)
@@ -628,11 +650,6 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
         error: null,
         loading: false,
       }));
-      const appsState = useAppsStore.getState();
-      appsState.setApps(appsState.list, {
-        appInstances: appsState.appInstances,
-        invalidateAppIds: [capability.appId],
-      });
     } catch (reason) {
       setCapabilities((current) => ({
         ...current,

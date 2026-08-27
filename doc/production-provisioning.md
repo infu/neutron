@@ -286,11 +286,11 @@ clients or UI before its certification and origin binding pass. The current
 SushiOS packages name source `233tv-xiaaa-aaaay-aacta-cai`; see
 [App Package Updates](./package-updates.md).
 
-The current assembler gives the actor a compiler-owned immutable
-`installation.network_id`. Production derives it only from the
-compiler-pinned IC mainnet root-key SPKI DER; neither the config nor a fetched
-root key may substitute for it. Planning and postflight require exact runtime
-identity `neutron_actor_v25`; other assembler IDs fail closed.
+The selected assembler gives the actor a compiler-owned immutable
+`installation.network_id`. Production derives it only from the compiler-pinned
+IC mainnet root-key SPKI DER; neither the config nor a fetched root key may
+substitute for it. Planning and postflight require the exact `ASSEMBLER_ID`
+exported by the compiler; other assembler IDs fail closed.
 
 The full CLI/config/session details are maintained in the
 [provisioner package reference](../packages/neutron-provision/README.md).

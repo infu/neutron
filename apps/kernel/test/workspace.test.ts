@@ -24,6 +24,7 @@ import {
   backgroundFrameEntries,
   backgroundFrameSecurity,
   INITIAL_RESIDENT_FRAME_READINESS,
+  ordinaryBackgroundFrameAuthorityCurrent,
   residentFrameAuthorityCurrent,
   runnableBackgroundFrameEntries,
 } from "../src/workspace/AppBackgroundFrames.tsx";
@@ -40,6 +41,7 @@ import type {
 import { registryApp } from "./app_registry_fixture.ts";
 import { useAppsStore } from "../src/reducer/apps.ts";
 import { MAX_RESIDENT_APP_FRAMES } from "../src/runtime_limits.ts";
+import { appFrameEndpointAuthority } from "../src/app_frame_security.ts";
 
 const helloTile: TileLaunchRequest = {
   appId: "hello",
@@ -59,6 +61,7 @@ beforeEach(() => {
     list: {},
     appInstances: {},
     runtimeGenerations: {},
+    browserSurfaceOriginAppIds: [],
     operation: null,
     pendingInstallRecovery: null,
     runtimeAuthorityFence: null,
@@ -468,6 +471,18 @@ test("resident readiness remounts once, then blocks without a reload loop", () =
   const recovered = advanceResidentFrameReadiness(blocked, "connected");
   expect(recovered).toEqual({ attempt: 1, phase: "ready" });
   expect(advanceResidentFrameReadiness(recovered, "deadline")).toBe(recovered);
+  const disconnected = advanceResidentFrameReadiness(
+    recovered,
+    "disconnected",
+  );
+  expect(disconnected).toEqual({
+    attempt: 1,
+    phase: "waiting",
+  });
+  expect(advanceResidentFrameReadiness(disconnected, "deadline")).toEqual({
+    attempt: 1,
+    phase: "blocked",
+  });
 });
 
 test("resident frames are unavailable without committed instance authority", () => {
@@ -726,35 +741,38 @@ test("resident background keys bind package, deployment, scope, mode, nonce, and
     residentFrameSecurity:
       ResidentFrameSecurityMode.CREDENTIALLESS_OPAQUE_V1,
   };
-  expect(backgroundKey("files", app, base)).not.toBe(
+  expect(backgroundKey("files", app, base, true)).not.toBe(
+    backgroundKey("files", app, base, false),
+  );
+  expect(backgroundKey("files", app, base, true)).not.toBe(
     backgroundKey("files", app, {
       ...base,
       browserOriginAuthorityEpoch: "2",
-    }),
+    }, true),
   );
-  expect(backgroundKey("files", app, base)).not.toBe(
+  expect(backgroundKey("files", app, base, true)).not.toBe(
     backgroundKey("files", app, {
       ...base,
       browserOriginNonce: "2".padStart(32, "0"),
-    }),
+    }, true),
   );
-  expect(backgroundKey("files", app, base)).not.toBe(
+  expect(backgroundKey("files", app, base, true)).not.toBe(
     backgroundKey("files", app, {
       ...base,
       capabilityPlanFingerprint: "a".repeat(64),
-    }),
+    }, true),
   );
-  expect(backgroundKey("files", app, base)).not.toBe(
+  expect(backgroundKey("files", app, base, true)).not.toBe(
     backgroundKey("files", app, {
       ...base,
       deploymentId: "next-deployment",
-    }),
+    }, true),
   );
-  expect(backgroundKey("files", app, base)).not.toBe(
+  expect(backgroundKey("files", app, base, true)).not.toBe(
     backgroundKey("files", app, {
       ...base,
       scope: { ...base.scope, installationUid: "10" },
-    }),
+    }, true),
   );
   const packageChanged = registryApp({
     id: "files",
@@ -762,12 +780,12 @@ test("resident background keys bind package, deployment, scope, mode, nonce, and
     background: { path: "service.html" },
     capabilities: { randomness: { api: 1 } },
   });
-  expect(backgroundKey("files", app, base)).not.toBe(
+  expect(backgroundKey("files", app, base, true)).not.toBe(
     backgroundKey("files", packageChanged, {
       ...base,
       capabilityPlanFingerprint:
         packageChanged.capability_plan_fingerprint,
-    }),
+    }, true),
   );
   const modeChanged = registryApp({
     id: "files",
@@ -781,14 +799,61 @@ test("resident background keys bind package, deployment, scope, mode, nonce, and
       },
     },
   });
-  expect(backgroundKey("files", app, base)).not.toBe(
+  expect(backgroundKey("files", app, base, true)).not.toBe(
     backgroundKey("files", modeChanged, {
       ...base,
       capabilityPlanFingerprint: modeChanged.capability_plan_fingerprint,
       residentFrameSecurity:
         ResidentFrameSecurityMode.CREDENTIALLESS_EPHEMERAL_DEDICATED_V1,
-    }),
+    }, true),
   );
+});
+
+test("ordinary background authority is bound to per-app sidecar adoption", () => {
+  const app = registryApp({
+    id: "hello",
+    name: "Hello",
+    background: { path: "service.html" },
+  });
+  const instance = {
+    scope: { appId: "hello", installationUid: "9" },
+    version: app.version,
+    deploymentId: "deployment",
+    capabilityPlanFingerprint: app.capability_plan_fingerprint,
+    browserOriginNonce: "9".padStart(32, "0"),
+    browserOriginAuthorityEpoch: "4",
+    residentFrameSecurity:
+      ResidentFrameSecurityMode.CREDENTIALLESS_OPAQUE_V1,
+  } as const;
+  useAppsStore.setState({
+    list: { hello: app },
+    appInstances: { hello: instance },
+    runtimeGenerations: { hello: 3 },
+    browserSurfaceOriginAppIds: ["hello"],
+  });
+  const expected = appFrameEndpointAuthority({
+    appId: "hello",
+    app,
+    appInstance: instance,
+    appGeneration: 3,
+    browserSurfaceOriginAdopted: true,
+  });
+
+  expect(
+    ordinaryBackgroundFrameAuthorityCurrent(
+      expected,
+      useAppsStore.getState(),
+    ),
+  ).toBe(true);
+  useAppsStore.setState({
+    browserSurfaceOriginAppIds: [],
+  });
+  expect(
+    ordinaryBackgroundFrameAuthorityCurrent(
+      expected,
+      useAppsStore.getState(),
+    ),
+  ).toBe(false);
 });
 
 test("resident endpoint authority rechecks runtime mode, nonce, epoch, and generation", () => {
@@ -821,12 +886,13 @@ test("resident endpoint authority rechecks runtime mode, nonce, epoch, and gener
     runtimeGenerations: { files: 3 },
   });
   const expected = {
-    appId: "files",
-    appVersion: app.version,
-    appGeneration: 3,
-    capabilityPlanFingerprint: app.capability_plan_fingerprint,
-    deploymentId: "deployment",
-    installationUid: "9",
+    ...appFrameEndpointAuthority({
+      appId: "files",
+      app,
+      appInstance: instance,
+      appGeneration: 3,
+      browserSurfaceOriginAdopted: false,
+    }),
     binding: {
       mode,
       browserOriginNonce: instance.browserOriginNonce,

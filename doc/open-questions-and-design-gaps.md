@@ -131,14 +131,37 @@ maintainers before becoming roadmap commitments.
 
 ### MessagePort And Browser Isolation
 
-- Tiles and ordinary background processes run in credentialless
-  `sandbox="allow-scripts"` iframes without same-origin authority.
-  Backgrounds may instead use one of the mutually exclusive
+- Under the browser-surface-origin runtime, a selected ordinary package becomes eligible
+  for originful surfaces only when it contains the generic packer-owned
+  `.neutron/browser-surface-origins.v1.json` marker or declares the inherently
+  new `browser_permissions` capability. The checked install transaction
+  copies the complete package, certifies its surface hosts, and records the
+  app in `/system/browser-surface-origins.json`; there are no app-name or
+  version exceptions.
+- Each eligible installation derives a separate exact origin for every tile
+  ID, tray, and ordinary background from its browser nonce. Those surfaces run
+  in credentialless `sandbox="allow-scripts allow-same-origin"` iframes while
+  remaining cross-origin from the Kernel. Historical packages without the
+  readiness evidence, the explicit predecessor bridge, and the unsupported-browser fallback
+  retain credentialless `sandbox="allow-scripts"` frames with opaque
+  `origin: "null"`. Backgrounds may instead use one of the mutually exclusive
   credentialless-ephemeral or persistent dedicated modes specified in
   [Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
-- The kernel registers each exact `contentWindow`, assigns its endpoint id, and
-  transfers a private `MessagePort` through the closed probe/ready/connect
-  handshake. All operational traffic uses that port.
+- Browser features are denied by default. The closed V1
+  `browser_permissions` manifest capability may request only `camera` and
+  `microphone` for exact tile IDs. After install/update review, the Kernel
+  delegates only the accepted features through intersecting Host-bound child
+  and exact iframe policies; the tile uses browser media APIs directly, and
+  the browser or operating system retains the final permission decision. No
+  media-session backend is involved, and tray/background delegation is not
+  available in V1.
+- For an originful frame, the kernel binds the handshake to both its registered
+  `contentWindow` and exact expected origin, then transfers a private
+  `MessagePort`. Retained opaque frames remain source/port-bound, but their
+  indistinguishable `origin: "null"` and retained `WindowProxy` cannot prove a
+  cryptographically distinct document generation across reload; observed
+  loads retire and reprobe the port. All operational traffic uses the current
+  private port.
 - Tool arguments/results are draft-07 validated and JSON/size/time/concurrency
   bounded. Same-app calls are automatic; cross-app calls require a user grant
   and are audited in memory.
@@ -193,9 +216,9 @@ maintainers before becoming roadmap commitments.
 - A commit publishes one immutable, monotonic starter revision. A funded
   registration retains that exact Wasm/runtime/files value across awaits even
   if a controller publishes a newer current starter, then releases the heavy
-  value after seeding. The current production payload is Kernel plus eleven
-  apps, with source-bearing manifests tied to the certified production
-  updater; exact inventory and IDs are in
+  value after seeding. The selected production payload contains the Kernel and
+  source-bearing app manifests tied to the certified production updater; its
+  authoritative inventory is in
   [Dispenser And Provisioning](./dispenser-and-provisioning.md).
 - Completed Neutrons retain only their own canister principal as IC controller.
 - `kernel_activation` is one public update with `#set(hash)` and `#use(code)`.
@@ -271,11 +294,15 @@ compiler enforcement.
 ### Browser Boundary Risk
 
 The kernel frontend is the trusted parent window and holds the authenticated
-icblast identity. The message bus now has a source/port-bound protocol contract,
-opaque sandbox origins, schema validation, and cross-app approval. Remaining
-risk is concentrated in unsupported browser behavior, unbounded browser
-resources, and hostile tool metadata shown to an AI agent. The direct canister
-`call` action remains unavailable.
+icblast identity. The message bus has exact-origin and source/port binding for
+adopted originful frames, retained source/port binding for legacy opaque
+frames, schema validation, and cross-app approval. An opaque frame's
+`origin: "null"` cannot distinguish document generations behind a retained
+`WindowProxy` across reload, so that compatibility path remains a lifecycle
+risk and never receives camera or microphone delegation. Other remaining risk
+is concentrated in unsupported browser behavior, unbounded browser resources,
+and hostile tool metadata shown to an AI agent. The direct canister `call`
+action remains unavailable.
 
 ### Install Consistency Risk
 

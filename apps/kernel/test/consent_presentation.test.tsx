@@ -57,6 +57,44 @@ test("material danger is shown first while technical identifiers stay out of the
   expect(html).not.toContain("raw_context_method");
 });
 
+test("browser-device consequences disclose requestable access without claiming use", () => {
+  const html = renderToStaticMarkup(
+    <PermissionConsequences
+      permissions={[representativePermissions.browser_permissions]}
+    />,
+  );
+  expect(html).toContain("Request camera and microphone access");
+  expect(html).toContain(
+    "Allow tile `call` to request access to cameras on this device",
+  );
+  expect(html).toContain(
+    "Allow tile `call` to request access to microphones on this device",
+  );
+  expect(html).toContain("The browser may show its own prompt");
+  expect(html).toContain("Installing the app does not activate a device");
+  expect(html).toContain(
+    "including while its workspace is hidden",
+  );
+  expect(html).toContain("browser&#x27;s device indicator remains authoritative");
+  expect(html).toContain("Browser and site settings can separately deny it");
+  expect(html).not.toContain("currently active");
+  expect(html).not.toContain("camera is active");
+
+  const microphoneHtml = renderToStaticMarkup(
+    <PermissionConsequences
+      permissions={[
+        {
+          source: "kernel",
+          kind: "browser_permissions",
+          tiles: [{ id: "call", features: ["microphone"] }],
+        },
+      ]}
+    />,
+  );
+  expect(microphoneHtml).toContain("Request microphone access");
+  expect(microphoneHtml).not.toContain("Request camera access");
+});
+
 test("signed-call consent derives read versus change only from live Candid", () => {
   const target = {
     $idlFactory: ({ IDL: FactoryIDL }: { IDL: typeof IDL }) =>
@@ -100,6 +138,11 @@ const representativePermissions = {
   dedicated_resident_origin: {
     source: "kernel",
     kind: "dedicated_resident_origin",
+  },
+  browser_permissions: {
+    source: "kernel",
+    kind: "browser_permissions",
+    tiles: [{ id: "call", features: ["camera", "microphone"] }],
   },
   backend_calls: {
     source: "kernel",

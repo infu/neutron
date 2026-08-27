@@ -6,6 +6,10 @@ import path from "path";
 import zlib from "zlib";
 import { assertAppVersion } from "neutron-tools/src/version.js";
 import { packageArchiveFilename } from "neutron-tools/src/package_archive.js";
+import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  browserSurfaceOriginsPackageMarkerBytes,
+} from "neutron-tools/src/package_surface_origins.js";
 
 const msgpack = msgpack5();
 const REMOVED_PACKAGE_BUILD_METADATA_PATH = ".neutron-build.json";
@@ -31,7 +35,7 @@ export async function readFile(filePath: string): Promise<Uint8Array> {
   }
 }
 
-export function compressFileToUint8Array(fileBuffer: Buffer): Uint8Array {
+export function compressFileToUint8Array(fileBuffer: Uint8Array): Uint8Array {
   // Compress file
   const compressedBuffer = zlib.gzipSync(fileBuffer);
 
@@ -149,6 +153,15 @@ export async function packDirectory(
     throw new Error(
       `${REMOVED_PACKAGE_BUILD_METADATA_PATH} is removed; package archives are deployment-target neutral`,
     );
+  }
+  if (Object.hasOwn(flatStructure, NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH)) {
+    throw new Error(
+      `${NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH} is reserved for package-generation metadata`,
+    );
+  }
+  if (packageJson.id !== "kernel") {
+    flatStructure[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH] =
+      compressFileToUint8Array(browserSurfaceOriginsPackageMarkerBytes());
   }
   let rez = msgpack.encode(flatStructure);
   console.log("\nSize: " + rez.length);

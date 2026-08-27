@@ -24,7 +24,8 @@ dynamic import boundaries in the browser.
 The closed runtime record also carries the exact target/canister-specific
 isolated-frame origin template and an explicit update-source origin. Frame URL
 construction fails closed unless the result matches that certified template or
-the exact Kernel origin for an intentionally opaque unprefixed frame. Local
+the exact Kernel origin used only by an unadopted historical package's legacy
+opaque frame URL. Local
 update checks use the certified provision-owned update-source origin when its
 principal is selected. An IC deployment normally records `null` because it
 needs no override: each package manifest's source principal derives its
@@ -575,8 +576,8 @@ still permits deliberate kernel replacement. See
 
 ### Isolated App Iframes
 
-Every app tile contains a credentialless, script-only sandboxed iframe. The
-paths are stable:
+Every app tile, tray page, and ordinary resident background runs in an
+untrusted iframe. The paths are stable:
 
 ```text
 /app/<app-id>/<tile.path>?app=<app-id>&tile=<tile-id>&instance=<instance-id>&workspace=<1-20>
@@ -584,16 +585,42 @@ paths are stable:
 /app/<app-id>/<tray.path>?app=<app-id>&role=tray&instance=<instance-id>
 ```
 
-For an app using the ordinary opaque background mode, production tile, tray,
-and background frames use
-`a<dns-app-id>a--<canister-id>.icp0.io`; local frames use the same prefix on
-`.localhost:8000`. If the app declares either dedicated resident mode, only
-its background receives the nonce-bound dedicated origin; its sandboxed tile
-and tray use the verified unprefixed canister origin. Raw and custom-proxy
-frame origins are rejected.
-The query parameters are
-convenience context for the app UI only; they are not trusted as security
-identity.
+Ordinary app packages produced by the current packer are marked as compatible
+with the browser-surface-origin contract. A package that declares
+`capabilities.browser_permissions` also inherently requires that contract. The
+compiler records adopted installations in the certified
+`/system/browser-surface-origins.json` sidecar; this is generic package
+metadata, not an app-name or app-version exception.
+
+Each adopted surface receives a distinct hostname derived from the app
+installation's 128-bit browser-origin nonce and its surface key: `tile:<id>`,
+`tray`, or `background`. Production uses an `i<24-hex>--<canister-id>.icp0.io`
+hostname and local development uses the corresponding `.localhost:8000`
+hostname. Different tile declarations therefore have different origins, while
+instances of the same declared tile share its installation-scoped origin. A
+normal app upgrade retains the installation nonce; uninstall and reinstall
+creates a new one. Dedicated resident background capabilities retain their
+specialized nonce-hosted background contract, while that app's adopted tile
+and tray surfaces still use their own installation-derived origins.
+
+An adopted ordinary frame is credentialless and uses
+`sandbox="allow-scripts allow-same-origin"`. The backend binds each exact
+surface hostname to only the corresponding app asset subtree, admits only the
+bounded subresource destinations, rejects top-level or other document loads,
+and limits `frame-ancestors` to the Kernel origin. If the browser cannot prove
+credentialless originful framing, the frontend removes `allow-same-origin` and
+any browser-feature delegation before navigation, so the frame falls back to
+an opaque origin.
+
+Unadopted historical packages keep their released opaque compatibility path.
+Their ordinary surfaces use the app-id-prefixed hostname; a historical package
+with a dedicated resident background may use the unprefixed Kernel hostname
+for its tile and tray URLs. In either case the container and response sandbox
+are `allow-scripts` only, so the document origin is opaque. Upgrading such an
+app with a current marked package adopts the installation-surface contract
+without changing its backend state. Raw and custom-proxy frame origins are
+rejected. Query parameters are convenience context for the app UI only; they
+are not trusted as security identity.
 
 These URLs request Kernel-certified static responses. The bounded
 gateway/browser qualification boundary is shared with certified HTTP and is
@@ -621,13 +648,23 @@ reserved for a confirmed running target. Other Settings remain usable, but
 install, update, uninstall, and app-specific Settings mutations stay disabled
 until recovery completes or a safely undispatched journal is discarded.
 
+The runtime query also returns the actor-local capability-authority revision
+when the selected assembler supports it. Each successful runtime capability
+toggle advances that revision. The observation loop compares it alongside the
+assembler, deployment, and app-instance inventory; any change fences current
+authority, resets the actor binding, increments every app generation, and
+removes all frame and transient runtime state before reloading the certified
+registry. The deployment ID distinguishes a replacement actor whose local
+revision counter starts again.
+
 Open tabs coordinate this boundary on a kernel-origin-only
 `BroadcastChannel`, with a same-origin `storage` event fallback. The initiating
 tab signals once after checked journal creation and again after commit; a safe
 abort signals the still-current committed deployment. Receivers synchronously
 fence and unmount tile, tray, and background frames before querying the
 canister. Opaque ordinary frames and nonce-hosted persistent backgrounds cannot
-open the kernel-origin channel. A coalesced visible-tab observation checks
+open the kernel-origin channel. Neither can installation-origin app frames. A
+coalesced visible-tab observation checks
 journal status and runtime identity every 20 seconds for other devices or
 missed signals. It performs the larger registry/assets reconciliation only
 after a change or uncertainty, so ordinary polling remains two small queries
@@ -639,22 +676,22 @@ Ordinary `/app/<id>/**` web paths and the committed
 HTTP protects their integrity but does not hide app HTML, JavaScript, icons,
 workers, lazy assets, or installed-package inventory.
 
-Tiles and trays remain credentialless opaque frames. A background uses exactly
-one compiled mode: opaque credentialless, credentialless-ephemeral dedicated,
-or persistent dedicated. The two dedicated capabilities are mutually exclusive
-and use a kernel-owned nonce hostname plus an exactly certified initial iframe
-request; stale, mismatched, top-level, and legacy-origin loads fail closed.
-The full frame attributes, Host/query binding, origin rotation, subresource
+Adopted tiles, trays, and ordinary backgrounds use the credentialless
+installation origins above; only unadopted historical surfaces retain opaque
+compatibility framing. A background may instead use one of the two mutually exclusive
+dedicated resident modes: credentialless-ephemeral or persistent. Their exact
+initial iframe request, Host/query binding, origin rotation, subresource
 destinations, and browser preflight rules are specified in
 [Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
-The backend continues to bind every allowed app-prefixed hostname to its
-matching `/app/<id>/` asset subtree. WebGPU-capable apps detect
-`navigator.gpu` inside the frame. `AppTileFrame`
+WebGPU-capable apps detect `navigator.gpu` inside the frame. `AppTileFrame`
 registers `iframe.contentWindow` in `frame_context.ts` with the
 kernel-owned `{ appId, tileId, instanceId, workspace }` context, installed app
 version, installation uid, and frontend registry generation, and unregisters
-it on unmount. This
-source-window registry is the trusted app identity for kernel request handling.
+it on unmount. The registration also stores the exact installation origin for
+an adopted frame. Both the registered source window and that origin must match
+before the Kernel transfers its private `MessagePort`; a legacy opaque frame
+is retained only on the historical source-window plus `origin: null` path.
+This registration is the trusted app identity for kernel request handling.
 A trusted local same-version development redeploy retains the installation uid
 but changes the deployment-bound projection and advances the generation; the
 owner-facing browser installer requires a strictly higher release version. An
@@ -689,11 +726,13 @@ badge, popover chrome, close behavior, native popover behavior, placement, and
 size caps. It mounts the declared tray page only while the popover is open,
 using a fresh
 `app:<appId>:tray:instance:<instanceId>` endpoint for every opening. The frame
-always remains credentialless with `sandbox="allow-scripts"`, even when the
-background has persistent storage. Closing the popover unregisters and destroys
-the frame. The host supplies an explicit close button and light-dismiss; a tray
-page handles Escape with `dismissTray()` while its cross-origin frame owns
-focus. See [App Tray](./app-tray.md).
+always remains credentialless. An adopted tray uses its installation-derived
+origin with `sandbox="allow-scripts allow-same-origin"`; an unadopted historical
+tray retains `sandbox="allow-scripts"` and an opaque origin. Neither inherits a
+persistent background's storage authority. Closing the popover unregisters and
+destroys the frame. The host supplies an explicit close button and
+light-dismiss; a tray page handles Escape with `dismissTray()` while its
+cross-origin frame owns focus. See [App Tray](./app-tray.md).
 
 The built-in Kernel tray item is separate from this app contract. It reuses the
 trusted popover primitive but never registers an app endpoint, mounts an iframe,
@@ -706,9 +745,22 @@ The exact registered `contentWindow` participates in a closed
 probe/ready/connect handshake, after which the Kernel transfers a private
 `MessagePort`. All requests, replies, progress, state changes, tools, and
 binary sidecars use that port. There is no operational Window-message
-fallback. Inside an app frame, the SDK derives the valid Kernel parent origin
+fallback. For an originful app frame the ready message and every connection
+probe are bound to the exact registered app origin as well as the exact source
+window. Inside an app frame, the SDK derives the valid Kernel parent origin
 from the canister-bound frame URL before accepting the connection; referrer
 text cannot nominate a different parent.
+
+Camera and microphone delegation is default-deny. A manifest may declare the
+closed `capabilities.browser_permissions` v1 object, mapping exact tile ids to
+`camera`, `microphone`, or both. The Kernel gives only those adopted tile
+iframes an exact-origin `allow` value; the Kernel document's Permissions Policy
+is only the parent ceiling, and the app document's certified policy limits the
+delegated feature to itself. Trays, backgrounds, undeclared tiles, legacy
+opaque fallbacks, and every other browser feature receive no delegation. The
+tile calls `navigator.mediaDevices.getUserMedia()` directly and the browser
+owns its prompt, indicators, and site-level denial. There is no Kernel backend
+media session, lease, stream proxy, or capture API.
 
 The kernel is a bus endpoint exposing canister schema/call tools, installed-app
 discovery, live endpoint discovery, permission requests, and per-app audit

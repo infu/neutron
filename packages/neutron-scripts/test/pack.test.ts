@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import msgpack5 from "msgpack5";
+import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  parseBrowserSurfaceOriginsPackageMarker,
+} from "neutron-tools/src/package_surface_origins.js";
 import { packDirectory } from "../src/pack.ts";
 
 const msgpack = msgpack5();
@@ -112,12 +117,16 @@ test("packer retains app-local and external durable predecessor fixtures", async
       fs.writeFile(fixturePath, "durable exact predecessor"),
     ]);
 
-    await packDirectory(appRoot);
+    const archivePath = await packDirectory(appRoot);
 
     expect(await fs.readFile(fixturePath, "utf8")).toBe(
       "durable exact predecessor",
     );
     expect(await fs.readdir(appRoot)).toContain("kernel.v0.3.6.neutron");
+    const entries = msgpack.decode(
+      await fs.readFile(archivePath),
+    ) as Record<string, Uint8Array>;
+    expect(entries[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]).toBeUndefined();
   } finally {
     await fs.rm(repositoryRoot, { recursive: true, force: true });
   }
@@ -139,7 +148,17 @@ test("packer emits a deployment-target-neutral archive", async () => {
     const archivePath = await packDirectory(rootDir);
     const archive = await fs.readFile(archivePath);
     const entries = msgpack.decode(archive) as Record<string, Uint8Array>;
-    expect(Object.keys(entries)).toEqual(["index.html"]);
+    expect(Object.keys(entries)).toEqual([
+      "index.html",
+      NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+    ]);
+    expect(
+      parseBrowserSurfaceOriginsPackageMarker(
+        zlib.gunzipSync(
+          entries[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]!,
+        ),
+      ),
+    ).toBe(true);
     expect(entries[".neutron-build.json"]).toBeUndefined();
   } finally {
     await fs.rm(rootDir, { recursive: true, force: true });
@@ -164,6 +183,32 @@ test("packer rejects the removed build-target marker", async () => {
 
     await expect(packDirectory(rootDir)).rejects.toThrow(
       "package archives are deployment-target neutral",
+    );
+  } finally {
+    await fs.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("packer reserves the browser-surface origins marker", async () => {
+  const rootDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "neutron-pack-origin-marker-"),
+  );
+
+  try {
+    await fs.writeFile(
+      path.join(rootDir, "neutron.json"),
+      JSON.stringify({ id: "reserved_origin", version: 100 }),
+    );
+    const markerPath = path.join(
+      rootDir,
+      "dist",
+      ...NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH.split("/"),
+    );
+    await fs.mkdir(path.dirname(markerPath), { recursive: true });
+    await fs.writeFile(markerPath, '{"format":1}\n');
+
+    await expect(packDirectory(rootDir)).rejects.toThrow(
+      "reserved for package-generation metadata",
     );
   } finally {
     await fs.rm(rootDir, { recursive: true, force: true });

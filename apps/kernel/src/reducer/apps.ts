@@ -10,12 +10,14 @@ import {
 import {
   appDependencyImpact,
   assertKernelPackageBaselineMatchesRuntime,
+  BROWSER_SURFACE_ORIGINS_PATH,
   compileAppUninstall,
   compilePackages,
   compilePackageInstall,
   createDeploymentNonce,
   deployPreparedPackages,
   normalizeAppRegistry,
+  parseBrowserSurfaceOriginsSidecar,
   planAppRegistryDependencies,
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
   recoverPendingInstall,
@@ -30,6 +32,11 @@ import {
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
 import { persistenceModeFromCompilerId } from "neutron-compiler/src/compile.js";
+import {
+  BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID,
+  LEGACY_V25_ASSEMBLER_ID,
+  normalizeBrowserSurfaceOriginAppIds,
+} from "neutron-compiler/src/assemble.js";
 import {
   parseDeploymentBuildRecord,
   type CompleteDeploymentBuildRecord,
@@ -273,6 +280,10 @@ type AppsState = {
   list: AppRegistry;
   appInstances: Readonly<Record<string, AppInstanceProjection>>;
   runtimeGenerations: Record<string, number>;
+  runtimeAssemblerId: string | null;
+  runtimeCapabilityAuthorityRevision: string | null;
+  authorityRevision: number;
+  browserSurfaceOriginAppIds: readonly string[];
   registryStatus: AppRegistryStatus;
   registryError: string | null;
   registryUpdatedAt: number | null;
@@ -289,6 +300,9 @@ type AppsState = {
     options?: {
       invalidateAppIds?: readonly string[];
       appInstances?: Readonly<Record<string, AppInstanceProjection>>;
+      runtimeAssemblerId?: string;
+      runtimeCapabilityAuthorityRevision?: string | null;
+      browserSurfaceOriginAppIds?: readonly string[];
     },
   ) => void;
   setRegistryLoading: () => void;
@@ -309,6 +323,10 @@ export const useAppsStore = create<AppsState>((set, get) => ({
   list: {},
   appInstances: {},
   runtimeGenerations: {},
+  runtimeAssemblerId: null,
+  runtimeCapabilityAuthorityRevision: null,
+  authorityRevision: 0,
+  browserSurfaceOriginAppIds: Object.freeze([]),
   registryStatus: "idle",
   registryError: null,
   registryUpdatedAt: null,
@@ -328,20 +346,57 @@ export const useAppsStore = create<AppsState>((set, get) => ({
     reconcileTrayRegistry(normalized);
     set((state) => {
       const forced = new Set(options.invalidateAppIds ?? []);
-      const appInstances = suppliedInstances
+      const candidateInstances = suppliedInstances
         ? requireInstancesForRegistry(normalized, suppliedInstances)
         : retainMatchingAppInstances(normalized, state.appInstances);
-      reconcileAgentGrant(normalized, appInstances);
+      const stableApps = retainRegistryIdentity(normalized, state.list);
+      const appInstances = retainAppInstanceInventoryIdentity(
+        candidateInstances,
+        state.appInstances,
+      );
+      const candidateBrowserSurfaceOriginAppIds =
+        canonicalBrowserSurfaceOriginAppIds(
+        options.browserSurfaceOriginAppIds ??
+          state.browserSurfaceOriginAppIds.filter(
+            (appId) => stableApps[appId],
+          ),
+        stableApps,
+      );
+      const browserSurfaceOriginAppIds =
+        JSON.stringify(candidateBrowserSurfaceOriginAppIds) ===
+        JSON.stringify(state.browserSurfaceOriginAppIds)
+          ? state.browserSurfaceOriginAppIds
+          : candidateBrowserSurfaceOriginAppIds;
+      const runtimeCapabilityAuthorityRevision = Object.hasOwn(
+        options,
+        "runtimeCapabilityAuthorityRevision",
+      )
+        ? (options.runtimeCapabilityAuthorityRevision ?? null)
+        : state.runtimeCapabilityAuthorityRevision;
+      const runtimeCapabilityAuthorityChanged =
+        runtimeCapabilityAuthorityRevision !==
+        state.runtimeCapabilityAuthorityRevision;
+      const previousBrowserSurfaceOrigins = new Set(
+        state.browserSurfaceOriginAppIds,
+      );
+      const nextBrowserSurfaceOrigins = new Set(
+        browserSurfaceOriginAppIds,
+      );
+      reconcileAgentGrant(stableApps, appInstances);
       const runtimeGenerations = { ...state.runtimeGenerations };
+      let runtimeGenerationChanged = false;
       const appIds = new Set([
         ...Object.keys(state.list),
-        ...Object.keys(normalized),
+        ...Object.keys(stableApps),
         ...forced,
       ]);
       for (const appId of appIds) {
         if (
+          runtimeCapabilityAuthorityChanged ||
           forced.has(appId) ||
-          !registryEntriesEqual(state.list[appId], normalized[appId]) ||
+          previousBrowserSurfaceOrigins.has(appId) !==
+            nextBrowserSurfaceOrigins.has(appId) ||
+          !registryEntriesEqual(state.list[appId], stableApps[appId]) ||
           !sameAppInstance(
             state.appInstances[appId],
             appInstances[appId],
@@ -349,15 +404,28 @@ export const useAppsStore = create<AppsState>((set, get) => ({
         ) {
           runtimeGenerations[appId] =
             (state.runtimeGenerations[appId] ?? 0) + 1;
+          runtimeGenerationChanged = true;
           if (state.list[appId] || state.appInstances[appId]) {
             revokedAppIds.add(appId);
           }
         }
       }
       return {
-        list: normalized,
+        list: stableApps,
         appInstances,
-        runtimeGenerations,
+        runtimeGenerations: runtimeGenerationChanged
+          ? runtimeGenerations
+          : state.runtimeGenerations,
+        runtimeAssemblerId:
+          options.runtimeAssemblerId ?? state.runtimeAssemblerId,
+        runtimeCapabilityAuthorityRevision,
+        authorityRevision:
+          runtimeGenerationChanged ||
+          runtimeCapabilityAuthorityRevision !==
+            state.runtimeCapabilityAuthorityRevision
+            ? state.authorityRevision + 1
+            : state.authorityRevision,
+        browserSurfaceOriginAppIds,
         registryStatus: "ready",
         registryError: null,
         registryUpdatedAt: Date.now(),
@@ -367,8 +435,19 @@ export const useAppsStore = create<AppsState>((set, get) => ({
   },
   setRegistryLoading: () =>
     set({ registryStatus: "loading", registryError: null }),
-  setRegistryError: (message) =>
-    set({ registryStatus: "error", registryError: message }),
+  setRegistryError: (message) => {
+    const wasPending = isAuthorityPendingState(get());
+    set((state) => ({
+      registryStatus: "error",
+      registryError: message,
+      authorityRevision: state.authorityRevision + 1,
+      runtimeAuthorityFence:
+        state.pendingInstallRecovery || state.runtimeAuthorityFence
+          ? state.runtimeAuthorityFence
+          : { deploymentId: null, reason: "observation_failed" },
+    }));
+    revokeOnAuthorityTransition(wasPending, get());
+  },
   addAppRequest: (request) =>
     set({
       compiled: null,
@@ -390,12 +469,18 @@ export const useAppsStore = create<AppsState>((set, get) => ({
   setInstallError: (installError) => set({ installError }),
   setPendingInstallRecovery: (pendingInstallRecovery) => {
     const wasPending = isAuthorityPendingState(get());
-    set({ pendingInstallRecovery });
+    set((state) => ({
+      pendingInstallRecovery,
+      authorityRevision: state.authorityRevision + 1,
+    }));
     revokeOnAuthorityTransition(wasPending, get());
   },
   setRuntimeAuthorityFence: (runtimeAuthorityFence) => {
     const wasPending = isAuthorityPendingState(get());
-    set({ runtimeAuthorityFence });
+    set((state) => ({
+      runtimeAuthorityFence,
+      authorityRevision: state.authorityRevision + 1,
+    }));
     revokeOnAuthorityTransition(wasPending, get());
   },
   setInstalled: () =>
@@ -649,15 +734,23 @@ async function loadAppRegistrySnapshot(): Promise<{
 }> {
   const loadId = ++registryLoadSequence;
   useAppsStore.getState().setRegistryLoading();
+  const authorityRevision = useAppsStore.getState().authorityRevision;
   try {
     const neutron = await getNeutronCan();
-    const { registry, runtime, pendingRecovery, provenance } =
+    const {
+      registry,
+      runtime,
+      pendingRecovery,
+      provenance,
+      browserSurfaceOriginAppIds,
+    } =
       await readConsistentAppRegistry(neutron);
     if (registry === undefined) throw new Error("App registry was not found");
-    const apps = normalizeAppRegistry(registry);
+    const apps = registry;
     const appInstances = assertRegistryMatchesRuntime(apps, runtime);
 
     if (loadId === registryLoadSequence) {
+      assertRuntimeAuthorityRevision(authorityRevision);
       if (
         pendingRecovery === null &&
         useAppsStore.getState().pendingInstallRecovery !== null
@@ -668,13 +761,22 @@ async function loadAppRegistrySnapshot(): Promise<{
         });
       }
       useAppsStore.getState().setPendingInstallRecovery(pendingRecovery);
-      useAppsStore.getState().setApps(apps, { appInstances });
+      useAppsStore.getState().setApps(apps, {
+        appInstances,
+        runtimeAssemblerId: runtime.assembler_id,
+        runtimeCapabilityAuthorityRevision:
+          normalizeRuntimeCapabilityAuthorityRevision(runtime),
+        browserSurfaceOriginAppIds,
+      });
       useAppsStore.getState().setRuntimeAuthorityFence(null);
     }
     return { apps, provenance, runtime };
   } catch (error) {
     const registryError = toInstallError(error);
-    if (loadId === registryLoadSequence) {
+    if (
+      loadId === registryLoadSequence &&
+      authorityRevision === useAppsStore.getState().authorityRevision
+    ) {
       if (error instanceof PendingInstallJournalError) {
         useAppsStore.getState().setPendingInstallRecovery({
           deploymentId: error.deploymentId,
@@ -688,7 +790,11 @@ async function loadAppRegistrySnapshot(): Promise<{
 
 export type RuntimeAuthorityObservation =
   | { status: "current"; deploymentId: string }
-  | { status: "changed"; deploymentId: string }
+  | {
+      status: "changed";
+      deploymentId: string;
+      change: "runtime" | "capabilities";
+    }
   | { status: "pending"; deploymentId: string };
 
 export type RuntimeAuthorityRefreshResult =
@@ -709,6 +815,9 @@ type RuntimeAuthorityActor = Pick<
 export async function observeRuntimeAuthority(
   neutron: RuntimeAuthorityActor,
   currentInstances = useAppsStore.getState().appInstances,
+  currentAssemblerId = useAppsStore.getState().runtimeAssemblerId,
+  currentCapabilityAuthorityRevision =
+    useAppsStore.getState().runtimeCapabilityAuthorityRevision,
 ): Promise<RuntimeAuthorityObservation> {
   const rawStatus = await neutron.kernel_install_status(null);
   if (!Array.isArray(rawStatus) || rawStatus.length > 1) {
@@ -730,12 +839,60 @@ export async function observeRuntimeAuthority(
     runtime.apps,
     runtime.deployment_id,
   );
-  return {
-    status: sameAppInstanceInventory(currentInstances, observedInstances)
-      ? "current"
-      : "changed",
-    deploymentId: runtime.deployment_id,
-  };
+  if (
+    currentAssemblerId === null ||
+    runtime.assembler_id !== currentAssemblerId ||
+    !sameAppInstanceInventory(currentInstances, observedInstances)
+  ) {
+    return {
+      status: "changed",
+      deploymentId: runtime.deployment_id,
+      change: "runtime",
+    };
+  }
+  const observedCapabilityAuthorityRevision =
+    normalizeRuntimeCapabilityAuthorityRevision(runtime);
+  if (
+    observedCapabilityAuthorityRevision !== currentCapabilityAuthorityRevision
+  ) {
+    return {
+      status: "changed",
+      deploymentId: runtime.deployment_id,
+      change: "capabilities",
+    };
+  }
+  return { status: "current", deploymentId: runtime.deployment_id };
+}
+
+export function normalizeRuntimeCapabilityAuthorityRevision(
+  runtime: Pick<
+    KernelRuntimeInfo,
+    "assembler_id" | "capability_authority_revision"
+  >,
+): string | null {
+  const raw = runtime.capability_authority_revision;
+  if (raw === undefined || (Array.isArray(raw) && raw.length === 0)) {
+    if (runtime.assembler_id === BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID) {
+      throw new Error(
+        "Current runtime is missing its capability authority revision",
+      );
+    }
+    return null;
+  }
+  if (!Array.isArray(raw) || raw.length !== 1) {
+    throw new Error("Runtime capability authority revision is invalid");
+  }
+  const value = raw[0];
+  const revision =
+    typeof value === "bigint"
+      ? value
+      : typeof value === "number" && Number.isSafeInteger(value)
+        ? BigInt(value)
+        : null;
+  if (revision === null || revision < 0n || revision > 0xffffffffffffffffn) {
+    throw new Error("Runtime capability authority revision is invalid");
+  }
+  return revision.toString();
 }
 
 let runtimeAuthorityRefresh: Promise<RuntimeAuthorityRefreshResult> | null = null;
@@ -825,11 +982,19 @@ export async function retainFrontendAuthorityAfterDeployFailure(
 }
 
 function retainObservationFailureFence(): void {
-  if (useAppsStore.getState().pendingInstallRecovery) return;
-  useAppsStore.getState().setRuntimeAuthorityFence({
+  const state = useAppsStore.getState();
+  if (state.pendingInstallRecovery || state.runtimeAuthorityFence) return;
+  state.setRuntimeAuthorityFence({
     deploymentId: null,
     reason: "observation_failed",
   });
+}
+
+function assertRuntimeAuthorityRevision(expected: number): void {
+  if (useAppsStore.getState().authorityRevision === expected) return;
+  throw new Error(
+    "Runtime authority changed while installed app state was being verified",
+  );
 }
 
 function isRuntimeDeploymentId(value: unknown): value is string {
@@ -845,6 +1010,7 @@ async function readConsistentAppRegistry(
   runtime: KernelRuntimeInfo;
   pendingRecovery: PendingInstallRecovery | null;
   provenance: InstallProvenance;
+  browserSurfaceOriginAppIds: readonly string[];
 }> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     let pendingBefore: PendingInstallJournalError | null = null;
@@ -861,8 +1027,9 @@ async function readConsistentAppRegistry(
       throw pendingBefore;
     }
 
-    const [registry, provenance] = await Promise.all([
+    const [registry, rawBrowserSurfaceOrigins, provenance] = await Promise.all([
       readKernelAssetJson<AppRegistry>("/system/apps.json"),
+      readKernelAssetJson<unknown>(BROWSER_SURFACE_ORIGINS_PATH),
       readInstallProvenance(),
     ]);
     const after = await neutron.kernel_runtime_info();
@@ -882,17 +1049,42 @@ async function readConsistentAppRegistry(
     }
     if (
       before.deployment_id !== after.deployment_id ||
-      after.deployment_id !== finalRuntime.deployment_id
+      after.deployment_id !== finalRuntime.deployment_id ||
+      before.assembler_id !== after.assembler_id ||
+      after.assembler_id !== finalRuntime.assembler_id ||
+      normalizeRuntimeCapabilityAuthorityRevision(before) !==
+        normalizeRuntimeCapabilityAuthorityRevision(after) ||
+      normalizeRuntimeCapabilityAuthorityRevision(after) !==
+        normalizeRuntimeCapabilityAuthorityRevision(finalRuntime)
     ) {
       continue;
     }
     if (pendingAfter?.deploymentId === finalRuntime.deployment_id) {
       throw pendingAfter;
     }
+    if (registry === undefined) {
+      return {
+        registry,
+        runtime: finalRuntime,
+        provenance,
+        browserSurfaceOriginAppIds: Object.freeze([]),
+        pendingRecovery: pendingAfter
+          ? { deploymentId: pendingAfter.deploymentId }
+          : null,
+      };
+    }
+    const normalizedRegistry = normalizeAppRegistry(registry);
+    const browserSurfaceOriginAppIds =
+      parseBrowserSurfaceOriginAuthoritySnapshot(
+        rawBrowserSurfaceOrigins,
+        normalizedRegistry,
+        finalRuntime.assembler_id,
+      );
     return {
-      registry,
+      registry: normalizedRegistry,
       runtime: finalRuntime,
       provenance,
+      browserSurfaceOriginAppIds,
       pendingRecovery: pendingAfter
         ? { deploymentId: pendingAfter.deploymentId }
         : null,
@@ -900,6 +1092,37 @@ async function readConsistentAppRegistry(
   }
   throw new Error(
     "Installed app state kept changing in another tab. Wait for it to finish and try again.",
+  );
+}
+
+/**
+ * Bind the closed sidecar shape to the only two runtime generations this
+ * frontend can safely bridge. V26 always has a sidecar, including for an empty
+ * set; the exact v25 predecessor never has one.
+ */
+export function parseBrowserSurfaceOriginAuthoritySnapshot(
+  value: unknown,
+  registry: AppRegistry,
+  assemblerId: string,
+): readonly string[] {
+  if (assemblerId === LEGACY_V25_ASSEMBLER_ID) {
+    if (value !== undefined) {
+      throw new Error(
+        "The v25 runtime cannot own a browser-surface origins sidecar",
+      );
+    }
+    return Object.freeze([]);
+  }
+  if (assemblerId !== BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID) {
+    throw new Error(
+      `Unsupported runtime assembler generation ${assemblerId}`,
+    );
+  }
+  if (value === undefined) {
+    throw new Error("The v26 browser-surface origins sidecar is missing");
+  }
+  return Object.freeze(
+    parseBrowserSurfaceOriginsSidecar(value, Object.keys(registry)),
   );
 }
 
@@ -936,6 +1159,7 @@ function assertRegistryMatchesRuntime(
 async function setCommittedAppsFromRuntime(
   neutron: Awaited<ReturnType<typeof getNeutronCan>>,
   apps: AppRegistry,
+  expectedBrowserSurfaceOriginAppIds: readonly string[],
   options: { invalidateAppIds?: readonly string[] } = {},
 ): Promise<void> {
   // Runtime info exposes the exact running actor, which is the staged target
@@ -943,26 +1167,78 @@ async function setCommittedAppsFromRuntime(
   // authority until the independently queried journal is absent on both sides
   // of the read.
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const authorityRevision = useAppsStore.getState().authorityRevision;
     await ensureInstallJournalSettled(neutron, {
       timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
     });
-    const runtime = await neutron.kernel_runtime_info();
+    const before = await neutron.kernel_runtime_info();
+    const rawBrowserSurfaceOrigins = await readKernelAssetJson<unknown>(
+      BROWSER_SURFACE_ORIGINS_PATH,
+    );
+    const after = await neutron.kernel_runtime_info();
     const trailing = await ensureInstallJournalSettled(neutron);
     if (trailing === "committed") continue;
-    const appInstances = assertRegistryMatchesRuntime(apps, runtime);
+    const finalRuntime = await neutron.kernel_runtime_info();
+    if (
+      before.deployment_id !== after.deployment_id ||
+      after.deployment_id !== finalRuntime.deployment_id ||
+      before.assembler_id !== after.assembler_id ||
+      after.assembler_id !== finalRuntime.assembler_id ||
+      normalizeRuntimeCapabilityAuthorityRevision(before) !==
+        normalizeRuntimeCapabilityAuthorityRevision(after) ||
+      normalizeRuntimeCapabilityAuthorityRevision(after) !==
+        normalizeRuntimeCapabilityAuthorityRevision(finalRuntime)
+    ) {
+      continue;
+    }
+    assertCurrentBrowserSurfaceOriginAssembler(finalRuntime.assembler_id);
+    const appInstances = assertRegistryMatchesRuntime(apps, finalRuntime);
+    const browserSurfaceOriginAppIds =
+      parseBrowserSurfaceOriginAuthoritySnapshot(
+        rawBrowserSurfaceOrigins,
+        apps,
+        finalRuntime.assembler_id,
+      );
+    if (
+      JSON.stringify(browserSurfaceOriginAppIds) !==
+      JSON.stringify(expectedBrowserSurfaceOriginAppIds)
+    ) {
+      throw new Error(
+        "Committed browser-surface origin authority does not match the compiled deployment",
+      );
+    }
+    if (useAppsStore.getState().authorityRevision !== authorityRevision) {
+      continue;
+    }
     if (useAppsStore.getState().pendingInstallRecovery !== null) {
       useAppsStore.getState().setRuntimeAuthorityFence({
-        deploymentId: runtime.deployment_id,
+        deploymentId: finalRuntime.deployment_id,
         reason: "runtime_changed",
       });
     }
     useAppsStore.getState().setPendingInstallRecovery(null);
-    useAppsStore.getState().setApps(apps, { ...options, appInstances });
+    useAppsStore.getState().setApps(apps, {
+      ...options,
+      appInstances,
+      runtimeAssemblerId: finalRuntime.assembler_id,
+      runtimeCapabilityAuthorityRevision:
+        normalizeRuntimeCapabilityAuthorityRevision(finalRuntime),
+      browserSurfaceOriginAppIds,
+    });
     useAppsStore.getState().setRuntimeAuthorityFence(null);
     return;
   }
   throw new Error(
     "Committed app identity kept changing after installation. Reload and try again.",
+  );
+}
+
+export function assertCurrentBrowserSurfaceOriginAssembler(
+  assemblerId: string,
+): void {
+  if (assemblerId === BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID) return;
+  throw new Error(
+    `Committed deployment did not activate ${BROWSER_SURFACE_ORIGIN_ASSEMBLER_ID}; found ${assemblerId}`,
   );
 }
 
@@ -1046,6 +1322,9 @@ export async function compile_app({
   const compiled = await compilePackageInstall({
     existingModules: kernelState.existingModules,
     existingConfigs: kernelState.existingConfigs,
+    existingApps: kernelState.apps,
+    existingBrowserSurfaceOriginAppIds:
+      kernelState.browserSurfaceOriginAppIds,
     existingStable: kernelState.previousStable,
     connectionProviderSupport: kernelState.connectionProviderSupport,
     preparedPackage,
@@ -1115,7 +1394,12 @@ async function readConsistentManualInstallBaseline(
       timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
     });
     if (trailingRecovery === "committed") continue;
-    if (before.deployment_id === after.deployment_id) {
+    if (
+      before.deployment_id === after.deployment_id &&
+      before.assembler_id === after.assembler_id &&
+      normalizeRuntimeCapabilityAuthorityRevision(before) ===
+        normalizeRuntimeCapabilityAuthorityRevision(after)
+    ) {
       assertKernelPackageBaselineMatchesRuntime(state, after);
       const fingerprint = hashContent(
         JSON.stringify(
@@ -1451,12 +1735,12 @@ async function reconcileCompletedPendingInstall(
     reason: "runtime_changed",
   });
   useAppsStore.getState().setPendingInstallRecovery(null);
+  await resetNeutronCanBinding();
+  await getApps();
   announceRuntimeAuthorityChange({
     deploymentId,
     phase: "committed",
   });
-  await resetNeutronCanBinding();
-  await getApps();
 }
 
 export async function abortPendingInstallRecovery(
@@ -1656,6 +1940,9 @@ export async function beginPackageInstallSession({
             packages: [...packages],
             existingModules: state.existingModules,
             existingConfigs: state.existingConfigs,
+            existingApps: state.apps,
+            existingBrowserSurfaceOriginAppIds:
+              state.browserSurfaceOriginAppIds,
             existingStable: state.previousStable,
             connectionProviderSupport: state.connectionProviderSupport,
             deploymentNonce: createDeploymentNonce(),
@@ -1790,6 +2077,8 @@ export async function beginPackageInstallSession({
             packages: [...packages],
             compiled,
             existingApps: currentState.apps,
+            existingBrowserSurfaceOriginAppIds:
+              currentState.browserSurfaceOriginAppIds,
             previousModulePaths: currentState.existingModules.map(
               ({ path }) => path,
             ),
@@ -1816,16 +2105,17 @@ export async function beginPackageInstallSession({
             },
           });
 
+          await setCommittedAppsFromRuntime(
+            neutron,
+            apps,
+            compiled.browserSurfaceOriginAppIds,
+            mode === "update" ? { invalidateAppIds: appIds } : {},
+          );
           announceRuntimeAuthorityChange({
             deploymentId: compiled.deploymentId,
             phase: "committed",
             kernelUpdated: appIds.includes("kernel"),
           });
-          await setCommittedAppsFromRuntime(
-            neutron,
-            apps,
-            mode === "update" ? { invalidateAppIds: appIds } : {},
-          );
           if (mode === "update") {
             for (const appId of appIds) {
               if (appId !== "kernel") removeAppRuntimeState(appId, false);
@@ -1940,7 +2230,12 @@ async function readConsistentRepositoryPackageState(
       timeoutMs: PASSIVE_INSTALL_RECOVERY_TIMEOUT_MS,
     });
     if (trailingRecovery === "committed") continue;
-    if (before.deployment_id === after.deployment_id) {
+    if (
+      before.deployment_id === after.deployment_id &&
+      before.assembler_id === after.assembler_id &&
+      normalizeRuntimeCapabilityAuthorityRevision(before) ===
+        normalizeRuntimeCapabilityAuthorityRevision(after)
+    ) {
       assertKernelPackageBaselineMatchesRuntime(state, after);
       return { state, runtime: after, provenance };
     }
@@ -1971,11 +2266,16 @@ function packageBaselineFingerprint({
           ),
         previousStable: state.previousStable,
         connectionProviderSupport: state.connectionProviderSupport,
+        browserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
+        browserSurfaceOriginsSidecarPresent:
+          state.browserSurfaceOriginsSidecarPresent,
         provenance,
         runtime: {
           deploymentId: runtime.deployment_id,
           assemblerId: runtime.assembler_id,
           compilerId: runtime.compiler_id,
+          capabilityAuthorityRevision:
+            normalizeRuntimeCapabilityAuthorityRevision(runtime),
           apps: runtime.apps
             .map(
               ({
@@ -2141,6 +2441,8 @@ async function uninstallAppInternal(
       packages: [],
       compiled,
       existingApps: state.apps,
+      existingBrowserSurfaceOriginAppIds:
+        state.browserSurfaceOriginAppIds,
       previousModulePaths: state.existingModules.map(({ path }) => path),
       removedApps: [appId],
       ...(provenanceAssets.length > 0
@@ -2153,11 +2455,15 @@ async function uninstallAppInternal(
         announceActivationStep(step, compiled.deploymentId, false);
       },
     });
+    await setCommittedAppsFromRuntime(
+      neutron,
+      result.apps,
+      result.compiled.browserSurfaceOriginAppIds,
+    );
     announceRuntimeAuthorityChange({
       deploymentId: result.compiled.deploymentId,
       phase: "committed",
     });
-    await setCommittedAppsFromRuntime(neutron, result.apps);
     removeAppRuntimeState(appId, true);
     await resetNeutronCanBinding();
     await delay(300);
@@ -2355,12 +2661,14 @@ async function installAppInternal(
       targetCanisterId: getRuntimeDeployment().canisterId,
       packages: [preparedPackage],
       compiled: compileDetails.compiled,
-      existingApps: compileDetails.state.apps,
-      previousModulePaths: compileDetails.state.existingModules.map(
+      existingApps: currentBaseline.state.apps,
+      existingBrowserSurfaceOriginAppIds:
+        currentBaseline.state.browserSurfaceOriginAppIds,
+      previousModulePaths: currentBaseline.state.existingModules.map(
         ({ path }) => path,
       ),
       deploymentBuildRecord: compileDetails.deployment.prepared.record,
-      expectedDeploymentId: compileDetails.expectedDeploymentId,
+      expectedDeploymentId: currentBaseline.expectedDeploymentId,
       ...(provenanceAssets.length > 0
         ? { stagedAssets: provenanceAssets }
         : {}),
@@ -2374,13 +2682,18 @@ async function installAppInternal(
       },
     });
 
+    await setCommittedAppsFromRuntime(
+      neutron,
+      appconfig,
+      compileDetails.compiled.browserSurfaceOriginAppIds,
+      {
+        invalidateAppIds: decisionOperation === "update" ? [id] : [],
+      },
+    );
     announceRuntimeAuthorityChange({
       deploymentId: compileDetails.compiled.deploymentId,
       phase: "committed",
       kernelUpdated: id === "kernel",
-    });
-    await setCommittedAppsFromRuntime(neutron, appconfig, {
-      invalidateAppIds: decisionOperation === "update" ? [id] : [],
     });
     if (decisionOperation === "update" && id !== "kernel") {
       removeAppRuntimeState(id, false);
@@ -2423,6 +2736,74 @@ function registryEntriesEqual(
   if (left === right) return true;
   if (!left || !right) return false;
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function retainRegistryIdentity(
+  next: AppRegistry,
+  current: AppRegistry,
+): AppRegistry {
+  const nextIds = Object.keys(next);
+  const currentIds = Object.keys(current);
+  if (
+    nextIds.length === currentIds.length &&
+    nextIds.every(
+      (appId) =>
+        current[appId] !== undefined &&
+        registryEntriesEqual(current[appId], next[appId]),
+    )
+  ) {
+    return current;
+  }
+  return Object.fromEntries(
+    nextIds.map((appId) => [
+      appId,
+      registryEntriesEqual(current[appId], next[appId])
+        ? current[appId]!
+        : next[appId]!,
+    ]),
+  );
+}
+
+function retainAppInstanceInventoryIdentity(
+  next: Readonly<Record<string, AppInstanceProjection>>,
+  current: Readonly<Record<string, AppInstanceProjection>>,
+): Readonly<Record<string, AppInstanceProjection>> {
+  const nextIds = Object.keys(next);
+  const currentIds = Object.keys(current);
+  if (
+    nextIds.length === currentIds.length &&
+    nextIds.every(
+      (appId) =>
+        current[appId] !== undefined &&
+        sameAppInstance(current[appId], next[appId]),
+    )
+  ) {
+    return current;
+  }
+  return Object.freeze(
+    Object.fromEntries(
+      nextIds.map((appId) => [
+        appId,
+        sameAppInstance(current[appId], next[appId])
+          ? current[appId]!
+          : next[appId]!,
+      ]),
+    ),
+  );
+}
+
+function canonicalBrowserSurfaceOriginAppIds(
+  appIds: readonly string[],
+  registry: AppRegistry,
+): readonly string[] {
+  const canonical = normalizeBrowserSurfaceOriginAppIds(
+    appIds,
+    Object.keys(registry),
+  );
+  if (JSON.stringify(canonical) !== JSON.stringify(appIds)) {
+    throw new Error("Browser-surface origin app IDs are not canonical");
+  }
+  return Object.freeze(canonical);
 }
 
 function beginOperation(): void {

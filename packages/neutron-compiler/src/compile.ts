@@ -32,7 +32,15 @@ import {
 } from "neutron-tools/src/capabilities/wire.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 import { whitelist } from "../whitelist.ts";
-import { ASSEMBLER_ID, assemble, type VetKeysEnvironment } from "./assemble.ts";
+import {
+  ASSEMBLER_ID,
+  assertAssemblerSupportsBrowserPermissions,
+  LEGACY_V25_ASSEMBLER_ID,
+  assemble,
+  assembleLegacyV25,
+  normalizeBrowserSurfaceOriginAppIds,
+  type VetKeysEnvironment,
+} from "./assemble.ts";
 import {
   planAppDependencies,
   type AppDependencyPlan,
@@ -129,6 +137,8 @@ export type CompileConfig = Record<string, PackagedNeutronManifest>;
 export type CompileInput = {
   mofiles: MotokoFile[];
   configs: CompileConfig;
+  /** Exact installed apps authorized to use installation-owned frame origins. */
+  browserSurfaceOriginAppIds?: readonly string[];
   previousConfigs?: CompileConfig;
   previousStable?: string | null;
   /** Exact support metadata shipped by the selected Kernel package. */
@@ -211,6 +221,8 @@ export type CompileResult = {
   managedMemoryRetirements: ManagedMemoryRetirement[];
   capabilityPlans: Record<string, CompiledCapabilityPlan>;
   appInstanceInventory: CompiledAppInstance[];
+  /** Exact registry apps authorized for installation-owned frame origins. */
+  browserSurfaceOriginAppIds: string[];
   /** Exact predecessor inventory used for managed-memory planning. */
   previousManagedMemoryInventory: CompiledManagedMemory[];
   managedMemoryInventory: CompiledManagedMemory[];
@@ -224,6 +236,8 @@ export type CompileResult = {
   /** Motoko persistence/GC mode used for inspection and final emission. */
   persistenceMode: NeutronPersistenceMode;
   compilerId: string;
+  /** Closed assembler generation that produced the actor. */
+  assemblerId: typeof ASSEMBLER_ID | typeof LEGACY_V25_ASSEMBLER_ID;
   modulePaths: string[];
 };
 
@@ -246,8 +260,39 @@ const astArgs = (value: unknown): unknown[] =>
 // Inspection and final emission deliberately use separate runtimes.
 let compileQueue: Promise<void> = Promise.resolve();
 
+type CompileGeneration =
+  | typeof ASSEMBLER_ID
+  | typeof LEGACY_V25_ASSEMBLER_ID;
+
 export function compile(input: CompileInput): Promise<CompileResult> {
-  const result = compileQueue.then(() => compileIsolated(input));
+  return enqueueCompile(input, ASSEMBLER_ID);
+}
+
+/**
+ * Compile a fresh whole-canister deployment for a pre-v316 Kernel. Callers
+ * cannot nominate a generation or browser-origin set: this path always emits
+ * exact v25 and always leaves browser-surface origins disabled.
+ */
+export function compileLegacyV25Compatibility(
+  input: Omit<CompileInput, "browserSurfaceOriginAppIds">,
+): Promise<CompileResult> {
+  if ("browserSurfaceOriginAppIds" in input) {
+    throw new Error(
+      "The v25 compatibility compiler does not accept browser-surface origins",
+    );
+  }
+  assertAssemblerSupportsBrowserPermissions(
+    LEGACY_V25_ASSEMBLER_ID,
+    Object.values(input.configs),
+  );
+  return enqueueCompile(input, LEGACY_V25_ASSEMBLER_ID);
+}
+
+function enqueueCompile(
+  input: CompileInput,
+  generation: CompileGeneration,
+): Promise<CompileResult> {
+  const result = compileQueue.then(() => compileIsolated(input, generation));
   compileQueue = result.then(
     () => undefined,
     () => undefined,
@@ -255,28 +300,35 @@ export function compile(input: CompileInput): Promise<CompileResult> {
   return result;
 }
 
-async function compileIsolated(input: CompileInput): Promise<CompileResult> {
+async function compileIsolated(
+  input: CompileInput,
+  generation: CompileGeneration,
+): Promise<CompileResult> {
   await disposeMotokoCompiler();
   try {
-    return await compileWithMotoko(input);
+    return await compileWithMotoko(input, generation);
   } finally {
     await disposeMotokoCompiler();
   }
 }
 
-async function compileWithMotoko({
-  mofiles,
-  configs,
-  previousConfigs = {},
-  previousStable = null,
-  connectionProviderSupport,
-  deploymentNonce,
-  vetKeysEnvironment = "production",
-  freshInstallationContext,
-  includeGeneratedSource = false,
-  persistenceMode = "classical",
-  verbose = false,
-}: CompileInput): Promise<CompileResult> {
+async function compileWithMotoko(
+  {
+    mofiles,
+    configs,
+    browserSurfaceOriginAppIds: requestedBrowserSurfaceOriginAppIds = [],
+    previousConfigs = {},
+    previousStable = null,
+    connectionProviderSupport,
+    deploymentNonce,
+    vetKeysEnvironment = "production",
+    freshInstallationContext,
+    includeGeneratedSource = false,
+    persistenceMode = "classical",
+    verbose = false,
+  }: CompileInput,
+  generation: CompileGeneration,
+): Promise<CompileResult> {
   assertVetKeysEnvironment(vetKeysEnvironment);
   assertDeploymentNonce(deploymentNonce);
   const debug = (...args: unknown[]) => {
@@ -284,6 +336,13 @@ async function compileWithMotoko({
   };
   validateConfigs(configs);
   validateConfigs(previousConfigs);
+  const browserSurfaceOriginAppIds =
+    generation === ASSEMBLER_ID
+      ? normalizeBrowserSurfaceOriginAppIds(
+          requestedBrowserSurfaceOriginAppIds,
+          Object.keys(configs),
+        )
+      : [];
   assertStableStoreSchemaTransitions(previousConfigs, configs);
   assertCertifiedAssetsTransitions(previousConfigs, configs);
   const installationContext = resolveInstallationContext({
@@ -322,6 +381,8 @@ async function compileWithMotoko({
     capabilityPlans,
     appInstanceInventory,
     managedMemoryInventory,
+    browserSurfaceOriginAppIds,
+    generation,
     compilerId,
     vetKeysEnvironment,
     installationContext.identity,
@@ -373,7 +434,7 @@ async function compileWithMotoko({
     throw new Error(`Disallowed Motoko code: ${dangerousApps.join("; ")}`);
   }
 
-  const neutronSource = assemble(configs, {
+  const assemblyOptions = {
     migrationPlan,
     committedRetirements,
     dependencyPlan,
@@ -383,7 +444,14 @@ async function compileWithMotoko({
     ...(installationContext.assembly === undefined
       ? {}
       : { installationContext: installationContext.assembly }),
-  });
+  };
+  const neutronSource =
+    generation === ASSEMBLER_ID
+      ? assemble(configs, {
+          ...assemblyOptions,
+          browserSurfaceOriginAppIds,
+        })
+      : assembleLegacyV25(configs, assemblyOptions);
   debug(neutronSource);
   await mo.write("neutron.mo", neutronSource);
   const compiled = await mo.wasm("neutron.mo", "ic");
@@ -426,6 +494,7 @@ async function compileWithMotoko({
     managedMemoryRetirements: targetRetirements,
     capabilityPlans,
     appInstanceInventory,
+    browserSurfaceOriginAppIds,
     previousManagedMemoryInventory,
     managedMemoryInventory,
     previousStableSignatureSha256:
@@ -435,6 +504,7 @@ async function compileWithMotoko({
     vetKeysEnvironment,
     persistenceMode,
     compilerId,
+    assemblerId: generation,
     modulePaths: reachableModules
       .map(({ path }) => path)
       .sort(compareCanonicalText),
@@ -921,29 +991,33 @@ function createDeploymentId(
   capabilityPlans: Record<string, CompiledCapabilityPlan>,
   appInstanceInventory: CompiledAppInstance[],
   managedMemoryInventory: CompiledManagedMemory[],
+  browserSurfaceOriginAppIds: readonly string[],
+  assemblerId: CompileGeneration,
   compilerId: string,
   vetKeysEnvironment: VetKeysEnvironment,
   installationContext: InstallationContextIdentity,
   deploymentNonce: string | undefined,
 ): string {
-  return hashContent(
-    canonicalJson({
-      assembler: ASSEMBLER_ID,
-      compiler: compilerId,
-      vetkeys_environment: vetKeysEnvironment,
-      installation_context: installationContext,
-      configs,
-      plan,
-      committed_memory_retirements: committedRetirements,
-      target_memory_retirements: targetRetirements,
-      capability_plans: capabilityPlans,
-      app_instance_inventory: appInstanceInventory,
-      managed_memory_inventory: managedMemoryInventory,
-      ...(deploymentNonce === undefined
-        ? {}
-        : { deployment_nonce: deploymentNonce }),
-    }),
-  ).slice(0, 32);
+  const semanticDeployment = {
+    assembler: assemblerId,
+    compiler: compilerId,
+    vetkeys_environment: vetKeysEnvironment,
+    installation_context: installationContext,
+    configs,
+    plan,
+    committed_memory_retirements: committedRetirements,
+    target_memory_retirements: targetRetirements,
+    capability_plans: capabilityPlans,
+    app_instance_inventory: appInstanceInventory,
+    managed_memory_inventory: managedMemoryInventory,
+    ...(assemblerId === ASSEMBLER_ID
+      ? { browser_surface_origin_app_ids: browserSurfaceOriginAppIds }
+      : {}),
+    ...(deploymentNonce === undefined
+      ? {}
+      : { deployment_nonce: deploymentNonce }),
+  };
+  return hashContent(canonicalJson(semanticDeployment)).slice(0, 32);
 }
 
 function assertDeploymentNonce(

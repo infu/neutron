@@ -5,7 +5,7 @@ import { Secp256k1KeyIdentity } from "@icp-sdk/core/identity/secp256k1";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
-  assertKernelPackageStateMatchesRuntime,
+  assertKernelPackageBaselineMatchesRuntime,
   compilePackages,
   createDeploymentNonce,
   deployPreparedPackages,
@@ -102,7 +102,7 @@ export async function runPersistenceUpgradeBridge(
     host: client.host,
     local: false,
   });
-  assertKernelPackageStateMatchesRuntime(state, beforeRuntime);
+  assertKernelPackageBaselineMatchesRuntime(state, beforeRuntime);
   const installedKernelVersion = state.existingConfigs.kernel?.version;
   if (installedKernelVersion === undefined) {
     throw new Error("Installed package state has no Kernel manifest");
@@ -117,6 +117,9 @@ export async function runPersistenceUpgradeBridge(
     packages: [preparedPackage],
     existingModules: state.existingModules,
     existingConfigs: state.existingConfigs,
+    existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds:
+      state.browserSurfaceOriginAppIds,
     existingStable: state.previousStable,
     connectionProviderSupport: state.connectionProviderSupport,
     deploymentNonce: createDeploymentNonce(),
@@ -223,6 +226,8 @@ export async function runPersistenceUpgradeBridge(
     packages: [preparedPackage],
     compiled,
     existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds:
+      state.browserSurfaceOriginAppIds,
     previousModulePaths: state.existingModules.map(({ path }) => path),
     stagedAssets: [
       {

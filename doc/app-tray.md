@@ -49,8 +49,9 @@ HTML or image content. A tray cannot be declared without an ordinary
 Declaring a tray adds no install or runtime permission. It does not imply
 either dedicated background-origin capability; if the background independently
 requests credentialless-ephemeral or persistent dedicated mode, that
-background-origin install disclosure still applies. The tray itself remains
-opaque in every case. See
+background-origin install disclosure still applies. In a current marked app
+package the tray receives its own credentialless installation origin; an
+unadopted historical package keeps its opaque tray for compatibility. See
 [Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
 
 ## Background-Owned Badge
@@ -122,15 +123,26 @@ Closing the popover unregisters the endpoint and destroys the iframe. Keep
 durable or continuously changing state in the resident background or backend,
 not in the tray page. Fetch a fresh snapshot when the page mounts.
 
-The tray frame always uses:
+For a current marked app package, the tray frame uses:
 
 ```html
-<iframe sandbox="allow-scripts" credentialless="true"></iframe>
+<iframe sandbox="allow-scripts allow-same-origin" credentialless="true"></iframe>
 ```
 
-It has an opaque origin and never inherits a storage-enabled background's
-`allow-same-origin` authority. App code cannot style or replace the trusted
-toolbar button and popover chrome.
+Its hostname is derived generically from the installation's browser-origin
+nonce and the `tray` surface key, independently of the app's name or version.
+The backend binds that hostname to only the app's asset subtree, permits it to
+be framed only by the Kernel, and rejects top-level document navigation. The
+Kernel binds the private `MessagePort` handshake to both this exact origin and
+the registered `contentWindow`.
+
+An unadopted historical package keeps its released URL with
+`sandbox="allow-scripts"` and an opaque origin. A browser that cannot prove
+credentialless originful framing also falls back to that script-only sandbox
+and receives no browser-feature delegation. Both paths remain credentialless,
+and neither inherits a storage-enabled background's origin or persistent
+storage authority. App code cannot style or replace the trusted toolbar button
+and popover chrome.
 
 A tray page may close its own currently open popover without gaining shell
 control. The host always supplies an explicit close button and light-dismiss.
@@ -221,8 +233,9 @@ display context only.
 | Backend reservations | May read its app's reservation list when `backend_calls` is declared, but cannot request, add, or remove reservations. |
 | Connections and raw resident credentials | Unavailable; these actions are exact-background-only. |
 | Clipboard and browser Ethereum provider | Unavailable; these are focused, transiently activated tile operations. |
+| Camera and microphone | Unavailable. `browser_permissions` delegates these features only to exact declared tile ids. |
 | Agent Mode | Cannot enable or initiate a turn and cannot receive delegated calls. Same-app status inspection and disabling remain available. Delegated app-tool discovery omits trays entirely. |
-| Persistent browser storage | Unavailable; the tray is always credentialless and opaque. |
+| Persistent browser storage | Unavailable; the tray is always credentialless. Its current installation origin does not inherit a persistent background's authority. |
 
 Private `tray.set_state` and `tray.dismiss` actions are transport helpers, not
 discoverable kernel tools. Delegated invocations cannot inspect tool schemas on

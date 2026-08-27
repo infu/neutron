@@ -4,6 +4,12 @@ This directory describes the current Neutron architecture. Source code is the
 final authority; these documents explain the contracts that the compiler,
 Kernel, app SDK, and provisioner enforce together.
 
+General guides deliberately do not pin the active package filenames, app
+release numbers, or assembler generation. Commands use semantic placeholders
+or the selected manifest/configuration. Exact numbers remain only where they
+name a stable protocol, schema, API, fixed migration boundary, or immutable
+compatibility artifact.
+
 Neutron is a user-owned operating-system canister. The Kernel is its replaceable
 trust root. Ordinary apps are packages assembled into the same actor, but they
 receive authority only through a closed manifest, a canonical capability plan,
@@ -45,6 +51,10 @@ compiler, shared-tools, or provisioner source change.
 - App operational messaging uses a source-bound private `MessagePort`.
   `window.postMessage` is used only for the ready/probe/port-transfer
   handshake.
+- Ordinary app surfaces use installation-owned, per-surface origins when their
+  package carries the generated readiness marker. Camera and microphone remain
+  default-deny and may be delegated only to exact declared tiles; media stays
+  in the browser and does not pass through the Kernel backend.
 - Self calls use one API-1 value model. Nested `Uint8Array` values travel as
   transferable sidecars and are bound to live Candid `vec nat8` leaves.
 - Provisioning accepts deployment config format 3 and provision journal schema

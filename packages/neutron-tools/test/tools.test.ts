@@ -918,6 +918,37 @@ test("message-channel handshake moves requests onto the kernel port", async () =
   channel.port2.close();
 });
 
+test("SPA route changes preserve the authenticated Kernel parent", async () => {
+  const fakeWindow = installFakeWindow(undefined, false);
+  fakeWindow.location.href =
+    `https://ahelloa--${fakeCanisterId}.icp0.io/settings`;
+  const channel = new MessageChannel();
+  channel.port2.addEventListener("message", (event) => {
+    channel.port2.postMessage({
+      type: "response",
+      id: event.data.id,
+      ok: "kernel-after-route-change",
+    });
+  });
+  channel.port2.start();
+
+  fakeWindow.dispatch(
+    {
+      type: "neutron:msgbus:connect",
+      version: 1,
+      sessionId: "routechange123456",
+    },
+    fakeWindow.parent,
+    fakeKernelOrigin,
+    [channel.port1],
+  );
+
+  await expect(exec("routed_action", {}, 0.2)).resolves.toBe(
+    "kernel-after-route-change",
+  );
+  channel.port2.close();
+});
+
 test("app calls wait for the private kernel port", async () => {
   const fakeWindow = installFakeWindow(undefined, false);
   const channel = new MessageChannel();

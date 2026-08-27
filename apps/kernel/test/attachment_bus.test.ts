@@ -91,7 +91,7 @@ function connectedEndpoint(appId: string) {
       { origin: "null" },
     ),
   );
-  expect(connectFrameEndpoint(source)).toBe(true);
+  expect(connectFrameEndpoint(source, true)).toBe(true);
   const endpoint = getRegisteredEndpoint(`app:${appId}:background`);
   if (!endpoint || !appPort) throw new Error("missing connected endpoint");
   cleanup.push(() => appPort?.close());
@@ -383,7 +383,7 @@ test("attachment progress keeps total bounds without an elapsed-time quota", asy
       { origin: "null" },
     ),
   );
-  expect(connectFrameEndpoint(source)).toBe(true);
+  expect(connectFrameEndpoint(source, true)).toBe(true);
   const endpoint = getRegisteredEndpoint("app:attachment_progress:background");
   if (!endpoint || !appPort) throw new Error("missing connected endpoint");
   const values: unknown[] = [];
@@ -446,7 +446,7 @@ test("outgoing timeout drops callback state after transferring its input", async
       { origin: "null" },
     ),
   );
-  expect(connectFrameEndpoint(source)).toBe(true);
+  expect(connectFrameEndpoint(source, true)).toBe(true);
   const endpoint = getRegisteredEndpoint("app:attachment_timeout:background");
   if (!endpoint || !appPort) throw new Error("missing connected endpoint");
   const data = new Uint8Array([1, 2, 3]).buffer;
@@ -489,7 +489,7 @@ test("endpoint reconnection rejects pending calls and active byte reservations",
       { origin: "null" },
     ),
   );
-  expect(connectFrameEndpoint(source)).toBe(true);
+  expect(connectFrameEndpoint(source, true)).toBe(true);
   const endpoint = getRegisteredEndpoint("app:attachment_reconnect:background");
   if (!endpoint) throw new Error("missing connected endpoint");
   const reservation = acquireAttachmentCapacity(endpoint, 4096);
@@ -501,7 +501,7 @@ test("endpoint reconnection rejects pending calls and active byte reservations",
     [],
     { timeoutSeconds: 10 },
   );
-  expect(connectFrameEndpoint(source)).toBe(true);
+  expect(connectFrameEndpoint(source, true)).toBe(true);
   await expect(pending).rejects.toMatchObject({
     code: "ATTACHMENT_ENDPOINT_CHANGED",
   });

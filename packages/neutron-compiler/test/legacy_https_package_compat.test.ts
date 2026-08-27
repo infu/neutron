@@ -8,6 +8,10 @@ import { chromium, type Browser, type Page } from "playwright";
 import msgpack from "tiny-msgpack";
 import { hashContent } from "neutron-tools/src/hash.js";
 import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  browserSurfaceOriginsPackageMarkerBytes,
+} from "neutron-tools/src/package_surface_origins.js";
+import {
   buildPackagesCompileInput,
   preparePackageInstall,
   unpackNeutronPackage,
@@ -21,8 +25,11 @@ const ARCHIVE_ONLY_SOURCE_PATH = "legal/source/app-source.v1.msgpack";
 const KERNEL_307_PREDECESSOR_ARCHIVE_PATH = fileURLToPath(
   new URL("./fixtures/kernel.v0.3.7.neutron", import.meta.url),
 );
+const KERNEL_315_PREDECESSOR_ARCHIVE_PATH = fileURLToPath(
+  new URL("./fixtures/kernel.v0.3.15.neutron", import.meta.url),
+);
 const FINAL_KERNEL_CANDIDATE_ARCHIVE_PATH = fileURLToPath(
-  new URL("../../../apps/kernel/kernel.v0.3.15.neutron", import.meta.url),
+  new URL("../../../apps/kernel/kernel.v0.3.16.neutron", import.meta.url),
 );
 const KERNEL_306_FIXTURE_PATH = fileURLToPath(
   new URL("./fixtures/kernel.v0.3.6.neutron", import.meta.url),
@@ -45,7 +52,7 @@ const CURRENT_PRODUCTION_APP_ARCHIVE_PATHS = [
 ].map((path) => fileURLToPath(new URL(path, import.meta.url)));
 
 type LegacyKernelExecutableFixture = Readonly<{
-  label: "v0.3.5" | "v0.3.6" | "v0.3.7";
+  label: "v0.3.5" | "v0.3.6" | "v0.3.7" | "v0.3.15";
   archivePath: string;
   bytes: number;
   sha256: string;
@@ -88,9 +95,19 @@ const LEGACY_KERNEL_EXECUTABLE_FIXTURES = [
     batchSymbol: "Dz",
     compileSymbol: "Xk",
   },
+  {
+    label: "v0.3.15",
+    archivePath: KERNEL_315_PREDECESSOR_ARCHIVE_PATH,
+    bytes: 2_011_370,
+    sha256: "9deeea94795589ee8a331e005c63a85a42886c3f6c0a948e194915539d6a13db",
+    mainTailMarker: "var qn=j(J(),1),GR=document.getElementById",
+    prepareSymbol: "lA",
+    batchSymbol: "uO",
+    compileSymbol: "fA",
+  },
 ] as const satisfies readonly LegacyKernelExecutableFixture[];
 const HAS_CURRENT_RELEASE_ARTIFACTS = [
-  KERNEL_307_PREDECESSOR_ARCHIVE_PATH,
+  ...LEGACY_KERNEL_EXECUTABLE_FIXTURES.map(({ archivePath }) => archivePath),
   FINAL_KERNEL_CANDIDATE_ARCHIVE_PATH,
   ...CURRENT_PRODUCTION_APP_ARCHIVE_PATHS,
 ].every(existsSync);
@@ -200,6 +217,8 @@ function httpsPackageFixture(
     "legal/APPLICATION-NOTICE.txt": applicationNoticeBytes,
     "legal/THIRD_PARTY_NOTICES.md": thirdPartyNoticeBytes,
     "legal/package-record.v1.json": encoder.encode(JSON.stringify(record)),
+    [NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]:
+      browserSurfaceOriginsPackageMarkerBytes(),
   };
   if (options.includeArchiveOnlySource) {
     files[ARCHIVE_ONLY_SOURCE_PATH] = offeredSourceBytes;
@@ -384,8 +403,11 @@ for (const fixture of LEGACY_KERNEL_EXECUTABLE_FIXTURES) {
           "app/hello/pkg/legal/package-record.v1.json",
         ],
         // v0.3.5 and v0.3.6 treat the sidecar as an ordinary auxiliary file;
-        // v0.3.7 understands and verifies its already-supported HTTPS form.
-        source: fixture.label === "v0.3.7" ? app.source : null,
+        // later released installers understand and verify its HTTPS form.
+        source:
+          fixture.label === "v0.3.7" || fixture.label === "v0.3.15"
+            ? app.source
+            : null,
       });
       expect(result.legalPaths).not.toContain(
         `app/hello/pkg/${ARCHIVE_ONLY_SOURCE_PATH}`,
@@ -398,7 +420,7 @@ for (const fixture of LEGACY_KERNEL_EXECUTABLE_FIXTURES) {
   );
 }
 
-test("the exact v0.3.5, v0.3.6, and v0.3.7 browser compilers compile a clean HTTPS app with a successor Kernel", async () => {
+test("the exact v0.3.5, v0.3.6, v0.3.7, and v0.3.15 browser compilers compile a clean HTTPS app with a successor Kernel", async () => {
   const app = httpsPackageFixture();
   const kernelArchive = syntheticSuccessorKernelArchive();
   for (const fixture of LEGACY_KERNEL_EXECUTABLE_FIXTURES) {
@@ -411,11 +433,11 @@ test("the exact v0.3.5, v0.3.6, and v0.3.7 browser compilers compile a clean HTT
 }, 120_000);
 
 test.skipIf(!RUN_CURRENT_RELEASE_ARTIFACT_GATE)(
-  "release-only archived browser compilers compile the exact v0.3.15 candidate and current app archives in one batch",
+  "release-only archived browser compilers compile the exact v0.3.16 candidate and unchanged current app archives in one batch",
   async () => {
     if (!HAS_CURRENT_RELEASE_ARTIFACTS) {
       throw new Error(
-        "NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE=1 requires the v0.3.7 predecessor, v0.3.15 candidate, and every current app archive",
+        "NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE=1 requires the archived browser compilers, v0.3.16 candidate, and every unchanged current app archive",
       );
     }
     const kernelArchive = new Uint8Array(
@@ -424,11 +446,17 @@ test.skipIf(!RUN_CURRENT_RELEASE_ARTIFACT_GATE)(
     const appArchives = CURRENT_PRODUCTION_APP_ARCHIVE_PATHS.map(
       (path) => new Uint8Array(readFileSync(path)),
     );
+    const candidateKernel = preparePackageInstall(kernelArchive);
     const currentApps = appArchives.map((archive) =>
       preparePackageInstall(archive),
     );
-    for (const app of currentApps) {
+    expect(candidateKernel.manifest).toMatchObject({
+      id: "kernel",
+      version: 316,
+    });
+    for (const app of [candidateKernel, ...currentApps]) {
       expect(app.manifest).not.toHaveProperty("package_features");
+      expect(app.manifest.capabilities?.browser_permissions).toBeUndefined();
       expect(app.packageRecord?.source.kind).toBe("https");
       expect(app.packageRecord).not.toHaveProperty("features");
       expect(
@@ -439,6 +467,16 @@ test.skipIf(!RUN_CURRENT_RELEASE_ARTIFACT_GATE)(
         ),
       ).toBe(false);
     }
+    for (const app of currentApps) {
+      expect(app.browserSurfaceOriginsReady).toBe(false);
+    }
+    expect(
+      buildPackagesCompileInput({
+        existingApps: {},
+        existingBrowserSurfaceOriginAppIds: [],
+        packages: [candidateKernel, ...currentApps],
+      }).browserSurfaceOriginAppIds,
+    ).toEqual([]);
     const expectedAppIds = [
       "kernel",
       ...currentApps.map(({ manifest }) => manifest.id),
@@ -460,6 +498,8 @@ test("the current installer accepts the same legacy-readable HTTPS app in one ba
   const preparedKernel = preparePackageInstall(kernelArchive);
   const preparedApp = preparePackageInstall(app.archive);
   const batch = buildPackagesCompileInput({
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
     packages: [preparedKernel, preparedApp],
   });
 
@@ -475,7 +515,9 @@ test("the current installer accepts the same legacy-readable HTTPS app in one ba
     source: app.source,
   });
   expect(preparedApp.packageRecord).not.toHaveProperty("features");
+  expect(preparedApp.browserSurfaceOriginsReady).toBe(true);
   expect(Object.keys(batch.configs)).toEqual(["kernel", "hello"]);
+  expect(batch.browserSurfaceOriginAppIds).toEqual(["hello"]);
   expect(preparedApp.files.map(({ path }) => path)).toEqual(
     expect.arrayContaining([
       "app/hello/pkg/legal/LICENSE.APP.txt",
@@ -564,17 +606,21 @@ test("the executable legacy fixtures pin the closed compatibility boundary", asy
     expect(attempts.clean).toMatchObject({ ok: true });
     expect(attempts.markedManifest).toMatchObject({ ok: false });
     if (!attempts.markedManifest!.ok) {
-      expect(attempts.markedManifest!.error).toContain("additional property");
+      expect(attempts.markedManifest!.error).toContain(
+        fixture.label === "v0.3.15"
+          ? "requires archive-only package material"
+          : "additional property",
+      );
     }
     expect(attempts.httpsInManifest).toMatchObject({ ok: false });
     if (!attempts.httpsInManifest!.ok) {
       expect(attempts.httpsInManifest!.error).toContain("additional property");
     }
 
-    if (fixture.label !== "v0.3.7") {
+    if (fixture.label === "v0.3.5" || fixture.label === "v0.3.6") {
       // v0.3.5 and v0.3.6 do not interpret package-record.v1 at all.
       expect(attempts.markedRecord).toMatchObject({ ok: true });
-    } else {
+    } else if (fixture.label === "v0.3.7") {
       // v0.3.7's record parser is closed and predates the features field.
       expect(attempts.markedRecord).toMatchObject({ ok: false });
       if (!attempts.markedRecord!.ok) {
@@ -582,16 +628,31 @@ test("the executable legacy fixtures pin the closed compatibility boundary", asy
           "unknown field features",
         );
       }
+    } else {
+      expect(attempts.markedRecord).toMatchObject({ ok: false });
+      if (!attempts.markedRecord!.ok) {
+        expect(attempts.markedRecord!.error).toContain(
+          "requires archive-only package material",
+        );
+      }
     }
 
-    // Neither legacy installer recognizes this as reserved. It would be
-    // publicly staged, so compatibility requires omitting it rather than
-    // relying on either predecessor to filter or reject it.
-    expect(attempts.archiveOnlyPath).toMatchObject({ ok: true });
-    if (attempts.archiveOnlyPath?.ok) {
-      expect(attempts.archiveOnlyPath.paths).toContain(
-        `app/hello/pkg/${ARCHIVE_ONLY_SOURCE_PATH}`,
-      );
+    if (fixture.label === "v0.3.15") {
+      expect(attempts.archiveOnlyPath).toMatchObject({ ok: false });
+      if (!attempts.archiveOnlyPath!.ok) {
+        expect(attempts.archiveOnlyPath!.error).toContain(
+          "requires package_features and package-record features",
+        );
+      }
+    } else {
+      // Earlier legacy installers do not recognize this as reserved. They
+      // would stage it publicly, so compatible packages must omit it.
+      expect(attempts.archiveOnlyPath).toMatchObject({ ok: true });
+      if (attempts.archiveOnlyPath?.ok) {
+        expect(attempts.archiveOnlyPath.paths).toContain(
+          `app/hello/pkg/${ARCHIVE_ONLY_SOURCE_PATH}`,
+        );
+      }
     }
   }
 }, 30_000);

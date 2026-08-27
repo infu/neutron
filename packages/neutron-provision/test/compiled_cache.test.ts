@@ -8,6 +8,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { ASSEMBLER_ID } from "neutron-compiler/src/assemble.js";
 import {
   compiledActorCacheKey,
   resolveLocalCompiledActor,
@@ -195,7 +196,9 @@ const compiled: CacheableCompileResult = {
   candid: "service : { ping : () -> (); }",
   stable: "type Neutron = { version : Nat };",
   compilerId: "moc_test",
+  assemblerId: ASSEMBLER_ID,
   deploymentId: "deployment_test",
+  browserSurfaceOriginAppIds: ["files"],
 };
 
 function cacheOptions(root: string) {
@@ -214,7 +217,7 @@ function cacheEntry(root: string): string {
     packageArchiveSha256: PACKAGE_HASHES,
     installationNetworkIdHex: INSTALLATION_NETWORK_ID,
   });
-  return path.join(root, ".neutron", "cache", "compiled", "v2", key);
+  return path.join(root, ".neutron", "cache", "compiled", "v3", key);
 }
 
 async function withTempDirectory(

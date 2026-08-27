@@ -34,7 +34,7 @@ describe("transaction payload orphan collection", () => {
     const activePath = await persistTransactionPayload(sessionPath, active);
     const abandonedTemporary = `${activePath}.tmp-999-${"a".repeat(12)}`;
     await writeFile(abandonedTemporary, new Uint8Array([9]), { mode: 0o600 });
-    const retiredPayload = activePath.replace(".payload-v3", ".payload-v2");
+    const retiredPayload = activePath.replace(".payload-v4", ".payload-v2");
     await writeFile(retiredPayload, active.bytes, { mode: 0o600 });
 
     expect(
@@ -89,7 +89,7 @@ describe("transaction payload orphan collection", () => {
 
 function payload(values: number[]): SerializedTransactionPayload {
   const bytes = new Uint8Array(values);
-  return { version: 3, sha256: sha256Hex(bytes), bytes };
+  return { version: 4, sha256: sha256Hex(bytes), bytes };
 }
 
 async function temporaryRoot(roots: string[]): Promise<string> {

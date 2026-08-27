@@ -102,9 +102,12 @@ test("legacy packages without a legal record remain on the ordinary install and 
   const existingModules = [
     { path: `${kernelEntry}.mo`, content: kernelSource },
   ];
+  const kernelApps = { kernel: appRegistryEntry(kernel) };
   const installCompile = buildPackageCompileInput({
     existingModules,
     existingConfigs: { kernel },
+    existingApps: kernelApps,
+    existingBrowserSurfaceOriginAppIds: [],
     existingStable: null,
     preparedPackage: prepared,
   });
@@ -118,9 +121,9 @@ test("legacy packages without a legal record remain on the ordinary install and 
     `${prepared.manifest.entry}.mo`,
   );
 
-  const kernelApps = { kernel: appRegistryEntry(kernel) };
   const installed = buildPackagesInstallAssets({
     existingApps: kernelApps,
+    existingBrowserSurfaceOriginAppIds: [],
     packages: [prepared],
     candid: "service : {}",
   });
@@ -131,6 +134,8 @@ test("legacy packages without a legal record remain on the ordinary install and 
     state: {
       registry: installed.apps,
       apps: installed.apps,
+      browserSurfaceOriginAppIds: installed.browserSurfaceOriginAppIds,
+      browserSurfaceOriginsSidecarPresent: true,
       existingConfigs: installCompile.configs,
       existingModules: installCompile.mofiles,
       previousStable: null,
@@ -145,6 +150,8 @@ test("legacy packages without a legal record remain on the ordinary install and 
 
   const removed = buildPackagesInstallAssets({
     existingApps: installed.apps,
+    existingBrowserSurfaceOriginAppIds:
+      installed.browserSurfaceOriginAppIds,
     packages: [],
     candid: "service : {}",
     removedApps: ["community_notes"],

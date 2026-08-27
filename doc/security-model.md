@@ -124,6 +124,13 @@ The compiler projects only the interfaces named by that plan. Runtime brokers
 also consult the live capability registry, so a handle alone is insufficient
 after disablement or replacement.
 
+The registry publishes an actor-local capability-authority revision through the
+generated runtime identity. A successful toggle advances it. The trusted
+frontend compares the revision together with the deployment identity, so a
+toggle invalidates all mounted frames and transient grants, while a code
+replacement cannot collide merely because a new actor's local counter starts
+again.
+
 Capability changes are staged with the install. Commit activates the target
 plan and reconciles its resources; abort discards it. Removal retires the
 scope, and a later re-addition receives a new one. Operations that cross an
@@ -197,6 +204,12 @@ and canonical constructor for IC and PocketIC authorities; each route surface
 still applies its own exact allow policy, and raw/custom gateway denial remains
 the caller's responsibility.
 
+The same backend certifies installation-owned browser-surface responses. One
+derived hostname is bound to one app installation and one declared tile, tray,
+or ordinary background. That hostname may execute only the matching app's
+asset subtree under the allowed request destinations; it cannot become a Kernel
+document origin or load another app's executable assets.
+
 ## Certified Assets
 
 Certified Assets exposes three kinds:
@@ -250,8 +263,27 @@ The Kernel rejects messages from an unregistered source, wrong role, stale
 session, replaced app, mismatched port, or inactive invocation. It captures the
 binding before asynchronous work and checks it again before effects or reply.
 
+An ordinary package built by the current packer carries the generic
+`.neutron/browser-surface-origins.v1.json` readiness marker. The checked install
+records eligible apps in the certified surface-origin sidecar. Each tile ID,
+tray, and ordinary background then receives a distinct hostname derived from
+the installation nonce and its surface key. Supported frames are credentialless
+and use `sandbox="allow-scripts allow-same-origin"`; the backend binds their Host,
+path, request destination, CSP, and `frame-ancestors` policy. A browser that
+cannot establish credentialless originful framing falls back before navigation
+to `sandbox="allow-scripts"`, an opaque origin, and no browser-feature
+delegation. Historical packages without readiness evidence retain that same
+opaque compatibility policy.
+
+Camera and microphone are denied by default. `browser_permissions` may delegate
+only those closed features to exact adopted tile IDs through the certified
+Permissions Policy and iframe `allow` intersection. The tile uses browser media
+APIs directly; the Kernel backend never receives the stream or mediates a media
+session. Trays, backgrounds, cross-origin descendants, other browser features,
+and opaque fallbacks receive no delegation.
+
 Disposable tile and tray frames are not persistent authorities. Resident
-backgrounds use one of the declared security modes:
+backgrounds additionally use one of the declared security modes:
 
 - opaque credentialless;
 - installation-dedicated credentialless ephemeral; or

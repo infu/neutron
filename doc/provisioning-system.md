@@ -75,9 +75,9 @@ compilation, payment, or mutation.
   },
   "artifacts": {
     "kind": "inline",
-    "kernel": { "path": "apps/kernel/kernel.v0.3.12.neutron" },
+    "kernel": { "path": "path/to/kernel.neutron" },
     "packages": [
-      { "path": "apps/hello/hello.v0.2.4.neutron" }
+      { "path": "path/to/app.neutron" }
     ]
   }
 }
@@ -119,11 +119,11 @@ Rules include:
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.12.neutron",
+      "path": "path/to/kernel.neutron",
       "sha256": "<64 lowercase hex>",
       "bytes": "<archive byte length>",
       "id": "kernel",
-      "version": 306
+      "version": 123
     },
     "packages": []
   }
@@ -137,6 +137,10 @@ IC inline archives are exactly pinned by:
 - byte length;
 - app ID; and
 - packed app version.
+
+The path and numeric version in this schematic are placeholders. A production
+configuration must copy every pin from the exact selected archive and release
+evidence; the documentation does not name the repository's active package.
 
 An external release artifact set may be selected with:
 
@@ -362,8 +366,8 @@ assertion. It verifies:
 - canonical canister ID and selected IC host;
 - running operational state;
 - module hash and Kernel runtime identity;
-- the exact current `neutron_actor_v25` assembler and a bounded package
-  inventory snapshot;
+- the exact compiler-owned `ASSEMBLER_ID` and a bounded package inventory
+  snapshot;
 - controller and settings snapshot;
 - authorized-principal snapshot including the deployer;
 - target subnet and Registry-backed deployment evidence; and

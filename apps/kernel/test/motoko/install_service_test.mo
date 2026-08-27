@@ -11,6 +11,7 @@ import BackendCallsService "../../backend/backend_calls/Service";
 import BackendCallTypes "../../backend/backend_calls/Types";
 import CapabilityTypes "../../backend/capabilities/Types";
 import InstallMemory "../../backend/install/Memory";
+import BrowserOrigin "../../backend/install/BrowserOrigin";
 import InstallLimits "../../backend/install/Limits";
 import InstallService "../../backend/install/Service";
 import InstallTypes "../../backend/install/Types";
@@ -26,6 +27,20 @@ let LEGACY_DEPLOYMENT = "44444444444444444444444444444444";
 let ORIGIN_EPOCH : Nat64 = 17;
 let DEPLOYMENT_BUILD_RECORD_PATH =
     "/system/deployment-build-record.json";
+
+let browserOriginVectorNonce = "dc67918c9d79794438224f851f95897c";
+assert (
+    BrowserOrigin.surfaceNonce(
+        browserOriginVectorNonce,
+        "tile:files",
+    ) == "ac1a044ad368b566350430ca52b8e635"
+);
+assert (
+    BrowserOrigin.surfacePrefix(
+        browserOriginVectorNonce,
+        "tile:files",
+    ) == "iac1a044ad368b566350430ca"
+);
 
 func stagingPrefix(deploymentId : Text) : Text {
     "/system/staging/" # deploymentId # "/";
@@ -56,6 +71,23 @@ func putAsset(
 };
 
 assert (InstallLimits.MAX_APP_INSTANCES == 256);
+assert (InstallService.installationUidLaneStart(0) == 1);
+assert (InstallService.installationUidLaneStart(1) == 258);
+assert (InstallService.installationUidLaneStart(17) == 4_370);
+assert (InstallService.installationUidLaneNextLimit(0) == 257);
+assert (InstallService.installationUidLaneNextLimit(1) == 514);
+assert (
+    InstallService.installationUidLaneStart(71_777_214_294_589_694) ==
+    18_446_744_073_709_551_359
+);
+assert (
+    InstallService.installationUidLaneNextLimit(
+        71_777_214_294_589_694
+    ) == 18_446_744_073_709_551_615
+);
+assert (InstallService.nextBrowserOriginAuthorityEpoch(1, 0) == 2);
+assert (InstallService.nextBrowserOriginAuthorityEpoch(1, 41) == 42);
+assert (InstallService.nextBrowserOriginAuthorityEpoch(50, 41) == 51);
 assert (
     InstallService.removalCountWithinCommitBound(
         InstallLimits.MAX_APP_REMOVALS_PER_COMMIT
@@ -153,6 +185,33 @@ assert (
         [sameDeclarationNewDeployment],
     ).size() == 0
 );
+let kernel315 = {
+    walletInitial with
+    scope = {
+        app_id = "kernel";
+        installation_uid = walletInitial.scope.installation_uid;
+    };
+    version = 315;
+};
+let kernel315NewDeployment = {
+    kernel315 with deployment_id = DEPLOYMENT;
+};
+assert (
+    InstallMemory.findApp(
+        InstallService.changedInstances(
+            [kernel315],
+            [kernel315NewDeployment],
+        ),
+        "kernel",
+    ) == null
+);
+let kernel316 = { kernel315NewDeployment with version = 316 };
+assert (
+    InstallMemory.findApp(
+        InstallService.changedInstances([kernel315], [kernel316]),
+        "kernel",
+    ) == ?kernel316
+);
 let sameDeclarationNewScope = {
     sameDeclarationNewDeployment with
     scope = {
@@ -239,6 +298,61 @@ assert (not InstallService.isValidBeginInput({
     validBegin with clear_prefixes = ["/pkg/legal/archive/"];
 }));
 
+// Install admission and certification must agree on one exact path grammar.
+// Keep each malformed source within the declared staging prefix and each
+// malformed clear within an otherwise permitted namespace, so these checks
+// exercise canonical-path rejection rather than the surrounding scope fence.
+let malformedCopySources = [
+    stagingPrefix(DEPLOYMENT) # "/asset",
+    stagingPrefix(DEPLOYMENT) # "./asset",
+    stagingPrefix(DEPLOYMENT) # "../asset",
+    stagingPrefix(DEPLOYMENT) # "%2fasset",
+    stagingPrefix(DEPLOYMENT) # "asset\\child",
+    stagingPrefix(DEPLOYMENT) # "asset?query",
+    stagingPrefix(DEPLOYMENT) # "asset#fragment",
+];
+for (source in malformedCopySources.vals()) {
+    assert (not InstallService.isValidBeginInput({
+        validBegin with copies = [{
+            source;
+            target = DEPLOYMENT_BUILD_RECORD_PATH;
+        }];
+    }));
+};
+let malformedCopyTargets = [
+    "/app/files//index.html",
+    "/app/files/./index.html",
+    "/app/files/../index.html",
+    "/app/files/%2findex.html",
+    "/app/files\\index.html",
+    "/app/files/index.html?query",
+    "/app/files/index.html#fragment",
+    "/app/a/b/c/d/e/f/g/h/i/j/k/l/m/n/index.html",
+];
+for (target in malformedCopyTargets.vals()) {
+    assert (not InstallService.isValidBeginInput({
+        validBegin with copies = [{
+            source = deploymentBuildRecordCopy(DEPLOYMENT).source;
+            target;
+        }];
+    }));
+};
+let malformedClearPrefixes = [
+    "/app/files//",
+    "/app/files/./",
+    "/app/files/../",
+    "/app/files/%2f/",
+    "/app/files\\child/",
+    "/app/files/?query",
+    "/app/files/#fragment",
+    "/app/a/b/c/d/e/f/g/h/i/j/k/l/m/n/",
+];
+for (prefix in malformedClearPrefixes.vals()) {
+    assert (not InstallService.isValidBeginInput({
+        validBegin with clear_prefixes = [prefix];
+    }));
+};
+
 func capacityAppId(index : Nat) : Text {
     let suffix = Nat.toText(index);
     if (index < 10) {
@@ -287,6 +401,7 @@ class CertificationProbe() {
     public var mutation_count = 0;
     public var publication_count = 0;
     var dirty = false;
+    let pending_chunked = Map.empty<Text, ()>();
 
     public func beginV2PublicationBatch() : () {
         begin_count += 1;
@@ -302,6 +417,18 @@ class CertificationProbe() {
         dirty := false;
         publication_count += 1;
         true;
+    };
+
+    public func hasPendingChunked(key : Text) : Bool {
+        Map.get(pending_chunked, Text.compare, key) != null;
+    };
+
+    public func setPendingChunked(key : Text, pending : Bool) : () {
+        if (pending) {
+            Map.add(pending_chunked, Text.compare, key, ());
+        } else {
+            Map.remove(pending_chunked, Text.compare, key);
+        };
     };
 
     public func putHash(_key : Text, _hash : Blob) : () {
@@ -329,6 +456,7 @@ let backendCalls : BackendCallTypes.Memory = {
 };
 var didCommit = false;
 var removedInstances : [InstallTypes.AppInstance] = [];
+var observedCanisterVersion : Nat64 = 0;
 
 func serviceFor(
     deploymentId : Text,
@@ -341,8 +469,10 @@ func serviceFor(
         backendCalls,
         deploymentId,
         active,
+        func() { observedCanisterVersion },
         func(_, _) { true },
         func(_, _) {},
+        func(key) { cert.delete(key) },
         func(removed, _) {
             didCommit := true;
             removedInstances := removed;
@@ -353,19 +483,15 @@ func serviceFor(
 let oldService = serviceFor(OLD_DEPLOYMENT, committedRuntime);
 let deploymentRecordSource =
     deploymentBuildRecordCopy(DEPLOYMENT).source;
-assert (not oldService.isPendingStagingPath(deploymentRecordSource));
+assert (oldService.publicStaticMutationsAllowed());
 assert (not oldService.copySourcesAvailable(validBegin));
 putAsset(assets, deploymentRecordSource, "first-record");
+cert.setPendingChunked(deploymentRecordSource, true);
+assert (not oldService.copySourcesAvailable(validBegin));
+cert.setPendingChunked(deploymentRecordSource, false);
 assert (oldService.copySourcesAvailable(validBegin));
 oldService.begin(validBegin);
-assert (oldService.isPendingStagingPath(deploymentRecordSource));
-assert (oldService.isPendingStagingPath(
-    stagingPrefix(DEPLOYMENT) # "any-upload",
-));
-assert (not oldService.isPendingStagingPath(
-    stagingPrefix(NEXT_DEPLOYMENT) # "any-upload",
-));
-assert (not oldService.isPendingStagingPath(DEPLOYMENT_BUILD_RECORD_PATH));
+assert (not oldService.publicStaticMutationsAllowed());
 let ?pending = oldService.status() else Runtime.trap("Install status missing");
 assert (pending.removed_apps == ["mail"]);
 assert (pending.committed_app_instances == memory.committed_app_instances);
@@ -416,7 +542,7 @@ assert (
 // authority, and deliberately leaves a monotonic allocation gap.
 oldService.abort({ deployment_id = DEPLOYMENT });
 assert (oldService.status() == null);
-assert (not oldService.isPendingStagingPath(deploymentRecordSource));
+assert (oldService.publicStaticMutationsAllowed());
 assert (assets.get(deploymentRecordSource) == null);
 assert (memory.next_installation_uid == 4);
 assert (memory.committed_app_instances == [mailInitial, walletInitial]);
@@ -426,7 +552,7 @@ assert (not didCommit);
 
 putAsset(assets, deploymentRecordSource, "committed-record");
 oldService.begin(validBegin);
-assert (oldService.isPendingStagingPath(deploymentRecordSource));
+assert (not oldService.publicStaticMutationsAllowed());
 let ?secondPending = oldService.status() else Runtime.trap("Second status missing");
 let ?secondJournal = memory.pending else Runtime.trap("Second journal missing");
 assert (InstallService.isValidJournal(secondJournal, ORIGIN_EPOCH));
@@ -498,7 +624,6 @@ let changedInstances = activated.commit(
     },
 );
 assert (activated.status() == null);
-assert (not activated.isPendingStagingPath(deploymentRecordSource));
 assert (didCommit);
 assert (didCommitManagedMemory);
 var replayedManagedMemoryCommit = false;
@@ -543,6 +668,7 @@ let withoutHello = [
     ),
 ];
 let committedService = serviceFor(DEPLOYMENT, targetRuntime);
+observedCanisterVersion := 41;
 putAsset(
     assets,
     deploymentBuildRecordCopy(NEXT_DEPLOYMENT).source,
@@ -570,7 +696,10 @@ assert (
 );
 assert (
     walletModeChanged.browser_origin_authority_epoch ==
-    walletCommitted.browser_origin_authority_epoch + 1
+    InstallService.nextBrowserOriginAuthorityEpoch(
+        walletCommitted.browser_origin_authority_epoch,
+        observedCanisterVersion,
+    )
 );
 // The old actor remains intact. The activated target cannot use even an exact
 // unchanged scope until its complete deployment commits: plan equality does
@@ -613,6 +742,7 @@ putAsset(
     deploymentBuildRecordCopy(REINSTALL_DEPLOYMENT).source,
     "reinstall-record",
 );
+observedCanisterVersion := 42;
 serviceFor(NEXT_DEPLOYMENT, withoutHello).begin({
     deployment_id = REINSTALL_DEPLOYMENT;
     copies = [deploymentBuildRecordCopy(REINSTALL_DEPLOYMENT)];
@@ -642,6 +772,10 @@ assert (not InstallMemory.scopeActive(
 assert (
     helloReinstalled.scope.installation_uid !=
     helloCommitted.scope.installation_uid
+);
+assert (
+    helloReinstalled.scope.installation_uid ==
+    InstallService.installationUidLaneStart(observedCanisterVersion)
 );
 assert (
     helloReinstalled.browser_origin_nonce !=
@@ -677,8 +811,10 @@ func legacyServiceFor(
         legacyBackendCalls,
         deploymentId,
         active,
+        func() { 0 : Nat64 },
         func(_, _) { true },
         func(_, _) {},
+        func(key) { legacyCert.delete(key) },
         func(_, _) {},
     );
 };
@@ -798,12 +934,14 @@ func batchServiceFor(
         batchBackendCalls,
         deploymentId,
         active,
+        func() { 0 : Nat64 },
         func(_, _) { true },
         func(key, hash) {
             // Model the public-response leaves installed alongside the body
             // hash.
             certificationProbe.putHash(key # "#public", hash);
         },
+        func(key) { certificationProbe.delete(key) },
         func(_, _) {
             // certifiedAssets.commitConfiguration opens this inner batch in
             // the production callback.
@@ -928,6 +1066,194 @@ assert (not BackendCallsMemory.allows(
     "app_alpha__default_v1_update",
 ));
 
+// Browser authority allocated by begin is provisional. Dispatch atomically
+// reissues both a new app's uid/nonce and an existing app's rotated authority
+// epoch from the current non-rollbackable canister-version lane. A definite
+// management call error clears only the marker; retrying dispatch reissues a
+// fresh lane again. Install claims remain inert UID-0/app-id records throughout.
+let dispatchMemory = InstallMemory.init();
+let dispatchCommittedRuntime = [
+    runtimeApp("alpha", 100, HASH_A),
+    runtimeApp("beta", 100, HASH_F),
+];
+let dispatchTargetRuntime = [
+    runtimeApp("alpha", 100, HASH_A),
+    runtimeAppWithSecurity(
+        "beta",
+        101,
+        HASH_A,
+        #credentialless_ephemeral_dedicated_v1,
+    ),
+    runtimeApp("gamma", 100, HASH_ZERO),
+];
+InstallService.initializeFresh(
+    dispatchMemory,
+    OLD_DEPLOYMENT,
+    dispatchCommittedRuntime,
+    ORIGIN_EPOCH,
+);
+let dispatchAssets = Assets.use(Assets.init());
+let dispatchCert = CertificationProbe();
+let dispatchBackendCalls : BackendCallTypes.Memory = {
+    var next_id = 1;
+    reservations = Map.empty<Nat, BackendCallTypes.Reservation>();
+};
+func dispatchInstallClaim() : ?BackendCallTypes.Reservation {
+    var found : ?BackendCallTypes.Reservation = null;
+    for (reservation in Map.values(dispatchBackendCalls.reservations)) {
+        if (reservation.app_scope.installation_uid == 0) {
+            assert (found == null);
+            found := ?reservation;
+        };
+    };
+    found;
+};
+var dispatchCanisterVersion : Nat64 = 10;
+let dispatchService = InstallService.Service(
+    dispatchMemory,
+    dispatchAssets,
+    dispatchCert,
+    dispatchBackendCalls,
+    OLD_DEPLOYMENT,
+    dispatchCommittedRuntime,
+    func() { dispatchCanisterVersion },
+    func(_, _) { true },
+    func(_, _) {},
+    func(key) { dispatchCert.delete(key) },
+    func(_, _) {},
+);
+let dispatchRecordSource = deploymentBuildRecordCopy(DEPLOYMENT).source;
+putAsset(dispatchAssets, dispatchRecordSource, "dispatch-record");
+dispatchService.begin({
+    deployment_id = DEPLOYMENT;
+    copies = [deploymentBuildRecordCopy(DEPLOYMENT)];
+    clear_prefixes = [];
+    target_app_inventory = dispatchTargetRuntime;
+});
+let ?dispatchProvisional = dispatchService.status() else {
+    Runtime.trap("Provisional dispatch journal missing");
+};
+let ?gammaProvisional = InstallMemory.findApp(
+    dispatchProvisional.target_app_instances,
+    "gamma",
+) else Runtime.trap("Provisional Gamma missing");
+let ?betaProvisional = InstallMemory.findApp(
+    dispatchProvisional.target_app_instances,
+    "beta",
+) else Runtime.trap("Provisional Beta missing");
+assert (
+    gammaProvisional.scope.installation_uid ==
+    InstallService.installationUidLaneStart(dispatchCanisterVersion)
+);
+assert (
+    betaProvisional.browser_origin_authority_epoch ==
+    InstallService.nextBrowserOriginAuthorityEpoch(
+        1,
+        dispatchCanisterVersion,
+    )
+);
+assert (BackendCallsMemory.prepareInstallClaims(
+    dispatchBackendCalls,
+    [{
+        app_scope = gammaProvisional.scope;
+        reservations = [#method("app_gamma__default_v1_update")];
+    }],
+    reservationOwner,
+    1,
+));
+let ?dispatchClaimBefore = dispatchInstallClaim() else {
+    Runtime.trap("Dispatch install claim missing");
+};
+assert (dispatchClaimBefore.app_scope == {
+    app_id = "gamma";
+    installation_uid = 0;
+});
+
+dispatchCanisterVersion := 20;
+dispatchService.markDispatched({ deployment_id = DEPLOYMENT });
+let ?firstDispatch = dispatchService.status() else {
+    Runtime.trap("First dispatch journal missing");
+};
+let ?gammaFirstDispatch = InstallMemory.findApp(
+    firstDispatch.target_app_instances,
+    "gamma",
+) else Runtime.trap("First dispatched Gamma missing");
+let ?betaFirstDispatch = InstallMemory.findApp(
+    firstDispatch.target_app_instances,
+    "beta",
+) else Runtime.trap("First dispatched Beta missing");
+assert (
+    gammaFirstDispatch.scope.installation_uid ==
+    InstallService.installationUidLaneStart(dispatchCanisterVersion)
+);
+assert (
+    gammaFirstDispatch.scope.installation_uid !=
+    gammaProvisional.scope.installation_uid
+);
+assert (
+    gammaFirstDispatch.browser_origin_nonce !=
+    gammaProvisional.browser_origin_nonce
+);
+assert (
+    betaFirstDispatch.browser_origin_authority_epoch ==
+    InstallService.nextBrowserOriginAuthorityEpoch(
+        1,
+        dispatchCanisterVersion,
+    )
+);
+assert (
+    betaFirstDispatch.browser_origin_nonce !=
+    betaProvisional.browser_origin_nonce
+);
+assert (dispatchInstallClaim() == ?dispatchClaimBefore);
+
+dispatchService.clearDispatchAfterCallError({
+    deployment_id = DEPLOYMENT;
+});
+assert (not dispatchService.isDispatched({ deployment_id = DEPLOYMENT }));
+dispatchCanisterVersion := 21;
+dispatchService.markDispatched({ deployment_id = DEPLOYMENT });
+let ?secondDispatch = dispatchService.status() else {
+    Runtime.trap("Second dispatch journal missing");
+};
+let ?gammaSecondDispatch = InstallMemory.findApp(
+    secondDispatch.target_app_instances,
+    "gamma",
+) else Runtime.trap("Second dispatched Gamma missing");
+let ?betaSecondDispatch = InstallMemory.findApp(
+    secondDispatch.target_app_instances,
+    "beta",
+) else Runtime.trap("Second dispatched Beta missing");
+assert (
+    gammaSecondDispatch.scope.installation_uid ==
+    InstallService.installationUidLaneStart(dispatchCanisterVersion)
+);
+assert (
+    gammaSecondDispatch.scope.installation_uid !=
+    gammaFirstDispatch.scope.installation_uid
+);
+assert (
+    gammaSecondDispatch.browser_origin_nonce !=
+    gammaFirstDispatch.browser_origin_nonce
+);
+assert (
+    betaSecondDispatch.browser_origin_authority_epoch ==
+    InstallService.nextBrowserOriginAuthorityEpoch(
+        1,
+        dispatchCanisterVersion,
+    )
+);
+assert (
+    betaSecondDispatch.browser_origin_nonce !=
+    betaFirstDispatch.browser_origin_nonce
+);
+assert (dispatchInstallClaim() == ?dispatchClaimBefore);
+dispatchService.abortAfterManagementFence({
+    deployment_id = DEPLOYMENT;
+});
+assert (dispatchService.status() == null);
+assert (not BackendCallsMemory.hasInstallClaims(dispatchBackendCalls));
+
 let reservationRegistry : CapabilityTypes.RuntimeRegistry = {
     allowed = func(_, _, _) { true };
     lease = func(_, _, _) { ?{ active = func() { true } } };
@@ -984,6 +1310,7 @@ reservationBroker.configure([
 var expectPromotedDuringCleanup = false;
 var sawPromotedDuringCleanup = false;
 var expectedPromotedScope : ?CapabilityTypes.AppScope = null;
+var reservationCanisterVersion : Nat64 = 1;
 func reservationScopeAllowed(
     appScope : CapabilityTypes.AppScope,
     scopeKind : Text,
@@ -1020,8 +1347,10 @@ func reservationServiceFor(
         reservationBackendCalls,
         deploymentId,
         active,
+        func() { reservationCanisterVersion },
         reservationScopeAllowed,
         func(_, _) {},
+        func(key) { reservationCert.delete(key) },
         func(_, _) {},
     );
 };

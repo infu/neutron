@@ -581,13 +581,20 @@ test("http_post_update_handler registration fingerprints its exact bounded autho
 });
 
 test("structural-only plans produce no runtime registry records", () => {
-  const entries = projectRuntimeCapabilityRegistrationsV1(
-    buildCapabilityPlan({
+  const plan = buildCapabilityPlan({
       format: 3,
       id: "plain_app",
       name: "Plain",
       version: 100,
       tiles: [{ id: "main", title: "Main", path: "index.html" }],
+      capabilities: {
+        browser_permissions: {
+          api: 1,
+          tiles: [
+            { id: "main", features: ["microphone", "camera"] },
+          ],
+        },
+      },
       memory: {
         plain: {
           version: 1,
@@ -595,8 +602,16 @@ test("structural-only plans produce no runtime registry records", () => {
           migrations: [],
         },
       },
-    }),
-  );
+    });
+  expect(
+    plan.entries.find(({ id }) => id === "browser_permissions"),
+  ).toMatchObject({
+    id: "browser_permissions",
+    config: {
+      tiles: [{ id: "main", features: ["camera", "microphone"] }],
+    },
+  });
+  const entries = projectRuntimeCapabilityRegistrationsV1(plan);
   expect(entries).toEqual([]);
 });
 

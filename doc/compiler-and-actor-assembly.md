@@ -13,13 +13,19 @@ bounded packages + prior runtime/stable state + trusted installation context
     -> Wasm + Candid + stable signature + install inventory
 ```
 
-The current assembler identity is exactly:
+The active assembler identity is the `ASSEMBLER_ID` exported by the compiler.
+Every compile result records the selected identity, and the installer requires
+the running actor to report that exact value. General documentation does not
+copy the mutable identifier.
 
-```text
-neutron_actor_v25
-```
-
-The installer requires that exact identity.
+The compiler retains one explicitly named predecessor compatibility lane.
+Fresh compilation selects the lane from the selected Kernel manifest through
+`assemblerForFreshKernelVersion`; the predecessor lane cannot compile
+`browser_permissions` or browser-surface origins. A browser-installed Kernel
+frontend produced by that predecessor may therefore be active on the legacy
+actor contract until its next checked install, which must use the active
+assembler. This is a state-preserving bridge, not permission to reinstall a
+production Neutron destructively.
 
 ## Inputs
 
@@ -276,6 +282,15 @@ The compiler records only declared surfaces:
 - optional resident background endpoint plus frame security mode; and
 - optional tray endpoint, only when that resident background exists.
 
+For the browser-surface-origin assembler, package preparation also derives the
+exact adopted app set. A selected ordinary package is eligible only when it
+carries the packer-owned readiness marker or declares `browser_permissions`;
+already adopted apps stay adopted across unrelated installs, and uninstall
+removes them. The compiler projects the adopted set into the actor's browser
+surface configuration and the install plan's certified sidecar. Each adopted
+tile ID, tray, and ordinary background becomes a separate installation-derived
+surface. No app ID or release-version exception participates in that decision.
+
 It derives frontend runtime admission counts and injects them into the actor.
 The backend and trusted frontend independently enforce 256 total app instances
 and 32 resident frames before activation/mounting.
@@ -323,7 +338,8 @@ A successful compile returns:
 - managed-memory retirement and inventory;
 - canonical capability plans and fingerprints;
 - app-instance inventory;
-- deployment and compiler IDs;
+- deployment, assembler, and compiler IDs;
+- the exact browser-surface-origin app set;
 - retained module paths; and
 - optional generated actor source for diagnostics/evidence.
 
@@ -398,10 +414,11 @@ The installer dispatches the new Wasm, waits for the target runtime, then
 requires exact:
 
 - deployment ID;
-- assembler ID `neutron_actor_v25`;
+- the assembler ID selected by the compilation;
 - compiler ID;
 - app instance inventory and plan fingerprints;
-- browser-origin/frame-security fields; and
+- browser-origin/frame-security fields, surface-origin sidecar state, and
+  capability-authority revision where the selected assembler provides them;
 - managed-memory inventory.
 
 Chunked Wasm upload is cleared after activation.
@@ -445,7 +462,8 @@ A fresh actor has no predecessor install transaction. The provisioner:
 
 1. installs the complete compiled target;
 2. initializes generic publication entropy;
-3. seeds package/static runtime assets;
+3. seeds package/static runtime assets, including the certified browser-surface
+   sidecar required by the selected assembler;
 4. authorizes configured principals;
 5. applies app-neutral local fixtures when selected; and
 6. verifies runtime, access, module, certified entrypoint, and package

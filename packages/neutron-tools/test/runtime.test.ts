@@ -5,6 +5,9 @@ import {
   appIndexUrl,
   appTrayUrl,
   canisterIdFromUrl,
+  installationAppSurfaceNonce,
+  installationAppSurfacePrefix,
+  isInstallationAppOrigin,
   isDedicatedAppOrigin,
   kernelParentOriginFromAppUrl,
   localCanisterOrigin,
@@ -14,6 +17,7 @@ import {
 import { loadTileContext } from "../src/app.ts";
 
 const canisterId = "4caro-hl777-77775-aaaba-cai";
+const surfaceBaseNonce = "dc67918c9d79794438224f851f95897c";
 
 test("app frame URLs authenticate the matching kernel shell origin", () => {
   expect(
@@ -33,10 +37,174 @@ test("app frame URLs authenticate the matching kernel shell origin", () => {
   ).toBe(`http://${canisterId}.localhost:8000`);
   expect(
     kernelParentOriginFromAppUrl(
+      `https://i9cedff19dabc40b990d81f4e--${canisterId}.icp0.io/app/hello/index.html`,
+    ),
+  ).toBe(`https://${canisterId}.icp0.io`);
+  expect(
+    kernelParentOriginFromAppUrl(
+      `http://i9cedff19dabc40b990d81f4e--${canisterId}.localhost:8000/app/hello/index.html`,
+    ),
+  ).toBe(`http://${canisterId}.localhost:8000`);
+  expect(
+    kernelParentOriginFromAppUrl(
       `https://gateway.example/app/hello/index.html?canisterId=${canisterId}`,
     ),
   ).toBeNull();
+  for (const hostile of [
+    `http://ahelloa--${canisterId}.icp0.io/app/hello/index.html`,
+    `https://ahelloa--${canisterId}.icp0.io:8443/app/hello/index.html`,
+    `https://ahelloa--${canisterId}.icp0.io.example/app/hello/index.html`,
+    `https://extra.ahelloa--${canisterId}.icp0.io/app/hello/index.html`,
+    `https://ahelloa--extra--${canisterId}.icp0.io/app/hello/index.html`,
+    `https://ahelloa--${canisterId}.icp0.io/not-app/hello/index.html`,
+    `https://ahelloa--${canisterId}.icp0.io/app/not-valid/index.html`,
+    `https://user@ahelloa--${canisterId}.icp0.io/app/hello/index.html`,
+  ]) {
+    expect(kernelParentOriginFromAppUrl(hostile)).toBeNull();
+  }
   expect(kernelParentOriginFromAppUrl("data:text/html,hello")).toBeNull();
+});
+
+test("installation app surface origin derivation has stable golden vectors", () => {
+  expect(
+    installationAppSurfaceNonce({
+      surfaceBaseNonce,
+      surfaceKey: "tile:files",
+    }),
+  ).toBe("ac1a044ad368b566350430ca52b8e635");
+  expect(
+    installationAppSurfacePrefix({
+      surfaceBaseNonce,
+      surfaceKey: "tile:files",
+    }),
+  ).toBe("iac1a044ad368b566350430ca");
+  expect(
+    installationAppSurfaceNonce({
+      surfaceBaseNonce,
+      surfaceKey: "tray",
+    }),
+  ).toBe("5420da7baf4c40c44da485517e1c198c");
+  expect(
+    installationAppSurfaceNonce({
+      surfaceBaseNonce,
+      surfaceKey: "background",
+    }),
+  ).toBe("cdd2b4edc67eb64351c8d7d4770a34aa");
+});
+
+test("installation app URLs isolate roles and tile ids but not tile instances", () => {
+  const tile = (tileId: string, instanceId: string) =>
+    appIndexUrl({
+      canisterId,
+      appId: "hello",
+      tileId,
+      instanceId,
+      surfaceBaseNonce,
+    });
+  const first = tile("main", "one");
+  const second = tile("main", "two");
+  const other = tile("other", "one");
+  const tray = appTrayUrl({
+    canisterId,
+    appId: "hello",
+    path: "tray.html",
+    instanceId: "one",
+    surfaceBaseNonce,
+  });
+  const background = appBackgroundUrl({
+    canisterId,
+    appId: "hello",
+    path: "service.html",
+    surfaceBaseNonce,
+  });
+
+  expect(new URL(first).hostname).toBe(
+    `i592acfcf232bebef7ec94aa8--${canisterId}.icp0.io`,
+  );
+  expect(new URL(first).origin).toBe(new URL(second).origin);
+  expect(
+    new Set([first, other, tray, background].map((url) => new URL(url).origin))
+      .size,
+  ).toBe(4);
+  expect(
+    isInstallationAppOrigin(
+      first,
+      canisterId,
+      "hello",
+      surfaceBaseNonce,
+      "tile:main",
+    ),
+  ).toBe(true);
+  expect(
+    isInstallationAppOrigin(
+      first,
+      canisterId,
+      "hello",
+      surfaceBaseNonce,
+      "tray",
+    ),
+  ).toBe(false);
+});
+
+test("installation app origins fail closed for malformed or ambiguous inputs", () => {
+  expect(() =>
+    installationAppSurfaceNonce({
+      surfaceBaseNonce: surfaceBaseNonce.toUpperCase(),
+      surfaceKey: "tile:main",
+    }),
+  ).toThrow("Invalid browser surface-base nonce");
+  expect(() =>
+    installationAppSurfaceNonce({
+      surfaceBaseNonce,
+      surfaceKey: "tile:not-valid" as `tile:${string}`,
+    }),
+  ).toThrow("Invalid installation app surface key");
+  expect(() =>
+    appIndexUrl({
+      canisterId,
+      appId: "hello",
+      tileId: "main",
+      surfaceBaseNonce,
+      unprefixed: true,
+    }),
+  ).toThrow("mutually exclusive");
+  expect(() =>
+    appBackgroundUrl({
+      canisterId,
+      appId: "hello",
+      path: "service.html",
+      surfaceBaseNonce,
+      residentBinding: {
+        installationUid: "1",
+        mode: "persistent_dedicated_v1",
+        browserOriginNonce: "01".repeat(16),
+        browserOriginAuthorityEpoch: "1",
+      },
+    }),
+  ).toThrow("mutually exclusive");
+
+  const mainnet = appIndexUrl({
+    canisterId,
+    appId: "hello",
+    tileId: "main",
+    surfaceBaseNonce,
+  });
+  for (const hostile of [
+    mainnet.replace(".icp0.io", ".raw.icp0.io"),
+    mainnet.replace(".icp0.io", ".example.com"),
+    mainnet.replace("/app/hello/", "/app/files/"),
+    mainnet.replace("https://", "http://"),
+  ]) {
+    expect(
+      isInstallationAppOrigin(
+        hostile,
+        canisterId,
+        "hello",
+        surfaceBaseNonce,
+        "tile:main",
+      ),
+    ).toBe(false);
+  }
 });
 
 test("local canister URLs use canister subdomains on localhost", () => {
@@ -256,6 +424,15 @@ test("dedicated app origins reject same-host proxy fallbacks", () => {
       "gemma"
     )
   ).toBe(false);
+  for (const hostile of [
+    `https://agemmaa--${canisterId}.raw.icp0.io/app/gemma/service.html`,
+    `https://agemmaa--${canisterId}.icp0.io/app/hello/service.html`,
+    `http://agemmaa--${canisterId}.icp0.io/app/gemma/service.html`,
+    `https://agemmaa--${canisterId}.icp0.io:8443/app/gemma/service.html`,
+    `https://extra.agemmaa--${canisterId}.icp0.io/app/gemma/service.html`,
+  ]) {
+    expect(isDedicatedAppOrigin(hostile, canisterId, "gemma")).toBe(false);
+  }
 });
 
 test("tile context can be read by app frontends", () => {

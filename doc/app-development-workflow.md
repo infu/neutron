@@ -51,16 +51,17 @@ manifest field, browser value, or runtime-config setting. Apps may bind
 network-scoped protocol objects to it, but cannot replace it. Fresh local
 assembly requires the provisioner's trusted PocketIC root key; production
 defaults only to the compiler-pinned IC mainnet root key. The assembled actor
-must report exact runtime identity `neutron_actor_v25`; an actor outside the
-current installation identity contract must be recreated with a destructive
-reinstall.
+must report the exact assembler identity selected by the compiler. An actor
+outside the supported installation-identity contract is rejected; production
+state must follow an explicit state-preserving compatibility path rather than a
+destructive reinstall.
 
 The app module is not itself a canister actor. The package and compiler flow
 later imports this module, creates persistent memory wrappers, instantiates `Init`,
 and exposes selected methods through generated actor code.
 
-The hello app release is `0.2.3`, stored as the packed top-level manifest value
-`203` and displayed in its filename as `hello.v0.2.4.neutron`. App releases use
+The hello app's release and generated archive name come from its source
+manifest. App releases use
 `major * 10_000 + minor * 100 + patch`; memory schema versions below are a
 separate positive-integer lane. Browser-installed replacements must have a
 strictly higher app release. Trusted local whole-canister provisioning may
@@ -335,7 +336,8 @@ The current order is:
 
 6. `pack.ts`
    walks every file under `dist/`, gzips each file, MessagePack-encodes the flat
-   path-to-bytes object, and writes
+   path-to-bytes object, injects the reserved browser-surface readiness marker
+   for an ordinary app, and writes
    `<id>.v<major>.<minor>.<patch>.neutron`.
 
 For a new app, select either `LICENSE.APP`/NSAL 1.1 when recipients may modify
@@ -371,16 +373,16 @@ compilation outside the kernel browser UI:
 
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
-  --package apps/kernel/kernel.v0.3.12.neutron \
-  --package apps/hello/hello.v0.2.4.neutron \
-  --package apps/kitchensink/kitchensink.v0.3.4.neutron \
+  --package path/to/kernel.neutron \
+  --package path/to/app.neutron \
+  --package path/to/another-app.neutron \
   --wasm-out /tmp/neutron.wasm \
   --candid-out /tmp/neutron.did
 ```
 
-It cannot produce a trusted local actor. Local `neutron_actor_v25` compilation
-requires the verified PocketIC root context and therefore occurs only inside
-the provisioner flow below.
+It cannot produce a trusted local actor. Local actor compilation requires the
+verified PocketIC root context and therefore occurs only inside the provisioner
+flow below.
 
 To run the app locally, package it first, place its archive declaration
 (`path`) in a format-3 PocketIC inline artifact set, keep the supervised
@@ -409,8 +411,7 @@ normal app.
 The hello app is a minimal package with one backend method and one frontend
 button that calls it through the kernel dialog flow.
 
-- `neutron.json` declares `id: "hello"`, `name: "Hello"`, `version: 202`
-  (`0.2.2`),
+- `neutron.json` declares `id: "hello"`, `name: "Hello"`, its release version,
   `src: "main.mo"`, one `main` launcher tile, one update function
   `hello_world`, and one memory namespace `hello` at version `1`.
 - `backend/main.mo` stores a mutable `name` value, exposes
@@ -421,7 +422,8 @@ button that calls it through the kernel dialog flow.
   then renders a button that asks for a kernel-mediated call to that method on
   the Neutron canister itself.
 - `build.ts` creates `dist/web/`, `mopack.ts` creates `dist/mo/` and
-  `dist/neutron.json`, and `pack.ts` creates `hello.v0.2.4.neutron`.
+  `dist/neutron.json`, and `pack.ts` derives the archive filename from the
+  manifest.
 
 ### Kitchen Sink App Example
 

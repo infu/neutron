@@ -76,13 +76,18 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     };
 
 
-    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 315; capability_plan_fingerprint = "7c0e8a5c0aefad78c47a79a1e41f8004e2ba467a2faf302ccded6d9489b2b1d7"; resident_frame_security = #credentialless_opaque_v1 }];
+    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 317; capability_plan_fingerprint = "39f7c64aeec7582f2a365d2d192bae23ec7b0ed120be933cf257dab000ba65cb"; resident_frame_security = #credentialless_opaque_v1 }];
 
 
 
 
     transient let NeutronKernel = NeutronModule_a6_kernel.Init(NeutronMemory_a6_kernel_r6_kernel,NeutronMemory_a6_kernel_r17_kernel_activation,"development",NeutronActiveAppInstanceInventory,NeutronPrim.principalOfActor(NeutronActor));
 
+
+
+      private func NeutronAppFunction_a6_kernel_r29_capability_authority_revision(NeutronRequest: NeutronModule_a6_kernel.capability_authority_revision_Input) :  NeutronModule_a6_kernel.capability_authority_revision_Output {
+         NeutronKernel.capability_authority_revision(NeutronRequest)
+      };
 
 
     public shared({ caller = NeutronCaller }) func kernel_authorized_add(NeutronRequest: NeutronModule_a6_kernel.kernel_authorized_add_Input) : async NeutronModule_a6_kernel.kernel_authorized_add_Output {
@@ -457,6 +462,8 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
       resident_frames = 0;
     });
 
+
+
     NeutronKernel.configure_app_capabilities([], {
       vetkeys_environment = #production;
       chain_key_signing_keys = {
@@ -481,6 +488,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
       deployment_id : Text;
       assembler_id : Text;
       compiler_id : Text;
+      capability_authority_revision : ?Nat64;
       apps : [{
         scope : { app_id : Text; installation_uid : Nat64 };
         version : Nat;
@@ -499,8 +507,9 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
       assert(NeutronKernel.is_authorized(NeutronCaller));
       {
         deployment_id = "development";
-        assembler_id = "neutron_actor_v25";
+        assembler_id = "neutron_actor_v26";
         compiler_id = "unknown";
+        capability_authority_revision = ?NeutronKernel.capability_authority_revision();
         apps = NeutronKernel.runtime_app_instances("development");
         memories = [{ id = "kernel"; owner = "kernel"; version = 3; schema = "memory/kernel/v3" }, { id = "kernel_activation"; owner = "kernel"; version = 1; schema = "memory/activation/v1" }];
       }

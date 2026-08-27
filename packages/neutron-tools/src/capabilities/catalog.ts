@@ -2,8 +2,19 @@ import type { Schema } from "jsonschema";
 import { Principal } from "@dfinity/principal";
 import { compareCanonicalText } from "../canonical.ts";
 import { CANISTER_METHOD_MAX_LENGTH } from "../physical_names.ts";
+import {
+  isValidTileId,
+  TILE_ID_MAX_LENGTH,
+  TILE_ID_SCHEMA_PATTERN,
+} from "../tile_ids.ts";
 
 export const CAPABILITY_API_VERSION = 1 as const;
+
+export const BROWSER_PERMISSION_FEATURES = [
+  "camera",
+  "microphone",
+] as const;
+export const BROWSER_PERMISSIONS_MAX_TILES = 16;
 
 export const ETHEREUM_PROVIDER_METHODS = [
   "eth_requestAccounts",
@@ -73,6 +84,8 @@ export const CERTIFIED_ASSETS_MAX_IDEMPOTENCY_RECEIPTS = 4_096;
 // Mirrors certified_http_v2.CERTIFIED_HTTP_PATH_SEGMENTS_MAX_V2. Every
 // certified-assets path is served below /app/<app>/_route/<mount>.
 export const CERTIFIED_HTTP_PATH_SEGMENTS_MAX_V2 = 14;
+/** Must match CertV2.CERTIFIED_HTTP_PATH_SEGMENT_BYTES_MAX_V2. */
+export const CERTIFIED_HTTP_PATH_SEGMENT_BYTES_MAX_V2 = 1_024;
 export const CERTIFIED_ASSETS_GLOBAL_ACTIVE_STAGES_MAX = 4;
 export const CERTIFIED_ASSETS_PHYSICAL_RESERVATION_POLICY_V1 = Object.freeze({
   id: "neutron.certified-assets.physical-reservation.v1",
@@ -243,6 +256,7 @@ export const DECLARED_CAPABILITY_IDS = [
   "public_ingress",
   "http_routes",
   "certified_assets",
+  "browser_permissions",
 ] as const;
 
 export const DERIVED_CAPABILITY_IDS = [
@@ -630,6 +644,20 @@ export const CAPABILITY_CATALOG = Object.freeze({
     audit:
       "Metadata-only bounded stage, publish, conditional delete, maintenance, denial, and configuration outcomes; bodies and public query serving are not retained in audit.",
   }),
+  browser_permissions: declared("browser_permissions", {
+    delivery: ["frontend_endpoint", "compiler_registration"],
+    title: "Browser device access",
+    summary:
+      "Let exact open tiles request declared browser device features; capture may continue while an open tile's workspace is hidden.",
+    grant: "declaration",
+    escalation: "owner_approval",
+    disable: "registration_enforced",
+    revocation: "remove_registration",
+    quota:
+      "At most 16 exact tiles and the closed camera and microphone feature set.",
+    audit:
+      "The approved declaration is retained in the capability plan; browser prompts, decisions, and device use are not observed or audited by Neutron.",
+  }),
   certified_read_routes: derived("certified_read_routes", {
     delivery: ["compiler_registration"],
     title: "Certified read routes",
@@ -1013,6 +1041,16 @@ export type NeutronDedicatedResidentOriginCapabilityConfig = {
   surface: "background";
   mode: "credentialless_ephemeral_v1";
 };
+export type NeutronBrowserPermissionFeature =
+  (typeof BROWSER_PERMISSION_FEATURES)[number];
+export type NeutronBrowserPermissionTileConfig = {
+  id: string;
+  features: NeutronBrowserPermissionFeature[];
+};
+export type NeutronBrowserPermissionsCapabilityConfig = {
+  api: 1;
+  tiles: NeutronBrowserPermissionTileConfig[];
+};
 export type NeutronResidentFrameSecurityMode =
   | "credentialless_opaque_v1"
   | "credentialless_ephemeral_dedicated_v1"
@@ -1332,6 +1370,7 @@ export type NeutronCapabilitiesConfig = {
   public_ingress?: NeutronPublicIngressCapabilityConfig;
   http_routes?: NeutronHttpRoutesCapabilityConfig;
   certified_assets?: NeutronCertifiedAssetsCapabilityConfig;
+  browser_permissions?: NeutronBrowserPermissionsCapabilityConfig;
 };
 
 export type NormalizedNeutronCapabilitiesConfig = Omit<
@@ -1351,6 +1390,7 @@ type NormalizeText = (
 export type CapabilityNormalizationContext = {
   appId?: string;
   hasBackground: boolean;
+  tileIds?: readonly string[];
   normalizeText: NormalizeText;
 };
 
@@ -2197,6 +2237,46 @@ function normalizeCapabilityDeclarationFields(
       surface: "background",
       mode: "credentialless_ephemeral_v1",
     };
+  }
+
+  const browserPermissions = declaration.browser_permissions;
+  if (browserPermissions !== undefined) {
+    assertClosed(browserPermissions, "browser_permissions capability", [
+      "api",
+      "tiles",
+    ]);
+    assertApi(browserPermissions, "browser_permissions");
+    if (
+      !Array.isArray(browserPermissions.tiles) ||
+      browserPermissions.tiles.length < 1 ||
+      browserPermissions.tiles.length > BROWSER_PERMISSIONS_MAX_TILES
+    ) {
+      throw new Error("Invalid browser_permissions tiles");
+    }
+    const tileIds = new Set<string>();
+    const allowedFeatures = new Set<string>(BROWSER_PERMISSION_FEATURES);
+    const tiles = browserPermissions.tiles.map((tile) => {
+      assertClosed(tile, "browser_permissions tile", ["id", "features"]);
+      if (!isValidTileId(tile.id)) {
+        throw new Error("Invalid browser_permissions tile id");
+      }
+      if (tileIds.has(tile.id)) {
+        throw new Error(`Duplicate browser_permissions tile ${tile.id}`);
+      }
+      tileIds.add(tile.id);
+      return {
+        id: tile.id,
+        features: sortedUniqueStrings(
+          tile.features,
+          `browser_permissions feature for ${tile.id}`,
+          1,
+          BROWSER_PERMISSION_FEATURES.length,
+          (feature) => allowedFeatures.has(feature),
+        ) as NeutronBrowserPermissionFeature[],
+      };
+    });
+    tiles.sort((left, right) => compareCanonicalText(left.id, right.id));
+    normalized.browser_permissions = { api: 1, tiles };
   }
 
   const publicIngress = declaration.public_ingress;
@@ -3313,6 +3393,43 @@ function createCapabilityDeclarationFieldsSchema(
         required: ["api", "surface", "mode"],
         additionalProperties: false,
       },
+      browser_permissions: {
+        type: "object",
+        properties: {
+          api,
+          tiles: {
+            type: "array",
+            minItems: 1,
+            maxItems: BROWSER_PERMISSIONS_MAX_TILES,
+            uniqueItems: true,
+            items: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: TILE_ID_MAX_LENGTH,
+                  pattern: TILE_ID_SCHEMA_PATTERN,
+                },
+                features: {
+                  type: "array",
+                  minItems: 1,
+                  maxItems: BROWSER_PERMISSION_FEATURES.length,
+                  uniqueItems: true,
+                  items: {
+                    type: "string",
+                    enum: [...BROWSER_PERMISSION_FEATURES],
+                  },
+                },
+              },
+              required: ["id", "features"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["api", "tiles"],
+        additionalProperties: false,
+      },
       public_ingress: {
         type: "object",
         properties: {
@@ -3823,12 +3940,14 @@ export function normalizeCapabilityDeclarations(
   }
   assertCapabilityComposition(
     normalized as NormalizedNeutronCapabilitiesConfig,
+    context,
   );
   return normalized as NormalizedNeutronCapabilitiesConfig;
 }
 
 export function assertCapabilityComposition(
   normalized: NormalizedNeutronCapabilitiesConfig,
+  context: Pick<CapabilityNormalizationContext, "tileIds"> = {},
 ): void {
   if (
     normalized.persistent_browser_storage &&
@@ -3837,6 +3956,16 @@ export function assertCapabilityComposition(
     throw new Error(
       "dedicated_resident_origin and persistent_browser_storage are mutually exclusive",
     );
+  }
+  if (normalized.browser_permissions) {
+    const declaredTileIds = new Set(context.tileIds ?? []);
+    for (const tile of normalized.browser_permissions.tiles) {
+      if (!declaredTileIds.has(tile.id)) {
+        throw new Error(
+          `browser_permissions references undeclared tile ${tile.id}`,
+        );
+      }
+    }
   }
   const httpRoutes = normalized.http_routes;
   const certifiedAssets = normalized.certified_assets;

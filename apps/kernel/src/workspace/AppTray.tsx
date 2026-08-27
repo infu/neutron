@@ -3,22 +3,24 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { IoNotificationsOutline } from "react-icons/io5";
-import { appTrayUrl } from "neutron-tools/src/runtime.js";
-import { usesUnprefixedAppFrameOrigin } from "../capabilities/plan.ts";
 import type { AppRegistryEntry } from "neutron-compiler/src/install.js";
 import type { AppInstanceProjection } from "../app_scope.ts";
-import { getNeutronId } from "../config.ts";
 import {
-  assertRuntimeFrameUrl,
-  getRuntimeDeployment,
-} from "../runtime_deployment.ts";
+  appFrameAuthorityCurrent,
+  appFrameEndpointAuthority,
+  CREDENTIALLESS_APP_FRAME_PROPS,
+  ordinaryAppFramePolicy,
+  prepareOrdinaryAppFrame,
+} from "../app_frame_security.ts";
+import { getRuntimeDeployment } from "../runtime_deployment.ts";
 import {
-  ensureFrameEndpointConnected,
+  markFrameEndpointLoaded,
   registerFrameContext,
 } from "../frame_context.ts";
 import {
@@ -36,6 +38,9 @@ export function AppTray({ children }: { children?: ReactNode }) {
   const appInstances = useAppsStore((state) => state.appInstances);
   const runtimeGenerations = useAppsStore((state) => state.runtimeGenerations);
   const authorityPending = useAppsStore(isAuthorityPendingState);
+  const browserSurfaceOriginAppIds = useAppsStore(
+    (state) => state.browserSurfaceOriginAppIds,
+  );
   const trayStates = useTrayStore((state) => state.apps);
   const entries = (authorityPending ? [] : Object.entries(apps))
     .filter((entry): entry is [string, AppRegistryEntry] =>
@@ -56,6 +61,9 @@ export function AppTray({ children }: { children?: ReactNode }) {
               appGeneration={runtimeGenerations[appId] ?? 0}
               appInstance={appInstances[appId]!}
               badge={trayStates[appId]?.badge ?? null}
+              browserSurfaceOriginAdopted={
+                browserSurfaceOriginAppIds.includes(appId)
+              }
               key={[
                 appId,
                 app.version,
@@ -63,6 +71,9 @@ export function AppTray({ children }: { children?: ReactNode }) {
                 runtimeGenerations[appId] ?? 0,
                 app.tray?.path ?? "",
                 app.tray?.icon ?? "",
+                browserSurfaceOriginAppIds.includes(appId)
+                  ? "surface-v26"
+                  : "surface-v25",
               ].join(":")}
             />
           ))}
@@ -79,12 +90,14 @@ function AppTrayItem({
   appGeneration,
   appInstance,
   badge,
+  browserSurfaceOriginAdopted,
 }: {
   appId: string;
   app: AppRegistryEntry;
   appGeneration: number;
   appInstance: AppInstanceProjection;
   badge: number | null;
+  browserSurfaceOriginAdopted: boolean;
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [instanceId, setInstanceId] = useState<string | null>(null);
@@ -152,6 +165,7 @@ function AppTrayItem({
           appId={appId}
           appGeneration={appGeneration}
           appInstance={appInstance}
+          browserSurfaceOriginAdopted={browserSurfaceOriginAdopted}
           instanceId={instanceId}
           key={instanceId}
         />
@@ -166,38 +180,87 @@ const AppTrayFrame = memo(function AppTrayFrame({
   appGeneration,
   appInstance,
   instanceId,
+  browserSurfaceOriginAdopted,
 }: {
   appId: string;
   app: AppRegistryEntry;
   appGeneration: number;
   appInstance: AppInstanceProjection;
   instanceId: string;
+  browserSurfaceOriginAdopted: boolean;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const loadedSrcRef = useRef<string | null>(null);
+  const launchedFrameRef = useRef<{
+    src: string;
+    source: Window;
+    origin: string;
+  } | null>(null);
   const deployment = getRuntimeDeployment();
-  const unprefixed = usesUnprefixedAppFrameOrigin(app);
   const installationUid = appInstance.scope.installationUid;
   const tray = app.tray;
   if (!tray) {
     throw new Error(`App '${appId}' has no tray`);
   }
-  const src = assertRuntimeFrameUrl(
-    appTrayUrl({
-      canisterId: getNeutronId(),
+  const framePolicy = useMemo(
+    () =>
+      ordinaryAppFramePolicy({
+        appId,
+        app,
+        appInstance,
+        endpoint: {
+          role: "tray",
+          path: tray.path,
+          instanceId,
+        },
+        deployment,
+        browserSurfaceOriginAdopted,
+      }),
+    [
+      app,
       appId,
-      path: tray.path,
+      appInstance,
+      browserSurfaceOriginAdopted,
+      deployment,
       instanceId,
-      unprefixed,
-      local: deployment.local,
-      ...(deployment.localHost ? { localHost: deployment.localHost } : {}),
-    }),
-    !unprefixed,
-    deployment,
+      tray.path,
+    ],
+  );
+  const endpointAuthority = useMemo(
+    () =>
+      appFrameEndpointAuthority({
+        appId,
+        app,
+        appInstance,
+        appGeneration,
+        browserSurfaceOriginAdopted,
+      }),
+    [
+      app,
+      appGeneration,
+      appId,
+      appInstance,
+      browserSurfaceOriginAdopted,
+    ],
   );
 
   useLayoutEffect(() => {
-    const source = iframeRef.current?.contentWindow ?? null;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    let launched = launchedFrameRef.current;
+    if (
+      !launched ||
+      launched.src !== framePolicy.src ||
+      launched.source !== iframe.contentWindow
+    ) {
+      const prepared = prepareOrdinaryAppFrame(iframe, framePolicy);
+      launched = {
+        src: framePolicy.src,
+        source: prepared.source,
+        origin: prepared.origin,
+      };
+      launchedFrameRef.current = launched;
+    }
+    const source = launched.source;
     const unregister = registerFrameContext(
       source,
       { role: "tray", appId, instanceId },
@@ -205,14 +268,30 @@ const AppTrayFrame = memo(function AppTrayFrame({
         appVersion: app.version,
         appGeneration,
         appScope: { appId, installationUid },
-        origin: "null",
+        origin: launched.origin,
+        isAuthorityCurrent: () => {
+          const state = useAppsStore.getState();
+          return appFrameAuthorityCurrent(
+            endpointAuthority,
+            state,
+            isAuthorityPendingState(state),
+          );
+        },
       },
     );
-    // Pair registration with either ordering of React's layout phase and a
-    // cached iframe's load event. Exactly one side observes the other first.
-    if (loadedSrcRef.current === src) ensureFrameEndpointConnected(source);
+    if (iframe.getAttribute("src") !== framePolicy.src) {
+      iframe.setAttribute("src", framePolicy.src);
+    }
     return unregister;
-  }, [app.version, appGeneration, appId, installationUid, instanceId, src]);
+  }, [
+    app.version,
+    appGeneration,
+    appId,
+    endpointAuthority,
+    framePolicy,
+    installationUid,
+    instanceId,
+  ]);
 
   return (
     <iframe
@@ -221,14 +300,12 @@ const AppTrayFrame = memo(function AppTrayFrame({
       data-instance-id={instanceId}
       data-tid="app-tray-frame"
       onLoad={() => {
-        loadedSrcRef.current = src;
-        ensureFrameEndpointConnected(iframeRef.current?.contentWindow ?? null);
+        if (iframeRef.current?.getAttribute("src") !== framePolicy.src) return;
+        markFrameEndpointLoaded(iframeRef.current?.contentWindow ?? null);
       }}
       ref={iframeRef}
-      sandbox="allow-scripts"
-      src={src}
       title={`${app.tray?.title ?? app.name} panel`}
-      {...({ credentialless: "true" } as Record<string, string>)}
+      {...CREDENTIALLESS_APP_FRAME_PROPS}
     />
   );
 });

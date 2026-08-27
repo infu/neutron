@@ -1,5 +1,10 @@
 import type { Permission, PermissionLevel } from "../lib/perm.ts";
-import { permissionLevel } from "../lib/perm.ts";
+import {
+  BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
+  browserPermissionFeaturesTitle,
+  browserPermissionRequestDisclosure,
+  permissionLevel,
+} from "../lib/perm.ts";
 import { formatBytes, formatCycles } from "../settings/format.ts";
 
 export type PermissionConsequence = Readonly<{
@@ -66,6 +71,7 @@ export function permissionConsequences(
   const consequences = [
     systemConsequences(permissions),
     delegatedConsequences(permissions),
+    browserDeviceConsequences(permissions),
     networkConsequences(permissions),
     publicConsequences(permissions),
     automaticConsequences(permissions),
@@ -76,6 +82,34 @@ export function permissionConsequences(
   return consequences.sort(
     (left, right) => right.level - left.level || left.title.localeCompare(right.title),
   );
+}
+
+function browserDeviceConsequences(
+  permissions: readonly Permission[],
+): PermissionConsequence | null {
+  const browserPermissions = firstPermission(
+    permissions,
+    "browser_permissions",
+  );
+  if (!browserPermissions) return null;
+  const browserPermissionTitle = browserPermissionFeaturesTitle(
+    browserPermissions.tiles.flatMap(({ features }) => features),
+  );
+  return {
+    id: "browser-device-access",
+    level: permissionLevel(browserPermissions),
+    title: `Request ${browserPermissionTitle.toLowerCase()} access`,
+    description:
+      "Declared open tiles can ask the browser for device access. Installing the app does not activate a device.",
+    facts: [
+      ...browserPermissions.tiles.flatMap(({ id, features }) =>
+        features.map((feature) =>
+          browserPermissionRequestDisclosure(id, feature),
+        ),
+      ),
+      BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
+    ],
+  };
 }
 
 function systemConsequences(

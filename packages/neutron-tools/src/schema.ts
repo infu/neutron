@@ -2,13 +2,23 @@ import type { Schema } from "jsonschema";
 import { Principal } from "@icp-sdk/core/principal";
 import {
   BACKEND_CAPABILITY_INTERFACES,
+  BROWSER_PERMISSION_FEATURES,
+  BROWSER_PERMISSIONS_MAX_TILES,
   createCapabilityDeclarationsSchema,
   normalizeCapabilityDeclarations,
   type BackendCapabilityInterfaceId,
   type CapabilityApiVersion,
+  type NeutronBrowserPermissionFeature,
+  type NeutronBrowserPermissionsCapabilityConfig,
+  type NeutronBrowserPermissionTileConfig,
   type NeutronCapabilitiesConfig,
   type NormalizedNeutronCapabilitiesConfig,
 } from "./capabilities/catalog.ts";
+import {
+  isValidTileId,
+  TILE_ID_MAX_LENGTH,
+  TILE_ID_SCHEMA_PATTERN,
+} from "./tile_ids.ts";
 import {
   APP_ID_MAX_LENGTH,
   APP_ID_MIN_LENGTH,
@@ -37,6 +47,8 @@ const ANONYMOUS_PRINCIPAL = "2vxsx-fae";
 export {
   CAPABILITY_API_VERSION,
   BACKEND_CAPABILITY_INTERFACES,
+  BROWSER_PERMISSION_FEATURES,
+  BROWSER_PERMISSIONS_MAX_TILES,
   CHAIN_KEY_SIGNING_ALGORITHMS,
   CHAIN_KEY_SIGNING_MAX_ASSERTION_BYTES,
   CHAIN_KEY_SIGNING_MAX_SLOTS_GLOBAL,
@@ -92,6 +104,9 @@ export {
   type NeutronBackendCallsCapabilityConfig,
   type NeutronBackgroundUiRequest,
   type NeutronBackgroundUiRequestsCapabilityConfig,
+  type NeutronBrowserPermissionFeature,
+  type NeutronBrowserPermissionsCapabilityConfig,
+  type NeutronBrowserPermissionTileConfig,
   type NeutronCapabilitiesConfig,
   type NeutronChainKeySigningAlgorithmV1,
   type NeutronChainKeySigningCapabilityConfig,
@@ -259,7 +274,6 @@ export type PackagedNeutronManifest = NeutronManifest & {
   entry: string;
 };
 
-const TILE_ID_PATTERN = /^[a-z_0-9]+$/;
 const DEPENDENCY_ALIAS_PATTERN = /^[a-z][a-z0-9_]{0,29}$/;
 const METHOD_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]{0,127}$/;
 
@@ -577,12 +591,7 @@ export function normalizeManifestTiles(
 
   const ids = new Set<string>();
   return declaredTiles.map((tile) => {
-    if (
-      typeof tile.id !== "string" ||
-      tile.id.length < 1 ||
-      tile.id.length > 30 ||
-      !TILE_ID_PATTERN.test(tile.id)
-    ) {
+    if (!isValidTileId(tile.id)) {
       throw new Error(`Invalid tile id ${String(tile.id)}`);
     }
     if (ids.has(tile.id)) {
@@ -664,11 +673,16 @@ export function normalizeManifestTray(
 
 export function normalizeManifestCapabilities(
   manifest: Pick<NeutronManifest, "capabilities"> &
-    Partial<Pick<NeutronManifest, "background" | "id">>,
+    Partial<Pick<NeutronManifest, "background" | "id" | "tiles">>,
 ): NormalizedNeutronCapabilitiesConfig {
+  const tileIds =
+    manifest.capabilities?.browser_permissions === undefined
+      ? undefined
+      : normalizeManifestTiles(manifest).map(({ id }) => id);
   return normalizeCapabilityDeclarations(manifest.capabilities, {
     ...(manifest.id === undefined ? {} : { appId: manifest.id }),
     hasBackground: manifest.background !== undefined,
+    ...(tileIds === undefined ? {} : { tileIds }),
     normalizeText: normalizeUntrustedText,
   });
 }
@@ -1025,8 +1039,8 @@ export const schema: Schema = {
           id: {
             type: "string",
             minLength: 1,
-            maxLength: 30,
-            pattern: "^[a-z_0-9]+$",
+            maxLength: TILE_ID_MAX_LENGTH,
+            pattern: TILE_ID_SCHEMA_PATTERN,
           },
           title: {
             type: "string",
@@ -1168,6 +1182,18 @@ export const schema: Schema = {
         },
       },
       then: { required: ["background"] },
+    },
+    {
+      if: {
+        required: ["capabilities"],
+        properties: {
+          capabilities: { required: ["browser_permissions"] },
+        },
+      },
+      then: {
+        required: ["tiles"],
+        properties: { tiles: { minItems: 1 } },
+      },
     },
     {
       if: {

@@ -4,13 +4,15 @@ import { open, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import {
-  compilePackages,
+  compileFreshPackages,
   DEFAULT_NEUTRON_PACKAGE_DECODE_LIMITS,
+  browserSurfaceOriginAppIdsForSelectedPackages,
   preparePackageInstall,
   type CompileResult,
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
 import { assertBackendCallInstallReservationsTarget } from "neutron-compiler/src/compile.js";
+import { assemblerForFreshKernelVersion } from "neutron-compiler/src/assemble.js";
 import {
   trustedInstallationNetworkIdHex,
   type TrustedInstallationContextV1,
@@ -68,7 +70,13 @@ export type PreparedDeployment = {
   packageArtifacts: PackageArtifact[];
   compiled: Pick<
     CompileResult,
-    "wasm" | "candid" | "stable" | "deploymentId" | "compilerId"
+    | "wasm"
+    | "candid"
+    | "stable"
+    | "deploymentId"
+    | "compilerId"
+    | "assemblerId"
+    | "browserSurfaceOriginAppIds"
   >;
   /** Exact public Wasm metadata proven from `compiled.wasm`. */
   wasmMetadata: SupportedCertificateVersionsMetadataV1;
@@ -200,11 +208,12 @@ export async function prepareDeployment(
   );
   const packages = loaded.map(({ prepared }) => prepared);
   assertFreshPackageRoles(packages);
+  const kernelVersion = packages[0]!.manifest.version;
+  const assemblerId = assemblerForFreshKernelVersion(kernelVersion);
   const compile = () =>
-    compilePackages({
+    compileFreshPackages({
       packages,
       vetKeysEnvironment: target === "local" ? "local" : "production",
-      versionPolicy: "allow-same-version",
       ...(options.deploymentNonce
         ? { deploymentNonce: options.deploymentNonce }
         : {}),
@@ -219,6 +228,19 @@ export async function prepareDeployment(
         compile,
     })
     : await compile();
+  if (compiled.assemblerId !== assemblerId) {
+    throw new Error("Fresh deployment compiler used the wrong assembler generation");
+  }
+  const expectedBrowserSurfaceOriginAppIds =
+    browserSurfaceOriginAppIdsForSelectedPackages(packages, assemblerId);
+  if (
+    JSON.stringify(compiled.browserSurfaceOriginAppIds) !==
+    JSON.stringify(expectedBrowserSurfaceOriginAppIds)
+  ) {
+    throw new Error(
+      "Fresh deployment compiler browser-surface origins do not match the selected packages",
+    );
+  }
   const wasmMetadata = assertSupportedCertificateVersions(compiled.wasm);
   const transportWasm = new Uint8Array(gzipSync(compiled.wasm));
   const chunks = chunkWasm(transportWasm);

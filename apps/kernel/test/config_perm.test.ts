@@ -4,6 +4,7 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import {
   BACKEND_RESERVATION_SCOPE_DISCLOSURES,
+  browserPermissionFeaturesTitle,
   configInstallDisclosures,
   configPermissions,
   permissionKey,
@@ -65,6 +66,63 @@ test("declaring an app-owned tray adds no install permission or explanation", ()
   expect(trayDisclosure.planFingerprint).not.toBe(
     residentDisclosure.planFingerprint,
   );
+});
+
+test("browser permissions disclose exact canonical tile grants", () => {
+  expect(browserPermissionFeaturesTitle(["camera"])).toBe("Camera");
+  expect(browserPermissionFeaturesTitle(["microphone"])).toBe("Microphone");
+  expect(browserPermissionFeaturesTitle(["microphone", "camera"])).toBe(
+    "Camera and microphone",
+  );
+  const disclosure = configInstallDisclosures({
+    format: 3,
+    id: "media_app",
+    name: "Media App",
+    version: 100,
+    tiles: [
+      { id: "secondary", title: "Secondary" },
+      { id: "call", title: "Call" },
+    ],
+    capabilities: {
+      browser_permissions: {
+        api: 1,
+        tiles: [
+          { id: "secondary", features: ["microphone"] },
+          { id: "call", features: ["microphone", "camera"] },
+        ],
+      },
+    },
+  });
+  const permissions = factsOfKind(
+    disclosure.permissions,
+    "browser_permissions",
+  );
+  expect(permissions).toEqual([
+    {
+      source: "kernel",
+      kind: "browser_permissions",
+      tiles: [
+        { id: "call", features: ["camera", "microphone"] },
+        { id: "secondary", features: ["microphone"] },
+      ],
+    },
+  ]);
+  expect(permissionLevel(permissions[0]!)).toBe(3);
+  expect(permissionKey(permissions[0]!)).toBe(
+    'browser_permissions:[["call",["camera","microphone"]],["secondary",["microphone"]]]',
+  );
+  expect(disclosure.appExplanations).toEqual([]);
+  expect(
+    disclosure.capabilityDisclosures.find(
+      ({ id }) => id === "browser_permissions",
+    )?.entry.config,
+  ).toEqual({
+    api: 1,
+    tiles: [
+      { id: "call", features: ["camera", "microphone"] },
+      { id: "secondary", features: ["microphone"] },
+    ],
+  });
 });
 
 test("bounded deferred timers add no install permission", () => {

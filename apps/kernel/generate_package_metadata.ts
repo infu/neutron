@@ -39,7 +39,7 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 315;
+export const KERNEL_NPL_RELEASE_VERSION = 317;
 export const KERNEL_NPL_LICENSE_ID =
   "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
@@ -203,17 +203,26 @@ const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
       sha256: "aaf329e5d526f4b5a436c440ac21a245b068172c6e4e2d6dc07696ecadc60f7d",
     },
   ],
+  [
+    "packages/neutron-compiler/test/fixtures/kernel.v0.3.15.neutron",
+    {
+      bytes: 2_011_370,
+      sha256: "9deeea94795589ee8a331e005c63a85a42886c3f6c0a948e194915539d6a13db",
+    },
+  ],
 ]);
 
 /** Explicitly reviewed new files in this uncommitted release candidate. */
 const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "LICENSES.md",
   "apps/kernel/NOTICE",
+  "apps/kernel/backend/install/BrowserOrigin.mo",
   "apps/kernel/generate_package_metadata.ts",
   "apps/kernel/evidence/qualification/failure.ts",
   "apps/kernel/evidence/qualification/profile.test.ts",
   "apps/kernel/evidence/qualification/run_failure.test.ts",
   "apps/kernel/evidence/qualification/run_metric.test.ts",
+  "apps/kernel/src/app_frame_security.ts",
   "apps/kernel/src/install_review/DeploymentBuildReview.tsx",
   "apps/kernel/src/install_review/deployment_build_review.ts",
   "apps/kernel/src/install_review/prepare_browser_deployment.ts",
@@ -225,6 +234,8 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/src/settings/deployment_integrity.ts",
   "apps/kernel/src/settings/installed_package_record.ts",
   "apps/kernel/test/access_settings_ui.test.tsx",
+  "apps/kernel/test/app_frame_security.test.ts",
+  "apps/kernel/test/browser/media-capabilities.qualification.ts",
   "apps/kernel/test/deployment_build_record.test.ts",
   "apps/kernel/test/deployment_build_record_ui.test.tsx",
   "apps/kernel/test/deployment_build_review.test.ts",
@@ -235,12 +246,15 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/test/installed_package_record_ui.test.tsx",
   "apps/kernel/test/manual_install_review_flow.isolated.ts",
   "apps/kernel/test/manual_install_review_flow.test.ts",
+  "apps/kernel/test/motoko/http_canonical_paths_test.mo",
   "apps/kernel/test/npl_hash_semantics.test.ts",
   "apps/kernel/test/package_metadata_generation.test.ts",
   "apps/kernel/test/prepare_browser_deployment.test.ts",
   "apps/kernel/test/provenance_binding.test.ts",
   "apps/kernel/test/repository_build_review_service.isolated.ts",
   "apps/kernel/test/repository_build_review_service.test.ts",
+  "apps/kernel/test/runtime_authority_registry_race.isolated.ts",
+  "apps/kernel/test/runtime_authority_registry_race.test.ts",
   "apps/kernel/test/tiny-msgpack.d.ts",
   "apps/kernel/test/uninstall_flow.isolated.ts",
   "apps/kernel/test/uninstall_flow.test.ts",
@@ -255,11 +269,14 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "packages/neutron-compiler/test/fixtures/kernel-v0.3.6.identity.json",
   "packages/neutron-compiler/test/fixtures/kernel.v0.3.7.neutron",
   "packages/neutron-compiler/test/fixtures/kernel-v0.3.7.identity.json",
+  "packages/neutron-compiler/test/fixtures/kernel.v0.3.15.neutron",
+  "packages/neutron-compiler/test/fixtures/kernel-v0.3.15.identity.json",
   "packages/neutron-compiler/test/legacy_https_package_compat.test.ts",
   "packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts",
   "packages/neutron-compiler/test/legacy_kernel_upgrade.test.ts",
   "packages/neutron-compiler/test/legacy_kernel_upgrade_fixture.ts",
   "packages/neutron-compiler/test/npl_conformance.test.ts",
+  "packages/neutron-compiler/test/package_decoder.test.ts",
   "packages/neutron-compiler/test/source_snapshot.test.ts",
   "packages/neutron-compiler/LICENSE",
   "packages/neutron-compiler/NOTICE",
@@ -283,6 +300,8 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "packages/neutron-security/NOTICE",
   "packages/neutron-tools/LICENSE",
   "packages/neutron-tools/NOTICE",
+  "packages/neutron-tools/src/package_surface_origins.ts",
+  "packages/neutron-tools/src/tile_ids.ts",
   "packages/neutron-tools/src/package_record.ts",
   "packages/neutron-tools/test/package_record.test.ts",
 ]);
@@ -1157,7 +1176,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.15 (packed version 315)",
+    "Package release: v0.3.17 (packed version 317)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

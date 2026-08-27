@@ -21,6 +21,7 @@ const {
   filesDropDestination,
   filesDownloadHandoffDecision,
   filesDownloadStartIsCurrent,
+  filesCanonicalPublicLink,
   filesPathCanOpen,
   filesPathContains,
   filesRootKind,
@@ -43,6 +44,20 @@ const {
   virtualWindow,
   wipeFilesDownloadChunks,
 } = await import(FILES_TILE_ENTRYPOINT);
+
+test("public links use the canonical Kernel origin from an isolated tile", () => {
+  const canisterId = "yifcp-hp777-77774-aaacq-cai";
+  const relativeUrl =
+    `/app/files/_route/shares/${"a".repeat(64)}/report.txt`;
+  const tileHref =
+    `https://i${"34".repeat(12)}--${canisterId}.icp0.io/app/files/index.html`;
+
+  expect(filesCanonicalPublicLink(relativeUrl, tileHref)).toBe(
+    `https://${canisterId}.icp0.io${relativeUrl}`,
+  );
+  expect(() => filesCanonicalPublicLink(`//evil.example${relativeUrl}`, tileHref))
+    .toThrow("invalid public link");
+});
 
 test("internal file moves require the live locally-issued drag token", () => {
   const live = {
