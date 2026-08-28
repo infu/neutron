@@ -9,6 +9,12 @@ uses the same workflow with multiple tiles and more backend methods. Kernel
 bootstrap, install-time compilation, and package upload behavior are covered in
 other documents.
 
+Hello is released package history, not a clean template. Before building a new
+app copied from it, follow the
+[new-project cleanup procedure](./app-developer-guide.md#create-or-copy-an-app-project)
+for its memory lock, archives, release tests, license notice, and update-source
+selection.
+
 Primary sources:
 
 - `apps/hello/`
@@ -340,12 +346,12 @@ The current order is:
    for an ordinary app, and writes
    `<id>.v<major>.<minor>.<patch>.neutron`.
 
-For a new app, select either `LICENSE.APP`/NSAL 1.1 when recipients may modify
-and share the app, or `LICENSE.APP.USE` when source should remain inspectable
-but modification and redistribution remain reserved. Both choices restrict
-Production Use to a Qualifying Sovereign System. Previously published NSAL 1.0
-apps retain that exact license until a future higher package release explicitly
-changes it.
+New apps default to `LICENSE.APP.USE` when source should remain inspectable but
+modification and redistribution remain reserved. Deliberately select
+`LICENSE.APP` instead when recipients may modify and share the app. Both choices
+restrict Production Use to a Qualifying Sovereign System. Previously published
+NSAL 1.0 apps retain that exact license until a future higher package release
+explicitly changes it.
 
 The hello README documents the minimal developer command sequence as a root
 `npm install`, then `npm run package` from `apps/hello`. `npm test` in the

@@ -143,10 +143,10 @@ authorization boundary.
 | --- | --- | --- | --- |
 | Run a listed self query | `querySelf(method, args)` | No | Exact method must be listed in `preapproved_self_calls.methods`, owner-authorized, owned by the source app, and a query. Arguments and results follow the method's complete live Candid type, including nested or repeated blobs. |
 | Run a listed self update | `updateSelf(method, args)` | No | Exact method must be listed in `preapproved_self_calls.methods`, owner-authorized, owned by the source app, and an update. Arguments and results follow the method's complete live Candid type, including nested or repeated blobs. |
-| Make a canister call through the owner identity | `callCanisterDialog({ canister, method, args })` | Every call | A same-Neutron target is routed through the private attachment-aware API-1 self-call wire; external targets retain the generic JSON route. The Kernel validates the live method input and calls only after approval. |
+| Make a canister call through the owner identity | `callCanisterDialog({ canister, method, args })` | When the source app has no active invocation | A same-Neutron target uses the private attachment-aware API-1 self-call wire and ordinary owner consent when the source app has no active invocation. While that app has an active invocation, an unscoped request fails with `SCOPED_CONTEXT_REQUIRED`, while a valid scoped request fails with `USER_INTERACTION_REQUIRED`. An eligible external call made through a live invocation-scoped client uses the generic JSON route and agent decision policy. The Kernel validates live input and calls only after the applicable decision. |
 | Call a tile, tray, or background tool in the same app | `callTool(...)` | No | Target must be a live endpoint; JSON Schema is checked at the endpoint and kernel. |
-| Call another app's live endpoint tool | `callTool(...)` | One-call or session grant | Kernel identifies both endpoints and prompts when no matching session grant exists. |
-| Add or remove backend-call reservations | `requestBackendCallReservations(...)` | Persistent-access dialog | Scopes must be declared by the app manifest. An optional same-app post-grant call uses the same private attachment-aware API-1 wire and supports nested or repeated blobs; the generic JSON tool accepts actions only. |
+| Call another app's live endpoint tool | `callTool(...)` | When the source app has no active invocation: one-call or session grant | Kernel identifies both endpoints. A matching live session grant is honored first; otherwise an invocation-scoped call uses the agent decision policy and an ordinary call uses the owner dialog. |
+| Add or remove backend-call reservations | `requestBackendCallReservations(...)` | When the source app has no active invocation: persistent-access dialog | Scopes must be declared by the app manifest. An invocation-scoped action-only request uses the agent decision policy, and an allowed reservation change persists. An optional same-app post-grant call uses the private attachment-aware API-1 wire and supports nested or repeated blobs; the generic JSON tool accepts actions only. |
 | Install package-declared backend-call reservations | `capabilities.backend_calls.install_reservations` | App install dialog | Every exact scope is kernel-normalized, displayed in install review, and applied only after the accepted app installation becomes active. |
 | Call from trusted kernel UI or an authorized CLI | Actor or agent API | No app dialog | The caller already possesses an authorized principal; backend authorization still applies. |
 | Call a declared public-ingress route externally | Actor or agent API | No | Use the generated app/protocol/mode physical dispatcher and stable V1 wire. Queries obey recipient caller policy. A direct authenticated update requires a self-authenticating user principal and accepts no cycles; a paid update must come from a canister with at least its `required_cycles` floor. The recipient still applies admission. |
@@ -324,23 +324,89 @@ const result = await callCanisterDialog({
 });
 ```
 
-The kernel shows a signature approval dialog containing the kernel-attested
-source endpoint, target canister, method, and arguments. Rejection prevents the
-call. Approval causes the kernel to sign and execute it with the authenticated
-owner identity.
+When the source app has no active invocation, the kernel shows an owner
+signature-approval dialog containing the kernel-attested source endpoint, target
+canister, method, and arguments. An eligible external call carrying a live agent
+invocation follows the nested-agent decision policy instead. A rejection
+prevents dispatch. An approval or agent allow causes the kernel to sign and
+execute the external call with the authenticated owner identity. Same-Neutron
+calls use the separate self-call consent behavior below.
+
+The v2 external route uses anonymous live discovery, a fresh owner-bound actor,
+and ICBlast's closed method registry, with numeric principal shorthand disabled.
+It converts the arguments once into an immutable prepared Candid snapshot. The
+review shows the method as quoted, escape-safe JSON and the complete prepared
+argument array as canonical JSON; approval dispatches that exact snapshot. The
+Kernel rechecks source, installation, invocation, and owner authority before
+network dispatch. A change after dispatch withholds the reply and reports an
+unknown outcome.
+
+An unknown outcome means the call may have executed and an update may have
+committed. Do not retry a mutating call merely because its reply was cancelled,
+withheld, or lost. Use a protocol-level idempotency key where the remote
+canister supports one, or reconcile against authoritative remote state before
+deciding whether another attempt is safe.
+
+For a nested Agent Mode request through `canister.call_dialog_v2`, the Kernel
+challenge carries that complete review value, not only counts. It must fit the
+ordinary bounded JSON contract or fail before the decision and signature.
+
+`canister.schema_v2` performs its own fresh anonymous discovery. Its result is
+informative; `canister.call_dialog_v2` always rediscovers and prepares the
+actual call rather than trusting an earlier schema response.
+
+`canister.call_dialog_v2` does not accept or enforce an expected method mode,
+and its result does not attest the live mode. A caller therefore cannot use an
+earlier scan or schema response to prove that a later signed call is still a
+query or update; the interface can change between those operations.
+
+If application safety depends on a method remaining a query or update, do not
+use an earlier schema result as authorization for this generic route. Use a
+purpose-built protocol or trusted tool that enforces the required mode at
+dispatch, or conservatively treat the signed call as state-changing.
+
+The unversioned `canister.schema` and `canister.call_dialog` tools are
+universally callable compatibility routes, not privileges gated to historical
+installations. They retain owner-authenticated discovery and pre-conversion
+ICBlast JSON handling, including numbered-principal conveniences. Their dialog
+therefore labels the displayed values as pre-conversion JSON. Both route
+families share Kernel consent, audit, authority, dispatch, and reply fencing.
+The compatibility routes lack v2's anonymous discovery, closed method lookup,
+phase-aware request cancellation, and complete prepared-argument review in an
+Agent Mode challenge. An Agent-scoped signed call through the compatibility
+route is rejected before live discovery; use the v2 route for nested Agent
+signed calls.
+
+Ordinary global SDK helpers prefer v2 and select an unversioned route only when
+the connected Kernel does not advertise its v2 counterpart. An
+invocation-scoped client does not negotiate down to the compatibility route;
+it must discover and call the v2 tool or report that the operation is
+unsupported.
 
 For a call back into the Neutron canister, the trusted registry must resolve
 the target as a non-internal method owned by the live source app. An app cannot
-use this dialog to call a kernel method or another installed app's method, and
-Agent Mode cannot invoke this same-canister route. The management canister is
-always rejected. The SDK automatically sends this target through the private
-attachment-aware API-1 self-call wire; the generic JSON-only call tool rejects
-it. External-canister calls retain the ordinary consent policy.
+use this dialog to call a kernel method or another installed app's method. The
+SDK automatically sends this target through the private attachment-aware API-1
+self-call wire; the generic JSON-only call tool rejects it.
 
-`callCanisterDialog()` showing a dialog is a property of that frontend tool.
-It is not inferred from the method being `authorized`. It currently prompts
-unless the source app uses `querySelf()` or `updateSelf()` for an exact method
-listed in its installed `preapproved_self_calls.methods` capability field.
+When the source app has no active invocation, that private route retains
+ordinary owner consent. While the source app has an active invocation, an
+unscoped module-level same-Neutron call dialog fails with
+`SCOPED_CONTEXT_REQUIRED` before call preparation and creates no owner approval
+UI. A valid invocation-scoped self-dialog instead fails with
+`USER_INTERACTION_REQUIRED`; Agent Mode cannot invoke the same-canister route.
+The management canister is always rejected. External-canister calls retain the
+ordinary consent policy.
+
+`callCanisterDialog()` consent is a property of that frontend tool. It is not
+inferred from the method being `authorized`. When the source app has no active
+invocation it opens the owner dialog; an eligible external call carrying a live
+agent invocation follows the nested-agent policy. A same-Neutron call while the
+source app has an active invocation follows the scoped-context and
+owner-interaction failures described above rather than opening that dialog or
+entering the agent decision flow.
+An app avoids per-call consent for its own exact listed methods by using
+`querySelf()` or `updateSelf()` instead.
 
 ## Wallet Example
 
@@ -362,8 +428,8 @@ Wallet demonstrates all three relevant routes:
 
 Reviewed preset ledgers use a whole-principal reservation plus exact scopes for
 their reviewed history index and any native minter route. A custom ledger id
-receives only exact `icrc1_metadata`, `icrc1_balance_of`, `icrc1_fee`, and
-`icrc1_transfer` scopes.
+receives only exact `icrc1_metadata`, `icrc1_balance_of`, `icrc1_fee`,
+`icrc1_transfer`, and `icrc3_get_blocks` scopes.
 
 `wallet_set_ledgers` is intentionally not preapproved. It runs only as the
 same-app operation attached to the owner-approved reservation batch. The
@@ -443,7 +509,8 @@ The message bus allows calls between UI endpoints:
 
 - calls among tile, tray, and background endpoints belonging to the same app
   are allowed by default;
-- calls to another app require a one-call or session grant; and
+- outside a validated Agent Mode invocation, calls to another app require a
+  one-call or session grant; and
 - each endpoint publishes JSON Schema tool descriptors used for discovery and
   validation.
 
@@ -453,7 +520,9 @@ perform local browser work without a prompt, but if it then requests an
   dialog still applies.
 
 Likewise, granting one app permission to call another app's frontend tool does
-not grant either app an authorized principal or bypass a backend wrapper.
+not grant either app an authorized principal or bypass a backend wrapper. A
+matching live session grant keeps its normal meaning inside an agent invocation
+and is checked before the Kernel asks for a new agent decision.
 
 ## Agent Mode Calls
 
@@ -462,19 +531,34 @@ method authorization. The owner first enables one exact installed agent app
 version and resident entrypoint. A turn must start from that app's focused tile
 with transient user activation.
 
-During the turn, a direct agent-selected app tool or delegable kernel action
-does not show an owner dialog. When a called app reaches a new permission
-boundary, authority is not inherited. The kernel suspends that exact request
-and asks the root agent for one allow or deny decision using only a bounded,
-kernel-produced summary. An allow resumes only that request and creates no
-session grant. A denial closes further permission requests from that invocation
-node.
+During a live invocation, a direct agent-selected app tool or delegable kernel
+action does not show an owner dialog. This policy follows invocation provenance;
+it does not replace the consent path of every unrelated request merely because
+an agent turn is active. When a called app reaches a new permission boundary,
+authority is not inherited. The kernel suspends that exact request and asks the
+root agent for one allow or deny decision using a bounded, kernel-produced
+challenge. V2 signed-call challenges follow the complete review-value rule
+above; the compatibility route rejects an Agent-scoped signed call instead of
+creating a reduced challenge. An allow for a frontend tool resumes only that
+request and creates no one-call or session grant. A denial closes further
+permission requests from that invocation node.
 
-Nested handlers must call through the `context.kernel` client supplied to
-their `exposeTool()` handler. It preserves private invocation provenance. A
-global `createMsgBusClient()` is still correct for ordinary work outside an
-agent turn, but using it for a nested permission-bearing call fails with
-`SCOPED_CONTEXT_REQUIRED` rather than opening a surprise owner dialog.
+Nested handlers must issue invocation-dependent work through the
+`context.kernel` client supplied to their `exposeTool()` handler. It preserves
+private invocation provenance and cancellation. Top-level helpers and clients
+are still correct for ordinary work when the source app has no active
+invocation, but they do not implicitly inherit the invocation of the handler
+that calls them. A generic protected call from an app participating in the
+active turn without that scope fails with `SCOPED_CONTEXT_REQUIRED` rather than
+opening a surprise owner dialog.
+
+For backend access, a nested handler can make an action-only reservation request
+through its invocation-scoped Kernel client. The top-level
+`requestBackendCallReservations()` helper, including its attachment-aware
+post-grant call form, does not inherit invocation provenance. An agent allow for
+a reservation mutation is different from an ephemeral frontend-tool allow: it
+deliberately applies the requested persistent reservation, still bounded by the
+installed manifest declaration.
 
 Owner-only operations are never sent to the agent judge. This includes
 management-canister and Neutron administration calls, install or uninstall,
@@ -483,9 +567,10 @@ external provider login. The app receives `OWNER_REQUIRED` or
 `USER_INTERACTION_REQUIRED` and must let the owner perform the operation in
 kernel UI.
 
-Preapproved self calls and existing backend reservations retain their normal
-meaning. They are checked before any new permission decision. Agent decisions
-do not broaden those declarations or bypass the generated Motoko owner check.
+Preapproved self calls, matching live frontend session grants, and existing
+backend reservations retain their normal meaning. They are checked before any
+new permission decision. Agent decisions do not broaden those declarations or
+bypass the generated Motoko owner check.
 
 ## Security Rules
 
@@ -504,6 +589,11 @@ do not broaden those declarations or bypass the generated Motoko owner check.
 7. Never trust app-reported app ids, Candid, schemas, identities, or caller
    context. The kernel must derive them from installed state and registered
    endpoints.
+8. Do not rely on an earlier external schema response to prove method mode at a
+   later signed call. Use a dispatch-time mode-enforcing contract when mode is a
+   security condition.
+9. Treat an unknown update outcome as potentially committed. Reconcile or use
+   remote idempotency before retrying.
 
 ## Enforcement Summary
 

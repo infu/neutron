@@ -1,4 +1,5 @@
 import {
+  CANISTER_PRINCIPAL_TEXT_MAX_LENGTH,
   MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
   MSG_BUS_MAX_PROGRESS_BYTES,
   KernelPolicyError,
@@ -6,9 +7,11 @@ import {
   NEUTRON_TOOL_VISIBILITY_SAME_APP,
   assertBoundedJson,
   assertToolName,
+  boundSerializedError,
   isExecEnvelope,
   isJsonObject,
   isJsonValue,
+  isRequestCancelEnvelope,
   jsonPayloadBytes,
   kernelCallPayloadSchema,
   kernelSchemaPayloadSchema,
@@ -47,6 +50,7 @@ import {
 import { CANISTER_METHOD_MAX_LENGTH } from "neutron-tools/src/physical_names.js";
 import { QueryResponseStatus } from "@dfinity/agent";
 import { IDL } from "@dfinity/candid";
+import { Principal } from "@dfinity/principal";
 import { parseRepositorySetupUrl } from "neutron-tools/repository";
 import { normalizeUntrustedText } from "neutron-tools/src/schema.js";
 import icblast from "icblast";
@@ -58,6 +62,7 @@ import {
   resolveRegisteredEndpoint,
   subscribeEndpointChanges,
   subscribeEndpointPortMessages,
+  subscribeEndpointPortRetirements,
   waitForFrameEndpointPort,
   type RegisteredEndpoint,
 } from "./frame_context.ts";
@@ -204,6 +209,7 @@ import {
   requestInstallOffer,
 } from "./install_offers/service.ts";
 import { safeInstallOfferUrl } from "./install_offers/InstallOfferDialog.tsx";
+import { throwIfRequestCancelled } from "./request_cancel.ts";
 import type {
   AttestedInstallOfferRequester,
   NormalizedInstallOffer,
@@ -219,6 +225,7 @@ type KernelToolHandler = (
   caller: RegisteredEndpoint,
   invocation: InvocationNode | null,
   invocationContext?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
 ) => JsonValue | Promise<JsonValue>;
 
 type RegisteredKernelTool = {
@@ -227,9 +234,7 @@ type RegisteredKernelTool = {
 };
 
 const kernelTools = new Map<string, RegisteredKernelTool>();
-const binarySelfCallDomainErrorStats = Symbol(
-  "binarySelfCallDomainErrorStats",
-);
+const binarySelfCallDomainErrorStats = Symbol("binarySelfCallDomainErrorStats");
 type BinarySelfCallStats = { count: number; bytes: number };
 type BinarySelfCallDomainError = Error & {
   readonly code: "binary_domain_error";
@@ -261,10 +266,7 @@ function protectedBinarySelfCallDomainError(
 function protectedBinarySelfCallStats(
   error: unknown,
 ): BinarySelfCallStats | null {
-  if (
-    !(error instanceof Error) ||
-    !(binarySelfCallDomainErrorStats in error)
-  ) {
+  if (!(error instanceof Error) || !(binarySelfCallDomainErrorStats in error)) {
     return null;
   }
   return (error as BinarySelfCallDomainError)[binarySelfCallDomainErrorStats];
@@ -276,6 +278,10 @@ const endpointMetadataOnlyTools = new WeakMap<
 >();
 const inFlightByCaller = new Map<string, number>();
 const controlInFlightByCaller = new Map<string, number>();
+const endpointRequestControllers = new WeakMap<
+  MessagePort,
+  Map<number, AbortController>
+>();
 const MAX_ENDPOINT_TOOLS = 64;
 const MAX_CONCURRENT_CALLS_PER_ENDPOINT = 8;
 const MAX_CONCURRENT_CONTROL_CALLS_PER_ENDPOINT = 1;
@@ -286,10 +292,7 @@ const MAX_RETAINED_STATE_TOPICS_PER_APP = 64;
 const TILE_VIEW_TTL_MS = 10_000;
 const MAX_APP_TILES_PER_WORKSPACE = 24;
 const MAX_APP_TILES_GLOBAL = 96;
-const pendingTileViews = new Map<
-  string,
-  { view: string; expiresAt: number }
->();
+const pendingTileViews = new Map<string, { view: string; expiresAt: number }>();
 type RetainedAppStateChange = Readonly<{
   event: AppStateChangeEnvelope;
   appGeneration: number | undefined;
@@ -305,7 +308,8 @@ const deliveredAppStateChanges = new WeakMap<
 >();
 const vetKeysBroker = new VetKeysBrowserBroker({
   backend: {
-    list: (appId) => callKernelVetKeys("kernel_vetkeys_list", [{ app_id: appId }]),
+    list: (appId) =>
+      callKernelVetKeys("kernel_vetkeys_list", [{ app_id: appId }]),
     binding: vetKeysSlotBinding,
     lifecycle: (appId, action) => callVetKeysLifecycle(appId, action),
     publicKey: (appId, slot, generation) =>
@@ -353,6 +357,7 @@ subscribeEndpointChanges(() =>
   reconcileAgentEndpoints((endpointId) => getRegisteredEndpoint(endpointId)),
 );
 subscribeEndpointChanges(reconcileInstallOffer);
+subscribeEndpointPortRetirements(cancelEndpointPortRequests);
 subscribeEndpointChanges(() =>
   reconcileEthereumProviderSessions(
     (endpointId) => getRegisteredEndpoint(endpointId)?.sessionId,
@@ -368,15 +373,21 @@ setAgentRootCancelDispatcher((root) => {
     2,
   ).catch(() => undefined);
 });
-const { explainMethodSchema, toState, validateMethodInput } = icblast as unknown as {
-  explainMethodSchema(target: unknown, method: string): unknown;
-  toState(value: unknown): unknown;
-  validateMethodInput(
-    target: unknown,
-    method: string,
-    args: unknown[]
-  ): { ok: boolean; errors?: unknown };
-};
+const { explainMethodSchema, toState, validateMethodInput } =
+  icblast as unknown as {
+    explainMethodSchema(
+      target: unknown,
+      method: string,
+      options?: Readonly<{ allowNumberedPrincipals?: boolean }>,
+    ): unknown;
+    toState(value: unknown): unknown;
+    validateMethodInput(
+      target: unknown,
+      method: string,
+      args: unknown[],
+      options?: Readonly<{ allowNumberedPrincipals?: boolean }>,
+    ): { ok: boolean; errors?: unknown };
+  };
 
 const emptyObjectSchema: JsonObject = {
   type: "object",
@@ -386,7 +397,7 @@ const emptyObjectSchema: JsonObject = {
 function defineKernelTool(
   name: string,
   options: ExposedToolOptions,
-  handler: KernelToolHandler
+  handler: KernelToolHandler,
 ): void {
   const descriptor = normalizeToolDescriptor({ name, ...options });
   kernelTools.set(name, { descriptor, handler });
@@ -400,19 +411,43 @@ function assertSchemaPayload(payload: JsonValue): KernelSchemaPayload {
   ) {
     throw new Error("Invalid schema request payload");
   }
-  return payload as KernelSchemaPayload;
+  return {
+    canister: canonicalCanisterPrincipal(payload.canister),
+    method: payload.method,
+  };
 }
 
 function assertCallPayload(payload: JsonValue): KernelCallPayload {
   const schemaPayload = assertSchemaPayload(payload);
   if (
-    "args" in schemaPayload &&
-    schemaPayload.args !== undefined &&
-    !Array.isArray(schemaPayload.args)
+    isJsonObject(payload) &&
+    "args" in payload &&
+    payload.args !== undefined &&
+    !Array.isArray(payload.args)
   ) {
     throw new Error("Invalid call request payload");
   }
-  return schemaPayload as KernelCallPayload;
+  return {
+    ...schemaPayload,
+    ...(isJsonObject(payload) && Array.isArray(payload.args)
+      ? { args: [...payload.args] }
+      : {}),
+  } as KernelCallPayload;
+}
+
+function canonicalCanisterPrincipal(value: string): string {
+  if (value.length > 0 && value.length <= CANISTER_PRINCIPAL_TEXT_MAX_LENGTH) {
+    try {
+      const canonical = Principal.fromText(value).toText();
+      if (canonical === value) return canonical;
+    } catch {
+      // The public error is intentionally independent of parser internals.
+    }
+  }
+  throw new KernelPolicyError(
+    "INVALID_REQUEST",
+    "Canister principal must be canonical",
+  );
 }
 
 function assertToolCall(payload: JsonValue): MsgBusToolCall {
@@ -436,9 +471,10 @@ function assertToolsListPayload(payload: JsonValue): MsgBusEndpointId {
   return target;
 }
 
-function assertAppStateChangePayload(
-  payload: JsonValue,
-): { topic: string; revision: string } {
+function assertAppStateChangePayload(payload: JsonValue): {
+  topic: string;
+  revision: string;
+} {
   if (
     !isJsonObject(payload) ||
     Object.keys(payload).some((key) => key !== "topic" && key !== "revision") ||
@@ -455,9 +491,10 @@ function assertAppStateChangePayload(
 function isEndpointId(value: unknown): value is MsgBusEndpointId {
   if (value === "kernel") return true;
   if (typeof value !== "string") return false;
-  const match = /^app:([^:]+):(?:background|tray:instance:[a-zA-Z0-9_-]+|tile:[a-z_0-9]+:instance:[a-zA-Z0-9_-]+)$/.exec(
-    value,
-  );
+  const match =
+    /^app:([^:]+):(?:background|tray:instance:[a-zA-Z0-9_-]+|tile:[a-z_0-9]+:instance:[a-zA-Z0-9_-]+)$/.exec(
+      value,
+    );
   return match !== null && isValidAppId(match[1]);
 }
 
@@ -466,19 +503,16 @@ function assertJsonResult(value: unknown): JsonValue {
   return value;
 }
 
-async function getJsonCanister(canister: string): Promise<any> {
-  const { getIC, getNeutronDynamicCan } = await import("./reducer/auth.ts");
-  if (neutron_id === canister) {
-    return getNeutronDynamicCan();
-  }
-  return getIC()(canister);
+async function getNeutronJsonCanister(): Promise<any> {
+  const { getNeutronDynamicCan } = await import("./reducer/auth.ts");
+  return getNeutronDynamicCan();
 }
 
 async function callKernelVetKeys(
   method: string,
   args: JsonValue[],
 ): Promise<JsonValue> {
-  const target = await getJsonCanister(neutron_id);
+  const target = await getNeutronJsonCanister();
   assertValidCall(target, method, args);
   let raw: unknown;
   try {
@@ -556,7 +590,10 @@ function lifecycleDisclosure(action: VetKeysLifecycleAction): JsonObject {
   }
 }
 
-async function vetKeysSlotBinding(appId: string, slot: string): Promise<string> {
+async function vetKeysSlotBinding(
+  appId: string,
+  slot: string,
+): Promise<string> {
   const uid = unwrapVetKeysOperationResult(
     await callKernelVetKeys("kernel_vetkeys_binding", [
       { app_id: appId, slot_id: slot },
@@ -579,22 +616,185 @@ async function vetKeysSlotBinding(appId: string, slot: string): Promise<string> 
   return text;
 }
 
-function assertValidCall(target: any, method: string, args: unknown[]): void {
-  const validation = validateMethodInput(target, method, args);
+const EXTERNAL_ICBLAST_JSON_OPTIONS = Object.freeze({
+  allowNumberedPrincipals: false,
+});
+
+function assertValidCall(
+  target: any,
+  method: string,
+  args: unknown[],
+  options?: Readonly<{ allowNumberedPrincipals: false }>,
+): void {
+  const validation = validateMethodInput(target, method, args, options);
   if (!validation.ok) {
     throw new Error(
-      "Invalid call JSON: " + JSON.stringify(validation.errors || [])
+      "Invalid call JSON: " + JSON.stringify(validation.errors || []),
     );
   }
 }
 
-async function getVerifiedMethodSchema(
-  canister: string,
-  method: string
-): Promise<JsonValue> {
-  const target = await getJsonCanister(canister);
-  return assertJsonResult(explainMethodSchema(target, method));
+function requireLegacyIcblastActorMethod(
+  target: any,
+  method: string,
+): (...args: unknown[]) => Promise<unknown> {
+  const registered = target?.$methods?.get?.(method);
+  if (typeof registered === "function") return registered;
+  if (
+    !Object.hasOwn(target ?? {}, method) ||
+    typeof target[method] !== "function"
+  ) {
+    throw new Error(`Unknown canister method: ${method}`);
+  }
+  return target[method];
 }
+
+type StrictIcblastMethod = ((...args: unknown[]) => Promise<unknown>) & {
+  prepare?: (...args: unknown[]) => Promise<unknown>;
+};
+
+function requireStrictIcblastActorMethod(
+  target: any,
+  method: string,
+): StrictIcblastMethod {
+  const methodTable = target?.$methods;
+  if (typeof methodTable?.get !== "function") {
+    throw new Error("Canister actor has no closed method registry");
+  }
+  const registered = methodTable.get(method);
+  if (typeof registered !== "function") {
+    throw new Error(`Unknown canister method: ${method}`);
+  }
+  return registered;
+}
+
+type PreparedExternalCall = Readonly<{
+  reviewArgs: JsonValue[];
+  invoke: () => Promise<unknown>;
+}>;
+
+type ExternalCanisterPolicy = Readonly<{
+  description: string;
+  loadSchemaTarget: (
+    canister: string,
+    assertAuthority: () => void,
+    signal?: AbortSignal,
+  ) => Promise<any>;
+  loadCallTarget: (
+    canister: string,
+    assertAuthority: () => void,
+    signal?: AbortSignal,
+  ) => Promise<any>;
+  methodSchema: (target: any, method: string) => JsonValue;
+  prepareCall: (
+    target: any,
+    method: string,
+    args: JsonValue[],
+    assertAuthority: () => void,
+  ) => Promise<PreparedExternalCall>;
+  canonicalReview: boolean;
+}>;
+
+async function loadLegacyExternalTarget(
+  canister: string,
+  assertAuthority: () => void,
+): Promise<any> {
+  const { getLegacyExternalDynamicCan } = await import("./reducer/auth.ts");
+  return getLegacyExternalDynamicCan(canister, assertAuthority);
+}
+
+async function loadStrictExternalTarget(
+  canister: string,
+  assertAuthority: () => void,
+  signal?: AbortSignal,
+): Promise<any> {
+  const { getStrictExternalDynamicCan } = await import("./reducer/auth.ts");
+  return getStrictExternalDynamicCan(canister, assertAuthority, signal);
+}
+
+async function loadStrictExternalDiscoveryTarget(
+  canister: string,
+  assertAuthority: () => void,
+  signal?: AbortSignal,
+): Promise<any> {
+  const { getStrictExternalDiscoveryCan } = await import("./reducer/auth.ts");
+  return getStrictExternalDiscoveryCan(canister, assertAuthority, signal);
+}
+
+async function prepareLegacyExternalCall(
+  target: any,
+  method: string,
+  args: JsonValue[],
+  assertAuthority: () => void,
+): Promise<PreparedExternalCall> {
+  assertValidCall(target, method, args);
+  const targetMethod = requireLegacyIcblastActorMethod(target, method);
+  assertAuthority();
+  return Object.freeze({
+    reviewArgs: args,
+    invoke: () => targetMethod(...args),
+  });
+}
+
+async function prepareStrictExternalCall(
+  target: any,
+  method: string,
+  args: JsonValue[],
+  assertAuthority: () => void,
+): Promise<PreparedExternalCall> {
+  assertValidCall(target, method, args, EXTERNAL_ICBLAST_JSON_OPTIONS);
+  const targetMethod = requireStrictIcblastActorMethod(target, method);
+  if (typeof targetMethod.prepare !== "function") {
+    throw new Error("Canister actor does not support prepared calls");
+  }
+  assertAuthority();
+  const rawPrepared = await targetMethod.prepare(...args);
+  assertAuthority();
+  if (
+    rawPrepared === null ||
+    typeof rawPrepared !== "object" ||
+    !Array.isArray((rawPrepared as { args?: unknown }).args) ||
+    typeof (rawPrepared as { invoke?: unknown }).invoke !== "function"
+  ) {
+    throw new Error("Canister actor returned an invalid prepared call");
+  }
+  const prepared = rawPrepared as {
+    args: unknown[];
+    invoke: () => Promise<unknown>;
+  };
+  const reviewArgs = assertJsonResult(prepared.args);
+  if (!Array.isArray(reviewArgs)) {
+    throw new Error("Prepared canister arguments must be an array");
+  }
+  return Object.freeze({
+    reviewArgs,
+    invoke: () => prepared.invoke(),
+  });
+}
+
+const legacyExternalCanisterPolicy: ExternalCanisterPolicy = Object.freeze({
+  description:
+    "Ask the user to approve and execute one owner-authenticated canister method using the compatible JSON conversion contract.",
+  loadSchemaTarget: loadLegacyExternalTarget,
+  loadCallTarget: loadLegacyExternalTarget,
+  methodSchema: (target, method) =>
+    assertJsonResult(explainMethodSchema(target, method)),
+  prepareCall: prepareLegacyExternalCall,
+  canonicalReview: false,
+});
+
+const strictExternalCanisterPolicy: ExternalCanisterPolicy = Object.freeze({
+  description:
+    "Discover external Candid anonymously, canonically prepare the arguments, then ask the user to approve one owner-authenticated canister method.",
+  loadSchemaTarget: loadStrictExternalDiscoveryTarget,
+  loadCallTarget: loadStrictExternalTarget,
+  methodSchema: (target, method) =>
+    assertJsonResult(
+      explainMethodSchema(target, method, EXTERNAL_ICBLAST_JSON_OPTIONS),
+    ),
+  prepareCall: prepareStrictExternalCall,
+  canonicalReview: true,
+});
 
 function verifiedEndpoint(context: ExposedActionContext): RegisteredEndpoint {
   const endpoint = resolveRegisteredEndpoint(context.source);
@@ -612,10 +812,8 @@ function assertCurrentEndpointVersion(endpoint: RegisteredEndpoint): void {
   // Kernel-owned surfaces carry installation scope, manifest version, and a
   // frontend registry generation. Scope is the authoritative reinstall
   // boundary; version/generation also revoke compatible in-place UI changes.
-  if (
-    endpoint.appVersion === undefined &&
-    endpoint.appGeneration === undefined
-  ) return;
+  if (endpoint.appVersion === undefined && endpoint.appGeneration === undefined)
+    return;
   const apps = useAppsStore.getState();
   const app = apps.list[endpoint.context.appId];
   if (!app) throw new Error("App endpoint is no longer installed");
@@ -681,44 +879,119 @@ function agentStatus(appId: string): JsonObject {
   };
 }
 
-defineKernelTool(
-  "canister.schema",
-  {
-    title: "Canister Method Schema",
-    description: "Return the kernel-derived JSON schema for a canister method.",
-    inputSchema: kernelSchemaPayloadSchema as JsonObject,
-  },
-  async (args, caller) => {
-    const { canister, method: logicalMethod } = assertSchemaPayload(args);
-    if (canister !== neutron_id) {
-      return getVerifiedMethodSchema(canister, logicalMethod);
-    }
-    const app = useAppsStore.getState().list[caller.context.appId];
-    if (!app) throw new Error("Requesting app is not installed");
-    const entry = requireConsentedSelfCall(app, logicalMethod);
-    return getVerifiedMethodSchema(
-      canister,
-      requirePhysicalSelfCallMethod(caller.context.appId, entry),
-    );
-  }
-);
+function kernelToolSupportsRequestCancellation(name: string): boolean {
+  return (
+    name === "canister.schema_v2" ||
+    name === "canister.call_dialog_v2" ||
+    name === "permissions.request"
+  );
+}
 
-defineKernelTool(
-  "canister.call_dialog",
-  {
-    title: "Approved Canister Call",
-    description: "Ask the user to approve and then execute a canister method.",
-    inputSchema: kernelCallPayloadSchema as JsonObject,
-    annotations: { "neutron:effects": ["signature_request", "network"] },
-  },
-  async (args, caller, invocation) => {
-    const callerBinding = captureSignedCallEndpoint(caller);
-    const callerAuth = useAuthStore.getState();
-    const authBinding = Object.freeze({
-      logged: callerAuth.logged,
-      authorized: callerAuth.authorized,
-      principal: callerAuth.principal,
-    });
+function defineCanisterSchemaTool(
+  name: "canister.schema" | "canister.schema_v2",
+  policy: ExternalCanisterPolicy,
+): void {
+  defineKernelTool(
+    name,
+    {
+      title: "Canister Method Schema",
+      description:
+        "Return the kernel-derived JSON schema for a canister method.",
+      inputSchema: kernelSchemaPayloadSchema as JsonObject,
+    },
+    async (args, caller, invocation, invocationContext, signal) => {
+      const requestSignal = kernelToolSupportsRequestCancellation(name)
+        ? signal
+        : undefined;
+      const { assertAuthority } = captureSelfCallAuthority(
+        caller,
+        invocationContext,
+        invocation,
+        requestSignal,
+      );
+      assertAuthority();
+      const { canister, method: logicalMethod } = assertSchemaPayload(args);
+      if (canister !== neutron_id) {
+        assertExternalCanisterCallTarget(canister, neutron_id);
+        const target = await policy.loadSchemaTarget(
+          canister,
+          assertAuthority,
+          requestSignal,
+        );
+        assertAuthority();
+        return policy.methodSchema(target, logicalMethod);
+      }
+      const app = useAppsStore.getState().list[caller.context.appId];
+      if (!app) throw new Error("Requesting app is not installed");
+      const entry = requireConsentedSelfCall(app, logicalMethod);
+      const target = await getNeutronJsonCanister();
+      assertAuthority();
+      return assertJsonResult(
+        explainMethodSchema(
+          target,
+          requirePhysicalSelfCallMethod(caller.context.appId, entry),
+        ),
+      );
+    },
+  );
+}
+
+function defineCanisterCallDialogTool(
+  name: "canister.call_dialog" | "canister.call_dialog_v2",
+  policy: ExternalCanisterPolicy,
+): void {
+  defineKernelTool(
+    name,
+    {
+      title: "Approved Canister Call",
+      description: policy.description,
+      inputSchema: kernelCallPayloadSchema as JsonObject,
+      annotations: {
+        "neutron:effects": ["signature_request", "network", "write"],
+      },
+    },
+    createCanisterCallDialogHandler(name, policy),
+  );
+}
+
+export function preparedCanisterCallAgentAction(
+  canister: string,
+  method: string,
+  reviewArgs: JsonValue[],
+  canonicalReview: boolean,
+): JsonObject {
+  return {
+    canister,
+    method,
+    argumentCount: reviewArgs.length,
+    argumentBytes: jsonPayloadBytes(reviewArgs),
+    ...(canonicalReview ? { arguments: reviewArgs } : {}),
+  };
+}
+
+function createCanisterCallDialogHandler(
+  name: "canister.call_dialog" | "canister.call_dialog_v2",
+  policy: ExternalCanisterPolicy,
+): KernelToolHandler {
+  return async (args, caller, invocation, invocationContext, signal) => {
+    const requestSignal = kernelToolSupportsRequestCancellation(name)
+      ? signal
+      : undefined;
+    const { callerBinding, assertAuthority } = captureSelfCallAuthority(
+      caller,
+      invocationContext,
+      invocation,
+      requestSignal,
+    );
+    assertAuthority();
+    // The compatibility route reviews pre-conversion JSON. Agent decisions
+    // require the exact arguments that dispatch, so fail before live discovery.
+    if (invocation !== null && !policy.canonicalReview) {
+      throw new KernelPolicyError(
+        "INVALID_REQUEST",
+        "Agent-scoped signed calls require canister.call_dialog_v2",
+      );
+    }
     const {
       canister,
       method: logicalMethod,
@@ -731,46 +1004,78 @@ defineKernelTool(
       );
     }
     assertExternalCanisterCallTarget(canister, neutron_id);
-    const target = await getJsonCanister(canister);
-    assertCurrentSignedCallEndpoint(callerBinding, authBinding);
-    assertValidCall(target, logicalMethod, methodArgs);
-    const agentApproved = await authorizeAgentPermission(caller, invocation, {
-      kind: "signed_canister_call",
-      persistence: "none",
-      risk: "high",
-      action: {
-        canister,
-        method: logicalMethod,
-        argumentCount: methodArgs.length,
-        argumentBytes: JSON.stringify(methodArgs).length,
+    if (!isJsonValue(methodArgs)) {
+      throw new KernelPolicyError(
+        "INVALID_REQUEST",
+        "External canister arguments must be JSON values",
+      );
+    }
+    const target = await policy.loadCallTarget(
+      canister,
+      assertAuthority,
+      requestSignal,
+    );
+    assertAuthority();
+    const prepared = await policy.prepareCall(
+      target,
+      logicalMethod,
+      methodArgs as JsonValue[],
+      assertAuthority,
+    );
+    assertAuthority();
+    const agentApproved = await authorizeAgentPermission(
+      caller,
+      invocation,
+      {
+        kind: "signed_canister_call",
+        persistence: "none",
+        risk: "high",
+        action: preparedCanisterCallAgentAction(
+          canister,
+          logicalMethod,
+          prepared.reviewArgs,
+          policy.canonicalReview,
+        ),
       },
-    });
-    assertCurrentSignedCallEndpoint(callerBinding, authBinding);
+      requestSignal,
+    );
+    assertAuthority();
     if (!agentApproved) {
       const mode = verifiedCallMode(target, logicalMethod);
       await callRequest({
         canister,
         method: logicalMethod,
         ...(mode ? { mode } : {}),
-        args: methodArgs,
+        args: prepared.reviewArgs,
+        canonicalArgs: policy.canonicalReview,
         binding: callerBinding,
+        ...(requestSignal ? { signal: requestSignal } : {}),
       });
     }
     // Consent is only authorization to attempt this exact call. The source
-    // endpoint, private session, installation scope, registry generation, and
-    // global frontend authority must all still be current at dispatch time.
-    assertCurrentSignedCallEndpoint(callerBinding, authBinding);
+    // endpoint, private session, installation scope, registry generation,
+    // and global frontend authority must all still be current at dispatch.
+    assertAuthority();
     // A revoked caller receives neither successful nor rejected reply data.
     // The call may still have executed, so the replacement error is explicit
     // that its outcome is unknown.
-    const rawResult = await dispatchSignedCallWithReplyFence(
-      () => target[logicalMethod](...methodArgs),
-      () => assertCurrentSignedCallEndpoint(callerBinding, authBinding),
-    );
-    return assertJsonResult(
-      normalizeCanisterCallResult(toState(rawResult)),
-    );
-  }
+    const rawResult = await dispatchSignedCallWithReplyFence(() => {
+      assertAuthority();
+      return prepared.invoke();
+    }, assertAuthority);
+    return assertJsonResult(normalizeCanisterCallResult(toState(rawResult)));
+  };
+}
+
+defineCanisterSchemaTool("canister.schema", legacyExternalCanisterPolicy);
+defineCanisterSchemaTool("canister.schema_v2", strictExternalCanisterPolicy);
+defineCanisterCallDialogTool(
+  "canister.call_dialog",
+  legacyExternalCanisterPolicy,
+);
+defineCanisterCallDialogTool(
+  "canister.call_dialog_v2",
+  strictExternalCanisterPolicy,
 );
 
 defineKernelTool(
@@ -794,7 +1099,10 @@ defineKernelTool(
                 type: "object",
                 required: ["kind"],
                 properties: {
-                  kind: { type: "string", enum: ["exact", "principal", "method"] },
+                  kind: {
+                    type: "string",
+                    enum: ["exact", "principal", "method"],
+                  },
                   principal: { type: "string", minLength: 3, maxLength: 80 },
                   method: {
                     type: "string",
@@ -813,43 +1121,49 @@ defineKernelTool(
       additionalProperties: false,
     },
     annotations: {
-      "neutron:effects": ["persistent_permission", "network", "user_visible_ui"],
+      "neutron:effects": [
+        "persistent_permission",
+        "network",
+        "user_visible_ui",
+        "write",
+      ],
     },
   },
   (args, caller, invocation) =>
-    requestBackendReservationForEndpoint(
-      args,
-      caller,
-      {
-        authorize: (request) =>
-          authorizeBackendAccess(caller, invocation, request),
-      },
-    )
+    requestBackendReservationForEndpoint(args, caller, {
+      authorize: (request, signal) =>
+        authorizeBackendAccess(caller, invocation, request, signal),
+    }),
 );
 
 function authorizeBackendAccess(
   caller: RegisteredEndpoint,
   invocation: InvocationNode | null,
   request: NormalizedBackendAccessRequest,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   const { actions } = request;
   let risk: AgentPermissionSummary["risk"] = "medium";
   if (
     actions.some(
-      (action) =>
-        action.kind === "reserve" && action.scope.kind !== "exact",
+      (action) => action.kind === "reserve" && action.scope.kind !== "exact",
     )
   ) {
     risk = "high";
   }
-  return authorizeAgentPermission(caller, invocation, {
-    kind: "backend_access",
-    persistence: actions.some((action) => action.kind === "reserve")
-      ? "durable"
-      : "none",
-    risk,
-    action: backendAccessAgentAction(request),
-  });
+  return authorizeAgentPermission(
+    caller,
+    invocation,
+    {
+      kind: "backend_access",
+      persistence: actions.some((action) => action.kind === "reserve")
+        ? "durable"
+        : "none",
+      risk,
+      action: backendAccessAgentAction(request),
+    },
+    signal,
+  );
 }
 
 export function backendAccessAgentAction(
@@ -869,8 +1183,7 @@ export function backendAccessAgentAction(
       },
       ...(action.reservationPresentAtRequest !== undefined
         ? {
-            reservationPresentAtRequest:
-              action.reservationPresentAtRequest,
+            reservationPresentAtRequest: action.reservationPresentAtRequest,
           }
         : {}),
     })),
@@ -903,7 +1216,7 @@ defineKernelTool(
     inputSchema: emptyObjectSchema,
     annotations: { "neutron:effects": ["read"] },
   },
-  (args, caller) => listBackendReservationsForEndpoint(args, caller)
+  (args, caller) => listBackendReservationsForEndpoint(args, caller),
 );
 
 defineKernelTool(
@@ -938,14 +1251,15 @@ defineKernelTool(
       id,
       description: safeDiscoveryText(app.description ?? app.name, 280),
     })),
-  })
+  }),
 );
 
 defineKernelTool(
   "apps.describe",
   {
     title: "Describe Installed App",
-    description: "Return tile, tray, and background metadata for one installed app.",
+    description:
+      "Return tile, tray, and background metadata for one installed app.",
     inputSchema: {
       type: "object",
       required: ["appId"],
@@ -963,7 +1277,7 @@ defineKernelTool(
     outputSchema: { type: "object", required: ["id", "name", "tiles"] },
     annotations: { "neutron:effects": ["read"] },
   },
-  (args) => describeInstalledApp(String(args.appId))
+  (args) => describeInstalledApp(String(args.appId)),
 );
 
 defineKernelTool(
@@ -1026,8 +1340,7 @@ defineKernelTool(
         );
       }
       if (
-        (caller.context.role !== "tile" &&
-          caller.context.role !== "tray") ||
+        (caller.context.role !== "tile" && caller.context.role !== "tray") ||
         (!isFocusedTileCaller(caller) && !isFocusedTrayCaller(caller)) ||
         !hasTransientUserActivation()
       ) {
@@ -1044,10 +1357,7 @@ defineKernelTool(
     const agentRoot = invocation
       ? useAgentModeStore.getState().activeRoot
       : null;
-    if (
-      invocation &&
-      (!agentRoot || agentRoot.id !== invocation.rootId)
-    ) {
+    if (invocation && (!agentRoot || agentRoot.id !== invocation.rootId)) {
       throw new KernelPolicyError(
         "INVOCATION_INVALID",
         "The agent root is no longer active",
@@ -1175,7 +1485,7 @@ defineKernelTool(
             : {}),
       })),
     ],
-  })
+  }),
 );
 
 defineKernelTool(
@@ -1216,7 +1526,8 @@ defineKernelTool(
   "permissions.request",
   {
     title: "Request App Tool Access",
-    description: "Ask the user for a session grant to call another app endpoint.",
+    description:
+      "Ask the user for a session grant to call another app endpoint.",
     inputSchema: {
       type: "object",
       required: ["target", "tool"],
@@ -1235,7 +1546,7 @@ defineKernelTool(
     },
     annotations: { "neutron:effects": ["user_visible_ui"] },
   },
-  async (args, caller, invocation) => {
+  async (args, caller, invocation, _invocationContext, signal) => {
     const target = String(args.target);
     const tool = String(args.tool);
     if (tool !== "*") assertToolName(tool);
@@ -1244,19 +1555,40 @@ defineKernelTool(
     }
     const targetEndpoint = getRegisteredEndpoint(target);
     if (!targetEndpoint) throw new Error(`Unknown endpoint '${target}'`);
+    const assertEndpointsCurrent = (): void => {
+      throwIfRequestCancelled(signal);
+      if (
+        getRegisteredEndpoint(caller.endpointId) !== caller ||
+        getRegisteredEndpoint(target) !== targetEndpoint
+      ) {
+        throw new KernelPolicyError(
+          "REQUEST_CANCELLED",
+          "An app surface changed while permission was pending",
+        );
+      }
+      assertCurrentEndpointVersion(caller);
+      assertCurrentEndpointVersion(targetEndpoint);
+    };
+    assertEndpointsCurrent();
     if (targetEndpoint.context.appId === caller.context.appId) {
       return { granted: true };
     }
-    const agentApproved = await authorizeAgentPermission(caller, invocation, {
-      kind: "frontend_tool",
-      persistence: "none",
-      risk: "medium",
-      action: {
-        targetAppId: targetEndpoint.context.appId,
-        targetRole: targetEndpoint.context.role,
-        tool,
+    const agentApproved = await authorizeAgentPermission(
+      caller,
+      invocation,
+      {
+        kind: "frontend_tool",
+        persistence: "none",
+        risk: "medium",
+        action: {
+          targetAppId: targetEndpoint.context.appId,
+          targetRole: targetEndpoint.context.role,
+          tool,
+        },
       },
-    });
+      signal,
+    );
+    assertEndpointsCurrent();
     if (!agentApproved) {
       await requestFrontendToolPermission({
         caller: callerContext(caller),
@@ -1268,10 +1600,12 @@ defineKernelTool(
         tool,
         arguments: isJsonObject(args.arguments) ? args.arguments : {},
         sessionOnly: true,
+        ...(signal ? { signal } : {}),
       });
+      assertEndpointsCurrent();
     }
     return { granted: true };
-  }
+  },
 );
 
 defineKernelTool(
@@ -1285,9 +1619,9 @@ defineKernelTool(
   },
   (_args, caller) => ({
     entries: listMsgBusAudit().filter(
-      (entry) => entry.caller.appId === caller.context.appId
+      (entry) => entry.caller.appId === caller.context.appId,
     ),
-  })
+  }),
 );
 
 defineKernelTool(
@@ -1413,13 +1747,13 @@ defineKernelTool(
     focusTileElement(instance.id);
     if (view) queueTileView(appId, tileId, instance.id, view);
     return { instanceId: instance.id, workspace, opened: true };
-  }
+  },
 );
 
 function findOpenAppTile(
   appId: string,
   tileId: string,
-  requestedWorkspace: WorkspaceId | null
+  requestedWorkspace: WorkspaceId | null,
 ): { instanceId: string; workspace: WorkspaceId } | null {
   const state = useWorkspaceStore.getState();
   const order = requestedWorkspace
@@ -1432,8 +1766,7 @@ function findOpenAppTile(
       ];
   for (const workspace of order) {
     const instance = workspaceStateById(state.workspaces, workspace).tiles.find(
-      (candidate) =>
-        candidate.appId === appId && candidate.tileId === tileId
+      (candidate) => candidate.appId === appId && candidate.tileId === tileId,
     );
     if (instance) return { instanceId: instance.id, workspace };
   }
@@ -1459,10 +1792,7 @@ function normalizeInstallOffer(
       reference: Object.freeze({ ...reference }),
     });
   }
-  throw new KernelPolicyError(
-    "INVALID_REQUEST",
-    "Unknown install offer kind",
-  );
+  throw new KernelPolicyError("INVALID_REQUEST", "Unknown install offer kind");
 }
 
 function assertInstallOfferFlowsIdle(): void {
@@ -1476,10 +1806,7 @@ function assertInstallOfferFlowsIdle(): void {
     apps.pendingInstallRecovery ||
     apps.runtimeAuthorityFence
   ) {
-    throw new KernelPolicyError(
-      "UI_BUSY",
-      "Another app operation is active",
-    );
+    throw new KernelPolicyError("UI_BUSY", "Another app operation is active");
   }
   const repository = useRepositorySetupStore.getState();
   if (repository.phase !== "idle" || repository.reference) {
@@ -1506,8 +1833,7 @@ function isFocusedTileCaller(caller: RegisteredEndpoint): boolean {
   return (
     state.activeWorkspaceId === caller.context.workspace &&
     workspaceStateById(state.workspaces, state.activeWorkspaceId)
-      .focusedTileId ===
-      caller.context.instanceId
+      .focusedTileId === caller.context.instanceId
   );
 }
 
@@ -1521,7 +1847,8 @@ function isFocusedTrayCaller(caller: RegisteredEndpoint): boolean {
   }
   const active = document.activeElement;
   return (
-    active instanceof HTMLIFrameElement && active.contentWindow === caller.source
+    active instanceof HTMLIFrameElement &&
+    active.contentWindow === caller.source
   );
 }
 
@@ -1530,10 +1857,7 @@ function hasTransientUserActivation(): boolean {
   return navigator.userActivation?.isActive === true;
 }
 
-function focusOpenAppTile(
-  workspace: WorkspaceId,
-  instanceId: string
-): void {
+function focusOpenAppTile(workspace: WorkspaceId, instanceId: string): void {
   useWorkspaceStore.getState().switchWorkspace(workspace);
   useWorkspaceStore.getState().focusTile(instanceId);
   focusTileElement(instanceId);
@@ -1541,8 +1865,9 @@ function focusOpenAppTile(
 
 function focusTileElement(instanceId: string, attempt = 0): void {
   if (typeof document === "undefined" || typeof window === "undefined") return;
-  const frame = [...document.querySelectorAll<HTMLIFrameElement>("iframe.tile-iframe")]
-    .find((candidate) => candidate.dataset.instanceId === instanceId);
+  const frame = [
+    ...document.querySelectorAll<HTMLIFrameElement>("iframe.tile-iframe"),
+  ].find((candidate) => candidate.dataset.instanceId === instanceId);
   if (frame) {
     frame.focus();
     frame.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -1557,7 +1882,7 @@ function queueTileView(
   appId: string,
   tileId: string,
   instanceId: string,
-  view: string
+  view: string,
 ): void {
   const endpointId = `app:${appId}:tile:${tileId}:instance:${instanceId}`;
   if (pendingTileViews.size >= MAX_PENDING_TILE_VIEWS) {
@@ -1610,10 +1935,7 @@ function describeInstalledApp(appId: string): JsonObject {
       ? {
           ...(app.background.description
             ? {
-                description: safeDiscoveryText(
-                  app.background.description,
-                  280
-                ),
+                description: safeDiscoveryText(app.background.description, 280),
               }
             : {}),
         }
@@ -1765,13 +2087,18 @@ async function executeBinarySelfMethod(
   reservation: AttachmentCapacityReservation,
   invocationContext?: MsgBusInvocationMetadata,
   boundInvocation: InvocationNode | null = null,
+  signal?: AbortSignal,
 ): Promise<BinarySelfCallResult> {
   const { callerBinding, assertAuthority } = captureSelfCallAuthority(
     caller,
     invocationContext,
     boundInvocation,
+    signal,
   );
   assertAuthority();
+  if (request.tool === "canister.call_dialog") {
+    assertScopedContextForActiveAppInvocation(caller, boundInvocation);
+  }
   const prepared = await prepareBinarySelfMethod(
     caller,
     request.tool,
@@ -1790,9 +2117,7 @@ async function executeBinarySelfMethod(
         "Agents cannot invoke app backend methods through the self-call dialog",
       );
     }
-    const inspections = await inspectBoundSelfCallBlobs(
-      prepared.boundBlobs,
-    );
+    const inspections = await inspectBoundSelfCallBlobs(prepared.boundBlobs);
     assertAuthority();
     await callRequest({
       canister: neutron_id,
@@ -1801,16 +2126,15 @@ async function executeBinarySelfMethod(
       args: prepared.reviewArgs,
       ...(inspections.length > 0
         ? {
-            binaryFields: inspections.map(
-              ({ path, byteLength, sha256 }) => ({
-                path,
-                byteLength,
-                sha256,
-              }),
-            ),
+            binaryFields: inspections.map(({ path, byteLength, sha256 }) => ({
+              path,
+              byteLength,
+              sha256,
+            })),
           }
         : {}),
       binding: callerBinding,
+      ...(signal ? { signal } : {}),
     });
     assertAuthority();
   }
@@ -1819,35 +2143,27 @@ async function executeBinarySelfMethod(
   assertAuthority();
   let rawReply: Uint8Array;
   if (prepared.mode === "query") {
-    const response = await dispatchSignedCallWithReplyFence(
-      () =>
-        {
-          assertAuthority();
-          return agent.query(neutron_id, {
-            methodName: prepared.method,
-            arg: prepared.rawInput,
-          });
-        },
-      assertAuthority,
-    );
+    const response = await dispatchSignedCallWithReplyFence(() => {
+      assertAuthority();
+      return agent.query(neutron_id, {
+        methodName: prepared.method,
+        arg: prepared.rawInput,
+      });
+    }, assertAuthority);
     if (response.status !== QueryResponseStatus.Replied) {
       throw new Error("Self-call query was rejected by the canister");
     }
     rawReply = response.reply.arg;
   } else {
-    rawReply = await dispatchSignedCallWithReplyFence(
-      () =>
-        {
-          assertAuthority();
-          return submitRawSelfUpdate(
-            agent,
-            neutron_id,
-            prepared.method,
-            prepared.rawInput,
-          );
-        },
-      assertAuthority,
-    );
+    rawReply = await dispatchSignedCallWithReplyFence(() => {
+      assertAuthority();
+      return submitRawSelfUpdate(
+        agent,
+        neutron_id,
+        prepared.method,
+        prepared.rawInput,
+      );
+    }, assertAuthority);
   }
 
   const measured = preflightSelfCallReply(
@@ -1860,10 +2176,7 @@ async function executeBinarySelfMethod(
   }
   if (
     measured.blobCount > 0 &&
-    isSelfCallDomainErrorResult(
-      decoded[0],
-      prepared.candidMethod.retTypes[0]!,
-    )
+    isSelfCallDomainErrorResult(decoded[0], prepared.candidMethod.retTypes[0]!)
   ) {
     throw protectedBinarySelfCallDomainError({
       count: measured.blobCount,
@@ -1901,6 +2214,7 @@ function captureSelfCallAuthority(
   caller: RegisteredEndpoint,
   invocationContext?: MsgBusInvocationMetadata,
   boundInvocation: InvocationNode | null = null,
+  signal?: AbortSignal,
 ): {
   callerBinding: SignedCallEndpointBinding;
   assertAuthority: () => void;
@@ -1913,6 +2227,7 @@ function captureSelfCallAuthority(
     principal: callerAuth.principal,
   });
   const assertAuthority = (): void => {
+    throwIfRequestCancelled(signal);
     assertCurrentSignedCallEndpoint(callerBinding, authBinding);
     if ((invocationContext === undefined) !== (boundInvocation === null)) {
       throw new KernelPolicyError(
@@ -1939,6 +2254,7 @@ async function executeBinaryBackendAccessRequest(
   reservation: AttachmentCapacityReservation,
   invocationContext?: MsgBusInvocationMetadata,
   boundInvocation: InvocationNode | null = null,
+  signal?: AbortSignal,
 ): Promise<BinarySelfCallResult> {
   if (
     request.tool !== "backend_calls.request" ||
@@ -1950,16 +2266,14 @@ async function executeBinaryBackendAccessRequest(
     caller,
     invocationContext,
     boundInvocation,
+    signal,
   );
   let inputBinary = selfCallBlobStats(request.blobs);
   let outputBinary = { count: 0, bytes: 0 };
   let outputBlobs: SelfCallWireBlob[] = [];
   let mode: PreapprovedSelfCallType | null = null;
 
-  const validate = async (
-    method: string,
-    args: JsonValue[],
-  ) => {
+  const validate = async (method: string, args: JsonValue[]) => {
     if (method !== request.method) {
       throw new Error("Attachment-aware backend call binding changed");
     }
@@ -1975,21 +2289,17 @@ async function executeBinaryBackendAccessRequest(
     mode = prepared.mode;
     reservation.resize(selfCallReservationBytes(inputBinary.bytes));
     reservation.retainUntilSettlement();
-    const inspections = await inspectBoundSelfCallBlobs(
-      prepared.boundBlobs,
-    );
+    const inspections = await inspectBoundSelfCallBlobs(prepared.boundBlobs);
     assertAuthority();
     return {
       args: prepared.reviewArgs,
       ...(inspections.length > 0
         ? {
-            binaryFields: inspections.map(
-              ({ path, byteLength, sha256 }) => ({
-                path,
-                byteLength,
-                sha256,
-              }),
-            ),
+            binaryFields: inspections.map(({ path, byteLength, sha256 }) => ({
+              path,
+              byteLength,
+              sha256,
+            })),
           }
         : {}),
     };
@@ -2014,6 +2324,7 @@ async function executeBinaryBackendAccessRequest(
             reservation,
             invocationContext,
             boundInvocation,
+            signal,
           );
           mode = result.mode;
           outputBinary = result.outputBinary;
@@ -2023,17 +2334,22 @@ async function executeBinaryBackendAccessRequest(
           }));
           return result.value;
         } catch (error) {
-          outputBinary =
-            protectedBinarySelfCallStats(error) ?? {
-              count: 0,
-              bytes: 0,
-            };
+          outputBinary = protectedBinarySelfCallStats(error) ?? {
+            count: 0,
+            bytes: 0,
+          };
           throw error;
         }
       },
-      authorize: (normalized) =>
-        authorizeBackendAccess(caller, boundInvocation, normalized),
+      authorize: (normalized, requestSignal) =>
+        authorizeBackendAccess(
+          caller,
+          boundInvocation,
+          normalized,
+          requestSignal,
+        ),
     },
+    signal,
   );
   if (mode === null) {
     throw new Error("Attachment-aware backend call mode was not resolved");
@@ -2053,7 +2369,9 @@ async function invokeKernelTool(
   caller: RegisteredEndpoint,
   invocation: InvocationNode | null = null,
   invocationContext?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
 ): Promise<JsonValue> {
+  throwIfRequestCancelled(signal);
   const tool = kernelTools.get(name);
   if (!tool) throw new Error(`Unknown kernel tool '${name}'`);
   validateToolArguments(tool.descriptor, args);
@@ -2062,7 +2380,9 @@ async function invokeKernelTool(
     caller,
     invocation,
     invocationContext,
+    signal,
   );
+  throwIfRequestCancelled(signal);
   assertBoundedJson(result, `Kernel tool '${name}' result`);
   validateToolResult(tool.descriptor, result);
   return result;
@@ -2072,7 +2392,9 @@ export async function listTargetTools(
   target: MsgBusEndpointId,
   caller: RegisteredEndpoint,
   invocation: InvocationNode | null = null,
+  signal?: AbortSignal,
 ): Promise<MsgBusToolDescriptor[]> {
+  throwIfRequestCancelled(signal);
   if (target === "kernel") {
     return [...kernelTools.values()].map(({ descriptor }) => descriptor);
   }
@@ -2086,23 +2408,35 @@ export async function listTargetTools(
       "Tray popouts are unavailable to delegated agent calls",
     );
   }
-  await authorizeEndpointAccess(caller, endpoint, "*", {}, invocation);
+  await authorizeEndpointAccess(
+    caller,
+    endpoint,
+    "*",
+    {},
+    invocation,
+    undefined,
+    signal,
+  );
   const value = await execEndpoint(
     endpoint,
     msgBusLocalActions.toolsList,
     null,
-    10
+    10,
+    undefined,
+    undefined,
+    signal,
   );
   if (!Array.isArray(value) || value.length > MAX_ENDPOINT_TOOLS) {
     throw new Error("Invalid endpoint tool list");
   }
   const descriptors = value.map((descriptor) => {
-    if (!isJsonObject(descriptor)) throw new Error("Invalid endpoint tool descriptor");
+    if (!isJsonObject(descriptor))
+      throw new Error("Invalid endpoint tool descriptor");
     return normalizeToolDescriptor(descriptor as MsgBusToolDescriptor);
   });
   rememberEndpointAuditProfiles(endpoint, descriptors);
   return descriptors.filter((descriptor) =>
-    endpointToolVisibleToCaller(descriptor, caller, endpoint)
+    endpointToolVisibleToCaller(descriptor, caller, endpoint),
   );
 }
 
@@ -2146,90 +2480,103 @@ export async function routeToolCall(
   reportProgress?: (value: JsonValue) => void,
   metadata?: MsgBusInvocationMetadata,
   control?: NeutronToolControlMode,
+  signal?: AbortSignal,
 ): Promise<JsonValue> {
+  throwIfRequestCancelled(signal);
   assertCurrentEndpointVersion(caller);
   const invocationContext = captureInvocationContext(metadata);
+  const requestSignal =
+    call.target !== "kernel" || kernelToolSupportsRequestCancellation(call.name)
+      ? signal
+      : undefined;
   if (control && call.target === "kernel") {
     throw new Error("Kernel tools are unavailable through the control lane");
   }
-  return withCallerConcurrency(caller, async () => {
-    const invocation = resolveInvocation(caller, invocationContext);
-    const startedAt = performance.now();
-    const args = call.arguments ?? {};
-    try {
-      const result =
-        call.target === "kernel"
-          ? await invokeKernelTool(
-              call.name,
-              args,
-              caller,
-              invocation,
-              invocationContext,
-            )
-          : await invokeEndpointTool(
-              call.target,
-              call.name,
-              args,
-              caller,
-              reportProgress,
-              invocation,
-              control,
-            );
-      const metadataOnly = toolUsesMetadataOnlyAudit(call);
-      recordMsgBusAudit({
-        caller: callerContext(caller),
-        target: call.target,
-        tool: call.name,
-        status: "ok",
-        durationMs: Math.round(performance.now() - startedAt),
-        arguments: auditToolArguments(call, args, metadataOnly),
-        ...(metadataOnly
-          ? {
-              metadataBytes: {
-                input: jsonPayloadBytes(args),
-                output: jsonPayloadBytes(result),
-              },
-            }
-          : {}),
-        ...(!metadataOnly
-          ? {
-              result:
-                call.target === "kernel" &&
-                call.name === "attachments.delegate"
-                  ? {
-                      delegationIssued:
-                        isJsonObject(result) &&
-                        typeof result.token === "string",
-                    }
-                  : result,
-            }
-          : {}),
-      });
-      return result;
-    } catch (error) {
-      const metadataOnly = toolUsesMetadataOnlyAudit(call);
-      recordMsgBusAudit({
-        caller: callerContext(caller),
-        target: call.target,
-        tool: call.name,
-        status: "error",
-        durationMs: Math.round(performance.now() - startedAt),
-        arguments: auditToolArguments(call, args, metadataOnly),
-        ...(metadataOnly
-          ? {
-              metadataBytes: {
-                input: jsonPayloadBytes(args),
-                output: 0,
-              },
-            }
-          : {}),
-        error: metadataOnly
-          ? "Metadata-only tool call failed"
-          : errorMessage(error),
-      });
-      throw error;
-    }
-  }, control ? "control" : "ordinary");
+  return withCallerConcurrency(
+    caller,
+    async () => {
+      const invocation = resolveInvocation(caller, invocationContext);
+      const startedAt = performance.now();
+      const args = call.arguments ?? {};
+      try {
+        const result =
+          call.target === "kernel"
+            ? await invokeKernelTool(
+                call.name,
+                args,
+                caller,
+                invocation,
+                invocationContext,
+                requestSignal,
+              )
+            : await invokeEndpointTool(
+                call.target,
+                call.name,
+                args,
+                caller,
+                reportProgress,
+                invocation,
+                control,
+                requestSignal,
+              );
+        throwIfRequestCancelled(requestSignal);
+        const metadataOnly = toolUsesMetadataOnlyAudit(call);
+        recordMsgBusAudit({
+          caller: callerContext(caller),
+          target: call.target,
+          tool: call.name,
+          status: "ok",
+          durationMs: Math.round(performance.now() - startedAt),
+          arguments: auditToolArguments(call, args, metadataOnly),
+          ...(metadataOnly
+            ? {
+                metadataBytes: {
+                  input: jsonPayloadBytes(args),
+                  output: jsonPayloadBytes(result),
+                },
+              }
+            : {}),
+          ...(!metadataOnly
+            ? {
+                result:
+                  call.target === "kernel" &&
+                  call.name === "attachments.delegate"
+                    ? {
+                        delegationIssued:
+                          isJsonObject(result) &&
+                          typeof result.token === "string",
+                      }
+                    : result,
+              }
+            : {}),
+        });
+        return result;
+      } catch (error) {
+        const metadataOnly = toolUsesMetadataOnlyAudit(call);
+        recordMsgBusAudit({
+          caller: callerContext(caller),
+          target: call.target,
+          tool: call.name,
+          status: "error",
+          durationMs: Math.round(performance.now() - startedAt),
+          arguments: auditToolArguments(call, args, metadataOnly),
+          ...(metadataOnly
+            ? {
+                metadataBytes: {
+                  input: jsonPayloadBytes(args),
+                  output: 0,
+                },
+              }
+            : {}),
+          error: metadataOnly
+            ? "Metadata-only tool call failed"
+            : errorMessage(error),
+        });
+        throw error;
+      }
+    },
+    control ? "control" : "ordinary",
+  );
 }
 
 function auditToolArguments(
@@ -2238,16 +2585,16 @@ function auditToolArguments(
   metadataOnly = false,
 ): JsonObject {
   if (metadataOnly) {
-    const metadataBytes =
-      new TextEncoder().encode(JSON.stringify(args)).byteLength;
+    const metadataBytes = new TextEncoder().encode(
+      JSON.stringify(args),
+    ).byteLength;
     if (
       call.target === "kernel" &&
       (call.name === "canister.query_self" ||
         call.name === "canister.update_self")
     ) {
       return {
-        method:
-          typeof args.method === "string" ? args.method : "invalid",
+        method: typeof args.method === "string" ? args.method : "invalid",
         mode: call.name.includes("query") ? "query" : "update",
         metadataBytes,
       };
@@ -2271,15 +2618,13 @@ function toolUsesMetadataOnlyAudit(
 ): boolean {
   if (call.target === "kernel") {
     return (
-      kernelTools
-        .get(call.name)
-        ?.descriptor.annotations?.["neutron:audit"] === "metadata_only"
+      kernelTools.get(call.name)?.descriptor.annotations?.["neutron:audit"] ===
+      "metadata_only"
     );
   }
   const endpoint = getRegisteredEndpoint(call.target);
   return Boolean(
-    endpoint &&
-      endpointMetadataOnlyTools.get(endpoint)?.has(call.name),
+    endpoint && endpointMetadataOnlyTools.get(endpoint)?.has(call.name),
   );
 }
 
@@ -2294,7 +2639,8 @@ export async function routeAttachmentToolCall(
   assertCurrentEndpointVersion(caller);
   assertToolAttachmentArray(attachments);
   const ownedReservation =
-    reservation ?? acquireAttachmentCapacity(caller, attachmentBytes(attachments));
+    reservation ??
+    acquireAttachmentCapacity(caller, attachmentBytes(attachments));
   try {
     return await withCallerConcurrency(caller, async () => {
       const invocation = resolveInvocation(caller, metadata);
@@ -2383,7 +2729,9 @@ async function invokeEndpointTool(
   reportProgress?: (value: JsonValue) => void,
   invocation: InvocationNode | null = null,
   control?: NeutronToolControlMode,
+  signal?: AbortSignal,
 ): Promise<JsonValue> {
+  throwIfRequestCancelled(signal);
   const endpoint = getRegisteredEndpoint(target);
   if (!endpoint) throw new Error(`Unknown endpoint '${target}'`);
   assertCurrentEndpointVersion(endpoint);
@@ -2392,7 +2740,9 @@ async function invokeEndpointTool(
     (caller.context.appId !== endpoint.context.appId ||
       !sameAppScope(caller.appScope, endpoint.appScope))
   ) {
-    throw new Error("Control tool calls must remain within one app installation");
+    throw new Error(
+      "Control tool calls must remain within one app installation",
+    );
   }
   let targetInvocation: InvocationNode | null = null;
   if (!invocation && !control) {
@@ -2402,12 +2752,12 @@ async function invokeEndpointTool(
       tool: name,
       ownerPrincipal: useAuthStore.getState().principal,
       installedVersion: requireInstalledAppVersion(endpoint.context.appId),
-      activated:
-        isFocusedTileCaller(caller) && hasTransientUserActivation(),
+      activated: isFocusedTileCaller(caller) && hasTransientUserActivation(),
     });
   }
   try {
-    const descriptors = await readEndpointTools(endpoint);
+    const descriptors = await readEndpointTools(endpoint, signal);
+    throwIfRequestCancelled(signal);
     const descriptor = descriptors.find((candidate) => candidate.name === name);
     if (
       !descriptor ||
@@ -2415,13 +2765,8 @@ async function invokeEndpointTool(
     ) {
       throw new Error(`Unknown tool '${name}' on '${target}'`);
     }
-    if (
-      control &&
-      descriptor.annotations?.["neutron:control"] !== control
-    ) {
-      throw new Error(
-        `Tool '${name}' is not declared as ${control} control`,
-      );
+    if (control && descriptor.annotations?.["neutron:control"] !== control) {
+      throw new Error(`Tool '${name}' is not declared as ${control} control`);
     }
     const effectiveInvocation = invocation ?? targetInvocation;
     await authorizeEndpointAccess(
@@ -2430,7 +2775,10 @@ async function invokeEndpointTool(
       descriptor,
       args,
       effectiveInvocation,
+      undefined,
+      signal,
     );
+    throwIfRequestCancelled(signal);
     if (parseToolAttachmentContract(descriptor)) {
       throw attachmentError(
         "ATTACHMENT_API_REQUIRED",
@@ -2456,7 +2804,9 @@ async function invokeEndpointTool(
       targetInvocation
         ? invocationMetadata(targetInvocation, targetInvocation.depth === 0)
         : undefined,
+      signal,
     );
+    throwIfRequestCancelled(signal);
     assertBoundedJson(result, `Tool '${name}' result`);
     validateToolResult(descriptor, result);
     return result;
@@ -2571,12 +2921,18 @@ async function invokeEndpointAttachmentTool(
   }
 }
 
-function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+function raceWithAbort<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
   if (signal.aborted) {
     return Promise.reject(
       signal.reason instanceof Error
         ? signal.reason
-        : attachmentError("ATTACHMENT_CANCELLED", "Attachment call was cancelled"),
+        : attachmentError(
+            "ATTACHMENT_CANCELLED",
+            "Attachment call was cancelled",
+          ),
     );
   }
   return new Promise<T>((resolve, reject) => {
@@ -2604,19 +2960,24 @@ function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T
 }
 
 async function readEndpointTools(
-  endpoint: RegisteredEndpoint
+  endpoint: RegisteredEndpoint,
+  signal?: AbortSignal,
 ): Promise<MsgBusToolDescriptor[]> {
   const value = await execEndpoint(
     endpoint,
     msgBusLocalActions.toolsList,
     null,
-    10
+    10,
+    undefined,
+    undefined,
+    signal,
   );
   if (!Array.isArray(value) || value.length > MAX_ENDPOINT_TOOLS) {
     throw new Error("Invalid endpoint tool list");
   }
   const descriptors = value.map((descriptor) => {
-    if (!isJsonObject(descriptor)) throw new Error("Invalid endpoint tool descriptor");
+    if (!isJsonObject(descriptor))
+      throw new Error("Invalid endpoint tool descriptor");
     return normalizeToolDescriptor(descriptor as MsgBusToolDescriptor);
   });
   rememberEndpointAuditProfiles(endpoint, descriptors);
@@ -2664,7 +3025,9 @@ async function authorizeEndpointAccess(
   args: JsonObject,
   invocation: InvocationNode | null = null,
   attachmentBytes?: { input: number; maximumOutput: number },
+  signal?: AbortSignal,
 ): Promise<void> {
+  throwIfRequestCancelled(signal);
   const tool = typeof descriptor === "string" ? descriptor : descriptor.name;
   if (caller.context.appId === target.context.appId) return;
   if (
@@ -2673,29 +3036,35 @@ async function authorizeEndpointAccess(
       caller.sessionId,
       target.endpointId,
       target.sessionId,
-      tool
+      tool,
     )
   ) {
     return;
   }
-  const agentApproved = await authorizeAgentPermission(caller, invocation, {
-    kind: "frontend_tool",
-    persistence: "none",
-    risk: "medium",
-    action: {
-      targetAppId: target.context.appId,
-      targetRole: target.context.role,
-      tool,
-      argumentCount: Object.keys(args).length,
-      argumentBytes: JSON.stringify(args).length,
-      ...(attachmentBytes
-        ? {
-            attachmentInputBytes: attachmentBytes.input,
-            attachmentMaximumOutputBytes: attachmentBytes.maximumOutput,
-          }
-        : {}),
+  const agentApproved = await authorizeAgentPermission(
+    caller,
+    invocation,
+    {
+      kind: "frontend_tool",
+      persistence: "none",
+      risk: "medium",
+      action: {
+        targetAppId: target.context.appId,
+        targetRole: target.context.role,
+        tool,
+        argumentCount: Object.keys(args).length,
+        argumentBytes: JSON.stringify(args).length,
+        ...(attachmentBytes
+          ? {
+              attachmentInputBytes: attachmentBytes.input,
+              attachmentMaximumOutputBytes: attachmentBytes.maximumOutput,
+            }
+          : {}),
+      },
     },
-  });
+    signal,
+  );
+  throwIfRequestCancelled(signal);
   if (agentApproved) {
     assertCurrentEndpointVersion(caller);
     assertCurrentEndpointVersion(target);
@@ -2715,7 +3084,9 @@ async function authorizeEndpointAccess(
       : {}),
     arguments: args,
     ...(attachmentBytes ? { attachmentBytes } : {}),
+    ...(signal ? { signal } : {}),
   });
+  throwIfRequestCancelled(signal);
   assertCurrentEndpointVersion(caller);
   assertCurrentEndpointVersion(target);
 }
@@ -2724,20 +3095,22 @@ async function authorizeAgentPermission(
   caller: RegisteredEndpoint,
   invocation: InvocationNode | null,
   summary: AgentPermissionSummary,
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  throwIfRequestCancelled(signal);
   if (invocation) {
     if (isDirectAgentInvocation(invocation)) return true;
-    await requestAgentConsent(invocation, summary, (challenge) =>
-      dispatchAgentConsent(invocation, challenge),
+    await requestAgentConsent(
+      invocation,
+      summary,
+      (challenge, decisionSignal) =>
+        dispatchAgentConsent(invocation, challenge, decisionSignal),
+      signal,
     );
+    throwIfRequestCancelled(signal);
     return true;
   }
-  if (hasActiveInvocationForApp(caller.context.appId)) {
-    throw new KernelPolicyError(
-      "SCOPED_CONTEXT_REQUIRED",
-      "Nested app calls must use context.kernel",
-    );
-  }
+  assertScopedContextForActiveAppInvocation(caller, invocation);
   if (caller.context.role === "background") {
     const category =
       summary.kind === "frontend_tool"
@@ -2761,6 +3134,17 @@ async function authorizeAgentPermission(
     }
   }
   return false;
+}
+
+function assertScopedContextForActiveAppInvocation(
+  caller: RegisteredEndpoint,
+  invocation: InvocationNode | null,
+): void {
+  if (invocation || !hasActiveInvocationForApp(caller.context.appId)) return;
+  throw new KernelPolicyError(
+    "SCOPED_CONTEXT_REQUIRED",
+    "Nested app calls must use context.kernel",
+  );
 }
 
 function assertAppTileCapacity(
@@ -2794,6 +3178,7 @@ function assertAppTileCapacity(
 async function dispatchAgentConsent(
   invocation: InvocationNode,
   challenge: import("neutron-tools/protocol").AgentConsentChallenge,
+  signal?: AbortSignal,
 ): Promise<import("neutron-tools/protocol").AgentConsentDecision> {
   const root = rootEndpoint(invocation);
   const endpoint = getRegisteredEndpoint(root.endpointId);
@@ -2808,6 +3193,9 @@ async function dispatchAgentConsent(
     msgBusLocalActions.agentConsentDecide,
     challenge,
     30,
+    undefined,
+    undefined,
+    signal,
   );
   if (
     !isJsonObject(result) ||
@@ -2829,19 +3217,19 @@ async function execEndpoint(
   timeout: number,
   reportProgress?: (value: JsonValue) => void,
   metadata?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
 ): Promise<JsonValue> {
   const options =
-    reportProgress || metadata
+    reportProgress || metadata || signal
       ? {
           timeout,
           ...(reportProgress ? { onProgress: reportProgress } : {}),
-          ...(metadata
-            ? { transportContext: { invocation: metadata } }
-            : {}),
+          ...(metadata ? { transportContext: { invocation: metadata } } : {}),
+          ...(signal ? { signal } : {}),
         }
       : timeout;
   if (endpoint.port) return execPort(endpoint.port, action, payload, options);
-  const port = await waitForFrameEndpointPort(endpoint, timeout);
+  const port = await waitForFrameEndpointPort(endpoint, timeout, signal);
   return execPort(port, action, payload, options);
 }
 
@@ -2850,8 +3238,7 @@ async function withCallerConcurrency<T>(
   operation: () => Promise<T>,
   lane: "ordinary" | "control" = "ordinary",
 ): Promise<T> {
-  const calls =
-    lane === "control" ? controlInFlightByCaller : inFlightByCaller;
+  const calls = lane === "control" ? controlInFlightByCaller : inFlightByCaller;
   const maximum =
     lane === "control"
       ? MAX_CONCURRENT_CONTROL_CALLS_PER_ENDPOINT
@@ -2876,55 +3263,59 @@ async function withCallerConcurrency<T>(
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
-  if (
-    isJsonObject(error) &&
-    typeof error.message === "string"
-  ) {
+  if (isJsonObject(error) && typeof error.message === "string") {
     return error.message;
   }
   return String(error);
 }
 
-expose(
-  "tools.call",
-  async (payload, context) =>
-    routeToolCall(
-      assertToolCall(payload),
-      verifiedEndpoint(context),
-      context.reportProgress,
-      context.invocation,
-    )
+expose("tools.call", async (payload, context) =>
+  routeToolCall(
+    assertToolCall(payload),
+    verifiedEndpoint(context),
+    context.reportProgress,
+    context.invocation,
+    undefined,
+    context.signal,
+  ),
 );
 
-expose(
-  "tools.call.control",
-  async (payload, context) => {
-    const caller = verifiedEndpoint(context);
-    if (context.invocation) {
-      throw new KernelPolicyError(
-        "INVOCATION_INVALID",
-        "Delegated calls cannot use the frontend control lane",
-      );
-    }
-    return routeToolCall(
-      assertToolCall(payload),
-      caller,
-      context.reportProgress,
-      undefined,
-      NEUTRON_TOOL_CONTROL_CANCEL,
+expose("tools.call.control", async (payload, context) => {
+  const caller = verifiedEndpoint(context);
+  if (context.invocation) {
+    throw new KernelPolicyError(
+      "INVOCATION_INVALID",
+      "Delegated calls cannot use the frontend control lane",
     );
-  },
-);
+  }
+  return routeToolCall(
+    assertToolCall(payload),
+    caller,
+    context.reportProgress,
+    undefined,
+    NEUTRON_TOOL_CONTROL_CANCEL,
+    context.signal,
+  );
+});
 
 expose("tools.list", async (payload, context) => {
   const endpoint = verifiedEndpoint(context);
   const invocation = resolveInvocation(endpoint, context.invocation);
   return withCallerConcurrency(endpoint, () =>
-    listTargetTools(assertToolsListPayload(payload), endpoint, invocation)
+    listTargetTools(
+      assertToolsListPayload(payload),
+      endpoint,
+      invocation,
+      context.signal,
+    ),
   );
 });
 
-for (const action of ["apps.list", "apps.describe", "endpoints.list"] as const) {
+for (const action of [
+  "apps.list",
+  "apps.describe",
+  "endpoints.list",
+] as const) {
   expose(action, async (payload, context) => {
     const endpoint = verifiedEndpoint(context);
     if (!isJsonObject(payload)) throw new Error(`Invalid ${action} payload`);
@@ -2933,18 +3324,24 @@ for (const action of ["apps.list", "apps.describe", "endpoints.list"] as const) 
       payload,
       endpoint,
       resolveInvocation(endpoint, context.invocation),
+      context.invocation,
+      context.signal,
     );
   });
 }
 
 expose("permissions.request", async (payload, context) => {
   const endpoint = verifiedEndpoint(context);
-  if (!isJsonObject(payload)) throw new Error("Invalid permissions.request payload");
+  if (!isJsonObject(payload)) {
+    throw new Error("Invalid permissions.request payload");
+  }
   return invokeKernelTool(
     "permissions.request",
     payload,
     endpoint,
     resolveInvocation(endpoint, context.invocation),
+    context.invocation,
+    context.signal,
   );
 });
 
@@ -2973,14 +3370,17 @@ expose("agent.mode.request", async (payload, context) => {
       "Enable agent mode from the focused agent tile",
     );
   }
-  await requestAgentGrant({
-    appId: endpoint.context.appId,
-    appName: app.name,
-    version: app.version,
-    installationUid: endpoint.appScope!.installationUid,
-    entrypoint: payload.entrypoint,
-    ownerPrincipal: useAuthStore.getState().principal,
-  });
+  await requestAgentGrant(
+    {
+      appId: endpoint.context.appId,
+      appName: app.name,
+      version: app.version,
+      installationUid: endpoint.appScope!.installationUid,
+      entrypoint: payload.entrypoint,
+      ownerPrincipal: useAuthStore.getState().principal,
+    },
+    context.signal,
+  );
   return agentStatus(endpoint.context.appId);
 });
 
@@ -3286,33 +3686,85 @@ expose("connections.disconnect", (payload, context) => {
   const endpoint = verifiedEndpoint(context);
   const invocation = resolveInvocation(endpoint, context.invocation);
   return withCallerConcurrency(endpoint, () =>
-    disconnectConnectionForEndpoint(
-      payload,
-      endpoint,
-      (request) =>
-        authorizeAgentPermission(endpoint, invocation, {
-          kind: "connection",
-          persistence: "durable",
-          risk: "medium",
-          action: request,
-        }),
+    disconnectConnectionForEndpoint(payload, endpoint, (request) =>
+      authorizeAgentPermission(endpoint, invocation, {
+        kind: "connection",
+        persistence: "durable",
+        risk: "medium",
+        action: request,
+      }),
     ),
   );
 });
 
 subscribeEndpointPortMessages(({ endpoint, event }) => {
+  if (isRequestCancelEnvelope(event.data)) {
+    if (endpoint.port) cancelEndpointPortRequest(endpoint.port, event.data.id);
+    return;
+  }
   if (isSelfCallWireMessage(event.data)) {
     if (endpoint.port) void handleEndpointSelfCallRequest(endpoint, event.data);
     return;
   }
   if (handleAttachmentReply(endpoint, event.data)) return;
   if (isAttachmentWireMessage(event.data)) {
-    if (endpoint.port) void handleEndpointAttachmentRequest(endpoint, event.data);
+    if (endpoint.port) {
+      void handleEndpointAttachmentRequest(endpoint, event.data);
+    }
     return;
   }
   if (!isExecEnvelope(event.data) || !endpoint.port) return;
   void handleEndpointPortRequest(endpoint, event.data);
 });
+
+function registerEndpointPortRequest(
+  port: MessagePort,
+  id: number,
+): AbortController | null {
+  const requests = endpointRequestControllers.get(port) ?? new Map();
+  if (requests.has(id)) return null;
+  const controller = new AbortController();
+  requests.set(id, controller);
+  endpointRequestControllers.set(port, requests);
+  return controller;
+}
+
+function unregisterEndpointPortRequest(
+  port: MessagePort,
+  id: number,
+  controller: AbortController,
+): void {
+  const requests = endpointRequestControllers.get(port);
+  if (requests?.get(id) !== controller) return;
+  requests.delete(id);
+  if (requests.size === 0) endpointRequestControllers.delete(port);
+}
+
+function cancelEndpointPortRequest(port: MessagePort, id: number): void {
+  endpointRequestControllers
+    .get(port)
+    ?.get(id)
+    ?.abort(
+      new KernelPolicyError(
+        "REQUEST_CANCELLED",
+        "Message-bus request was cancelled by the requesting app",
+      ),
+    );
+}
+
+function cancelEndpointPortRequests(port: MessagePort): void {
+  const requests = endpointRequestControllers.get(port);
+  if (!requests) return;
+  endpointRequestControllers.delete(port);
+  for (const controller of requests.values()) {
+    controller.abort(
+      new KernelPolicyError(
+        "REQUEST_CANCELLED",
+        "Message-bus endpoint was retired",
+      ),
+    );
+  }
+}
 
 type SelfCallWireRequest = {
   type: "neutron:self-call:exec";
@@ -3330,7 +3782,9 @@ type SelfCallWireRequest = {
   context?: { invocation: MsgBusInvocationMetadata };
 };
 
-function isSelfCallWireMessage(value: unknown): value is Record<string, unknown> {
+function isSelfCallWireMessage(
+  value: unknown,
+): value is Record<string, unknown> {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -3426,11 +3880,13 @@ async function handleEndpointSelfCallRequest(
   const port = endpoint.port;
   if (!port) return;
   const possibleId =
-    isJsonObject(raw) &&
-    Number.isSafeInteger(raw.id) &&
-    Number(raw.id) > 0
+    isJsonObject(raw) && Number.isSafeInteger(raw.id) && Number(raw.id) > 0
       ? Number(raw.id)
       : null;
+  const controller =
+    possibleId === null ? null : registerEndpointPortRequest(port, possibleId);
+  // Keep the first request authoritative for this source port and id.
+  if (possibleId !== null && !controller) return;
   let reservation: AttachmentCapacityReservation | undefined;
   const startedAt = performance.now();
   let request: SelfCallWireRequest | undefined;
@@ -3450,6 +3906,7 @@ async function handleEndpointSelfCallRequest(
             reservation!,
             invocationMetadataValue,
             invocation,
+            controller?.signal,
           )
         : executeBinarySelfMethod(
             endpoint,
@@ -3457,6 +3914,7 @@ async function handleEndpointSelfCallRequest(
             reservation!,
             invocationMetadataValue,
             invocation,
+            controller?.signal,
           ),
     );
     recordMsgBusAudit({
@@ -3534,6 +3992,9 @@ async function handleEndpointSelfCallRequest(
     }
   } finally {
     reservation?.release();
+    if (controller && possibleId !== null) {
+      unregisterEndpointPortRequest(port, possibleId, controller);
+    }
   }
 }
 
@@ -3609,10 +4070,13 @@ async function handleEndpointAttachmentRequest(
 
 async function handleEndpointPortRequest(
   endpoint: RegisteredEndpoint,
-  request: ReturnType<typeof assertExecEnvelope>
+  request: ReturnType<typeof assertExecEnvelope>,
 ): Promise<void> {
   const port = endpoint.port;
   if (!port) return;
+  const controller = registerEndpointPortRequest(port, request.id);
+  // Keep the first request authoritative for this source port and id.
+  if (!controller) return;
   let response: ResponseEnvelope;
   try {
     assertCurrentEndpointVersion(endpoint);
@@ -3625,15 +4089,16 @@ async function handleEndpointPortRequest(
         ...(request.payload.context?.invocation
           ? { invocation: request.payload.context.invocation }
           : {}),
+        signal: controller.signal,
         reportProgress: (value) => {
           assertBoundedJson(
             value,
             "Progress payload",
-            MSG_BUS_MAX_PROGRESS_BYTES
+            MSG_BUS_MAX_PROGRESS_BYTES,
           );
           port.postMessage({ type: "progress", id: request.id, value });
         },
-      }
+      },
     );
     assertBoundedJson(result, `Action '${request.payload.action}' result`);
     response = { type: "response", id: request.id, ok: result };
@@ -3643,6 +4108,8 @@ async function handleEndpointPortRequest(
       id: request.id,
       error: serializeActionError(error, request.payload.action),
     };
+  } finally {
+    unregisterEndpointPortRequest(port, request.id, controller);
   }
   port.postMessage(response);
 }
@@ -3666,15 +4133,10 @@ function serializeActionError(error: unknown, action?: string): JsonValue {
       serialized = serializeError(error);
     }
   }
-  try {
-    assertBoundedJson(serialized, "Action error");
-    return serialized;
-  } catch {
-    return {
-      name: "Error",
-      message: "Request failed with an oversized protected error",
-    };
-  }
+  return boundSerializedError(
+    serialized,
+    "Request failed with an oversized protected error",
+  );
 }
 
 function assertExecEnvelope(value: unknown) {

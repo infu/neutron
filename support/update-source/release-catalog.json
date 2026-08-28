@@ -27,6 +27,10 @@
       "directory": "../../apps/agent"
     },
     {
+      "id": "blast",
+      "directory": "../../apps/blast"
+    },
+    {
       "id": "jetcreeper",
       "directory": "../../apps/jetcreeper"
     },

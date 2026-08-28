@@ -260,6 +260,195 @@ test("notice bundle is deterministic, deduplicated, and preserves exact inputs",
   }
 });
 
+test("notice bundle generically retains declared legal trees and bound materials", async () => {
+  const fixture = await createBaseFixture();
+  const dependencyRoot = path.join(
+    fixture.repositoryRoot,
+    "node_modules",
+    "wasm-tool",
+  );
+  const inventory = "Local compiler inventory\n";
+  const material =
+    "Exact nested dependency material\nLLVM EXCEPTIONS TO THE APACHE 2.0 LICENSE\n";
+  const materialSha256 = sha256(material);
+  const materialPath =
+    `third_party/licenses/runtime/material/${materialSha256}.txt`;
+  const materialBinding = {
+    bundled_path: `material/${materialSha256}.txt`,
+    sha256: materialSha256,
+    bytes: new TextEncoder().encode(material).byteLength,
+  };
+  const materialMap = () =>
+    `${JSON.stringify({
+      schema: 999,
+      components: [{ name: "runtime", materials: [materialBinding] }],
+    })}\n`;
+  const installDependency = async (): Promise<void> => {
+    await fs.rm(dependencyRoot, { recursive: true, force: true });
+    await writePackage(fixture.appRoot, {
+      name: "demo-app",
+      version: "1.0.0",
+      dependencies: { "wasm-tool": "1.0.0" },
+    });
+    await writePackage(
+      dependencyRoot,
+      {
+        name: "wasm-tool",
+        version: "1.0.0",
+        license: "Apache-2.0",
+        files: [
+          "LICENSE",
+          "NOTICE",
+          "THIRD_PARTY_NOTICES.md",
+          "third_party/licenses/runtime",
+        ],
+      },
+      {
+        LICENSE: await fs.readFile(fixture.apacheLicensePath, "utf8"),
+        NOTICE: "Installed package notice\n",
+        "THIRD_PARTY_NOTICES.md": inventory,
+        "third_party/licenses/runtime/map.json": materialMap(),
+        [materialPath]: material,
+      },
+    );
+  };
+  const buildBundle = () =>
+    buildThirdPartyNoticeBundle({
+      ...fixture,
+      mopsSourcesOutput: "",
+    });
+  try {
+    await installDependency();
+    let bundle = await buildBundle();
+    const component = bundle.components.find(
+      ({ name }) => name === "wasm-tool",
+    );
+    expect(component).toMatchObject({
+      version: "1.0.0",
+      declaredLicense: "Apache-2.0",
+      selectedLicense: "Apache-2.0",
+    });
+    expect(component?.materials.map(({ sourcePath }) => sourcePath)).toContain(
+      "THIRD_PARTY_NOTICES.md",
+    );
+    expect(component?.materials.map(({ sourcePath }) => sourcePath)).toContain(
+      "third_party/licenses/runtime/map.json",
+    );
+    expect(component?.materials.map(({ sourcePath }) => sourcePath)).toContain(
+      materialPath,
+    );
+    const exactMaterials = new TextDecoder().decode(
+      bundle.files[THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH],
+    );
+    expect(exactMaterials).toContain(inventory);
+    expect(exactMaterials).toContain(materialMap());
+    expect(exactMaterials).toContain(material);
+
+    await fs.rm(path.join(dependencyRoot, materialPath));
+    await expect(buildBundle()).rejects.toThrow(
+      /does not exactly match its material directory/,
+    );
+
+    await fs.writeFile(path.join(dependencyRoot, materialPath), material);
+    await fs.writeFile(
+      path.join(
+        dependencyRoot,
+        "third_party/licenses/runtime/material/unmapped.txt",
+      ),
+      "unmapped material\n",
+    );
+    await expect(buildBundle()).rejects.toThrow(
+      /does not exactly match its material directory/,
+    );
+
+    await fs.rm(
+      path.join(
+        dependencyRoot,
+        "third_party/licenses/runtime/material/unmapped.txt",
+      ),
+    );
+    await fs.writeFile(path.join(dependencyRoot, materialPath), "corrupt\n");
+    await expect(buildBundle()).rejects.toThrow(
+      /material does not match/,
+    );
+
+    await installDependency();
+    await fs.rm(path.join(dependencyRoot, "THIRD_PARTY_NOTICES.md"));
+    await expect(buildBundle()).rejects.toThrow(/declared legal root/);
+
+    await installDependency();
+    await fs.rm(
+      path.join(dependencyRoot, "third_party/licenses/runtime"),
+      { recursive: true },
+    );
+    await expect(buildBundle()).rejects.toThrow(/declared legal root/);
+  } finally {
+    await fs.rm(fixture.repositoryRoot, { recursive: true, force: true });
+  }
+});
+
+test("notice bundle retains unrelated legal map schemas without interpreting them", async () => {
+  const fixture = await createBaseFixture();
+  const dependencyRoot = path.join(
+    fixture.repositoryRoot,
+    "node_modules",
+    "mapping-tool",
+  );
+  const mapPath = "third_party/licenses/runtime/map.json";
+  const materialPath = "third_party/licenses/runtime/material/README.txt";
+  const unrelatedMap = `${JSON.stringify({
+    schema: "runtime-source-map-v1",
+    entries: [
+      {
+        bundled_path: "material/README.txt",
+        description: "This is not a content-addressed legal binding",
+      },
+    ],
+  })}\n`;
+  try {
+    await writePackage(fixture.appRoot, {
+      name: "demo-app",
+      version: "1.0.0",
+      dependencies: { "mapping-tool": "1.0.0" },
+    });
+    await writePackage(
+      dependencyRoot,
+      {
+        name: "mapping-tool",
+        version: "1.0.0",
+        license: "MIT",
+        files: ["LICENSE", "third_party/licenses/runtime"],
+      },
+      {
+        LICENSE: "MIT fixture license\nCopyright Example\n",
+        [mapPath]: unrelatedMap,
+        [materialPath]: "Human-readable material inventory\n",
+      },
+    );
+
+    const bundle = await buildThirdPartyNoticeBundle({
+      ...fixture,
+      mopsSourcesOutput: "",
+    });
+    const component = bundle.components.find(
+      ({ name }) => name === "mapping-tool",
+    );
+    expect(component?.materials.map(({ sourcePath }) => sourcePath)).toContain(
+      mapPath,
+    );
+    expect(component?.materials.map(({ sourcePath }) => sourcePath)).toContain(
+      materialPath,
+    );
+    const exactMaterials = new TextDecoder().decode(
+      bundle.files[THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH],
+    );
+    expect(exactMaterials).toContain(unrelatedMap);
+    expect(exactMaterials).toContain("Human-readable material inventory\n");
+  } finally {
+    await fs.rm(fixture.repositoryRoot, { recursive: true, force: true });
+  }
+});
+
 test("notice bundle fails closed when a non-Apache package omits its license", async () => {
   const fixture = await createBaseFixture();
   try {

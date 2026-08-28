@@ -1,0 +1,63 @@
+{
+  "format": 3,
+  "name": "Blast",
+  "id": "blast",
+  "version": 102,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Headless IC data, collection, and JavaScript tools for Neutron agents",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Resident ICBlast, script, and local collection service"
+  },
+  "capabilities": {
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "blast_scripts_list_v1",
+        "blast_script_get_v1",
+        "blast_script_save_v1",
+        "blast_script_delete_v1"
+      ]
+    },
+    "background_ui_requests": {
+      "api": 1,
+      "categories": [
+        "signed_canister_call"
+      ]
+    },
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    }
+  },
+  "func": {
+    "blast_scripts_list_v1": {
+      "type": "query",
+      "async": false
+    },
+    "blast_script_get_v1": {
+      "type": "query",
+      "async": false
+    },
+    "blast_script_save_v1": {
+      "type": "update",
+      "async": false
+    },
+    "blast_script_delete_v1": {
+      "type": "update",
+      "async": false
+    }
+  },
+  "memory": {
+    "blast": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/blast/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

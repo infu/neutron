@@ -12,6 +12,7 @@ import {
   getRegisteredEndpoint,
   subscribeEndpointChanges,
 } from "../frame_context.ts";
+import { requestCancellationError } from "../request_cancel.ts";
 
 export type MsgBusCaller = {
   endpoint: string;
@@ -43,6 +44,8 @@ type PermissionCallbacks = {
   resolve: () => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  signal?: AbortSignal;
+  abort?: () => void;
 };
 
 type MsgBusPermissionState = {
@@ -142,14 +145,11 @@ export function removeFrontendAppState(appId: string): void {
       request.caller.appId === appId ||
       targetBelongsToApp(request.target, appId)
     ) {
-      callbacks
-        .get(request.cid)
-        ?.reject(new Error(`App ${appId} was uninstalled`));
-      const callback = callbacks.get(request.cid);
-      if (callback) clearTimeout(callback.timeout);
-      finishOwnerAttention(request.attentionToken);
-      callbacks.delete(request.cid);
-      useMsgBusPermissionStore.getState().removeRequest(request.cid);
+      rejectRequest(
+        request.cid,
+        new Error(`App ${appId} was uninstalled`),
+        false,
+      );
     }
   }
   for (let index = auditEntries.length - 1; index >= 0; index -= 1) {
@@ -190,7 +190,16 @@ export function requestFrontendToolPermission(input: {
     input: number;
     maximumOutput: number;
   };
+  signal?: AbortSignal;
 }): Promise<void> {
+  if (input.signal?.aborted) {
+    return Promise.reject(
+      requestCancellationError(
+        input.signal,
+        "App request was cancelled by the requesting surface",
+      ),
+    );
+  }
   if (
     hasFrontendToolGrant(
       input.caller,
@@ -241,9 +250,20 @@ export function requestFrontendToolPermission(input: {
   };
   useMsgBusPermissionStore.getState().addRequest(request);
   return new Promise((resolve, reject) => {
+    const abort = (): void => {
+      rejectRequest(
+        cid,
+        requestCancellationError(
+          input.signal,
+          "App request was cancelled by the requesting surface",
+        ),
+        false,
+      );
+    };
     callbacks.set(cid, {
       resolve,
       reject,
+      ...(input.signal ? { signal: input.signal, abort } : {}),
       timeout: setTimeout(() => {
         rejectRequest(
           cid,
@@ -252,6 +272,8 @@ export function requestFrontendToolPermission(input: {
         );
       }, 60_000),
     });
+    input.signal?.addEventListener("abort", abort, { once: true });
+    if (input.signal?.aborted) abort();
   });
 }
 
@@ -275,7 +297,7 @@ export function approveFrontendToolRequest(
     );
   }
   const callback = callbacks.get(cid);
-  if (callback) clearTimeout(callback.timeout);
+  if (callback) cleanupCallback(callback);
   callback?.resolve();
   callbacks.delete(cid);
   finishOwnerAttention(request.attentionToken);
@@ -290,7 +312,7 @@ export function rejectFrontendToolRequest(cidValue: number | string): void {
 function rejectRequest(cid: number, error: Error, recoveryPause: boolean): void {
   const request = useMsgBusPermissionStore.getState().requests[cid];
   const callback = callbacks.get(cid);
-  if (callback) clearTimeout(callback.timeout);
+  if (callback) cleanupCallback(callback);
   callback?.reject(error);
   callbacks.delete(cid);
   if (request) {
@@ -299,6 +321,13 @@ function rejectRequest(cid: number, error: Error, recoveryPause: boolean): void 
     });
   }
   useMsgBusPermissionStore.getState().removeRequest(cid);
+}
+
+function cleanupCallback(callback: PermissionCallbacks): void {
+  clearTimeout(callback.timeout);
+  if (callback.signal && callback.abort) {
+    callback.signal.removeEventListener("abort", callback.abort);
+  }
 }
 
 subscribeEndpointChanges(() => {

@@ -2606,7 +2606,10 @@ async function installAppInternal(
       appReject(installError);
       useAppsStore
         .getState()
-        .setInstallError({ kind: "install", message: installError.message });
+        .setInstallError({
+          kind: decisionOperation,
+          message: installError.message,
+        });
     }
     throw error;
   }
@@ -2650,7 +2653,7 @@ async function installAppInternal(
       packageDigest,
     );
     useAppsStore.getState().setOperation({
-      kind: "install",
+      kind: decisionOperation,
       appId: id,
       phase: "staging",
     });
@@ -2673,7 +2676,7 @@ async function installAppInternal(
         ? { stagedAssets: provenanceAssets }
         : {}),
       onStep(step) {
-        setDeployOperation("install", id, step);
+        setDeployOperation(decisionOperation, id, step);
         announceActivationStep(
           step,
           compileDetails.compiled.deploymentId,
@@ -2711,7 +2714,10 @@ async function installAppInternal(
       useAppsStore.getState().setOperation(null);
       useAppsStore
         .getState()
-        .setInstallError({ kind: "install", message: installError.message });
+        .setInstallError({
+          kind: decisionOperation,
+          message: installError.message,
+        });
     }
     throw error;
   }

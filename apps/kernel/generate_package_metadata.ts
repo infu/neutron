@@ -29,7 +29,6 @@ import {
 } from "neutron-scripts/src/package_metadata.ts";
 import {
   buildThirdPartyNoticeBundle,
-  type AuditedNpmOwnerLicenseDecision,
   type ThirdPartyNoticeBundle,
 } from "neutron-scripts/src/third_party_notices.ts";
 
@@ -39,16 +38,14 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 317;
-export const KERNEL_NPL_LICENSE_ID =
-  "LicenseRef-Neutron-Public-License-1.0";
+export const KERNEL_NPL_RELEASE_VERSION = 320;
+export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
 export const KERNEL_RELEASE_MEMORY_LOCK_SHA256 =
   "0cc3f918b360f3d2f35d0622870e4c02fed414fe9d2638ae5bcbb229782ecd3d";
 export const KERNEL_NPL_LICENSE_PATH = "legal/LICENSE.NPL-1.0.txt";
-export const KERNEL_APPLICATION_NOTICE_PATH =
-  "legal/APPLICATION-NOTICE.txt";
+export const KERNEL_APPLICATION_NOTICE_PATH = "legal/APPLICATION-NOTICE.txt";
 export const KERNEL_ESBUILD_META_PATH = "meta.json";
 const KERNEL_WORKSPACE_SOURCE_MAX_FILES = 4_096;
 const KERNEL_WORKSPACE_SOURCE_MAX_FILE_BYTES = 8 * MIB;
@@ -186,28 +183,32 @@ const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
     "packages/neutron-compiler/test/fixtures/kernel.v0.3.5.neutron",
     {
       bytes: 1_918_481,
-      sha256: "534e0ded262bb5700d92046a4fafad16ccf42473259edd3f18e8a0578347f2ae",
+      sha256:
+        "534e0ded262bb5700d92046a4fafad16ccf42473259edd3f18e8a0578347f2ae",
     },
   ],
   [
     "packages/neutron-compiler/test/fixtures/kernel.v0.3.6.neutron",
     {
       bytes: 1_858_175,
-      sha256: "b25948f68ed10f29c984e936ecfd18b95fa8d4cdec0bbd1e944b53b2a371bd8b",
+      sha256:
+        "b25948f68ed10f29c984e936ecfd18b95fa8d4cdec0bbd1e944b53b2a371bd8b",
     },
   ],
   [
     "packages/neutron-compiler/test/fixtures/kernel.v0.3.7.neutron",
     {
       bytes: 1_924_034,
-      sha256: "aaf329e5d526f4b5a436c440ac21a245b068172c6e4e2d6dc07696ecadc60f7d",
+      sha256:
+        "aaf329e5d526f4b5a436c440ac21a245b068172c6e4e2d6dc07696ecadc60f7d",
     },
   ],
   [
     "packages/neutron-compiler/test/fixtures/kernel.v0.3.15.neutron",
     {
       bytes: 2_011_370,
-      sha256: "9deeea94795589ee8a331e005c63a85a42886c3f6c0a948e194915539d6a13db",
+      sha256:
+        "9deeea94795589ee8a331e005c63a85a42886c3f6c0a948e194915539d6a13db",
     },
   ],
 ]);
@@ -218,6 +219,7 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/NOTICE",
   "apps/kernel/backend/install/BrowserOrigin.mo",
   "apps/kernel/generate_package_metadata.ts",
+  "apps/kernel/public/system/browser-origin-cleanup.html",
   "apps/kernel/evidence/qualification/failure.ts",
   "apps/kernel/evidence/qualification/profile.test.ts",
   "apps/kernel/evidence/qualification/run_failure.test.ts",
@@ -227,6 +229,7 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/src/install_review/deployment_build_review.ts",
   "apps/kernel/src/install_review/prepare_browser_deployment.ts",
   "apps/kernel/src/install_review/provenance_binding.ts",
+  "apps/kernel/src/request_cancel.ts",
   "apps/kernel/src/settings/DeploymentBuildRecordDetails.tsx",
   "apps/kernel/src/settings/DeploymentIntegrityDetails.tsx",
   "apps/kernel/src/settings/InstalledPackageLegalDetails.tsx",
@@ -246,6 +249,7 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/test/installed_package_record_ui.test.tsx",
   "apps/kernel/test/manual_install_review_flow.isolated.ts",
   "apps/kernel/test/manual_install_review_flow.test.ts",
+  "apps/kernel/test/msg_bus.isolated.ts",
   "apps/kernel/test/motoko/http_canonical_paths_test.mo",
   "apps/kernel/test/npl_hash_semantics.test.ts",
   "apps/kernel/test/package_metadata_generation.test.ts",
@@ -357,18 +361,6 @@ type BuildKernelPackageMetadataOptions = Readonly<{
   sourceFiles: readonly KernelWorkspaceSourceFile[];
   thirdPartyNotices: ThirdPartyNoticeBundle;
 }>;
-
-const KERNEL_ICBLAST_OWNER_LICENSE_DECISION = Object.freeze({
-  name: "icblast",
-  version: "4.3.0",
-  packageJsonSha256:
-    "8b1567890ef4a42b57fdedd404891f1998ca1d7dc56107e52b2c850f24434fa0",
-  selectedLicense: "Apache-2.0",
-  copyrightHolder: "3V Interactive",
-  scope:
-    "First-party JavaScript and TypeScript authored and owned by 3V Interactive in this exact installed npm package, excluding the paths listed below.",
-  excludedPaths: Object.freeze(["didc_wasm_pkg"]),
-} satisfies AuditedNpmOwnerLicenseDecision);
 
 /**
  * Build the target-neutral Kernel legal record and deterministic provider-hosted
@@ -582,7 +574,6 @@ export async function generateKernelPackageMetadata(
     appRoot: kernelRoot,
     repositoryRoot,
     appSpecificNoticePaths: [],
-    auditedNpmOwnerLicenseDecisions: [KERNEL_ICBLAST_OWNER_LICENSE_DECISION],
   });
   const generated = buildKernelPackageMetadata({
     kernelRoot,
@@ -841,9 +832,8 @@ async function assertNoOmittedCandidateChanges(
     if (!isCandidateRelevantChange(relativePath)) continue;
     assertNotSensitiveSourcePath(relativePath);
     if (isExcludedSourceFile(relativePath)) {
-      const fixtureIdentity = KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES.get(
-        relativePath,
-      );
+      const fixtureIdentity =
+        KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES.get(relativePath);
       if (fixtureIdentity) {
         await assertReviewedBinaryFixture(
           repositoryRoot,
@@ -1087,7 +1077,9 @@ function parseKernelReleaseManifest(
   );
   assertKernelProductionManifestFields(value);
   if (!isRecord(value.memory) || Object.keys(value.memory).length === 0) {
-    throw new Error("The Kernel release must retain its managed-memory declarations");
+    throw new Error(
+      "The Kernel release must retain its managed-memory declarations",
+    );
   }
   assertReleasedMemoryManifest(value.memory, true);
   return value as PackagedNeutronManifest;
@@ -1155,9 +1147,7 @@ function assertKernelPackageLicenseLabel(content: Uint8Array): void {
     });
   }
   if (!isRecord(value) || value.license !== "SEE LICENSE IN LICENSE") {
-    throw new Error(
-      "Kernel package.json must declare SEE LICENSE IN LICENSE",
-    );
+    throw new Error("Kernel package.json must declare SEE LICENSE IN LICENSE");
   }
 }
 
@@ -1176,7 +1166,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.17 (packed version 317)",
+    "Package release: v0.3.20 (packed version 320)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",
@@ -1203,22 +1193,24 @@ function assertKernelBrowserMetafile(content: Uint8Array): void {
   const inputs = Object.keys(value.inputs).map((input) =>
     input.replaceAll("\\", "/"),
   );
-  if (
-    !inputs.some((input) =>
-      input.endsWith("/node_modules/icblast/lib/browser.js"),
-    )
-  ) {
+  const hasInput = (relativePath: string) =>
+    inputs.some(
+      (input) => input === relativePath || input.endsWith(`/${relativePath}`),
+    );
+  if (!hasInput("node_modules/icblast/lib/browser.js")) {
     throw new Error(
       "Kernel browser bundle is missing the expected icblast/lib/browser.js input",
     );
   }
-  const forbidden = inputs.find((input) =>
-    input.includes("/node_modules/icblast/didc_wasm_pkg/"),
-  );
-  if (forbidden !== undefined) {
-    throw new Error(
-      `Kernel browser bundle must not incorporate icblast didc_wasm_pkg: ${forbidden}`,
-    );
+  for (const required of [
+    "node_modules/icblast/didc_wasm_pkg/didc_rust.js",
+    "node_modules/icblast/didc_wasm_pkg/didc_rust_bg.bin",
+  ]) {
+    if (!hasInput(required)) {
+      throw new Error(
+        `Kernel browser bundle is missing the packaged ICBlast Candid Wasm input: ${required}`,
+      );
+    }
   }
 }
 
@@ -1227,11 +1219,11 @@ function assertThirdPartyNoticeEnvelope(bundle: ThirdPartyNoticeBundle): void {
     ({ ecosystem, name }) => ecosystem === "npm" && name === "icblast",
   );
   if (
-    icblast?.version !== "4.3.0" ||
-    icblast.declaredLicense !== "package.json omits a license field" ||
+    icblast?.version !== "4.3.3" ||
+    icblast.declaredLicense !== "Apache-2.0" ||
     icblast.selectedLicense !== "Apache-2.0"
   ) {
-    throw new Error("Kernel notices lack the exact icblast@4.3.0 decision");
+    throw new Error("Kernel notices lack the exact icblast@4.3.3 materials");
   }
   if (
     !bundle.components.some(
@@ -1247,8 +1239,9 @@ function assertThirdPartyNoticeEnvelope(bundle: ThirdPartyNoticeBundle): void {
     .map((bytes) => textDecoder.decode(bytes))
     .join("\n");
   for (const required of [
-    "didc_wasm_pkg",
-    "this decision makes no claim about those rights",
+    "didc_wasm_pkg/didc_rust_bg.bin",
+    "third_party/licenses/rust/map.json",
+    "Rust standard-library dependency inventory",
     "https://github.com/infu/neutron_motoko/tree/d7ed0a92b6219d784b7143e0851ed64b55dfc25a",
     "https://github.com/ocsigen/js_of_ocaml/tree/e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581",
   ]) {
@@ -1320,7 +1313,9 @@ function assertKernelProductionManifestFields(
   manifest: Record<string, unknown>,
 ): void {
   if (manifest.update_source !== KERNEL_PRODUCTION_UPDATE_SOURCE) {
-    throw new Error("The Kernel release must retain the production update source");
+    throw new Error(
+      "The Kernel release must retain the production update source",
+    );
   }
   if (
     !Array.isArray(manifest.init_arg) ||
@@ -1329,7 +1324,9 @@ function assertKernelProductionManifestFields(
       (argument, index) => argument !== KERNEL_RELEASE_INIT_ARGS[index],
     )
   ) {
-    throw new Error("The Kernel release must retain its production init arguments");
+    throw new Error(
+      "The Kernel release must retain its production init arguments",
+    );
   }
 }
 

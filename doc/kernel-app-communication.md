@@ -38,17 +38,29 @@ endpoint. The whole Neutron admits at most 32 resident backgrounds.
 
 Updating an app advances its runtime generation and invalidates the old
 endpoint even though its `AppScope` is retained. Rotating origin authority,
-closing a frame, logging out, removing the app, or ending an invocation also
-invalidates the affected endpoint. A stale Window or port does not inherit the
-new live authority.
+closing a frame, logging out, or removing the app also invalidates the affected
+endpoint. Ending an agent invocation instead revokes that invocation's
+authority and cancels its invocation-scoped work; it does not disconnect the
+otherwise-current endpoint. A stale Window or port does not inherit new live
+authority.
 
 ## Handshake
 
-The only Window messages are exact closed envelopes:
+The registered app-runtime Window handshake uses:
 
-- `neutron:msgbus:probe`;
-- `neutron:msgbus:ready`; and
+- exact closed `neutron:msgbus:probe` and `neutron:msgbus:ready` envelopes; and
 - `neutron:msgbus:connect`, which transfers `MessageChannel.port2`.
+
+The Kernel emits `connect` with only its type, version, and session ID. Released
+app receivers validate those required fields but accept additional envelope
+fields for compatibility, so extensions must not be treated as authority.
+
+Before a dedicated resident background starts, its isolated origin-cleanup
+document may send one separate exact `neutron:persistent-origin-policy:v1`
+result containing only `type` and `ok`. The Kernel binds that result to the
+expected cleanup Window and origin. It carries no app request, authority, or
+private port. Apart from this lifecycle result and the handshake, app-runtime
+Window messages are not operational transport.
 
 The Kernel checks the registered child Window and exact expected origin before
 transferring a port. The app checks its parent Window and derives the exact
@@ -60,17 +72,27 @@ Window path.
 
 ## Package Entrypoints
 
-`neutron-tools` has three side-effect boundaries:
+`neutron-tools` exposes four message-bus-facing package boundaries:
 
-| Import | Role |
-| --- | --- |
-| `neutron-tools/protocol` | Pure envelopes, types, schemas, limits, and errors |
-| `neutron-tools/app` | App client, app listener, self-call API, and exposed-tool API |
-| `neutron-tools/kernel` | Small trusted host-side port helpers |
+| Import                           | Role                                                             |
+| -------------------------------- | ---------------------------------------------------------------- |
+| `neutron-tools/protocol`         | Pure envelopes, types, schemas, limits, and errors               |
+| `neutron-tools/app`              | App client, app listener, self-call API, and exposed-tool API    |
+| `neutron-tools/app_attachments`  | Attachment listener, client, and attachment-exposed-tool API     |
+| `neutron-tools/kernel`           | Small trusted host-side port helpers                             |
 
 The Kernel imports only protocol and Kernel entries. It does not load the
-app-side listener as a side effect. `app_entry.ts` is the app bootstrap entry.
-Schemas are shared through the pure protocol rather than copied.
+app-side listener as a side effect. `neutron-tools/app` is the app bootstrap
+entry. Schemas are shared through the pure protocol rather than copied.
+
+The attachment entry is intentionally separate and is not re-exported by the
+app entry. Apps that use attachments must import it explicitly; doing so
+installs its attachment listener on the same transferred private port. Its
+`callToolWithAttachments()` API requires an exact target and has its own bounded
+connection wait, call timer, `AbortSignal` settlement, and connection-
+replacement cleanup. A caller timeout or abort stops that local wait but does
+not send the ordinary JSON cancellation envelope or retract work already in
+progress.
 
 ## Ordinary JSON Wire
 
@@ -99,16 +121,67 @@ type ResponseEnvelope = {
 };
 ```
 
+A valid response owns exactly one of `ok` or `error`. The optional properties
+in the TypeScript shape express those two alternatives compactly; a response
+with neither or both is invalid.
+
 Progress uses `{ type: "progress", id, value }`.
 
-Ordinary payloads are bounded JSON:
+A caller cancels one exact in-flight request on the same private port with:
 
-- maximum payload: 1 MiB;
-- maximum schema: 32 KiB;
+```ts
+type RequestCancelEnvelope = {
+  type: "neutron:msgbus:cancel";
+  version: 1;
+  id: number;
+};
+```
+
+The ordinary JSON wire and the API-1 self-call wire share this source-bound
+cancellation envelope. The SDK sends it when a request's `AbortSignal` fires or
+its caller-selected timeout expires. Replacing or disconnecting the SDK port
+sends it for outstanding requests before closing the port. The receiver binds
+cancellation to that exact port and id; Kernel-side endpoint retirement aborts
+the same request signals.
+
+Cancellation is cooperative, not a promise that every underlying operation can
+be retracted. App tool handlers may honor their request signal. Among Kernel
+canister tools, `canister.schema_v2` and `canister.call_dialog_v2` propagate it
+through strict ICBlast discovery and native fetches. Cancellation before their
+network dispatch prevents the call. Cancellation cannot retract a v2 update
+after dispatch: the Kernel withholds any late reply and reports that the outcome
+is unknown. The SDK retains `canister.call_dialog_v2` for one bounded
+cancellation-reply window so the Kernel's pre- or post-dispatch classification
+wins; if no reply arrives, it conservatively reports an unknown outcome. The
+same fence applies to API-1 self updates, including scoped `updateSelf()` calls
+made by an exposed app tool. Self queries can settle immediately after sending
+their cancellation because they cannot mutate canister state.
+
+The generic tool-attachment wire retains its own settlement and resource
+lifecycle; this envelope does not cancel an attachment request.
+
+The ordinary path uses these wire bounds and SDK defaults:
+
+- maximum request or response payload: 1 MiB;
+- maximum input or output schema: 32 KiB;
 - maximum progress event: 64 KiB;
 - at most 2,000 progress events;
 - default call timeout: 300 seconds; and
 - default discovery timeout: 10 seconds.
+
+Sender-side hardening additionally enforces at most 64 nested JSON containers,
+100,000 aggregate container elements, and 128 characters from the closed action
+alphabet. Those are not receive-time limits for the released v1 wire.
+Compatibility receivers continue to accept deeper or larger-container v1 JSON
+and any nonempty legacy action string when the value remains JSON-compatible
+and within its byte ceiling. Dispatch may still reject an action it does not
+implement.
+
+The typed external-canister schema and call helpers use those discovery and
+call defaults respectively. Generic `callTool()` timeouts are caller-chosen,
+including zero for no timer; the defaults are not protocol ceilings. API-1
+self-call helpers instead enforce the fixed SDK call-timeout cap. No timeout
+makes an already-dispatched update reversible.
 
 Requests have one final result. Progress is informational and cannot replace or
 reorder the final response.
@@ -118,15 +191,22 @@ reorder the final response.
 Apps expose tools with:
 
 - a canonical name;
-- description;
-- closed input and output JSON Schemas;
+- a required input JSON Schema;
+- optional title and description;
+- an optional output JSON Schema;
 - optional annotations; and
 - a handler.
 
+Object schemas are not closed automatically. A descriptor author that needs to
+reject undeclared object fields must use `additionalProperties: false` at every
+applicable object level.
+
 `tools.list` discovers descriptors from registered endpoints. `tools.call`
-validates arguments before dispatch and validates the returned value before
-reply. The caller can select an exact endpoint or let routing choose an active
-declared provider.
+validates arguments before dispatch and, when an output schema is present,
+validates the returned value before reply. Every call must name an exact target;
+there is no implicit provider selection. `tools.list` may omit its target to
+discover across live endpoints, but that does not choose a target for a later
+call.
 
 An app learns app/tool behavior from live descriptors and `apps.describe`; the
 Kernel and Agent do not carry hardcoded ordinary-app tool schemas.
@@ -134,7 +214,10 @@ Kernel and Agent do not carry hardcoded ordinary-app tool schemas.
 Current Kernel tools include:
 
 - `canister.schema`;
+- `canister.schema_v2`;
 - `canister.call_dialog`;
+- `canister.call_dialog_v2`, whose versioned contract is documented in
+  [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method);
 - `backend_calls.request`;
 - `backend_calls.list`;
 - `apps.list`;
@@ -147,6 +230,11 @@ Current Kernel tools include:
 - `workspace.open_tile`.
 
 The raw action aliases `schema` and `call_dialog` do not exist.
+
+The unversioned canister names are universally callable compatibility routes,
+not names gated by the age of an installed package. Their exact differences
+from the v2 external-call route are documented in
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
 ## App Client API
 
@@ -233,13 +321,13 @@ binary model, and transferred back through response sidecars.
 
 Limits are:
 
-| Self-call resource | Limit |
-| --- | ---: |
+| Self-call resource     |     Limit |
+| ---------------------- | --------: |
 | Aggregate binary bytes | 1,900,000 |
-| Binary leaves | 512 |
-| JSON metadata | 64 KiB |
-| Value/Candid depth | 32 |
-| Container elements | 4,096 |
+| Binary leaves          |       512 |
+| JSON metadata          |    64 KiB |
+| Value/Candid depth     |        32 |
+| Container elements     |     4,096 |
 
 Additional type-table, non-binary Candid, decoder allocation, in-flight byte,
 and concurrency limits apply in the Kernel.
@@ -259,7 +347,11 @@ Each declaration fixes:
 - attachment name;
 - allowed media types;
 - maximum bytes; and
-- whether the attachment is required.
+- the fixed `required: true` marker.
+
+A declared direction therefore requires exactly one attachment. Omit the input
+or output declaration to allow no attachment in that direction; optional
+attachments are not supported.
 
 Every data buffer is transferred. The Kernel validates descriptor, metadata,
 source endpoint, name, type, size, and in-flight capacity. Current ceilings are
@@ -267,9 +359,12 @@ source endpoint, name, type, size, and in-flight capacity. Current ceilings are
 trusted frontend broker realm/process. That browser limit is not an
 actor-global total across separate browsers.
 
-An invocation-scoped nested attachment call uses a short-lived one-use
-delegation token. Tokens expire after 10 seconds and are bounded to four per
-endpoint and 64 globally.
+An attachment handler's `context.callTool` carries its invocation binding
+directly. An ordinary exposed-tool handler instead bridges its current
+invocation into the separate attachment client by requesting a short-lived,
+one-use delegation token from `attachments.delegate`; a call cannot combine
+that token with direct invocation metadata. Tokens expire after 10 seconds and
+are bounded to four per endpoint and 64 globally.
 
 ## App State Invalidation
 
@@ -286,7 +381,17 @@ The Kernel can send:
 
 State messages are invalidation hints, not authority or durable data. An app
 subscribes by topic and performs its own scoped query. The Kernel retains only
-bounded recent revisions and sends them only to a current port.
+bounded recent revisions and sends them only to a current port. Publication is
+same-app only and excludes the publishing endpoint, which must update or query
+its own state locally.
+
+The SDK does not queue an invalidation for a topic that has no listener when it
+arrives. Once the Kernel posts a revision to a connected endpoint it records
+that delivery, so adding a listener later or reconnecting the same frame does
+not guarantee another copy. A retained latest revision may be replayed to an
+eligible endpoint that did not receive it, but this bounded replay is not a
+durable subscription log. Register listeners early, query initial authoritative
+state, and refresh after reconnect rather than depending on replay.
 
 ## Tile Views
 
@@ -306,21 +411,39 @@ session closes.
 
 ## Agent Invocations
 
-An agent invocation carries:
+An Agent root starts only from the granted installed app's focused,
+owner-activated tile, targets that app's connected resident background, and
+names the exact declared entrypoint. Each root or child invocation binds its
+node, parent, and root IDs; unguessable capability; target endpoint and session;
+installed app scope, role, and tool; expiry and cancellation state; and bounded
+depth, calls, parallel children, consent challenges, and progress.
 
-- a root ID;
-- exact capability/entrypoint path;
-- source endpoint and session;
-- optional consent registration;
-- cancellation state; and
-- bounded progress.
+Every delegated endpoint call creates a child invocation for that exact target
+and tool; tray popouts cannot receive one. The Kernel resolves the invocation
+before every protected nested action. Delegation never changes the target app's
+manifest or bypasses its broker. Completing or cancelling an invocation removes
+its scoped authority without retiring the target endpoint. The current stable
+error vocabulary includes `AGENT_MODE_REVOKED` and `AGENT_MODE_LIMIT`.
 
-The Kernel resolves the invocation before every protected nested action.
-Delegation never changes the target app's manifest or bypasses its broker. The
-current stable error vocabulary includes `AGENT_MODE_REVOKED` and
-`AGENT_MODE_LIMIT`.
+A nested `canister.call_dialog_v2` decision must receive the complete review
+value, not only summary counts, and an oversized challenge fails before
+signing. The unversioned compatibility route rejects Agent-scoped signed calls
+before discovery. The canonical v2 contract is in
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
-Interactive self-call dialogs cannot be executed silently by an agent.
+An exposed-tool handler with `agentMode: true` must use its invocation-bound
+`context.kernel` client for nested Agent work. That client propagates invocation
+metadata, cancellation, and exposes `callTool`, `querySelf`, and `updateSelf`;
+module-level helpers do not inherit the handler context. Attachment handlers
+likewise use their invocation-bound `context.callTool` for nested attachment
+work.
+
+The scoped client intentionally does not expose `callSelfDialog`. While the
+caller app has any active invocation, an unscoped module-level same-Neutron
+call-dialog request fails with `SCOPED_CONTEXT_REQUIRED` before Candid
+preparation and opens no owner UI. A valid invocation-scoped self-dialog fails
+with `USER_INTERACTION_REQUIRED`. Outside an active invocation, ordinary owner
+consent remains unchanged.
 
 ## Private Broker Actions
 
@@ -362,16 +485,20 @@ changing callback ownership.
 ## Background Lifecycle
 
 Resident backgrounds are mounted only for the declared endpoint and admitted
-security mode. Startup, restart, failure backoff, authority rotation, app
-replacement, capability disablement, and uninstall are Kernel-owned lifecycle
-events.
+security mode. Startup, readiness retry, authority rotation, app replacement,
+capability disablement, and uninstall are Kernel-owned lifecycle events. The
+launcher remounts once after a missed readiness deadline; a second missed
+deadline blocks further automatic relaunch for that mounted lifecycle instead
+of entering a general failure-backoff loop. A late authenticated connection can
+still mark that retry ready.
 
 The background does not become a backend cron process. It runs while the
 trusted browser shell is open and uses declared broker APIs for durable work.
 
 ## Security Invariants
 
-- Window messaging is handshake-only.
+- Registered app-runtime Window messaging is handshake-only; the dedicated
+  resident-origin cleanup result is a lifecycle-only exception.
 - Operational calls require the exact private port.
 - A port belongs to one endpoint session and cannot be reassigned.
 - AppScope and plan fingerprint remain authoritative across every route.

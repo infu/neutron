@@ -8,6 +8,8 @@ import {
   isMsgBusFrameReady,
   MSG_BUS_FRAME_PROBE,
 } from "neutron-tools/src/frame_handshake.js";
+import { retireExecPort } from "neutron-tools/src/kernel.js";
+import { requestCancellationError } from "./request_cancel.ts";
 
 export type TileFrameContext = {
   role: "tile";
@@ -29,9 +31,7 @@ export type TrayFrameContext = {
 };
 
 export type FrameContext =
-  | TileFrameContext
-  | BackgroundFrameContext
-  | TrayFrameContext;
+  TileFrameContext | BackgroundFrameContext | TrayFrameContext;
 
 export type RegisteredEndpoint = {
   endpointId: string;
@@ -52,11 +52,13 @@ export type EndpointPortMessage = {
 };
 
 type EndpointPortListener = (message: EndpointPortMessage) => void;
+type EndpointPortRetirementListener = (port: MessagePort) => void;
 type EndpointChangeListener = () => void;
 
 const frames = new WeakMap<object, RegisteredEndpoint>();
 const endpoints = new Map<string, RegisteredEndpoint>();
 const portListeners = new Set<EndpointPortListener>();
+const portRetirementListeners = new Set<EndpointPortRetirementListener>();
 const changeListeners = new Set<EndpointChangeListener>();
 const handshakeWindows = new WeakSet<object>();
 const loadedFrames = new WeakSet<object>();
@@ -148,10 +150,18 @@ export function registerFrameContext(
 export function waitForFrameEndpointPort(
   endpoint: RegisteredEndpoint,
   timeoutSeconds: number,
+  signal?: AbortSignal,
 ): Promise<MessagePort> {
+  if (signal?.aborted) {
+    return Promise.reject(
+      requestCancellationError(signal, "Endpoint connection was cancelled"),
+    );
+  }
   if (!endpointRegistered(endpoint) || !endpointAuthorityCurrent(endpoint)) {
     return Promise.reject(
-      new Error(`Endpoint '${endpoint.endpointId}' authority is no longer current`),
+      new Error(
+        `Endpoint '${endpoint.endpointId}' authority is no longer current`,
+      ),
     );
   }
   if (endpoint.port) return Promise.resolve(endpoint.port);
@@ -163,6 +173,7 @@ export function waitForFrameEndpointPort(
       settled = true;
       globalThis.clearTimeout(timeout);
       unsubscribe();
+      signal?.removeEventListener("abort", abort);
       if ("port" in result) resolve(result.port);
       else reject(result.error);
     };
@@ -175,6 +186,14 @@ export function waitForFrameEndpointPort(
         }),
       timeoutSeconds * 1_000,
     );
+    const abort = (): void =>
+      finish({
+        error: requestCancellationError(
+          signal,
+          "Endpoint connection was cancelled",
+        ),
+      });
+    signal?.addEventListener("abort", abort, { once: true });
     const check = (): void => {
       const current = endpoints.get(endpoint.endpointId);
       if (current !== endpoint) {
@@ -194,6 +213,7 @@ export function waitForFrameEndpointPort(
       }
     };
     unsubscribe = subscribeEndpointChanges(check);
+    if (signal?.aborted) abort();
     check();
   });
 }
@@ -220,7 +240,7 @@ export function connectFrameEndpoint(
   }
   if (hasKnownDifferentOrigin(source, endpoint.origin)) return false;
 
-  endpoint.port?.close();
+  disconnectEndpointPort(endpoint, false);
   const channel = new MessageChannel();
   const sessionId = createSessionId();
   endpoint.port = channel.port1;
@@ -247,7 +267,7 @@ export function connectFrameEndpoint(
       sessionId,
     },
     endpoint.origin && endpoint.origin !== "null" ? endpoint.origin : "*",
-    [channel.port2]
+    [channel.port2],
   );
   notifyEndpointChange();
   return true;
@@ -302,8 +322,8 @@ export function isFrameEndpointReady(source: Window | null): boolean {
   const endpoint = frames.get(source);
   return Boolean(
     endpoint?.port &&
-      endpointRegistered(endpoint) &&
-      endpointAuthorityCurrent(endpoint),
+    endpointRegistered(endpoint) &&
+    endpointAuthorityCurrent(endpoint),
   );
 }
 
@@ -322,9 +342,7 @@ export function installFrameEndpointHandshake(
   handshakeWindows.add(targetWindow);
 }
 
-function acceptAuthenticatedFrameReady(
-  endpoint: RegisteredEndpoint,
-): boolean {
+function acceptAuthenticatedFrameReady(endpoint: RegisteredEndpoint): boolean {
   if (!endpointRegistered(endpoint) || !endpointAuthorityCurrent(endpoint)) {
     disconnectEndpointPort(endpoint);
     return false;
@@ -380,10 +398,22 @@ function disconnectEndpointPort(
   endpoint: RegisteredEndpoint,
   notify = true,
 ): void {
-  const hadPort = endpoint.port !== undefined || endpoint.sessionId !== undefined;
-  endpoint.port?.close();
-  delete endpoint.port;
-  delete endpoint.sessionId;
+  const retiredPort = endpoint.port;
+  const retiredSessionId = endpoint.sessionId;
+  const hadPort = retiredPort !== undefined || retiredSessionId !== undefined;
+  if (retiredPort) {
+    retireExecPort(retiredPort);
+    for (const listener of portRetirementListeners) {
+      try {
+        listener(retiredPort);
+      } catch {
+        // One teardown observer cannot keep the retired transport alive.
+      }
+    }
+    retiredPort.close();
+  }
+  if (endpoint.port === retiredPort) delete endpoint.port;
+  if (endpoint.sessionId === retiredSessionId) delete endpoint.sessionId;
   if (hadPort && notify) notifyEndpointChange();
 }
 
@@ -405,21 +435,32 @@ function hasKnownDifferentOrigin(source: Window, expected?: string): boolean {
 }
 
 export function subscribeEndpointPortMessages(
-  listener: EndpointPortListener
+  listener: EndpointPortListener,
 ): () => void {
   portListeners.add(listener);
   return () => portListeners.delete(listener);
 }
 
+/** Register exact-port cleanup that must run before a retired port closes. */
+export function subscribeEndpointPortRetirements(
+  listener: EndpointPortRetirementListener,
+): () => void {
+  portRetirementListeners.add(listener);
+  return () => portRetirementListeners.delete(listener);
+}
+
 export function subscribeEndpointChanges(
-  listener: EndpointChangeListener
+  listener: EndpointChangeListener,
 ): () => void {
   changeListeners.add(listener);
   return () => changeListeners.delete(listener);
 }
 
 function createSessionId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID().replaceAll("-", "");
   }
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random()
@@ -432,20 +473,20 @@ function notifyEndpointChange(): void {
 }
 
 export function resolveFrameContext(
-  source: MessageEventSource | null
+  source: MessageEventSource | null,
 ): FrameContext | null {
   return resolveRegisteredEndpoint(source)?.context ?? null;
 }
 
 export function resolveRegisteredEndpoint(
-  source: MessageEventSource | null
+  source: MessageEventSource | null,
 ): RegisteredEndpoint | null {
   if (!source || typeof source !== "object") return null;
   return frames.get(source) ?? null;
 }
 
 export function getRegisteredEndpoint(
-  endpointId: string
+  endpointId: string,
 ): RegisteredEndpoint | null {
   return endpoints.get(endpointId) ?? null;
 }

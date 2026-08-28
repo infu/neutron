@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8" />
+<script>
+  (() => {
+    "use strict";
+    const type = "neutron:persistent-origin-policy:v1";
+    const finish = (ok) => parent.postMessage({ type, ok }, "*");
+    (async () => {
+      try {
+        if (!("serviceWorker" in navigator)) {
+          finish(true);
+          return;
+        }
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((entry) => entry.unregister()));
+        if ((await navigator.serviceWorker.getRegistrations()).length !== 0) {
+          throw new Error();
+        }
+        if (document.readyState !== "complete") {
+          await new Promise((resolve) =>
+            addEventListener("load", resolve, { once: true }),
+          );
+        }
+        finish(true);
+      } catch {
+        finish(false);
+      }
+    })();
+  })();
+</script>

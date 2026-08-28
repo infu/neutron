@@ -209,6 +209,9 @@ module {
     let BROWSER_SURFACE_ORIGINS_PATH =
         "/system/browser-surface-origins.json";
 
+    public let BROWSER_ORIGIN_CLEANUP_PATH =
+        "/system/browser-origin-cleanup.html";
+
     public func isAppRegistryStaticTarget(path : Text) : Bool {
         path == APP_REGISTRY_PATH;
     };
@@ -473,6 +476,24 @@ module {
         );
     };
 
+    public func browserOriginCleanupDocumentCspForAuthority(
+        surfaceHostLabel : Text,
+        kernelHostLabel : Text,
+        authority : Text,
+    ) : ?Text {
+        let ?environment = browserGatewayEnvironment(
+            surfaceHostLabel,
+            kernelHostLabel,
+            authority,
+        ) else return null;
+        ?(
+            "sandbox allow-scripts allow-same-origin; default-src 'none'; " #
+            "script-src 'unsafe-inline'; worker-src 'none'; " #
+            "object-src 'none'; base-uri 'none'; form-action 'none'; " #
+            "frame-ancestors " # environment.kernel_origin
+        );
+    };
+
     public func isSharedAppRoutePath(path : Text) : Bool {
         RouteNamespace.isSharedRoutePath(path);
     };
@@ -601,6 +622,7 @@ module {
     };
 
     public func hasOriginScopedStaticCertification(key : Text) : Bool {
+        key == BROWSER_ORIGIN_CLEANUP_PATH or
         appIdFromAssetUrl(key) != null;
     };
 
@@ -738,11 +760,12 @@ module {
         };
     };
 
-    func dedicatedResidentQuery(
+    func dedicatedResidentAuthorityQuery(
         instance : InstallTypes.AppInstance,
+        role : Text,
     ) : Text {
         "app=" # instance.scope.app_id #
-        "&role=background" #
+        "&role=" # role #
         "&installation-uid=" # Nat64.toText(
             instance.scope.installation_uid
         ) #
@@ -753,6 +776,31 @@ module {
         "&browser-origin-authority-epoch=" # Nat64.toText(
             instance.browser_origin_authority_epoch
         );
+    };
+
+    func dedicatedResidentQuery(
+        instance : InstallTypes.AppInstance,
+    ) : Text {
+        dedicatedResidentAuthorityQuery(instance, "background");
+    };
+
+    public func browserOriginCleanupQuery(
+        instance : InstallTypes.AppInstance,
+    ) : Text {
+        dedicatedResidentAuthorityQuery(instance, "origin-policy-cleanup");
+    };
+
+    public func browserOriginCleanupRequestBound(
+        requestUrl : Text,
+        headers : [Painless.HeaderField],
+        instance : InstallTypes.AppInstance,
+    ) : Bool {
+        if (instance.resident_frame_security != #persistent_dedicated_v1) {
+            return false;
+        };
+        requestUrl == BROWSER_ORIGIN_CLEANUP_PATH # "?" #
+            browserOriginCleanupQuery(instance) and
+        uniqueFetchDestination(headers) == ?"iframe";
     };
 
     // A dedicated-origin HTML document is executable only for the exact
@@ -821,15 +869,11 @@ module {
             case (?"frame") false;
             case (?"object") false;
             case (?"embed") false;
-            // The ephemeral capability promises one dedicated Worker. Do not
-            // silently widen it to a persistent ServiceWorker or a
-            // cross-document SharedWorker authority.
-            case (?"serviceworker") {
-                instance.resident_frame_security == #persistent_dedicated_v1;
-            };
-            case (?"sharedworker") {
-                instance.resident_frame_security == #persistent_dedicated_v1;
-            };
+            // Every app origin may create ordinary dedicated Workers, but no
+            // app asset is admitted as a persistent ServiceWorker or a
+            // cross-document SharedWorker entrypoint.
+            case (?"serviceworker") false;
+            case (?"sharedworker") false;
             case (?"audio") true;
             case (?"audioworklet") true;
             case (?"empty") true;
@@ -1208,10 +1252,7 @@ module {
             };
         };
 
-        func residentSubresourceDestinations(
-            contentType : Text,
-            allowPersistentWorkers : Bool,
-        ) : [Text] {
+        func residentSubresourceDestinations(contentType : Text) : [Text] {
             let mime = contentTypeBase(contentType);
             let result = List.empty<Text>();
             func add(value : Text) : () {
@@ -1238,10 +1279,6 @@ module {
                 add("worker");
                 add("audioworklet");
                 add("paintworklet");
-                if (allowPersistentWorkers) {
-                    add("serviceworker");
-                    add("sharedworker");
-                };
             } else if (mime == "text/css") {
                 add("style");
             } else if (Text.startsWith(mime, #text "image/")) {
@@ -1279,7 +1316,7 @@ module {
                 // the separate installation-document branch.
                 return ["empty"];
             };
-            residentSubresourceDestinations(contentType, false);
+            residentSubresourceDestinations(contentType);
         };
 
         func residentRequestKindForRequest(
@@ -1307,11 +1344,8 @@ module {
                     canonical_query = dedicatedResidentQuery(instance);
                 });
             };
-            let allowPersistentWorkers =
-                instance.resident_frame_security == #persistent_dedicated_v1;
             for (allowed in residentSubresourceDestinations(
                 contentType,
-                allowPersistentWorkers,
             ).vals()) {
                 if (selected == allowed) {
                     return ?#subresource_v1({ destination = selected });
@@ -1428,14 +1462,23 @@ module {
                         let ?authority = documentAuthority else Runtime.trap(
                             "Resident document has no exact authority"
                         );
-                        let ?csp = residentDocumentCspForAuthority(
-                            authority.host_label,
-                            canisterId,
-                            authority.authority,
-                        ) else Runtime.trap(
+                        let csp = if (key == BROWSER_ORIGIN_CLEANUP_PATH) {
+                            browserOriginCleanupDocumentCspForAuthority(
+                                authority.host_label,
+                                canisterId,
+                                authority.authority,
+                            );
+                        } else {
+                            residentDocumentCspForAuthority(
+                                authority.host_label,
+                                canisterId,
+                                authority.authority,
+                            );
+                        };
+                        let ?resolvedCsp = csp else Runtime.trap(
                             "Resident document has an invalid authority"
                         );
-                        [("Content-Security-Policy", csp)];
+                        [("Content-Security-Policy", resolvedCsp)];
                     } else [];
                 };
                 case _ appAssetSandboxHeaders(policy, html);
@@ -1620,7 +1663,6 @@ module {
             bodyHash : Blob,
         ) : [Cert.ResidentResponseVariant] {
             if (
-                isInternalHttpStatePath(key) or
                 isSharedAppRoutePath(key) or
                 isPackageHttpAssetPath(key) or
                 validatedHttpAssetPath(key) != ?key or
@@ -1631,11 +1673,51 @@ module {
                     file.content_encoding != "gzip"
                 )
             ) return [];
-            let ?appId = appIdFromAssetUrl(key) else return [];
             let ?instances = InstallMemory.instancesForDeployment(
                 mem.install,
                 runningDeploymentId,
             ) else return [];
+            if (key == BROWSER_ORIGIN_CLEANUP_PATH) {
+                if (contentTypeBase(file.content_type) != "text/html") {
+                    return [];
+                };
+                let cleanup = List.empty<Cert.ResidentResponseVariant>();
+                for (instance in instances.vals()) {
+                    if (
+                        instance.resident_frame_security ==
+                            #persistent_dedicated_v1 and
+                        dedicatedResidentOriginActive(instance)
+                    ) {
+                        let hostLabel = persistentAppOriginPrefix(
+                            instance.browser_origin_nonce,
+                        ) # "--" # canisterId;
+                        let kind : Cert.ResidentRequestKind = #html_v1({
+                            canonical_query = browserOriginCleanupQuery(instance);
+                        });
+                        for (authority in certifiedAuthorities(hostLabel).vals()) {
+                            List.add(cleanup, {
+                                method = "GET";
+                                host = authority;
+                                kind;
+                                status_code = 200 : Nat16;
+                                body_hash = bodyHash;
+                                response_headers = certifiedResponseHeaders(
+                                    key,
+                                    file,
+                                    #persistent_app,
+                                    null,
+                                    ?{ host_label = hostLabel; authority },
+                                    bodyHash,
+                                    ?Cert.residentCertificationExpression(kind),
+                                );
+                            });
+                        };
+                    };
+                };
+                return List.toArray(cleanup);
+            };
+            if (isInternalHttpStatePath(key)) return [];
+            let ?appId = appIdFromAssetUrl(key) else return [];
             let ?instance = InstallMemory.findApp(instances, appId) else {
                 return [];
             };
@@ -1690,12 +1772,8 @@ module {
                         }));
                     };
                 } else {
-                    let allowPersistentWorkers =
-                        instance.resident_frame_security ==
-                            #persistent_dedicated_v1;
                     for (destination in residentSubresourceDestinations(
                         file.content_type,
-                        allowPersistentWorkers,
                     ).vals()) {
                         List.add(
                             residentKinds,
@@ -2006,6 +2084,16 @@ module {
             reconcilePublicStaticAssetsAtPrefix("/app/" # appId # "/");
         };
 
+        func reconcileBrowserOriginCleanupDocument() : () {
+            let ?bodyHash = cert.assetHash(BROWSER_ORIGIN_CLEANUP_PATH) else {
+                return;
+            };
+            cert.apply(staticCertificationMutations(
+                BROWSER_ORIGIN_CLEANUP_PATH,
+                bodyHash,
+            ));
+        };
+
         // After the structural v316 cutover, rebuild only Kernel-owned assets.
         // Ordered seeks jump over the potentially large app, module, package,
         // and internal-system stores. App/module/package response subtrees are
@@ -2152,6 +2240,7 @@ module {
                 };
             };
             cert.apply(List.toArray(mutations));
+            reconcileBrowserOriginCleanupDocument();
         };
 
         func reconcileResidentOriginPolicy(appId : Text) : () {
@@ -2160,6 +2249,7 @@ module {
             // aggregate forest-work meter covers this whole app scan too.
             cert.beginV2PublicationBatch();
             reconcilePublicStaticAssetsForApp(appId);
+            reconcileBrowserOriginCleanupDocument();
             ignore cert.finishV2PublicationBatch();
         };
 
@@ -3231,6 +3321,12 @@ module {
             url : Text,
             canisterId : Text,
         ) : HttpAssetOriginPolicy {
+            if (url == BROWSER_ORIGIN_CLEANUP_PATH) {
+                return switch (browserOriginCleanupInstance(headers)) {
+                    case (?_) #persistent_app;
+                    case null #deny;
+                };
+            };
             let authority = requestHostAuthority(headers);
 
             switch (appIdFromAssetUrl(url)) {
@@ -3270,6 +3366,30 @@ module {
                     );
                 };
             };
+        };
+
+        func browserOriginCleanupInstance(
+            headers : [Painless.HeaderField],
+        ) : ?InstallTypes.AppInstance {
+            let #allow(?hostLabel) = appAssetHostLabelForHeaders(headers) else {
+                return null;
+            };
+            for (instance in mem.install.committed_app_instances.vals()) {
+                if (
+                    instance.resident_frame_security ==
+                        #persistent_dedicated_v1 and
+                    dedicatedResidentOriginActive(instance) and
+                    InstallMemory.scopeActive(
+                        mem.install,
+                        runningDeploymentId,
+                        instance.scope,
+                    ) and
+                    hostLabel == persistentAppOriginPrefix(
+                        instance.browser_origin_nonce,
+                    ) # "--" # canisterId
+                ) return ?instance;
+            };
+            null;
         };
 
         public func /*query:unauthorized*/http_request(
@@ -3323,7 +3443,10 @@ module {
             if (not boundedCertifiedHttpRequest(request)) {
                 return plainHttpError(405, "Unsupported HTTP request");
             };
-            if (isInternalHttpStatePath(url)) return assetNotFound(url);
+            if (
+                isInternalHttpStatePath(url) and
+                url != BROWSER_ORIGIN_CLEANUP_PATH
+            ) return assetNotFound(url);
 
             // Certified Assets routes enforce their own Host and closed query
             // policy before static fallback. Executable app assets below are
@@ -3417,31 +3540,60 @@ module {
                         originPolicy
                     ) {
                         case (#persistent_app) {
-                            let ?appId = appIdFromAssetUrl(url) else {
-                                return assetNotFound(url);
+                            let instance = if (
+                                url == BROWSER_ORIGIN_CLEANUP_PATH
+                            ) {
+                                let ?cleanupInstance =
+                                    browserOriginCleanupInstance(
+                                        request.headers,
+                                    ) else return assetNotFound(url);
+                                if (not browserOriginCleanupRequestBound(
+                                    request.url,
+                                    request.headers,
+                                    cleanupInstance,
+                                )) return assetNotFound(url);
+                                cleanupInstance;
+                            } else {
+                                let ?appId = appIdFromAssetUrl(url) else {
+                                    return assetNotFound(url);
+                                };
+                                let ?residentInstance = InstallMemory.findApp(
+                                    mem.install.committed_app_instances,
+                                    appId,
+                                ) else return assetNotFound(url);
+                                if (
+                                    not dedicatedResidentOriginActive(
+                                        residentInstance,
+                                    ) or
+                                    not dedicatedResidentAssetRequestBound(
+                                        request.url,
+                                        url,
+                                        request.headers,
+                                        file.content_type,
+                                        residentInstance,
+                                    )
+                                ) return assetNotFound(url);
+                                residentInstance;
                             };
-                            let ?instance = InstallMemory.findApp(
-                                mem.install.committed_app_instances,
-                                appId,
-                            ) else return assetNotFound(url);
                             if (
-                                not dedicatedResidentOriginActive(instance) or
-                                not dedicatedResidentAssetRequestBound(
+                                url == BROWSER_ORIGIN_CLEANUP_PATH and
+                                contentTypeBase(file.content_type) != "text/html"
+                            ) return assetNotFound(url);
+                            if (url == BROWSER_ORIGIN_CLEANUP_PATH) {
+                                ?#html_v1({
+                                    canonical_query =
+                                        browserOriginCleanupQuery(instance);
+                                });
+                            } else {
+                                let ?kind = residentRequestKindForRequest(
                                     request.url,
                                     url,
                                     request.headers,
                                     file.content_type,
                                     instance,
-                                )
-                            ) return assetNotFound(url);
-                            let ?kind = residentRequestKindForRequest(
-                                request.url,
-                                url,
-                                request.headers,
-                                file.content_type,
-                                instance,
-                            ) else return assetNotFound(url);
-                            ?kind;
+                                ) else return assetNotFound(url);
+                                ?kind;
+                            };
                         };
                         case (#installation_app) {
                             let ?appId = appIdFromAssetUrl(url) else {

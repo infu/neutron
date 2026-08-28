@@ -1,0 +1,43 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-blast",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
+    "watch": "bun build.ts watch",
+    "test:unit": "bun test test/database.test.ts test/icblast_client.test.ts test/icblast_worker_runner.test.ts test/identity.test.ts test/json.test.ts test/package.test.ts test/runtime_config.test.ts test/runtime_protocol.test.ts test/scripts.test.ts test/service.test.ts",
+    "test:browser-bundles": "bun test test/query_worker.test.ts && bun test test/script_worker.test.ts",
+    "test:backend": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/backend.test.mo",
+    "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo",
+    "test:qualification": "bun ../../test/qualification/blast/run.ts --release",
+    "test": "npm run package && npm run test:unit && npm run test:browser-bundles && npm run test:backend && npm run test:memory",
+    "verify:release": "npm test && npm run test:qualification"
+  },
+  "author": "3V Interactive",
+  "license": "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",
+  "description": "Headless IC data, collection, and JavaScript tools for Neutron agents",
+  "dependencies": {
+    "@dfinity/identity": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "icblast": "4.3.3",
+    "idb": "^7.1.1",
+    "jsonata": "2.2.2",
+    "neutron-tools": "^1.1.0",
+    "quickjs-emscripten-core": "0.32.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "fake-indexeddb": "6.2.5",
+    "neutron-scripts": "^1.1.0"
+  }
+}

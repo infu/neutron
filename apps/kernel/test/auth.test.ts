@@ -74,7 +74,9 @@ test("auth agents take their gateway only from certified runtime", async () => {
   );
 
   expect(source).toContain("const deployment = getRuntimeDeployment()");
-  expect(source).toContain("agentOptions: { host: deployment.gateway }");
+  expect(source).toMatch(
+    /agentOptions:\s*\{[\s\S]*?host:\s*deployment\.gateway[\s\S]*?\}/u,
+  );
   expect(source).toContain("host: runtimeDeployment.gateway");
   expect(source).not.toContain("process.env.LOCAL");
   expect(source).not.toContain("process.env.ICP_LOCAL_HOST");
@@ -96,7 +98,8 @@ test("the dynamic self actor is single-flight and generation scoped", async () =
     "if (neutronDynamicCanPromise) return neutronDynamicCanPromise",
   );
   expect(factory).toContain('readKernelAssetText("/pkg/neutron.did")');
-  expect(factory).toContain("createDynamicIcblastClient()");
+  expect(factory).toContain("createDynamicIcblastClient(");
+  expect(factory).toContain("new TextEncoder().encode(candid).byteLength");
   expect(factory).toContain("generationClient(getNeutronId(), candid)");
   expect(factory).toContain("generation !== neutronCanGeneration");
   expect(factory).toContain("return getNeutronDynamicCan()");

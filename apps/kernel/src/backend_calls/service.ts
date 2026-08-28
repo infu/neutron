@@ -28,6 +28,7 @@ import {
   assertEndpointAppScope,
   assertFrontendAuthorityCommitted,
 } from "../runtime_authority.ts";
+import { throwIfRequestCancelled } from "../request_cancel.ts";
 
 export type BackendCallReservation = {
   id: bigint;
@@ -66,7 +67,10 @@ export type BackendAccessRequestRuntime = {
   ) => Promise<void | ValidatedSelfCall>;
   /** Executes through the normal same-app path, which revalidates at execution. */
   executeSelfCall?: ExecuteSelfCall;
-  authorize?: (request: NormalizedBackendAccessRequest) => Promise<boolean>;
+  authorize?: (
+    request: NormalizedBackendAccessRequest,
+    signal?: AbortSignal,
+  ) => Promise<boolean>;
   /** Test seam; production always uses the authenticated kernel actor. */
   transport?: BackendReservationTransport;
 };
@@ -86,7 +90,9 @@ export async function requestBackendReservationForEndpoint(
   payload: JsonValue,
   endpoint: RegisteredEndpoint,
   runtime: BackendAccessRequestRuntime,
+  signal?: AbortSignal,
 ): Promise<JsonValue> {
+  assertBackendAccessRequestActive(signal);
   const declaration = requireDeclaration(endpoint);
   const record = requiredObject(payload, "backend access request");
   assertOnlyKeys(record, ["actions", "call"], "backend access request");
@@ -118,6 +124,7 @@ export async function requestBackendReservationForEndpoint(
       (await runtime.validateSelfCall(call.method, call.args)) ?? {
         args: call.args,
       };
+    assertBackendAccessRequestActive(signal);
     assertValidatedSelfCall(reviewedCall);
     assertEndpointCurrent(endpoint, {
       ...(endpoint.sessionId ? { endpointSession: endpoint.sessionId } : {}),
@@ -158,6 +165,7 @@ export async function requestBackendReservationForEndpoint(
           (reservation) => reservation.appId === endpoint.context.appId,
         )
       : [];
+  assertBackendAccessRequestActive(signal);
   assertEndpointCurrent(endpoint, initialSnapshot);
   const request = immutableBackendCallSnapshot({
     ...initialSnapshot,
@@ -170,15 +178,20 @@ export async function requestBackendReservationForEndpoint(
   });
 
   const preapproved =
-    (await runtime.authorize?.({
-      actions: request.actions,
-      ...(request.call ? { call: request.call } : {}),
-      endpoint: request.endpoint,
-      source: request.source,
-    })) ?? false;
+    (await runtime.authorize?.(
+      {
+        actions: request.actions,
+        ...(request.call ? { call: request.call } : {}),
+        endpoint: request.endpoint,
+        source: request.source,
+      },
+      signal,
+    )) ?? false;
+  assertBackendAccessRequestActive(signal);
   assertEndpointCurrent(endpoint, request);
   if (!preapproved) {
-    await requestBackendCallConsent(request);
+    await requestBackendCallConsent(request, signal);
+    assertBackendAccessRequestActive(signal);
     assertEndpointCurrent(endpoint, request);
   }
 
@@ -187,6 +200,7 @@ export async function requestBackendReservationForEndpoint(
   // ownership and live Candid once more at the point of invocation.
   if (call) {
     await runtime.validateSelfCall!(call.method, call.args);
+    assertBackendAccessRequestActive(signal);
     assertEndpointCurrent(endpoint, request);
   }
   // Preserve the backend API contract for call-only requests: applying an
@@ -213,6 +227,15 @@ export async function requestBackendReservationForEndpoint(
   };
   assertBoundedJson(result, "Backend access response");
   return result;
+}
+
+function assertBackendAccessRequestActive(
+  signal: AbortSignal | undefined,
+): void {
+  throwIfRequestCancelled(
+    signal,
+    "Backend access request was cancelled by the requesting app",
+  );
 }
 
 function assertValidatedSelfCall(

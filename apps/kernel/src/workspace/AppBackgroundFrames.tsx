@@ -43,6 +43,11 @@ import {
 import { assertAppSurfaceInventoryCapacity } from "../runtime_limits.ts";
 
 export const RESIDENT_FRAME_READY_TIMEOUT_MS = 15_000;
+export const PERSISTENT_ORIGIN_POLICY_TIMEOUT_MS = 15_000;
+export const PERSISTENT_ORIGIN_POLICY_MESSAGE =
+  "neutron:persistent-origin-policy:v1";
+export const PERSISTENT_ORIGIN_POLICY_PATH =
+  "/system/browser-origin-cleanup.html";
 
 export type ResidentFrameReadiness = Readonly<{
   attempt: 0 | 1;
@@ -130,6 +135,14 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
   const [readiness, setReadiness] = useState<ResidentFrameReadiness>(
     INITIAL_RESIDENT_FRAME_READINESS,
   );
+  const [originPolicyPhase, setOriginPolicyPhase] = useState<
+    "waiting" | "ready" | "blocked"
+  >(() =>
+    residentFrameSecurityMode(app) ===
+      ResidentFrameSecurityMode.PERSISTENT_DEDICATED_V1
+      ? "waiting"
+      : "ready"
+  );
   const deployment = getRuntimeDeployment();
   const canisterId = getNeutronId();
   const installationUid = appInstance.scope.installationUid;
@@ -190,6 +203,10 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
         deployment,
       )
     : null;
+  const cleanupSrc =
+    mode === ResidentFrameSecurityMode.PERSISTENT_DEDICATED_V1 && residentSrc
+      ? persistentOriginPolicyCleanupUrl(residentSrc)
+      : null;
   const src = ordinaryFramePolicy?.src ?? residentSrc;
   if (!src) throw new Error("Background frame has no runtime URL");
   const residentSecurity = residentSrc
@@ -227,6 +244,55 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
       residentSecurity?.binding.browserOriginAuthorityEpoch,
     ],
   );
+
+  useLayoutEffect(() => {
+    if (!cleanupSrc || originPolicyPhase !== "waiting") return;
+    const iframe = iframeRef.current;
+    const source = iframe?.contentWindow;
+    if (!iframe || !source) {
+      setOriginPolicyPhase("blocked");
+      return;
+    }
+    const expectedOrigin = new URL(cleanupSrc).origin;
+    let active = true;
+    const finish = (next: "ready" | "blocked"): void => {
+      if (!active) return;
+      active = false;
+      globalThis.clearTimeout(timer);
+      window.removeEventListener("message", receive);
+      setOriginPolicyPhase(next);
+    };
+    const receive = (event: MessageEvent): void => {
+      if (
+        event.source !== source ||
+        event.origin !== expectedOrigin ||
+        !isPersistentOriginPolicyResult(event.data)
+      ) return;
+      const state = useAppsStore.getState();
+      finish(
+        event.data.ok &&
+            appFrameAuthorityCurrent(
+              endpointAuthority,
+              state,
+              isAuthorityPendingState(state),
+            )
+          ? "ready"
+          : "blocked",
+      );
+    };
+    window.addEventListener("message", receive);
+    const timer = globalThis.setTimeout(
+      () => finish("blocked"),
+      PERSISTENT_ORIGIN_POLICY_TIMEOUT_MS,
+    );
+    iframe.setAttribute("src", cleanupSrc);
+    return () => {
+      active = false;
+      globalThis.clearTimeout(timer);
+      window.removeEventListener("message", receive);
+    };
+  }, [cleanupSrc, endpointAuthority, originPolicyPhase]);
+
   const launchFailure =
     preflightFailure ??
     (readiness.phase === "blocked"
@@ -234,6 +300,7 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
       : null);
 
   useLayoutEffect(() => {
+    if (originPolicyPhase !== "ready") return;
     const iframe = iframeRef.current;
     if (!iframe) return;
     const launchKey = residentSecurity
@@ -370,6 +437,7 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
     appId,
     installationUid,
     ordinaryFramePolicy,
+    originPolicyPhase,
     residentSecurity?.origin,
     residentSecurity?.credentialless,
     residentSecurity?.binding.mode,
@@ -379,6 +447,30 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
     readiness.attempt,
     src,
   ]);
+
+  if (cleanupSrc && originPolicyPhase !== "ready") {
+    return (
+      <iframe
+        key="origin-policy"
+        ref={iframeRef}
+        className="app-background-frame"
+        data-tid="app-origin-policy-frame"
+        data-app-id={appId}
+        data-resident-launch={
+          originPolicyPhase === "blocked" ? "blocked" : "origin-policy"
+        }
+        {...(originPolicyPhase === "blocked"
+          ? {
+              "data-resident-launch-error":
+                "Persistent origin policy cleanup failed",
+            }
+          : {})}
+        sandbox={ORIGINFUL_APP_FRAME_SANDBOX}
+        title={`${app.name} origin policy`}
+        tabIndex={-1}
+      />
+    );
+  }
 
   return (
     <iframe
@@ -419,6 +511,29 @@ const AppBackgroundFrame = memo(function AppBackgroundFrame({
     />
   );
 });
+
+export function persistentOriginPolicyCleanupUrl(residentSrc: string): string {
+  const url = new URL(residentSrc);
+  url.pathname = PERSISTENT_ORIGIN_POLICY_PATH;
+  url.searchParams.set("role", "origin-policy-cleanup");
+  url.hash = "";
+  return url.href;
+}
+
+export function isPersistentOriginPolicyResult(
+  value: unknown,
+): value is Readonly<{
+  type: typeof PERSISTENT_ORIGIN_POLICY_MESSAGE;
+  ok: boolean;
+}> {
+  if (!value || typeof value !== "object") return false;
+  const result = value as Record<string, unknown>;
+  return (
+    Object.keys(result).length === 2 &&
+    result.type === PERSISTENT_ORIGIN_POLICY_MESSAGE &&
+    typeof result.ok === "boolean"
+  );
+}
 
 export function backgroundFrameSecurity(
   appId: string,

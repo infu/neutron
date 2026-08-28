@@ -1,5 +1,7 @@
 import type {
   OpenRouterModel,
+  PendingStateChangeAttempt,
+  PendingStateChangeJournal,
   PersistedAgentState,
   TranscriptMessage,
 } from "./chat_types.ts";
@@ -13,6 +15,8 @@ const MAX_MODELS = 600;
 const MAX_TEXT = 64_000;
 const MAX_MODEL_TURNS = 32;
 const MAX_MODEL_HISTORY_BYTES = 4 * 1024 * 1024;
+export const MAX_PENDING_STATE_CHANGE_ATTEMPTS = 32;
+const SAFE_ATTEMPT_FIELD = /^[a-zA-Z0-9:_.-]+$/;
 
 const emptyState = (): PersistedAgentState => ({
   selectedModelId: null,
@@ -20,6 +24,7 @@ const emptyState = (): PersistedAgentState => ({
   modelsFetchedAt: 0,
   messages: [],
   modelTurns: [],
+  pendingStateChangeJournal: null,
 });
 
 export class AgentStorage {
@@ -65,6 +70,9 @@ function normalizeState(state: PersistedAgentState): PersistedAgentState {
         : 0,
     messages: normalizeMessages(state.messages),
     modelTurns: normalizeModelTurns(state.modelTurns),
+    pendingStateChangeJournal: normalizePendingStateChangeJournal(
+      state.pendingStateChangeJournal,
+    ),
   };
 }
 
@@ -82,7 +90,35 @@ export function normalizePersistedState(value: unknown): PersistedAgentState {
     modelTurns: Array.isArray(value.modelTurns)
       ? normalizeModelTurns(value.modelTurns)
       : [],
+    pendingStateChangeJournal: normalizePendingStateChangeJournal(
+      value.pendingStateChangeJournal,
+    ),
   });
+}
+
+function normalizePendingStateChangeJournal(
+  value: unknown,
+): PendingStateChangeJournal | null {
+  if (!isRecord(value)) return null;
+  const rawAttempts = Array.isArray(value.attempts) ? value.attempts : [];
+  const attempts: PendingStateChangeAttempt[] = [];
+  const keys = new Set<string>();
+  let overflow = value.overflow === true;
+  for (const candidate of rawAttempts) {
+    if (!isRecord(candidate)) continue;
+    const target = boundedSafeAttemptField(candidate.target, 240);
+    const name = boundedSafeAttemptField(candidate.name, 128);
+    if (!target || !name) continue;
+    const key = `${target}\n${name}`;
+    if (keys.has(key)) continue;
+    if (attempts.length >= MAX_PENDING_STATE_CHANGE_ATTEMPTS) {
+      overflow = true;
+      continue;
+    }
+    keys.add(key);
+    attempts.push({ target, name });
+  }
+  return attempts.length > 0 || overflow ? { attempts, overflow } : null;
 }
 
 function normalizeMessages(value: unknown): TranscriptMessage[] {
@@ -181,6 +217,18 @@ function normalizeMessage(value: Record<string, unknown>): TranscriptMessage {
 
 function boundedString(value: unknown, maximum: number): string {
   return typeof value === "string" ? value.slice(0, maximum) : "";
+}
+
+function boundedSafeAttemptField(value: unknown, maximum: number): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > maximum ||
+    !SAFE_ATTEMPT_FIELD.test(value)
+  ) {
+    return "";
+  }
+  return value;
 }
 
 function randomId(): string {

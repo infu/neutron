@@ -25,9 +25,15 @@ const MAX_MOPS_OUTPUT_BYTES = 1024 * 1024;
 const MAX_PACKAGE_JSON_BYTES = 1024 * 1024;
 
 const LEGAL_FILE_PATTERN =
-  /^(?:licen[cs]es?|copying|notice|copyright)(?:$|[._-])/iu;
+  /^(?:(?:licen[cs]es?|copying|notice|copyright)(?:$|[._-])|third[_-]party[_-]notices(?:$|[._-]))/iu;
 const PRIMARY_LICENSE_FILE_PATTERN =
   /^(?:licen[cs]es?|copying)(?:$|[._-])/iu;
+const THIRD_PARTY_LICENSE_TREE_PATTERN =
+  /(?:^|\/)third_party\/licenses(?:\/|$)/iu;
+const CONTENT_ADDRESSED_MATERIAL_PATTERN =
+  /^(.*)\/material\/([a-f0-9]{64})\.txt$/u;
+const CONTENT_ADDRESSED_BUNDLED_PATH_PATTERN =
+  /^material\/([a-f0-9]{64})\.txt$/u;
 const PACKAGE_NAME_PATTERN =
   /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/iu;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
@@ -616,6 +622,7 @@ async function collectNpmComponents(
       legalInputs = await collectPackageLegalInputs({
         packageRoot,
         packageName: actualName,
+        requiredLegalRoots: declaredNpmLegalRoots(manifest, actualName),
         declaredLicense,
         apacheLicense,
         allowApacheFallback: true,
@@ -640,16 +647,12 @@ async function collectNpmComponents(
         );
       }
     }
-    const effectiveLicense = detectLlvmException(
-      selectedLicense,
-      legalInputs,
-    );
     const draft: DraftComponent = Object.freeze({
       ecosystem: "npm",
       name: actualName,
       version,
       declaredLicense,
-      selectedLicense: effectiveLicense,
+      selectedLicense: detectLlvmException(selectedLicense, legalInputs),
       ...optionalMetadataFields(manifest, `npm ${actualName}@${version}`),
       legalInputs: Object.freeze(legalInputs),
     });
@@ -776,14 +779,52 @@ async function selectAuditedUndeclaredMopsLicense(
   return selected;
 }
 
+function declaredNpmLegalRoots(
+  manifest: JsonObject,
+  packageName: string,
+): readonly string[] {
+  if (manifest.files === undefined) return [];
+  if (!Array.isArray(manifest.files)) {
+    throw new Error(`npm ${packageName} package.json files must be an array`);
+  }
+  const roots = new Set<string>();
+  for (const entry of manifest.files) {
+    if (typeof entry !== "string") {
+      throw new Error(`npm ${packageName} package.json files must contain text`);
+    }
+    const literal = entry
+      .replaceAll("\\", "/")
+      .replace(/^(?:\.\/)+/u, "")
+      .replace(/\/+$/u, "");
+    if (
+      literal.length === 0 ||
+      /[*?[\]{}!]/u.test(literal) ||
+      (!LEGAL_FILE_PATTERN.test(path.posix.basename(literal)) &&
+        !THIRD_PARTY_LICENSE_TREE_PATTERN.test(literal))
+    ) {
+      continue;
+    }
+    const normalized = normalizeSafeRelativePath(
+      literal,
+      `npm ${packageName} published file`,
+    );
+    roots.add(normalized);
+  }
+  return [...roots].sort(compareCanonical);
+}
+
 async function collectPackageLegalInputs(options: Readonly<{
   packageRoot: string;
   packageName: string;
+  requiredLegalRoots?: readonly string[];
   declaredLicense: string;
   apacheLicense: Uint8Array;
   allowApacheFallback: boolean;
 }>): Promise<LegalInput[]> {
-  const discoveredPaths = await discoverLegalFiles(options.packageRoot);
+  const discoveredPaths = await discoverLegalFiles(
+    options.packageRoot,
+    options.requiredLegalRoots ?? [],
+  );
   const seeLicenseMatch = /^SEE LICENSE IN (.+)$/iu.exec(
     options.declaredLicense.trim(),
   );
@@ -835,6 +876,8 @@ async function collectPackageLegalInputs(options: Readonly<{
     });
   }
 
+  validateBoundLegalMaps(inputs, options.packageName);
+
   if (!hasPrimaryLicense) {
     if (
       options.allowApacheFallback &&
@@ -858,7 +901,138 @@ async function collectPackageLegalInputs(options: Readonly<{
   );
 }
 
-async function discoverLegalFiles(packageRoot: string): Promise<string[]> {
+function validateBoundLegalMaps(
+  inputs: readonly LegalInput[],
+  packageName: string,
+): void {
+  const inputByPath = new Map(inputs.map((input) => [input.sourcePath, input]));
+  const contentAddressedMapRoots = new Set<string>();
+  for (const { sourcePath } of inputs) {
+    const match = CONTENT_ADDRESSED_MATERIAL_PATTERN.exec(sourcePath);
+    if (match === null) continue;
+    const mapRoot = match[1]!;
+    contentAddressedMapRoots.add(mapRoot);
+    if (!inputByPath.has(`${mapRoot}/map.json`)) {
+      throw new Error(
+        `${packageName} content-addressed legal material has no map.json`,
+      );
+    }
+  }
+
+  for (const mapInput of inputs.filter(
+    ({ sourcePath }) =>
+      THIRD_PARTY_LICENSE_TREE_PATTERN.test(sourcePath) &&
+      path.posix.basename(sourcePath).toLowerCase() === "map.json",
+  )) {
+    const label = `${packageName} legal material map ${mapInput.sourcePath}`;
+    const mapRoot = path.posix.dirname(mapInput.sourcePath);
+    let map: JsonObject;
+    try {
+      map = parseJsonObjectBytes(mapInput.bytes, label);
+    } catch (error) {
+      if (contentAddressedMapRoots.has(mapRoot)) throw error;
+      continue;
+    }
+    if (
+      !contentAddressedMapRoots.has(mapRoot) &&
+      !hasContentAddressedMaterialBinding(map)
+    ) {
+      continue;
+    }
+    const references = new Map<
+      string,
+      Readonly<{ sha256: string; bytes: number }>
+    >();
+    const pending: unknown[] = [map];
+    let visited = 0;
+    while (pending.length > 0) {
+      const value = pending.pop();
+      visited += 1;
+      if (visited > MAX_DIRECTORY_ENTRIES_PER_COMPONENT) {
+        throw new Error(`${label} exceeds the supported bounds`);
+      }
+      if (Array.isArray(value)) {
+        pending.push(...value);
+        continue;
+      }
+      if (!isObject(value)) continue;
+      if (value.bundled_path !== undefined) {
+        const bundledPath = requiredString(value, "bundled_path", label);
+        const sha256 = requiredString(value, "sha256", label);
+        const bytes = value.bytes;
+        const match = CONTENT_ADDRESSED_BUNDLED_PATH_PATTERN.exec(bundledPath);
+        if (
+          match === null ||
+          match[1] !== sha256 ||
+          typeof bytes !== "number" ||
+          !Number.isSafeInteger(bytes) ||
+          bytes <= 0 ||
+          bytes > MAX_MATERIAL_BYTES
+        ) {
+          throw new Error(`${label} has an invalid content binding`);
+        }
+        const sourcePath = `${mapRoot}/${bundledPath}`;
+        const previous = references.get(sourcePath);
+        if (
+          previous !== undefined &&
+          (previous.sha256 !== sha256 || previous.bytes !== bytes)
+        ) {
+          throw new Error(`${label} has conflicting content bindings`);
+        }
+        references.set(sourcePath, { sha256, bytes });
+      }
+      pending.push(...Object.values(value));
+    }
+    if (references.size === 0) {
+      throw new Error(`${label} contains no content-addressed material`);
+    }
+
+    const actualPaths = [...inputByPath.keys()]
+      .filter((sourcePath) => sourcePath.startsWith(`${mapRoot}/material/`))
+      .sort(compareCanonical);
+    const expectedPaths = [...references.keys()].sort(compareCanonical);
+    if (actualPaths.join("\u0000") !== expectedPaths.join("\u0000")) {
+      throw new Error(`${label} does not exactly match its material directory`);
+    }
+    for (const [sourcePath, expected] of references) {
+      const actual = inputByPath.get(sourcePath)!;
+      if (
+        actual.bytes.byteLength !== expected.bytes ||
+        hashBytes(actual.bytes) !== expected.sha256
+      ) {
+        throw new Error(`${label} material does not match: ${sourcePath}`);
+      }
+    }
+  }
+}
+
+function hasContentAddressedMaterialBinding(value: JsonObject): boolean {
+  const pending: unknown[] = [value];
+  let visited = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    visited += 1;
+    if (visited > MAX_DIRECTORY_ENTRIES_PER_COMPONENT) return false;
+    if (Array.isArray(current)) {
+      pending.push(...current);
+      continue;
+    }
+    if (!isObject(current)) continue;
+    if (
+      typeof current.bundled_path === "string" &&
+      CONTENT_ADDRESSED_BUNDLED_PATH_PATTERN.test(current.bundled_path)
+    ) {
+      return true;
+    }
+    pending.push(...Object.values(current));
+  }
+  return false;
+}
+
+async function discoverLegalFiles(
+  packageRoot: string,
+  requiredRoots: readonly string[] = [],
+): Promise<string[]> {
   const files: string[] = [];
   let scannedEntries = 0;
 
@@ -888,12 +1062,32 @@ async function discoverLegalFiles(packageRoot: string): Promise<string[]> {
           `Installed dependency contains non-regular entry: ${absolutePath}`,
         );
       }
-      if (!LEGAL_FILE_PATTERN.test(entry.name)) continue;
-      files.push(toPosixRelative(packageRoot, absolutePath));
+      const relativePath = toPosixRelative(packageRoot, absolutePath);
+      const isRequiredPath = requiredRoots.some(
+        (root) => relativePath === root || relativePath.startsWith(`${root}/`),
+      );
+      if (
+        !LEGAL_FILE_PATTERN.test(entry.name) &&
+        !THIRD_PARTY_LICENSE_TREE_PATTERN.test(relativePath) &&
+        !isRequiredPath
+      ) {
+        continue;
+      }
+      files.push(relativePath);
     }
   };
 
   await walk(packageRoot);
+  for (const relativePath of requiredRoots) {
+    if (
+      !files.includes(relativePath) &&
+      !files.some((filePath) => filePath.startsWith(`${relativePath}/`))
+    ) {
+      throw new Error(
+        `Installed dependency declared legal root is empty: ${relativePath}`,
+      );
+    }
+  }
   return files.sort(compareCanonical);
 }
 
@@ -1482,10 +1676,13 @@ function detectLlvmException(
   inputs: readonly LegalInput[],
 ): string {
   if (selectedLicense !== "Apache-2.0") return selectedLicense;
-  const hasException = inputs.some((input) =>
-    fatalUtf8Decoder
-      .decode(input.bytes)
-      .includes("LLVM EXCEPTIONS TO THE APACHE 2.0 LICENSE"),
+  const hasException = inputs.some(
+    (input) =>
+      !input.sourcePath.includes("/") &&
+      PRIMARY_LICENSE_FILE_PATTERN.test(input.sourcePath) &&
+      fatalUtf8Decoder
+        .decode(input.bytes)
+        .includes("LLVM EXCEPTIONS TO THE APACHE 2.0 LICENSE"),
   );
   return hasException ? "Apache-2.0 WITH LLVM-exception" : selectedLicense;
 }

@@ -9,6 +9,7 @@ import {
   registerFrameContext,
   resolveFrameContext,
   subscribeEndpointChanges,
+  subscribeEndpointPortRetirements,
   waitForFrameEndpointPort,
 } from "../src/frame_context.ts";
 import {
@@ -16,6 +17,7 @@ import {
   MSG_BUS_FRAME_READY,
 } from "neutron-tools/src/frame_handshake.js";
 import { ResidentFrameSecurityMode } from "../src/capabilities/plan.ts";
+import { execPort as execKernelPort } from "neutron-tools/src/kernel.js";
 
 test("frame context registers, replaces, and unregisters by exact source", () => {
   const source = {} as Window;
@@ -60,8 +62,8 @@ test("background endpoints use one canonical app namespace", () => {
   });
   expect(
     listRegisteredEndpoints().some(
-      (endpoint) => endpoint.endpointId === "app:gemma:background"
-    )
+      (endpoint) => endpoint.endpointId === "app:gemma:background",
+    ),
   ).toBe(true);
   unregister();
   expect(getRegisteredEndpoint("app:gemma:background")).toBeNull();
@@ -132,7 +134,11 @@ test("resident background ports require authenticated frame readiness", () => {
     transfer: Transferable[];
   }> = [];
   const source = {
-    postMessage(message: unknown, targetOrigin: string, transfer: Transferable[]) {
+    postMessage(
+      message: unknown,
+      targetOrigin: string,
+      transfer: Transferable[],
+    ) {
       posted.push({ message, targetOrigin, transfer });
     },
   } as unknown as Window;
@@ -174,8 +180,7 @@ test("authenticated ready replaces exact-origin sessions without duplicate churn
     },
   } as unknown as Pick<Window, "addEventListener">);
   const posted: Array<{ message: unknown; targetOrigin: string }> = [];
-  const origin =
-    "http://i3aa79fc331fed4c37ec77196--4caro.localhost:8000";
+  const origin = "http://i3aa79fc331fed4c37ec77196--4caro.localhost:8000";
   const source = {
     postMessage(message: unknown, targetOrigin: string) {
       posted.push({ message, targetOrigin });
@@ -193,9 +198,7 @@ test("authenticated ready replaces exact-origin sessions without duplicate churn
     { origin },
   );
 
-  const endpoint = getRegisteredEndpoint(
-    "app:calls:tile:call:instance:one",
-  );
+  const endpoint = getRegisteredEndpoint("app:calls:tile:call:instance:one");
   onKernelMessage({
     data: MSG_BUS_FRAME_READY,
     origin,
@@ -241,8 +244,93 @@ test("authenticated ready replaces exact-origin sessions without duplicate churn
         (message as { type?: unknown }).type === "neutron:msgbus:connect",
     ),
   ).toHaveLength(2);
-  expect(posted.every(({ targetOrigin }) => targetOrigin === origin)).toBe(true);
+  expect(posted.every(({ targetOrigin }) => targetOrigin === origin)).toBe(
+    true,
+  );
   unregister();
+});
+
+test("port replacement cancels the exact retired transport before closing it", async () => {
+  const appPorts: MessagePort[] = [];
+  const appMessages: unknown[][] = [];
+  const source = {
+    postMessage(
+      _message: unknown,
+      _targetOrigin: string,
+      transfer: Transferable[] = [],
+    ) {
+      const port = transfer[0];
+      if (!(port instanceof MessagePort)) return;
+      const messages: unknown[] = [];
+      port.addEventListener("message", (event) => messages.push(event.data));
+      port.start();
+      appPorts.push(port);
+      appMessages.push(messages);
+    },
+  } as unknown as Window;
+  const unregister = registerFrameContext(
+    source,
+    {
+      role: "tile",
+      appId: "retirement",
+      tileId: "main",
+      instanceId: "one",
+      workspace: 1,
+    },
+    { origin: "null" },
+  );
+  const endpoint = getRegisteredEndpoint(
+    "app:retirement:tile:main:instance:one",
+  );
+  if (!endpoint) throw new Error("Retirement endpoint did not register");
+  expect(connectFrameEndpoint(source, true)).toBe(true);
+  const firstPort = endpoint.port;
+  if (!firstPort) throw new Error("First endpoint port did not connect");
+  const retiredPorts: MessagePort[] = [];
+  const unsubscribe = subscribeEndpointPortRetirements((port) => {
+    retiredPorts.push(port);
+  });
+
+  const firstPending = execKernelPort(firstPort, "slow", null, 1);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(connectFrameEndpoint(source, true)).toBe(true);
+  await expect(firstPending).rejects.toThrow("Message bus endpoint retired");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(retiredPorts).toEqual([firstPort]);
+  expect(endpoint.port).toBeDefined();
+  expect(endpoint.port).not.toBe(firstPort);
+  const firstRequest = appMessages[0]?.[0] as { id?: number } | undefined;
+  expect(appMessages[0]?.[1]).toEqual({
+    type: "neutron:msgbus:cancel",
+    version: 1,
+    id: firstRequest?.id,
+  });
+
+  const secondPort = endpoint.port!;
+  const secondPending = execKernelPort<string>(secondPort, "current", null, 1);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await expect(
+    Promise.race([
+      secondPending.then(
+        () => "settled",
+        () => "settled",
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve("pending"), 0)),
+    ]),
+  ).resolves.toBe("pending");
+  const secondRequest = appMessages[1]?.[0] as { id?: number } | undefined;
+  appPorts[1]?.postMessage({
+    type: "response",
+    id: secondRequest?.id,
+    ok: "current",
+  });
+  await expect(secondPending).resolves.toBe("current");
+
+  unregister();
+  expect(retiredPorts).toEqual([firstPort, secondPort]);
+  unsubscribe();
+  for (const port of appPorts) port.close();
 });
 
 test("legacy opaque tray reload replaces the old document's port", () => {
@@ -286,9 +374,7 @@ test("legacy opaque tray reload replaces the old document's port", () => {
   expect(markFrameEndpointLoaded(source)).toBe("preserved");
   expect(connectionCount).toBe(1);
   expect(isFrameEndpointReady(source)).toBe(true);
-  const endpoint = getRegisteredEndpoint(
-    "app:calls:tray:instance:opaque",
-  );
+  const endpoint = getRegisteredEndpoint("app:calls:tray:instance:opaque");
   const firstPort = endpoint?.port;
   const firstSessionId = endpoint?.sessionId;
 
@@ -345,9 +431,7 @@ test("legacy opaque background reload waits for the new document's readiness", (
   ready();
   expect(connectionCount).toBe(1);
   expect(isFrameEndpointReady(source)).toBe(true);
-  const endpoint = getRegisteredEndpoint(
-    "app:opaque-load-first:background",
-  );
+  const endpoint = getRegisteredEndpoint("app:opaque-load-first:background");
   const firstPort = endpoint?.port;
   const firstSessionId = endpoint?.sessionId;
   const probesBeforeReload = probeCount;
@@ -389,11 +473,9 @@ test("a retained legacy opaque tile reconnects after re-registration", () => {
     instanceId: "retained",
     workspace: 1,
   };
-  const unregisterFirst = registerFrameContext(
-    source,
-    context,
-    { origin: "null" },
-  );
+  const unregisterFirst = registerFrameContext(source, context, {
+    origin: "null",
+  });
   expect(markFrameEndpointLoaded(source)).toBe("preserved");
   const firstEndpoint = getRegisteredEndpoint(
     "app:calls-retained-compat:tile:call:instance:retained",
@@ -455,10 +537,12 @@ test("exact-origin initial load can precede SDK readiness", () => {
   } as unknown as MessageEvent);
   expect(isFrameEndpointReady(source)).toBe(true);
   expect(posted.at(-1)).toMatchObject({ targetOrigin: origin });
-  expect(
-    (posted.at(-1)?.message as { type?: unknown } | undefined)?.type,
-  ).toBe("neutron:msgbus:connect");
-  expect(posted.every(({ targetOrigin }) => targetOrigin === origin)).toBe(true);
+  expect((posted.at(-1)?.message as { type?: unknown } | undefined)?.type).toBe(
+    "neutron:msgbus:connect",
+  );
+  expect(posted.every(({ targetOrigin }) => targetOrigin === origin)).toBe(
+    true,
+  );
   unregister();
 });
 
@@ -579,6 +663,24 @@ test("kernel waits for a loading frame's private message port", async () => {
   unregister();
 });
 
+test("request cancellation stops waiting for a frame port", async () => {
+  const source = { postMessage() {} } as unknown as Window;
+  const unregister = registerFrameContext(
+    source,
+    { role: "background", appId: "files-cancelled-wait" },
+    { origin: "null" },
+  );
+  const endpoint = getRegisteredEndpoint("app:files-cancelled-wait:background");
+  if (!endpoint) throw new Error("Endpoint did not register");
+  const controller = new AbortController();
+  const pending = waitForFrameEndpointPort(endpoint, 1, controller.signal);
+
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(connectFrameEndpoint(source, true)).toBe(true);
+  unregister();
+});
+
 test("frame readiness and registration form a lossless handshake", async () => {
   let onKernelMessage: (event: Event) => void = () => undefined;
   const kernelWindow = {
@@ -690,14 +792,12 @@ test("a tile-origin ready handshake cannot claim a background context", () => {
 test("kernel stops waiting when a loading frame is replaced", async () => {
   const first = {} as Window;
   const context = { role: "background" as const, appId: "files" };
-  const unregisterFirst = registerFrameContext(first, context, {
-  });
+  const unregisterFirst = registerFrameContext(first, context, {});
   const endpoint = getRegisteredEndpoint("app:files:background");
   if (!endpoint) throw new Error("Files endpoint did not register");
 
   const pending = waitForFrameEndpointPort(endpoint, 1);
-  const unregisterSecond = registerFrameContext({} as Window, context, {
-  });
+  const unregisterSecond = registerFrameContext({} as Window, context, {});
   await expect(pending).rejects.toThrow("was replaced before connecting");
   unregisterFirst();
   unregisterSecond();
@@ -710,19 +810,15 @@ test("kernel targets real-origin background handshakes exactly", () => {
       posted.push({ targetOrigin });
     },
   } as unknown as Window;
-  const origin =
-    "http://agemmaa--4caro-hl777-77775-aaaba-cai.localhost:8000";
+  const origin = "http://agemmaa--4caro-hl777-77775-aaaba-cai.localhost:8000";
   const unregister = registerFrameContext(
     source,
     { role: "background", appId: "gemma" },
-    { origin }
+    { origin },
   );
 
   expect(connectFrameEndpoint(source, true)).toBe(true);
-  expect(posted).toEqual([
-    { targetOrigin: origin },
-    { targetOrigin: origin },
-  ]);
+  expect(posted).toEqual([{ targetOrigin: origin }, { targetOrigin: origin }]);
   unregister();
 });
 
@@ -742,9 +838,7 @@ test("kernel ignores a dedicated frame's initial same-origin document", () => {
 
   expect(connectFrameEndpoint(source, true)).toBe(false);
   expect(posted).toEqual([]);
-  expect(
-    getRegisteredEndpoint("app:agent:background")?.port,
-  ).toBeUndefined();
+  expect(getRegisteredEndpoint("app:agent:background")?.port).toBeUndefined();
   unregister();
 });
 
@@ -756,8 +850,7 @@ test("kernel does not probe a resident before dedicated-origin navigation", () =
     },
   } as unknown as Pick<Window, "addEventListener">);
   const posted: Array<{ message: unknown; targetOrigin: string }> = [];
-  const origin =
-    "http://p0123456789abcdef01234567--4caro.localhost:8000";
+  const origin = "http://p0123456789abcdef01234567--4caro.localhost:8000";
   let navigated = false;
   const source = {
     location: {
@@ -793,9 +886,9 @@ test("kernel does not probe a resident before dedicated-origin navigation", () =
   expect(markFrameEndpointLoaded(source)).toBe("preserved");
   expect(posted).toHaveLength(1);
   expect(posted[0]!.targetOrigin).toBe(origin);
-  expect(
-    (posted[0]!.message as { type?: unknown }).type,
-  ).toBe("neutron:msgbus:connect");
+  expect((posted[0]!.message as { type?: unknown }).type).toBe(
+    "neutron:msgbus:connect",
+  );
   unregister();
 });
 
@@ -807,8 +900,7 @@ test("resident endpoint ports are bound to current mode, nonce, and epoch", () =
     },
   } as unknown as Pick<Window, "addEventListener">);
   const posted: Array<{ transfer: Transferable[] }> = [];
-  const origin =
-    "http://p0123456789abcdef01234567--4caro.localhost:8000";
+  const origin = "http://p0123456789abcdef01234567--4caro.localhost:8000";
   const source = {
     postMessage(
       _message: unknown,
@@ -820,8 +912,7 @@ test("resident endpoint ports are bound to current mode, nonce, and epoch", () =
   } as unknown as Window;
   let current = true;
   const binding = {
-    mode:
-      ResidentFrameSecurityMode.CREDENTIALLESS_EPHEMERAL_DEDICATED_V1,
+    mode: ResidentFrameSecurityMode.CREDENTIALLESS_EPHEMERAL_DEDICATED_V1,
     browserOriginNonce: "0123456789abcdef0123456789abcdef",
     browserOriginAuthorityEpoch: "7",
   } as const;

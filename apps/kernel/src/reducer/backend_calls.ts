@@ -12,6 +12,7 @@ import {
   admitOwnerAttention,
   finishOwnerAttention,
 } from "../ui_attention/owner.ts";
+import { requestCancellationError } from "../request_cancel.ts";
 import type { CallBinaryFieldInspection } from "./request.ts";
 
 export type BackendCallScopeKind = "exact" | "principal" | "method";
@@ -65,6 +66,8 @@ type ConsentCallbacks = {
   resolve: () => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  signal?: AbortSignal;
+  abort?: () => void;
 };
 
 type BackendCallConsentState = {
@@ -99,7 +102,16 @@ const MAX_PENDING_REQUESTS_PER_APP = 4;
 
 export function requestBackendCallConsent(
   request: Omit<PendingBackendCallRequest, "id" | "attentionToken">,
+  signal?: AbortSignal,
 ): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(
+      requestCancellationError(
+        signal,
+        "Backend access request was cancelled by the requesting app",
+      ),
+    );
+  }
   const pending = Object.values(useBackendCallConsentStore.getState().requests);
   if (pending.length >= MAX_PENDING_REQUESTS) {
     return Promise.reject(new Error("Too many pending backend access requests"));
@@ -126,9 +138,20 @@ export function requestBackendCallConsent(
     attentionToken,
   });
   return new Promise((resolve, reject) => {
+    const abort = (): void => {
+      rejectRequest(
+        id,
+        requestCancellationError(
+          signal,
+          "Backend access request was cancelled by the requesting app",
+        ),
+        false,
+      );
+    };
     callbacks.set(id, {
       resolve,
       reject,
+      ...(signal ? { signal, abort } : {}),
       timeout: setTimeout(() => {
         rejectRequest(
           id,
@@ -137,6 +160,8 @@ export function requestBackendCallConsent(
         );
       }, 60_000),
     });
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
   });
 }
 
@@ -234,7 +259,7 @@ function immutableJsonValue(value: JsonValue): JsonValue {
 
 export function approveBackendCallRequest(id: number): void {
   const callback = callbacks.get(id);
-  if (callback) clearTimeout(callback.timeout);
+  if (callback) cleanupCallback(callback);
   callback?.resolve();
   callbacks.delete(id);
   const request = useBackendCallConsentStore.getState().requests[id];
@@ -257,7 +282,7 @@ export function removeBackendCallRequestsForApp(appId: string): void {
 
 function rejectRequest(id: number, error: Error, recoveryPause: boolean): void {
   const callback = callbacks.get(id);
-  if (callback) clearTimeout(callback.timeout);
+  if (callback) cleanupCallback(callback);
   callback?.reject(error);
   callbacks.delete(id);
   const request = useBackendCallConsentStore.getState().requests[id];
@@ -265,6 +290,13 @@ function rejectRequest(id: number, error: Error, recoveryPause: boolean): void {
     finishOwnerAttention(request.attentionToken, { recoveryPause });
   }
   useBackendCallConsentStore.getState().remove(id);
+}
+
+function cleanupCallback(callback: ConsentCallbacks): void {
+  clearTimeout(callback.timeout);
+  if (callback.signal && callback.abort) {
+    callback.signal.removeEventListener("abort", callback.abort);
+  }
 }
 
 subscribeEndpointChanges(() => {

@@ -33,6 +33,10 @@ user-sovereign Application licenses:
   redistribution, sublicensing, and operation-for-another rights. Its narrow
   installation and use grant also requires a Qualifying Sovereign System.
 
+The current Application using the inspection-oriented use license is:
+
+- `apps/blast`
+
 Previously published ordinary Applications remain under the exact Neutron
 Sovereign Application License, Version 1.0
 (`LicenseRef-Neutron-Sovereign-Application-License-1.0`) preserved in

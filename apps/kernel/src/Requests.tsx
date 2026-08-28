@@ -85,7 +85,7 @@ export function Requests() {
   if (!cid) return null;
   const call = calls[Number(cid)] as PendingCallRequest | undefined;
   if (!call) return null;
-  const call_args = toState(call.args);
+  const call_args = toState(call.args) as JsonValue;
   const appName = apps[call.frame.appId]?.name ?? call.frame.appId;
   const callTarget =
     call.canister === getNeutronId() ? "this Neutron" : "another canister";
@@ -126,28 +126,35 @@ export function Requests() {
             >
               <span id={`call-summary-${cid}`}>
                 <strong>{appName}</strong> wants to use your Neutron identity to{" "}
-                {action} on {callTarget}. Neutron verifies the exact method and
-                values, but cannot verify what this app-defined operation means.
+                {action} on {callTarget}. Neutron verifies the exact method and{" "}
+                {call.canonicalArgs === false
+                  ? "shows the legacy JSON values before ICBlast conversion"
+                  : "values"}
+                , but cannot verify what this app-defined operation means.
               </span>
             </ConsentNotice>
             <ConsentTechnicalDetails mode={uiMode}>
-            <div className="a-infogrid">
-              <div className="label">Requesting app surface</div>
-              <div className="val">
-                {frameRequestLabel(call.frame)}
+              <div className="a-infogrid">
+                <div className="label">Requesting app surface</div>
+                <div className="val">{frameRequestLabel(call.frame)}</div>
+
+                <ToAddress address={call.canister} />
+
+                <div className="label">Operation</div>
+                <div className="val">
+                  <CandidMethodName method={call.method} />
+                </div>
               </div>
-
-              <ToAddress address={call.canister} />
-
-              <div className="label">Operation</div>
-              <div className="val">{call.method}</div>
-            </div>
-            <div className="a-args">
-              <Args args={call_args} />
-            </div>
-            {call.binaryFields && call.binaryFields.length > 0 ? (
-              <BinaryFieldInspectionList fields={call.binaryFields} />
-            ) : null}
+              <div className="a-args">
+                <CanonicalJsonReview
+                  ariaLabel="Canonical JSON for the complete canister call arguments"
+                  heading="Complete canister call arguments"
+                  value={call_args}
+                />
+              </div>
+              {call.binaryFields && call.binaryFields.length > 0 ? (
+                <BinaryFieldInspectionList fields={call.binaryFields} />
+              ) : null}
             </ConsentTechnicalDetails>
             <div className="btn-actions">
               <PauseRequests
@@ -328,13 +335,11 @@ export function BackendCallRequest({
           {request.call ? (
             <>
               <div className="a-args">
-                <strong>Complete attached-call arguments</strong>
-                <pre
-                  aria-label="Canonical JSON for the complete attached-call arguments"
-                  className="backend-call-canonical-json"
-                >
-                  {canonicalJsonForDisplay(request.call.args)}
-                </pre>
+                <CanonicalJsonReview
+                  ariaLabel="Canonical JSON for the complete attached-call arguments"
+                  heading="Complete attached-call arguments"
+                  value={request.call.args}
+                />
               </div>
               {request.call.binaryFields &&
               request.call.binaryFields.length > 0 ? (
@@ -426,7 +431,8 @@ function BackendAccessDecisionSummary({
           <span>
             {request.limits.maxCyclesPerCall > 0 ? (
               <>
-                Up to <strong>{formatCycles(request.limits.maxCyclesPerCall)}</strong>{" "}
+                Up to{" "}
+                <strong>{formatCycles(request.limits.maxCyclesPerCall)}</strong>{" "}
                 transferred per call and{" "}
                 <strong>{formatCycles(request.limits.maxCyclesPerDay)}</strong>{" "}
                 per UTC day
@@ -560,6 +566,29 @@ export function canonicalJsonForDisplay(value: JsonValue): string {
   return serializeCanonicalJson(value, 0);
 }
 
+export function CandidMethodName({ method }: { method: string }) {
+  return <code>{canonicalJsonForDisplay(method)}</code>;
+}
+
+export function CanonicalJsonReview({
+  ariaLabel,
+  heading,
+  value,
+}: {
+  ariaLabel: string;
+  heading: string;
+  value: JsonValue;
+}) {
+  return (
+    <>
+      <strong>{heading}</strong>
+      <pre aria-label={ariaLabel} className="backend-call-canonical-json">
+        {canonicalJsonForDisplay(value)}
+      </pre>
+    </>
+  );
+}
+
 function serializeCanonicalJson(value: JsonValue, depth: number): string {
   if (value === null) return "null";
   if (typeof value === "string") return quoteJsonForDisplay(value);
@@ -624,7 +653,9 @@ function quoteJsonForDisplay(value: string): string {
         break;
       default:
         result +=
-          codePoint < 0x20 || AMBIGUOUS_JSON_TEXT_PATTERN.test(character)
+          codePoint < 0x20 ||
+          (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+          AMBIGUOUS_JSON_TEXT_PATTERN.test(character)
             ? jsonUnicodeEscape(codePoint)
             : character;
     }

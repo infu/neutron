@@ -33,9 +33,6 @@ separate source-inspectable `LICENSE.APP.USE` alternative added on 20 August
   Production Use to a Qualifying Sovereign System.
 - `LICENSE.GPL-3.0`: unchanged official GPLv3 reference text.
 - `LICENSE.NPL-0.2`: unchanged preservation copy of the superseded NPL draft.
-- `license_review.md`: historical review of NPL v0.2 and the repository state
-  before this rewrite.
-
 No custom license may exceed **675 physical lines**. The official GPLv3
 reference in this repository is 674 lines. If a draft exceeds the cap,
 reorganize definitions, remove repetition, and consolidate remedies rather

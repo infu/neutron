@@ -1,8 +1,8 @@
 import { validate as validateJsonSchema, type Schema } from "jsonschema";
 import {
-  MSG_BUS_MAX_PROGRESS_BYTES,
   MSG_BUS_MAX_PROGRESS_EVENTS,
   assertBoundedJson,
+  assertMsgBusActionName,
   isProgressEnvelope,
   isResponseEnvelope,
   toError,
@@ -19,6 +19,7 @@ export type ExposedActionContext = {
   origin: string;
   reportProgress?: (value: JsonValue) => void;
   invocation?: MsgBusInvocationMetadata;
+  signal?: AbortSignal;
 };
 
 export type ExposedAction<
@@ -45,6 +46,7 @@ type PortCallback = {
   port: MessagePort;
   onProgress?: (value: JsonValue) => void;
   progressCount: number;
+  cleanup?: () => void;
 };
 
 const actions = new Map<string, RegisteredAction>();
@@ -92,7 +94,7 @@ export function execPort<T extends JsonValue = JsonValue>(
   payload: JsonValue = null,
   options: number | MsgBusCallOptions = 0,
 ): Promise<T> {
-  if (!action) throw new Error("Action is required");
+  assertMsgBusActionName(action);
   assertBoundedJson(payload);
   installPortListener(port);
 
@@ -101,12 +103,29 @@ export function execPort<T extends JsonValue = JsonValue>(
   const timeout = normalizedOptions.timeout ?? 0;
   const id = ++nextId;
   const context = normalizedOptions.transportContext;
+  const signal = normalizedOptions.signal;
+  if (signal?.aborted) return Promise.reject(abortReason(signal));
 
   return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let posted = false;
+    const finish = (error: Error, cancel: boolean): void => {
+      if (settled) return;
+      settled = true;
+      const callback = callbacks.get(id);
+      if (callback?.port === port) callbacks.delete(id);
+      if (callback?.timeout) clearTimeout(callback.timeout);
+      callback?.cleanup?.();
+      if (cancel && posted) postRequestCancellation(port, id);
+      reject(error);
+    };
+    const abort = (): void => {
+      if (signal) finish(abortReason(signal), true);
+    };
+    const cleanup = (): void => signal?.removeEventListener("abort", abort);
     const timeoutCallback = timeout
       ? setTimeout(() => {
-          callbacks.delete(id);
-          reject(new Error(`Timeout after ${timeout} seconds`));
+          finish(new Error(`Timeout after ${timeout} seconds`), true);
         }, timeout * 1_000)
       : undefined;
 
@@ -118,8 +137,12 @@ export function execPort<T extends JsonValue = JsonValue>(
         ? { onProgress: normalizedOptions.onProgress }
         : {}),
       progressCount: 0,
+      cleanup,
       ...(timeoutCallback ? { timeout: timeoutCallback } : {}),
     });
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    if (settled) return;
 
     try {
       port.postMessage({
@@ -131,12 +154,52 @@ export function execPort<T extends JsonValue = JsonValue>(
           ...(context ? { context } : {}),
         },
       } satisfies ExecEnvelope);
+      posted = true;
     } catch (error) {
-      if (timeoutCallback) clearTimeout(timeoutCallback);
-      callbacks.delete(id);
-      reject(error);
+      finish(
+        error instanceof Error ? error : new Error(String(error)),
+        false,
+      );
     }
   });
+}
+
+/**
+ * Cancel and reject every Kernel request bound to one retired app port.
+ * The caller remains responsible for closing the port after this returns.
+ */
+export function retireExecPort(
+  port: MessagePort,
+  reason: Error = new Error("Message bus endpoint retired"),
+): void {
+  for (const [id, callback] of callbacks) {
+    if (callback.port !== port) continue;
+    callbacks.delete(id);
+    if (callback.timeout) clearTimeout(callback.timeout);
+    callback.cleanup?.();
+    postRequestCancellation(port, id);
+    callback.reject(reason);
+  }
+}
+
+function postRequestCancellation(port: MessagePort, id: number): void {
+  try {
+    port.postMessage({
+      type: "neutron:msgbus:cancel",
+      version: 1,
+      id,
+    });
+  } catch {
+    // Local settlement remains authoritative after peer disconnection.
+  }
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : Object.assign(new Error("Message-bus request cancelled"), {
+        name: "AbortError",
+      });
 }
 
 function installPortListener(port: MessagePort): void {
@@ -159,15 +222,6 @@ function handlePortMessage(event: MessageEvent, port: MessagePort): void {
     ) {
       return;
     }
-    try {
-      assertBoundedJson(
-        event.data.value,
-        "Progress payload",
-        MSG_BUS_MAX_PROGRESS_BYTES,
-      );
-    } catch {
-      return;
-    }
     callback.progressCount += 1;
     try {
       callback.onProgress(event.data.value);
@@ -182,6 +236,7 @@ function handlePortMessage(event: MessageEvent, port: MessagePort): void {
   if (!callback || callback.port !== port) return;
   if (callback.timeout) clearTimeout(callback.timeout);
   callbacks.delete(event.data.id);
+  callback.cleanup?.();
   if (Object.hasOwn(event.data, "error")) {
     callback.reject(toError(event.data.error));
   } else {
