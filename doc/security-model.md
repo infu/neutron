@@ -199,10 +199,9 @@ Public routes are closed:
 Host parsing, gateway authority, reserved prefixes, route collisions, methods,
 body sizes, forwarded headers, response sizes, rate limits, and replay storage
 are Kernel policy. Apps do not receive a raw HTTP callback or certification
-tree. `apps/kernel/backend/http_routes/GatewayAuthority.mo` is the single Motoko parser
-and canonical constructor for IC and PocketIC authorities; each route surface
-still applies its own exact allow policy, and raw/custom gateway denial remains
-the caller's responsibility.
+tree. One Kernel-owned parser and canonical constructor defines IC and PocketIC
+authorities. Each route surface still applies its own exact allow policy, and
+raw/custom gateway denial remains the caller's responsibility.
 
 The same backend certifies installation-owned browser-surface responses. One
 derived hostname is bound to one app installation and one declared tile, tray,
@@ -254,14 +253,19 @@ Tiles, trays, and resident backgrounds are separate registered endpoints.
 Registration binds the exact iframe `Window`, role, app installation, endpoint
 path, session, origin mode, and current authority.
 
-`window.postMessage` is used only to authenticate the parent/child ready probe
-and transfer a `MessagePort`. Operational requests, replies, progress, state
-invalidation, self calls, tool calls, and binary data travel only through that
-private port.
+For registered app endpoints, `window.postMessage` authenticates the
+parent/child ready probe and transfers a `MessagePort`. Message-bus operational
+requests, replies, progress, state invalidation, self calls, tool calls, and
+binary data travel only through that private port. The persistent-origin
+cleanup preflight is a separate one-shot protocol: the Kernel accepts its
+result only from the exact cleanup iframe `Window`, exact expected origin, and
+closed result envelope. It neither registers an app endpoint nor carries
+message-bus traffic.
 
-The Kernel rejects messages from an unregistered source, wrong role, stale
-session, replaced app, mismatched port, or inactive invocation. It captures the
-binding before asynchronous work and checks it again before effects or reply.
+On the registered endpoint and message-bus path, the Kernel rejects messages
+from an unregistered source, wrong role, stale session, replaced app,
+mismatched port, or inactive invocation. It captures the binding before
+asynchronous work and checks it again before effects or reply.
 
 An ordinary package built by the current packer carries the generic
 `.neutron/browser-surface-origins.v1.json` readiness marker. The checked install
@@ -295,6 +299,29 @@ are Kernel-controlled and certified. Credentialless-ephemeral residents may
 still have browser storage APIs inside their ephemeral credential partition;
 they never fall back to the persistent mode.
 
+A persistent resident keeps its installation hostname across ordinary upgrades
+so legitimate IndexedDB remains durable. Before the current resident document
+can launch, the trusted frontend loads a certified cleanup document on that
+same hostname but outside the app asset subtree. Because app worker scripts are
+confined to the subtree and receive no wider Service Worker scope header, a
+predecessor Service Worker cannot control the cleanup document. The document
+unregisters every same-origin Service Worker registration, confirms the list is
+empty, and returns a result which the Kernel accepts only from the exact iframe
+window and origin. A failed or timed-out cleanup blocks the resident launch.
+HTTP-served Service Worker and SharedWorker entrypoint requests are denied,
+while ordinary dedicated Worker requests remain allowed. Blob-backed
+SharedWorkers do not traverse that HTTP request-destination policy and are not
+blocked by it. They remain confined to the app's nonce-derived origin; nonce
+rotation prevents a later installation origin from reaching them.
+
+Browser APIs cannot synchronously terminate an already running Service Worker
+or enumerate and terminate SharedWorkers owned by another still-live document.
+Unregistration prevents the successor from being controlled, and closing the
+old app client allows those contexts to expire according to browser lifecycle
+rules. A predecessor worker may persist until every other live owner document
+closes, and the browser decides when it ends after that. Uninstall/reinstall
+and resident-authority rotation remain the hard origin-revocation boundary.
+
 ## Self Calls And Binary Values
 
 Apps call their own backend through `querySelf`, `updateSelf`, or
@@ -324,8 +351,15 @@ app manifests or Kernel brokers.
 An agent invocation has a root identity, an exact registered capability path,
 bounded progress and tool calls, cancellation, and a live source-bound
 endpoint. The Kernel revalidates the invocation and its app authority around
-every protected operation. User-interactive calls remain interactive and
-cannot be silently converted into agent authority.
+every protected operation. Outside Agent Mode, interactive calls use owner UI.
+During Agent Mode, eligible external signed calls follow the nested-agent
+policy, while interactive same-Neutron self calls are rejected.
+
+A nested `canister.call_dialog_v2` decision must receive the exact review value
+rather than summary counts, and an oversized challenge fails before signing.
+The unversioned compatibility route rejects Agent-scoped signed calls before
+discovery. See
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
 ## Connections And Provider Drivers
 

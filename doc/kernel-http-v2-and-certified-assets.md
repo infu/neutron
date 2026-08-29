@@ -57,11 +57,11 @@ Certified Assets is separate from:
 All public certified records share the canister's certified-data root, but each
 record, route, collection, and mutation is installation-scoped.
 
-`apps/kernel/backend/http_routes/GatewayAuthority.mo` is the sole Motoko parser and
-canonical constructor for IC and PocketIC Host authorities. Certified Assets,
-authored POST routes, route namespaces, and connection callbacks reuse that
-interpretation while retaining their own exact allow policies; callers that
-accept raw/custom gateways must deny them explicitly.
+One Kernel-owned parser and canonical constructor defines IC and PocketIC Host
+authorities. Certified Assets, authored POST routes, route namespaces, and
+connection callbacks reuse that interpretation while retaining their own exact
+allow policies; callers that accept raw/custom gateways must deny them
+explicitly.
 
 ## Manifest Contract
 
@@ -390,8 +390,9 @@ empty `400` response instead of falling back to block zero.
 `HEAD` uses the certified metadata alternative and no body. Portable blobs do
 not expose ranges or `HEAD`.
 
-The public renderer's per-block admission is 1,900,000 bytes. The storage stage
-block is slightly smaller to leave deterministic encoding headroom.
+The public renderer and storage staging engine share one exact per-block
+admission limit of 1,889,984 bytes. The allocator's larger physical-extent
+ceiling is an internal bound, not a client chunk size.
 
 ## HTTP Response Certification
 
@@ -401,6 +402,11 @@ The generated final Wasm advertises:
 icp:public supported_certificate_versions = "2"
 ```
 
+Direct `http_request` callers must provide `certificate_version` with a maximum
+supported value of at least 2. A missing or lower value returns a plain,
+uncertified `426` before route selection. Conforming gateways perform this
+negotiation for ordinary HTTP clients.
+
 The Kernel emits direct certified responses; Certified Assets does not use the
 static asset streaming callback.
 
@@ -408,6 +414,11 @@ Two exact certification expressions are used:
 
 - host-bound responses certify the `Host` header and no query parameters;
 - portable responses exclude Host and query parameters.
+
+Those expression rules are distinct from request admission. A nonempty query is
+accepted as an alias on a host-bound route and is excluded from its proof. A
+portable route rejects any nonempty query with an empty `400` response, so a
+portable object's identity must be carried entirely by its path.
 
 The persistent authenticated forest stores compact request/expression/response
 leaf keys and fixed wildcard-absence owners. Query proof construction returns
@@ -463,7 +474,7 @@ Selected declaration and engine limits are:
 | Cleanup jobs per scope | 16 |
 | Cleanup jobs plus active stages actor-wide | 4,096 |
 | Global charged admission, including allocator metadata reserve | 2,890,572,816 |
-| Stable-metadata budget within that envelope | 939,524,096 |
+| Additional global body-plus-metadata charged headroom | 939,524,096 |
 | Physical arena-byte admission | 1,879,048,192 |
 | Physical extent-policy ceiling | `2 × reserved_extents + 1 ≤ 250,000` |
 | Portable blob response | 1,048,576 |
@@ -494,8 +505,11 @@ Abort publishes none of it.
 An update that retains an `AppScope` must retain exact collection topology,
 location, kind, and mount semantics. It may only widen numeric declaration and
 per-collection object limits. Adding, removing, narrowing, or semantically
-changing a collection requires removing the app scope and later adding a fresh
-one; the old scope is retired.
+changing a collection is rejected by the checked in-place upgrade contract.
+Removing and later re-adding a production app scope retires its stored records
+and is not a migration mechanism. A production release must preserve the
+existing topology until a state-preserving forward migration path exists and
+has migrated every supported installed state before any old storage is retired.
 
 Settings can:
 
@@ -519,6 +533,12 @@ Certified Assets collection records.
 
 The checked installer writes the canonical
 `/system/browser-surface-origins.json` sidecar from package readiness evidence.
+An ordinary package is ready when it carries the canonical generated readiness
+marker or declares `browser_permissions`; either condition opts the package into
+installation-owned browser-surface origins. A markerless package that declares
+no browser permissions and has not already been adopted retains the opaque
+compatibility path.
+
 For each adopted app, the assembler derives one hostname per tile ID plus the
 optional tray and ordinary background from the installation's browser nonce and
 surface key. The literal Kernel app is excluded. An in-place update retains the
@@ -546,8 +566,6 @@ Supported frames are credentialless with
 `sandbox="allow-scripts allow-same-origin"`. If the frontend cannot prove the
 required credentialless behavior before navigation, it removes same-origin and
 feature delegation and uses the opaque `allow-scripts` compatibility sandbox.
-Historical packages without the generated readiness marker retain the same
-opaque path.
 
 ## Dedicated Resident Origins
 
@@ -564,6 +582,36 @@ manifest choices. A credentialless-ephemeral resident may still see browser
 storage APIs, but only inside its ephemeral credential partition; it never
 falls back to the persistent mode. Rotation invalidates the old authority.
 Tiles and trays do not receive resident persistence.
+
+The persistent-origin policy transition retains the installation hostname and
+therefore retains IndexedDB. Before each persistent resident launch, the trusted
+frontend first navigates the frame to a certified cleanup document on that same
+hostname at a Kernel-reserved path outside every app asset subtree. The document
+unregisters every Service Worker registration on the retained origin and reports
+success only after no registrations remain. It does not clear IndexedDB.
+
+The cleanup request binds the exact current app, installation UID, resident
+mode, nonce, authority epoch, `Host`, and iframe request destination. Its
+response CSP admits only its inline cleanup script, denies workers and all other
+resource types, and limits ancestors to the Kernel origin. The Kernel never
+emits a wider Service Worker scope header, so an app Service Worker registered
+from its subtree cannot cover the cleanup document.
+
+The frontend launches the resident app only after the expected current-authority
+success message. A denied or missing document, cleanup failure, stale authority,
+unexpected message, or 15-second timeout leaves that launch blocked. After the
+serving or authority problem is repaired, reload or otherwise remount the Kernel
+frontend to retry the idempotent preflight; do not bypass it or use reinstall as
+recovery.
+
+HTTP denies executable app assets requested as `serviceworker` or
+`sharedworker`, so an app cannot use an HTTP-served package asset as a Service
+Worker or SharedWorker entrypoint. Ordinary dedicated Workers remain allowed.
+A blob-backed SharedWorker does not make an HTTP `sharedworker` entrypoint
+request and is therefore outside that destination policy; it remains confined
+to the app's nonce-derived origin and loses cross-install reach when the nonce
+rotates. These denials do not claim to synchronously terminate an already
+running worker context held by another live document.
 
 ## Qualification Status
 
@@ -593,21 +641,21 @@ manifests, implementation sources, and qualified raw and transport Wasm.
 Absent or stale is not qualified; a checked binding alone does not establish a
 production-safe maximum.
 
+From the repository root, write and review the candidate binding, check it
+against current source, and then run the public qualification command:
+
+```sh
+npm --workspace neutron-kernel run certified-assets:candidate-binding:write
+npm --workspace neutron-kernel run certified-assets:candidate-binding
+npm --workspace neutron-kernel run certified-assets:qualify
+```
+
+The
+[source-owned qualification README](../apps/kernel/evidence/qualification/README.md)
+owns the runner's current internal source layout and detailed evidence
+procedure. The commands above are the stable release interface.
+
 The receipt is bounded release-regression evidence. It does not establish
 cycle cost, proof size, allocator behavior, or upgrade safety at the
 100,000-entry production ceiling. The separate manifest gate's 100,001
 declaration rejection proves only the schema/admission ceiling.
-
-## Implementation Map
-
-- `packages/neutron-tools/src/capabilities/catalog.ts`
-- `packages/neutron-tools/src/certified_assets_qualification.ts`
-- `packages/neutron-motoko-capabilities/src/lib.mo`
-- `packages/neutron-compiler/src/assemble.ts`
-- `apps/kernel/backend/certified_assets/`
-- `apps/kernel/backend/certified_http_v2.mo`
-- `apps/kernel/backend/certified_http.mo`
-- `apps/kernel/backend/http_routes/`
-- `apps/kernel/evidence/certified_assets_candidate_binding.ts`
-- `apps/kernel/evidence/qualification/`
-- `apps/kernel/certified-assets-candidate-binding.json`

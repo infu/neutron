@@ -1081,12 +1081,9 @@ let residentWorkerVariant : Cert.ResidentResponseVariant = {
     response_headers = installationHtmlHeaders;
 };
 
-// Derive the closed maximum for one JavaScript asset: persistent background
-// mode replaces the ordinary installation background, leaving 32 tiles plus
-// tray (33 surfaces) across two authorities and five installation destinations
-// (330 owners), plus one persistent origin across two authorities and seven
-// destinations (14 owners). The count anchors the whole-asset reset bound used
-// by install cleanup.
+// Current generation creates only dedicated Worker leaves. Preserve a
+// predecessor-shaped seven-destination set below to prove the 344-leaf cleanup
+// ceiling can still retire already-certified ServiceWorker/SharedWorker leaves.
 let fanoutInstallationKinds : [Cert.ResidentRequestKind] = [
     #subresource_v1({ destination = "empty" }),
     #subresource_v1({ destination = "script" }),
@@ -1103,6 +1100,7 @@ let fanoutPersistentKinds : [Cert.ResidentRequestKind] = [
     #subresource_v1({ destination = "audioworklet" }),
     #subresource_v1({ destination = "paintworklet" }),
 ];
+let currentPersistentKindCount = 5;
 let fanoutInstallationSurfaceCount = 33;
 let fanoutAuthorityCount = 2;
 let fanoutInstallationVariantCount = fanoutInstallationSurfaceCount *
@@ -1142,6 +1140,11 @@ func fanoutVariants(bodyHash : Blob) : [Cert.ResidentResponseVariant] {
 };
 let initialFanoutVariants = fanoutVariants(routeBodyBHash);
 assert (fanoutInstallationVariantCount == 330);
+assert (
+    fanoutInstallationVariantCount +
+        fanoutAuthorityCount * currentPersistentKindCount == 340
+);
+assert (Cert.originResponseVariantCountAllowed(340));
 assert (initialFanoutVariants.size() == 344);
 assert (
     initialFanoutVariants.size() == Cert.ORIGIN_RESPONSE_VARIANTS_MAX

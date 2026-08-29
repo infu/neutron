@@ -471,12 +471,17 @@ and app UI must not expose users, roles, invites, or per-principal app data.
 - `logged`
 - `authorized`
 - `principal`
+- `sessionGeneration`
 - `loading`
 - `authError`
 
-Long-lived runtime values stay in module scope in
-`apps/kernel/src/reducer/auth.ts`, including the current icblast client, the
-checked-in bootstrap actor, and cached dynamic kernel bindings.
+The session generation advances whenever authentication state is replaced and
+keeps retained workspaces from being reused across authentication sessions.
+
+Long-lived runtime values stay outside the reactive store, including the active
+identity generation, the checked-in bootstrap actor, the cached dynamic Kernel
+actor, and any in-flight dynamic-actor load. Each live-interface generation
+creates its own ICBlast client so an older client cannot retain a stale actor.
 
 After Internet Identity login, the frontend creates the bootstrap actor from a
 small checked-in IDL and calls `kernel_check_authorized(null)`. This keeps the
@@ -488,11 +493,11 @@ actual signed caller. If the update response is lost, the frontend queries
 `kernel_check_authorized` instead of replaying a possibly consumed bearer. It
 checks authorization again before mounting the runtime.
 
-The first dynamic app-method call after authorization fetches
-`/pkg/neutron.did` through certified HTTP and creates the dynamic actor.
-Concurrent callers share that one fetch and compilation promise, and later
-self-calls reuse the resulting actor. The same HTTP helper reads registry,
-package, compiler, and provenance assets; browser caching applies normally.
+The first dynamic app-method call after authorization fetches the certified
+live interface and creates the dynamic actor. Concurrent callers share that
+one fetch and compilation promise, and later self-calls reuse the resulting
+actor. The same HTTP helper reads registry, package, compiler, and provenance
+assets; browser caching applies normally.
 Logout, identity replacement, or a committed runtime replacement clears all
 bootstrap and dynamic-actor caches, including an in-flight older-generation
 load. The workspace shell, launcher, and app iframes mount only when both
@@ -628,11 +633,12 @@ recorded in
 [Certified HTTP And Certified Assets](./kernel-http-v2-and-certified-assets.md#qualification-status).
 
 The backend `kernel_runtime_info` inventory gives the frontend each committed
-app's kernel-assigned `(app_id, installation_uid)`, plan fingerprint, deployment
-id, and 128-bit browser-origin nonce. The frontend accepts that projection only
-after the install journal is absent both before and after the runtime read.
-Although the running target actor can report its staged inventory between
-activation and commit, that inventory never becomes browser authority.
+app's kernel-assigned `(app_id, installation_uid)`, installed version, plan
+fingerprint, deployment id, 128-bit browser-origin nonce, browser-origin
+authority epoch, and resident-frame security mode. The frontend accepts that
+projection only after the install journal is absent both before and after the
+runtime read. Although the running target actor can report its staged inventory
+between activation and commit, that inventory never becomes browser authority.
 
 Frontend authority is bound to that complete app-instance projection, including
 the actor deployment id, rather than only to version or installation uid. Every
@@ -664,12 +670,14 @@ abort signals the still-current committed deployment. Receivers synchronously
 fence and unmount tile, tray, and background frames before querying the
 canister. Opaque ordinary frames and nonce-hosted persistent backgrounds cannot
 open the kernel-origin channel. Neither can installation-origin app frames. A
-coalesced visible-tab observation checks
-journal status and runtime identity every 20 seconds for other devices or
-missed signals. It performs the larger registry/assets reconciliation only
-after a change or uncertainty, so ordinary polling remains two small queries
-and hidden tabs do not poll. Observation failure stays fail closed until a
-later focus, signal, or interval proves and reloads committed authority.
+coalesced observation loop checks journal status and runtime identity on a
+low-frequency interval for other devices or missed signals. The interval
+continues while a tab is hidden because resident frames remain live there;
+focus, visibility transitions, and same-browser signals also request a check.
+It performs the larger registry/assets reconciliation only after a change or
+uncertainty, so ordinary polling remains two small queries. Observation failure
+stays fail closed until a later focus, signal, or interval proves and reloads
+committed authority.
 
 Ordinary `/app/<id>/**` web paths and the committed
 `/app/<id>/pkg/**` metadata subtree are anonymously HTTP-readable. Certified
@@ -710,6 +718,22 @@ or reloads the corresponding background process. Resident frames are also
 unmounted while an activated install is pending and are not mounted at all
 until a committed app-instance record matches the registry.
 
+Before mounting a persistent resident, the Kernel first mounts only the
+same-origin persistent-policy cleanup iframe. The reserved document removes
+and rechecks same-origin Service Worker registrations without clearing
+IndexedDB, then posts a closed result envelope. The Kernel validates the exact
+source window, origin, and still-current app-instance authority before replacing
+that iframe with the resident. Failure or timeout leaves the resident blocked.
+The cleanup is safe to repeat and does not rotate the installation hostname.
+It closes the current page's predecessor app client, but browser APIs cannot
+force an already-owned Service Worker or SharedWorker in another live document
+to terminate synchronously. A predecessor worker may persist until every other
+live owner document closes, after which browser lifecycle rules decide when it
+ends. HTTP-served Service Worker and SharedWorker entrypoint requests are
+denied, while ordinary dedicated Workers remain allowed. Blob SharedWorkers are
+not blocked by that request-destination policy, but remain confined to the
+nonce-scoped origin and lose cross-install reach when the nonce rotates.
+
 For a resident that requires an authenticated MessagePort, the kernel starts a
 15-second readiness deadline for the current installation/deployment authority.
 If no valid endpoint is ready, it remounts that exact resident once. A second
@@ -740,11 +764,12 @@ accepts app-provided metadata, or exposes badge control.
 
 ### Kernel-App Request Boundary
 
-`index.tsx` imports `./expose`, which installs the unified frontend message bus.
-The exact registered `contentWindow` participates in a closed
-probe/ready/connect handshake, after which the Kernel transfers a private
-`MessagePort`. All requests, replies, progress, state changes, tools, and
-binary sidecars use that port. There is no operational Window-message
+Bootstrap accepts the runtime deployment configuration before loading the
+application. Application startup then installs the unified frontend message bus
+before rendering the shell. The exact registered `contentWindow` participates
+in a closed probe/ready/connect handshake, after which the Kernel transfers a
+private `MessagePort`. All requests, replies, progress, state changes, tools,
+and binary sidecars use that port. There is no operational Window-message
 fallback. For an originful app frame the ready message and every connection
 probe are bound to the exact registered app origin as well as the exact source
 window. Inside an app frame, the SDK derives the valid Kernel parent origin
@@ -764,10 +789,12 @@ media session, lease, stream proxy, or capture API.
 
 The kernel is a bus endpoint exposing canister schema/call tools, installed-app
 discovery, live endpoint discovery, permission requests, and per-app audit
-history. The canonical actions are `canister.schema` and
-`canister.call_dialog`; the raw `schema` and `call_dialog` aliases do not
-exist. Endpoint tools are discovered live and called only through Kernel
-routing.
+history. The canonical actions are listed in
+[Kernel-App Message Bus](./kernel-app-communication.md#tool-descriptors), and
+the versioned external-call privacy contract is documented in
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
+The raw `schema` and `call_dialog` aliases do not exist. Endpoint tools are
+discovered live and called only through Kernel routing.
 
 The private `app.state.publish` action is part of this same bus. The kernel
 binds it to the registered source app, accepts only a bounded topic and decimal
@@ -812,25 +839,32 @@ app-version-bound, short lived, concurrency bounded, and method validated. It is
 listed as a kernel tool or delivered as a provider object to the iframe.
 
 Apps do not provide Candid text or package-provided schemas. For calls to the
-Neutron canister, the kernel fetches `/pkg/neutron.did` through certified HTTP
-and uses icblast to derive method JSON Schema and validate JSON arguments. The
-previous direct `call` action remains unavailable.
+Neutron canister, the kernel reads the certified live interface and uses
+ICBlast to derive method JSON Schema and validate arguments. The previous
+direct `call` action remains unavailable.
 
 ### Request Approval Dialogs
 
 `useRequestStore()` stores pending call approvals under `calls`, keyed by an
-incrementing `cid`. Each request now includes the iframe-derived frame context.
+incrementing `cid`. Each request includes the iframe-derived frame context.
 
-`Requests` renders the first pending canister request. It shows:
+Outside a validated Agent Mode invocation, `Requests` renders the first pending
+canister request. It shows:
 
 - requesting app and exact tile, tray, or background surface;
 - destination canister principal;
-- operation/method name;
-- arguments converted with icblast `toState()`;
+- operation/method name as a quoted JSON string, with controls, bidirectional
+  formatting, and default-ignorable characters rendered as visible escapes;
+- the review arguments defined by the signed-call consent contract;
 - Approve and Reject buttons.
 
 Approving resolves the pending Promise and then the exposed action performs the
-canister call. Rejecting rejects the app's request with `User rejected`.
+canister call. Rejecting rejects the app's request with `User rejected`. Inside
+a validated Agent Mode invocation, eligible external calls use the
+invocation-scoped agent policy: a direct root action needs no owner modal, while
+a descendant permission boundary requires one nested-agent decision. Unscoped
+calls made while that app has an active invocation fail closed, and interactive
+same-Neutron self calls are rejected.
 
 The same component renders cross-app frontend tool requests. It shows caller
 app/role, exact target endpoint, tool name, and JSON arguments. The user can
@@ -847,20 +881,26 @@ or the browser session.
 
 ### Agent Mode Runtime
 
-`src/ui_attention/agent.ts` owns session-only Agent Mode grants, root turns,
-invocation nodes, one-shot agent decisions, hard budgets, cancellation, and a
-bounded redacted audit. A grant is bound to the current owner principal, app
-id, installed version, and exact declared resident entrypoint. One grant and
-one root may be active. Reload, logout, authorization loss, update, uninstall,
+The Kernel's Agent Mode runtime owns session-only grants, root turns, invocation
+nodes, one-shot agent decisions, hard budgets, cancellation, and a bounded
+redacted audit. A grant is bound to the current owner principal, app id,
+installed version, and exact declared resident entrypoint. One grant and one
+root may be active. Reload, logout, authorization loss, update, uninstall,
 endpoint replacement, expiry, stop, or disable invalidates the affected tree.
 
 Invocation capabilities are random private transport metadata bound to one
-endpoint session and dynamic call lifetime. `expose.ts` resolves this metadata
+endpoint session and dynamic call lifetime. The Kernel resolves this metadata
 before every routed action and gives each child a fresh capability. Direct root
 actions can cross delegable boundaries without an owner modal. New permissions
 requested by descendants are suspended and sent to the root through the
 reserved consent action on the existing message bus. Invalid, stale, unscoped,
 late, or replayed authority fails closed.
+
+For a nested `canister.call_dialog_v2` permission, the exact review value—not
+only summary counts—must fit the ordinary message-bus envelope before any
+decision or signature. The unversioned compatibility route rejects
+Agent-scoped signed calls before discovery. See
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
 The topbar indicator remains kernel-owned while a grant is active. It shows
 idle or running state, elapsed turn time, stop, and disable controls. Settings

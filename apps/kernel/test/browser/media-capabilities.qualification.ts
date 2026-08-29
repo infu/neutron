@@ -3,10 +3,15 @@ import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import {
   ORIGINFUL_APP_FRAME_SANDBOX,
   tileBrowserPermissionAllow,
 } from "../../src/app_frame_security.ts";
+import {
+  PERSISTENT_ORIGIN_POLICY_MESSAGE,
+  PERSISTENT_ORIGIN_POLICY_PATH,
+} from "../../src/workspace/AppBackgroundFrames.tsx";
 import { registryApp } from "../app_registry_fixture.ts";
 
 const chromiumExecutable = findChromiumExecutable();
@@ -142,8 +147,9 @@ async function qualifyMediaCapabilities(): Promise<void> {
 await qualifyMediaCapabilities();
 await qualifyKernelFrameAncestors();
 await qualifyPassivePackageResponses();
+await qualifyPersistentOriginPolicyTransition();
 console.log(
-  "Browser qualification passed: explicit media delegation, document boundaries, and passive package replay held.",
+  "Browser qualification passed: explicit media delegation, document boundaries, passive package replay, and the persistent-origin policy transition held.",
 );
 
 async function qualifyKernelFrameAncestors(): Promise<void> {
@@ -339,6 +345,339 @@ async function qualifyPassivePackageResponses(): Promise<void> {
     await browser?.close();
     server.stop(true);
   }
+}
+
+async function qualifyPersistentOriginPolicyTransition(): Promise<void> {
+  if (!chromiumExecutable) {
+    throw new Error(
+      "Persistent-origin policy qualification requires a runnable Chromium.",
+    );
+  }
+  const cleanupDocument = await readFile(
+    new URL(
+      "../../public/system/browser-origin-cleanup.html",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const cleanupQuery =
+    "app=example&role=origin-policy-cleanup&installation-uid=17" +
+    "&resident-frame-security=persistent_dedicated_v1" +
+    "&browser-origin-nonce=0123456789abcdef0123456789abcdef" +
+    "&browser-origin-authority-epoch=3";
+  let currentPolicy = false;
+  let appOrigin = "";
+  let kernelOrigin = "";
+  const workerDestinations: string[] = [];
+  const cleanupDestinations: string[] = [];
+  const app = serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url);
+      const destination = request.headers.get("sec-fetch-dest") ?? "";
+      if (url.pathname === PERSISTENT_ORIGIN_POLICY_PATH) {
+        cleanupDestinations.push(destination);
+        if (
+          !currentPolicy ||
+          destination !== "iframe" ||
+          url.searchParams.toString() !== cleanupQuery
+        ) return new Response("Not found", { status: 404 });
+        return new Response(cleanupDocument, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "content-security-policy":
+              "sandbox allow-scripts allow-same-origin; default-src 'none'; " +
+              "script-src 'unsafe-inline'; worker-src 'none'; object-src 'none'; " +
+              `base-uri 'none'; form-action 'none'; frame-ancestors ${kernelOrigin}`,
+          },
+        });
+      }
+      if (
+        url.pathname.endsWith("-worker.js") &&
+        (destination === "serviceworker" || destination === "sharedworker")
+      ) {
+        workerDestinations.push(destination);
+        if (currentPolicy) return passivePackageResponse("denied");
+        return new Response(predecessorServiceWorker(), {
+          headers: { "content-type": "text/javascript; charset=utf-8" },
+        });
+      }
+      if (
+        url.pathname === "/app/example/current-dedicated-worker.js" &&
+        destination === "worker"
+      ) {
+        workerDestinations.push(destination);
+        return new Response('postMessage("ready");', {
+          headers: { "content-type": "text/javascript; charset=utf-8" },
+        });
+      }
+      if (url.pathname === "/app/example/predecessor.html") {
+        return new Response(predecessorOriginDocument(), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      if (url.pathname === "/app/example/successor.html") {
+        return new Response(successorOriginDocument(), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      return new Response("Not found", { status: 404 });
+    },
+  });
+  appOrigin = `http://127.0.0.1:${app.port}`;
+  const kernel = serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      return new Response(
+        persistentOriginPolicyParentDocument({
+          appOrigin,
+          cleanupSrc: `${appOrigin}${PERSISTENT_ORIGIN_POLICY_PATH}?${cleanupQuery}`,
+          successorSrc: `${appOrigin}/app/example/successor.html`,
+        }),
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      );
+    },
+  });
+  kernelOrigin = `http://127.0.0.1:${kernel.port}`;
+
+  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  try {
+    browser = await chromium.launch({
+      executablePath: chromiumExecutable,
+      headless: true,
+      timeout: 30_000,
+    });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto(`${appOrigin}/app/example/predecessor.html`);
+    await page.waitForFunction(() => Boolean(globalThis.__originPredecessor));
+    assert.deepEqual(await page.evaluate(() => globalThis.__originPredecessor), {
+      value: "durable-browser-state",
+      controlled: true,
+      registrations: 1,
+    });
+
+    currentPolicy = true;
+    await page.goto(kernelOrigin);
+    await page.waitForFunction(() => Boolean(globalThis.__originSuccessor));
+    assert.deepEqual(await page.evaluate(() => globalThis.__originCleanup), {
+      type: PERSISTENT_ORIGIN_POLICY_MESSAGE,
+      ok: true,
+    });
+    assert.deepEqual(await page.evaluate(() => globalThis.__originSuccessor), {
+      type: "neutron:persistent-origin-successor:v1",
+      value: "durable-browser-state",
+      controlled: false,
+      registrations: 0,
+      serviceWorkerStarted: false,
+      sharedWorkerStarted: false,
+      blobSharedWorkerStarted: true,
+      dedicatedWorkerStarted: true,
+    });
+    assert.deepEqual(cleanupDestinations, ["iframe"]);
+    assert.equal(
+      workerDestinations.filter((value) => value === "serviceworker").length,
+      2,
+    );
+    assert.equal(
+      workerDestinations.filter((value) => value === "sharedworker").length,
+      1,
+    );
+    assert.equal(
+      workerDestinations.filter((value) => value === "worker").length,
+      1,
+    );
+    // unregister() removes the registration and the successor is neither
+    // controlled nor able to register again. Browsers may retain the already
+    // running predecessor worker briefly; there is no synchronous termination
+    // primitive for that context.
+  } finally {
+    await browser?.close();
+    kernel.stop(true);
+    app.stop(true);
+  }
+}
+
+function predecessorServiceWorker(): string {
+  return `self.addEventListener("install", () => self.skipWaiting());
+    self.addEventListener("activate", (event) => event.waitUntil(clients.claim()));`;
+}
+
+function indexedDbHelpers(): string {
+  return `
+    function openDatabase() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open("origin-policy-qualification", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("data");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+    async function writeValue(value) {
+      const db = await openDatabase();
+      await new Promise((resolve, reject) => {
+        const transaction = db.transaction("data", "readwrite");
+        transaction.objectStore("data").put(value, "value");
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+      });
+      db.close();
+    }
+    async function readValue() {
+      const db = await openDatabase();
+      const value = await new Promise((resolve, reject) => {
+        const request = db.transaction("data").objectStore("data").get("value");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      db.close();
+      return value;
+    }`;
+}
+
+function predecessorOriginDocument(): string {
+  return `<!doctype html><meta charset="utf-8"><script>
+    ${indexedDbHelpers()}
+    (async () => {
+      await writeValue("durable-browser-state");
+      await navigator.serviceWorker.register("/app/example/predecessor-worker.js");
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) {
+        await new Promise((resolve) =>
+          navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true })
+        );
+      }
+      globalThis.__originPredecessor = {
+        value: await readValue(),
+        controlled: Boolean(navigator.serviceWorker.controller),
+        registrations: (await navigator.serviceWorker.getRegistrations()).length,
+      };
+    })();
+  </script>`;
+}
+
+function successorOriginDocument(): string {
+  return `<!doctype html><meta charset="utf-8"><script>
+    ${indexedDbHelpers()}
+    async function tryServiceWorker() {
+      try {
+        await navigator.serviceWorker.register("/app/example/current-worker.js");
+        return true;
+      } catch { return false; }
+    }
+    async function trySharedWorker() {
+      return await new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          resolve(value);
+        };
+        try {
+          const worker = new SharedWorker("/app/example/current-shared-worker.js");
+          worker.port.onmessage = () => finish(true);
+          worker.onerror = (event) => {
+            event.preventDefault();
+            finish(false);
+          };
+          worker.port.start();
+        } catch { finish(false); }
+        setTimeout(() => finish(false), 2_000);
+      });
+    }
+    async function tryBlobSharedWorker() {
+      const url = URL.createObjectURL(new Blob([
+        "onconnect = (event) => event.ports[0].postMessage('ready');",
+      ], { type: "text/javascript" }));
+      try {
+        return await new Promise((resolve) => {
+          let settled = false;
+          const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+          };
+          try {
+            const worker = new SharedWorker(url);
+            worker.port.onmessage = () => finish(true);
+            worker.onerror = (event) => {
+              event.preventDefault();
+              finish(false);
+            };
+            worker.port.start();
+          } catch { finish(false); }
+          setTimeout(() => finish(false), 2_000);
+        });
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+    async function tryDedicatedWorker() {
+      return await new Promise((resolve) => {
+        let settled = false;
+        const finish = (worker, value) => {
+          if (settled) return;
+          settled = true;
+          worker?.terminate();
+          resolve(value);
+        };
+        try {
+          const worker = new Worker("/app/example/current-dedicated-worker.js");
+          worker.onmessage = () => finish(worker, true);
+          worker.onerror = () => finish(worker, false);
+          setTimeout(() => finish(worker, false), 2_000);
+        } catch { finish(undefined, false); }
+      });
+    }
+    (async () => {
+      const result = {
+        type: "neutron:persistent-origin-successor:v1",
+        value: await readValue(),
+        controlled: Boolean(navigator.serviceWorker.controller),
+        registrations: (await navigator.serviceWorker.getRegistrations()).length,
+        serviceWorkerStarted: await tryServiceWorker(),
+        sharedWorkerStarted: await trySharedWorker(),
+        blobSharedWorkerStarted: await tryBlobSharedWorker(),
+        dedicatedWorkerStarted: await tryDedicatedWorker(),
+      };
+      parent.postMessage(result, "*");
+    })();
+  </script>`;
+}
+
+function persistentOriginPolicyParentDocument({
+  appOrigin,
+  cleanupSrc,
+  successorSrc,
+}: {
+  appOrigin: string;
+  cleanupSrc: string;
+  successorSrc: string;
+}): string {
+  return `<!doctype html><meta charset="utf-8"><script>
+    globalThis.__originCleanup = undefined;
+    globalThis.__originSuccessor = undefined;
+    addEventListener("DOMContentLoaded", () => {
+      const frame = document.querySelector("iframe");
+      addEventListener("message", (event) => {
+        if (event.source !== frame.contentWindow || event.origin !== ${JSON.stringify(appOrigin)}) return;
+        if (
+          event.data &&
+          Object.keys(event.data).length === 2 &&
+          event.data.type === ${JSON.stringify(PERSISTENT_ORIGIN_POLICY_MESSAGE)} &&
+          event.data.ok === true
+        ) {
+          globalThis.__originCleanup = event.data;
+          frame.src = ${JSON.stringify(successorSrc)};
+        } else if (event.data?.type === "neutron:persistent-origin-successor:v1") {
+          globalThis.__originSuccessor = event.data;
+        }
+      });
+      frame.src = ${JSON.stringify(cleanupSrc)};
+    });
+  </script><iframe sandbox=${JSON.stringify(ORIGINFUL_APP_FRAME_SANDBOX)}></iframe>`;
 }
 
 function passivePackageResponse(body: string): Response {
@@ -550,10 +889,35 @@ type PackageReplayResult = {
   serviceWorkerError: string | null;
 };
 
+type OriginPredecessorResult = {
+  value: string;
+  controlled: boolean;
+  registrations: number;
+};
+
+type OriginCleanupResult = {
+  type: typeof PERSISTENT_ORIGIN_POLICY_MESSAGE;
+  ok: boolean;
+};
+
+type OriginSuccessorResult = {
+  type: "neutron:persistent-origin-successor:v1";
+  value: string;
+  controlled: boolean;
+  registrations: number;
+  serviceWorkerStarted: boolean;
+  sharedWorkerStarted: boolean;
+  blobSharedWorkerStarted: boolean;
+  dedicatedWorkerStarted: boolean;
+};
+
 declare global {
   // Browser-only field installed by the parent test document.
   var __mediaResult: MediaResult | undefined;
   var __kernelTargetExecuted: boolean | undefined;
   var __packageReplayScriptExecuted: boolean | undefined;
   var __packageReplayResult: PackageReplayResult | undefined;
+  var __originPredecessor: OriginPredecessorResult | undefined;
+  var __originCleanup: OriginCleanupResult | undefined;
+  var __originSuccessor: OriginSuccessorResult | undefined;
 }

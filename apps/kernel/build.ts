@@ -56,7 +56,7 @@ const config: BuildOptions = {
   },
   format: "esm",
   jsx: "automatic",
-  loader: { ".js": "jsx", ".ts": "ts", ".tsx": "tsx" },
+  loader: { ".bin": "file", ".js": "jsx", ".ts": "ts", ".tsx": "tsx" },
 
   plugins: [
     retainMetafilePlugin,

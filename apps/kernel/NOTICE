@@ -5,16 +5,15 @@ Licensed under the Neutron Public License, Version 1.0.
 SPDX-License-Identifier: LicenseRef-Neutron-Public-License-1.0
 See the LICENSE file distributed with this work.
 
-Package release: v0.3.17 (packed version 317).
+Package release: v0.3.20 (packed version 320).
 
 The package record binds a deterministic provider-hosted HTTPS source artifact
 containing the reviewed Neutron workspace source and important build inputs for
 these package bytes. It is a source snapshot, not a reproducible-build claim.
 
-The package also carries installed npm and Mops legal materials, including the
-exact audited owner-license decision for 3V Interactive-owned code in icblast@4.3.0. That
-decision excludes icblast/didc_wasm_pkg and makes no claim about third-party
-rights in that path.
+The package also carries installed npm and Mops legal materials. ICBlast 4.3.3
+includes the local Candid compiler, its exact Wasm inventory, and the license
+materials bound to that compiler artifact.
 
 The modified browser compiler is maintained in its own source repository.
 packages/neutron-motoko-wasm/LICENSES.md identifies its immutable source

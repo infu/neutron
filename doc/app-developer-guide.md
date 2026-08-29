@@ -22,14 +22,15 @@ be installed into a user's Neutron canister.
 12. [Add An App Tray](#add-an-app-tray)
 13. [Use External Connections](#use-external-connections)
 14. [Use Backend Capabilities](#use-backend-capabilities)
-15. [Validate, Build, And Package](#validate-build-and-package)
-16. [Run Locally](#run-locally)
-17. [Install Into A Local Neutron Canister](#install-into-a-local-neutron-canister)
-18. [Test Your App](#test-your-app)
-19. [Security And Trust Rules](#security-and-trust-rules)
-20. [Package Contents](#package-contents)
-21. [Current Limitations](#current-limitations)
-22. [Reference Files](#reference-files)
+15. [Run Scheduled Backend Work](#run-scheduled-backend-work)
+16. [Validate, Build, And Package](#validate-build-and-package)
+17. [Run Locally](#run-locally)
+18. [Install Into A Local Neutron Canister](#install-into-a-local-neutron-canister)
+19. [Test Your App](#test-your-app)
+20. [Security And Trust Rules](#security-and-trust-rules)
+21. [Package Contents](#package-contents)
+22. [Current Limitations](#current-limitations)
+23. [References](#references)
 
 ## What You Are Building
 
@@ -64,7 +65,8 @@ message-bus tools, shared durable state, long scrollable content, and live
 kernel-derived JSON schema display. It also imports the shared
 `neutron-design-system` SCSS package and is the current design reference. Until
 the app-template CLI is published, new app projects should start by copying the
-`apps/hello` shape and use `apps/kitchensink` as a feature reference.
+`apps/hello` shape with the cleanup procedure below and use `apps/kitchensink`
+as a feature reference.
 
 ## Prerequisites
 
@@ -103,19 +105,71 @@ dependency install source of truth.
 
 ## Create Or Copy An App Project
 
-Today, the practical starting point is:
+The tracked example is already a released app, and a working checkout can also
+contain ignored build outputs. Run this sequence only against the newly copied
+destination, before making app-specific changes:
 
 ```sh
 cp -R apps/hello apps/my_app
+rm -rf apps/my_app/.mops apps/my_app/.neutron apps/my_app/dist \
+  apps/my_app/node_modules
+rm -f apps/my_app/*.neutron apps/my_app/neutron.lock.json \
+  apps/my_app/*.tsbuildinfo apps/my_app/.DS_Store
+rm -f apps/my_app/test/memory_release.test.ts
+mv apps/my_app/backend/memory/hello \
+  apps/my_app/backend/memory/my_app
 ```
 
+The removed lock, archives, and TypeScript archive-transition test belong to
+Hello's immutable release history; do not rename or reuse them for a new app.
+This cleanup is valid only for a new package id that has never been released.
+For a successor of an existing app, preserve its lock, released schemas and
+migrations, version lineage, archives, and predecessor fixtures.
 Then update:
 
-- `apps/my_app/package.json`
-- `apps/my_app/neutron.json`
-- `apps/my_app/backend/main.mo`
-- `apps/my_app/src/index.tsx`
-- any files under `apps/my_app/public/`
+- `package.json`: workspace name and app metadata, governing license, and test
+  scripts;
+- `neutron.json`: app identity, first release version, memory ids and schema
+  paths, surfaces, capabilities, and update-source choice;
+- `backend/main.mo` and `backend/memory/my_app/`: module names, managed-memory
+  fields, defaults, and app methods;
+- `src/`, `public/`, `README.md`, and `NOTICE`: all app-facing names, content,
+  assets, copyright information, and license notice;
+- the repository application-license classification and `LICENSES.md`: add the
+  new workspace under its selected governing license;
+- the repository test, validation, packaging, and TypeScript project lists:
+  enroll the new workspace because these root gates do not discover it
+  automatically;
+- `.gitignore`: replace Hello's historical archive exception with only the
+  exact new-app archives deliberately retained as release evidence, while
+  keeping the general rule that ignores disposable `.neutron` builds;
+- `test/package.test.ts` and `test/memory_release.test.mo`: replace every
+  Hello-specific assertion and keep a clean-initialization and retained-root
+  test appropriate to the new schema.
+
+Finish the rename by reviewing every remaining template reference:
+
+```sh
+rg -ni 'hello' apps/my_app
+```
+
+After resolving those references and changing the workspace name, run
+`npm install` again from the repository root so the root `package-lock.json`
+records the new workspace before its first build or test.
+
+For a new app, default `package.json` `license` to
+`LicenseRef-Neutron-Sovereign-Application-Use-License-1.0` and replace the copied
+`NOTICE` with the matching application notice. Choose
+`LicenseRef-Neutron-Sovereign-Application-License-1.1` only deliberately when
+recipients may modify and share the app. The metadata step supplies the shared
+repository license text; do not copy, shorten, or paraphrase it into the app.
+
+Do not inherit the example's `update_source` by accident. Set it to the
+distribution channel's operated source only when the app will be published
+there; otherwise omit it for manual updates. See
+[License And Deployment Records](./license-and-deployment-records.md) and
+[App Package Updates](./package-updates.md). Never relabel an already published
+package in place; a license change requires a higher app release.
 
 Use a package id that passes the manifest and installer rules:
 
@@ -159,9 +213,11 @@ apps/my_app/
   build.ts
   mops.toml
   neutron.json
-  neutron.lock.json
+  neutron.lock.json              # generated by the first managed-memory build
+  NOTICE
   package.json
   test/
+    memory_release.test.mo
     package.test.ts
 ```
 
@@ -181,9 +237,10 @@ apps/my_app/dist/
 apps/my_app/my_app.v0.1.0.neutron
 ```
 
-`neutron.lock.json` is created by the first managed-memory package build. The
-manifest is format 3; the independently versioned memory lock remains format
-2. Do not write the lock by hand, and do commit it with the app's source.
+After the copied template lock is removed, `neutron.lock.json` is created by the
+first managed-memory package build. The manifest is format 3; the independently
+versioned memory lock remains format 2. Do not write the lock by hand, and do
+commit it with the app's source.
 
 `dist/`, `.mops/`, `.neutron`, `node_modules/`, and TypeScript build
 info are ignored generated/local artifacts.
@@ -193,16 +250,12 @@ info are ignored generated/local artifacts.
 The backend source is a Motoko module, not an actor. The manifest `src` field
 selects the file under `backend/`; in the hello app this is `backend/main.mo`.
 
-New apps use the latest pinned `mo:core` package. Choose collections by their
-semantics: Core `Map` for keyed state, `Set` for unique membership, `List` for a
-growable random-access vector, and `Queue` for FIFO state. Keep immutable arrays
-for Candid vectors, fixed snapshots, static catalogs, and indexed fixed-size
-data; do not replace every array mechanically.
-
-```toml
-[dependencies]
-core = "https://github.com/dfinity/motoko-core#v2.6.0"
-```
+New apps use the repository's pinned `mo:core` package rather than selecting a
+separate floating revision. Choose collections by their semantics: Core `Map`
+for keyed state, `Set` for unique membership, `List` for a growable
+random-access vector, and `Queue` for FIFO state. Keep immutable arrays for
+Candid vectors, fixed snapshots, static catalogs, and indexed fixed-size data;
+do not replace every array mechanically.
 
 Format-3 apps put persistent types and clean-install defaults in immutable
 schema modules. The app module imports the current schema and provides
@@ -340,12 +393,12 @@ block.
 
 Supported annotations:
 
-| Annotation               | Meaning                                                      |
-| ------------------------ | ------------------------------------------------------------ |
-| `/*update*/`             | Expose an authenticated update method.                       |
-| `/*query*/`              | Expose an authenticated query method.                        |
-| `/*internal*/`           | Generate an internal wrapper only.                           |
-| `/*internal:apps*/`      | Export a private internal function to declared app consumers. |
+| Annotation               | Meaning                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| `/*update*/`             | Expose an authenticated update method.                                                          |
+| `/*query*/`              | Expose an authenticated query method.                                                           |
+| `/*internal*/`           | Generate an internal wrapper only.                                                              |
+| `/*internal:apps*/`      | Export a private internal function to declared app consumers.                                   |
 | `/*query:unauthorized*/` | Kernel package only. Ordinary apps are rejected and must declare `capabilities.public_ingress`. |
 
 The annotation comment must appear directly between `public func` and the
@@ -525,7 +578,7 @@ type PublicIngressResultV1 = {
 Encode `payload` as Candid for the exact handler input and decode an `#ok`
 blob as the exact handler output. Use
 `physicalPublicIngressMethodName(appId, protocol, mode)` from
-`@neutron-org/tools` when generating a client or backend reservation. One
+`neutron-tools` when generating a client or backend reservation. One
 exact reservation for that physical method covers every route id sharing the
 dispatcher. It grants outbound call authority only; the recipient still
 enforces its declared byte/rate/concurrency limits, lifecycle, per-route
@@ -755,22 +808,34 @@ validates the id and returns:
 
 - `methodSchema(method, timeout)`, which asks the kernel for the
   kernel-derived icblast JSON Schema for the method;
-- `callDialog(method, args, timeout)`, which asks the kernel to show an
-  approval dialog and then make the call with the currently authenticated
-  kernel identity.
+- `callDialog(method, args, timeout)`, the global convenience route for ordinary
+  code when the app has no live routed invocation. It uses the kernel's
+  signed-call policy and currently authenticated identity and requests owner
+  approval when needed.
+
+Inside an exposed tool handler, use the supplied `context.kernel` client for
+nested requests that Agent Mode permits. Only that client carries the
+kernel-created invocation provenance needed to apply Agent Mode policy; scope is
+required context, not permission by itself.
 
 For methods on your app backend, use the Neutron canister id from
 `loadNeutronCanisterId()`. Installed app methods are methods on the user's
 combined Neutron canister, not on a separate app canister.
 
-`callDialog()` arguments should be a JSON array matching the Candid argument
-order. Apps send JSON-compatible values only: no `undefined`, `NaN`, `BigInt`,
-functions, cycles, class instances, `Uint8Array`, Candid text, Candid encoded
-bytes, package-provided schemas, or identities. For current generated app
-wrappers, no-argument methods use `[null]`, single-argument methods use
-`["value"]`, and multi-parameter Motoko methods use one tuple argument such as
-`[["Ada", "ada@example.test", "Notes", true]]`. `Int` and `Nat` values use
-icblast's JSON form, currently strings such as `"42"`.
+`callDialog()` arguments are an array matching the Candid argument order. For
+an external target, the generic dialog route accepts JSON-compatible values
+only: no `undefined`, `NaN`, `BigInt`, functions, cycles, class instances,
+`Uint8Array`, Candid text, Candid-encoded bytes, package-provided schemas, or
+identities. For the current Neutron canister, the SDK instead selects the
+private API-1 self-call transport. That route accepts `Uint8Array` as canonical
+bytes and `ArrayBuffer` as an input convenience wherever the live Candid type
+is `blob` or `vec nat8`.
+
+For generated app wrappers, no-argument methods use `[null]`, single-argument
+methods use `["value"]`, and multi-parameter Motoko methods use one tuple
+argument such as `[["Ada", "ada@example.test", "Notes", true]]`. On both the
+external and private self-call routes, `Int` and `Nat` use ICBlast's lossless
+JSON form, such as the decimal string `"42"`.
 
 The kernel derives method schemas from the installed canister interface with
 icblast and uses that trusted interface to convert approved JSON arguments into
@@ -778,9 +843,15 @@ Candid calls. App builds also write `dist/schema.json` with the same
 wrapper-accurate method schemas for local tests, package inspection, and app
 developer tooling. The kernel does not trust that package file at runtime.
 
-These helpers now call `canister.schema` and `canister.call_dialog` through the
-same frontend message bus used by app tools. There is no direct app-facing
-canister `call` action.
+For external canisters, ordinary global helpers inspect the live Kernel tool
+descriptors, prefer `canister.schema_v2` and `canister.call_dialog_v2`, and use
+the unversioned compatibility names only when the v2 descriptor is absent.
+Invocation-scoped code does not fall back: it must use the v2 tool through
+`context.kernel` or fail closed when that tool is unavailable. Calls to the
+app's own Neutron use the private attachment-aware self-call transport. There
+is no direct app-facing canister `call` action. See
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method)
+for its versioned privacy and compatibility contract.
 
 ### Preapprove Exact Self Calls
 
@@ -793,10 +864,7 @@ Declare a versioned object containing a unique list of exact method names:
   "capabilities": {
     "preapproved_self_calls": {
       "api": 1,
-      "methods": [
-        "read_profile",
-        "refresh_profile"
-      ]
+      "methods": ["read_profile", "refresh_profile"]
     }
   }
 }
@@ -820,6 +888,11 @@ installed capability and expected method type, validates live Candid arguments,
 fixes the target to the current Neutron canister, and signs with the current
 owner identity. An unlisted method must use `callCanisterDialog()` or another
 kernel-owned approval flow.
+
+Inside an exposed tool handler, prefer the scoped `context.kernel.querySelf()`
+and `context.kernel.updateSelf()` helpers. They inherit that exact request's
+cancellation signal. Cancellation cannot retract an update after dispatch, so
+the Kernel reports an unknown outcome instead of inviting an unsafe retry.
 
 This capability changes frontend consent only. The generated backend wrapper
 keeps its normal owner-authorization assertion, and no Motoko capability handle
@@ -943,12 +1016,24 @@ Call your own background from a tile:
 import { callTool, loadTileContext } from "neutron-tools/app";
 
 const appId = loadTileContext().app!;
-const result = await callTool({
-  target: `app:${appId}:background`,
-  name: "notes_search",
-  arguments: { query: "roadmap" },
-});
+const controller = new AbortController();
+const result = await callTool(
+  {
+    target: `app:${appId}:background`,
+    name: "notes_search",
+    arguments: { query: "roadmap" },
+  },
+  {
+    signal: controller.signal,
+    timeout: 45,
+    onProgress: (value) => renderProgress(value),
+  },
+);
 ```
+
+`timeout` is the caller's timeout in seconds; omitting it uses the SDK default.
+The signal and timeout cancel that exact ordinary message-bus request
+cooperatively. They do not roll back a remote effect that was already sent.
 
 For resident-owned mutable state, keep the resident process or backend as the
 single authority. After a successful mutation, publish only its monotonic
@@ -978,11 +1063,14 @@ authoritative snapshot, reject older responses, and keep a slow polling or
 reconnect refresh as fallback. Notification failure must never turn a
 successful mutation into an apparent write failure.
 
-Use `createMsgBusClient()` to list installed apps, live endpoints, and allowed
-tools. Same-app calls are allowed by default. Cross-app tool listing or calls
-show a kernel-owned approval dialog and require a one-call or session grant.
-Arguments are JSON objects and schemas use JSON Schema draft-07. Tool metadata
-is treated as untrusted when shown to users or agents.
+Use the global `createMsgBusClient()` for ordinary work outside a routed tool
+handler to list installed apps, live endpoints, and allowed tools. Same-app
+calls are allowed by default. Outside Agent Mode, cross-app tool listing or
+calls show a kernel-owned approval dialog and require a one-call or session
+grant. Inside a routed handler, use `context.kernel`; nested Agent Mode policy
+applies only to that scoped request. Arguments are JSON objects and schemas use
+JSON Schema draft-07. Tool metadata is treated as untrusted when shown to users
+or agents.
 
 Keep tile-only control methods out of other apps' and agents' live catalogs by
 adding `annotations: { "neutron:visibility": "same_app" }`. The kernel filters
@@ -1007,11 +1095,7 @@ tools:
     },
     "background_ui_requests": {
       "api": 1,
-      "categories": [
-        "frontend_tool",
-        "signed_canister_call",
-        "backend_access"
-      ]
+      "categories": ["frontend_tool", "signed_canister_call", "backend_access"]
     }
   }
 }
@@ -1037,10 +1121,31 @@ exposeTool("agent_run", options, async (args, context) => {
 ```
 
 The scoped client carries kernel-created provenance outside tool arguments. Do
-not copy caller, root, or Agent Mode fields into your schema. A nested handler
-that uses a global bus for a permission-bearing request fails closed with
-`SCOPED_CONTEXT_REQUIRED`. Ordinary work outside a routed handler can still use
-`createMsgBusClient()`. Long-running handlers should also observe
+not copy caller, root, or Agent Mode fields into your schema. During an active
+invocation, any permission-bearing request made through a global helper or bus
+fails closed with `SCOPED_CONTEXT_REQUIRED` and opens no owner UI. This includes
+module-level `createCanisterClient(neutronId).callDialog()` back into the same
+Neutron, not only external or cross-app requests. Ordinary work when the app has
+no active routed invocation can still use the global helpers and their normal
+owner-consent flow.
+
+Scoping does not make an interactive same-Neutron self-dialog delegable: that
+attempt fails with `USER_INTERACTION_REQUIRED`. For same-Neutron work during a
+handler, use `context.kernel.querySelf()` or `context.kernel.updateSelf()` only
+for an exact preapproved method; otherwise let the owner initiate the dialog
+after the invocation ends. For a nested signed call to an external canister, use
+the scoped route:
+
+```ts
+const result = await context.kernel.callTool({
+  target: "kernel",
+  name: "canister.call_dialog_v2",
+  arguments: { canister, method, args },
+});
+```
+
+Do not create a global canister client inside the handler. Long-running handlers
+should also observe
 `context.signal`; the kernel aborts it when the owner stops the root. Treat it
 as cancellation of future work, not rollback of a remote call already sent.
 
@@ -1115,7 +1220,7 @@ import { copyToClipboard } from "neutron-tools/app";
 
 <button type="button" onClick={() => void copyToClipboard(value)}>
   Copy
-</button>
+</button>;
 ```
 
 Call `copyToClipboard()` directly in the click handler, before any `await` or
@@ -1194,7 +1299,15 @@ provider contract in `neutron.json`:
 
 ```json
 {
+  "background": {
+    "path": "service.html",
+    "description": "Resident connection service"
+  },
   "capabilities": {
+    "background_ui_requests": {
+      "api": 1,
+      "categories": ["connection"]
+    },
     "connections": {
       "api": 1,
       "providers": [
@@ -1226,10 +1339,17 @@ const connection = await requestConnection({
 const sensitive = await acquireConnectionCredential(connection.provider);
 ```
 
-`requestConnection()` opens a kernel-owned consent dialog and authorization
-window. The provider returns to the single root callback page, and the kernel
-backend exchanges and stores the credential. `listConnections()` returns only
-redacted summaries. `listConnections(provider)`,
+The `connection` background UI category discloses that the resident may request
+this owner interaction; it does not preapprove a connection. Without that
+category, `requestConnection()` for a new or missing connection fails with
+`OWNER_REQUIRED`. Connection creation is unavailable during Agent Mode and must
+begin from ordinary owner interaction.
+
+`requestConnection()` returns the existing matching connection when one is
+already active. For a new or missing connection, it opens a kernel-owned
+consent dialog and authorization window. The provider returns to the single
+root callback page, and the kernel backend exchanges and stores the credential.
+`listConnections()` returns only redacted summaries. `listConnections(provider)`,
 `acquireConnectionCredential(provider)`, and
 `disconnectConnection(provider)` select the exact declared provider; there is
 at most one credential per app installation and provider. Keep an acquired
@@ -1275,7 +1395,7 @@ Declare backend-call authority and select its V1 interface:
     "backend_calls": {
       "api": 1,
       "description": "Connect to owner-approved ICRC ledger canisters",
-      "reservation_scopes": ["principal"],
+      "reservation_scopes": ["principal", "exact"],
       "max_concurrency": 20,
       "max_cycles_per_call": 0,
       "max_cycles_per_day": 0
@@ -1353,10 +1473,21 @@ await requestBackendCallReservations({
 });
 ```
 
-That Wallet example is for reviewed preset ledgers. For a user-supplied custom
-ledger, request separate `exact` scopes for `icrc1_metadata`,
-`icrc1_balance_of`, `icrc1_fee`, and `icrc1_transfer` instead of whole-principal
-access.
+The two principal actions above illustrate the batch mechanics; they are not
+Wallet's complete selection algorithm. For each reviewed preset, Wallet derives
+the whole-principal ledger scope plus the exact history-index, native-route, and
+gas-ledger helper scopes required by that catalog entry. For a user-supplied
+custom ledger, it requests separate `exact` scopes for `icrc1_metadata`,
+`icrc1_balance_of`, `icrc1_fee`, `icrc1_transfer`, and `icrc3_get_blocks`
+instead of whole-principal access.
+
+The global helper above is for ordinary work outside a routed handler and uses
+the persistent-access owner dialog. During a routed Agent Mode invocation, an
+eligible action-only change must instead call the `backend_calls.request`
+Kernel tool through `context.kernel`; the agent decision then applies only to
+that scoped request. The scoped generic route does not accept the optional
+post-grant call, and the attachment-aware global helper does not inherit a
+handler invocation.
 
 Supported reservation modes are `exact` (one method on one principal),
 `principal` (all current and future methods on one principal), and `method`
@@ -1449,12 +1580,14 @@ or transaction-signing API. Declare exact slots and select the leaf explicitly:
   "capabilities": {
     "chain_key_signing": {
       "api": 1,
-      "slots": [{
-        "id": "receipts",
-        "algorithm": "ecdsa_secp256k1",
-        "purpose": "Sign application receipt assertions",
-        "max_assertion_bytes": 4096
-      }]
+      "slots": [
+        {
+          "id": "receipts",
+          "algorithm": "ecdsa_secp256k1",
+          "purpose": "Sign application receipt assertions",
+          "max_assertion_bytes": 4096
+        }
+      ]
     }
   }
 }
@@ -1524,15 +1657,17 @@ does not expose raw stable memory or a Region:
   "capabilities": {
     "stable_store": {
       "api": 1,
-      "stores": [{
-        "id": "notes",
-        "purpose": "Keep revision-safe notes",
-        "schema_version": 1,
-        "max_entries": 128,
-        "max_key_bytes": 64,
-        "max_value_bytes": 4096,
-        "max_bytes": 262144
-      }]
+      "stores": [
+        {
+          "id": "notes",
+          "purpose": "Keep revision-safe notes",
+          "schema_version": 1,
+          "max_entries": 128,
+          "max_key_bytes": 64,
+          "max_value_bytes": 4096,
+          "max_bytes": 262144
+        }
+      ]
     }
   }
 }
@@ -1603,15 +1738,17 @@ confidentiality from subnet replicas:
   "capabilities": {
     "https_outcalls": {
       "api": 1,
-      "endpoints": [{
-        "id": "example",
-        "url_prefix": "https://example.com/",
-        "methods": ["get", "head"],
-        "request_headers": ["accept"],
-        "max_request_bytes": 4096,
-        "max_response_bytes": 32768,
-        "transform": "strip_headers"
-      }]
+      "endpoints": [
+        {
+          "id": "example",
+          "url_prefix": "https://example.com/",
+          "methods": ["get", "head"],
+          "request_headers": ["accept"],
+          "max_request_bytes": 4096,
+          "max_response_bytes": 32768,
+          "transform": "strip_headers"
+        }
+      ]
     }
   }
 }
@@ -1733,7 +1870,7 @@ import NeutronCapabilities "mo:neutron-capabilities";
 import Text "mo:core/Text";
 
 public class Init() {
-  public func receive_hook(
+  public func /*internal*/receive_hook(
     request : NeutronCapabilities.HttpPostUpdateHandlerRequestV1
   ) : NeutronCapabilities.HttpPostUpdateHandlerResponseV1 {
     // Validate request.headers as untrusted app-protocol data, then mutate
@@ -1746,6 +1883,9 @@ public class Init() {
   };
 };
 ```
+
+The `/*internal*/` marker is required. The build derives the handler's `func`
+metadata from that annotation; do not hand-author a conflicting function entry.
 
 `max_request_bytes`, `max_response_bytes`, and `max_calls_per_hour` are closed
 install-time ceilings: request and reply are 1–65,536 bytes, rate is
@@ -2007,15 +2147,16 @@ type TaskCapabilities = {
 
 public func /*internal*/wallet_history_tick(
   (),
-  taskCapabilities : TaskCapabilities,
+  /*task_capabilities*/ taskCapabilities : TaskCapabilities,
 ) : async* () {
   ignore await* refreshDueState(taskCapabilities.backend_calls);
 };
 ```
 
 The target must belong to the declaring app and use `async*`. When the app
-declares `backend_calls`, the exact `task_capabilities` resource shown above is
-required; otherwise the target takes no injected resources. A fresh record,
+declares `backend_calls`, the `/*task_capabilities*/` marker on the exact
+injected record is required so the build derives the `task_capabilities`
+function argument; otherwise the target takes no injected resources. A fresh record,
 backend-call budget, and revocable lease are created for every run. Its
 `max_backend_calls` counter is not
 shared with the app's foreground capability or another scheduled task. A task
@@ -2102,8 +2243,9 @@ The steps are:
    reads generated backend aliases and asks icblast to write
    `dist/schema.json` for every public app method.
 6. `package:metadata`
-   replaces `dist/legal` with the verified package record, concise application
-   notice, governing license, and derived third-party notices. With
+   validates the app-root `NOTICE` against the license selected in
+   `package.json`, then replaces `dist/legal` with the verified package record,
+   application notice, governing license, and derived third-party notices. With
    `update_source`, it writes the exact generated Complete App Source gzip bytes
    outside `dist`, at
    `<app>/.neutron/sources/<sha256>.source.v1.msgpack.gz`, and records the
@@ -2119,8 +2261,9 @@ The steps are:
 For an NSAL 1.1 release, this tooling includes the exact `LICENSE.APP` text. For
 an inspectable use-only release, it includes the exact `LICENSE.APP.USE` text.
 Both include required third-party notices and identify exact Complete App
-Source; the use-only source offer grants inspection, not modification or
-redistribution. For a normal source-discoverable release, the provider's
+Source. The use-only license permits inspection, security review, and
+verification; source availability does not grant modification or redistribution.
+For a normal source-discoverable release, the provider's
 update-source publisher uploads the source artifact; the installed canister
 receives the license, notices, and record but not the source bytes. This is a
 package and publisher responsibility, not a requirement for a Sovereign User
@@ -2154,9 +2297,13 @@ The output filename is derived from the app ID and release in its manifest:
 
 Use the single
 [Maintainer Release Workflow](./package-updates.md#maintainer-release-workflow)
-for the version bump, package build, production source publication,
-verification, and optional Dispenser starter update. This guide does not
-duplicate those release commands.
+for a SushiOS production version bump, package build, source publication,
+verification, and optional Dispenser starter update. For an independently
+operated source, use its
+[generic publisher workflow](../support/update-source/README.md#generic-publisher-command).
+An app that omits `update_source` remains manual-update-only and does not publish
+through either source workflow. This guide does not duplicate those release
+commands.
 
 ## Run Locally
 
@@ -2249,12 +2396,11 @@ the kernel manifest used to assemble the user's Neutron actor.
 
 ## Test Your App
 
-Use fast package-level tests first:
+Run the app workspace's complete test command:
 
 ```sh
 cd apps/my_app
 npm test
-npm run package
 ```
 
 The sample app tests check that:
@@ -2263,17 +2409,27 @@ The sample app tests check that:
 - the declared methods are present;
 - the apps declare the expected launcher tile metadata;
 - the generated Candid aliases can produce an app-usable JSON Schema through
-  icblast.
+  icblast;
+- clean initialization and retained managed-memory behavior remain correct.
 
-These package tests are fast checks around source and metadata. They do not
-build the final `.neutron` archive unless the app test explicitly invokes the
-package script.
+In the copied template, `npm test` runs the complete package command first, then
+the Bun source/metadata tests and the Motoko memory test, so it does build the
+final `.neutron` archive. If the app later splits fast and release suites, keep
+the authoritative package command and every app-specific release test in its
+release qualification; packaging alone is not sufficient evidence.
 
-Run the repository unit suite from the root before changing shared packages:
+Run the complete repository baseline from the root before release:
 
 ```sh
 npm test
+npm run typecheck
+npm run security:check
+npm run license:check
 ```
+
+These are separate gates; the unit suite does not imply the type, security, or
+application-license checks. See
+[Testing And Verification](./testing-and-verification.md#fast-checks).
 
 Run the full local browser install flow:
 
@@ -2360,7 +2516,8 @@ hash.
 
 ## Current Limitations
 
-- There is no published app-template generator yet. Copy `apps/hello` for now.
+- There is no published app-template generator yet. Use the copy-and-clean
+  procedure above for now.
 - The production-context compile-only CLI exists as source under
   `packages/neutron-cli`. Trusted local compilation and deployment are owned by
   the format-3 provisioner because it authenticates
@@ -2385,7 +2542,7 @@ hash.
 - Some developer scripts are still repo-relative. The roadmap is to remove
   assumptions that app authors know this repository layout.
 
-## Reference Files
+## References
 
 - [App Development Workflow](./app-development-workflow.md)
 - [Neutron Design System](./design-system.md)
@@ -2396,14 +2553,7 @@ hash.
 - [Compiler And Actor Assembly](./compiler-and-actor-assembly.md)
 - [Bootstrap, Local Development, And Deployment](./bootstrap-local-development-and-deployment.md)
 - [Testing And Verification](./testing-and-verification.md)
-- `apps/hello/`
-- `apps/kitchensink/`
-- `packages/neutron-design-system/`
-- `packages/neutron-tools/src/app.ts`
-- `packages/neutron-tools/src/schema.ts`
-- `packages/neutron-scripts/src/mogen.ts`
-- `packages/neutron-scripts/src/mopack.ts`
-- `packages/neutron-scripts/src/pack.ts`
-- `packages/neutron-cli/src/index.ts`
-- `packages/neutron-compiler/src/assemble.ts`
-- `packages/neutron-compiler/src/install.ts`
+- `apps/hello/` minimal template workspace
+- `apps/kitchensink/` feature-reference workspace
+- `neutron-tools` and `neutron-tools/app` public SDK entrypoints
+- `neutron-design-system` public UI package

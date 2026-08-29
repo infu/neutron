@@ -58,6 +58,9 @@
       "path": "./apps/wallet"
     },
     {
+      "path": "./apps/blast"
+    },
+    {
       "path": "./support/dispenser"
     },
     {

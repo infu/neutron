@@ -41,7 +41,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v317 NPL package metadata", () => {
+describe("Kernel v320 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -99,7 +99,7 @@ describe("Kernel v317 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(317);
+    expect(packagedManifest.version).toBe(320);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -120,7 +120,7 @@ describe("Kernel v317 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 317");
+    ).toThrow("restricted to Kernel version 320");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -316,7 +316,11 @@ async function metadataFixture(): Promise<MetadataFixture> {
     license,
     notice,
     esbuildMetafile: jsonBytes({
-      inputs: { "/repo/node_modules/icblast/lib/browser.js": {} },
+      inputs: {
+        "node_modules/icblast/lib/browser.js": {},
+        "node_modules/icblast/didc_wasm_pkg/didc_rust.js": {},
+        "node_modules/icblast/didc_wasm_pkg/didc_rust_bg.bin": {},
+      },
     }),
     sourceFiles: [...contentByPath.entries()].map(([sourcePath, content]) => ({
       path: sourcePath,
@@ -332,8 +336,9 @@ function thirdPartyFixture(): ThirdPartyNoticeBundle {
   return {
     files: {
       [noticePath]: textEncoder.encode(
-        "didc_wasm_pkg\n" +
-          "this decision makes no claim about those rights\n" +
+        "didc_wasm_pkg/didc_rust_bg.bin\n" +
+          "third_party/licenses/rust/map.json\n" +
+          "Rust standard-library dependency inventory\n" +
           "https://github.com/infu/neutron_motoko/tree/" +
           "d7ed0a92b6219d784b7143e0851ed64b55dfc25a\n" +
           "https://github.com/ocsigen/js_of_ocaml/tree/" +
@@ -345,8 +350,8 @@ function thirdPartyFixture(): ThirdPartyNoticeBundle {
       {
         ecosystem: "npm",
         name: "icblast",
-        version: "4.3.0",
-        declaredLicense: "package.json omits a license field",
+        version: "4.3.3",
+        declaredLicense: "Apache-2.0",
         selectedLicense: "Apache-2.0",
         materials: [],
       },

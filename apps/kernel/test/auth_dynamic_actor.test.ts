@@ -1,11 +1,9 @@
 import { expect, test } from "bun:test";
 import { spawn } from "bun";
 
-test("isolated dynamic self-actor cache", async () => {
-  const fixture = new URL(
-    "./auth_dynamic_actor.isolated.ts",
-    import.meta.url,
-  ).pathname;
+test("isolated dynamic actor caches and external privacy boundary", async () => {
+  const fixture = new URL("./auth_dynamic_actor.isolated.ts", import.meta.url)
+    .pathname;
   const repositoryRoot = new URL("../../..", import.meta.url).pathname;
   const child = spawn([process.execPath, "test", fixture], {
     cwd: repositoryRoot,
@@ -20,5 +18,5 @@ test("isolated dynamic self-actor cache", async () => {
   ]);
 
   expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
-  expect(`${stdout}\n${stderr}`).toContain("4 pass");
+  expect(`${stdout}\n${stderr}`).toContain("9 pass");
 });

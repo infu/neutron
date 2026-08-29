@@ -4,10 +4,7 @@ import {
   kernelParentOriginFromAppWindow,
 } from "./runtime.js";
 import { normalizeUntrustedText } from "./schema.js";
-import {
-  isMsgBusFrameProbe,
-  MSG_BUS_FRAME_READY,
-} from "./frame_handshake.js";
+import { isMsgBusFrameProbe, MSG_BUS_FRAME_READY } from "./frame_handshake.js";
 import {
   MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
   MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
@@ -21,7 +18,9 @@ import {
   SELF_CALL_VALUE_MAX_CONTAINER_ELEMENTS,
   SELF_CALL_VALUE_MAX_DEPTH,
   VET_KEYS_ERROR_CODES,
+  KernelPolicyError,
   assertBoundedJson,
+  assertMsgBusActionName,
   assertToolName,
   isAppStateChangeEnvelope,
   isExecEnvelope,
@@ -29,10 +28,11 @@ import {
   isJsonValue,
   isProgressEnvelope,
   isRecord,
+  isRequestCancelEnvelope,
   isResponseEnvelope,
   msgBusLocalActions,
   normalizeToolDescriptor,
-  serializeError,
+  serializeBoundedError,
   toError,
   validateToolArguments,
   validateToolResult,
@@ -76,6 +76,7 @@ import type {
   OpenAppTileRequest,
   OpenAppTileResult,
   ProgressEnvelope,
+  RequestCancelEnvelope,
   ResponseEnvelope,
   ScopedKernelClient,
   SelfCallBlobPathSegment,
@@ -112,6 +113,8 @@ type Callback = {
   source: MessagePort;
   onProgress?: (value: JsonValue) => void;
   progressCount: number;
+  cleanup?: () => void;
+  preserveCancellationReply?: boolean;
 };
 
 type SelfCallCallback = {
@@ -119,18 +122,23 @@ type SelfCallCallback = {
   reject: (reason?: unknown) => void;
   timeout?: ReturnType<typeof setTimeout>;
   source: MessagePort;
+  cleanup?: () => void;
+  preserveCancellationReply?: boolean;
 };
 
 let nextId = 0;
 const callbacks = new Map<number, Callback>();
 const selfCallCallbacks = new Map<number, SelfCallCallback>();
+let validatedNeutronCanisterId: string | null = null;
 let installedWindow: Window | undefined;
 let kernelPort: MessagePort | undefined;
-const kernelPortWaiters = new Set<{
+type KernelPortWaiter = {
   resolve: (port: MessagePort) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
-}>();
+  cleanup?: () => void;
+};
+const kernelPortWaiters = new Set<KernelPortWaiter>();
 const installedPorts = new WeakSet<MessagePort>();
 const localTools = new Map<
   string,
@@ -151,6 +159,11 @@ const invocationAbortControllers = new Map<
   string,
   Map<string, AbortController>
 >();
+let ordinaryKernelToolNames: Promise<ReadonlySet<string>> | undefined;
+const localRequestControllers = new WeakMap<
+  MessagePort,
+  Map<number, AbortController>
+>();
 
 function getWindow(): Window {
   if (typeof window === "undefined") {
@@ -163,9 +176,10 @@ function postPortMessage(
   target: MessagePort,
   message:
     | ExecEnvelope
+    | RequestCancelEnvelope
     | ResponseEnvelope
     | ProgressEnvelope
-    | AppStateChangeEnvelope
+    | AppStateChangeEnvelope,
 ): void {
   target.postMessage(message);
 }
@@ -185,10 +199,7 @@ function handlePortMessage(event: MessageEvent, port: MessagePort): void {
   handlePeerMessage(event.data, port);
 }
 
-function handlePeerMessage(
-  data: unknown,
-  source: MessagePort
-): void {
+function handlePeerMessage(data: unknown, source: MessagePort): void {
   if (isTileViewEnvelope(data) && isKernelPeer(source)) {
     dispatchTileView(data.view);
     return;
@@ -197,10 +208,7 @@ function handlePeerMessage(
     dispatchAppStateChange(data);
     return;
   }
-  if (
-    isRecord(data) &&
-    data.type === "neutron:self-call:response"
-  ) {
+  if (isRecord(data) && data.type === "neutron:self-call:response") {
     handleSelfCallResponseMessage(data, source);
     return;
   }
@@ -210,6 +218,10 @@ function handlePeerMessage(
   }
   if (isResponseEnvelope(data)) {
     handleResponseMessage(data, source);
+    return;
+  }
+  if (isRequestCancelEnvelope(data)) {
+    cancelLocalRequest(source, data.id);
     return;
   }
 
@@ -262,20 +274,11 @@ function dispatchAppStateChange(change: AppStateChangeEnvelope): void {
 
 function handleProgressMessage(
   progress: ProgressEnvelope,
-  source: MessagePort
+  source: MessagePort,
 ): void {
   const callback = callbacks.get(progress.id);
   if (!callback || callback.source !== source || !callback.onProgress) return;
   if (callback.progressCount >= MSG_BUS_MAX_PROGRESS_EVENTS) return;
-  try {
-    assertBoundedJson(
-      progress.value,
-      "Progress payload",
-      MSG_BUS_MAX_PROGRESS_BYTES
-    );
-  } catch {
-    return;
-  }
 
   callback.progressCount += 1;
   try {
@@ -287,13 +290,14 @@ function handleProgressMessage(
 
 function handleResponseMessage(
   response: ResponseEnvelope,
-  source: MessagePort
+  source: MessagePort,
 ): void {
   const callback = callbacks.get(response.id);
   if (!callback || callback.source !== source) return;
 
   if (callback.timeout) clearTimeout(callback.timeout);
   callbacks.delete(response.id);
+  callback.cleanup?.();
 
   if (Object.hasOwn(response, "error")) {
     callback.reject(toError(response.error));
@@ -304,7 +308,7 @@ function handleResponseMessage(
 
 async function handleLocalToolMessage(
   request: ExecEnvelope,
-  responseTarget: MessagePort
+  responseTarget: MessagePort,
 ): Promise<void> {
   const action = request.payload.action;
   if (
@@ -323,29 +327,42 @@ async function handleLocalToolMessage(
     return;
   }
 
+  const requestController = registerLocalRequest(responseTarget, request.id);
+  if (!requestController) {
+    // Keep the first request authoritative. Replying to a duplicate with the
+    // same id would settle the caller while the original request was still
+    // running, recreating the very orphaned-work condition cancellation avoids.
+    return;
+  }
+
   try {
     let progressCount = 0;
     const reportProgress = (value: JsonValue): void => {
       if (progressCount >= MSG_BUS_MAX_PROGRESS_EVENTS) return;
       assertBoundedJson(value, "Progress payload", MSG_BUS_MAX_PROGRESS_BYTES);
       progressCount += 1;
-      postPortMessage(
-        responseTarget,
-        { type: "progress", id: request.id, value }
-      );
+      postPortMessage(responseTarget, {
+        type: "progress",
+        id: request.id,
+        value,
+      });
     };
     const ok =
       action === msgBusLocalActions.toolsList
         ? listExposedTools()
         : action === msgBusLocalActions.agentConsentDecide
-          ? await decideAgentConsent(request.payload.payload)
+          ? await decideAgentConsent(
+              request.payload.payload,
+              requestController.signal,
+            )
           : action === msgBusLocalActions.agentTurnCancel
             ? cancelAgentTurn(request.payload.payload)
-          : await callExposedTool(
-              request.payload.payload,
-              reportProgress,
-              request.payload.context?.invocation,
-            );
+            : await callExposedTool(
+                request.payload.payload,
+                reportProgress,
+                request.payload.context?.invocation,
+                requestController.signal,
+              );
     assertBoundedJson(ok, "Tool result");
     postPortMessage(responseTarget, {
       type: "response",
@@ -356,18 +373,65 @@ async function handleLocalToolMessage(
     postPortMessage(responseTarget, {
       type: "response",
       id: request.id,
-      error: serializeError(error),
+      error: serializeBoundedError(error),
     });
+  } finally {
+    unregisterLocalRequest(responseTarget, request.id, requestController);
   }
 }
 
-async function decideAgentConsent(payload: JsonValue): Promise<JsonValue> {
+function registerLocalRequest(
+  source: MessagePort,
+  id: number,
+): AbortController | null {
+  const requests = localRequestControllers.get(source) ?? new Map();
+  if (requests.has(id)) return null;
+  const controller = new AbortController();
+  requests.set(id, controller);
+  localRequestControllers.set(source, requests);
+  return controller;
+}
+
+function unregisterLocalRequest(
+  source: MessagePort,
+  id: number,
+  controller: AbortController,
+): void {
+  const requests = localRequestControllers.get(source);
+  if (requests?.get(id) !== controller) return;
+  requests.delete(id);
+  if (requests.size === 0) localRequestControllers.delete(source);
+}
+
+function cancelLocalRequest(source: MessagePort, id: number): void {
+  localRequestControllers
+    .get(source)
+    ?.get(id)
+    ?.abort(new Error("Message-bus request cancelled by peer"));
+}
+
+function cancelLocalRequestsForPeer(source: MessagePort, reason: Error): void {
+  const requests = localRequestControllers.get(source);
+  if (!requests) return;
+  for (const controller of requests.values()) controller.abort(reason);
+  localRequestControllers.delete(source);
+}
+
+async function decideAgentConsent(
+  payload: JsonValue,
+  signal?: AbortSignal,
+): Promise<JsonValue> {
   if (!isJsonObject(payload) || !isAgentConsentChallenge(payload)) {
     throw new Error("Invalid agent consent challenge");
   }
+  if (signal?.aborted) throw abortReason(signal);
   const registered = agentConsentHandlers.get(payload.rootId);
-  if (!registered?.handler) throw new Error("Agent consent handler is not active");
-  const decision = await registered.handler(payload);
+  if (!registered?.handler)
+    throw new Error("Agent consent handler is not active");
+  const decision = await settleWithSignal(
+    Promise.resolve(registered.handler(payload, signal)),
+    signal,
+  );
   if (
     !isJsonObject(decision) ||
     (decision.decision !== "allow" && decision.decision !== "deny") ||
@@ -431,7 +495,9 @@ function isAgentConsentChallenge(
   );
 }
 
-function isMsgBusConnectEnvelope(value: unknown): value is MsgBusConnectEnvelope {
+function isMsgBusConnectEnvelope(
+  value: unknown,
+): value is MsgBusConnectEnvelope {
   return (
     isRecord(value) &&
     value.type === "neutron:msgbus:connect" &&
@@ -457,14 +523,22 @@ function acceptKernelPort(event: MessageEvent<MsgBusConnectEnvelope>): void {
   const port = event.ports[0];
   if (!port) return;
 
-  if (kernelPort) {
-    rejectCallbacksForPeer(kernelPort, "Message bus connection replaced");
-    kernelPort.close();
-  }
+  const replacedPort = kernelPort;
   kernelPort = port;
+  ordinaryKernelToolNames = undefined;
   installPortListener(port);
+  if (replacedPort) {
+    cancelOutstandingRequestsForPeer(replacedPort);
+    rejectCallbacksForPeer(replacedPort, "Message bus connection replaced");
+    cancelLocalRequestsForPeer(
+      replacedPort,
+      new Error("Message bus connection replaced"),
+    );
+    replacedPort.close();
+  }
   for (const waiter of kernelPortWaiters) {
     clearTimeout(waiter.timeout);
+    waiter.cleanup?.();
     waiter.resolve(port);
   }
   kernelPortWaiters.clear();
@@ -485,14 +559,26 @@ export function installMessageListener(targetWindow = getWindow()): void {
 }
 
 export function disconnectMsgBus(): void {
-  if (kernelPort) {
-    rejectCallbacksForPeer(kernelPort, "Message bus disconnected");
-    kernelPort.close();
-  }
+  const disconnectedPort = kernelPort;
   kernelPort = undefined;
+  ordinaryKernelToolNames = undefined;
+  if (disconnectedPort) {
+    cancelOutstandingRequestsForPeer(disconnectedPort);
+    rejectCallbacksForPeer(disconnectedPort, "Message bus disconnected");
+    cancelLocalRequestsForPeer(
+      disconnectedPort,
+      new Error("Message bus disconnected"),
+    );
+    disconnectedPort.close();
+  }
   for (const [id, callback] of selfCallCallbacks) {
     if (callback.timeout) clearTimeout(callback.timeout);
-    callback.reject(new Error("Message bus disconnected"));
+    callback.cleanup?.();
+    callback.reject(
+      callback.preserveCancellationReply
+        ? unknownCanisterCallOutcome("Message bus disconnected")
+        : new Error("Message bus disconnected"),
+    );
     selfCallCallbacks.delete(id);
   }
   agentConsentHandlers.clear();
@@ -502,34 +588,53 @@ export function disconnectMsgBus(): void {
   invocationAbortControllers.clear();
   for (const waiter of kernelPortWaiters) {
     clearTimeout(waiter.timeout);
+    waiter.cleanup?.();
     waiter.reject(new Error("Message bus disconnected"));
   }
   kernelPortWaiters.clear();
 }
 
-function rejectCallbacksForPeer(
-  peer: MessagePort,
-  message: string
-): void {
+function rejectCallbacksForPeer(peer: MessagePort, message: string): void {
   for (const [id, callback] of callbacks) {
     if (callback.source !== peer) continue;
     if (callback.timeout) clearTimeout(callback.timeout);
     callbacks.delete(id);
-    callback.reject(new Error(message));
+    callback.cleanup?.();
+    callback.reject(
+      callback.preserveCancellationReply
+        ? unknownCanisterCallOutcome(message)
+        : new Error(message),
+    );
   }
   for (const [id, callback] of selfCallCallbacks) {
     if (callback.source !== peer) continue;
     if (callback.timeout) clearTimeout(callback.timeout);
     selfCallCallbacks.delete(id);
-    callback.reject(new Error(message));
+    callback.cleanup?.();
+    callback.reject(
+      callback.preserveCancellationReply
+        ? unknownCanisterCallOutcome(message)
+        : new Error(message),
+    );
   }
+}
+
+function cancelOutstandingRequestsForPeer(peer: MessagePort): void {
+  const ids = new Set<number>();
+  for (const [id, callback] of callbacks) {
+    if (callback.source === peer) ids.add(id);
+  }
+  for (const [id, callback] of selfCallCallbacks) {
+    if (callback.source === peer) ids.add(id);
+  }
+  for (const id of ids) postRequestCancellation(peer, id);
 }
 
 export function execPort<T extends JsonValue = JsonValue>(
   target: MessagePort,
   action: string,
   payload: JsonValue = null,
-  options: number | MsgBusCallOptions = 0
+  options: number | MsgBusCallOptions = 0,
 ): Promise<T> {
   installPortListener(target);
   return execPeer<T>(target, action, payload, options);
@@ -541,20 +646,85 @@ function execPeer<T extends JsonValue = JsonValue>(
   payload: JsonValue,
   options: number | MsgBusCallOptions,
   context?: MsgBusTransportContext,
+  boundSignal?: AbortSignal,
 ): Promise<T> {
-  if (!action) throw new Error("Action is required");
+  assertMsgBusActionName(action);
   assertBoundedJson(payload);
 
   const id = ++nextId;
   const normalizedOptions =
     typeof options === "number" ? { timeout: options } : options;
   const timeout = normalizedOptions.timeout ?? 0;
+  const signals = [normalizedOptions.signal, boundSignal].filter(
+    (signal, index, values): signal is AbortSignal =>
+      signal !== undefined && values.indexOf(signal) === index,
+  );
+  const alreadyAborted = signals.find((signal) => signal.aborted);
+  if (alreadyAborted) return Promise.reject(abortReason(alreadyAborted));
+  // Once this request crosses the private port, only the Kernel knows whether
+  // an update was dispatched. Keep its phase-aware cancellation reply instead
+  // of replacing it locally with an ordinary timeout or AbortError.
+  const preserveCancellationReply = isKernelCanisterCall(action, payload);
 
   return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let posted = false;
+    let cancellationPending = false;
+    const finish = (error: Error, notifyPeer: boolean): void => {
+      if (settled) return;
+      settled = true;
+      const callback = callbacks.get(id);
+      if (callback?.source === target) callbacks.delete(id);
+      if (callback?.timeout) clearTimeout(callback.timeout);
+      callback?.cleanup?.();
+      if (notifyPeer && posted) postRequestCancellation(target, id);
+      reject(error);
+    };
+    const requestCancellation = (error: Error): void => {
+      if (settled || cancellationPending) return;
+      if (!posted || !preserveCancellationReply) {
+        finish(error, true);
+        return;
+      }
+      const callback = callbacks.get(id);
+      if (callback?.source !== target) {
+        finish(unknownCanisterCallOutcome(error.message), false);
+        return;
+      }
+      cancellationPending = true;
+      if (callback.timeout) clearTimeout(callback.timeout);
+      callback.cleanup?.();
+      delete callback.onProgress;
+      if (!postRequestCancellation(target, id)) {
+        finish(unknownCanisterCallOutcome(error.message), false);
+        return;
+      }
+      if (callbacks.get(id) !== callback) return;
+      callback.timeout = setTimeout(
+        () =>
+          finish(
+            unknownCanisterCallOutcome(
+              "The Kernel did not acknowledge canister call cancellation",
+            ),
+            false,
+          ),
+        MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS * 1_000,
+      );
+    };
+    const abortListeners = signals.map((signal) => {
+      const listener = (): void => requestCancellation(abortReason(signal));
+      return [signal, listener] as const;
+    });
+    const cleanup = (): void => {
+      for (const [signal, listener] of abortListeners) {
+        signal.removeEventListener("abort", listener);
+      }
+    };
     const timeoutCallback = timeout
       ? setTimeout(() => {
-          callbacks.delete(id);
-          reject(new Error("Timeout after " + timeout + " seconds"));
+          requestCancellation(
+            new Error("Timeout after " + timeout + " seconds"),
+          );
         }, 1000 * timeout)
       : undefined;
 
@@ -566,51 +736,139 @@ function execPeer<T extends JsonValue = JsonValue>(
         ? { onProgress: normalizedOptions.onProgress }
         : {}),
       progressCount: 0,
+      cleanup,
+      ...(preserveCancellationReply ? { preserveCancellationReply: true } : {}),
       ...(timeoutCallback ? { timeout: timeoutCallback } : {}),
     });
+    for (const [signal, listener] of abortListeners) {
+      signal.addEventListener("abort", listener, { once: true });
+    }
+    for (const [signal, listener] of abortListeners) {
+      if (signal.aborted) listener();
+    }
+    if (settled) return;
 
-    postPortMessage(
-      target,
-      {
+    try {
+      postPortMessage(target, {
         type: "exec",
         id,
         payload: {
           action,
           payload,
-          ...(context ?? normalizedOptions.transportContext
+          ...((context ?? normalizedOptions.transportContext)
             ? { context: context ?? normalizedOptions.transportContext }
             : {}),
         },
-      } satisfies ExecEnvelope
+      } satisfies ExecEnvelope);
+      posted = true;
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)), false);
+    }
+  });
+}
+
+function isKernelCanisterCall(action: string, payload: JsonValue): boolean {
+  return (
+    action === "tools.call" &&
+    isJsonObject(payload) &&
+    payload.target === "kernel" &&
+    (payload.name === "canister.call_dialog_v2" ||
+      payload.name === "canister.call_dialog")
+  );
+}
+
+function unknownCanisterCallOutcome(message: string): KernelPolicyError {
+  return new KernelPolicyError(
+    "REQUEST_CANCELLED",
+    `${message}; the canister call outcome is unknown`,
+  );
+}
+
+function postRequestCancellation(target: MessagePort, id: number): boolean {
+  try {
+    postPortMessage(target, {
+      type: "neutron:msgbus:cancel",
+      version: 1,
+      id,
+    });
+    return true;
+  } catch {
+    // Local settlement remains authoritative after peer disconnection.
+    return false;
+  }
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : Object.assign(new Error("Message-bus request cancelled"), {
+        name: "AbortError",
+      });
+}
+
+function settleWithSignal<Value>(
+  operation: PromiseLike<Value>,
+  signal?: AbortSignal,
+): Promise<Value> {
+  if (!signal) return Promise.resolve(operation);
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      callback();
+    };
+    const abort = (): void => finish(() => reject(abortReason(signal)));
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve(operation).then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
     );
+    if (signal.aborted) abort();
   });
 }
 
 export function exec<T extends JsonValue = JsonValue>(
   action: string,
   payload: JsonValue = null,
-  options: number | MsgBusCallOptions = 0
+  options: number | MsgBusCallOptions = 0,
 ): Promise<T> {
   if (kernelPort) {
     return execPort<T>(kernelPort, action, payload, options);
   }
-  return waitForKernelPort().then((port) =>
-    execPort<T>(port, action, payload, options)
+  const signal = typeof options === "number" ? undefined : options.signal;
+  return waitForKernelPort(signal).then((port) =>
+    execPort<T>(port, action, payload, options),
   );
 }
 
-function waitForKernelPort(): Promise<MessagePort> {
+function waitForKernelPort(signal?: AbortSignal): Promise<MessagePort> {
   if (kernelPort) return Promise.resolve(kernelPort);
+  if (signal?.aborted) return Promise.reject(abortReason(signal));
   return new Promise((resolve, reject) => {
-    const waiter = {
+    let waiter!: KernelPortWaiter;
+    const abort = (): void => {
+      kernelPortWaiters.delete(waiter);
+      clearTimeout(waiter.timeout);
+      waiter.cleanup?.();
+      reject(abortReason(signal!));
+    };
+    const cleanup = (): void => signal?.removeEventListener("abort", abort);
+    waiter = {
       resolve,
       reject,
+      ...(signal ? { cleanup } : {}),
       timeout: setTimeout(() => {
         kernelPortWaiters.delete(waiter);
+        cleanup();
         reject(new Error("Message bus connection timed out"));
       }, 2_000),
     };
     kernelPortWaiters.add(waiter);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
   });
 }
 
@@ -634,7 +892,7 @@ function announceFrameReady(): void {
 export function exposeTool(
   name: string,
   options: ExposedToolOptions,
-  handler: MsgBusToolHandler
+  handler: MsgBusToolHandler,
 ): void {
   if (typeof handler !== "function") {
     throw new Error("Tool handler must be a function");
@@ -659,6 +917,7 @@ async function callExposedTool(
   payload: JsonValue,
   reportProgress: (value: JsonValue) => void,
   invocation?: MsgBusInvocationMetadata,
+  requestSignal?: AbortSignal,
 ): Promise<JsonValue> {
   if (!isJsonObject(payload) || typeof payload.name !== "string") {
     throw new Error("Invalid tool call payload");
@@ -683,17 +942,16 @@ async function callExposedTool(
     ? createAgentConsentRegistration(invocation)
     : undefined;
   const abortRegistration = invocation
-    ? createInvocationAbortRegistration(invocation)
+    ? createInvocationAbortRegistration(invocation, requestSignal)
     : undefined;
+  const signal = abortRegistration?.signal ?? requestSignal;
   try {
     const result = await registered.handler(args, {
       ...(caller ? { caller } : {}),
       reportProgress,
-      kernel: invocation
-        ? createScopedMsgBusClient(invocation)
-        : createMsgBusClient(),
+      kernel: createRequestMsgBusClient(invocation, signal),
       agentMode: invocation !== undefined,
-      ...(abortRegistration ? { signal: abortRegistration.signal } : {}),
+      ...(signal ? { signal } : {}),
       ...(registration ? { agentConsent: registration.api } : {}),
     });
     assertBoundedJson(result, `Tool '${payload.name}' result`);
@@ -707,8 +965,14 @@ async function callExposedTool(
 
 function createInvocationAbortRegistration(
   invocation: MsgBusInvocationMetadata,
+  requestSignal?: AbortSignal,
 ): { signal: AbortSignal; dispose(): void } {
   const controller = new AbortController();
+  const abortFromRequest = (): void => {
+    controller.abort(requestSignal?.reason);
+  };
+  requestSignal?.addEventListener("abort", abortFromRequest, { once: true });
+  if (requestSignal?.aborted) abortFromRequest();
   const controllers =
     invocationAbortControllers.get(invocation.rootId) ??
     new Map<string, AbortController>();
@@ -717,6 +981,7 @@ function createInvocationAbortRegistration(
   return {
     signal: controller.signal,
     dispose() {
+      requestSignal?.removeEventListener("abort", abortFromRequest);
       const active = invocationAbortControllers.get(invocation.rootId);
       if (active?.get(invocation.capability) !== controller) return;
       active.delete(invocation.capability);
@@ -747,7 +1012,8 @@ function createAgentConsentRegistration(invocation: MsgBusInvocationMetadata): {
         if (typeof handler !== "function") {
           throw new Error("Agent consent handler must be a function");
         }
-        if (current) throw new Error("Agent consent handler already registered");
+        if (current)
+          throw new Error("Agent consent handler already registered");
         current = handler;
         agentConsentHandlers.set(invocation.rootId, {
           ...agentConsentHandlers.get(invocation.rootId),
@@ -781,7 +1047,7 @@ function createAgentConsentRegistration(invocation: MsgBusInvocationMetadata): {
 
 export function callTool<T extends JsonValue = JsonValue>(
   call: MsgBusToolCall,
-  options: number | MsgBusCallOptions = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS
+  options: number | MsgBusCallOptions = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
 ): Promise<T> {
   return exec(toolCallAction(options), call, options);
 }
@@ -800,40 +1066,40 @@ function toolCallAction(
 
 export function listTools(
   target?: MsgBusEndpointId,
-  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
 ): Promise<MsgBusToolDescriptor[]> {
   return exec<MsgBusToolDescriptor[]>(
     "tools.list",
     target ? { target } : {},
-    timeout
+    timeout,
   );
 }
 
 export function listApps(
-  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
 ): Promise<JsonValue> {
   return callTool(
     { target: "kernel", name: "apps.list", arguments: {} },
-    timeout
+    timeout,
   );
 }
 
 export function describeApp(
   appId: string,
-  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
 ): Promise<JsonValue> {
   return callTool(
     { target: "kernel", name: "apps.describe", arguments: { appId } },
-    timeout
+    timeout,
   );
 }
 
 export function listEndpoints(
-  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
 ): Promise<JsonValue> {
   return callTool(
     { target: "kernel", name: "endpoints.list", arguments: {} },
-    timeout
+    timeout,
   );
 }
 
@@ -849,10 +1115,16 @@ export function createMsgBusClient(): ScopedKernelClient {
   };
 }
 
-function createScopedMsgBusClient(
-  invocation: MsgBusInvocationMetadata,
+function createRequestMsgBusClient(
+  invocation?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
 ): ScopedKernelClient {
-  const boundInvocation = Object.freeze({ ...invocation });
+  const boundInvocation = invocation
+    ? Object.freeze({ ...invocation })
+    : undefined;
+  const transportContext = boundInvocation
+    ? { invocation: boundInvocation }
+    : undefined;
   const scopedCallTool = <T extends JsonValue = JsonValue>(
     call: MsgBusToolCall,
     options: number | MsgBusCallOptions = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
@@ -861,7 +1133,8 @@ function createScopedMsgBusClient(
       toolCallAction(options),
       call,
       options,
-      { invocation: boundInvocation },
+      transportContext,
+      signal,
     );
 
   return {
@@ -880,15 +1153,13 @@ function createScopedMsgBusClient(
         { target: "kernel", name: "endpoints.list", arguments: {} },
         timeout,
       ),
-    listTools: (
-      target,
-      timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
-    ) =>
+    listTools: (target, timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS) =>
       execWithTransportContext<MsgBusToolDescriptor[]>(
         "tools.list",
         target ? { target } : {},
         timeout,
-        { invocation: boundInvocation },
+        transportContext,
+        signal,
       ),
     callTool: scopedCallTool,
     querySelf: <T extends SelfCallValue = JsonValue>(
@@ -902,6 +1173,7 @@ function createScopedMsgBusClient(
         args,
         timeout,
         boundInvocation,
+        signal,
       ),
     updateSelf: <T extends SelfCallValue = JsonValue>(
       method: string,
@@ -914,6 +1186,7 @@ function createScopedMsgBusClient(
         args,
         timeout,
         boundInvocation,
+        signal,
       ),
   };
 }
@@ -922,19 +1195,20 @@ function execWithTransportContext<T extends JsonValue = JsonValue>(
   action: string,
   payload: JsonValue,
   options: number | MsgBusCallOptions,
-  context: MsgBusTransportContext,
+  context?: MsgBusTransportContext,
+  signal?: AbortSignal,
 ): Promise<T> {
   if (kernelPort) {
-    return execPeer<T>(kernelPort, action, payload, options, context);
+    return execPeer<T>(kernelPort, action, payload, options, context, signal);
   }
-  return waitForKernelPort().then((port) =>
-    execPeer<T>(port, action, payload, options, context)
+  return waitForKernelPort(signal).then((port) =>
+    execPeer<T>(port, action, payload, options, context, signal),
   );
 }
 
 export function openAppTile(
   request: OpenAppTileRequest,
-  timeout = 60
+  timeout = 60,
 ): Promise<OpenAppTileResult> {
   return callTool<OpenAppTileResult>(
     {
@@ -942,7 +1216,7 @@ export function openAppTile(
       name: "workspace.open_tile",
       arguments: request,
     },
-    timeout
+    timeout,
   );
 }
 
@@ -954,7 +1228,7 @@ export function openAppTile(
  */
 export function offerAppInstall(
   request: AppInstallOfferRequest,
-  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
 ): Promise<AppInstallOfferResult> {
   return callTool<AppInstallOfferResult>(
     {
@@ -962,7 +1236,7 @@ export function offerAppInstall(
       name: "apps.install_offer",
       arguments: request,
     },
-    timeout
+    timeout,
   );
 }
 
@@ -1053,7 +1327,11 @@ export async function getVetKeyPublicKey(
   request: { slot: string; generation: string | bigint },
   timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
 ): Promise<VetKeyPublicInfo> {
-  assertExactKeys(request, ["slot", "generation"], "vetKeys public-key request");
+  assertExactKeys(
+    request,
+    ["slot", "generation"],
+    "vetKeys public-key request",
+  );
   const slot = normalizeVetKeySlot(request.slot);
   const generation = normalizeVetKeyGeneration(request.generation);
   const result = assertVetKeyPublicInfo(
@@ -1207,10 +1485,7 @@ function encodeVetKeysLifecycleRequest(
 }
 
 function normalizeVetKeySlot(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    !/^[a-z][a-z0-9_]{0,39}$/u.test(value)
-  ) {
+  if (typeof value !== "string" || !/^[a-z][a-z0-9_]{0,39}$/u.test(value)) {
     throw new Error("Invalid vetKeys slot");
   }
   return value;
@@ -1218,10 +1493,7 @@ function normalizeVetKeySlot(value: unknown): string {
 
 function normalizeVetKeyGeneration(value: unknown): string {
   const text = typeof value === "bigint" ? value.toString() : value;
-  if (
-    typeof text !== "string" ||
-    !/^(0|[1-9][0-9]{0,19})$/u.test(text)
-  ) {
+  if (typeof text !== "string" || !/^(0|[1-9][0-9]{0,19})$/u.test(text)) {
     throw new Error("Invalid vetKeys generation");
   }
   const generation = BigInt(text);
@@ -1310,8 +1582,7 @@ function isVetKeyGeneration(value: unknown): value is string {
 
 function isVetKeyTime(value: unknown): value is string {
   return (
-    isCanonicalNat(value, 20) &&
-    BigInt(value) <= 18_446_744_073_709_551_615n
+    isCanonicalNat(value, 20) && BigInt(value) <= 18_446_744_073_709_551_615n
   );
 }
 
@@ -1440,7 +1711,7 @@ function assertVetKeysLifecycleResult(value: unknown): VetKeysLifecycleResult {
     Object.keys(value).length !== 2 ||
     typeof value.retired !== "boolean" ||
     (value.slot !== null && !isVetKeySlotSummary(value.slot)) ||
-    (value.retired !== (value.slot === null))
+    value.retired !== (value.slot === null)
   ) {
     throw new Error("Invalid vetKeys lifecycle response");
   }
@@ -1465,7 +1736,8 @@ function assertVetKeysListResult(value: unknown): VetKeysListResult {
 }
 
 function assertVetKeyPublicInfo(value: unknown): VetKeyPublicInfo {
-  if (!isJsonObject(value)) throw new Error("Invalid vetKeys public-key response");
+  if (!isJsonObject(value))
+    throw new Error("Invalid vetKeys public-key response");
   const expected = [
     "canisterPrincipal",
     "slot",
@@ -1546,9 +1818,7 @@ function assertAppStateTopic(topic: string): void {
 }
 
 function isAppStateTopic(value: unknown): value is string {
-  return (
-    typeof value === "string" && /^[a-z][a-z0-9_.-]{0,63}$/u.test(value)
-  );
+  return typeof value === "string" && /^[a-z][a-z0-9_.-]{0,63}$/u.test(value);
 }
 
 function normalizeAppStateRevision(revision: string | number): string {
@@ -1566,9 +1836,7 @@ function normalizeAppStateRevision(revision: string | number): string {
 }
 
 function isAppStateRevision(value: unknown): value is string {
-  return (
-    typeof value === "string" && /^(0|[1-9][0-9]{0,127})$/u.test(value)
-  );
+  return typeof value === "string" && /^(0|[1-9][0-9]{0,127})$/u.test(value);
 }
 
 export function requestAgentMode(
@@ -1576,11 +1844,7 @@ export function requestAgentMode(
   timeout = 0,
 ): Promise<AgentModeStatus> {
   assertToolName(entrypoint);
-  return exec<AgentModeStatus>(
-    "agent.mode.request",
-    { entrypoint },
-    timeout,
-  );
+  return exec<AgentModeStatus>("agent.mode.request", { entrypoint }, timeout);
 }
 
 export function getAgentModeStatus(
@@ -1595,7 +1859,9 @@ export function disableAgentMode(
   return exec<AgentModeStatus>("agent.mode.disable", {}, timeout);
 }
 
-export function onTileViewRequest(listener: (view: string) => void): () => void {
+export function onTileViewRequest(
+  listener: (view: string) => void,
+): () => void {
   tileViewListeners.add(listener);
   if (pendingTileViews.length > 0) {
     const queued = pendingTileViews.splice(0);
@@ -1609,61 +1875,127 @@ export function onTileViewRequest(listener: (view: string) => void): () => void 
 
 export function requestMethodSchema(
   payload: KernelSchemaPayload,
-  timeout = 0
+  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
 ): Promise<JsonValue> {
-  return callTool(
-    {
-      target: "kernel",
-      name: "canister.schema",
-      arguments: payload,
-    },
-    timeout
+  return selectOrdinaryKernelCanisterTool(
+    "canister.schema_v2",
+    "canister.schema",
+    timeout,
+  ).then((name) =>
+    callTool(
+      {
+        target: "kernel",
+        name,
+        arguments: payload,
+      },
+      timeout,
+    ),
   );
 }
 
 export function callCanisterDialog<T extends SelfCallValue = JsonValue>(
   payload: KernelCallPayload,
-  timeout = 0
+  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
 ): Promise<T> {
+  assertNoActiveInvocationForUnscopedDialog();
   const currentHref = currentWindowHref();
   const currentCanister = currentHref
     ? canisterIdFromUrl(currentHref, false)
     : false;
-  if (currentCanister === payload.canister) {
+  if (
+    currentCanister === payload.canister ||
+    validatedNeutronCanisterId === payload.canister
+  ) {
     return callSelfDialog<T>(payload.method, payload.args ?? [], timeout);
   }
   const args = payload.args ?? [];
   if (!isJsonValue(args)) {
     throw new Error(
-      "Binary values are supported only for calls to this Neutron"
+      "Binary values are supported only for calls to this Neutron",
     );
   }
-  return callTool(
-    {
-      target: "kernel",
-      name: "canister.call_dialog",
-      arguments: {
-        canister: payload.canister,
-        method: payload.method,
-        args,
-      },
+  return selectOrdinaryKernelCanisterTool(
+    "canister.call_dialog_v2",
+    "canister.call_dialog",
+    timeout,
+  ).then(
+    (name) => {
+      assertNoActiveInvocationForUnscopedDialog();
+      return callTool(
+        {
+          target: "kernel",
+          name,
+          arguments: {
+            canister: payload.canister,
+            method: payload.method,
+            args,
+          },
+        },
+        timeout,
+      ) as Promise<T>;
     },
-    timeout
-  ) as Promise<T>;
+  );
+}
+
+function assertNoActiveInvocationForUnscopedDialog(): void {
+  if (invocationAbortControllers.size === 0) return;
+  throw new KernelPolicyError(
+    "SCOPED_CONTEXT_REQUIRED",
+    "Nested app calls must use context.kernel",
+  );
+}
+
+async function selectOrdinaryKernelCanisterTool<
+  Preferred extends string,
+  Legacy extends string,
+>(
+  preferred: Preferred,
+  legacy: Legacy,
+  timeout: number,
+): Promise<Preferred | Legacy> {
+  const names = await getOrdinaryKernelToolNames(
+    timeout === 0
+      ? MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS
+      : Math.min(timeout, MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS),
+  );
+  if (names.has(preferred)) return preferred;
+  if (names.has(legacy)) return legacy;
+  throw new Error(`Kernel does not expose '${preferred}' or '${legacy}'`);
+}
+
+async function getOrdinaryKernelToolNames(
+  timeout: number,
+): Promise<ReadonlySet<string>> {
+  const pending =
+    ordinaryKernelToolNames ??
+    listTools("kernel", timeout).then(
+      (descriptors) =>
+        new Set(descriptors.map((descriptor) => descriptor.name)),
+    );
+  ordinaryKernelToolNames = pending;
+  try {
+    return await pending;
+  } catch (error) {
+    if (ordinaryKernelToolNames === pending) {
+      ordinaryKernelToolNames = undefined;
+    }
+    throw error;
+  }
 }
 
 export function callSelfDialog<T extends SelfCallValue = JsonValue>(
   method: string,
   args: SelfCallValue[] = [],
-  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
 ): Promise<T> {
+  assertNoActiveInvocationForUnscopedDialog();
   return execSelfCall<T>("canister.call_dialog", method, args, timeout);
 }
 
 export function querySelf<T extends SelfCallValue = JsonValue>(
   method: string,
   args: SelfCallValue[] = [],
-  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
 ): Promise<T> {
   return execSelfCall<T>("canister.query_self", method, args, timeout);
 }
@@ -1671,7 +2003,7 @@ export function querySelf<T extends SelfCallValue = JsonValue>(
 export function updateSelf<T extends SelfCallValue = JsonValue>(
   method: string,
   args: SelfCallValue[] = [],
-  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
 ): Promise<T> {
   return execSelfCall<T>("canister.update_self", method, args, timeout);
 }
@@ -1686,12 +2018,14 @@ async function execSelfCall<T extends SelfCallValue>(
   args: SelfCallValue[],
   timeout: number,
   invocation?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
   actions?: BackendCallReservationAction[],
 ): Promise<T> {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,127}$/u.test(method)) {
     throw new Error("Invalid self-call method");
   }
-  if (!Array.isArray(args)) throw new Error("Self-call arguments must be an array");
+  if (!Array.isArray(args))
+    throw new Error("Self-call arguments must be an array");
   if (
     !Number.isFinite(timeout) ||
     timeout < 0 ||
@@ -1703,8 +2037,10 @@ async function execSelfCall<T extends SelfCallValue>(
   const encoded = encodeSelfCallValues(args);
   const currentWindow = getWindow();
   installMessageListener(currentWindow);
-  const port = kernelPort ?? (await waitForKernelPort());
+  const port = kernelPort ?? (await waitForKernelPort(signal));
+  if (signal?.aborted) throw abortReason(signal);
   const id = ++nextId;
+  const preserveCancellationReply = tool !== "canister.query_self";
   const envelope: SelfCallExecEnvelope =
     tool === "backend_calls.request"
       ? {
@@ -1730,40 +2066,93 @@ async function execSelfCall<T extends SelfCallValue>(
         };
 
   return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let posted = false;
+    let cancellationPending = false;
+    const cleanup = (): void => signal?.removeEventListener("abort", abort);
+    const finish = (error: Error, notifyPeer: boolean): void => {
+      if (settled) return;
+      settled = true;
+      const callback = selfCallCallbacks.get(id);
+      if (callback?.source === port) selfCallCallbacks.delete(id);
+      if (callback?.timeout) clearTimeout(callback.timeout);
+      callback?.cleanup?.();
+      if (notifyPeer && posted) postRequestCancellation(port, id);
+      reject(error);
+    };
+    const requestCancellation = (error: Error): void => {
+      if (settled || cancellationPending) return;
+      if (!posted || !preserveCancellationReply) {
+        finish(error, true);
+        return;
+      }
+      const callback = selfCallCallbacks.get(id);
+      if (callback?.source !== port) {
+        finish(unknownCanisterCallOutcome(error.message), false);
+        return;
+      }
+      cancellationPending = true;
+      if (callback.timeout) clearTimeout(callback.timeout);
+      callback.cleanup?.();
+      if (!postRequestCancellation(port, id)) {
+        finish(unknownCanisterCallOutcome(error.message), false);
+        return;
+      }
+      if (selfCallCallbacks.get(id) !== callback) return;
+      callback.timeout = setTimeout(
+        () =>
+          finish(
+            unknownCanisterCallOutcome(
+              "The Kernel did not acknowledge self-call cancellation",
+            ),
+            false,
+          ),
+        MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS * 1_000,
+      );
+    };
+    const abort = (): void => requestCancellation(abortReason(signal!));
     const timeoutHandle = timeout
-      ? setTimeout(() => {
-          selfCallCallbacks.delete(id);
-          reject(new Error(`Timeout after ${timeout} seconds`));
-        }, timeout * 1_000)
+      ? setTimeout(
+          () =>
+            requestCancellation(new Error(`Timeout after ${timeout} seconds`)),
+          timeout * 1_000,
+        )
       : undefined;
     selfCallCallbacks.set(id, {
       resolve: resolve as (value: SelfCallValue) => void,
       reject,
       source: port,
+      cleanup,
+      ...(preserveCancellationReply ? { preserveCancellationReply: true } : {}),
       ...(timeoutHandle ? { timeout: timeoutHandle } : {}),
     });
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    if (settled) return;
     try {
       port.postMessage(
         envelope,
         encoded.blobs.map((blob) => blob.data),
       );
+      posted = true;
     } catch (error) {
-      if (timeoutHandle) clearTimeout(timeoutHandle);
-      selfCallCallbacks.delete(id);
-      reject(error instanceof Error ? error : new Error(String(error)));
+      finish(error instanceof Error ? error : new Error(String(error)), false);
     }
   });
 }
 
-export function encodeSelfCallValues(
-  value: SelfCallValue,
-): { value: JsonValue; blobs: SelfCallWireBlob[] };
-export function encodeSelfCallValues(
-  value: SelfCallValue[],
-): { value: JsonValue[]; blobs: SelfCallWireBlob[] };
-export function encodeSelfCallValues(
-  value: SelfCallValue | SelfCallValue[],
-): { value: JsonValue | JsonValue[]; blobs: SelfCallWireBlob[] } {
+export function encodeSelfCallValues(value: SelfCallValue): {
+  value: JsonValue;
+  blobs: SelfCallWireBlob[];
+};
+export function encodeSelfCallValues(value: SelfCallValue[]): {
+  value: JsonValue[];
+  blobs: SelfCallWireBlob[];
+};
+export function encodeSelfCallValues(value: SelfCallValue | SelfCallValue[]): {
+  value: JsonValue | JsonValue[];
+  blobs: SelfCallWireBlob[];
+} {
   const blobs: SelfCallWireBlob[] = [];
   const active = new WeakSet<object>();
   let elements = 0;
@@ -1795,13 +2184,13 @@ export function encodeSelfCallValues(
         throw new Error("Self-call value exceeds the binary field count limit");
       }
       const source =
-        candidate instanceof Uint8Array
-          ? candidate
-          : new Uint8Array(candidate);
+        candidate instanceof Uint8Array ? candidate : new Uint8Array(candidate);
       const snapshot = Uint8Array.from(source);
       binaryBytes += snapshot.byteLength;
       if (binaryBytes > SELF_CALL_BINARY_MAX_BYTES) {
-        throw new Error("Self-call value exceeds the aggregate binary byte limit");
+        throw new Error(
+          "Self-call value exceeds the aggregate binary byte limit",
+        );
       }
       const data = snapshot.buffer as ArrayBuffer;
       blobs.push({
@@ -1829,7 +2218,9 @@ export function encodeSelfCallValues(
         }
         elements += candidate.length;
         if (elements > SELF_CALL_VALUE_MAX_CONTAINER_ELEMENTS) {
-          throw new Error("Self-call value exceeds the container element limit");
+          throw new Error(
+            "Self-call value exceeds the container element limit",
+          );
         }
         return Array.from({ length: candidate.length }, (_, index) => {
           const descriptor = Object.getOwnPropertyDescriptor(
@@ -1860,22 +2251,14 @@ export function encodeSelfCallValues(
           throw new Error("Self-call record field name is invalid");
         }
         const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
-        if (
-          !descriptor ||
-          !descriptor.enumerable ||
-          !("value" in descriptor)
-        ) {
+        if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
           throw new Error(
             "Self-call records require enumerable data properties",
           );
         }
         output.push([
           key,
-          visit(
-            descriptor.value as SelfCallValue,
-            [...path, key],
-            depth + 1,
-          ),
+          visit(descriptor.value as SelfCallValue, [...path, key], depth + 1),
         ]);
       }
       return Object.fromEntries(output);
@@ -1905,13 +2288,14 @@ function handleSelfCallResponseMessage(
   if (!callback || callback.source !== source) return;
   if (callback.timeout) clearTimeout(callback.timeout);
   selfCallCallbacks.delete(raw.id);
+  callback.cleanup?.();
 
   try {
     if (
       !hasExactSelfCallResponseKeys(raw) ||
       raw.type !== "neutron:self-call:response" ||
       raw.version !== 1 ||
-      (Object.hasOwn(raw, "ok") === Object.hasOwn(raw, "error"))
+      Object.hasOwn(raw, "ok") === Object.hasOwn(raw, "error")
     ) {
       throw new Error("Invalid self-call response envelope");
     }
@@ -1934,10 +2318,7 @@ function handleSelfCallResponseMessage(
 }
 
 export function parseSelfCallWireBlobs(value: unknown): SelfCallWireBlob[] {
-  if (
-    !isDenseDataArray(value) ||
-    value.length > SELF_CALL_BINARY_MAX_COUNT
-  ) {
+  if (!isDenseDataArray(value) || value.length > SELF_CALL_BINARY_MAX_COUNT) {
     throw new Error("Invalid self-call binary field list");
   }
   let aggregateBytes = 0;
@@ -1950,9 +2331,7 @@ export function parseSelfCallWireBlobs(value: unknown): SelfCallWireBlob[] {
       candidate.path.length > SELF_CALL_VALUE_MAX_DEPTH ||
       !candidate.path.every(
         (part) =>
-          (typeof part === "string" &&
-            part.length > 0 &&
-            part.length <= 256) ||
+          (typeof part === "string" && part.length > 0 && part.length <= 256) ||
           (typeof part === "number" &&
             Number.isSafeInteger(part) &&
             part >= 0 &&
@@ -1967,7 +2346,9 @@ export function parseSelfCallWireBlobs(value: unknown): SelfCallWireBlob[] {
     }
     aggregateBytes += Number(candidate.byteLength);
     if (aggregateBytes > SELF_CALL_BINARY_MAX_BYTES) {
-      throw new Error("Self-call value exceeds the aggregate binary byte limit");
+      throw new Error(
+        "Self-call value exceeds the aggregate binary byte limit",
+      );
     }
     const pathKey = JSON.stringify(candidate.path);
     if (paths.has(pathKey)) {
@@ -2004,9 +2385,7 @@ function hasExactEnumerableDataKeys(
   const keys = Reflect.ownKeys(value);
   return (
     keys.length === expected.length &&
-    keys.every(
-      (key) => typeof key === "string" && expected.includes(key),
-    ) &&
+    keys.every((key) => typeof key === "string" && expected.includes(key)) &&
     expected.every((key) => {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       return (
@@ -2018,9 +2397,7 @@ function hasExactEnumerableDataKeys(
   );
 }
 
-function hasExactSelfCallResponseKeys(
-  value: Record<string, unknown>,
-): boolean {
+function hasExactSelfCallResponseKeys(value: Record<string, unknown>): boolean {
   const expected = Object.hasOwn(value, "error")
     ? ["type", "version", "id", "error"]
     : ["type", "version", "id", "ok", "blobs"];
@@ -2057,7 +2434,9 @@ export function decodeSelfCallValue(
     if (Array.isArray(candidate)) {
       elements += candidate.length;
       if (elements > SELF_CALL_VALUE_MAX_CONTAINER_ELEMENTS) {
-        throw new Error("Self-call response exceeds the container element limit");
+        throw new Error(
+          "Self-call response exceeds the container element limit",
+        );
       }
       return candidate.map((entry, index) =>
         visit(entry, [...path, index], depth + 1),
@@ -2067,7 +2446,9 @@ export function decodeSelfCallValue(
       const entries = Object.entries(candidate);
       elements += entries.length;
       if (elements > SELF_CALL_VALUE_MAX_CONTAINER_ELEMENTS) {
-        throw new Error("Self-call response exceeds the container element limit");
+        throw new Error(
+          "Self-call response exceeds the container element limit",
+        );
       }
       return Object.fromEntries(
         entries.map(([key, entry]) => [
@@ -2096,6 +2477,7 @@ export function requestBackendCallReservations<
       request.call.args ?? [],
       0,
       undefined,
+      undefined,
       request.actions,
     );
   }
@@ -2105,12 +2487,12 @@ export function requestBackendCallReservations<
       name: "backend_calls.request",
       arguments: { actions: request.actions },
     },
-    0
+    0,
   ) as Promise<T>;
 }
 
 export function listBackendCallReservations(
-  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS
+  timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
 ): Promise<JsonValue> {
   return callTool(
     {
@@ -2118,7 +2500,7 @@ export function listBackendCallReservations(
       name: "backend_calls.list",
       arguments: {},
     },
-    timeout
+    timeout,
   );
 }
 
@@ -2134,8 +2516,7 @@ export async function connectEthereumProvider(
     typeof opened.provider.name !== "string" ||
     opened.provider.name.length < 1 ||
     opened.provider.name.length > 80 ||
-    (opened.provider.rdns !== null &&
-      typeof opened.provider.rdns !== "string")
+    (opened.provider.rdns !== null && typeof opened.provider.rdns !== "string")
   ) {
     throw new Error("Invalid Ethereum provider session");
   }
@@ -2183,11 +2564,18 @@ export function assertCanisterId(value: unknown): string {
   if (
     typeof value !== "string" ||
     value.length === 0 ||
+    value.length > 63 ||
     !canisterIdPattern.test(value)
   ) {
     throw new Error("Invalid canister id");
   }
-  return value;
+  try {
+    const canonical = Principal.fromText(value).toText();
+    if (canonical !== value) throw new Error("Non-canonical canister id");
+    return canonical;
+  } catch {
+    throw new Error("Invalid canister id");
+  }
 }
 
 export function assertMethodSchema(value: JsonValue): MethodSchemaJson {
@@ -2204,17 +2592,20 @@ export function assertMethodSchema(value: JsonValue): MethodSchemaJson {
 export async function loadNeutronCanisterId(
   path = "/pkg/id.json",
   fetcher: JsonFetcher = fetch,
-  href = currentWindowHref()
+  href = currentWindowHref(),
 ): Promise<string> {
   if (href) {
     const fromUrl = canisterIdFromUrl(href);
-    if (fromUrl) return assertCanisterId(fromUrl);
+    if (fromUrl) {
+      validatedNeutronCanisterId = assertCanisterId(fromUrl);
+      return validatedNeutronCanisterId;
+    }
   }
 
   const response = await fetcher(path);
   if (!response.ok) {
     throw new Error(
-      `Failed to load Neutron canister id: HTTP ${response.status}`
+      `Failed to load Neutron canister id: HTTP ${response.status}`,
     );
   }
 
@@ -2223,7 +2614,8 @@ export async function loadNeutronCanisterId(
     throw new Error("Invalid Neutron canister id response");
   }
 
-  return assertCanisterId(body.id);
+  validatedNeutronCanisterId = assertCanisterId(body.id);
+  return validatedNeutronCanisterId;
 }
 
 function currentWindowHref(): string | null {
@@ -2257,17 +2649,24 @@ export function createCanisterClient(canister: string): NeutronCanisterClient {
 
   return {
     canister: checkedCanister,
-    async methodSchema(method, timeout = 0) {
+    async methodSchema(
+      method,
+      timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
+    ) {
       const schema = await requestMethodSchema(
         { canister: checkedCanister, method },
-        timeout
+        timeout,
       );
       return assertMethodSchema(schema);
     },
-    callDialog(method, args: JsonValue[] = [], timeout = 0) {
+    callDialog(
+      method,
+      args: JsonValue[] = [],
+      timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+    ) {
       return callCanisterDialog(
         { canister: checkedCanister, method, args },
-        timeout
+        timeout,
       );
     },
   };

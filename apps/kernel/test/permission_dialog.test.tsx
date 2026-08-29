@@ -11,6 +11,8 @@ import { safeInstallOfferUrl } from "../src/install_offers/InstallOfferDialog.ts
 import {
   BackendCallRequest,
   BinaryFieldInspectionList,
+  CandidMethodName,
+  CanonicalJsonReview,
   canonicalJsonForDisplay,
 } from "../src/Requests.tsx";
 import { configInstallDisclosures } from "../src/lib/perm.ts";
@@ -1485,10 +1487,52 @@ test("canonical runtime JSON keeps scalar types distinct and escapes spoofing te
       "a\tb\nc",
       "safe\u2066spoof\u2069",
       "zero\u200djoin",
+      "high\ud800surrogate",
+      "low\udfffsurrogate",
     ]),
   ).toBe(
-    '[\n  "null",\n  null,\n  "true",\n  true,\n  -0,\n  "a\\tb\\nc",\n  "safe\\u2066spoof\\u2069",\n  "zero\\u200djoin"\n]',
+    '[\n  "null",\n  null,\n  "true",\n  true,\n  -0,\n  "a\\tb\\nc",\n  "safe\\u2066spoof\\u2069",\n  "zero\\u200djoin",\n  "high\\ud800surrogate",\n  "low\\udfffsurrogate"\n]',
   );
+});
+
+test("generic canister consent review renders exact canonical JSON arguments", () => {
+  const html = renderToStaticMarkup(
+    <CanonicalJsonReview
+      ariaLabel="Canonical JSON for the complete canister call arguments"
+      heading="Complete canister call arguments"
+      value={[
+        "null",
+        null,
+        "",
+        -0,
+        "Kernel\u202e verified",
+        "zero\u200bwidth",
+      ]}
+    />,
+  );
+  expect(html).toContain("Complete canister call arguments");
+  expect(html).toContain(
+    'aria-label="Canonical JSON for the complete canister call arguments"',
+  );
+  expect(html).toContain("&quot;null&quot;");
+  expect(html).toContain("null");
+  expect(html).toContain("&quot;&quot;");
+  expect(html).toContain("-0");
+  expect(html).toContain("Kernel\\u202e verified");
+  expect(html).toContain("zero\\u200bwidth");
+  expect(html).not.toContain("\u202e");
+  expect(html).not.toContain("\u200b");
+});
+
+test("generic canister consent quotes and escapes an arbitrary Candid method name", () => {
+  const method = "read\nKernel\u202e approved\u200b";
+  const html = renderToStaticMarkup(<CandidMethodName method={method} />);
+  expect(html).toContain(
+    "&quot;read\\nKernel\\u202e approved\\u200b&quot;",
+  );
+  expect(html).not.toContain("\nKernel");
+  expect(html).not.toContain("\u202e");
+  expect(html).not.toContain("\u200b");
 });
 
 test("runtime backend consent gives broad scopes stronger persistent warnings", () => {

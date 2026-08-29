@@ -5,12 +5,7 @@ import { normalizeUntrustedText } from "./schema.ts";
 
 export type JsonObject = { [key: string]: JsonValue };
 export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | JsonObject;
+  null | boolean | number | string | JsonValue[] | JsonObject;
 
 export type SelfCallObject = { [key: string]: SelfCallValue };
 export type SelfCallValue =
@@ -108,10 +103,7 @@ export type VetKeysErrorCode = (typeof VET_KEYS_ERROR_CODES)[number];
 export type VetKeysError = Error & {
   code: VetKeysErrorCode;
 };
-export type VetKeySlotStatus =
-  | "enabled"
-  | "disabled"
-  | "manifest_suspended";
+export type VetKeySlotStatus = "enabled" | "disabled" | "manifest_suspended";
 export type VetKeyGenerationStatus = "current" | "previous";
 
 export type VetKeyGenerationSummary = JsonObject & {
@@ -150,12 +142,7 @@ export type VetKeyPublicInfo = JsonObject & {
 
 export type VetKeysLifecycleRequest =
   | {
-      action:
-        | "reserve"
-        | "enable"
-        | "disable"
-        | "rotate"
-        | "retireSlot";
+      action: "reserve" | "enable" | "disable" | "rotate" | "retireSlot";
       slot: string;
     }
   | {
@@ -249,14 +236,11 @@ export type MsgBusToolDescriptor = JsonObject & {
 };
 
 export const NEUTRON_TOOL_AUDIT_METADATA_ONLY = "metadata_only" as const;
-export type NeutronToolAuditMode =
-  typeof NEUTRON_TOOL_AUDIT_METADATA_ONLY;
+export type NeutronToolAuditMode = typeof NEUTRON_TOOL_AUDIT_METADATA_ONLY;
 export const NEUTRON_TOOL_CONTROL_CANCEL = "cancel" as const;
-export type NeutronToolControlMode =
-  typeof NEUTRON_TOOL_CONTROL_CANCEL;
+export type NeutronToolControlMode = typeof NEUTRON_TOOL_CONTROL_CANCEL;
 export const NEUTRON_TOOL_VISIBILITY_SAME_APP = "same_app" as const;
-export type NeutronToolVisibility =
-  typeof NEUTRON_TOOL_VISIBILITY_SAME_APP;
+export type NeutronToolVisibility = typeof NEUTRON_TOOL_VISIBILITY_SAME_APP;
 
 export type MsgBusToolCall = JsonObject & {
   target: MsgBusEndpointId;
@@ -339,6 +323,7 @@ export type AgentConsentDecision = JsonObject & {
 
 export type AgentConsentHandler = (
   challenge: AgentConsentChallenge,
+  signal?: AbortSignal,
 ) => AgentConsentDecision | Promise<AgentConsentDecision>;
 
 export type AgentConsentRegistration = {
@@ -400,6 +385,7 @@ export type MsgBusCallOptions = {
   onProgress?: (value: JsonValue) => void;
   transportContext?: MsgBusTransportContext;
   control?: NeutronToolControlMode;
+  signal?: AbortSignal;
 };
 
 export type NeutronCanisterClient = {
@@ -425,6 +411,12 @@ export type ExecEnvelope = {
     payload: JsonValue;
     context?: MsgBusTransportContext;
   };
+};
+
+export type RequestCancelEnvelope = {
+  type: "neutron:msgbus:cancel";
+  version: 1;
+  id: number;
 };
 
 export type MsgBusInvocationMetadata = JsonObject & {
@@ -463,10 +455,7 @@ type SelfMethodCallExecEnvelope = {
   type: "neutron:self-call:exec";
   version: 1;
   id: number;
-  tool:
-    | "canister.query_self"
-    | "canister.update_self"
-    | "canister.call_dialog";
+  tool: "canister.query_self" | "canister.update_self" | "canister.call_dialog";
   method: string;
   args: JsonValue[];
   blobs: SelfCallWireBlob[];
@@ -486,8 +475,7 @@ type BackendAccessCallExecEnvelope = {
 };
 
 export type SelfCallExecEnvelope =
-  | SelfMethodCallExecEnvelope
-  | BackendAccessCallExecEnvelope;
+  SelfMethodCallExecEnvelope | BackendAccessCallExecEnvelope;
 
 export type SelfCallResponseEnvelope = {
   type: "neutron:self-call:response";
@@ -530,11 +518,32 @@ export const msgBusLocalActions = {
 } as const;
 
 export const MSG_BUS_MAX_PAYLOAD_BYTES = 1024 * 1024;
+export const MSG_BUS_MAX_JSON_DEPTH = 64;
+export const MSG_BUS_MAX_JSON_CONTAINER_ELEMENTS = 100_000;
+export const MSG_BUS_ACTION_NAME_MAX_LENGTH = 128;
 export const MSG_BUS_MAX_SCHEMA_BYTES = 32 * 1024;
 export const MSG_BUS_MAX_PROGRESS_BYTES = 64 * 1024;
 export const MSG_BUS_MAX_PROGRESS_EVENTS = 2_000;
 export const MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS = 300;
 export const MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS = 10;
+export const CANISTER_PRINCIPAL_TEXT_MAX_LENGTH = 63;
+
+function isMsgBusActionName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MSG_BUS_ACTION_NAME_MAX_LENGTH &&
+    /^[A-Za-z_][A-Za-z0-9_.:-]*$/u.test(value)
+  );
+}
+
+export function assertMsgBusActionName(
+  value: unknown,
+): asserts value is string {
+  if (!isMsgBusActionName(value)) {
+    throw new Error("Invalid message-bus action name");
+  }
+}
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -546,32 +555,231 @@ export const isJsonObject = (
   (Object.getPrototypeOf(value) === Object.prototype ||
     Object.getPrototypeOf(value) === null);
 
-function isJsonValueInternal(
+type JsonInspectionFrame =
+  | { kind: "value"; value: unknown; depth: number }
+  | { kind: "leave"; value: object };
+
+type V1JsonInspectionFrame =
+  { kind: "value"; value: unknown } | { kind: "leave"; value: object };
+
+function isMsgBusV1JsonValue(
   value: unknown,
-  ancestors: WeakSet<object>,
+  maximumBytes: number,
 ): value is JsonValue {
-  if (value === null) return true;
-  if (typeof value === "string" || typeof value === "boolean") return true;
-  if (typeof value === "number") return Number.isFinite(value);
-  if (Array.isArray(value)) {
-    if (ancestors.has(value)) return false;
-    ancestors.add(value);
-    const ok = value.every((item) => isJsonValueInternal(item, ancestors));
-    ancestors.delete(value);
-    return ok;
+  const frames: V1JsonInspectionFrame[] = [{ kind: "value", value }];
+  const ancestors = new WeakSet<object>();
+  let minimumBytes = 0;
+  const addMinimumBytes = (bytes: number): boolean => {
+    minimumBytes += bytes;
+    return minimumBytes <= maximumBytes;
+  };
+  try {
+    while (frames.length > 0) {
+      const frame = frames.pop()!;
+      if (frame.kind === "leave") {
+        ancestors.delete(frame.value);
+        continue;
+      }
+      const current = frame.value;
+      if (current === null) {
+        if (!addMinimumBytes(4)) return false;
+        continue;
+      }
+      if (typeof current === "string") {
+        if (!addMinimumBytes(current.length + 2)) return false;
+        continue;
+      }
+      if (typeof current === "boolean") {
+        if (!addMinimumBytes(current ? 4 : 5)) return false;
+        continue;
+      }
+      if (typeof current === "number") {
+        if (!Number.isFinite(current)) return false;
+        if (
+          !addMinimumBytes(Object.is(current, -0) ? 1 : String(current).length)
+        ) {
+          return false;
+        }
+        continue;
+      }
+      if (typeof current !== "object" || ancestors.has(current)) return false;
+
+      ancestors.add(current);
+      frames.push({ kind: "leave", value: current });
+      if (Array.isArray(current)) {
+        // The released v1 validator used Array#every: holes and non-index
+        // properties were ignored, matching their JSON.stringify projection.
+        if (
+          !addMinimumBytes(current.length === 0 ? 2 : current.length + 1) ||
+          current.length > Math.floor((maximumBytes - 1) / 2)
+        ) {
+          return false;
+        }
+        for (let index = current.length - 1; index >= 0; index -= 1) {
+          if (index in current) {
+            frames.push({ kind: "value", value: current[index] });
+          } else if (!addMinimumBytes(4)) {
+            return false;
+          }
+        }
+        continue;
+      }
+      if (!isJsonObject(current)) return false;
+      const entries = Object.entries(current);
+      if (!addMinimumBytes(entries.length === 0 ? 2 : entries.length + 1)) {
+        return false;
+      }
+      for (const [key, item] of entries) {
+        if (!addMinimumBytes(key.length + 3)) return false;
+        frames.push({ kind: "value", value: item });
+      }
+    }
+    return true;
+  } catch {
+    return false;
   }
-  if (!isJsonObject(value)) return false;
-  if (ancestors.has(value)) return false;
-  ancestors.add(value);
-  const ok = Object.values(value).every((item) =>
-    isJsonValueInternal(item, ancestors)
-  );
-  ancestors.delete(value);
-  return ok;
+}
+
+function inspectJsonValue(
+  value: unknown,
+  limits?: Readonly<{
+    maximumDepth: number;
+    maximumContainerElements: number;
+    maximumBytes: number;
+  }>,
+): string | null {
+  const frames: JsonInspectionFrame[] = [{ kind: "value", value, depth: 1 }];
+  const ancestors = new WeakSet<object>();
+  let containerElements = 0;
+  let minimumBytes = 0;
+  const addMinimumBytes = (bytes: number): string | null => {
+    minimumBytes += bytes;
+    return limits && minimumBytes > limits.maximumBytes
+      ? `exceeds ${limits.maximumBytes} bytes`
+      : null;
+  };
+
+  while (frames.length > 0) {
+    const frame = frames.pop()!;
+    if (frame.kind === "leave") {
+      ancestors.delete(frame.value);
+      continue;
+    }
+    const current = frame.value;
+    if (current === null) {
+      const failure = addMinimumBytes(4);
+      if (failure) return failure;
+      continue;
+    }
+    if (typeof current === "boolean") {
+      const failure = addMinimumBytes(current ? 4 : 5);
+      if (failure) return failure;
+      continue;
+    }
+    if (typeof current === "number") {
+      if (!Number.isFinite(current)) return "must be JSON-compatible";
+      const failure = addMinimumBytes(
+        Object.is(current, -0) ? 1 : String(current).length,
+      );
+      if (failure) return failure;
+      continue;
+    }
+    if (typeof current === "string") {
+      // Every UTF-16 code unit takes at least one byte in its JSON encoding.
+      // This lower bound rejects giant strings before JSON.stringify allocates
+      // their escaped representation; the exact encoded size is checked later.
+      const failure = addMinimumBytes(current.length + 2);
+      if (failure) return failure;
+      continue;
+    }
+    if (typeof current !== "object") return "must be JSON-compatible";
+    if (limits && frame.depth > limits.maximumDepth) {
+      return `exceeds nesting depth ${limits.maximumDepth}`;
+    }
+    if (ancestors.has(current)) return "must not contain cycles";
+
+    let propertyNames: string[];
+    let symbolCount: number;
+    try {
+      propertyNames = Object.getOwnPropertyNames(current);
+      symbolCount = Object.getOwnPropertySymbols(current).length;
+    } catch {
+      return "must use ordinary JSON containers";
+    }
+    if (symbolCount > 0) return "must not contain symbol properties";
+
+    ancestors.add(current);
+    frames.push({ kind: "leave", value: current });
+    if (Array.isArray(current)) {
+      if (
+        propertyNames.length !== current.length + 1 ||
+        !propertyNames.includes("length")
+      ) {
+        return "must not contain sparse arrays or extra array properties";
+      }
+      containerElements += current.length;
+      if (limits && containerElements > limits.maximumContainerElements) {
+        return `exceeds ${limits.maximumContainerElements} container elements`;
+      }
+      const punctuation = current.length === 0 ? 2 : current.length + 1;
+      const failure = addMinimumBytes(punctuation);
+      if (failure) return failure;
+      for (let index = current.length - 1; index >= 0; index -= 1) {
+        const name = String(index);
+        const descriptor = Object.getOwnPropertyDescriptor(current, name);
+        if (
+          !descriptor ||
+          !("value" in descriptor) ||
+          descriptor.enumerable !== true
+        ) {
+          return "must contain only enumerable data properties";
+        }
+        frames.push({
+          kind: "value",
+          value: descriptor.value,
+          depth: frame.depth + 1,
+        });
+      }
+      continue;
+    }
+
+    if (!isJsonObject(current)) return "must use ordinary JSON containers";
+    containerElements += propertyNames.length;
+    if (limits && containerElements > limits.maximumContainerElements) {
+      return `exceeds ${limits.maximumContainerElements} container elements`;
+    }
+    const punctuation =
+      propertyNames.length === 0 ? 2 : propertyNames.length + 1;
+    let failure = addMinimumBytes(punctuation);
+    if (failure) return failure;
+    for (let index = propertyNames.length - 1; index >= 0; index -= 1) {
+      const name = propertyNames[index]!;
+      const descriptor = Object.getOwnPropertyDescriptor(current, name);
+      if (
+        !descriptor ||
+        !("value" in descriptor) ||
+        descriptor.enumerable !== true
+      ) {
+        return "must contain only enumerable data properties";
+      }
+      failure = addMinimumBytes(name.length + 3);
+      if (failure) return failure;
+      frames.push({
+        kind: "value",
+        value: descriptor.value,
+        depth: frame.depth + 1,
+      });
+    }
+  }
+  return null;
 }
 
 export function isJsonValue(value: unknown): value is JsonValue {
-  return isJsonValueInternal(value, new WeakSet<object>());
+  try {
+    return inspectJsonValue(value) === null;
+  } catch {
+    return false;
+  }
 }
 
 export function jsonPayloadBytes(value: JsonValue): number {
@@ -583,16 +791,75 @@ export function assertBoundedJson(
   label = "Payload",
   maximumBytes = MSG_BUS_MAX_PAYLOAD_BYTES,
 ): asserts value is JsonValue {
-  if (!isJsonValue(value)) {
+  let failure: string | null;
+  try {
+    failure = inspectJsonValue(value, {
+      maximumDepth: MSG_BUS_MAX_JSON_DEPTH,
+      maximumContainerElements: MSG_BUS_MAX_JSON_CONTAINER_ELEMENTS,
+      maximumBytes,
+    });
+  } catch {
+    failure = "must use ordinary JSON containers";
+  }
+  if (failure) throw new Error(`${label} ${failure}`);
+  if (jsonPayloadBytes(value as JsonValue) > maximumBytes) {
+    throw new Error(`${label} exceeds ${maximumBytes} bytes`);
+  }
+}
+
+/**
+ * Validate the released v1 JSON wire without imposing the newer sender-side
+ * depth and aggregate-element limits. Existing SDKs could emit any JSON value
+ * that fit the byte ceiling, so receivers must continue to accept that shape.
+ */
+export function assertMsgBusV1Json(
+  value: unknown,
+  label = "Payload",
+  maximumBytes = MSG_BUS_MAX_PAYLOAD_BYTES,
+): asserts value is JsonValue {
+  if (!isMsgBusV1JsonValue(value, maximumBytes)) {
     throw new Error(`${label} must be JSON-compatible`);
   }
-  if (jsonPayloadBytes(value) > maximumBytes) {
+  let bytes: number;
+  try {
+    bytes = jsonPayloadBytes(value);
+  } catch {
+    throw new Error(`${label} must be JSON-compatible`);
+  }
+  if (bytes > maximumBytes) {
     throw new Error(`${label} exceeds ${maximumBytes} bytes`);
   }
 }
 
 const isMessageId = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+
+function hasExactEnumerableDataKeys(
+  value: unknown,
+  expected: readonly string[],
+): value is Record<string, unknown> {
+  if (!isJsonObject(value)) return false;
+  let keys: (string | symbol)[];
+  try {
+    keys = Reflect.ownKeys(value);
+  } catch {
+    return false;
+  }
+  if (
+    keys.length !== expected.length ||
+    keys.some((key) => typeof key !== "string" || !expected.includes(key))
+  ) {
+    return false;
+  }
+  return expected.every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return (
+      descriptor !== undefined &&
+      "value" in descriptor &&
+      descriptor.enumerable === true
+    );
+  });
+}
 
 function isTransportContext(value: unknown): value is MsgBusTransportContext {
   if (!isJsonObject(value)) return false;
@@ -602,7 +869,7 @@ function isTransportContext(value: unknown): value is MsgBusTransportContext {
   return (
     isJsonObject(invocation) &&
     Object.keys(invocation).every((key) =>
-      ["id", "rootId", "capability", "agentConsent"].includes(key)
+      ["id", "rootId", "capability", "agentConsent"].includes(key),
     ) &&
     typeof invocation.id === "string" &&
     invocation.id.length >= 16 &&
@@ -620,12 +887,30 @@ export function isExecEnvelope(value: unknown): value is ExecEnvelope {
     return false;
   }
   const payload = value.payload;
+  if (
+    !isRecord(payload) ||
+    typeof payload.action !== "string" ||
+    payload.action.length === 0 ||
+    (payload.context !== undefined && !isTransportContext(payload.context))
+  ) {
+    return false;
+  }
+  try {
+    assertMsgBusV1Json(payload.payload, "Exec payload");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isRequestCancelEnvelope(
+  value: unknown,
+): value is RequestCancelEnvelope {
   return (
-    isRecord(payload) &&
-    typeof payload.action === "string" &&
-    payload.action.length > 0 &&
-    isJsonValue(payload.payload) &&
-    (payload.context === undefined || isTransportContext(payload.context))
+    hasExactEnumerableDataKeys(value, ["type", "version", "id"]) &&
+    value.type === "neutron:msgbus:cancel" &&
+    value.version === 1 &&
+    isMessageId(value.id)
   );
 }
 
@@ -636,16 +921,32 @@ export function isResponseEnvelope(value: unknown): value is ResponseEnvelope {
   const hasOk = Object.hasOwn(value, "ok");
   const hasError = Object.hasOwn(value, "error");
   if (hasOk === hasError) return false;
-  return hasOk ? isJsonValue(value.ok) : isJsonValue(value.error);
+  try {
+    assertMsgBusV1Json(
+      hasOk ? value.ok : value.error,
+      "Response payload",
+      MSG_BUS_MAX_PAYLOAD_BYTES,
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function isProgressEnvelope(value: unknown): value is ProgressEnvelope {
-  return (
-    isRecord(value) &&
-    value.type === "progress" &&
-    isMessageId(value.id) &&
-    isJsonValue(value.value)
-  );
+  if (!isRecord(value) || value.type !== "progress" || !isMessageId(value.id)) {
+    return false;
+  }
+  try {
+    assertMsgBusV1Json(
+      value.value,
+      "Progress payload",
+      MSG_BUS_MAX_PROGRESS_BYTES,
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function isAppStateChangeEnvelope(
@@ -654,7 +955,7 @@ export function isAppStateChangeEnvelope(
   return (
     isJsonObject(value) &&
     Object.keys(value).every((key) =>
-      ["type", "version", "topic", "revision"].includes(key)
+      ["type", "version", "topic", "revision"].includes(key),
     ) &&
     value.type === "neutron:app:state" &&
     value.version === 1 &&
@@ -737,11 +1038,11 @@ function errorText(
     if (isRecord(detail)) {
       const fields = Object.entries(detail)
         .filter((entry): entry is [string, string | number | boolean] =>
-          ["string", "number", "boolean"].includes(typeof entry[1])
+          ["string", "number", "boolean"].includes(typeof entry[1]),
         )
         .map(
           ([field, fieldValue]) =>
-            `${field.replaceAll("_", " ")} ${String(fieldValue)}`
+            `${field.replaceAll("_", " ")} ${String(fieldValue)}`,
         );
       if (fields.length > 0) return `${label}: ${fields.join(", ")}`;
     }
@@ -771,6 +1072,31 @@ export function serializeError(error: unknown): JsonValue {
     };
   }
   return isJsonValue(error) ? error : String(error);
+}
+
+const OVERSIZED_ERROR: JsonObject = Object.freeze({
+  name: "Error",
+  message: "Request failed with an oversized error",
+});
+
+export function boundSerializedError(
+  serialized: JsonValue,
+  fallbackMessage = OVERSIZED_ERROR.message as string,
+): JsonValue {
+  try {
+    assertBoundedJson(serialized, "Error payload", MSG_BUS_MAX_PAYLOAD_BYTES);
+    return serialized;
+  } catch {
+    return { name: "Error", message: fallbackMessage };
+  }
+}
+
+export function serializeBoundedError(error: unknown): JsonValue {
+  try {
+    return boundSerializedError(serializeError(error));
+  } catch {
+    return OVERSIZED_ERROR;
+  }
 }
 
 export function isVetKeysError(value: unknown): value is VetKeysError {
@@ -825,8 +1151,7 @@ export function normalizeToolDescriptor(
       descriptor.annotations,
       "neutron:audit",
     ) &&
-    descriptor.annotations["neutron:audit"] !==
-      NEUTRON_TOOL_AUDIT_METADATA_ONLY
+    descriptor.annotations["neutron:audit"] !== NEUTRON_TOOL_AUDIT_METADATA_ONLY
   ) {
     throw new Error("Unsupported neutron:audit tool annotation");
   }
@@ -836,8 +1161,7 @@ export function normalizeToolDescriptor(
       descriptor.annotations,
       "neutron:control",
     ) &&
-    descriptor.annotations["neutron:control"] !==
-      NEUTRON_TOOL_CONTROL_CANCEL
+    descriptor.annotations["neutron:control"] !== NEUTRON_TOOL_CONTROL_CANCEL
   ) {
     throw new Error("Unsupported neutron:control tool annotation");
   }
@@ -888,10 +1212,7 @@ export function normalizeToolDescriptor(
   };
 }
 
-function assertSafeJsonSchema(
-  schema: JsonSchemaDocument,
-  label: string,
-): void {
+function assertSafeJsonSchema(schema: JsonSchemaDocument, label: string): void {
   let nodes = 0;
   const visit = (value: JsonValue, depth: number): void => {
     nodes++;
@@ -1027,6 +1348,7 @@ function validateToolSchemaValue(
 const canisterIdSchema: Schema = {
   type: "string",
   minLength: 1,
+  maxLength: CANISTER_PRINCIPAL_TEXT_MAX_LENGTH,
   pattern: "^[a-z0-9-]+$",
 };
 

@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import icblastDefault, { InternetIdentity } from "icblast";
+import didcWasmUrl from "icblast/didc-wasm";
+import type { IDL } from "@dfinity/candid";
 import {
   Actor,
   HttpAgent,
@@ -41,13 +43,11 @@ import { AuthGeneration } from "./auth_generation.ts";
 import { kernelSetupStorage } from "../bootstrap.ts";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
 import { takePendingActivation } from "../activation_handoff.ts";
-import {
-  redeemActivation,
-  type ActivationResult,
-} from "./activation.ts";
+import { redeemActivation, type ActivationResult } from "./activation.ts";
 
 type IcblastFactory = (options?: Record<string, unknown>) => any;
-type IcblastClient = (canister: string, candid?: string) => Promise<any>;
+type IcblastPreset = string | IDL.InterfaceFactory;
+type IcblastClient = (canister: string, preset?: IcblastPreset) => Promise<any>;
 
 export type KernelActor = CertifiedAssetsSettingsActor & {
   kernel_check_authorized(req: null): Promise<boolean>;
@@ -57,12 +57,8 @@ export type KernelActor = CertifiedAssetsSettingsActor & {
     deployment_id: string;
     wasm_memory_persistence: { keep: null } | { replace: null };
   }): Promise<null>;
-  kernel_install_wasm_chunks_clear(
-    req: DeploymentReference,
-  ): Promise<null>;
-  kernel_install_wasm_chunk(
-    req: KernelInstallWasmChunkRequest,
-  ): Promise<null>;
+  kernel_install_wasm_chunks_clear(req: DeploymentReference): Promise<null>;
+  kernel_install_wasm_chunk(req: KernelInstallWasmChunkRequest): Promise<null>;
   kernel_install_code_chunked(
     req: KernelInstallCodeChunkedRequest,
   ): Promise<null>;
@@ -86,9 +82,7 @@ export type KernelActor = CertifiedAssetsSettingsActor & {
   }): Promise<boolean>;
   kernel_install_abort(req: DeploymentReference): Promise<null>;
   kernel_runtime_info(): Promise<KernelRuntimeInfo>;
-  kernel_app_usage_snapshot(
-    req: null,
-  ): Promise<KernelAppUsageSnapshotWire>;
+  kernel_app_usage_snapshot(req: null): Promise<KernelAppUsageSnapshotWire>;
   kernel_memory_snapshot(req: null): Promise<KernelMemorySnapshot>;
   kernel_settings_snapshot(req: null): Promise<KernelSettingsSnapshot>;
   kernel_scheduled_tasks_snapshot(req: null): Promise<ScheduledTaskSummary[]>;
@@ -139,9 +133,18 @@ export type KernelActor = CertifiedAssetsSettingsActor & {
     app_id: string;
     slot_id: string;
   }): Promise<unknown>;
-  kernel_vetkeys_enable(req: { app_id: string; slot_id: string }): Promise<unknown>;
-  kernel_vetkeys_disable(req: { app_id: string; slot_id: string }): Promise<unknown>;
-  kernel_vetkeys_rotate(req: { app_id: string; slot_id: string }): Promise<unknown>;
+  kernel_vetkeys_enable(req: {
+    app_id: string;
+    slot_id: string;
+  }): Promise<unknown>;
+  kernel_vetkeys_disable(req: {
+    app_id: string;
+    slot_id: string;
+  }): Promise<unknown>;
+  kernel_vetkeys_rotate(req: {
+    app_id: string;
+    slot_id: string;
+  }): Promise<unknown>;
   kernel_vetkeys_retire_generation(req: {
     app_id: string;
     slot_id: string;
@@ -194,7 +197,6 @@ export const useAuthStore = create<AuthState>((set) => ({
 const createIcblast = icblastDefault as unknown as IcblastFactory;
 const ANONYMOUS_PRINCIPAL = "2vxsx-fae";
 
-let ic: IcblastClient | null = null;
 let neutronCan: KernelActor | null = null;
 let neutronDynamicCan: any = null;
 let neutronDynamicCanPromise: Promise<any> | null = null;
@@ -273,10 +275,6 @@ export async function activateIdentity(
   // exact OAuth popup flow owned by this Internet Identity to report back.
   clearConnectionRequestsForAuth({ preserveStoredRecovery: logged });
   activeIdentity = logged ? identity : null;
-  ic = createIcblast({
-    ...runtimeIcblastOptions(),
-    identity,
-  }) as IcblastClient;
   resetNeutronCan();
 
   const principal = nextPrincipal;
@@ -351,7 +349,6 @@ export async function logout(): Promise<void> {
   try {
     await internetIdentityReady;
     if (!identityActivation.isCurrent(logoutGeneration)) return;
-    ic = createIcblast(runtimeIcblastOptions()) as IcblastClient;
     resetNeutronCan();
     activeIdentity = null;
     useAuthStore.getState().setAuth({
@@ -373,25 +370,187 @@ function clearPendingSetupBestEffort(): void {
   }
 }
 
-export function getIC(): IcblastClient {
-  if (!ic) ic = createIcblast(runtimeIcblastOptions()) as IcblastClient;
-  return ic;
+export async function getLegacyExternalDynamicCan(
+  canister: string,
+  assertAuthority: () => void,
+): Promise<any> {
+  const ownerIdentity = activeIdentity;
+  assertAuthority();
+  const target = await createExternalIcblastClient({
+    identity: ownerIdentity,
+    assertAuthority,
+    allowNumberedPrincipals: true,
+  })(canister);
+  assertAuthority();
+  return target;
 }
 
-function createDynamicIcblastClient(): IcblastClient {
+export async function getStrictExternalDynamicCan(
+  canister: string,
+  assertAuthority: () => void,
+  signal?: AbortSignal,
+): Promise<any> {
+  const ownerIdentity = activeIdentity;
+  const discovered = await getStrictExternalDiscoveryCan(
+    canister,
+    assertAuthority,
+    signal,
+  );
+  assertAuthority();
+  const idlFactory = (discovered as { $idlFactory?: unknown })?.$idlFactory;
+  if (typeof idlFactory !== "function") {
+    throw new Error("External canister discovery returned no Candid interface");
+  }
+  // Supplying the already-discovered factory keeps the authenticated client
+  // on ICBlast's preset path: it creates the owner-bound actor without making
+  // another interface-discovery request to the target canister.
+  return createExternalIcblastClient({
+    identity: ownerIdentity,
+    assertAuthority,
+    allowNumberedPrincipals: false,
+    ...(signal ? { signal } : {}),
+  })(canister, idlFactory as IDL.InterfaceFactory);
+}
+
+export async function getStrictExternalDiscoveryCan(
+  canister: string,
+  assertAuthority: () => void,
+  signal?: AbortSignal,
+): Promise<any> {
+  assertAuthority();
+  return createExternalIcblastClient({
+    assertAuthority,
+    allowNumberedPrincipals: false,
+    ...(signal ? { signal } : {}),
+  })(canister);
+}
+
+function createDynamicIcblastClient(candidSourceBytes: number): IcblastClient {
   return createIcblast({
     ...runtimeIcblastOptions(),
     ...(activeIdentity ? { identity: activeIdentity } : {}),
+    // `/pkg/neutron.did` is the compiler-produced interface of this Kernel.
+    // Do not impose ICBlast's generic untrusted-canister limits on durable,
+    // already-valid app installations.
+    maxCandidSourceBytes: candidSourceBytes,
+    maxGeneratedJavaScriptBytes: Number.MAX_SAFE_INTEGER,
+    maxCandidTypeItems: Number.MAX_SAFE_INTEGER,
+    maxCandidTypeDepth: Number.MAX_SAFE_INTEGER,
+    maxDecodedCandidItems: Number.MAX_SAFE_INTEGER,
+    maxDecodedCandidDepth: Number.MAX_SAFE_INTEGER,
   }) as IcblastClient;
 }
 
-function runtimeIcblastOptions(): Record<string, unknown> {
+function createExternalIcblastClient({
+  identity = null,
+  assertAuthority,
+  allowNumberedPrincipals,
+  signal,
+}: Readonly<{
+  identity?: Identity | null;
+  assertAuthority: () => void;
+  allowNumberedPrincipals: boolean;
+  signal?: AbortSignal;
+}>): IcblastClient {
+  return createIcblast({
+    ...runtimeIcblastOptions(assertAuthority, signal),
+    ...(identity ? { identity } : {}),
+    allowNumberedPrincipals,
+  }) as IcblastClient;
+}
+
+function runtimeIcblastOptions(
+  assertAuthority?: () => void,
+  signal?: AbortSignal,
+): Record<string, unknown> {
   const deployment = getRuntimeDeployment();
   return {
     local: deployment.local,
     local_host: deployment.gateway,
-    agentOptions: { host: deployment.gateway },
+    agentOptions: {
+      host: deployment.gateway,
+      ...(assertAuthority
+        ? { fetch: authorityCheckedFetch(assertAuthority, signal) }
+        : {}),
+    },
+    didcWasm: didcWasmUrl,
   };
+}
+
+type FetchImplementation = (
+  this: unknown,
+  ...args: Parameters<typeof fetch>
+) => ReturnType<typeof fetch>;
+
+function authorityCheckedFetch(
+  assertAuthority: () => void,
+  requestSignal?: AbortSignal,
+): FetchImplementation {
+  const browserFetch = globalThis.fetch;
+  if (typeof browserFetch !== "function") {
+    throw new Error("A browser fetch implementation is required");
+  }
+  const underlyingFetch = browserFetch.bind(globalThis);
+  return function checkedFetch(
+    this: unknown,
+    ...args: Parameters<typeof fetch>
+  ) {
+    // Keep this assertion immediately adjacent to the native dispatch. ICBlast
+    // performs its response checks outside it. The native browser fetch stays
+    // bound to its global receiver even though HttpAgent calls this wrapper as
+    // one of its private fields.
+    assertAuthority();
+    if (!requestSignal) return underlyingFetch(...args);
+
+    const [input, init] = args;
+    const inputSignal =
+      typeof Request !== "undefined" && input instanceof Request
+        ? input.signal
+        : undefined;
+    const combined = combineFetchSignals([
+      requestSignal,
+      init?.signal ?? undefined,
+      inputSignal,
+    ]);
+    try {
+      return underlyingFetch(input, { ...init, signal: combined.signal }).finally(
+        combined.cleanup,
+      );
+    } catch (error) {
+      combined.cleanup();
+      throw error;
+    }
+  };
+}
+
+function combineFetchSignals(
+  candidates: readonly (AbortSignal | undefined)[],
+): Readonly<{ signal: AbortSignal; cleanup: () => void }> {
+  const signals = candidates.filter(
+    (signal, index, values): signal is AbortSignal =>
+      signal !== undefined && values.indexOf(signal) === index,
+  );
+  if (signals.length === 1) {
+    return Object.freeze({ signal: signals[0]!, cleanup: () => undefined });
+  }
+
+  const controller = new AbortController();
+  const listeners = signals.map((signal) => {
+    const abort = (): void => {
+      if (!controller.signal.aborted) controller.abort(signal.reason);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    return [signal, abort] as const;
+  });
+  return Object.freeze({
+    signal: controller.signal,
+    cleanup: () => {
+      for (const [signal, abort] of listeners) {
+        signal.removeEventListener("abort", abort);
+      }
+    },
+  });
 }
 
 export function resetNeutronCan(): void {
@@ -410,9 +569,7 @@ async function getBootstrapKernelCan(): Promise<ActorSubclass<KernelActor>> {
   const agent = await HttpAgent.create({
     host: runtimeDeployment.gateway,
     identity,
-    ...(runtimeDeployment.local
-      ? { verifyQuerySignatures: false }
-      : {}),
+    ...(runtimeDeployment.local ? { verifyQuerySignatures: false } : {}),
   });
   if (runtimeDeployment.rootKeyPolicy === "fetch") await agent.fetchRootKey();
 
@@ -428,7 +585,9 @@ async function fetchKernelAsset(key: string): Promise<Response | undefined> {
   const response = await fetch(key);
   if (response.status === 404) return undefined;
   if (!response.ok) {
-    throw new Error(`Could not fetch kernel asset ${key}: HTTP ${response.status}`);
+    throw new Error(
+      `Could not fetch kernel asset ${key}: HTTP ${response.status}`,
+    );
   }
   return response;
 }
@@ -463,9 +622,11 @@ export function getNeutronDynamicCan(): Promise<any> {
   // Neutron Candid changes after an app install, update, or uninstall, so a
   // shared client would return its old actor even after resetNeutronCan()
   // cleared our own cache. Give every Candid generation its own client.
-  const generationClient = createDynamicIcblastClient();
   const pending = (async () => {
     const candid = await readKernelAssetText("/pkg/neutron.did");
+    const generationClient = createDynamicIcblastClient(
+      new TextEncoder().encode(candid).byteLength,
+    );
     const actor = await generationClient(getNeutronId(), candid);
     // An identity change may complete while Candid is being fetched or
     // compiled. Never publish that actor into the next identity generation;
@@ -912,10 +1073,12 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
       [],
     ),
     kernel_backend_reservations_apply: IDL.Func(
-      [IDL.Record({
-        app_id: IDL.Text,
-        actions: IDL.Vec(BackendReservationAction),
-      })],
+      [
+        IDL.Record({
+          app_id: IDL.Text,
+          actions: IDL.Vec(BackendReservationAction),
+        }),
+      ],
       [IDL.Vec(BackendReservationSummary)],
       [],
     ),
@@ -924,11 +1087,7 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
       [IDL.Vec(BackendReservationSummary)],
       ["query"],
     ),
-    kernel_access_snapshot: IDL.Func(
-      [IDL.Null],
-      [KernelAccessSnapshot],
-      [],
-    ),
+    kernel_access_snapshot: IDL.Func([IDL.Null], [KernelAccessSnapshot], []),
     kernel_authorized_add: IDL.Func([IDL.Principal], [IDL.Null], []),
     kernel_authorized_rem: IDL.Func([IDL.Principal], [IDL.Null], []),
     kernel_activation: IDL.Func(
@@ -1025,11 +1184,7 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
       [KernelAppUsageSnapshot],
       ["query"],
     ),
-    kernel_memory_snapshot: IDL.Func(
-      [IDL.Null],
-      [KernelMemorySnapshot],
-      [],
-    ),
+    kernel_memory_snapshot: IDL.Func([IDL.Null], [KernelMemorySnapshot], []),
     kernel_settings_snapshot: IDL.Func(
       [IDL.Null],
       [KernelSettingsSnapshot],

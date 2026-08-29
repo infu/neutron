@@ -28,31 +28,22 @@ const KERNEL_307_PREDECESSOR_ARCHIVE_PATH = fileURLToPath(
 const KERNEL_315_PREDECESSOR_ARCHIVE_PATH = fileURLToPath(
   new URL("./fixtures/kernel.v0.3.15.neutron", import.meta.url),
 );
-const FINAL_KERNEL_CANDIDATE_ARCHIVE_PATH = fileURLToPath(
-  new URL("../../../apps/kernel/kernel.v0.3.16.neutron", import.meta.url),
-);
 const KERNEL_306_FIXTURE_PATH = fileURLToPath(
   new URL("./fixtures/kernel.v0.3.6.neutron", import.meta.url),
 );
-const CURRENT_PRODUCTION_APP_ARCHIVE_PATHS = [
-  "../../../apps/agent/agent.v0.3.4.neutron",
-  "../../../apps/chess/chess.v0.3.4.neutron",
-  "../../../apps/contacts/contacts.v0.3.4.neutron",
-  "../../../apps/gemma/gemma.v0.2.4.neutron",
-  "../../../apps/hello/hello.v0.2.4.neutron",
-  "../../../apps/hullshift/hullshift.v0.2.4.neutron",
-  "../../../apps/jetcreeper/jetcreeper.v0.3.4.neutron",
-  "../../../apps/kitchensink/kitchensink.v0.3.4.neutron",
-  "../../../apps/mail/mail.v0.3.5.neutron",
-  "../../../apps/mysubnet/mysubnet.v0.3.4.neutron",
-  "../../../apps/spreadsheet/spreadsheet.v0.3.4.neutron",
-  "../../../apps/vfs/files.v0.4.6.neutron",
-  "../../../apps/wagyu/wagyu.v0.3.5.neutron",
-  "../../../apps/wallet/wallet.v0.3.5.neutron",
-].map((path) => fileURLToPath(new URL(path, import.meta.url)));
+const RELEASE_CATALOG_MODULE_URL = new URL(
+  "../../../support/update-source/src/release_catalog.ts",
+  import.meta.url,
+).href;
+
+type ReleaseCatalogModule = Readonly<{
+  loadReleaseCatalog(path: string): Promise<unknown>;
+  productionReleaseCatalogPath: string;
+  resolveReleaseCatalogPackageFiles(catalog: unknown): Promise<string[]>;
+}>;
 
 type LegacyKernelExecutableFixture = Readonly<{
-  label: "v0.3.5" | "v0.3.6" | "v0.3.7" | "v0.3.15";
+  label: "v0.3.5" | "v0.3.6" | "v0.3.7" | "v0.3.15" | "v0.3.17";
   archivePath: string;
   bytes: number;
   sha256: string;
@@ -60,7 +51,22 @@ type LegacyKernelExecutableFixture = Readonly<{
   prepareSymbol: string;
   batchSymbol: string;
   compileSymbol: string;
+  emptyRuntimeMarker: string;
 }>;
+
+const KERNEL_317_RELEASE_FIXTURE = Object.freeze({
+  label: "v0.3.17",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.17.neutron", import.meta.url),
+  ),
+  bytes: 2_014_382,
+  sha256: "877e0b348dcfcbb344bbf4f87ef3a6b7924262bf8077aeae279d27bea916ff52",
+  mainTailMarker: "var Jn=V(G(),1),NL=document.getElementById",
+  prepareSymbol: "$A",
+  batchSymbol: "nP",
+  compileSymbol: "QA",
+  emptyRuntimeMarker: "var Kt=4096,X=null;",
+} satisfies LegacyKernelExecutableFixture);
 
 const LEGACY_KERNEL_EXECUTABLE_FIXTURES = [
   {
@@ -74,6 +80,7 @@ const LEGACY_KERNEL_EXECUTABLE_FIXTURES = [
     prepareSymbol: "vb",
     batchSymbol: "kR",
     compileSymbol: "Ab",
+    emptyRuntimeMarker: "var St=4096,G=null;",
   },
   {
     label: "v0.3.6",
@@ -84,6 +91,7 @@ const LEGACY_KERNEL_EXECUTABLE_FIXTURES = [
     prepareSymbol: "vb",
     batchSymbol: "kR",
     compileSymbol: "Ab",
+    emptyRuntimeMarker: "var St=4096,G=null;",
   },
   {
     label: "v0.3.7",
@@ -94,6 +102,7 @@ const LEGACY_KERNEL_EXECUTABLE_FIXTURES = [
     prepareSymbol: "Wk",
     batchSymbol: "Dz",
     compileSymbol: "Xk",
+    emptyRuntimeMarker: "var St=4096,G=null;",
   },
   {
     label: "v0.3.15",
@@ -104,13 +113,18 @@ const LEGACY_KERNEL_EXECUTABLE_FIXTURES = [
     prepareSymbol: "lA",
     batchSymbol: "uO",
     compileSymbol: "fA",
+    emptyRuntimeMarker: "var St=4096,G=null;",
   },
 ] as const satisfies readonly LegacyKernelExecutableFixture[];
-const HAS_CURRENT_RELEASE_ARTIFACTS = [
-  ...LEGACY_KERNEL_EXECUTABLE_FIXTURES.map(({ archivePath }) => archivePath),
-  FINAL_KERNEL_CANDIDATE_ARCHIVE_PATH,
-  ...CURRENT_PRODUCTION_APP_ARCHIVE_PATHS,
-].every(existsSync);
+// The v0.3.17 archive is an ignored release artifact rather than a tracked test
+// fixture. Its compiler closes over the exact released app registry, so use it
+// only in the opt-in gate that already requires local release archives.
+const RELEASE_ARTIFACT_KERNEL_EXECUTABLE_FIXTURES = [
+  ...LEGACY_KERNEL_EXECUTABLE_FIXTURES,
+  KERNEL_317_RELEASE_FIXTURE,
+] as const;
+const LEGACY_SYNTHETIC_SUCCESSOR_FIXTURES =
+  LEGACY_KERNEL_EXECUTABLE_FIXTURES;
 const RUN_CURRENT_RELEASE_ARTIFACT_GATE =
   process.env.NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE === "1";
 let sharedLegacyBrowserPromise: Promise<Browser> | undefined;
@@ -293,7 +307,11 @@ async function compileLegacyArchiveBatch(
         };
         const exposed = globalThis as typeof globalThis & {
           __legacyPreparePackageInstall: (archive: Uint8Array) => unknown;
-          __legacyCompilePackages: (input: { packages: unknown[] }) => Promise<{
+          __legacyCompilePackages: (input: {
+            packages: unknown[];
+            existingApps: Record<string, never>;
+            existingBrowserSurfaceOriginAppIds: string[];
+          }) => Promise<{
             wasm: Uint8Array;
             diagnostics: Array<{ severity?: number }>;
             compatibilityDiagnostics: unknown[];
@@ -303,7 +321,11 @@ async function compileLegacyArchiveBatch(
         const packages = archivesBase64.map((archive) =>
           exposed.__legacyPreparePackageInstall(decodeBase64(archive)),
         );
-        const compiled = await exposed.__legacyCompilePackages({ packages });
+        const compiled = await exposed.__legacyCompilePackages({
+          packages,
+          existingApps: {},
+          existingBrowserSurfaceOriginAppIds: [],
+        });
         return {
           wasmBytes: compiled.wasm.byteLength,
           wasmMagic: [...compiled.wasm.slice(0, 4)],
@@ -337,7 +359,7 @@ function expectSuccessfulLegacyCompile(
   expect(result.compatibilityDiagnostics).toBe(0);
 }
 
-for (const fixture of LEGACY_KERNEL_EXECUTABLE_FIXTURES) {
+for (const fixture of LEGACY_SYNTHETIC_SUCCESSOR_FIXTURES) {
   test(
     `the exact ${fixture.label} browser installer accepts one Kernel-plus-HTTPS-app batch`,
     async () => {
@@ -405,7 +427,8 @@ for (const fixture of LEGACY_KERNEL_EXECUTABLE_FIXTURES) {
         // v0.3.5 and v0.3.6 treat the sidecar as an ordinary auxiliary file;
         // later released installers understand and verify its HTTPS form.
         source:
-          fixture.label === "v0.3.7" || fixture.label === "v0.3.15"
+          fixture.label === "v0.3.7" ||
+          fixture.label === "v0.3.15"
             ? app.source
             : null,
       });
@@ -420,10 +443,10 @@ for (const fixture of LEGACY_KERNEL_EXECUTABLE_FIXTURES) {
   );
 }
 
-test("the exact v0.3.5, v0.3.6, v0.3.7, and v0.3.15 browser compilers compile a clean HTTPS app with a successor Kernel", async () => {
+test("the exact archived browser compilers compile a clean HTTPS app with a successor Kernel", async () => {
   const app = httpsPackageFixture();
   const kernelArchive = syntheticSuccessorKernelArchive();
-  for (const fixture of LEGACY_KERNEL_EXECUTABLE_FIXTURES) {
+  for (const fixture of LEGACY_SYNTHETIC_SUCCESSOR_FIXTURES) {
     const result = await compileLegacyArchiveBatch(fixture, [
       kernelArchive,
       app.archive,
@@ -433,28 +456,34 @@ test("the exact v0.3.5, v0.3.6, v0.3.7, and v0.3.15 browser compilers compile a 
 }, 120_000);
 
 test.skipIf(!RUN_CURRENT_RELEASE_ARTIFACT_GATE)(
-  "release-only archived browser compilers compile the exact v0.3.16 candidate and unchanged current app archives in one batch",
+  "release-only archived browser compilers compile the manifest-selected production package set in one batch",
   async () => {
-    if (!HAS_CURRENT_RELEASE_ARTIFACTS) {
-      throw new Error(
-        "NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE=1 requires the archived browser compilers, v0.3.16 candidate, and every unchanged current app archive",
-      );
-    }
-    const kernelArchive = new Uint8Array(
-      readFileSync(FINAL_KERNEL_CANDIDATE_ARCHIVE_PATH),
+    const releaseCatalog = await import(
+      RELEASE_CATALOG_MODULE_URL
+    ) as ReleaseCatalogModule;
+    const catalog = await releaseCatalog.loadReleaseCatalog(
+      releaseCatalog.productionReleaseCatalogPath,
     );
-    const appArchives = CURRENT_PRODUCTION_APP_ARCHIVE_PATHS.map(
-      (path) => new Uint8Array(readFileSync(path)),
+    const archivePaths = await releaseCatalog.resolveReleaseCatalogPackageFiles(
+      catalog,
     );
-    const candidateKernel = preparePackageInstall(kernelArchive);
-    const currentApps = appArchives.map((archive) =>
-      preparePackageInstall(archive),
-    );
-    expect(candidateKernel.manifest).toMatchObject({
-      id: "kernel",
-      version: 316,
+    const releases = archivePaths.map((archivePath) => {
+      const archive = new Uint8Array(readFileSync(archivePath));
+      return Object.freeze({
+        archive,
+        prepared: preparePackageInstall(archive),
+      });
     });
-    for (const app of [candidateKernel, ...currentApps]) {
+    const candidateKernel = exactlyOne(
+      releases.filter(({ prepared }) => prepared.manifest.id === "kernel"),
+      "Kernel release artifact",
+    );
+    const currentAppReleases = releases.filter(
+      ({ prepared }) => prepared.manifest.id !== "kernel",
+    );
+    const currentApps = currentAppReleases.map(({ prepared }) => prepared);
+    expect(candidateKernel.prepared.manifest.id).toBe("kernel");
+    for (const app of [candidateKernel.prepared, ...currentApps]) {
       expect(app.manifest).not.toHaveProperty("package_features");
       expect(app.manifest.capabilities?.browser_permissions).toBeUndefined();
       expect(app.packageRecord?.source.kind).toBe("https");
@@ -467,29 +496,29 @@ test.skipIf(!RUN_CURRENT_RELEASE_ARTIFACT_GATE)(
         ),
       ).toBe(false);
     }
-    for (const app of currentApps) {
-      expect(app.browserSurfaceOriginsReady).toBe(false);
-    }
+    const browserSurfaceOriginAppIds = currentApps
+      .filter(({ browserSurfaceOriginsReady }) => browserSurfaceOriginsReady)
+      .map(({ manifest }) => manifest.id);
     expect(
       buildPackagesCompileInput({
         existingApps: {},
         existingBrowserSurfaceOriginAppIds: [],
-        packages: [candidateKernel, ...currentApps],
+        packages: [candidateKernel.prepared, ...currentApps],
       }).browserSurfaceOriginAppIds,
-    ).toEqual([]);
+    ).toEqual([...browserSurfaceOriginAppIds].sort());
     const expectedAppIds = [
       "kernel",
       ...currentApps.map(({ manifest }) => manifest.id),
     ];
-    for (const fixture of LEGACY_KERNEL_EXECUTABLE_FIXTURES) {
+    for (const fixture of RELEASE_ARTIFACT_KERNEL_EXECUTABLE_FIXTURES) {
       const result = await compileLegacyArchiveBatch(fixture, [
-        kernelArchive,
-        ...appArchives,
+        candidateKernel.archive,
+        ...currentAppReleases.map(({ archive }) => archive),
       ]);
       expectSuccessfulLegacyCompile(result, expectedAppIds);
     }
   },
-  120_000,
+  300_000,
 );
 
 test("the current installer accepts the same legacy-readable HTTPS app in one batch", () => {
@@ -701,7 +730,7 @@ async function withLegacyKernelExecutable<T>(
     `globalThis.__legacyCompilePackages=${fixture.compileSymbol};`;
 
   let runtimeSource = decoder.decode(files[runtimePath]);
-  const emptyRuntime = "var St=4096,G=null;";
+  const emptyRuntime = fixture.emptyRuntimeMarker;
   if (!runtimeSource.includes(emptyRuntime)) {
     throw new Error(`The exact ${fixture.label} runtime fixture changed`);
   }
@@ -720,7 +749,10 @@ async function withLegacyKernelExecutable<T>(
   });
   runtimeSource = runtimeSource.replace(
     emptyRuntime,
-    `var St=4096,G=Object.freeze(${JSON.stringify(runtime)});`,
+    emptyRuntime.replace(
+      "null;",
+      `Object.freeze(${JSON.stringify(runtime)});`,
+    ),
   );
 
   const server = createServer((request, response) => {
@@ -815,7 +847,7 @@ async function launchChromium(): Promise<Browser> {
     : chromium.launch({ headless: true, executablePath });
 }
 
-function exactlyOne(values: readonly string[], label: string): string {
+function exactlyOne<T>(values: readonly T[], label: string): T {
   if (values.length !== 1) {
     throw new Error(`Expected exactly one ${label}; found ${values.length}`);
   }

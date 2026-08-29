@@ -206,9 +206,10 @@ module {
     );
   };
   // A persistent background replaces the ordinary installation background:
-  // 32 tiles plus tray yield 33 installation surfaces (330 JavaScript variants
-  // across two authorities and five destinations), while the persistent origin
-  // adds 14 variants, for a closed whole-asset maximum of 344.
+  // Preserve the predecessor ceiling so an upgrade can remove already-certified
+  // ServiceWorker and SharedWorker leaves. Current generation emits at most 340
+  // JavaScript variants: 330 installation-surface leaves plus 10 persistent
+  // origin leaves for the five remaining destinations.
   public let ORIGIN_RESPONSE_VARIANTS_MAX : Nat = 344;
 
   // One update may nest several certification publishers (install assets,

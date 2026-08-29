@@ -15,8 +15,10 @@ import {
   isValidAppId,
 } from "neutron-tools/src/app_ids.js";
 
-const MAX_TOOL_RESULT_BYTES = 128 * 1024;
-const AGENT_TOOL_TIMEOUT_SECONDS = 60;
+const MAX_TOOL_RESULT_BYTES = 192 * 1024;
+export const AGENT_TOOL_TIMEOUT_SECONDS = 60;
+export const AGENT_LONG_RUNNING_TOOL_TIMEOUT_SECONDS = 300;
+const READ_ONLY_TOOL_EFFECTS = new Set(["read", "network", "gpu"]);
 
 export type AgentToolEvent = {
   id: string;
@@ -28,22 +30,41 @@ export type AgentToolEvent = {
 export function createNeutronAgentTools({
   bus,
   onEvent,
+  beforeStateChangingDispatch,
 }: {
   bus: MsgBusClient;
   onEvent: (event: AgentToolEvent) => void;
+  beforeStateChangingDispatch?: (attempt: Readonly<{
+    target: MsgBusEndpointId;
+    name: string;
+  }>) => Promise<void> | void;
 }) {
   let callQueue: Promise<void> = Promise.resolve();
 
   const run = async <T>(
     name: string,
     summary: string,
-    operation: () => Promise<T>
+    operation: (progress: (summary: string) => void) => Promise<T>,
+    resultError?: (value: T) => string | null,
   ): Promise<T> => {
     const id = randomId();
     onEvent({ id, name, status: "running", summary });
     try {
-      const value = await operation();
-      onEvent({ id, name, status: "ok", summary });
+      const value = await operation((progressSummary) =>
+        onEvent({
+          id,
+          name,
+          status: "running",
+          summary: progressSummary.slice(0, 512),
+        }),
+      );
+      const failure = resultError?.(value) ?? null;
+      onEvent({
+        id,
+        name,
+        status: failure === null ? "ok" : "error",
+        summary: failure ?? summary,
+      });
       return value;
     } catch (error) {
       onEvent({
@@ -135,7 +156,7 @@ export function createNeutronAgentTools({
 
     call_app_tool: tool({
       description:
-        "Call one exact Neutron app method after inspecting its schema. Existing kernel permissions apply.",
+        "Call one exact Neutron app method after inspecting its schema. Existing kernel permissions apply. When a method that may change state fails, its outcome may be unknown: retrySafe is false, so reconcile through read or status methods before retrying.",
       inputSchema: jsonSchema<{
         target: string;
         name: string;
@@ -150,12 +171,30 @@ export function createNeutronAgentTools({
         },
         additionalProperties: false,
       }),
-      execute: async ({ target, name, arguments: arguments_ }) =>
-        run("call_app_tool", `Call ${name}`, async () =>
+      execute: async (
+        { target, name, arguments: arguments_ },
+        { abortSignal },
+      ) =>
+        run("call_app_tool", `Call ${name}`, async (report) =>
           serializeCall(async () => {
             const endpoint = endpointId(target);
-            await readDescriptor(bus, endpoint, name);
+            const descriptor = await readDescriptor(bus, endpoint, name);
             const args = jsonObject(arguments_);
+            const mayChangeState = toolMayChangeState(descriptor);
+            if (mayChangeState) {
+              try {
+                if (!beforeStateChangingDispatch) {
+                  throw new Error("State-change recovery journal is unavailable");
+                }
+                await beforeStateChangingDispatch({ target: endpoint, name });
+              } catch (error) {
+                return {
+                  ok: false,
+                  error: safeToolError(error),
+                  retrySafe: true,
+                };
+              }
+            }
             try {
               return boundResult({
                 ok: true,
@@ -165,19 +204,62 @@ export function createNeutronAgentTools({
                     name,
                     arguments: args,
                   },
-                  AGENT_TOOL_TIMEOUT_SECONDS
+                  {
+                    timeout: toolTimeoutSeconds(descriptor),
+                    onProgress: (value) =>
+                      report(toolProgressSummary(name, value)),
+                    ...(abortSignal ? { signal: abortSignal } : {}),
+                  },
                 ),
               });
             } catch (error) {
               return {
                 ok: false,
                 error: safeToolError(error),
+                ...(mayChangeState ? { retrySafe: false } : {}),
               };
             }
-          })
+          }),
+          failedToolSummary,
         ),
     }),
   };
+}
+
+function toolMayChangeState(descriptor: MsgBusToolDescriptor): boolean {
+  const effects = descriptor.annotations?.["neutron:effects"];
+  return !(
+    Array.isArray(effects) &&
+    effects.includes("read") &&
+    effects.every(
+      (effect) =>
+        typeof effect === "string" && READ_ONLY_TOOL_EFFECTS.has(effect),
+    )
+  );
+}
+
+function toolTimeoutSeconds(descriptor: MsgBusToolDescriptor): number {
+  return descriptor.annotations?.["neutron:longRunning"] === true
+    ? AGENT_LONG_RUNNING_TOOL_TIMEOUT_SECONDS
+    : AGENT_TOOL_TIMEOUT_SECONDS;
+}
+
+function toolProgressSummary(name: string, value: JsonValue): string {
+  if (isJsonObject(value)) {
+    const phase = typeof value.phase === "string" ? value.phase : "progress";
+    const runId = typeof value.runId === "string" ? ` (${value.runId})` : "";
+    return `${name}: ${phase}${runId}`;
+  }
+  return `${name}: progress`;
+}
+
+function failedToolSummary(value: JsonValue): string | null {
+  if (!isJsonObject(value) || value.ok !== false) return null;
+  const error = value.error;
+  if (isJsonObject(error) && typeof error.message === "string") {
+    return error.message.slice(0, 512);
+  }
+  return "App tool failed";
 }
 
 async function listAppTools(
@@ -290,6 +372,7 @@ async function readDescriptor(
 }
 
 function endpointId(value: string): MsgBusEndpointId {
+  if (value.length > 240) throw new Error("Invalid endpoint target");
   if (value === "kernel") return value;
   const match = /^app:([^:]+):(?:background|tile:[a-z_0-9]+:instance:[a-zA-Z0-9_-]+)$/.exec(
     value,

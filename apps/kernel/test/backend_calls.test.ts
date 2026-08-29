@@ -75,6 +75,57 @@ test("backend consent remains pending until explicit owner action", async () => 
   await expect(consent).resolves.toBeUndefined();
 });
 
+test("request cancellation removes only its pending backend consent", async () => {
+  const controller = new AbortController();
+  const consent = requestBackendCallConsent(
+    {
+      endpoint: endpoint.endpointId,
+      appId: "wallet",
+      source: {
+        role: "tile",
+        tileId: "wallet",
+        instanceId: "one",
+        workspace: 1,
+      },
+      actions: [
+        {
+          kind: "reserve",
+          scope: {
+            kind: "principal",
+            principal: "ryjl3-tyaaa-aaaaa-aaaba-cai",
+          },
+        },
+      ],
+    },
+    controller.signal,
+  );
+  expect(
+    Object.values(useBackendCallConsentStore.getState().requests),
+  ).toHaveLength(1);
+
+  controller.abort();
+  await expect(consent).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(useBackendCallConsentStore.getState().requests).toEqual({});
+
+  const replacement = requestBackendCallConsent({
+    endpoint: endpoint.endpointId,
+    appId: "wallet",
+    source: {
+      role: "tile",
+      tileId: "wallet",
+      instanceId: "one",
+      workspace: 1,
+    },
+    actions: [],
+  });
+  const pending = Object.values(
+    useBackendCallConsentStore.getState().requests,
+  )[0];
+  if (!pending) throw new Error("Missing replacement backend consent");
+  approveBackendCallRequest(pending.id);
+  await expect(replacement).resolves.toBeUndefined();
+});
+
 test("backend consent is cancelled when its app surface closes", async () => {
   const unregister = registerFrameContext(
     endpointSource,
@@ -379,6 +430,55 @@ test("invalid attached call arguments fail before consent or reservation work", 
     authorizations: 0,
     executions: 0,
   });
+});
+
+test("attachment request cancellation reaches authorization and stops before apply", async () => {
+  installWalletDeclaration(true);
+  const controller = new AbortController();
+  let authorizationSignal: AbortSignal | undefined;
+  let releaseAuthorization!: () => void;
+  const authorizationGate = new Promise<void>((resolve) => {
+    releaseAuthorization = resolve;
+  });
+  let applies = 0;
+  let executions = 0;
+
+  const operation = requestBackendReservationForEndpoint(
+    {
+      actions: [],
+      call: { method: "prepare_remote", args: [null] },
+    },
+    endpoint,
+    {
+      validateSelfCall: async () => undefined,
+      executeSelfCall: async () => {
+        executions += 1;
+        return null;
+      },
+      authorize: async (_request, signal) => {
+        authorizationSignal = signal;
+        await authorizationGate;
+        return true;
+      },
+      transport: {
+        listReservations: async () => [],
+        applyReservations: async () => {
+          applies += 1;
+          return [];
+        },
+      },
+    },
+    controller.signal,
+  );
+
+  await tick();
+  expect(authorizationSignal).toBe(controller.signal);
+  controller.abort();
+  releaseAuthorization();
+
+  await expect(operation).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(useBackendCallConsentStore.getState().requests).toEqual({});
+  expect({ applies, executions }).toEqual({ applies: 0, executions: 0 });
 });
 
 test("owner sees the immutable attached arguments that are revalidated and executed", async () => {

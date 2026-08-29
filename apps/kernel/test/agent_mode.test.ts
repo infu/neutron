@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { MSG_BUS_MAX_PAYLOAD_BYTES } from "neutron-tools/protocol";
 import type { RegisteredEndpoint } from "../src/frame_context.ts";
 import {
   approveAgentGrant,
@@ -75,6 +76,29 @@ async function grantAgent(): Promise<void> {
   approveAgentGrant();
   await pending;
 }
+
+test("request cancellation removes a pending agent grant", async () => {
+  const controller = new AbortController();
+  const pending = requestAgentGrant(
+    {
+      appId: "agent",
+      appName: "Agent",
+      version: 100,
+      installationUid: "101",
+      entrypoint: "agent_chat",
+      ownerPrincipal: owner,
+    },
+    controller.signal,
+  );
+  expect(useAgentModeStore.getState().pendingGrant?.appId).toBe("agent");
+
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(useAgentModeStore.getState().pendingGrant).toBeNull();
+
+  await grantAgent();
+  expect(useAgentModeStore.getState().grant?.appId).toBe("agent");
+});
 
 test("agent authority is bound to one activated declared root", async () => {
   await grantAgent();
@@ -155,6 +179,87 @@ test("downstream permission requires one exact agent decision", async () => {
     decision: "allow",
     requesterAppId: "wallet",
   });
+  completeInvocation(child);
+  completeInvocation(root);
+});
+
+test("request cancellation settles and removes a nested agent decision", async () => {
+  await grantAgent();
+  const root = beginAgentRoot({
+    caller: tile("agent"),
+    target: background("agent"),
+    tool: "agent_chat",
+    ownerPrincipal: owner,
+    installedVersion: 100,
+    activated: true,
+  })!;
+  const child = createChildInvocation(root, background("wallet"), "send");
+  const controller = new AbortController();
+  let dispatchSignal: AbortSignal | undefined;
+  const pending = requestAgentConsent(
+    child,
+    {
+      kind: "connection",
+      persistence: "durable",
+      risk: "high",
+      action: { provider: "wallet" },
+    },
+    async (_challenge, signal) => {
+      dispatchSignal = signal;
+      return new Promise(() => undefined);
+    },
+    controller.signal,
+  );
+
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(dispatchSignal).toBe(controller.signal);
+  expect(dispatchSignal?.aborted).toBe(true);
+  expect(child.status).toBe("active");
+  expect(useAgentModeStore.getState().decisions).toHaveLength(0);
+
+  await expect(
+    requestAgentConsent(child, {
+      kind: "frontend_tool",
+      persistence: "none",
+      risk: "low",
+      action: { tool: "read" },
+    }, async () => ({ decision: "allow", reason: "Safe read" })),
+  ).resolves.toBeUndefined();
+  expect(useAgentModeStore.getState().decisions).toHaveLength(1);
+  completeInvocation(child);
+  completeInvocation(root);
+});
+
+test("an oversized agent consent challenge fails before dispatch", async () => {
+  await grantAgent();
+  const root = beginAgentRoot({
+    caller: tile("agent"),
+    target: background("agent"),
+    tool: "agent_chat",
+    ownerPrincipal: owner,
+    installedVersion: 100,
+    activated: true,
+  })!;
+  const child = createChildInvocation(root, background("wallet"), "send");
+  let dispatched = false;
+
+  await expect(
+    requestAgentConsent(
+      child,
+      {
+        kind: "signed_canister_call",
+        persistence: "none",
+        risk: "high",
+        action: { arguments: ["x".repeat(MSG_BUS_MAX_PAYLOAD_BYTES)] },
+      },
+      async () => {
+        dispatched = true;
+        return { decision: "allow", reason: "should not run" };
+      },
+    ),
+  ).rejects.toThrow("Agent consent challenge exceeds");
+  expect(dispatched).toBe(false);
   completeInvocation(child);
   completeInvocation(root);
 });

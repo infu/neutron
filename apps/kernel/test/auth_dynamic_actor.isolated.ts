@@ -1,6 +1,7 @@
 // This file is launched by auth_dynamic_actor.test.ts in a separate Bun
 // process. Bun module mocks are process-global and cannot be restored safely.
 import { beforeEach, expect, mock, test } from "bun:test";
+import type { Identity } from "@dfinity/agent";
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -24,17 +25,75 @@ const principal = {
 const identity = {
   getPrincipal: () => principal,
 };
+const ownerPrincipal = {
+  toText: () => "aaaaa-aa",
+};
+const ownerIdentity = {
+  getPrincipal: () => ownerPrincipal,
+} as unknown as Identity;
+const nextOwnerIdentity = {
+  getPrincipal: () => ({ toText: () => "rrkah-fqaaa-aaaaa-aaaaq-cai" }),
+} as unknown as Identity;
+const bootstrapActor = {
+  kernel_check_authorized: async () => true,
+};
+mock.module("@dfinity/agent", () => ({
+  Actor: {
+    createActor: () => bootstrapActor,
+  },
+  HttpAgent: {
+    create: async () => ({
+      fetchRootKey: async () => undefined,
+    }),
+  },
+}));
+
 const actorLoads: Deferred<object>[] = [];
 let actorLoadCount = 0;
 let assetFetchCount = 0;
 let clientFactoryCount = 0;
+const clientFactoryOptions: Record<string, unknown>[] = [];
+const externalClientCalls: Array<{
+  options: Record<string, unknown>;
+  preset: unknown;
+}> = [];
+let externalOwnerMethodCalls = 0;
+const fetchReceivers: unknown[] = [];
+const fetchSignals: Array<AbortSignal | null | undefined> = [];
+let blockedNativeFetch: Deferred<Response> | null = null;
+const EXTERNAL_CANISTER = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+const firstExternalIdlFactory = () => ({ _fields: [] });
+const secondExternalIdlFactory = () => ({ _fields: [] });
+let externalIdlFactory = firstExternalIdlFactory;
 
-const createIcblast = () => {
+const createIcblast = (options: Record<string, unknown> = {}) => {
   clientFactoryCount += 1;
+  clientFactoryOptions.push(options);
   let cachedActor: object | null = null;
-  return async (_canister: string, candid?: string): Promise<object> => {
+  return async (canister: string, preset?: unknown): Promise<object> => {
     if (cachedActor) return cachedActor;
-    expect(candid).toBe("service : {};");
+    if (canister === EXTERNAL_CANISTER) {
+      externalClientCalls.push({ options, preset });
+      const ownerFactory =
+        typeof preset === "function"
+          ? preset
+          : options.allowNumberedPrincipals === true
+            ? externalIdlFactory
+            : null;
+      cachedActor = ownerFactory
+        ? {
+            $idlFactory: ownerFactory,
+            probe: async () => {
+              externalOwnerMethodCalls += 1;
+              return ownerFactory === firstExternalIdlFactory
+                ? "owner reply 1"
+                : "owner reply 2";
+            },
+          }
+        : { $idlFactory: externalIdlFactory };
+      return cachedActor;
+    }
+    expect(preset).toBe("service : {};");
     actorLoadCount += 1;
     const next = actorLoads.shift();
     if (!next) throw new Error("Missing dynamic actor result");
@@ -67,18 +126,46 @@ Object.defineProperty(globalThis, "window", {
     },
   },
 });
-globalThis.fetch = (async () => {
+globalThis.fetch = async function (
+  this: unknown,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) {
+  fetchReceivers.push(this);
+  fetchSignals.push(init?.signal);
   assetFetchCount += 1;
+  if (String(input).includes("/hang")) {
+    if (!blockedNativeFetch) {
+      throw new Error("Missing blocked native fetch result");
+    }
+    const signal = init?.signal;
+    if (!signal) return blockedNativeFetch.promise;
+    if (signal.aborted) throw signal.reason;
+    return new Promise<Response>((resolve, reject) => {
+      let settled = false;
+      const finish = (complete: () => void): void => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener("abort", abort);
+        complete();
+      };
+      const abort = (): void => finish(() => reject(signal.reason));
+      signal.addEventListener("abort", abort, { once: true });
+      blockedNativeFetch!.promise.then(
+        (response) => finish(() => resolve(response)),
+        (error) => finish(() => reject(error)),
+      );
+      if (signal.aborted) abort();
+    });
+  }
   return {
     ok: true,
     status: 200,
     text: async () => "service : {};",
   } as Response;
-}) as unknown as typeof fetch;
+} as unknown as typeof fetch;
 
-const { loadRuntimeDeployment } = await import(
-  "../src/runtime_deployment.ts"
-);
+const { loadRuntimeDeployment } = await import("../src/runtime_deployment.ts");
 await loadRuntimeDeployment(
   (async () =>
     new Response(
@@ -108,9 +195,14 @@ await loadRuntimeDeployment(
   window.location.href,
 );
 
-const { getNeutronDynamicCan, resetNeutronCan } = await import(
-  "../src/reducer/auth.ts"
-);
+const {
+  activateIdentity,
+  getLegacyExternalDynamicCan,
+  getNeutronDynamicCan,
+  getStrictExternalDiscoveryCan,
+  getStrictExternalDynamicCan,
+  resetNeutronCan,
+} = await import("../src/reducer/auth.ts");
 
 async function waitForActorLoads(count: number): Promise<void> {
   for (let attempt = 0; attempt < 20 && actorLoadCount < count; attempt += 1) {
@@ -125,6 +217,13 @@ beforeEach(() => {
   actorLoadCount = 0;
   assetFetchCount = 0;
   clientFactoryCount = 0;
+  clientFactoryOptions.length = 0;
+  externalClientCalls.length = 0;
+  externalOwnerMethodCalls = 0;
+  externalIdlFactory = firstExternalIdlFactory;
+  fetchReceivers.length = 0;
+  fetchSignals.length = 0;
+  blockedNativeFetch = null;
 });
 
 test("concurrent dynamic actor requests share Candid fetch and compilation", async () => {
@@ -144,6 +243,25 @@ test("concurrent dynamic actor requests share Candid fetch and compilation", asy
   expect(await getNeutronDynamicCan()).toBe(actor);
   expect(actorLoadCount).toBe(1);
   expect(assetFetchCount).toBe(1);
+  expect(clientFactoryOptions[0]?.didcWasm).toBeString();
+  expect(String(clientFactoryOptions[0]?.didcWasm)).toEndWith(
+    "didc_rust_bg.bin",
+  );
+  expect(clientFactoryOptions[0]?.allowNumberedPrincipals).toBeUndefined();
+  expect(clientFactoryOptions[0]?.maxCandidSourceBytes).toBe(
+    new TextEncoder().encode("service : {};").byteLength,
+  );
+  expect(clientFactoryOptions[0]?.maxGeneratedJavaScriptBytes).toBe(
+    Number.MAX_SAFE_INTEGER,
+  );
+  for (const option of [
+    "maxCandidTypeItems",
+    "maxCandidTypeDepth",
+    "maxDecodedCandidItems",
+    "maxDecodedCandidDepth",
+  ]) {
+    expect(clientFactoryOptions[0]?.[option]).toBe(Number.MAX_SAFE_INTEGER);
+  }
 });
 
 test("a rejected dynamic actor load is cleared so the next call retries", async () => {
@@ -212,4 +330,216 @@ test("reset bypasses icblast's actor cache for changed live Candid", async () =>
 
   expect(await secondRequest).toBe(secondActor);
   expect(clientFactoryCount).toBe(2);
+});
+
+test("each external call rediscovers anonymously and owner binding uses only that preset", async () => {
+  await activateIdentity(ownerIdentity, true);
+  const firstTarget = await getStrictExternalDynamicCan(
+    EXTERNAL_CANISTER,
+    () => undefined,
+  );
+
+  expect(externalClientCalls).toHaveLength(2);
+  const [discovery, ownerBinding] = externalClientCalls;
+  expect(discovery?.preset).toBeUndefined();
+  expect(discovery?.options.identity).toBeUndefined();
+  expect(discovery?.options.allowNumberedPrincipals).toBe(false);
+  for (const option of [
+    "maxCandidTypeItems",
+    "maxCandidTypeDepth",
+    "maxDecodedCandidItems",
+    "maxDecodedCandidDepth",
+  ]) {
+    expect(discovery?.options[option]).toBeUndefined();
+  }
+  expect(ownerBinding?.preset).toBe(externalIdlFactory);
+  expect(ownerBinding?.options.identity).toBe(ownerIdentity);
+  expect(ownerBinding?.options.allowNumberedPrincipals).toBe(false);
+  for (const option of [
+    "maxCandidTypeItems",
+    "maxCandidTypeDepth",
+    "maxDecodedCandidItems",
+    "maxDecodedCandidDepth",
+  ]) {
+    expect(ownerBinding?.options[option]).toBeUndefined();
+  }
+  expect(externalOwnerMethodCalls).toBe(0);
+
+  await expect(
+    (firstTarget as { probe(): Promise<string> }).probe(),
+  ).resolves.toBe("owner reply 1");
+  expect(externalOwnerMethodCalls).toBe(1);
+
+  externalIdlFactory = secondExternalIdlFactory;
+  const secondTarget = await getStrictExternalDynamicCan(
+    EXTERNAL_CANISTER,
+    () => undefined,
+  );
+  expect(externalClientCalls).toHaveLength(4);
+  const [secondDiscovery, secondOwnerBinding] = externalClientCalls.slice(2);
+  expect(secondDiscovery?.preset).toBeUndefined();
+  expect(secondDiscovery?.options.identity).toBeUndefined();
+  expect(secondOwnerBinding?.preset).toBe(secondExternalIdlFactory);
+  expect(secondOwnerBinding?.options.identity).toBe(ownerIdentity);
+  await expect(
+    (secondTarget as { probe(): Promise<string> }).probe(),
+  ).resolves.toBe("owner reply 2");
+  expect(externalOwnerMethodCalls).toBe(2);
+});
+
+test("legacy external requests retain owner discovery and numbered principals", async () => {
+  await activateIdentity(ownerIdentity, true);
+  const first = await getLegacyExternalDynamicCan(
+    EXTERNAL_CANISTER,
+    () => undefined,
+  );
+  const second = await getLegacyExternalDynamicCan(
+    EXTERNAL_CANISTER,
+    () => undefined,
+  );
+
+  expect(externalClientCalls).toHaveLength(2);
+  for (const call of externalClientCalls) {
+    expect(call.preset).toBeUndefined();
+    expect(call.options.identity).toBe(ownerIdentity);
+    expect(call.options.allowNumberedPrincipals).toBe(true);
+    for (const option of [
+      "maxCandidTypeItems",
+      "maxCandidTypeDepth",
+      "maxDecodedCandidItems",
+      "maxDecodedCandidDepth",
+    ]) {
+      expect(call.options[option]).toBeUndefined();
+    }
+  }
+  expect(second).not.toBe(first);
+  await expect(
+    (first as { probe(): Promise<string> }).probe(),
+  ).resolves.toBe("owner reply 1");
+
+  await activateIdentity(nextOwnerIdentity, true);
+  const afterIdentityChange = await getLegacyExternalDynamicCan(
+    EXTERNAL_CANISTER,
+    () => undefined,
+  );
+  expect(externalClientCalls).toHaveLength(3);
+  expect(externalClientCalls[2]?.options.identity).toBe(nextOwnerIdentity);
+  expect(afterIdentityChange).not.toBe(first);
+});
+
+test("legacy requests fence their fetches independently", async () => {
+  await activateIdentity(ownerIdentity, true);
+  let firstCurrent = true;
+  let secondCurrent = true;
+  const first = await getLegacyExternalDynamicCan(EXTERNAL_CANISTER, () => {
+    if (!firstCurrent) throw new Error("first authority changed");
+  });
+  const second = await getLegacyExternalDynamicCan(EXTERNAL_CANISTER, () => {
+    if (!secondCurrent) throw new Error("second authority changed");
+  });
+  expect(second).not.toBe(first);
+
+  const firstGuardedFetch = (
+    externalClientCalls[0]?.options.agentOptions as
+      { fetch?: typeof fetch } | undefined
+  )?.fetch;
+  const secondGuardedFetch = (
+    externalClientCalls[1]?.options.agentOptions as
+      { fetch?: typeof fetch } | undefined
+  )?.fetch;
+  if (!firstGuardedFetch || !secondGuardedFetch) {
+    throw new Error("Missing legacy authority-checked fetch");
+  }
+  const fakeAgentReceiver = { kind: "HttpAgent" };
+  secondCurrent = false;
+  expect(() =>
+    Reflect.apply(secondGuardedFetch, fakeAgentReceiver, [
+      "https://icp-api.io/api/v2/status",
+    ]),
+  ).toThrow("second authority changed");
+  await Reflect.apply(firstGuardedFetch, fakeAgentReceiver, [
+    "https://icp-api.io/api/v2/status",
+  ]);
+  expect(fetchReceivers.at(-1)).toBe(globalThis);
+  firstCurrent = false;
+});
+
+test("strict schema discovery stays anonymous and every fetch is authority gated", async () => {
+  await activateIdentity(ownerIdentity, true);
+  let authorityCurrent = true;
+  let assertions = 0;
+  await getStrictExternalDiscoveryCan(EXTERNAL_CANISTER, () => {
+    assertions += 1;
+    if (!authorityCurrent) throw new Error("authority changed");
+  });
+
+  const options = externalClientCalls[0]?.options;
+  expect(options?.identity).toBeUndefined();
+  expect(options?.allowNumberedPrincipals).toBe(false);
+  const guardedFetch = (
+    options?.agentOptions as { fetch?: typeof fetch } | undefined
+  )?.fetch;
+  expect(guardedFetch).toBeFunction();
+  if (!guardedFetch) throw new Error("Missing authority-checked fetch");
+  const fakeAgentReceiver = { kind: "HttpAgent" };
+  await Reflect.apply(guardedFetch, fakeAgentReceiver, [
+    "https://icp-api.io/api/v2/status",
+  ]);
+  expect(fetchReceivers.at(-1)).toBe(globalThis);
+  const beforeRejectedFetch = assetFetchCount;
+  authorityCurrent = false;
+  expect(() =>
+    Reflect.apply(guardedFetch, fakeAgentReceiver, [
+      "https://icp-api.io/api/v2/status",
+    ]),
+  ).toThrow("authority changed");
+  expect(assetFetchCount).toBe(beforeRejectedFetch);
+  expect(assertions).toBe(3);
+});
+
+test("strict external fetches preserve transport cancellation and the request signal", async () => {
+  await activateIdentity(ownerIdentity, true);
+  const requestController = new AbortController();
+  await getStrictExternalDiscoveryCan(
+    EXTERNAL_CANISTER,
+    () => undefined,
+    requestController.signal,
+  );
+
+  const guardedFetch = (
+    externalClientCalls[0]?.options.agentOptions as
+      { fetch?: typeof fetch } | undefined
+  )?.fetch;
+  if (!guardedFetch) throw new Error("Missing strict authority-checked fetch");
+  const transportController = new AbortController();
+  blockedNativeFetch = deferred<Response>();
+  const transportPending = Reflect.apply(guardedFetch, { kind: "HttpAgent" }, [
+    "https://icp-api.io/hang",
+    { signal: transportController.signal },
+  ]);
+  const transportNativeSignal = fetchSignals.at(-1);
+  expect(transportNativeSignal).toBeInstanceOf(AbortSignal);
+  expect(transportNativeSignal).not.toBe(requestController.signal);
+  expect(transportNativeSignal).not.toBe(transportController.signal);
+
+  const transportReason = new Error("transport cancelled");
+  transportController.abort(transportReason);
+  await expect(transportPending).rejects.toBe(transportReason);
+  expect(transportNativeSignal?.aborted).toBe(true);
+  expect(requestController.signal.aborted).toBe(false);
+
+  blockedNativeFetch.resolve(new Response(null, { status: 200 }));
+  blockedNativeFetch = deferred<Response>();
+  const requestPending = Reflect.apply(guardedFetch, { kind: "HttpAgent" }, [
+    "https://icp-api.io/hang",
+  ]);
+  const requestNativeSignal = fetchSignals.at(-1);
+  expect(requestNativeSignal).toBe(requestController.signal);
+
+  const reason = new Error("strict request cancelled");
+  requestController.abort(reason);
+  await expect(requestPending).rejects.toBe(reason);
+  expect(requestNativeSignal?.aborted).toBe(true);
+
+  blockedNativeFetch.resolve(new Response(null, { status: 200 }));
 });

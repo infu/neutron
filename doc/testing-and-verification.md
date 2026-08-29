@@ -15,7 +15,12 @@ Run the repository baseline from the root:
 npm test
 npm run typecheck
 npm run security:check
+npm run license:check
 ```
+
+Run all four as separate repository gates. In particular, `npm test` does not
+imply the type, security, or license checks, and the license check validates the
+declared application-license boundary independently of the test suites.
 
 `npm test` runs the workspace unit suites. The main layers are:
 
@@ -85,16 +90,29 @@ transition.
 
 ### Kernel-app transport
 
-Transport tests assert that operational traffic uses a source-bound
-`MessagePort`. Window messages are limited to the probe, ready, and connect
-handshake that transfers the port. There is no operational Window fallback.
+Within the message-bus protocol, transport tests assert that operational
+traffic uses a source-bound `MessagePort`. Window messages are limited to the
+probe, ready, and connect handshake that transfers the port. There is no
+operational Window fallback. The persistent-origin cleanup qualification has a
+separate, source- and origin-bound iframe result delivered by Window messaging;
+that cleanup result is not operational message-bus traffic.
 
 The tests cover:
 
 - endpoint identity, role, installation UID, generation, and origin binding;
 - replacement, navigation, logout, and uninstall invalidation;
-- closed JSON request, response, progress, and tool envelopes;
-- canonical `canister.schema` and `canister.call_dialog` actions;
+- closed JSON request, response, progress, cancellation, and tool envelopes,
+  including cancellation by the matching port and request ID and release of a
+  cancelled local request ID for reuse;
+- universally available compatibility names `canister.schema` and
+  `canister.call_dialog`, plus
+  anonymous-discovery `canister.schema_v2` and prepared
+  `canister.call_dialog_v2` actions;
+- canonical v2 argument review and dispatch, plus unit-level construction of
+  complete prepared arguments for Agent consent; installed Blast qualification
+  separately binds a nested challenge to its requester and allow/deny decision
+  without asserting the challenge action payload;
+- quoted and escape-safe trusted display of arbitrary Candid method names;
 - live tool discovery instead of app-specific Kernel schemas;
 - private API-1 self-call sidecars for nested and repeated `vec nat8` values;
 - exact Candid-path binding, byte/depth/element limits, and transferables; and
@@ -104,18 +122,35 @@ See [Kernel-App Communication](./kernel-app-communication.md).
 
 ### Browser surfaces and media
 
-Run the standalone Chromium qualification from the repository root:
+For release evidence, run the standalone Chromium qualification from the
+repository root inside the locked flake environment and record the browser
+identity output with the pass result:
 
 ```sh
-npm run test:browser-media
+nix develop -c bash -lc '
+  set -euo pipefail
+  "$PLAYWRIGHT_CHROMIUM_EXECUTABLE" --version
+  npm run test:browser-media
+'
 ```
 
-It requires a runnable Chromium; use `nix develop` or set
-`PLAYWRIGHT_CHROMIUM_EXECUTABLE`. The qualification proves browser behavior for
-explicit camera/microphone delegation and denial, child-document policy
-narrowing, Kernel `frame-ancestors` containment, and passive package-response
-replay. Unit and integration fixtures separately cover manifest normalization,
-exact tile binding, installation-derived origins, credentialless fallback,
+Setting `PLAYWRIGHT_CHROMIUM_EXECUTABLE` outside that pinned environment is
+useful for local diagnosis but is not release qualification by itself. The
+qualification proves browser behavior for explicit camera/microphone delegation
+and denial, child-document policy narrowing, Kernel `frame-ancestors`
+containment, passive package-response replay, and the persistent-origin
+predecessor/current transition. That transition registers a predecessor
+Service Worker, writes IndexedDB, closes the old client, loads the reserved
+cleanup iframe, and proves that the successor keeps its data while receiving no
+controller or registrations. It also proves that current HTTP-served Service
+Worker and SharedWorker entrypoints are denied while same-origin dedicated
+Workers remain available. Request-destination qualification does not establish
+denial of blob-backed SharedWorkers; those remain nonce-origin-confined and lose
+cross-install reach when that nonce rotates.
+The test intentionally does not require synchronous destruction of the
+already-running predecessor worker context, which browser APIs do not provide.
+Unit and integration fixtures separately cover manifest normalization, exact
+tile binding, installation-derived origins, credentialless fallback,
 Host/path/destination admission, CSP and Permissions Policy headers, certified
 surface variants, sidecar lifecycle, and frame invalidation.
 
@@ -156,6 +191,22 @@ binding. The binding identifies exact inputs and is not evidence. It covers
 five neutral scopes and 12 operational cases run once on fresh canisters,
 including the actor-wide cross-scope cases and separate privileged gates.
 
+For each Kernel release candidate, freeze, check, and qualify the exact
+candidate from the repository root, in that order:
+
+```sh
+npm --workspace neutron-kernel run certified-assets:candidate-binding:write
+npm --workspace neutron-kernel run certified-assets:candidate-binding
+npm --workspace neutron-kernel run certified-assets:qualify
+```
+
+The write command updates the deterministic candidate binding, the check
+command requires that binding to match the current checkout, and the
+qualification command runs the release boundary and emits the pass-only
+receipt. Kernel unit tests also reject a stale checked binding, but that does
+not replace this explicit release sequence. App packaging and the repository
+baseline do not run `certified-assets:qualify` transitively.
+
 The isolated PocketIC timeline starts from a private bootstrap, keeps automatic
 progress off, and explicitly normalizes to the fixed historical start
 `1735689600000000000` ns. The physical phase runs first and commits 256
@@ -175,11 +226,11 @@ cycle cost, proof size, allocator behavior, or upgrade safety at the
 100,000-entry production ceiling. The separate 100,001 declaration rejection
 proves only the schema/admission ceiling.
 
-The normal release command has an absolute three-minute wall-clock ceiling and
-owns a private process group and temporary directory. Its normal timeout stops
-PocketIC descendants and removes that state; the emergency hard-stop still
-guarantees descendant termination but may leave the isolated temporary
-directory for later operating-system cleanup.
+The `certified-assets:qualify` command has an absolute three-minute wall-clock
+ceiling and owns a private process group and temporary directory. Its normal
+timeout stops PocketIC descendants and removes that state; the emergency
+hard-stop still guarantees descendant termination but may leave the isolated
+temporary directory for later operating-system cleanup.
 
 See [Certified HTTP And Certified Assets](./kernel-http-v2-and-certified-assets.md#qualification-status).
 
@@ -233,14 +284,17 @@ npm run test:e2e:local:ii
 npm run test:e2e:local:fresh
 npm run test:e2e:kitchensink
 npm run test:e2e:kitchensink:fresh
-npm run test:e2e:package-updates
+NEUTRON_E2E_WITH_II=1 npm run test:e2e:package-updates
 npm run test:e2e:package-updates:fresh
 npm run test:browser-media
 ```
 
 The `:fresh` commands run the format-3 provisioner's destructive local
 `reinstall` first. The non-fresh commands use the canister IDs and gateway from
-`local.ndeploy.session.json`.
+`local.ndeploy.session.json`. The package-update spec intentionally skips when
+`NEUTRON_E2E_WITH_II` is not `1`, so an unprefixed non-fresh success is not
+evidence that the spec ran. Use the explicit prefix above; the `:fresh` script
+sets it itself.
 
 Current browser specs exercise:
 
@@ -268,6 +322,20 @@ page-thread state.
 
 App-owned Playwright suites may have additional prerequisites and evidence
 contracts. Read the app's local E2E README before running those suites.
+
+Blast releases require a separate installed qualification that root `npm test`
+does not run. Package the current Kernel and Agent candidates, then run Blast's
+complete release gate:
+
+```sh
+npm --workspace neutron-kernel run package
+npm --workspace neutron-agent run package
+npm --workspace neutron-blast run verify:release
+```
+
+`verify:release` packages and tests Blast, then installs the current packaged
+Kernel, Agent, and Blast candidates with its qualification-only driver in a
+fresh private PocketIC and exercises the installed browser boundary.
 
 Files keeps its self-contained inline-worker Chromium check outside normal
 packaging:
@@ -310,16 +378,3 @@ boundaries are exercised directly.
   replies and controller retirement.
 - Continue cross-app isolation tests for capabilities whose unit fixtures do
   not yet cross a real canister/browser boundary.
-
-## Relevant Sources
-
-- `package.json`
-- `playwright.config.ts`
-- `test/e2e/`
-- `packages/neutron-tools/test/`
-- `packages/neutron-compiler/test/`
-- `packages/neutron-provision/test/`
-- `apps/kernel/test/`
-- `apps/kernel/evidence/certified_assets_candidate_binding.ts`
-- `apps/kernel/evidence/qualification/`
-- `packages/neutron-tools/src/certified_assets_qualification.ts`

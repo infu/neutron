@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "blast",
+  "memory": {
+    "blast": {
+      "schemas": {
+        "1": {
+          "hash": "e60fcb67417eb31fe4abf505603a1fa978a6d809db9900318e67133921ce1b89",
+          "entry": "55515fec08cba723e820ba0026503114c0c4a9a2aa602bddb8c026012963137f"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

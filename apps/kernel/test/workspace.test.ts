@@ -24,7 +24,10 @@ import {
   backgroundFrameEntries,
   backgroundFrameSecurity,
   INITIAL_RESIDENT_FRAME_READINESS,
+  isPersistentOriginPolicyResult,
   ordinaryBackgroundFrameAuthorityCurrent,
+  persistentOriginPolicyCleanupUrl,
+  PERSISTENT_ORIGIN_POLICY_MESSAGE,
   residentFrameAuthorityCurrent,
   runnableBackgroundFrameEntries,
 } from "../src/workspace/AppBackgroundFrames.tsx";
@@ -566,6 +569,52 @@ test("persistent background storage requires a dedicated app origin", () => {
       "7",
     ),
   ).toThrow("does not match its current origin authority");
+});
+
+test("persistent origin cleanup keeps the origin and exact authority query", () => {
+  const origin =
+    "http://p0123456789abcdef01234567--4caro-hl777-77775-aaaba-cai.localhost:8000";
+  const resident =
+    `${origin}/app/gemma/service.html?` +
+    "app=gemma&role=background&installation-uid=17" +
+    "&resident-frame-security=persistent_dedicated_v1" +
+    "&browser-origin-nonce=0123456789abcdef0123456789abcdef" +
+    "&browser-origin-authority-epoch=3";
+  const cleanup = new URL(persistentOriginPolicyCleanupUrl(resident));
+
+  expect(cleanup.origin).toBe(origin);
+  expect(cleanup.pathname).toBe("/system/browser-origin-cleanup.html");
+  expect(cleanup.search).toBe(
+    "?app=gemma&role=origin-policy-cleanup&installation-uid=17" +
+      "&resident-frame-security=persistent_dedicated_v1" +
+      "&browser-origin-nonce=0123456789abcdef0123456789abcdef" +
+      "&browser-origin-authority-epoch=3",
+  );
+});
+
+test("persistent origin cleanup accepts only its exact result envelope", () => {
+  expect(
+    isPersistentOriginPolicyResult({
+      type: PERSISTENT_ORIGIN_POLICY_MESSAGE,
+      ok: true,
+    }),
+  ).toBe(true);
+  expect(
+    isPersistentOriginPolicyResult({
+      type: PERSISTENT_ORIGIN_POLICY_MESSAGE,
+      ok: false,
+    }),
+  ).toBe(true);
+  expect(
+    isPersistentOriginPolicyResult({
+      type: PERSISTENT_ORIGIN_POLICY_MESSAGE,
+      ok: true,
+      app: "gemma",
+    }),
+  ).toBe(false);
+  expect(
+    isPersistentOriginPolicyResult({ type: "ready", ok: true }),
+  ).toBe(false);
 });
 
 test("ephemeral dedicated residents use the nonce origin without persistence", () => {

@@ -1242,12 +1242,107 @@ assert (Kernel.dedicatedResidentHtmlRequestBound(
     [("sec-fetch-dest", "iframe")],
     persistentResidentInstance,
 ));
+assert (Kernel.dedicatedResidentAssetRequestBound(
+    "/app/gemma/service.js",
+    "/app/gemma/service.js",
+    [("Sec-Fetch-Dest", "worker")],
+    "text/javascript",
+    persistentResidentInstance,
+));
+assert (not Kernel.dedicatedResidentAssetRequestBound(
+    "/app/gemma/service-worker.js",
+    "/app/gemma/service-worker.js",
+    [("Sec-Fetch-Dest", "serviceworker")],
+    "text/javascript",
+    persistentResidentInstance,
+));
+assert (not Kernel.dedicatedResidentAssetRequestBound(
+    "/app/gemma/shared-worker.js",
+    "/app/gemma/shared-worker.js",
+    [("Sec-Fetch-Dest", "sharedworker")],
+    "text/javascript",
+    persistentResidentInstance,
+));
 assert (not Kernel.dedicatedResidentHtmlRequestBound(
     persistentResidentUrl,
     "/app/gemma/other.html",
     [("Sec-Fetch-Dest", "iframe")],
     persistentResidentInstance,
 ));
+let cleanupQuery = Kernel.browserOriginCleanupQuery(
+    persistentResidentInstance
+);
+assert (
+    cleanupQuery ==
+    "app=gemma&role=origin-policy-cleanup" #
+    "&installation-uid=17" #
+    "&resident-frame-security=persistent_dedicated_v1" #
+    "&browser-origin-nonce=" # nonce #
+    "&browser-origin-authority-epoch=3"
+);
+assert (
+    Kernel.browserOriginCleanupQuery({
+        persistentResidentInstance with
+        version = 999;
+        deployment_id = "successor_deployment";
+        capability_plan_fingerprint =
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    }) == cleanupQuery
+);
+let cleanupUrl = Kernel.BROWSER_ORIGIN_CLEANUP_PATH # "?" # cleanupQuery;
+assert (Kernel.isInternalHttpStatePath(
+    Kernel.BROWSER_ORIGIN_CLEANUP_PATH
+));
+assert (Kernel.hasOriginScopedStaticCertification(
+    Kernel.BROWSER_ORIGIN_CLEANUP_PATH
+));
+assert (Kernel.browserOriginCleanupRequestBound(
+    cleanupUrl,
+    [("Sec-Fetch-Dest", "iframe")],
+    persistentResidentInstance,
+));
+assert (not Kernel.browserOriginCleanupRequestBound(
+    cleanupUrl,
+    [("Sec-Fetch-Dest", "document")],
+    persistentResidentInstance,
+));
+assert (not Kernel.browserOriginCleanupRequestBound(
+    cleanupUrl,
+    [
+        ("Sec-Fetch-Dest", "iframe"),
+        ("sec-fetch-dest", "iframe"),
+    ],
+    persistentResidentInstance,
+));
+assert (not Kernel.browserOriginCleanupRequestBound(
+    cleanupUrl # "&unexpected=value",
+    [("Sec-Fetch-Dest", "iframe")],
+    persistentResidentInstance,
+));
+assert (not Kernel.browserOriginCleanupRequestBound(
+    cleanupUrl,
+    [("Sec-Fetch-Dest", "iframe")],
+    residentInstance,
+));
+let persistentHostLabel = "p0123456789abcdef01234567--" # canisterId;
+let ?cleanupCsp = Kernel.browserOriginCleanupDocumentCspForAuthority(
+    persistentHostLabel,
+    canisterId,
+    persistentHostLabel # ".icp0.io",
+) else Runtime.trap("Expected cleanup CSP");
+assert (Text.contains(cleanupCsp, #text "default-src 'none'"));
+assert (Text.contains(cleanupCsp, #text "worker-src 'none'"));
+assert (Text.contains(
+    cleanupCsp,
+    #text ("frame-ancestors https://" # canisterId # ".icp0.io"),
+));
+assert (
+    Kernel.browserOriginCleanupDocumentCspForAuthority(
+        persistentHostLabel,
+        canisterId,
+        persistentHostLabel # ".raw.icp0.io",
+    ) == null
+);
 
 // Non-persistent surfaces retain their ordinary app host, but cannot opt in
 // to a nonce host and are always response-sandboxed.

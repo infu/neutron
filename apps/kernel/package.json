@@ -29,7 +29,7 @@
     "@dfinity/candid": "^3.4.3",
     "@dfinity/identity": "^3.4.3",
     "@dfinity/principal": "^3.4.3",
-    "icblast": "^4.3.0",
+    "icblast": "4.3.3",
     "neutron-compiler": "^1.1.0",
     "neutron-motoko-wasm": "^1.1.0",
     "neutron-tools": "^1.1.0",

@@ -11,12 +11,14 @@ import {
   admitOwnerAttention,
   finishOwnerAttention,
 } from "../ui_attention/owner.ts";
+import { requestCancellationError } from "../request_cancel.ts";
 
 export type PendingCallRequest = {
   canister: string;
   method: string;
   mode: "query" | "update" | "unknown";
   args: unknown[];
+  canonicalArgs?: boolean;
   /**
    * Transient trusted projection for consent UI. It is removed with the
    * request and is never copied into the persistent message-bus audit.
@@ -55,6 +57,8 @@ type RequestCallbacks = {
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
   binding: SignedCallEndpointBinding;
+  signal?: AbortSignal;
+  abort?: () => void;
 };
 
 type RequestState = {
@@ -89,10 +93,20 @@ export function callRequest(req: {
   method: string;
   mode?: "query" | "update";
   args: unknown[];
+  canonicalArgs?: boolean;
   binaryFields?: readonly CallBinaryFieldInspection[];
   binding: SignedCallEndpointBinding;
+  signal?: AbortSignal;
 }): Promise<void> {
   assertSignedCallEndpointCurrent(req.binding);
+  if (req.signal?.aborted) {
+    return Promise.reject(
+      requestCancellationError(
+        req.signal,
+        "Signature request was cancelled by the requesting app",
+      ),
+    );
+  }
   cidIncr += 1;
   const cid = cidIncr;
   const attentionToken = admitOwnerAttention(
@@ -104,6 +118,9 @@ export function callRequest(req: {
     method: req.method,
     mode: req.mode ?? "unknown",
     args: req.args,
+    ...(req.canonicalArgs !== undefined
+      ? { canonicalArgs: req.canonicalArgs }
+      : {}),
     ...(req.binaryFields && req.binaryFields.length > 0
       ? {
           binaryFields: req.binaryFields.map((field) =>
@@ -122,17 +139,26 @@ export function callRequest(req: {
     ...(req.binding.appGeneration !== undefined
       ? { endpointAppGeneration: req.binding.appGeneration }
       : {}),
-    ...(req.binding.appScope
-      ? { endpointAppScope: req.binding.appScope }
-      : {}),
+    ...(req.binding.appScope ? { endpointAppScope: req.binding.appScope } : {}),
     cid,
     attentionToken,
   });
   return new Promise((resolve, reject) => {
+    const abort = (): void => {
+      rejectCall(
+        cid,
+        requestCancellationError(
+          req.signal,
+          "Signature request was cancelled by the requesting app",
+        ),
+        false,
+      );
+    };
     callbacks[cid] = {
       resolve,
       reject,
       binding: req.binding,
+      ...(req.signal ? { signal: req.signal, abort } : {}),
       timeout: setTimeout(() => {
         rejectCall(
           cid,
@@ -141,6 +167,8 @@ export function callRequest(req: {
         );
       }, 60_000),
     };
+    req.signal?.addEventListener("abort", abort, { once: true });
+    if (req.signal?.aborted) abort();
   });
 }
 
@@ -174,7 +202,7 @@ export function callApprove({ cid }: { cid: number | string }): void {
     );
     return;
   }
-  if (callback) clearTimeout(callback.timeout);
+  if (callback) cleanupCallback(callback);
   callback?.resolve();
   delete callbacks[numericCid];
   const request = useRequestStore.getState().calls[numericCid];
@@ -320,7 +348,7 @@ function sameFrameContext(left: FrameContext, right: FrameContext): boolean {
 
 function rejectCall(cid: number, error: Error, recoveryPause: boolean): void {
   const callback = callbacks[cid];
-  if (callback) clearTimeout(callback.timeout);
+  if (callback) cleanupCallback(callback);
   callback?.reject(error);
   delete callbacks[cid];
   const request = useRequestStore.getState().calls[cid];
@@ -328,4 +356,11 @@ function rejectCall(cid: number, error: Error, recoveryPause: boolean): void {
     finishOwnerAttention(request.attentionToken, { recoveryPause });
   }
   useRequestStore.getState().removeCallRequest(cid);
+}
+
+function cleanupCallback(callback: RequestCallbacks): void {
+  clearTimeout(callback.timeout);
+  if (callback.signal && callback.abort) {
+    callback.signal.removeEventListener("abort", callback.abort);
+  }
 }

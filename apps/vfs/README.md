@@ -80,32 +80,41 @@ carry plaintext.
 
 ## Release
 
-Files v0.4.7 is manifest version 407 and managed-memory schema 2. It retains
-the immutable schema-1 module and performs one managed `1 -> 2` migration,
-preserving the encrypted Vault state while initializing the new Workspace and
-Shared roots.
+The current Files release uses the release version and managed-memory lineage
+declared by `neutron.json` and `neutron.lock.json`. It retains every immutable
+released schema module and follows the declared forward migration path,
+preserving encrypted Vault state while initializing the Workspace and Shared
+roots. The managed-memory lock remains append-only release history and must not
+be deleted or regenerated.
 
-Use `npm run package` for normal rebuilds. The managed-memory lock remains
-append-only release history and must not be deleted or regenerated.
+Run release commands from the repository root using the workspace name from
+the app package manifest:
+
+```sh
+VFS_WORKSPACE="$(node -p "require('./apps/vfs/package.json').name")"
+npm --workspace "$VFS_WORKSPACE" run package
+```
 
 Packaging starts from an empty `dist`, embeds release evidence for the exact
-Files sources, dependency lock, both memory schemas, the migration and memory
+Files sources, dependency lock, declared memory schemas and migrations, memory
 lock, inline crypto worker, and payload bytes, then verifies every unpacked
 archive path and byte. Files release evidence deliberately does not hash
 Kernel source or Kernel Certified Assets qualification artifacts; the Kernel
 qualifies its generic capability independently, while Files tests its own
 integration. Normal packaging does not launch a browser or embed a
-browser-generated artifact. Run `npm run release:browser` for the
-explicit Playwright release gate that executes the exact inline worker in a
-browser-isolated frame. `npm test` rebuilds and verifies
-`files.v0.4.7.neutron` and runs the browser suites separately, so stale ignored
-output cannot satisfy the package tests.
+browser-generated artifact. Run
+`npm --workspace "$VFS_WORKSPACE" run release:browser` for the explicit
+Playwright release gate that executes the exact inline worker in a
+browser-isolated frame. `npm --workspace "$VFS_WORKSPACE" test` rebuilds and
+verifies the manifest-selected archive and runs the browser suites separately,
+so stale ignored output cannot satisfy the package tests.
 
-`npm run unicode:check` regenerates both Unicode table artifacts in memory
-from the vendored, checksum-pinned Unicode 16.0 inputs and runs all 99,825 NFC
-relations in the official normalization corpus. The Unicode License v3 notice
-is in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md). Packaging includes
-it in the record-bound ordinary `legal/**` notice corpus, which is installed as
-certified package metadata. Complete App Source is instead supplied once by the
-provider-hosted, digest-bound HTTPS offer and is not copied into each installed
-canister.
+`npm --workspace "$VFS_WORKSPACE" run unicode:check` regenerates both Unicode
+table artifacts in memory from the vendored, checksum-pinned Unicode 16.0
+inputs and runs all 99,825 NFC relations in the official normalization corpus.
+The Unicode License v3 notice is in
+[`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md). Packaging includes it in
+the record-bound ordinary `legal/**` notice corpus, which is installed as
+certified package metadata. Complete App Source is instead supplied once by
+the provider-hosted, digest-bound HTTPS offer and is not copied into each
+installed canister.

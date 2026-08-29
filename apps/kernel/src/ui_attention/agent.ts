@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   KernelPolicyError,
+  assertBoundedJson,
   type AgentConsentChallenge,
   type AgentConsentDecision,
   type JsonObject,
@@ -17,6 +18,10 @@ import {
   admitOwnerAttention,
   finishOwnerAttention,
 } from "./owner.ts";
+import {
+  requestCancellationError,
+  throwIfRequestCancelled,
+} from "../request_cancel.ts";
 
 const ROOT_TTL_MS = 5 * 60_000;
 const DECISION_TTL_MS = 30_000;
@@ -124,6 +129,8 @@ type RootRuntime = {
 type GrantCallbacks = {
   resolve: () => void;
   reject: (error: Error) => void;
+  signal?: AbortSignal;
+  abort?: () => void;
 };
 
 let grantCallbacks: GrantCallbacks | null = null;
@@ -143,7 +150,18 @@ export function setAgentRootCancelDispatcher(
   rootCancelDispatcher = dispatcher;
 }
 
-export function requestAgentGrant(input: PendingAgentGrant): Promise<void> {
+export function requestAgentGrant(
+  input: PendingAgentGrant,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(
+      requestCancellationError(
+        signal,
+        "The agent permission request was cancelled by the requesting app",
+      ),
+    );
+  }
   if (grantCallbacks || useAgentModeStore.getState().pendingGrant) {
     return Promise.reject(
       policyError("UI_BUSY", "An agent permission request is already active"),
@@ -167,7 +185,25 @@ export function requestAgentGrant(input: PendingAgentGrant): Promise<void> {
   }
   useAgentModeStore.setState({ pendingGrant: { ...input } });
   return new Promise((resolve, reject) => {
-    grantCallbacks = { resolve, reject };
+    const callbacks: GrantCallbacks = {
+      resolve,
+      reject,
+      ...(signal ? { signal } : {}),
+    };
+    const abort = (): void => {
+      if (grantCallbacks !== callbacks) return;
+      rejectPendingAgentGrant(
+        requestCancellationError(
+          signal,
+          "The agent permission request was cancelled by the requesting app",
+        ),
+        false,
+      );
+    };
+    if (signal) callbacks.abort = abort;
+    grantCallbacks = callbacks;
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
   });
 }
 
@@ -178,6 +214,7 @@ export function approveAgentGrant(): void {
   if (active) cancelAgentRoot(active.id, "Agent grant replaced");
   const callbacks = grantCallbacks;
   grantCallbacks = null;
+  cleanupGrantCallbacks(callbacks);
   if (grantAttentionToken) finishOwnerAttention(grantAttentionToken);
   grantAttentionToken = null;
   useAgentModeStore.setState({
@@ -188,22 +225,21 @@ export function approveAgentGrant(): void {
 }
 
 export function rejectAgentGrant(): void {
-  grantCallbacks?.reject(
+  rejectPendingAgentGrant(
     policyError("REQUEST_CANCELLED", "Agent mode was not enabled"),
+    true,
   );
-  grantCallbacks = null;
-  if (grantAttentionToken) {
-    finishOwnerAttention(grantAttentionToken, { recoveryPause: true });
-  }
-  grantAttentionToken = null;
-  useAgentModeStore.setState({ pendingGrant: null });
 }
 
 export function disableAgentMode(reason = "Agent mode disabled"): void {
   const active = useAgentModeStore.getState().activeRoot;
   if (active) cancelAgentRoot(active.id, reason);
-  grantCallbacks?.reject(policyError("AGENT_MODE_REVOKED", reason));
+  const callbacks = grantCallbacks;
   grantCallbacks = null;
+  if (callbacks) {
+    cleanupGrantCallbacks(callbacks);
+    callbacks.reject(policyError("AGENT_MODE_REVOKED", reason));
+  }
   if (grantAttentionToken) finishOwnerAttention(grantAttentionToken);
   grantAttentionToken = null;
   useAgentModeStore.setState({
@@ -468,8 +504,16 @@ export function admitAgentWorkspaceMutation(
 export async function requestAgentConsent(
   node: InvocationNode,
   summary: AgentPermissionSummary,
-  dispatch: (challenge: AgentConsentChallenge) => Promise<AgentConsentDecision>,
+  dispatch: (
+    challenge: AgentConsentChallenge,
+    signal?: AbortSignal,
+  ) => Promise<AgentConsentDecision>,
+  signal?: AbortSignal,
 ): Promise<void> {
+  throwIfRequestCancelled(
+    signal,
+    "The agent permission decision was cancelled by the requesting app",
+  );
   if (node.depth === 0) return;
   const root = requireRoot(node);
   if (node.status === "permission_denied") {
@@ -512,12 +556,18 @@ export async function requestAgentConsent(
     risk: summary.risk,
     action: summary.action,
   };
+  assertBoundedJson(challenge, "Agent consent challenge");
 
   let timeout: ReturnType<typeof setTimeout> | null = null;
+  let abort: (() => void) | null = null;
   try {
+    throwIfRequestCancelled(
+      signal,
+      "The agent permission decision was cancelled by the requesting app",
+    );
     const decision = normalizeDecision(
       await Promise.race([
-        dispatch(challenge),
+        dispatch(challenge, signal),
         new Promise<AgentConsentDecision>((_resolve, reject) => {
           pendingDecisionRejects.set(node.rootId, reject);
           timeout = setTimeout(
@@ -530,6 +580,17 @@ export async function requestAgentConsent(
               ),
             DECISION_TTL_MS,
           );
+          if (signal) {
+            abort = () =>
+              reject(
+                requestCancellationError(
+                  signal,
+                  "The agent permission decision was cancelled by the requesting app",
+                ),
+              );
+            signal.addEventListener("abort", abort, { once: true });
+            if (signal.aborted) abort();
+          }
         }),
       ]),
     );
@@ -547,7 +608,8 @@ export async function requestAgentConsent(
   } catch (error) {
     if (
       error instanceof KernelPolicyError &&
-      error.code !== "AGENT_CONSENT_DENIED"
+      error.code !== "AGENT_CONSENT_DENIED" &&
+      error.code !== "REQUEST_CANCELLED"
     ) {
       node.status = "permission_denied";
       recordDecision(challenge, {
@@ -558,7 +620,28 @@ export async function requestAgentConsent(
     throw error;
   } finally {
     if (timeout) clearTimeout(timeout);
+    if (signal && abort) signal.removeEventListener("abort", abort);
     pendingDecisionRejects.delete(node.rootId);
+  }
+}
+
+function rejectPendingAgentGrant(error: Error, recoveryPause: boolean): void {
+  const callbacks = grantCallbacks;
+  grantCallbacks = null;
+  if (callbacks) {
+    cleanupGrantCallbacks(callbacks);
+    callbacks.reject(error);
+  }
+  if (grantAttentionToken) {
+    finishOwnerAttention(grantAttentionToken, { recoveryPause });
+  }
+  grantAttentionToken = null;
+  useAgentModeStore.setState({ pendingGrant: null });
+}
+
+function cleanupGrantCallbacks(callbacks: GrantCallbacks): void {
+  if (callbacks.signal && callbacks.abort) {
+    callbacks.signal.removeEventListener("abort", callbacks.abort);
   }
 }
 

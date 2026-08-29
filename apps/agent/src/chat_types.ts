@@ -45,10 +45,21 @@ export type AgentProgress =
       activity: AgentToolActivity;
     });
 
+export type PendingStateChangeAttempt = {
+  target: string;
+  name: string;
+};
+
+export type PendingStateChangeJournal = {
+  attempts: PendingStateChangeAttempt[];
+  overflow: boolean;
+};
+
 export type PersistedAgentState = {
   selectedModelId: string | null;
   models: OpenRouterModel[];
   modelsFetchedAt: number;
   messages: TranscriptMessage[];
   modelTurns: ModelMessage[][];
+  pendingStateChangeJournal: PendingStateChangeJournal | null;
 };
