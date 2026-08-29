@@ -756,10 +756,12 @@ the same prefix range and is authorization-protected by the generated actor. It
 requests one extra key internally and traps instead of silently returning a
 partial list when that bound is exceeded.
 
-`kernel_static_query` is only a key-list operation. The browser and CLI use it
-to discover the content-addressed names under `/mo/`, then fetch module bodies
-and other committed metadata through IC HTTP response certification version 2.
-There is no separate static-body actor query.
+`kernel_static_query` only lists keys; clients fetch bodies through IC HTTP
+response certification version 2. Compiler clients list `/mo/`, while the
+trusted frontend may list one ordinary app subtree for artifact inspection.
+The inspection tools compose these existing operations in the frontend and add
+no backend method, managed-memory schema, or upgrade hook. Kernel root inventory
+details are in [Asset Storage And HTTP Serving](./asset-storage-and-http-serving.md).
 
 `apps/kernel/src/tools/install.ts` is the main upload client:
 
@@ -958,7 +960,7 @@ The public API is declared in `apps/kernel/neutron.json` and generated in
 | `kernel_controller_add`           | update, async*  | `public shared` with `await*`              | required             | `this`           | Preserves the current controller list and adds one controller.                                                 |
 | `kernel_controller_rem`           | update, async*  | `public shared` with `await*`              | required             | `this`           | Removes one controller while protecting Neutron's self-controller.                                            |
 | `kernel_static`                   | update          | `public shared`                            | required             | none             | Stores, chunks, deletes, or clears static assets and certification state.                                      |
-| `kernel_static_query`             | query           | `public query`                             | required             | none             | Lists bounded static keys by prefix; current clients use it only for `/mo/` module names.                       |
+| `kernel_static_query`             | query           | `public query`                             | required             | none             | Lists bounded static keys by prefix for compiler module discovery and trusted frontend app-scoped artifact inventory. |
 | `http_request`                    | query           | `public query`                             | allowed unauthorized | `this`           | Serves exact static/certified GET with a v2 proof and streams multi-chunk bodies, or returns only `upgrade = true` after bounded preflight for an exact declared POST. |
 | `http_request_streaming_callback` | query           | `public query`                             | allowed unauthorized | none             | Returns the next stored chunk for a validated, public static-asset streaming token.                             |
 | `http_request_update`             | update, async*  | `public shared`                            | allowed unauthorized | real caller      | Revalidates and admits an exact surface-owned POST, applying request windows only to non-authorized callers, then invokes only its compiler-bound synchronous handler through a self-only dispatch wrapper. |

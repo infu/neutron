@@ -114,11 +114,28 @@ The tests cover:
   without asserting the challenge action payload;
 - quoted and escape-safe trusted display of arbitrary Candid method names;
 - live tool discovery instead of app-specific Kernel schemas;
+- direct-root-only exact installed-artifact tools, including closed schemas,
+  cancellation, metadata-only audit, revision and cursor binding, and rejection
+  before asset I/O for unscoped or delegated-child calls;
 - private API-1 self-call sidecars for nested and repeated `vec nat8` values;
 - exact Candid-path binding, byte/depth/element limits, and transferables; and
 - the separate generic tool-attachment protocol.
 
 See [Kernel-App Communication](./kernel-app-communication.md).
+
+Installed-artifact service tests use injected list/read and app-binding
+adapters. They cover ordinary app subtree confinement, Kernel build-inventory
+mapping, content-addressed Motoko closure traversal, shared dependencies and
+repeated roots, missing or corrupt required roots, absent historical roots,
+literal-search pagination, UTF-8 chunk boundaries, binary and oversized-file
+handling, opaque cursor misuse, cancellation, and target-local cache and
+revision invalidation. Package-generation tests bind the Kernel inventory to
+the exact packaged files, cover inline inspection of package-owned
+HTTP-internal system documents, and exclude runtime-generated and
+content-addressed artifacts handled by the runtime catalog. These tests
+exercise the bounded frontend inspection functions and installed-path mapping.
+They do not claim to recover original workspace source or inspect generated
+Wasm as source text.
 
 ### Browser surfaces and media
 

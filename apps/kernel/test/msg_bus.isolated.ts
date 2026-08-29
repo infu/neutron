@@ -57,8 +57,10 @@ import { useInstallOfferStore } from "../src/install_offers/store.ts";
 import {
   approveAgentGrant,
   beginAgentRoot,
+  cancelAgentRoot,
   clearAgentModeForAuth,
   completeInvocation,
+  createChildInvocation,
   invocationMetadata,
   requestAgentGrant,
   resolveInvocation,
@@ -179,6 +181,63 @@ mock.module("../src/self_call_transport.ts", () => ({
       throw new Error("Self-call update transport was not installed");
     }
     return submitSelfCallUpdate(agent, canisterId, methodName, arg);
+  },
+}));
+
+type SourceInspectionOperation = "list" | "search" | "read";
+type SourceInspectionCall = Readonly<{
+  operation: SourceInspectionOperation;
+  args: Readonly<Record<string, unknown>>;
+  signal?: AbortSignal;
+}>;
+
+const SOURCE_INSPECTION_REVISION = "a".repeat(64);
+const sourceInspectionCalls: SourceInspectionCall[] = [];
+let sourceInspectionOverride:
+  ((call: SourceInspectionCall) => JsonValue | Promise<JsonValue>) | undefined;
+
+function invokeSourceInspection(
+  operation: SourceInspectionOperation,
+  args: Readonly<Record<string, unknown>>,
+  signal?: AbortSignal,
+): JsonValue | Promise<JsonValue> {
+  const call: SourceInspectionCall = Object.freeze({
+    operation,
+    args: { ...args },
+    ...(signal ? { signal } : {}),
+  });
+  sourceInspectionCalls.push(call);
+  if (sourceInspectionOverride) return sourceInspectionOverride(call);
+  if (operation !== "list") {
+    throw new Error(`Unexpected mock source inspection operation ${operation}`);
+  }
+  return {
+    appId: String(args.appId),
+    appVersion: 100,
+    installationUid: "401",
+    sourceRevision: SOURCE_INSPECTION_REVISION,
+    artifacts: [
+      {
+        path: "/app/signed_call_agent/source-secret.js",
+        area: "frontend",
+        readability: "text",
+        bytes: 18,
+        sha256: "b".repeat(64),
+      },
+    ],
+    complete: true,
+    nextCursor: null,
+  };
+}
+
+mock.module("../src/source_inspection/runtime.ts", () => ({
+  installedArtifactInspector: {
+    list: (args: Readonly<Record<string, unknown>>, signal?: AbortSignal) =>
+      invokeSourceInspection("list", args, signal),
+    search: (args: Readonly<Record<string, unknown>>, signal?: AbortSignal) =>
+      invokeSourceInspection("search", args, signal),
+    read: (args: Readonly<Record<string, unknown>>, signal?: AbortSignal) =>
+      invokeSourceInspection("read", args, signal),
   },
 }));
 
@@ -620,6 +679,8 @@ afterEach(() => {
   validateMethodInputOverride = undefined;
   explainMethodOptions = undefined;
   icblastClientCallOverride = undefined;
+  sourceInspectionCalls.length = 0;
+  sourceInspectionOverride = undefined;
   activeFakeWindow = null;
   clearInstallOffer("Test cleanup");
   removeAllCallRequests();
@@ -674,6 +735,239 @@ afterEach(() => {
     value: originalNavigator,
   });
   globalThis.fetch = originalFetch;
+});
+
+test("installed source tool descriptors stay bounded, read-only, and metadata-only", async () => {
+  installFakeWindow();
+  const caller = registerTile(
+    {} as Window,
+    "gemma",
+    "source-descriptor-caller",
+  );
+  const descriptors = new Map(
+    (await listTargetTools("kernel", caller))
+      .filter(({ name }) => name.startsWith("source."))
+      .map((descriptor) => [descriptor.name, descriptor]),
+  );
+
+  expect([...descriptors.keys()].sort()).toEqual([
+    "source.files",
+    "source.read",
+    "source.search",
+  ]);
+  for (const name of ["source.files", "source.search"] as const) {
+    const descriptor = descriptors.get(name);
+    if (!descriptor) throw new Error(`Missing ${name} descriptor`);
+    expect(descriptor.annotations).toEqual({
+      "neutron:audit": "metadata_only",
+      "neutron:effects": ["read", "network"],
+      "neutron:longRunning": true,
+    });
+    expect(descriptor.description).toContain("untrusted");
+  }
+
+  const read = descriptors.get("source.read");
+  if (!read) throw new Error("Missing source.read descriptor");
+  expect(read.annotations).toEqual({
+    "neutron:audit": "metadata_only",
+    "neutron:effects": ["read", "network"],
+    "neutron:longRunning": true,
+  });
+  expect(read.description).toContain("untrusted");
+
+  const expectedRequired = {
+    "source.files": ["appId", "sourceRevision", "cursor"],
+    "source.search": ["appId", "sourceRevision", "query", "cursor"],
+    "source.read": ["appId", "sourceRevision", "path", "cursor"],
+  } as const;
+  for (const [name, required] of Object.entries(expectedRequired)) {
+    const descriptor = descriptors.get(name);
+    if (!descriptor) throw new Error(`Missing ${name} descriptor`);
+    expect(descriptor.inputSchema).toMatchObject({
+      type: "object",
+      required: [...required],
+      additionalProperties: false,
+    });
+  }
+  const readVariants = (read.outputSchema as { oneOf?: unknown }).oneOf;
+  expect(Array.isArray(readVariants)).toBe(true);
+  if (!Array.isArray(readVariants)) {
+    throw new Error("source.read output schema is not a closed variant union");
+  }
+  expect(readVariants).toHaveLength(3);
+});
+
+test("installed source inspection admits only the active direct Agent root", async () => {
+  installFakeWindow();
+  const { resident, root } = await beginSignedCallAgentInvocation();
+  const call = {
+    target: "kernel" as const,
+    name: "source.files",
+    arguments: {
+      appId: "signed_call_agent",
+      sourceRevision: null,
+      cursor: null,
+    },
+  };
+
+  await expect(routeToolCall(call, resident)).rejects.toMatchObject({
+    code: "INVOCATION_INVALID",
+  });
+  expect(sourceInspectionCalls).toHaveLength(0);
+
+  const child = createChildInvocation(
+    root,
+    resident,
+    "nested_source_inspection",
+  );
+  await expect(
+    routeToolCall(call, resident, undefined, invocationMetadata(child, true)),
+  ).rejects.toMatchObject({ code: "INVOCATION_INVALID" });
+  expect(sourceInspectionCalls).toHaveLength(0);
+  completeInvocation(child);
+
+  await expect(
+    routeToolCall(call, resident, undefined, invocationMetadata(root, true)),
+  ).resolves.toMatchObject({
+    appId: "signed_call_agent",
+    appVersion: 100,
+    installationUid: "401",
+    sourceRevision: SOURCE_INSPECTION_REVISION,
+    complete: true,
+    nextCursor: null,
+  });
+  expect(sourceInspectionCalls).toHaveLength(1);
+  expect(sourceInspectionCalls[0]).toMatchObject({
+    operation: "list",
+    args: call.arguments,
+  });
+
+  const audit = listMsgBusAudit().at(-1);
+  expect(audit).toMatchObject({
+    target: "kernel",
+    tool: "source.files",
+    status: "ok",
+    arguments: { metadataBytes: expect.any(Number) },
+    metadataBytes: {
+      input: expect.any(Number),
+      output: expect.any(Number),
+    },
+  });
+  expect(audit).not.toHaveProperty("result");
+  expect(JSON.stringify(audit)).not.toContain("source-secret.js");
+  completeInvocation(root);
+});
+
+test("installed source inspection withholds a result after its Agent root ends", async () => {
+  installFakeWindow();
+  const { resident, root } = await beginSignedCallAgentInvocation();
+  let markStarted!: () => void;
+  let release!: (value: JsonValue) => void;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const gate = new Promise<JsonValue>((resolve) => {
+    release = resolve;
+  });
+  sourceInspectionOverride = () => {
+    markStarted();
+    return gate;
+  };
+  const pending = routeToolCall(
+    {
+      target: "kernel",
+      name: "source.files",
+      arguments: {
+        appId: "signed_call_agent",
+        sourceRevision: null,
+        cursor: null,
+      },
+    },
+    resident,
+    undefined,
+    invocationMetadata(root, true),
+  );
+  void pending.catch(() => undefined);
+  await started;
+  cancelAgentRoot(root.id, "Test cancellation");
+  release({});
+  await expect(pending).rejects.toMatchObject({
+    code: "INVOCATION_INVALID",
+  });
+});
+
+test("every installed source tool receives request cancellation", async () => {
+  installFakeWindow();
+  const { resident, root } = await beginSignedCallAgentInvocation();
+  const calls = [
+    {
+      operation: "list" as const,
+      name: "source.files",
+      arguments: {
+        appId: "signed_call_agent",
+        sourceRevision: null,
+        cursor: null,
+      },
+    },
+    {
+      operation: "search" as const,
+      name: "source.search",
+      arguments: {
+        appId: "signed_call_agent",
+        sourceRevision: SOURCE_INSPECTION_REVISION,
+        query: "needle",
+        cursor: null,
+      },
+    },
+    {
+      operation: "read" as const,
+      name: "source.read",
+      arguments: {
+        appId: "signed_call_agent",
+        sourceRevision: SOURCE_INSPECTION_REVISION,
+        path: "/app/signed_call_agent/main.js",
+        cursor: null,
+      },
+    },
+  ];
+
+  for (const expected of calls) {
+    let release!: (value: JsonValue) => void;
+    const gate = new Promise<JsonValue>((resolve) => {
+      release = resolve;
+    });
+    sourceInspectionOverride = () => gate;
+    const controller = new AbortController();
+    const previousCalls = sourceInspectionCalls.length;
+    const pending = routeToolCall(
+      {
+        target: "kernel",
+        name: expected.name,
+        arguments: expected.arguments,
+      },
+      resident,
+      undefined,
+      invocationMetadata(root, true),
+      undefined,
+      controller.signal,
+    );
+    void pending.catch(() => undefined);
+    for (
+      let turn = 0;
+      turn < 20 && sourceInspectionCalls.length === previousCalls;
+      turn += 1
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    const observed = sourceInspectionCalls.at(-1);
+    expect(observed).toMatchObject({ operation: expected.operation });
+    expect(observed?.signal).toBe(controller.signal);
+
+    controller.abort();
+    release({});
+    await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  }
+  completeInvocation(root);
 });
 
 const echoDescriptor: MsgBusToolDescriptor = {

@@ -5,6 +5,7 @@ import {
   buildPackagesCompileInput,
   buildPackagesInstallAssets,
   compilePackages,
+  compileFreshPackages,
   motokoFilesFromPreparedFiles,
   preparePackageInstall,
   type CompileResult,
@@ -14,9 +15,11 @@ import {
 import { compileLegacyV25Compatibility } from "../src/compile.ts";
 import {
   ASSEMBLER_ID,
-  LEGACY_V25_ASSEMBLER_ID,
+  assemblerForFreshKernelVersion,
 } from "../src/assemble.ts";
+import { packageArchiveFilename } from "neutron-tools/src/package_archive.js";
 import type { PackagedNeutronManifest } from "neutron-tools/src/schema.js";
+import { assertAppVersion } from "neutron-tools/src/version.js";
 
 export type LegacyKernelVersion = 305 | 306 | 307 | 315;
 
@@ -34,6 +37,19 @@ export type LegacyKernelReleaseFixture = Readonly<{
   archivePath: string;
   identityUrl: URL;
 }>;
+
+type RetainedKernelReleaseFixture = Readonly<{
+  label: "v0.3.20";
+  version: 320;
+  archive: "../../../apps/kernel/kernel.v0.3.20.neutron";
+  bytes: number;
+  sha256: string;
+  persistenceMode: "classical";
+  archivePath: string;
+}>;
+
+type KernelUpgradeReleaseFixture =
+  LegacyKernelReleaseFixture | RetainedKernelReleaseFixture;
 
 // v305-v307 self-upgrades hardcode `wasm_memory_persistence = keep`; v315
 // introduced caller-selected persistence and shipped on the classical line.
@@ -100,6 +116,18 @@ export const LEGACY_KERNEL_RELEASES = [
   },
 ] as const satisfies readonly LegacyKernelReleaseFixture[];
 
+export const RETAINED_KERNEL_V320_RELEASE = {
+  label: "v0.3.20",
+  version: 320,
+  archive: "../../../apps/kernel/kernel.v0.3.20.neutron",
+  bytes: 2_415_407,
+  sha256: "7dc5f4484a6010ebcbdb52d59b13dae01b1252c4f1c5ed2ae8f34a5f64e39576",
+  persistenceMode: "classical",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.20.neutron", import.meta.url),
+  ),
+} as const satisfies RetainedKernelReleaseFixture;
+
 /** Backward-compatible aliases for callers that mean the latest predecessor. */
 export const LEGACY_KERNEL_VERSION = LEGACY_KERNEL_RELEASES[3].version;
 export const LEGACY_KERNEL_ARCHIVE_BYTES = LEGACY_KERNEL_RELEASES[3].bytes;
@@ -109,11 +137,11 @@ export const LEGACY_HELLO_ARCHIVE_BYTES = 185_021;
 export const LEGACY_HELLO_ARCHIVE_SHA256 =
   "82613cc3882c7404e51e09308e27a4885062f5f622663becf18cca0a046b8c27";
 export const LEGACY_KERNEL_ARCHIVE_PATH = LEGACY_KERNEL_RELEASES[3].archivePath;
-export const FINAL_CANDIDATE_KERNEL_ARCHIVE_PATH = fileURLToPath(
+const HISTORICAL_TEST_CANDIDATE_KERNEL_ARCHIVE_PATH = fileURLToPath(
   new URL("../../../apps/kernel/kernel.v0.3.16.neutron", import.meta.url),
 );
 
-export type LegacyKernelIdentityFixture = Readonly<{
+type KernelUpgradeIdentityFixture<Version extends number = number> = Readonly<{
   schema: 1;
   archive: string;
   bytes: number;
@@ -121,7 +149,7 @@ export type LegacyKernelIdentityFixture = Readonly<{
   package: Readonly<{
     format: 3;
     id: "kernel";
-    version: LegacyKernelVersion;
+    version: Version;
     update_source: string;
   }>;
   memory: readonly Readonly<{
@@ -133,16 +161,50 @@ export type LegacyKernelIdentityFixture = Readonly<{
   }>[];
 }>;
 
+export type LegacyKernelIdentityFixture =
+  KernelUpgradeIdentityFixture<LegacyKernelVersion>;
+
+const RETAINED_KERNEL_V320_IDENTITY = {
+  schema: 1,
+  archive: RETAINED_KERNEL_V320_RELEASE.archive,
+  bytes: RETAINED_KERNEL_V320_RELEASE.bytes,
+  sha256: RETAINED_KERNEL_V320_RELEASE.sha256,
+  package: {
+    format: 3,
+    id: "kernel",
+    version: RETAINED_KERNEL_V320_RELEASE.version,
+    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+  },
+  memory: [
+    {
+      owner: "kernel",
+      id: "kernel",
+      version: 3,
+      schema:
+        "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
+      entry: "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b",
+    },
+    {
+      owner: "kernel",
+      id: "kernel_activation",
+      version: 1,
+      schema:
+        "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
+      entry: "f2380721e6147d0f0af208a70183e3d8ce6ac19ad533e1367b3f5780305e7ad3",
+    },
+  ],
+} as const satisfies KernelUpgradeIdentityFixture<320>;
+
 export type LegacyUpgradeCompileFixture = Readonly<{
-  release: LegacyKernelReleaseFixture;
-  identity: LegacyKernelIdentityFixture;
+  release: KernelUpgradeReleaseFixture;
+  identity: KernelUpgradeIdentityFixture;
   legacyArchive: Uint8Array;
   helloArchive: Uint8Array;
   candidateArchive: Uint8Array;
   legacyKernel: PreparedPackageInstall;
   hello: PreparedPackageInstall;
   candidateKernel: PreparedPackageInstall;
-  /** Exact unmarked registry produced by the released pre-v26 installer. */
+  /** Exact registry produced by the selected predecessor package set. */
   existingApps: AppRegistry;
   initial: CompileResult;
   upgraded: CompileResult;
@@ -196,18 +258,40 @@ export async function loadLegacyKernelIdentityFixture(
   return { release, identity, archivePath, archive };
 }
 
+async function loadRetainedKernelV320Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<320>;
+  archive: Uint8Array;
+}> {
+  const archive = await loadKernelArchive(
+    RETAINED_KERNEL_V320_RELEASE.archivePath,
+    "The retained v0.3.20 Kernel predecessor",
+  );
+  assertArchiveIdentity(
+    RETAINED_KERNEL_V320_RELEASE.label,
+    archive,
+    RETAINED_KERNEL_V320_RELEASE.bytes,
+    RETAINED_KERNEL_V320_RELEASE.sha256,
+  );
+  return { identity: RETAINED_KERNEL_V320_IDENTITY, archive };
+}
+
 export async function compileLegacyKernelUpgradeFixture(
   legacyVersion: LegacyKernelVersion = LEGACY_KERNEL_VERSION,
 ): Promise<LegacyUpgradeCompileFixture> {
-  return compileLegacyKernelUpgradeCandidate(
-    legacyKernelRelease(legacyVersion),
+  const release = legacyKernelRelease(legacyVersion);
+  return compileKernelUpgradeCandidate(
+    release,
+    () => loadLegacyKernelIdentityFixture(release.version),
     () =>
-      loadCandidateKernelArchive("The generated v0.3.16 Kernel candidate"),
+      loadKernelArchive(
+        HISTORICAL_TEST_CANDIDATE_KERNEL_ARCHIVE_PATH,
+        "The generated v0.3.16 Kernel candidate",
+      ),
   );
 }
 
 /**
- * Decode and compile the actual packed v0.3.16 candidate. This never invokes
+ * Decode and compile the actual packed current candidate. This never invokes
  * the packer: the caller must deliberately create and review the archive first.
  */
 export async function compileFinalCandidateLegacyKernelUpgradeFixture({
@@ -217,26 +301,77 @@ export async function compileFinalCandidateLegacyKernelUpgradeFixture({
   expectedSha256: string;
   legacyVersion?: LegacyKernelVersion;
 }): Promise<LegacyUpgradeCompileFixture> {
+  const release = legacyKernelRelease(legacyVersion);
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release,
+    loadPredecessor: () => loadLegacyKernelIdentityFixture(release.version),
+  });
+}
+
+export async function compileFinalCandidateRetainedKernelUpgradeFixture({
+  expectedSha256,
+}: {
+  expectedSha256: string;
+}): Promise<LegacyUpgradeCompileFixture> {
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release: RETAINED_KERNEL_V320_RELEASE,
+    loadPredecessor: loadRetainedKernelV320Fixture,
+  });
+}
+
+async function compileFinalCandidateKernelUpgradeFixture({
+  expectedSha256,
+  release,
+  loadPredecessor,
+}: {
+  expectedSha256: string;
+  release: KernelUpgradeReleaseFixture;
+  loadPredecessor: () => Promise<{
+    identity: KernelUpgradeIdentityFixture;
+    archive: Uint8Array;
+  }>;
+}): Promise<LegacyUpgradeCompileFixture> {
   if (!/^[a-f0-9]{64}$/u.test(expectedSha256)) {
     throw new Error(
       "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
     );
   }
-  return compileLegacyKernelUpgradeCandidate(
-    legacyKernelRelease(legacyVersion),
-    () => loadCandidateKernelArchive("The reviewed final candidate"),
+  const manifest = JSON.parse(
+    await readFile(
+      new URL("../../../apps/kernel/neutron.json", import.meta.url),
+      "utf8",
+    ),
+  ) as { version?: unknown };
+  assertAppVersion(manifest.version, "Current Kernel source manifest version");
+  const archivePath = fileURLToPath(
+    new URL(
+      `../../../apps/kernel/${packageArchiveFilename("kernel", manifest.version)}`,
+      import.meta.url,
+    ),
+  );
+  return compileKernelUpgradeCandidate(
+    release,
+    loadPredecessor,
+    () =>
+      loadKernelArchive(archivePath, "The reviewed current Kernel candidate"),
     expectedSha256,
+    manifest.version,
   );
 }
 
-async function compileLegacyKernelUpgradeCandidate(
-  release: LegacyKernelReleaseFixture,
+async function compileKernelUpgradeCandidate(
+  release: KernelUpgradeReleaseFixture,
+  loadPredecessor: () => Promise<{
+    identity: KernelUpgradeIdentityFixture;
+    archive: Uint8Array;
+  }>,
   loadCandidateArchive: () => Promise<Uint8Array>,
   expectedCandidateSha256?: string,
+  expectedCandidateVersion = TEST_CANDIDATE_KERNEL_VERSION,
 ): Promise<LegacyUpgradeCompileFixture> {
-  const { identity, archive: legacyArchive } =
-    await loadLegacyKernelIdentityFixture(release.version);
-  assertLegacyKernelArchive(identity, legacyArchive, release);
+  const { identity, archive: legacyArchive } = await loadPredecessor();
 
   const helloArchive = new Uint8Array(
     await readFile(
@@ -251,8 +386,8 @@ async function compileLegacyKernelUpgradeCandidate(
   );
   const legacyKernel = preparePackageInstall(legacyArchive);
   const hello = preparePackageInstall(helloArchive);
-  assertLegacyPackageIdentity(identity, legacyKernel);
-  assertLegacyPackageRecord(release, legacyKernel);
+  assertPredecessorPackageIdentity(identity, legacyKernel);
+  assertPredecessorPackageRecord(release, legacyKernel);
 
   const candidateArchive = await loadCandidateArchive();
   const candidateKernel =
@@ -261,29 +396,35 @@ async function compileLegacyKernelUpgradeCandidate(
       : preparePackageInstall(candidateArchive, {
           expectedIdentity: {
             id: "kernel",
-            version: TEST_CANDIDATE_KERNEL_VERSION,
+            version: expectedCandidateVersion,
             sha256: expectedCandidateSha256,
           },
         });
-  assertCandidateManifest(identity, candidateKernel);
+  assertCandidateManifest(identity, candidateKernel, expectedCandidateVersion);
   if (candidateKernel.packageRecord === undefined) {
-    throw new Error("The v0.3.16 candidate package record was not verified");
+    throw new Error("The Kernel candidate package record was not verified");
   }
   assertCandidatePackageRecord(candidateKernel);
 
-  const {
-    browserSurfaceOriginAppIds: _v26Selection,
-    ...legacyCompileInput
-  } = buildPackagesCompileInput({
-    packages: [legacyKernel, hello],
-    existingApps: {},
-    existingBrowserSurfaceOriginAppIds: [],
-    versionPolicy: "allow-same-version",
-  });
-  const initial = await compileLegacyV25Compatibility({
-    ...legacyCompileInput,
-    persistenceMode: release.persistenceMode,
-  });
+  let initial: CompileResult;
+  if (release.version === RETAINED_KERNEL_V320_RELEASE.version) {
+    initial = await compileFreshPackages({
+      packages: [legacyKernel, hello],
+      persistenceMode: release.persistenceMode,
+    });
+  } else {
+    const { browserSurfaceOriginAppIds: _v26Selection, ...legacyCompileInput } =
+      buildPackagesCompileInput({
+        packages: [legacyKernel, hello],
+        existingApps: {},
+        existingBrowserSurfaceOriginAppIds: [],
+        versionPolicy: "allow-same-version",
+      });
+    initial = await compileLegacyV25Compatibility({
+      ...legacyCompileInput,
+      persistenceMode: release.persistenceMode,
+    });
+  }
   const existingModules = motokoFilesFromPreparedFiles([
     ...legacyKernel.files,
     ...hello.files,
@@ -303,7 +444,7 @@ async function compileLegacyKernelUpgradeCandidate(
     existingModules,
     existingConfigs,
     existingApps,
-    existingBrowserSurfaceOriginAppIds: [],
+    existingBrowserSurfaceOriginAppIds: initial.browserSurfaceOriginAppIds,
     existingStable: initial.stable,
     ...(legacyKernel.connectionProviderSupport
       ? { connectionProviderSupport: legacyKernel.connectionProviderSupport }
@@ -337,13 +478,13 @@ function assertCandidatePackageRecord(
     record.build.inputs.length === 0
   ) {
     throw new Error(
-      "The v0.3.16 candidate must carry the reviewed NPL source record",
+      "The Kernel candidate must carry the reviewed NPL source record",
     );
   }
 }
 
-function assertLegacyPackageRecord(
-  release: LegacyKernelReleaseFixture,
+function assertPredecessorPackageRecord(
+  release: KernelUpgradeReleaseFixture,
   prepared: PreparedPackageInstall,
 ): void {
   const record = prepared.packageRecord;
@@ -355,14 +496,14 @@ function assertLegacyPackageRecord(
     }
     return;
   }
-  if (release.version === 315) {
+  if (release.version === 315 || release.version === 320) {
     if (
-      record?.package.version !== 315 ||
+      record?.package.version !== release.version ||
       record.license.id !== "LicenseRef-Neutron-Public-License-1.0" ||
       record.source.kind !== "https"
     ) {
       throw new Error(
-        "The immutable v0.3.15 archive must retain its reviewed NPL source record",
+        `The immutable ${release.label} archive must retain its reviewed NPL source record`,
       );
     }
     return;
@@ -383,18 +524,19 @@ function assertLegacyPackageRecord(
 }
 
 function assertCandidateManifest(
-  identity: LegacyKernelIdentityFixture,
+  identity: KernelUpgradeIdentityFixture,
   candidate: PreparedPackageInstall,
+  expectedVersion: number,
 ): void {
   const { manifest } = candidate;
   if (
     manifest.format !== 3 ||
     manifest.id !== "kernel" ||
-    manifest.version !== TEST_CANDIDATE_KERNEL_VERSION ||
+    manifest.version !== expectedVersion ||
     manifest.update_source !== identity.package.update_source
   ) {
     throw new Error(
-      "The candidate must be Kernel v0.3.16 in format 3 with the production update source",
+      "The candidate must match the expected Kernel version in format 3 with the production update source",
     );
   }
 }
@@ -403,11 +545,17 @@ function assertCandidateManifest(
 export function assertLegacyUpgradeCompileInvariants(
   fixture: LegacyUpgradeCompileFixture,
 ): void {
+  const candidateVersion = fixture.candidateKernel.manifest.version;
+  const expectedInitialAssemblerId = assemblerForFreshKernelVersion(
+    fixture.release.version,
+  );
   if (
-    fixture.initial.assemblerId !== LEGACY_V25_ASSEMBLER_ID ||
+    fixture.initial.assemblerId !== expectedInitialAssemblerId ||
     fixture.upgraded.assemblerId !== ASSEMBLER_ID
   ) {
-    throw new Error("The legacy bridge did not compile exact v25 then v26");
+    throw new Error(
+      `The upgrade did not compile exact ${expectedInitialAssemblerId} then ${ASSEMBLER_ID}`,
+    );
   }
   if (
     fixture.initial.persistenceMode !== fixture.release.persistenceMode ||
@@ -481,7 +629,7 @@ export function assertLegacyUpgradeCompileInvariants(
     })),
     [
       { app_id: "hello", version: 201 },
-      { app_id: "kernel", version: TEST_CANDIDATE_KERNEL_VERSION },
+      { app_id: "kernel", version: candidateVersion },
     ],
   );
   for (const expected of fixture.identity.memory) {
@@ -494,7 +642,7 @@ export function assertLegacyUpgradeCompileInvariants(
       (declaration.migrations?.length ?? 0) !== 0
     ) {
       throw new Error(
-        `The v0.3.16 candidate changed released memory ${expected.id} v${expected.version}`,
+        `The Kernel candidate changed released memory ${expected.id} v${expected.version}`,
       );
     }
   }
@@ -545,8 +693,8 @@ export function assertLegacyKernelArchive(
   }
 }
 
-function assertLegacyPackageIdentity(
-  identity: LegacyKernelIdentityFixture,
+function assertPredecessorPackageIdentity(
+  identity: KernelUpgradeIdentityFixture,
   prepared: PreparedPackageInstall,
 ): void {
   const { manifest } = prepared;
@@ -591,16 +739,15 @@ function assertArchiveIdentity(
   }
 }
 
-async function loadCandidateKernelArchive(
+async function loadKernelArchive(
+  archivePath: string,
   missingLabel: string,
 ): Promise<Uint8Array> {
   try {
-    return new Uint8Array(await readFile(FINAL_CANDIDATE_KERNEL_ARCHIVE_PATH));
+    return new Uint8Array(await readFile(archivePath));
   } catch (error) {
     if (!isMissingFile(error)) throw error;
-    throw new Error(
-      `${missingLabel} does not exist at ${FINAL_CANDIDATE_KERNEL_ARCHIVE_PATH}`,
-    );
+    throw new Error(`${missingLabel} does not exist at ${archivePath}`);
   }
 }
 

@@ -15,7 +15,8 @@
  *   NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
  *   bun test packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts
  *
- * After the reviewed v0.3.16 archive exists, qualify those exact bytes with:
+ * After the reviewed current Kernel archive exists, qualify those exact bytes
+ * with:
  *
  *   NEUTRON_RUN_FINAL_KERNEL_CANDIDATE_POCKETIC=1 \
  *   NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256=<reviewed-lowercase-sha256> \
@@ -57,6 +58,7 @@ import { promisify } from "node:util";
 import { gunzipSync, gzipSync } from "node:zlib";
 import msgpack from "tiny-msgpack";
 import { prepareDeterministicWasmTransport } from "../src/deployment_record.ts";
+import { supportsBrowserSurfaceOrigins } from "../src/assemble.ts";
 import {
   assertKernelPackageStateMatchesRuntime,
   buildPackagesInstallAssets,
@@ -88,9 +90,10 @@ import {
 import { assertSupportedCertificateVersions } from "neutron-tools/src/wasm_metadata.js";
 import {
   LEGACY_KERNEL_RELEASES,
-  TEST_CANDIDATE_KERNEL_VERSION,
+  RETAINED_KERNEL_V320_RELEASE,
   assertLegacyUpgradeCompileInvariants,
   compileFinalCandidateLegacyKernelUpgradeFixture,
+  compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   type LegacyUpgradeCompileFixture,
 } from "./legacy_kernel_upgrade_fixture.ts";
@@ -357,7 +360,7 @@ for (const release of LEGACY_KERNEL_RELEASES) {
   );
 
   finalCandidateTest(
-    `the reviewed v0.3.16 archive preserves durable state through the ${release.label} checked self-upgrade`,
+    `the reviewed current Kernel archive preserves durable state through the ${release.label} checked self-upgrade`,
     () =>
       runLegacyUpgradeQualification(() =>
         compileFinalCandidateLegacyKernelUpgradeFixture({
@@ -369,6 +372,17 @@ for (const release of LEGACY_KERNEL_RELEASES) {
     300_000,
   );
 }
+
+finalCandidateTest(
+  `the reviewed current Kernel archive preserves durable state through the ${RETAINED_KERNEL_V320_RELEASE.label} checked self-upgrade`,
+  () =>
+    runLegacyUpgradeQualification(() =>
+      compileFinalCandidateRetainedKernelUpgradeFixture({
+        expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
+      }),
+    ),
+  300_000,
+);
 
 browserOriginSnapshotTest(
   "restored pre-begin and pending-dispatch branches never reuse browser origins",
@@ -1073,8 +1087,10 @@ function legacyPackageState(
   return {
     registry: fixture.existingApps,
     apps: fixture.existingApps,
-    browserSurfaceOriginAppIds: [],
-    browserSurfaceOriginsSidecarPresent: false,
+    browserSurfaceOriginAppIds: fixture.initial.browserSurfaceOriginAppIds,
+    browserSurfaceOriginsSidecarPresent: supportsBrowserSurfaceOrigins(
+      fixture.initial.assemblerId,
+    ),
     existingConfigs: {
       kernel: fixture.legacyKernel.manifest,
       hello: fixture.hello.manifest,
@@ -1167,6 +1183,7 @@ async function runLegacyUpgradeQualification(
   loadFixture: () => Promise<LegacyUpgradeCompileFixture>,
 ): Promise<void> {
   const fixture = await loadFixture();
+  const candidateVersion = fixture.candidateKernel.manifest.version;
   assertLegacyUpgradeCompileInvariants(fixture);
   const provision = await loadProvisionHarness();
   const binary = requiredPocketIcBinary();
@@ -1396,7 +1413,7 @@ async function runLegacyUpgradeQualification(
       ),
     ).toEqual([
       ["hello", 201],
-      ["kernel", TEST_CANDIDATE_KERNEL_VERSION],
+      ["kernel", candidateVersion],
     ]);
     const upgradedAppInstances = normalizeAppInstances(upgradedRuntime.apps);
     expect(requiredAppInstance(upgradedAppInstances, "hello")).toEqual({
@@ -1409,7 +1426,7 @@ async function runLegacyUpgradeQualification(
     );
     expect(requiredAppInstance(upgradedAppInstances, "kernel")).toEqual({
       ...initialKernelInstance,
-      version: TEST_CANDIDATE_KERNEL_VERSION,
+      version: candidateVersion,
       deployment_id: fixture.upgraded.deploymentId,
       capability_plan_fingerprint:
         compiledKernelInstance.capability_plan_fingerprint,
@@ -1448,7 +1465,7 @@ async function runLegacyUpgradeQualification(
     expect(finalRegistry.hello).toEqual(initialRegistry.hello);
     expect(
       jsonObject(finalRegistry.kernel, "upgraded Kernel registry entry"),
-    ).toMatchObject({ version: TEST_CANDIDATE_KERNEL_VERSION });
+    ).toMatchObject({ version: candidateVersion });
     expect(
       await ownerActor.kernel_static_query({ list: { prefix: "/pkg/legal/" } }),
     ).toContain("/pkg/legal/package-record.v1.json");
@@ -1459,7 +1476,7 @@ async function runLegacyUpgradeQualification(
       ),
     ).toMatchObject({
       format: 1,
-      package: { id: "kernel", version: TEST_CANDIDATE_KERNEL_VERSION },
+      package: { id: "kernel", version: candidateVersion },
     });
 
     const installedModuleContents = new Map(

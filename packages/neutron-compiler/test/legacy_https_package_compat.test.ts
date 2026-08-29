@@ -43,7 +43,13 @@ type ReleaseCatalogModule = Readonly<{
 }>;
 
 type LegacyKernelExecutableFixture = Readonly<{
-  label: "v0.3.5" | "v0.3.6" | "v0.3.7" | "v0.3.15" | "v0.3.17";
+  label:
+    | "v0.3.5"
+    | "v0.3.6"
+    | "v0.3.7"
+    | "v0.3.15"
+    | "v0.3.17"
+    | "v0.3.20";
   archivePath: string;
   bytes: number;
   sha256: string;
@@ -65,6 +71,20 @@ const KERNEL_317_RELEASE_FIXTURE = Object.freeze({
   prepareSymbol: "$A",
   batchSymbol: "nP",
   compileSymbol: "QA",
+  emptyRuntimeMarker: "var Kt=4096,X=null;",
+} satisfies LegacyKernelExecutableFixture);
+
+const KERNEL_320_RELEASE_FIXTURE = Object.freeze({
+  label: "v0.3.20",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.20.neutron", import.meta.url),
+  ),
+  bytes: 2_415_407,
+  sha256: "7dc5f4484a6010ebcbdb52d59b13dae01b1252c4f1c5ed2ae8f34a5f64e39576",
+  mainTailMarker: "var Xn=V(Z(),1),QL=document.getElementById",
+  prepareSymbol: "eS",
+  batchSymbol: "vP",
+  compileSymbol: "cS",
   emptyRuntimeMarker: "var Kt=4096,X=null;",
 } satisfies LegacyKernelExecutableFixture);
 
@@ -116,12 +136,13 @@ const LEGACY_KERNEL_EXECUTABLE_FIXTURES = [
     emptyRuntimeMarker: "var St=4096,G=null;",
   },
 ] as const satisfies readonly LegacyKernelExecutableFixture[];
-// The v0.3.17 archive is an ignored release artifact rather than a tracked test
-// fixture. Its compiler closes over the exact released app registry, so use it
-// only in the opt-in gate that already requires local release archives.
+// These ignored release archives are exact production predecessors rather than
+// tracked test fixtures. Their compilers close over their released app registries,
+// so use them only in the opt-in gate that already requires local release archives.
 const RELEASE_ARTIFACT_KERNEL_EXECUTABLE_FIXTURES = [
   ...LEGACY_KERNEL_EXECUTABLE_FIXTURES,
   KERNEL_317_RELEASE_FIXTURE,
+  KERNEL_320_RELEASE_FIXTURE,
 ] as const;
 const LEGACY_SYNTHETIC_SUCCESSOR_FIXTURES =
   LEGACY_KERNEL_EXECUTABLE_FIXTURES;

@@ -146,16 +146,18 @@ the same request signals.
 
 Cancellation is cooperative, not a promise that every underlying operation can
 be retracted. App tool handlers may honor their request signal. Among Kernel
-canister tools, `canister.schema_v2` and `canister.call_dialog_v2` propagate it
-through strict ICBlast discovery and native fetches. Cancellation before their
-network dispatch prevents the call. Cancellation cannot retract a v2 update
-after dispatch: the Kernel withholds any late reply and reports that the outcome
-is unknown. The SDK retains `canister.call_dialog_v2` for one bounded
-cancellation-reply window so the Kernel's pre- or post-dispatch classification
-wins; if no reply arrives, it conservatively reports an unknown outcome. The
-same fence applies to API-1 self updates, including scoped `updateSelf()` calls
-made by an exposed app tool. Self queries can settle immediately after sending
-their cancellation because they cannot mutate canister state.
+source tools, cancellation propagates through catalog construction, search,
+and asset reads; they perform no mutation. Among Kernel canister tools,
+`canister.schema_v2` and `canister.call_dialog_v2` propagate it through strict
+ICBlast discovery and native fetches. Cancellation before their network
+dispatch prevents the call. Cancellation cannot retract a v2 update after
+dispatch: the Kernel withholds any late reply and reports that the outcome is
+unknown. The SDK retains `canister.call_dialog_v2` for one bounded cancellation-
+reply window so the Kernel's pre- or post-dispatch classification wins; if no
+reply arrives, it conservatively reports an unknown outcome. The same fence
+applies to API-1 self updates, including scoped `updateSelf()` calls made by an
+exposed app tool. Self queries can settle immediately after sending their
+cancellation because they cannot mutate canister state.
 
 The generic tool-attachment wire retains its own settlement and resource
 lifecycle; this envelope does not cancel an attachment request.
@@ -222,6 +224,9 @@ Current Kernel tools include:
 - `backend_calls.list`;
 - `apps.list`;
 - `apps.describe`;
+- `source.files`;
+- `source.search`;
+- `source.read`;
 - `apps.install_offer`;
 - `endpoints.list`;
 - `attachments.delegate`;
@@ -235,6 +240,49 @@ The unversioned canister names are universally callable compatibility routes,
 not names gated by the age of an installed package. Their exact differences
 from the v2 external-call route are documented in
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
+
+### Exact Installed Artifact Inspection
+
+The three `source.*` tools describe a read-only, app-scoped view of catalogued
+artifacts in the current committed installation. Their descriptors are
+discoverable like other Kernel tools, but calls are accepted only from the
+active direct Agent root. An ordinary app call or a delegated child invocation
+cannot use them. The trusted Kernel frontend implements the operations over
+existing backend primitives and build-generated static package metadata. They
+add no app capability, backend method, managed-memory schema, or owner approval
+path. Their descriptors declare read and network effects, and Kernel audit
+records only bounded metadata rather than raw arguments or returned source. A
+direct root may select any currently installed app by exact app ID, one app per
+call. All three are marked long-running because any one of them may construct
+the bounded catalog on a cold browser cache.
+
+Start with `source.files` using `sourceRevision: null` and `cursor: null`. Keep
+the returned `sourceRevision` for later list pages and every `source.search` or
+`source.read` call. A non-null continuation cursor must be passed back unchanged
+with otherwise-identical arguments. Only `complete: true` together with
+`nextCursor: null` proves that a list traversal or text read ended. For search,
+that pair proves only that selected-path traversal ended: a positive
+`skippedLargeFiles` or `skippedUnavailableFiles` count means an absent match is
+not exhaustive. If a deployment commits during the operation or the target
+installation changes, the call is cancelled and inspection must restart at
+`source.files`.
+
+`source.search` performs bounded literal text search, not regular-expression
+evaluation. It returns at most 8 matches per scanned file and reports files
+with further omitted matches in `truncatedFiles`; use `source.read` for deeper
+inspection. Search counters apply only to their returned page, and
+`skippedBinaryFiles` is already included in `scannedFiles`. `source.read`
+accepts only an exact path from the bound catalog and returns bounded
+strict-UTF-8 chunks. Invalid UTF-8, NUL-containing data, Wasm, and other binary
+artifacts return metadata only; their bytes are never placed on the tool wire.
+Results and previews are untrusted installed content, not instructions.
+
+The catalog is installed build output, not repository source: frontend bundles
+may be minified and retained Motoko modules are transformed and content
+addressed. Generated actor glue, unretained files, and compiler binary contents
+cannot be recovered. Exact catalog construction and retention rules are in
+[Kernel Frontend Runtime](./kernel-frontend-runtime.md#exact-installed-artifact-inspection)
+and [Asset Storage And HTTP Serving](./asset-storage-and-http-serving.md#installed-app-assets-under-appid).
 
 ## App Client API
 

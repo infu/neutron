@@ -295,6 +295,24 @@ response certification version 2:
 `/pkg/neutron.did` and `/pkg/id.json` are runtime/deployment metadata files, not
 files produced by `preparePackageFiles()` from the package layout.
 
+The Kernel package also generates a closed installed-artifact inventory during
+packaging. It binds the closed inspectable frontend and package file set to
+final installed paths, byte lengths, and SHA-256 digests. Motoko modules are
+omitted because their filenames already bind their content; the inventory
+itself and selected runtime-generated artifacts included in the catalog are
+anchored separately. Bounded package-owned text files installed beneath the
+HTTP-internal system subtree are carried inline with the same digests and
+lengths, so the frontend can inspect them without changing public HTTP
+admission. General mutable system records remain outside the inventory. The
+inventory is needed because a Kernel upgrade does not clear the whole root
+namespace, so a broad
+root listing could include superseded frontend chunks. Ordinary app replacement
+instead clears and promotes that app's complete `/app/<id>/` subtree. After
+excluding Kernel-owned route records, its remaining keys are the exact static
+inventory for that app. The Kernel inventory is ordinary package metadata
+handled by the unchanged static asset store; it introduces no backend method or
+managed-memory root.
+
 ### Installed App Assets Under `/app/<id>/`
 
 Normal app frontend files are served under `/app/<id>/`. The install-time app id
@@ -341,6 +359,16 @@ modules by hash. A successful install commit removes only content-addressed
 modules that were in that install's authenticated baseline and are absent from
 the newly compiled reachable-module set. Unknown concurrent uploads are not
 globally scanned or deleted.
+
+Installed-artifact inspection therefore derives a per-app backend view from
+the selected installed manifest rather than assigning the global module store
+to every app. It verifies the main manifest entry, every current non-retired
+memory-schema entry, and module filename digests, then follows content-addressed
+imports. Those required roots and their reachable dependencies must be present.
+Available installed modules reachable from historical, migration, and retired-
+memory declarations are included. An absent optional root or dependency is not
+catalogued because module garbage collection may legitimately have removed it;
+its declaration or import remains visible in retained text.
 
 ### Upload Chunking, MIME, And Content Encoding
 
@@ -403,11 +431,13 @@ and returns up to 20,000 matching keys. The backend detects a 20,001st match and
 traps rather than returning an incomplete result.
 
 The generated actor protects `kernel_static` and `kernel_static_query` with the
-normal authorization check. `kernel_static_query` remains only as the bounded
-key-list operation needed to discover `/mo/` module names; asset contents are
-not returned through an actor query. Browser and CLI clients fetch the listed
-modules and committed package metadata over HTTP. `http_request` is explicitly
-allowed for unauthorized callers.
+normal authorization check. `kernel_static_query` remains only a bounded key
+list: compiler clients use it to discover `/mo/` module names, and the trusted
+Kernel frontend also uses it to enumerate one ordinary app's exact
+`/app/<id>/` subtree for installed-artifact inspection. Asset contents are not
+returned through an actor query. Browser and CLI clients fetch listed modules
+and committed package metadata over HTTP. `http_request` is explicitly allowed
+for unauthorized callers.
 
 ### `http_request` Static Lookup And IC Response Certification
 

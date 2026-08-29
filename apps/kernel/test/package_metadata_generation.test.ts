@@ -15,11 +15,17 @@ import {
   auditKernelDistForPackaging,
   buildKernelPackageMetadata,
   collectKernelWorkspaceSource,
+  installKernelInstalledArtifactInventory,
   type KernelWorkspaceSourceFile,
 } from "../generate_package_metadata.ts";
 import { packDirectory } from "neutron-scripts/src/pack.js";
 import type { ThirdPartyNoticeBundle } from "neutron-scripts/src/third_party_notices.js";
 import { hashContent } from "neutron-tools/src/hash.js";
+import {
+  KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
+  kernelPackagePathRequiresInlineText,
+  parseKernelInstalledArtifactInventory,
+} from "neutron-tools/src/installed_artifacts.js";
 import {
   NEUTRON_PACKAGE_RECORD_PATH,
   readNeutronPackageRecord,
@@ -41,7 +47,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v320 NPL package metadata", () => {
+describe("Kernel v321 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -70,6 +76,9 @@ describe("Kernel v320 NPL package metadata", () => {
     expect(generated.record.build.inputs.map(({ path: inputPath }) => inputPath)).toEqual(
       [...KERNEL_PACKAGE_BUILD_INPUT_PATHS].sort(),
     );
+    expect(
+      generated.record.build.inputs.map(({ path: inputPath }) => inputPath),
+    ).toContain("packages/neutron-tools/src/installed_artifacts.ts");
     expect(textDecoder.decode(generated.notice)).toContain(
       "Copyright 2026 3V Interactive",
     );
@@ -99,7 +108,7 @@ describe("Kernel v320 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(320);
+    expect(packagedManifest.version).toBe(321);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -120,7 +129,7 @@ describe("Kernel v320 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 320");
+    ).toThrow("restricted to Kernel version 321");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -202,6 +211,7 @@ describe("Kernel v320 NPL package metadata", () => {
     const requiredFiles = [
       ".neutron-release-evidence.json",
       "connection-providers.json",
+      KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
       KERNEL_NPL_LICENSE_PATH,
       KERNEL_APPLICATION_NOTICE_PATH,
       "legal/THIRD_PARTY_NOTICES.md",
@@ -224,6 +234,89 @@ describe("Kernel v320 NPL package metadata", () => {
     await fs.writeFile(path.join(root, "stale-debug.json"), "{}\n");
     await expect(auditKernelDistForPackaging(root)).rejects.toThrow(
       "unexpected file: stale-debug.json",
+    );
+  });
+
+  test("generates a deterministic inventory of exact installed Kernel artifacts", async () => {
+    const root = await temporaryDirectory("neutron-kernel-artifact-inventory-");
+    const packagedFiles = new Map<string, Uint8Array>([
+      [".neutron-release-evidence.json", textEncoder.encode("evidence\n")],
+      ["connection-providers.json", textEncoder.encode("[]\n")],
+      [KERNEL_NPL_LICENSE_PATH, textEncoder.encode("license\n")],
+      [KERNEL_APPLICATION_NOTICE_PATH, textEncoder.encode("notice\n")],
+      ["legal/THIRD_PARTY_NOTICES.md", textEncoder.encode("notices\n")],
+      [
+        "legal/third-party/EXACT-MATERIALS.v1.txt",
+        textEncoder.encode("materials\n"),
+      ],
+      [NEUTRON_PACKAGE_RECORD_PATH, textEncoder.encode("record\n")],
+      ["neutron.did", textEncoder.encode("service : {}\n")],
+      ["neutron.json", textEncoder.encode("manifest\n")],
+      ["neutron.lock.json", textEncoder.encode("lock\n")],
+      [`mo/${"a".repeat(64)}.mo`, textEncoder.encode("actor {}\n")],
+      ["web/index.html", textEncoder.encode("<main>Kernel</main>\n")],
+      ["web/assets/app.js", new Uint8Array([0x00, 0xff, 0x0a, 0x41])],
+      [
+        "web/system/browser-origin-cleanup.html",
+        textEncoder.encode(
+          "<script>parent.postMessage('ready', '*')</script>\n",
+        ),
+      ],
+    ]);
+    await Promise.all(
+      [...packagedFiles].map(async ([relativePath, content]) => {
+        const destination = path.join(root, ...relativePath.split("/"));
+        await fs.mkdir(path.dirname(destination), { recursive: true });
+        await fs.writeFile(destination, content);
+      }),
+    );
+
+    await installKernelInstalledArtifactInventory(root, 321);
+    const inventoryPath = path.join(
+      root,
+      KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
+    );
+    const firstBytes = new Uint8Array(await fs.readFile(inventoryPath));
+    const parsed = parseKernelInstalledArtifactInventory(
+      JSON.parse(textDecoder.decode(firstBytes)),
+    );
+    const byPackagePath = new Map(
+      parsed.artifacts.map((file) => [file.package_path, file] as const),
+    );
+
+    expect(parsed.package).toEqual({ id: "kernel", version: 321 });
+    expect(byPackagePath.has("neutron.did")).toBe(false);
+    expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
+    expect(
+      byPackagePath.has(KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH),
+    ).toBe(false);
+    expect(
+      byPackagePath.get("web/system/browser-origin-cleanup.html"),
+    ).toMatchObject({
+      inline_text: "<script>parent.postMessage('ready', '*')</script>\n",
+    });
+    for (const [packagePath, content] of packagedFiles) {
+      if (packagePath === "neutron.did" || packagePath.startsWith("mo/")) {
+        continue;
+      }
+      expect(byPackagePath.get(packagePath)).toMatchObject({
+        bytes: content.byteLength,
+        sha256: hashContent(content),
+      });
+      expect(byPackagePath.get(packagePath)?.inline_text !== undefined).toBe(
+        kernelPackagePathRequiresInlineText(packagePath),
+      );
+    }
+
+    await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
+    await installKernelInstalledArtifactInventory(root, 321);
+    expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
+      firstBytes,
+    );
+
+    await fs.rm(inventoryPath);
+    await expect(auditKernelDistForPackaging(root)).rejects.toThrow(
+      `missing required file: ${KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH}`,
     );
   });
 

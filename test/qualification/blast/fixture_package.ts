@@ -59,6 +59,126 @@ import {
 
 const TARGET = "app:blast:background";
 const ENTRYPOINT = "${BLAST_QUALIFICATION_ENTRYPOINT}";
+const SOURCE_TIMEOUT_SECONDS = 120;
+
+function qualificationObject(value, label) {
+  if (!isJsonObject(value)) throw new Error(label + " is not an object");
+  return value;
+}
+
+function qualificationAssert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function callSourceTool(context, name, arguments_) {
+  return qualificationObject(
+    await context.kernel.callTool(
+      { target: "kernel", name, arguments: arguments_ },
+      { timeout: SOURCE_TIMEOUT_SECONDS, signal: context.signal },
+    ),
+    name + " result",
+  );
+}
+
+async function inspectInstalledSource(context, appId, manifestPath) {
+  const listed = await callSourceTool(context, "source.files", {
+    appId,
+    sourceRevision: null,
+    cursor: null,
+    pathPrefix: manifestPath,
+    limit: 1,
+  });
+  const manifestFiles = listed.artifacts;
+  qualificationAssert(
+    listed.appId === appId &&
+      typeof listed.sourceRevision === "string" &&
+      typeof listed.installationUid === "string" &&
+      Array.isArray(manifestFiles) &&
+      listed.complete === true &&
+      listed.nextCursor === null &&
+      manifestFiles.length === 1,
+    appId + " manifest listing is not exact and complete",
+  );
+  const manifestFile = qualificationObject(
+    manifestFiles[0],
+    appId + " manifest file",
+  );
+  qualificationAssert(
+    manifestFile.path === manifestPath && manifestFile.area === "package",
+    appId + " manifest listing returned the wrong artifact",
+  );
+
+  const sourceRevision = listed.sourceRevision;
+  const manifestRead = await callSourceTool(context, "source.read", {
+    appId,
+    sourceRevision,
+    path: manifestPath,
+    cursor: null,
+  });
+  qualificationAssert(
+    manifestRead.kind === "text" &&
+      manifestRead.complete === true &&
+      manifestRead.nextCursor === null &&
+      manifestRead.startByte === 0 &&
+      manifestRead.endByte === manifestRead.totalBytes &&
+      typeof manifestRead.text === "string",
+    appId + " installed manifest was not returned as complete text",
+  );
+  const manifest = qualificationObject(
+    JSON.parse(manifestRead.text),
+    appId + " installed manifest",
+  );
+  const entry = manifest.entry;
+  qualificationAssert(
+    manifest.id === appId &&
+      Number.isSafeInteger(manifest.version) &&
+      listed.appVersion === manifest.version &&
+      typeof entry === "string" &&
+      /^[a-f0-9]{64}$/.test(entry) &&
+      typeof manifestRead.sha256 === "string" &&
+      Number.isSafeInteger(manifestRead.totalBytes) &&
+      manifestRead.totalBytes > 0,
+    appId + " source binding does not match its installed manifest",
+  );
+  if (manifestFile.sha256 !== undefined) {
+    qualificationAssert(
+      manifestFile.sha256 === manifestRead.sha256 &&
+        manifestFile.bytes === manifestRead.totalBytes,
+      appId + " manifest inventory does not match its read bytes",
+    );
+  }
+
+  const searched = await callSourceTool(context, "source.search", {
+    appId,
+    sourceRevision,
+    query: entry,
+    cursor: null,
+    pathPrefix: manifestPath,
+    limit: 8,
+  });
+  const matches = searched.matches;
+  qualificationAssert(
+    searched.appId === appId &&
+      searched.sourceRevision === sourceRevision &&
+      Array.isArray(matches) &&
+      searched.complete === true &&
+      searched.nextCursor === null &&
+      matches.some((value) => {
+        const match = qualificationObject(value, appId + " search match");
+        return (
+          match.path === manifestPath &&
+          match.sha256 === manifestRead.sha256
+        );
+      }),
+    appId + " manifest search did not find its exact entry hash",
+  );
+
+  return {
+    version: manifest.version,
+    installationUid: listed.installationUid,
+    revision: sourceRevision,
+  };
+}
 
 exposeTool(
   ENTRYPOINT,
@@ -132,7 +252,22 @@ exposeTool(
               entry.role === "background" &&
               entry.connected === true)
           : [];
-        const discovery = { appIds, blastEndpoints, toolNames };
+        const kernelSource = await inspectInstalledSource(
+          context,
+          "kernel",
+          "/pkg/neutron.json",
+        );
+        const blastSource = await inspectInstalledSource(
+          context,
+          "blast",
+          "/app/blast/pkg/neutron.json",
+        );
+        const discovery = {
+          appIds,
+          blastEndpoints,
+          toolNames,
+          installedSource: { kernel: kernelSource, blast: blastSource },
+        };
         return { discovery, challenges };
       }
       if (typeof args.tool !== "string" || !isJsonObject(args.arguments)) {
