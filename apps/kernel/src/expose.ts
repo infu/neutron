@@ -216,6 +216,11 @@ import type {
 } from "./install_offers/types.ts";
 import { startRepositorySetupFromOffer } from "./repository/service.ts";
 import { useRepositorySetupStore } from "./repository/store.ts";
+import {
+  SOURCE_FILES_TOOL_OPTIONS,
+  SOURCE_READ_TOOL_OPTIONS,
+  SOURCE_SEARCH_TOOL_OPTIONS,
+} from "./source_inspection/tool_options.ts";
 
 const neutron_id = getNeutronId();
 installFrameEndpointHandshake();
@@ -883,7 +888,10 @@ function kernelToolSupportsRequestCancellation(name: string): boolean {
   return (
     name === "canister.schema_v2" ||
     name === "canister.call_dialog_v2" ||
-    name === "permissions.request"
+    name === "permissions.request" ||
+    name === "source.files" ||
+    name === "source.search" ||
+    name === "source.read"
   );
 }
 
@@ -1279,6 +1287,36 @@ defineKernelTool(
   },
   (args) => describeInstalledApp(String(args.appId)),
 );
+
+for (const [name, options, operation] of [
+  ["source.files", SOURCE_FILES_TOOL_OPTIONS, "list"],
+  ["source.search", SOURCE_SEARCH_TOOL_OPTIONS, "search"],
+  ["source.read", SOURCE_READ_TOOL_OPTIONS, "read"],
+] as const) {
+  defineKernelTool(
+    name,
+    options,
+    async (args, caller, invocation, invocationContext, signal) => {
+      const assertActiveRoot = (): void => {
+        if (
+          !isDirectAgentInvocation(invocation) ||
+          resolveInvocation(caller, invocationContext) !== invocation
+        ) {
+          throw new KernelPolicyError(
+            "INVOCATION_INVALID",
+            "Installed source inspection is available only to the active Agent root",
+          );
+        }
+      };
+      assertActiveRoot();
+      const { installedArtifactInspector } =
+        await import("./source_inspection/runtime.ts");
+      const result = await installedArtifactInspector[operation](args, signal);
+      assertActiveRoot();
+      return result;
+    },
+  );
+}
 
 defineKernelTool(
   "apps.install_offer",

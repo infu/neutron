@@ -422,7 +422,14 @@ async function readInstalledPackageAsset(
   return readBoundedResponse(response, path, maximumBytes);
 }
 
-async function readBoundedResponse(
+export class BoundedResponseLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BoundedResponseLimitError";
+  }
+}
+
+export async function readBoundedResponse(
   response: Response,
   label: string,
   maximumBytes: number,
@@ -439,14 +446,18 @@ async function readBoundedResponse(
       declared < 0 ||
       declared > maximumBytes
     ) {
-      throw new Error(`${label} exceeds the ${maximumBytes}-byte read limit`);
+      throw new BoundedResponseLimitError(
+        `${label} exceeds the ${maximumBytes}-byte read limit`,
+      );
     }
   }
 
   if (!response.body) {
     const content = new Uint8Array(await response.arrayBuffer());
     if (content.byteLength > maximumBytes) {
-      throw new Error(`${label} exceeds the ${maximumBytes}-byte read limit`);
+      throw new BoundedResponseLimitError(
+        `${label} exceeds the ${maximumBytes}-byte read limit`,
+      );
     }
     return content;
   }
@@ -465,7 +476,9 @@ async function readBoundedResponse(
         } catch {
           // The bounded read has already failed closed.
         }
-        throw new Error(`${label} exceeds the ${maximumBytes}-byte read limit`);
+        throw new BoundedResponseLimitError(
+          `${label} exceeds the ${maximumBytes}-byte read limit`,
+        );
       }
       chunks.push(value);
     }

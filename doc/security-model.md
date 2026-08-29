@@ -361,6 +361,22 @@ The unversioned compatibility route rejects Agent-scoped signed calls before
 discovery. See
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
+Exact installed-artifact inspection is narrower than general Agent delegation.
+Only the current direct root invocation may call `source.files`,
+`source.search`, or `source.read`; ordinary app calls and delegated children are
+rejected. Every operation is bound to one installed app and an opaque source
+revision, admits only catalogued same-Neutron paths, and rechecks the target
+installation after asynchronous reads. It cannot select another origin or an
+arbitrary URL.
+
+Returned text is potentially hostile app content. It is carried as inert,
+bounded tool data and is never executed or rendered as trusted markup by the
+inspection service; binary bytes are not returned. The frontend reuses
+authorized listing and certified HTTP reads without adding backend methods,
+managed-memory state, or app authority. Exact classification and integrity
+behavior are documented in
+[Kernel Frontend Runtime](./kernel-frontend-runtime.md#exact-installed-artifact-inspection).
+
 ## Connections And Provider Drivers
 
 An app may declare exact provider IDs and scopes only for its resident

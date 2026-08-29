@@ -5,7 +5,7 @@ Licensed under the Neutron Public License, Version 1.0.
 SPDX-License-Identifier: LicenseRef-Neutron-Public-License-1.0
 See the LICENSE file distributed with this work.
 
-Package release: v0.3.20 (packed version 320).
+Package release: v0.3.21 (packed version 321).
 
 The package record binds a deterministic provider-hosted HTTPS source artifact
 containing the reviewed Neutron workspace source and important build inputs for

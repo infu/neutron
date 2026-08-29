@@ -19,6 +19,12 @@ import {
 } from "neutron-tools/src/schema.js";
 import { assertAppVersion } from "neutron-tools/src/version.js";
 import {
+  KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
+  createKernelInstalledArtifactInventory,
+  kernelPackagePathIsInventoried,
+  kernelPackagePathRequiresInlineText,
+} from "neutron-tools/src/installed_artifacts.js";
+import {
   ORDINARY_APP_SOURCE_LIMITS,
   createNeutronPackageSourceArtifact,
   encodeNeutronPackageSourceSnapshot,
@@ -34,11 +40,15 @@ import {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
+const exactTextDecoder = new TextDecoder("utf-8", {
+  fatal: true,
+  ignoreBOM: true,
+});
 const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 320;
+export const KERNEL_NPL_RELEASE_VERSION = 321;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
@@ -96,6 +106,7 @@ const KERNEL_RELEASED_SCHEMA_SOURCE_SHA256 = Object.freeze({
 const KERNEL_DIST_REQUIRED_FILES = new Set([
   ".neutron-release-evidence.json",
   "connection-providers.json",
+  KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
   KERNEL_NPL_LICENSE_PATH,
   KERNEL_APPLICATION_NOTICE_PATH,
   "legal/THIRD_PARTY_NOTICES.md",
@@ -230,6 +241,9 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/src/install_review/prepare_browser_deployment.ts",
   "apps/kernel/src/install_review/provenance_binding.ts",
   "apps/kernel/src/request_cancel.ts",
+  "apps/kernel/src/source_inspection/installed_artifacts.ts",
+  "apps/kernel/src/source_inspection/runtime.ts",
+  "apps/kernel/src/source_inspection/tool_options.ts",
   "apps/kernel/src/settings/DeploymentBuildRecordDetails.tsx",
   "apps/kernel/src/settings/DeploymentIntegrityDetails.tsx",
   "apps/kernel/src/settings/InstalledPackageLegalDetails.tsx",
@@ -245,6 +259,7 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/test/deployment_record_fixture.ts",
   "apps/kernel/test/deployment_integrity.test.ts",
   "apps/kernel/test/deployment_integrity_ui.test.tsx",
+  "apps/kernel/test/installed_artifact_inspection.test.ts",
   "apps/kernel/test/installed_package_record.test.ts",
   "apps/kernel/test/installed_package_record_ui.test.tsx",
   "apps/kernel/test/manual_install_review_flow.isolated.ts",
@@ -304,9 +319,13 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "packages/neutron-security/NOTICE",
   "packages/neutron-tools/LICENSE",
   "packages/neutron-tools/NOTICE",
+  "packages/neutron-tools/src/installed_artifacts.ts",
+  "packages/neutron-tools/src/motoko_imports.ts",
   "packages/neutron-tools/src/package_surface_origins.ts",
   "packages/neutron-tools/src/tile_ids.ts",
   "packages/neutron-tools/src/package_record.ts",
+  "packages/neutron-tools/test/installed_artifacts.test.ts",
+  "packages/neutron-tools/test/motoko_imports.test.ts",
   "packages/neutron-tools/test/package_record.test.ts",
 ]);
 
@@ -329,6 +348,7 @@ export const KERNEL_PACKAGE_BUILD_INPUT_PATHS = Object.freeze([
   "packages/neutron-scripts/src/package_metadata.ts",
   "packages/neutron-scripts/src/pack.ts",
   "packages/neutron-scripts/src/third_party_notices.ts",
+  "packages/neutron-tools/src/installed_artifacts.ts",
   "packages/neutron-tools/src/package_record.ts",
 ]);
 
@@ -589,6 +609,10 @@ export async function generateKernelPackageMetadata(
     thirdPartyNotices,
   });
   await installGeneratedKernelPackageMetadata(distRoot, generated);
+  await installKernelInstalledArtifactInventory(
+    distRoot,
+    generated.record.package.version,
+  );
   await retainNeutronPackageSourceArtifact(generated.sourceArtifact);
   await auditKernelDistForPackaging(distRoot);
   return generated;
@@ -681,6 +705,81 @@ function isAllowedKernelDistFile(relativePath: string): boolean {
     /^mo\/[a-f0-9]{64}\.mo$/u.test(relativePath) ||
     relativePath.startsWith("web/")
   );
+}
+
+export async function installKernelInstalledArtifactInventory(
+  distRoot: string,
+  version: number,
+): Promise<void> {
+  const packagePaths: string[] = [];
+  const visit = async (
+    directory: string,
+    relativeDirectory: string,
+  ): Promise<void> => {
+    const entries = await fs.readdir(directory, { withFileTypes: true });
+    entries.sort((left, right) => compareCanonicalText(left.name, right.name));
+    for (const entry of entries) {
+      const relativePath = relativeDirectory
+        ? `${relativeDirectory}/${entry.name}`
+        : entry.name;
+      const absolutePath = path.join(directory, entry.name);
+      if (entry.isSymbolicLink()) {
+        throw new Error(
+          `Kernel installed-artifact inventory rejects symbolic link ${relativePath}`,
+        );
+      }
+      if (entry.isDirectory()) {
+        await visit(absolutePath, relativePath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        throw new Error(
+          `Kernel installed-artifact inventory rejects non-file ${relativePath}`,
+        );
+      }
+      if (!kernelPackagePathIsInventoried(relativePath)) continue;
+      packagePaths.push(relativePath);
+    }
+  };
+  await visit(distRoot, "");
+
+  const files = await Promise.all(
+    packagePaths.map(async (packagePath) => {
+      const content = await readBytes(
+        path.join(distRoot, ...packagePath.split("/")),
+      );
+      return Object.freeze({
+        package_path: packagePath,
+        bytes: content.byteLength,
+        sha256: hashContent(content),
+        ...(kernelPackagePathRequiresInlineText(packagePath)
+          ? { inline_text: exactTextDecoder.decode(content) }
+          : {}),
+      });
+    }),
+  );
+  files.sort((left, right) =>
+    compareCanonicalText(left.package_path, right.package_path),
+  );
+  const inventory = createKernelInstalledArtifactInventory({
+    version,
+    artifacts: files,
+  });
+  const destination = path.join(
+    distRoot,
+    KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
+  );
+  const temporary = `${destination}.${process.pid}.tmp`;
+  try {
+    await fs.writeFile(temporary, `${JSON.stringify(inventory)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o644,
+    });
+    await fs.rename(temporary, destination);
+  } finally {
+    await fs.rm(temporary, { force: true });
+  }
 }
 
 /** Collect the reviewed Kernel/build-tool source scope from current workspace bytes. */
@@ -1166,7 +1265,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.20 (packed version 320)",
+    "Package release: v0.3.21 (packed version 321)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

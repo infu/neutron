@@ -114,6 +114,17 @@ type NetworkGuard = {
   socketAddresses: Set<string>;
 };
 
+type InstalledSourceTargetSummary = Readonly<{
+  version: number;
+  installationUid: string;
+  revision: string;
+}>;
+
+type InstalledSourceQualification = Readonly<{
+  kernel: InstalledSourceTargetSummary;
+  blast: InstalledSourceTargetSummary;
+}>;
+
 type QualificationReport = Readonly<{
   isolated: true;
   versions: Readonly<{ kernel: number; agent: number; blast: number }>;
@@ -124,6 +135,7 @@ type QualificationReport = Readonly<{
   sameProfileIdentityPrincipal: string;
   secondProfileIdentityPrincipal: string;
   workerBundles: string[];
+  installedSource: InstalledSourceQualification;
   cancellation: Readonly<{
     error: string;
     runningRunsAfterCancellation: number;
@@ -248,6 +260,7 @@ export async function runInstalledBlastQualification(): Promise<QualificationRep
         workerBundles: [...first.workerRequests]
           .filter((url) => /\/(?:script|query)_worker\.js(?:\?|$)/u.test(url))
           .sort(),
+        installedSource: report.installedSource,
         nestedConsent: report.nestedConsent,
         ownerConsent: report.ownerConsent,
         cancellation: report.cancellation,
@@ -1072,6 +1085,10 @@ async function qualifyFirstProfile(driver: Driver, runtime: InstalledRuntime) {
   assertArray(discovery.appIds, "installed Agent app ids");
   assertArray(discovery.blastEndpoints, "installed Agent Blast endpoints");
   assertArray(discovery.toolNames, "installed Agent Blast tool names");
+  const installedSource = assertInstalledSourceQualification(
+    discovery.installedSource,
+    runtime.versions,
+  );
   assert(
     discovery.appIds.includes(BLAST_APP_ID) &&
       discovery.blastEndpoints.length === 1 &&
@@ -1417,6 +1434,7 @@ async function qualifyFirstProfile(driver: Driver, runtime: InstalledRuntime) {
     derivedCollectionId,
     scriptId,
     scriptRevision,
+    installedSource,
     cancellation: {
       error: cancellationError,
       runningRunsAfterCancellation: requiredNonNegativeInteger(
@@ -1437,6 +1455,48 @@ async function qualifyFirstProfile(driver: Driver, runtime: InstalledRuntime) {
       counterAfterApproval,
     },
   };
+}
+
+function assertInstalledSourceQualification(
+  value: unknown,
+  versions: BlastPackageVersions,
+): InstalledSourceQualification {
+  const inspection = requiredObject(value, "installed source qualification");
+  const kernel = installedSourceTarget(
+    inspection.kernel,
+    "kernel",
+    versions.kernel,
+  );
+  const blast = installedSourceTarget(
+    inspection.blast,
+    "blast",
+    versions.blast,
+  );
+  return Object.freeze({ kernel, blast });
+}
+
+function installedSourceTarget(
+  value: unknown,
+  appId: "kernel" | "blast",
+  expectedVersion: number,
+): InstalledSourceTargetSummary {
+  const target = requiredObject(value, `${appId} installed source`);
+  const installationUid = requiredString(
+    target.installationUid,
+    `${appId} source installation uid`,
+  );
+  const revision = requiredString(target.revision, `${appId} source revision`);
+  assert(
+    target.version === expectedVersion &&
+      /^[1-9][0-9]*$/u.test(installationUid) &&
+      /^[a-f0-9]{64}$/u.test(revision),
+    `${appId} source summary has the wrong installed identity`,
+  );
+  return Object.freeze({
+    version: expectedVersion,
+    installationUid,
+    revision,
+  });
 }
 
 async function waitForNoRunningRuns(

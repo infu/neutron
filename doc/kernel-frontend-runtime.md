@@ -915,6 +915,81 @@ one-shot agent decision. Neither path can switch, close, move, resize, or reset
 another app's workspace UI. Tray endpoints cannot start Agent Mode or receive
 delegated agent calls.
 
+### Exact Installed Artifact Inspection
+
+The Kernel frontend registers `source.files`, `source.search`, and
+`source.read` with discoverable descriptors, while their handlers admit only a
+direct Agent root. Their service is browser-local: it reads the committed app
+registry and app-instance binding, uses the existing authorized static-key
+listing where an inventory is needed, and fetches exact asset bodies from the
+same Neutron over ordinary certified HTTP. It introduces no Motoko service,
+Candid method, managed-memory root, IndexedDB store, or install transaction.
+All three operations are marked long-running because a cold call may construct
+the bounded catalog before doing its requested operation.
+
+For an ordinary app, the frontend lists only its installed `/app/<id>/`
+subtree, separates frontend and package metadata, and excludes Kernel-owned
+route records. For the Kernel, root assets cannot safely be inferred from a
+broad key scan because superseded root files may remain after an upgrade. The
+Kernel package therefore carries a build-generated closed inventory binding
+the inspectable frontend and package files to installed paths, byte lengths,
+and digests. Bounded text for package-owned HTTP-internal system documents is
+carried inside that integrity-bound inventory, so inspection does not weaken
+their HTTP admission policy. The frontend also adds a small closed runtime path
+set to the catalog and hashes those installed runtime bytes while verifying
+packaged files against their inventory-bound digests.
+
+Ordinary-app enumeration reuses the existing static-key query, whose bound is
+on key count rather than aggregate path bytes. A deliberately extreme local
+package with thousands of maximum-length paths can therefore be unavailable to
+inspection if the platform cannot return that one legacy list. The frontend
+fails the catalog call instead of returning a partial inventory or widening its
+scope. Removing this inherited limit would require a paged backend listing API,
+which these frontend-only tools deliberately do not add.
+
+Backend inspection follows the selected app's verified content-addressed import
+closure instead of assigning the shared `/mo/` namespace to every app. Required,
+historical, migration, and retired-memory retention rules are detailed in
+[Asset Storage And HTTP Serving](./asset-storage-and-http-serving.md#installed-app-assets-under-appid).
+
+The first `source.files` call creates an opaque target-local source revision
+from the selected installation binding, manifest, and canonical catalog.
+Subsequent pages, searches, and reads must carry that revision and their opaque
+cursors; each returned text or binary read and every search match also carries
+the digest of the exact bytes it observed. The service rechecks the same app
+binding, deployment identity, and integrity anchors after asynchronous work. A
+committed deployment during the operation cancels that call so it cannot return
+removed shared modules. On restart, an unrelated deployment may produce the
+same target-local revision when the selected catalog is unchanged. The bounded
+in-memory catalog cache is ephemeral and holds no fetched source across browser
+sessions.
+
+For ordinary-app static files, the source revision fences the selected
+installation and path catalog; it is not an atomic digest of every asset body.
+Each read and search match reports the SHA-256 of the exact bytes it observed.
+Normal checked installs change the deployment binding and cancel an in-flight
+call. A direct authorized static mutation outside that install path can change
+an ordinary asset's observed digest without changing the source revision, so a
+caller comparing work across such mutations must restart its traversal.
+
+This is exact output for the catalogued installed paths, not a reconstruction
+of the workspace or a listing of every Kernel-owned record. General
+runtime/system metadata and unrelated runtime identity records are outside the
+catalog. JavaScript and CSS can be bundled and minified, Motoko is the
+transformed content-addressed form used by the compiler, and generated actor
+glue is not a retained text artifact. The reader classifies bytes by strict
+UTF-8 and NUL checks, not by filename or MIME type; invalid UTF-8 or
+NUL-containing content is reported as binary metadata without its bytes. This
+includes compiler Wasm. Tool output remains inert, untrusted data and must not
+be evaluated, imported, rendered as trusted markup, or treated as agent
+instructions.
+
+Search completion describes path traversal, not universal text coverage.
+Search counters are page-local; binary files are included in the scanned-file
+count, while positive skipped-large or skipped-unavailable counts make a
+negative conclusion incomplete. A truncated-file count means further matches
+were omitted deliberately and the caller must use `source.read` for that path.
+
 ### App Install Request And Progress Dialogs
 
 `install_app()` in `apps/kernel/src/reducer/apps.ts` still drives the browser
