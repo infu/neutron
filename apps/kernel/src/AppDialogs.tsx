@@ -161,6 +161,10 @@ export function AppUninstallRequestDialog({
   uiMode?: KernelUiMode;
 }) {
   const uiMode = useConsentUiMode(uiModeOverride);
+  const appCount = request.apps.length;
+  const memories = request.apps.flatMap(({ appId, memoryIds }) =>
+    memoryIds.map((memoryId) => ({ appId, memoryId })),
+  );
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -205,25 +209,35 @@ export function AppUninstallRequestDialog({
         role="alertdialog"
       >
         <div className="title" id="uninstall-title">
-          Uninstall application
+          Uninstall {appCount === 1 ? "application" : "applications"}
         </div>
         <div className="call">
           <div className="a-infogrid uninstall-summary">
-            <div className="label">Application</div>
-            <div className="val">{request.appName}</div>
-            <div className="label">App id</div>
-            <div className="val instance-id">{request.appId}</div>
+            <div className="label">
+              {appCount === 1 ? "Application" : "Applications"}
+            </div>
+            <div className="val uninstall-app-list">
+              {request.apps.map(({ appId, appName }) => (
+                <div key={appId}>
+                  <span>{appName}</span>
+                  <code>{appId}</code>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="uninstall-warning" id="uninstall-description">
-            This permanently removes the app backend, owned memory, files,
-            credentials, resident process, and every open tile.
+            This permanently removes the selected app
+            {appCount === 1 ? "" : "s"}, owned memory, files, credentials,
+            resident processes, and every open tile.
           </div>
-          {request.memoryIds.length > 0 ? (
+          {memories.length > 0 ? (
             <div className="dialog-section">
               <div className="section-title">Owned memory</div>
               <div className="uninstall-memory-list">
-                {request.memoryIds.map((memoryId) => (
-                  <code key={memoryId}>{memoryId}</code>
+                {memories.map(({ appId, memoryId }) => (
+                  <code key={`${appId}/${memoryId}`}>
+                    {appCount === 1 ? memoryId : `${appId}/${memoryId}`}
+                  </code>
                 ))}
               </div>
             </div>
@@ -249,7 +263,7 @@ export function AppUninstallRequestDialog({
               type="button"
             >
               <IoTrashOutline aria-hidden="true" />
-              Uninstall
+              Uninstall{appCount === 1 ? "" : ` ${appCount} apps`}
             </button>
           </div>
         </div>

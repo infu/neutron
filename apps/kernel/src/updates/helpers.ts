@@ -75,7 +75,7 @@ export function assertSelectedUpdateBounds(
 ): void {
   if (candidates.length > REPOSITORY_LIMITS.packagesPerManifest) {
     throw new Error(
-      `Update All supports at most ${REPOSITORY_LIMITS.packagesPerManifest} apps at once. Select a smaller batch.`,
+      `Selected updates support at most ${REPOSITORY_LIMITS.packagesPerManifest} apps at once. Select a smaller batch.`,
     );
   }
   let bytes = 0;

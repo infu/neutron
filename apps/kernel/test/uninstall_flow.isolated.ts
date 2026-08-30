@@ -31,7 +31,7 @@ type Deferred<T> = Readonly<{
 
 type CompileCall = Readonly<{
   state: KernelPackageState;
-  appId: string;
+  appIds: readonly string[];
   deploymentNonce: string;
   vetKeysEnvironment: "local" | "production";
   persistenceMode: "classical" | "enhanced";
@@ -96,7 +96,7 @@ mock.module("neutron-compiler/src/install.js", () => ({
     expect(runtime.deployment_id).toBe(runtimeDeploymentId);
     if (baselineMismatch) throw baselineMismatch;
   },
-  compileAppUninstall: (input: CompileCall) => {
+  compileAppsUninstall: (input: CompileCall) => {
     compileCalls.push(input);
     compileStarted.resolve(undefined);
     return compileGate.promise;
@@ -212,6 +212,7 @@ Object.defineProperty(globalThis, "window", {
 const {
   resolveAppUninstall,
   uninstall_app,
+  uninstall_apps,
   useAppsStore,
 } = await import("../src/reducer/apps.ts");
 const { useWorkspaceStore } = await import("../src/workspace/store.ts");
@@ -416,7 +417,7 @@ test("uninstall compilation completes before the final confirmation is exposed",
   expect(compileCalls).toHaveLength(1);
   expect(compileCalls[0]).toEqual({
     state: compilerState,
-    appId: "mail",
+    appIds: ["mail"],
     deploymentNonce: DEPLOYMENT_NONCE,
     vetKeysEnvironment: "local",
     persistenceMode: "classical",
@@ -433,9 +434,13 @@ test("uninstall compilation completes before the final confirmation is exposed",
   const request = await waitForUninstallRequest();
 
   expect(request).toMatchObject({
-    appId: "mail",
-    appName: "Mail from authenticated baseline",
-    memoryIds: ["mail_primary", "mail_archive"],
+    apps: [
+      {
+        appId: "mail",
+        appName: "Mail from authenticated baseline",
+        memoryIds: ["mail_primary", "mail_archive"],
+      },
+    ],
     deploymentReview: { record: deploymentRecord, suppliedPackages: [] },
   });
   expect(request.deploymentReview.record).toBe(deploymentRecord);
@@ -703,4 +708,91 @@ test("approval is the only boundary that deploys the reviewed uninstall artifact
     },
   });
   expect(resetCalls).toBe(0);
+});
+
+test("selected apps share one reviewed compile and deployment boundary", async () => {
+  const calendar = Object.freeze({ name: "Calendar", version: 100 });
+  compilerState = Object.freeze({
+    ...compilerState,
+    apps: Object.freeze({
+      kernel: baselineKernel,
+      mail: baselineMail,
+      calendar,
+    }),
+    registry: Object.freeze({
+      kernel: baselineKernel,
+      mail: baselineMail,
+      calendar,
+    }),
+    browserSurfaceOriginAppIds: Object.freeze(["calendar", "mail"]),
+    existingConfigs: Object.freeze({
+      kernel: { name: "Neutron" },
+      mail: { name: "Mail from authenticated baseline" },
+      calendar: { name: "Calendar" },
+    }),
+  }) as unknown as KernelPackageState;
+  observedCompilerState = compilerState;
+  useAppsStore.setState({
+    list: compilerState.apps,
+    appInstances: {},
+    runtimeGenerations: {},
+  });
+  provenanceValue = Object.freeze({
+    format: 1 as const,
+    apps: Object.freeze({
+      ...BASELINE_PROVENANCE.apps,
+      calendar: Object.freeze({
+        kind: "manual" as const,
+        acquisition: "file" as const,
+        package_digest: "bb".repeat(32),
+      }),
+    }),
+  });
+  deploymentRecord = Object.freeze({
+    ...deploymentRecord,
+    warnings: Object.freeze({
+      removed_apps: Object.freeze(["calendar", "mail"]),
+      destructive_memory_roots: Object.freeze([
+        Object.freeze({ owner: "calendar", memory_id: "events" }),
+        Object.freeze({ owner: "mail", memory_id: "messages" }),
+      ]),
+    }),
+  }) as CompleteDeploymentBuildRecord;
+
+  const result = uninstall_apps(["mail", "calendar"]);
+  await compileStarted.promise;
+  expect(compileCalls).toEqual([
+    {
+      state: compilerState,
+      appIds: ["calendar", "mail"],
+      deploymentNonce: DEPLOYMENT_NONCE,
+      vetKeysEnvironment: "local",
+      persistenceMode: "classical",
+    },
+  ]);
+  compileGate.resolve(compiled);
+  const request = await waitForUninstallRequest();
+  expect(request.apps).toEqual([
+    { appId: "calendar", appName: "Calendar", memoryIds: ["events"] },
+    {
+      appId: "mail",
+      appName: "Mail from authenticated baseline",
+      memoryIds: ["messages"],
+    },
+  ]);
+  expect(recordPreparationCalls).toHaveLength(1);
+
+  resolveAppUninstall(true);
+  await deployStarted.promise;
+  expect(recordPreparationCalls).toHaveLength(2);
+  expect(deployCalls).toHaveLength(1);
+  expect(deployCalls[0]?.removedApps).toEqual(["calendar", "mail"]);
+  expect(
+    JSON.parse(
+      new TextDecoder().decode(deployCalls[0]?.stagedAssets?.[0]?.content),
+    ),
+  ).toEqual({ format: 1, apps: {} });
+
+  deployGate.reject(new Error("stop after batch deployment boundary"));
+  await expect(result).rejects.toThrow("stop after batch deployment boundary");
 });

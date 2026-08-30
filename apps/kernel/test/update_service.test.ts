@@ -17,5 +17,5 @@ test("isolated updater service orchestration", async () => {
   ]);
 
   expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
-  expect(`${stdout}\n${stderr}`).toContain("13 pass");
+  expect(`${stdout}\n${stderr}`).toContain("14 pass");
 });

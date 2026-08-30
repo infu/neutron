@@ -43,7 +43,7 @@ mock.module("neutron-compiler/src/install.js", () => ({
     expect(runtime.deployment_id).toBe(deploymentId);
     runtimeAssertions += 1;
   },
-  compileAppUninstall: () => {
+  compileAppsUninstall: () => {
     throw new Error("Unexpected uninstall compilation");
   },
   compilePackages: () => {

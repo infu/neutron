@@ -223,10 +223,11 @@ JavaScript numbers are rejected before formatting.
 All per-app operational information lives in the **Installed Apps** table;
 Settings has no separate instructions, usage, or updates section. The overview
 columns are app, cycles used, cycles in, updates, installed version, details,
-and uninstall. The app cell shows the app name with a one-line, ellipsized
+and selection. The app cell shows the app name with a one-line, ellipsized
 app-provided description. The version uses the packed manifest version rendered
-as a semantic version. The details and uninstall controls remain separate
-keyboard-reachable cells, and the kernel row cannot be uninstalled.
+as a semantic version. The details and selection controls remain separate
+keyboard-reachable cells. A selection control toggles the row without starting
+an app operation. The kernel row cannot be selected for deletion.
 
 The cycles-used cell joins telemetry by exact app id and installation uid. It
 uses a low-side 13-node estimate:
@@ -314,11 +315,15 @@ inconsistent, match, and mismatch states distinct. No installed-app row is
 given its own module hash. The exact record contracts and GPL bridge behavior
 are in [License And Deployment Records](./license-and-deployment-records.md).
 
-Launcher and Settings share one kernel-owned uninstall confirmation and one
-global app-operation state. The confirmation lists owned memory roots when
-known. Verified uninstall performs message-bus cleanup, removes tiles from all
-workspaces, updates the registry, and unmounts the resident through the shared
-reducer path. The kernel row never receives an executable uninstall action.
+Settings is the only surface that starts app deletion; the launcher only opens
+tiles and installs apps. **Delete selected** compiles the target without every
+selected app, then presents one kernel-owned confirmation listing the selected
+apps and their known memory roots. A provider may be removed with all of its
+selected consumers, while retained consumers block the action. Verified
+uninstall commits the set atomically, performs message-bus cleanup, removes
+tiles from all workspaces, updates the registry, and unmounts each resident
+through the shared reducer path. The kernel row never receives an executable
+uninstall action.
 
 The final `Access & recovery` disclosure is collapsed by default and does not
 call the management canister until opened. It lists equivalent authorized owner
@@ -1053,12 +1058,15 @@ IDs per source, and reads fixed certified release assets in waves of at most
 20. It sends neither installed versions nor credentials and aborts if the
 registry changes or Settings unmounts.
 
-Selecting a row's **Update** action re-fetches and reconciles that candidate
-against the observed release tuple. The existing installer prepares that app,
-compiles the proposed final app set, displays the normal package review, and
-deploys through one checked journal. Candidate state and package bytes remain
-browser-ephemeral; successful registry, source metadata, and provenance writes
-commit together. Details are in [App Package Updates](./package-updates.md).
+Selecting rows exposes **Update selected**, which intersects the UI selection
+with verified available releases. A row's **Update** action still prepares that
+one candidate, while **Upgrade all** remains available when no rows are
+selected. Every path re-fetches and reconciles its candidates against the
+observed release tuples, compiles the proposed final app set, displays one
+package review, and deploys through one checked journal. Candidate state and
+package bytes remain browser-ephemeral; successful registry, source metadata,
+and provenance writes commit together. Details are in
+[App Package Updates](./package-updates.md).
 
 The disclosure snapshot contains closed kernel-fact records rather than display
 strings. Kernel-owned renderers derive authoritative wording, risk, groups,

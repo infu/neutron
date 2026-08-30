@@ -11,7 +11,7 @@ import {
   appDependencyImpact,
   assertKernelPackageBaselineMatchesRuntime,
   BROWSER_SURFACE_ORIGINS_PATH,
-  compileAppUninstall,
+  compileAppsUninstall,
   compilePackages,
   compilePackageInstall,
   createDeploymentNonce,
@@ -197,10 +197,14 @@ type AppInstallError = {
 };
 
 export type AppUninstallRequest = {
+  apps: AppUninstallTarget[];
+  deploymentReview: DeploymentBuildReviewInput;
+};
+
+export type AppUninstallTarget = {
   appId: string;
   appName: string;
   memoryIds: string[];
-  deploymentReview: DeploymentBuildReviewInput;
 };
 
 export type AppRegistryStatus = "idle" | "loading" | "ready" | "error";
@@ -231,6 +235,11 @@ export type RuntimeAuthorityFence = {
 
 export type AppInstallResult = {
   appId: string;
+  apps: AppRegistry;
+};
+
+export type AppsUninstallResult = {
+  appIds: string[];
   apps: AppRegistry;
 };
 
@@ -628,8 +637,21 @@ export function clearInstallError(): void {
 export function requestAppUninstall(
   request: AppUninstallRequest,
 ): Promise<boolean> {
-  if (request.appId === "kernel") {
+  const targets = [...request.apps].sort((left, right) =>
+    compareCanonicalText(left.appId, right.appId),
+  );
+  if (targets.length === 0) {
+    throw new Error("Select at least one app to uninstall");
+  }
+  if (targets.some(({ appId }) => appId === "kernel")) {
     throw new Error("The kernel app cannot be uninstalled");
+  }
+  if (
+    targets.some(
+      ({ appId }, index) => index > 0 && targets[index - 1]!.appId === appId,
+    )
+  ) {
+    throw new Error("App uninstall request contains duplicate apps");
   }
   if (request.deploymentReview.suppliedPackages.length !== 0) {
     throw new Error("App uninstall review cannot contain supplied packages");
@@ -640,22 +662,24 @@ export function requestAppUninstall(
   if (deploymentRecord.state !== "complete") {
     throw new Error("App uninstall requires a complete deployment build record");
   }
+  const targetIds = targets.map(({ appId }) => appId);
   if (
-    deploymentRecord.warnings.removed_apps.length !== 1 ||
-    deploymentRecord.warnings.removed_apps[0] !== request.appId
+    JSON.stringify(deploymentRecord.warnings.removed_apps) !==
+    JSON.stringify(targetIds)
   ) {
     throw new Error(
       "App uninstall request does not match the build record removal plan",
     );
   }
-  const recordedMemoryIds = deploymentRecord.warnings.destructive_memory_roots
-    .filter(({ owner }) => owner === request.appId)
-    .map(({ memory_id }) => memory_id)
-    .sort(compareCanonicalText);
-  const requestedMemoryIds = [...new Set(request.memoryIds)].sort(
-    compareCanonicalText,
-  );
-  if (JSON.stringify(recordedMemoryIds) !== JSON.stringify(requestedMemoryIds)) {
+  const recordedMemories = deploymentRecord.warnings.destructive_memory_roots
+    .map(({ owner, memory_id: memoryId }) => ({ appId: owner, memoryId }))
+    .sort(compareUninstallMemory);
+  const requestedMemories = targets
+    .flatMap(({ appId, memoryIds }) =>
+      [...new Set(memoryIds)].map((memoryId) => ({ appId, memoryId })),
+    )
+    .sort(compareUninstallMemory);
+  if (JSON.stringify(recordedMemories) !== JSON.stringify(requestedMemories)) {
     throw new Error(
       "App uninstall request does not match the build record memory plan",
     );
@@ -666,17 +690,20 @@ export function requestAppUninstall(
   });
   createDeploymentBuildReviewModel(deploymentReview);
   const apps = useAppsStore.getState().list;
-  if (apps[request.appId]) {
-    const impact = appDependencyImpact(
-      planAppRegistryDependencies(apps),
-      request.appId,
+  const removed = new Set(targetIds);
+  const dependencyPlan = planAppRegistryDependencies(apps);
+  for (const target of targets) {
+    if (!apps[target.appId]) continue;
+    const impact = appDependencyImpact(dependencyPlan, target.appId);
+    const remainingDependents = impact.direct.filter(
+      ({ consumer }) => !removed.has(consumer),
     );
-    if (impact.direct.length > 0) {
+    if (remainingDependents.length > 0) {
       const names = [
-        ...new Set(impact.direct.map(({ consumer }) => consumer)),
+        ...new Set(remainingDependents.map(({ consumer }) => consumer)),
       ].map((consumer) => apps[consumer]?.name ?? consumer);
       throw new Error(
-        `${request.appName} cannot be uninstalled; required by ${names.join(", ")}`,
+        `${target.appName} cannot be uninstalled; required by ${names.join(", ")}`,
       );
     }
   }
@@ -687,13 +714,25 @@ export function requestAppUninstall(
       ? document.activeElement
       : null;
   useAppsStore.getState().setUninstallRequest({
-    ...request,
-    memoryIds: [...request.memoryIds],
+    apps: targets.map((target) => ({
+      ...target,
+      memoryIds: [...target.memoryIds],
+    })),
     deploymentReview,
   });
   return new Promise((resolve) => {
     uninstallCallback = resolve;
   });
+}
+
+function compareUninstallMemory(
+  left: Readonly<{ appId: string; memoryId: string }>,
+  right: Readonly<{ appId: string; memoryId: string }>,
+): number {
+  return (
+    compareCanonicalText(left.appId, right.appId) ||
+    compareCanonicalText(left.memoryId, right.memoryId)
+  );
 }
 
 export function resolveAppUninstall(approved: boolean): void {
@@ -1828,14 +1867,14 @@ async function readManualInstallProvenanceSnapshot(): Promise<ManualInstallProve
 
 function removeInstallProvenanceAssets(
   current: InstallProvenance,
-  appId: string,
+  appIds: readonly string[],
 ): InstallStagedAsset[] {
-  if (!current.apps[appId]) return [];
+  if (!appIds.some((appId) => current.apps[appId])) return [];
   return [
     {
       target: INSTALL_PROVENANCE_PATH,
       content: serializeInstallProvenance(
-        withoutInstallProvenance(current, [appId]),
+        withoutInstallProvenance(current, appIds),
       ),
       contentType: "application/json",
     },
@@ -2341,23 +2380,46 @@ function equalByteArrays(left: Uint8Array, right: Uint8Array): boolean {
 export async function uninstall_app(
   appId: string,
 ): Promise<AppInstallResult | null> {
-  if (appId === "kernel") {
-    throw new Error("The kernel app cannot be uninstalled");
-  }
+  const result = await uninstall_apps([appId]);
+  return result ? { appId, apps: result.apps } : null;
+}
+
+export async function uninstall_apps(
+  appIds: readonly string[],
+): Promise<AppsUninstallResult | null> {
+  const normalizedAppIds = normalizeUninstallAppIds(appIds);
   beginOperation();
   try {
-    return await uninstallAppInternal(appId);
+    return await uninstallAppsInternal(normalizedAppIds);
   } finally {
     endOperation();
   }
 }
 
-async function uninstallAppInternal(
-  appId: string,
-): Promise<AppInstallResult | null> {
+function normalizeUninstallAppIds(appIds: readonly string[]): string[] {
+  const normalized = [...appIds].sort(compareCanonicalText);
+  if (normalized.length === 0) {
+    throw new Error("Select at least one app to uninstall");
+  }
+  for (let index = 0; index < normalized.length; index += 1) {
+    const appId = normalized[index]!;
+    if (appId === "kernel") {
+      throw new Error("The kernel app cannot be uninstalled");
+    }
+    if (index > 0 && normalized[index - 1] === appId) {
+      throw new Error(`Duplicate app uninstall selection ${appId}`);
+    }
+  }
+  return normalized;
+}
+
+async function uninstallAppsInternal(
+  appIds: readonly string[],
+): Promise<AppsUninstallResult | null> {
+  const operationAppId = appIds.length === 1 ? appIds[0] : undefined;
   useAppsStore.getState().setOperation({
     kind: "uninstall",
-    appId,
+    ...(operationAppId ? { appId: operationAppId } : {}),
     phase: "preparing",
   });
   useAppsStore.getState().setInstallError(null);
@@ -2366,35 +2428,39 @@ async function uninstallAppInternal(
     const neutron = await getNeutronCan();
     const baseline = await readConsistentManualInstallBaseline(neutron);
     const { state, expectedDeploymentId, runtime } = baseline;
-    const compiled = await compileAppUninstall({
+    const compiled = await compileAppsUninstall({
       state,
-      appId,
+      appIds,
       deploymentNonce: createDeploymentNonce(),
       vetKeysEnvironment: runtimeCompilerEnvironment(),
       persistenceMode: persistenceModeFromCompilerId(runtime.compiler_id),
     });
-    const app = state.apps[appId];
-    if (!app) {
-      throw new Error(`${appId} is not installed`);
-    }
+    const targets = appIds.map((appId) => {
+      const app = state.apps[appId];
+      if (!app) throw new Error(`${appId} is not installed`);
+      return { appId, app };
+    });
     const targetCanisterId = getRuntimeDeployment().canisterId;
     const deployment = await prepareBrowserDeployment({
       compiled,
       expectedDeploymentId,
       packages: [],
       provenance: baseline.provenance,
-      removedApps: [appId],
+      removedApps: [...appIds],
       runtime,
       state,
       targetCanisterId,
     });
     useAppsStore.getState().setOperation(null);
     const approved = await requestAppUninstall({
-      appId,
-      appName: app.name,
-      memoryIds: deployment.prepared.record.warnings.destructive_memory_roots
-        .filter(({ owner }) => owner === appId)
-        .map(({ memory_id }) => memory_id),
+      apps: targets.map(({ appId, app }) => ({
+        appId,
+        appName: app.name,
+        memoryIds:
+          deployment.prepared.record.warnings.destructive_memory_roots
+            .filter(({ owner }) => owner === appId)
+            .map(({ memory_id }) => memory_id),
+      })),
       deploymentReview: deployment.review,
     });
     if (!approved) return null;
@@ -2410,7 +2476,7 @@ async function uninstallAppInternal(
       expectedDeploymentId: currentBaseline.expectedDeploymentId,
       packages: [],
       provenance: currentBaseline.provenance,
-      removedApps: [appId],
+      removedApps: appIds,
       runtime: currentBaseline.runtime,
       state: currentBaseline.state,
       targetCanisterId,
@@ -2427,11 +2493,11 @@ async function uninstallAppInternal(
     }
     const provenanceAssets = removeInstallProvenanceAssets(
       currentBaseline.provenance,
-      appId,
+      appIds,
     );
     useAppsStore.getState().setOperation({
       kind: "uninstall",
-      appId,
+      ...(operationAppId ? { appId: operationAppId } : {}),
       phase: "staging",
     });
     deployStarted = true;
@@ -2444,14 +2510,14 @@ async function uninstallAppInternal(
       existingBrowserSurfaceOriginAppIds:
         state.browserSurfaceOriginAppIds,
       previousModulePaths: state.existingModules.map(({ path }) => path),
-      removedApps: [appId],
+      removedApps: [...appIds],
       ...(provenanceAssets.length > 0
         ? { stagedAssets: provenanceAssets }
         : {}),
       deploymentBuildRecord: deployment.prepared.record,
       expectedDeploymentId,
       onStep(step) {
-        setDeployOperation("uninstall", appId, step);
+        setDeployOperation("uninstall", operationAppId, step);
         announceActivationStep(step, compiled.deploymentId, false);
       },
     });
@@ -2464,11 +2530,11 @@ async function uninstallAppInternal(
       deploymentId: result.compiled.deploymentId,
       phase: "committed",
     });
-    removeAppRuntimeState(appId, true);
+    for (const appId of appIds) removeAppRuntimeState(appId, true);
     await resetNeutronCanBinding();
     await delay(300);
     useAppsStore.getState().setInstalled();
-    return { appId, apps: result.apps };
+    return { appIds: [...appIds], apps: result.apps };
   } catch (error) {
     const neutron = await getNeutronCan().catch(() => null);
     if (neutron && deployStarted) {

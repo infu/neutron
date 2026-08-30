@@ -16,10 +16,25 @@ export function uninstallDeploymentRecordFixture({
   appId?: string;
   memoryIds?: readonly string[];
 }> = {}): CompleteDeploymentBuildRecord {
+  return appsUninstallDeploymentRecordFixture({
+    apps: [{ appId, memoryIds }],
+  });
+}
+
+export function appsUninstallDeploymentRecordFixture({
+  apps,
+}: Readonly<{
+  apps: readonly Readonly<{
+    appId: string;
+    memoryIds: readonly string[];
+  }>[];
+}>): CompleteDeploymentBuildRecord {
   const kernelApp = app("kernel", 100, "1");
-  const removedApp = app(appId, 100, "2");
-  const previousMemories = memoryIds.map((id) =>
-    memory(appId, id, 1, "3"),
+  const removedApps = apps.map(({ appId }, index) =>
+    app(appId, 100, String((index % 8) + 2)),
+  );
+  const previousMemories = apps.flatMap(({ appId, memoryIds }, appIndex) =>
+    memoryIds.map((id) => memory(appId, id, 1, String((appIndex % 7) + 3))),
   );
   const { wasmRecord } = prepareDeterministicWasmTransport(
     Uint8Array.of(0x00, 0x61, 0x73, 0x6d, 1, 0, 0, 0),
@@ -31,7 +46,7 @@ export function uninstallDeploymentRecordFixture({
     previous: {
       deployment_id: deploymentId("b"),
       stable_signature_sha256: null,
-      apps: [kernelApp, removedApp],
+      apps: [kernelApp, ...removedApps],
       memories: previousMemories,
     },
     build: {
@@ -65,7 +80,7 @@ export function uninstallDeploymentRecordFixture({
         from: item.version,
         old_schema_entry_sha256: item.schema,
       })),
-      removed_apps: [appId],
+      removed_apps: apps.map(({ appId }) => appId).sort(),
       destructive_memory_roots: previousMemories.map((item) => ({
         owner: item.owner,
         memory_id: item.id,

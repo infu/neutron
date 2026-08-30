@@ -1,6 +1,9 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import { registryApp } from "./app_registry_fixture.ts";
-import { uninstallDeploymentRecordFixture } from "./deployment_record_fixture.ts";
+import {
+  appsUninstallDeploymentRecordFixture,
+  uninstallDeploymentRecordFixture,
+} from "./deployment_record_fixture.ts";
 
 const capabilityPlanFingerprint = "a".repeat(64);
 
@@ -125,6 +128,14 @@ function uninstallReview(
   });
 }
 
+function uninstallTargets(
+  appId = "files",
+  appName = "Files",
+  memoryIds: string[] = ["files"],
+) {
+  return [{ appId, appName, memoryIds }];
+}
+
 beforeEach(() => {
   resolveAppUninstall(false);
   resetUiAttentionState();
@@ -210,16 +221,12 @@ test("shared uninstall confirmation resolves and clears its request", async () =
   const deploymentRecord = uninstallDeploymentRecordFixture();
   const deploymentReview = uninstallReview(deploymentRecord);
   const decision = requestAppUninstall({
-    appId: "files",
-    appName: "Files",
-    memoryIds: ["files"],
+    apps: uninstallTargets(),
     deploymentReview,
   });
 
   expect(useAppsStore.getState().uninstallRequest).toEqual({
-    appId: "files",
-    appName: "Files",
-    memoryIds: ["files"],
+    apps: uninstallTargets(),
     deploymentReview,
   });
 
@@ -236,9 +243,7 @@ test("cancelling the shared uninstall confirmation preserves app state", async (
   useAppsStore.getState().setApps(apps);
   const before = useAppsStore.getState().list;
   const decision = requestAppUninstall({
-    appId: "files",
-    appName: "Files",
-    memoryIds: ["files"],
+    apps: uninstallTargets(),
     deploymentReview: uninstallReview(),
   });
 
@@ -433,9 +438,7 @@ test("content-identical authority refresh preserves app and instance identity", 
 test("uninstall confirmation is bound to the exact compiled destruction plan", () => {
   expect(() =>
     requestAppUninstall({
-      appId: "files",
-      appName: "Files",
-      memoryIds: [],
+      apps: uninstallTargets("files", "Files", []),
       deploymentReview: uninstallReview(),
     }),
   ).toThrow("does not match the build record memory plan");
@@ -445,9 +448,7 @@ test("uninstall confirmation is bound to the exact compiled destruction plan", (
 test("kernel uninstall cannot enter the confirmation flow", () => {
   expect(() =>
     requestAppUninstall({
-      appId: "kernel",
-      appName: "Neutron",
-      memoryIds: ["kernel"],
+      apps: uninstallTargets("kernel", "Neutron", ["kernel"]),
       deploymentReview: uninstallReview(),
     }),
   ).toThrow("kernel app cannot be uninstalled");
@@ -483,9 +484,7 @@ test("shared uninstall confirmation blocks required providers", () => {
 
   expect(() =>
     requestAppUninstall({
-      appId: "contacts",
-      appName: "Contacts",
-      memoryIds: [],
+      apps: uninstallTargets("contacts", "Contacts", []),
       deploymentReview: uninstallReview(
         uninstallDeploymentRecordFixture({
           appId: "contacts",
@@ -495,6 +494,49 @@ test("shared uninstall confirmation blocks required providers", () => {
     }),
   ).toThrow("Contacts cannot be uninstalled; required by Calendar");
   expect(useAppsStore.getState().uninstallRequest).toBeNull();
+});
+
+test("shared uninstall confirmation permits a provider with all selected consumers", async () => {
+  useAppsStore.getState().setApps({
+    contacts: registryApp({
+      id: "contacts",
+      name: "Contacts",
+      version: 102,
+      func: {
+        list_contacts: {
+          type: "internal",
+          async: "async*",
+          expose: "apps",
+        },
+      },
+    }),
+    calendar: registryApp({
+      id: "calendar",
+      name: "Calendar",
+      version: 100,
+      dependencies: {
+        people: {
+          app: "contacts",
+          min_version: 102,
+          functions: ["list_contacts"],
+        },
+      },
+    }),
+  });
+  const apps = [
+    { appId: "calendar", appName: "Calendar", memoryIds: [] },
+    { appId: "contacts", appName: "Contacts", memoryIds: [] },
+  ];
+  const decision = requestAppUninstall({
+    apps,
+    deploymentReview: uninstallReview(
+      appsUninstallDeploymentRecordFixture({ apps }),
+    ),
+  });
+
+  expect(useAppsStore.getState().uninstallRequest?.apps).toEqual(apps);
+  resolveAppUninstall(false);
+  await expect(decision).resolves.toBe(false);
 });
 
 test("call approval resolves pending request and removes it", async () => {

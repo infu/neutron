@@ -46,6 +46,7 @@ import {
   browserSurfaceOriginsSidecar,
   applyRuntimeDeploymentConfig,
   buildAppUninstallCompileInput,
+  buildAppsUninstallCompileInput,
   appRegistryEntry,
   appDependencyImpact,
   createStaticFileOperation,
@@ -860,6 +861,9 @@ test("bounded package decoding accepts every active canonical package fixture", 
       const activeManifest = JSON.parse(
         await readFile(sourceManifestPath, "utf8"),
       ) as { id: string; version: number; update_source?: string };
+      const workspacePackage = JSON.parse(
+        await readFile(join(appRoot, appDirectory, "package.json"), "utf8"),
+      ) as { license?: string };
       if (prepared.manifest.version !== activeManifest.version) {
         if (prepared.packageRecord !== undefined) {
           expect(prepared.packageRecord.package).toMatchObject({
@@ -875,12 +879,15 @@ test("bounded package decoding accepts every active canonical package fixture", 
           id: activeManifest.id,
           version: activeManifest.version,
         });
+        const declaredLicense = workspacePackage.license;
+        expect(typeof declaredLicense).toBe("string");
+        if (typeof declaredLicense !== "string") {
+          throw new Error("workspace package license is missing");
+        }
         expect(record.license.id).toBe(
           activeManifest.id === "kernel"
             ? "LicenseRef-Neutron-Public-License-1.0"
-            : activeManifest.id === "gemma"
-              ? "Apache-2.0"
-              : "LicenseRef-Neutron-Sovereign-Application-License-1.0",
+            : declaredLicense,
         );
         expect(record.notices.map(({ path }) => path)).toContain(
           "legal/APPLICATION-NOTICE.txt",
@@ -2799,6 +2806,61 @@ test("uninstall preflight blocks providers and permits consumers", () => {
   expect(
     buildAppUninstallCompileInput({ state, appId: "calendar" }).configs,
   ).toEqual({ kernel, contacts });
+  expect(
+    buildAppsUninstallCompileInput({
+      state,
+      appIds: ["contacts", "calendar"],
+    }).configs,
+  ).toEqual({ kernel });
+});
+
+test("batch uninstall selection is non-empty, unique, bounded, and non-system", () => {
+  const kernel = {
+    format: 3 as const,
+    id: "kernel",
+    name: "Kernel",
+    version: 100,
+    entry: "kernel",
+  };
+  const mail = {
+    format: 3 as const,
+    id: "mail",
+    name: "Mail",
+    version: 100,
+    entry: "mail",
+  };
+  const state = {
+    registry: {},
+    apps: {},
+    browserSurfaceOriginAppIds: [],
+    browserSurfaceOriginsSidecarPresent: true,
+    existingModules: [],
+    existingConfigs: { kernel, mail },
+    previousStable: null,
+    connectionProviderSupport: connectionProviderSupportFixture,
+  };
+
+  expect(() =>
+    buildAppsUninstallCompileInput({ state, appIds: [] }),
+  ).toThrow("Select at least one app");
+  expect(() =>
+    buildAppsUninstallCompileInput({ state, appIds: ["mail", "mail"] }),
+  ).toThrow("Duplicate removed app mail");
+  expect(() =>
+    buildAppsUninstallCompileInput({ state, appIds: ["kernel"] }),
+  ).toThrow("kernel app cannot be removed");
+  expect(() =>
+    buildAppsUninstallCompileInput({ state, appIds: ["missing"] }),
+  ).toThrow("App missing is not installed");
+  expect(() =>
+    buildAppsUninstallCompileInput({
+      state,
+      appIds: Array.from(
+        { length: KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT + 1 },
+        (_, index) => `app${index}`,
+      ),
+    }),
+  ).toThrow(`kernel limit is ${KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT}`);
 });
 
 test("registry dependency graph reports direct and transitive impact", () => {

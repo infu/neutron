@@ -293,7 +293,7 @@ test("kernel settings preserves the workspace and shows reconciled system state"
     "Owner"
   );
   await expect(page.locator('[data-tid="settings-app-kernel"]')).toBeVisible();
-  await expect(page.locator('[data-tid="settings-uninstall-kernel"]')).toHaveCount(
+  await expect(page.locator('[data-tid="settings-select-kernel"]')).toHaveCount(
     0
   );
   await expect(page.locator(".kernel-workspace-surface")).toHaveAttribute(
@@ -458,16 +458,23 @@ test("kernel settings transactionally uninstalls a disposable app", async ({
   await page.reload({ waitUntil: "domcontentloaded" });
   await openKernelSettings(page);
 
-  const uninstall = page.locator('[data-tid="settings-uninstall-hello"]');
-  await expect(uninstall).toBeEnabled();
-  await uninstall.click();
+  const selection = page.locator('[data-tid="settings-select-hello"]');
+  await expect(selection).toBeEnabled();
+  await expect(selection).toHaveAttribute("aria-pressed", "false");
+  await selection.click();
+  await expect(selection).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-tid="uninstall-dialog"]')).toHaveCount(0);
+  const deleteSelected = page.locator('[data-tid="settings-delete-selected"]');
+  await expect(deleteSelected).toBeEnabled();
+  await deleteSelected.click();
   await expect(page.locator('[data-tid="uninstall-dialog"]')).toContainText(
     "hello"
   );
   await page.locator('[data-tid="uninstall-cancel"]').click();
   await expect(page.locator('[data-tid="settings-app-hello"]')).toBeVisible();
+  await expect(selection).toHaveAttribute("aria-pressed", "true");
 
-  await uninstall.click();
+  await deleteSelected.click();
   await page.locator('[data-tid="uninstall-confirm"]').click();
   await expect(page.locator('[data-tid="install-progress"]')).toHaveAttribute(
     "data-operation-kind",

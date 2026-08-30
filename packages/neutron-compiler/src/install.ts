@@ -1841,29 +1841,54 @@ export function applyRuntimeDeploymentConfig(
   }
 }
 
-export function buildAppUninstallCompileInput({
-  state,
-  appId,
-  deploymentNonce,
-  vetKeysEnvironment,
-  persistenceMode,
-}: {
+type AppsUninstallCompileInput = {
   state: KernelPackageState;
-  appId: string;
+  appIds: readonly string[];
   deploymentNonce?: string;
   vetKeysEnvironment?: VetKeysEnvironment;
   persistenceMode?: NeutronPersistenceMode;
-}): CompileInput {
-  validateInstallAppId(appId);
-  if (appId === "kernel")
-    throw new Error("The kernel app cannot be uninstalled");
-  if (!state.existingConfigs[appId]) {
-    throw new Error(`App ${appId} is not installed`);
+};
+
+type AppUninstallCompileInput = Omit<AppsUninstallCompileInput, "appIds"> & {
+  appId: string;
+};
+
+export function buildAppUninstallCompileInput({
+  state,
+  appId,
+  ...options
+}: AppUninstallCompileInput): CompileInput {
+  return buildAppsUninstallCompileInput({
+    state,
+    appIds: [appId],
+    ...options,
+  });
+}
+
+export function buildAppsUninstallCompileInput({
+  state,
+  appIds,
+  deploymentNonce,
+  vetKeysEnvironment,
+  persistenceMode,
+}: AppsUninstallCompileInput): CompileInput {
+  const normalizedAppIds = normalizeRemovedApps(appIds, []);
+  if (normalizedAppIds.length === 0) {
+    throw new Error("Select at least one app to uninstall");
   }
+  for (const appId of normalizedAppIds) {
+    if (!state.existingConfigs[appId]) {
+      throw new Error(`App ${appId} is not installed`);
+    }
+  }
+  const removed = new Set(normalizedAppIds);
   const dependencyPlan = planAppDependencies(state.existingConfigs);
-  const impact = appDependencyImpact(dependencyPlan, appId);
-  const dependents = impact.direct;
-  if (dependents.length > 0) {
+  for (const appId of normalizedAppIds) {
+    const impact = appDependencyImpact(dependencyPlan, appId);
+    const dependents = impact.direct.filter(
+      ({ consumer }) => !removed.has(consumer),
+    );
+    if (dependents.length === 0) continue;
     const provider = state.existingConfigs[appId]!;
     const direct = dependents
       .map((dependent) => {
@@ -1872,6 +1897,7 @@ export function buildAppUninstallCompileInput({
       })
       .join(", ");
     const transitive = impact.transitiveConsumers
+      .filter((consumer) => !removed.has(consumer))
       .map((consumer) => state.existingConfigs[consumer]?.name ?? consumer)
       .join(", ");
     throw new Error(
@@ -1881,7 +1907,7 @@ export function buildAppUninstallCompileInput({
     );
   }
   const configs = Object.fromEntries(
-    Object.entries(state.existingConfigs).filter(([id]) => id !== appId),
+    Object.entries(state.existingConfigs).filter(([id]) => !removed.has(id)),
   );
   assertCompileConnectionProviderSupport(
     configs,
@@ -1972,15 +1998,21 @@ export function appDependencyImpact(
   };
 }
 
-export async function compileAppUninstall(input: {
-  state: KernelPackageState;
-  appId: string;
-  deploymentNonce?: string;
-  vetKeysEnvironment?: VetKeysEnvironment;
-  persistenceMode?: NeutronPersistenceMode;
-}): Promise<CompileResult> {
+export async function compileAppUninstall(
+  input: AppUninstallCompileInput,
+): Promise<CompileResult> {
+  const { appId, ...options } = input;
+  return compileAppsUninstall({
+    ...options,
+    appIds: [appId],
+  });
+}
+
+export async function compileAppsUninstall(
+  input: AppsUninstallCompileInput,
+): Promise<CompileResult> {
   const { compile } = await import("./compile.ts");
-  return compile(buildAppUninstallCompileInput(input));
+  return compile(buildAppsUninstallCompileInput(input));
 }
 
 export async function uninstallApp({

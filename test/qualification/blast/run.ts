@@ -2001,9 +2001,12 @@ async function updateBlastFromBrowser(
 
 async function uninstallBlastFromBrowser(page: Page): Promise<void> {
   await openKernelSettings(page);
-  const uninstall = page.locator('[data-tid="settings-uninstall-blast"]');
-  await uninstall.waitFor({ state: "visible", timeout: 30_000 });
-  await uninstall.click({ timeout: 30_000 });
+  const selection = page.locator('[data-tid="settings-select-blast"]');
+  await selection.waitFor({ state: "visible", timeout: 30_000 });
+  await selection.click({ timeout: 30_000 });
+  await page
+    .locator('[data-tid="settings-delete-selected"]')
+    .click({ timeout: 30_000 });
   const dialog = page.locator('[data-tid="uninstall-dialog"]');
   await dialog.waitFor({ state: "visible", timeout: QUALIFICATION_TIMEOUT_MS });
   const memoryIds = (await dialog
