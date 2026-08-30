@@ -384,7 +384,7 @@ function renderEntry(uiMode: KernelUiMode): string {
         memories={[]}
         onRevokeReservation={() => undefined}
         onSetCapabilityEnabled={() => undefined}
-        onUninstall={() => undefined}
+        onToggleSelected={() => undefined}
         provenance={{
           kind: "repository",
           repository: "qhbym-qaaaa-aaaaa-aaafq-cai",
@@ -397,8 +397,9 @@ function renderEntry(uiMode: KernelUiMode): string {
         runtimeVersion={100n}
         scheduledTasks={[]}
         transitiveDependentIds={[]}
-        uninstallDisabled={false}
-        uninstallTitle="Uninstall Networked App"
+        selected={false}
+        selectionDisabled={false}
+        selectionTitle="Select Networked App for app actions"
         update={null}
       />
     </table>,
@@ -427,14 +428,15 @@ function renderStaticEntry(
         memories={[]}
         onRevokeReservation={() => undefined}
         onSetCapabilityEnabled={() => undefined}
-        onUninstall={() => undefined}
+        onToggleSelected={() => undefined}
         registry={{ [appId]: appEntry }}
         reservationActionsDisabled={false}
         runtimeVersion={100n}
         scheduledTasks={[]}
         transitiveDependentIds={[]}
-        uninstallDisabled={false}
-        uninstallTitle={`Uninstall ${appEntry.name}`}
+        selected={false}
+        selectionDisabled={false}
+        selectionTitle={`Select ${appEntry.name} for app actions`}
         update={null}
       />
     </table>,

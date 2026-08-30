@@ -1933,7 +1933,7 @@ button:focus-visible,
 .launcher-tile-row {
     align-items: stretch;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 28px;
+    grid-template-columns: minmax(0, 1fr);
     min-width: 0;
 }
 
@@ -1960,27 +1960,6 @@ button:focus-visible,
     svg {
         height: 16px;
         width: 16px;
-    }
-}
-
-.launcher-uninstall {
-    align-items: center;
-    background: transparent;
-    border: 0;
-    border-radius: 3px;
-    color: var(--k-text-faint);
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    opacity: 0;
-    padding: 0;
-    &:hover {
-        background: rgba(255, 120, 133, 0.12);
-        color: var(--k-danger);
-    }
-    &:focus-visible,
-    .launcher-tile-row:hover & {
-        opacity: 1;
     }
 }
 
@@ -2948,6 +2927,23 @@ button:focus-visible,
     padding: 10px;
 }
 
+.uninstall-app-list {
+    display: grid;
+    gap: 5px;
+
+    > div {
+        align-items: baseline;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px 9px;
+    }
+
+    code {
+        color: var(--k-text-faint);
+        font-size: 10px;
+    }
+}
+
 .uninstall-memory-list {
     display: flex;
     flex-wrap: wrap;
@@ -3761,7 +3757,7 @@ button:focus-visible,
 }
 
 .settings-app-cell--details,
-.settings-app-cell--uninstall {
+.settings-app-cell--selection {
     padding-left: 4px;
     padding-right: 4px;
     text-align: center;
@@ -3903,6 +3899,8 @@ button:focus-visible,
 
 .settings-app-updates-toolbar {
     display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
     justify-content: flex-end;
     margin-bottom: 9px;
 
@@ -3940,7 +3938,7 @@ button:focus-visible,
 
 .settings-app-details-toggle,
 .settings-app-lock,
-.settings-app-uninstall {
+.settings-app-selection {
     align-items: center;
     color: var(--k-text-faint);
     display: inline-flex;
@@ -3957,9 +3955,14 @@ button:focus-visible,
     }
 }
 
-.settings-app-uninstall:not(:disabled):hover {
+.settings-app-selection:not(:disabled):hover,
+.settings-app-selection[aria-pressed="true"] {
     background: rgba(255, 120, 133, 0.12);
     color: var(--k-danger);
+}
+
+.settings-app-entry.is-selected .settings-app-row > .settings-app-cell {
+    background: rgba(255, 120, 133, 0.035);
 }
 
 .settings-app-details-row[hidden] {
@@ -5800,7 +5803,7 @@ button:focus-visible,
     }
 
     .settings-app-cell--details,
-    .settings-app-cell--uninstall {
+    .settings-app-cell--selection {
         padding-left: 2px;
         padding-right: 2px;
     }
@@ -5925,7 +5928,7 @@ button:focus-visible,
     }
 
     .settings-app-cell--details,
-    .settings-app-cell--uninstall {
+    .settings-app-cell--selection {
         align-items: end;
         justify-items: center;
         padding: 6px 1px;
@@ -5949,7 +5952,7 @@ button:focus-visible,
     }
 
     .settings-app-cell--details .settings-app-cell-label,
-    .settings-app-cell--uninstall .settings-app-cell-label {
+    .settings-app-cell--selection .settings-app-cell-label {
         clip: rect(0 0 0 0);
         clip-path: inset(50%);
         height: 1px;

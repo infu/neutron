@@ -39,9 +39,9 @@ export type LegacyKernelReleaseFixture = Readonly<{
 }>;
 
 type RetainedKernelReleaseFixture = Readonly<{
-  label: "v0.3.20";
-  version: 320;
-  archive: "../../../apps/kernel/kernel.v0.3.20.neutron";
+  label: "v0.3.21";
+  version: 321;
+  archive: "../../../apps/kernel/kernel.v0.3.21.neutron";
   bytes: number;
   sha256: string;
   persistenceMode: "classical";
@@ -116,15 +116,15 @@ export const LEGACY_KERNEL_RELEASES = [
   },
 ] as const satisfies readonly LegacyKernelReleaseFixture[];
 
-export const RETAINED_KERNEL_V320_RELEASE = {
-  label: "v0.3.20",
-  version: 320,
-  archive: "../../../apps/kernel/kernel.v0.3.20.neutron",
-  bytes: 2_415_407,
-  sha256: "7dc5f4484a6010ebcbdb52d59b13dae01b1252c4f1c5ed2ae8f34a5f64e39576",
+export const RETAINED_KERNEL_V321_RELEASE = {
+  label: "v0.3.21",
+  version: 321,
+  archive: "../../../apps/kernel/kernel.v0.3.21.neutron",
+  bytes: 2_411_860,
+  sha256: "1143b525ce869cae6c44297ec973b56bec06e2250a0885bca12ca87e030c999e",
   persistenceMode: "classical",
   archivePath: fileURLToPath(
-    new URL("../../../apps/kernel/kernel.v0.3.20.neutron", import.meta.url),
+    new URL("../../../apps/kernel/kernel.v0.3.21.neutron", import.meta.url),
   ),
 } as const satisfies RetainedKernelReleaseFixture;
 
@@ -164,15 +164,15 @@ type KernelUpgradeIdentityFixture<Version extends number = number> = Readonly<{
 export type LegacyKernelIdentityFixture =
   KernelUpgradeIdentityFixture<LegacyKernelVersion>;
 
-const RETAINED_KERNEL_V320_IDENTITY = {
+const RETAINED_KERNEL_V321_IDENTITY = {
   schema: 1,
-  archive: RETAINED_KERNEL_V320_RELEASE.archive,
-  bytes: RETAINED_KERNEL_V320_RELEASE.bytes,
-  sha256: RETAINED_KERNEL_V320_RELEASE.sha256,
+  archive: RETAINED_KERNEL_V321_RELEASE.archive,
+  bytes: RETAINED_KERNEL_V321_RELEASE.bytes,
+  sha256: RETAINED_KERNEL_V321_RELEASE.sha256,
   package: {
     format: 3,
     id: "kernel",
-    version: RETAINED_KERNEL_V320_RELEASE.version,
+    version: RETAINED_KERNEL_V321_RELEASE.version,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
   },
   memory: [
@@ -193,7 +193,7 @@ const RETAINED_KERNEL_V320_IDENTITY = {
       entry: "f2380721e6147d0f0af208a70183e3d8ce6ac19ad533e1367b3f5780305e7ad3",
     },
   ],
-} as const satisfies KernelUpgradeIdentityFixture<320>;
+} as const satisfies KernelUpgradeIdentityFixture<321>;
 
 export type LegacyUpgradeCompileFixture = Readonly<{
   release: KernelUpgradeReleaseFixture;
@@ -258,21 +258,21 @@ export async function loadLegacyKernelIdentityFixture(
   return { release, identity, archivePath, archive };
 }
 
-async function loadRetainedKernelV320Fixture(): Promise<{
-  identity: KernelUpgradeIdentityFixture<320>;
+async function loadRetainedKernelV321Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<321>;
   archive: Uint8Array;
 }> {
   const archive = await loadKernelArchive(
-    RETAINED_KERNEL_V320_RELEASE.archivePath,
-    "The retained v0.3.20 Kernel predecessor",
+    RETAINED_KERNEL_V321_RELEASE.archivePath,
+    "The retained v0.3.21 Kernel predecessor",
   );
   assertArchiveIdentity(
-    RETAINED_KERNEL_V320_RELEASE.label,
+    RETAINED_KERNEL_V321_RELEASE.label,
     archive,
-    RETAINED_KERNEL_V320_RELEASE.bytes,
-    RETAINED_KERNEL_V320_RELEASE.sha256,
+    RETAINED_KERNEL_V321_RELEASE.bytes,
+    RETAINED_KERNEL_V321_RELEASE.sha256,
   );
-  return { identity: RETAINED_KERNEL_V320_IDENTITY, archive };
+  return { identity: RETAINED_KERNEL_V321_IDENTITY, archive };
 }
 
 export async function compileLegacyKernelUpgradeFixture(
@@ -316,8 +316,8 @@ export async function compileFinalCandidateRetainedKernelUpgradeFixture({
 }): Promise<LegacyUpgradeCompileFixture> {
   return compileFinalCandidateKernelUpgradeFixture({
     expectedSha256,
-    release: RETAINED_KERNEL_V320_RELEASE,
-    loadPredecessor: loadRetainedKernelV320Fixture,
+    release: RETAINED_KERNEL_V321_RELEASE,
+    loadPredecessor: loadRetainedKernelV321Fixture,
   });
 }
 
@@ -407,7 +407,7 @@ async function compileKernelUpgradeCandidate(
   assertCandidatePackageRecord(candidateKernel);
 
   let initial: CompileResult;
-  if (release.version === RETAINED_KERNEL_V320_RELEASE.version) {
+  if (release.version === RETAINED_KERNEL_V321_RELEASE.version) {
     initial = await compileFreshPackages({
       packages: [legacyKernel, hello],
       persistenceMode: release.persistenceMode,
@@ -496,7 +496,7 @@ function assertPredecessorPackageRecord(
     }
     return;
   }
-  if (release.version === 315 || release.version === 320) {
+  if (release.version === 315 || release.version === 321) {
     if (
       record?.package.version !== release.version ||
       record.license.id !== "LicenseRef-Neutron-Public-License-1.0" ||

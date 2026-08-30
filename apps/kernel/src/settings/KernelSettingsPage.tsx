@@ -10,7 +10,9 @@ import {
 import { IoArrowBack, IoHardwareChipOutline, IoRefresh } from "react-icons/io5";
 import {
   appDependencyImpact,
+  KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT,
   planAppRegistryDependencies,
+  type AppDependencyImpact,
   type KernelRuntimeInfo,
 } from "neutron-compiler/src/install.js";
 import { getNeutronId } from "../config.ts";
@@ -18,7 +20,7 @@ import {
   getApps,
   isAuthorityPendingState,
   refreshRuntimeAuthority,
-  uninstall_app,
+  uninstall_apps,
   useAppsStore,
 } from "../reducer/apps.ts";
 import {
@@ -175,6 +177,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
   const [provenance, setProvenance] =
     useState<ResourceState<InstallProvenance>>(initialResource);
   const [capabilityOperation, setCapabilityOperation] = useState<string | null>(null);
+  const [actionAppIds, setActionAppIds] = useState<string[]>([]);
   const [runtimeOpen, setRuntimeOpen] = useState(false);
   const [lastSuccessfulRefresh, setLastSuccessfulRefresh] = useState<
     number | null
@@ -509,6 +512,29 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
     () => settingsAppRows(apps, runtime.data),
     [apps, runtime.data],
   );
+  const actionAppIdSet = useMemo(
+    () => new Set(actionAppIds),
+    [actionAppIds],
+  );
+
+  useEffect(() => {
+    setActionAppIds((current) => {
+      const next = current.filter(
+        (appId) => appId !== "kernel" && apps[appId] !== undefined,
+      );
+      return next.length === current.length ? current : next;
+    });
+  }, [apps]);
+
+  const toggleAppSelection = useCallback((appId: string) => {
+    if (appId === "kernel") return;
+    setActionAppIds((current) => {
+      const selected = new Set(current);
+      if (selected.has(appId)) selected.delete(appId);
+      else selected.add(appId);
+      return [...selected].sort();
+    });
+  }, []);
   const reconciliation = useMemo(() => {
     if (!runtime.data || registryStatus !== "ready") return null;
     try {
@@ -550,7 +576,50 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
       return { error: errorMessage(error), plan: null };
     }
   }, [apps]);
+  const dependencyImpacts = useMemo<Map<string, AppDependencyImpact>>(() => {
+    const plan = dependencyGraph.plan;
+    if (!plan) return new Map();
+    return new Map(
+      rows.map(({ id }) => [id, appDependencyImpact(plan, id)]),
+    );
+  }, [dependencyGraph.plan, rows]);
+  const selectedDependencyNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const appId of actionAppIds) {
+      for (const { consumer } of dependencyImpacts.get(appId)?.direct ?? []) {
+        if (!actionAppIdSet.has(consumer)) {
+          names.add(apps[consumer]?.name ?? consumer);
+        }
+      }
+    }
+    return [...names].sort();
+  }, [actionAppIds, actionAppIdSet, apps, dependencyImpacts]);
   const registryReconciled = reconciliation?.ok === true;
+  const appActionsDisabled =
+    appMutationBlocked ||
+    capabilityOperation !== null ||
+    registryStatus !== "ready" ||
+    !registryReconciled;
+  const selectionDisabledTitle = appMutationBlocked
+    ? authorityPending
+      ? "Finish or discard the pending installation first"
+      : "Another app operation is in progress"
+    : registryStatus !== "ready" || !registryReconciled
+      ? "Refresh and reconcile app state before selecting apps"
+      : "App actions are temporarily unavailable";
+  const deleteSelectionTitle =
+    actionAppIds.length > KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT
+      ? `Select at most ${KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT} apps per deletion`
+      : dependencyGraph.plan === null
+        ? "Resolve app dependency metadata before deleting apps"
+        : selectedDependencyNames.length > 0
+          ? `Also select required dependents: ${selectedDependencyNames.join(", ")}`
+          : `Delete ${actionAppIds.length} selected app${actionAppIds.length === 1 ? "" : "s"}`;
+  const deleteSelectionDisabled =
+    appActionsDisabled ||
+    dependencyGraph.plan === null ||
+    selectedDependencyNames.length > 0 ||
+    actionAppIds.length > KERNEL_INSTALL_MAX_APP_REMOVALS_PER_COMMIT;
   const refreshing =
     snapshot.loading ||
     runtime.loading ||
@@ -594,14 +663,23 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
             ? `Runtime identity is unavailable: ${runtime.error}`
             : null;
 
-  const uninstall = async (appId: string) => {
+  const uninstallSelected = async () => {
+    if (actionAppIds.length === 0) return;
     try {
-      const result = await uninstall_app(appId);
-      if (result) await refresh();
+      const result = await uninstall_apps(actionAppIds);
+      if (result) {
+        setActionAppIds([]);
+        await refresh();
+      }
     } catch {
       // The shared operation dialog owns the actionable error.
     }
   };
+
+  const refreshAfterUpdate = useCallback(async () => {
+    setActionAppIds([]);
+    await refresh();
+  }, [refresh]);
 
   const revokeReservation = async (reservation: BackendCallReservation) => {
     await revokeBackendReservation(reservation);
@@ -752,7 +830,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
 
         <AppUpdatesCoordinator
           fallbackFocusRef={installedAppsRef}
-          onUpdated={refresh}
+          onUpdated={refreshAfterUpdate}
           returnFocusRef={updateReturnFocusRef}
         />
 
@@ -765,13 +843,12 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
           <AppInstallRecoveryPanel />
           <AppUpdatesFeedback />
           <AppUpdatesBulkAction
-            disabled={
-              appMutationBlocked ||
-              capabilityOperation !== null ||
-              registryStatus !== "ready" ||
-              !registryReconciled
-            }
+            deleteDisabled={deleteSelectionDisabled}
+            deleteTitle={deleteSelectionTitle}
+            disabled={appActionsDisabled}
+            onDeleteSelected={() => void uninstallSelected()}
             returnFocusRef={updateReturnFocusRef}
+            actionAppIds={actionAppIds}
           />
           {registryError ? (
             <InlineError
@@ -842,7 +919,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                 <col className="settings-app-column--update" />
                 <col className="settings-app-column--version" />
                 <col className="settings-app-column--details" />
-                <col className="settings-app-column--uninstall" />
+                <col className="settings-app-column--selection" />
               </colgroup>
               <thead>
                 <tr>
@@ -852,27 +929,17 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                   <th scope="col">Update</th>
                   <th scope="col">Version</th>
                   <th scope="col"><span className="sr-only">Details</span></th>
-                  <th scope="col"><span className="sr-only">Uninstall</span></th>
+                  <th scope="col"><span className="sr-only">Select</span></th>
                 </tr>
               </thead>
               {rows.map(({ id, entry, memories, runtimeVersion }) => {
                 const isKernel = id === "kernel";
                 const dependencies =
                   dependencyGraph.plan?.dependenciesByConsumer[id] ?? [];
-                const impact = dependencyGraph.plan
-                  ? appDependencyImpact(dependencyGraph.plan, id)
-                  : { direct: [], transitiveConsumers: [] };
-                const dependentNames = [
-                  ...new Set(impact.direct.map(({ consumer }) => consumer)),
-                ].map((consumer) => apps[consumer]?.name ?? consumer);
-                const disabled =
-                  isKernel ||
-                  appMutationBlocked ||
-                  capabilityOperation !== null ||
-                  registryStatus !== "ready" ||
-                  !registryReconciled ||
-                  dependencyGraph.plan === null ||
-                  impact.direct.length > 0;
+                const impact = dependencyImpacts.get(id) ?? {
+                  direct: [],
+                  transitiveConsumers: [],
+                };
                 const appProvenance = provenance.data?.apps[id];
                 const legalInspection: InstalledPackageRecordInspection =
                   packageRecords.loading
@@ -938,9 +1005,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                       capabilityReconciliation.data?.byApp[id] ?? []
                     }
                     {...(appProvenance ? { provenance: appProvenance } : {})}
-                    onUninstall={() =>
-                      void uninstall(id)
-                    }
+                    onToggleSelected={() => toggleAppSelection(id)}
                     onRevokeReservation={(reservation) =>
                       void revokeReservation(reservation)
                     }
@@ -959,30 +1024,20 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                     registry={apps}
                     runtimeVersion={runtimeVersion}
                     transitiveDependentIds={impact.transitiveConsumers}
-                    uninstallDisabled={disabled}
-                    uninstallTitle={
-                      appMutationBlocked
-                        ? authorityPending
-                          ? "Finish or discard the pending installation first"
-                          : "Another app operation is in progress"
-                        : dependentNames.length > 0
-                          ? `Required by ${dependentNames.join(", ")}`
-                          : dependencyGraph.error
-                            ? "Resolve app dependency metadata before uninstalling"
-                            : disabled
-                              ? "Refresh and reconcile app state before uninstalling"
-                              : `Uninstall ${entry.name}`
+                    selected={actionAppIdSet.has(id)}
+                    selectionDisabled={appActionsDisabled}
+                    selectionTitle={
+                      appActionsDisabled
+                        ? selectionDisabledTitle
+                        : actionAppIdSet.has(id)
+                          ? `Deselect ${entry.name}`
+                          : `Select ${entry.name} for app actions`
                     }
                     update={
                       <AppUpdateCell
                         appId={id}
                         appName={entry.name}
-                        disabled={
-                          appMutationBlocked ||
-                          capabilityOperation !== null ||
-                          registryStatus !== "ready" ||
-                          !registryReconciled
-                        }
+                        disabled={appActionsDisabled}
                         returnFocusRef={updateReturnFocusRef}
                         {...(entry.update_source
                           ? { updateSource: entry.update_source }

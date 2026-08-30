@@ -10,16 +10,10 @@ import {
   IoLinkOutline,
   IoRefresh,
   IoSearch,
-  IoTrashOutline,
 } from "react-icons/io5";
-import {
-  appDependencyImpact,
-  planAppRegistryDependencies,
-} from "neutron-compiler/src/install.js";
 import {
   install_app,
   isAuthorityPendingState,
-  uninstall_app,
   useAppsStore,
   type AppInstallSource,
 } from "../reducer/apps.ts";
@@ -55,9 +49,9 @@ export function Launcher(props: LauncherProps) {
   const testId = (id: string) =>
     placement === "modal" ? id : `workspace-${id}`;
   const [query, setQuery] = useState("");
-  const [installSource, setInstallSource] = useState<
-    "file" | "url" | "uninstall" | null
-  >(null);
+  const [installSource, setInstallSource] = useState<"file" | "url" | null>(
+    null,
+  );
   const [installUrl, setInstallUrl] = useState("");
   const [installError, setInstallError] = useState<string | null>(null);
   const [urlInstallOpen, setUrlInstallOpen] = useState(false);
@@ -126,13 +120,6 @@ export function Launcher(props: LauncherProps) {
     () => launcherEntriesFromApps(apps, query),
     [apps, query],
   );
-  const dependencyPlan = useMemo(() => {
-    try {
-      return planAppRegistryDependencies(apps);
-    } catch {
-      return null;
-    }
-  }, [apps]);
 
   if (!open) return null;
 
@@ -204,23 +191,6 @@ export function Launcher(props: LauncherProps) {
     setUrlInstallOpen(false);
     if (restoreFocus) {
       requestAnimationFrame(() => installUrlButtonRef.current?.focus());
-    }
-  };
-
-  const uninstallPackage = async (appId: string) => {
-    if (
-      installRunRef.current ||
-      useAppsStore.getState().operationBusy ||
-      isAuthorityPendingState(useAppsStore.getState())
-    ) return;
-    setInstallSource("uninstall");
-    try {
-      const result = await uninstall_app(appId);
-      if (result) close(true);
-    } catch (error) {
-      console.error("Uninstall package failed", error);
-    } finally {
-      setInstallSource(null);
     }
   };
 
@@ -421,59 +391,24 @@ export function Launcher(props: LauncherProps) {
               </div>
             </div>
           </div>
-          {entries.map((entry) => {
-            const impact = dependencyPlan
-              ? appDependencyImpact(dependencyPlan, entry.appId)
-              : null;
-            const dependentNames = [
-              ...new Set(
-                (impact?.direct ?? []).map(({ consumer }) => consumer),
-              ),
-            ].map((consumer) => apps[consumer]?.name ?? consumer);
-            const uninstallDisabled =
-              installSource !== null ||
-              appMutationBlocked ||
-              dependencyPlan === null ||
-              dependentNames.length > 0;
-            const uninstallTitle =
-              dependentNames.length > 0
-                ? `Required by ${dependentNames.join(", ")}`
-                : authorityPending
-                  ? "Finish or discard the pending installation first"
-                  : dependencyPlan === null
-                    ? "Resolve app dependency metadata before uninstalling"
-                    : `Uninstall ${entry.appName}`;
-            return (
-              <div
-                className="launcher-tile-row"
-                key={`${entry.appId}/${entry.tileId}`}
+          {entries.map((entry) => (
+            <div
+              className="launcher-tile-row"
+              key={`${entry.appId}/${entry.tileId}`}
+            >
+              <button
+                type="button"
+                className="launcher-tile"
+                data-tid={testId(
+                  `launcher-tile-${entry.appId}-${entry.tileId}`,
+                )}
+                onClick={() => launch(entry)}
               >
-                <button
-                  type="button"
-                  className="launcher-tile"
-                  data-tid={testId(
-                    `launcher-tile-${entry.appId}-${entry.tileId}`,
-                  )}
-                  onClick={() => launch(entry)}
-                >
-                  <img src={entry.icon} alt="" />
-                  <span className="launcher-tile-title">{entry.title}</span>
-                </button>
-                <button
-                  type="button"
-                  className="launcher-uninstall"
-                  title={uninstallTitle}
-                  aria-label={uninstallTitle}
-                  disabled={uninstallDisabled}
-                  onClick={() =>
-                    void uninstallPackage(entry.appId)
-                  }
-                >
-                  <IoTrashOutline aria-hidden="true" />
-                </button>
-              </div>
-            );
-          })}
+                <img src={entry.icon} alt="" />
+                <span className="launcher-tile-title">{entry.title}</span>
+              </button>
+            </div>
+          ))}
           {entries.length === 0 ? (
             <div className="launcher-empty">No matching tiles</div>
           ) : null}

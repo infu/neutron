@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   LEGACY_KERNEL_RELEASES,
-  RETAINED_KERNEL_V320_RELEASE,
+  RETAINED_KERNEL_V321_RELEASE,
   TEST_CANDIDATE_KERNEL_VERSION,
   compileFinalCandidateLegacyKernelUpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
@@ -29,15 +29,15 @@ test("the final candidate lane requires an externally reviewed archive digest", 
   );
 });
 
-test("the retained v0.3.20 predecessor is final-candidate-only and identity-bound", () => {
+test("the retained v0.3.21 predecessor is final-candidate-only and identity-bound", () => {
   expect(LEGACY_KERNEL_RELEASES.map(({ version }) => version)).not.toContain(
-    RETAINED_KERNEL_V320_RELEASE.version,
+    RETAINED_KERNEL_V321_RELEASE.version,
   );
-  expect(RETAINED_KERNEL_V320_RELEASE).toMatchObject({
-    label: "v0.3.20",
-    version: 320,
-    bytes: 2_415_407,
-    sha256: "7dc5f4484a6010ebcbdb52d59b13dae01b1252c4f1c5ed2ae8f34a5f64e39576",
+  expect(RETAINED_KERNEL_V321_RELEASE).toMatchObject({
+    label: "v0.3.21",
+    version: 321,
+    bytes: 2_411_860,
+    sha256: "1143b525ce869cae6c44297ec973b56bec06e2250a0885bca12ca87e030c999e",
     persistenceMode: "classical",
   });
 });

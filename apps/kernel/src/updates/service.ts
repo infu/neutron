@@ -206,73 +206,44 @@ export async function retryFailedUpdateChecks(
   }
 }
 
-export function toggleUpdateSelection(appId: string): void {
+export async function prepareAppUpdates(
+  appIds: readonly string[],
+  clientOptions: UpdateHttpClientOptions = {},
+): Promise<void> {
   const state = useUpdateCheckStore.getState();
-  if (state.phase !== "ready" && state.phase !== "error") return;
-  const selectable = new Set(
+  if (!updateSelectionMayPrepare(state)) return;
+  const available = new Set(
     state.results
-      .filter(isSelectableUpdateResult)
+      .filter(({ kind }) => kind === "available")
       .map(({ appId: id }) => id),
   );
-  if (!selectable.has(appId)) return;
-  const selected = new Set(state.selectedAppIds);
-  if (selected.has(appId)) selected.delete(appId);
-  else selected.add(appId);
-  updateCheckState.selection([...selected]);
+  const selected = appIds.filter((appId) => available.has(appId));
+  if (selected.length === 0) return;
+  updateCheckState.selection(selected);
+  await prepareSelectedUpdates(clientOptions);
 }
 
 export async function prepareAppUpdate(
   appId: string,
   clientOptions: UpdateHttpClientOptions = {},
 ): Promise<void> {
-  const state = useUpdateCheckStore.getState();
-  if (
-    state.errorStage === "apply" ||
-    (state.phase !== "ready" &&
-      !(state.phase === "error" && state.results.length > 0)) ||
-    !state.results.some(
-      (result) => result.appId === appId && result.kind === "available",
-    )
-  ) {
-    return;
-  }
-  updateCheckState.selection([appId]);
-  await prepareSelectedUpdates(clientOptions);
+  await prepareAppUpdates([appId], clientOptions);
 }
 
 export async function prepareAllAvailableUpdates(
   clientOptions: UpdateHttpClientOptions = {},
 ): Promise<void> {
-  const state = useUpdateCheckStore.getState();
-  if (
-    state.errorStage === "apply" ||
-    (state.phase !== "ready" &&
-      !(state.phase === "error" && state.results.length > 0))
-  ) {
-    return;
-  }
-  const availableAppIds = state.results
-    .filter(
-      (result): result is Extract<UpdateCheckResult, { kind: "available" }> =>
-        result.kind === "available",
-    )
-    .map(({ appId }) => appId);
-  if (availableAppIds.length === 0) return;
-  updateCheckState.selection(availableAppIds);
-  await prepareSelectedUpdates(clientOptions);
+  await prepareAppUpdates(
+    useUpdateCheckStore.getState().results.map(({ appId }) => appId),
+    clientOptions,
+  );
 }
 
 export async function prepareSelectedUpdates(
   clientOptions: UpdateHttpClientOptions = {},
 ): Promise<void> {
   const state = useUpdateCheckStore.getState();
-  if (
-    state.errorStage === "apply" ||
-    (state.phase !== "ready" &&
-      !(state.phase === "error" && state.results.length > 0))
-  ) {
-    return;
-  }
+  if (!updateSelectionMayPrepare(state)) return;
   const candidates = selectedCandidates(state.results, state.selectedAppIds);
   if (candidates.length === 0) return;
   try {
@@ -497,6 +468,16 @@ export async function prepareSelectedUpdates(
   } finally {
     if (activeAbort === abort) activeAbort = null;
   }
+}
+
+function updateSelectionMayPrepare(
+  state: ReturnType<typeof useUpdateCheckStore.getState>,
+): boolean {
+  return (
+    state.errorStage !== "apply" &&
+    (state.phase === "ready" ||
+      (state.phase === "error" && state.results.length > 0))
+  );
 }
 
 export async function applyPreparedUpdates(): Promise<void> {

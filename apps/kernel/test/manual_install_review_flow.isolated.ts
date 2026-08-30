@@ -92,7 +92,7 @@ mock.module("neutron-compiler/src/install.js", () => ({
   assertKernelPackageBaselineMatchesRuntime: () => {
     baselineAssertions += 1;
   },
-  compileAppUninstall: () => {
+  compileAppsUninstall: () => {
     throw new Error("Unexpected uninstall compilation");
   },
   compilePackages: async () => compiled,

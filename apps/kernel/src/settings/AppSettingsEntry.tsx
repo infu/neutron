@@ -77,7 +77,7 @@ export function AppSettingsEntry({
   uiMode,
   usage,
   memories,
-  onUninstall,
+  onToggleSelected,
   onRevokeReservation,
   onSetCapabilityEnabled,
   provenance,
@@ -85,9 +85,10 @@ export function AppSettingsEntry({
   registry,
   runtimeVersion,
   scheduledTasks,
+  selected,
+  selectionDisabled,
+  selectionTitle,
   transitiveDependentIds,
-  uninstallDisabled,
-  uninstallTitle,
   update,
 }: {
   backendReservations: BackendCallReservation[];
@@ -102,7 +103,7 @@ export function AppSettingsEntry({
   uiMode: KernelUiMode;
   usage: AppUsageCellState;
   memories: KernelRuntimeInfo["memories"];
-  onUninstall: () => void;
+  onToggleSelected: () => void;
   onRevokeReservation: (reservation: BackendCallReservation) => void;
   onSetCapabilityEnabled: (
     capability: CapabilitySummary,
@@ -113,9 +114,10 @@ export function AppSettingsEntry({
   registry: AppRegistry;
   runtimeVersion: NatValue | undefined;
   scheduledTasks: ScheduledTaskSummary[];
+  selected: boolean;
+  selectionDisabled: boolean;
+  selectionTitle: string;
   transitiveDependentIds: string[];
-  uninstallDisabled: boolean;
-  uninstallTitle: string;
   update: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -174,8 +176,9 @@ export function AppSettingsEntry({
 
   return (
     <tbody
-      className="settings-app-entry"
+      className={`settings-app-entry${selected ? " is-selected" : ""}`}
       data-app-id={id}
+      data-selected={selected ? "true" : "false"}
       data-tid={`settings-app-${id}`}
     >
       <tr className="settings-app-row">
@@ -239,25 +242,26 @@ export function AppSettingsEntry({
             />
           </button>
         </td>
-        <td className="settings-app-cell settings-app-cell--uninstall">
-          <span className="settings-app-cell-label">Uninstall</span>
+        <td className="settings-app-cell settings-app-cell--selection">
+          <span className="settings-app-cell-label">Select</span>
           {isKernel ? (
             <span
-              aria-label="Neutron is the system app and cannot be uninstalled"
+              aria-label="Neutron is the system app and cannot be selected for deletion"
               className="settings-app-lock"
               role="img"
-              title="Neutron is the system app and cannot be uninstalled"
+              title="Neutron is the system app and cannot be selected for deletion"
             >
               <IoLockClosedOutline aria-hidden="true" />
             </span>
           ) : (
             <button
-              aria-label={`Uninstall ${entry.name}`}
-              className="icon-button settings-app-uninstall"
-              data-tid={`settings-uninstall-${id}`}
-              disabled={uninstallDisabled}
-              onClick={onUninstall}
-              title={uninstallTitle}
+              aria-label={`${selected ? "Deselect" : "Select"} ${entry.name} for app actions`}
+              aria-pressed={selected}
+              className="icon-button settings-app-selection"
+              data-tid={`settings-select-${id}`}
+              disabled={selectionDisabled}
+              onClick={onToggleSelected}
+              title={selectionTitle}
               type="button"
             >
               <IoTrashOutline aria-hidden="true" />

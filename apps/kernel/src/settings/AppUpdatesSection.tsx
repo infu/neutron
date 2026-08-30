@@ -15,6 +15,7 @@ import {
   cancelUpdateWork,
   clearUpdateResults,
   prepareAllAvailableUpdates,
+  prepareAppUpdates,
   prepareAppUpdate,
 } from "../updates/service.ts";
 import { updateFailureMessage, type UpdateReview } from "../updates/model.ts";
@@ -128,10 +129,18 @@ export function AppUpdatesFeedback() {
 }
 
 export function AppUpdatesBulkAction({
+  deleteDisabled,
+  deleteTitle,
   disabled,
+  onDeleteSelected,
   returnFocusRef,
+  actionAppIds,
 }: {
+  actionAppIds: readonly string[];
+  deleteDisabled: boolean;
+  deleteTitle: string;
   disabled: boolean;
+  onDeleteSelected: () => void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
 }) {
   const state = useUpdateCheckStore();
@@ -140,19 +149,18 @@ export function AppUpdatesBulkAction({
   ).length;
   const selectedAvailableCount = state.results.filter(
     ({ appId, kind }) =>
-      kind === "available" && state.selectedAppIds.includes(appId),
+      kind === "available" && actionAppIds.includes(appId),
   ).length;
-  const bulkPreparing =
-    state.phase === "preparing" && selectedAvailableCount > 1;
-  const bulkReviewing = state.phase === "review" && selectedAvailableCount > 1;
-  const bulkApplying = state.phase === "applying" && selectedAvailableCount > 1;
+  const preparing = state.phase === "preparing";
+  const reviewing = state.phase === "review";
+  const applying = state.phase === "applying";
 
-  if (bulkPreparing) {
+  if (preparing) {
     return (
       <div className="settings-app-updates-toolbar">
         <button
           className="btn btn-sec settings-app-update-cancel"
-          data-tid="settings-upgrade-all-cancel"
+          data-tid="settings-update-cancel"
           onClick={cancelUpdateWork}
           ref={returnFocusRef}
           type="button"
@@ -164,23 +172,55 @@ export function AppUpdatesBulkAction({
     );
   }
 
-  if (bulkReviewing || bulkApplying) {
+  if (reviewing || applying) {
     return (
       <div className="settings-app-updates-toolbar">
         <button className="btn" disabled ref={returnFocusRef} type="button">
-          {bulkReviewing ? "Reviewing upgrades" : "Upgrading apps"}
+          {reviewing ? "Reviewing updates" : "Updating apps"}
         </button>
       </div>
     );
   }
 
-  if (
-    availableCount < 2 ||
-    (state.phase !== "ready" &&
-      !(state.phase === "error" && state.errorStage !== "apply"))
-  ) {
-    return null;
+  const resultsUsable =
+    state.phase === "ready" ||
+    (state.phase === "error" && state.errorStage !== "apply");
+
+  if (actionAppIds.length > 0) {
+    return (
+      <div className="settings-app-updates-toolbar">
+        <button
+          aria-label={`Delete selected: ${applicationCount(actionAppIds.length)}`}
+          className="btn btn-danger"
+          data-tid="settings-delete-selected"
+          disabled={deleteDisabled || state.errorStage === "apply"}
+          onClick={onDeleteSelected}
+          title={deleteTitle}
+          type="button"
+        >
+          Delete selected ({actionAppIds.length})
+        </button>
+        <button
+          aria-label={`Update selected: ${applicationCount(selectedAvailableCount)}`}
+          className="btn"
+          data-tid="settings-update-selected"
+          disabled={
+            disabled || !resultsUsable || selectedAvailableCount === 0
+          }
+          onClick={(event) => {
+            returnFocusRef.current = event.currentTarget;
+            void prepareAppUpdates(actionAppIds);
+          }}
+          ref={returnFocusRef}
+          type="button"
+        >
+          Update selected ({selectedAvailableCount})
+        </button>
+      </div>
+    );
   }
+
+  if (availableCount < 2 || !resultsUsable) return null;
 
   return (
     <div className="settings-app-updates-toolbar">
@@ -219,25 +259,6 @@ export function AppUpdateCell({
   const result = state.results.find((candidate) => candidate.appId === appId);
   const selected = state.selectedAppIds.includes(appId);
 
-  if (
-    selected &&
-    state.phase === "preparing" &&
-    state.selectedAppIds.length === 1
-  ) {
-    return (
-      <button
-        aria-label={`Cancel update preparation for ${appName}`}
-        className="btn btn-sec settings-app-update-action settings-app-update-cancel"
-        onClick={cancelUpdateWork}
-        ref={returnFocusRef}
-        title="Cancel update preparation"
-        type="button"
-      >
-        <span aria-hidden="true" className="settings-app-update-spinner" />
-        Cancel
-      </button>
-    );
-  }
   if (selected && state.phase === "preparing") {
     return <UpdateBusy label="Preparing" />;
   }

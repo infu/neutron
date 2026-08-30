@@ -143,6 +143,7 @@ const [{
   checkAppUpdates,
   clearUpdateResults,
   prepareAllAvailableUpdates,
+  prepareAppUpdates,
   prepareAppUpdate,
   prepareSelectedUpdates,
   retryFailedUpdateChecks,
@@ -641,6 +642,44 @@ describe("update service orchestration", () => {
       selectedAppIds: ["mail"],
       errorStage: "prepare",
     });
+  });
+
+  test("Update selected freezes only the verified available intersection", async () => {
+    const registry = appRegistry({
+      calendar: { source: SOURCE, version: 101 },
+      contacts: { source: SECOND_SOURCE, version: 100 },
+      mail: { source: SOURCE, version: 100 },
+    });
+    appsStore.setState({ list: registry });
+    const calendar = candidate(
+      "calendar",
+      "Calendar",
+      SOURCE,
+      packageBytes("calendar"),
+    );
+    updateCheckState.ready(
+      [
+        { ...calendar, kind: "current", installed: 101 },
+        candidate(
+          "contacts",
+          "Contacts",
+          SECOND_SOURCE,
+          packageBytes("contacts"),
+        ),
+        candidate("mail", "Mail", SOURCE, packageBytes("mail")),
+      ],
+      1_700_000_000_000,
+    );
+    let selectionAtPrepare: readonly string[] = [];
+    beginSessionImpl = async () => {
+      selectionAtPrepare = useUpdateCheckStore.getState().selectedAppIds;
+      throw new Error("Stop after observing the prepared selection");
+    };
+
+    await prepareAppUpdates(["missing", "mail", "calendar", "mail"]);
+
+    expect(selectionAtPrepare).toEqual(["mail"]);
+    expect(useUpdateCheckStore.getState().selectedAppIds).toEqual(["mail"]);
   });
 
   test("source changes and removals commit only through the exact atomic target batch", async () => {

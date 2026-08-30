@@ -196,9 +196,10 @@ compilation:
 - uninstalling a consumer removes its edge and can make its provider removable.
 
 Settings shows `Requires` and `Required by`, exact functions, installed and
-minimum versions, and exported internal methods. Launcher and Settings disable
-blocked uninstall actions. The compiler repeats the check so stale frontend or
-CLI state cannot bypass it.
+minimum versions, and exported internal methods. **Delete selected** permits a
+provider only when all of its remaining consumers are selected too. The
+launcher does not expose uninstall. The compiler repeats the dependency check
+so stale frontend state cannot bypass it.
 
 Neutron does not download missing provider packages automatically and does not
 cascade uninstall into dependents.

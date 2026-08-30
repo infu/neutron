@@ -24,6 +24,7 @@ import {
 } from "../src/reducer/apps.ts";
 import { AppSettingsEntry } from "../src/settings/AppSettingsEntry.tsx";
 import { Launcher } from "../src/workspace/Launcher.tsx";
+import { launcherEntriesFromApps } from "../src/workspace/launcher_entries.ts";
 import { WorkspaceView } from "../src/workspace/WorkspaceView.tsx";
 import { useWorkspaceStore } from "../src/workspace/store.ts";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
@@ -171,6 +172,32 @@ test("launcher reuses its controls as a non-modal workspace region", () => {
   expect(html).not.toContain('aria-modal="true"');
   expect(html).not.toContain('class="launcher-backdrop"');
   expect(html).not.toContain('data-tid="launcher-reset-workspace"');
+});
+
+test("launcher opens installed tiles without exposing app deletion", async () => {
+  const apps = {
+    mail: registryApp({
+      id: "mail",
+      name: "Mail",
+      tiles: [
+        {
+          id: "main",
+          title: "Mail",
+          path: "index.html",
+          icon: "static/icon.png",
+        },
+      ],
+    }),
+  };
+  expect(launcherEntriesFromApps(apps)).toMatchObject(
+    [{ appId: "mail", appName: "Mail", tileId: "main", title: "Mail" }],
+  );
+  const source = await fs.readFile(
+    path.join(repoRoot, "apps/kernel/src/workspace/Launcher.tsx"),
+    "utf8",
+  );
+  expect(source).not.toContain("uninstall");
+  expect(source).not.toContain("IoTrashOutline");
 });
 
 test("a pending install disables launcher mutations without hiding the launcher", async () => {
@@ -868,14 +895,15 @@ test("Settings discloses exact canister payment for public updates while queries
           memories={[]}
           onRevokeReservation={() => undefined}
           onSetCapabilityEnabled={() => undefined}
-          onUninstall={() => undefined}
+          onToggleSelected={() => undefined}
           registry={{ mail_peer: entry }}
           reservationActionsDisabled={false}
           runtimeVersion={100n}
           scheduledTasks={[]}
           transitiveDependentIds={[]}
-          uninstallDisabled={false}
-          uninstallTitle="Uninstall Mail Peer"
+          selected={false}
+          selectionDisabled={false}
+          selectionTitle="Select Mail Peer for app actions"
           update={null}
         />
       </table>,
@@ -1646,14 +1674,15 @@ test("Settings labels app names and tile/background display text as unverified",
       memories={[]}
       onRevokeReservation={() => undefined}
       onSetCapabilityEnabled={() => undefined}
-      onUninstall={() => undefined}
+      onToggleSelected={() => undefined}
       registry={{}}
       reservationActionsDisabled={false}
       runtimeVersion={100n}
       scheduledTasks={[]}
       transitiveDependentIds={[]}
-      uninstallDisabled={false}
-      uninstallTitle="Uninstall"
+      selected={false}
+      selectionDisabled={false}
+      selectionTitle="Select app for app actions"
       update={null}
     />,
   );
@@ -1727,14 +1756,15 @@ test("Settings shows preapproved self calls only in Backend functions", () => {
       memories={[]}
       onRevokeReservation={() => undefined}
       onSetCapabilityEnabled={() => undefined}
-      onUninstall={() => undefined}
+      onToggleSelected={() => undefined}
       registry={{}}
       reservationActionsDisabled={false}
       runtimeVersion={100n}
       scheduledTasks={[]}
       transitiveDependentIds={[]}
-      uninstallDisabled={false}
-      uninstallTitle="Uninstall"
+      selected={false}
+      selectionDisabled={false}
+      selectionTitle="Select app for app actions"
       update={null}
     />,
   );
@@ -1819,7 +1849,7 @@ test("Settings exposes one canonical scheduled-task authority switch", () => {
       memories={[]}
       onRevokeReservation={() => undefined}
       onSetCapabilityEnabled={() => undefined}
-      onUninstall={() => undefined}
+      onToggleSelected={() => undefined}
       registry={{}}
       reservationActionsDisabled={false}
       runtimeVersion={100n}
@@ -1837,8 +1867,9 @@ test("Settings exposes one canonical scheduled-task authority switch", () => {
         },
       ]}
       transitiveDependentIds={[]}
-      uninstallDisabled={false}
-      uninstallTitle="Uninstall"
+      selected={false}
+      selectionDisabled={false}
+      selectionTitle="Select app for app actions"
       update={null}
     />,
   );
@@ -1937,14 +1968,15 @@ test("Settings identifies public POST handlers and their exact operating bounds"
       memories={[]}
       onRevokeReservation={() => undefined}
       onSetCapabilityEnabled={() => undefined}
-      onUninstall={() => undefined}
+      onToggleSelected={() => undefined}
       registry={{}}
       reservationActionsDisabled={false}
       runtimeVersion={100n}
       scheduledTasks={[]}
       transitiveDependentIds={[]}
-      uninstallDisabled={false}
-      uninstallTitle="Uninstall"
+      selected={false}
+      selectionDisabled={false}
+      selectionTitle="Select app for app actions"
       update={null}
     />,
   );
@@ -2031,14 +2063,15 @@ test("Settings shows HTTPS endpoint authority beside its live toggle", () => {
       memories={[]}
       onRevokeReservation={() => undefined}
       onSetCapabilityEnabled={() => undefined}
-      onUninstall={() => undefined}
+      onToggleSelected={() => undefined}
       registry={{}}
       reservationActionsDisabled={false}
       runtimeVersion={100n}
       scheduledTasks={[]}
       transitiveDependentIds={[]}
-      uninstallDisabled={false}
-      uninstallTitle="Uninstall"
+      selected={false}
+      selectionDisabled={false}
+      selectionTitle="Select app for app actions"
       update={null}
     />,
   );
@@ -2123,14 +2156,15 @@ test("Settings shows chain-key slot authority, unverified purpose, and live togg
       memories={[]}
       onRevokeReservation={() => undefined}
       onSetCapabilityEnabled={() => undefined}
-      onUninstall={() => undefined}
+      onToggleSelected={() => undefined}
       registry={{}}
       reservationActionsDisabled={false}
       runtimeVersion={100n}
       scheduledTasks={[]}
       transitiveDependentIds={[]}
-      uninstallDisabled={false}
-      uninstallTitle="Uninstall"
+      selected={false}
+      selectionDisabled={false}
+      selectionTitle="Select app for app actions"
       update={null}
     />,
   );
@@ -2220,14 +2254,15 @@ test("Settings shows stable-store authority, unverified purpose, and live toggle
       memories={[]}
       onRevokeReservation={() => undefined}
       onSetCapabilityEnabled={() => undefined}
-      onUninstall={() => undefined}
+      onToggleSelected={() => undefined}
       registry={{}}
       reservationActionsDisabled={false}
       runtimeVersion={100n}
       scheduledTasks={[]}
       transitiveDependentIds={[]}
-      uninstallDisabled={false}
-      uninstallTitle="Uninstall"
+      selected={false}
+      selectionDisabled={false}
+      selectionTitle="Select app for app actions"
       update={null}
     />,
   );

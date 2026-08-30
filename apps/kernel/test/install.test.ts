@@ -26,7 +26,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.21.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.22.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -35,7 +35,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(321);
+  expect(manifest.version).toBe(322);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   expect(manifest.memory.kernel.version).toBe(3);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3"]);
@@ -55,7 +55,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(321);
+  expect(packagedManifest.version).toBe(322);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
@@ -66,10 +66,10 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(3);
-  expect(packagedArchive.manifest.version).toBe(321);
+  expect(packagedArchive.manifest.version).toBe(322);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 321 },
+    package: { id: "kernel", version: 322 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });
@@ -751,7 +751,7 @@ test("frontend app state is cleared only after the atomic install commit", async
     "utf8",
   );
   const uninstallBody = source.slice(
-    source.indexOf("async function uninstallAppInternal"),
+    source.indexOf("async function uninstallAppsInternal"),
     source.indexOf("export async function install_app"),
   );
   const committedUninstallIndex = uninstallBody.indexOf(
@@ -807,7 +807,7 @@ test("frontend deployments signal sibling tabs at activation and commit", async 
       source.indexOf("function assertPackageSessionTargets"),
     ),
     source.slice(
-      source.indexOf("async function uninstallAppInternal"),
+      source.indexOf("async function uninstallAppsInternal"),
       source.indexOf("export async function install_app"),
     ),
     source.slice(
@@ -931,14 +931,14 @@ test("manual install and uninstall use a consistent checked deployment baseline"
   ).toBe(2);
 
   const uninstallBody = source.slice(
-    source.indexOf("async function uninstallAppInternal"),
+    source.indexOf("async function uninstallAppsInternal"),
     source.indexOf("export async function install_app"),
   );
   expect(uninstallBody).toContain("expectedDeploymentId");
   expect(uninstallBody).toMatch(
-    /compileAppUninstall\([\s\S]*?deployPreparedPackages\([\s\S]*?expectedDeploymentId/,
+    /compileAppsUninstall\([\s\S]*?deployPreparedPackages\([\s\S]*?expectedDeploymentId/,
   );
-  const compileIndex = uninstallBody.indexOf("await compileAppUninstall");
+  const compileIndex = uninstallBody.indexOf("await compileAppsUninstall");
   const buildRecordIndex = uninstallBody.indexOf(
     "prepareBrowserDeployment",
   );

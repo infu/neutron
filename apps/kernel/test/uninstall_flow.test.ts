@@ -18,5 +18,5 @@ test("uninstall preparation, cancellation, and approval stay transactionally sep
   ]);
 
   expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
-  expect(`${stdout}\n${stderr}`).toContain("10 pass");
+  expect(`${stdout}\n${stderr}`).toContain("11 pass");
 });

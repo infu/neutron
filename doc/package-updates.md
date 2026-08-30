@@ -8,7 +8,8 @@ managed-memory planner, checked deployment journal, and atomic asset commit
 used by ordinary installation. Opening Settings checks update sources, and the
 global Settings refresh checks them again. There is no standalone updates
 section, background polling, automatic installation, or second package format.
-The owner may update one row or use **Upgrade all** to review and install every
+The owner may update one row, select an exact subset with **Update selected**,
+or use **Upgrade all** with no row selection to review and install every
 verified available release as one batch.
 
 ## Maintainer Release Workflow
@@ -393,10 +394,11 @@ late completions cannot publish state.
 
 ## Package Preparation
 
-When the owner selects an app row's **Update** action or the Installed Apps
-**Upgrade all** action, Neutron:
+When the owner selects an app row's **Update** action, **Update selected**, or
+the Installed Apps **Upgrade all** action, Neutron:
 
-1. selects the requested row or every successfully verified **Update** row;
+1. freezes the requested row, selected verified rows, or every successfully
+   verified **Update** row;
 2. re-fetches each release record immediately before preparation;
 3. requires the exact app ID, version, size, package digest, and release-record
    digest observed during the check;
@@ -411,8 +413,10 @@ package, malformed archive, or capability-plan mismatch invalidates the
 attempt. Neutron never silently removes the failed app and continues with a
 different batch.
 
-The current Settings UI supports one row or all verified available rows.
-Failed, unpublished, regressed, and manual-only rows are excluded from
+The current Settings UI supports one row, an exact selected subset, or all
+verified available rows. Selected rows without an available release remain
+selected for other Settings actions but are excluded from **Update selected**.
+Failed, unpublished, regressed, and manual-only rows are also excluded from
 **Upgrade all** and remain visible for the owner to resolve. The shared
 preparation boundary remains defensively bounded to 64 packages and 64 MiB of
 advertised package bytes. Archive-entry, decoded-byte, generated-copy, and

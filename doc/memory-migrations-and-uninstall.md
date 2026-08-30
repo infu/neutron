@@ -627,18 +627,18 @@ never interpreted as permission to discard data.
 
 ## Uninstall The App
 
-Full uninstall is not a manifest edit. Use the reviewed launcher uninstall
-action when testing the product workflow. For the normal local development
+Full uninstall is not a manifest edit. In Settings, select one or more app rows
+and use the reviewed **Delete selected** action when testing the product
+workflow. The launcher does not delete apps. For the normal local development
 loop, remove the app archive's path declaration from the format-3 PocketIC
 artifact set and run the provisioner's destructive whole-canister reinstall;
-there is no
-package-level uninstall CLI.
+there is no package-level uninstall CLI.
 
-Neutron compiles a target actor without the app, verifies the new runtime, and
-removes its registry entry, web/package assets, connection credentials,
-backend-call reservations, message-bus session state, resident frame, and
-workspace tiles in the checked commit. Every live managed root is staged and
-cleared by the commit-atomic retirement protocol described above.
+Neutron compiles one target actor without the selected apps, verifies the new
+runtime, and removes their registry entries, web/package assets, connection
+credentials, backend-call reservations, message-bus session state, resident
+frames, and workspace tiles in one checked commit. Every live managed root is
+staged and cleared by the commit-atomic retirement protocol described above.
 
 If the app reserved app-isolated vetKeys slots, uninstall retires them only in
 the verified install-journal commit. An aborted or failed actor activation

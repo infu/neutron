@@ -90,7 +90,7 @@ import {
 import { assertSupportedCertificateVersions } from "neutron-tools/src/wasm_metadata.js";
 import {
   LEGACY_KERNEL_RELEASES,
-  RETAINED_KERNEL_V320_RELEASE,
+  RETAINED_KERNEL_V321_RELEASE,
   assertLegacyUpgradeCompileInvariants,
   compileFinalCandidateLegacyKernelUpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
@@ -374,7 +374,7 @@ for (const release of LEGACY_KERNEL_RELEASES) {
 }
 
 finalCandidateTest(
-  `the reviewed current Kernel archive preserves durable state through the ${RETAINED_KERNEL_V320_RELEASE.label} checked self-upgrade`,
+  `the reviewed current Kernel archive preserves durable state through the ${RETAINED_KERNEL_V321_RELEASE.label} checked self-upgrade`,
   () =>
     runLegacyUpgradeQualification(() =>
       compileFinalCandidateRetainedKernelUpgradeFixture({

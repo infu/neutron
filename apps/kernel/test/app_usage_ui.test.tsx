@@ -184,14 +184,15 @@ test("Installed Apps applies low-side 13-node execution pricing with four TC dec
         memories={[]}
         onRevokeReservation={() => undefined}
         onSetCapabilityEnabled={() => undefined}
-        onUninstall={() => undefined}
+        onToggleSelected={() => undefined}
         registry={{ alpha: entry }}
         reservationActionsDisabled={false}
         runtimeVersion={100n}
         scheduledTasks={[]}
         transitiveDependentIds={[]}
-        uninstallDisabled={false}
-        uninstallTitle="Uninstall Alpha"
+        selected={false}
+        selectionDisabled={false}
+        selectionTitle="Select Alpha for app actions"
         update={<span>Up to date</span>}
       />
     </table>
@@ -212,7 +213,9 @@ test("Installed Apps applies low-side 13-node execution pricing with four TC dec
   expect(html).toContain("Up to date");
   expect(html).toContain("v0.1.0");
   expect(html).toContain('data-tid="settings-app-details-toggle-alpha"');
-  expect(html).toContain('data-tid="settings-uninstall-alpha"');
+  expect(html).toContain('data-tid="settings-select-alpha"');
+  expect(html).toContain('aria-pressed="false"');
+  expect(html).toContain("Select Alpha for app actions");
   expect(html).not.toContain("App usage");
   expect(html).not.toContain("30-day");
 });

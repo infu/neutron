@@ -210,6 +210,41 @@ test("verified updates expose one bulk upgrade action", () => {
   expect(html).toContain("Upgrade all 2 available apps");
 });
 
+test("Settings selection replaces Upgrade all with explicit selected actions", () => {
+  const state: UpdateState = {
+    ...idleState,
+    phase: "ready",
+    checkedAt: 1_700_000_000_000,
+    results: [
+      available("mail", "Mail", 102),
+      {
+        kind: "current",
+        appId: "calendar",
+        name: "Calendar",
+        installed: 101,
+        source: SOURCE,
+        release: release("calendar", 101),
+        releaseDigest: "c".repeat(64),
+      },
+    ],
+  };
+  const html = renderSurface(
+    state,
+    [
+      { appId: "mail", appName: "Mail", updateSource: SOURCE },
+      { appId: "calendar", appName: "Calendar", updateSource: SOURCE },
+    ],
+    false,
+    ["calendar", "mail"],
+  );
+
+  expect(html).toContain('data-tid="settings-delete-selected"');
+  expect(html).toContain("Delete selected (2)");
+  expect(html).toContain('data-tid="settings-update-selected"');
+  expect(html).toContain("Update selected (1)");
+  expect(html).not.toContain('data-tid="settings-upgrade-all"');
+});
+
 test("terminal update states stay visible in their Installed Apps cells", () => {
   const state: UpdateState = {
     ...idleState,
@@ -326,7 +361,7 @@ test("bulk review stays plural and preserves a bulk return target", () => {
 
   expect(html).toContain("Review app updates");
   expect(html.match(/data-tid="deployment-build-review"/gu)).toHaveLength(1);
-  expect(html).toContain("Reviewing upgrades");
+  expect(html).toContain("Reviewing updates");
   expect(html).toContain("Update 2 apps");
 });
 
@@ -370,7 +405,7 @@ test("success feedback reports the committed app count", () => {
   expect(html).toContain("Installed version and integrity records were committed together.");
 });
 
-test("preparing one app keeps a focused cancel affordance in its row", () => {
+test("preparing one app keeps one toolbar cancel and passive row status", () => {
   const html = renderSurface(
     {
       ...idleState,
@@ -382,8 +417,8 @@ test("preparing one app keeps a focused cancel affordance in its row", () => {
     [{ appId: "mail", appName: "Mail", updateSource: SOURCE }]
   );
 
-  expect(html).toContain("Cancel update preparation for Mail");
-  expect(html).toContain("Cancel update preparation");
+  expect(html.match(/data-tid="settings-update-cancel"/gu)).toHaveLength(1);
+  expect(html).toContain(">Preparing<");
   expect(html).not.toContain('role="status"');
 });
 
@@ -405,7 +440,7 @@ test("bulk preparation has one cancel action and passive row status", () => {
     ],
   );
 
-  expect(html.match(/data-tid="settings-upgrade-all-cancel"/gu)).toHaveLength(
+  expect(html.match(/data-tid="settings-update-cancel"/gu)).toHaveLength(
     1,
   );
   expect(html.match(/>Preparing</gu)).toHaveLength(2);
@@ -422,7 +457,8 @@ function renderSurface(
     appName: string;
     updateSource?: string;
   }[] = [],
-  disabled = false
+  disabled = false,
+  actionAppIds: readonly string[] = [],
 ): string {
   useUpdateCheckStore.setState(state);
   const returnFocusRef = React.createRef<HTMLButtonElement>();
@@ -440,7 +476,14 @@ function renderSurface(
           })}
         </div>
       ))}
-      {AppUpdatesBulkAction({ disabled, returnFocusRef })}
+      {AppUpdatesBulkAction({
+        deleteDisabled: disabled,
+        deleteTitle: "Delete selected apps",
+        disabled,
+        onDeleteSelected: () => undefined,
+        returnFocusRef,
+        actionAppIds,
+      })}
       {AppUpdatesFeedback()}
       {AppUpdatesCoordinator({ fallbackFocusRef, returnFocusRef })}
     </>

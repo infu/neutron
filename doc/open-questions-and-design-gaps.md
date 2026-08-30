@@ -173,9 +173,10 @@ maintainers before becoming roadmap commitments.
 
 - Install and uninstall use one stable staged journal, runtime verification,
   idempotent promotion, app-prefix cleanup, credential cleanup, and module GC.
-- The launcher exposes reviewed app uninstall, and the workspace removes every
-  tile belonging to the deleted app after verified commit. The developer CLI
-  has no package-level uninstall command.
+- Settings exposes reviewed, atomic deletion of the selected app set, and the
+  workspace removes every tile belonging to those apps after verified commit.
+  The launcher exposes no deletion control, and the developer CLI has no
+  package-level uninstall command.
 - Public Candid methods live in one generated actor, but ordinary-app wrappers
   that exist now use a deterministic `app_<id>__<method>` physical name.
   Route-only handlers opting into `public_ingress_cycles` have no such wrapper

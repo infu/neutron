@@ -111,11 +111,13 @@ Kernel Settings keeps per-app operational information in the **Installed
 Apps** table rather than separate usage and update sections. Each row shows the
 app name and one-line description, cycles used, cycles in, update state or
 action from the latest Settings refresh, installed semantic version, details
-control, and uninstall control. Opening Settings checks update sources
-automatically; its global refresh action refreshes them again. When multiple
-verified releases are available, **Upgrade all** downloads and verifies the
-complete set, compiles it once, shows one combined approval review, and commits
-it through one checked installation transaction. The cycles-used cell is a
+control, and app-selection control. Selecting rows replaces the bulk update
+control with **Delete selected** and **Update selected**; deletion and selected
+updates each compile, review, and commit the complete selected set atomically.
+The launcher never exposes app deletion. Opening Settings checks update sources
+automatically; its global refresh action refreshes them again. With no rows
+selected, **Upgrade all** remains available for the complete verified update
+set. The cycles-used cell is a
 low-side 13-node pricing estimate: installation-lifetime instructions cost one
 cycle each, each measured update execution adds the 5,000,000-cycle execution
 base, authorized and direct-authenticated-ingress updates add the
