@@ -4,8 +4,8 @@ import Memory "../backend/memory/agent/v1";
 let fresh = Memory.init();
 assert fresh.installed;
 
-// The archive transition test proves that 0.3.1 -> 0.3.2 is a compiler
-// #keep operation. Model that operation with representative non-default data:
+// Archive transition tests prove that this is a compiler #keep operation.
+// Model that operation with representative non-default data:
 // the existing object is reused and init() is not called again.
 let installed = Memory.init();
 installed.installed := false;

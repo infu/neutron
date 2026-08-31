@@ -124,6 +124,9 @@ function agentSnapshot(): AgentSnapshot {
     models: [],
     modelsLoading: false,
     generating: false,
+    generatingHere: false,
+    conversationRevision: "0:0:-",
+    hiddenMessageCount: 0,
     messages: [],
     error: null,
   };

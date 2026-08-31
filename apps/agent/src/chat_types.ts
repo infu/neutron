@@ -31,6 +31,9 @@ export type AgentSnapshot = JsonObject & {
   models: OpenRouterModel[];
   modelsLoading: boolean;
   generating: boolean;
+  generatingHere: boolean;
+  conversationRevision: string | null;
+  hiddenMessageCount: number;
   messages: TranscriptMessage[];
   error: string | null;
 };
@@ -55,11 +58,24 @@ export type PendingStateChangeJournal = {
   overflow: boolean;
 };
 
-export type PersistedAgentState = {
+export type AgentChatTileEndpointId =
+  `app:agent:tile:chat:instance:${string}`;
+
+export type PersistedAgentSharedState = {
   selectedModelId: string | null;
   models: OpenRouterModel[];
   modelsFetchedAt: number;
+};
+
+export type PersistedConversationState = {
+  selectedModelId: string | null;
   messages: TranscriptMessage[];
   modelTurns: ModelMessage[][];
   pendingStateChangeJournal: PendingStateChangeJournal | null;
 };
+
+// Released Agent versions stored shared and conversation state together under
+// one IndexedDB key. Keep this type as the exact legacy shape so that browser
+// state can be normalized and claimed by one authenticated tile.
+export type PersistedAgentState = PersistedAgentSharedState &
+  PersistedConversationState;

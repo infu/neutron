@@ -10,6 +10,10 @@ import {
   modelAuthorLabel,
   modelAuthorTone,
   modelDisplayName,
+  modelFamilyId,
+  modelFamilyLabel,
+  modelFamilyScope,
+  modelMatchesFamily,
 } from "../src/model_catalog.ts";
 
 const model = (
@@ -55,6 +59,31 @@ test("model author helpers derive friendly, stable identities", () => {
   expect(modelAuthorTone(catalog[0]!)).toBe(modelAuthorTone(catalog[0]!));
   expect(modelAuthorTone(catalog[0]!)).toBeGreaterThanOrEqual(0);
   expect(modelAuthorTone(catalog[0]!)).toBeLessThan(6);
+});
+
+test("model family helpers keep the picker trigger short", () => {
+  expect(modelFamilyId(model("openai/luna-3.1-fast", "Luna 3.1 Fast"))).toBe(
+    "luna",
+  );
+  expect(modelFamilyId(model("openai/gpt-5.6-luna-pro", "GPT-5.6 Luna Pro"))).toBe(
+    "luna",
+  );
+  expect(modelFamilyId(model("qwen/qwen3-coder", "Qwen3 Coder"))).toBe(
+    "qwen",
+  );
+  expect(modelFamilyId(model("openai/o3-mini", "o3 Mini"))).toBe("o3");
+  expect(modelFamilyLabel(model("openai/gpt-5", "GPT-5"))).toBe("GPT");
+  expect(modelFamilyLabel(model("z-ai/glm-4.5", "GLM 4.5"))).toBe("GLM");
+
+  const luna = model("openai/gpt-5.6-luna", "GPT-5.6 Luna");
+  const lunaPro = model("openai/gpt-5.6-luna-pro", "GPT-5.6 Luna Pro");
+  const olderLuna = model("openai/gpt-5.5-luna", "GPT-5.5 Luna");
+  const terra = model("openai/gpt-5.6-terra", "GPT-5.6 Terra");
+  const family = modelFamilyScope(lunaPro);
+  expect(family.label).toBe("luna");
+  expect([olderLuna, luna, lunaPro, terra].filter((item) =>
+    modelMatchesFamily(item, family)
+  ).map(({ id }) => id)).toEqual([olderLuna.id, luna.id, lunaPro.id]);
 });
 
 test("model search matches names, exact ids, and publishers across terms", () => {
