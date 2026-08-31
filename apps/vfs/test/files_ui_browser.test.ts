@@ -189,8 +189,27 @@ test(
       expect(Math.round(resizedBrowserWidth ?? 0)).toBe(
         Math.round(initialBrowserWidth + 16),
       );
+      const workspaceBox = await page.locator(".files-v2-workspace")
+        .boundingBox();
+      const detailBeforeCollapse = await page.locator(".files-v2-detail")
+        .boundingBox();
+      if (!workspaceBox || !detailBeforeCollapse) {
+        throw new Error("Files detail is not visible before tree collapse");
+      }
       await page.getByRole("button", { name: "Hide file tree" }).click();
       expect(await browserPanel.isHidden()).toBe(true);
+      const detailAfterCollapse = await page.locator(".files-v2-detail")
+        .boundingBox();
+      if (!detailAfterCollapse) {
+        throw new Error("Files detail disappeared with the file tree");
+      }
+      expect(Math.abs(detailAfterCollapse.x - workspaceBox.x))
+        .toBeLessThanOrEqual(1);
+      expect(Math.abs(detailAfterCollapse.width - workspaceBox.width))
+        .toBeLessThanOrEqual(1);
+      expect(detailAfterCollapse.width).toBeGreaterThan(
+        detailBeforeCollapse.width,
+      );
       await page.getByRole("button", { name: "Show file tree" }).click();
       expect(Math.round((await browserPanel.boundingBox())?.width ?? 0)).toBe(
         Math.round(initialBrowserWidth + 16),

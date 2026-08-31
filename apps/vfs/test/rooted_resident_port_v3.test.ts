@@ -628,6 +628,85 @@ describe("Files rooted resident port", () => {
     expect(decryptedBytes).toEqual(new Uint8Array([0, 0, 0]));
   });
 
+  test("moves a Workspace file into Vault using each root's native path", async () => {
+    const events: string[] = [];
+    const vault = new FakeResidentPort("vault", events);
+    const plain = new FakeResidentPort("plain", events);
+    plain.statResult = file("/Workspace/report.txt", "same-digest");
+    const sourceBytes = new Uint8Array([4, 5, 6]);
+    plain.readResult = {
+      entry: plain.statResult as FilesServiceFile["entry"],
+      bytes: sourceBytes,
+    };
+    vault.writeResult = {
+      entry: file(
+        "/inbox/report.txt",
+        "same-digest",
+      ) as FilesServiceWriteResult["entry"],
+      cleanupPending: false,
+    };
+    vault.notFoundPaths.add("/inbox/report.txt");
+    const rooted = new FilesRootedResidentPort({ vault, plain });
+
+    await expect(
+      rooted.move(
+        "/Workspace/report.txt",
+        "/Vault/inbox/report.txt",
+        false,
+        undefined,
+        POLICY,
+      ),
+    ).resolves.toEqual({
+      path: "/Vault/inbox/report.txt",
+      structuralRevision: nat(1),
+      changed: 1,
+      cleanupPending: false,
+    });
+
+    expect(events).toEqual([
+      "vault:stat",
+      "plain:stat",
+      "plain:read",
+      "vault:write",
+      "plain:stat",
+      "vault:stat",
+      "plain:stat",
+      "vault:stat",
+      "plain:remove",
+    ]);
+    expect(vault.calls[0]).toEqual({
+      method: "stat",
+      args: ["/inbox/report.txt", undefined],
+    });
+    expect(vault.calls.find((call) => call.method === "write")?.args[0])
+      .toMatchObject({
+        path: "/inbox/report.txt",
+        contentKind: "binary",
+        mediaType: "application/octet-stream",
+        ifMatch: null,
+        ifNoneMatch: true,
+        createParents: true,
+      });
+    expect(plain.calls.find((call) => call.method === "read")).toEqual({
+      method: "read",
+      args: ["/Workspace/report.txt", undefined],
+    });
+    expect(plain.calls.at(-1)).toEqual({
+      method: "remove",
+      args: [
+        "/Workspace/report.txt",
+        false,
+        undefined,
+        {
+          nodeId: nat(1),
+          structuralRevision: nat(1),
+          etagSha256: "same-digest",
+        },
+      ],
+    });
+    expect(sourceBytes).toEqual(new Uint8Array([0, 0, 0]));
+  });
+
   test("wipes a decrypted copy buffer when the destination write fails", async () => {
     const vault = new FakeResidentPort("vault");
     const plain = new FakeResidentPort("plain");

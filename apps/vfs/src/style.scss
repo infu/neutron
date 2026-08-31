@@ -131,6 +131,8 @@
     background: var(--nt-bg-panel);
     display: flex;
     flex-direction: column;
+    grid-column: 1;
+    grid-row: 1;
     overflow: hidden;
   }
 
@@ -141,6 +143,8 @@
   .files-v2-browser-resizer {
     background: var(--nt-line-subtle);
     cursor: col-resize;
+    grid-column: 2;
+    grid-row: 1;
     min-height: 0;
     outline: 0;
     position: relative;
@@ -508,6 +512,8 @@
     background: var(--nt-bg);
     display: flex;
     flex-direction: column;
+    grid-column: 3;
+    grid-row: 1;
     overflow: hidden;
   }
 
@@ -917,6 +923,7 @@
     .files-v2-browser {
       border-bottom: 1px solid var(--nt-line-subtle);
       border-right: 0;
+      grid-column: 1;
       grid-row: 1;
     }
 
@@ -925,6 +932,7 @@
     }
 
     .files-v2-detail {
+      grid-column: 1;
       grid-row: 3;
     }
 

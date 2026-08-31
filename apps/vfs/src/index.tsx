@@ -1257,6 +1257,20 @@ export type FilesSpreadsheetHandoffDependencies = Readonly<{
   open(): Promise<void>;
 }>;
 
+export type FilesSpreadsheetTileOpener = (
+  request: Parameters<typeof openAppTile>[0],
+) => ReturnType<typeof openAppTile>;
+
+export async function openFilesSpreadsheetTile(
+  open: FilesSpreadsheetTileOpener = openAppTile,
+): Promise<void> {
+  await open({
+    appId: "spreadsheet",
+    tileId: "workbook",
+    reuseExisting: true,
+  });
+}
+
 /**
  * Hands one authenticated immutable read to Spreadsheet. Opening a tile with
  * only a path is insufficient: Spreadsheet intentionally accepts Files bytes
@@ -4128,11 +4142,7 @@ export function App({
         },
         async open() {
           if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
-          await openAppTile({
-            appId: "spreadsheet",
-            tileId: "spreadsheet",
-            reuseExisting: true,
-          });
+          await openFilesSpreadsheetTile();
         },
       });
       if (!privateRequestIsCurrent(generation, vaultEpoch)) return;

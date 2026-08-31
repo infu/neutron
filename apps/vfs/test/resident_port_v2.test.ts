@@ -22,7 +22,10 @@ import type {
 } from "../src/protocol/types.ts";
 import { FILES_V2_LIMITS } from "../src/protocol/constants.ts";
 import { filesId128ToKey } from "../src/protocol/ids.ts";
-import type { FilesResidentFilePort } from "../src/resident/service_contract.ts";
+import {
+  FilesServiceFault,
+  type FilesResidentFilePort,
+} from "../src/resident/service_contract.ts";
 import {
   DefaultFilesResidentPort,
   createDefaultFilesResidentPort,
@@ -327,6 +330,18 @@ describe("Files V2 concrete resident port", () => {
       limit: 1,
       recursive: true,
     })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  test("maps a missing Vault stat into the resident service fault contract", async () => {
+    const harness = active();
+    harness.present = true;
+    harness.vaultState = "locked";
+    const port = makePort(harness);
+    await port.unlock();
+
+    const error = await port.stat("/missing.txt").catch((reason) => reason);
+    expect(error).toBeInstanceOf(FilesServiceFault);
+    expect(error).toMatchObject({ code: "not_found" });
   });
 
   test("direct pages are sorted locally by folder and deterministic decrypted name without changing paging", async () => {

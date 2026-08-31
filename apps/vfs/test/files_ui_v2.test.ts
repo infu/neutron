@@ -30,6 +30,7 @@ const {
   isFilesPublicRelativeUrl,
   isFilesAmbiguousTransferFailure,
   isFilesKnownConflictFailure,
+  openFilesSpreadsheetTile,
   prepareFilesVaultLifecycle,
   readStrictTextFile,
   releaseFilesResidentDownload,
@@ -706,6 +707,23 @@ test("Spreadsheet handoff sends the exact authenticated etag and attachment befo
       async open() {},
     }),
   ).rejects.toThrow("changed after review");
+});
+
+test("Spreadsheet handoff opens the installed workbook tile", async () => {
+  let request: unknown = null;
+  await openFilesSpreadsheetTile(async (input: unknown) => {
+    request = input;
+    return {
+      instanceId: "spreadsheet-instance",
+      workspace: 0,
+      opened: true,
+    };
+  });
+  expect(request).toEqual({
+    appId: "spreadsheet",
+    tileId: "workbook",
+    reuseExisting: true,
+  });
 });
 
 test("public links are exact local publication routes", () => {
