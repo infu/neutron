@@ -97,6 +97,174 @@ test(
         .toBe(0);
       expect(await page.getByText("Move / rename", { exact: true }).count())
         .toBe(0);
+      const workspaceRoot = tree.locator('[data-path="/Workspace"]');
+      const workspaceNote = tree.locator(
+        '[data-path="/Workspace/workspace-note.txt"]',
+      );
+      expect(await workspaceNote.evaluate((node) =>
+        Math.round(node.getBoundingClientRect().height)
+      )).toBe(32);
+      expect(await workspaceNote.locator(".files-v2-row-size").count()).toBe(0);
+      expect(await workspaceNote.locator(".files-v2-tree-guide--branch").count())
+        .toBe(1);
+      expect(await workspaceRoot.getByRole("button", {
+        name: "Collapse Workspace",
+      }).count()).toBe(1);
+      await workspaceRoot.getByRole("button", {
+        name: "Collapse Workspace",
+      }).click();
+      await workspaceRoot.getByRole("button", {
+        name: "Expand Workspace",
+      }).click();
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path
+        ),
+      ).toBe("/Workspace");
+      await tree.locator('[data-path="/Workspace/Projects"]').click();
+      await page.getByRole("navigation", { name: "Current folder" })
+        .getByText("Projects", { exact: true })
+        .waitFor();
+      const sharedRoot = tree.locator('[data-path="/Shared"]');
+      await sharedRoot.focus();
+      await sharedRoot.press("ArrowLeft");
+      expect(
+        await page.getByRole("navigation", { name: "Current folder" })
+          .innerText(),
+      ).toContain("Projects");
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path
+        ),
+      ).toBe("/Shared");
+      await tree.evaluate((node) => {
+        node.style.flex = "0 0 96px";
+        node.style.height = "96px";
+        node.style.maxHeight = "96px";
+      });
+      await page.waitForTimeout(30);
+      await sharedRoot.press("End");
+      await page.waitForFunction(() =>
+        (document.activeElement as HTMLElement | null)?.dataset.path
+          ?.startsWith("/Workspace/zz-fixture-")
+      );
+      const lastFocusedPath = await page.evaluate(() =>
+        (document.activeElement as HTMLElement | null)?.dataset.path ?? null
+      );
+      expect(lastFocusedPath).not.toBeNull();
+      await page.keyboard.press("Enter");
+      expect(await tree.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path ?? null
+        ),
+      ).toBe(lastFocusedPath);
+      await tree.evaluate((node) => {
+        node.style.flex = "";
+        node.style.height = "";
+        node.style.maxHeight = "";
+      });
+      await page.keyboard.press("Home");
+      await page.waitForFunction(() =>
+        (document.activeElement as HTMLElement | null)?.dataset.path ===
+          "/Shared"
+      );
+      await workspaceRoot.click();
+      await page.keyboard.press("ArrowDown");
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path
+            ?.startsWith("/Workspace/")
+        ),
+      ).toBe(true);
+      await workspaceRoot.click();
+      const browserPanel = page.locator("#files-v2-browser");
+      const initialBrowserWidth = (await browserPanel.boundingBox())?.width;
+      if (!initialBrowserWidth) throw new Error("File tree is not visible");
+      const separator = page.getByRole("separator", {
+        name: "Resize file tree",
+      });
+      await separator.press("ArrowRight");
+      const resizedBrowserWidth = (await browserPanel.boundingBox())?.width;
+      expect(Math.round(resizedBrowserWidth ?? 0)).toBe(
+        Math.round(initialBrowserWidth + 16),
+      );
+      const workspaceBox = await page.locator(".files-v2-workspace")
+        .boundingBox();
+      const detailBeforeCollapse = await page.locator(".files-v2-detail")
+        .boundingBox();
+      if (!workspaceBox || !detailBeforeCollapse) {
+        throw new Error("Files detail is not visible before tree collapse");
+      }
+      await page.getByRole("button", { name: "Hide file tree" }).click();
+      expect(await browserPanel.isHidden()).toBe(true);
+      const detailAfterCollapse = await page.locator(".files-v2-detail")
+        .boundingBox();
+      if (!detailAfterCollapse) {
+        throw new Error("Files detail disappeared with the file tree");
+      }
+      expect(Math.abs(detailAfterCollapse.x - workspaceBox.x))
+        .toBeLessThanOrEqual(1);
+      expect(Math.abs(detailAfterCollapse.width - workspaceBox.width))
+        .toBeLessThanOrEqual(1);
+      expect(detailAfterCollapse.width).toBeGreaterThan(
+        detailBeforeCollapse.width,
+      );
+      await page.getByRole("button", { name: "Show file tree" }).click();
+      expect(Math.round((await browserPanel.boundingBox())?.width ?? 0)).toBe(
+        Math.round(initialBrowserWidth + 16),
+      );
+      await page.setViewportSize({ width: 800, height: 720 });
+      const responsiveWidth = (await browserPanel.boundingBox())?.width;
+      const separatorBox = await separator.boundingBox();
+      if (!responsiveWidth || !separatorBox) {
+        throw new Error("Responsive file tree resizer is unavailable");
+      }
+      await page.mouse.move(
+        separatorBox.x + separatorBox.width / 2,
+        separatorBox.y + separatorBox.height / 2,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        separatorBox.x + separatorBox.width / 2 + 24,
+        separatorBox.y + separatorBox.height / 2,
+      );
+      await page.mouse.up();
+      expect(Math.round((await browserPanel.boundingBox())?.width ?? 0)).toBe(
+        Math.round(responsiveWidth + 24),
+      );
+      await separator.press("End");
+      await page.setViewportSize({ width: 650, height: 720 });
+      await page.waitForFunction(() => {
+        const panel = document.querySelector<HTMLElement>("#files-v2-browser");
+        return panel !== null && panel.getBoundingClientRect().width <= 370;
+      });
+      const narrowWidth = Math.round(
+        (await browserPanel.boundingBox())?.width ?? 0,
+      );
+      expect(Number(await separator.getAttribute("aria-valuenow"))).toBe(
+        narrowWidth,
+      );
+      await separator.press("ArrowLeft");
+      const keyboardNarrowWidth = Math.round(
+        (await browserPanel.boundingBox())?.width ?? 0,
+      );
+      expect(keyboardNarrowWidth).toBe(narrowWidth - 16);
+      expect(Number(await separator.getAttribute("aria-valuenow"))).toBe(
+        keyboardNarrowWidth,
+      );
+      await separator.focus();
+      await separator.press("Enter");
+      expect(await browserPanel.isHidden()).toBe(true);
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.getAttribute(
+            "aria-label",
+          )
+        ),
+      ).toBe("Show file tree");
+      await page.getByRole("button", { name: "Show file tree" }).click();
+      await page.setViewportSize({ width: 1280, height: 720 });
 
       const projects = tree.locator('[data-path="/Workspace/Projects"]');
       await page.evaluate(() => {
@@ -124,7 +292,10 @@ test(
         (globalThis as BrowserHarnessGlobal).__filesHarness
           .releaseDelayedStatus();
       });
-      await page.waitForTimeout(30);
+      await page.waitForFunction(() =>
+        !(globalThis as BrowserHarnessGlobal).__filesHarness
+          .delayedStatusPending
+      );
       expect(
         await page.getByRole("navigation", { name: "Current folder" })
           .innerText(),
@@ -150,7 +321,262 @@ test(
         folderRaceCalls.filter((path) => path === "/Workspace/Fast").length,
       ).toBe(1);
 
+      await fastFolder.getByRole("button", { name: "Actions for Fast" })
+        .click();
+      await page.getByRole("menu", { name: "Actions for Fast" })
+        .getByRole("menuitem", { name: "Rename" })
+        .click();
+      const openFolderRenameDialog = page.getByRole("dialog", {
+        name: "Rename Fast",
+      });
+      await openFolderRenameDialog.getByRole("textbox", { name: "Name" })
+        .fill("Renamed Fast");
+      await openFolderRenameDialog.getByRole("button", { name: "Rename" })
+        .click();
+      const renamedFastFolder = tree.locator(
+        '[data-path="/Workspace/Renamed Fast"]',
+      );
+      await renamedFastFolder.waitFor();
+      expect(await fastFolder.count()).toBe(0);
+      await tree.locator(
+        '[data-path="/Workspace/Renamed Fast/fast-note.txt"]',
+      ).waitFor();
+      expect(
+        await page.getByRole("navigation", { name: "Current folder" })
+          .innerText(),
+      ).toContain("Renamed Fast");
+
+      await page.getByRole("navigation", { name: "Current folder" })
+        .getByText("Workspace", { exact: true })
+        .click();
       const workspace = tree.locator('[data-path="/Workspace"]');
+      await workspace.waitFor();
+      await workspace.getByRole("button", {
+        name: "Actions for Workspace",
+      }).click();
+      await page.getByRole("menu", { name: "Actions for Workspace" })
+        .getByRole("menuitem", { name: "New folder" })
+        .click();
+      const recreateFolderDialog = page.getByRole("dialog", {
+        name: "New folder",
+      });
+      await recreateFolderDialog.getByRole("textbox", { name: "Name" })
+        .fill("Fast");
+      await recreateFolderDialog.getByRole("button", {
+        name: "Create folder",
+      }).click();
+      await recreateFolderDialog.waitFor({ state: "detached" });
+      await workspace.focus();
+      await workspace.press("End");
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path ?? null
+        ),
+      ).toBe("/Workspace/Fast");
+      const recreatedFastFolder = tree.locator(
+        '[data-path="/Workspace/Fast"]',
+      );
+      expect(await recreatedFastFolder.getAttribute("aria-expanded"))
+        .toBe("false");
+      expect(
+        await tree.locator(
+          '[data-path="/Workspace/Fast/fast-note.txt"]',
+        ).count(),
+      ).toBe(0);
+      await recreatedFastFolder.press("Home");
+
+      const pendingFolder = tree.locator(
+        '[data-path="/Workspace/Pending"]',
+      );
+      await pendingFolder.getByRole("button", { name: "Expand Pending" })
+        .click();
+      await page.waitForFunction(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness
+          .delayedPendingFolderListPending
+      );
+      await pendingFolder.focus();
+      await pendingFolder.press("Shift+F10");
+      await page.getByRole("menu", { name: "Actions for Pending" })
+        .getByRole("menuitem", { name: "Rename" })
+        .click();
+      const pendingRenameDialog = page.getByRole("dialog", {
+        name: "Rename Pending",
+      });
+      await pendingRenameDialog.getByRole("textbox", { name: "Name" })
+        .fill("Renamed Pending");
+      await pendingRenameDialog.getByRole("button", { name: "Rename" })
+        .click();
+      await page.waitForFunction(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.lastMove?.to ===
+          "/Workspace/Renamed Pending"
+      );
+      await page.evaluate(() => {
+        (globalThis as BrowserHarnessGlobal).__filesHarness
+          .releaseDelayedPendingFolderList();
+      });
+      await page.waitForFunction(() =>
+        !(globalThis as BrowserHarnessGlobal).__filesHarness
+          .delayedPendingFolderListPending
+      );
+      await page.getByRole("navigation", { name: "Current folder" })
+        .getByText("Workspace", { exact: true })
+        .click();
+      await workspace.waitFor();
+      await workspace.getByRole("button", {
+        name: "Actions for Workspace",
+      }).click();
+      await page.getByRole("menu", { name: "Actions for Workspace" })
+        .getByRole("menuitem", { name: "New folder" })
+        .click();
+      const recreatePendingDialog = page.getByRole("dialog", {
+        name: "New folder",
+      });
+      await recreatePendingDialog.getByRole("textbox", { name: "Name" })
+        .fill("Pending");
+      await recreatePendingDialog.getByRole("button", {
+        name: "Create folder",
+      }).click();
+      await recreatePendingDialog.waitFor({ state: "detached" });
+      await workspace.focus();
+      await workspace.press("End");
+      const recreatedPendingFolder = tree.locator(
+        '[data-path="/Workspace/Pending"]',
+      );
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path ?? null
+        ),
+      ).toBe("/Workspace/Pending");
+      expect(await recreatedPendingFolder.getAttribute("aria-expanded"))
+        .toBe("false");
+      const pendingListCalls = await page.evaluate(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.listCalls
+          .filter((path) => path === "/Workspace/Pending").length
+      );
+      await recreatedPendingFolder.getByRole("button", {
+        name: "Expand Pending",
+      }).click();
+      await page.waitForFunction((baseline) =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.listCalls
+          .filter((path) => path === "/Workspace/Pending").length ===
+            (baseline as number) + 1,
+        pendingListCalls,
+      );
+      expect(
+        await tree.locator(
+          '[data-path="/Workspace/Pending/pending-note.txt"]',
+        ).count(),
+      ).toBe(0);
+      await recreatedPendingFolder.press("Home");
+      const slowImageFile = tree.locator(
+        '[data-path="/Workspace/slow-photo.png"]',
+      );
+      await slowImageFile.click();
+      await page.waitForFunction(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.delayedImagePending
+      );
+      const imageFile = tree.locator('[data-path="/Workspace/photo.png"]');
+      await imageFile.click();
+      await page.waitForFunction(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness
+          .delayedImageAborted
+      );
+      const image = page.getByRole("img", { name: "photo.png" });
+      await image.waitFor();
+      await page.waitForFunction(() =>
+        document.querySelector<HTMLImageElement>('img[alt="photo.png"]')
+          ?.naturalWidth === 1
+      );
+      const previewUrl = await image.getAttribute("src");
+      if (!previewUrl?.startsWith("blob:")) {
+        throw new Error("Image preview did not use a Blob URL");
+      }
+      expect(
+        await page.evaluate(() =>
+          (globalThis as BrowserHarnessGlobal).__filesHarness
+            .binaryReadRequests.slice(0, 2)
+        ),
+      ).toEqual([
+        { path: "/Workspace/slow-photo.png", ifMatch: "a".repeat(64) },
+        { path: "/Workspace/photo.png", ifMatch: "a".repeat(64) },
+      ]);
+      await page.evaluate(() => {
+        (globalThis as BrowserHarnessGlobal).__filesHarness
+          .releaseDelayedImage();
+      });
+      await page.waitForFunction(() =>
+        !(globalThis as BrowserHarnessGlobal).__filesHarness
+          .delayedImagePending
+      );
+      expect(await page.getByRole("img", { name: "photo.png" })
+        .getAttribute("src")).toBe(previewUrl);
+      const readsBeforeVaultLock = await page.evaluate(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.binaryReadPaths
+          .length
+      );
+      await page.evaluate(() => {
+        const harness =
+          (globalThis as BrowserHarnessGlobal).__filesHarness;
+        harness.setVaultLocked();
+        harness.emitState();
+      });
+      await page.waitForFunction((minimum) =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.binaryReadPaths
+          .length > (minimum as number), readsBeforeVaultLock
+      );
+      await page.waitForFunction(() =>
+        document.querySelector<HTMLImageElement>('img[alt="photo.png"]')
+          ?.naturalWidth === 1
+      );
+      const reloadedPreviewUrl = await page.getByRole("img", {
+        name: "photo.png",
+      }).getAttribute("src");
+      expect(reloadedPreviewUrl).not.toBe(previewUrl);
+      await page.waitForFunction((url) =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.revokedUrls
+          .includes(url as string), previewUrl
+      );
+      const urlsBeforeBrokenPreview = await page.evaluate(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.createdUrls.length
+      );
+      await tree.locator('[data-path="/Workspace/broken.png"]').click();
+      await page.waitForFunction((url) =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.revokedUrls
+          .includes(url as string), reloadedPreviewUrl
+      );
+      await page.getByRole("heading", { name: "Preview unavailable" })
+        .waitFor();
+      expect(
+        await page.getByRole("button", { name: "Download", exact: true })
+          .isEnabled(),
+      ).toBe(true);
+      await page.waitForFunction((baseline) =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.createdUrls
+          .length === (baseline as number) + 1,
+        urlsBeforeBrokenPreview,
+      );
+      const brokenPreviewUrl = await page.evaluate(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.createdUrls.at(-1)
+      );
+      expect(brokenPreviewUrl?.startsWith("blob:")).toBe(true);
+      await page.waitForFunction((url) =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.revokedUrls
+          .includes(url as string), brokenPreviewUrl
+      );
+      const binaryReadsBeforeLarge = await page.evaluate(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.binaryReadPaths
+          .length
+      );
+      await tree.locator('[data-path="/Workspace/large.png"]').click();
+      await page.getByRole("heading", {
+        name: "Image is too large to preview",
+      }).waitFor();
+      expect(
+        await page.evaluate(() =>
+          (globalThis as BrowserHarnessGlobal).__filesHarness.binaryReadPaths
+            .length
+        ),
+      ).toBe(binaryReadsBeforeLarge);
       await workspace.click();
       const priorFile = tree.locator(
         '[data-path="/Workspace/workspace-note.txt"]',
@@ -205,6 +631,87 @@ test(
         ),
       ).toBe(readsBeforeArrow);
       await fastFile.click();
+      await fastFile.focus();
+      await fastFile.press("Shift+F10");
+      const keyboardMenu = page.getByRole("menu", {
+        name: "Actions for fast.txt",
+      });
+      await keyboardMenu.waitFor();
+      await page.keyboard.press("Escape");
+      await keyboardMenu.waitFor({ state: "detached" });
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path
+        ),
+      ).toBe("/Workspace/fast.txt");
+      await fastFile.press("Shift+F10");
+      await keyboardMenu.waitFor();
+      await tree.evaluate((node) => {
+        node.dispatchEvent(new Event("scroll", { bubbles: true }));
+      });
+      await keyboardMenu.waitFor({ state: "detached" });
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.getAttribute("role")
+        ),
+      ).toBe("tree");
+      await page.keyboard.press("ArrowUp");
+      await page.waitForFunction(() =>
+        (document.activeElement as HTMLElement | null)?.dataset.path ===
+          "/Workspace/slow.txt"
+      );
+      await fastFile.click();
+      await fastEditor.fill("keep this buffer");
+      const readsBeforeSameRow = await page.evaluate(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.readPaths.length
+      );
+      await fastFile.click();
+      expect(await fastEditor.inputValue()).toBe("keep this buffer");
+      expect(
+        await page.evaluate(() =>
+          (globalThis as BrowserHarnessGlobal).__filesHarness.readPaths.length
+        ),
+      ).toBe(readsBeforeSameRow);
+      const movesBeforeRename = await page.evaluate(() =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.moveCalls
+      );
+      await slowFile.getByRole("button", { name: "Actions for slow.txt" })
+        .click();
+      await page.getByRole("menu", { name: "Actions for slow.txt" })
+        .getByRole("menuitem", { name: "Rename" })
+        .click();
+      const renameDialog = page.getByRole("dialog", {
+        name: "Rename slow.txt",
+      });
+      await renameDialog.getByRole("textbox", { name: "Name" })
+        .fill("renamed-slow.txt");
+      await renameDialog.getByRole("button", { name: "Rename" }).click();
+      await page.waitForFunction((baseline) =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.moveCalls ===
+          (baseline as number) + 1,
+        movesBeforeRename,
+      );
+      await page.waitForTimeout(100);
+      expect(
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path ?? null
+        ),
+      ).toBe("/Workspace/renamed-slow.txt");
+      await page.getByRole("heading", { name: "fast.txt", level: 2 })
+        .waitFor();
+      expect(await fastEditor.inputValue()).toBe("keep this buffer");
+      await page.waitForFunction(() =>
+        document.querySelector<HTMLTextAreaElement>(
+          '[aria-label="Edit fast.txt"]',
+        )?.disabled === false
+      );
+      await fastEditor.fill("fast content");
+      await tree.focus();
+      await page.keyboard.press("Home");
+      await page.waitForFunction(() =>
+        (document.activeElement as HTMLElement | null)?.dataset.path ===
+          "/Shared"
+      );
 
       const detailBox = await page.locator(".files-v2-detail").boundingBox();
       const editorBox = await fastEditor.boundingBox();
@@ -228,13 +735,7 @@ test(
       const publicFile = tree.locator('[data-path="/Shared/public.txt"]');
       await publicFile.waitFor();
       await workspace.click();
-      const search = page.getByRole("searchbox", {
-        name: "Search this folder",
-      });
-      await search.fill("public");
-      expect(await tree.locator('[data-path="/Shared/public.txt"]').count())
-        .toBe(0);
-      await search.fill("");
+      expect(await page.getByRole("searchbox").count()).toBe(0);
       await publicFile.waitFor();
       await publicFile.click();
       expect(
@@ -285,8 +786,24 @@ test(
         ),
       ).toBe(movesBeforeForgedDrop);
       await workspaceFile.dragTo(shared);
-      await page.waitForFunction(() =>
-        (globalThis as BrowserHarnessGlobal).__filesHarness.moveCalls === 1
+      const moveDialog = page.getByRole("dialog", {
+        name: "Change storage policy?",
+      });
+      await moveDialog.waitFor();
+      expect(
+        await page.evaluate(() =>
+          (globalThis as BrowserHarnessGlobal).__filesHarness.moveCalls
+        ),
+      ).toBe(movesBeforeForgedDrop);
+      await moveDialog.getByRole("button", { name: "Cancel" }).click();
+      await workspaceFile.dragTo(shared);
+      await page.getByRole("dialog", { name: "Change storage policy?" })
+        .getByRole("button", { name: "Move and change storage" })
+        .click();
+      await page.waitForFunction((baseline) =>
+        (globalThis as BrowserHarnessGlobal).__filesHarness.moveCalls ===
+          (baseline as number) + 1,
+        movesBeforeForgedDrop,
       );
       expect(
         await page.evaluate(() =>
@@ -313,6 +830,12 @@ test(
         const transfer = new DataTransfer();
         transfer.items.add(
           new File(["dropped"], "dropped.txt", { type: "text/plain" }),
+        );
+        transfer.items.add(
+          new File(["second"], "second.txt", { type: "text/plain" }),
+        );
+        transfer.items.add(
+          new File(["invalid"], " bad ", { type: "text/plain" }),
         );
         target.dispatchEvent(
           new DragEvent("dragenter", {
@@ -354,6 +877,31 @@ test(
           }),
         );
       });
+      const uploadDialog = page.getByRole("dialog", {
+        name: "Upload files",
+      });
+      await uploadDialog.waitFor();
+      expect(await uploadDialog.getByText(
+        "/Workspace/Projects",
+        { exact: true },
+      ).count()).toBe(1);
+      await uploadDialog.getByText(
+        "Workspace stores regular files without a public link.",
+        { exact: true },
+      ).waitFor();
+      expect(
+        await page.evaluate(() =>
+          (globalThis as BrowserHarnessGlobal).__filesHarness.writePaths
+            .includes("/Workspace/Projects/dropped.txt")
+        ),
+      ).toBe(false);
+      await uploadDialog.getByText("Files cannot store this filename.")
+        .waitFor();
+      await uploadDialog.getByRole("button", { name: "Remove second.txt" })
+        .click();
+      await uploadDialog.getByRole("button", { name: /Remove bad/u })
+        .click();
+      await uploadDialog.getByRole("button", { name: "Upload 1" }).click();
       await page.waitForFunction(() =>
         (globalThis as BrowserHarnessGlobal).__filesHarness.writePaths
           .includes("/Workspace/Projects/dropped.txt")
@@ -365,11 +913,28 @@ test(
       await page.getByRole("button", { name: "Dismiss transfers" }).click();
       expect(await page.locator('[aria-label="File transfers"]').count())
         .toBe(0);
+      await page.getByRole("button", { name: "Upload", exact: true }).click();
+      await page.locator('input[type="file"]').setInputFiles(
+        Array.from({ length: 101 }, (_, index) => ({
+          name: `limit-${index}.txt`,
+          mimeType: "text/plain",
+          buffer: Buffer.from("x"),
+        })),
+      );
+      const limitDialog = page.getByRole("dialog", { name: "Upload files" });
+      await limitDialog.getByRole("alert").filter({
+        hasText: "1 additional file was not added",
+      }).waitFor();
+      await limitDialog.getByRole("button", { name: "Cancel" }).click();
+      await page.getByRole("button", { name: "Upload", exact: true }).click();
       await page.locator('input[type="file"]').setInputFiles({
         name: "auto-dismiss.txt",
         mimeType: "text/plain",
         buffer: Buffer.from("done"),
       });
+      await page.getByRole("dialog", { name: "Upload files" })
+        .getByRole("button", { name: "Upload 1" })
+        .click();
       const autoDismissTransfer = page.locator(
         '[aria-label="File transfers"]',
       );
@@ -410,7 +975,11 @@ test(
       await projects.click();
       await page.getByRole("heading", { name: "Projects", level: 2 })
         .waitFor();
-      await page.getByRole("button", { name: "Delete Projects" }).click();
+      await projects.getByRole("button", { name: "Actions for Projects" })
+        .click();
+      await page.getByRole("menu", { name: "Actions for Projects" })
+        .getByRole("menuitem", { name: "Delete folder" })
+        .click();
       await page.getByRole("dialog", { name: "Delete Projects?" })
         .getByRole("button", { name: "Delete folder" })
         .click();
@@ -425,6 +994,49 @@ test(
       expect(await tree.locator('[data-path="/Workspace/Projects"]').count())
         .toBe(0);
       await page.close();
+
+      const vaultBoundary = await browser.newPage();
+      await vaultBoundary.goto(origin);
+      const vaultBoundaryTree = vaultBoundary.getByRole("tree", {
+        name: "Files",
+      });
+      await vaultBoundaryTree.locator(
+        '[data-path="/Workspace/workspace-note.txt"]',
+      ).waitFor();
+      const vaultBoundaryRoot = vaultBoundaryTree.locator(
+        '[data-path="/Vault"]',
+      );
+      await vaultBoundaryRoot.click();
+      await vaultBoundaryTree.locator('[data-path="/Vault/secret.txt"]')
+        .waitFor();
+      await vaultBoundaryRoot.getByRole("button", {
+        name: "Actions for Vault",
+      }).click();
+      await vaultBoundary.getByRole("menu", { name: "Actions for Vault" })
+        .getByRole("menuitem", { name: "New text file" })
+        .click();
+      const privateCreateDialog = vaultBoundary.getByRole("dialog", {
+        name: "New file",
+      });
+      await privateCreateDialog.getByText("/Vault", { exact: true }).waitFor();
+      await vaultBoundary.evaluate(() => {
+        const harness =
+          (globalThis as BrowserHarnessGlobal).__filesHarness;
+        harness.setVaultLocked();
+        harness.emitState();
+      });
+      await privateCreateDialog.waitFor({ state: "detached" });
+      await vaultBoundary.getByRole("heading", { name: "Open Vault" })
+        .waitFor();
+      expect(await vaultBoundaryRoot.getAttribute("aria-expanded")).toBe(
+        "false",
+      );
+      expect(
+        await vaultBoundaryTree.locator(
+          '[data-path="/Vault/secret.txt"]',
+        ).count(),
+      ).toBe(0);
+      await vaultBoundary.close();
 
       const inactivityUnlock = await browser.newPage();
       await inactivityUnlock.goto(origin);
@@ -494,14 +1106,38 @@ test(
           (globalThis as BrowserHarnessGlobal).__filesHarness.unlockCalls
         ),
       ).toBe(0);
-      await lockedTree.locator('[data-path="/Vault"]').click();
+      const lockedVault = lockedTree.locator('[data-path="/Vault"]');
+      await lockedVault.click();
       const lockedGate = locked.locator(".files-v2-gate");
       await lockedGate.getByRole("heading", { name: "Open Vault" }).waitFor();
+      expect(await lockedVault.getAttribute("aria-expanded")).toBe("false");
       expect(
         await locked.evaluate(() =>
           (globalThis as BrowserHarnessGlobal).__filesHarness.unlockCalls
         ),
       ).toBe(1);
+      await lockedVault.focus();
+      await lockedVault.press("Shift+F10");
+      const lockedVaultMenu = locked.getByRole("menu", {
+        name: "Actions for Vault",
+      });
+      await lockedVaultMenu.waitFor();
+      expect(
+        await locked.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.getAttribute("role")
+        ),
+      ).toBe("menu");
+      await locked.keyboard.press("Escape");
+      await lockedVaultMenu.waitFor({ state: "detached" });
+      expect(
+        await locked.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.dataset.path
+        ),
+      ).toBe("/Vault");
+      await lockedVault.press("Shift+F10");
+      await lockedVaultMenu.waitFor();
+      await locked.keyboard.press("Tab");
+      await lockedVaultMenu.waitFor({ state: "detached" });
       await locked.evaluate(() => {
         const harness =
           (globalThis as BrowserHarnessGlobal).__filesHarness;
@@ -641,7 +1277,7 @@ test(
       server.stop(true);
     }
   },
-  30_000,
+  60_000,
 );
 
 type BrowserHarnessGlobal = typeof globalThis & {
@@ -655,14 +1291,24 @@ type BrowserHarnessGlobal = typeof globalThis & {
     } | null;
     writePaths: string[];
     readPaths: string[];
+    binaryReadPaths: string[];
+    binaryReadRequests: Array<{ path: string; ifMatch: string | null }>;
+    createdUrls: string[];
+    revokedUrls: string[];
     removePaths: string[];
     residentRotateCalls: number;
     statusCalls: number;
     unlockCalls: number;
     delayedStatusPending: boolean;
+    delayedImagePending: boolean;
+    delayedImageAborted: boolean;
+    delayedPendingFolderListPending: boolean;
     beginDelayedStateRefresh(): void;
     releaseDelayedStatus(): void;
+    releaseDelayedImage(): void;
+    releaseDelayedPendingFolderList(): void;
     emitState(): void;
+    setVaultLocked(): void;
     setUninitializedAuthority(): void;
     setVaultLockedForReconnect(): void;
     setVaultUninitialized(): void;
@@ -723,6 +1369,25 @@ function browserHarnessSource(): string {
       revision: "1",
       publicUrl,
     });
+    const pngBytes = Uint8Array.from(
+      atob(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      ),
+      (character) => character.charCodeAt(0),
+    );
+    const binaryEntry = (path, mediaType, byteLength) => ({
+      path,
+      name: path.slice(path.lastIndexOf("/") + 1),
+      type: "file",
+      contentKind: "binary",
+      byteLength,
+      mediaType,
+      etag,
+      createdAtNs: "1",
+      modifiedAtNs: "2",
+      revision: "1",
+      publicUrl: null,
+    });
     const folderEntry = (path) => ({
       path,
       name: path.slice(path.lastIndexOf("/") + 1),
@@ -745,6 +1410,7 @@ function browserHarnessSource(): string {
       ["/Workspace/Projects", folderEntry("/Workspace/Projects")],
       ["/Workspace/Slow", folderEntry("/Workspace/Slow")],
       ["/Workspace/Fast", folderEntry("/Workspace/Fast")],
+      ["/Workspace/Pending", folderEntry("/Workspace/Pending")],
       [
         "/Workspace/Projects/nested.txt",
         textEntry("/Workspace/Projects/nested.txt"),
@@ -758,12 +1424,41 @@ function browserHarnessSource(): string {
         textEntry("/Workspace/Fast/fast-note.txt"),
       ],
       [
+        "/Workspace/Pending/pending-note.txt",
+        textEntry("/Workspace/Pending/pending-note.txt"),
+      ],
+      [
         "/Workspace/workspace-note.txt",
         textEntry("/Workspace/workspace-note.txt"),
       ],
       ["/Workspace/slow.txt", textEntry("/Workspace/slow.txt")],
       ["/Workspace/fast.txt", textEntry("/Workspace/fast.txt")],
+      [
+        "/Workspace/broken.png",
+        binaryEntry("/Workspace/broken.png", "image/png", 5),
+      ],
+      [
+        "/Workspace/photo.png",
+        binaryEntry("/Workspace/photo.png", "image/png", pngBytes.byteLength),
+      ],
+      [
+        "/Workspace/slow-photo.png",
+        binaryEntry(
+          "/Workspace/slow-photo.png",
+          "image/png",
+          pngBytes.byteLength,
+        ),
+      ],
+      [
+        "/Workspace/large.png",
+        binaryEntry("/Workspace/large.png", "image/png", 16 * 1024 * 1024 + 1),
+      ],
     ]);
+    for (let index = 0; index < 30; index += 1) {
+      const path = "/Workspace/zz-fixture-" +
+        String(index).padStart(2, "0") + ".txt";
+      nodes.set(path, textEntry(path));
+    }
     const counters = {
       liveEntries: "0",
       occupiedEntrySlots: "0",
@@ -844,6 +1539,8 @@ function browserHarnessSource(): string {
     const listCalls = [];
     const writePaths = [];
     const readPaths = [];
+    const binaryReadPaths = [];
+    const binaryReadRequests = [];
     const removePaths = [];
     let moveCalls = 0;
     let residentRotateCalls = 0;
@@ -852,8 +1549,20 @@ function browserHarnessSource(): string {
     let failNextStatusForReconnect = false;
     let delayNextStatus = false;
     let delayedStatusResolve = null;
+    let delayedImageResolve = null;
+    let delayedImageSignal = null;
+    let delayedPendingFolderListResolve = null;
+    let delayPendingFolderList = true;
     let lastMove = null;
     const stateListeners = new Set();
+    const lockVault = () => {
+      status = {
+        ...ready,
+        vault: "locked",
+        lockEpoch: "2",
+        reason: "inactivity",
+      };
+    };
     const children = (parent) =>
       [...nodes.values()].filter((entry) => {
         const at = entry.path.lastIndexOf("/");
@@ -863,16 +1572,23 @@ function browserHarnessSource(): string {
     const client = {
       async list(input) {
         listCalls.push(input.path);
+        const entries = children(input.path);
         if (input.path === "/Workspace/Slow") {
           await new Promise((resolve) => setTimeout(resolve, 120));
         }
         if (input.path === "/Workspace/Fast") {
           await new Promise((resolve) => setTimeout(resolve, 8));
         }
+        if (input.path === "/Workspace/Pending" && delayPendingFolderList) {
+          delayPendingFolderList = false;
+          await new Promise((resolve) => {
+            delayedPendingFolderListResolve = resolve;
+          });
+          delayedPendingFolderListResolve = null;
+        }
         if (input.path.startsWith("/Vault") && status.vault !== "ready") {
           throw new Error("Vault is locked");
         }
-        const entries = children(input.path);
         return {
           path: input.path,
           revision: "1",
@@ -934,17 +1650,23 @@ function browserHarnessSource(): string {
         lastMove = { from, to, overwrite };
         const entry = nodes.get(from);
         if (!entry) throw new Error("not found");
-        nodes.delete(from);
-        const name = to.slice(to.lastIndexOf("/") + 1);
-        nodes.set(to, {
-          ...entry,
-          path: to,
-          name,
-          publicUrl:
-            entry.type === "file" && to.startsWith("/Shared/")
-              ? publicBase + name
-              : null,
-        });
+        const moved = [...nodes.entries()].filter(([path]) =>
+          path === from || path.startsWith(from + "/")
+        );
+        for (const [path] of moved) nodes.delete(path);
+        for (const [path, movedEntry] of moved) {
+          const nextPath = to + path.slice(from.length);
+          const name = nextPath.slice(nextPath.lastIndexOf("/") + 1);
+          nodes.set(nextPath, {
+            ...movedEntry,
+            path: nextPath,
+            name,
+            publicUrl:
+              movedEntry.type === "file" && nextPath.startsWith("/Shared/")
+                ? publicBase + name
+                : null,
+          });
+        }
       },
       async remove(path, recursive) {
         removePaths.push(path);
@@ -957,12 +1679,30 @@ function browserHarnessSource(): string {
           }
         }
       },
-      async readBinary(path) {
+      async readBinary(path, options) {
+        binaryReadPaths.push(path);
+        binaryReadRequests.push({
+          path,
+          ifMatch: options?.ifMatch ?? null,
+        });
+        if (options?.ifMatch !== etag) {
+          throw new Error("readBinary requires the exact reviewed etag");
+        }
+        if (path === "/Workspace/slow-photo.png") {
+          delayedImageSignal = options.signal;
+          await new Promise((resolve) => {
+            delayedImageResolve = resolve;
+          });
+          delayedImageResolve = null;
+        }
         const entry = nodes.get(path);
         if (!entry) throw new Error("not found");
+        const data = path === "/Workspace/photo.png"
+          ? pngBytes.slice().buffer
+          : new TextEncoder().encode("hello").buffer;
         return {
           entry,
-          data: new TextEncoder().encode("hello").buffer,
+          data,
           mediaType: entry.mediaType,
         };
       },
@@ -1043,6 +1783,19 @@ function browserHarnessSource(): string {
     const root = document.createElement("div");
     root.id = "root";
     document.body.append(root);
+    const revokedUrls = [];
+    const createdUrls = [];
+    const createObjectURL = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (blob) => {
+      const url = createObjectURL(blob);
+      createdUrls.push(url);
+      return url;
+    };
+    const revokeObjectURL = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = (url) => {
+      revokedUrls.push(url);
+      revokeObjectURL(url);
+    };
     createRoot(root).render(createElement(App, {
       client,
       subscribeStateChange(_topic, listener) {
@@ -1066,6 +1819,18 @@ function browserHarnessSource(): string {
       get readPaths() {
         return [...readPaths];
       },
+      get binaryReadPaths() {
+        return [...binaryReadPaths];
+      },
+      get binaryReadRequests() {
+        return binaryReadRequests.map((request) => ({ ...request }));
+      },
+      get revokedUrls() {
+        return [...revokedUrls];
+      },
+      get createdUrls() {
+        return [...createdUrls];
+      },
       get removePaths() {
         return [...removePaths];
       },
@@ -1081,12 +1846,27 @@ function browserHarnessSource(): string {
       get delayedStatusPending() {
         return delayedStatusResolve !== null;
       },
+      get delayedImagePending() {
+        return delayedImageResolve !== null;
+      },
+      get delayedImageAborted() {
+        return delayedImageSignal?.aborted === true;
+      },
+      get delayedPendingFolderListPending() {
+        return delayedPendingFolderListResolve !== null;
+      },
       beginDelayedStateRefresh() {
         delayNextStatus = true;
         for (const listener of [...stateListeners]) listener();
       },
       releaseDelayedStatus() {
         delayedStatusResolve?.();
+      },
+      releaseDelayedImage() {
+        delayedImageResolve?.();
+      },
+      releaseDelayedPendingFolderList() {
+        delayedPendingFolderListResolve?.();
       },
       emitState() {
         for (const listener of [...stateListeners]) listener();
@@ -1097,13 +1877,11 @@ function browserHarnessSource(): string {
           lockEpoch: "2",
         };
       },
+      setVaultLocked() {
+        lockVault();
+      },
       setVaultLockedForReconnect() {
-        status = {
-          ...ready,
-          vault: "locked",
-          lockEpoch: "2",
-          reason: "inactivity",
-        };
+        lockVault();
         failNextStatusForReconnect = true;
       },
       setVaultUninitialized() {

@@ -19,22 +19,22 @@ const {
   errorMessage,
   FILES_UI_ROOTS,
   filesDropDestination,
+  filesDropIntent,
   filesDownloadHandoffDecision,
   filesDownloadStartIsCurrent,
   filesCanonicalPublicLink,
   filesPathCanOpen,
-  filesPathContains,
   filesRootKind,
-  filterFilesTreeForFolderSearch,
   flattenFilesTree,
   handoffFileToSpreadsheet,
   isFilesPublicRelativeUrl,
   isFilesAmbiguousTransferFailure,
   isFilesKnownConflictFailure,
-  matchesFilesSearch,
+  openFilesSpreadsheetTile,
   prepareFilesVaultLifecycle,
   readStrictTextFile,
   releaseFilesResidentDownload,
+  reviewFilesUpload,
   shutdownFilesTransfers,
   shouldRetainFilesDirtyBuffer,
   shouldResetFilesSelectionAfterRevisionRestart,
@@ -106,6 +106,10 @@ type FilesTileEntry = Readonly<{
 type FilesTreeRow = Readonly<{
   entry: FilesTileEntry;
   level: number;
+  position: number;
+  setSize: number;
+  ancestorContinues: readonly boolean[];
+  isLastSibling: boolean;
 }>;
 
 type FilesTilePublicUsage = Readonly<{
@@ -279,8 +283,9 @@ test("three fixed roots route access, flatten lazily, and validate drops", () =>
     contentKind: "text" as const,
     mediaType: "text/plain;charset=utf-8",
   };
+  const archive = folder("/Workspace/Archive", "Archive");
   const pages = new Map([
-    ["/Workspace", page("/Workspace", [project])],
+    ["/Workspace", page("/Workspace", [project, archive], 3)],
     ["/Workspace/Projects", page("/Workspace/Projects", [note])],
   ]);
   expect(
@@ -294,6 +299,7 @@ test("three fixed roots route access, flatten lazily, and validate drops", () =>
     ["/Workspace", 1],
     ["/Workspace/Projects", 2],
     ["/Workspace/Projects/note.txt", 3],
+    ["/Workspace/Archive", 2],
   ]);
   expect(
     flattenFilesTree(pages, new Set()).map(
@@ -301,6 +307,29 @@ test("three fixed roots route access, flatten lazily, and validate drops", () =>
     ),
   )
     .toEqual(["/Shared", "/Vault", "/Workspace"]);
+
+  const expanded = flattenFilesTree(
+    pages,
+    new Set(["/Workspace", "/Workspace/Projects"]),
+  );
+  const projectRow = expanded.find(
+    (row: FilesTreeRow) => row.entry.path === project.path,
+  ) as FilesTreeRow;
+  const noteRow = expanded.find(
+    (row: FilesTreeRow) => row.entry.path === note.path,
+  ) as FilesTreeRow;
+  expect(projectRow).toMatchObject({
+    position: 1,
+    setSize: 3,
+    ancestorContinues: [],
+    isLastSibling: false,
+  });
+  expect(noteRow).toMatchObject({
+    position: 1,
+    setSize: 1,
+    ancestorContinues: [true],
+    isLastSibling: true,
+  });
 
   expect(
     filesDropDestination(
@@ -314,49 +343,69 @@ test("three fixed roots route access, flatten lazily, and validate drops", () =>
   expect(() =>
     filesDropDestination("/Workspace/Projects", "/Workspace/Projects/Child")
   ).toThrow("inside itself");
+
+  expect(
+    filesDropIntent(note.path, folder("/Shared/Public", "Public"), "ready"),
+  ).toMatchObject({
+    ok: true,
+    intent: {
+      destination: "/Shared/Public/note.txt",
+      sourceRoot: "workspace",
+      targetRoot: "shared",
+      policyChange: true,
+    },
+  });
+  expect(
+    filesDropIntent(note.path, project, "ready"),
+  ).toMatchObject({ ok: false });
+  expect(
+    filesDropIntent(project.path, folder(
+      "/Workspace/Projects/Child",
+      "Child",
+    ), "ready"),
+  ).toMatchObject({ ok: false });
+  expect(
+    filesDropIntent(note.path, { ...entry(), path: "/Shared/file" }, "ready"),
+  ).toMatchObject({ ok: false });
+  expect(
+    filesDropIntent(note.path, folder("/Vault/Private", "Private"), "locked"),
+  ).toMatchObject({ ok: false });
 });
 
-test("folder search stays inside the open folder and keeps tree context", () => {
-  const project = folder("/Workspace/Projects", "Projects");
-  const archive = folder("/Workspace/Archive", "Archive");
-  const projectNote = {
-    ...entry(),
-    path: "/Workspace/Projects/note.txt",
-    name: "note.txt",
-  };
-  const archiveNote = {
-    ...entry(),
-    path: "/Workspace/Archive/note.txt",
-    name: "note.txt",
-  };
-  const pages = new Map([
-    ["/Workspace", page("/Workspace", [project, archive])],
-    ["/Workspace/Projects", page("/Workspace/Projects", [projectNote])],
-    ["/Workspace/Archive", page("/Workspace/Archive", [archiveNote])],
-  ]);
-  const rows = flattenFilesTree(
-    pages,
-    new Set(["/Workspace", "/Workspace/Projects", "/Workspace/Archive"]),
-  );
-  expect(
-    filterFilesTreeForFolderSearch(
-      rows,
-      "/Workspace/Projects",
-      [projectNote, archiveNote],
-    ).map((row: FilesTreeRow) => row.entry.path),
-  ).toEqual([
-    "/Shared",
-    "/Vault",
-    "/Workspace",
+test("upload review preserves capacity for valid unique files", () => {
+  const review = reviewFilesUpload(
+    [
+      { name: " bad ", size: 1 },
+      { name: "large.bin", size: 64 * 1024 * 1024 + 1 },
+      { name: "report.txt", size: 5 },
+      { name: "report.txt", size: 7 },
+      { name: "later.txt", size: 9 },
+    ],
     "/Workspace/Projects",
-    "/Workspace/Projects/note.txt",
+    99,
+    "ready",
+  );
+  expect(review.accepted.map(
+    (item: { path: string | null }) => item.path,
+  )).toEqual(["/Workspace/Projects/report.txt"]);
+  expect(review.items.map(
+    (item: { error: string | null }) => item.error,
+  )).toEqual([
+    "Files cannot store this filename.",
+    "This file is larger than the 64 MiB Files limit.",
+    null,
+    "Another staged file has the same destination name.",
+    "Only 1 more file can be queued.",
   ]);
-  expect(filesPathContains("/Workspace/Projects", projectNote.path)).toBe(
-    true,
-  );
-  expect(filesPathContains("/Workspace/Projects", archiveNote.path)).toBe(
-    false,
-  );
+  expect(review.acceptedBytes).toBe(5);
+  expect(
+    reviewFilesUpload(
+      [{ name: "secret.txt", size: 1 }],
+      "/Vault",
+      0,
+      "locked",
+    ).accepted,
+  ).toEqual([]);
 });
 
 test("strict UTF-8 reads slices and invalid text is classified for binary fallback", async () => {
@@ -660,6 +709,23 @@ test("Spreadsheet handoff sends the exact authenticated etag and attachment befo
   ).rejects.toThrow("changed after review");
 });
 
+test("Spreadsheet handoff opens the installed workbook tile", async () => {
+  let request: unknown = null;
+  await openFilesSpreadsheetTile(async (input: unknown) => {
+    request = input;
+    return {
+      instanceId: "spreadsheet-instance",
+      workspace: 0,
+      opened: true,
+    };
+  });
+  expect(request).toEqual({
+    appId: "spreadsheet",
+    tileId: "workbook",
+    reuseExisting: true,
+  });
+});
+
 test("public links are exact local publication routes", () => {
   const publication = "a".repeat(64);
   expect(
@@ -808,12 +874,6 @@ test("a hung resident download release cannot block the next download", async ()
   expect((cleanupSignal as AbortSignal | null)?.aborted).toBe(true);
 });
 
-test("paged search has exact, prefix, and fuzzy matching without substring scans", () => {
-  expect(matchesFilesSearch("Budget 2026.xlsx", "Budget")).toBe(true);
-  expect(matchesFilesSearch("Budget 2026.xlsx", "bdg26")).toBe(true);
-  expect(matchesFilesSearch("Budget 2026.xlsx", "get 2")).toBe(false);
-});
-
 test("common service faults map to one concrete recovery action", () => {
   expect(classifyFilesError("cursor_expired: stale cursor")).toEqual({
     kind: "restart-folder",
@@ -928,15 +988,19 @@ function folder(path: string, name: string): FilesTileEntry {
   };
 }
 
-function page(path: string, entries: readonly FilesTileEntry[]) {
+function page(
+  path: string,
+  entries: readonly FilesTileEntry[],
+  total = entries.length,
+) {
   return {
     path,
     revision: "1",
     entries,
     loaded: entries.length,
-    total: entries.length,
-    hasMore: false,
-    cursor: null,
+    total,
+    hasMore: total > entries.length,
+    cursor: total > entries.length ? "next" : null,
   };
 }
 

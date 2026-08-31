@@ -488,11 +488,15 @@ export class DefaultFilesResidentPort
 
   async stat(path: string, signal?: AbortSignal): Promise<FilesServiceEntry> {
     throwIfAborted(signal);
-    const runtime = await this.#readyRuntime();
-    const canonical = canonicalizeFilesPath(path);
-    const node = await runtime.vault.lookupPath(canonical.path);
-    this.#assertRuntimeCurrent(runtime);
-    return serviceEntry(canonical.path, node);
+    try {
+      const runtime = await this.#readyRuntime();
+      const canonical = canonicalizeFilesPath(path);
+      const node = await runtime.vault.lookupPath(canonical.path);
+      this.#assertRuntimeCurrent(runtime);
+      return serviceEntry(canonical.path, node);
+    } catch (error) {
+      throw mapFault(error);
+    }
   }
 
   async read(
