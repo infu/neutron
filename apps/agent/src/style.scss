@@ -515,7 +515,7 @@
     color: var(--nt-danger);
   }
 
-  .ora-agent-mode {
+  .ora-composer-toggle {
     background: transparent;
     color: var(--nt-text-muted);
     height: 28px;
@@ -526,11 +526,10 @@
       height: 14px;
       width: 14px;
     }
-
   }
 
-  .ora-agent-mode:hover:not(:disabled),
-  .ora-agent-mode:focus-visible {
+  .ora-composer-toggle:hover:not(:disabled),
+  .ora-composer-toggle:focus-visible {
     background: var(--nt-bg-control-hover);
     color: var(--nt-text-strong);
   }
@@ -544,6 +543,17 @@
   .ora-agent-mode.is-enabled:focus-visible {
     background: rgb(118 88 220 / 28%);
     color: #e0d9ff;
+  }
+
+  .ora-web-access.is-enabled {
+    background: rgb(117 213 165 / 12%);
+    color: var(--nt-accent);
+  }
+
+  .ora-web-access.is-enabled:hover:not(:disabled),
+  .ora-web-access.is-enabled:focus-visible {
+    background: rgb(117 213 165 / 20%);
+    color: var(--nt-accent);
   }
 
   .ora-icon-button svg {
@@ -1079,7 +1089,7 @@
       width: 38px;
     }
 
-    .ora-agent-mode {
+    .ora-composer-toggle {
       padding: 0;
       width: 38px;
     }

@@ -20,6 +20,7 @@
   "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   "description": "Agent powered by OpenRouter with kernel-regulated Neutron tools",
   "dependencies": {
+    "@ai-sdk/provider-utils": "5.0.7",
     "@openrouter/ai-sdk-provider": "3.0.0",
     "ai": "7.0.20",
     "katex": "0.16.47",

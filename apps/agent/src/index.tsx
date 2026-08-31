@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import {
   IoArrowDown,
   IoArrowUp,
+  IoGlobeOutline,
   IoLink,
   IoSparklesOutline,
   IoStop,
@@ -57,6 +58,7 @@ function App() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [chatPending, setChatPending] = useState(false);
+  const [webEnabled, setWebEnabled] = useState(false);
   const [activeTool, setActiveTool] = useState<AgentToolActivity | null>(null);
   const [agentMode, setAgentMode] = useState<AgentModeStatus | null>(null);
   const [followBottom, setFollowBottom] = useState(true);
@@ -183,6 +185,10 @@ function App() {
     if (history) history.scrollTop = history.scrollHeight;
   }, [snapshot?.messages, activeTool, followBottom]);
 
+  useEffect(() => {
+    if (snapshot && !snapshot.webToolsAvailable) setWebEnabled(false);
+  }, [snapshot?.webToolsAvailable]);
+
   const run = async (
     name: string,
     arguments_: Record<string, JsonValue> = {},
@@ -226,6 +232,7 @@ function App() {
     setChatPending(true);
     setActiveTool(null);
     const developmentRunId = beginAgentDevelopmentRun(text);
+    const useWeb = webEnabled && snapshot.webToolsAvailable;
     let turnStarted = false;
     try {
       const result = await bus.callTool(
@@ -240,6 +247,7 @@ function App() {
                   conversationRevision: snapshot.conversationRevision,
                 }
               : {}),
+            ...(useWeb ? { webEnabled: true } : {}),
           },
         },
         {
@@ -366,7 +374,7 @@ function App() {
               className="ora-jump"
               onClick={() => setFollowBottom(true)}
             >
-              <IoArrowDown />
+              <IoArrowDown aria-hidden="true" />
             </IconButton>
           )}
         </section>
@@ -410,14 +418,33 @@ function App() {
             <div className="ora-composer-actions">
               <IconButton
                 label={
+                  snapshot.webToolsAvailable
+                    ? webEnabled
+                      ? "Disable web search and page reading"
+                      : "Enable web search and page reading"
+                    : "Web access is unavailable in this Agent process"
+                }
+                className={`ora-composer-toggle ora-web-access${
+                  webEnabled ? " is-enabled" : ""
+                }`}
+                aria-pressed={webEnabled}
+                disabled={
+                  !snapshot.webToolsAvailable || generationActive || busy
+                }
+                onClick={() => setWebEnabled((current) => !current)}
+              >
+                <IoGlobeOutline aria-hidden="true" />
+              </IconButton>
+              <IconButton
+                label={
                   agentMode?.enabled
                     ? "Disable Agent Mode"
                     : "Enable Agent Mode"
                 }
                 className={
                   agentMode?.enabled
-                    ? "ora-agent-mode is-enabled"
-                    : "ora-agent-mode"
+                    ? "ora-composer-toggle ora-agent-mode is-enabled"
+                    : "ora-composer-toggle ora-agent-mode"
                 }
                 aria-pressed={agentMode?.enabled ?? false}
                 disabled={
@@ -434,7 +461,7 @@ function App() {
                   className="ora-send"
                   onClick={() => void run("agent_stop")}
                 >
-                  <IoStop />
+                  <IoStop aria-hidden="true" />
                 </IconButton>
               ) : (
                 <IconButton
@@ -446,7 +473,7 @@ function App() {
                   }
                   onClick={() => void send()}
                 >
-                  <IoArrowUp />
+                  <IoArrowUp aria-hidden="true" />
                 </IconButton>
               )}
               <ToolbarMenu
@@ -539,6 +566,8 @@ function asSnapshot(value: JsonValue): AgentSnapshot {
     !isJsonObject(value) ||
     typeof value.ready !== "boolean" ||
     typeof value.connected !== "boolean" ||
+    (value.webToolsAvailable !== undefined &&
+      typeof value.webToolsAvailable !== "boolean") ||
     typeof value.generating !== "boolean" ||
     (value.generatingHere !== undefined &&
       typeof value.generatingHere !== "boolean") ||
@@ -555,6 +584,7 @@ function asSnapshot(value: JsonValue): AgentSnapshot {
   }
   return {
     ...value,
+    webToolsAvailable: value.webToolsAvailable === true,
     generatingHere:
       typeof value.generatingHere === "boolean"
         ? value.generatingHere

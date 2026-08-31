@@ -120,6 +120,7 @@ function agentSnapshot(): AgentSnapshot {
   return {
     ready: true,
     connected: true,
+    webToolsAvailable: true,
     selectedModelId: "provider/model",
     models: [],
     modelsLoading: false,
