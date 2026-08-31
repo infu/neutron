@@ -13,7 +13,7 @@ const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const mainJsUrl = new URL("../dist/web/main.js", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
 const packageUrl = new URL(
-  "../agent.v0.3.6.neutron",
+  "../agent.v0.3.8.neutron",
   import.meta.url
 );
 
@@ -23,7 +23,7 @@ test("Agent declares one resident credential connection", async () => {
   expect(manifest).toMatchObject({
     id: "agent",
     name: "Agent",
-    version: 306,
+    version: 308,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -58,6 +58,8 @@ test("Agent bundles local UI and resident AI SDK runtime", async () => {
   expect(css).toContain(".ora-model-popover");
   expect(css).toContain(".ora-model-search");
   expect(css).toContain(".ora-toolbar-menu-popover");
+  expect(css).toContain(".ora-markdown");
+  expect(css).toContain(".ora-math-block");
   expect(css).not.toContain("scroll-snap");
   expect(css).not.toContain("content-visibility");
   expect(css).not.toMatch(/gradient\s*\(/i);
@@ -67,6 +69,10 @@ test("Agent bundles local UI and resident AI SDK runtime", async () => {
   expect(mainJs).toContain("OpenRouter models");
   expect(mainJs).toContain("ora-model-list-spacer");
   expect(mainJs).toContain("Agent Mode");
+  expect(mainJs).toContain("Agent settings");
+  expect(mainJs).toContain("Back to all models");
+  expect(mainJs).toContain("Copy link");
+  expect(mainJs).toContain("Clear all conversations");
   expect(mainJs).toContain("__NEUTRON_AGENT_DEV__");
   expect(serviceJs).not.toContain("__NEUTRON_AGENT_DEV__");
   expect(mainJs).not.toContain("assistant_delta");
@@ -79,6 +85,7 @@ test("Agent bundles local UI and resident AI SDK runtime", async () => {
     "agent_chat",
     "agent_stop",
     "openrouter_reset_chat",
+    "openrouter_reset_all_chats",
     "openrouter_disconnect",
   ]) {
     expect(serviceJs).toContain(method);

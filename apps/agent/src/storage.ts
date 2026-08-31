@@ -1,27 +1,50 @@
+import type { ModelMessage } from "ai";
 import type {
+  AgentChatTileEndpointId,
   OpenRouterModel,
   PendingStateChangeAttempt,
   PendingStateChangeJournal,
+  PersistedAgentSharedState,
   PersistedAgentState,
+  PersistedConversationState,
   TranscriptMessage,
 } from "./chat_types.ts";
-import type { ModelMessage } from "ai";
 
 const DATABASE = "neutron-agent";
+// Opening v2 fences the released flat-history runtime: IndexedDB will not run
+// this upgrade until every live v1 connection has closed, so its final write
+// is visible before one tile claims the legacy conversation.
+const DATABASE_VERSION = 2;
 const STORE = "state";
-const CURRENT = "current";
+const LEGACY_CURRENT = "current";
+const LEGACY_CONVERSATION_CLAIMED = "legacy-conversation-claimed";
+const SHARED = "shared";
+const CONVERSATION_PREFIX = "conversation:";
+// v307 rewrites conversation records, so keep the v308 tile model outside
+// that record while old frames finish closing during an upgrade.
+const CONVERSATION_MODEL_PREFIX = "conversation-model:";
 const MAX_MESSAGES = 160;
 const MAX_MODELS = 600;
 const MAX_TEXT = 64_000;
 const MAX_MODEL_TURNS = 32;
 const MAX_MODEL_HISTORY_BYTES = 4 * 1024 * 1024;
+const MAX_VISIBLE_TRANSCRIPT_BYTES = 544 * 1024;
+const MAX_MODEL_CATALOG_BYTES = 256 * 1024;
 export const MAX_PENDING_STATE_CHANGE_ATTEMPTS = 32;
 const SAFE_ATTEMPT_FIELD = /^[a-zA-Z0-9:_.-]+$/;
+const AGENT_CHAT_TILE_ENDPOINT =
+  /^app:agent:tile:chat:instance:[a-zA-Z0-9_-]{1,256}$/;
 
-const emptyState = (): PersistedAgentState => ({
+const emptySharedState = (): PersistedAgentSharedState => ({
   selectedModelId: null,
   models: [],
   modelsFetchedAt: 0,
+});
+
+export const emptyConversationState = (
+  selectedModelId: string | null = null,
+): PersistedConversationState => ({
+  selectedModelId,
   messages: [],
   modelTurns: [],
   pendingStateChangeJournal: null,
@@ -30,8 +53,8 @@ const emptyState = (): PersistedAgentState => ({
 export class AgentStorage {
   private constructor(private readonly database: IDBDatabase) {}
 
-  static async open(): Promise<AgentStorage> {
-    const request = indexedDB.open(DATABASE, 1);
+  static async open(databaseName = DATABASE): Promise<AgentStorage> {
+    const request = indexedDB.open(databaseName, DATABASE_VERSION);
     request.addEventListener("upgradeneeded", () => {
       if (!request.result.objectStoreNames.contains(STORE)) {
         request.result.createObjectStore(STORE);
@@ -40,60 +63,343 @@ export class AgentStorage {
     return new AgentStorage(await requestResult(request));
   }
 
-  async load(): Promise<PersistedAgentState> {
-    const transaction = this.database.transaction(STORE, "readonly");
-    const value = await requestResult(
-      transaction.objectStore(STORE).get(CURRENT)
-    );
-    return normalizePersistedState(value);
+  async loadShared(): Promise<PersistedAgentSharedState> {
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const current = await requestResult(store.get(SHARED));
+    const value =
+      current === undefined
+        ? await requestResult(store.get(LEGACY_CURRENT))
+        : current;
+    const normalized = normalizePersistedSharedState(value);
+    store.put(normalized, SHARED);
+    await transactionDone(transaction);
+    return normalized;
   }
 
-  async save(state: PersistedAgentState): Promise<void> {
+  async saveShared(state: PersistedAgentSharedState): Promise<void> {
     const transaction = this.database.transaction(STORE, "readwrite");
-    transaction.objectStore(STORE).put(normalizeState(state), CURRENT);
+    transaction.objectStore(STORE).put(
+      normalizePersistedSharedState(state),
+      SHARED,
+    );
     await transactionDone(transaction);
   }
 
-  async clearConversation(state: PersistedAgentState): Promise<void> {
-    await this.save({ ...state, messages: [], modelTurns: [] });
+  async loadConversation(
+    historyId: AgentChatTileEndpointId,
+    inheritedModelId: string | null = null,
+  ): Promise<PersistedConversationState> {
+    const id = requireAgentChatTileEndpoint(historyId);
+    const key = conversationKey(id);
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const storedShared = await requestResult(store.get(SHARED));
+    let defaultModelId =
+      storedShared === undefined
+        ? inheritedModelId
+        : normalizePersistedSharedState(storedShared).selectedModelId;
+    const storedModelId = await requestResult(
+      store.get(conversationModelKey(id)),
+    );
+    const stored = await requestResult(store.get(key));
+    if (stored !== undefined) {
+      const conversation = conversationWithModelSelection(
+        stored,
+        defaultModelId,
+        storedModelId,
+      );
+      store.put(conversationRecord(conversation), key);
+      store.put(conversation.selectedModelId, conversationModelKey(id));
+      store.put(true, LEGACY_CONVERSATION_CLAIMED);
+      store.delete(LEGACY_CURRENT);
+      await transactionDone(transaction);
+      return conversation;
+    }
+
+    if (
+      (await requestResult(store.get(LEGACY_CONVERSATION_CLAIMED))) === true
+    ) {
+      store.delete(LEGACY_CURRENT);
+      const conversation = conversationWithModelSelection(
+        undefined,
+        defaultModelId,
+        storedModelId,
+      );
+      store.put(conversationRecord(conversation), key);
+      store.put(conversation.selectedModelId, conversationModelKey(id));
+      await transactionDone(transaction);
+      return conversation;
+    }
+
+    const legacy = await requestResult(store.get(LEGACY_CURRENT));
+    if (legacy !== undefined && storedShared === undefined) {
+      const legacyShared = normalizePersistedSharedState(legacy);
+      store.put(legacyShared, SHARED);
+      defaultModelId = legacyShared.selectedModelId;
+    }
+    const claimed = legacyConversation(legacy, defaultModelId, storedModelId);
+    const conversation = claimed ?? conversationWithModelSelection(
+      undefined,
+      defaultModelId,
+      storedModelId,
+    );
+    store.put(true, LEGACY_CONVERSATION_CLAIMED);
+    store.delete(LEGACY_CURRENT);
+    store.put(conversationRecord(conversation), key);
+    store.put(conversation.selectedModelId, conversationModelKey(id));
+    await transactionDone(transaction);
+    return conversation;
+  }
+
+  async peekConversation(
+    historyId: AgentChatTileEndpointId,
+    inheritedModelId: string | null = null,
+  ): Promise<PersistedConversationState> {
+    const id = requireAgentChatTileEndpoint(historyId);
+    const key = conversationKey(id);
+    const transaction = this.database.transaction(STORE, "readonly");
+    const store = transaction.objectStore(STORE);
+    const storedShared = await requestResult(store.get(SHARED));
+    const defaultModelId =
+      storedShared === undefined
+        ? inheritedModelId
+        : normalizePersistedSharedState(storedShared).selectedModelId;
+    const storedModelId = await requestResult(
+      store.get(conversationModelKey(id)),
+    );
+    const stored = await requestResult(store.get(key));
+    if (stored !== undefined) {
+      return conversationWithModelSelection(
+        stored,
+        defaultModelId,
+        storedModelId,
+      );
+    }
+    if (
+      (await requestResult(store.get(LEGACY_CONVERSATION_CLAIMED))) === true
+    ) {
+      return conversationWithModelSelection(
+        undefined,
+        defaultModelId,
+        storedModelId,
+      );
+    }
+    return legacyConversation(
+      await requestResult(store.get(LEGACY_CURRENT)),
+      defaultModelId,
+      storedModelId,
+    ) ?? conversationWithModelSelection(
+      undefined,
+      defaultModelId,
+      storedModelId,
+    );
+  }
+
+  async saveConversation(
+    historyId: AgentChatTileEndpointId,
+    state: PersistedConversationState,
+  ): Promise<void> {
+    const id = requireAgentChatTileEndpoint(historyId);
+    const key = conversationKey(id);
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const conversation = normalizePersistedConversationState(state);
+    store.put(conversationRecord(conversation), key);
+    store.put(conversation.selectedModelId, conversationModelKey(id));
+    store.put(true, LEGACY_CONVERSATION_CLAIMED);
+    store.delete(LEGACY_CURRENT);
+    await transactionDone(transaction);
+  }
+
+  async saveModelSelection(
+    historyId: AgentChatTileEndpointId,
+    selectedModelId: string,
+    shared: PersistedAgentSharedState,
+  ): Promise<PersistedConversationState> {
+    const id = requireAgentChatTileEndpoint(historyId);
+    const key = conversationKey(id);
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const conversation = conversationWithModelSelection(
+      await requestResult(store.get(key)),
+      shared.selectedModelId,
+      await requestResult(store.get(conversationModelKey(id))),
+    );
+    conversation.selectedModelId = boundedString(selectedModelId, 240);
+    store.put(normalizePersistedSharedState(shared), SHARED);
+    store.put(conversationRecord(conversation), key);
+    store.put(conversation.selectedModelId, conversationModelKey(id));
+    store.put(true, LEGACY_CONVERSATION_CLAIMED);
+    store.delete(LEGACY_CURRENT);
+    await transactionDone(transaction);
+    return conversation;
+  }
+
+  async deleteConversation(
+    historyId: AgentChatTileEndpointId,
+  ): Promise<void> {
+    const id = requireAgentChatTileEndpoint(historyId);
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    store.delete(conversationKey(id));
+    store.delete(conversationModelKey(id));
+    await transactionDone(transaction);
+  }
+
+  async deleteAllConversations(
+    inheritedModelId: string | null = null,
+  ): Promise<void> {
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const storedShared = await requestResult(store.get(SHARED));
+    const defaultModelId =
+      storedShared === undefined
+        ? inheritedModelId
+        : normalizePersistedSharedState(storedShared).selectedModelId;
+    const keys = await requestResult(store.getAllKeys());
+    for (const key of keys) {
+      if (typeof key === "string" && key.startsWith(CONVERSATION_PREFIX)) {
+        const id = requireAgentChatTileEndpoint(
+          key.slice(CONVERSATION_PREFIX.length),
+        );
+        const current = conversationWithModelSelection(
+          await requestResult(store.get(key)),
+          defaultModelId,
+          await requestResult(store.get(conversationModelKey(id))),
+        );
+        store.put(
+          conversationRecord(emptyConversationState(current.selectedModelId)),
+          key,
+        );
+        store.put(current.selectedModelId, conversationModelKey(id));
+      }
+    }
+    store.delete(LEGACY_CURRENT);
+    store.put(true, LEGACY_CONVERSATION_CLAIMED);
+    await transactionDone(transaction);
   }
 }
 
-function normalizeState(state: PersistedAgentState): PersistedAgentState {
+export function requireAgentChatTileEndpoint(
+  value: unknown,
+): AgentChatTileEndpointId {
+  if (typeof value !== "string" || !AGENT_CHAT_TILE_ENDPOINT.test(value)) {
+    throw new Error("Agent controls require an authenticated Agent chat tile");
+  }
+  return value as AgentChatTileEndpointId;
+}
+
+export function normalizePersistedSharedState(
+  value: unknown,
+): PersistedAgentSharedState {
+  if (!isRecord(value)) return emptySharedState();
+  const selectedModelId =
+    typeof value.selectedModelId === "string" ? value.selectedModelId : null;
+  const models = Array.isArray(value.models)
+    ? value.models.filter(isRecord).slice(0, MAX_MODELS).map(normalizeModel)
+    : [];
+  return {
+    selectedModelId,
+    models: boundModelCatalog(models, selectedModelId),
+    modelsFetchedAt:
+      typeof value.modelsFetchedAt === "number" &&
+      Number.isFinite(value.modelsFetchedAt) &&
+      value.modelsFetchedAt > 0
+        ? value.modelsFetchedAt
+        : 0,
+  };
+}
+
+export function normalizePersistedConversationState(
+  value: unknown,
+  inheritedModelId: string | null = null,
+): PersistedConversationState {
+  if (!isRecord(value)) return emptyConversationState(inheritedModelId);
   return {
     selectedModelId:
-      typeof state.selectedModelId === "string" ? state.selectedModelId : null,
-    models: state.models.slice(0, MAX_MODELS).map(normalizeModel),
-    modelsFetchedAt:
-      Number.isFinite(state.modelsFetchedAt) && state.modelsFetchedAt > 0
-        ? state.modelsFetchedAt
-        : 0,
-    messages: normalizeMessages(state.messages),
-    modelTurns: normalizeModelTurns(state.modelTurns),
+      typeof value.selectedModelId === "string"
+        ? boundedString(value.selectedModelId, 240)
+        : "selectedModelId" in value
+          ? null
+          : inheritedModelId,
+    messages: normalizeMessages(value.messages),
+    modelTurns: normalizeModelTurns(value.modelTurns),
     pendingStateChangeJournal: normalizePendingStateChangeJournal(
-      state.pendingStateChangeJournal,
+      value.pendingStateChangeJournal,
     ),
   };
 }
 
+/** Normalize the exact flat record written by Agent releases through v0.3.6. */
 export function normalizePersistedState(value: unknown): PersistedAgentState {
-  if (!isRecord(value)) return emptyState();
-  return normalizeState({
-    selectedModelId:
-      typeof value.selectedModelId === "string" ? value.selectedModelId : null,
-    models: Array.isArray(value.models)
-      ? value.models.filter(isRecord).map(normalizeModel)
-      : [],
-    modelsFetchedAt:
-      typeof value.modelsFetchedAt === "number" ? value.modelsFetchedAt : 0,
-    messages: normalizeMessages(value.messages),
-    modelTurns: Array.isArray(value.modelTurns)
-      ? normalizeModelTurns(value.modelTurns)
-      : [],
-    pendingStateChangeJournal: normalizePendingStateChangeJournal(
-      value.pendingStateChangeJournal,
-    ),
-  });
+  return {
+    ...normalizePersistedSharedState(value),
+    ...normalizePersistedConversationState(value),
+  };
+}
+
+function legacyConversation(
+  value: unknown,
+  inheritedModelId: string | null = null,
+  storedModelId: unknown = undefined,
+): PersistedConversationState | null {
+  const conversation = conversationWithModelSelection(
+    value,
+    inheritedModelId,
+    storedModelId,
+  );
+  return conversation.messages.length > 0 ||
+    conversation.modelTurns.length > 0 ||
+    conversation.pendingStateChangeJournal !== null
+    ? conversation
+    : null;
+}
+
+function conversationKey(historyId: AgentChatTileEndpointId): string {
+  return `${CONVERSATION_PREFIX}${historyId}`;
+}
+
+function conversationModelKey(historyId: AgentChatTileEndpointId): string {
+  return `${CONVERSATION_MODEL_PREFIX}${historyId}`;
+}
+
+function modelSelection(
+  stored: unknown,
+  fallback: string | null,
+): string | null {
+  return stored === null
+    ? null
+    : typeof stored === "string"
+      ? boundedString(stored, 240)
+      : fallback;
+}
+
+function conversationWithModelSelection(
+  value: unknown,
+  inheritedModelId: string | null,
+  storedModelId: unknown,
+): PersistedConversationState {
+  const conversation = normalizePersistedConversationState(
+    value,
+    inheritedModelId,
+  );
+  conversation.selectedModelId = modelSelection(
+    storedModelId,
+    conversation.selectedModelId,
+  );
+  return conversation;
+}
+
+function conversationRecord(
+  state: PersistedConversationState,
+): Omit<PersistedConversationState, "selectedModelId"> {
+  const normalized = normalizePersistedConversationState(state);
+  return {
+    messages: normalized.messages,
+    modelTurns: normalized.modelTurns,
+    pendingStateChangeJournal: normalized.pendingStateChangeJournal,
+  };
 }
 
 function normalizePendingStateChangeJournal(
@@ -135,6 +441,65 @@ function normalizeMessages(value: unknown): TranscriptMessage[] {
     if (message.text.trim()) messages.push(message);
   }
   return messages.slice(-MAX_MESSAGES);
+}
+
+export function boundTranscriptMessages(
+  messages: readonly TranscriptMessage[],
+): TranscriptMessage[] {
+  const units: TranscriptMessage[][] = [];
+  for (const message of messages.slice(-MAX_MESSAGES)) {
+    if (message.role === "user" || units.length === 0) {
+      units.push([message]);
+    } else {
+      units.at(-1)!.push(message);
+    }
+  }
+  const selected: TranscriptMessage[][] = [];
+  let used = 2;
+  for (let index = units.length - 1; index >= 0; index -= 1) {
+    const unit = units[index]!;
+    const bytes = jsonBytes(unit);
+    if (used + bytes <= MAX_VISIBLE_TRANSCRIPT_BYTES) {
+      selected.unshift(unit);
+      used += bytes;
+      continue;
+    }
+    if (selected.length === 0) {
+      const newest: TranscriptMessage[] = [];
+      for (let messageIndex = unit.length - 1; messageIndex >= 0; messageIndex -= 1) {
+        const message = unit[messageIndex]!;
+        const messageBytes = jsonBytes(message);
+        if (used + messageBytes <= MAX_VISIBLE_TRANSCRIPT_BYTES) {
+          newest.unshift(message);
+          used += messageBytes;
+        }
+      }
+      if (newest.length > 0) selected.unshift(newest);
+    }
+    break;
+  }
+  return selected.flat();
+}
+
+export function boundModelCatalog(
+  models: readonly OpenRouterModel[],
+  selectedModelId: string | null = null,
+): OpenRouterModel[] {
+  const unique = new Map<string, OpenRouterModel>();
+  for (const model of models.slice(0, MAX_MODELS)) {
+    if (model.id && !unique.has(model.id)) unique.set(model.id, model);
+  }
+  const preferred = selectedModelId ? unique.get(selectedModelId) : undefined;
+  let used = 2 + (preferred ? jsonBytes(preferred) : 0);
+  const retained = new Set(preferred ? [preferred.id] : []);
+  for (const model of unique.values()) {
+    if (retained.has(model.id)) continue;
+    const bytes = jsonBytes(model);
+    if (used + bytes + 1 > MAX_MODEL_CATALOG_BYTES) continue;
+    retained.add(model.id);
+    used += bytes + 1;
+  }
+  return Array.from(unique.values()).filter((model) => retained.has(model.id));
 }
 
 function normalizeModel(value: Record<string, unknown>): OpenRouterModel {
@@ -243,7 +608,7 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.addEventListener("success", () => resolve(request.result));
     request.addEventListener("error", () =>
-      reject(request.error ?? new Error("IndexedDB request failed"))
+      reject(request.error ?? new Error("IndexedDB request failed")),
     );
   });
 }
@@ -252,10 +617,10 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.addEventListener("complete", () => resolve());
     transaction.addEventListener("abort", () =>
-      reject(transaction.error ?? new Error("IndexedDB transaction aborted"))
+      reject(transaction.error ?? new Error("IndexedDB transaction aborted")),
     );
     transaction.addEventListener("error", () =>
-      reject(transaction.error ?? new Error("IndexedDB transaction failed"))
+      reject(transaction.error ?? new Error("IndexedDB transaction failed")),
     );
   });
 }

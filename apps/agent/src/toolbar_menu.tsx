@@ -1,24 +1,29 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
-  IoEllipsisHorizontal,
   IoLogOutOutline,
+  IoSettingsOutline,
   IoTrashOutline,
 } from "react-icons/io5";
 
 export function ToolbarMenu({
+  anyGenerating,
   busy,
-  generating,
+  conversationGenerating,
   hasMessages,
   onClear,
+  onClearAll,
   onDisconnect,
 }: {
+  anyGenerating: boolean;
   busy: boolean;
-  generating: boolean;
+  conversationGenerating: boolean;
   hasMessages: boolean;
   onClear: () => void;
+  onClearAll: () => void;
   onDisconnect: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [confirmingClearAll, setConfirmingClearAll] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -27,6 +32,7 @@ export function ToolbarMenu({
 
   const close = useCallback((restoreFocus = false) => {
     setOpen(false);
+    setConfirmingClearAll(false);
     if (restoreFocus) {
       window.setTimeout(() => triggerRef.current?.focus(), 0);
     }
@@ -92,23 +98,29 @@ export function ToolbarMenu({
         aria-controls={open ? menuId : undefined}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="More agent actions"
+        aria-label="Agent settings"
         className="ora-icon-button"
         onClick={() => {
           initialFocusRef.current = "first";
-          setOpen((current) => !current);
+          if (open) {
+            close(false);
+          } else {
+            setConfirmingClearAll(false);
+            setOpen(true);
+          }
         }}
         onKeyDown={(event) => {
           if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
           event.preventDefault();
           initialFocusRef.current = event.key === "ArrowUp" ? "last" : "first";
+          setConfirmingClearAll(false);
           setOpen(true);
         }}
         ref={triggerRef}
-        title="More agent actions"
+        title="Agent settings"
         type="button"
       >
-        <IoEllipsisHorizontal aria-hidden="true" />
+        <IoSettingsOutline aria-hidden="true" />
       </button>
       {open ? (
         <div
@@ -120,7 +132,7 @@ export function ToolbarMenu({
           role="menu"
         >
           <button
-            disabled={generating || busy || !hasMessages}
+            disabled={conversationGenerating || busy || !hasMessages}
             onClick={() => {
               close(true);
               onClear();
@@ -136,7 +148,35 @@ export function ToolbarMenu({
           </button>
           <button
             className="is-danger"
-            disabled={generating || busy}
+            disabled={anyGenerating || busy}
+            onClick={() => {
+              if (confirmingClearAll) {
+                close(true);
+                onClearAll();
+              } else {
+                setConfirmingClearAll(true);
+              }
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <IoTrashOutline aria-hidden="true" />
+            <span>
+              <strong>
+                {confirmingClearAll
+                  ? "Confirm clear all"
+                  : "Clear all conversations"}
+              </strong>
+              <small>
+                {confirmingClearAll
+                  ? "This permanently removes every Agent tile history"
+                  : "Remove history from every Agent tile"}
+              </small>
+            </span>
+          </button>
+          <button
+            className="is-danger"
+            disabled={anyGenerating || busy}
             onClick={() => {
               close(true);
               onDisconnect();

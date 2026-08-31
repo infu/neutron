@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
+  IoArrowBack,
   IoCheckmark,
   IoChevronDown,
   IoClose,
@@ -23,6 +24,9 @@ import {
   formatModelPrice,
   modelAuthorLabel,
   modelDisplayName,
+  modelFamilyScope,
+  modelMatchesFamily,
+  type ModelFamilyScope,
 } from "./model_catalog.ts";
 
 const MODEL_ROW_HEIGHT = 56;
@@ -51,6 +55,7 @@ export function ModelPicker({
   const [reasoningOnly, setReasoningOnly] = useState(false);
   const [freeOnly, setFreeOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [family, setFamily] = useState<ModelFamilyScope | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,11 +73,23 @@ export function ModelPicker({
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = `${useId().replaceAll(":", "")}-model-list`;
+  const popoverId = `${listId}-dialog`;
   const statusId = `${listId}-status`;
   const selectedModel = models.find((model) => model.id === selectedModelId) ?? null;
+  const selectedFamily = useMemo(
+    () => selectedModel ? modelFamilyScope(selectedModel) : null,
+    [selectedModel],
+  );
+  const scopedModels = useMemo(
+    () =>
+      family === null
+        ? models
+        : models.filter((model) => modelMatchesFamily(model, family)),
+    [family, models],
+  );
   const result = useMemo(
-    () => filterModels(models, { query, reasoningOnly, freeOnly }),
-    [freeOnly, models, query, reasoningOnly],
+    () => filterModels(scopedModels, { query, reasoningOnly, freeOnly }),
+    [freeOnly, query, reasoningOnly, scopedModels],
   );
   const activeIndex = result.items.findIndex((model) => model.id === activeId);
   const activeOptionId =
@@ -157,12 +174,30 @@ export function ModelPicker({
   const openPicker = () => {
     initialScrollRef.current = true;
     setOpen(true);
+    setFamily(selectedFamily);
     setQuery("");
     setFiltersOpen(false);
     setActionError(null);
     setActiveId(selectedModelId ?? models[0]?.id ?? null);
     setViewport((current) => ({ ...current, firstRow: 0 }));
   };
+
+  const showAllModels = () => {
+    setFamily(null);
+    setQuery("");
+    setActiveId(null);
+    resetListScroll();
+    window.setTimeout(() => searchRef.current?.focus(), 0);
+  };
+
+  useEffect(() => {
+    if (
+      family !== null &&
+      !models.some((model) => modelMatchesFamily(model, family))
+    ) {
+      setFamily(null);
+    }
+  }, [family, models]);
 
   useEffect(() => {
     if (!open) return;
@@ -325,9 +360,9 @@ export function ModelPicker({
             ? `OpenRouter connected. Current model: ${modelDisplayName(selectedModel)}. Choose model`
             : "OpenRouter connected. Choose a model"
         }
-        aria-controls={open ? listId : undefined}
+        aria-controls={open ? popoverId : undefined}
         aria-expanded={open}
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         className={`ora-model-trigger${open ? " is-open" : ""}`}
         onClick={() => (open ? close(false) : openPicker())}
         onKeyDown={(event) => {
@@ -341,15 +376,35 @@ export function ModelPicker({
         type="button"
       >
         <span className="ora-model-trigger-copy">
-          <strong>{selectedModel ? modelDisplayName(selectedModel) : "Choose a model"}</strong>
+          <strong>{selectedFamily?.label ?? "model"}</strong>
         </span>
         <IoChevronDown aria-hidden="true" className="ora-model-chevron" />
       </button>
 
       {open ? (
-        <div className="ora-model-popover">
+        <div
+          aria-label="Choose model"
+          className="ora-model-popover"
+          id={popoverId}
+          role="dialog"
+        >
           <div className="ora-model-top">
-            <div className="ora-model-search-row">
+            <div
+              className={`ora-model-search-row${
+                family === null ? "" : " has-back"
+              }`}
+            >
+              {family !== null ? (
+                <button
+                  aria-label="Back to all models"
+                  className="ora-model-control-button ora-model-back"
+                  onClick={showAllModels}
+                  title="All models"
+                  type="button"
+                >
+                  <IoArrowBack aria-hidden="true" />
+                </button>
+              ) : null}
               <div className="ora-model-search">
                 <IoSearchOutline aria-hidden="true" />
                 <input
@@ -358,7 +413,11 @@ export function ModelPicker({
                   aria-controls={listId}
                   aria-describedby={selectionLocked || actionError ? statusId : undefined}
                   aria-expanded="true"
-                  aria-label="Search models or publishers"
+                  aria-label={
+                    family === null
+                      ? "Search models or publishers"
+                      : `Search ${family.label} models`
+                  }
                   autoComplete="off"
                   onChange={(event) => {
                     setQuery(event.target.value);
@@ -366,7 +425,11 @@ export function ModelPicker({
                     resetListScroll();
                   }}
                   onKeyDown={onSearchKeyDown}
-                  placeholder="Search models"
+                  placeholder={
+                    family === null
+                      ? "Search models"
+                      : `Search ${family.label}`
+                  }
                   ref={searchRef}
                   role="combobox"
                   spellCheck={false}
@@ -462,7 +525,11 @@ export function ModelPicker({
           </div>
 
           <div
-            aria-label="OpenRouter models"
+            aria-label={
+              family === null
+                ? "All OpenRouter models"
+                : `${family.label} models`
+            }
             aria-busy={refreshing || loading}
             aria-describedby={selectionLocked || actionError ? statusId : undefined}
             className="ora-model-list"

@@ -114,7 +114,7 @@ permission shortcut. A destructive reinstall may require reconnecting the
 provider depending on the resident-origin rotation.
 
 The Playwright browser is its own browser context. Do not assume it shares the
-login, provider connection, selected model, open workspaces, or Agent Mode state
+login, provider connection, tile model choices, open workspaces, or Agent Mode state
 from a developer's ordinary browser. After every reinstall:
 
 1. use the deterministic local login above;
@@ -125,7 +125,13 @@ from a developer's ordinary browser. After every reinstall:
 
 Restored workspaces can contain more than one Agent tile. Pick one target and
 use that same tile for preparation, the trusted Send click, and observation.
-The examples use the last matching tile deliberately.
+The examples use the last matching tile deliberately. Each tile instance has
+its own conversation history, so preparing one tile and inspecting another is
+not a valid observation of the same turn. The provider connection is shared,
+but each tile keeps its own model selection. Changing a tile's model establishes
+the default for newly opened tiles without changing existing ones. Different
+tiles may run turns in parallel; only another view of the same durable tile is
+serialized with its active turn.
 
 ## Prepare, send, and observe
 

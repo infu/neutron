@@ -24,6 +24,25 @@ const AUTHOR_LABELS: Record<string, string> = {
   "x-ai": "xAI",
   "z-ai": "Z.AI",
 };
+const GENERIC_MODEL_VARIANTS = new Set([
+  "base",
+  "chat",
+  "coder",
+  "fast",
+  "flash",
+  "free",
+  "instruct",
+  "latest",
+  "lite",
+  "max",
+  "mini",
+  "nano",
+  "preview",
+  "pro",
+  "reasoning",
+  "thinking",
+  "turbo",
+]);
 
 export type ModelFilterOptions = {
   query?: string;
@@ -140,6 +159,62 @@ export function modelDisplayName(
   return name;
 }
 
+export function modelFamilyId(
+  model: Pick<OpenRouterModel, "id">,
+): string {
+  const slug = modelSlug(model);
+  const distinctive = [...slug.split(/[-_.]/)]
+    .reverse()
+    .find(
+      (part) =>
+        /^[a-z]{2,}$/u.test(part) && !GENERIC_MODEL_VARIANTS.has(part),
+    );
+  if (distinctive) return distinctive;
+  const first = slug.split(/[-_.]/, 1)[0]?.replace(/[^a-z0-9]/g, "") ?? "";
+  if (!first) return modelAuthorId(model);
+  if (/^[a-z]{2,}\d/.test(first)) return first.replace(/\d.*$/, "");
+  return first;
+}
+
+export function modelFamilyLabel(
+  model: Pick<OpenRouterModel, "id">,
+): string {
+  const id = modelFamilyId(model);
+  if (id === "gpt") return "GPT";
+  if (id === "glm") return "GLM";
+  return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+export type ModelFamilyScope = {
+  authorId: string;
+  familyId: string;
+  key: string;
+  label: string;
+};
+
+export function modelFamilyScope(
+  selected: OpenRouterModel,
+): ModelFamilyScope {
+  const authorId = modelAuthorId(selected);
+  const familyId = modelFamilyId(selected);
+  return {
+    authorId,
+    familyId,
+    key: `${authorId}/${familyId}`,
+    label: familyId,
+  };
+}
+
+export function modelMatchesFamily(
+  model: OpenRouterModel,
+  family: ModelFamilyScope,
+): boolean {
+  return (
+    modelAuthorId(model) === family.authorId &&
+    modelFamilyId(model) === family.familyId
+  );
+}
+
 export function modelAuthorInitials(
   model: Pick<OpenRouterModel, "id">,
 ): string {
@@ -198,4 +273,15 @@ function normalizeSearch(value: string): string {
     .replace(/\p{M}/gu, "")
     .toLowerCase()
     .trim();
+}
+
+function modelSlug(model: Pick<OpenRouterModel, "id">): string {
+  const separator = model.id.indexOf("/");
+  return (separator >= 0 ? model.id.slice(separator + 1) : model.id)
+    .split(":", 1)[0]!
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9.-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }

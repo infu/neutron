@@ -10,11 +10,17 @@ export function applyTranscriptProgress(
 ): AgentSnapshot | null {
   if (!current || progress.type === "tool") return current;
   if (current.messages.some((message) => message.id === progress.user.id)) {
-    return { ...current, generating: true, error: null };
+    return {
+      ...current,
+      generating: true,
+      generatingHere: true,
+      error: null,
+    };
   }
   return {
     ...current,
     generating: true,
+    generatingHere: true,
     error: null,
     messages: [...current.messages, progress.user],
   };

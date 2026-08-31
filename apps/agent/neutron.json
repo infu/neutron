@@ -2,13 +2,13 @@
   "format": 3,
   "name": "Agent",
   "id": "agent",
-  "version": 306,
+  "version": 308,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "OpenRouter chat agent with kernel-regulated Neutron tools",
   "src": "main.mo",
   "background": {
     "path": "service.html",
-    "description": "Resident Agent process and shared conversation"
+    "description": "Resident Agent process with tile-scoped conversations"
   },
   "capabilities": {
     "agent_entrypoints": {

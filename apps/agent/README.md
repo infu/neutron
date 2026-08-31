@@ -4,6 +4,25 @@ Resident OpenRouter chat agent for Neutron. The kernel owns authorization and
 durable credentials; the app background process receives its declared key in
 memory and uses the Vercel AI SDK to stream model requests directly.
 
+Each Agent tile has its own visible transcript, hidden model turns, reset
+boundary, and state-change recovery journal. The resident derives that scope
+from the kernel-authenticated tile endpoint; the tile cannot select or read
+another tile's conversation. A tile keeps its history across reloads and
+workspace moves because its instance id is durable, while a newly opened tile
+starts empty. The OpenRouter connection and model catalog stay shared in the
+resident process. Model selection belongs to each tile; changing it also sets
+the initial model for future tiles without changing any existing tile. Turns
+from different tiles can run in parallel, while the same tile remains limited
+to one turn across all of its open browser tabs. Shared connection changes and
+the explicit clear-all action are blocked while any turn is active.
+The legacy shared conversation stored before tile-scoped histories had no tile
+identity, so it is moved once to the first authenticated Agent tile that loads
+after the upgrade instead of being copied into every tile.
+The tile menu can clear only the current conversation or, after explicit
+confirmation, clear retained conversation history for every Agent tile.
+If a transcript grows beyond the safe tile-transport budget, the tile shows
+the newest messages and the count of earlier messages that remain retained.
+
 The app declares `agent_chat` as its exact Agent Mode entrypoint. Enabling
 Agent Mode requires a kernel-owned owner confirmation and binds the grant to
 this installed app version and entrypoint for the current frontend session.
@@ -76,9 +95,11 @@ Models shown in the searchable picker must advertise both `tools` and
 publisher names; it can filter for reasoning-capable or free models and shows
 context size plus labelled per-million-token input and output pricing. Model
 refresh lives in the picker, while conversation reset and credential
-disconnect live in the header's overflow menu. The compact header keeps the
-Agent Mode control visible and remains usable in narrow tiles. Reasoning is set to high when
-the model advertises it. Complete AI SDK
+disconnect live in the settings menu. The short model-family selector, Agent
+Mode icon, settings icon, and Send or Stop control share a compact footer inside
+the message composer and remain usable in narrow tiles. Opening the selector
+shows variants of the current model family; its Back control opens the complete
+catalog. Reasoning is set to high when the model advertises it. Complete AI SDK
 assistant tool-call and tool-result messages are retained as bounded whole
 turns and sent back on later requests. The visible transcript remains a compact
 projection, but it is not used to reconstruct model tool history.
@@ -87,9 +108,16 @@ incomplete hidden protocol history is discarded once instead of being trusted.
 While a turn runs, one compact tool row shows the latest activity. A new tool
 replaces it, a completed tool remains visible while the model continues
 thinking, and the row disappears only with the final response or error.
+Completed assistant text is rendered locally as CommonMark with GitHub
+Flavored Markdown tables, task lists, autolinks, strikethrough, and inline or
+block TeX math. Footnote links stay within the transcript. Raw HTML and images
+are not rendered, unsafe or relative links remain
+inert text, and safe HTTP(S) destinations are shown and can be copied through
+the trusted Kernel clipboard control. User prompts remain literal text. Agent
+stores the original bounded Markdown, never rendered HTML.
 
 Provider errors, timeout, disconnect, abort, malformed output, or a missing
-decision fail closed as deny with no retry. Stop aborts the active model
+decision fail closed as deny with no retry. Stop aborts this tile's active model
 request, and the kernel invalidates the full invocation tree. The kernel can
 bind a decision to this approved app and version, but it cannot prove that this
 app obtained the response from a model. Enabling Agent Mode therefore means

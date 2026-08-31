@@ -41,12 +41,15 @@ import {
   installAgentDevelopmentApi,
   recordAgentDevelopmentProgress,
 } from "./development.ts";
+import { MarkdownMessage } from "./markdown_message.tsx";
 import { ModelPicker } from "./model_picker.tsx";
 import { ToolbarMenu } from "./toolbar_menu.tsx";
 import "./style.scss";
 
 const TARGET = "app:agent:background" as MsgBusEndpointId;
 const STATE_TOPIC = "agent";
+const CONNECTION_DIALOG_TIMEOUT_SECONDS = 16 * 60;
+const STATUS_REFRESH_INTERVAL_MS = 30_000;
 const bus = createMsgBusClient();
 
 function App() {
@@ -63,39 +66,57 @@ function App() {
   const draftRef = useRef(draft);
   const activeToolRef = useRef(activeTool);
   const chatPendingRef = useRef(chatPending);
+  const statusGenerationRef = useRef(0);
+  const statusRefreshRunningRef = useRef(false);
+  const statusRefreshPendingRef = useRef(false);
   snapshotRef.current = snapshot;
   draftRef.current = draft;
   activeToolRef.current = activeTool;
   chatPendingRef.current = chatPending;
 
   const readStatus = useCallback(async () => {
+    const generation = ++statusGenerationRef.current;
     const [value, mode] = await Promise.all([
       bus.callTool({
         target: TARGET,
         name: "agent_status",
         arguments: {},
       }),
-      getAgentModeStatus(),
+      getAgentModeStatus().catch(() => null),
     ]);
+    if (generation !== statusGenerationRef.current) return false;
     setSnapshot(asSnapshot(value));
-    setAgentMode(mode);
+    if (mode) setAgentMode(mode);
+    return true;
   }, []);
+
+  const refreshStatus = useCallback(async () => {
+    statusRefreshPendingRef.current = true;
+    if (statusRefreshRunningRef.current) return;
+    statusRefreshRunningRef.current = true;
+    try {
+      do {
+        statusRefreshPendingRef.current = false;
+        for (const retryDelay of [0, 350, 1_200]) {
+          if (retryDelay > 0) await delay(retryDelay);
+          try {
+            if (await readStatus()) break;
+          } catch {
+            // A later invalidation or the fallback refresh will retry.
+          }
+        }
+      } while (statusRefreshPendingRef.current);
+    } finally {
+      statusRefreshRunningRef.current = false;
+    }
+  }, [readStatus]);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       while (!cancelled) {
         try {
-          const value = await bus.callTool(
-            { target: TARGET, name: "agent_status", arguments: {} },
-            10
-          );
-          const mode = await getAgentModeStatus().catch(() => null);
-          if (!cancelled) {
-            setSnapshot(asSnapshot(value));
-            if (mode) setAgentMode(mode);
-          }
-          return;
+          if (await readStatus()) return;
         } catch {
           await delay(350);
         }
@@ -105,12 +126,29 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [readStatus]);
 
   useEffect(
-    () => onAppStateChange(STATE_TOPIC, () => void readStatus().catch(() => undefined)),
-    [readStatus],
+    () => onAppStateChange(STATE_TOPIC, () => void refreshStatus()),
+    [refreshStatus],
   );
+
+  useEffect(() => {
+    const refreshVisible = (): void => {
+      if (!document.hidden) void refreshStatus();
+    };
+    const interval = window.setInterval(
+      refreshVisible,
+      STATUS_REFRESH_INTERVAL_MS,
+    );
+    document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener("focus", refreshVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener("focus", refreshVisible);
+    };
+  }, [refreshStatus]);
 
   useEffect(
     () =>
@@ -151,17 +189,19 @@ function App() {
   ): Promise<boolean> => {
     setBusy(true);
     try {
-      const result = await bus.callTool({
-        target: TARGET,
-        name,
-        arguments: arguments_,
-      });
+      const result = await bus.callTool(
+        { target: TARGET, name, arguments: arguments_ },
+        name === "openrouter_connect" || name === "openrouter_disconnect"
+          ? CONNECTION_DIALOG_TIMEOUT_SECONDS
+          : undefined,
+      );
+      statusGenerationRef.current += 1;
       setSnapshot(asSnapshot(result));
       return true;
     } catch (error) {
       setSnapshot((current) =>
         current
-          ? { ...current, error: safeError(error), generating: false }
+          ? { ...current, error: safeError(error) }
           : current
       );
       return false;
@@ -176,7 +216,7 @@ function App() {
       !text ||
       !snapshot?.connected ||
       !snapshot.selectedModelId ||
-      snapshot.generating ||
+      snapshot.generatingHere ||
       chatPending
     ) {
       return;
@@ -186,18 +226,31 @@ function App() {
     setChatPending(true);
     setActiveTool(null);
     const developmentRunId = beginAgentDevelopmentRun(text);
+    let turnStarted = false;
     try {
       const result = await bus.callTool(
         {
           target: TARGET,
           name: "agent_chat",
-          arguments: { text },
+          arguments: {
+            text,
+            ...(snapshot.conversationRevision
+              ? {
+                  modelId: snapshot.selectedModelId,
+                  conversationRevision: snapshot.conversationRevision,
+                }
+              : {}),
+          },
         },
         {
           timeout: 15 * 60,
           onProgress: (value) => {
             const progress = asProgress(value);
             if (!progress) return;
+            if (progress.type === "turn_start") {
+              turnStarted = true;
+              statusGenerationRef.current += 1;
+            }
             recordAgentDevelopmentProgress(developmentRunId, progress);
             setSnapshot((current) =>
               applyTranscriptProgress(current, progress),
@@ -207,16 +260,20 @@ function App() {
         }
       );
       const next = asSnapshot(result);
+      statusGenerationRef.current += 1;
       setSnapshot(next);
       completeAgentDevelopmentRun(developmentRunId, next);
     } catch (error) {
+      if (!turnStarted) {
+        setDraft((current) => current || text);
+      }
       failAgentDevelopmentRun(developmentRunId, safeError(error));
       setSnapshot((current) =>
         current
-          ? { ...current, error: safeError(error), generating: false }
+          ? { ...current, error: safeError(error) }
           : current
       );
-      void readStatus().catch(() => undefined);
+      void refreshStatus();
     } finally {
       setActiveTool(null);
       setChatPending(false);
@@ -278,54 +335,12 @@ function App() {
     );
   }
 
-  const generationActive = snapshot.generating || chatPending;
+  const generationActive = snapshot.generatingHere || chatPending;
+  const anyGenerationActive = snapshot.generating || generationActive;
 
   return (
     <main className="nt-app ora-app">
       <div className="ora-shell">
-        <header className="ora-toolbar">
-          <ModelPicker
-            loading={snapshot.modelsLoading}
-            models={snapshot.models}
-            onRefresh={() => run("openrouter_models", { refresh: true })}
-            onSelect={(modelId) => run("openrouter_select_model", { modelId })}
-            selectedModelId={snapshot.selectedModelId}
-            selectionLocked={generationActive || busy}
-            selectionLockedReason={
-              generationActive
-                ? "Stop the response to change models"
-                : "A model action is in progress"
-            }
-          />
-          <div className="ora-toolbar-actions">
-            <IconButton
-              label={
-                agentMode?.enabled ? "Disable Agent Mode" : "Enable Agent Mode"
-              }
-              className={
-                agentMode?.enabled
-                  ? "ora-agent-mode is-enabled"
-                  : "ora-agent-mode"
-              }
-              aria-pressed={agentMode?.enabled ?? false}
-              disabled={
-                generationActive || busy || agentMode?.eligible === false
-              }
-              onClick={() => void toggleAgentMode()}
-            >
-              <IoSparklesOutline aria-hidden="true" />
-              <span>Agent Mode</span>
-            </IconButton>
-            <ToolbarMenu
-              busy={busy}
-              generating={generationActive}
-              hasMessages={snapshot.messages.length > 0}
-              onClear={() => void run("openrouter_reset_chat")}
-              onDisconnect={() => void run("openrouter_disconnect")}
-            />
-          </div>
-        </header>
-
         <section className="ora-history">
           <div
             ref={historyRef}
@@ -333,6 +348,12 @@ function App() {
             onScroll={onHistoryScroll}
           >
             <div className="ora-history-inner">
+              {snapshot.hiddenMessageCount > 0 && (
+                <p className="ora-history-truncated" role="status">
+                  {snapshot.hiddenMessageCount} earlier messages are retained
+                  but not shown in this view.
+                </p>
+              )}
               {snapshot.messages.map((entry) => (
                 <Message key={entry.id} message={entry} />
               ))}
@@ -359,7 +380,9 @@ function App() {
             rows={1}
             aria-label="Message"
             placeholder={snapshot.selectedModelId ? "Message" : "Select a model"}
-            disabled={!snapshot.selectedModelId || busy}
+            disabled={
+              !snapshot.selectedModelId || generationActive || busy
+            }
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -368,26 +391,81 @@ function App() {
               }
             }}
           />
-          {generationActive ? (
-            <IconButton
-              label="Stop"
-              type="button"
-              className="ora-send"
-              onClick={() => void run("agent_stop")}
-            >
-              <IoStop />
-            </IconButton>
-          ) : (
-            <IconButton
-              label="Send"
-              type="button"
-              className="ora-send ora-send--active"
-              disabled={!draft.trim() || !snapshot.selectedModelId || busy}
-              onClick={() => void send()}
-            >
-              <IoArrowUp />
-            </IconButton>
-          )}
+          <div className="ora-composer-footer">
+            <ModelPicker
+              loading={snapshot.modelsLoading}
+              models={snapshot.models}
+              onRefresh={() => run("openrouter_models", { refresh: true })}
+              onSelect={(modelId) =>
+                run("openrouter_select_model", { modelId })
+              }
+              selectedModelId={snapshot.selectedModelId}
+              selectionLocked={generationActive || busy}
+              selectionLockedReason={
+                generationActive
+                  ? "Stop this response to change models"
+                  : "A model action is in progress"
+              }
+            />
+            <div className="ora-composer-actions">
+              <IconButton
+                label={
+                  agentMode?.enabled
+                    ? "Disable Agent Mode"
+                    : "Enable Agent Mode"
+                }
+                className={
+                  agentMode?.enabled
+                    ? "ora-agent-mode is-enabled"
+                    : "ora-agent-mode"
+                }
+                aria-pressed={agentMode?.enabled ?? false}
+                disabled={
+                  generationActive || busy || agentMode?.eligible === false
+                }
+                onClick={() => void toggleAgentMode()}
+              >
+                <IoSparklesOutline aria-hidden="true" />
+              </IconButton>
+              {generationActive ? (
+                <IconButton
+                  label="Stop"
+                  type="button"
+                  className="ora-send"
+                  onClick={() => void run("agent_stop")}
+                >
+                  <IoStop />
+                </IconButton>
+              ) : (
+                <IconButton
+                  label="Send"
+                  type="button"
+                  className="ora-send ora-send--active"
+                  disabled={
+                    !draft.trim() || !snapshot.selectedModelId || busy
+                  }
+                  onClick={() => void send()}
+                >
+                  <IoArrowUp />
+                </IconButton>
+              )}
+              <ToolbarMenu
+                anyGenerating={anyGenerationActive}
+                busy={busy}
+                conversationGenerating={generationActive}
+                hasMessages={snapshot.messages.length > 0}
+                onClear={() =>
+                  void run("openrouter_reset_chat", {
+                    ...(snapshot.conversationRevision
+                      ? { conversationRevision: snapshot.conversationRevision }
+                      : {}),
+                  })
+                }
+                onClearAll={() => void run("openrouter_reset_all_chats")}
+                onDisconnect={() => void run("openrouter_disconnect")}
+              />
+            </div>
+          </div>
         </form>
       </div>
     </main>
@@ -398,7 +476,13 @@ function Message({ message }: { message: TranscriptMessage }) {
   return (
     <article className={`ora-message ora-message--${message.role}`}>
       {message.role === "assistant" && <span className="ora-message-mark" />}
-      <div className="ora-message-body">{message.text}</div>
+      <div className="ora-message-body">
+        {message.role === "assistant" ? (
+          <MarkdownMessage messageId={message.id} text={message.text} />
+        ) : (
+          message.text
+        )}
+      </div>
     </article>
   );
 }
@@ -455,12 +539,35 @@ function asSnapshot(value: JsonValue): AgentSnapshot {
     !isJsonObject(value) ||
     typeof value.ready !== "boolean" ||
     typeof value.connected !== "boolean" ||
+    typeof value.generating !== "boolean" ||
+    (value.generatingHere !== undefined &&
+      typeof value.generatingHere !== "boolean") ||
+    (value.conversationRevision !== undefined &&
+      typeof value.conversationRevision !== "string") ||
+    (value.hiddenMessageCount !== undefined &&
+      (typeof value.hiddenMessageCount !== "number" ||
+        !Number.isSafeInteger(value.hiddenMessageCount) ||
+        value.hiddenMessageCount < 0)) ||
     !Array.isArray(value.models) ||
     !Array.isArray(value.messages)
   ) {
     throw new Error("Invalid Agent state");
   }
-  return value as AgentSnapshot;
+  return {
+    ...value,
+    generatingHere:
+      typeof value.generatingHere === "boolean"
+        ? value.generatingHere
+        : value.generating,
+    conversationRevision:
+      typeof value.conversationRevision === "string"
+        ? value.conversationRevision
+        : null,
+    hiddenMessageCount:
+      typeof value.hiddenMessageCount === "number"
+        ? value.hiddenMessageCount
+        : 0,
+  } as AgentSnapshot;
 }
 
 function asProgress(value: JsonValue): AgentProgress | null {
