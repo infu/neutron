@@ -27,6 +27,7 @@ export type AgentToolActivity = JsonObject & {
 export type AgentSnapshot = JsonObject & {
   ready: boolean;
   connected: boolean;
+  webToolsAvailable: boolean;
   selectedModelId: string | null;
   models: OpenRouterModel[];
   modelsLoading: boolean;

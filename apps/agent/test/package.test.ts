@@ -13,7 +13,7 @@ const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const mainJsUrl = new URL("../dist/web/main.js", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
 const packageUrl = new URL(
-  "../agent.v0.3.8.neutron",
+  "../agent.v0.3.9.neutron",
   import.meta.url
 );
 
@@ -23,7 +23,7 @@ test("Agent declares one resident credential connection", async () => {
   expect(manifest).toMatchObject({
     id: "agent",
     name: "Agent",
-    version: 308,
+    version: 309,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -70,6 +70,7 @@ test("Agent bundles local UI and resident AI SDK runtime", async () => {
   expect(mainJs).toContain("ora-model-list-spacer");
   expect(mainJs).toContain("Agent Mode");
   expect(mainJs).toContain("Agent settings");
+  expect(mainJs).toContain("Enable web search and page reading");
   expect(mainJs).toContain("Back to all models");
   expect(mainJs).toContain("Copy link");
   expect(mainJs).toContain("Clear all conversations");
@@ -99,6 +100,11 @@ test("Agent bundles local UI and resident AI SDK runtime", async () => {
     expect(serviceJs).toContain(tool);
   }
   expect(serviceJs).toContain("https://openrouter.ai/api/v1/models");
+  expect(serviceJs).toContain("openrouter.web_search");
+  expect(serviceJs).toContain("openrouter.web_fetch");
+  expect(serviceJs).toContain("max_tool_calls");
+  expect(serviceJs).toContain("max_content_tokens");
+  expect(mainJs).not.toContain("openrouter:web_search");
   expect(serviceJs).not.toContain("localStorage.setItem");
 });
 

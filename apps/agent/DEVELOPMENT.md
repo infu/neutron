@@ -132,6 +132,9 @@ but each tile keeps its own model selection. Changing a tile's model establishes
 the default for newly opened tiles without changing existing ones. Different
 tiles may run turns in parallel; only another view of the same durable tile is
 serialized with its active turn.
+The Web control is intentionally local to one tile document and defaults off
+again after reload. Enable it visibly on the same tile used for the test when a
+scenario needs public web search or page extraction.
 
 ## Prepare, send, and observe
 

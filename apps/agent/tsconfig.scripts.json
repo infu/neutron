@@ -12,6 +12,7 @@
     "src/development.ts",
     "src/model_catalog.ts",
     "src/neutron_agent_tools.ts",
+    "src/openrouter_web_tools.ts",
     "src/agent_runtime.ts",
     "src/storage.ts",
     "test/**/*.ts",

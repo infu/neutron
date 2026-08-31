@@ -399,7 +399,7 @@ export function ModelPicker({
                   aria-label="Back to all models"
                   className="ora-model-control-button ora-model-back"
                   onClick={showAllModels}
-                  title="All models"
+                  title="Back to all models"
                   type="button"
                 >
                   <IoArrowBack aria-hidden="true" />
@@ -445,6 +445,7 @@ export function ModelPicker({
                       resetListScroll();
                       searchRef.current?.focus();
                     }}
+                    title="Clear model search"
                     type="button"
                   >
                     <IoClose aria-hidden="true" />
