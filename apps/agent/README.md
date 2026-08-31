@@ -84,6 +84,20 @@ history is trimmed to the model budget.
 
 The main agent uses strict OpenRouter compatibility, sequential tool calls,
 and requires the model to choose a real tool on the first step of every turn.
+Each tile also has a default-off Web control in its composer. Enabling it makes
+bounded OpenRouter server-side search and public-page or PDF extraction
+available for that tile's turns until the tile reloads or the owner turns it
+off. The browser still connects only to OpenRouter; target-site CORS does not
+apply and no Motoko HTTP outcall is involved. Web tools are available only to
+the initial model step, and provider retries are disabled for Web turns.
+Provider citation metadata is reduced to validated HTTP(S) titles and URLs;
+raw result excerpts are not appended, although the model's answer may quote or
+summarize them. Search queries and fetched content cross an additional
+third-party boundary. The system prompt forbids placing private workspace data
+in them and treats every result as untrusted input, but this is a model
+instruction rather than a browser-enforced separation. Enable Web only when
+the prompt and retained conversation context are suitable to share.
+
 The OpenRouter runtime uses a bounded tool-step budget. Its final allowed step
 disables tools so the model must synthesize a response instead of ending on an
 unreported tool result. The owner can still press Stop, and model-step,
@@ -95,9 +109,10 @@ Models shown in the searchable picker must advertise both `tools` and
 publisher names; it can filter for reasoning-capable or free models and shows
 context size plus labelled per-million-token input and output pricing. Model
 refresh lives in the picker, while conversation reset and credential
-disconnect live in the settings menu. The short model-family selector, Agent
-Mode icon, settings icon, and Send or Stop control share a compact footer inside
-the message composer and remain usable in narrow tiles. Opening the selector
+disconnect live in the settings menu. The short model-family selector, Web and
+Agent Mode icons, settings icon, and Send or Stop control share a compact footer
+inside the message composer and remain usable in narrow tiles. Every icon-only
+control has an accessible name and a tooltip. Opening the selector
 shows variants of the current model family; its Back control opens the complete
 catalog. Reasoning is set to high when the model advertises it. Complete AI SDK
 assistant tool-call and tool-result messages are retained as bounded whole

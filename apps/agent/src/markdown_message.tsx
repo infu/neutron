@@ -164,7 +164,7 @@ function MarkdownLink({
         aria-describedby={externalUrlId}
         aria-label="Copy link"
         onClick={() => void copyToClipboard(href).catch(() => undefined)}
-        title={href}
+        title="Copy link"
         type="button"
       >
         <IoCopyOutline aria-hidden="true" />

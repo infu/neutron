@@ -22,6 +22,7 @@ const snapshotSchema: JsonObject = {
   required: [
     "ready",
     "connected",
+    "webToolsAvailable",
     "selectedModelId",
     "models",
     "modelsLoading",
@@ -35,6 +36,7 @@ const snapshotSchema: JsonObject = {
   properties: {
     ready: { type: "boolean" },
     connected: { type: "boolean" },
+    webToolsAvailable: { type: "boolean" },
     selectedModelId: { type: ["string", "null"] },
     models: { type: "array" },
     modelsLoading: { type: "boolean" },
@@ -203,6 +205,11 @@ exposeTool(
           minLength: 1,
           maxLength: 256,
         },
+        webEnabled: {
+          type: "boolean",
+          description:
+            "Allow bounded OpenRouter server-side public web search and page reading for this turn.",
+        },
       },
       additionalProperties: false,
     },
@@ -225,6 +232,7 @@ exposeTool(
           publishTurnStarted,
           optionalString(args.modelId),
           optionalString(args.conversationRevision),
+          args.webEnabled === true,
         ),
       ),
     );
