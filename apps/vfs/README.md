@@ -23,6 +23,15 @@ destination policy: Vault encrypts it, Workspace stores it as backend
 plaintext, and Shared publishes it. Shared files use **Get link** rather than a
 separate sharing workflow.
 
+The tree stays compact, lazy, collapsible, and resizable. Entry menus keep
+create, rename, upload, and delete actions next to their exact target instead
+of relying on whichever folder is open later. External drops and the upload
+picker stage multiple files for review before any write begins; internal drops
+move entries and confirm root-policy changes. Common raster images are shown
+through bounded, revision-bound binary reads and lifecycle-bound Blob URLs.
+Active document formats and images above the preview limit remain
+download-only.
+
 Files runs its background resident on an installation-dedicated persistent
 browser origin. The Files backend and the kernel's Certified Assets store remain
 the authoritative stores for file metadata and bodies.

@@ -101,7 +101,7 @@ test("authority changes synchronously purge volatile state while an idle lock re
   expect(String(manager.lockEpoch)).toBe("4");
 });
 
-test("Blob URLs survive handoff briefly and authority reset revokes all", () => {
+test("Blob URLs support immediate preview cleanup and delayed handoff cleanup", () => {
   const revoked: string[] = [];
   let next = 0;
   const registry = new FilesBlobUrlRegistry(
@@ -115,8 +115,11 @@ test("Blob URLs survive handoff briefly and authority reset revokes all", () => 
   const second = registry.create(new Blob(["two"]));
   registry.releaseAfterHandoff(first);
   expect(registry.size).toBe(2);
+  expect(registry.revoke(second)).toBe(true);
+  expect(registry.revoke(second)).toBe(false);
+  expect(revoked).toEqual([second]);
   registry.revokeAll();
-  expect(revoked).toEqual([first, second]);
+  expect(revoked).toEqual([second, first]);
   expect(registry.size).toBe(0);
 });
 

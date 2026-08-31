@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type DragEvent,
   type UIEvent,
 } from "react";
@@ -13,8 +14,6 @@ import { createRoot } from "react-dom/client";
 import {
   IoAddOutline,
   IoCheckmark,
-  IoChevronDown,
-  IoChevronForward,
   IoClose,
   IoCloudDownloadOutline,
   IoCloudUploadOutline,
@@ -24,12 +23,16 @@ import {
   IoFolderOpenOutline,
   IoFolderOutline,
   IoHomeOutline,
+  IoImageOutline,
   IoKeyOutline,
   IoLinkOutline,
+  IoMenuOutline,
+  IoEllipsisVerticalOutline,
+  IoRemoveOutline,
+  IoPencilOutline,
   IoRefresh,
   IoReloadOutline,
   IoSaveOutline,
-  IoSearchOutline,
   IoShieldCheckmarkOutline,
   IoTrashOutline,
   IoWarningOutline,
@@ -58,6 +61,11 @@ import {
 } from "neutron-tools/app_attachments";
 import { isMarkdownPath, MarkdownPreview } from "./markdown.tsx";
 import {
+  FILES_IMAGE_PREVIEW_MAX_BYTES,
+  filesImagePreviewMediaType,
+  validateFilesImageRead,
+} from "./image_preview.ts";
+import {
   FILES_SERVICE_LIMITS,
   FILES_UI_DOWNLOAD_TOOL,
   FILES_UI_TOOL,
@@ -74,7 +82,7 @@ import "./style.scss";
 const STATE_TOPIC = "filesystem";
 const ATTACHMENT_NAME = "file";
 const FILES_INTERNAL_DRAG_TYPE = "application/x-neutron-files-entry";
-const ROW_HEIGHT = 44;
+const ROW_HEIGHT = 32;
 const OVERSCAN = 6;
 const TEXT_LIMIT = 512 * 1024;
 const PRIVATE_FILE_LIMIT = 64 * 1024 * 1024;
@@ -82,8 +90,6 @@ const BLOB_REVOKE_DELAY_MS = 60_000;
 const FILES_VETKEY_SLOT = "files_vault";
 const FOLDER_PAGE_SIZE = 200;
 const MAX_PRIVATE_ENTRIES = 10_000;
-const MAX_SEARCH_PAGES = Math.ceil(MAX_PRIVATE_ENTRIES / FOLDER_PAGE_SIZE);
-const MAX_SEARCH_RESULTS = 2_000;
 const MAX_VISIBLE_TRANSFERS = 100;
 const MAX_STATUS_TRANSFERS = 256;
 const BUSY_REVEAL_MS = 400;
@@ -178,7 +184,22 @@ export type FilesTreeRow = Readonly<{
   setSize: number;
   root: FilesRootKind;
   isRoot: boolean;
+  ancestorContinues: readonly boolean[];
+  isLastSibling: boolean;
 }>;
+
+export type FilesDropIntent = Readonly<{
+  sourcePath: string;
+  targetFolder: string;
+  destination: string;
+  sourceRoot: FilesRootKind;
+  targetRoot: FilesRootKind;
+  policyChange: boolean;
+}>;
+
+export type FilesDropIntentResult =
+  | Readonly<{ ok: true; intent: FilesDropIntent }>
+  | Readonly<{ ok: false; reason: string }>;
 
 export function filesRootKind(path: string): FilesRootKind | null {
   const normalized = normalizeFilesPath(path).path;
@@ -217,6 +238,44 @@ export function filesDropDestination(
   );
 }
 
+export function filesDropIntent(
+  sourcePath: string,
+  target: Readonly<{ path: string; type: FilesTileEntry["type"] }>,
+  vaultState: FilesTileStatus["vault"] | null,
+): FilesDropIntentResult {
+  try {
+    if (target.type !== "folder") {
+      throw new Error("Choose a folder as the move destination.");
+    }
+    const targetFolder = target.path;
+    const sourceRoot = filesRootKind(sourcePath);
+    const targetRoot = filesRootKind(targetFolder);
+    if (!sourceRoot || !targetRoot) {
+      throw new Error("Choose a folder inside Files.");
+    }
+    if (
+      vaultState !== "ready" &&
+      (sourceRoot === "vault" || targetRoot === "vault")
+    ) {
+      throw new Error("Open Vault before moving files into or out of it.");
+    }
+    const destination = filesDropDestination(sourcePath, targetFolder);
+    return {
+      ok: true,
+      intent: {
+        sourcePath: normalizeFilesPolicyPath(sourcePath),
+        targetFolder: normalizeFilesPolicyPath(targetFolder),
+        destination,
+        sourceRoot,
+        targetRoot,
+        policyChange: sourceRoot !== targetRoot,
+      },
+    };
+  } catch (error) {
+    return { ok: false, reason: errorMessage(error) };
+  }
+}
+
 export function filesPathContains(
   ancestorPath: string,
   candidatePath: string,
@@ -224,37 +283,6 @@ export function filesPathContains(
   const ancestor = normalizeFilesPath(ancestorPath).path;
   const candidate = normalizeFilesPath(candidatePath).path;
   return candidate === ancestor || candidate.startsWith(`${ancestor}/`);
-}
-
-export function filterFilesTreeForFolderSearch(
-  rows: readonly FilesTreeRow[],
-  folderPath: string,
-  matches: readonly FilesTileEntry[],
-): readonly FilesTreeRow[] {
-  const normalizedFolder = normalizeFilesPath(folderPath).path;
-  const folderRow = rows.find((row) => row.entry.path === normalizedFolder);
-  const context = rows.filter((row) =>
-    row.isRoot ||
-    filesPathContains(row.entry.path, normalizedFolder)
-  );
-  if (!folderRow) return context;
-  const root = filesRootKind(normalizedFolder);
-  if (!root) return context;
-  const seen = new Set(context.map((row) => row.entry.path));
-  const children = matches.filter((entry) =>
-    parentPath(entry.path) === normalizedFolder && !seen.has(entry.path)
-  );
-  return [
-    ...context,
-    ...children.map((entry, index) => ({
-      entry,
-      level: folderRow.level + 1,
-      position: index + 1,
-      setSize: children.length,
-      root,
-      isRoot: false,
-    })),
-  ];
 }
 
 export function flattenFilesTree(
@@ -269,8 +297,18 @@ export function flattenFilesTree(
     setSize: number,
     root: FilesRootKind,
     isRoot: boolean,
+    ancestorContinues: readonly boolean[],
   ): void => {
-    rows.push({ entry, level, position, setSize, root, isRoot });
+    rows.push({
+      entry,
+      level,
+      position,
+      setSize,
+      root,
+      isRoot,
+      ancestorContinues,
+      isLastSibling: position >= setSize,
+    });
     if (
       entry.type !== "folder" ||
       !expandedPaths.has(entry.path) ||
@@ -278,11 +316,23 @@ export function flattenFilesTree(
     ) {
       return;
     }
-    const children = pages.get(entry.path)?.entries ?? [];
+    const page = pages.get(entry.path);
+    const children = page?.entries ?? [];
+    const childSetSize = page?.total ?? children.length;
     for (let index = 0; index < children.length; index += 1) {
       const child = children[index];
       if (!child || !child.path.startsWith(`${entry.path}/`)) continue;
-      visit(child, level + 1, index + 1, children.length, root, false);
+      visit(
+        child,
+        level + 1,
+        index + 1,
+        childSetSize,
+        root,
+        false,
+        isRoot
+          ? []
+          : [...ancestorContinues, position < setSize],
+      );
     }
   };
   for (let index = 0; index < FILES_UI_ROOTS.length; index += 1) {
@@ -294,6 +344,7 @@ export function flattenFilesTree(
       FILES_UI_ROOTS.length,
       root.kind,
       true,
+      [],
     );
   }
   return rows;
@@ -485,6 +536,7 @@ export type FilesTileClient = Readonly<{
   ): Promise<void>;
   remove(path: string, recursive: boolean, signal?: AbortSignal): Promise<void>;
   readBinary(path: string, options?: {
+    ifMatch?: string;
     signal?: AbortSignal;
     onProgress?: (value: JsonValue) => void;
   }): Promise<{
@@ -655,6 +707,7 @@ export function createFilesTileClient(
           name: "readBinary",
           arguments: {
             path,
+            ...(options.ifMatch ? { ifMatch: options.ifMatch } : {}),
           },
         },
         [],
@@ -667,11 +720,22 @@ export function createFilesTileClient(
         },
       );
       const attachment = result.attachments[0];
-      if (!attachment || attachment.name !== ATTACHMENT_NAME) {
+      if (
+        result.attachments.length !== 1 ||
+        !attachment ||
+        attachment.name !== ATTACHMENT_NAME ||
+        attachment.mediaType !== "application/octet-stream" ||
+        attachment.byteLength !== attachment.data.byteLength ||
+        attachment.data.byteLength > FILES_SERVICE_LIMITS.binaryBytes
+      ) {
         throw new Error("Files binary response is missing its attachment");
       }
+      const entry = parseEntry(record(result.value, "binary read result"));
+      if (entry.byteLength !== attachment.data.byteLength) {
+        throw new Error("Files binary response length is inconsistent");
+      }
       return {
-        entry: parseEntry(record(result.value, "binary read result")),
+        entry,
         data: attachment.data,
         mediaType: attachment.mediaType,
       };
@@ -866,6 +930,7 @@ type LocalTransfer = {
 
 type LocalDownload = {
   id: string;
+  path: string;
   label: string;
   phase:
     | "queued"
@@ -887,11 +952,159 @@ type EditorConflict = {
   message: string;
 };
 
-type FolderSearchState = {
-  phase: "idle" | "scanning" | "complete" | "cancelled";
-  pages: number;
-  capped: boolean;
+type CreateDraft = {
+  kind: "file" | "folder";
+  parentPath: string;
+  name: string;
+  error: string | null;
 };
+
+type RenameDraft = Readonly<{
+  target: FilesTileEntry;
+  name: string;
+  error: string | null;
+}>;
+
+type StagedUpload = Readonly<{
+  id: string;
+  file: File;
+}>;
+
+function stagedUploads(
+  files: FileList | readonly File[],
+  limit: number,
+): { items: readonly StagedUpload[]; truncated: number } {
+  const incoming = Array.from(files);
+  const accepted = incoming.slice(0, Math.max(0, limit));
+  return {
+    items: accepted.map((file) => ({ id: crypto.randomUUID(), file })),
+    truncated: incoming.length - accepted.length,
+  };
+}
+
+type UploadDraft = Readonly<{
+  destination: string;
+  items: readonly StagedUpload[];
+  truncated: number;
+}>;
+
+type EntryMenuState = Readonly<{
+  entry: FilesTileEntry;
+  anchor: Readonly<{ left: number; top: number; right: number; bottom: number }>;
+}>;
+
+type FilesEntryMenuAction = Readonly<{
+  label: string;
+  icon: React.ReactNode;
+  danger?: boolean;
+  disabled?: boolean;
+  onSelect(): void;
+}>;
+
+type ImagePreviewState =
+  | Readonly<{ key: string; phase: "loading"; url: null; error: null }>
+  | Readonly<{ key: string; phase: "ready"; url: string; error: null }>
+  | Readonly<{ key: string; phase: "error"; url: null; error: string }>;
+
+export type FilesUploadReviewItem<T> = Readonly<{
+  source: T;
+  path: string | null;
+  error: string | null;
+}>;
+
+export type FilesUploadReview<T> = Readonly<{
+  items: readonly FilesUploadReviewItem<T>[];
+  accepted: readonly FilesUploadReviewItem<T>[];
+  acceptedBytes: number;
+}>;
+
+export function reviewFilesUpload<T extends Readonly<{
+  name: string;
+  size: number;
+}>>(
+  files: readonly T[],
+  destinationFolder: string,
+  activeTransfers: number,
+  vaultState: FilesTileStatus["vault"] | null,
+): FilesUploadReview<T> {
+  const available = Math.max(0, MAX_VISIBLE_TRANSFERS - activeTransfers);
+  const destinationOpen = filesPathCanOpen(destinationFolder, vaultState);
+  const seen = new Set<string>();
+  let acceptedCount = 0;
+  const items = files.map((source): FilesUploadReviewItem<T> => {
+    if (!destinationOpen) {
+      return {
+        source,
+        path: null,
+        error: "Open Vault before adding files there.",
+      };
+    }
+    if (source.size > PRIVATE_FILE_LIMIT) {
+      return {
+        source,
+        path: null,
+        error: "This file is larger than the 64 MiB Files limit.",
+      };
+    }
+    try {
+      const path = joinPath(
+        destinationFolder,
+        validateFilesPolicyName(destinationFolder, source.name),
+      );
+      if (seen.has(path)) {
+        return {
+          source,
+          path: null,
+          error: "Another staged file has the same destination name.",
+        };
+      }
+      seen.add(path);
+      if (acceptedCount >= available) {
+        return {
+          source,
+          path: null,
+          error: `Only ${available} more file${available === 1 ? "" : "s"} can be queued.`,
+        };
+      }
+      acceptedCount += 1;
+      return { source, path, error: null };
+    } catch {
+      return {
+        source,
+        path: null,
+        error: "Files cannot store this filename.",
+      };
+    }
+  });
+  const accepted = items.filter(
+    (item) => item.path !== null && item.error === null,
+  );
+  return {
+    items,
+    accepted,
+    acceptedBytes: accepted.reduce(
+      (total, item) => total + item.source.size,
+      0,
+    ),
+  };
+}
+
+function reviewStagedUploads(
+  draft: UploadDraft,
+  activeTransfers: number,
+  vaultState: FilesTileStatus["vault"] | null,
+) {
+  return reviewFilesUpload(
+    draft.items.map((item) => ({
+      ...item,
+      name: item.file.name,
+      size: item.file.size,
+    })),
+    draft.destination,
+    activeTransfers,
+    vaultState,
+  );
+}
 
 export function shutdownFilesTransfers(
   transfers: readonly {
@@ -1126,9 +1339,17 @@ export function App({
   const folderRequestRef = useRef(0);
   const editorRequestRef = useRef(0);
   const editorControllerRef = useRef<AbortController | null>(null);
+  const imageRequestRef = useRef(0);
+  const imageControllerRef = useRef<AbortController | null>(null);
+  const imageUrlRef = useRef<string | null>(null);
   const privateRequestGenerationRef = useRef(0);
+  const vaultRequestEpochRef = useRef(0);
   const authorityBoundaryGenerationRef = useRef(0);
   const statusRequestRef = useRef(0);
+  const vaultLifecycleRequestRef = useRef(0);
+  const vaultUnlockPromiseRef = useRef<Promise<FilesTileStatus | null> | null>(
+    null,
+  );
   const vaultMigrationAttemptRef = useRef<string | null>(null);
   const mountedClientRef = useRef<FilesTileClient | null>(null);
   const lastStatusRef = useRef<FilesTileStatus | null>(null);
@@ -1140,7 +1361,6 @@ export function App({
   const queuedTransferIdsRef = useRef(new Set<string>());
   const transfersRef = useRef<LocalTransfer[]>([]);
   const activeResidentTransferIdsRef = useRef("");
-  const searchControllerRef = useRef<AbortController | null>(null);
   const treeRequestRefs = useRef(new Map<string, number>());
   const treeControllersRef = useRef(new Map<string, AbortController>());
   const internalDragRef = useRef<Readonly<{
@@ -1149,9 +1369,22 @@ export function App({
   }> | null>(null);
   const pendingTreeFocusRef = useRef<string | null>(null);
   const busyVisibleSinceRef = useRef(0);
+  const busyOperationSequenceRef = useRef(0);
+  const busyOperationsRef = useRef(new Map<number, Readonly<{
+    blocksNavigation: boolean;
+    label: string;
+    vaultEpoch: number | null;
+  }>>());
   const blobUrlsRef = useRef<FilesBlobUrlRegistry | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const browserToggleRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const resizeDragRef = useRef<Readonly<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  }> | null>(null);
   const [status, setStatus] = useState<FilesTileStatus | null>(null);
   const [folder, setFolder] = useState<FilesTileList>({
     path: "/Workspace",
@@ -1174,15 +1407,6 @@ export function App({
   const [busy, setBusy] = useState<string | null>("Starting Files");
   const [visibleBusy, setVisibleBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<
-    readonly FilesTileEntry[] | null
-  >(null);
-  const [searchState, setSearchState] = useState<FolderSearchState>({
-    phase: "idle",
-    pages: 0,
-    capped: false,
-  });
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(480);
   const [dragging, setDragging] = useState(false);
@@ -1203,16 +1427,22 @@ export function App({
   const [downloadTransfer, setDownloadTransfer] =
     useState<LocalDownload | null>(null);
   const [transferToastHidden, setTransferToastHidden] = useState(false);
-  const [createKind, setCreateKind] = useState<"file" | "folder" | null>(null);
-  const [newName, setNewName] = useState("");
-  const [renameTarget, setRenameTarget] = useState<FilesTileEntry | null>(null);
-  const [renameName, setRenameName] = useState("");
-  const [renameError, setRenameError] = useState<string | null>(null);
+  const [createDraft, setCreateDraft] = useState<CreateDraft | null>(null);
+  const [uploadDraft, setUploadDraft] = useState<UploadDraft | null>(null);
+  const [entryMenu, setEntryMenu] = useState<EntryMenuState | null>(null);
+  const [pendingMove, setPendingMove] = useState<FilesDropIntent | null>(null);
+  const [browserCollapsed, setBrowserCollapsed] = useState(false);
+  const [browserWidth, setBrowserWidth] = useState(240);
+  const [workspaceWidth, setWorkspaceWidth] = useState(0);
+  const [renameDraft, setRenameDraft] = useState<RenameDraft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FilesTileEntry | null>(null);
   const [markdownPreview, setMarkdownPreview] = useState(false);
   const [spreadsheetInstalled, setSpreadsheetInstalled] = useState(false);
   const [conflict, setConflict] = useState<EditorConflict | null>(null);
   const [copiedLinkPath, setCopiedLinkPath] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] =
+    useState<ImagePreviewState | null>(null);
+  const [imageReloadEpoch, setImageReloadEpoch] = useState(0);
   if (uploadQueueRef.current === null) {
     uploadQueueRef.current = new FilesSerialUploadQueue();
   }
@@ -1224,29 +1454,81 @@ export function App({
   }
   const dirty = content !== savedContent;
   const currentRoot = filesRootKind(folder.path);
-  const rawTreeRows = useMemo(
+  const treeRows = useMemo(
     () => flattenFilesTree(treePages, expandedPaths),
     [expandedPaths, treePages],
   );
-  const treeRows = useMemo(() => {
-    const needle = query.trim();
-    if (!needle) return rawTreeRows;
-    const matches =
-      searchResults ??
-      folder.entries.filter((entry) =>
-        matchesFilesSearch(entry.name, needle)
-      );
-    return filterFilesTreeForFolderSearch(
-      rawTreeRows,
-      folder.path,
-      matches,
-    );
-  }, [folder.entries, folder.path, query, rawTreeRows, searchResults]);
   const selectedEntry =
-    rawTreeRows.find((row) => row.entry.path === selected)?.entry ??
+    treeRows.find((row) => row.entry.path === selected)?.entry ??
     folder.entries.find((entry) => entry.path === selected) ??
-    searchResults?.find((entry) => entry.path === selected) ??
     null;
+
+  function resetImagePreview({
+    clearState = true,
+    revokeAll = false,
+  }: Readonly<{
+    clearState?: boolean;
+    revokeAll?: boolean;
+  }> = {}): void {
+    imageRequestRef.current += 1;
+    imageControllerRef.current?.abort();
+    imageControllerRef.current = null;
+    if (revokeAll) {
+      blobUrlsRef.current?.revokeAll();
+    } else if (imageUrlRef.current) {
+      blobUrlsRef.current?.revoke(imageUrlRef.current);
+    }
+    imageUrlRef.current = null;
+    if (clearState) setImagePreview(null);
+  }
+
+  function beginBusy(
+    label: string,
+    vaultEpoch: number | null = null,
+    blocksNavigation = false,
+  ): number {
+    const id = ++busyOperationSequenceRef.current;
+    busyOperationsRef.current.set(id, {
+      blocksNavigation,
+      label,
+      vaultEpoch,
+    });
+    setBusy(label);
+    return id;
+  }
+
+  function finishBusy(id: number): void {
+    if (!busyOperationsRef.current.delete(id)) return;
+    const active = [...busyOperationsRef.current.values()].at(-1);
+    setBusy(active?.label ?? null);
+  }
+
+  function clearBusy(): void {
+    busyOperationsRef.current.clear();
+    setBusy(null);
+  }
+
+  function clearIdleBusy(): void {
+    if (busyOperationsRef.current.size === 0) setBusy(null);
+  }
+
+  function clearVaultBusy(): void {
+    let changed = false;
+    for (const [id, operation] of busyOperationsRef.current) {
+      if (operation.vaultEpoch === null) continue;
+      busyOperationsRef.current.delete(id);
+      changed = true;
+    }
+    if (!changed) return;
+    const active = [...busyOperationsRef.current.values()].at(-1);
+    setBusy(active?.label ?? null);
+  }
+
+  function navigationIsBlocked(): boolean {
+    return [...busyOperationsRef.current.values()].some(
+      (operation) => operation.blocksNavigation,
+    );
+  }
   const focusedEntry =
     treeRows.find((row) => row.entry.path === treeFocusPath)?.entry ?? null;
   const virtual = useMemo(
@@ -1260,6 +1542,104 @@ export function App({
       ),
     [scrollTop, treeRows, viewportHeight],
   );
+
+  useEffect(() => {
+    const entry = selectedEntry;
+    resetImagePreview();
+    const mediaType = entry ? filesImagePreviewMediaType(entry) : null;
+    if (
+      !entry ||
+      entry.type !== "file" ||
+      entry.contentKind !== "binary" ||
+      mediaType === null ||
+      entry.etag === null ||
+      entry.byteLength === null ||
+      entry.byteLength > FILES_IMAGE_PREVIEW_MAX_BYTES
+    ) {
+      return;
+    }
+    const etag = entry.etag;
+    const request = imageRequestRef.current;
+    const generation = privateRequestGenerationRef.current;
+    const key = `${entry.path}\n${entry.etag}`;
+    const controller = new AbortController();
+    imageControllerRef.current = controller;
+    setImagePreview({ key, phase: "loading", url: null, error: null });
+    const requestIsCurrent = (): boolean =>
+      mountedRef.current &&
+      request === imageRequestRef.current &&
+      generation === privateRequestGenerationRef.current &&
+      selectedRef.current === entry.path &&
+      imageControllerRef.current === controller &&
+      !controller.signal.aborted;
+    void retryFilesMessageBusRead(
+      () =>
+        client.readBinary(entry.path, {
+          ifMatch: etag,
+          signal: controller.signal,
+        }),
+      requestIsCurrent,
+    ).then((result) => {
+      if (result === null) return;
+      if (!requestIsCurrent()) {
+        new Uint8Array(result.data).fill(0);
+        return;
+      }
+      let data: ArrayBuffer | null = result.data;
+      let url: string | null = null;
+      try {
+        const validated = validateFilesImageRead(entry, result);
+        const blob = new Blob([validated.data], {
+          type: validated.mediaType,
+        });
+        url = blobUrlsRef.current?.create(blob) ?? null;
+        if (!url) throw new Error("Files could not create an image preview");
+        if (!requestIsCurrent()) {
+          blobUrlsRef.current?.revoke(url);
+          return;
+        }
+        imageUrlRef.current = url;
+        setImagePreview({ key, phase: "ready", url, error: null });
+      } catch (nextError) {
+        if (url) blobUrlsRef.current?.revoke(url);
+        if (requestIsCurrent()) {
+          setImagePreview({
+            key,
+            phase: "error",
+            url: null,
+            error: errorMessage(nextError),
+          });
+        }
+      } finally {
+        if (data) new Uint8Array(data).fill(0);
+        data = null;
+      }
+    }).catch((nextError) => {
+      if (!requestIsCurrent()) return;
+      setImagePreview({
+        key,
+        phase: "error",
+        url: null,
+        error: errorMessage(nextError),
+      });
+    }).finally(() => {
+      if (imageControllerRef.current === controller) {
+        imageControllerRef.current = null;
+      }
+    });
+    return () => {
+      controller.abort();
+    };
+  }, [
+    client,
+    selectedEntry?.byteLength,
+    selectedEntry?.contentKind,
+    selectedEntry?.etag,
+    selectedEntry?.mediaType,
+    selectedEntry?.path,
+    selectedEntry?.type,
+    imageReloadEpoch,
+  ]);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -1301,10 +1681,16 @@ export function App({
     if (!node) return;
     const row = [...node.querySelectorAll<HTMLElement>("[data-path]")]
       .find((candidate) => candidate.dataset.path === pendingPath);
-    if (!row) return;
+    if (!row) {
+      const index = treeRows.findIndex(
+        (candidate) => candidate.entry.path === pendingPath,
+      );
+      if (index >= 0) scrollTreeRowIntoView(index, node);
+      return;
+    }
     pendingTreeFocusRef.current = null;
     row.focus({ preventScroll: true });
-  }, [treeFocusPath, virtual.after, virtual.before, virtual.items]);
+  }, [treeFocusPath, treeRows, virtual.after, virtual.before, virtual.items]);
 
   useEffect(() => {
     if (treeRows.some((row) => row.entry.path === treeFocusPath)) return;
@@ -1312,7 +1698,7 @@ export function App({
       treeRows.find((row) => row.entry.path === folder.path) ??
       treeRows[0];
     if (!fallback) return;
-    setTreeFocusPath(fallback.entry.path);
+    focusTreeRow(treeRows.indexOf(fallback));
   }, [folder.path, treeFocusPath, treeRows]);
 
   useEffect(() => {
@@ -1353,7 +1739,7 @@ export function App({
     }
     const timeout = window.setTimeout(() => {
       setTransferToastHidden(true);
-      setTransfers((current) =>
+      replaceTransfers((current) =>
         current.filter(
           (transfer) => !isTerminalTransferPhase(transfer.phase),
         )
@@ -1386,6 +1772,7 @@ export function App({
       statusRequestRef.current += 1;
       editorControllerRef.current?.abort();
       editorControllerRef.current = null;
+      resetImagePreview({ clearState: false, revokeAll: true });
       downloadStartEpochRef.current += 1;
       downloadControllerRef.current?.abort();
       downloadControllerRef.current = null;
@@ -1396,15 +1783,12 @@ export function App({
           transferId: downloadId,
         }).catch(() => undefined);
       }
-      searchControllerRef.current?.abort();
-      searchControllerRef.current = null;
       for (const controller of treeControllersRef.current.values()) {
         controller.abort();
       }
       treeControllersRef.current.clear();
       treeRequestRefs.current.clear();
       internalDragRef.current = null;
-      blobUrlsRef.current?.revokeAll();
       const queue = uploadQueueRef.current;
       if (queue) {
         shutdownFilesTransfers(
@@ -1433,12 +1817,20 @@ export function App({
   }, []);
 
   useEffect(() => {
-    const node = listRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) setViewportHeight(entry.contentRect.height);
+    const list = listRef.current;
+    const workspace = workspaceRef.current;
+    if (!list || !workspace || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === list) {
+          setViewportHeight(Math.round(entry.contentRect.height));
+        } else if (entry.target === workspace) {
+          setWorkspaceWidth(Math.round(entry.contentRect.width));
+        }
+      }
     });
-    observer.observe(node);
+    observer.observe(list);
+    observer.observe(workspace);
     return () => observer.disconnect();
   }, []);
 
@@ -1495,8 +1887,91 @@ export function App({
   }
 
   function purgeVaultTileState(preserveDirty: boolean): void {
-    privateRequestGenerationRef.current += 1;
-    blobUrlsRef.current?.revokeAll();
+    vaultRequestEpochRef.current += 1;
+    vaultLifecycleRequestRef.current += 1;
+    vaultUnlockPromiseRef.current = null;
+    clearVaultBusy();
+    const selectedOutsideVault =
+      selectedRef.current !== null &&
+      filesRootKind(selectedRef.current) !== "vault";
+    resetImagePreview({ revokeAll: true });
+    if (selectedOutsideVault) {
+      setImageReloadEpoch((current) => current + 1);
+    }
+    setCreateDraft((current) =>
+      current && filesRootKind(current.parentPath) === "vault"
+        ? null
+        : current
+    );
+    setUploadDraft((current) =>
+      current && filesRootKind(current.destination) === "vault"
+        ? null
+        : current
+    );
+    setEntryMenu((current) =>
+      current && filesRootKind(current.entry.path) === "vault"
+        ? null
+        : current
+    );
+    setPendingMove((current) =>
+      current &&
+          (current.sourceRoot === "vault" || current.targetRoot === "vault")
+        ? null
+        : current
+    );
+    setDeleteTarget((current) =>
+      current && filesRootKind(current.path) === "vault" ? null : current
+    );
+    setRenameDraft((current) =>
+      current && filesRootKind(current.target.path) === "vault"
+        ? null
+        : current
+    );
+    setKeyboardMovePath((current) =>
+      current && filesRootKind(current) === "vault" ? null : current
+    );
+    setDropTarget((current) =>
+      current && filesRootKind(current) === "vault" ? null : current
+    );
+    if (
+      pendingTreeFocusRef.current &&
+      pendingTreeFocusRef.current !== "/Vault" &&
+      filesRootKind(pendingTreeFocusRef.current) === "vault"
+    ) {
+      pendingTreeFocusRef.current = null;
+    }
+    setTreeFocusPath((current) =>
+      current !== "/Vault" && filesRootKind(current) === "vault"
+        ? "/Vault"
+        : current
+    );
+    if (
+      internalDragRef.current &&
+      filesRootKind(internalDragRef.current.path) === "vault"
+    ) {
+      internalDragRef.current = null;
+    }
+    if (inputRef.current) inputRef.current.value = "";
+    const retainedTransfers = transfersRef.current.filter((transfer) => {
+      if (filesRootKind(transfer.path) !== "vault") return true;
+      transferControllersRef.current.get(transfer.id)?.abort();
+      if (transfer.residentId) {
+        void client.ui({
+          action: "cancel",
+          transferId: transfer.residentId,
+        }).catch(() => undefined);
+      }
+      return false;
+    });
+    replaceTransfers(() => retainedTransfers);
+    const activeDownload = downloadTransferRef.current;
+    if (activeDownload && filesRootKind(activeDownload.path) === "vault") {
+      downloadStartEpochRef.current += 1;
+      downloadControllerRef.current?.abort();
+      downloadControllerRef.current = null;
+      downloadTransferRef.current = null;
+      setDownloadTransfer(null);
+    }
     for (const [path, controller] of treeControllersRef.current) {
       if (filesRootKind(path) !== "vault") continue;
       controller.abort();
@@ -1510,6 +1985,11 @@ export function App({
       }
       return next;
     });
+    setExpandedPaths((current) =>
+      new Set(
+        [...current].filter((path) => filesRootKind(path) !== "vault"),
+      )
+    );
     setTreeLoading((current) =>
       new Set(
         [...current].filter((path) => filesRootKind(path) !== "vault"),
@@ -1517,10 +1997,8 @@ export function App({
     );
     const currentFolderPath = folderPathRef.current;
     if (filesRootKind(currentFolderPath) === "vault") {
-      setFolder(emptyTileList(currentFolderPath));
-      setQuery("");
-      setSearchResults(null);
-      setSearchState({ phase: "idle", pages: 0, capped: false });
+      folderPathRef.current = "/Vault";
+      setFolder(emptyTileList("/Vault"));
     }
     if (
       selectedRef.current !== null &&
@@ -1547,15 +2025,14 @@ export function App({
     retainedFolderPath: string,
   ): void {
     privateRequestGenerationRef.current += 1;
+    vaultLifecycleRequestRef.current += 1;
+    vaultUnlockPromiseRef.current = null;
     authorityBoundaryGenerationRef.current += 1;
     folderRequestRef.current += 1;
     editorRequestRef.current += 1;
     vaultMigrationAttemptRef.current = null;
     editorControllerRef.current?.abort();
     editorControllerRef.current = null;
-    blobUrlsRef.current?.revokeAll();
-    searchControllerRef.current?.abort();
-    searchControllerRef.current = null;
     for (const controller of treeControllersRef.current.values()) {
       controller.abort();
     }
@@ -1572,8 +2049,7 @@ export function App({
     queuedTransferIdsRef.current.clear();
     uploadQueueRef.current?.close();
     uploadQueueRef.current = new FilesSerialUploadQueue();
-    transfersRef.current = [];
-    setTransfers([]);
+    replaceTransfers(() => []);
     setDownloadTransfer(null);
     downloadTransferRef.current = null;
     if (inputRef.current) inputRef.current.value = "";
@@ -1586,10 +2062,8 @@ export function App({
       hasMore: false,
       cursor: null,
     });
-    setQuery("");
+    if (listRef.current) listRef.current.scrollTop = 0;
     setScrollTop(0);
-    setSearchResults(null);
-    setSearchState({ phase: "idle", pages: 0, capped: false });
     setDragging(false);
     setDropTarget(null);
     setExpandedPaths(new Set(["/Workspace"]));
@@ -1597,7 +2071,7 @@ export function App({
     pendingTreeFocusRef.current = null;
     setTreePages(new Map());
     setTreeLoading(new Set());
-    setBusy(null);
+    clearBusy();
     setError(null);
     setEditorLoadingPath(null);
     clearPrivateTileState(preserveDirty);
@@ -1607,10 +2081,14 @@ export function App({
     editorRequestRef.current += 1;
     editorControllerRef.current?.abort();
     editorControllerRef.current = null;
-    blobUrlsRef.current?.revokeAll();
+    resetImagePreview({ revokeAll: true });
     setDeleteTarget(null);
-    setCreateKind(null);
-    setNewName("");
+    setCreateDraft(null);
+    setUploadDraft(null);
+    setEntryMenu(null);
+    setPendingMove(null);
+    setRenameDraft(null);
+    setKeyboardMovePath(null);
     setConflict(null);
     if (preserveDirty && dirtyRef.current) return;
     selectedRef.current = null;
@@ -1623,11 +2101,29 @@ export function App({
     setMarkdownPreview(false);
   }
 
-  function privateRequestIsCurrent(generation: number): boolean {
+  function captureVaultRequestEpoch(...paths: readonly string[]): number | null {
+    return paths.some((path) => filesRootKind(path) === "vault")
+      ? vaultRequestEpochRef.current
+      : null;
+  }
+
+  function privateRequestIsCurrent(
+    generation: number,
+    vaultEpoch: number | null = null,
+  ): boolean {
     return (
       mountedRef.current &&
-      generation === privateRequestGenerationRef.current
+      generation === privateRequestGenerationRef.current &&
+      (vaultEpoch === null || vaultEpoch === vaultRequestEpochRef.current)
     );
+  }
+
+  function replaceTransfers(
+    update: (current: readonly LocalTransfer[]) => LocalTransfer[],
+  ): void {
+    const next = update(transfersRef.current);
+    transfersRef.current = next;
+    setTransfers(next);
   }
 
   function applyStatusResult(
@@ -1636,13 +2132,19 @@ export function App({
   ): void {
     applyPrivateBoundary(next, knownReason);
     setStatus(next);
-    setTransfers((current) =>
+    replaceTransfers((current) =>
       current.map((transfer) => {
         if (!transfer.residentId) return transfer;
         const resident = next.transfers.find(
           (candidate) => candidate.id === transfer.residentId,
         );
         if (!resident) return transfer;
+        if (
+          transfer.phase === "checking-outcome" &&
+          !isResolvedTransferPhase(resident.phase)
+        ) {
+          return transfer;
+        }
         return {
           ...transfer,
           phase:
@@ -1662,32 +2164,53 @@ export function App({
     );
   }
 
-  const unlockVault = useCallback(async (
+  const unlockVault = useCallback((
     observedLocked: FilesTileStatus,
   ): Promise<FilesTileStatus | null> => {
-    if (observedLocked.vault !== "locked") return null;
-    const request = ++statusRequestRef.current;
+    if (observedLocked.vault !== "locked") return Promise.resolve(null);
+    const pending = vaultUnlockPromiseRef.current;
+    if (pending) return pending;
+    const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch("/Vault");
+    const request = ++vaultLifecycleRequestRef.current;
+    const observedStatusRequest = statusRequestRef.current;
     const requestIsCurrent = (): boolean =>
-      mountedRef.current && request === statusRequestRef.current;
-    setBusy("Opening Vault");
-    try {
-      // Unlock is an intentional, single dispatch. In particular it must not
-      // inherit the status-read reconnect loop and derive another key merely
-      // because a resident connection was replaced.
-      const next = parseStatus(await client.ui({ action: "unlock" }));
-      if (!requestIsCurrent()) return null;
-      applyStatusResult(next, observedLocked.reason);
-      setError(null);
-      return next;
-    } catch (nextError) {
-      if (requestIsCurrent()) {
-        applyStatusResult(observedLocked);
-        setError(errorMessage(nextError));
+      privateRequestIsCurrent(generation, vaultEpoch) &&
+      request === vaultLifecycleRequestRef.current;
+    const busyId = beginBusy("Opening Vault", vaultEpoch);
+    const operation = (async (): Promise<FilesTileStatus | null> => {
+      try {
+        // Unlock is an intentional, coalesced dispatch. In particular it must
+        // not inherit the status-read reconnect loop and derive another key
+        // merely because a resident connection was replaced.
+        const next = parseStatus(await client.ui({ action: "unlock" }));
+        if (!requestIsCurrent()) return null;
+        statusRequestRef.current += 1;
+        applyStatusResult(next, observedLocked.reason);
+        setError(null);
+        return next;
+      } catch (nextError) {
+        if (requestIsCurrent()) {
+          const current = lastStatusRef.current;
+          if (current?.vault === "ready") {
+            setError(null);
+            return current;
+          }
+          if (statusRequestRef.current === observedStatusRequest) {
+            applyStatusResult(observedLocked);
+          }
+          setError(errorMessage(nextError));
+        }
+        return null;
+      } finally {
+        finishBusy(busyId);
+        if (request === vaultLifecycleRequestRef.current) {
+          vaultUnlockPromiseRef.current = null;
+        }
       }
-      return null;
-    } finally {
-      if (requestIsCurrent()) setBusy(null);
-    }
+    })();
+    vaultUnlockPromiseRef.current = operation;
+    return operation;
     // applyStatusResult only uses refs and stable React setters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
@@ -1710,15 +2233,19 @@ export function App({
       if (requestIsCurrent()) setError(errorMessage(nextError));
       return null;
     } finally {
-      if (requestIsCurrent()) setBusy(null);
+      if (requestIsCurrent()) clearIdleBusy();
     }
     // applyStatusResult only uses refs and stable React setters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
 
   const loadTreeFolder = useCallback(
-    async (path: string, force = false): Promise<void> => {
-      if (!filesPathCanOpen(path, status?.vault ?? null)) return;
+    async (
+      path: string,
+      force = false,
+      vaultState = status?.vault ?? null,
+    ): Promise<void> => {
+      if (!filesPathCanOpen(path, vaultState)) return;
       if (!force && treePages.has(path)) return;
       const prior = treeControllersRef.current.get(path);
       prior?.abort();
@@ -1776,12 +2303,15 @@ export function App({
         return;
       }
       const generation = privateRequestGenerationRef.current;
+      const vaultEpoch = captureVaultRequestEpoch(path);
       const request = ++folderRequestRef.current;
       const requestIsCurrent = (): boolean =>
-        mountedRef.current &&
-        generation === privateRequestGenerationRef.current &&
+        privateRequestIsCurrent(generation, vaultEpoch) &&
         request === folderRequestRef.current;
-      setBusy(append ? "Loading more files" : "Loading folder");
+      const busyId = beginBusy(
+        append ? "Loading more files" : "Loading folder",
+        vaultEpoch,
+      );
       try {
         const page = await retryFilesMessageBusRead(
           () =>
@@ -1842,140 +2372,18 @@ export function App({
             loaded: entries.size,
           });
         });
-        if (!append) {
-          searchControllerRef.current?.abort();
-          searchControllerRef.current = null;
-          setSearchResults(null);
-          setSearchState({ phase: "idle", pages: 0, capped: false });
-          if (
-            path !== folder.path ||
-            (revisionRestart &&
-              (selectedRef.current === null || resetSelection))
-          ) {
-            setScrollTop(0);
-          }
-          if (resetSelection) {
-            clearPrivateTileState(false);
-          }
+        if (!append && resetSelection) {
+          clearPrivateTileState(false);
         }
         setError(null);
       } catch (nextError) {
         if (requestIsCurrent()) setError(errorMessage(nextError));
       } finally {
-        if (requestIsCurrent()) {
-          setBusy(null);
-        }
+        finishBusy(busyId);
       }
     },
     [client, folder.cursor, folder.path, status?.vault],
   );
-
-  async function scanFolderSearch(): Promise<void> {
-    const rawQuery = query.trim().normalize("NFC");
-    if (
-      !rawQuery ||
-      !filesPathCanOpen(folder.path, status?.vault ?? null) ||
-      searchState.phase === "scanning"
-    ) {
-      return;
-    }
-    searchControllerRef.current?.abort();
-    const controller = new AbortController();
-    const generation = privateRequestGenerationRef.current;
-    const requestIsCurrent = (): boolean =>
-      mountedRef.current &&
-      generation === privateRequestGenerationRef.current &&
-      searchControllerRef.current === controller;
-    searchControllerRef.current = controller;
-    setSearchResults([]);
-    setSearchState({ phase: "scanning", pages: 0, capped: false });
-    setScrollTop(0);
-    const matches = new Map<string, FilesTileEntry>();
-    let capped = false;
-    try {
-      if (
-        !rawQuery.includes("/") &&
-        rawQuery !== "." &&
-        rawQuery !== ".."
-      ) {
-        try {
-          const exact = await retryFilesMessageBusRead(
-            () =>
-              client.stat(
-                joinPath(folder.path, rawQuery),
-                controller.signal,
-              ),
-            requestIsCurrent,
-          );
-          if (exact === null) return;
-          if (!requestIsCurrent()) return;
-          matches.set(exact.path, exact);
-        } catch (nextError) {
-          if (!requestIsCurrent()) return;
-          if (!/not.?found|missing|does not exist/i.test(errorMessage(nextError))) {
-            throw nextError;
-          }
-        }
-      }
-      let cursor: string | null = null;
-      let pages = 0;
-      do {
-        const page = await retryFilesMessageBusRead(
-          () =>
-            client.list({
-              path: folder.path,
-              ...(cursor ? { cursor } : {}),
-              limit: FOLDER_PAGE_SIZE,
-              signal: controller.signal,
-            }),
-          requestIsCurrent,
-        );
-        if (page === null) return;
-        if (!requestIsCurrent()) return;
-        pages += 1;
-        for (const entry of page.entries) {
-          if (!matchesFilesSearch(entry.name, rawQuery)) continue;
-          if (matches.size >= MAX_SEARCH_RESULTS) {
-            capped = true;
-            continue;
-          }
-          matches.set(entry.path, entry);
-        }
-        cursor = page.cursor;
-        if (!requestIsCurrent()) return;
-        setSearchResults(sortSearchResults(matches.values()));
-        setSearchState({ phase: "scanning", pages, capped });
-      } while (cursor !== null && pages < MAX_SEARCH_PAGES);
-      if (cursor !== null) capped = true;
-      if (!requestIsCurrent()) return;
-      setSearchResults(sortSearchResults(matches.values()));
-      setSearchState({ phase: "complete", pages, capped });
-      setError(null);
-    } catch (nextError) {
-      if (!requestIsCurrent()) return;
-      if (controller.signal.aborted) {
-        setSearchState((current) => ({
-          ...current,
-          phase: "cancelled",
-        }));
-      } else {
-        setSearchResults(null);
-        setSearchState({ phase: "idle", pages: 0, capped: false });
-        setError(errorMessage(nextError));
-      }
-    } finally {
-      if (requestIsCurrent()) {
-        searchControllerRef.current = null;
-      }
-    }
-  }
-
-  function cancelSearchScan(): void {
-    searchControllerRef.current?.abort();
-    searchControllerRef.current = null;
-    setSearchResults(null);
-    setSearchState({ phase: "cancelled", pages: 0, capped: false });
-  }
 
   useEffect(() => {
     void refreshStatus();
@@ -2056,6 +2464,12 @@ export function App({
     action: "initialize" | "rotate",
   ): Promise<void> {
     if (busy) return;
+    const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch("/Vault");
+    const request = ++vaultLifecycleRequestRef.current;
+    const requestIsCurrent = (): boolean =>
+      privateRequestIsCurrent(generation, vaultEpoch) &&
+      request === vaultLifecycleRequestRef.current;
     // Lifecycle requests originate in this focused click stack. The
     // background resident is deliberately never allowed to reserve,
     // enable, or rotate a vetKey slot on the tile's behalf.
@@ -2074,23 +2488,27 @@ export function App({
                 new Error("Files does not have a current key generation"),
               )
           : Promise.resolve(null);
-    setBusy(
+    const busyId = beginBusy(
       action === "initialize"
         ? "Setting up Files"
         : "Updating security",
+      vaultEpoch,
     );
     try {
       await lifecycle;
       const next = parseStatus(await client.ui({ action }));
+      if (!requestIsCurrent()) return;
       statusRequestRef.current += 1;
       applyPrivateBoundary(next);
       setStatus(next);
       setError(null);
     } catch (nextError) {
+      if (!requestIsCurrent()) return;
       const message = errorMessage(nextError);
       if (startsNewRotation) {
         try {
           const next = parseStatus(await client.ui({ action: "status" }));
+          if (!requestIsCurrent()) return;
           statusRequestRef.current += 1;
           applyPrivateBoundary(next);
           setStatus(next);
@@ -2099,9 +2517,9 @@ export function App({
           // reconcile status if the resident itself is unavailable.
         }
       }
-      setError(message);
+      if (requestIsCurrent()) setError(message);
     } finally {
-      setBusy(null);
+      finishBusy(busyId);
     }
   }
 
@@ -2114,24 +2532,25 @@ export function App({
       return;
     }
     const generation = privateRequestGenerationRef.current;
-    if (!quiet) setBusy("Opening Vault");
+    const vaultEpoch = captureVaultRequestEpoch("/Vault");
+    const busyId = quiet ? null : beginBusy("Opening Vault", vaultEpoch);
     try {
       // The kernel key generation already advanced. This resident-only call
       // rewraps/verifies Files and must never rotate the kernel slot again.
       const next = parseStatus(await client.ui({ action: "rotate" }));
-      if (!privateRequestIsCurrent(generation)) return;
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
       statusRequestRef.current += 1;
       applyPrivateBoundary(next);
       setStatus(next);
       setError(null);
     } catch {
-      if (privateRequestIsCurrent(generation)) {
+      if (privateRequestIsCurrent(generation, vaultEpoch)) {
         setError(
           "Vault could not finish opening. Refresh Files and try again.",
         );
       }
     } finally {
-      if (!quiet && privateRequestIsCurrent(generation)) setBusy(null);
+      if (busyId !== null) finishBusy(busyId);
     }
   }
 
@@ -2158,7 +2577,42 @@ export function App({
     });
   }
 
-  function toggleTreeFolder(entry: FilesTileEntry): void {
+  function pruneTreeSubtree(path: string): void {
+    for (const [candidate, controller] of treeControllersRef.current) {
+      if (!filesPathContains(path, candidate)) continue;
+      controller.abort();
+      treeControllersRef.current.delete(candidate);
+    }
+    for (const candidate of treeRequestRefs.current.keys()) {
+      if (filesPathContains(path, candidate)) {
+        treeRequestRefs.current.delete(candidate);
+      }
+    }
+    setExpandedPaths((current) =>
+      new Set(
+        [...current].filter((candidate) =>
+          !filesPathContains(path, candidate)
+        ),
+      )
+    );
+    setTreePages((current) =>
+      new Map(
+        [...current].filter(([candidate]) =>
+          !filesPathContains(path, candidate)
+        ),
+      )
+    );
+    setTreeLoading((current) =>
+      new Set(
+        [...current].filter((candidate) =>
+          !filesPathContains(path, candidate)
+        ),
+      )
+    );
+  }
+
+  async function toggleTreeFolder(entry: FilesTileEntry): Promise<void> {
+    if (navigationIsBlocked()) return;
     if (entry.type !== "folder") return;
     if (expandedPaths.has(entry.path)) {
       setExpandedPaths((current) => {
@@ -2168,21 +2622,48 @@ export function App({
       });
       return;
     }
+    if (!filesPathCanOpen(entry.path, status?.vault ?? null)) {
+      if (filesRootKind(entry.path) === "vault" && status?.vault === "locked") {
+        const next = await unlockVault(status);
+        if (next?.vault === "ready") {
+          expandTreePath(entry.path);
+          await loadTreeFolder(entry.path, false, next.vault);
+        }
+      }
+      return;
+    }
     expandTreePath(entry.path);
-    void loadTreeFolder(entry.path);
+    await loadTreeFolder(entry.path);
   }
 
   async function selectEntry(
     entry: FilesTileEntry,
-    openFolder = true,
+    forceReload = false,
   ): Promise<void> {
+    if (navigationIsBlocked()) return;
+    const treeIndex = treeRows.findIndex(
+      (row) => row.entry.path === entry.path,
+    );
+    if (treeIndex >= 0) {
+      focusTreeRow(treeIndex);
+    } else {
+      setTreeFocusPath(entry.path);
+      pendingTreeFocusRef.current = entry.path;
+    }
+    const retriesLockedVault =
+      entry.type === "folder" &&
+      filesRootKind(entry.path) === "vault" &&
+      status?.vault === "locked";
+    if (
+      selectedRef.current === entry.path &&
+      !forceReload &&
+      !retriesLockedVault
+    ) return;
     if (!confirmDiscardIfDirty(entry.path)) return;
+    dirtyRef.current = false;
     const request = ++editorRequestRef.current;
     editorControllerRef.current?.abort();
     editorControllerRef.current = null;
-    if (busy === "Saving") setBusy(null);
-    setTreeFocusPath(entry.path);
-    pendingTreeFocusRef.current = entry.path;
     if (entry.type === "folder") {
       selectedRef.current = entry.path;
       setSelected(entry.path);
@@ -2192,10 +2673,6 @@ export function App({
       setContent("");
       setSavedContent("");
       setLoadedEtag(null);
-      if (!openFolder) {
-        return;
-      }
-      expandTreePath(entry.path);
       if (!filesPathCanOpen(entry.path, status?.vault ?? null)) {
         setFolder(emptyTileList(entry.path));
         if (
@@ -2205,15 +2682,18 @@ export function App({
           // Selecting Vault is a deliberate user gesture. Cold startup,
           // background state changes, and reconnect refreshes remain
           // observation-only and never reach this paid derivation path.
-          void unlockVault(status);
+          const next = await unlockVault(status);
+          if (
+            next?.vault === "ready" &&
+            selectedRef.current === entry.path
+          ) {
+            expandTreePath(entry.path);
+          }
         }
         return;
       }
+      expandTreePath(entry.path);
       setFolder(treePages.get(entry.path) ?? emptyTileList(entry.path));
-      setQuery("");
-      setSearchResults(null);
-      setSearchState({ phase: "idle", pages: 0, capped: false });
-      setScrollTop(0);
       await loadFolder(entry.path, false);
       return;
     }
@@ -2229,28 +2709,21 @@ export function App({
     const containingFolder = parentPath(entry.path);
     if (folder.path !== containingFolder) {
       folderRequestRef.current += 1;
-      if (busy === "Loading folder" || busy === "Loading more files") {
-        setBusy(null);
-      }
       setFolder(
         treePages.get(containingFolder) ?? emptyTileList(containingFolder),
       );
-      setQuery("");
-      setSearchResults(null);
-      setSearchState({ phase: "idle", pages: 0, capped: false });
-      setScrollTop(0);
     }
     if (entry.contentKind === "binary") {
       setLoadedEtag(entry.etag);
       return;
     }
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(entry.path);
     const controller = new AbortController();
     editorControllerRef.current = controller;
     setEditorLoadingPath(entry.path);
     const requestIsCurrent = (): boolean =>
-      mountedRef.current &&
-      generation === privateRequestGenerationRef.current &&
+      privateRequestIsCurrent(generation, vaultEpoch) &&
       request === editorRequestRef.current &&
       selectedRef.current === entry.path &&
       editorControllerRef.current === controller &&
@@ -2264,6 +2737,7 @@ export function App({
       if (!requestIsCurrent()) return;
       setContent(result.content);
       setSavedContent(result.content);
+      dirtyRef.current = false;
       setLoadedEtag(result.entry.etag);
       setError(null);
     } catch (nextError) {
@@ -2289,12 +2763,13 @@ export function App({
     const sourcePath = selectedEntry.path;
     const buffer = content;
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(sourcePath);
     const request = ++editorRequestRef.current;
     editorControllerRef.current?.abort();
     editorControllerRef.current = null;
     setEditorLoadingPath(null);
     const requestIsCurrent = (): boolean =>
-      privateRequestIsCurrent(generation) &&
+      privateRequestIsCurrent(generation, vaultEpoch) &&
       request === editorRequestRef.current &&
       selectedRef.current === sourcePath;
     let path = sourcePath;
@@ -2322,7 +2797,7 @@ export function App({
         return;
       }
     }
-    setBusy("Saving");
+    const busyId = beginBusy("Saving", vaultEpoch);
     try {
       const result = await client.write({
         path,
@@ -2334,6 +2809,7 @@ export function App({
       });
       if (!requestIsCurrent()) return;
       setSavedContent(buffer);
+      dirtyRef.current = false;
       setLoadedEtag(result.etag);
       setConflict(null);
       setError(null);
@@ -2344,7 +2820,7 @@ export function App({
       }
       await loadFolder(parentPath(path), false);
       if (
-        !privateRequestIsCurrent(generation) ||
+        !privateRequestIsCurrent(generation, vaultEpoch) ||
         request !== editorRequestRef.current
       ) return;
     } catch (nextError) {
@@ -2356,34 +2832,59 @@ export function App({
         setError(message);
       }
     } finally {
-      if (
-        privateRequestIsCurrent(generation) &&
-        request === editorRequestRef.current
-      ) {
-        setBusy(null);
-      }
+      finishBusy(busyId);
     }
   }
 
   async function reloadConflict(): Promise<void> {
     if (!selectedEntry) return;
     setConflict(null);
-    await selectEntry(selectedEntry);
+    await selectEntry(selectedEntry, true);
+  }
+
+  function startCreate(
+    kind: CreateDraft["kind"],
+    parentPath: string,
+  ): void {
+    if (busy) return;
+    if (!filesPathCanOpen(parentPath, status?.vault ?? null)) {
+      setError("Open Vault before adding files there.");
+      return;
+    }
+    setCreateDraft({ kind, parentPath, name: "", error: null });
   }
 
   async function createEntry(): Promise<void> {
+    if (!createDraft || busy) return;
     let name: string;
     try {
-      name = validateFilesPolicyName(folder.path, newName);
+      name = validateFilesPolicyName(
+        createDraft.parentPath,
+        createDraft.name,
+      );
     } catch {
-      setError("Enter one valid name without surrounding whitespace.");
+      setCreateDraft((current) =>
+        current
+          ? {
+              ...current,
+              error: "Enter one valid name without surrounding whitespace.",
+            }
+          : null
+      );
       return;
     }
-    const path = joinPath(folder.path, name);
+    const path = joinPath(createDraft.parentPath, name);
+    const parent = createDraft.parentPath;
+    const kind = createDraft.kind;
     const generation = privateRequestGenerationRef.current;
-    setBusy(createKind === "folder" ? "Creating folder" : "Creating file");
+    const vaultEpoch = captureVaultRequestEpoch(parent);
+    const busyId = beginBusy(
+      kind === "folder" ? "Creating folder" : "Creating file",
+      vaultEpoch,
+      true,
+    );
     try {
-      if (createKind === "folder") {
+      if (kind === "folder") {
         await client.mkdir(path);
       } else {
         await client.write({
@@ -2393,20 +2894,27 @@ export function App({
           createParents: false,
         });
       }
-      if (!privateRequestIsCurrent(generation)) return;
-      setCreateKind(null);
-      setNewName("");
-      await loadFolder(folder.path, false);
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
+      setCreateDraft(null);
+      expandTreePath(parent);
+      if (folder.path === parent) {
+        await loadFolder(parent, false);
+      } else {
+        await loadTreeFolder(parent, true);
+      }
     } catch (nextError) {
-      if (privateRequestIsCurrent(generation)) {
-        setError(errorMessage(nextError));
+      if (privateRequestIsCurrent(generation, vaultEpoch)) {
+        setCreateDraft((current) =>
+          current ? { ...current, error: errorMessage(nextError) } : null
+        );
       }
     } finally {
-      if (privateRequestIsCurrent(generation)) setBusy(null);
+      finishBusy(busyId);
     }
   }
 
   function startRename(entry: FilesTileEntry): void {
+    if (busy) return;
     if (FILES_UI_ROOTS.some((root) => root.path === entry.path)) return;
     if (
       dirtyRef.current &&
@@ -2416,85 +2924,115 @@ export function App({
       setError("Save or discard the open file before renaming this folder.");
       return;
     }
-    setRenameTarget(entry);
-    setRenameName(entry.name);
-    setRenameError(null);
+    setRenameDraft({ target: entry, name: entry.name, error: null });
   }
 
   function closeRename(): void {
-    setRenameTarget(null);
-    setRenameName("");
-    setRenameError(null);
+    setRenameDraft(null);
   }
 
   async function renameEntry(): Promise<void> {
-    if (!renameTarget) return;
+    if (!renameDraft || busy) return;
+    const draft = renameDraft;
     if (
       dirtyRef.current &&
       selectedRef.current !== null &&
-      filesPathContains(renameTarget.path, selectedRef.current)
+      filesPathContains(draft.target.path, selectedRef.current)
     ) {
-      setRenameError("Save or discard the open file before renaming this folder.");
+      setRenameDraft((current) =>
+        current
+          ? {
+              ...current,
+              error:
+                "Save or discard the open file before renaming this folder.",
+            }
+          : null
+      );
       return;
     }
     let name: string;
     let destination: string;
     try {
       name = validateFilesPolicyName(
-        parentPath(renameTarget.path),
-        renameName,
+        parentPath(draft.target.path),
+        draft.name,
       );
       destination = canonicalFilesMoveDestination(
-        renameTarget.path,
-        joinPath(parentPath(renameTarget.path), name),
+        draft.target.path,
+        joinPath(parentPath(draft.target.path), name),
       );
     } catch (nextError) {
-      setRenameError(errorMessage(nextError));
+      setRenameDraft((current) =>
+        current ? { ...current, error: errorMessage(nextError) } : null
+      );
       return;
     }
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(
+      draft.target.path,
+      destination,
+    );
+    const sourcePath = draft.target.path;
+    const sourceParent = parentPath(sourcePath);
+    const selectedBeforeRename = selectedRef.current;
+    const renamesCurrentSelection =
+      selectedBeforeRename !== null &&
+      filesPathContains(sourcePath, selectedBeforeRename);
+    const selectedAfterRename =
+      renamesCurrentSelection && selectedBeforeRename !== null
+        ? `${destination}${selectedBeforeRename.slice(sourcePath.length)}`
+        : selectedBeforeRename;
     const openFolderAfterRename =
-      folder.path === renameTarget.path ||
-        folder.path.startsWith(`${renameTarget.path}/`)
-        ? `${destination}${folder.path.slice(renameTarget.path.length)}`
+      folder.path === sourcePath ||
+        folder.path.startsWith(`${sourcePath}/`)
+        ? `${destination}${folder.path.slice(sourcePath.length)}`
         : folder.path;
-    setBusy("Renaming");
+    const busyId = beginBusy("Renaming", vaultEpoch, true);
     try {
-      await client.move(renameTarget.path, destination, false);
-      if (!privateRequestIsCurrent(generation)) return;
-      const parent = parentPath(destination);
+      await client.move(sourcePath, destination, false);
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
+      pruneTreeSubtree(sourcePath);
       closeRename();
-      selectedRef.current = destination;
-      setSelected(destination);
-      setTreeFocusPath(destination);
-      pendingTreeFocusRef.current = destination;
+      if (renamesCurrentSelection) {
+        selectedRef.current = selectedAfterRename;
+        setSelected(selectedAfterRename);
+      }
       if (openFolderAfterRename !== folder.path) {
         expandTreePath(destination);
+        await loadTreeFolder(sourceParent, true);
         await loadFolder(openFolderAfterRename, false);
-      } else if (folder.path === parent) {
-        await loadFolder(parent, false);
+      } else if (folder.path === sourceParent) {
+        await loadFolder(sourceParent, false);
       } else {
-        await loadTreeFolder(parent, true);
+        await loadTreeFolder(sourceParent, true);
       }
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
+      setTreeFocusPath(destination);
+      pendingTreeFocusRef.current = destination;
       setError(null);
     } catch (nextError) {
-      if (privateRequestIsCurrent(generation)) {
-        setRenameError(errorMessage(nextError));
+      if (privateRequestIsCurrent(generation, vaultEpoch)) {
+        setRenameDraft((current) =>
+          current ? { ...current, error: errorMessage(nextError) } : null
+        );
       }
     } finally {
-      if (privateRequestIsCurrent(generation)) setBusy(null);
+      finishBusy(busyId);
     }
   }
 
-  async function moveEntryToFolder(
+  function requestMoveToFolder(
     sourcePath: string,
-    targetFolder: string,
-  ): Promise<void> {
-    let destination: string;
-    try {
-      destination = filesDropDestination(sourcePath, targetFolder);
-    } catch (nextError) {
-      setError(errorMessage(nextError));
+    target: Readonly<{ path: string; type: FilesTileEntry["type"] }>,
+  ): void {
+    if (busy) return;
+    const result = filesDropIntent(
+      sourcePath,
+      target,
+      status?.vault ?? null,
+    );
+    if (!result.ok) {
+      setError(result.reason);
       return;
     }
     if (
@@ -2505,7 +3043,50 @@ export function App({
       setError("Save or discard the open file before moving this item.");
       return;
     }
+    if (result.intent.policyChange) {
+      setPendingMove(result.intent);
+      return;
+    }
+    void performMove(result.intent);
+  }
+
+  async function performMove(intent: FilesDropIntent): Promise<void> {
+    if (busy) {
+      setPendingMove(null);
+      return;
+    }
+    const current = filesDropIntent(
+      intent.sourcePath,
+      { path: intent.targetFolder, type: "folder" },
+      status?.vault ?? null,
+    );
+    if (
+      !current.ok ||
+      current.intent.destination !== intent.destination ||
+      current.intent.sourceRoot !== intent.sourceRoot ||
+      current.intent.targetRoot !== intent.targetRoot
+    ) {
+      setPendingMove(null);
+      setError(
+        current.ok
+          ? "The move destination changed. Choose it again."
+          : current.reason,
+      );
+      return;
+    }
+    if (
+      dirtyRef.current &&
+      selectedRef.current !== null &&
+      filesPathContains(intent.sourcePath, selectedRef.current)
+    ) {
+      setPendingMove(null);
+      setError("Save or discard the open file before moving this item.");
+      return;
+    }
+    setPendingMove(null);
+    const { sourcePath, destination } = intent;
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(sourcePath, destination);
     const sourceParent = parentPath(sourcePath);
     const destinationParent = parentPath(destination);
     const selectedBeforeMove = selectedRef.current;
@@ -2523,14 +3104,17 @@ export function App({
         : movesCurrentSelection
           ? destinationParent
           : folder.path;
-    setBusy(
+    const busyId = beginBusy(
       filesRootKind(sourcePath) === filesRootKind(destination)
         ? "Moving"
         : "Moving and updating storage",
+      vaultEpoch,
+      true,
     );
     try {
       await client.move(sourcePath, destination, false);
-      if (!privateRequestIsCurrent(generation)) return;
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
+      pruneTreeSubtree(sourcePath);
       expandTreePath(destinationParent);
       await Promise.all([
         sourceParent === openFolderAfterMove
@@ -2542,6 +3126,7 @@ export function App({
           : loadTreeFolder(destinationParent, true),
       ]);
       await loadFolder(openFolderAfterMove, false);
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
       selectedRef.current = selectedAfterMove;
       setSelected(selectedAfterMove);
       const focusAfterMove = selectedAfterMove ?? destination;
@@ -2549,14 +3134,14 @@ export function App({
       pendingTreeFocusRef.current = focusAfterMove;
       setError(null);
     } catch (nextError) {
-      if (privateRequestIsCurrent(generation)) {
+      if (privateRequestIsCurrent(generation, vaultEpoch)) {
         setError(errorMessage(nextError));
       }
     } finally {
-      if (privateRequestIsCurrent(generation)) {
-        setBusy(null);
+      if (privateRequestIsCurrent(generation, vaultEpoch)) {
         setDropTarget(null);
       }
+      finishBusy(busyId);
     }
   }
 
@@ -2584,11 +3169,11 @@ export function App({
   async function refreshContainingFolder(path: string): Promise<void> {
     const parent = parentPath(path);
     await loadTreeFolder(parent, true);
-    if (folder.path === parent) await loadFolder(parent, false);
+    if (folderPathRef.current === parent) await loadFolder(parent, false);
   }
 
   async function removeEntry(): Promise<void> {
-    if (!deleteTarget) return;
+    if (!deleteTarget || busy) return;
     const target = deleteTarget;
     if (
       dirtyRef.current &&
@@ -2600,18 +3185,19 @@ export function App({
       return;
     }
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(target.path);
     const targetParent = parentPath(target.path);
     const navigateAfterDelete = filesPathContains(
       target.path,
       folder.path,
     );
-    setBusy("Removing item");
+    const busyId = beginBusy("Removing item", vaultEpoch, true);
     try {
       await client.remove(
         target.path,
         target.type === "folder",
       );
-      if (!privateRequestIsCurrent(generation)) return;
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
       if (
         selectedRef.current !== null &&
         filesPathContains(target.path, selectedRef.current)
@@ -2623,22 +3209,12 @@ export function App({
         setSelected(null);
         setContent("");
         setSavedContent("");
+        dirtyRef.current = false;
         setLoadedEtag(null);
         setEditorLoadingPath(null);
       }
       setDeleteTarget(null);
-      setExpandedPaths((current) =>
-        new Set(
-          [...current].filter((path) => !filesPathContains(target.path, path)),
-        )
-      );
-      setTreePages((current) =>
-        new Map(
-          [...current].filter(
-            ([path]) => !filesPathContains(target.path, path),
-          ),
-        )
-      );
+      pruneTreeSubtree(target.path);
       if (navigateAfterDelete) {
         expandTreePath(targetParent);
         selectedRef.current = targetParent;
@@ -2653,51 +3229,82 @@ export function App({
       }
       await refreshStatus();
     } catch (nextError) {
-      if (privateRequestIsCurrent(generation)) {
+      if (privateRequestIsCurrent(generation, vaultEpoch)) {
         setError(errorMessage(nextError));
       }
     } finally {
-      if (privateRequestIsCurrent(generation)) setBusy(null);
+      finishBusy(busyId);
     }
   }
 
-  async function receiveFiles(
-    files: FileList | readonly File[],
-    destinationFolder = folder.path,
-  ) {
+  function stageFiles(
+    destinationFolder: string,
+    files: FileList | readonly File[] = [],
+  ): void {
+    if (busy) return;
     if (!filesPathCanOpen(destinationFolder, status?.vault ?? null)) {
       setError("Open Vault before adding files there.");
       return;
     }
-    expandTreePath(destinationFolder);
-    setTransferToastHidden(false);
-    const available = Math.max(
-      0,
-      MAX_VISIBLE_TRANSFERS - transfersRef.current.length,
+    const staged = stagedUploads(files, MAX_VISIBLE_TRANSFERS);
+    setUploadDraft({
+      destination: destinationFolder,
+      items: staged.items,
+      truncated: staged.truncated,
+    });
+  }
+
+  function appendStagedFiles(files: FileList | readonly File[]): void {
+    if (!uploadDraft) return;
+    const staged = stagedUploads(
+      files,
+      MAX_VISIBLE_TRANSFERS - uploadDraft.items.length,
     );
-    const selectedFiles = Array.from(files).slice(0, available);
-    if (selectedFiles.length < files.length) {
+    if (staged.items.length === 0 && staged.truncated === 0) return;
+    setUploadDraft((current) =>
+      current
+        ? {
+            ...current,
+            items: [...current.items, ...staged.items].slice(
+              0,
+              MAX_VISIBLE_TRANSFERS,
+            ),
+            truncated: current.truncated + staged.truncated,
+          }
+        : current
+    );
+  }
+
+  function queueStagedFiles(): void {
+    if (!uploadDraft || busy) return;
+    const review = reviewStagedUploads(
+      uploadDraft,
+      transfersRef.current.length,
+      status?.vault ?? null,
+    );
+    const accepted = review.accepted.flatMap((item) =>
+      item.path === null ? [] : [{ file: item.source.file, path: item.path }]
+    );
+    if (accepted.length === 0) return;
+    const rejected =
+      review.items.length - accepted.length + uploadDraft.truncated;
+    setUploadDraft(null);
+    if (inputRef.current) inputRef.current.value = "";
+    if (rejected > 0) {
       setError(
-        `Files can upload up to ${MAX_VISIBLE_TRANSFERS} files at once. Wait for the current uploads to finish.`,
+        `${rejected} staged file${rejected === 1 ? " was" : "s were"} skipped.`,
       );
     }
-    for (const file of selectedFiles) {
-      if (file.size > PRIVATE_FILE_LIMIT) {
-        setError(`${file.name} does not fit in the available Files storage.`);
-        continue;
-      }
-      let path: string;
-      try {
-        path = joinPath(
-          destinationFolder,
-          validateFilesPolicyName(destinationFolder, file.name),
-        );
-      } catch {
-        setError(
-          `${file.name || "This file"} has a name Files cannot store.`,
-        );
-        continue;
-      }
+    enqueueFiles(accepted, uploadDraft.destination);
+  }
+
+  function enqueueFiles(
+    files: readonly Readonly<{ file: File; path: string }>[],
+    destinationFolder: string,
+  ): void {
+    expandTreePath(destinationFolder);
+    setTransferToastHidden(false);
+    for (const { file, path } of files) {
       const id = crypto.randomUUID();
       const transfer: LocalTransfer = {
         id,
@@ -2711,7 +3318,7 @@ export function App({
         error: null,
         controller: null,
       };
-      setTransfers((current) => [...current, transfer]);
+      replaceTransfers((current) => [...current, transfer]);
       enqueueUpload(transfer);
     }
   }
@@ -2721,6 +3328,7 @@ export function App({
     setTransferToastHidden(false);
     const controller = new AbortController();
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(item.path);
     queuedTransferIdsRef.current.add(item.id);
     transferControllersRef.current.set(item.id, controller);
     updateTransfer(item.id, {
@@ -2733,15 +3341,15 @@ export function App({
       id: `${item.id}:${crypto.randomUUID()}`,
       signal: controller.signal,
       run: async () => {
-        if (
-          controller.signal.aborted ||
-          generation !== privateRequestGenerationRef.current
-        ) {
-          return;
-        }
-        updateTransfer(item.id, { phase: "hashing" });
         try {
-          await runUpload(item, controller, generation);
+          if (
+            controller.signal.aborted ||
+            !privateRequestIsCurrent(generation, vaultEpoch)
+          ) {
+            return;
+          }
+          updateTransfer(item.id, { phase: "hashing" });
+          await runUpload(item, controller, generation, vaultEpoch);
         } finally {
           transferControllersRef.current.delete(item.id);
           queuedTransferIdsRef.current.delete(item.id);
@@ -2763,11 +3371,11 @@ export function App({
     item: LocalTransfer,
     controller: AbortController,
     generation: number,
+    vaultEpoch: number | null,
   ): Promise<void> {
     const requestIsCurrent = (): boolean =>
-      mountedRef.current &&
       !controller.signal.aborted &&
-      generation === privateRequestGenerationRef.current;
+      privateRequestIsCurrent(generation, vaultEpoch);
     try {
       const onProgress = (value: JsonValue): void => {
         if (!requestIsCurrent()) return;
@@ -2804,7 +3412,7 @@ export function App({
       await refreshContainingFolder(item.path);
       await refreshStatus();
     } catch (nextError) {
-      if (generation !== privateRequestGenerationRef.current) return;
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
       const committed = committedFilesResidentTransfer(
         lastStatusRef.current?.transfers ?? [],
         item.id,
@@ -2819,6 +3427,12 @@ export function App({
           error: committed.error,
           controller: null,
         });
+        return;
+      }
+      if (
+        transfersRef.current.find((transfer) => transfer.id === item.id)
+          ?.phase === "checking-outcome"
+      ) {
         return;
       }
       const cancelled =
@@ -2961,6 +3575,9 @@ export function App({
       return;
     }
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(transfer.path);
+    const requestIsCurrent = (): boolean =>
+      privateRequestIsCurrent(generation, vaultEpoch);
     updateTransfer(transfer.id, {
       phase: "checking-outcome",
       controller: null,
@@ -2972,11 +3589,14 @@ export function App({
           transferId: transfer.residentId,
         }),
       );
-      if (privateRequestIsCurrent(generation)) {
+      if (requestIsCurrent() && transferAwaitsOutcome(transfer)) {
         statusRequestRef.current += 1;
         const boundaryChanged = applyPrivateBoundary(next);
         setStatus(next);
-        if (boundaryChanged) return;
+        if (
+          boundaryChanged ||
+          !requestIsCurrent()
+        ) return;
         const committed = committedFilesResidentTransfer(
           next.transfers,
           transfer.residentId,
@@ -3006,7 +3626,7 @@ export function App({
         });
       }
     } catch (nextError) {
-      if (privateRequestIsCurrent(generation)) {
+      if (requestIsCurrent() && transferAwaitsOutcome(transfer)) {
         updateTransfer(transfer.id, {
           phase: "cleanup-pending",
           error: errorMessage(nextError),
@@ -3020,6 +3640,9 @@ export function App({
   ): Promise<void> {
     if (transfer.phase !== "conflicted") return;
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(transfer.path);
+    const requestIsCurrent = (): boolean =>
+      privateRequestIsCurrent(generation, vaultEpoch);
     updateTransfer(transfer.id, {
       phase: "checking-outcome",
       controller: null,
@@ -3032,11 +3655,14 @@ export function App({
             transferId: transfer.residentId,
           }),
         );
-        if (!privateRequestIsCurrent(generation)) return;
+        if (!requestIsCurrent() || !transferAwaitsOutcome(transfer)) return;
         statusRequestRef.current += 1;
         const boundaryChanged = applyPrivateBoundary(next);
         setStatus(next);
-        if (boundaryChanged) return;
+        if (
+          boundaryChanged ||
+          !requestIsCurrent()
+        ) return;
         const committed = committedFilesResidentTransfer(
           next.transfers,
           transfer.residentId,
@@ -3055,7 +3681,7 @@ export function App({
           return;
         }
       }
-      if (!privateRequestIsCurrent(generation)) return;
+      if (!requestIsCurrent()) return;
       const replacementId = crypto.randomUUID();
       const restarted: LocalTransfer = {
         ...transfer,
@@ -3070,14 +3696,14 @@ export function App({
         error: null,
         controller: null,
       };
-      setTransfers((current) =>
+      replaceTransfers((current) =>
         current.map((item) =>
           item.id === transfer.id ? restarted : item
         )
       );
       enqueueUpload(restarted);
     } catch (nextError) {
-      if (!privateRequestIsCurrent(generation)) return;
+      if (!requestIsCurrent() || !transferAwaitsOutcome(transfer)) return;
       updateTransfer(transfer.id, {
         phase: "conflicted",
         error: errorMessage(nextError),
@@ -3105,7 +3731,7 @@ export function App({
         error: null,
         controller: null,
       };
-      setTransfers((current) =>
+      replaceTransfers((current) =>
         current.map((item) =>
           item.id === transfer.id ? restarted : item
         )
@@ -3114,6 +3740,9 @@ export function App({
       return;
     }
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(transfer.path);
+    const requestIsCurrent = (): boolean =>
+      privateRequestIsCurrent(generation, vaultEpoch);
     updateTransfer(transfer.id, {
       phase: "checking-outcome",
       error: null,
@@ -3128,11 +3757,14 @@ export function App({
           transferId: transfer.residentId,
         }),
       );
-      if (privateRequestIsCurrent(generation)) {
+      if (requestIsCurrent() && transferAwaitsOutcome(transfer)) {
         statusRequestRef.current += 1;
         const boundaryChanged = applyPrivateBoundary(next);
         setStatus(next);
-        if (boundaryChanged) return;
+        if (
+          boundaryChanged ||
+          !requestIsCurrent()
+        ) return;
         const committed = committedFilesResidentTransfer(
           next.transfers,
           transfer.residentId,
@@ -3160,7 +3792,7 @@ export function App({
           error: null,
           controller: null,
         };
-        setTransfers((current) =>
+        replaceTransfers((current) =>
           current.map((item) =>
             item.id === transfer.id ? restarted : item
           )
@@ -3168,7 +3800,7 @@ export function App({
         enqueueUpload(restarted);
       }
     } catch (nextError) {
-      if (!privateRequestIsCurrent(generation)) return;
+      if (!requestIsCurrent() || !transferAwaitsOutcome(transfer)) return;
       const message = errorMessage(nextError);
       updateTransfer(transfer.id, {
         phase: "failed",
@@ -3182,10 +3814,20 @@ export function App({
     id: string,
     patch: Partial<LocalTransfer>,
   ): void {
-    setTransfers((current) =>
+    replaceTransfers((current) =>
       current.map((item) =>
         item.id === id ? { ...item, ...patch } : item
       )
+    );
+  }
+
+  function transferAwaitsOutcome(transfer: LocalTransfer): boolean {
+    const current = transfersRef.current.find(
+      (candidate) => candidate.id === transfer.id,
+    );
+    return (
+      current?.residentId === transfer.residentId &&
+      current.phase === "checking-outcome"
     );
   }
 
@@ -3202,6 +3844,7 @@ export function App({
     }
     setTransferToastHidden(false);
     const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(reviewed.path);
     const startEpoch = ++downloadStartEpochRef.current;
     downloadControllerRef.current?.abort();
     const previousDownloadId = downloadTransferRef.current?.id;
@@ -3216,7 +3859,7 @@ export function App({
       );
     }
     if (!filesDownloadStartIsCurrent({
-      authorityCurrent: privateRequestIsCurrent(generation),
+      authorityCurrent: privateRequestIsCurrent(generation, vaultEpoch),
       startEpoch,
       currentEpoch: downloadStartEpochRef.current,
     })) {
@@ -3226,6 +3869,7 @@ export function App({
     downloadControllerRef.current = controller;
     const transfer: LocalDownload = {
       id: crypto.randomUUID(),
+      path: reviewed.path,
       label: reviewed.name,
       phase: "downloading",
       processedBytes: 0,
@@ -3235,6 +3879,11 @@ export function App({
     };
     setDownloadTransfer(transfer);
     downloadTransferRef.current = transfer;
+    const requestIsCurrent = (): boolean =>
+      privateRequestIsCurrent(generation, vaultEpoch) &&
+      startEpoch === downloadStartEpochRef.current &&
+      downloadControllerRef.current === controller &&
+      downloadTransferRef.current?.id === transfer.id;
     try {
       const result = await streamFilesDownloadChunks(
         reviewed,
@@ -3249,8 +3898,7 @@ export function App({
             signal: controller.signal,
             onProgress(value) {
               if (
-                downloadControllerRef.current !== controller ||
-                !privateRequestIsCurrent(generation)
+                !requestIsCurrent()
               ) {
                 return;
               }
@@ -3274,8 +3922,7 @@ export function App({
           }),
         (processedBytes) => {
           if (
-            downloadControllerRef.current !== controller ||
-            !privateRequestIsCurrent(generation)
+            !requestIsCurrent()
           ) {
             return;
           }
@@ -3294,7 +3941,9 @@ export function App({
         },
       );
       const handoff = filesDownloadHandoffDecision({
-        authorityCurrent: privateRequestIsCurrent(generation),
+        authorityCurrent:
+          privateRequestIsCurrent(generation, vaultEpoch) &&
+          startEpoch === downloadStartEpochRef.current,
         signalAborted: controller.signal.aborted,
         controllerCurrent: downloadControllerRef.current === controller,
         transferCurrent: downloadTransferRef.current?.id === transfer.id,
@@ -3339,7 +3988,7 @@ export function App({
       };
       setError(null);
     } catch (nextError) {
-      if (privateRequestIsCurrent(generation)) {
+      if (requestIsCurrent()) {
         if (controller.signal.aborted) {
           const cancelled: LocalDownload = {
             ...transfer,
@@ -3380,18 +4029,24 @@ export function App({
     const controller = downloadControllerRef.current;
     const transfer = downloadTransferRef.current;
     if (!controller || !transfer || transfer.phase === "committed") return;
-    downloadStartEpochRef.current += 1;
+    const generation = privateRequestGenerationRef.current;
+    const vaultEpoch = captureVaultRequestEpoch(transfer.path);
+    const cancelEpoch = ++downloadStartEpochRef.current;
     controller.abort();
     downloadControllerRef.current = null;
+    const checking: LocalDownload = {
+      ...transfer,
+      phase: "checking-outcome",
+      controller: null,
+    };
+    downloadTransferRef.current = checking;
     setDownloadTransfer((current) =>
-      current?.id === transfer.id
-        ? {
-            ...current,
-            phase: "checking-outcome",
-            controller: null,
-          }
-        : current
+      current?.id === transfer.id ? checking : current
     );
+    const requestIsCurrent = (): boolean =>
+      privateRequestIsCurrent(generation, vaultEpoch) &&
+      cancelEpoch === downloadStartEpochRef.current &&
+      downloadTransferRef.current?.id === transfer.id;
     try {
       const next = parseStatus(
         await client.ui({
@@ -3399,9 +4054,14 @@ export function App({
           transferId: transfer.id,
         }),
       );
+      if (!requestIsCurrent()) return;
+      statusRequestRef.current += 1;
       const boundaryChanged = applyPrivateBoundary(next);
       setStatus(next);
-      if (boundaryChanged) return;
+      if (
+        boundaryChanged ||
+        !requestIsCurrent()
+      ) return;
       const cancelled: LocalDownload = {
         ...transfer,
         phase: "cancelled",
@@ -3413,6 +4073,7 @@ export function App({
         current?.id === transfer.id ? cancelled : current
       );
     } catch (nextError) {
+      if (!requestIsCurrent()) return;
       const pending: LocalDownload = {
         ...transfer,
         phase: "cleanup-pending",
@@ -3428,13 +4089,18 @@ export function App({
 
   async function openSelectedInSpreadsheet(): Promise<void> {
     if (!selectedEntry) return;
+    const reviewedPath = selectedEntry.path;
     const generation = privateRequestGenerationRef.current;
-    setBusy("Verifying and handing off to Spreadsheet");
+    const vaultEpoch = captureVaultRequestEpoch(reviewedPath);
+    const busyId = beginBusy(
+      "Verifying and handing off to Spreadsheet",
+      vaultEpoch,
+    );
     try {
       await handoffFileToSpreadsheet(selectedEntry, {
         async readBinary(path) {
           const file = await client.readBinary(path);
-          if (!privateRequestIsCurrent(generation)) {
+          if (!privateRequestIsCurrent(generation, vaultEpoch)) {
             throw new DOMException(
               "Files authority changed",
               "AbortError",
@@ -3443,7 +4109,7 @@ export function App({
           return file;
         },
         async accept(args, attachment) {
-          if (!privateRequestIsCurrent(generation)) {
+          if (!privateRequestIsCurrent(generation, vaultEpoch)) {
             throw new DOMException(
               "Files authority changed",
               "AbortError",
@@ -3461,7 +4127,7 @@ export function App({
           );
         },
         async open() {
-          if (!privateRequestIsCurrent(generation)) return;
+          if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
           await openAppTile({
             appId: "spreadsheet",
             tileId: "spreadsheet",
@@ -3469,14 +4135,14 @@ export function App({
           });
         },
       });
-      if (!privateRequestIsCurrent(generation)) return;
+      if (!privateRequestIsCurrent(generation, vaultEpoch)) return;
       setError(null);
     } catch (nextError) {
-      if (privateRequestIsCurrent(generation)) {
+      if (privateRequestIsCurrent(generation, vaultEpoch)) {
         setError(errorMessage(nextError));
       }
     } finally {
-      if (privateRequestIsCurrent(generation)) setBusy(null);
+      finishBusy(busyId);
     }
   }
 
@@ -3493,16 +4159,85 @@ export function App({
     );
   }
 
-  function navigateUp(): void {
-    if (!confirmDiscardIfDirty()) return;
-    const parent = parentPath(folder.path);
-    if (parent === "/") return;
-    const known =
-      rawTreeRows.find((row) => row.entry.path === parent)?.entry ??
-      FILES_UI_ROOTS.find((root) => root.path === parent);
-    if (known) void selectEntry(
-      "kind" in known ? rootEntry(known) : known,
+  function treeRowElement(path: string): HTMLElement | null {
+    const node = listRef.current;
+    if (!node) return null;
+    return [...node.querySelectorAll<HTMLElement>("[data-path]")]
+      .find((candidate) => candidate.dataset.path === path) ?? null;
+  }
+
+  function openEntryMenu(
+    entry: FilesTileEntry,
+    anchor: Pick<DOMRect, "left" | "top" | "right" | "bottom">,
+  ): void {
+    setTreeFocusPath(entry.path);
+    setEntryMenu({
+      entry,
+      anchor: {
+        left: anchor.left,
+        top: anchor.top,
+        right: anchor.right,
+        bottom: anchor.bottom,
+      },
+    });
+  }
+
+  function closeEntryMenu(restoreFocus = true): void {
+    const path = entryMenu?.entry.path ?? null;
+    if (restoreFocus && path) {
+      treeRowElement(path)?.focus({ preventScroll: true });
+    }
+    setEntryMenu(null);
+  }
+
+  function runEntryMenuAction(action: () => void): void {
+    closeEntryMenu(true);
+    action();
+  }
+
+  function browserWidthBounds(): { min: number; max: number } {
+    const available = workspaceWidth || workspaceRef.current?.clientWidth || 800;
+    return {
+      min: 180,
+      max: Math.max(180, Math.min(420, available - 280)),
+    };
+  }
+
+  function clampBrowserWidth(width: number): number {
+    const bounds = browserWidthBounds();
+    return Math.min(bounds.max, Math.max(bounds.min, Math.round(width)));
+  }
+
+  function resizeBrowserBy(delta: number): void {
+    setBrowserWidth((current) =>
+      clampBrowserWidth(clampBrowserWidth(current) + delta)
     );
+  }
+
+  function focusTreeRow(index: number): void {
+    const row = treeRows[index];
+    if (!row) return;
+    setTreeFocusPath(row.entry.path);
+    pendingTreeFocusRef.current = row.entry.path;
+    const node = listRef.current;
+    if (!node) return;
+    scrollTreeRowIntoView(index, node);
+  }
+
+  function scrollTreeRowIntoView(
+    index: number,
+    node: HTMLElement,
+  ): void {
+    const top = index * ROW_HEIGHT;
+    const bottom = top + ROW_HEIGHT;
+    const next = top < node.scrollTop
+      ? top
+      : bottom > node.scrollTop + node.clientHeight
+        ? bottom - node.clientHeight
+        : node.scrollTop;
+    if (next === node.scrollTop) return;
+    node.scrollTop = next;
+    setScrollTop(next);
   }
 
   function moveListSelection(
@@ -3523,18 +4258,7 @@ export function App({
                 current < 0 ? 0 : current + 1,
               )
             : Math.max(0, current < 0 ? 0 : current - 1);
-    const row = treeRows[index];
-    if (!row) return;
-    setTreeFocusPath(row.entry.path);
-    pendingTreeFocusRef.current = row.entry.path;
-    const node = listRef.current;
-    if (!node) return;
-    const top = index * ROW_HEIGHT;
-    const bottom = top + ROW_HEIGHT;
-    if (top < node.scrollTop) node.scrollTop = top;
-    else if (bottom > node.scrollTop + node.clientHeight) {
-      node.scrollTop = bottom - node.clientHeight;
-    }
+    focusTreeRow(index);
   }
 
   function runErrorRecovery(kind: FilesErrorRecoveryKind): void {
@@ -3584,6 +4308,18 @@ export function App({
   const spreadsheetSelected =
     selectedEntry?.type === "file" &&
     isSpreadsheet(selectedEntry.mediaType, selectedEntry.path);
+  const selectedImageMediaType = selectedEntry
+    ? filesImagePreviewMediaType(selectedEntry)
+    : null;
+  const selectedImageKey =
+    selectedEntry?.etag && selectedImageMediaType
+      ? `${selectedEntry.path}\n${selectedEntry.etag}`
+      : null;
+  const selectedImageTooLarge =
+    selectedImageMediaType !== null &&
+    selectedEntry?.byteLength !== null &&
+    selectedEntry?.byteLength !== undefined &&
+    selectedEntry.byteLength > FILES_IMAGE_PREVIEW_MAX_BYTES;
   const detachedResidentTransfers =
     status?.transfers.filter(
       (resident) =>
@@ -3601,19 +4337,109 @@ export function App({
     folder.path,
     status?.vault ?? null,
   );
-  const selectedIsRoot = selectedEntry
-    ? FILES_UI_ROOTS.some((root) => root.path === selectedEntry.path)
+  const entryMenuTarget = entryMenu?.entry ?? null;
+  const entryMenuTargetIsRoot = entryMenuTarget
+    ? FILES_UI_ROOTS.some((root) => root.path === entryMenuTarget.path)
     : false;
+  const entryMenuActions: readonly FilesEntryMenuAction[] = entryMenuTarget
+    ? [
+        ...(entryMenuTarget.type === "folder"
+          ? [
+              {
+                label: "New text file",
+                icon: <IoAddOutline aria-hidden="true" />,
+                disabled:
+                  Boolean(busy) ||
+                  !filesPathCanOpen(
+                    entryMenuTarget.path,
+                    status?.vault ?? null,
+                  ),
+                onSelect: () =>
+                  runEntryMenuAction(() =>
+                    startCreate("file", entryMenuTarget.path)
+                  ),
+              },
+              {
+                label: "New folder",
+                icon: <IoFolderOutline aria-hidden="true" />,
+                disabled:
+                  Boolean(busy) ||
+                  !filesPathCanOpen(
+                    entryMenuTarget.path,
+                    status?.vault ?? null,
+                  ),
+                onSelect: () =>
+                  runEntryMenuAction(() =>
+                    startCreate("folder", entryMenuTarget.path)
+                  ),
+              },
+              {
+                label: "Upload files",
+                icon: <IoCloudUploadOutline aria-hidden="true" />,
+                disabled:
+                  Boolean(busy) ||
+                  !filesPathCanOpen(
+                    entryMenuTarget.path,
+                    status?.vault ?? null,
+                  ),
+                onSelect: () =>
+                  runEntryMenuAction(() =>
+                    stageFiles(entryMenuTarget.path)
+                  ),
+              },
+            ]
+          : []),
+        ...(!entryMenuTargetIsRoot
+          ? [
+              {
+                label: "Rename",
+                icon: <IoPencilOutline aria-hidden="true" />,
+                disabled: Boolean(busy),
+                onSelect: () =>
+                  runEntryMenuAction(() => startRename(entryMenuTarget)),
+              },
+              {
+                label: `Delete ${entryMenuTarget.type}`,
+                icon: <IoTrashOutline aria-hidden="true" />,
+                danger: true,
+                disabled: Boolean(busy),
+                onSelect: () =>
+                  runEntryMenuAction(() => setDeleteTarget(entryMenuTarget)),
+              },
+            ]
+          : []),
+      ]
+    : [];
+  const uploadReview = uploadDraft
+    ? reviewStagedUploads(
+        uploadDraft,
+        transfers.length,
+        status?.vault ?? null,
+      )
+    : null;
+  const effectiveBrowserWidth = clampBrowserWidth(browserWidth);
+  const navigationBlocked = navigationIsBlocked();
 
   return (
     <main className={cx("nt-app", "files-v2-app")}>
       <header className="files-v2-header">
         <button
+          aria-controls="files-v2-browser"
+          aria-expanded={!browserCollapsed}
+          aria-label={browserCollapsed ? "Show file tree" : "Hide file tree"}
+          className="nt-icon-button"
+          onClick={() => setBrowserCollapsed((current) => !current)}
+          ref={browserToggleRef}
+          title={browserCollapsed ? "Show file tree" : "Hide file tree"}
+          type="button"
+        >
+          <IoMenuOutline aria-hidden="true" />
+        </button>
+        <button
           aria-label="Home"
           className="nt-icon-button"
           disabled={folder.path === "/Workspace" || Boolean(busy)}
           onClick={() => {
-            if (!confirmDiscardIfDirty()) return;
             const workspace = rootEntry(FILES_UI_ROOTS[2]!);
             void selectEntry(workspace);
           }}
@@ -3626,12 +4452,11 @@ export function App({
             <button
               key={crumb.path}
               onClick={() => {
-                const known = rawTreeRows.find(
+                if (navigationBlocked) return;
+                const known = treeRows.find(
                   (row) => row.entry.path === crumb.path
                 )?.entry;
-                if (known && confirmDiscardIfDirty()) {
-                  void selectEntry(known);
-                }
+                if (known) void selectEntry(known);
               }}
               type="button"
             >
@@ -3651,35 +4476,9 @@ export function App({
           <IoRefresh aria-hidden="true" />
         </button>
         <button
-          aria-label="Create folder"
-          className="nt-icon-button"
-          disabled={Boolean(busy) || !folderCanOpen}
-          onClick={() => {
-            setCreateKind("folder");
-            setNewName("");
-          }}
-          title="New folder"
-          type="button"
-        >
-          <IoFolderOutline aria-hidden="true" />
-        </button>
-        <button
-          aria-label="Create text file"
-          className="nt-icon-button"
-          disabled={Boolean(busy) || !folderCanOpen}
-          onClick={() => {
-            setCreateKind("file");
-            setNewName("");
-          }}
-          title="New text file"
-          type="button"
-        >
-          <IoAddOutline aria-hidden="true" />
-        </button>
-        <button
           className="nt-button nt-button--secondary files-v2-upload-button"
           disabled={Boolean(busy) || !folderCanOpen}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => stageFiles(folder.path)}
           type="button"
         >
           <IoCloudUploadOutline aria-hidden="true" />
@@ -3690,7 +4489,7 @@ export function App({
           multiple
           onChange={(event) => {
             if (event.target.files) {
-              void receiveFiles(event.target.files, folder.path);
+              appendStagedFiles(event.target.files);
             }
             event.target.value = "";
           }}
@@ -3740,100 +4539,21 @@ export function App({
       </div>
 
       <div
-        className="files-v2-workspace"
+        className={cx(
+          "files-v2-workspace",
+          browserCollapsed && "files-v2-workspace--browser-collapsed",
+        )}
+        ref={workspaceRef}
+        style={{
+          "--files-browser-width": `${effectiveBrowserWidth}px`,
+        } as CSSProperties}
       >
           <section
             aria-label="File browser"
             className="files-v2-browser"
+            hidden={browserCollapsed}
+            id="files-v2-browser"
           >
-            <div className="files-v2-search-row">
-              <label className="files-v2-search">
-                <IoSearchOutline aria-hidden="true" />
-                <span className="files-v2-visually-hidden">
-                  Search this folder
-                </span>
-                <input
-                  onChange={(event) => {
-                    searchControllerRef.current?.abort();
-                    searchControllerRef.current = null;
-                    setQuery(event.target.value);
-                    setSearchResults(null);
-                    setSearchState({
-                      phase: "idle",
-                      pages: 0,
-                      capped: false,
-                    });
-                    setScrollTop(0);
-                  }}
-                  placeholder="Search this folder"
-                  type="search"
-                  value={query}
-                />
-              </label>
-              {query.trim() ? (
-                searchState.phase === "scanning" ? (
-                  <button
-                    className="nt-button nt-button--secondary"
-                    onClick={cancelSearchScan}
-                    type="button"
-                  >
-                    Stop searching
-                  </button>
-                ) : (
-                  <button
-                    className="nt-button nt-button--secondary"
-                    onClick={() => void scanFolderSearch()}
-                    type="button"
-                  >
-                    Search all in this folder
-                  </button>
-                )
-              ) : null}
-              {searchState.phase !== "idle" ? (
-                <span className="files-v2-search-status" role="status">
-                  {searchState.phase === "scanning"
-                    ? "Searching…"
-                    : searchState.phase === "complete"
-                      ? `${searchResults?.length ?? 0} results${searchState.capped ? " (showing the first matches)" : ""}`
-                      : "Search cancelled"}
-                </span>
-              ) : null}
-            </div>
-            {createKind ? (
-              <div className="files-v2-create">
-                {createKind === "folder" ? (
-                  <IoFolderOutline aria-hidden="true" />
-                ) : (
-                  <IoDocumentTextOutline aria-hidden="true" />
-                )}
-                <input
-                  aria-label={`New ${createKind} name`}
-                  autoFocus
-                  onChange={(event) => setNewName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void createEntry();
-                    if (event.key === "Escape") setCreateKind(null);
-                  }}
-                  value={newName}
-                />
-                <button
-                  aria-label={`Create ${createKind}`}
-                  className="nt-icon-button"
-                  onClick={() => void createEntry()}
-                  type="button"
-                >
-                  <IoCheckmark aria-hidden="true" />
-                </button>
-                <button
-                  aria-label="Cancel create"
-                  className="nt-icon-button"
-                  onClick={() => setCreateKind(null)}
-                  type="button"
-                >
-                  <IoClose aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
             <div
               aria-busy={Boolean(busy)}
               aria-label="Files"
@@ -3868,8 +4588,9 @@ export function App({
               onDrop={(event: DragEvent<HTMLDivElement>) => {
                 if (!hasOsFileDrag(event.dataTransfer)) return;
                 event.preventDefault();
+                const files = Array.from(event.dataTransfer.files);
                 setDragging(false);
-                void receiveFiles(event.dataTransfer.files, folder.path);
+                stageFiles(folder.path, files);
               }}
               onKeyDown={(event) => {
                 if (
@@ -3897,7 +4618,7 @@ export function App({
                   event.preventDefault();
                   const source = keyboardMovePath;
                   setKeyboardMovePath(null);
-                  void moveEntryToFolder(source, focusedEntry.path);
+                  requestMoveToFolder(source, focusedEntry);
                 } else if (event.key === "Escape" && keyboardMovePath) {
                   event.preventDefault();
                   setKeyboardMovePath(null);
@@ -3925,7 +4646,7 @@ export function App({
                 ) {
                   event.preventDefault();
                   if (!expandedPaths.has(focusedEntry.path)) {
-                    toggleTreeFolder(focusedEntry);
+                    void toggleTreeFolder(focusedEntry);
                   } else {
                     const index = treeRows.findIndex(
                       (row) => row.entry.path === focusedEntry.path,
@@ -3934,8 +4655,7 @@ export function App({
                     if (child && child.level === (
                       treeRows[index]?.level ?? 0
                     ) + 1) {
-                      setTreeFocusPath(child.entry.path);
-                      pendingTreeFocusRef.current = child.entry.path;
+                      focusTreeRow(index + 1);
                     }
                   }
                 } else if (
@@ -3944,27 +4664,32 @@ export function App({
                   expandedPaths.has(focusedEntry.path)
                 ) {
                   event.preventDefault();
-                  toggleTreeFolder(focusedEntry);
+                  void toggleTreeFolder(focusedEntry);
                 } else if (event.key === "ArrowLeft") {
                   event.preventDefault();
                   const parent = focusedEntry
                     ? parentPath(focusedEntry.path)
                     : "/";
-                  const parentRow = treeRows.find(
+                  const parentIndex = treeRows.findIndex(
                     (row) => row.entry.path === parent,
                   );
-                  if (parentRow) {
-                    setTreeFocusPath(parentRow.entry.path);
-                    pendingTreeFocusRef.current = parentRow.entry.path;
-                  } else {
-                    navigateUp();
-                  }
-                } else if (event.key === "F2" && focusedEntry) {
+                  if (parentIndex >= 0) focusTreeRow(parentIndex);
+                } else if (event.key === "F2" && focusedEntry && !busy) {
                   event.preventDefault();
                   startRename(focusedEntry);
                 } else if (
+                  event.key === "F10" &&
+                  event.shiftKey &&
+                  focusedEntry
+                ) {
+                  event.preventDefault();
+                  const rect = treeRowElement(focusedEntry.path)
+                    ?.getBoundingClientRect();
+                  if (rect) openEntryMenu(focusedEntry, rect);
+                } else if (
                   event.key === "Delete" &&
                   focusedEntry &&
+                  !busy &&
                   !FILES_UI_ROOTS.some(
                     (root) => root.path === focusedEntry.path,
                   )
@@ -3973,11 +4698,16 @@ export function App({
                   setDeleteTarget(focusedEntry);
                 }
               }}
-              onScroll={(event: UIEvent<HTMLDivElement>) =>
-                setScrollTop(event.currentTarget.scrollTop)
-              }
+              onScroll={(event: UIEvent<HTMLDivElement>) => {
+                setScrollTop(event.currentTarget.scrollTop);
+                if (entryMenu) {
+                  setEntryMenu(null);
+                  event.currentTarget.focus({ preventScroll: true });
+                }
+              }}
               ref={listRef}
               role="tree"
+              tabIndex={-1}
             >
               {dragging ? (
                 <div className="files-v2-drop">
@@ -3991,13 +4721,13 @@ export function App({
                 const expanded =
                   entry.type === "folder" &&
                   expandedPaths.has(entry.path);
-                const canDrop = entry.type === "folder";
                 return (
                   <div
                     aria-expanded={
                       entry.type === "folder" ? expanded : undefined
                     }
                     aria-level={row.level}
+                    aria-label={entry.name}
                     aria-posinset={row.position}
                     aria-selected={selected === entry.path}
                     aria-setsize={row.setSize}
@@ -4009,11 +4739,17 @@ export function App({
                       dropTarget === entry.path && "files-v2-row--drop-target",
                     )}
                     data-path={entry.path}
-                    draggable={!row.isRoot}
+                    draggable={!row.isRoot && !busy}
                     key={entry.path}
-                    onClick={() => {
-                      setTreeFocusPath(entry.path);
-                      void selectEntry(entry);
+                    onClick={() => void selectEntry(entry)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      openEntryMenu(entry, {
+                        left: event.clientX,
+                        right: event.clientX,
+                        top: event.clientY,
+                        bottom: event.clientY,
+                      });
                     }}
                     onDragEnd={() => {
                       internalDragRef.current = null;
@@ -4025,17 +4761,25 @@ export function App({
                       );
                     }}
                     onDragOver={(event) => {
-                      if (
-                        !canDrop ||
-                        (!internalDragRef.current &&
-                          !hasOsFileDrag(event.dataTransfer))
-                      ) {
-                        return;
-                      }
+                      const internal = internalDragRef.current;
+                      const osFiles = hasOsFileDrag(event.dataTransfer);
+                      const canAcceptInternal = internal
+                        ? !busy && filesDropIntent(
+                            internal.path,
+                            entry,
+                            status?.vault ?? null,
+                          ).ok
+                        : false;
+                      const canAcceptFiles =
+                        !busy &&
+                        osFiles &&
+                        entry.type === "folder" &&
+                        filesPathCanOpen(entry.path, status?.vault ?? null);
+                      if (!canAcceptInternal && !canAcceptFiles) return;
                       event.preventDefault();
                       event.stopPropagation();
                       event.dataTransfer.dropEffect =
-                        internalDragRef.current ? "move" : "copy";
+                        canAcceptInternal ? "move" : "copy";
                       setDropTarget(entry.path);
                     }}
                     onDragStart={(event) => {
@@ -4055,9 +4799,10 @@ export function App({
                       );
                     }}
                     onDrop={(event) => {
-                      if (!canDrop) return;
+                      if (entry.type !== "folder") return;
                       event.preventDefault();
                       event.stopPropagation();
+                      const files = Array.from(event.dataTransfer.files);
                       const liveDrag = internalDragRef.current;
                       const source = authorizedFilesInternalDragSource(
                         liveDrag,
@@ -4069,18 +4814,14 @@ export function App({
                       setDragging(false);
                       setDropTarget(null);
                       if (source) {
-                        void moveEntryToFolder(source, entry.path);
-                      } else if (hasOsFileDrag(event.dataTransfer)) {
-                        void receiveFiles(
-                          event.dataTransfer.files,
-                          entry.path,
-                        );
+                        requestMoveToFolder(source, entry);
+                      } else if (files.length > 0) {
+                        stageFiles(entry.path, files);
                       }
                     }}
                     role="treeitem"
                     style={{
                       height: ROW_HEIGHT,
-                      paddingInlineStart: `${6 + (row.level - 1) * 16}px`,
                     }}
                     tabIndex={
                       treeFocusPath === entry.path
@@ -4088,21 +4829,53 @@ export function App({
                         : -1
                     }
                   >
+                    <span
+                      aria-hidden="true"
+                      className="files-v2-tree-guides"
+                    >
+                      {row.ancestorContinues.map((continues, index) => (
+                        <span
+                          className={cx(
+                            "files-v2-tree-guide",
+                            continues && "files-v2-tree-guide--continues",
+                          )}
+                          key={`${entry.path}:ancestor:${index}`}
+                        />
+                      ))}
+                      {!row.isRoot ? (
+                        <span
+                          className={cx(
+                            "files-v2-tree-guide",
+                            "files-v2-tree-guide--branch",
+                            !row.isLastSibling &&
+                              "files-v2-tree-guide--continues",
+                          )}
+                        />
+                      ) : null}
+                    </span>
                     {entry.type === "folder" ? (
                       <button
                         aria-label={`${expanded ? "Collapse" : "Expand"} ${entry.name}`}
                         className="files-v2-tree-toggle"
                         onClick={(event) => {
                           event.stopPropagation();
-                          toggleTreeFolder(entry);
+                          setTreeFocusPath(entry.path);
+                          event.currentTarget
+                            .closest<HTMLElement>('[role="treeitem"]')
+                            ?.focus();
+                          void toggleTreeFolder(entry);
+                        }}
+                        onDragStart={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
                         }}
                         tabIndex={-1}
                         type="button"
                       >
                         {expanded ? (
-                          <IoChevronDown aria-hidden="true" />
+                          <IoRemoveOutline aria-hidden="true" />
                         ) : (
-                          <IoChevronForward aria-hidden="true" />
+                          <IoAddOutline aria-hidden="true" />
                         )}
                       </button>
                     ) : (
@@ -4120,13 +4893,37 @@ export function App({
                       <IoDocumentOutline aria-hidden="true" />
                     )}
                     <span className="files-v2-row-name">{entry.name}</span>
-                    <span className="files-v2-row-size">
-                      {treeLoading.has(entry.path)
-                        ? "Loading…"
-                        : entry.byteLength === null
-                          ? ""
-                          : formatBytes(entry.byteLength)}
-                    </span>
+                    {treeLoading.has(entry.path) ? (
+                      <span
+                        aria-label={`Loading ${entry.name}`}
+                        className="nt-spinner files-v2-row-spinner"
+                        role="status"
+                      />
+                    ) : (
+                      <button
+                        aria-expanded={entryMenuTarget?.path === entry.path}
+                        aria-haspopup="menu"
+                        aria-label={`Actions for ${entry.name}`}
+                        className="nt-icon-button files-v2-row-menu-button"
+                        data-menu-for={entry.path}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          openEntryMenu(
+                            entry,
+                            event.currentTarget.getBoundingClientRect(),
+                          );
+                        }}
+                        onDragStart={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        tabIndex={-1}
+                        type="button"
+                      >
+                        <IoEllipsisVerticalOutline aria-hidden="true" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -4140,7 +4937,7 @@ export function App({
                   : ""}
               </span>
             </div>
-            {folder.hasMore && searchResults === null ? (
+            {folder.hasMore ? (
               <footer className="files-v2-list-footer">
                 <button
                   className="nt-button nt-button--secondary"
@@ -4153,6 +4950,68 @@ export function App({
               </footer>
             ) : null}
           </section>
+
+          <div
+            aria-controls="files-v2-browser"
+            aria-label="Resize file tree"
+            aria-orientation="vertical"
+            aria-valuemax={browserWidthBounds().max}
+            aria-valuemin={browserWidthBounds().min}
+            aria-valuenow={effectiveBrowserWidth}
+            className="files-v2-browser-resizer"
+            hidden={browserCollapsed}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                resizeBrowserBy(-16);
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                resizeBrowserBy(16);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                setBrowserWidth(browserWidthBounds().min);
+              } else if (event.key === "End") {
+                event.preventDefault();
+                setBrowserWidth(browserWidthBounds().max);
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                browserToggleRef.current?.focus();
+                setBrowserCollapsed(true);
+              }
+            }}
+            onLostPointerCapture={() => {
+              resizeDragRef.current = null;
+            }}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              resizeDragRef.current = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startWidth: effectiveBrowserWidth,
+              };
+              event.currentTarget.setPointerCapture(event.pointerId);
+              event.preventDefault();
+            }}
+            onPointerMove={(event) => {
+              const drag = resizeDragRef.current;
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              setBrowserWidth(
+                clampBrowserWidth(
+                  drag.startWidth + event.clientX - drag.startX,
+                ),
+              );
+            }}
+            onPointerUp={(event) => {
+              const drag = resizeDragRef.current;
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              resizeDragRef.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+            role="separator"
+            tabIndex={0}
+          />
 
           <section aria-label="File details and editor" className="files-v2-detail">
             {currentRoot === "vault" && status?.vault !== "ready" ? (
@@ -4290,27 +5149,6 @@ export function App({
                         ) : null}
                       </>
                     ) : null}
-                    {!selectedIsRoot ? (
-                      <>
-                        <button
-                          aria-label={`Rename ${selectedEntry.name}`}
-                          className="nt-button nt-button--secondary"
-                          disabled={Boolean(busy)}
-                          onClick={() => startRename(selectedEntry)}
-                          type="button"
-                        >
-                          Rename
-                        </button>
-                        <button
-                          aria-label={`Delete ${selectedEntry.name}`}
-                          className="nt-icon-button nt-icon-button--danger"
-                          onClick={() => setDeleteTarget(selectedEntry)}
-                          type="button"
-                        >
-                          <IoTrashOutline aria-hidden="true" />
-                        </button>
-                      </>
-                    ) : null}
                   </div>
                 </header>
                 {conflict ? (
@@ -4363,8 +5201,15 @@ export function App({
                     <textarea
                       aria-label={`Edit ${selectedEntry.name}`}
                       className="files-v2-editor"
-                      disabled={editorLoadingPath === selectedEntry.path}
-                      onChange={(event) => setContent(event.target.value)}
+                      disabled={
+                        navigationBlocked ||
+                        editorLoadingPath === selectedEntry.path
+                      }
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        dirtyRef.current = next !== savedContent;
+                        setContent(next);
+                      }}
                       placeholder={
                         editorLoadingPath === selectedEntry.path
                           ? "Opening file…"
@@ -4374,12 +5219,67 @@ export function App({
                       value={content}
                     />
                   )
+                ) : selectedImageMediaType &&
+                  selectedImageKey &&
+                  !selectedImageTooLarge ? (
+                  imagePreview?.key === selectedImageKey &&
+                  imagePreview.phase === "ready" ? (
+                    <div className="files-v2-image-preview">
+                      <img
+                        alt={selectedEntry.name}
+                        decoding="async"
+                        draggable={false}
+                        onError={() => {
+                          const failedUrl = imagePreview.url;
+                          if (imageUrlRef.current !== failedUrl) return;
+                          blobUrlsRef.current?.revoke(failedUrl);
+                          imageUrlRef.current = null;
+                          setImagePreview((current) =>
+                            current?.phase === "ready" &&
+                              current.key === selectedImageKey &&
+                              current.url === failedUrl
+                              ? {
+                                  key: selectedImageKey,
+                                  phase: "error",
+                                  url: null,
+                                  error:
+                                    "This image could not be decoded safely.",
+                                }
+                              : current
+                          );
+                        }}
+                        src={imagePreview.url}
+                      />
+                    </div>
+                  ) : imagePreview?.key === selectedImageKey &&
+                    imagePreview.phase === "error" ? (
+                    <div className="files-v2-binary-detail">
+                      <IoImageOutline aria-hidden="true" />
+                      <h3>Preview unavailable</h3>
+                      <p>{imagePreview.error} You can still download it.</p>
+                    </div>
+                  ) : (
+                    <div className="files-v2-binary-detail" role="status">
+                      <span className="nt-spinner" aria-hidden="true" />
+                      <h3>Opening image</h3>
+                    </div>
+                  )
                 ) : (
                   <div className="files-v2-binary-detail">
-                    <IoDocumentOutline aria-hidden="true" />
-                    <h3>Download to open</h3>
+                    {selectedImageTooLarge ? (
+                      <IoImageOutline aria-hidden="true" />
+                    ) : (
+                      <IoDocumentOutline aria-hidden="true" />
+                    )}
+                    <h3>
+                      {selectedImageTooLarge
+                        ? "Image is too large to preview"
+                        : "Download to open"}
+                    </h3>
                     <p>
-                      This file opens with an app on your device.
+                      {selectedImageTooLarge
+                        ? "Download it to view the original image."
+                        : "This file opens with an app on your device."}
                     </p>
                   </div>
                 )}
@@ -4406,7 +5306,7 @@ export function App({
               className="nt-icon-button"
               onClick={() => {
                 setTransferToastHidden(true);
-                setTransfers((current) =>
+                replaceTransfers((current) =>
                   current.filter(
                     (transfer) =>
                       !isTerminalTransferPhase(transfer.phase),
@@ -4572,12 +5472,235 @@ export function App({
         </aside>
       ) : null}
 
-      {renameTarget ? (
+      {entryMenu ? (
+        <FilesEntryMenu
+          actions={entryMenuActions}
+          anchor={entryMenu.anchor}
+          entryName={entryMenu.entry.name}
+          onClose={() => closeEntryMenu(true)}
+        />
+      ) : null}
+
+      {createDraft ? (
         <Dialog
           actions={
             <>
               <button
                 className="nt-button nt-button--secondary"
+                disabled={navigationBlocked}
+                onClick={() => setCreateDraft(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="nt-button nt-button--primary"
+                disabled={Boolean(busy)}
+                onClick={() => void createEntry()}
+                type="button"
+              >
+                Create {createDraft.kind}
+              </button>
+            </>
+          }
+          closeDisabled={navigationBlocked}
+          initialFocusSelector="[data-files-dialog-initial]"
+          onClose={() => setCreateDraft(null)}
+          title={`New ${createDraft.kind}`}
+        >
+          <p className="files-v2-dialog-destination">
+            In <code>{createDraft.parentPath}</code>
+          </p>
+          <label className="nt-field">
+            <span className="nt-label">Name</span>
+            <input
+              aria-describedby={
+                createDraft.error ? "files-create-error" : undefined
+              }
+              className="nt-input"
+              data-files-dialog-initial
+              disabled={navigationBlocked}
+              onChange={(event) =>
+                setCreateDraft((current) =>
+                  current
+                    ? { ...current, name: event.target.value, error: null }
+                    : null
+                )
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void createEntry();
+                }
+              }}
+              spellCheck={false}
+              value={createDraft.name}
+            />
+          </label>
+          {createDraft.error ? (
+            <p id="files-create-error" role="alert">
+              {createDraft.error}
+            </p>
+          ) : null}
+        </Dialog>
+      ) : null}
+
+      {uploadDraft && uploadReview ? (
+        <Dialog
+          actions={
+            <>
+              <button
+                className="nt-button nt-button--secondary"
+                onClick={() => setUploadDraft(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="nt-button nt-button--primary"
+                disabled={
+                  Boolean(busy) || uploadReview.accepted.length === 0
+                }
+                onClick={queueStagedFiles}
+                type="button"
+              >
+                Upload {uploadReview.accepted.length || ""}
+              </button>
+            </>
+          }
+          initialFocusSelector="[data-files-dialog-initial]"
+          onClose={() => setUploadDraft(null)}
+          title="Upload files"
+        >
+          <div className="files-v2-upload-destination">
+            <strong>Destination</strong>
+            <code>{uploadDraft.destination}</code>
+            <span>{filesPathPolicy(uploadDraft.destination)}</span>
+          </div>
+          <div
+            className="files-v2-upload-dropzone"
+            data-files-dialog-initial
+            onDragOver={(event) => {
+              if (!hasOsFileDrag(event.dataTransfer)) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+            }}
+            onDrop={(event) => {
+              if (!hasOsFileDrag(event.dataTransfer)) return;
+              event.preventDefault();
+              event.stopPropagation();
+              const files = Array.from(event.dataTransfer.files);
+              appendStagedFiles(files);
+            }}
+            role="group"
+            tabIndex={0}
+          >
+            <IoCloudUploadOutline aria-hidden="true" />
+            <span>Drop multiple files here</span>
+            <button
+              className="nt-button nt-button--secondary"
+              onClick={() => inputRef.current?.click()}
+              type="button"
+            >
+              Choose files
+            </button>
+          </div>
+          {uploadReview.items.length > 0 ? (
+            <ul className="files-v2-upload-review">
+              {uploadReview.items.map((item) => (
+                <li key={item.source.id}>
+                  <IoDocumentOutline aria-hidden="true" />
+                  <span>
+                    <strong>{item.source.file.name || "Unnamed file"}</strong>
+                    <small>
+                      {item.error ?? formatBytes(item.source.file.size)}
+                    </small>
+                  </span>
+                  <button
+                    aria-label={`Remove ${item.source.file.name || "file"}`}
+                    className="nt-icon-button"
+                    onClick={() =>
+                      setUploadDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              items: current.items.filter(
+                                (candidate) =>
+                                  candidate.id !== item.source.id,
+                              ),
+                            }
+                          : null
+                      )
+                    }
+                    type="button"
+                  >
+                    <IoClose aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {uploadDraft.truncated > 0 ? (
+            <p className="files-v2-upload-limit" role="alert">
+              {uploadDraft.truncated} additional file{
+                uploadDraft.truncated === 1 ? " was" : "s were"
+              } not added because each review is limited to {
+                MAX_VISIBLE_TRANSFERS
+              } files.
+            </p>
+          ) : null}
+          <p className="files-v2-upload-summary" role="status">
+            {uploadReview.accepted.length} ready · {formatBytes(
+              uploadReview.acceptedBytes,
+            )}
+          </p>
+        </Dialog>
+      ) : null}
+
+      {pendingMove ? (
+        <Dialog
+          actions={
+            <>
+              <button
+                className="nt-button nt-button--secondary"
+                onClick={() => setPendingMove(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="nt-button nt-button--primary"
+                disabled={Boolean(busy)}
+                onClick={() => void performMove(pendingMove)}
+                type="button"
+              >
+                Move and change storage
+              </button>
+            </>
+          }
+          onClose={() => setPendingMove(null)}
+          title="Change storage policy?"
+        >
+          <p>
+            Moving <strong>{leafName(pendingMove.sourcePath)}</strong> from
+            {` ${filesRootLabel(pendingMove.sourceRoot)} to ${filesRootLabel(pendingMove.targetRoot)} `}
+            changes how it is stored.
+          </p>
+          <p>
+            {filesRootPolicy(pendingMove.sourceRoot)} {filesRootPolicy(
+              pendingMove.targetRoot,
+            )}
+          </p>
+        </Dialog>
+      ) : null}
+
+      {renameDraft ? (
+        <Dialog
+          actions={
+            <>
+              <button
+                className="nt-button nt-button--secondary"
+                disabled={navigationBlocked}
                 onClick={closeRename}
                 type="button"
               >
@@ -4593,19 +5716,26 @@ export function App({
               </button>
             </>
           }
+          closeDisabled={navigationBlocked}
           initialFocusSelector="[data-files-dialog-initial]"
           onClose={closeRename}
-          title={`Rename ${renameTarget.name}`}
+          title={`Rename ${renameDraft.target.name}`}
         >
           <label className="nt-field">
             <span className="nt-label">Name</span>
             <input
-              aria-describedby={renameError ? "files-rename-error" : undefined}
+              aria-describedby={
+                renameDraft.error ? "files-rename-error" : undefined
+              }
               className="nt-input"
               data-files-dialog-initial
+              disabled={navigationBlocked}
               onChange={(event) => {
-                setRenameName(event.target.value);
-                setRenameError(null);
+                setRenameDraft((current) =>
+                  current
+                    ? { ...current, name: event.target.value, error: null }
+                    : null
+                );
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -4614,12 +5744,12 @@ export function App({
                 }
               }}
               spellCheck={false}
-              value={renameName}
+              value={renameDraft.name}
             />
           </label>
-          {renameError ? (
+          {renameDraft.error ? (
             <p id="files-rename-error" role="alert">
-              {renameError}
+              {renameDraft.error}
             </p>
           ) : null}
         </Dialog>
@@ -4631,6 +5761,7 @@ export function App({
             <>
               <button
                 className="nt-button nt-button--secondary"
+                disabled={navigationBlocked}
                 onClick={() => setDeleteTarget(null)}
                 type="button"
               >
@@ -4638,6 +5769,7 @@ export function App({
               </button>
               <button
                 className="nt-button nt-button--danger"
+                disabled={Boolean(busy)}
                 onClick={() => void removeEntry()}
                 type="button"
               >
@@ -4645,6 +5777,7 @@ export function App({
               </button>
             </>
           }
+          closeDisabled={navigationBlocked}
           onClose={() => setDeleteTarget(null)}
           title={`Delete ${deleteTarget.name}?`}
         >
@@ -4835,18 +5968,22 @@ function Dialog({
   children,
   actions,
   onClose,
+  closeDisabled = false,
   initialFocusSelector,
 }: {
   title: string;
   children: React.ReactNode;
   actions: React.ReactNode;
   onClose(): void;
+  closeDisabled?: boolean;
   initialFocusSelector?: string;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
   const titleId = useId();
   closeRef.current = onClose;
+  closeDisabledRef.current = closeDisabled;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -4867,7 +6004,7 @@ function Dialog({
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        closeRef.current();
+        if (!closeDisabledRef.current) closeRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -4912,6 +6049,7 @@ function Dialog({
           <button
             aria-label="Close dialog"
             className="nt-icon-button"
+            disabled={closeDisabled}
             onClick={onClose}
             type="button"
           >
@@ -4921,6 +6059,112 @@ function Dialog({
         <div className="files-v2-dialog-body">{children}</div>
         <footer>{actions}</footer>
       </section>
+    </div>
+  );
+}
+
+function FilesEntryMenu({
+  actions,
+  anchor,
+  entryName,
+  onClose,
+}: {
+  actions: readonly FilesEntryMenuAction[];
+  anchor: EntryMenuState["anchor"];
+  entryName: string;
+  onClose(): void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const menuWidth = 184;
+  const estimatedHeight = actions.length * 32 + 8;
+  const left = Math.max(
+    8,
+    Math.min(anchor.right - menuWidth, window.innerWidth - menuWidth - 8),
+  );
+  const top = Math.max(
+    8,
+    anchor.bottom + estimatedHeight + 8 <= window.innerHeight
+      ? anchor.bottom + 4
+      : anchor.top - estimatedHeight - 4,
+  );
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    const first = menu?.querySelector<HTMLButtonElement>(
+      '[role="menuitem"]:not([disabled])',
+    );
+    (first ?? menu)?.focus();
+    const pointerDown = (event: PointerEvent): void => {
+      if (
+        event.target instanceof Node &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        closeRef.current();
+      }
+    };
+    const close = (): void => closeRef.current();
+    document.addEventListener("pointerdown", pointerDown, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", pointerDown, true);
+      window.removeEventListener("resize", close);
+    };
+  }, []);
+
+  return (
+    <div
+      aria-label={`Actions for ${entryName}`}
+      className="files-v2-entry-menu"
+      onKeyDown={(event) => {
+        const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+          '[role="menuitem"]:not([disabled])',
+        )];
+        const index = items.indexOf(document.activeElement as HTMLButtonElement);
+        let next: HTMLButtonElement | undefined;
+        if (event.key === "ArrowDown") {
+          next = items[(index + 1 + items.length) % items.length];
+        } else if (event.key === "ArrowUp") {
+          next = items[(index - 1 + items.length) % items.length];
+        } else if (event.key === "Home") {
+          next = items[0];
+        } else if (event.key === "End") {
+          next = items.at(-1);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+          return;
+        } else if (event.key === "Tab") {
+          onClose();
+          return;
+        } else {
+          return;
+        }
+        event.preventDefault();
+        next?.focus();
+      }}
+      ref={menuRef}
+      role="menu"
+      style={{ left, top }}
+      tabIndex={-1}
+    >
+      {actions.map((action) => (
+        <button
+          className={cx(
+            "files-v2-entry-menu-item",
+            action.danger && "files-v2-entry-menu-item--danger",
+          )}
+          disabled={action.disabled}
+          key={action.label}
+          onClick={action.onSelect}
+          role="menuitem"
+          type="button"
+        >
+          {action.icon}
+          {action.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -4950,35 +6194,6 @@ export function virtualWindow<T>(
     before: start * rowHeight,
     after: Math.max(0, (entries.length - end) * rowHeight),
   };
-}
-
-export function matchesFilesSearch(name: string, query: string): boolean {
-  const candidate = name.normalize("NFC").toLocaleLowerCase();
-  const needle = query.normalize("NFC").toLocaleLowerCase();
-  if (!needle) return false;
-  if (candidate === needle || candidate.startsWith(needle)) return true;
-  // Fuzzy mode is deliberately a compact, single-token subsequence. A
-  // whitespace-bearing query is a literal name prefix, so fuzzy matching
-  // cannot jump across arbitrary words and manufacture surprising matches.
-  if (/\s/u.test(needle)) return false;
-  let at = 0;
-  for (const character of candidate) {
-    if (character === needle[at]) at += 1;
-    if (at === needle.length) return true;
-  }
-  return false;
-}
-
-export function sortSearchResults(
-  entries: Iterable<FilesTileEntry>,
-): readonly FilesTileEntry[] {
-  return [...entries].sort(
-    (left, right) =>
-      left.name.localeCompare(right.name, undefined, {
-        sensitivity: "base",
-        numeric: true,
-      }) || left.path.localeCompare(right.path),
-  );
 }
 
 function parseList(value: unknown): FilesTileList {
@@ -5694,6 +6909,27 @@ function folderDescription(path: string): string {
       : "Open this folder from the tree to see its contents.";
 }
 
+function filesRootLabel(root: FilesRootKind): string {
+  return root === "shared" ? "Shared" : root === "vault" ? "Vault" : "Workspace";
+}
+
+function filesRootPolicy(root: FilesRootKind): string {
+  if (root === "shared") {
+    return "Shared publishes files through public links.";
+  }
+  if (root === "vault") {
+    return "Vault protects files with the current Vault key.";
+  }
+  return "Workspace stores regular files without a public link.";
+}
+
+function filesPathPolicy(path: string): string {
+  const root = filesRootKind(path);
+  return root === null
+    ? "Choose a folder in Shared, Vault, or Workspace."
+    : filesRootPolicy(root);
+}
+
 function hasOsFileDrag(dataTransfer: DataTransfer): boolean {
   return (
     dataTransfer.files.length > 0 ||
@@ -5726,6 +6962,14 @@ function isTerminalTransferPhase(phase: string): boolean {
     phase === "committed" ||
     phase === "cancelled" ||
     phase === "cleanup-pending"
+  );
+}
+
+function isResolvedTransferPhase(phase: string): boolean {
+  return (
+    isTerminalTransferPhase(phase) ||
+    phase === "conflicted" ||
+    phase === "failed"
   );
 }
 
