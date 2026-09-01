@@ -120,11 +120,13 @@ Each workspace stores:
 - `tiles`, the open tile instances in that workspace;
 - `focusedTileId`.
 
-Opening a tile always creates a new tile instance. The first tile fills an empty
+Opening a tile from the launcher creates a new tile instance. Kernel-authorized
+navigation, including provider presentation, may instead focus an exact
+existing app/tile instance before opening one. The first tile fills an empty
 workspace; later tiles split the focused tile to the right. Closing the final
 tile leaves the workspace empty. Open tile instances keep their own app id,
-tile id, title, path, and icon, so a later registry refresh does not
-immediately delete already-open windows.
+tile id, title, path, and icon, so a later registry refresh does not immediately
+delete already-open windows.
 
 ### Layout And Gestures
 
@@ -876,28 +878,38 @@ app/role, exact target endpoint, tool name, and JSON arguments. The user can
 allow one call, allow that endpoint/tool for the current session, or reject.
 
 An exact `{"neutron:consent":"provider_once"}` descriptor takes a separate
-branch in the same request machinery. The Kernel validates the caller's
-original arguments before dispatch and, outside Agent Mode, requires the
-focused source tile plus transient user activation. It skips the ordinary
-preliminary tool prompt and gives the target handler one invocation-scoped
-`requestApproval(review)` callback. When the provider calls it, `Requests`
-shows the Kernel-attested caller and provider identities, labels the bounded
-canonical JSON as provider-supplied, and renders **Allow once** and **Reject**.
-It never offers **Allow session**, creates no grant, and ignores pre-existing
-exact or wildcard grants. Reject, Escape, timeout, cancellation, endpoint
-replacement, a second callback, replay, or a handler return without one
-completed callback fails closed. The provider remains responsible for freezing
-its operation before asking and for using only its own preapproved authority
-afterward; the Kernel does not interpret the review.
+branch outside `Requests`. The Kernel validates the caller's original arguments
+before dispatch and, outside Agent Mode, requires the focused source tile plus
+transient user activation. It skips the ordinary preliminary tool prompt and
+gives the target handler one invocation-scoped
+`presentUserInterface({ tileId, tool, arguments })` callback. Kernel opens or
+reuses and focuses that exact provider tile in the active workspace, waits for
+its exact endpoint, and routes the opaque arguments only to a private tool
+declaring `same_app` visibility and the `foreground_tile` audience. It attests
+the original caller and audience rather than accepting them in app data.
 
-All app-originated frontend tool, signed call, backend access, Connections,
+The provider tile loads authoritative facts, renders its own modal, owns Accept
+and Reject, and makes its own preapproved self call after Accept. No Kernel
+dialog renders or interprets the provider's domain data. The callback is
+one-use, creates no grant, and ignores pre-existing exact or wildcard grants.
+Timeout, cancellation, endpoint replacement, a second use, replay, or a handler
+return without one completed interaction fails closed.
+
+The deprecated `requestApproval(review)` callback remains only so
+already-published providers, including Wallet 0.3.6, continue to work with
+their old Kernel-rendered raw-JSON review. It shares the same one-use capability
+with `presentUserInterface`; new provider code must use the provider-owned tile
+path and cannot stack both flows.
+
+All Kernel-owned frontend tool, signed call, backend access, Connections,
 workspace navigation, and Agent Mode grant prompts first pass through the
 shared UI-attention policy in `src/ui_attention/owner.ts`. Only one may be
 active globally and there is no hidden queue. Rolling source-app and global
 limits reject excess attempts with structured errors. Requests expire, and
 rejecting, pressing Escape, or closing a backdrop applies a short recovery
 pause. Prompt controls can pause that source app for two minutes, ten minutes,
-or the browser session.
+or the browser session. A provider-owned modal is app UI inside its isolated
+tile and is bounded by that provider's implementation instead.
 
 ### Agent Mode Runtime
 
@@ -916,10 +928,13 @@ requested by descendants are suspended and sent to the root through the
 reserved consent action on the existing message bus. Invalid, stale, unscoped,
 late, or replayed authority fails closed.
 
-For a provider-mediated one-shot request, a direct root automatically resolves
-the provider's callback without owner UI. A descendant sends the complete
-provider-authored review—not only argument counts or bytes—to the root's
-private allow/deny path. An ordinary session grant cannot bypass that boundary.
+Provider-owned presentation is the human route and is rejected from Agent
+invocations. Autonomous provider work uses a separate tool declaring both
+`same_app` visibility and the `agent_root` audience. Kernel exposes and routes
+that tool only to the active depth-zero root, injects the attested audience,
+and opens neither Kernel nor provider UI. Ordinary app calls and delegated
+descendants are rejected before target dispatch. The provider checks the
+audience and uses only its own declared preapproved authority.
 
 For a nested `canister.call_dialog_v2` permission, the exact review value—not
 only summary counts—must fit the ordinary message-bus envelope before any
@@ -940,10 +955,15 @@ one-shot agent decision. Neither path can switch, close, move, resize, or reset
 another app's workspace UI. Tray endpoints cannot start Agent Mode or receive
 delegated agent calls.
 
+A provider presentation uses the same exact open-or-focus primitive but cannot
+choose another app: Kernel derives the provider app from the suspended public
+tool invocation and accepts only a declared tile and its private
+`foreground_tile` tool.
+
 Agent Mode remains live-turn authority. Enabling one exact entrypoint does not
 start an unattended background root; each root begins from the agent's focused,
-transiently owner-activated tile and provider authority ends with that bounded
-invocation.
+transiently owner-activated tile, and the provider's `agent_root` audience ends
+with that bounded invocation.
 
 ### Exact Installed Artifact Inspection
 

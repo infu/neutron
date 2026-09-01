@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import {
   LEGACY_KERNEL_RELEASES,
+  PRODUCTION_KERNEL_V323_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   TEST_CANDIDATE_KERNEL_VERSION,
   compileFinalCandidateLegacyKernelUpgradeFixture,
+  compileFinalCandidateProductionKernelUpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   loadLegacyKernelIdentityFixture,
@@ -45,6 +47,22 @@ test("the retained v0.3.21 predecessor is final-candidate-only and identity-boun
 test("the retained predecessor lane also requires the reviewed candidate digest", async () => {
   await expect(
     compileFinalCandidateRetainedKernelUpgradeFixture({
+      expectedSha256: "",
+    }),
+  ).rejects.toThrow(
+    "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+  );
+});
+
+test("the exact production v0.3.23 predecessor is identity-bound", async () => {
+  expect(PRODUCTION_KERNEL_V323_RELEASE).toMatchObject({
+    version: 323,
+    bytes: 2_448_813,
+    sha256: "e2e5cea791af54a5052f227fcda57f07ecec1a5b4d11bfb5c79696c75d826334",
+    persistenceMode: "classical",
+  });
+  await expect(
+    compileFinalCandidateProductionKernelUpgradeFixture({
       expectedSha256: "",
     }),
   ).rejects.toThrow(

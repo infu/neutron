@@ -1,9 +1,14 @@
 import Blob "mo:core/Blob";
+import Int "mo:core/Int";
 import List "mo:core/List";
 import Map "mo:core/Map";
+import Nat64 "mo:core/Nat64";
+import Order "mo:core/Order";
 import CommandMemory "../memory/wallet_commands/v1";
 
 module {
+    public type ExecutionAdmission = { #waiting; #dispatch };
+
     public type ActiveIcpRevokeMatch = {
         #none;
         #resume : {
@@ -18,6 +23,55 @@ module {
         frozen_args : Blob;
         spender : Blob;
         var seen : Bool;
+    };
+
+    public func pruneExpiredCommands(
+        commands : Map.Map<CommandMemory.CommandKey, CommandMemory.Command>,
+        compare : (CommandMemory.CommandKey, CommandMemory.CommandKey) -> Order.Order,
+        now : Int,
+        limit : Nat,
+    ) : Nat {
+        let discarded = List.empty<CommandMemory.CommandKey>();
+        label entries for ((key, command) in Map.entries(commands)) {
+            if (List.size(discarded) >= limit) break entries;
+            let removable = switch (command.status) {
+                case (#prepared) now > Int.fromNat(Nat64.toNat(command.valid_until));
+                case (#succeeded(_)) now >= command.retain_until;
+                case (#rejected(_)) now >= command.retain_until;
+                case (#pending(_)) false;
+            };
+            if (removable) List.add(discarded, key);
+        };
+        for (key in List.values(discarded)) {
+            Map.remove(commands, compare, key);
+        };
+        List.size(discarded);
+    };
+
+    public func acceptForExecution(
+        command : CommandMemory.Command,
+        anotherInFlight : Bool,
+        now : Int,
+    ) : ExecutionAdmission {
+        let attempts = switch (command.status) {
+            case (#pending(value)) value.attempts + 1;
+            case (_) 1;
+        };
+        let startedAt = switch (command.status) {
+            case (#pending(value)) value.started_at;
+            case (_) now;
+        };
+        let lastError = switch (command.status) {
+            case (#pending(value)) value.last_error;
+            case (_) null;
+        };
+        command.status := #pending({
+            attempts;
+            started_at = startedAt;
+            last_error = lastError;
+        });
+        command.updated_at := now;
+        if (anotherInFlight) #waiting else #dispatch;
     };
 
     public func activeCommandCount(

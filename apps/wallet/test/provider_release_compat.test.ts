@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { unpackNeutronPackage } from "neutron-compiler/src/install.ts";
+import { normalizeToolDescriptor } from "neutron-tools/app";
 import { handleWalletFunding } from "../src/funding.ts";
 
 const RELEASED_WALLET_V032 = new URL(
@@ -11,6 +12,13 @@ const RELEASED_WALLET_V032 = new URL(
 const RELEASED_WALLET_V032_BYTES = 575_530;
 const RELEASED_WALLET_V032_SHA256 =
   "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43";
+const RELEASED_WALLET_V036 = new URL(
+  "../wallet.v0.3.6.neutron",
+  import.meta.url,
+);
+const RELEASED_WALLET_V036_BYTES = 666_413;
+const RELEASED_WALLET_V036_SHA256 =
+  "bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae";
 
 const decoder = new TextDecoder();
 
@@ -45,7 +53,39 @@ test("released Wallet 0.3.2 cannot expose successor provider funding", async () 
   expect(service).not.toContain("provider_approval.request");
 });
 
-test("successor Wallet fails closed on an older Kernel without provider approval", async () => {
+test("released Wallet 0.3.6 keeps the legacy provider contract accepted by the successor", async () => {
+  const archive = await readFile(RELEASED_WALLET_V036);
+  expect(archive.byteLength).toBe(RELEASED_WALLET_V036_BYTES);
+  expect(createHash("sha256").update(archive).digest("hex")).toBe(
+    RELEASED_WALLET_V036_SHA256,
+  );
+
+  const unpacked = unpackNeutronPackage(new Uint8Array(archive));
+  const manifest = decodeJson(unpacked["neutron.json"], "manifest") as {
+    version?: unknown;
+  };
+  const service = decodeText(unpacked["web/service.js"], "resident service");
+  expect(manifest.version).toBe(306);
+  expect(service).toContain("wallet_fund_v1");
+  expect(service).toContain("provider_approval.request");
+  expect(service).toContain(
+    '"neutron:audit":"metadata_only","neutron:consent":"provider_once","neutron:effects":["write","network","user_visible_ui"]',
+  );
+  expect(
+    normalizeToolDescriptor({
+      name: "wallet_fund_v1",
+      inputSchema: { type: "object", additionalProperties: false },
+      outputSchema: { type: "object", additionalProperties: false },
+      annotations: {
+        "neutron:audit": "metadata_only",
+        "neutron:consent": "provider_once",
+        "neutron:effects": ["write", "network", "user_visible_ui"],
+      },
+    }).annotations,
+  ).toMatchObject({ "neutron:consent": "provider_once" });
+});
+
+test("successor Wallet fails closed on an older Kernel without provider UI", async () => {
   let selfCalls = 0;
   const controller = new AbortController();
   const context = {
@@ -80,7 +120,7 @@ test("successor Wallet fails closed on an older Kernel without provider approval
       context,
     ),
   ).rejects.toThrow(
-    "Wallet funding requires a Kernel with provider approval support",
+    "Wallet funding requires a Kernel with provider UI support",
   );
   expect(selfCalls).toBe(0);
 });

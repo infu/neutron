@@ -30,11 +30,19 @@ type IcpLedger = {
   ], { allowance: bigint; expires_at: [] | [bigint] }>;
 };
 
-type DialogAudit = {
+type KernelDialogAudit = {
   seen: string[];
 };
 
-test("Kitchen Sink funds Neutrinite governance through Wallet with one decision", async ({
+type WalletFundingKind = "direct" | "allowance";
+
+const KERNEL_DIALOG_SELECTOR = [
+  '[data-tid="frontend-tool-dialog"]',
+  '[data-tid="call-dialog"]',
+  '[data-tid="backend-call-dialog"]',
+].join(", ");
+
+test("Kitchen Sink funds governance with one Wallet decision and no Kernel dialog", async ({
   page,
 }) => {
   test.setTimeout(300_000);
@@ -80,11 +88,27 @@ test("Kitchen Sink funds Neutrinite governance through Wallet with one decision"
   const source = account(runtime.canisterId);
   const governance = account(NEUTRINITE_GOVERNANCE);
 
+  const rejectedDirectSource = await ledger.icrc1_balance_of(source);
+  const rejectedDirectGovernance = await ledger.icrc1_balance_of(governance);
+  await runWalletAction({
+    page,
+    kitchen,
+    kind: "direct",
+    buttonName: `Transfer ${ICP_SWAP_AMOUNT_DISPLAY}`,
+    expectedStatus: "rejected",
+    decision: "reject",
+  });
+  expect(await ledger.icrc1_balance_of(source)).toBe(rejectedDirectSource);
+  expect(await ledger.icrc1_balance_of(governance)).toBe(
+    rejectedDirectGovernance,
+  );
+
   const directSourceBefore = await ledger.icrc1_balance_of(source);
   const directGovernanceBefore = await ledger.icrc1_balance_of(governance);
   await runWalletAction({
     page,
     kitchen,
+    kind: "direct",
     buttonName: `Transfer ${ICP_SWAP_AMOUNT_DISPLAY}`,
     expectedStatus: "transferred",
   });
@@ -95,12 +119,35 @@ test("Kitchen Sink funds Neutrinite governance through Wallet with one decision"
     directGovernanceBefore + amount,
   );
 
+  const rejectedAllowanceSource = await ledger.icrc1_balance_of(source);
+  const rejectedAllowanceGovernance = await ledger.icrc1_balance_of(governance);
+  const rejectedAllowance = await ledger.icrc2_allowance({
+    account: source,
+    spender: governance,
+  });
+  await runWalletAction({
+    page,
+    kitchen,
+    kind: "allowance",
+    buttonName: `Approve ${ICP_SWAP_AMOUNT_DISPLAY} swap funding`,
+    expectedStatus: "rejected",
+    decision: "reject",
+  });
+  expect(await ledger.icrc1_balance_of(source)).toBe(rejectedAllowanceSource);
+  expect(await ledger.icrc1_balance_of(governance)).toBe(
+    rejectedAllowanceGovernance,
+  );
+  expect(
+    await ledger.icrc2_allowance({ account: source, spender: governance }),
+  ).toEqual(rejectedAllowance);
+
   const allowanceSourceBefore = await ledger.icrc1_balance_of(source);
   const allowanceGovernanceBefore = await ledger.icrc1_balance_of(governance);
   const allowanceStartedNs = BigInt(Date.now()) * 1_000_000n;
   await runWalletAction({
     page,
     kitchen,
+    kind: "allowance",
     buttonName: `Approve ${ICP_SWAP_AMOUNT_DISPLAY} swap funding`,
     expectedStatus: "approved",
   });
@@ -125,43 +172,83 @@ test("Kitchen Sink funds Neutrinite governance through Wallet with one decision"
 async function runWalletAction({
   page,
   kitchen,
+  kind,
   buttonName,
   expectedStatus,
+  decision = "accept",
 }: {
   page: Page;
   kitchen: FrameLocator;
+  kind: WalletFundingKind;
   buttonName: string;
-  expectedStatus: "transferred" | "approved";
+  expectedStatus: "transferred" | "approved" | "rejected";
+  decision?: "accept" | "reject";
 }): Promise<void> {
-  await startDialogAudit(page);
+  await startKernelDialogAudit(page);
+  const kitchenFrame = page.locator(
+    'iframe[data-app-id="kitchensink"][data-tile-id="main"]',
+  );
+  await kitchenFrame.focus();
+  await expect(kitchenFrame).toBeFocused();
   await kitchen.getByRole("button", { name: buttonName, exact: true }).click();
 
-  const dialog = page.locator('[data-tid="frontend-tool-dialog"]');
-  await expect(dialog).toHaveCount(1);
+  await expect(page.locator(KERNEL_DIALOG_SELECTOR)).toHaveCount(0);
+  await expect(
+    page.locator('iframe[data-app-id="wallet"][data-tile-id="wallet"]'),
+  ).toHaveCount(1);
+  const wallet = page.frameLocator(
+    'iframe[data-app-id="wallet"][data-tile-id="wallet"]',
+  );
+  const dialog = wallet.locator('[data-tid="wallet-funding-dialog"]');
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Allow Kitchen Sink to use Wallet?");
+  await expect(dialog).toHaveCount(1);
+  await expect(dialog).toContainText("Request from kitchensink");
   await expect(dialog).toContainText("Internet Computer");
   await expect(dialog).toContainText("ICP");
-  await expect(dialog).toContainText(ICP_SWAP_AMOUNT_DISPLAY);
-  await expect(dialog).toContainText(ICP_LEDGER);
-  await expect(dialog).toContainText(NEUTRINITE_GOVERNANCE);
+  await expect(dialog.getByText(ICP_LEDGER, { exact: true })).toHaveCount(1);
   await expect(
-    page.locator('[data-tid="frontend-tool-approve-once"]'),
+    dialog.getByText(NEUTRINITE_GOVERNANCE, { exact: true }),
   ).toHaveCount(1);
-  await expect(
-    page.locator('[data-tid="frontend-tool-approve-session"]'),
-  ).toHaveCount(0);
-  await expect(page.locator('[data-tid="call-dialog"]')).toHaveCount(0);
-  await expect(page.locator('[data-tid="backend-call-dialog"]')).toHaveCount(0);
-  await page.locator('[data-tid="frontend-tool-approve-once"]').click();
+  await expect(dialog).toContainText(
+    kind === "direct"
+      ? `Send ${ICP_SWAP_AMOUNT_DISPLAY}`
+      : `Approve ${ICP_SWAP_AMOUNT_DISPLAY} allowance`,
+  );
+  await expect(dialog).toContainText(kind === "direct" ? "Recipient" : "Spender");
+  await expect(dialog).toContainText("Command ID");
+  await expect(dialog).toContainText(`${ICP_SWAP_AMOUNT_ATOMS} atoms`);
+  if (kind === "direct") {
+    await expect(dialog).toContainText("Ledger fee");
+    await expect(dialog).toContainText("Maximum debit");
+  } else {
+    for (const detail of [
+      "Current allowance",
+      "New allowance",
+      "Approval fee",
+      "Transfer-from fee",
+      "Current expiration",
+      "New expiration",
+      "Maximum source debit",
+    ]) {
+      await expect(dialog).toContainText(detail);
+    }
+  }
+  const accept = wallet.locator('[data-tid="wallet-funding-accept"]');
+  await expect(accept).toHaveCount(1);
+  await expect(accept).toHaveText(
+    kind === "direct" ? "Send" : "Approve allowance",
+  );
+  const reject = wallet.locator('[data-tid="wallet-funding-reject"]');
+  await expect(reject).toHaveText("Cancel");
+  await expect(page.locator(KERNEL_DIALOG_SELECTOR)).toHaveCount(0);
+  await (decision === "accept" ? accept : reject).click();
 
   await expect(
     kitchen.locator('[data-tid="wallet-funding-result"]'),
   ).toContainText(`"status": "${expectedStatus}"`, { timeout: 120_000 });
   await expect(dialog).toHaveCount(0);
-  await expect(page.locator('[data-tid="call-dialog"]')).toHaveCount(0);
-  await expect(page.locator('[data-tid="backend-call-dialog"]')).toHaveCount(0);
-  expect((await stopDialogAudit(page)).seen).toHaveLength(1);
+  await expect(page.locator(KERNEL_DIALOG_SELECTOR)).toHaveCount(0);
+  expect((await stopKernelDialogAudit(page)).seen).toEqual([]);
 }
 
 async function openKitchenSink(page: Page): Promise<void> {
@@ -188,42 +275,42 @@ function account(owner: string): IcrcAccount {
   return { owner: Principal.fromText(owner), subaccount: [] };
 }
 
-async function startDialogAudit(page: Page): Promise<void> {
-  await page.evaluate(() => {
+async function startKernelDialogAudit(page: Page): Promise<void> {
+  await page.evaluate((selector) => {
     const scope = globalThis as typeof globalThis & {
-      __NEUTRON_WALLET_DIALOG_AUDIT__?: {
+      __NEUTRON_KERNEL_DIALOG_AUDIT__?: {
         observer: MutationObserver;
         seen: Set<string>;
       };
     };
-    scope.__NEUTRON_WALLET_DIALOG_AUDIT__?.observer.disconnect();
+    scope.__NEUTRON_KERNEL_DIALOG_AUDIT__?.observer.disconnect();
     const seen = new Set<string>();
     const observe = () => {
       document
-        .querySelectorAll<HTMLElement>('[data-tid="frontend-tool-dialog"]')
+        .querySelectorAll<HTMLElement>(selector)
         .forEach((dialog) => {
-          seen.add(dialog.getAttribute("aria-labelledby") ?? "unlabelled");
+          seen.add(dialog.dataset.tid ?? "unlabelled");
         });
     };
     const observer = new MutationObserver(observe);
     observer.observe(document.body, { childList: true, subtree: true });
-    scope.__NEUTRON_WALLET_DIALOG_AUDIT__ = { observer, seen };
+    scope.__NEUTRON_KERNEL_DIALOG_AUDIT__ = { observer, seen };
     observe();
-  });
+  }, KERNEL_DIALOG_SELECTOR);
 }
 
-async function stopDialogAudit(page: Page): Promise<DialogAudit> {
+async function stopKernelDialogAudit(page: Page): Promise<KernelDialogAudit> {
   return page.evaluate(() => {
     const scope = globalThis as typeof globalThis & {
-      __NEUTRON_WALLET_DIALOG_AUDIT__?: {
+      __NEUTRON_KERNEL_DIALOG_AUDIT__?: {
         observer: MutationObserver;
         seen: Set<string>;
       };
     };
-    const audit = scope.__NEUTRON_WALLET_DIALOG_AUDIT__;
-    if (!audit) throw new Error("Wallet dialog audit was not started");
+    const audit = scope.__NEUTRON_KERNEL_DIALOG_AUDIT__;
+    if (!audit) throw new Error("Kernel dialog audit was not started");
     audit.observer.disconnect();
-    delete scope.__NEUTRON_WALLET_DIALOG_AUDIT__;
+    delete scope.__NEUTRON_KERNEL_DIALOG_AUDIT__;
     return { seen: Array.from(audit.seen) };
   });
 }

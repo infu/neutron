@@ -15,6 +15,9 @@ import {
 } from "../src/catalog.ts";
 import { formatTokenAmount, parseTokenAmount } from "../src/format.ts";
 import {
+  WALLET_FUNDING_PRESENT_TOOL,
+  WALLET_FUNDING_REJECT_METHOD,
+  WALLET_FUNDING_ROOT_TOOL,
   WALLET_FUNDING_TOOL,
   walletFundingInputSchema,
   walletFundingOutputSchema,
@@ -37,7 +40,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.6.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.7.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -49,7 +52,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 306,
+    version: 307,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -89,6 +92,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_transfer",
           "wallet_funding_prepare_v1",
           "wallet_funding_execute_v1",
+          "wallet_funding_reject_v1",
           "wallet_allowances_page_v1",
         ],
       },
@@ -137,6 +141,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value.func).toHaveProperty("wallet_transfer");
   expect(value.func).toHaveProperty("wallet_funding_prepare_v1");
   expect(value.func).toHaveProperty("wallet_funding_execute_v1");
+  expect(value.func).toHaveProperty("wallet_funding_reject_v1");
   expect(value.func).toHaveProperty("wallet_allowances_page_v1");
   expect(value.func).toHaveProperty("wallet_refresh_deposits");
   expect(value.func?.wallet_history_tick).toEqual({
@@ -270,7 +275,9 @@ test("Wallet tile and tray mount the same app and gate only focused capabilities
   expect(service).toContain("WALLET_PROJECTION_TOOLS.overview");
   expect(service).toContain("WALLET_PROJECTION_TOOLS.refresh");
   expect(service).toContain("WALLET_FUNDING_TOOL");
+  expect(service).toContain("WALLET_FUNDING_ROOT_TOOL");
   expect(service).toContain("handleWalletFunding");
+  expect(service).toContain('"neutron:audience": "agent_root"');
   expect(service).toContain('"neutron:consent": "provider_once"');
   expect(service).toContain('updateSelf("wallet_refresh_balances"');
   expect(service).toContain("setTrayState({ badge: null })");
@@ -286,6 +293,18 @@ test("Wallet tile and tray mount the same app and gate only focused capabilities
   expect(frontend).toContain("Continue deposit in Wallet");
   expect(frontend).toContain("setProjectionRevision");
   expect(frontend).toContain("publishWalletInvalidation");
+  expect(frontend).toContain("WALLET_FUNDING_PRESENT_TOOL");
+  expect(frontend).toContain('"neutron:audience": "foreground_tile"');
+  expect(frontend).toContain('data-tid="wallet-funding-dialog"');
+  expect(frontend).toContain('data-tid="wallet-funding-accept"');
+  expect(frontend).toContain('data-tid="wallet-funding-reject"');
+  expect(frontend).toContain("<code>{review.ledger}</code>");
+  expect(frontend).toContain('<code>{review.destination ?? "Unavailable"}</code>');
+  expect(frontend).toContain("? approvalSpenderText(review.spender)");
+  expect(frontend).toContain("Wallet is already reviewing another funding request");
+  expect(frontend).toContain("{review.amountAtoms} atoms");
+  expect(frontend).not.toContain("WALLET_FUNDING_PROMPT_LIMIT");
+  expect(frontend).not.toContain("for a swap");
   expect(frontend).toContain('className="wallet-custom-ledger-entry"');
   expect(frontend).toContain("onClick={addCustomLedger}");
   expect(frontend).not.toContain("<form");
@@ -314,6 +333,29 @@ test("Wallet resident tool schemas are closed and hardened", () => {
       annotations: { "neutron:consent": "provider_once" },
     }),
   ).not.toThrow();
+  expect(() =>
+    normalizeToolDescriptor({
+      name: WALLET_FUNDING_PRESENT_TOOL,
+      inputSchema: walletFundingInputSchema,
+      outputSchema: walletFundingOutputSchema,
+      annotations: {
+        "neutron:audience": "foreground_tile",
+        "neutron:visibility": "same_app",
+      },
+    }),
+  ).not.toThrow();
+  expect(() =>
+    normalizeToolDescriptor({
+      name: WALLET_FUNDING_ROOT_TOOL,
+      inputSchema: walletFundingInputSchema,
+      outputSchema: walletFundingOutputSchema,
+      annotations: {
+        "neutron:audience": "agent_root",
+        "neutron:visibility": "same_app",
+      },
+    }),
+  ).not.toThrow();
+  expect(WALLET_FUNDING_REJECT_METHOD).toBe("wallet_funding_reject_v1");
 });
 
 test("Wallet formats arbitrary Nat balances without Number conversion", () => {

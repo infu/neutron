@@ -133,6 +133,90 @@ Map.add(
 assert (FundingJournal.activeCommandCount(commands, "swap") == 2);
 assert (FundingJournal.activeCommandCount(commands, "other") == 1);
 
+// Capacity cleanup must retain terminal request IDs through retain_until so a
+// retry replays its result instead of becoming a second value-moving command.
+let retainedTerminals = Map.empty<CommandMemory.CommandKey, CommandMemory.Command>();
+let retainedSuccessKey = key("swap", 7);
+let retainedRejectedKey = key("swap", 8);
+Map.add(
+    retainedTerminals,
+    compareKey,
+    retainedSuccessKey,
+    command("swap", ledger, spender, 500, ?900, #succeeded({
+        block_index = ?1;
+        duplicate = false;
+        completed_at = 0;
+    })),
+);
+Map.add(
+    retainedTerminals,
+    compareKey,
+    retainedRejectedKey,
+    command("swap", ledger, spender, 500, ?900, #rejected({
+        code = "owner_rejected";
+        message = "rejected";
+        at = 0;
+    })),
+);
+assert (
+    FundingJournal.pruneExpiredCommands(
+        retainedTerminals,
+        compareKey,
+        1_001,
+        64,
+    ) == 0
+);
+switch (Map.get(retainedTerminals, compareKey, retainedSuccessKey)) {
+    case (?command) switch (command.status) {
+        case (#succeeded(_)) {};
+        case (_) assert false;
+    };
+    case null assert false;
+};
+switch (Map.get(retainedTerminals, compareKey, retainedRejectedKey)) {
+    case (?command) switch (command.status) {
+        case (#rejected(_)) {};
+        case (_) assert false;
+    };
+    case null assert false;
+};
+assert (
+    FundingJournal.pruneExpiredCommands(
+        retainedTerminals,
+        compareKey,
+        2_000,
+        64,
+    ) == 2
+);
+assert (Map.size(retainedTerminals) == 0);
+
+// An owner acceptance while another Wallet call is active is still journaled
+// as pending. The same request can later dispatch without becoming reviewable
+// or rejectable again.
+let acceptedWhileBusy = command("swap", ledger, spender, 500, ?900, #prepared);
+switch (FundingJournal.acceptForExecution(acceptedWhileBusy, true, 1_100)) {
+    case (#waiting) {};
+    case (#dispatch) assert false;
+};
+switch (acceptedWhileBusy.status) {
+    case (#pending(value)) {
+        assert (value.attempts == 1);
+        assert (value.started_at == 1_100);
+    };
+    case (_) assert false;
+};
+switch (FundingJournal.acceptForExecution(acceptedWhileBusy, false, 1_200)) {
+    case (#dispatch) {};
+    case (#waiting) assert false;
+};
+switch (acceptedWhileBusy.status) {
+    case (#pending(value)) {
+        assert (value.attempts == 2);
+        assert (value.started_at == 1_100);
+    };
+    case (_) assert false;
+};
+
 // A fresh request ID with the exact original facts resumes the durable pending
 // legacy removal rather than admitting another fee-bearing remove_approval.
 switch (FundingJournal.activeIcpRevoke(

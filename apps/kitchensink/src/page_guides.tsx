@@ -609,16 +609,16 @@ await bus.callTool({
       "A swap or commerce app can ask the user's trusted Wallet to fund one exact action without learning token implementation details or asking for a second approval.",
     flow: [
       "Kitchen Sink sends one fixed ICP intent to Wallet's exact resident wallet_fund_v1 tool directly from the user's click.",
-      "Wallet reads authoritative ledger metadata and fees, prepares the token-aware review, and asks the Kernel to bind one decision to that request.",
-      "Wallet either transfers directly or creates a five-minute allowance; only Neutrinite governance can later consume its own allowance with transfer_from.",
+      "The Kernel authenticates and routes the request and opens or focuses Wallet without displaying a token approval dialog.",
+      "Wallet reads authoritative ledger metadata and fees, shows its own token-aware modal, then transfers directly or creates a five-minute allowance after one decision.",
     ],
     security: {
       enforced:
-        "The Kernel source-binds Kitchen Sink and Wallet, validates the tool schemas, and permits only one request decision; it routes but does not interpret ICP amounts, decimals, or fees.",
+        "The Kernel source-binds Kitchen Sink and Wallet, validates the tool schemas, and opens the exact Wallet tile; it routes but does not interpret or display ICP amounts, decimals, or fees.",
       authority:
         "Wallet owns the ledger reservations and execution. Kitchen Sink fixes the ledger, amount, and governance account and cannot spend Neutrinite governance's allowance or fall back to a direct ledger call.",
       visibility:
-        "The intent and Wallet-authored review are visible to Kitchen Sink, Wallet, and the trusted Kernel. Ledger transfers and approvals are public replicated ledger state.",
+        "The intent and receipt traverse the trusted Kernel router, while the token-aware review is rendered inside Wallet. Ledger transfers and approvals are public replicated ledger state.",
     },
     example: {
       title: "Ask Wallet to prepare and execute one exact funding intent",

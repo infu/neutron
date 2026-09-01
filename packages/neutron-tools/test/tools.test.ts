@@ -47,9 +47,12 @@ import {
 import {
   MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
   MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
+  NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
   NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
   kernelCallPayloadSchema,
   kernelSchemaPayloadSchema,
+  normalizeToolDescriptor,
 } from "../src/protocol.ts";
 import {
   executeExposedAction,
@@ -1023,7 +1026,7 @@ test("provider-reviewed handlers receive one private approval callback", async (
     targetOrigin: "port",
   });
   expect(secondApprovalError).toBe(
-    "Provider approval callback was already used",
+    "Provider interaction callback was already used",
   );
   expect(
     fakeWindow.parent.messages.filter(
@@ -1033,6 +1036,119 @@ test("provider-reviewed handlers receive one private approval callback", async (
     ),
   ).toHaveLength(1);
   removeExposedTool("provider_transfer");
+});
+
+test("provider presentation sends one exact closed request and shares the approval gate", async () => {
+  const fakeWindow = installFakeWindow();
+  const capability = "c".repeat(64);
+  const presentation = {
+    tileId: "wallet",
+    tool: "wallet_funding_review_v1",
+    arguments: {
+      requestId: "00112233445566778899aabbccddeeff",
+      amountAtoms: "1000000",
+    },
+  };
+  let secondInteractionError = "";
+  exposeTool(
+    "provider_present",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        required: ["decision"],
+        properties: { decision: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    async (_args, context) => {
+      if (!context.presentUserInterface || !context.requestApproval) {
+        throw new Error("Provider interaction is unavailable");
+      }
+      const result = await context.presentUserInterface<{ decision: string }>(
+        presentation,
+      );
+      try {
+        await context.requestApproval({ amount: "must not be requested" });
+      } catch (error) {
+        secondInteractionError = (error as Error).message;
+      }
+      return result;
+    },
+  );
+
+  const invocation = {
+    id: "4".repeat(16),
+    rootId: "5".repeat(16),
+    capability: "6".repeat(64),
+  };
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 64,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "provider_present",
+        arguments: {},
+        providerApproval: { capability },
+      },
+      context: { invocation },
+    },
+  });
+  await nextTick();
+  const request = fakeWindow.parent.messages.find(
+    ({ message }) =>
+      (message as { type?: unknown }).type === "exec" &&
+      (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_ui.present",
+  )?.message as
+    | {
+        type: "exec";
+        id: number;
+        payload: {
+          action: string;
+          payload: unknown;
+          context?: { invocation?: unknown };
+        };
+      }
+    | undefined;
+  expect(request).toEqual({
+    type: "exec",
+    id: expect.any(Number),
+    payload: {
+      action: "provider_ui.present",
+      payload: { capability, ...presentation },
+      context: { invocation },
+    },
+  });
+  if (!request) throw new Error("Missing provider presentation request");
+  fakeWindow.dispatch({
+    type: "response",
+    id: request.id,
+    ok: { decision: "approved" },
+  });
+  await nextTick();
+
+  expect(fakeWindow.parent.messages).toContainEqual({
+    message: {
+      type: "response",
+      id: 64,
+      ok: { decision: "approved" },
+    },
+    targetOrigin: "port",
+  });
+  expect(secondInteractionError).toBe(
+    "Provider interaction callback was already used",
+  );
+  expect(
+    fakeWindow.parent.messages.some(
+      ({ message }) =>
+        (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_approval.request",
+    ),
+  ).toBe(false);
+  removeExposedTool("provider_present");
 });
 
 test("provider-reviewed handlers receive no callback from an older Kernel", async () => {
@@ -1589,6 +1705,191 @@ test("tool descriptors expose only the closed same-app visibility profile", () =
       ),
     ).toThrow(/Unsupported neutron:visibility/);
   }
+});
+
+test("tool descriptors accept only closed same-app audience profiles", () => {
+  for (const audience of [
+    NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+    NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  ] as const) {
+    const name = `audience_${audience}`;
+    exposeTool(
+      name,
+      {
+        inputSchema: { type: "object", additionalProperties: false },
+        annotations: {
+          "neutron:visibility": "same_app",
+          "neutron:audience": audience,
+        },
+      },
+      () => null,
+    );
+    expect(
+      listExposedTools().find((descriptor) => descriptor.name === name)
+        ?.annotations,
+    ).toEqual({
+      "neutron:visibility": "same_app",
+      "neutron:audience": audience,
+    });
+    removeExposedTool(name);
+  }
+
+  expect(() =>
+    exposeTool(
+      "audience_without_visibility",
+      {
+        inputSchema: { type: "object", additionalProperties: false },
+        annotations: {
+          "neutron:audience": NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+        },
+      },
+      () => null,
+    ),
+  ).toThrow(/must also use same-app visibility/);
+
+  for (const audience of [
+    "foreground",
+    "root",
+    "same_app",
+    "",
+    null,
+    1,
+    false,
+  ]) {
+    expect(() =>
+      exposeTool(
+        "invalid_audience",
+        {
+          inputSchema: { type: "object", additionalProperties: false },
+          annotations: {
+            "neutron:visibility": "same_app",
+            "neutron:audience": audience,
+          } as any,
+        },
+        () => null,
+      ),
+    ).toThrow(/Unsupported neutron:audience/);
+  }
+});
+
+test("audience profiles reject incompatible tool annotations", () => {
+  const incompatibleAnnotations = [
+    {
+      "neutron:attachments": {
+        version: 1,
+        input: {
+          name: "payload",
+          mediaTypes: ["application/octet-stream"],
+          maxBytes: 1,
+          required: true,
+        },
+      },
+    },
+    { "neutron:control": "cancel" },
+    { "neutron:consent": NEUTRON_TOOL_CONSENT_PROVIDER_ONCE },
+  ];
+
+  for (const audience of [
+    NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+    NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  ] as const) {
+    for (const incompatible of incompatibleAnnotations) {
+      expect(() =>
+        normalizeToolDescriptor({
+          name: `incompatible_${audience}`,
+          inputSchema: { type: "object", additionalProperties: false },
+          annotations: {
+            "neutron:visibility": "same_app",
+            "neutron:audience": audience,
+            ...incompatible,
+          },
+        }),
+      ).toThrow(
+        /Audience-restricted tools cannot use attachments, control, or provider consent/,
+      );
+    }
+  }
+});
+
+test("audience-restricted handlers require the exact Kernel attestation", async () => {
+  const fakeWindow = installFakeWindow();
+  let handlerCalls = 0;
+  exposeTool(
+    "foreground_only",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        required: ["audience"],
+        properties: { audience: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: {
+        "neutron:visibility": "same_app",
+        "neutron:audience": NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+      },
+    },
+    (_args, context) => {
+      handlerCalls += 1;
+      return { audience: context.audience ?? "missing" };
+    },
+  );
+
+  const dispatch = (id: number, audience?: unknown) => {
+    fakeWindow.dispatch({
+      type: "exec",
+      id,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: {
+          name: "foreground_only",
+          arguments: {},
+          ...(audience === undefined ? {} : { audience }),
+        },
+      },
+    });
+  };
+
+  dispatch(65);
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 65,
+    error: {
+      message: "Tool audience attestation is missing or invalid",
+    },
+  });
+  expect(handlerCalls).toBe(0);
+
+  dispatch(66, NEUTRON_TOOL_AUDIENCE_AGENT_ROOT);
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 66,
+    error: {
+      message: "Tool audience attestation is missing or invalid",
+    },
+  });
+  expect(handlerCalls).toBe(0);
+
+  dispatch(67, "forged_root");
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 67,
+    error: { message: "Invalid tool audience attestation" },
+  });
+  expect(handlerCalls).toBe(0);
+
+  dispatch(68, NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE);
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toEqual({
+    type: "response",
+    id: 68,
+    ok: { audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE },
+  });
+  expect(handlerCalls).toBe(1);
+  removeExposedTool("foreground_only");
 });
 
 test("tool cancellation control is declared and uses its reserved action", async () => {

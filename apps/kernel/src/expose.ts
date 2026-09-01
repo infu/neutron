@@ -4,6 +4,8 @@ import {
   MSG_BUS_MAX_PROGRESS_BYTES,
   MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
   KernelPolicyError,
+  NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
   NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
   NEUTRON_TOOL_CONTROL_CANCEL,
   NEUTRON_TOOL_VISIBILITY_SAME_APP,
@@ -30,6 +32,7 @@ import {
   type KernelSchemaPayload,
   type MsgBusEndpointId,
   type MsgBusInvocationMetadata,
+  type OpenAppTileResult,
   type MsgBusToolCall,
   type MsgBusToolDescriptor,
   type NeutronToolControlMode,
@@ -213,7 +216,10 @@ import {
   requestInstallOffer,
 } from "./install_offers/service.ts";
 import { safeInstallOfferUrl } from "./install_offers/InstallOfferDialog.tsx";
-import { throwIfRequestCancelled } from "./request_cancel.ts";
+import {
+  requestCancellationError,
+  throwIfRequestCancelled,
+} from "./request_cancel.ts";
 import type {
   AttestedInstallOfferRequester,
   NormalizedInstallOffer,
@@ -330,7 +336,7 @@ type PendingProviderApproval = {
   timer?: ReturnType<typeof setTimeout>;
   sourceSignal?: AbortSignal;
   sourceAbort?: () => void;
-  state: "pending" | "deciding" | "approved" | "denied";
+  state: "pending" | "deciding" | "completed" | "denied";
 };
 const pendingProviderApprovals = new Map<string, PendingProviderApproval>();
 type RetainedAppStateChange = Readonly<{
@@ -1743,9 +1749,7 @@ defineKernelTool(
   async (args, caller, invocation) => {
     const appId = String(args.appId);
     const tileId = String(args.tileId);
-    const app = useAppsStore.getState().list[appId];
-    const tile = app?.tiles.find((candidate) => candidate.id === tileId);
-    if (!app || !tile) throw new Error(`Unknown app tile '${appId}/${tileId}'`);
+    requireInstalledAppTile(appId, tileId);
     const requestedWorkspace = Number(args.workspace ?? 0);
     const hasRequestedWorkspace = args.workspace !== undefined;
     const defaultWorkspace = useWorkspaceStore.getState().activeWorkspaceId;
@@ -1799,30 +1803,48 @@ defineKernelTool(
         onceOnly: true,
       });
     }
-    if (invocation) {
-      admitAgentWorkspaceMutation(invocation, !existing);
-    }
-    if (existing) {
-      focusOpenAppTile(existing.workspace, existing.instanceId);
-      if (view) queueTileView(appId, tileId, existing.instanceId, view);
-      return {
-        instanceId: existing.instanceId,
-        workspace: existing.workspace,
-        opened: false,
-      };
-    }
-    const instance = useWorkspaceStore.getState().openTile({
-      appId,
-      tileId,
-      title: tile.title,
-      path: tile.path,
-      icon: tile.icon,
-    });
-    focusTileElement(instance.id);
-    if (view) queueTileView(appId, tileId, instance.id, view);
-    return { instanceId: instance.id, workspace, opened: true };
+    return openOrFocusAppTile(appId, tileId, workspace, view, invocation);
   },
 );
+
+function requireInstalledAppTile(appId: string, tileId: string) {
+  const app = useAppsStore.getState().list[appId];
+  const tile = app?.tiles.find((candidate) => candidate.id === tileId);
+  if (!app || !tile) throw new Error(`Unknown app tile '${appId}/${tileId}'`);
+  return tile;
+}
+
+function openOrFocusAppTile(
+  appId: string,
+  tileId: string,
+  workspace: WorkspaceId,
+  view: string | null,
+  invocation: InvocationNode | null,
+): OpenAppTileResult {
+  const tile = requireInstalledAppTile(appId, tileId);
+  const existing = findOpenAppTile(appId, tileId, workspace);
+  assertAppTileCapacity(workspace, Boolean(existing), invocation);
+  if (invocation) admitAgentWorkspaceMutation(invocation, !existing);
+  if (existing) {
+    focusOpenAppTile(existing.workspace, existing.instanceId);
+    if (view) queueTileView(appId, tileId, existing.instanceId, view);
+    return {
+      instanceId: existing.instanceId,
+      workspace: existing.workspace,
+      opened: false,
+    };
+  }
+  const instance = useWorkspaceStore.getState().openTile({
+    appId,
+    tileId,
+    title: tile.title,
+    path: tile.path,
+    icon: tile.icon,
+  });
+  focusTileElement(instance.id);
+  if (view) queueTileView(appId, tileId, instance.id, view);
+  return { instanceId: instance.id, workspace, opened: true };
+}
 
 function findOpenAppTile(
   appId: string,
@@ -1950,6 +1972,58 @@ function focusTileElement(instanceId: string, attempt = 0): void {
   if (attempt < 30) {
     globalThis.setTimeout(() => focusTileElement(instanceId, attempt + 1), 16);
   }
+}
+
+function waitForRegisteredEndpoint(
+  endpointId: MsgBusEndpointId,
+  timeoutSeconds: number,
+  signal?: AbortSignal,
+): Promise<RegisteredEndpoint> {
+  const existing = getRegisteredEndpoint(endpointId);
+  if (existing) return Promise.resolve(existing);
+  if (signal?.aborted) {
+    return Promise.reject(
+      requestCancellationError(signal, "Endpoint registration was cancelled"),
+    );
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (
+      result: { endpoint: RegisteredEndpoint } | { error: Error },
+    ): void => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      unsubscribe();
+      signal?.removeEventListener("abort", abort);
+      if ("endpoint" in result) resolve(result.endpoint);
+      else reject(result.error);
+    };
+    const timeout = globalThis.setTimeout(
+      () =>
+        finish({
+          error: new Error(
+            `Endpoint '${endpointId}' did not register after ${timeoutSeconds} seconds`,
+          ),
+        }),
+      timeoutSeconds * 1_000,
+    );
+    const abort = (): void =>
+      finish({
+        error: requestCancellationError(
+          signal,
+          "Endpoint registration was cancelled",
+        ),
+      });
+    const check = (): void => {
+      const endpoint = getRegisteredEndpoint(endpointId);
+      if (endpoint) finish({ endpoint });
+    };
+    const unsubscribe = subscribeEndpointChanges(check);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    check();
+  });
 }
 
 function queueTileView(
@@ -2109,11 +2183,10 @@ async function prepareBinarySelfMethod(
     blobs,
     candidMethod.argTypes,
   );
-  // icblast's generated JSON schema intentionally knows only its public
-  // blob shorthands (hex string or number array), not Uint8Array. Validate a
-  // live-Candid-derived structural shadow while encoding the separately bound
-  // immutable bytes below.
-  assertValidCall(target, physicalMethod, materialized.validationArgs);
+  // The private self-call boundary is validated against the exact installed
+  // live-Candid method. Public icblast JSON schemas intentionally project some
+  // records into scalar shorthands, so applying that public schema here would
+  // reject valid structural Candid values.
   const rawInput = Uint8Array.from(
     await target[`${physicalMethod}$`](...materialized.args),
   );
@@ -2510,7 +2583,7 @@ export async function listTargetTools(
   });
   rememberEndpointAuditProfiles(endpoint, descriptors);
   return descriptors.filter((descriptor) =>
-    endpointToolVisibleToCaller(descriptor, caller, endpoint),
+    endpointToolVisibleToCaller(descriptor, caller, endpoint, invocation),
   );
 }
 
@@ -2838,9 +2911,18 @@ async function invokeEndpointTool(
     const descriptor = descriptors.find((candidate) => candidate.name === name);
     if (
       !descriptor ||
-      !endpointToolVisibleToCaller(descriptor, caller, endpoint)
+      !endpointToolVisibleToCaller(descriptor, caller, endpoint, invocation)
     ) {
       throw new Error(`Unknown tool '${name}' on '${target}'`);
+    }
+    const agentRootAudience =
+      descriptor.annotations?.["neutron:audience"] ===
+      NEUTRON_TOOL_AUDIENCE_AGENT_ROOT;
+    if (agentRootAudience && !isDirectAgentInvocation(invocation)) {
+      throw new KernelPolicyError(
+        "INVOCATION_INVALID",
+        "This tool is available only to the active Agent root",
+      );
     }
     if (control && descriptor.annotations?.["neutron:control"] !== control) {
       throw new Error(`Tool '${name}' is not declared as ${control} control`);
@@ -2911,6 +2993,9 @@ async function invokeEndpointTool(
               },
             }
           : {}),
+        ...(agentRootAudience
+          ? { audience: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT }
+          : {}),
       },
       control
         ? CONTROL_CALL_TIMEOUT_SECONDS
@@ -2923,10 +3008,10 @@ async function invokeEndpointTool(
     );
     if (providerApproval) {
       assertProviderApprovalCurrent(providerApproval);
-      if (providerApproval.state !== "approved") {
+      if (providerApproval.state !== "completed") {
         throw new KernelPolicyError(
           "INVALID_REQUEST",
-          "Provider-confirmed tool returned without completing its one-shot approval",
+          "Provider-confirmed tool returned without completing its one-shot interaction",
         );
       }
     }
@@ -3054,9 +3139,7 @@ function disposeProviderApproval(binding: PendingProviderApproval): void {
   }
 }
 
-function assertProviderApprovalCurrent(
-  binding: PendingProviderApproval,
-): void {
+function assertProviderApprovalCurrent(binding: PendingProviderApproval): void {
   throwIfRequestCancelled(binding.controller.signal);
   if (
     pendingProviderApprovals.get(binding.capability) !== binding ||
@@ -3095,7 +3178,8 @@ function assertProviderApprovalCurrent(
     );
   }
   if (
-    (binding.sourceInvocation && binding.sourceInvocation.status !== "active") ||
+    (binding.sourceInvocation &&
+      binding.sourceInvocation.status !== "active") ||
     (binding.targetInvocation && binding.targetInvocation.status !== "active")
   ) {
     throw new KernelPolicyError(
@@ -3136,101 +3220,269 @@ async function requestProviderApprovalForEndpoint(
   callbackInvocation: InvocationNode | null,
   signal?: AbortSignal,
 ): Promise<JsonValue> {
-  throwIfRequestCancelled(signal);
+  const binding = pendingProviderInteraction(payload, provider);
+  return consumeProviderInteraction(
+    binding,
+    callbackInvocation,
+    signal,
+    async () => {
+      const request = payload as JsonObject;
+      if (Object.keys(request).length !== 2 || !isJsonObject(request.review)) {
+        throw new KernelPolicyError(
+          "INVALID_REQUEST",
+          "Provider approval review must be one closed JSON object",
+        );
+      }
+      const review = request.review;
+      assertBoundedJson(
+        review,
+        "Provider approval review",
+        MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
+      );
+      const agentApproved = await authorizeAgentPermission(
+        binding.caller,
+        binding.sourceInvocation,
+        {
+          kind: "frontend_tool",
+          persistence: "none",
+          risk: "high",
+          action: {
+            targetAppId: binding.target.context.appId,
+            targetRole: binding.target.context.role,
+            targetEndpoint: binding.target.endpointId,
+            tool: binding.descriptor.name,
+            originalArgumentsSha256: binding.argumentsSha256,
+            providerReview: review,
+          },
+        },
+        binding.controller.signal,
+      );
+      assertProviderApprovalCurrent(binding);
+      if (!agentApproved) {
+        await requestFrontendToolPermission({
+          caller: callerContext(binding.caller),
+          callerSessionId: binding.callerSessionId,
+          target: binding.target.endpointId,
+          targetSessionId: binding.targetSessionId,
+          tool: binding.descriptor.name,
+          ...(binding.descriptor.title
+            ? { toolTitle: binding.descriptor.title }
+            : {}),
+          ...(binding.descriptor.description
+            ? { toolDescription: binding.descriptor.description }
+            : {}),
+          arguments: {},
+          providerReview: review,
+          onceOnly: true,
+          requireFreshDecision: true,
+          signal: binding.controller.signal,
+        });
+        assertProviderApprovalCurrent(binding);
+      }
+      return { approved: true };
+    },
+  );
+}
+
+function pendingProviderInteraction(
+  payload: JsonValue,
+  provider: RegisteredEndpoint,
+): PendingProviderApproval {
   if (!isJsonObject(payload) || typeof payload.capability !== "string") {
     throw new KernelPolicyError(
       "INVALID_REQUEST",
-      "Invalid provider approval request",
+      "Invalid provider interaction request",
     );
   }
   const binding = pendingProviderApprovals.get(payload.capability);
   if (!binding || binding.target !== provider) {
     throw new KernelPolicyError(
       "INVALID_REQUEST",
-      "Invalid provider approval capability",
+      "Invalid provider interaction capability",
     );
   }
   if (binding.state !== "pending") {
     throw new KernelPolicyError(
       "INVALID_REQUEST",
-      "Provider approval capability was already consumed",
+      "Provider interaction capability was already consumed",
     );
   }
-  const abortFromRequest = (): void =>
-    binding.controller.abort(signal?.reason);
+  return binding;
+}
+
+async function consumeProviderInteraction<T>(
+  binding: PendingProviderApproval,
+  callbackInvocation: InvocationNode | null,
+  signal: AbortSignal | undefined,
+  interact: () => Promise<T>,
+): Promise<T> {
+  throwIfRequestCancelled(signal);
+  assertProviderApprovalCurrent(binding);
+  if (callbackInvocation !== binding.targetInvocation) {
+    throw new KernelPolicyError(
+      "INVOCATION_INVALID",
+      "Provider interaction invocation does not match the tool handler",
+    );
+  }
+  binding.state = "deciding";
+  const abortFromRequest = (): void => binding.controller.abort(signal?.reason);
+  signal?.addEventListener("abort", abortFromRequest, { once: true });
+  if (signal?.aborted) abortFromRequest();
   try {
-    if (Object.keys(payload).length !== 2 || !isJsonObject(payload.review)) {
-      throw new KernelPolicyError(
-        "INVALID_REQUEST",
-        "Provider approval review must be one closed JSON object",
-      );
-    }
+    const result = await interact();
     assertProviderApprovalCurrent(binding);
-    if (callbackInvocation !== binding.targetInvocation) {
-      throw new KernelPolicyError(
-        "INVOCATION_INVALID",
-        "Provider approval invocation does not match the tool handler",
-      );
-    }
-    binding.state = "deciding";
-    signal?.addEventListener("abort", abortFromRequest, { once: true });
-    if (signal?.aborted) abortFromRequest();
-    assertBoundedJson(
-      payload.review,
-      "Provider approval review",
-      MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
-    );
-    const agentApproved = await authorizeAgentPermission(
-      binding.caller,
-      binding.sourceInvocation,
-      {
-        kind: "frontend_tool",
-        persistence: "none",
-        risk: "high",
-        action: {
-          targetAppId: binding.target.context.appId,
-          targetRole: binding.target.context.role,
-          targetEndpoint: binding.target.endpointId,
-          tool: binding.descriptor.name,
-          originalArgumentsSha256: binding.argumentsSha256,
-          providerReview: payload.review,
-        },
-      },
-      binding.controller.signal,
-    );
-    assertProviderApprovalCurrent(binding);
-    if (!agentApproved) {
-      await requestFrontendToolPermission({
-        caller: callerContext(binding.caller),
-        callerSessionId: binding.callerSessionId,
-        target: binding.target.endpointId,
-        targetSessionId: binding.targetSessionId,
-        tool: binding.descriptor.name,
-        ...(binding.descriptor.title
-          ? { toolTitle: binding.descriptor.title }
-          : {}),
-        ...(binding.descriptor.description
-          ? { toolDescription: binding.descriptor.description }
-          : {}),
-        arguments: {},
-        providerReview: payload.review,
-        onceOnly: true,
-        requireFreshDecision: true,
-        signal: binding.controller.signal,
-      });
-      assertProviderApprovalCurrent(binding);
-    }
-    binding.state = "approved";
-    return { approved: true };
+    binding.state = "completed";
+    return result;
   } catch (error) {
     binding.state = "denied";
-    if (!binding.controller.signal.aborted) {
-      binding.controller.abort(error);
-    }
+    if (!binding.controller.signal.aborted) binding.controller.abort(error);
     throw error;
   } finally {
     signal?.removeEventListener("abort", abortFromRequest);
   }
+}
+
+async function presentProviderUiForEndpoint(
+  payload: JsonValue,
+  provider: RegisteredEndpoint,
+  callbackInvocation: InvocationNode | null,
+  signal?: AbortSignal,
+): Promise<JsonValue> {
+  const binding = pendingProviderInteraction(payload, provider);
+  return consumeProviderInteraction(
+    binding,
+    callbackInvocation,
+    signal,
+    async () => {
+      if (
+        !isJsonObject(payload) ||
+        Object.keys(payload).length !== 4 ||
+        typeof payload.tileId !== "string" ||
+        !/^[a-z_0-9]+$/u.test(payload.tileId) ||
+        typeof payload.tool !== "string" ||
+        !isJsonObject(payload.arguments)
+      ) {
+        throw new KernelPolicyError(
+          "INVALID_REQUEST",
+          "Invalid provider presentation request",
+        );
+      }
+      assertToolName(payload.tool);
+      assertBoundedJson(
+        payload,
+        "Provider presentation request",
+        MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
+      );
+      if (binding.sourceInvocation !== null) {
+        throw new KernelPolicyError(
+          "INVOCATION_INVALID",
+          "Agent calls must use the provider's direct-root tool",
+        );
+      }
+      const tileId = payload.tileId;
+      const toolName = payload.tool;
+      const args = payload.arguments;
+      const appId = binding.target.context.appId;
+      const workspace = useWorkspaceStore.getState().activeWorkspaceId;
+      const opened = openOrFocusAppTile(appId, tileId, workspace, null, null);
+      const endpointId =
+        `app:${appId}:tile:${tileId}:instance:${opened.instanceId}` as MsgBusEndpointId;
+      const tile = await waitForRegisteredEndpoint(
+        endpointId,
+        MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+        binding.controller.signal,
+      );
+      assertProviderPresentationTileCurrent(
+        binding,
+        tile,
+        endpointId,
+        tileId,
+        opened.instanceId,
+      );
+      const descriptors = await readEndpointTools(
+        tile,
+        binding.controller.signal,
+      );
+      assertProviderPresentationTileCurrent(
+        binding,
+        tile,
+        endpointId,
+        tileId,
+        opened.instanceId,
+      );
+      const descriptor = descriptors.find(
+        (candidate) => candidate.name === toolName,
+      );
+      if (
+        !descriptor ||
+        descriptor.annotations?.["neutron:visibility"] !==
+          NEUTRON_TOOL_VISIBILITY_SAME_APP ||
+        descriptor.annotations?.["neutron:audience"] !==
+          NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE
+      ) {
+        throw new KernelPolicyError(
+          "INVALID_REQUEST",
+          `Unknown provider presentation tool '${toolName}'`,
+        );
+      }
+      validateToolArguments(descriptor, args);
+      assertProviderPresentationTileCurrent(
+        binding,
+        tile,
+        endpointId,
+        tileId,
+        opened.instanceId,
+      );
+      const result = await execEndpoint(
+        tile,
+        msgBusLocalActions.toolsCall,
+        {
+          name: toolName,
+          arguments: args,
+          caller: callerContext(binding.caller),
+          audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+        },
+        MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+        undefined,
+        undefined,
+        binding.controller.signal,
+      );
+      assertProviderPresentationTileCurrent(
+        binding,
+        tile,
+        endpointId,
+        tileId,
+        opened.instanceId,
+      );
+      assertBoundedJson(result, `Tool '${toolName}' result`);
+      validateToolResult(descriptor, result);
+      return result;
+    },
+  );
+}
+
+function assertProviderPresentationTileCurrent(
+  binding: PendingProviderApproval,
+  tile: RegisteredEndpoint,
+  endpointId: MsgBusEndpointId,
+  tileId: string,
+  instanceId: string,
+): void {
+  assertProviderApprovalCurrent(binding);
+  if (
+    getRegisteredEndpoint(endpointId) !== tile ||
+    tile.context.role !== "tile" ||
+    tile.context.appId !== binding.target.context.appId ||
+    tile.context.tileId !== tileId ||
+    tile.context.instanceId !== instanceId ||
+    !sameAppScope(binding.target.appScope, tile.appScope)
+  ) {
+    throw new KernelPolicyError(
+      "REQUEST_CANCELLED",
+      "Provider tile authority does not match the resident provider",
+    );
+  }
+  assertCurrentEndpointVersion(tile);
 }
 
 async function invokeEndpointAttachmentTool(
@@ -3271,7 +3523,7 @@ async function invokeEndpointAttachmentTool(
     const descriptor = descriptors.find((candidate) => candidate.name === name);
     if (
       !descriptor ||
-      !endpointToolVisibleToCaller(descriptor, caller, endpoint)
+      !endpointToolVisibleToCaller(descriptor, caller, endpoint, invocation)
     ) {
       throw new Error(`Unknown tool '${name}' on '${target}'`);
     }
@@ -3424,7 +3676,13 @@ function endpointToolVisibleToCaller(
   descriptor: MsgBusToolDescriptor,
   caller: RegisteredEndpoint,
   endpoint: RegisteredEndpoint,
+  invocation: InvocationNode | null,
 ): boolean {
+  const audience = descriptor.annotations?.["neutron:audience"];
+  if (audience === NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE) return false;
+  if (audience === NEUTRON_TOOL_AUDIENCE_AGENT_ROOT) {
+    return isDirectAgentInvocation(invocation);
+  }
   if (
     descriptor.annotations?.["neutron:visibility"] !==
     NEUTRON_TOOL_VISIBILITY_SAME_APP
@@ -3770,6 +4028,19 @@ expose("permissions.request", async (payload, context) => {
 expose("provider_approval.request", async (payload, context) => {
   const provider = verifiedEndpoint(context);
   return requestProviderApprovalForEndpoint(
+    payload,
+    provider,
+    resolveInvocation(provider, context.invocation),
+    context.signal,
+  );
+});
+
+// New provider-owned flows use the same one-shot capability to open the
+// provider's own tile. The Kernel binds and routes opaque arguments but never
+// interprets or renders the provider's domain-specific review.
+expose("provider_ui.present", async (payload, context) => {
+  const provider = verifiedEndpoint(context);
+  return presentProviderUiForEndpoint(
     payload,
     provider,
     resolveInvocation(provider, context.invocation),

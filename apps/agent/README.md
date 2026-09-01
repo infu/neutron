@@ -35,22 +35,25 @@ to discover apps, inspect one tool schema, and call tools. Direct agent actions
 do not show owner dialogs. If a called app requests a new permission, the
 kernel suspends that exact request and sends a bounded, kernel-produced
 challenge to the resident runtime. Frontend, backend, connection, and workspace
-challenges normally exclude raw tool arguments. Two deliberate exceptions
-carry the complete bounded value being decided: a v2 external signed-call
-challenge includes its canonical prepared argument array, and a nested
-`provider_once` challenge includes the target provider's complete prepared
-review. The runtime makes one separate `generateText` request
-with the selected OpenRouter model and one forced `permission_decision` tool.
+challenges normally exclude raw tool arguments. One deliberate exception
+carries the complete bounded value being decided: a v2 external signed-call
+challenge includes its canonical prepared argument array. The runtime makes
+one separate `generateText` request with the selected OpenRouter model and one
+forced `permission_decision` tool.
 It receives the current owner goal and those permission facts, not the
 transcript, tool output, credentials, private keys, or transport ids.
 
-A direct root call to a `provider_once` tool resolves the provider's scoped
-approval callback without owner UI. If an invoked app calls that provider as a
-descendant, the complete provider review reaches the decision path above;
-exact or wildcard frontend session grants cannot bypass it. This remains
-live-turn authority. Enabling Agent Mode does not let the resident start future
-turns unattended: every root still begins from the focused Agent tile with
-transient user activation.
+Tools that opt into both `"neutron:visibility":"same_app"` and
+`"neutron:audience":"agent_root"` are a separate automation surface. Kernel
+shows and routes such a tool only to the incoming live depth-zero Agent root,
+attests that audience to the handler, and adds no owner dialog. Human callers
+and nested agent calls are rejected before target dispatch. Provider-owned
+foreground UI is likewise unavailable to delegated Agent calls; an app that
+supports both people and root automation exposes a narrowly scoped root tool in
+addition to its human presentation flow. This remains live-turn authority.
+Enabling Agent Mode does not let the resident start future turns unattended:
+every root still begins from the focused Agent tile with transient user
+activation.
 
 Agent contains no app ids, app-specific paths, or app-specific calling rules.
 Its installed-app list, live endpoints, tool descriptions, schemas, and

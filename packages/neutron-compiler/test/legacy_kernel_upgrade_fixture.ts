@@ -39,9 +39,11 @@ export type LegacyKernelReleaseFixture = Readonly<{
 }>;
 
 type RetainedKernelReleaseFixture = Readonly<{
-  label: "v0.3.21";
-  version: 321;
-  archive: "../../../apps/kernel/kernel.v0.3.21.neutron";
+  label: "v0.3.21" | "v0.3.23";
+  version: 321 | 323;
+  archive:
+    | "../../../apps/kernel/kernel.v0.3.21.neutron"
+    | "../../../apps/kernel/kernel.v0.3.23.neutron";
   bytes: number;
   sha256: string;
   persistenceMode: "classical";
@@ -128,6 +130,18 @@ export const RETAINED_KERNEL_V321_RELEASE = {
   ),
 } as const satisfies RetainedKernelReleaseFixture;
 
+export const PRODUCTION_KERNEL_V323_RELEASE = {
+  label: "v0.3.23",
+  version: 323,
+  archive: "../../../apps/kernel/kernel.v0.3.23.neutron",
+  bytes: 2_448_813,
+  sha256: "e2e5cea791af54a5052f227fcda57f07ecec1a5b4d11bfb5c79696c75d826334",
+  persistenceMode: "classical",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.23.neutron", import.meta.url),
+  ),
+} as const satisfies RetainedKernelReleaseFixture;
+
 /** Backward-compatible aliases for callers that mean the latest predecessor. */
 export const LEGACY_KERNEL_VERSION = LEGACY_KERNEL_RELEASES[3].version;
 export const LEGACY_KERNEL_ARCHIVE_BYTES = LEGACY_KERNEL_RELEASES[3].bytes;
@@ -194,6 +208,17 @@ const RETAINED_KERNEL_V321_IDENTITY = {
     },
   ],
 } as const satisfies KernelUpgradeIdentityFixture<321>;
+
+const PRODUCTION_KERNEL_V323_IDENTITY = {
+  ...RETAINED_KERNEL_V321_IDENTITY,
+  archive: PRODUCTION_KERNEL_V323_RELEASE.archive,
+  bytes: PRODUCTION_KERNEL_V323_RELEASE.bytes,
+  sha256: PRODUCTION_KERNEL_V323_RELEASE.sha256,
+  package: {
+    ...RETAINED_KERNEL_V321_IDENTITY.package,
+    version: PRODUCTION_KERNEL_V323_RELEASE.version,
+  },
+} as const satisfies KernelUpgradeIdentityFixture<323>;
 
 export type LegacyUpgradeCompileFixture = Readonly<{
   release: KernelUpgradeReleaseFixture;
@@ -275,6 +300,23 @@ async function loadRetainedKernelV321Fixture(): Promise<{
   return { identity: RETAINED_KERNEL_V321_IDENTITY, archive };
 }
 
+async function loadProductionKernelV323Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<323>;
+  archive: Uint8Array;
+}> {
+  const archive = await loadKernelArchive(
+    PRODUCTION_KERNEL_V323_RELEASE.archivePath,
+    "The production v0.3.23 Kernel predecessor",
+  );
+  assertArchiveIdentity(
+    PRODUCTION_KERNEL_V323_RELEASE.label,
+    archive,
+    PRODUCTION_KERNEL_V323_RELEASE.bytes,
+    PRODUCTION_KERNEL_V323_RELEASE.sha256,
+  );
+  return { identity: PRODUCTION_KERNEL_V323_IDENTITY, archive };
+}
+
 export async function compileLegacyKernelUpgradeFixture(
   legacyVersion: LegacyKernelVersion = LEGACY_KERNEL_VERSION,
 ): Promise<LegacyUpgradeCompileFixture> {
@@ -318,6 +360,18 @@ export async function compileFinalCandidateRetainedKernelUpgradeFixture({
     expectedSha256,
     release: RETAINED_KERNEL_V321_RELEASE,
     loadPredecessor: loadRetainedKernelV321Fixture,
+  });
+}
+
+export async function compileFinalCandidateProductionKernelUpgradeFixture({
+  expectedSha256,
+}: {
+  expectedSha256: string;
+}): Promise<LegacyUpgradeCompileFixture> {
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release: PRODUCTION_KERNEL_V323_RELEASE,
+    loadPredecessor: loadProductionKernelV323Fixture,
   });
 }
 
@@ -407,7 +461,10 @@ async function compileKernelUpgradeCandidate(
   assertCandidatePackageRecord(candidateKernel);
 
   let initial: CompileResult;
-  if (release.version === RETAINED_KERNEL_V321_RELEASE.version) {
+  if (
+    release.version === RETAINED_KERNEL_V321_RELEASE.version ||
+    release.version === PRODUCTION_KERNEL_V323_RELEASE.version
+  ) {
     initial = await compileFreshPackages({
       packages: [legacyKernel, hello],
       persistenceMode: release.persistenceMode,
@@ -496,7 +553,11 @@ function assertPredecessorPackageRecord(
     }
     return;
   }
-  if (release.version === 315 || release.version === 321) {
+  if (
+    release.version === 315 ||
+    release.version === 321 ||
+    release.version === 323
+  ) {
     if (
       record?.package.version !== release.version ||
       record.license.id !== "LicenseRef-Neutron-Public-License-1.0" ||

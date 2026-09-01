@@ -2,3 +2,4 @@ node_modules
 dist
 *.neutron
 !wallet.v0.3.2.neutron
+!wallet.v0.3.6.neutron

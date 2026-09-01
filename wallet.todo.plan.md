@@ -1,667 +1,431 @@
-# Wallet funding and approvals implementation plan
+# Wallet-owned funding UI: implementation and release plan
 
-Status: implemented and release-qualified in the working tree across the SDK,
-Kernel, Wallet backend/resident/UI, Kitchen Sink, tests, and documentation.
-Exact Kernel, Wallet, and Kitchen Sink candidate archives have been built with
-the repository's Nix toolchain and published to the production update source in
-atomic batch 36. No package was installed into an existing Neutron, and this
-plan remains release evidence rather than publication authority.
+Status date: 2026-09-01
 
-Final verification checkpoint (2026-09-01):
+This is the authoritative plan for the corrective Wallet funding release. The
+previous design in which Wallet supplied JSON for a Kernel approval dialog is
+retained only as immutable release history and a narrow compatibility path for
+Wallet 0.3.6. It is not the design for new Wallet code.
 
-- Full repository gate passed under `nix develop`: `npm test`.
-- Independent `npm run typecheck`, `npm run security:check`, and
-  `npm run license:check` gates passed.
-- Kernel tests passed: 699 Bun tests and all 31 Motoko programs. The exact
-  Kernel candidate passed binding verification and the 12-sample certified
-  assets qualification.
-- Wallet tests passed: 65 Bun tests, the complete focused Motoko graph, and the
-  production-memory release test. Fresh initialization and upgrade from the
-  archived production Wallet retain `wallet` v1 and initialize only the
-  additive `wallet_commands` v1 root.
-- Compatibility tests cover ordinary existing tools/session grants, archived
-  Wallet behavior on the new Kernel, new Wallet failure-before-effect on an old
-  Kernel, and human/root-agent/nested-agent provider decisions.
-- The pinned Chromium/PocketIC Kitchen Sink qualification passed against the
-  ICP ledger, including a post-fix rerun against the exact final candidate
-  bytes. It proved a direct 0.01 ICP transfer to Neutrinite governance and a
-  short-lived allowance whose sole spender is Neutrinite governance, with
-  exactly one `frontend-tool-dialog` and no call/backend dialog for each
-  action. Kitchen Sink never called `transfer_from`.
-- Kernel `0.3.23` candidate: 2,448,813 bytes, SHA-256
-  `e2e5cea791af54a5052f227fcda57f07ecec1a5b4d11bfb5c79696c75d826334`.
-  Its offered-source artifact is 3,007,430 bytes, SHA-256
-  `7dd544994c3caab7954a470de37ccc960ede16f181976a30b55011ddedffcab8`.
-- Wallet `0.3.6` candidate: 666,413 bytes, SHA-256
-  `bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae`.
-  Its offered-source artifact is 464,462 bytes, SHA-256
-  `f4ddaa4d0d1f93b58276656f391764224a5d0ee1f38216b3fb3acbb94faa3d1e`.
-- Kitchen Sink `0.3.5` candidate: 428,073 bytes, SHA-256
-  `885fb6555d7a36e7856cad1c5ce31ad19922de1371ec26f81fc52052cf889602`.
-  Its offered-source artifact is 398,027 bytes, SHA-256
-  `5429bc579003b9eee58f06d0713b01960482998f4ceebfe55005e49fca62ea0e`.
-- Repeat packaging produced identical archive and offered-source bytes for
-  Wallet and Kitchen Sink. Kernel's final binding check also matched after its
-  qualification and full test repeat.
-- Kitchen Sink now contains the real fixed ICP consumer demo and replaces the
-  disposable Swap package: direct transfer and short-lived allowance requests
-  target Neutrinite governance through the installed Wallet provider.
-- A low-risk display residual remains: a hostile ledger error can contain
-  confusing Unicode control/bidirectional text. Errors are bounded and cannot
-  bypass consent or cause another ledger effect; a later ASCII-safe error
-  projector can remove the visual ambiguity.
-- Production update-source batch 36 published only Kernel `0.3.23`, Kitchen
-  Sink `0.3.5`, and Wallet `0.3.6` plus their exact offered-source objects. The
-  repeated canonical catalog publication returned `batch_id: null` with all
-  16 package and source rows `unchanged`. The Dispenser starter selection and
-  installed canisters remain unchanged.
+## Status and immutable release history
 
-## Goal
+[PR #13](https://github.com/infu/neutron/pull/13) currently contains commit
+`cf01ea4` and the already-published provider-funding work. Production
+update-source batch 36 atomically published these exact packages and offered
+sources:
 
-Make the installed Wallet the trusted token-transaction provider for other
-Neutron apps while keeping Kernel completely token-agnostic.
+| Package | Package bytes and SHA-256 | Offered-source bytes and SHA-256 |
+| --- | --- | --- |
+| Kernel 0.3.23 (323) | 2,448,813; `e2e5cea791af54a5052f227fcda57f07ecec1a5b4d11bfb5c79696c75d826334` | 3,007,430; `7dd544994c3caab7954a470de37ccc960ede16f181976a30b55011ddedffcab8` |
+| Wallet 0.3.6 (306) | 666,413; `bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae` | 464,462; `f4ddaa4d0d1f93b58276656f391764224a5d0ee1f38216b3fb3acbb94faa3d1e` |
+| Kitchen Sink 0.3.5 (305) | 428,073; `885fb6555d7a36e7856cad1c5ce31ad19922de1371ec26f81fc52052cf889602` | 398,027; `5429bc579003b9eee58f06d0713b01960482998f4ceebfe55005e49fca62ea0e` |
 
-- A person clicks **Swap** and makes one decision in trusted Kernel chrome using
-  details prepared by Wallet.
-- Wallet then uses an exact preapproved self update to perform an ICRC-1
-  transfer or an ICRC-2 approval through the Wallet backend.
-- A direct root agent can make the same call without owner UI. A nested
-  Swap-to-Wallet call is decided by the root agent, never by an owner dialog.
-- Wallet shows outstanding approvals for selected/access-approved ledgers and
-  lets the owner revoke them.
-- Kitchen Sink is the executable consumer reference for Swap apps. It uses real
-  Wallet calls without pretending to be a DEX or taking backend ledger
-  authority.
+The second publication of those exact bytes returned `batch_id: null`; all 16
+catalog package/source rows were `unchanged`. The release did not install
+anything into existing Neutrons and did not change the Dispenser starter.
 
-## Final architecture decision
+Those exact bytes were qualified with the full repository, typecheck,
+security, and license gates. Kernel recorded 699 Bun tests, 31 Motoko programs,
+the candidate binding check, and 12-sample certified-assets qualification.
+Wallet recorded 65 Bun tests, its focused Motoko graph, and production-memory
+qualification. The ICP Kitchen Sink scenario proved the 0.01 ICP transfer and
+governance allowance. That historical scenario used the now-superseded raw
+Kernel review dialog.
 
-Use one generic **provider-mediated, one-shot review** mechanism.
+The corrective successors are frozen, packaged, release-qualified, and
+published:
 
-The ordinary tool prompt alone is not sufficient: Kernel authorizes the call
-before the target tool handler runs, so it can display only caller-supplied raw
-arguments. Wallet must first read authoritative ledger metadata, decimals,
-fees, and current allowance. A simple `exact_once` flag would remove reusable
-session permission, but would not move review preparation to Wallet.
+| Package | Package bytes and SHA-256 | Offered-source bytes and SHA-256 |
+| --- | --- | --- |
+| Kernel 0.3.24 (324) | 2,449,608; `6ae401a934160410ec7d099f9d3a7f62c94126ab491fc115cc2e38b5b27c067a` | 3,020,803; `ea7cd9a8d5b761e62445301a8c0ad2887a793a1337b3a521e7d94ee83dbfb30d` |
+| Wallet 0.3.7 (307) | 677,271; `20ba3b00349e9386713a789622ce6a570fc7123e7daf89cda38daedcfc74fac1` | 473,458; `b5b22f50160cb1f048308c27ad3c29da4e9ebf83ab66b35d291c36f92bed6dd2` |
+| Kitchen Sink 0.3.6 (306) | 429,282; `31f447052918fbfb848a32f649af5c0098a043149d52d0e14f759b58a4743f2f` | 400,668; `3cccf2ccd48b4421b3a48d089c8e6cf5e9dc1ab6395ece5e9cdc96db99a1dd94` |
 
-The minimal correct flow is:
+The complete production-app and support-workspace test matrix passed, as did
+repository typecheck, security, license, and diff checks. Kernel candidate
+binding and certified-assets qualification passed. Exact-archive,
+state-preserving K323 -> K324 and W306 -> W307 release tests passed with their
+released memory roots intact. The final real-ICP browser test used the exact
+three archives above and passed direct transfer Reject/Accept and allowance
+Reject/Accept with exact ledger deltas and zero Kernel dialogs (`1 passed`,
+10.6 seconds). Production update-source batch 37 atomically published exactly
+Kernel, Wallet, and Kitchen Sink plus their offered sources; the other 13
+catalog rows were verified unchanged. The immediate identical-byte postflight
+returned `batch_id: null`, with all 16 package and source rows `unchanged`.
+The verbatim receipt JSON files are retained under
+`.neutron/release-receipts/wallet-provider-2026-09-01/`; their SHA-256 values
+are `e6bb8b75b7e172e246c87f7ff9fa3851e90e74c89786543c2f41fb08d0eaf2bd`
+for batch 37 and
+`36b630e3a1a459a8c979370b774c897f739887c8d715f85bb572061e5963e107`
+for the no-op postflight.
+
+## Required outcome
+
+- Existing apps keep calling `app:wallet:background` / `wallet_fund_v1` with
+  the released input and output contract. No caller migration, new grant, or
+  SDK rebuild is required.
+- A human action opens or focuses the installed Wallet tile. Wallet prepares
+  authoritative ledger facts and presents a polished Wallet modal. The owner
+  chooses **Accept** or **Reject** once.
+- Accept executes through Wallet's exact preapproved self-call path. There is
+  no Kernel frontend-tool, backend-call, or raw-JSON dialog.
+- A live depth-zero root agent can call a separate Wallet tool and execute the
+  same bounded operation with no user interface. Humans and nested agents
+  cannot call that tool.
+- Wallet continues to list discoverable ICP/ICRC allowances and lets its owner
+  revoke them from the Wallet UI.
+- Kernel remains token- and app-agnostic. It knows only generic endpoint,
+  capability, audience, tile, cancellation, and invocation facts. Wallet alone
+  knows ICRC methods, ledger principals, decimals, fees, symbols, accounts,
+  allowance semantics, and display formatting.
+- Kitchen Sink remains the executable Swap-app example: 0.01 ICP
+  (`1_000_000` e8s) on ledger `ryjl3-tyaaa-aaaaa-aaaba-cai`, with Neutrinite
+  governance `eqsml-lyaaa-aaaaq-aacdq-cai` as the direct destination or
+  allowance spender.
+
+## Normative architecture
+
+### Human app flow
 
 ```text
-Human
-Swap app
+Swap/Kitchen Sink
   -> app:wallet:background / wallet_fund_v1
+  -> Wallet background validates caller + released request shape
+  -> context.presentUserInterface({
+       tileId: "wallet",
+       tool: "wallet_funding_present_v1",
+       arguments: original normalized request
+     })
+  -> Kernel opens/reuses/focuses the exact installed Wallet tile
+  -> Kernel privately invokes the exact Wallet tile tool with
+       audience = "foreground_tile" and the attested original caller
   -> Wallet prepares authoritative ledger facts
-  -> Wallet requests one invocation-scoped Kernel review
-  -> owner approves once
-  -> Wallet context.kernel.updateSelf(...)
-  -> Wallet backend -> ledger
-  -> receipt -> Swap
-
-Agent Mode
-root agent or agent-invoked Swap
-  -> the same Wallet tool and Wallet-prepared review
-  -> direct root auto-allows, or nested call is decided by the root agent
-  -> no owner dialog
-  -> the same preapproved Wallet backend path
+  -> Wallet modal: one Accept or Reject
+  -> Wallet preapproved self call: execute or reject the exact command
+  -> ledger receipt/result returns through Wallet to the caller
 ```
 
-This is intentionally not a Wallet-specific Kernel API. Kernel transports and
-renders bounded inert JSON, identifies the installed caller and provider, and
-routes the decision. It never interprets tokens, ledgers, ICRC standards,
-symbols, decimals, fees, recipients, spenders, or swap semantics.
+`wallet_fund_v1` keeps its released `{"neutron:consent":"provider_once"}`
+annotation. Kernel uses that annotation to issue one invocation-scoped
+provider capability, but it does not show a preliminary permission dialog or
+create a reusable grant. Wallet must call `presentUserInterface` before any
+prepare self call; an older Kernel therefore fails the new Wallet before any
+financial effect.
 
-## Backward compatibility requirement
+The SDK exposes `context.presentUserInterface()` only with that active
+capability. Kernel consumes the same one-use gate for either the new callback
+or the deprecated `context.requestApproval()` compatibility callback, so one
+invocation cannot use both.
 
-All previously released apps and their installed state must continue to work.
-This is a release gate, not a best-effort goal.
+Kernel reuses the existing workspace open/focus implementation. It derives the
+provider app from the bound endpoint, opens only that app's declared tile,
+waits for the exact tile endpoint, and rechecks installation scope, endpoint
+version, session, cancellation, and capability bindings after awaits. The
+presentation tool must declare both:
 
-| Combination | Required behavior |
+```json
+{
+  "neutron:visibility": "same_app",
+  "neutron:audience": "foreground_tile"
+}
+```
+
+Ordinary listing and calls cannot see or invoke that tool. Kernel injects the
+closed audience attestation; Wallet checks it again. The request is opaque to
+Kernel and Kernel renders none of it.
+
+The Wallet tile, not the background service, performs preparation. It reads
+the exact live token metadata, decimals, fees, current allowance, destination
+or spender, expiry, and maximum debit through the existing durable Wallet
+funding core, then renders the existing Wallet surface/modal. Reject calls
+`wallet_funding_reject_v1`, which may change only a `prepared` command to the
+existing durable rejected state. It cannot relabel pending, dispatched, or
+terminal work. Accept calls `wallet_funding_execute_v1` for the same command.
+
+### Root-agent flow
+
+The Wallet background also exposes `wallet_fund_root_v1` with the same public
+funding request/result schemas and these restrictions:
+
+```json
+{
+  "neutron:visibility": "same_app",
+  "neutron:audience": "agent_root",
+  "neutron:audit": "metadata_only"
+}
+```
+
+Kernel makes this tool visible and dispatchable only to the incoming active
+depth-zero root invocation, before creating a child invocation, and injects
+`audience = "agent_root"`. Wallet requires that attestation. The handler uses
+the same prepare/execute functions and exact preapproved self calls as the
+human path, but opens no Wallet or Kernel UI. A human call, a normal app call,
+or a nested agent call is rejected before Wallet dispatch. An agent-driven Swap
+must have its root agent call this tool directly; the public human tool never
+falls back to silent agent execution.
+
+### Wallet execution and approvals
+
+Keep one backend implementation for direct ICRC-1 transfer, ICRC-2 approval,
+revoke, durable command replay/reconciliation, fee handling, and history. The
+human tile and root tool are two policy entry points into that shared core, not
+two transaction implementations.
+
+The Wallet manifest preapproves only the exact Wallet methods it calls,
+including existing `wallet_transfer` and the versioned funding prepare,
+execute, reject, and allowance-page methods. Wallet's own Send/Withdraw and
+revoke buttons are the trusted decisions and use `updateSelf`; they do not ask
+Kernel for a second backend-call approval.
+
+The existing Approvals screen remains Wallet-owned:
+
+- use draft `icrc103_get_allowances` behind the isolated bounded adapter for
+  selected/access-approved ICRC ledgers;
+- use the existing ICP legacy allowance listing/removal adapter for the ICP
+  ledger only;
+- show exact spender/account, formatted amount, expiry, ledger, and revoke fee;
+- use CAS-style `icrc2_approve(amount = 0, expected_allowance = current)` for
+  standard revocation and refresh on an allowance race;
+- never describe history-derived or inaccessible-ledger results as a complete
+  global allowance list.
+
+Another token standard should be implemented by another trusted Wallet using
+the same generic provider-UI primitive. No token-standard branch belongs in
+Kernel.
+
+## Compatibility contract
+
+The already-published public tool and legacy callback make partial upgrades
+fail closed without breaking old callers:
+
+| Kernel / Wallet | Required behavior |
 | --- | --- |
-| New Kernel + any existing app | Valid existing tools, queries, updates, session grants, Agent flows, attachments, control tools, and self calls behave as before. The new annotation/context field is optional. Malformed tool arguments now fail before permission UI. |
-| New Kernel + old Wallet | Old Wallet works unchanged. The new funding tool and Approvals screen are simply absent. |
-| Old Kernel + new Wallet | Existing Wallet functionality continues to work. The old Kernel may first apply its released ordinary cross-app prompt/grant route to the new tool, but once the handler runs it finds no scoped callback and fails before preparation/execution. It must never silently turn that generic grant into Wallet funding authority. |
-| New Kernel + new Wallet | The one-review funding and approvals flow is enabled. |
-| Existing custom-ledger installation | Existing balance, history, deposit, and transfer behavior remains usable. New allowance features show **permission required** until the owner grants the additional exact scopes. |
+| K323 / W306 | Immutable batch-36 behavior continues: the released Wallet uses its raw Kernel review callback. |
+| K323 / W307 | Existing Wallet features continue; new `wallet_fund_v1` requires `presentUserInterface`, which K323 lacks, and fails before prepare or execution. |
+| K324 / W306 | K324 retains only the deprecated `requestApproval` lane needed by released W306. Funding works with its legacy raw Kernel dialog. |
+| K324 / W307 | Normal path: Wallet tile/modal owns the one human decision and Kernel shows zero dialogs. Root tool is UI-free. |
 
-Compatibility rules:
+Existing apps remain compatible because the exact endpoint, tool name, request
+schema, result schema, provider annotation, and caller identity semantics of
+`wallet_fund_v1` do not change. Existing ordinary tools, grants, Agent flows,
+attachments, control calls, and self calls retain their behavior. New closed
+audience fields are optional for old tools and are rejected when malformed or
+forged.
 
-- Do not change any existing tool envelope or required SDK context field. Add
-  `requestApproval` as optional invocation metadata/context available only to
-  annotated tools.
-- Preserve ordinary cross-app authorization and session-grant behavior. The
-  provider-mediated branch applies only to the exact new closed annotation.
-- Keep every published Wallet Candid method and type compatible. In particular,
-  retain the exact contact-only `wallet_transfer` signature and semantics; add
-  new versioned named-record methods instead of overloading it.
-- Preserve all released Kernel and Wallet managed-memory roots and lock
-  lineage. The new Wallet command root is additive and initializes without
-  rewriting existing Wallet state.
-- Do not require existing apps to add capabilities, change manifests, rebuild,
-  or adopt the new SDK to continue operating.
-- Unknown/unsupported consent annotations must never grant authority. New
-  Wallet code checks for the scoped callback before any new funding preparation
-  or execution, which makes partial/rolling installation fail closed.
-- The separately authorized release published the compatible Kernel, Wallet,
-  and Kitchen Sink successors together. Partial-upgrade directions remain
-  tested because Settings may install only one package.
+The legacy Kernel JSON-review fields and `requestApproval` implementation must
+remain only to run immutable W306. New Wallet code and new documentation must
+not invoke or present that path. Do not add a second Kernel dialog store,
+Wallet-specific Kernel API, token-shaped Kernel type, or duplicate Wallet
+transaction executor.
 
-## Trust boundary
+## Trust and security invariants
 
 The owner explicitly trusts the exact installed Wallet package, including its
-tile, tray, resident service, backend methods, manifest, and upgrades. Listing
-Wallet methods in `preapproved_self_calls` makes that trust explicit.
-
-Kernel remains responsible for generic platform guarantees:
-
-- authenticate and display the exact caller and Wallet endpoint;
-- bind the review to one caller session, Wallet session/app scope, tool call,
-  cancellation signal, and Agent invocation;
-- preserve unforgeable root-agent provenance;
-- provide trusted dialog chrome, fixed **Allow once**/**Reject** controls, timeout,
-  attention admission, endpoint invalidation, and safe text rendering;
-- ensure no exact or wildcard session grant substitutes for this decision.
-
-Wallet owns all financial meaning and execution:
-
-- ledger selection, metadata, symbols, decimals, fees, balances, and formatting;
-- ICRC-1 transfer and ICRC-2 allowance semantics;
-- exact recipient/spender accounts and short allowance expiration;
-- preparation, durable idempotency, reconciliation, receipts, history, approval
-  enumeration, and revocation;
-- its narrow policy for authenticated Agent Mode requests.
-
-Swap owns its quote, minimum output, deadline, DEX reservation, and post-funding
-execution. Source-review agents are defense in depth; source inspection does not
-replace runtime capability, amount, account, expiry, and retry bounds.
-
-All app backends share the Neutron canister principal. A backend
-`icrc2_transfer_from` caller therefore cannot consume an allowance owned by a
-different canister principal. In the Kitchen Sink reference, the spender is
-Neutrinite governance (`eqsml-lyaaa-aaaaq-aacdq-cai`), so only that canister can
-consume the allowance. Kitchen Sink deliberately stops after approval and has
-no ledger mutation reservation. Kernel remains unaware of these token
-semantics.
-
-Wallet rejects its own default source account as spender, treating an absent
-(`null`) subaccount and the all-zero subaccount as equivalent. Direct-calling
-Swap apps and fixtures must use a distinct exact spender subaccount because
-ICRC-2 same-account `transfer_from` is not allowance-bounded.
-
-## Existing code to reuse
-
-| Need | Existing implementation to extend |
-| --- | --- |
-| Typed tools and argument validation | `packages/neutron-tools/src/app.ts` and `protocol.ts` |
-| Caller, Agent Mode, cancellation, scoped self calls | `MsgBusToolContext` and `context.kernel.updateSelf()` |
-| One-shot dialog lifecycle | `requestFrontendToolPermission`, its `onceOnly` state, owner attention, and `Requests.tsx` |
-| Safe exact JSON display | `CanonicalJsonReview` / `canonicalJsonForDisplay` in `apps/kernel/src/Requests.tsx` |
-| Existing trusted Wallet send | `apps/wallet/src/index.tsx` and contact-only `wallet_transfer` |
-| ICRC transfer/approve request builders | `apps/wallet/backend/icrc1/Client.mo` and `Types.mo` |
-| Token amount formatting | `apps/wallet/src/format.ts` |
-| ICRC account JSON decoding | `packages/neutron-tools/src/icrc_account.ts` |
-| Approval history parsing | Wallet ICRC/ICP history adapters and Wallet Activity components |
-| Additive memory roots | compiler `initialize` planning and the multiple-root pattern in the memory migration docs |
-| Full ledger fixtures | existing `full_protocol_fixtures` local profile |
-
-Do not add a second dialog store, Wallet iframe/modal protocol, SDK-specific
-Wallet client, token-shaped Kernel method, parallel ICRC approve implementation,
-or a second Wallet UI for the tray.
-
-## 1. Generic Kernel and SDK review primitive
-
-- Add one closed tool descriptor annotation:
-
-  ```json
-  { "neutron:consent": "provider_once" }
-  ```
-
-- Validate the closed annotation value beside the existing `neutron:audit`,
-  `neutron:control`, and `neutron:visibility` annotations.
-- Move `validateToolArguments()` before authorization for ordinary tool calls,
-  matching the attachment path. Invalid input must not create a prompt or run
-  Wallet preparation.
-- For a cross-app `provider_once` tool, skip the ordinary preliminary tool
-  grant and dispatch the provider with a private random one-use capability.
-- For a non-Agent call, capture and require the requesting focused tile's
-  transient user activation before asynchronous descriptor/preparation work.
-  Preserve the existing provenance-stripping check so an app inside an Agent
-  turn cannot drop invocation metadata and redirect the decision to owner UI.
-- Bind that capability to the original caller object/session/app scope, target
-  endpoint/session/app scope, exact tool, current endpoint versions, abort
-  signal, Agent invocation, and canonical digest of the validated original
-  arguments. Do not place it in public tool arguments.
-- Add an optional invocation-scoped callback to `MsgBusToolContext`:
-
-  ```ts
-  context.requestApproval(review: JsonObject): Promise<void>
-  ```
-
-- Expose the callback only for an active annotated invocation. It is private,
-  non-discoverable, one-use, abort-aware, and accepts only a JSON object bounded
-  to 16 KiB plus the ordinary depth/element limits.
-- Human route: reuse `requestFrontendToolPermission` with `onceOnly: true` and
-  the Wallet-authored review as its arguments. Fix `onceOnly` so it ignores
-  existing exact and wildcard grants as well as preventing a new grant.
-- Render the Wallet-authored review prominently with the existing canonical,
-  bidi-safe JSON renderer. Keep technical endpoint details available, label the
-  content as supplied by Wallet, and show Kernel-attested caller and Wallet
-  identities. Do not offer **Allow session**.
-- Agent route: direct root calls resolve automatically; nested calls send the
-  complete Wallet-authored review to the existing root-agent challenge. Do not
-  reduce it to argument count/byte count and never open owner UI.
-- Reject replay, a second callback, wrong endpoint/tool/session, endpoint
-  replacement, timeout, cancellation, or invocation completion. Recheck both
-  endpoint versions after every await.
-- Require every dispatched cross-app provider handler to complete the callback
-  exactly once before it returns. A return without approval is an invalid
-  request even when the Wallet command already has a durable terminal result;
-  command idempotency never becomes reusable consent.
-- Initially reject this annotation on attachment and control tools to keep the
-  primitive narrow.
-- An older Kernel must fail closed: the new Wallet handler checks that
-  `context.requestApproval` exists before preparing or executing a new command.
-  Kernel and Wallet remain one intended compatible release set, subject to the
-  qualification and separate publication gates below.
-
-This mechanism deliberately trusts the provider to request approval before a
-preapproved effect. Kernel cannot prove ordering without adding token/provider
-policy or a much larger gated-self-call system. That trust is acceptable here
-because the user explicitly trusts the reviewed Wallet package.
-
-No Kernel managed-memory change, Wallet-specific manifest field,
-`background_ui_requests`, or Wallet `agent_entrypoints` capability is needed.
-
-## 2. Wallet's public funding tool
-
-Expose one stable resident tool at the exact known endpoint
-`app:wallet:background`, named `wallet_fund_v1`. Swap callers use that exact
-endpoint and name; they must not call cross-app `tools.list` first, because
-listing itself crosses a permission boundary.
-
-Use one closed tagged request. JSON integers remain strings:
-
-```text
-requestId: random bounded caller-scoped id, at least 128 bits
-ledger: ledger principal
-amountAtoms: base-unit Nat string to deliver/swap
-validUntilNs: bounded freshness deadline
-route:
-  direct:
-    to: exact ICRC Account
-    memoHex: optional bounded memo
-  allowance:
-    spender: exact ICRC Account
-    expiresAtNs: exact short expiration
-```
-
-Do not accept symbol, decimals, fee, Wallet identity, caller identity, Agent
-identity, friendly recipient/spender labels, arbitrary method names, or
-app-authored review prose as authoritative input. Kernel supplies caller and
-Agent context; Wallet fetches and formats all token facts.
-
-For an allowance request, `amountAtoms` is the amount the DEX intends to pull.
-Wallet computes and displays:
-
-- the swap amount;
-- the current `transfer_from` fee;
-- the exact absolute allowance, normally amount plus transfer fee;
-- the separate approval fee;
-- the maximum total source-account debit;
-- the exact spender account and expiration;
-- the ledger principal, raw atoms, command ID, and the current-to-replacement
-  absolute allowance alongside formatted Wallet/ledger-supplied metadata.
-
-Use a fixed Wallet maximum lifetime and reject stale requests. If a fee,
-allowance, metadata value, or expiry changes between preparation and execution,
-fail closed and require a fresh request/review; never silently increase a fee or
-allowance.
-
-Return a closed result distinguishing `transferred`, `approved`, `revoked`,
-`pending`, and `rejected`, with Nat values represented as strings and the
-Wallet command ID in every non-validation result. `revoked` belongs to the
-shared Wallet command result used by its Approvals UI; the public funding input
-still exposes only direct transfer and ICRC-2 allowance routes.
-
-`pending` means that a value-moving call may have committed but Wallet does not
-yet possess authoritative completion evidence. It is not a safe-to-retry error.
-The caller must reuse the same immediate-caller/request-ID/intent tuple. After a
-fresh one-shot provider decision, Wallet either reconciles authoritative state,
-replays only the exact frozen arguments when that ledger protocol makes the
-replay safe, or returns the same pending command. It never substitutes a new
-request ID or rebuilds arguments after an ambiguous outcome.
-
-The service handler must:
-
-1. Require the scoped approval callback before doing new provider-mediated work.
-2. Derive requester identity and Agent Mode only from `context`.
-3. Call the backend only through `context.kernel.updateSelf()`, never the
-   module-level helper, so invocation provenance and cancellation remain bound.
-4. Prepare or load the exact command and build the Wallet-authored review from
-   its authoritative durable response.
-5. Await exactly one Kernel/root-agent decision, including for terminal or
-   pending replays of a prior invocation.
-6. Return an existing terminal result after that decision. For `prepared` or
-   `pending`, call only `wallet_funding_execute_v1` with the same command key so
-   the backend performs first dispatch or protocol-safe reconciliation.
-7. Honor `context.signal` throughout. Cancellation prevents later work but
-   cannot turn an already-dispatched update into a definite failure.
-
-## 3. Existing Wallet send
-
-- Add the existing exact `wallet_transfer` method to Wallet's
-  `preapproved_self_calls` list.
-- Change the current Wallet **Send/Withdraw** action from
-  `createCanisterClient(...).callDialog("wallet_transfer", ...)` to
-  `updateSelf("wallet_transfer", ...)`.
-- Keep `wallet_transfer` contact-only, revision-bound, and otherwise
-  backward-compatible. Do not add optional arbitrary-destination, allowance, or
-  request-ID behavior to the published method.
-- The Wallet button remains the one trusted approval. There is no second Kernel
-  backend-call dialog.
-
-## 4. Wallet backend protocol and shared execution
-
-Add versioned named-record methods instead of changing the meaning of
-`wallet_transfer`:
-
-- `wallet_funding_prepare_v1`
-  - receives only data supplied by the trusted Wallet handler, including its
-    Kernel-attested immediate caller app ID/mode;
-  - validates a selected/reserved ICRC ledger, default Wallet source account,
-    exact full Account values, amount, freshness, and bounded expiration;
-  - fetches live metadata, fee, and current allowance where applicable;
-  - freezes the reviewed command and returns a bounded review DTO plus command
-    key;
-  - on an identical request key, returns the existing command and review; the
-    same key with different intent is a conflict. Pending reconciliation occurs
-    only through the execute method for that same key.
-- `wallet_funding_execute_v1`
-  - accepts only an existing command key; terminal commands return their
-    durable result, while prepared and pending commands enter dispatch or
-    recovery;
-  - revalidates review-sensitive metadata before value movement;
-  - persists exact ledger Candid arguments and `created_at_time` before the
-    first value-moving await;
-  - calls only `icrc1_transfer` or `icrc2_approve`, chosen by a closed stored
-    kind; no arbitrary `(canister, method, args)` execution;
-  - accepts an exact ledger `Duplicate` as the receipt for an exact replay;
-  - classifies definite ledger rejection separately from ambiguous broker
-    outcome and never rebuilds arguments for a retry;
-  - for a pending ICRC command, first reconciles allowance state where
-    applicable and otherwise reuses only the frozen Candid bytes and timestamp;
-    a replay rejection without authoritative evidence remains pending;
-  - for a pending ICP `remove_approval`, lists again and succeeds only if the
-    exact approval disappeared. Because legacy ICP has no CAS/idempotency
-    timestamp, it never automatically sends a second fee-bearing removal.
-- `wallet_allowances_page_v1`
-  - is a preapproved Wallet update because it must call remote ledger query
-    methods in replicated execution;
-  - returns a bounded page for one selected ledger/default Wallet account.
-
-Use one internal transfer executor and one internal approval executor. Factor
-the selected-ledger checks, fee handling, reply decoding, Duplicate handling,
-history recording, balance invalidation, and errors out of the current path
-instead of copying them.
-
-Generalize the existing ICRC approval request builder to accept:
-
-- a complete spender `Account`, including optional subaccount;
-- exact amount and fee;
-- `expected_allowance` CAS;
-- exact expiration and fixed `created_at_time`.
-
-Keep native Bitcoin, Dogecoin, Ethereum, ERC-20 withdrawals, standing
-allowances, and arbitrary DEX calls outside this protocol. Cross-app funding is
-ICRC-only in the first release.
-
-## 5. Durable idempotency without migrating Wallet v1
-
-The current heap-only `transferInFlight` flag and newly generated timestamp are
-not enough for agent retries or lost replies. Add a new independent managed
-memory root named `wallet_commands` at schema version 1. Leave
-`memory/wallet/v1.mo`, its lock lineage, and all released schemas byte-for-byte
-unchanged.
-
-The upgrade plan is exactly:
-
-```text
-#keep wallet v1
-#initialize wallet_commands v1
-```
-
-No Wallet v2 schema and no migration module are needed.
-
-Keep the new root lean: one bounded map keyed by `(caller app id, request id)`.
-Each record stores only:
-
-- a canonical bounded intent/hash and freshness deadline;
-- closed kind: ICRC-1 transfer, ICRC-2 approve, or revoke;
-- ledger principal and exact Wallet-created Candid arguments;
-- prepared review facts needed for comparison/audit;
-- state: `prepared`, `pending`, `succeeded(receipt)`, or
-  `rejected(definite error)`;
-- immediate caller app/role and whether the request was in Agent Mode.
-
-Kernel remains the authoritative durable/diagnostic source for the full root
-invocation chain; do not expand the Wallet protocol merely to copy it.
-
-Use a small fixed capacity. Expired `prepared` and old terminal records may be
-cleaned by bounded scans; never evict `pending` work. At capacity with no safe
-entry to remove, fail closed. Exact idempotency is guaranteed through the
-request deadline plus the documented retention window. An expired `prepared`
-command is rejected before dispatch. A command which became `pending` after
-dispatch stays potentially committed across deadline, cancellation, browser
-loss, and upgrade; never prune it or relabel it rejected merely because time
-passed. After expiry Wallet may perform read-only authoritative reconciliation,
-but it must not issue a fresh mutation. Once a terminal tombstone is pruned, an
-intentionally reused ID is no longer distinguishable, so require a canonical
-random ID of at least 128 bits; permanent replay protection would require
-unbounded/permanent tombstones.
-
-## 6. Approvals screen and revocation
-
-Add **Approvals** beside Assets and Activity in the existing shared
-`WalletApp`; reuse the current tile/tray app, token marks, amount formatter,
-copy buttons, activity list/detail patterns, loading/error states, and
-invalidation path.
-
-“All approvals” means all approvals discoverable on the Wallet's selected and
-backend-access-approved ledgers. There is no global registry that can discover
-arbitrary ledgers the owner never selected.
-
-- ICRC ledgers: call draft `icrc103_get_allowances` from the Wallet backend.
-  Isolate its draft types/adapter so later standard changes do not spread.
-- Start at the Wallet's exact default Account. Paginate with both the last
-  `from_account` and `to_spender`, treat null and all-zero subaccount as the
-  same default account, return only that source, and stop when results move to
-  another Wallet-owned subaccount.
-- Enforce page/entry/reply caps, strict cursor progress, valid Accounts, owner
-  equality, nonzero allowances, and sane expirations.
-- ICP: use its existing paginated `get_allowances` adapter and
-  `remove_approval`, reusing the Wallet account-identifier codec.
-- The legacy ICP adapter is selected only for the reviewed ICP principal and is
-  used for listing/removal, not creation of a new Swap allowance. A custom
-  ledger uses the ICRC path even if it exposes similarly named methods.
-- A custom ledger without a complete ICRC-103 enumeration path shows
-  **enumeration unsupported**. Do not invent a history-derived or known-spender
-  list and call it complete.
-- Standard ICRC-2 revoke: call
-  `icrc2_approve(amount = 0, expected_allowance = displayed current)` and
-  refresh. `AllowanceChanged` requires a refresh rather than an unconditional
-  retry.
-- ICP revoke has no CAS/idempotency timestamp. After an unknown result, list
-  again before deciding whether any retry is safe.
-- Display ledger/symbol, formatted remaining allowance, exact spender ICRC
-  account or ICP account identifier, expiration, and the approval fee charged
-  for revoke. The Wallet revoke button is the trusted approval and uses the
-  same prepared/idempotent backend core; it needs no Kernel dialog.
-
-Preset ledgers already use whole-principal backend reservations. Extend custom
-ledger reservations only with the exact methods needed:
-
-```text
-icrc2_allowance
-icrc2_approve
-icrc103_get_allowances
-```
-
-Existing installations do not gain these reservations automatically. Reuse the
-current ledger-settings reservation flow and show **permission required** until
-the owner grants the missing exact scopes; do not introduce a surprise prompt
-inside Swap or Approvals.
-
-## 7. Swap consumer contract
-
-Provide a fixed executable integration page in Kitchen Sink:
-
-- Call exact `app:wallet:background` / `wallet_fund_v1`; do not discover tools
-  through wildcard listing.
-- Pin the example to ICP ledger `ryjl3-tyaaa-aaaaa-aaaba-cai`, requested value
-  1,000,000 e8s (0.01 ICP), and Neutrinite governance
-  `eqsml-lyaaa-aaaaq-aacdq-cai` as both direct destination and allowance
-  spender.
-- Direct route: Wallet performs the ICRC-1 transfer and returns the receipt.
-- Allowance route: Wallet creates the exact five-minute allowance, including
-  the live transfer fee. Approval itself moves no ICP, and Kitchen Sink cannot
-  call `transfer_from` for a spender owned by Neutrinite governance.
-- Retain the same request ID after pending or ambiguous outcomes so a retry
-  cannot silently create another transfer.
-
-Another token standard can be implemented by another trusted Wallet exposing
-an analogous app-level tool. Kernel needs no new standard-specific support.
-
-## 8. Tests and qualification
-
-### SDK and Kernel
-
-- Run the compatibility matrix above with representative previously released
-  app packages, including an old Wallet on the new Kernel and the new Wallet on
-  the old Kernel.
-- Run the existing all-apps Kernel/tool/Agent test suites unchanged; no existing
-  valid call path may gain an extra prompt or lose an existing grant.
-- Annotation normalization accepts only `provider_once`.
-- Invalid tool arguments fail before handler dispatch or review.
-- Provider call has no preliminary prompt and no reusable grant.
-- Exact and wildcard session grants cannot bypass provider review.
-- Approval capability is one-use and bound to exact caller/target/tool/session,
-  endpoint versions, cancellation, and Agent invocation.
-- Reject, timeout, Escape, endpoint replacement, abort, and replay fail closed.
-- Dialog shows Kernel-attested caller/provider, one **Allow once** action, no
-  session action, and prominent canonical escape-safe Wallet JSON.
-- Direct root agent produces zero owner dialogs. Nested Swap-to-Wallet sends the
-  full Wallet review to the root and honors allow/deny.
-- Ordinary tools retain their current grant behavior.
-
-Extend the existing tool tests, `msg_bus.isolated.ts`, Agent Mode tests,
-permission-dialog component tests, Playwright permission fixture, and scoped
-self-call tests instead of building parallel harnesses.
-
-### Wallet backend and memory
-
-- Clean initialization of both roots and exact production Wallet v1 restoration.
-- Upgrade an exact archived production Wallet package with representative
-  selected ledgers, balances, metadata, history, native-deposit progress, and
-  configuration, then prove all data and existing methods are preserved.
-- Upgrade planning proves `keep wallet v1` plus `initialize wallet_commands v1`
-  with no destructive root.
-- Same request/same intent replays; same key/different intent conflicts.
-- Lost reply and upgrade-at-await preserve one exact pending command. A
-  same-key replay must reach backend reconciliation, reuse only frozen
-  arguments where safe, accept exact `Duplicate`, and never create another
-  mutation. A terminal replay returns its durable result only after the new
-  provider invocation completes its own one-shot decision.
-- Pending recovery before and after the command deadline, including the rule
-  that expiry stops new dispatch but does not make an already-dispatched
-  outcome rejected or evictable; also cover capacity and unresolved-entry
-  retention.
-- Exact ICRC-1 transfer and ICRC-2 approve/revoke arguments, fee failures,
-  metadata change, `expected_allowance` race, malformed replies, and no
-  arbitrary target/method.
-- ICRC-103 pagination/default-account filtering/bounds, ICP listing/removal,
-  unsupported custom ledger behavior, and reservation-required behavior.
-
-### Wallet frontend and end to end
-
-- Existing Wallet send uses one Wallet button and zero Kernel backend-call
-  dialogs.
-- Human direct and allowance funding each show exactly one Kernel review and
-  never send on reject.
-- Approved direct funding transfers once.
-- Installed Kitchen Sink direct and allowance buttons each use one human
-  decision. The browser test proves the direct ICP balance delta and the exact
-  live governance allowance without attempting a false Kitchen Sink
-  `transfer_from`.
-- Root and nested Agent Mode flows create no owner prompt.
-- Approvals render exact accounts, decimal amounts, fees, expirations, errors,
-  loading, empty, incomplete, and unsupported states.
-
-Run at minimum:
+tile, background service, backend, manifest, and upgrades. That trust permits
+Wallet to present financial meaning and then invoke its own preapproved methods.
+Source-review agents are useful defense in depth, but do not replace runtime
+bindings or Wallet validation.
+
+Kernel still guarantees:
+
+- one random, bounded, invocation-scoped capability bound to exact caller,
+  provider, tool, arguments digest, sessions, installation scopes, endpoint
+  versions, owner/auth state, cancellation, expiry, and Agent invocation;
+- no preliminary grant, session-grant bypass, public presentation-tool access,
+  cross-installation tile substitution, or reuse of either interaction
+  callback;
+- exact provider tile open/reuse/focus and closed audience attestation;
+- direct-root provenance for the no-UI tool, with human and nested calls denied
+  before target dispatch.
+
+Wallet still guarantees:
+
+- closed, bounded request parsing and caller identity derived only from SDK
+  context;
+- selected/reserved ledger validation, exact ICRC Accounts, live metadata and
+  fee checks, short expiry bounds, and no caller-supplied display authority;
+- one exact durable `(caller app, request ID, intent)` command, frozen Candid
+  arguments before dispatch, safe duplicate/reconciliation handling, and no
+  automatic fresh mutation after an ambiguous result;
+- exact closed ledger methods only, no arbitrary canister/method execution;
+- rejection incapable of changing dispatched or terminal state.
+
+Swap remains responsible for its quote, minimum output, deadline, DEX call,
+and post-funding result. Wallet provides the direct transfer or allowance
+needed by that swap; Kitchen Sink deliberately does not pretend it can consume
+an allowance whose spender is the governance canister.
+
+## Contacts regression fix
+
+Do not change Contacts or its public contract. Contacts correctly supplies the
+structural Candid ICRC Account
+`{ owner : principal; subaccount : opt blob }`. The regression came from
+running icblast's public generated JSON schema after arguments had already been
+materialized against the exact installed live-Candid method. That public schema
+projects some Account records as strings, producing the reported `oneOf`
+failure for `internet_computer`.
+
+The generic self-call fix is to make the installed live-Candid signature the
+authority and remove the redundant generated-JSON-schema assertion after
+materialization. Retain exact method/mode/arity and recursive
+record/variant/option/vector/scalar checks, binary sidecar/path binding, IDL
+encoding, and raw Candid size/depth/allocation/blob preflight. Preserve only the
+generic string-record shorthand contract exposed by the pinned ICBlast release,
+with no sidecar beneath it; ICBlast encoding and exact raw-Candid preflight must
+still reject strings unsupported by the live method.
+
+Tests must cover Contacts Account values with absent and present 32-byte
+subaccounts, W306's published shorthand, and rejection of shorthand plus a
+binary sidecar. This fixes the generic boundary without weakening external
+canister-call validation or adding a Contacts exception.
+
+## Managed memory
+
+This is a code-only successor release:
+
+- Kernel keeps its released memory roots and versions unchanged.
+- Wallet keeps both released roots, `wallet` v1 and `wallet_commands` v1,
+  unchanged. `apps/wallet/backend/memory/wallet_commands/v1.mo` and the lock
+  lineage published in W306 are immutable; do not edit them or add a fake
+  migration.
+- Kitchen Sink keeps its released memory declaration unchanged.
+
+Qualify fresh installation and a real state-preserving upgrade from the exact
+published archives. W306 -> W307 must restore representative Wallet state and
+prepared, pending, and terminal command records without calling an initializer
+or migration for either v1 root.
+
+## Lean implementation and cleanup checklist
+
+- Reuse `provider_once` capability creation, the existing workspace tile
+  open/focus functions, endpoint registration, scoped `updateSelf`, Wallet's
+  existing app surface, durable funding journal, allowance adapters, amount
+  formatter, and shared transaction executors.
+- Add only the generic SDK presentation callback and closed audiences, the
+  generic Kernel route, Wallet tile presentation tool/modal, root-only Wallet
+  tool, and prepared-command rejection method needed by this design.
+- Keep the deprecated raw-review path only where W306 compatibility requires
+  it. Remove any new code, tests, or prose that makes it the normative path.
+- Review `git diff origin/main` file by file. Remove unrelated changes,
+  duplicate helpers, dead exports, copied codecs, stale tests, generated churn,
+  and obsolete design prose. The unrelated Mail package-test shim is removed;
+  Mail source, manifest, memory, and released 0.3.5 archive remain unchanged,
+  and that archive is restored to its released digest.
+- Keep the released `wallet_commands/v1.mo`, old archives, receipts, lock
+  records, and historical release evidence unchanged.
+- Keep all token display and app-specific policy out of Kernel. Kernel source
+  and tests should refer only to a generic provider presentation.
+
+## Required verification
+
+### Focused contracts
+
+- SDK: exact `provider_ui.present` envelope; closed request; shared one-use gate
+  with legacy approval; only `foreground_tile` and `agent_root`; audience tools
+  require `same_app`; missing, invalid, or mismatched audience fails before the
+  handler.
+- Kernel human path: validates public arguments first; shows no Kernel dialog;
+  opens/reuses/focuses only Wallet's exact tile; passes the original caller;
+  invokes only a same-app foreground tool; rejects capability/tool/tile/scope/
+  session/version forgery, callback replay, timeout, cancellation, replacement,
+  and provider return without interaction completion.
+- Kernel root path: only an active incoming depth-zero root can list/call the
+  tool; human and nested attempts fail before endpoint dispatch; exact
+  `agent_root` is injected; no Wallet or Kernel UI is opened.
+- Legacy: K324/W306 still completes through the deprecated callback; the new
+  W307 path never calls it; one invocation cannot call both callbacks.
+- Wallet: background presentation happens before every prepare; tile/root
+  audiences are checked; one modal Accept executes exactly once; Reject makes
+  no ledger call; close/cancel safely rejects prepared work; pending and
+  terminal replay cannot create a second mutation; direct and allowance facts
+  are formatted from authoritative ledger data.
+- Wallet approvals: bounded ICRC-103 and ICP pagination, exact source filtering,
+  cursor progress, unsupported/reservation-required states, CAS revoke races,
+  ambiguous ICP removal, and refresh after success.
+- Contacts: structural default/present-subaccount calls work and malformed
+  shapes, sidecars, or Candid bytes still fail closed.
+
+### Integration and browser gates
+
+- Run all old-app compatibility suites and the four-version matrix above.
+- Upgrade exact K323/W306/Kitchen305 installations to the corrective set
+  through the checked product update path and verify durable state.
+- Kitchen Sink direct: click once, Wallet opens/focuses, Wallet shows ICP,
+  0.01, live fees, exact governance destination, Accept once, and the exact
+  ledger balance delta occurs once.
+- Kitchen Sink allowance: Wallet shows exact governance spender, current/new
+  allowance, fees, five-minute expiry, and maximum debit; Accept once; query
+  the exact live allowance; Kitchen Sink never calls `transfer_from`.
+- Reject both routes and prove no transfer/allowance mutation.
+- Assert zero `frontend-tool-dialog`, Kernel call dialog, and backend dialog on
+  K324/W307 human flows; assert zero Wallet and Kernel UI for the root flow.
+- Exercise Wallet Send/Withdraw and Approvals revoke with one Wallet decision
+  and no Kernel dialog.
+- Exercise Contacts add/edit with both default and non-default IC subaccounts.
+
+### Repository and release commands
+
+At minimum, rerun on the frozen final tree:
 
 ```sh
 npm --workspace neutron-tools test
 npm --workspace neutron-kernel test
 npm --workspace neutron-wallet test
+npm --workspace neutron-kitchensink test
 npm --workspace neutron-compiler test
 npm run typecheck
 npm run security:check
 npm run license:check
+npm test
 ```
 
-Then run the complete Kernel and Wallet package commands and their release
-qualification, including the Kernel certified-assets candidate binding and
-final-candidate state-preserving PocketIC upgrade test.
+Then run each complete package workflow, not a lower-level pack script:
 
-## 9. Documentation
+```sh
+npm --workspace neutron-kernel run package
+npm --workspace neutron-wallet run package
+npm --workspace neutron-kitchensink run package
+```
 
-Update the existing docs rather than adding a competing architecture document:
+Also rerun each app's release-specific memory, Motoko, browser/PocketIC, Kernel
+candidate-binding, certified-assets, and exact-archive compatibility gates.
+Record command, result, exact archive path, byte length, SHA-256, and offered
+source for the final candidates. A passing intermediate tree or package build
+is not final release evidence.
 
-- `apps/wallet/README.md`: trusted Wallet provider, funding contract,
-  approvals/revoke support, custom-ledger limitations, and Agent behavior.
-- `doc/app-method-access-and-call-consent.md`: provider-one-shot route,
-  preapproved Wallet execution, no session-grant bypass, and Agent routing.
-- `doc/kernel-app-communication.md`: annotation, private scoped callback,
-  caller/provider attribution, cancellation, and complete review payload.
-- `doc/app-developer-guide.md`: provider recipe and Swap consumer example.
-- `doc/product-model-and-user-story.md`: explicit user trust in an installed
-  Wallet while Kernel remains the platform trust root.
-- `doc/open-questions-and-design-gaps.md`: resolve/narrow the current statement
-  that every value-moving adapter requires immediate owner presence. Raw
-  chain-key signing remains a separate stricter boundary.
-- Update custom-ledger reservation examples and relevant testing/security docs.
+## Release procedure
 
-## 10. Release order
+1. Complete the diff cleanup and security review; freeze source and tests.
+2. Prove unchanged memory roots with fresh and exact-production upgrade tests.
+3. Set manifests to exactly Kernel 324, Wallet 307, and Kitchen Sink 306 while
+   retaining production `update_source` `233tv-xiaaa-aaaay-aacta-cai`.
+4. Run all qualification and complete package commands against the same final
+   source. Do not reuse or overwrite K323/W306/Kitchen305 bytes.
+5. Update only active archive references and generated repository data from the
+   exact successor archives. Preserve immutable historical archives and restore
+   exact released dependency artifacts before any repository generation; do
+   not repackage an old version.
+6. Review the three archives and their offered-source artifacts, then publish
+   Kernel 324, Wallet 307, and Kitchen Sink 306 together in one catalog
+   transaction with `npm run updates:publish`.
+7. Rerun that command against the exact same bytes. Require `batch_id: null`
+   and every package/source row `unchanged`, with matching version, path, size,
+   URL, and SHA-256.
+8. Commit and push the reviewed result to PR #13 with the exact qualification
+   and publication evidence.
 
-- Preserve Kernel `kernel` v3 and `kernel_activation` v1 memory unchanged.
-- Preserve Wallet `wallet` v1 unchanged and add only `wallet_commands` v1.
-- Only after the state-compatible implementation and release tests are ready,
-  set Kernel strictly above 322 (minimum 323) and Wallet strictly above 305
-  (minimum 306). App versions and memory versions remain independent. A number
-  present in a working-tree manifest is not evidence that its package passed.
-- Keep production `update_source` as `233tv-xiaaa-aaaay-aacta-cai`.
-- Package through the complete workspace commands; do not call pack scripts
-  directly or rewrite historical archives, schemas, lock entries, fixtures, or
-  release evidence. Packaging creates candidate bytes, not a qualification or
-  publication claim.
-- Kernel, Wallet, and Kitchen Sink became one compatible **Upgrade all** set
-  only after the matrix and package qualification passed. The explicitly
-  requested publication used one catalog transaction (batch 36), followed by
-  the exact-byte receipt-v2 no-op with `batch_id: null` and every item
-  `unchanged`.
-- Publication occurred only after the explicit request and completed release
-  qualification.
-- Do not update the Dispenser starter package set unless that separate rollout
-  is explicitly requested.
+Do not publish a Kernel-first phase, rebuild after an ambiguous publication,
+or update/stage the Dispenser starter unless that separate rollout is
+explicitly requested.
 
-## Explicitly deferred
+## Deferred
 
-- Fully unattended/background roots beyond the current live Agent Mode turn.
-  Current Agent Mode still starts from an enabled exact agent version, focused
-  tile, and transient user activation; once live, funding needs no owner dialog.
-- Wallet-controlled swap/DEX orchestration.
-- Standing or unlimited allowances, caller-selected long lifetimes, per-agent
-  budgets, spender reputation/attestation, and automatic post-swap revoke.
-- Native-chain and ERC-20 cross-app withdrawals.
-- Global allowance discovery for ledgers the Wallet cannot know or access.
+- Wallet-operated DEX execution, quote validation, or swap settlement.
+- Standing/unlimited allowances, caller-selected long expiries, automatic
+  post-swap revoke, and per-agent budgets.
+- Native-chain and ERC-20 cross-app withdrawal protocols.
+- Global allowance discovery for ledgers Wallet has never selected or cannot
+  access.
 - Generic wallet-provider discovery or wildcard tool listing.
 
-These can be considered later without putting token or app-specific knowledge
-into Kernel.
+These can be added later without changing the token-agnostic Kernel boundary.

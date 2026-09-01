@@ -990,7 +990,6 @@ module {
                 case (#err(error)) return #err(error);
                 case (#ok(())) {};
             };
-            pruneFundingCommands(Time.now(), false);
             switch (existingActiveIcpRevoke(request, now)) {
                 case (#err(error)) return #err(error);
                 case (#ok(?outcome)) return #ok(outcome);
@@ -1028,7 +1027,6 @@ module {
             // Preparation awaits ledger facts. Recheck the global semantic
             // fence before insertion so two fresh request IDs cannot both
             // prepare the same non-idempotent legacy removal.
-            pruneFundingCommands(Time.now(), false);
             switch (existingActiveIcpRevoke(request, finishedAt)) {
                 case (#err(error)) return #err(error);
                 case (#ok(?outcome)) return #ok(outcome);
@@ -1102,33 +1100,54 @@ module {
                 };
                 case (_) {};
             };
-            if (transferInFlight) {
-                return pendingExecution(
+            // Accept is durable even when another Wallet action currently owns
+            // the ledger-call slot. A retry then resumes without another owner
+            // decision, and reject cannot relabel the accepted command.
+            switch (FundingJournal.acceptForExecution(
+                command,
+                transferInFlight,
+                Time.now(),
+            )) {
+                case (#waiting) return pendingExecution(
                     request.command_id,
                     "Another Wallet transfer or approval is in progress",
                 );
+                case (#dispatch) {};
             };
-
-            let attempts = switch (command.status) {
-                case (#prepared) 1;
-                case (#pending(value)) value.attempts + 1;
-                case (_) 1;
-            };
-            let startedAt = switch (command.status) {
-                case (#pending(value)) value.started_at;
-                case (_) Time.now();
-            };
-            let lastError = switch (command.status) {
-                case (#pending(value)) value.last_error;
-                case (_) null;
-            };
-            // This durable transition happens before the first execute await.
-            command.status := #pending({ attempts; started_at = startedAt; last_error = lastError });
-            command.updated_at := Time.now();
             transferInFlight := true;
             let result = await* executeFundingCommand(key, command);
             transferInFlight := false;
             result;
+        };
+
+        public func /*update*/wallet_funding_reject_v1(
+            request : WalletFundingExecuteRequestV1,
+        ) : async* WalletFundingExecutionResultV1 {
+            if (request.command_id.request_id.size() != REQUEST_ID_BYTES) {
+                return rejectedExecution(
+                    request.command_id,
+                    "Invalid Wallet funding command ID",
+                );
+            };
+            let key : CommandMemory.CommandKey = {
+                caller_app_id = request.command_id.caller_app_id;
+                request_id = request.command_id.request_id;
+            };
+            let ?command = Map.get(commandMem.commands, commandKeyCompare, key) else {
+                return rejectedExecution(request.command_id, "Wallet funding command was not found");
+            };
+            switch (command.status) {
+                case (#prepared) rejectFundingCommand(
+                    key,
+                    command,
+                    "owner_rejected",
+                    "Wallet funding was rejected by the owner",
+                );
+                // Reject is deliberately incapable of relabeling a dispatched
+                // or terminal command. The durable execution journal remains
+                // authoritative once an accepted operation starts.
+                case (_) fundingExecution(key, command);
+            };
         };
 
         func validateFundingRequest(
@@ -1451,33 +1470,13 @@ module {
         };
 
         func ensureFundingCapacity(now : Int) : Bool {
-            pruneFundingCommands(now, false);
-            if (Map.size(commandMem.commands) >= COMMAND_CAPACITY) {
-                pruneFundingCommands(now, true);
-            };
+            ignore FundingJournal.pruneExpiredCommands(
+                commandMem.commands,
+                commandKeyCompare,
+                now,
+                COMMAND_PRUNE_LIMIT,
+            );
             Map.size(commandMem.commands) < COMMAND_CAPACITY;
-        };
-
-        func pruneFundingCommands(now : Int, underPressure : Bool) : () {
-            let discarded = List.empty<CommandMemory.CommandKey>();
-            label commands for ((key, command) in Map.entries(commandMem.commands)) {
-                if (List.size(discarded) >= COMMAND_PRUNE_LIMIT) break commands;
-                let validityPassed = now > Int.fromNat(Nat64.toNat(command.valid_until));
-                let removable = switch (command.status) {
-                    case (#prepared) validityPassed;
-                    case (#succeeded(_)) {
-                        now >= command.retain_until or (underPressure and validityPassed);
-                    };
-                    case (#rejected(_)) {
-                        now >= command.retain_until or (underPressure and validityPassed);
-                    };
-                    case (#pending(_)) false;
-                };
-                if (removable) List.add(discarded, key);
-            };
-            for (key in List.values(discarded)) {
-                Map.remove(commandMem.commands, commandKeyCompare, key);
-            };
         };
 
         func preflightFundingCapabilities(
@@ -4288,6 +4287,9 @@ public type wallet_funding_prepare_v1_Output = WalletFundingPrepareResultV1;
 
 public type wallet_funding_execute_v1_Input = (request : WalletFundingExecuteRequestV1,);
 public type wallet_funding_execute_v1_Output = WalletFundingExecutionResultV1;
+
+public type wallet_funding_reject_v1_Input = (request : WalletFundingExecuteRequestV1,);
+public type wallet_funding_reject_v1_Output = WalletFundingExecutionResultV1;
 
 public type wallet_allowances_page_v1_Input = (request : WalletAllowancesPageRequestV1,);
 public type wallet_allowances_page_v1_Output = WalletAllowancesPageResultV1;

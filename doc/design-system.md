@@ -5,7 +5,9 @@
 The Neutron design system is a shared app-developer package for building
 consistent dark-mode app frontends inside kernel-managed iframe tiles. It is a
 developer convenience, not a security boundary. The kernel still owns trusted
-install, signature, authorization, and canister-call approval UI.
+install, signature, authorization, and generic canister-call approval UI. An
+exact provider app may own a domain-specific decision in its authenticated
+foreground tile; that modal remains provider UI, not Kernel UI.
 
 Source package:
 
@@ -343,17 +345,22 @@ await client.callDialog("save_profile", [
 ]);
 ```
 
-App buttons should say `Review in kernel`, not `Approve`, `Accept`, `Sign`, or
-`Authorize`.
+For a generic Kernel-mediated backend call, app buttons should say
+`Review in kernel`, not `Approve`, `Accept`, `Sign`, or `Authorize`.
 
 An app may still use a concrete domain verb such as **Send**, **Approve
 allowance**, or **Revoke** for an operation which its own trusted UI fully
 reviews and then performs through an exact preapproved self call. It must not
 imitate Kernel chrome or imply that another app or Kernel verified its domain
-facts. For a cross-app `provider_once` tool, the provider supplies only bounded
-inert review JSON; Kernel renders the fixed identities, modal chrome,
-**Allow once**/**Reject** controls, focus behavior, and timeout. Provider HTML,
-Markdown, styles, images, and components never enter the Kernel document.
+facts. For a cross-app `provider_once` tool, its resident first calls
+`context.presentUserInterface()` without preparing an effect. Kernel then
+opens or focuses the exact provider tile and routes a bounded opaque request to
+its private `same_app` + `foreground_tile` tool. The provider may use
+`nt-dialog` and its own components to show normalized domain facts with one
+**Accept**/**Reject** decision. Kernel owns the routing and audience
+attestation, not the modal, token formatting, focus management, or decision.
+The provider must implement Escape handling, focus trapping and restoration,
+cancellation, loading/error states, and prevention of duplicate acceptance.
 
 ### Dense Inspector
 
@@ -387,12 +394,16 @@ The design system must not:
 - style kernel install, authorization, dangerous-code, or signature dialogs;
 - present app-side previews as trusted kernel approval UI.
 
-Provider-authored review text shown by Kernel remains visibly attributed and
-unverified app content even when the owner has chosen to trust that provider.
-The design system does not define provider review policy or token fields.
+Kernel does not render provider-authored review content on the new path. It
+authenticates and focuses the exact provider tile, while the owner chooses to
+trust that installed provider's UI and domain checks. The design system does
+not define provider policy or token fields and does not make the modal a Kernel
+security surface.
 
-Apps may use `neutron-tools/app` for approved calls, but the kernel derives
-method schemas from the installed canister and owns the approval dialog.
+Apps may use `neutron-tools/app` for approved calls. On the generic
+`callDialog()` path, Kernel derives method schemas from the installed canister
+and owns that approval dialog; the provider-owned path above is deliberately
+separate.
 
 ## Kitchen Sink Reference
 

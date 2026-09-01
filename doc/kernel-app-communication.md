@@ -217,57 +217,81 @@ Kernel and Agent do not carry hardcoded ordinary-app tool schemas.
 
 The closed descriptor annotation
 `{"neutron:consent":"provider_once"}` selects a target-mediated one-shot
-review. It is for a provider which must inspect authoritative state before an
-informed decision can be rendered. The annotation does not describe tokens,
-payments, wallets, or any other app domain.
+interaction. It is for a provider which must own the specialized UI and inspect
+authoritative state before the owner can make an informed decision. The
+annotation does not describe tokens, payments, wallets, or any other app
+domain.
 
 For a cross-app invocation, the Kernel validates the original JSON arguments
-against the target descriptor before either approval or handler dispatch. It
-then bypasses the ordinary preliminary frontend-tool grant and calls the exact
-provider endpoint with a private one-use `requestApproval` callback in that
-handler's context. The callback is bound to the captured caller object and
-session, caller AppScope/version, target object and session, target
-AppScope/version, exact tool, request cancellation signal, and any Agent
-invocation, together with the canonical SHA-256 of the validated original
-arguments. It never appears in the ordinary JSON envelope, discovery result,
-tool arguments, progress, or response.
+against the target descriptor, bypasses the ordinary preliminary frontend-tool
+grant, and calls the exact provider endpoint with a private one-use
+`presentUserInterface` callback in that handler's context. The callback is
+bound to the captured caller object and session, caller AppScope/version,
+target object and session, target AppScope/version, exact public tool, request
+cancellation signal, and canonical SHA-256 of the validated original
+arguments. It never appears in discovery, public tool arguments, progress, or
+the response.
 
-The provider must freeze its exact operation before calling:
+The provider invokes the callback before domain-specific preparation:
 
 ```ts
-await context.requestApproval(review);
+return context.presentUserInterface({
+  tileId: "wallet",
+  tool: "wallet_funding_present_v1",
+  arguments: request,
+});
 ```
 
-`review` is a JSON object bounded to 16 KiB in addition to the ordinary depth
-and container-element limits. The Kernel renders it as inert canonical text
-inside fixed Kernel chrome, visibly attributes it to the exact target provider,
-and separately shows the Kernel-derived requesting app. It does not interpret
-the review's keys or values. The handler must complete the callback exactly once;
-returning without it is an invalid request. A second call, replay, wrong tool or
-endpoint, source/target replacement, timeout, abort, cancellation, or completed
-invocation fails closed. Endpoint and authority bindings are rechecked after
-every asynchronous step.
+The request is a closed `{ tileId, tool, arguments }` object bounded to 16 KiB
+in addition to the ordinary depth and container-element limits. The Kernel
+opens or reuses and focuses that exact declared tile of the provider in the
+active workspace, waits for its exact registered endpoint, and routes the
+opaque `arguments` only to a private tool declaring both
+`{"neutron:visibility":"same_app"}` and
+`{"neutron:audience":"foreground_tile"}`. The Kernel injects the original
+caller context and the attested `foreground_tile` audience; neither value can
+be supplied by an app argument. The SDK rejects a missing or mismatched
+audience before entering the private handler.
 
 Outside Agent Mode, the original request is admitted only from the focused
-source tile with transient user activation. The callback then reuses the
-existing owner-attention and frontend-tool request machinery with
-`onceOnly: true`. No exact or wildcard
-session grant is consulted, no **Allow session** action is rendered, and an
-approval creates no grant. In Agent Mode, a direct root resolves automatically;
-a descendant sends the complete provider-authored review to the root's private
-decision callback and resumes only on allow. No owner dialog opens.
+source tile with transient user activation. The provider tile, not Kernel,
+loads authoritative facts, renders its own review UI, owns Accept and Reject,
+and performs its own preapproved self call only after Accept. Kernel neither
+renders a dialog nor interprets the payload. No exact or wildcard session grant
+is consulted, and the interaction creates no grant.
 
-The pending capability and decision binding are ephemeral browser state. This
-route adds no Kernel managed-memory schema and no durable permission record;
-existing audit projection remains the only persistent generic record.
+The pending capability and presentation binding are ephemeral browser state.
+This route adds no Kernel managed-memory schema and no durable permission
+record; existing audit projection remains the only persistent generic record.
 
-The target provider, not Kernel, is trusted to call this callback before using
-its own preapproved effects. Kernel authenticates and freezes routing and the
-decision, but cannot prove app-specific ordering without understanding the
-provider. A provider must test that `context.requestApproval` exists before it
-prepares or executes new work. On an older Kernel the optional annotation does
-not supply that callback, so a new provider fails closed rather than falling
-back to the ordinary session-grant path.
+The public handler must complete exactly one provider interaction; returning
+without it is invalid. The SDK gives `requestApproval` and
+`presentUserInterface` one shared use, so a handler cannot stack the old and new
+paths. A second use, replay, wrong tool or endpoint, source/target replacement,
+timeout, abort, or cancellation fails closed. Endpoint and authority bindings
+are rechecked after every asynchronous step.
+
+The target provider, not Kernel, is trusted to keep preparation, display,
+decision, and execution correctly ordered. Kernel authenticates routing but
+cannot prove app-specific ordering without understanding the provider. A new
+provider must feature-detect `context.presentUserInterface` before preparation
+or execution. On an older Kernel it fails closed rather than falling back to an
+ordinary session grant.
+
+`context.requestApproval(review)` is deprecated compatibility for providers
+already published with that contract, including Wallet 0.3.6. That legacy lane
+retains its Kernel-rendered inert raw-JSON review so those installed callers
+continue to work, but new providers must not use it and new Wallet flows do not
+open a Kernel dialog.
+
+Agent automation uses a separate provider tool declaring both
+`{"neutron:visibility":"same_app"}` and
+`{"neutron:audience":"agent_root"}`. Kernel hides and rejects that tool for
+ordinary app calls and delegated Agent descendants; only the active depth-zero
+root invocation is admitted, and it receives an attested `agent_root` audience.
+The provider checks that audience, prepares and executes through its own
+preapproved authority, and opens no provider or Kernel UI. An Agent invocation
+which attempts `presentUserInterface` fails closed instead of opening a tile.
 
 The initial protocol rejects `provider_once` on attachment and control tools.
 Same-app calls and every tool without this exact annotation retain their
@@ -363,11 +387,16 @@ The app entry provides:
 Every helper ultimately uses the connected private port.
 
 An `exposeTool()` handler's context additionally contains optional
-`requestApproval(review)` only while the Kernel is dispatching that exact
-cross-app `provider_once` invocation. It is invocation metadata, not a global
-app helper. Code must feature-detect it before preparation, must not copy it out
-of the dynamic handler lifetime, and must continue to use the same context's
-`kernel` client for subsequent scoped self calls or nested tools.
+`presentUserInterface({ tileId, tool, arguments })` only while Kernel is
+dispatching that exact cross-app `provider_once` invocation. It is invocation
+metadata, not a global app helper. Code must feature-detect it before
+preparation, must not copy it out of the dynamic handler lifetime, and must
+continue to use the same context's `kernel` client for subsequent scoped self
+calls or nested tools. Audience-restricted handlers receive the corresponding
+Kernel-attested `context.audience`; the SDK rejects missing or mismatched
+attestation before invoking the handler. Deprecated `requestApproval(review)`
+exists only for released-provider compatibility and shares the same one-use
+gate.
 
 ## Self Calls With Nested Binary Values
 
@@ -425,12 +454,19 @@ input.
 Before dispatch the Kernel:
 
 1. validates the endpoint, scope, method, and preapproval or dialog route;
-2. validates the live Candid type graph;
-3. binds sidecars and creates a schema-safe validation shadow;
-4. encodes exact raw Candid;
-5. independently scans that raw Candid for binary, allocation, element, and
+2. resolves and validates the exact live Candid method and type graph;
+3. binds every sidecar exactly to that graph and validates the structural
+   value;
+4. encodes the arguments through the exact live IDL method;
+5. independently scans that raw Candid against the live types for binary,
+   allocation, element, and
    depth limits; and
 6. rechecks the endpoint and invocation before the signed query/update.
+
+The private self-call path does not apply ICBlast's public JSON Schema shadow.
+That public projection may intentionally represent Candid records with scalar
+conveniences and is not authoritative for a private structural Candid value.
+The live IDL encoding and raw-Candid preflight remain mandatory.
 
 The reply is raw-preflighted before decode, projected into the same native
 binary model, and transferred back through response sidecars.
@@ -547,13 +583,12 @@ signing. The unversioned compatibility route rejects Agent-scoped signed calls
 before discovery. The canonical v2 contract is in
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
-A nested `provider_once` call has the same complete-review requirement at its
-own target-mediated boundary. A compliant provider prepares and freezes its
-operation, then `requestApproval()` sends the entire bounded review to the root
-agent before any later preapproved effect. Argument counts or byte counts are
-not a substitute. A direct root resolves that callback without owner UI; a
-descendant denial or cancel prevents the provider's later preapproved self
-update. Exact and wildcard ordinary tool grants are ignored for this route.
+New provider-owned UI is not an Agent decision surface. A root that needs the
+provider's autonomous operation calls the separate `same_app` + `agent_root`
+tool. Kernel admits it only for the active depth-zero root and attests that
+audience; a descendant or ordinary caller is rejected before target dispatch.
+The provider performs no UI on that route and uses only its own declared
+preapproved authority. The public `provider_once` path remains the human route.
 
 An exposed-tool handler with `agentMode: true` must use its invocation-bound
 `context.kernel` client for nested Agent work. That client propagates invocation
@@ -571,8 +606,9 @@ consent remains unchanged.
 
 Agent Mode remains a live invocation model. Enabling one exact agent version
 does not start an unattended background root: each root begins from that
-agent's focused, owner-activated tile. Provider approvals can be automatic or
-root-decided only while that bounded invocation remains live.
+agent's focused, owner-activated tile. A provider's separate root-audience tool
+can execute without UI only while that bounded depth-zero invocation remains
+live.
 
 ## Private Broker Actions
 
@@ -608,11 +644,11 @@ rechecks it against live state. Before effect and reply it verifies that:
 - any invocation is still active; and
 - the capability registry still permits the resource.
 
-A `provider_once` request captures both the original call and its later review
-under this same binding. The review cannot retarget the tool, replace the
-caller, select another endpoint, manufacture Agent provenance, or authorize a
-second request. Provider review text remains app-authored data even though the
-Kernel safely renders it in trusted chrome.
+A `provider_once` request captures both the original call and its one provider
+presentation under this same binding. The presentation cannot retarget the
+public tool, replace the caller, select another app, manufacture an audience,
+or authorize a second request. Its opaque arguments remain app-authored data
+which only the provider tile interprets and renders.
 
 Unrecognized envelopes and stale replies are ignored or rejected without
 changing callback ownership.
@@ -642,7 +678,7 @@ trusted browser shell is open and uses declared broker APIs for durable work.
 - Authority is rechecked after `await`.
 - Tool discovery describes live apps; Core code does not encode ordinary app
   behavior.
-- Provider-mediated approval is one-use and source/target/invocation-bound;
-  ordinary session grants cannot satisfy it, and its review stays inert
-  app-authored data.
+- Provider presentation is one-use and source/target-bound; ordinary session
+  grants cannot satisfy it, and only the provider tile interprets its opaque
+  data. Root-agent execution is a separate exact audience-restricted tool.
 - Closing or replacing an endpoint cancels its pending authority.

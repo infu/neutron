@@ -123,15 +123,15 @@ function WalletFundingPage() {
     <CapabilityFrame
       status="ready"
       statusLabel="Wallet provider"
-      purpose="Exercise the two funding rails a swap app needs. Wallet—not Kitchen Sink or the Kernel—reads ICP metadata, calculates fees, prepares the human-readable review, and executes the ledger mutation."
-      boundary="Each button targets one exact resident Wallet tool and receives one Wallet-authored Kernel decision in interactive mode. Kitchen Sink cannot alter the ledger, amount, or governance account, and it cannot consume an allowance owned by Neutrinite governance. Root Agent Mode can decide the same one-shot request without owner UI."
+      purpose="Exercise the two funding rails a swap app needs. Wallet—not Kitchen Sink or the Kernel—reads ICP metadata, calculates fees, shows the human-readable approval, and executes the ledger mutation."
+      boundary="Each button sends one exact intent to Wallet. The Kernel authenticates and routes it and opens or focuses Wallet, but renders no token approval UI and does not interpret token details. One decision in Wallet authorizes only the frozen transfer or allowance. Kitchen Sink cannot alter the ledger, amount, or governance account, and it cannot consume an allowance owned by Neutrinite governance."
       declaration={`target = ${WALLET_FUNDING_TARGET}\ntool = ${WALLET_FUNDING_TOOL}\nledger = ${ICP_LEDGER}\namount_atoms = ${ICP_SWAP_AMOUNT_ATOMS}\ngovernance = ${NEUTRINITE_GOVERNANCE}`}
       evidence={<EvidenceList items={[
         { label: "Ledger", value: <code>{ICP_LEDGER}</code> },
         { label: "Requested value", value: `${ICP_SWAP_AMOUNT_DISPLAY} (${ICP_SWAP_AMOUNT_ATOMS} e8s)` },
         { label: "Destination / spender", value: <code>{NEUTRINITE_GOVERNANCE}</code> },
         { label: "Provider", value: <code>{WALLET_FUNDING_TARGET} / {WALLET_FUNDING_TOOL}</code> },
-        { label: "Consent", value: "One exact decision; no reusable session grant" },
+        { label: "Consent", value: "One Wallet approval; no Kernel dialog or session grant" },
       ]} />}
     >
       <div className="ks-two-column">

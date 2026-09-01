@@ -31,9 +31,13 @@ must never preapprove that raw-signing decision.
 This stricter boundary is about a Kernel broker holding a generic threshold
 transaction-signing primitive. It does not govern a separately installed,
 owner-trusted Wallet app which understands its own asset protocol, prepares a
-bounded `provider_once` review, and invokes only its own exact preapproved
-backend methods. That app-level Wallet remains isolated and untrusted by Kernel;
-it receives no raw chain-key signer from this capability.
+bounded operation in its own foreground tile, and invokes only its own exact
+preapproved backend methods after the user accepts the Wallet modal. Kernel
+opens and focuses the exact provider tile but neither renders nor interprets
+the token decision. A separate direct-root Wallet tool may use the same checked
+prepare/execute core without UI only when Kernel attests the active depth-zero
+root. That app-level Wallet remains isolated and untrusted by Kernel; it
+receives no raw chain-key signer from this capability.
 
 A signature is still authority-bearing evidence: an external verifier can
 choose to interpret any assertion as permission for a high-impact action. App

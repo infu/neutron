@@ -10,14 +10,18 @@ import { encodeIcrcAccount } from "neutron-tools/src/icrc_account.js";
 import {
   WALLET_FUNDING_EXECUTE_METHOD,
   WALLET_FUNDING_PREPARE_METHOD,
+  WALLET_FUNDING_PRESENT_TOOL,
   WALLET_FUNDING_TOOL,
   assertRevokePreparedMatchesDisplay,
+  executeWalletFundingOperation,
   fundingPrepareArgs,
   handleWalletFunding,
   mergeWalletAllowancesPages,
   parseFundingPrepareResult,
   parseWalletAllowancesPage,
   parseWalletFundingRequest,
+  prepareWalletFundingOperation,
+  rejectWalletFundingOperation,
   resolveWalletFundingPreparation,
   walletAllowancesPageArgs,
   walletFundingInputSchema,
@@ -41,6 +45,10 @@ const accountWithSubaccount = encodeIcrcAccount({
   owner: Principal.fromText(ledger),
   subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
 });
+const candidAccountWithSubaccount = {
+  owner: ledger,
+  subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
+};
 
 const descriptor = normalizeToolDescriptor({
   name: WALLET_FUNDING_TOOL,
@@ -133,7 +141,7 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       direct: {
         amount_atoms: "123456789",
-        to: accountWithSubaccount,
+        to: candidAccountWithSubaccount,
       },
     },
   });
@@ -158,7 +166,7 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       allowance: {
         amount_atoms: "500000000",
-        spender: accountWithSubaccount,
+        spender: candidAccountWithSubaccount,
         expires_at_ns: "1800000300000000000",
       },
     },
@@ -180,8 +188,8 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     ledger,
     cursor: {
       icrc103: {
-        from_account: ledger,
-        to_spender: accountWithSubaccount,
+        from_account: { owner: ledger, subaccount: null },
+        to_spender: candidAccountWithSubaccount,
         pages: "1",
         entries: "40",
       },
@@ -210,86 +218,56 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       revoke: {
         source: { icrc: null },
-        spender: { icrc: accountWithSubaccount },
+        spender: { icrc: candidAccountWithSubaccount },
         expected_allowance_atoms: "200",
       },
     },
   });
 });
 
-test("funding fails before preparation when provider approval is unavailable", async () => {
+test("funding fails before preparation when provider UI is unavailable", async () => {
   const methods: string[] = [];
   const context = fundingContext(async (method) => {
     methods.push(method);
     throw new Error("must not call");
   });
-  delete context.requestApproval;
+  delete context.presentUserInterface;
 
   await expect(handleWalletFunding(directRequest, context)).rejects.toThrow(
-    "provider approval support",
+    "provider UI support",
   );
   expect(methods).toEqual([]);
 });
 
-test("funding prepares, reviews authoritative facts once, then executes", async () => {
+test("public funding forwards the canonical request to Wallet UI without preparing", async () => {
   const methods: string[] = [];
-  const argumentsSeen: unknown[] = [];
-  const reviews: JsonObject[] = [];
+  const presentations: JsonObject[] = [];
   const context = fundingContext(
-    async (method, args) => {
+    async (method) => {
       methods.push(method);
-      argumentsSeen.push(args);
-      if (method === WALLET_FUNDING_PREPARE_METHOD) {
-        return preparedDirect();
-      }
-      if (method === WALLET_FUNDING_EXECUTE_METHOD) {
-        return {
-          transferred: {
-            command_id: commandId,
-            block_index: "91",
-            duplicate: false,
-          },
-        };
-      }
-      throw new Error("unexpected method");
+      throw new Error("must not prepare in the resident");
     },
-    async (review) => {
-      reviews.push(review);
+    async (request) => {
+      presentations.push(request);
+      return {
+        status: "transferred",
+        commandId: `${callerApp}:${requestId}`,
+        blockIndex: "91",
+        duplicate: false,
+        message: null,
+      };
     },
   );
 
   const result = await handleWalletFunding(directRequest, context);
-  expect(methods).toEqual([
-    WALLET_FUNDING_PREPARE_METHOD,
-    WALLET_FUNDING_EXECUTE_METHOD,
+  expect(methods).toEqual([]);
+  expect(presentations).toEqual([
+    {
+      tileId: "wallet",
+      tool: WALLET_FUNDING_PRESENT_TOOL,
+      arguments: directRequest,
+    },
   ]);
-  const prepareArgs = (argumentsSeen[0] as unknown[])[0] as Record<
-    string,
-    unknown
-  >;
-  expect(prepareArgs.request_id).toEqual(requestIdBytes);
-  expect(prepareArgs.caller).toEqual({
-    endpoint: "app:swap:tile",
-    app_id: callerApp,
-    role: "tile",
-  });
-  expect(prepareArgs.agent_mode).toBe(false);
-  expect(reviews).toHaveLength(1);
-  expect(reviews[0]).toMatchObject({
-    action: "Transfer tokens",
-    commandId: `${callerApp}:${requestId}`,
-    token: {
-      ledger,
-      symbol: "ICP",
-      decimals: 8,
-    },
-    amount: { atoms: "123456789", display: "1.23456789 ICP" },
-    destination: {
-      account: accountWithSubaccount,
-      owner: ledger,
-      subaccountHex: `${"00".repeat(31)}ff`,
-    },
-  });
   expect(result).toEqual({
     status: "transferred",
     commandId: `${callerApp}:${requestId}`,
@@ -298,14 +276,9 @@ test("funding prepares, reviews authoritative facts once, then executes", async 
     message: null,
   });
   expect(() => validateToolResult(descriptor, result)).not.toThrow();
-  const executeArgs = (argumentsSeen[1] as unknown[])[0] as Record<
-    string,
-    unknown
-  >;
-  expect(executeArgs.command_id).toEqual(commandId);
 });
 
-test("allowance review shows the exact current and replacement authority", async () => {
+test("tile preparation returns authoritative allowance facts and shared execution", async () => {
   const request: JsonObject = {
     requestId,
     ledger,
@@ -317,132 +290,162 @@ test("allowance review shows the exact current and replacement authority", async
       expiresAtNs: "1800000300000000000",
     },
   };
-  let review: JsonObject | null = null;
-  const context = fundingContext(
-    async (method) => {
-      if (method === WALLET_FUNDING_PREPARE_METHOD) {
-        return {
-          prepared: {
-            command_id: commandId,
-            review: allowanceReview(),
-          },
-        };
-      }
-      return {
-        approved: {
-          command_id: commandId,
-          block_index: "92",
-          duplicate: false,
-        },
-      };
+  const context = fundingContext(async () => ({
+    prepared: {
+      command_id: commandId,
+      review: allowanceReview(),
     },
-    async (value) => {
-      review = value;
-    },
-  );
-
-  const result = await handleWalletFunding(request, context);
-  expect(review).toMatchObject({
-    action: "Approve token spending",
-    allowanceChange: {
-      current: { atoms: "50", display: "0.0000005 ICP" },
-      replacement: { atoms: "110", display: "0.0000011 ICP" },
-    },
-    expirationChange: {
-      currentNs: "1800000200000000000",
-      replacementNs: "1800000300000000000",
-    },
-    spender: {
-      account: accountWithSubaccount,
-      owner: ledger,
-      subaccountHex: `${"00".repeat(31)}ff`,
-    },
+  }));
+  const operation = await prepareWalletFundingOperation(request, context, false);
+  expect(operation.preparation.value.review).toMatchObject({
+    kind: "allowance",
+    currentAllowanceAtoms: "50",
+    allowanceAtoms: "110",
+    currentExpiresAtNs: "1800000200000000000",
+    expiresAtNs: "1800000300000000000",
+    spender: { kind: "icrc", account: accountWithSubaccount },
   });
+  const result = await executeWalletFundingOperation(operation, async () => ({
+    approved: {
+      command_id: commandId,
+      block_index: "92",
+      duplicate: false,
+    },
+  }));
   expect(result).toMatchObject({ status: "approved", blockIndex: "92" });
 });
 
+test("funding cannot be approved with incomplete or route-mixed review facts", async () => {
+  const incompleteDirect = directReview();
+  delete (incompleteDirect as Partial<typeof incompleteDirect>)
+    .transfer_fee_atoms;
+  await expect(
+    prepareWalletFundingOperation(
+      directRequest,
+      fundingContext(async () => ({
+        prepared: { command_id: commandId, review: incompleteDirect },
+      })),
+      false,
+    ),
+  ).rejects.toThrow("preparation is incomplete");
+
+  const allowanceRequest: JsonObject = {
+    requestId,
+    ledger,
+    amountAtoms: "100",
+    validUntilNs: "1800000000000000000",
+    route: {
+      kind: "allowance",
+      spender: accountWithSubaccount,
+      expiresAtNs: "1800000300000000000",
+    },
+  };
+  for (const field of [
+    "transfer_fee_atoms",
+    "approval_fee_atoms",
+    "allowance_atoms",
+    "current_allowance_atoms",
+  ] as const) {
+    const incompleteAllowance = allowanceReview();
+    delete incompleteAllowance[field];
+    await expect(
+      prepareWalletFundingOperation(
+        allowanceRequest,
+        fundingContext(async () => ({
+          prepared: { command_id: commandId, review: incompleteAllowance },
+        })),
+        false,
+      ),
+    ).rejects.toThrow("preparation is incomplete");
+  }
+});
+
 test("funding rejects an execution receipt for another command", async () => {
-  const context = fundingContext(async (method) => {
-    if (method === WALLET_FUNDING_PREPARE_METHOD) return preparedDirect();
-    return {
+  const context = fundingContext(async () => preparedDirect());
+  const operation = await prepareWalletFundingOperation(
+    directRequest,
+    context,
+    false,
+  );
+  await expect(
+    executeWalletFundingOperation(operation, async () => ({
       transferred: {
         command_id: { ...commandId, caller_app_id: "another-app" },
         block_index: "91",
         duplicate: false,
       },
-    };
-  });
-
-  await expect(handleWalletFunding(directRequest, context)).rejects.toThrow(
-    "execution command mismatch",
-  );
+    })),
+  ).rejects.toThrow("execution command mismatch");
 });
 
-test("Agent Mode still requests approval and terminal replay never executes", async () => {
+test("root-agent core marks preparation as agent mode and terminal replay never executes", async () => {
   const methods: string[] = [];
-  let approvals = 0;
-  const context = fundingContext(
-    async (method) => {
-      methods.push(method);
-      return {
-        completed: {
-          review: directReview(),
-          result: {
-            transferred: {
-              command_id: commandId,
-              block_index: "91",
-              duplicate: true,
-            },
+  const argumentsSeen: unknown[] = [];
+  const context = fundingContext(async (method, args) => {
+    methods.push(method);
+    argumentsSeen.push(args);
+    return {
+      completed: {
+        review: directReview(),
+        result: {
+          transferred: {
+            command_id: commandId,
+            block_index: "91",
+            duplicate: true,
           },
         },
-      };
-    },
-    async () => {
-      approvals += 1;
-    },
+      },
+    };
+  });
+  const operation = await prepareWalletFundingOperation(
+    directRequest,
+    context,
+    true,
   );
-  context.agentMode = true;
-
-  const result = await handleWalletFunding(directRequest, context);
-  expect(approvals).toBe(1);
+  let executions = 0;
+  const result = await executeWalletFundingOperation(operation, async () => {
+    executions += 1;
+    throw new Error("must not execute terminal replay");
+  });
   expect(methods).toEqual([WALLET_FUNDING_PREPARE_METHOD]);
+  expect(
+    ((argumentsSeen[0] as unknown[])[0] as { agent_mode: boolean }).agent_mode,
+  ).toBe(true);
+  expect(executions).toBe(0);
   expect(result).toMatchObject({ status: "transferred", duplicate: true });
 });
 
-test("pending direct replay is approved once and re-enters reconciliation", async () => {
+test("pending direct replay re-enters reconciliation without another UI decision", async () => {
   const methods: string[] = [];
-  let approvals = 0;
-  const context = fundingContext(
-    async (method) => {
-      methods.push(method);
-      if (method === WALLET_FUNDING_PREPARE_METHOD) {
-        return {
-          completed: {
-            review: directReview(),
-            result: {
-              pending: {
-                command_id: commandId,
-                message: "Ledger outcome is unknown",
-              },
-            },
+  const context = fundingContext(async (method) => {
+    methods.push(method);
+    return {
+      completed: {
+        review: directReview(),
+        result: {
+          pending: {
+            command_id: commandId,
+            message: "Ledger outcome is unknown",
           },
-        };
-      }
-      return {
-        transferred: {
-          command_id: commandId,
-          block_index: "93",
-          duplicate: true,
         },
-      };
-    },
-    async () => {
-      approvals += 1;
-    },
+      },
+    };
+  });
+  const operation = await prepareWalletFundingOperation(
+    directRequest,
+    context,
+    false,
   );
-
-  const result = await handleWalletFunding(directRequest, context);
-  expect(approvals).toBe(1);
+  const result = await executeWalletFundingOperation(operation, async () => {
+    methods.push(WALLET_FUNDING_EXECUTE_METHOD);
+    return {
+      transferred: {
+        command_id: commandId,
+        block_index: "93",
+        duplicate: true,
+      },
+    };
+  });
   expect(methods).toEqual([
     WALLET_FUNDING_PREPARE_METHOD,
     WALLET_FUNDING_EXECUTE_METHOD,
@@ -454,7 +457,37 @@ test("pending direct replay is approved once and re-enters reconciliation", asyn
   });
 });
 
-test("pending allowance replay is approved once and re-enters reconciliation", async () => {
+test("prepared funding can be rejected without executing it", async () => {
+  const context = fundingContext(async () => preparedDirect());
+  const operation = await prepareWalletFundingOperation(
+    directRequest,
+    context,
+    false,
+  );
+  let rejectArgs: unknown = null;
+  const result = await rejectWalletFundingOperation(
+    operation,
+    async (args) => {
+      rejectArgs = args;
+      return {
+        rejected: {
+          command_id: commandId,
+          message: "Wallet funding was rejected by the owner",
+        },
+      };
+    },
+  );
+  expect(rejectArgs).toEqual({ command_id: commandId });
+  expect(result).toEqual({
+    status: "rejected",
+    commandId: `${callerApp}:${requestId}`,
+    blockIndex: null,
+    duplicate: null,
+    message: "Wallet funding was rejected by the owner",
+  });
+});
+
+test("pending allowance replay re-enters reconciliation", async () => {
   const request: JsonObject = {
     requestId,
     ledger,
@@ -466,43 +499,25 @@ test("pending allowance replay is approved once and re-enters reconciliation", a
       expiresAtNs: "1800000300000000000",
     },
   };
-  const methods: string[] = [];
-  let approvals = 0;
-  const context = fundingContext(
-    async (method) => {
-      methods.push(method);
-      if (method === WALLET_FUNDING_PREPARE_METHOD) {
-        return {
-          completed: {
-            review: allowanceReview(),
-            result: {
-              pending: {
-                command_id: commandId,
-                message: "Ledger outcome is unknown",
-              },
-            },
-          },
-        };
-      }
-      return {
-        approved: {
+  const context = fundingContext(async () => ({
+    completed: {
+      review: allowanceReview(),
+      result: {
+        pending: {
           command_id: commandId,
-          block_index: "94",
-          duplicate: true,
+          message: "Ledger outcome is unknown",
         },
-      };
+      },
     },
-    async () => {
-      approvals += 1;
+  }));
+  const operation = await prepareWalletFundingOperation(request, context, false);
+  const result = await executeWalletFundingOperation(operation, async () => ({
+    approved: {
+      command_id: commandId,
+      block_index: "94",
+      duplicate: true,
     },
-  );
-
-  const result = await handleWalletFunding(request, context);
-  expect(approvals).toBe(1);
-  expect(methods).toEqual([
-    WALLET_FUNDING_PREPARE_METHOD,
-    WALLET_FUNDING_EXECUTE_METHOD,
-  ]);
+  }));
   expect(result).toMatchObject({
     status: "approved",
     blockIndex: "94",
@@ -544,23 +559,19 @@ test("pending revoke replay re-enters reconciliation", async () => {
   });
 });
 
-test("abort after approval fences the funding execute", async () => {
+test("abort during preparation never reaches execution", async () => {
   const controller = new AbortController();
   const methods: string[] = [];
-  const context = fundingContext(
-    async (method) => {
-      methods.push(method);
-      return preparedDirect();
-    },
-    async () => {
-      controller.abort(new Error("cancelled"));
-    },
-  );
+  const context = fundingContext(async (method) => {
+    methods.push(method);
+    controller.abort(new Error("cancelled"));
+    return preparedDirect();
+  });
   context.signal = controller.signal;
 
-  await expect(handleWalletFunding(directRequest, context)).rejects.toThrow(
-    "cancelled",
-  );
+  await expect(
+    prepareWalletFundingOperation(directRequest, context, false),
+  ).rejects.toThrow("cancelled");
   expect(methods).toEqual([WALLET_FUNDING_PREPARE_METHOD]);
 });
 
@@ -794,7 +805,13 @@ test("revoke execution is gated by every displayed review-sensitive fact", () =>
 
 function fundingContext(
   updateSelf: (method: string, args: unknown[]) => Promise<unknown>,
-  requestApproval: (review: JsonObject) => Promise<void> = async () => {},
+  presentUserInterface: (request: JsonObject) => Promise<JsonObject> = async () => ({
+    status: "rejected",
+    commandId: `${callerApp}:${requestId}`,
+    blockIndex: null,
+    duplicate: null,
+    message: "fixture",
+  }),
 ): WalletFundingToolContext {
   return {
     caller: {
@@ -805,7 +822,7 @@ function fundingContext(
     },
     agentMode: false,
     reportProgress: () => undefined,
-    requestApproval,
+    presentUserInterface,
     kernel: {
       updateSelf,
     },

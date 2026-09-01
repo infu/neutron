@@ -30,8 +30,10 @@ import {
   connectEthereumProvider,
   copyToClipboard,
   dismissTray,
+  exposeTool,
   isJsonObject,
   listBackendCallReservations,
+  loadTileContext,
   onAppStateChange,
   onTileViewRequest,
   openAppTile,
@@ -41,6 +43,8 @@ import {
   updateSelf,
   type JsonObject,
   type JsonValue,
+  type MsgBusToolContext,
+  type SelfCallObject,
 } from "neutron-tools/app";
 import {
   createContext,
@@ -70,22 +74,34 @@ import {
   WALLET_ALLOWANCES_PAGE_METHOD,
   WALLET_FUNDING_EXECUTE_METHOD,
   WALLET_FUNDING_PREPARE_METHOD,
+  WALLET_FUNDING_PRESENT_TOOL,
+  WALLET_FUNDING_REJECT_METHOD,
   approvalExpirationText,
   approvalSpenderText,
   assertRevokePreparedMatchesDisplay,
   createWalletRequestId,
+  executeWalletFundingOperation,
   failedWalletAllowancesPage,
+  fundingPreparationCommand,
   mergeWalletAllowancesPages,
   parseFundingPrepareResult,
   parseWalletAllowancesPage,
+  prepareWalletFundingOperation,
+  rejectWalletFundingOperation,
   resolveWalletFundingPreparation,
   walletAllowancesPageArgs,
   walletRequestDeadlineNs,
   walletRevokePrepareArgs,
+  walletFundingInputSchema,
+  walletFundingOutputSchema,
   type WalletAllowance,
   type WalletAllowancesPage,
   type WalletFundingCaller,
+  type WalletFundingReview,
+  type WalletFundingToolContext,
+  type PreparedWalletFundingOperation,
 } from "./funding.ts";
+import { candidIcrcAccountFromText } from "./icrc_account.ts";
 import {
   confirmationPercent,
   confirmationsRemaining,
@@ -191,6 +207,256 @@ function useWalletSurface(): WalletSurfaceContextValue {
   return value;
 }
 
+type WalletFundingPromptPhase =
+  | "review"
+  | "executing"
+  | "checking"
+  | "uncertain"
+  | "rejecting";
+
+type WalletFundingPrompt = {
+  id: string;
+  operation: PreparedWalletFundingOperation;
+  phase: WalletFundingPromptPhase;
+  error: string | null;
+  resolve: (value: JsonObject) => void;
+  reject: (reason?: unknown) => void;
+  removeAbortListener: (() => void) | null;
+  signal: AbortSignal | undefined;
+};
+
+let walletFundingPrompt: WalletFundingPrompt | null = null;
+const walletFundingPromptListeners = new Set<() => void>();
+
+function currentWalletFundingPrompt(): WalletFundingPrompt | null {
+  return walletFundingPrompt;
+}
+
+function subscribeWalletFundingPrompt(listener: () => void): () => void {
+  walletFundingPromptListeners.add(listener);
+  listener();
+  return () => walletFundingPromptListeners.delete(listener);
+}
+
+function notifyWalletFundingPrompt(): void {
+  for (const listener of walletFundingPromptListeners) listener();
+}
+
+function removeWalletFundingPrompt(prompt: WalletFundingPrompt): boolean {
+  if (walletFundingPrompt !== prompt) return false;
+  walletFundingPrompt = null;
+  prompt.removeAbortListener?.();
+  prompt.removeAbortListener = null;
+  notifyWalletFundingPrompt();
+  return true;
+}
+
+function finishWalletFundingPrompt(
+  prompt: WalletFundingPrompt,
+  result: JsonObject,
+): void {
+  if (!removeWalletFundingPrompt(prompt)) return;
+  prompt.resolve(result);
+  publishWalletInvalidation();
+}
+
+function restoreOrAbortWalletFundingPrompt(
+  prompt: WalletFundingPrompt,
+  reason: unknown,
+): void {
+  if (currentWalletFundingPrompt() !== prompt) return;
+  if (prompt.signal?.aborted) {
+    if (removeWalletFundingPrompt(prompt)) {
+      prompt.reject(prompt.signal.reason ?? reason);
+    }
+    return;
+  }
+  prompt.phase = "review";
+  prompt.error = errorMessage(reason);
+  notifyWalletFundingPrompt();
+}
+
+function markWalletFundingExecutionUncertain(
+  prompt: WalletFundingPrompt,
+  reason: unknown,
+): void {
+  if (currentWalletFundingPrompt() !== prompt) return;
+  if (prompt.signal?.aborted) {
+    if (removeWalletFundingPrompt(prompt)) {
+      prompt.reject(prompt.signal.reason ?? reason);
+    }
+    return;
+  }
+  prompt.phase = "uncertain";
+  prompt.error = `Wallet could not confirm the ledger outcome: ${errorMessage(reason)} Check status before starting another request.`;
+  notifyWalletFundingPrompt();
+}
+
+function closeUncertainWalletFundingPrompt(prompt: WalletFundingPrompt): void {
+  if (prompt.phase !== "uncertain" || !removeWalletFundingPrompt(prompt)) {
+    return;
+  }
+  prompt.reject(new Error(prompt.error ?? "Wallet funding outcome is uncertain"));
+  publishWalletInvalidation();
+}
+
+async function executePresentedWalletFunding(
+  prompt: WalletFundingPrompt,
+): Promise<void> {
+  if (
+    currentWalletFundingPrompt() !== prompt ||
+    (prompt.phase !== "review" && prompt.phase !== "uncertain")
+  ) {
+    return;
+  }
+  prompt.phase = prompt.phase === "uncertain" ? "checking" : "executing";
+  prompt.error = null;
+  notifyWalletFundingPrompt();
+  try {
+    const result = await executeWalletFundingOperation(
+      prompt.operation,
+      (args) =>
+        updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [args], 120),
+    );
+    finishWalletFundingPrompt(prompt, result);
+  } catch (reason) {
+    markWalletFundingExecutionUncertain(prompt, reason);
+  }
+}
+
+async function rejectPresentedWalletFunding(
+  prompt: WalletFundingPrompt,
+): Promise<void> {
+  if (
+    currentWalletFundingPrompt() !== prompt ||
+    prompt.phase !== "review"
+  ) {
+    return;
+  }
+  prompt.phase = "rejecting";
+  prompt.error = null;
+  notifyWalletFundingPrompt();
+  try {
+    const result = await rejectWalletFundingOperation(
+      prompt.operation,
+      (args) => updateSelf(WALLET_FUNDING_REJECT_METHOD, [args], 30),
+    );
+    finishWalletFundingPrompt(prompt, result);
+  } catch (reason) {
+    restoreOrAbortWalletFundingPrompt(prompt, reason);
+  }
+}
+
+async function handleWalletFundingPresentation(
+  args: JsonObject,
+  context: MsgBusToolContext,
+): Promise<JsonObject> {
+  if (context.audience !== "foreground_tile") {
+    throw new Error("Wallet funding UI requires foreground-tile attestation");
+  }
+  const operation = await prepareWalletFundingOperation(
+    args,
+    context as WalletFundingToolContext,
+    false,
+  );
+
+  // A pending command proves that Wallet already dispatched a previously
+  // accepted operation. Reconcile it without asking the owner a second time.
+  if (operation.preparation.kind === "completed") {
+    const result = await executeWalletFundingOperation(
+      operation,
+      (executeArgs) =>
+        updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [executeArgs], 120),
+    );
+    publishWalletInvalidation();
+    return result;
+  }
+
+  const command = fundingPreparationCommand(operation.preparation);
+  const id = `${command.callerAppId}:${command.requestId}`;
+  if (walletFundingPrompt?.id === id) {
+    throw new Error("This Wallet funding request is already awaiting review");
+  }
+  if (walletFundingPrompt !== null) {
+    await rejectWalletFundingOperation(
+      operation,
+      (rejectArgs) =>
+        updateSelf(WALLET_FUNDING_REJECT_METHOD, [rejectArgs], 30),
+    ).catch(() => undefined);
+    throw new Error("Wallet is already reviewing another funding request");
+  }
+
+  return new Promise<JsonObject>((resolve, reject) => {
+    const prompt: WalletFundingPrompt = {
+      id,
+      operation,
+      phase: "review",
+      error: null,
+      resolve,
+      reject,
+      removeAbortListener: null,
+      signal: context.signal,
+    };
+    const abort = () => {
+      if (prompt.phase === "uncertain") {
+        if (removeWalletFundingPrompt(prompt)) {
+          reject(context.signal?.reason ?? new Error("Wallet funding was cancelled"));
+        }
+        return;
+      }
+      if (prompt.phase !== "review" || !removeWalletFundingPrompt(prompt)) {
+        return;
+      }
+      void rejectWalletFundingOperation(
+        operation,
+        (rejectArgs) =>
+          updateSelf(WALLET_FUNDING_REJECT_METHOD, [rejectArgs], 30),
+      )
+        .then(() => publishWalletInvalidation())
+        .catch(() => undefined);
+      reject(context.signal?.reason ?? new Error("Wallet funding was cancelled"));
+    };
+    if (context.signal) {
+      context.signal.addEventListener("abort", abort, { once: true });
+      prompt.removeAbortListener = () =>
+        context.signal?.removeEventListener("abort", abort);
+    }
+    walletFundingPrompt = prompt;
+    notifyWalletFundingPrompt();
+    if (context.signal?.aborted) abort();
+  });
+}
+
+function isWalletTileRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const context = loadTileContext();
+    return context.app === "wallet" && context.tile === "wallet";
+  } catch {
+    return false;
+  }
+}
+
+if (isWalletTileRuntime()) {
+  exposeTool(
+    WALLET_FUNDING_PRESENT_TOOL,
+    {
+      title: "Review Wallet funding",
+      description:
+        "Show Wallet's authoritative review for one transfer or allowance and return the resulting receipt.",
+      inputSchema: walletFundingInputSchema,
+      outputSchema: walletFundingOutputSchema,
+      annotations: {
+        "neutron:audit": "metadata_only",
+        "neutron:audience": "foreground_tile",
+        "neutron:effects": ["write", "network", "user_visible_ui"],
+        "neutron:visibility": "same_app",
+      },
+    },
+    handleWalletFundingPresentation,
+  );
+}
+
 export function WalletApp({
   surface = "tile",
 }: {
@@ -225,7 +491,303 @@ export function WalletApp({
   return (
     <WalletSurfaceContext.Provider value={{ openInTile, surface }}>
       <WalletAppContent surface={surface} />
+      {surface === "tile" ? <WalletFundingPromptHost /> : null}
     </WalletSurfaceContext.Provider>
+  );
+}
+
+function WalletFundingPromptHost() {
+  const [, setRevision] = useState(0);
+  useEffect(
+    () =>
+      subscribeWalletFundingPrompt(() =>
+        setRevision((revision) => revision + 1),
+      ),
+    [],
+  );
+  const prompt = currentWalletFundingPrompt();
+  return prompt ? <WalletFundingDialog prompt={prompt} /> : null;
+}
+
+function WalletFundingDialog({ prompt }: { prompt: WalletFundingPrompt }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const review = prompt.operation.preparation.value.review;
+  const uncertain = prompt.phase === "uncertain";
+  const busy =
+    prompt.phase === "executing" ||
+    prompt.phase === "checking" ||
+    prompt.phase === "rejecting";
+  const symbol = review.tokenSymbol;
+  const amount = walletFundingAmount(review.amountAtoms, review);
+
+  useEffect(() => {
+    const node = dialog.current;
+    if (node && !node.open) node.showModal();
+    return () => {
+      if (node?.open) node.close();
+    };
+  }, [prompt.id]);
+
+  return (
+    <div className="nt-app wallet-funding-layer">
+      <dialog
+        aria-describedby="wallet-funding-summary"
+        aria-labelledby="wallet-funding-title"
+        aria-modal="true"
+        className="nt-dialog wallet-funding-dialog"
+        data-tid="wallet-funding-dialog"
+        onCancel={(event) => {
+          event.preventDefault();
+          if (uncertain) closeUncertainWalletFundingPrompt(prompt);
+          else if (!busy) void rejectPresentedWalletFunding(prompt);
+        }}
+        ref={dialog}
+      >
+        <div className="nt-dialog-body">
+          <header className="wallet-funding-heading">
+            <TokenMark logo={null} symbol={symbol} />
+            <span>
+              <small>Request from {prompt.operation.caller.appId}</small>
+              <h2 id="wallet-funding-title">
+                {review.kind === "direct"
+                  ? `Send ${amount}`
+                  : `Approve ${amount} allowance`}
+              </h2>
+            </span>
+          </header>
+
+          <p className="wallet-funding-summary" id="wallet-funding-summary">
+            <strong>{prompt.operation.caller.appId}</strong> asked Wallet to {review.kind === "direct"
+              ? "send tokens from your Neutron"
+              : "create a short-lived token allowance"}. Wallet read the token details and fees directly from the ledger.
+          </p>
+
+          <dl className="wallet-funding-details">
+            <div>
+              <dt>Token</dt>
+              <dd>
+                <strong>{review.tokenName}</strong>
+                <small>{symbol} · {review.decimals} decimals</small>
+              </dd>
+            </div>
+            <div>
+              <dt>Ledger</dt>
+              <dd>
+                <code>{review.ledger}</code>
+              </dd>
+            </div>
+            {review.kind === "direct" ? (
+              <>
+                <div>
+                  <dt>Recipient</dt>
+                  <dd>
+                    <code>{review.destination ?? "Unavailable"}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Amount</dt>
+                  <dd>
+                    {amount}
+                    <small>{review.amountAtoms} atoms</small>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Ledger fee</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.transferFeeAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div className="wallet-funding-total">
+                  <dt>Maximum debit</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.totalDebitAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                {review.memoHex !== null ? (
+                  <div>
+                    <dt>Memo</dt>
+                    <dd><code>{review.memoHex || "Empty"}</code></dd>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div>
+                  <dt>Spender</dt>
+                  <dd>
+                    <code>
+                      {review.spender
+                        ? approvalSpenderText(review.spender)
+                        : "Unavailable"}
+                    </code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Requested amount</dt>
+                  <dd>
+                    {amount}
+                    <small>{review.amountAtoms} atoms</small>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Current allowance</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.currentAllowanceAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt>New allowance</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.allowanceAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt>Approval fee</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.approvalFeeAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt>Transfer-from fee</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.transferFeeAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt>Current expiration</dt>
+                  <dd>{approvalExpirationText(review.currentExpiresAtNs)}</dd>
+                </div>
+                <div>
+                  <dt>New expiration</dt>
+                  <dd>{approvalExpirationText(review.expiresAtNs)}</dd>
+                </div>
+                <div className="wallet-funding-total">
+                  <dt>Maximum source debit</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.totalDebitAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+              </>
+            )}
+            <div>
+              <dt>Request expires</dt>
+              <dd>{approvalExpirationText(review.validUntilNs)}</dd>
+            </div>
+            <div>
+              <dt>Command ID</dt>
+              <dd>
+                <code>{review.commandId.callerAppId}:{review.commandId.requestId}</code>
+              </dd>
+            </div>
+          </dl>
+
+          {review.kind === "allowance" ? (
+            <div className="wallet-funding-warning" role="note">
+              <IoWarningOutline aria-hidden="true" />
+              <span>
+                This spender can make multiple transfers and choose destinations until the allowance expires or you revoke it in Approvals.
+              </span>
+            </div>
+          ) : null}
+
+          {prompt.error ? (
+            <div className="wallet-funding-error" role="alert">
+              <IoAlertCircleOutline aria-hidden="true" />
+              <span>{prompt.error}</span>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="nt-dialog-actions">
+          <button
+            autoFocus
+            className="nt-button nt-button--secondary"
+            data-tid="wallet-funding-reject"
+            disabled={busy}
+            onClick={() => {
+              if (uncertain) closeUncertainWalletFundingPrompt(prompt);
+              else void rejectPresentedWalletFunding(prompt);
+            }}
+            type="button"
+          >
+            <IoClose aria-hidden="true" />
+            {uncertain ? "Close" : "Cancel"}
+          </button>
+          <button
+            className="nt-button"
+            data-tid="wallet-funding-accept"
+            disabled={busy}
+            onClick={() => void executePresentedWalletFunding(prompt)}
+            type="button"
+          >
+            {busy ? (
+              <span className="wallet-spinner" />
+            ) : uncertain ? (
+              <IoRefresh aria-hidden="true" />
+            ) : review.kind === "direct" ? (
+              <IoSend aria-hidden="true" />
+            ) : (
+              <IoShieldCheckmarkOutline aria-hidden="true" />
+            )}
+            {prompt.phase === "executing"
+              ? "Sending"
+              : prompt.phase === "checking"
+                ? "Checking status"
+              : prompt.phase === "rejecting"
+                ? "Cancelling"
+                : prompt.phase === "uncertain"
+                  ? "Check status"
+                : review.kind === "direct"
+                  ? "Send"
+                  : "Approve allowance"}
+          </button>
+        </div>
+      </dialog>
+    </div>
+  );
+}
+
+function walletFundingAmount(
+  atoms: string,
+  review: Pick<WalletFundingReview, "decimals" | "tokenSymbol">,
+): string {
+  return `${formatTokenAmount(atoms, review.decimals)} ${review.tokenSymbol}`;
+}
+
+function WalletFundingAmountDetail({
+  atoms,
+  review,
+}: {
+  atoms: string | null;
+  review: Pick<WalletFundingReview, "decimals" | "tokenSymbol">;
+}) {
+  if (atoms === null) return <>Unavailable</>;
+  return (
+    <>
+      {walletFundingAmount(atoms, review)}
+      <small>{atoms} atoms</small>
+    </>
   );
 }
 
@@ -3739,9 +4301,14 @@ function networkVariant(network: CatalogNetwork): JsonObject {
   return { [network]: null };
 }
 
-function destinationVariant(destination: WalletDestination): JsonObject {
+function destinationVariant(destination: WalletDestination): SelfCallObject {
   return destination.network === "internet_computer"
-    ? { internet_computer: destination.account }
+    ? {
+        internet_computer: candidIcrcAccountFromText(
+          destination.account,
+          "transfer destination",
+        ),
+      }
     : { [destination.network]: destination.address };
 }
 

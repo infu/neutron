@@ -2260,6 +2260,169 @@ body {
     }
   }
 
+  .wallet-funding-layer {
+    inset: 0;
+    pointer-events: none;
+    position: fixed;
+  }
+
+  .wallet-funding-dialog {
+    background: #101618;
+    border: 1px solid var(--nt-line);
+    border-radius: 12px;
+    color: var(--nt-text);
+    inline-size: min(520px, calc(100vw - 24px));
+    max-block-size: calc(100dvh - 24px);
+    overflow: auto;
+    padding: 0;
+    pointer-events: auto;
+
+    &::backdrop {
+      backdrop-filter: blur(3px);
+      background: rgb(3 6 7 / 76%);
+    }
+
+    .nt-dialog-body {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+    }
+
+    .nt-dialog-actions {
+      background: #0d1214;
+      border-block-start: 1px solid var(--nt-line-subtle);
+      padding: 12px 18px;
+    }
+  }
+
+  .wallet-funding-heading {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+
+    .wallet-token-mark {
+      block-size: 38px;
+      flex: 0 0 38px;
+      inline-size: 38px;
+    }
+
+    h2,
+    small {
+      display: block;
+      margin: 0;
+    }
+
+    h2 {
+      font-size: 1rem;
+      line-height: 1.25;
+    }
+
+    small {
+      color: var(--nt-text-muted);
+      font-size: 0.68rem;
+      margin-block-end: 3px;
+    }
+  }
+
+  .wallet-funding-summary {
+    color: var(--nt-text-muted);
+    font-size: 0.76rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .wallet-funding-details {
+    background: rgb(255 255 255 / 2%);
+    border: 1px solid var(--nt-line-subtle);
+    border-radius: 8px;
+    margin: 0;
+    overflow: hidden;
+
+    > div {
+      align-items: start;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
+      padding: 8px 10px;
+
+      + div {
+        border-block-start: 1px solid var(--nt-line-subtle);
+      }
+    }
+
+    dt {
+      color: var(--nt-text-faint);
+      font-size: 0.67rem;
+    }
+
+    dd {
+      color: var(--nt-text);
+      font-family: var(--nt-font-mono);
+      font-size: 0.69rem;
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      text-align: end;
+
+      small {
+        color: var(--nt-text-faint);
+        display: block;
+        font-family: var(--nt-font-sans);
+      }
+    }
+
+    .wallet-funding-total {
+      background: rgb(141 224 207 / 6%);
+
+      dd {
+        color: var(--nt-accent);
+        font-weight: 700;
+      }
+    }
+  }
+
+  .wallet-funding-warning,
+  .wallet-funding-error {
+    align-items: start;
+    border-radius: 7px;
+    display: flex;
+    font-size: 0.7rem;
+    gap: 7px;
+    line-height: 1.45;
+    padding: 9px 10px;
+
+    svg {
+      flex: 0 0 15px;
+      margin-block-start: 2px;
+    }
+  }
+
+  .wallet-funding-warning {
+    background: rgb(255 190 92 / 9%);
+    color: var(--nt-warning);
+  }
+
+  .wallet-funding-error {
+    background: rgb(255 105 120 / 9%);
+    color: var(--nt-danger);
+  }
+
+  @media (max-width: 430px) {
+    .wallet-funding-dialog {
+      .nt-dialog-body {
+        padding: 14px;
+      }
+
+      .nt-dialog-actions {
+        padding: 10px 14px;
+      }
+    }
+
+    .wallet-funding-details > div {
+      grid-template-columns: minmax(90px, 0.7fr) minmax(0, 1.3fr);
+    }
+  }
+
   @keyframes wallet-spin {
     to { transform: rotate(360deg); }
   }

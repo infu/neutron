@@ -39,5 +39,6 @@ test("the guide covers critical truth-in-labeling boundaries", () => {
   expect(routes).toContain("does not prove the content is true");
   expect(denseData).toContain("inert examples");
   expect(walletFunding).toContain("cannot spend Neutrinite governance&#x27;s allowance");
-  expect(walletFunding).toContain("does not interpret ICP amounts");
+  expect(walletFunding).toContain("does not interpret or display ICP amounts");
+  expect(walletFunding).toContain("token-aware review is rendered inside Wallet");
 });

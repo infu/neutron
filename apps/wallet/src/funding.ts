@@ -5,7 +5,6 @@ import {
   type MsgBusToolContext,
   type SelfCallObject,
 } from "neutron-tools/app";
-import { formatTokenAmount } from "./format.ts";
 import {
   bytesToHex,
   candidIcrcAccountFromText,
@@ -16,8 +15,11 @@ import {
 } from "./icrc_account.ts";
 
 export const WALLET_FUNDING_TOOL = "wallet_fund_v1";
+export const WALLET_FUNDING_ROOT_TOOL = "wallet_fund_root_v1";
+export const WALLET_FUNDING_PRESENT_TOOL = "wallet_funding_present_v1";
 export const WALLET_FUNDING_PREPARE_METHOD = "wallet_funding_prepare_v1";
 export const WALLET_FUNDING_EXECUTE_METHOD = "wallet_funding_execute_v1";
+export const WALLET_FUNDING_REJECT_METHOD = "wallet_funding_reject_v1";
 export const WALLET_ALLOWANCES_PAGE_METHOD = "wallet_allowances_page_v1";
 export const WALLET_ALLOWANCE_PAGE_LIMIT = 40;
 
@@ -129,7 +131,7 @@ export type WalletFundingResult = {
   message: string | null;
 };
 
-type WalletFundingCommandId = {
+export type WalletFundingCommandId = {
   callerAppId: string;
   requestId: string;
 };
@@ -140,7 +142,7 @@ export type ParsedWalletFundingResult = WalletFundingResult & {
 
 export type WalletFundingToolContext = MsgBusToolContext;
 
-type WalletFundingReview = {
+export type WalletFundingReview = {
   commandId: WalletFundingCommandId;
   kind: "direct" | "allowance" | "revoke";
   ledger: string;
@@ -161,7 +163,7 @@ type WalletFundingReview = {
   expiresAtNs: string | null;
 };
 
-type WalletFundingPrepared = {
+export type WalletFundingPrepared = {
   commandId: WalletFundingCommandId;
   review: WalletFundingReview;
 };
@@ -173,51 +175,86 @@ export type WalletFundingPrepareResult =
       value: { review: WalletFundingReview; result: ParsedWalletFundingResult };
     };
 
+export type PreparedWalletFundingOperation = {
+  request: WalletFundingRequest;
+  caller: WalletFundingCaller;
+  preparation: WalletFundingPrepareResult;
+};
+
 export async function handleWalletFunding(
   rawRequest: JsonObject,
   context: WalletFundingToolContext,
 ): Promise<JsonObject> {
-  const requestApproval = context.requestApproval;
-  if (typeof requestApproval !== "function") {
+  const presentUserInterface = context.presentUserInterface;
+  if (typeof presentUserInterface !== "function") {
     throw new Error(
-      "Wallet funding requires a Kernel with provider approval support",
+      "Wallet funding requires a Kernel with provider UI support",
     );
   }
   throwIfAborted(context.signal);
+  requireFundingCaller(context.caller);
+  const request = parseWalletFundingRequest(rawRequest);
+  return presentUserInterface<JsonObject>({
+    tileId: "wallet",
+    tool: WALLET_FUNDING_PRESENT_TOOL,
+    arguments: walletFundingRequestJson(request),
+  });
+}
+
+export async function prepareWalletFundingOperation(
+  rawRequest: JsonObject,
+  context: WalletFundingToolContext,
+  agentMode: boolean,
+): Promise<PreparedWalletFundingOperation> {
+  throwIfAborted(context.signal);
   const caller = requireFundingCaller(context.caller);
   const request = parseWalletFundingRequest(rawRequest);
-  const prepared = parseFundingPrepareResult(
+  const preparation = parseFundingPrepareResult(
     await context.kernel.updateSelf(
       WALLET_FUNDING_PREPARE_METHOD,
-      [fundingPrepareArgs(request, caller, context.agentMode === true)],
+      [fundingPrepareArgs(request, caller, agentMode)],
       60,
     ),
   );
   throwIfAborted(context.signal);
   const command =
-    prepared.kind === "prepared"
-      ? prepared.value.commandId
-      : prepared.value.result.command;
+    preparation.kind === "prepared"
+      ? preparation.value.commandId
+      : preparation.value.result.command;
   assertPreparedFundingMatchesRequest(
-    prepared.value.review,
+    preparation.value.review,
     command,
     request,
     caller,
   );
-  await requestApproval(
-    fundingReviewJson(
-      fundingCommandIdText(command),
-      prepared.value.review,
-      prepared.kind === "completed" ? prepared.value.result : null,
-    ),
-  );
+  return { request, caller, preparation };
+}
+
+export async function executeWalletFundingOperation(
+  operation: PreparedWalletFundingOperation,
+  execute: (args: SelfCallObject) => Promise<unknown>,
+  signal?: AbortSignal,
+): Promise<JsonObject> {
   const result = await resolveWalletFundingPreparation(
-    prepared,
-    (args) =>
-      context.kernel.updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [args], 120),
-    context.signal,
+    operation.preparation,
+    execute,
+    signal,
   );
-  return externalFundingJson(request, result);
+  return externalFundingJson(operation.request, result);
+}
+
+export async function rejectWalletFundingOperation(
+  operation: PreparedWalletFundingOperation,
+  reject: (args: SelfCallObject) => Promise<unknown>,
+): Promise<JsonObject> {
+  const command = fundingPreparationCommand(operation.preparation);
+  const result = parseFundingExecutionResult(
+    await reject(walletFundingExecuteArgs(command)),
+  );
+  if (fundingCommandIdText(result.command) !== fundingCommandIdText(command)) {
+    throw new Error("Wallet funding rejection command mismatch");
+  }
+  return externalFundingJson(operation.request, result);
 }
 
 export async function resolveWalletFundingPreparation(
@@ -302,6 +339,31 @@ export function parseWalletFundingRequest(
   throw new Error("Invalid funding route");
 }
 
+export function walletFundingRequestJson(
+  request: WalletFundingRequest,
+): JsonObject {
+  return {
+    requestId: request.requestId,
+    ledger: request.ledger,
+    amountAtoms: request.amountAtoms,
+    validUntilNs: request.validUntilNs,
+    route:
+      request.route.kind === "direct"
+        ? {
+            kind: "direct",
+            to: request.route.to,
+            ...(request.route.memoHex === null
+              ? {}
+              : { memoHex: request.route.memoHex }),
+          }
+        : {
+            kind: "allowance",
+            spender: request.route.spender,
+            expiresAtNs: request.route.expiresAtNs,
+          },
+  };
+}
+
 export function fundingPrepareArgs(
   request: WalletFundingRequest,
   caller: WalletFundingCaller,
@@ -312,7 +374,10 @@ export function fundingPrepareArgs(
       ? {
           direct: {
             amount_atoms: request.amountAtoms,
-            to: request.route.to,
+            to: candidIcrcAccountFromText(
+              request.route.to,
+              "transfer destination",
+            ),
             ...(request.route.memoHex === null
               ? {}
               : { memo: hexToBytes(request.route.memoHex, "transfer memo") }),
@@ -321,7 +386,10 @@ export function fundingPrepareArgs(
       : {
           allowance: {
             amount_atoms: request.amountAtoms,
-            spender: request.route.spender,
+            spender: candidIcrcAccountFromText(
+              request.route.spender,
+              "allowance spender",
+            ),
             expires_at_ns: request.route.expiresAtNs,
           },
         };
@@ -536,7 +604,7 @@ export function walletRevokePrepareArgs(
   const spender: SelfCallObject =
     entry.spender.kind === "icrc"
       ? {
-          icrc: canonicalIcrcAccountText(
+          icrc: candidIcrcAccountFromText(
             entry.spender.account,
             "approval spender",
           ),
@@ -616,6 +684,7 @@ function assertPreparedFundingMatchesRequest(
   request: WalletFundingRequest,
   caller: WalletFundingCaller,
 ): void {
+  assertFundingReviewComplete(review);
   const routeMatches =
     request.route.kind === "direct"
       ? review.kind === "direct" &&
@@ -639,6 +708,31 @@ function assertPreparedFundingMatchesRequest(
     !routeMatches
   ) {
     throw new Error("Wallet funding preparation does not match the request");
+  }
+}
+
+function assertFundingReviewComplete(review: WalletFundingReview): void {
+  const complete =
+    review.kind === "direct"
+      ? review.destination !== null &&
+        review.spender === null &&
+        review.transferFeeAtoms !== null &&
+        review.approvalFeeAtoms === null &&
+        review.allowanceAtoms === null &&
+        review.currentAllowanceAtoms === null &&
+        review.currentExpiresAtNs === null &&
+        review.expiresAtNs === null
+      : review.kind === "allowance" &&
+        review.destination === null &&
+        review.memoHex === null &&
+        review.spender?.kind === "icrc" &&
+        review.transferFeeAtoms !== null &&
+        review.approvalFeeAtoms !== null &&
+        review.allowanceAtoms !== null &&
+        review.currentAllowanceAtoms !== null &&
+        review.expiresAtNs !== null;
+  if (!complete) {
+    throw new Error("Wallet funding preparation is incomplete");
   }
 }
 
@@ -729,6 +823,14 @@ export function walletFundingExecuteArgs(
   };
 }
 
+export function fundingPreparationCommand(
+  preparation: WalletFundingPrepareResult,
+): WalletFundingCommandId {
+  return preparation.kind === "prepared"
+    ? preparation.value.commandId
+    : preparation.value.result.command;
+}
+
 export function createWalletRequestId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return bytesToHex(bytes);
@@ -754,113 +856,6 @@ export function approvalExpirationText(expiresAtNs: string | null): string {
   if (milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) return expiresAtNs;
   const date = new Date(Number(milliseconds));
   return Number.isNaN(date.getTime()) ? expiresAtNs : date.toLocaleString();
-}
-
-function fundingReviewJson(
-  commandId: string,
-  review: WalletFundingReview,
-  existingResult: WalletFundingResult | null,
-): JsonObject {
-  const token: JsonObject = {
-    name: review.tokenName,
-    symbol: review.tokenSymbol,
-    decimals: review.decimals,
-    ledger: review.ledger,
-    source: "Wallet metadata read from the ledger",
-  };
-  const amount = reviewAmount(review.amountAtoms, review);
-  const maximumDebit = reviewAmount(review.totalDebitAtoms, review);
-  if (review.kind === "direct") {
-    if (review.destination === null || review.transferFeeAtoms === null) {
-      throw new Error("Invalid direct funding review");
-    }
-    return {
-      action: "Transfer tokens",
-      commandId,
-      existingResult:
-        existingResult === null ? null : asFundingJson(existingResult),
-      token,
-      amount,
-      ledgerFee: reviewAmount(review.transferFeeAtoms, review),
-      maximumDebit,
-      destination: reviewAccountJson(review.destination),
-      memoHex: review.memoHex,
-      validity: {
-        untilNs: review.validUntilNs,
-        until: approvalExpirationText(review.validUntilNs),
-      },
-    };
-  }
-  if (review.kind !== "allowance") {
-    throw new Error("Invalid external funding review");
-  }
-  if (
-    review.spender === null ||
-    review.spender.kind !== "icrc" ||
-    review.transferFeeAtoms === null ||
-    review.approvalFeeAtoms === null ||
-    review.allowanceAtoms === null ||
-    review.currentAllowanceAtoms === null ||
-    review.expiresAtNs === null
-  ) {
-    throw new Error("Invalid allowance funding review");
-  }
-  return {
-    action: "Approve token spending",
-    commandId,
-    existingResult:
-      existingResult === null ? null : asFundingJson(existingResult),
-    token,
-    swapAmount: amount,
-    transferFromFee: reviewAmount(review.transferFeeAtoms, review),
-    allowanceChange: {
-      current: reviewAmount(review.currentAllowanceAtoms, review),
-      replacement: reviewAmount(review.allowanceAtoms, review),
-    },
-    approvalFee: reviewAmount(review.approvalFeeAtoms, review),
-    maximumSourceDebit: maximumDebit,
-    spender: reviewAccountJson(review.spender.account),
-    validity: {
-      untilNs: review.validUntilNs,
-      until: approvalExpirationText(review.validUntilNs),
-    },
-    expirationChange: {
-      currentNs: review.currentExpiresAtNs,
-      current: approvalExpirationText(review.currentExpiresAtNs),
-      replacementNs: review.expiresAtNs,
-      replacement: approvalExpirationText(review.expiresAtNs),
-    },
-    notice:
-      "The spender can make multiple transfers and choose destinations while this allowance remains.",
-  };
-}
-
-function reviewAccountJson(value: string): JsonObject {
-  const account = candidIcrcAccountFromText(value, "review account");
-  const owner = account.owner;
-  const subaccount = account.subaccount;
-  if (
-    typeof owner !== "string" ||
-    (subaccount !== null && !(subaccount instanceof Uint8Array))
-  ) {
-    throw new Error("Invalid review account");
-  }
-  return {
-    account: value,
-    owner,
-    subaccountHex:
-      subaccount instanceof Uint8Array ? bytesToHex(subaccount) : null,
-  };
-}
-
-function reviewAmount(
-  atoms: string,
-  review: Pick<WalletFundingReview, "decimals" | "tokenSymbol">,
-): JsonObject {
-  return {
-    display: `${formatTokenAmount(atoms, review.decimals)} ${review.tokenSymbol}`,
-    atoms,
-  };
 }
 
 function parseFundingPrepared(value: unknown): WalletFundingPrepared {
@@ -1076,11 +1071,11 @@ function allowanceCursorWire(cursor: WalletAllowanceCursor): SelfCallObject {
   return cursor.kind === "icrc103"
     ? {
         icrc103: {
-          from_account: canonicalIcrcAccountText(
+          from_account: candidIcrcAccountFromText(
             cursor.fromAccount,
             "allowance cursor source",
           ),
-          to_spender: canonicalIcrcAccountText(
+          to_spender: candidIcrcAccountFromText(
             cursor.toSpender,
             "allowance cursor spender",
           ),

@@ -11,6 +11,13 @@ import type {
 } from "neutron-tools/src/schema.js";
 
 const decoder = new TextDecoder();
+const releasedWallet306 = new URL(
+  "../wallet.v0.3.6.neutron",
+  import.meta.url,
+);
+const releasedWallet306Bytes = 666_413;
+const releasedWallet306Sha256 =
+  "bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae";
 const kernel: PackagedNeutronManifest = {
   format: 3,
   id: "kernel",
@@ -97,6 +104,60 @@ test("Wallet candidate keeps production wallet v1 and initializes wallet_command
         owner: "wallet",
         memoryId: "wallet_commands",
         to: 1,
+      },
+    ],
+    removedApps: [],
+    destructiveMemoryRoots: [],
+  });
+});
+
+test("Wallet 0.3.7 keeps both exact Wallet 0.3.6 memory roots", async () => {
+  const [releasedBytes, sourceText, lockText] = await Promise.all([
+    readFile(releasedWallet306),
+    readFile(new URL("../neutron.json", import.meta.url), "utf8"),
+    readFile(new URL("../neutron.lock.json", import.meta.url), "utf8"),
+  ]);
+  expect(releasedBytes.byteLength).toBe(releasedWallet306Bytes);
+  expect(createHash("sha256").update(releasedBytes).digest("hex")).toBe(
+    releasedWallet306Sha256,
+  );
+
+  const released = packageManifest(releasedBytes);
+  const source = JSON.parse(sourceText) as NeutronManifest;
+  const lock = JSON.parse(lockText) as ReturnType<typeof createMemoryLock>;
+  expect(released).toMatchObject({ id: "wallet", version: 306 });
+  expect(source).toMatchObject({ id: "wallet", version: 307 });
+
+  const releasedLock = createMemoryLock(released);
+  const candidateMemory = Object.fromEntries(
+    ["wallet", "wallet_commands"].map((memoryId) => {
+      const releasedRoot = requiredMemory(released, memoryId);
+      const sourceRoot = requiredMemory(source, memoryId);
+      expect(sourceShape(releasedRoot)).toEqual(sourceRoot);
+      expect(lock.memory[memoryId]).toEqual(releasedLock.memory[memoryId]);
+      return [memoryId, packageMemory(sourceRoot, lock.memory[memoryId])];
+    }),
+  );
+  const candidate: PackagedNeutronManifest = {
+    ...released,
+    ...source,
+    entry: released.entry,
+    memory: candidateMemory,
+  };
+
+  expect(
+    planMemoryMigrations(
+      { kernel, wallet: released },
+      { kernel, wallet: candidate },
+    ),
+  ).toEqual({
+    upgrades: [
+      { kind: "keep", owner: "wallet", memoryId: "wallet", version: 1 },
+      {
+        kind: "keep",
+        owner: "wallet",
+        memoryId: "wallet_commands",
+        version: 1,
       },
     ],
     removedApps: [],

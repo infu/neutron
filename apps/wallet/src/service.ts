@@ -8,8 +8,12 @@ import {
 } from "neutron-tools/app";
 import { historyPageRequest, parseHistoryPage } from "./history.ts";
 import {
+  WALLET_FUNDING_EXECUTE_METHOD,
+  WALLET_FUNDING_ROOT_TOOL,
   WALLET_FUNDING_TOOL,
+  executeWalletFundingOperation,
   handleWalletFunding,
+  prepareWalletFundingOperation,
   walletFundingInputSchema,
   walletFundingOutputSchema,
   type WalletFundingToolContext,
@@ -65,7 +69,7 @@ exposeTool(
   {
     title: "Fund an app with Wallet",
     description:
-      "Prepare one exact ICRC token transfer or short-lived spending allowance. Wallet reads authoritative ledger facts and asks for one invocation-scoped approval before execution.",
+      "Open Wallet to review and execute one exact ICRC token transfer or short-lived spending allowance.",
     inputSchema: walletFundingInputSchema,
     outputSchema: walletFundingOutputSchema,
     annotations: {
@@ -74,10 +78,46 @@ exposeTool(
       "neutron:effects": ["write", "network", "user_visible_ui"],
     },
   },
-  async (args, context) => {
-    const result = await handleWalletFunding(
+  (args, context) =>
+    handleWalletFunding(
       args,
       context as WalletFundingToolContext,
+    ),
+);
+
+exposeTool(
+  WALLET_FUNDING_ROOT_TOOL,
+  {
+    title: "Fund an app with Wallet as the root agent",
+    description:
+      "Prepare and execute one exact ICRC token transfer or short-lived spending allowance without interactive UI. Available only to the active root agent.",
+    inputSchema: walletFundingInputSchema,
+    outputSchema: walletFundingOutputSchema,
+    annotations: {
+      "neutron:audit": "metadata_only",
+      "neutron:audience": "agent_root",
+      "neutron:effects": ["write", "network"],
+      "neutron:visibility": "same_app",
+    },
+  },
+  async (args, context) => {
+    if (context.audience !== "agent_root") {
+      throw new Error("Wallet root funding requires root-agent attestation");
+    }
+    const operation = await prepareWalletFundingOperation(
+      args,
+      context as WalletFundingToolContext,
+      true,
+    );
+    const result = await executeWalletFundingOperation(
+      operation,
+      (executeArgs) =>
+        context.kernel.updateSelf(
+          WALLET_FUNDING_EXECUTE_METHOD,
+          [executeArgs],
+          120,
+        ),
+      context.signal,
     );
     try {
       await publishAppStateChange(WALLET_PROJECTION_TOPIC, Date.now());

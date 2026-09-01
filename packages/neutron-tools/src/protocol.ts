@@ -63,6 +63,17 @@ export type OpenAppTileResult = JsonObject & {
   opened: boolean;
 };
 
+/**
+ * One provider-owned foreground interaction. The Kernel opens or focuses the
+ * provider's own tile and delivers this opaque request to the named private
+ * tile tool. The provider, not the Kernel, owns the rendered UI and decision.
+ */
+export type ProviderPresentationRequest = JsonObject & {
+  tileId: string;
+  tool: string;
+  arguments?: JsonObject;
+};
+
 export type AppInstallOfferRequest =
   | {
       kind: "package_url";
@@ -240,10 +251,14 @@ export type NeutronToolAuditMode = typeof NEUTRON_TOOL_AUDIT_METADATA_ONLY;
 export const NEUTRON_TOOL_CONTROL_CANCEL = "cancel" as const;
 export type NeutronToolControlMode = typeof NEUTRON_TOOL_CONTROL_CANCEL;
 export const NEUTRON_TOOL_CONSENT_PROVIDER_ONCE = "provider_once" as const;
-export type NeutronToolConsentMode =
-  typeof NEUTRON_TOOL_CONSENT_PROVIDER_ONCE;
+export type NeutronToolConsentMode = typeof NEUTRON_TOOL_CONSENT_PROVIDER_ONCE;
 export const NEUTRON_TOOL_VISIBILITY_SAME_APP = "same_app" as const;
 export type NeutronToolVisibility = typeof NEUTRON_TOOL_VISIBILITY_SAME_APP;
+export const NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE = "foreground_tile" as const;
+export const NEUTRON_TOOL_AUDIENCE_AGENT_ROOT = "agent_root" as const;
+export type NeutronToolAudience =
+  | typeof NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE
+  | typeof NEUTRON_TOOL_AUDIENCE_AGENT_ROOT;
 
 export type MsgBusToolCall = JsonObject & {
   target: MsgBusEndpointId;
@@ -351,7 +366,12 @@ export type MsgBusToolContext = {
   caller?: MsgBusCallerContext;
   reportProgress: (value: JsonValue) => void;
   kernel: ScopedKernelClient;
+  /** @deprecated Compatibility for already-published provider_once apps. */
   requestApproval?: (review: JsonObject) => Promise<void>;
+  presentUserInterface?: <T extends JsonValue = JsonValue>(
+    request: ProviderPresentationRequest,
+  ) => Promise<T>;
+  audience?: NeutronToolAudience;
   signal?: AbortSignal;
   agentConsent?: AgentConsentRegistration;
   agentMode?: boolean;
@@ -1207,6 +1227,47 @@ export function normalizeToolDescriptor(
       NEUTRON_TOOL_VISIBILITY_SAME_APP
   ) {
     throw new Error("Unsupported neutron:visibility tool annotation");
+  }
+  if (
+    descriptor.annotations &&
+    Object.prototype.hasOwnProperty.call(
+      descriptor.annotations,
+      "neutron:audience",
+    ) &&
+    descriptor.annotations["neutron:audience"] !==
+      NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE &&
+    descriptor.annotations["neutron:audience"] !==
+      NEUTRON_TOOL_AUDIENCE_AGENT_ROOT
+  ) {
+    throw new Error("Unsupported neutron:audience tool annotation");
+  }
+  if (
+    descriptor.annotations?.["neutron:audience"] !== undefined &&
+    descriptor.annotations["neutron:visibility"] !==
+      NEUTRON_TOOL_VISIBILITY_SAME_APP
+  ) {
+    throw new Error(
+      "Audience-restricted tools must also use same-app visibility",
+    );
+  }
+  if (
+    descriptor.annotations?.["neutron:audience"] !== undefined &&
+    (Object.prototype.hasOwnProperty.call(
+      descriptor.annotations,
+      "neutron:attachments",
+    ) ||
+      Object.prototype.hasOwnProperty.call(
+        descriptor.annotations,
+        "neutron:control",
+      ) ||
+      Object.prototype.hasOwnProperty.call(
+        descriptor.annotations,
+        "neutron:consent",
+      ))
+  ) {
+    throw new Error(
+      "Audience-restricted tools cannot use attachments, control, or provider consent",
+    );
   }
   assertSafeJsonSchema(descriptor.inputSchema, "Tool inputSchema");
   if (descriptor.outputSchema) {

@@ -52,13 +52,31 @@ annotation `"neutron:audit": "metadata_only"`. Other values are rejected.
 
 An exact cross-app provider tool may declare the closed annotation
 `"neutron:consent": "provider_once"`. Its handler receives optional
-`context.requestApproval(review)` only for that live invocation. The provider
-must feature-detect the callback before preparation, freeze its operation,
-submit one bounded JSON object, and use the same context's scoped Kernel client
-after the decision. The callback must complete exactly once; returning without
-it fails the invocation. It creates no session grant and is not a global helper
-or discoverable tool. An old Kernel supplies no callback, so new provider code
-must fail closed rather than fall back to ordinary tool consent.
+`context.presentUserInterface({ tileId, tool, arguments })` only for that live
+invocation. The provider must feature-detect the callback before preparing or
+mutating state. Kernel consumes the capability once, derives the installed
+provider and original caller, opens or focuses the provider's exact tile, and
+routes the opaque arguments only to a private tool annotated with both
+`"neutron:visibility": "same_app"` and
+`"neutron:audience": "foreground_tile"`. The private handler verifies
+`context.audience`, owns the user-visible decision, and uses its scoped Kernel
+client for any accepted self call. Kernel does not render or interpret the
+provider's review.
+
+The presentation callback is a one-use invocation capability, not a global
+helper, session grant, or discoverable tool. Returning without consuming it
+fails the invocation. An old Kernel supplies no presentation callback, so new
+provider code must fail closed before preparation instead of falling back to
+ordinary tool consent. `context.requestApproval(review)` is deprecated and
+retained only for compatibility with already-published Wallet 0.3.6 and its raw
+Kernel JSON dialog; new providers must not use it.
+
+An automation tool may instead combine
+`"neutron:visibility": "same_app"` with
+`"neutron:audience": "agent_root"`. Kernel exposes and routes it only to the
+incoming live depth-zero Agent root and attests that audience to the handler;
+human and nested-agent calls fail before target dispatch. This is a separate
+UI-free tool contract, not a bypass for the foreground presentation path.
 
 Run the package tests with:
 

@@ -36,7 +36,7 @@ const htmlUrl = new URL("../dist/web/index.html", import.meta.url);
 const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const trayHtmlUrl = new URL("../dist/web/tray.html", import.meta.url);
 const trayCssUrl = new URL("../dist/web/tray.css", import.meta.url);
-const packageUrl = new URL("../kitchensink.v0.3.5.neutron", import.meta.url);
+const packageUrl = new URL("../kitchensink.v0.3.6.neutron", import.meta.url);
 const decoder = new TextDecoder();
 
 async function readManifest(): Promise<NeutronManifest> {
@@ -141,7 +141,7 @@ test("kitchen sink declares the complete closed capability lab", async () => {
   expect(manifest).toMatchObject({
     id: "kitchensink",
     name: "Kitchen Sink",
-    version: 305,
+    version: 306,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [
@@ -501,6 +501,7 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   expect(platformFrontend).toContain("BigInt(next.revision) >= BigInt(current.revision)");
   expect(platformFrontend).toContain("function WalletFundingPage()");
   expect(platformFrontend).toContain("Kitchen Sink stops after Wallet returns");
+  expect(platformFrontend).toContain('view: "approvals"');
   expect(walletFundingDemo).toContain('WALLET_FUNDING_TARGET = "app:wallet:background"');
   expect(walletFundingDemo).toContain('WALLET_FUNDING_TOOL = "wallet_fund_v1"');
   expect(walletFundingDemo).toContain('ICP_LEDGER = "ryjl3-tyaaa-aaaaa-aaaba-cai"');

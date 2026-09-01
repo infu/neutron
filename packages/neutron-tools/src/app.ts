@@ -12,6 +12,8 @@ import {
   MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
   MSG_BUS_MAX_PROGRESS_BYTES,
   MSG_BUS_MAX_PROGRESS_EVENTS,
+  NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
   NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
   NEUTRON_TOOL_CONTROL_CANCEL,
   SELF_CALL_BINARY_MAX_BYTES,
@@ -74,9 +76,11 @@ import type {
   MsgBusToolDescriptor,
   MsgBusToolHandler,
   MsgBusTransportContext,
+  NeutronToolAudience,
   NeutronCanisterClient,
   OpenAppTileRequest,
   OpenAppTileResult,
+  ProviderPresentationRequest,
   ProgressEnvelope,
   RequestCancelEnvelope,
   ResponseEnvelope,
@@ -947,6 +951,18 @@ async function callExposedTool(
   ) {
     throw new Error("Unexpected provider approval capability");
   }
+  const audience = parseToolAudience(payload);
+  const declaredAudience =
+    registered.descriptor.annotations?.["neutron:audience"];
+  if (
+    declaredAudience !== undefined &&
+    (audience === undefined || audience !== declaredAudience)
+  ) {
+    throw new Error("Tool audience attestation is missing or invalid");
+  }
+  if (audience !== undefined && declaredAudience !== audience) {
+    throw new Error("Unexpected tool audience attestation");
+  }
   validateToolArguments(registered.descriptor, args);
   const registration = invocation?.agentConsent
     ? createAgentConsentRegistration(invocation)
@@ -955,20 +971,20 @@ async function callExposedTool(
     ? createInvocationAbortRegistration(invocation, requestSignal)
     : undefined;
   const signal = abortRegistration?.signal ?? requestSignal;
+  const providerInteraction = providerApprovalCapability
+    ? createProviderInteractionRequester(
+        providerApprovalCapability,
+        invocation,
+        signal,
+      )
+    : undefined;
   try {
     const result = await registered.handler(args, {
       ...(caller ? { caller } : {}),
       reportProgress,
       kernel: createRequestMsgBusClient(invocation, signal),
-      ...(providerApprovalCapability
-        ? {
-            requestApproval: createProviderApprovalRequester(
-              providerApprovalCapability,
-              invocation,
-              signal,
-            ),
-          }
-        : {}),
+      ...(providerInteraction ?? {}),
+      ...(audience ? { audience } : {}),
       agentMode: invocation !== undefined,
       ...(signal ? { signal } : {}),
       ...(registration ? { agentConsent: registration.api } : {}),
@@ -982,9 +998,25 @@ async function callExposedTool(
   }
 }
 
+function parseToolAudience(
+  payload: JsonObject,
+): NeutronToolAudience | undefined {
+  if (!("audience" in payload)) return undefined;
+  const audience = payload.audience;
+  if (
+    audience !== NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE &&
+    audience !== NEUTRON_TOOL_AUDIENCE_AGENT_ROOT
+  ) {
+    throw new Error("Invalid tool audience attestation");
+  }
+  return audience;
+}
+
 const providerApprovalCapabilityPattern = /^[0-9a-f]{64}$/u;
 
-function parseProviderApprovalCapability(payload: JsonObject): string | undefined {
+function parseProviderApprovalCapability(
+  payload: JsonObject,
+): string | undefined {
   if (!("providerApproval" in payload)) return undefined;
   const metadata = payload.providerApproval;
   if (
@@ -1028,21 +1060,71 @@ async function requestProviderApproval(
   }
 }
 
-function createProviderApprovalRequester(
+function createProviderInteractionRequester(
   capability: string,
   invocation?: MsgBusInvocationMetadata,
   signal?: AbortSignal,
-): (review: JsonObject) => Promise<void> {
+): Pick<MsgBusToolContext, "requestApproval" | "presentUserInterface"> {
   let used = false;
-  return (review) => {
+  const consume = <T>(operation: () => Promise<T>): Promise<T> => {
     if (used) {
       return Promise.reject(
-        new Error("Provider approval callback was already used"),
+        new Error("Provider interaction callback was already used"),
       );
     }
     used = true;
-    return requestProviderApproval(capability, review, invocation, signal);
+    return operation();
   };
+  return {
+    requestApproval: (review) =>
+      consume(() =>
+        requestProviderApproval(capability, review, invocation, signal),
+      ),
+    presentUserInterface: <T extends JsonValue = JsonValue>(
+      request: ProviderPresentationRequest,
+    ) =>
+      consume(() =>
+        requestProviderPresentation<T>(capability, request, invocation, signal),
+      ),
+  };
+}
+
+async function requestProviderPresentation<T extends JsonValue = JsonValue>(
+  capability: string,
+  request: ProviderPresentationRequest,
+  invocation?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (
+    !isJsonObject(request) ||
+    Object.keys(request).some(
+      (key) => key !== "tileId" && key !== "tool" && key !== "arguments",
+    ) ||
+    typeof request.tileId !== "string" ||
+    !/^[a-z_0-9]+$/u.test(request.tileId) ||
+    typeof request.tool !== "string" ||
+    (request.arguments !== undefined && !isJsonObject(request.arguments))
+  ) {
+    throw new Error("Invalid provider presentation request");
+  }
+  assertToolName(request.tool);
+  assertBoundedJson(
+    request,
+    "Provider presentation request",
+    MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
+  );
+  return execWithTransportContext<T>(
+    "provider_ui.present",
+    {
+      capability,
+      tileId: request.tileId,
+      tool: request.tool,
+      arguments: request.arguments ?? {},
+    },
+    MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+    invocation ? { invocation: Object.freeze({ ...invocation }) } : undefined,
+    signal,
+  );
 }
 
 function createInvocationAbortRegistration(

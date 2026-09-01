@@ -6,20 +6,22 @@ owned by the Neutron canister principal. Ledger calls use owner-approved
 backend actor directly.
 
 Wallet is also the owner's trusted token-transaction provider for other
-Neutron apps. Kernel authenticates the requesting and Wallet endpoints, hosts
-the fixed approval chrome, and routes Agent Mode provenance, but it does not
-interpret ledgers, symbols, decimals, fees, recipients, spenders, allowances,
-or swap semantics. Wallet prepares those facts, asks for one provider-mediated
-decision, and executes only through its own exact preapproved backend methods.
-This is an operational Wallet for owner-trusted apps and live agents, not a
-cold-storage boundary against the installed Wallet package. Installing or
-updating Wallet is therefore a consequential trust decision.
+Neutron apps. Kernel authenticates the requesting and Wallet endpoints and
+opens or focuses Wallet's exact tile, but it forwards only opaque presentation
+data and does not render or interpret token decisions. Wallet reads the ledger,
+formats symbols, decimals, fees, recipients, spenders, and allowances, renders
+the one approval modal, and executes only through its exact preapproved backend
+methods after acceptance. This is an operational Wallet for owner-trusted apps
+and live agents, not a cold-storage boundary against the installed Wallet
+package. Installing or updating Wallet is therefore a consequential trust
+decision.
 
 ## App Funding Contract
 
-The resident exposes the versioned `wallet_fund_v1` tool at the exact
-`app:wallet:background` endpoint. A caller supplies a bounded request id,
-ledger principal, base-unit amount, freshness deadline, and one closed route:
+The resident keeps the versioned `wallet_fund_v1` tool at the exact
+`app:wallet:background` endpoint, so apps written against the existing public
+contract remain compatible. A caller supplies a bounded request id, ledger
+principal, base-unit amount, freshness deadline, and one closed route:
 
 - `direct` names an exact ICRC account which receives an `icrc1_transfer`;
 - `allowance` names an exact spender account and short expiration for an
@@ -33,15 +35,24 @@ for a Swap.
 
 The tool is annotated with `{"neutron:consent":"provider_once"}`. Kernel
 requires an ordinary human request to start from the focused calling tile with
-transient user activation, validates its JSON before dispatch, and then lets
-Wallet run first so Wallet can read authoritative ledger metadata, decimals,
-current fees, and allowance state. Wallet freezes the command, supplies a
-bounded inert review object through the invocation-scoped
-`context.requestApproval()`, and calls its
-backend only after that request resolves. The owner sees one Kernel dialog,
-with Kernel-attested caller and Wallet identities and Wallet-supplied financial
-details; exact or wildcard tool-session grants cannot replace this decision and
-there is no **Allow session** action.
+transient user activation and validates its JSON before dispatch. The Wallet
+background validates the request and feature-detects the invocation-scoped
+`context.presentUserInterface()` callback before preparing or changing any
+command. Kernel then opens, reuses, and focuses Wallet's `wallet` tile and
+routes the opaque request only to Wallet's private
+`wallet_funding_present_v1` tool. That tool is annotated with
+`"neutron:visibility":"same_app"` and
+`"neutron:audience":"foreground_tile"`; it checks Kernel's audience
+attestation, reads authoritative ledger metadata, decimals, current fees, and
+allowance state, freezes the command, and renders Wallet's modal.
+
+The owner makes one decision in Wallet. **Accept** executes the frozen command
+through Wallet's exact preapproved self call; **Reject** records a definite
+rejection without a ledger call. Kernel displays no approval dialog and never
+sees token semantics. The presentation capability is bound to the original
+caller, provider, and live invocation and can be consumed only once. A calling
+app cannot invoke the private tile tool directly, and exact or wildcard tool
+session grants cannot replace this decision.
 
 The funding descriptor uses metadata-only Kernel audit projection. Kernel keeps
 bounded caller/provider/tool/outcome facts rather than financial arguments or
@@ -86,26 +97,33 @@ freshness, and current allowance state. A change rejects that prepared command
 and requires a fresh request and review; Wallet never silently increases the
 reviewed fee, debit, or allowance.
 
-Inside a live Agent Mode turn, the same Wallet-authored review follows Kernel
-provenance. A direct root-agent call resolves without owner UI; a nested
-Swap-to-Wallet request is sent with the complete review to the root agent for
-one allow or deny decision. Wallet derives caller and Agent Mode only from its
-tool context and uses `context.kernel.updateSelf()` so the invocation and
-cancellation remain bound. This is not unattended background authority: the
-current root turn still begins from the enabled exact agent's focused tile with
-transient user activation.
+Agent automation uses a separate `wallet_fund_root_v1` tool with the same
+closed input and output schemas. Its descriptor combines
+`"neutron:visibility":"same_app"` with
+`"neutron:audience":"agent_root"`. Kernel shows and routes it only to the
+incoming live depth-zero Agent root, and Wallet verifies the audience before it
+uses the same prepare and execute helpers. That path has no Wallet or Kernel
+approval UI. Human callers and nested Swap-to-Wallet agent calls are rejected
+before target dispatch; they cannot turn the root-only tool into delegated
+authority. The invocation and cancellation remain bound through
+`context.kernel.updateSelf()`. This is live root authority, not unattended
+background authority: the current root turn still begins from the enabled
+exact agent's focused tile with transient user activation.
 
-An older Kernel has no scoped `requestApproval` callback. The new Wallet checks
-for it before preparing or executing a funding command and fails closed; it
-never falls back to an ordinary reusable tool grant. Existing Wallet features
-remain usable in every partial-upgrade combination.
+Published Wallet 0.3.6 used the now-deprecated scoped
+`context.requestApproval()` callback. A provider-UI Kernel retains its raw JSON
+dialog only as a compatibility lane for that exact published Wallet. New Wallet
+code requires `context.presentUserInterface()` before preparation and never
+falls back to the legacy callback or an ordinary reusable tool grant. Existing
+Wallet features remain usable in every partial-upgrade combination.
 
 | Installed combination | Funding behavior |
 | --- | --- |
-| New Kernel + existing app | Valid existing tools, grants, attachments, self calls, and Agent flows keep their prior behavior. Malformed tool input now fails before any permission UI. |
-| New Kernel + old Wallet | Existing Wallet works; `wallet_fund_v1` and Approvals are absent. |
-| Old Kernel + new Wallet | Existing Wallet works; `wallet_fund_v1` fails closed before preparation or execution because `requestApproval` is unavailable. |
-| New Kernel + new Wallet | Provider-mediated funding and Approvals are available. |
+| Provider-UI Kernel + existing caller app | The unchanged `wallet_fund_v1` endpoint and schema open Wallet's approval modal; callers need no migration. |
+| Provider-UI Kernel + published Wallet 0.3.6 | `wallet_fund_v1` still works through the deprecated raw Kernel JSON dialog until Wallet is updated. |
+| Wallet before 0.3.6 | Existing Wallet features work; cross-app funding and Approvals are absent. |
+| Kernel without provider UI + new Wallet | Existing Wallet features work; human funding fails before preparation and the root-only tool remains unavailable. |
+| Provider-UI Kernel + new Wallet | Human funding uses one Wallet modal; a direct root Agent may use the separate UI-free root tool. |
 | Existing custom-ledger setup | Existing balances, history, deposits, and sends work; allowance features require the additional exact scopes described below. |
 
 The ledger picker offers both reviewed presets and an **Add custom ledger**
@@ -156,13 +174,14 @@ the setup page uses an explicit **Open Wallet** action, copy affordances use an
 open icon instead of pretending to copy, and Ethereum deposit entry starts only
 after the handoff so no draft is discarded. Escape dismisses the popout.
 
-The non-persistent resident exposes three agent-visible tools:
+The non-persistent resident exposes three public tools:
 `wallet_overview` reads the bounded wallet projection, `wallet_refresh`
 refreshes selected ledger balances and returns that same projection, and
-`wallet_fund_v1` performs the provider-mediated funding flow above. All use
-closed schemas and preserve `Nat`/`Int` values as decimal strings. Wallet
-intentionally publishes no tray badge: it has no unread cursor, and balance
-errors are not unread items.
+`wallet_fund_v1` performs the human funding flow above. It also declares the
+private, direct-root-only `wallet_fund_root_v1` automation tool. All use closed
+schemas and preserve `Nat`/`Int` values as decimal strings. Wallet intentionally
+publishes no tray badge: it has no unread cursor, and balance errors are not
+unread items.
 
 Assets show an indicative USD position value and portfolio total using the
 native asset behind each reviewed ledger (`ckBTC` uses BTC, `ckETH` uses ETH,
@@ -274,12 +293,13 @@ unchanged. Commands are keyed by immediate caller app and request id, freeze
 the exact ledger arguments and `created_at_time` before value-moving awaits,
 and distinguish prepared, pending, succeeded, and definitely rejected states.
 An identical replay loads the same command; a reused key with a different
-intent is rejected. After the replay's fresh one-shot provider decision, a
-terminal command returns its durable result and a pending command enters
-protocol-safe reconciliation through the same execute key. Wallet reuses only
-frozen arguments where safe and never rebuilds an ambiguous outcome as a fresh
-transaction. Command idempotency does not reuse consent, including when a new
-invocation returns an already completed receipt.
+intent is rejected. A terminal command returns its durable result, while a
+pending command enters protocol-safe reconciliation through the same execute
+key. Wallet reuses only frozen arguments where safe and never rebuilds an
+ambiguous outcome as a fresh transaction. Replaying a terminal receipt does
+not dispatch another financial operation or require another decision; a fresh
+request id requires a fresh Wallet decision on the human path or a fresh
+direct-root invocation.
 
 IC destinations use `icrc1_transfer`. Bitcoin, Dogecoin, Ethereum, ERC-20, and
 Solana destinations use the token's official approve-then-withdraw flow: Wallet

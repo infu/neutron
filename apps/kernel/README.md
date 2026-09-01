@@ -32,12 +32,24 @@ and [Kernel Frontend Runtime](../../doc/kernel-frontend-runtime.md#exact-install
 
 The frontend message bus also supports the generic
 `{"neutron:consent":"provider_once"}` tool annotation. It lets an exact target
-app prepare one bounded review before the Kernel routes a decision. Kernel
-attests caller/provider identity, renders inert JSON in fixed chrome, binds the
-one-use callback to the live invocation, and prevents session grants from
-bypassing it; it does not interpret Wallet, token, amount, fee, or other
-provider fields. Direct Agent roots resolve without owner UI, while descendants
-send the complete provider review to the root agent. See
+app ask once for its own foreground UI during the live invocation. Kernel
+derives the provider and original caller from the one-use capability,
+opens or reuses and focuses the provider's exact tile, and routes the opaque
+request only to a private tool annotated with
+`"neutron:visibility":"same_app"` and
+`"neutron:audience":"foreground_tile"`. Kernel attests that audience and the
+caller but neither renders a decision dialog nor interprets provider-specific
+fields. The provider tile owns the review, the single user decision, and any
+preapproved self call made after acceptance; ordinary session grants cannot
+bypass this path.
+
+A separate private tool annotated with
+`"neutron:visibility":"same_app"` and
+`"neutron:audience":"agent_root"` may be routed without UI only to the incoming
+live depth-zero Agent root. Human and nested-agent calls are rejected before
+target dispatch. The deprecated provider `requestApproval` callback and its
+raw Kernel JSON dialog remain only so already-published Wallet 0.3.6 continues
+to work; new provider code uses `context.presentUserInterface`. See
 [App Method Access And Call Consent](../../doc/app-method-access-and-call-consent.md#provider-mediated-one-shot-tools).
 
 Kernel-authorized principals are never request-rate-limited or counted. Fixed-

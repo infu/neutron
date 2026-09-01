@@ -194,20 +194,24 @@ replace the browser's permission prompt and device indicators.
 Apps can call their own backend with native nested binary values. User review
 shows binary path, size, and digest instead of rendering arbitrary bytes.
 
-An exact app tool may opt into provider-mediated one-shot review. Kernel first
+An exact app tool may opt into one provider-owned decision. Kernel first
 authenticates the requesting and provider endpoints and validates the tool
-input, then lets the provider prepare authoritative facts. The provider submits
-one bounded inert JSON object through an invocation-scoped callback. Kernel
-displays fixed trusted chrome and identities but does not interpret the
-provider's domain fields. The decision cannot be replaced by a session grant
-and resumes only that call.
+input. The provider resident must then call its one-use
+`presentUserInterface()` callback before preparing an effect. Kernel opens or
+focuses that provider's exact tile and routes a bounded opaque request only to
+its private foreground tool. The provider tile prepares authoritative facts,
+renders its own modal, and performs or rejects the operation. Kernel does not
+render a dialog or interpret the provider's domain fields. A session grant
+cannot replace the decision, which resumes only that call.
 
-Wallet uses this route for cross-app swap funding. One human decision approves
+Wallet keeps the public `wallet_fund_v1` contract for existing cross-app Swap
+callers and uses this route for human funding. One Wallet decision accepts
 either a direct ICRC-1 transfer or an exact short-lived ICRC-2 allowance; a
 pull-based Swap then executes `icrc2_transfer_from` through its own reviewed
 authority without another owner prompt. Wallet, not Kernel, owns token
 metadata, formatting, fee and spender meaning, durable idempotency, approval
-enumeration, and revocation.
+enumeration, and revocation. Kernel retains the old raw-review callback only as
+a compatibility lane for already-published providers such as Wallet 0.3.6.
 
 ### 5. Connect External Authority
 
@@ -220,13 +224,15 @@ Some capabilities require an owner action after installation:
 - enabling an app capability in Settings.
 
 A provider-mediated operation is different from a generic app backend call.
-The owner has already chosen to trust the exact provider package, but still
-receives one provider-prepared per-operation decision. Inside a live Agent Mode
-turn a direct root resolves it automatically and a nested request is decided by
-the root agent from the complete provider review, never by an owner modal.
-Agent Mode still requires the owner to enable an exact agent version and start
-each root turn from its focused tile with transient user activation; it does
-not yet create an unattended background principal.
+The owner has already chosen to trust the exact provider package and receives
+one provider-owned per-operation decision in that app's tile. For autonomous
+work, Wallet exposes a separate direct-root tool which shares its checked
+prepare/execute core but opens no Wallet or Kernel UI. Kernel makes that tool
+visible only to the active live depth-zero root and rejects human or nested
+agent calls before provider dispatch. Agent Mode still requires the owner to
+enable an exact agent version and start each root turn from its focused tile
+with transient user activation; it does not yet create an unattended
+background principal or standing spend authority.
 
 Install-time backend reservation defaults may be approved with the package and
 materialized by the compiled target. The UI also supports later explicit

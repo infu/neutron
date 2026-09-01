@@ -90,9 +90,11 @@ import {
 import { assertSupportedCertificateVersions } from "neutron-tools/src/wasm_metadata.js";
 import {
   LEGACY_KERNEL_RELEASES,
+  PRODUCTION_KERNEL_V323_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   assertLegacyUpgradeCompileInvariants,
   compileFinalCandidateLegacyKernelUpgradeFixture,
+  compileFinalCandidateProductionKernelUpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   type LegacyUpgradeCompileFixture,
@@ -378,6 +380,17 @@ finalCandidateTest(
   () =>
     runLegacyUpgradeQualification(() =>
       compileFinalCandidateRetainedKernelUpgradeFixture({
+        expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
+      }),
+    ),
+  300_000,
+);
+
+finalCandidateTest(
+  `the reviewed current Kernel archive preserves durable state through the exact production ${PRODUCTION_KERNEL_V323_RELEASE.label} checked self-upgrade`,
+  () =>
+    runLegacyUpgradeQualification(() =>
+      compileFinalCandidateProductionKernelUpgradeFixture({
         expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
       }),
     ),
