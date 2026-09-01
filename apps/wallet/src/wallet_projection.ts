@@ -291,10 +291,15 @@ export function parseWalletProjection(value: JsonValue): WalletProjection {
 }
 
 export function walletTileView(
-  action: "assets" | "activity" | "setup" | "receive" | "send",
+  action: "assets" | "activity" | "approvals" | "setup" | "receive" | "send",
   ledgerId?: string,
 ): string {
-  if (action === "assets" || action === "activity" || action === "setup") {
+  if (
+    action === "assets" ||
+    action === "activity" ||
+    action === "approvals" ||
+    action === "setup"
+  ) {
     return action;
   }
   if (!ledgerId || !/^(0|[1-9][0-9]{0,39})$/.test(ledgerId)) {

@@ -8,6 +8,13 @@ import {
 } from "neutron-tools/app";
 import { historyPageRequest, parseHistoryPage } from "./history.ts";
 import {
+  WALLET_FUNDING_TOOL,
+  handleWalletFunding,
+  walletFundingInputSchema,
+  walletFundingOutputSchema,
+  type WalletFundingToolContext,
+} from "./funding.ts";
+import {
   WALLET_PROJECTION_ACTIVITY_LIMIT,
   WALLET_PROJECTION_TOOLS,
   WALLET_PROJECTION_TOPIC,
@@ -51,6 +58,34 @@ exposeTool(
     annotations: { "neutron:effects": ["write"] },
   },
   async () => asJson(await refreshProjection()),
+);
+
+exposeTool(
+  WALLET_FUNDING_TOOL,
+  {
+    title: "Fund an app with Wallet",
+    description:
+      "Prepare one exact ICRC token transfer or short-lived spending allowance. Wallet reads authoritative ledger facts and asks for one invocation-scoped approval before execution.",
+    inputSchema: walletFundingInputSchema,
+    outputSchema: walletFundingOutputSchema,
+    annotations: {
+      "neutron:audit": "metadata_only",
+      "neutron:consent": "provider_once",
+      "neutron:effects": ["write", "network", "user_visible_ui"],
+    },
+  },
+  async (args, context) => {
+    const result = await handleWalletFunding(
+      args,
+      context as WalletFundingToolContext,
+    );
+    try {
+      await publishAppStateChange(WALLET_PROJECTION_TOPIC, Date.now());
+    } catch {
+      // The durable funding result is authoritative; notification is best effort.
+    }
+    return result;
+  },
 );
 
 // Wallet does not yet have an unread cursor, so the tray icon intentionally has

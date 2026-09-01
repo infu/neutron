@@ -66,13 +66,8 @@ function encode(types: IDL.Type[], values: unknown[]): Uint8Array {
   return new Uint8Array(IDL.encode(types, values));
 }
 
-function projectSelfCallResult(
-  value: unknown,
-  outputType: IDL.Type,
-) {
-  return encodeSelfCallResult(
-    normalizeSelfCallResult(value, outputType),
-  ).value;
+function projectSelfCallResult(value: unknown, outputType: IDL.Type) {
+  return encodeSelfCallResult(normalizeSelfCallResult(value, outputType)).value;
 }
 
 test("top-level absent Candid options become JSON null", () => {
@@ -114,8 +109,9 @@ test("API1 preapproval binds an exact logical method and mode", () => {
   expect(() => requirePreapprovedSelfCall(app(), "read", "update")).toThrow(
     /not an app update/,
   );
-  expect(() => requirePreapprovedSelfCall(app(), "public_status", "query"))
-    .toThrow(/not preapproved/);
+  expect(() =>
+    requirePreapprovedSelfCall(app(), "public_status", "query"),
+  ).toThrow(/not preapproved/);
   expect(() => requirePreapprovedSelfCall(app(), "missing", "query")).toThrow(
     /does not belong/,
   );
@@ -168,17 +164,18 @@ test("live Candid is authoritative for self-call existence, mode, and shape", ()
   const fetch = requireSelfCallCandidMethod(service, "fetch", "query");
   expect(fetch.argTypes).toEqual([input]);
   expect(fetch.retTypes).toEqual([output]);
-  expect(requireSelfCallCandidMethod(service, "store", "update").argTypes)
-    .toEqual([input]);
+  expect(
+    requireSelfCallCandidMethod(service, "store", "update").argTypes,
+  ).toEqual([input]);
   expect(() => requireSelfCallCandidMethod(service, "fetch", "update")).toThrow(
     /mode does not match/,
   );
   expect(() =>
     requireSelfCallCandidMethod(service, "missing", "query"),
   ).toThrow();
-  expect(() => requireSelfCallCandidMethod(service, "notify", "update")).toThrow(
-    /exactly one/,
-  );
+  expect(() =>
+    requireSelfCallCandidMethod(service, "notify", "update"),
+  ).toThrow(/exactly one/);
 });
 
 test("nested and repeated binary fields bind only at live Candid blob leaves", () => {
@@ -277,6 +274,31 @@ test("live blobs require their exact transferable sidecars", () => {
   ).toThrow(/missing its binary sidecar/);
 });
 
+test("schema-projected record shorthands remain opaque and sidecar-free", () => {
+  const accountType = IDL.Record({
+    owner: IDL.Principal,
+    subaccount: IDL.Opt(blobType),
+  });
+  const shorthand = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+  const materialized = materializeSelfCallArguments(
+    [shorthand],
+    [],
+    [accountType],
+  );
+
+  expect(materialized.args).toEqual([shorthand]);
+  expect(materialized.validationArgs).toEqual([shorthand]);
+  expect(materialized.metadata).toEqual([shorthand]);
+  expect(materialized.binary).toEqual({ count: 0, bytes: 0 });
+  expect(() =>
+    materializeSelfCallArguments(
+      [shorthand],
+      [wireBlob([0, "subaccount"], [1])],
+      [accountType],
+    ),
+  ).toThrow(/record has an invalid shape/);
+});
+
 test("non-binary containers are recursively bounded against live Candid", () => {
   const values = Array.from(
     { length: SELF_CALL_CANDID_MAX_CONTAINER_ELEMENTS },
@@ -308,9 +330,9 @@ test("non-binary containers are recursively bounded against live Candid", () => 
   recursive.fill(IDL.Opt(IDL.Record({ next: recursive })));
   let deep: unknown = null;
   for (let index = 0; index < 40; index += 1) deep = { next: deep };
-  expect(() =>
-    materializeSelfCallArguments([deep], [], [recursive]),
-  ).toThrow(/depth limit/);
+  expect(() => materializeSelfCallArguments([deep], [], [recursive])).toThrow(
+    /depth limit/,
+  );
 });
 
 test("non-binary siblings cannot bypass bounds beside a bound blob", () => {
@@ -337,9 +359,9 @@ test("non-binary siblings cannot bypass bounds beside a bound blob", () => {
 
 test("strings and number arrays are never reinterpreted as blobs", () => {
   for (const value of ["", "00ff", [], [0, 255]]) {
-    expect(() =>
-      materializeSelfCallArguments([value], [], [blobType]),
-    ).toThrow(/missing its binary sidecar/);
+    expect(() => materializeSelfCallArguments([value], [], [blobType])).toThrow(
+      /missing its binary sidecar/,
+    );
   }
   expect(() =>
     materializeSelfCallArguments(
@@ -427,10 +449,7 @@ test("marker-bearing branches reject unknown fields and misplaced markers", () =
   expect(() =>
     materializeSelfCallArguments(
       [{ body: null, metadata: { title: "ok" } }],
-      [
-        wireBlob([0, "body"], [1]),
-        wireBlob([0, "body"], [2]),
-      ],
+      [wireBlob([0, "body"], [1]), wireBlob([0, "body"], [2])],
       [requestType],
     ),
   ).toThrow(/paths must be unique/);
@@ -498,9 +517,12 @@ test("raw request and reply preflight meters all nested blob leaves", () => {
 
 test("raw preflight enforces binary field-count and aggregate-byte limits", () => {
   const repeatedType = IDL.Vec(IDL.Record({ data: blobType }));
-  const tooMany = Array.from({ length: SELF_CALL_BINARY_MAX_COUNT + 1 }, () => ({
-    data: new Uint8Array(0),
-  }));
+  const tooMany = Array.from(
+    { length: SELF_CALL_BINARY_MAX_COUNT + 1 },
+    () => ({
+      data: new Uint8Array(0),
+    }),
+  );
   const countBomb = encode([repeatedType], [tooMany]);
   expect(() => preflightSelfCallRequest(countBomb, [repeatedType])).toThrow(
     /binary field count limit/,
@@ -530,9 +552,7 @@ test("raw request byte accounting excludes bounded binary payload bytes", () => 
   ).not.toThrow();
   expect(() =>
     assertSelfCallRawRequestBytes(
-      SELF_CALL_BINARY_MAX_BYTES +
-        SELF_CALL_NON_BINARY_CANDID_MAX_BYTES +
-        1,
+      SELF_CALL_BINARY_MAX_BYTES + SELF_CALL_NON_BINARY_CANDID_MAX_BYTES + 1,
       SELF_CALL_BINARY_MAX_BYTES,
     ),
   ).toThrow(/raw metadata limit/);
@@ -773,8 +793,7 @@ test("trusted binary inspection exposes exact path, size, and SHA-256 transientl
     path: 'args[0].nested["not simple"][2]',
     pathSegments: [0, "nested", "not simple", 2],
     byteLength: 3,
-    sha256:
-      "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+    sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
   });
 });
 

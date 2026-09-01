@@ -5,6 +5,7 @@ import {
   isJsonObject,
   msgBusLocalActions,
   type ExecEnvelope,
+  type JsonObject,
   type JsonValue,
   type MsgBusToolDescriptor,
 } from "neutron-tools/protocol";
@@ -393,6 +394,254 @@ function createToolEndpoint(
   return source;
 }
 
+function createProviderToolEndpoint(
+  descriptor: MsgBusToolDescriptor,
+  review: Record<string, JsonValue>,
+  result: JsonValue,
+  options: {
+    requestApproval?: boolean;
+    catchApprovalError?: boolean;
+    approvalExtra?: JsonObject;
+    holdAfterApproval?: Promise<void>;
+  } = {},
+): {
+  source: Window;
+  state: {
+    calls: number;
+    capability: string | null;
+    approvalRequests: number;
+    cancelled: boolean;
+    caughtApprovalError: boolean;
+    approvalSucceeded: boolean;
+  };
+} {
+  const state = {
+    calls: 0,
+    capability: null as string | null,
+    approvalRequests: 0,
+    cancelled: false,
+    caughtApprovalError: false,
+    approvalSucceeded: false,
+  };
+  let nextRequestId = 10_000;
+  const pending = new Map<number, { outerId: number; port: MessagePort }>();
+  const source = {
+    postMessage(
+      message: unknown,
+      _origin: string,
+      transfer: Transferable[] = [],
+    ) {
+      if (!isJsonObject(message) || message.type !== "neutron:msgbus:connect") {
+        return;
+      }
+      const port = transfer[0] as MessagePort | undefined;
+      if (!port) return;
+      port.addEventListener("message", (event) => {
+        const incoming = event.data as {
+          type?: unknown;
+          id?: unknown;
+          ok?: JsonValue;
+          error?: JsonValue;
+          payload?: {
+            action?: unknown;
+            payload?: JsonValue;
+            context?: ExecEnvelope["payload"]["context"];
+          };
+        };
+        if (incoming.type === "neutron:msgbus:cancel") {
+          state.cancelled = true;
+          return;
+        }
+        if (incoming.type === "response" && typeof incoming.id === "number") {
+          const request = pending.get(incoming.id);
+          if (!request) return;
+          pending.delete(incoming.id);
+          const failed = Object.hasOwn(incoming, "error");
+          if (failed && options.catchApprovalError) {
+            state.caughtApprovalError = true;
+          }
+          const settleHandler = () =>
+            request.port.postMessage({
+              type: "response",
+              id: request.outerId,
+              ...(failed && !options.catchApprovalError
+                ? { error: incoming.error ?? null }
+                : { ok: result }),
+            });
+          if (!failed) {
+            state.approvalSucceeded = true;
+            if (options.holdAfterApproval) {
+              void options.holdAfterApproval.then(settleHandler);
+              return;
+            }
+          }
+          settleHandler();
+          return;
+        }
+        if (
+          incoming.type !== "exec" ||
+          typeof incoming.id !== "number" ||
+          !incoming.payload
+        ) {
+          return;
+        }
+        if (incoming.payload.action === msgBusLocalActions.toolsList) {
+          port.postMessage({
+            type: "response",
+            id: incoming.id,
+            ok: [descriptor],
+          });
+          return;
+        }
+        if (incoming.payload.action !== msgBusLocalActions.toolsCall) return;
+        state.calls += 1;
+        const callPayload = incoming.payload.payload;
+        const providerApproval =
+          isJsonObject(callPayload) && isJsonObject(callPayload.providerApproval)
+            ? callPayload.providerApproval
+            : null;
+        state.capability =
+          providerApproval && typeof providerApproval.capability === "string"
+            ? providerApproval.capability
+            : null;
+        if (options.requestApproval === false) {
+          port.postMessage({ type: "response", id: incoming.id, ok: result });
+          return;
+        }
+        if (!state.capability) {
+          port.postMessage({
+            type: "response",
+            id: incoming.id,
+            error: { name: "Error", message: "Approval callback unavailable" },
+          });
+          return;
+        }
+        const approvalId = ++nextRequestId;
+        state.approvalRequests += 1;
+        pending.set(approvalId, { outerId: incoming.id, port });
+        port.postMessage({
+          type: "exec",
+          id: approvalId,
+          payload: {
+            action: "provider_approval.request",
+            payload: {
+              ...(options.approvalExtra ?? {}),
+              capability: state.capability,
+              review,
+            },
+            ...(incoming.payload.context
+              ? { context: incoming.payload.context }
+              : {}),
+          },
+        } satisfies ExecEnvelope);
+      });
+      port.start();
+    },
+  } as unknown as Window;
+  return { source, state };
+}
+
+function createAgentConsentEndpoint(
+  decision: "allow" | "deny" = "allow",
+): {
+  source: Window;
+  challenges: JsonValue[];
+} {
+  const challenges: JsonValue[] = [];
+  const source = {
+    postMessage(
+      message: unknown,
+      _origin: string,
+      transfer: Transferable[] = [],
+    ) {
+      if (!isJsonObject(message) || message.type !== "neutron:msgbus:connect") {
+        return;
+      }
+      const port = transfer[0] as MessagePort | undefined;
+      if (!port) return;
+      port.addEventListener("message", (event) => {
+        const request = event.data as ExecEnvelope;
+        if (
+          request.type !== "exec" ||
+          request.payload.action !== msgBusLocalActions.agentConsentDecide
+        ) {
+          return;
+        }
+        challenges.push(request.payload.payload);
+        port.postMessage({
+          type: "response",
+          id: request.id,
+          ok: {
+            decision,
+            reason:
+              decision === "allow"
+                ? "Exact Wallet review accepted"
+                : "Exact Wallet review denied",
+          },
+        });
+      });
+      port.start();
+    },
+  } as unknown as Window;
+  return { source, challenges };
+}
+
+function focusTestTile(instanceId: string): void {
+  useWorkspaceStore.setState((state) => ({
+    workspaces: {
+      ...state.workspaces,
+      1: {
+        ...state.workspaces[1],
+        focusedTileId: instanceId,
+      },
+    },
+  }));
+}
+
+function registerScopedBackgroundEndpoint(
+  source: Window,
+  appId: string,
+  installationUid: string,
+) {
+  const app = registryApp({
+    id: appId,
+    name: appId,
+    version: 100,
+    background: { path: "service.html" },
+  });
+  const appScope = { appId, installationUid };
+  useAppsStore.setState((state) => ({
+    list: { ...state.list, [appId]: app },
+    appInstances: {
+      ...state.appInstances,
+      [appId]: {
+        scope: appScope,
+        version: app.version,
+        deploymentId: "development",
+        capabilityPlanFingerprint: app.capability_plan_fingerprint,
+        browserOriginNonce: installationUid.padStart(32, "0"),
+        browserOriginAuthorityEpoch: "1",
+        residentFrameSecurity: "credentialless_opaque_v1",
+      },
+    },
+  }));
+  unregisters.push(
+    registerFrameContext(
+      source,
+      { role: "background", appId },
+      {
+        appVersion: app.version,
+        appScope,
+        origin: TEST_FRAME_ORIGIN,
+      },
+    ),
+  );
+  authenticateLoadedTestFrame(source);
+  const endpoint = getRegisteredEndpoint(`app:${appId}:background`);
+  if (!endpoint) throw new Error(`${appId} endpoint did not register`);
+  return endpoint;
+}
+
 function registerTile(source: Window, appId: string, instanceId: string) {
   ensureTestApp(appId);
   const unregister = registerFrameContext(
@@ -596,7 +845,9 @@ async function beginExternalSignedCall(
   return { cid, result };
 }
 
-async function beginSignedCallAgentInvocation() {
+async function beginSignedCallAgentInvocation(
+  backgroundSource: Window = {} as Window,
+) {
   const appId = "signed_call_agent";
   const installationUid = "401";
   const installed = registryApp({
@@ -625,7 +876,6 @@ async function beginSignedCallAgentInvocation() {
   });
 
   const tileSource = {} as Window;
-  const backgroundSource = {} as Window;
   unregisters.push(
     registerFrameContext(
       tileSource,
@@ -987,6 +1237,76 @@ const echoDescriptor: MsgBusToolDescriptor = {
     additionalProperties: false,
   },
 };
+
+const providerTransferDescriptor: MsgBusToolDescriptor = {
+  name: "wallet_transfer",
+  title: "Transfer Tokens",
+  description: "Prepare and submit one Wallet-owned token transfer.",
+  inputSchema: {
+    type: "object",
+    required: ["amount"],
+    properties: { amount: { type: "string" } },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    required: ["block"],
+    properties: { block: { type: "string" } },
+    additionalProperties: false,
+  },
+  annotations: { "neutron:consent": "provider_once" },
+};
+
+test("a new Kernel keeps an old Wallet surface and fails closed for its absent successor tool", async () => {
+  const fakeWindow = installFakeWindow();
+  const caller = registerTile({} as Window, "swap", "caller");
+  const target = "app:wallet:background" as const;
+  const releasedWalletOverview: MsgBusToolDescriptor = {
+    name: "wallet_overview",
+    title: "Read Wallet Overview",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: "object",
+      required: ["revision"],
+      properties: { revision: { type: "string" } },
+      additionalProperties: false,
+    },
+  };
+  const oldWallet = createToolEndpoint(fakeWindow, releasedWalletOverview, {
+    revision: "released-wallet",
+  });
+  unregisters.push(registerBackground(oldWallet, "wallet"));
+  grantFrontendToolSession("swap", target, "*");
+
+  await expect(
+    routeToolCall(
+      { target, name: "wallet_overview", arguments: {} },
+      caller,
+    ),
+  ).resolves.toEqual({ revision: "released-wallet" });
+  await expect(
+    routeToolCall(
+      {
+        target,
+        name: "wallet_fund_v1",
+        arguments: {
+          requestId: "00112233445566778899aabbccddeeff",
+          ledger: "xevnm-gaaaa-aaaar-qafnq-cai",
+          amountAtoms: "1000000",
+          validUntilNs: "1893456000000000000",
+          route: { kind: "direct", to: "aaaaa-aa" },
+        },
+      },
+      caller,
+    ),
+  ).rejects.toThrow("Unknown tool 'wallet_fund_v1'");
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  expect(useRequestStore.getState().calls).toEqual({});
+});
 
 test("same-app tile and background-style endpoints call through the broker", async () => {
   const fakeWindow = installFakeWindow();
@@ -3833,6 +4153,672 @@ test("cross-app calls require and honor an explicit session grant", async () => 
       caller,
     ),
   ).resolves.toEqual({ value: "allowed" });
+});
+
+test("provider-owned consent validates and requires captured tile activation before dispatch", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "1 TEST" },
+    { block: "1" },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+  const call = {
+    target: "app:wallet:background" as const,
+    name: "wallet_transfer",
+    arguments: { amount: "100000000" },
+  };
+
+  setTransientUserActivation(false);
+  await expect(routeToolCall(call, caller)).rejects.toMatchObject({
+    code: "OWNER_REQUIRED",
+  });
+  expect(provider.state.calls).toBe(0);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+
+  setTransientUserActivation(true);
+  await expect(
+    routeToolCall(
+      { ...call, arguments: {} },
+      caller,
+    ),
+  ).rejects.toThrow("Invalid arguments");
+  expect(provider.state.calls).toBe(0);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("provider-owned consent rejects control and attachment tool combinations", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  const cases: Array<[string, JsonObject]> = [
+    ["walletcontrol", { "neutron:control": "cancel" }],
+    [
+      "walletbinary",
+      {
+        "neutron:attachments": {
+          version: 1,
+          input: {
+            name: "payload",
+            mediaTypes: ["application/octet-stream"],
+            maxBytes: 1,
+            required: true,
+          },
+        },
+      },
+    ],
+  ];
+
+  for (const [appId, incompatible] of cases) {
+    const provider = createProviderToolEndpoint(
+      {
+        ...providerTransferDescriptor,
+        annotations: {
+          ...providerTransferDescriptor.annotations,
+          ...incompatible,
+        },
+      },
+      { amount: "1 TEST" },
+      { block: "never" },
+    );
+    unregisters.push(registerBackground(provider.source, appId));
+    await expect(
+      routeToolCall(
+        {
+          target: `app:${appId}:background`,
+          name: "wallet_transfer",
+          arguments: { amount: "100000000" },
+        },
+        caller,
+      ),
+    ).rejects.toThrow(/cannot be combined with control or attachment/);
+    expect(provider.state.calls).toBe(0);
+    expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  }
+});
+
+test("provider-owned consent shows one canonical provider review and ignores grants", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  const review = {
+    amount: "1.00000000 TEST",
+    fee: "0.00010000 TEST",
+    recipient: "aaaaa-aa",
+  };
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    review,
+    { block: "77" },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+  const target = "app:wallet:background" as const;
+  grantFrontendToolSession("swap", target, "wallet_transfer");
+
+  const pending = routeToolCall(
+    {
+      target,
+      name: "wallet_transfer",
+      arguments: { amount: "100000000" },
+    },
+    caller,
+  );
+  for (
+    let turn = 0;
+    turn < 20 &&
+    Object.keys(useMsgBusPermissionStore.getState().requests).length === 0;
+    turn += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const requests = Object.values(
+    useMsgBusPermissionStore.getState().requests,
+  );
+  expect(provider.state.calls).toBe(1);
+  expect(provider.state.approvalRequests).toBe(1);
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    caller: { appId: "swap", role: "tile" },
+    target,
+    tool: "wallet_transfer",
+    arguments: {},
+    providerReview: review,
+    onceOnly: true,
+  });
+  expect(JSON.stringify(requests[0])).not.toContain("100000000");
+
+  await expect(
+    routeToolCall(
+      {
+        target,
+        name: "wallet_transfer",
+        arguments: { amount: "200000000" },
+      },
+      caller,
+    ),
+  ).rejects.toMatchObject({ code: "UI_BUSY" });
+  expect(provider.state.calls).toBe(1);
+
+  if (!provider.state.capability || !requests[0]) {
+    throw new Error("Missing provider approval fixture state");
+  }
+  await expect(
+    executeExposedAction(
+      "provider_approval.request",
+      { capability: provider.state.capability, review },
+      { source: provider.source, origin: TEST_FRAME_ORIGIN },
+    ),
+  ).rejects.toThrow("already consumed");
+
+  approveFrontendToolRequest(requests[0].cid, "once");
+  await expect(pending).resolves.toEqual({ block: "77" });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("provider-owned consent fails closed when the handler omits its callback", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "1 TEST" },
+    { block: "never" },
+    { requestApproval: false },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+
+  await expect(
+    routeToolCall(
+      {
+        target: "app:wallet:background",
+        name: "wallet_transfer",
+        arguments: { amount: "100000000" },
+      },
+      caller,
+    ),
+  ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+  expect(provider.state.calls).toBe(1);
+  expect(provider.state.approvalRequests).toBe(0);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("provider-owned consent rejects oversized reviews and aborts the handler", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { detail: "x".repeat(17 * 1024) },
+    { block: "never" },
+    { catchApprovalError: true },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+
+  await expect(
+    routeToolCall(
+      {
+        target: "app:wallet:background",
+        name: "wallet_transfer",
+        arguments: { amount: "100000000" },
+      },
+      caller,
+    ),
+  ).rejects.toThrow("Provider approval review exceeds 16384 bytes");
+  expect(provider.state.approvalRequests).toBe(1);
+  expect(provider.state.cancelled).toBe(true);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("provider-owned consent rejects extended approval payloads and aborts the handler", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "1.00000000 TEST" },
+    { block: "never" },
+    {
+      catchApprovalError: true,
+      approvalExtra: { approved: true },
+    },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+
+  await expect(
+    routeToolCall(
+      {
+        target: "app:wallet:background",
+        name: "wallet_transfer",
+        arguments: { amount: "100000000" },
+      },
+      caller,
+    ),
+  ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+  expect(provider.state.approvalRequests).toBe(1);
+  expect(provider.state.caughtApprovalError).toBe(true);
+  expect(provider.state.cancelled).toBe(true);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("provider-owned consent cancels when the provider endpoint is replaced", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "1.00000000 TEST" },
+    { block: "never" },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+  const pending = routeToolCall(
+    {
+      target: "app:wallet:background",
+      name: "wallet_transfer",
+      arguments: { amount: "100000000" },
+    },
+    caller,
+  );
+  for (
+    let turn = 0;
+    turn < 20 &&
+    Object.keys(useMsgBusPermissionStore.getState().requests).length === 0;
+    turn += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  expect(
+    Object.values(useMsgBusPermissionStore.getState().requests),
+  ).toHaveLength(1);
+
+  const replacement = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "replacement" },
+    { block: "replacement" },
+  );
+  unregisters.push(registerBackground(replacement.source, "wallet"));
+  await expect(pending).rejects.toThrow("Message bus endpoint retired");
+  expect(provider.state.cancelled).toBe(true);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("provider-owned consent cancels when the caller session is replaced", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "1.00000000 TEST" },
+    { block: "never" },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+  const pending = routeToolCall(
+    {
+      target: "app:wallet:background",
+      name: "wallet_transfer",
+      arguments: { amount: "100000000" },
+    },
+    caller,
+  );
+  for (
+    let turn = 0;
+    turn < 20 &&
+    Object.keys(useMsgBusPermissionStore.getState().requests).length === 0;
+    turn += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  expect(
+    Object.values(useMsgBusPermissionStore.getState().requests),
+  ).toHaveLength(1);
+
+  registerTile({} as Window, "swap", "caller");
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(provider.state.cancelled).toBe(true);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("provider-owned consent rechecks the authorized owner after review", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-one");
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "1 TEST" },
+    { block: "never" },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+  const pending = routeToolCall(
+    {
+      target: "app:wallet:background",
+      name: "wallet_transfer",
+      arguments: { amount: "100000000" },
+    },
+    caller,
+  );
+  for (
+    let turn = 0;
+    turn < 20 &&
+    Object.keys(useMsgBusPermissionStore.getState().requests).length === 0;
+    turn += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const request = Object.values(
+    useMsgBusPermissionStore.getState().requests,
+  )[0];
+  if (!request) throw new Error("Missing provider review request");
+  authorizeTestOwner("owner-two");
+  approveFrontendToolRequest(request.cid, "once");
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+});
+
+test("provider-owned consent rechecks owner authority after the approved handler returns", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-one");
+  const caller = registerTile({} as Window, "swap", "caller");
+  focusTestTile("caller");
+  setTransientUserActivation(true);
+  let releaseHandler!: () => void;
+  const holdAfterApproval = new Promise<void>((resolve) => {
+    releaseHandler = resolve;
+  });
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "1.00000000 TEST" },
+    { block: "must-not-return" },
+    { holdAfterApproval },
+  );
+  unregisters.push(registerBackground(provider.source, "wallet"));
+  const pending = routeToolCall(
+    {
+      target: "app:wallet:background",
+      name: "wallet_transfer",
+      arguments: { amount: "100000000" },
+    },
+    caller,
+  );
+  for (
+    let turn = 0;
+    turn < 20 &&
+    Object.keys(useMsgBusPermissionStore.getState().requests).length === 0;
+    turn += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const request = Object.values(
+    useMsgBusPermissionStore.getState().requests,
+  )[0];
+  if (!request) throw new Error("Missing provider review request");
+  approveFrontendToolRequest(request.cid, "once");
+  for (
+    let turn = 0;
+    turn < 20 && !provider.state.approvalSucceeded;
+    turn += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  expect(provider.state.approvalSucceeded).toBe(true);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+
+  authorizeTestOwner("owner-two");
+  releaseHandler();
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+});
+
+test("a direct Agent root completes provider-owned consent without owner UI", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const { resident, root } = await beginSignedCallAgentInvocation();
+  const wallet = registryApp({
+    id: "wallet",
+    name: "Wallet",
+    version: 100,
+    background: { path: "service.html" },
+  });
+  const walletScope = { appId: "wallet", installationUid: "501" };
+  useAppsStore.setState((state) => ({
+    list: { ...state.list, wallet },
+    appInstances: {
+      ...state.appInstances,
+      wallet: {
+        scope: walletScope,
+        version: wallet.version,
+        deploymentId: "development",
+        capabilityPlanFingerprint: wallet.capability_plan_fingerprint,
+        browserOriginNonce: "501".padStart(32, "0"),
+        browserOriginAuthorityEpoch: "1",
+        residentFrameSecurity: "credentialless_opaque_v1",
+      },
+    },
+  }));
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    { amount: "1.00000000 TEST", fee: "0.00010000 TEST" },
+    { block: "agent-77" },
+  );
+  unregisters.push(
+    registerFrameContext(
+      provider.source,
+      { role: "background", appId: "wallet" },
+      {
+        appVersion: wallet.version,
+        appScope: walletScope,
+        origin: TEST_FRAME_ORIGIN,
+      },
+    ),
+  );
+  authenticateLoadedTestFrame(provider.source);
+
+  await expect(
+    routeToolCall(
+      {
+        target: "app:wallet:background",
+        name: "wallet_transfer",
+        arguments: { amount: "100000000" },
+      },
+      resident,
+      undefined,
+      invocationMetadata(root, true),
+    ),
+  ).resolves.toEqual({ block: "agent-77" });
+  expect(provider.state.calls).toBe(1);
+  expect(provider.state.approvalRequests).toBe(1);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  expect(useRequestStore.getState().calls).toEqual({});
+  completeInvocation(root);
+});
+
+test("nested Agent provider consent sends the exact provider review to the root", async () => {
+  const fakeWindow = installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const agent = createAgentConsentEndpoint();
+  const { root } = await beginSignedCallAgentInvocation(agent.source);
+  const swap = registryApp({
+    id: "swap",
+    name: "Swap",
+    version: 100,
+    background: { path: "service.html" },
+  });
+  const wallet = registryApp({
+    id: "wallet",
+    name: "Wallet",
+    version: 100,
+    background: { path: "service.html" },
+  });
+  const swapScope = { appId: "swap", installationUid: "601" };
+  const walletScope = { appId: "wallet", installationUid: "602" };
+  useAppsStore.setState((state) => ({
+    list: { ...state.list, swap, wallet },
+    appInstances: {
+      ...state.appInstances,
+      swap: {
+        scope: swapScope,
+        version: swap.version,
+        deploymentId: "development",
+        capabilityPlanFingerprint: swap.capability_plan_fingerprint,
+        browserOriginNonce: "601".padStart(32, "0"),
+        browserOriginAuthorityEpoch: "1",
+        residentFrameSecurity: "credentialless_opaque_v1",
+      },
+      wallet: {
+        scope: walletScope,
+        version: wallet.version,
+        deploymentId: "development",
+        capabilityPlanFingerprint: wallet.capability_plan_fingerprint,
+        browserOriginNonce: "602".padStart(32, "0"),
+        browserOriginAuthorityEpoch: "1",
+        residentFrameSecurity: "credentialless_opaque_v1",
+      },
+    },
+  }));
+  const swapSource = createToolEndpoint(fakeWindow, echoDescriptor, {
+    value: "unused",
+  });
+  unregisters.push(
+    registerFrameContext(
+      swapSource,
+      { role: "background", appId: "swap" },
+      {
+        appVersion: swap.version,
+        appScope: swapScope,
+        origin: TEST_FRAME_ORIGIN,
+      },
+    ),
+  );
+  authenticateLoadedTestFrame(swapSource);
+  const swapEndpoint = getRegisteredEndpoint("app:swap:background");
+  if (!swapEndpoint) throw new Error("Swap endpoint did not register");
+  const review = {
+    amount: "1.00000000 TEST",
+    fee: "0.00010000 TEST",
+    recipient: "aaaaa-aa",
+  };
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    review,
+    { block: "nested-agent-77" },
+  );
+  unregisters.push(
+    registerFrameContext(
+      provider.source,
+      { role: "background", appId: "wallet" },
+      {
+        appVersion: wallet.version,
+        appScope: walletScope,
+        origin: TEST_FRAME_ORIGIN,
+      },
+    ),
+  );
+  authenticateLoadedTestFrame(provider.source);
+  const swapInvocation = createChildInvocation(
+    root,
+    swapEndpoint,
+    "swap_execute",
+  );
+
+  await expect(
+    routeToolCall(
+      {
+        target: "app:wallet:background",
+        name: "wallet_transfer",
+        arguments: { amount: "100000000" },
+      },
+      swapEndpoint,
+      undefined,
+      invocationMetadata(swapInvocation),
+    ),
+  ).resolves.toEqual({ block: "nested-agent-77" });
+  expect(agent.challenges).toHaveLength(1);
+  expect(agent.challenges[0]).toMatchObject({
+    kind: "frontend_tool",
+    risk: "high",
+    requester: { appId: "swap", role: "background" },
+    action: {
+      targetAppId: "wallet",
+      tool: "wallet_transfer",
+      originalArgumentsSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      providerReview: review,
+    },
+  });
+  expect(JSON.stringify(agent.challenges[0])).not.toContain("100000000");
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  expect(useRequestStore.getState().calls).toEqual({});
+  completeInvocation(swapInvocation);
+  completeInvocation(root);
+});
+
+test("nested Agent denial aborts a provider that catches the approval error", async () => {
+  const fakeWindow = installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const agent = createAgentConsentEndpoint("deny");
+  const { root } = await beginSignedCallAgentInvocation(agent.source);
+  const swapSource = createToolEndpoint(fakeWindow, echoDescriptor, {
+    value: "unused",
+  });
+  const swapEndpoint = registerScopedBackgroundEndpoint(
+    swapSource,
+    "swap",
+    "701",
+  );
+  const review = {
+    amount: "9.00000000 TEST",
+    fee: "0.00010000 TEST",
+    recipient: "aaaaa-aa",
+  };
+  const provider = createProviderToolEndpoint(
+    providerTransferDescriptor,
+    review,
+    { block: "must-not-return" },
+    { catchApprovalError: true },
+  );
+  registerScopedBackgroundEndpoint(provider.source, "wallet", "702");
+  const swapInvocation = createChildInvocation(
+    root,
+    swapEndpoint,
+    "swap_execute",
+  );
+
+  await expect(
+    routeToolCall(
+      {
+        target: "app:wallet:background",
+        name: "wallet_transfer",
+        arguments: { amount: "900000000" },
+      },
+      swapEndpoint,
+      undefined,
+      invocationMetadata(swapInvocation),
+    ),
+  ).rejects.toMatchObject({ code: "AGENT_CONSENT_DENIED" });
+  expect(agent.challenges).toHaveLength(1);
+  expect(agent.challenges[0]).toMatchObject({
+    action: { providerReview: review },
+  });
+  expect(provider.state.cancelled).toBe(true);
+  expect(provider.state.caughtApprovalError).toBe(true);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  expect(useRequestStore.getState().calls).toEqual({});
+  completeInvocation(swapInvocation);
+  completeInvocation(root);
 });
 
 test("permission requests cancel through tool and direct action routes", async () => {

@@ -13,6 +13,10 @@ import {
   buildCapabilityPlan,
   getCapabilityPlanEntry,
 } from "neutron-tools/src/capabilities/plan.ts";
+import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  browserSurfaceOriginsPackageMarkerBytes,
+} from "neutron-tools/src/package_surface_origins.ts";
 import { type NeutronManifest } from "neutron-tools/src/schema.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 import { trayDemoSnapshotSchema } from "../src/tray_demo.ts";
@@ -24,6 +28,7 @@ const frontendUrl = new URL("../src/index.tsx", import.meta.url);
 const capabilityFrontendUrl = new URL("../src/capability_lab.tsx", import.meta.url);
 const derivedFrontendUrl = new URL("../src/derived_capabilities.tsx", import.meta.url);
 const platformFrontendUrl = new URL("../src/platform_pages.tsx", import.meta.url);
+const walletFundingDemoUrl = new URL("../src/wallet_funding_demo.ts", import.meta.url);
 const contactsManifestUrl = new URL("../../contacts/neutron.json", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
@@ -31,7 +36,7 @@ const htmlUrl = new URL("../dist/web/index.html", import.meta.url);
 const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const trayHtmlUrl = new URL("../dist/web/tray.html", import.meta.url);
 const trayCssUrl = new URL("../dist/web/tray.css", import.meta.url);
-const packageUrl = new URL("../kitchensink.v0.3.4.neutron", import.meta.url);
+const packageUrl = new URL("../kitchensink.v0.3.5.neutron", import.meta.url);
 const decoder = new TextDecoder();
 
 async function readManifest(): Promise<NeutronManifest> {
@@ -44,6 +49,7 @@ async function readBackend(): Promise<string> {
 
 function assertAllowedPackagePath(path: string): void {
   const allowed =
+    path === NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH ||
     path === "neutron.json" ||
     path === "neutron.lock.json" ||
     path === "schema.json" ||
@@ -135,7 +141,7 @@ test("kitchen sink declares the complete closed capability lab", async () => {
   expect(manifest).toMatchObject({
     id: "kitchensink",
     name: "Kitchen Sink",
-    version: 304,
+    version: 305,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [
@@ -373,6 +379,7 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   const capabilityFrontend = await readFile(capabilityFrontendUrl, "utf8");
   const derivedFrontend = await readFile(derivedFrontendUrl, "utf8");
   const platformFrontend = await readFile(platformFrontendUrl, "utf8");
+  const walletFundingDemo = await readFile(walletFundingDemoUrl, "utf8");
 
   for (const demo of [
     "overview",
@@ -395,6 +402,7 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
     "composition",
     "memory",
     "bus",
+    "wallet_funding",
     "tray",
     "schemas",
     "data",
@@ -491,6 +499,17 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   expect(platformFrontend).toContain("function TrayPage()");
   expect(platformFrontend).toContain("new TrayDemoClient()");
   expect(platformFrontend).toContain("BigInt(next.revision) >= BigInt(current.revision)");
+  expect(platformFrontend).toContain("function WalletFundingPage()");
+  expect(platformFrontend).toContain("Kitchen Sink stops after Wallet returns");
+  expect(walletFundingDemo).toContain('WALLET_FUNDING_TARGET = "app:wallet:background"');
+  expect(walletFundingDemo).toContain('WALLET_FUNDING_TOOL = "wallet_fund_v1"');
+  expect(walletFundingDemo).toContain('ICP_LEDGER = "ryjl3-tyaaa-aaaaa-aaaba-cai"');
+  expect(walletFundingDemo).toContain('NEUTRINITE_GOVERNANCE = "eqsml-lyaaa-aaaaq-aacdq-cai"');
+  expect(walletFundingDemo).toContain('ICP_SWAP_AMOUNT_ATOMS = "1000000"');
+  expect(walletFundingDemo).not.toContain("icrc1_transfer");
+  expect(walletFundingDemo).not.toContain("icrc2_approve");
+  expect(walletFundingDemo).not.toContain("icrc2_transfer_from");
+  expect(backend).not.toContain("icrc2_transfer_from");
 });
 
 test("kitchen sink resident service owns bounded tray state", async () => {
@@ -577,6 +596,9 @@ test("kitchen sink package contains self-contained frontend assets", async () =>
   expect(paths).toContain("web/tray.js");
   expect(paths).toContain("web/static/tray-demo.svg");
   expect(paths).toContain("schema.json");
+  expect(unpacked[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH]).toEqual(
+    browserSurfaceOriginsPackageMarkerBytes(),
+  );
 
   for (const path of paths) {
     assertAllowedPackagePath(path);

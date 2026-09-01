@@ -675,7 +675,7 @@ function jsonUnicodeEscape(codePoint: number): string {
     .padStart(4, "0")}`;
 }
 
-function FrontendToolRequest({
+export function FrontendToolRequest({
   request,
   uiMode,
 }: {
@@ -745,7 +745,14 @@ function FrontendToolRequest({
             <span id={summaryId}>
               <strong>{callerName}</strong> wants to run{" "}
               <strong>{toolTitle}</strong> in {targetName}.
-              {request.tool === "*" ? (
+              {request.providerReview ? (
+                <>
+                  {" "}
+                  <strong>{targetName}</strong> prepared the exact review below.
+                  Neutron binds this decision to one request but does not
+                  interpret the provider&apos;s values.
+                </>
+              ) : request.tool === "*" ? (
                 " Allowing this inspection once only lists the available tools; it does not run one."
               ) : request.toolDescription ? (
                 <>
@@ -771,32 +778,43 @@ function FrontendToolRequest({
               once” authorizes only this request.
             </ConsentNotice>
           ) : null}
-          <ConsentTechnicalDetails mode={uiMode}>
-          <div className="a-infogrid">
-            <div className="label">Requesting app</div>
-            <div className="val">
-              {request.caller.appId}/{request.caller.role}
+          {request.providerReview ? (
+            <div className="dialog-section provider-approval-review">
+              <CanonicalJsonReview
+                ariaLabel={`Canonical review prepared by ${targetName}`}
+                heading={`Review from ${targetName}`}
+                value={request.providerReview}
+              />
             </div>
-            <div className="label">Target</div>
-            <div className="val principal">{request.target}</div>
-            <div className="label">Tool</div>
-            <div className="val">{request.tool}</div>
-            {request.attachmentBytes ? (
-              <>
-                <div className="label">Binary input</div>
-                <div className="val">
-                  {formatByteCount(request.attachmentBytes.input)}
-                </div>
-                <div className="label">Maximum binary output</div>
-                <div className="val">
-                  {formatByteCount(request.attachmentBytes.maximumOutput)}
-                </div>
-              </>
+          ) : null}
+          <ConsentTechnicalDetails mode={uiMode}>
+            <div className="a-infogrid">
+              <div className="label">Requesting app</div>
+              <div className="val">
+                {request.caller.appId}/{request.caller.role}
+              </div>
+              <div className="label">Target</div>
+              <div className="val principal">{request.target}</div>
+              <div className="label">Tool</div>
+              <div className="val">{request.tool}</div>
+              {request.attachmentBytes ? (
+                <>
+                  <div className="label">Binary input</div>
+                  <div className="val">
+                    {formatByteCount(request.attachmentBytes.input)}
+                  </div>
+                  <div className="label">Maximum binary output</div>
+                  <div className="val">
+                    {formatByteCount(request.attachmentBytes.maximumOutput)}
+                  </div>
+                </>
+              ) : null}
+            </div>
+            {!request.providerReview ? (
+              <div className="a-args">
+                <Args args={request.arguments} />
+              </div>
             ) : null}
-          </div>
-          <div className="a-args">
-            <Args args={request.arguments} />
-          </div>
           </ConsentTechnicalDetails>
           <div className="btn-actions">
             <PauseRequests

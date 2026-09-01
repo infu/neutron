@@ -64,6 +64,14 @@ Trusted components are narrower:
   and
 - explicit owner and controller actions.
 
+An owner may additionally choose to trust one exact installed provider app,
+such as Wallet, to interpret its own protocol and use its own declared
+authority. That is an app-level trust decision, not an expansion of Kernel's
+trusted computing base. Kernel continues to treat the provider's code,
+descriptor, review text, and messages as attacker-controlled input for
+isolation, parsing, routing, rendering, and resource bounds. No provider app id
+or token standard becomes Core policy.
+
 ## Owner, Principals, And Controllers
 
 The product has one human owner. The Kernel maintains the authorized-owner
@@ -343,6 +351,75 @@ binary leaves independently before decode. Metadata, depth, element, binary
 count, aggregate byte, allocation, concurrency, source, method, owner, and
 AppScope limits all remain enforced.
 
+## Provider-Mediated One-Shot Review
+
+An exact endpoint tool may declare the closed
+`{"neutron:consent":"provider_once"}` annotation. This is a narrow generic
+exception to the ordinary pre-dispatch cross-app grant: the target provider
+must inspect authoritative state before a meaningful review exists.
+
+Kernel validates the original tool input, captures its canonical digest plus
+both source and target endpoint/session/AppScope/version bindings, and, for an
+ordinary human route, requires the focused source tile with transient user
+activation. It dispatches the provider with a private one-use
+`requestApproval` callback. Exact and
+wildcard session grants cannot satisfy it. The provider freezes its operation
+and supplies a bounded JSON object which Kernel renders only as escaped inert
+text, separately from Kernel-attested caller and provider identities. The JSON
+cannot select HTML, React, policy, identities, backend methods, or another
+endpoint.
+
+The callback is bound to one tool invocation, cancellation signal, and Agent
+node. Approval creates no grant, and returning from the handler without one
+completed callback fails the invocation. Rejection, timeout, Escape, duplicate
+use, replay, endpoint replacement, logout, update, invocation end, or authority
+change aborts the pending route. Kernel rechecks both endpoints after every
+await. The initial version rejects attachment and control tools so the path
+cannot smuggle a second transport or cancellation protocol.
+
+This primitive intentionally relies on the owner-trusted provider to call the
+callback before using its own preapproved authority. Kernel cannot enforce
+provider-specific prepare/review/execute ordering without importing that app's
+semantics or gating every effect. A malicious Wallet already able to invoke its
+preapproved transfer method remains dangerous; `provider_once` does not make it
+more trusted by Kernel. The safety argument is defense in depth: exact install
+disclosure and source review inform the owner's trust choice, while runtime
+AppScope, source binding, backend reservations, bounded review, durable command
+identity, and reconciliation still constrain execution.
+
+Wallet uses the path without adding token logic to Kernel. It prepares either
+an exact ICRC-1 transfer or a short-lived ICRC-2 allowance, then invokes only
+its own exact preapproved backend method. It lists ICRC approvals through the
+draft ICRC-103 API or ICP's distinct approval API and revokes under Wallet
+policy. Another asset standard belongs in another provider app.
+
+Exact allowance and expiry bounds limit a spender's authority but do not attest
+the code behind its principal. An external DEX canister may be upgraded after
+the Wallet or Swap source was reviewed and then spend within the remaining
+approved bounds. Likewise, response validation cannot prove that a selected
+malicious ledger honestly enumerates every allowance; it may omit or fabricate
+rows or implement inconsistent transfer behavior.
+
+Where a trustworthy attestation source exists, a provider or consumer app may
+optionally pin reviewed external module hashes and require a new decision when
+they drift. This is app-level defense in depth, not a Kernel policy: Kernel must
+not acquire DEX, module-registry, ledger, token, or allowance semantics.
+
+All assembled app backends call external canisters as the same Neutron canister
+principal. For a Swap-owned `icrc2_transfer_from`, the ledger authenticates that
+principal and applies the supplied `spender_subaccount` and arguments; it does
+not attest the internal AppScope or Motoko module which requested the call.
+Security therefore depends on compiler-enforced capability isolation, the
+Swap's exact ledger-method reservation, and reviewed backend code which
+hard-codes or validates the spender subaccount and every financial argument.
+The allowance itself is not a cryptographic per-app sandbox, and Kernel remains
+token-agnostic.
+
+Wallet rejects its own default source account as spender, treating an absent
+(`null`) subaccount and the all-zero subaccount as equivalent. Direct-calling
+Swap apps and fixtures must use a distinct exact spender subaccount because
+ICRC-2 same-account `transfer_from` is not allowance-bounded.
+
 ## Agent Mode
 
 Agent Mode is a generic, owner-controlled delegation role. It does not bypass
@@ -354,6 +431,15 @@ endpoint. The Kernel revalidates the invocation and its app authority around
 every protected operation. Outside Agent Mode, interactive calls use owner UI.
 During Agent Mode, eligible external signed calls follow the nested-agent
 policy, while interactive same-Neutron self calls are rejected.
+
+For `provider_once`, a direct root resolves the provider's one-use callback
+without owner UI. A descendant sends the complete provider-authored review to
+the root agent and resumes only on allow; session grants and reduced
+count/byte-only summaries are not accepted. The provider must use its
+invocation-scoped client for the later exact preapproved self update. This
+authority ends with the invocation. Each root still begins from the enabled
+exact agent version's focused, transiently owner-activated tile; current Agent
+Mode does not authorize unattended background roots.
 
 A nested `canister.call_dialog_v2` decision must receive the exact review value
 rather than summary counts, and an oversized challenge fails before signing.
@@ -376,6 +462,13 @@ authorized listing and certified HTTP reads without adding backend methods,
 managed-memory state, or app authority. Exact classification and integrity
 behavior are documented in
 [Kernel Frontend Runtime](./kernel-frontend-runtime.md#exact-installed-artifact-inspection).
+
+The inspection catalog is installed build output, not proof of complete
+repository source. Frontend bundles may be minified, retained Motoko is
+transformed, and generated, unretained, or binary material can be unavailable.
+Review agents may detect malicious behavior and are valuable defense in depth,
+but their verdict is not a bearer capability and cannot replace runtime
+authorization, exact transaction bounds, or ambiguous-outcome reconciliation.
 
 ## Connections And Provider Drivers
 
@@ -450,6 +543,9 @@ Changes must preserve all of the following:
   verification, and trusted root-key validation;
 - decoder bounds for paths, sizes, nesting, gzip, Candid, JSON, and browser
   messages;
+- one-use provider review bound to exact source, target, tool, sessions,
+  versions, cancellation, and Agent invocation, with no session-grant bypass
+  and no interpretation of provider semantics by Kernel;
 - random publication salt, never-reused generations, and positive semantic
   tombstones before destructive remote cleanup; and
 - bounded previous-generation vetKey rotation safety.

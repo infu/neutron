@@ -23,3 +23,22 @@ export function compareCanonicalText(left: string, right: string): number {
     if (leftCodePoint > rightCodePoint) return 1;
   }
 }
+
+/** Serialize an already-validated JSON value with deterministic object-key order. */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === "boolean") return String(value);
+  if (typeof value === "string" || typeof value === "number") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  if (typeof value !== "object") {
+    throw new Error("Canonical JSON input must be JSON-compatible");
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort(compareCanonicalText)
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}

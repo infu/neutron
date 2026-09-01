@@ -15,6 +15,11 @@ import {
 } from "../src/catalog.ts";
 import { formatTokenAmount, parseTokenAmount } from "../src/format.ts";
 import {
+  WALLET_FUNDING_TOOL,
+  walletFundingInputSchema,
+  walletFundingOutputSchema,
+} from "../src/funding.ts";
+import {
   walletProjectionEmptyInputSchema,
   walletProjectionSchema,
 } from "../src/wallet_projection.ts";
@@ -23,12 +28,16 @@ const manifestUrl = new URL("../neutron.json", import.meta.url);
 const backendUrl = new URL("../backend/main.mo", import.meta.url);
 const catalogUrl = new URL("../backend/Catalog.mo", import.meta.url);
 const memoryUrl = new URL("../backend/memory/wallet/v1.mo", import.meta.url);
+const commandMemoryUrl = new URL(
+  "../backend/memory/wallet_commands/v1.mo",
+  import.meta.url,
+);
 const frontendUrl = new URL("../src/index.tsx", import.meta.url);
 const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.5.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.6.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -40,7 +49,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 305,
+    version: 306,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -77,6 +86,10 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_history_status",
           "wallet_history_sources",
           "wallet_history_sync",
+          "wallet_transfer",
+          "wallet_funding_prepare_v1",
+          "wallet_funding_execute_v1",
+          "wallet_allowances_page_v1",
         ],
       },
       backend_calls: {
@@ -112,13 +125,19 @@ test("Wallet declares managed memory and generic backend calls", async () => {
         ],
       },
     },
-    memory: { wallet: { version: 1 } },
+    memory: {
+      wallet: { version: 1 },
+      wallet_commands: { version: 1 },
+    },
   });
   expect(value).not.toHaveProperty("init_arg");
   expect(value.func).toHaveProperty("wallet_catalog");
   expect(value.func).toHaveProperty("wallet_set_ledgers");
   expect(value.func).toHaveProperty("wallet_contact_destinations");
   expect(value.func).toHaveProperty("wallet_transfer");
+  expect(value.func).toHaveProperty("wallet_funding_prepare_v1");
+  expect(value.func).toHaveProperty("wallet_funding_execute_v1");
+  expect(value.func).toHaveProperty("wallet_allowances_page_v1");
   expect(value.func).toHaveProperty("wallet_refresh_deposits");
   expect(value.func?.wallet_history_tick).toEqual({
     type: "internal",
@@ -128,9 +147,9 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value.func).not.toHaveProperty("wallet_add_ledger");
   expect(value.func).not.toHaveProperty("wallet_remove_ledger");
   expect(value.background).not.toHaveProperty("storage");
-  expect(
-    value.capabilities?.backend_calls?.install_reservations,
-  ).toHaveLength(15);
+  expect(value.capabilities?.backend_calls?.install_reservations).toHaveLength(
+    15,
+  );
   expect(
     value.capabilities?.backend_calls?.install_reservations?.map(
       ({ kind, principal, method }) =>
@@ -207,6 +226,7 @@ test("Wallet setup replaces one v1 ledger selection through one permission batch
   const backend = await readFile(backendUrl, "utf8");
   const catalog = await readFile(catalogUrl, "utf8");
   const memory = await readFile(memoryUrl, "utf8");
+  const commandMemory = await readFile(commandMemoryUrl, "utf8");
   const frontend = await readFile(frontendUrl, "utf8");
 
   expect(catalog).toContain("ryjl3-tyaaa-aaaaa-aaaba-cai");
@@ -220,6 +240,8 @@ test("Wallet setup replaces one v1 ledger selection through one permission batch
   expect(memory).toContain("native_deposit_progress : ?NativeDepositProgress");
   expect(memory).toMatch(/^import Map "mo:core\/Map";$/m);
   expect(memory).not.toMatch(/^import\s+\w+\s+"(?:\.{1,2}\/|\/)/m);
+  expect(commandMemory).toMatch(/^import Map "mo:core\/Map";$/m);
+  expect(commandMemory).not.toMatch(/^import\s+\w+\s+"(?:\.{1,2}\/|\/)/m);
   expect(frontend).toContain("requestBackendCallReservations({");
   expect(frontend).toContain('method: "wallet_set_ledgers"');
   expect(frontend).toContain('updateSelf("wallet_refresh_deposits"');
@@ -230,6 +252,7 @@ test("Wallet setup replaces one v1 ledger selection through one permission batch
   expect(frontend).not.toContain("wallet_remove_ledger");
   expect(frontend).toContain("onTileViewRequest");
   expect(frontend).toContain('requested === "activity"');
+  expect(frontend).toContain('requested === "approvals"');
   expect(frontend).toContain("/^(receive|deposit|send)");
   expect(frontend).toContain("Wallet alpha warning");
   expect(frontend).toContain(
@@ -246,6 +269,9 @@ test("Wallet tile and tray mount the same app and gate only focused capabilities
 
   expect(service).toContain("WALLET_PROJECTION_TOOLS.overview");
   expect(service).toContain("WALLET_PROJECTION_TOOLS.refresh");
+  expect(service).toContain("WALLET_FUNDING_TOOL");
+  expect(service).toContain("handleWalletFunding");
+  expect(service).toContain('"neutron:consent": "provider_once"');
   expect(service).toContain('updateSelf("wallet_refresh_balances"');
   expect(service).toContain("setTrayState({ badge: null })");
   expect(service).toContain("publishAppStateChange(WALLET_PROJECTION_TOPIC");
@@ -278,6 +304,14 @@ test("Wallet resident tool schemas are closed and hardened", () => {
       name: "wallet_overview",
       inputSchema: walletProjectionEmptyInputSchema,
       outputSchema: walletProjectionSchema,
+    }),
+  ).not.toThrow();
+  expect(() =>
+    normalizeToolDescriptor({
+      name: WALLET_FUNDING_TOOL,
+      inputSchema: walletFundingInputSchema,
+      outputSchema: walletFundingOutputSchema,
+      annotations: { "neutron:consent": "provider_once" },
     }),
   ).not.toThrow();
 });

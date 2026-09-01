@@ -368,7 +368,8 @@ module {
             amount : Nat,
             fee : ?Nat,
             destination : ?Memory.HistoryAddress,
-            intent : Memory.TransferIntent,
+            memo : ?Blob,
+            intent : ?Memory.TransferIntent,
             native : ?Memory.NativeHistoryContext,
         ) : Types.Result<()> {
             let ?ledger = Map.get(mem.ledgers, Principal.compare, ledgerPrincipal) else {
@@ -386,9 +387,9 @@ module {
                     if (existing.amount != amount) {
                         return #err("Block already has a conflicting Wallet amount");
                     };
-                    switch (existing.intent) {
-                        case (?previous) {
-                            if (not intentsEqual(previous, intent)) {
+                    switch (existing.intent, intent) {
+                        case (?previous, ?next) {
+                            if (not intentsEqual(previous, next)) {
                                 return #err("Block already has a conflicting Wallet destination");
                             };
                         };
@@ -396,7 +397,8 @@ module {
                     };
                     let merged = {
                         existing with
-                        intent = ?intent;
+                        memo = preferBlob(memo, existing.memo);
+                        intent = preferIntent(intent, existing.intent);
                         native = preferNative(native, existing.native);
                     };
                     ignore Store.putTransaction(mem, ledgerPrincipal, merged);
@@ -416,8 +418,8 @@ module {
                         });
                         to = canonicalDestination;
                         spender = null;
-                        memo = null;
-                        intent = ?intent;
+                        memo;
+                        intent;
                         native;
                         provenance = #local_pending;
                         verification = #pending;
@@ -425,6 +427,56 @@ module {
                     if (Store.putTransaction(mem, ledgerPrincipal, transaction)) {
                         #ok(());
                     } else #err("Ledger disappeared while recording transfer");
+                };
+            };
+        };
+
+        public func recordApproval(
+            ledgerPrincipal : Principal,
+            blockIndex : Nat,
+            amount : Nat,
+            fee : Nat,
+            spender : Memory.HistoryAddress,
+            memo : ?Blob,
+        ) : Types.Result<()> {
+            let ?ledger = Map.get(mem.ledgers, Principal.compare, ledgerPrincipal) else {
+                return #err("Ledger is not configured");
+            };
+            switch (Map.get(ledger.history.transactions, Nat.compare, blockIndex)) {
+                case (?existing) {
+                    if (existing.operation != #approve or existing.amount != amount) {
+                        return #err("Block already has a conflicting Wallet approval");
+                    };
+                    ignore Store.putTransaction(mem, ledgerPrincipal, {
+                        existing with
+                        spender = ?spender;
+                        memo = preferBlob(memo, existing.memo);
+                    });
+                    #ok(());
+                };
+                case null {
+                    let transaction : Memory.HistoryTransaction = {
+                        block_index = blockIndex;
+                        operation = #approve;
+                        timestamp_ns = Store.nowNanos();
+                        amount;
+                        fee = ?fee;
+                        balance_effect = -Int.fromNat(fee);
+                        from = ?historyAddress(ledgerPrincipal, {
+                            owner = calls.canister_principal;
+                            subaccount = null;
+                        });
+                        to = null;
+                        spender = ?spender;
+                        memo;
+                        intent = null;
+                        native = null;
+                        provenance = #local_pending;
+                        verification = #pending;
+                    };
+                    if (Store.putTransaction(mem, ledgerPrincipal, transaction)) {
+                        #ok(());
+                    } else #err("Ledger disappeared while recording approval");
                 };
             };
         };
@@ -1399,6 +1451,10 @@ module {
         preferred : ?Memory.NativeHistoryContext,
         fallback : ?Memory.NativeHistoryContext,
     ) : ?Memory.NativeHistoryContext {
+        switch (preferred) { case (?value) ?value; case null fallback };
+    };
+
+    func preferBlob(preferred : ?Blob, fallback : ?Blob) : ?Blob {
         switch (preferred) { case (?value) ?value; case null fallback };
     };
 

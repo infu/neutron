@@ -50,6 +50,16 @@ mutually exclusive.
 Tool descriptors may opt into sensitive audit projection only with the closed
 annotation `"neutron:audit": "metadata_only"`. Other values are rejected.
 
+An exact cross-app provider tool may declare the closed annotation
+`"neutron:consent": "provider_once"`. Its handler receives optional
+`context.requestApproval(review)` only for that live invocation. The provider
+must feature-detect the callback before preparation, freeze its operation,
+submit one bounded JSON object, and use the same context's scoped Kernel client
+after the decision. The callback must complete exactly once; returning without
+it fails the invocation. It creates no session grant and is not a global helper
+or discoverable tool. An old Kernel supplies no callback, so new provider code
+must fail closed rather than fall back to ordinary tool consent.
+
 Run the package tests with:
 
 ```sh

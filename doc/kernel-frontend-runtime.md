@@ -875,6 +875,21 @@ The same component renders cross-app frontend tool requests. It shows caller
 app/role, exact target endpoint, tool name, and JSON arguments. The user can
 allow one call, allow that endpoint/tool for the current session, or reject.
 
+An exact `{"neutron:consent":"provider_once"}` descriptor takes a separate
+branch in the same request machinery. The Kernel validates the caller's
+original arguments before dispatch and, outside Agent Mode, requires the
+focused source tile plus transient user activation. It skips the ordinary
+preliminary tool prompt and gives the target handler one invocation-scoped
+`requestApproval(review)` callback. When the provider calls it, `Requests`
+shows the Kernel-attested caller and provider identities, labels the bounded
+canonical JSON as provider-supplied, and renders **Allow once** and **Reject**.
+It never offers **Allow session**, creates no grant, and ignores pre-existing
+exact or wildcard grants. Reject, Escape, timeout, cancellation, endpoint
+replacement, a second callback, replay, or a handler return without one
+completed callback fails closed. The provider remains responsible for freezing
+its operation before asking and for using only its own preapproved authority
+afterward; the Kernel does not interpret the review.
+
 All app-originated frontend tool, signed call, backend access, Connections,
 workspace navigation, and Agent Mode grant prompts first pass through the
 shared UI-attention policy in `src/ui_attention/owner.ts`. Only one may be
@@ -901,6 +916,11 @@ requested by descendants are suspended and sent to the root through the
 reserved consent action on the existing message bus. Invalid, stale, unscoped,
 late, or replayed authority fails closed.
 
+For a provider-mediated one-shot request, a direct root automatically resolves
+the provider's callback without owner UI. A descendant sends the complete
+provider-authored review—not only argument counts or bytes—to the root's
+private allow/deny path. An ordinary session grant cannot bypass that boundary.
+
 For a nested `canister.call_dialog_v2` permission, the exact review value—not
 only summary counts—must fit the ordinary message-bus envelope before any
 decision or signature. The unversioned compatibility route rejects
@@ -919,6 +939,11 @@ limits. Agent roots may navigate without a fresh click; descendants require a
 one-shot agent decision. Neither path can switch, close, move, resize, or reset
 another app's workspace UI. Tray endpoints cannot start Agent Mode or receive
 delegated agent calls.
+
+Agent Mode remains live-turn authority. Enabling one exact entrypoint does not
+start an unattended background root; each root begins from the agent's focused,
+transiently owner-activated tile and provider authority ends with that bounded
+invocation.
 
 ### Exact Installed Artifact Inspection
 

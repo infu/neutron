@@ -15,14 +15,14 @@
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.12.neutron"
+      "path": "apps/kernel/kernel.v0.3.23.neutron"
     },
     "packages": [
       {
         "path": "apps/hello/hello.v0.2.4.neutron"
       },
       {
-        "path": "apps/kitchensink/kitchensink.v0.3.4.neutron"
+        "path": "apps/kitchensink/kitchensink.v0.3.5.neutron"
       },
       {
         "path": "apps/gemma/gemma.v0.2.4.neutron"
@@ -52,7 +52,7 @@
         "path": "apps/mail/mail.v0.3.5.neutron"
       },
       {
-        "path": "apps/wallet/wallet.v0.3.5.neutron"
+        "path": "apps/wallet/wallet.v0.3.6.neutron"
       },
       {
         "path": "apps/mysubnet/mysubnet.v0.3.4.neutron"

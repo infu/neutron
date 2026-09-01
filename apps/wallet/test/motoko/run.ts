@@ -3,10 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import {
-  disposeMotokoCompiler,
-  loadMotoko,
-} from "neutron-motoko-wasm";
+import { disposeMotokoCompiler, loadMotoko } from "neutron-motoko-wasm";
 import {
   getDependencies,
   parsePackageString,
@@ -18,7 +15,21 @@ import {
 const execute = promisify(execFile);
 const cwd = process.cwd();
 const testRoot = path.resolve("test/motoko");
-const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wallet-motoko-test-"));
+const availableTests = [
+  "allowances_test.mo",
+  "funding_test.mo",
+  "history_test.mo",
+];
+const requestedTests = process.argv.slice(2);
+const testFiles = requestedTests.length === 0 ? availableTests : requestedTests;
+for (const testFile of testFiles) {
+  if (!availableTests.includes(testFile)) {
+    throw new Error(`Unknown Wallet Motoko test: ${testFile}`);
+  }
+}
+const temporary = await fs.mkdtemp(
+  path.join(os.tmpdir(), "wallet-motoko-test-"),
+);
 
 try {
   const sourceOutput = await execute("mops", ["sources"], { cwd });
@@ -26,30 +37,35 @@ try {
     sourceOutput.stdout.replace(/\n/g, " ").trim(),
   );
   const wasmtime = await resolveWasmtime();
-  const mo = await loadMotoko();
-  const hashfiles: HashFiles = {};
-  const cache: DependencyCache = {};
-  const dependencies = await getDependencies(
-    null,
-    path.join(testRoot, "history_test.mo"),
-    packages,
-    hashfiles,
-    cache,
-  );
-  const used: string[] = [];
-  const [, entry] = walkReplace(dependencies, hashfiles, used, {
-    allowDangerous: true,
-  });
-  for (const hash of new Set(used)) {
-    await mo.write(`${hash}.mo`, hashfiles[hash]!.content);
+  for (const testFile of testFiles) {
+    const mo = await loadMotoko();
+    try {
+      const hashfiles: HashFiles = {};
+      const cache: DependencyCache = {};
+      const dependencies = await getDependencies(
+        null,
+        path.join(testRoot, testFile),
+        packages,
+        hashfiles,
+        cache,
+      );
+      const used: string[] = [];
+      const [, entry] = walkReplace(dependencies, hashfiles, used, {
+        allowDangerous: true,
+      });
+      for (const hash of new Set(used)) {
+        await mo.write(`${hash}.mo`, hashfiles[hash]!.content);
+      }
+      const compiled = await mo.wasm(`${entry}.mo`, "wasi");
+      const wasmPath = path.join(temporary, testFile.replace(/\.mo$/, ".wasm"));
+      await fs.writeFile(wasmPath, compiled.wasm);
+      await execute(wasmtime, ["-W", "memory64=y", wasmPath]);
+      console.log(`Motoko test passed: ${testFile}`);
+    } finally {
+      await disposeMotokoCompiler();
+    }
   }
-  const compiled = await mo.wasm(`${entry}.mo`, "wasi");
-  const wasmPath = path.join(temporary, "history_test.wasm");
-  await fs.writeFile(wasmPath, compiled.wasm);
-  await execute(wasmtime, ["-W", "memory64=y", wasmPath]);
-  console.log("Motoko test passed: history_test.mo");
 } finally {
-  await disposeMotokoCompiler();
   await fs.rm(temporary, { recursive: true, force: true });
 }
 

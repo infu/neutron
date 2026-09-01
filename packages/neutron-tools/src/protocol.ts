@@ -239,6 +239,9 @@ export const NEUTRON_TOOL_AUDIT_METADATA_ONLY = "metadata_only" as const;
 export type NeutronToolAuditMode = typeof NEUTRON_TOOL_AUDIT_METADATA_ONLY;
 export const NEUTRON_TOOL_CONTROL_CANCEL = "cancel" as const;
 export type NeutronToolControlMode = typeof NEUTRON_TOOL_CONTROL_CANCEL;
+export const NEUTRON_TOOL_CONSENT_PROVIDER_ONCE = "provider_once" as const;
+export type NeutronToolConsentMode =
+  typeof NEUTRON_TOOL_CONSENT_PROVIDER_ONCE;
 export const NEUTRON_TOOL_VISIBILITY_SAME_APP = "same_app" as const;
 export type NeutronToolVisibility = typeof NEUTRON_TOOL_VISIBILITY_SAME_APP;
 
@@ -348,6 +351,7 @@ export type MsgBusToolContext = {
   caller?: MsgBusCallerContext;
   reportProgress: (value: JsonValue) => void;
   kernel: ScopedKernelClient;
+  requestApproval?: (review: JsonObject) => Promise<void>;
   signal?: AbortSignal;
   agentConsent?: AgentConsentRegistration;
   agentMode?: boolean;
@@ -518,6 +522,7 @@ export const msgBusLocalActions = {
 } as const;
 
 export const MSG_BUS_MAX_PAYLOAD_BYTES = 1024 * 1024;
+export const MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES = 16 * 1024;
 export const MSG_BUS_MAX_JSON_DEPTH = 64;
 export const MSG_BUS_MAX_JSON_CONTAINER_ELEMENTS = 100_000;
 export const MSG_BUS_ACTION_NAME_MAX_LENGTH = 128;
@@ -1164,6 +1169,33 @@ export function normalizeToolDescriptor(
     descriptor.annotations["neutron:control"] !== NEUTRON_TOOL_CONTROL_CANCEL
   ) {
     throw new Error("Unsupported neutron:control tool annotation");
+  }
+  if (
+    descriptor.annotations &&
+    Object.prototype.hasOwnProperty.call(
+      descriptor.annotations,
+      "neutron:consent",
+    ) &&
+    descriptor.annotations["neutron:consent"] !==
+      NEUTRON_TOOL_CONSENT_PROVIDER_ONCE
+  ) {
+    throw new Error("Unsupported neutron:consent tool annotation");
+  }
+  if (
+    descriptor.annotations?.["neutron:consent"] ===
+      NEUTRON_TOOL_CONSENT_PROVIDER_ONCE &&
+    (Object.prototype.hasOwnProperty.call(
+      descriptor.annotations,
+      "neutron:control",
+    ) ||
+      Object.prototype.hasOwnProperty.call(
+        descriptor.annotations,
+        "neutron:attachments",
+      ))
+  ) {
+    throw new Error(
+      "Provider-owned consent cannot be combined with control or attachment tools",
+    );
   }
   if (
     descriptor.annotations &&

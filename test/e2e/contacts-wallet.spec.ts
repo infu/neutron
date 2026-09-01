@@ -93,11 +93,8 @@ test("Contacts CRUD is shared with Wallet destination discovery", async ({
   await wallet.getByRole("button", { name: `Send to ${name}` }).click();
   await wallet.getByRole("textbox", { name: "Transfer amount" }).fill("0.001");
   await wallet.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page.locator('[data-tid="call-dialog"]')).toContainText(
-    "wallet_transfer",
-  );
-  await page.locator('[data-tid="call-approve"]').click();
   await expect(wallet.getByText("Transfer sent")).toBeVisible();
+  await expect(page.locator('[data-tid="call-dialog"]')).toHaveCount(0);
   await wallet.getByRole("button", { name: "Done" }).click();
 
   if (process.env.NEUTRON_E2E_SCREENSHOT) {

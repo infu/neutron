@@ -213,6 +213,67 @@ call.
 An app learns app/tool behavior from live descriptors and `apps.describe`; the
 Kernel and Agent do not carry hardcoded ordinary-app tool schemas.
 
+### Provider-Mediated One-Shot Consent
+
+The closed descriptor annotation
+`{"neutron:consent":"provider_once"}` selects a target-mediated one-shot
+review. It is for a provider which must inspect authoritative state before an
+informed decision can be rendered. The annotation does not describe tokens,
+payments, wallets, or any other app domain.
+
+For a cross-app invocation, the Kernel validates the original JSON arguments
+against the target descriptor before either approval or handler dispatch. It
+then bypasses the ordinary preliminary frontend-tool grant and calls the exact
+provider endpoint with a private one-use `requestApproval` callback in that
+handler's context. The callback is bound to the captured caller object and
+session, caller AppScope/version, target object and session, target
+AppScope/version, exact tool, request cancellation signal, and any Agent
+invocation, together with the canonical SHA-256 of the validated original
+arguments. It never appears in the ordinary JSON envelope, discovery result,
+tool arguments, progress, or response.
+
+The provider must freeze its exact operation before calling:
+
+```ts
+await context.requestApproval(review);
+```
+
+`review` is a JSON object bounded to 16 KiB in addition to the ordinary depth
+and container-element limits. The Kernel renders it as inert canonical text
+inside fixed Kernel chrome, visibly attributes it to the exact target provider,
+and separately shows the Kernel-derived requesting app. It does not interpret
+the review's keys or values. The handler must complete the callback exactly once;
+returning without it is an invalid request. A second call, replay, wrong tool or
+endpoint, source/target replacement, timeout, abort, cancellation, or completed
+invocation fails closed. Endpoint and authority bindings are rechecked after
+every asynchronous step.
+
+Outside Agent Mode, the original request is admitted only from the focused
+source tile with transient user activation. The callback then reuses the
+existing owner-attention and frontend-tool request machinery with
+`onceOnly: true`. No exact or wildcard
+session grant is consulted, no **Allow session** action is rendered, and an
+approval creates no grant. In Agent Mode, a direct root resolves automatically;
+a descendant sends the complete provider-authored review to the root's private
+decision callback and resumes only on allow. No owner dialog opens.
+
+The pending capability and decision binding are ephemeral browser state. This
+route adds no Kernel managed-memory schema and no durable permission record;
+existing audit projection remains the only persistent generic record.
+
+The target provider, not Kernel, is trusted to call this callback before using
+its own preapproved effects. Kernel authenticates and freezes routing and the
+decision, but cannot prove app-specific ordering without understanding the
+provider. A provider must test that `context.requestApproval` exists before it
+prepares or executes new work. On an older Kernel the optional annotation does
+not supply that callback, so a new provider fails closed rather than falling
+back to the ordinary session-grant path.
+
+The initial protocol rejects `provider_once` on attachment and control tools.
+Same-app calls and every tool without this exact annotation retain their
+released routing and grant behavior. Unknown annotation values never select
+this path.
+
 Current Kernel tools include:
 
 - `canister.schema`;
@@ -300,6 +361,13 @@ The app entry provides:
   `requestBackendCallReservations`.
 
 Every helper ultimately uses the connected private port.
+
+An `exposeTool()` handler's context additionally contains optional
+`requestApproval(review)` only while the Kernel is dispatching that exact
+cross-app `provider_once` invocation. It is invocation metadata, not a global
+app helper. Code must feature-detect it before preparation, must not copy it out
+of the dynamic handler lifetime, and must continue to use the same context's
+`kernel` client for subsequent scoped self calls or nested tools.
 
 ## Self Calls With Nested Binary Values
 
@@ -479,6 +547,14 @@ signing. The unversioned compatibility route rejects Agent-scoped signed calls
 before discovery. The canonical v2 contract is in
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
+A nested `provider_once` call has the same complete-review requirement at its
+own target-mediated boundary. A compliant provider prepares and freezes its
+operation, then `requestApproval()` sends the entire bounded review to the root
+agent before any later preapproved effect. Argument counts or byte counts are
+not a substitute. A direct root resolves that callback without owner UI; a
+descendant denial or cancel prevents the provider's later preapproved self
+update. Exact and wildcard ordinary tool grants are ignored for this route.
+
 An exposed-tool handler with `agentMode: true` must use its invocation-bound
 `context.kernel` client for nested Agent work. That client propagates invocation
 metadata, cancellation, and exposes `callTool`, `querySelf`, and `updateSelf`;
@@ -492,6 +568,11 @@ call-dialog request fails with `SCOPED_CONTEXT_REQUIRED` before Candid
 preparation and opens no owner UI. A valid invocation-scoped self-dialog fails
 with `USER_INTERACTION_REQUIRED`. Outside an active invocation, ordinary owner
 consent remains unchanged.
+
+Agent Mode remains a live invocation model. Enabling one exact agent version
+does not start an unattended background root: each root begins from that
+agent's focused, owner-activated tile. Provider approvals can be automatic or
+root-decided only while that bounded invocation remains live.
 
 ## Private Broker Actions
 
@@ -527,6 +608,12 @@ rechecks it against live state. Before effect and reply it verifies that:
 - any invocation is still active; and
 - the capability registry still permits the resource.
 
+A `provider_once` request captures both the original call and its later review
+under this same binding. The review cannot retarget the tool, replace the
+caller, select another endpoint, manufacture Agent provenance, or authorize a
+second request. Provider review text remains app-authored data even though the
+Kernel safely renders it in trusted chrome.
+
 Unrecognized envelopes and stale replies are ignored or rejected without
 changing callback ownership.
 
@@ -555,4 +642,7 @@ trusted browser shell is open and uses declared broker APIs for durable work.
 - Authority is rechecked after `await`.
 - Tool discovery describes live apps; Core code does not encode ordinary app
   behavior.
+- Provider-mediated approval is one-use and source/target/invocation-bound;
+  ordinary session grants cannot satisfy it, and its review stays inert
+  app-authored data.
 - Closing or replacing an endpoint cancels its pending authority.

@@ -20,6 +20,7 @@ import {
   IoReceiptOutline,
   IoSearchOutline,
   IoSend,
+  IoShieldCheckmarkOutline,
   IoStar,
   IoTimeOutline,
   IoWarningOutline,
@@ -28,7 +29,6 @@ import {
 import {
   connectEthereumProvider,
   copyToClipboard,
-  createCanisterClient,
   dismissTray,
   isJsonObject,
   listBackendCallReservations,
@@ -66,6 +66,26 @@ import {
   parseTokenAmount,
   parseTransferAmount,
 } from "./format.ts";
+import {
+  WALLET_ALLOWANCES_PAGE_METHOD,
+  WALLET_FUNDING_EXECUTE_METHOD,
+  WALLET_FUNDING_PREPARE_METHOD,
+  approvalExpirationText,
+  approvalSpenderText,
+  assertRevokePreparedMatchesDisplay,
+  createWalletRequestId,
+  failedWalletAllowancesPage,
+  mergeWalletAllowancesPages,
+  parseFundingPrepareResult,
+  parseWalletAllowancesPage,
+  resolveWalletFundingPreparation,
+  walletAllowancesPageArgs,
+  walletRequestDeadlineNs,
+  walletRevokePrepareArgs,
+  type WalletAllowance,
+  type WalletAllowancesPage,
+  type WalletFundingCaller,
+} from "./funding.ts";
 import {
   confirmationPercent,
   confirmationsRemaining,
@@ -147,6 +167,7 @@ type WalletTransferReceipt = {
 };
 
 export type WalletSurface = "tile" | "tray";
+type WalletView = "assets" | "activity" | "approvals";
 
 type WalletSurfaceContextValue = {
   surface: WalletSurface;
@@ -210,7 +231,7 @@ export function WalletApp({
 
 function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const { openInTile } = useWalletSurface();
-  const [view, setView] = useState<"assets" | "activity">("assets");
+  const [view, setView] = useState<WalletView>("assets");
   const [snapshot, setSnapshot] = useState<WalletSnapshot | null>(null);
   const [catalog, setCatalog] = useState<CatalogLedger[]>([]);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -255,6 +276,14 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const [historySyncing, setHistorySyncing] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
+  const [allowancePages, setAllowancePages] = useState<WalletAllowancesPage[]>(
+    [],
+  );
+  const [allowancesLoading, setAllowancesLoading] = useState(false);
+  const [allowancesLoadingMore, setAllowancesLoadingMore] = useState<
+    Set<string>
+  >(new Set());
+  const [allowanceBusy, setAllowanceBusy] = useState<string | null>(null);
   const [priceBook, setPriceBook] = useState<UsdPriceBook | null>(null);
   const [priceRefreshing, setPriceRefreshing] = useState(false);
   const [priceError, setPriceError] = useState<string | null>(null);
@@ -262,6 +291,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const [projectionRevision, setProjectionRevision] = useState(0);
   const depositRefreshInFlight = useRef(false);
   const historyRequest = useRef(0);
+  const allowancesRequest = useRef(0);
   const priceRequest = useRef(0);
 
   const load = useCallback(async () => {
@@ -367,7 +397,161 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     }
   }, [historySyncing, loadHistory]);
 
-  const chooseView = (next: "assets" | "activity") => {
+  const loadAllowances = useCallback(async () => {
+    if (!snapshot) return;
+    const requestId = ++allowancesRequest.current;
+    setAllowancesLoading(true);
+    setAllowancesLoadingMore(new Set());
+    try {
+      const pages: WalletAllowancesPage[] = [];
+      for (let offset = 0; offset < snapshot.ledgers.length; offset += 4) {
+        const batch = await Promise.all(
+          snapshot.ledgers.slice(offset, offset + 4).map(async (ledger) => {
+            try {
+              const value = await updateSelf(
+                WALLET_ALLOWANCES_PAGE_METHOD,
+                [walletAllowancesPageArgs(ledger.principal, null)],
+                60,
+              );
+              const page = parseWalletAllowancesPage(value);
+              if (page.ledger !== ledger.principal) {
+                throw new Error("Wallet returned allowances for another ledger");
+              }
+              return page;
+            } catch (reason) {
+              return failedWalletAllowancesPage(
+                ledger.principal,
+                ledger.name ?? "Custom token",
+                ledger.symbol ?? compactPrincipal(ledger.principal),
+                ledger.decimals ?? 0,
+                errorMessage(reason),
+              );
+            }
+          }),
+        );
+        if (requestId !== allowancesRequest.current) return;
+        pages.push(...batch);
+      }
+      if (requestId === allowancesRequest.current) setAllowancePages(pages);
+    } finally {
+      if (requestId === allowancesRequest.current) setAllowancesLoading(false);
+    }
+  }, [snapshot]);
+
+  useEffect(() => {
+    if (view !== "approvals" || setupOpen) return;
+    void loadAllowances();
+  }, [loadAllowances, projectionRevision, setupOpen, view]);
+
+  const loadMoreAllowances = useCallback(
+    async (ledger: string) => {
+      const current = allowancePages.find((page) => page.ledger === ledger);
+      if (!current?.hasMore || current.next === null) return;
+      const requestId = allowancesRequest.current;
+      setAllowancesLoadingMore((active) => new Set(active).add(ledger));
+      try {
+        const value = await updateSelf(
+          WALLET_ALLOWANCES_PAGE_METHOD,
+          [walletAllowancesPageArgs(ledger, current.next)],
+          60,
+        );
+        const next = parseWalletAllowancesPage(value);
+        if (next.ledger !== ledger) {
+          throw new Error("Wallet returned allowances for another ledger");
+        }
+        const merged = mergeWalletAllowancesPages(current, next);
+        if (requestId !== allowancesRequest.current) return;
+        setAllowancePages((pages) =>
+          pages.map((page) =>
+            page.ledger === ledger ? merged : page,
+          ),
+        );
+      } catch (reason) {
+        if (requestId === allowancesRequest.current) {
+          const message = errorMessage(reason);
+          setAllowancePages((pages) =>
+            pages.map((page) =>
+              page.ledger === ledger
+                ? {
+                    ...page,
+                    state: "degraded",
+                    stateDetail: message,
+                    warning: message,
+                    next: null,
+                    hasMore: false,
+                  }
+                : page,
+            ),
+          );
+        }
+      } finally {
+        if (requestId === allowancesRequest.current) {
+          setAllowancesLoadingMore((active) => {
+            const next = new Set(active);
+            next.delete(ledger);
+            return next;
+          });
+        }
+      }
+    },
+    [allowancePages],
+  );
+
+  const revokeAllowance = useCallback(
+    async (entry: WalletAllowance, page: WalletAllowancesPage) => {
+      if (allowanceBusy !== null) return;
+      setAllowanceBusy(entry.key);
+      setError(null);
+      const caller: WalletFundingCaller = {
+        endpoint: "wallet_ui",
+        appId: "wallet",
+        role: surface,
+      };
+      try {
+        const prepared = parseFundingPrepareResult(
+          await updateSelf(
+            WALLET_FUNDING_PREPARE_METHOD,
+            [
+              walletRevokePrepareArgs(
+                entry,
+                caller,
+                createWalletRequestId(),
+                walletRequestDeadlineNs(),
+              ),
+            ],
+            60,
+          ),
+        );
+        assertRevokePreparedMatchesDisplay(prepared, page, entry);
+        const result = await resolveWalletFundingPreparation(
+          prepared,
+          (args) => updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [args], 120),
+        );
+        if (result.status === "rejected") {
+          throw new Error(result.message ?? "The ledger rejected the revocation");
+        }
+        if (result.status !== "revoked" && result.status !== "pending") {
+          throw new Error("Wallet returned an invalid revocation result");
+        }
+        if (result.status === "pending") {
+          setError(
+            result.message ??
+              "The revocation outcome is pending. Wallet refreshed the live allowance.",
+          );
+        }
+        await reloadSnapshot();
+        publishWalletInvalidation();
+      } catch (reason) {
+        setError(errorMessage(reason));
+      } finally {
+        await loadAllowances();
+        setAllowanceBusy(null);
+      }
+    },
+    [allowanceBusy, loadAllowances, reloadSnapshot, surface],
+  );
+
+  const chooseView = (next: WalletView) => {
     setView(next);
     setError(null);
     setDepositLedgerId(null);
@@ -483,6 +667,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setCustomLedgerError(null);
     setSearch("");
     setSetupOpen(false);
+  };
+
+  const openApprovalSettings = () => {
+    if (surface === "tile") {
+      openSetup();
+      return;
+    }
+    setError(null);
+    void openInTile(walletTileView("setup")).catch((reason) =>
+      setError(errorMessage(reason)),
+    );
   };
 
   const toggleLedger = (principal: string) => {
@@ -897,6 +1092,14 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       return;
     }
 
+    if (requested === "approvals") {
+      setSetupOpen(false);
+      setDepositLedgerId(null);
+      setDestinationLedger(null);
+      setView("approvals");
+      return;
+    }
+
     const assetRequest = /^(receive|deposit|send)\/(0|[1-9][0-9]{0,39})$/.exec(
       requested,
     );
@@ -983,7 +1186,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setTransferBusy(true);
     setError(null);
     try {
-      const value = await createCanisterClient(snapshot.owner).callDialog(
+      const value = await updateSelf(
         "wallet_transfer",
         [
           {
@@ -1298,6 +1501,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
               <IoReceiptOutline aria-hidden="true" />
               <span>Activity</span>
             </button>
+            <button
+              aria-label="Approvals"
+              aria-selected={view === "approvals"}
+              className={view === "approvals" ? "is-active" : undefined}
+              onClick={() => chooseView("approvals")}
+              role="tab"
+              type="button"
+            >
+              <IoShieldCheckmarkOutline aria-hidden="true" />
+              <span>Approvals</span>
+            </button>
           </div>
           <span className="wallet-toolbar-spacer" />
           {view === "assets" && portfolio.eligible > 0 ? (
@@ -1342,15 +1556,32 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
           </IconButton>
           <IconButton
             className="wallet-refresh-trigger"
-            label={view === "activity" ? "Sync activity" : "Refresh balances"}
+            label={
+              view === "activity"
+                ? "Sync activity"
+                : view === "approvals"
+                  ? "Refresh approvals"
+                  : "Refresh balances"
+            }
             disabled={
               busy !== null ||
               snapshot.ledgers.length === 0 ||
-              historySyncing
+              (view === "activity" && historySyncing) ||
+              (view === "approvals" &&
+                (allowancesLoading ||
+                  allowancesLoadingMore.size > 0 ||
+                  allowanceBusy !== null))
             }
-            active={view === "activity" ? historySyncing : busy === "balances"}
+            active={
+              view === "activity"
+                ? historySyncing
+                : view === "approvals"
+                  ? allowancesLoading
+                  : busy === "balances"
+            }
             onClick={() => {
               if (view === "activity") void syncHistory();
+              else if (view === "approvals") void loadAllowances();
               else {
                 void update("wallet_refresh_balances", [null], "balances");
                 void refreshPrices(true);
@@ -1376,6 +1607,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             records={historyRecords}
             status={historyStatus}
             warning={historyError ?? historyWarning}
+          />
+        ) : view === "approvals" ? (
+          <WalletApprovals
+            busy={allowanceBusy}
+            ledgers={snapshot.ledgers}
+            loading={allowancesLoading}
+            loadingMore={allowancesLoadingMore}
+            onLoadMore={(ledger) => void loadMoreAllowances(ledger)}
+            onPermissionRequired={openApprovalSettings}
+            onRevoke={(entry, page) => void revokeAllowance(entry, page)}
+            pages={allowancePages}
           />
         ) : depositLedger ? (
           <WalletDeposit
@@ -1604,6 +1846,309 @@ function TokenRow({
       </span>
     </article>
   );
+}
+
+function WalletApprovals({
+  busy,
+  ledgers,
+  loading,
+  loadingMore,
+  onLoadMore,
+  onPermissionRequired,
+  onRevoke,
+  pages,
+}: {
+  busy: string | null;
+  ledgers: WalletLedger[];
+  loading: boolean;
+  loadingMore: ReadonlySet<string>;
+  onLoadMore: (ledger: string) => void;
+  onPermissionRequired: () => void;
+  onRevoke: (entry: WalletAllowance, page: WalletAllowancesPage) => void;
+  pages: WalletAllowancesPage[];
+}) {
+  const [ledger, setLedger] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const ledgerByPrincipal = new Map(
+    ledgers.map((item) => [item.principal, item]),
+  );
+  const visiblePages = ledger === null
+    ? pages
+    : pages.filter((page) => page.ledger === ledger);
+  const visibleCount = visiblePages.reduce(
+    (total, page) => total + page.entries.length,
+    0,
+  );
+  const hasState = visiblePages.some(
+    (page) => page.state !== "ready" || page.warning !== null,
+  );
+
+  useEffect(() => {
+    if (ledger === null || pages.some((page) => page.ledger === ledger)) return;
+    setLedger(null);
+  }, [ledger, pages]);
+
+  return (
+    <WalletFallbackViewContext.Provider value={walletTileView("approvals")}>
+      <section
+        className="wallet-activity wallet-approvals"
+        aria-label="Token approvals"
+      >
+        <div className="wallet-activity-filters wallet-approval-filters">
+          <label>
+            <span className="nt-sr-only">Token</span>
+            <select
+              aria-label="Filter approvals by token"
+              className="nt-select"
+              onChange={(event) => setLedger(event.target.value || null)}
+              value={ledger ?? ""}
+            >
+              <option value="">All tokens</option>
+              {pages.map((page) => (
+                <option key={page.ledger} value={page.ledger}>
+                  {page.tokenSymbol}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="wallet-activity-count">{visibleCount}</span>
+        </div>
+
+        {loading && pages.length > 0 ? (
+          <div className="wallet-activity-state" role="status">
+            <span className="wallet-spinner" />
+            <span>Refreshing live approvals</span>
+          </div>
+        ) : null}
+
+        <div className="wallet-activity-list wallet-approval-list">
+          {loading && pages.length === 0 ? (
+            <div className="wallet-loading" aria-label="Loading approvals">
+              <span className="wallet-spinner" />
+            </div>
+          ) : visibleCount === 0 && !hasState ? (
+            <div className="wallet-empty">
+              <IoShieldCheckmarkOutline aria-hidden="true" />
+              <span>No active approvals</span>
+            </div>
+          ) : (
+            visiblePages.map((page) => {
+              const token = ledgerByPrincipal.get(page.ledger);
+              return (
+                <section
+                  className="wallet-activity-day wallet-approval-ledger"
+                  key={page.ledger}
+                >
+                  {page.state !== "ready" || page.warning ? (
+                    <WalletAllowanceState
+                      logo={token?.logo ?? null}
+                      onPermissionRequired={onPermissionRequired}
+                      page={page}
+                    />
+                  ) : null}
+                  {page.entries.map((entry) => {
+                    const isOpen = expanded === entry.key;
+                    return (
+                      <article
+                        className="wallet-activity-entry wallet-approval-entry"
+                        key={entry.key}
+                      >
+                        <button
+                          aria-expanded={isOpen}
+                          className="wallet-activity-row"
+                          onClick={() => setExpanded(isOpen ? null : entry.key)}
+                          type="button"
+                        >
+                          <span className="wallet-activity-operation neutral">
+                            <IoShieldCheckmarkOutline aria-hidden="true" />
+                          </span>
+                          <TokenMark
+                            logo={token?.logo ?? null}
+                            symbol={page.tokenSymbol}
+                          />
+                          <span className="wallet-activity-main">
+                            <strong>{page.tokenSymbol} allowance</strong>
+                            <small title={approvalSpenderText(entry.spender)}>
+                              {compactAddress(approvalSpenderText(entry.spender))}
+                            </small>
+                          </span>
+                          <span className="wallet-activity-value">
+                            <strong>
+                              {formatTokenAmount(entry.amountAtoms, page.decimals)}
+                            </strong>
+                            <small>
+                              {approvalExpirationText(entry.expiresAtNs)}
+                            </small>
+                          </span>
+                          <span
+                            aria-hidden="true"
+                            className="wallet-activity-pending is-hidden"
+                          />
+                          <IoChevronDown
+                            aria-hidden="true"
+                            className={`wallet-activity-chevron${
+                              isOpen ? " is-open" : ""
+                            }`}
+                          />
+                        </button>
+                        {isOpen ? (
+                          <dl className="wallet-history-details wallet-approval-details">
+                            <HistoryDetail label="Ledger" value={page.ledger} code />
+                            <div>
+                              <dt>
+                                {entry.spender.kind === "icrc"
+                                  ? "Spender ICRC account"
+                                  : "Spender ICP account identifier"}
+                              </dt>
+                              <dd>
+                                <CopyValue
+                                  label={
+                                    entry.spender.kind === "icrc"
+                                      ? "Copy spender ICRC account"
+                                      : "Copy spender ICP account identifier"
+                                  }
+                                  value={approvalSpenderText(entry.spender)}
+                                />
+                              </dd>
+                            </div>
+                            <HistoryDetail
+                              label="Allowance atoms"
+                              value={entry.amountAtoms}
+                              code
+                            />
+                            <HistoryDetail
+                              label="Expires"
+                              value={approvalExpirationText(entry.expiresAtNs)}
+                            />
+                            <HistoryDetail
+                              label="Expiration (ns)"
+                              value={entry.expiresAtNs ?? "No expiration"}
+                              code={entry.expiresAtNs !== null}
+                            />
+                            <HistoryDetail
+                              label="Revoke fee"
+                              value={
+                                page.revokeFeeAtoms === null
+                                  ? "Unavailable"
+                                  : `${formatTokenAmount(
+                                      page.revokeFeeAtoms,
+                                      page.decimals,
+                                    )} ${page.tokenSymbol} (${page.revokeFeeAtoms} atoms)`
+                              }
+                            />
+                            <HistoryDetail
+                              label="Source"
+                              value={allowanceSourceLabel(page.source)}
+                            />
+                            <div className="wallet-approval-action">
+                              <dt>Action</dt>
+                              <dd>
+                                <button
+                                  aria-label={`Revoke ${page.tokenSymbol} approval`}
+                                  className="nt-button nt-button--sm wallet-approval-revoke"
+                                  disabled={
+                                    busy !== null ||
+                                    loading ||
+                                    loadingMore.has(page.ledger) ||
+                                    page.revokeFeeAtoms === null
+                                  }
+                                  onClick={() => onRevoke(entry, page)}
+                                  title={
+                                    page.revokeFeeAtoms === null
+                                      ? "Revoke fee is unavailable"
+                                      : `Revoke this ${page.tokenSymbol} approval`
+                                  }
+                                  type="button"
+                                >
+                                  {busy === entry.key ? (
+                                    <span className="wallet-spinner" />
+                                  ) : (
+                                    <IoClose aria-hidden="true" />
+                                  )}
+                                  <span>Revoke approval</span>
+                                </button>
+                              </dd>
+                            </div>
+                          </dl>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                  {page.hasMore && page.next !== null ? (
+                    <button
+                      className="wallet-activity-more"
+                      disabled={loadingMore.has(page.ledger) || busy !== null}
+                      onClick={() => onLoadMore(page.ledger)}
+                      type="button"
+                    >
+                      {loadingMore.has(page.ledger) ? (
+                        <span className="wallet-spinner" />
+                      ) : (
+                        `Load more ${page.tokenSymbol} approvals`
+                      )}
+                    </button>
+                  ) : null}
+                </section>
+              );
+            })
+          )}
+        </div>
+      </section>
+    </WalletFallbackViewContext.Provider>
+  );
+}
+
+function WalletAllowanceState({
+  logo,
+  onPermissionRequired,
+  page,
+}: {
+  logo: string | null;
+  onPermissionRequired: () => void;
+  page: WalletAllowancesPage;
+}) {
+  const message =
+    page.state === "permission_required"
+      ? "Permission required. Open Token settings and Apply to list and revoke approvals."
+      : page.state === "unsupported"
+        ? "This ledger cannot enumerate all active approvals"
+        : page.state === "degraded"
+          ? (page.stateDetail ?? "Approvals are temporarily unavailable")
+          : page.warning;
+  if (!message) return null;
+  return (
+    <article
+      className={`wallet-approval-state${
+        page.state === "permission_required" ? " is-permission" : ""
+      }`}
+      role={page.state === "degraded" ? "alert" : "status"}
+    >
+      <TokenMark logo={logo} symbol={page.tokenSymbol} />
+      <span>
+        <strong>
+          {page.tokenName} ({page.tokenSymbol})
+        </strong>
+        <small title={page.ledger}>
+          {compactPrincipal(page.ledger)} · {message}
+        </small>
+      </span>
+      {page.state === "permission_required" ? (
+        <button
+          className="nt-button nt-button--sm"
+          onClick={onPermissionRequired}
+          type="button"
+        >
+          Token settings
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function allowanceSourceLabel(source: WalletAllowancesPage["source"]): string {
+  if (source === "icrc103") return "ICRC-103 draft live ledger allowances";
+  if (source === "icp") return "ICP live ledger approvals";
+  return "Enumeration unavailable";
 }
 
 function WalletActivity({

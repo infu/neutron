@@ -346,6 +346,15 @@ await client.callDialog("save_profile", [
 App buttons should say `Review in kernel`, not `Approve`, `Accept`, `Sign`, or
 `Authorize`.
 
+An app may still use a concrete domain verb such as **Send**, **Approve
+allowance**, or **Revoke** for an operation which its own trusted UI fully
+reviews and then performs through an exact preapproved self call. It must not
+imitate Kernel chrome or imply that another app or Kernel verified its domain
+facts. For a cross-app `provider_once` tool, the provider supplies only bounded
+inert review JSON; Kernel renders the fixed identities, modal chrome,
+**Allow once**/**Reject** controls, focus behavior, and timeout. Provider HTML,
+Markdown, styles, images, and components never enter the Kernel document.
+
 ### Dense Inspector
 
 Use `nt-table-wrap` for tables, `nt-copy-field` for principals and hashes, and
@@ -377,6 +386,10 @@ The design system must not:
 - call the kernel, `postMessage`, IC agents, identity libraries, or icblast;
 - style kernel install, authorization, dangerous-code, or signature dialogs;
 - present app-side previews as trusted kernel approval UI.
+
+Provider-authored review text shown by Kernel remains visibly attributed and
+unverified app content even when the owner has chosen to trust that provider.
+The design system does not define provider review policy or token fields.
 
 Apps may use `neutron-tools/app` for approved calls, but the kernel derives
 method schemas from the installed canister and owns the approval dialog.

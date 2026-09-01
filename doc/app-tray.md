@@ -210,11 +210,13 @@ const snapshot = await callTool({
 
 While open, a tray may also use `exposeTool()`. Generic `endpoints.list` reports
 its exact live instance, and ordinary direct same-app callers may list or call
-its tools without approval. Direct cross-app discovery and calls retain normal
-one-call or session approval and preserve the tray instance as caller
-provenance. Those grants and pending requests are endpoint/session-bound;
-closing or reopening the tray prevents reuse. A transient tray is therefore not
-a durable integration target.
+its tools without approval. Ordinary direct cross-app discovery and calls
+retain normal one-call or session approval. A cross-app `provider_once` call is
+rejected here because its human route requires the focused source tile and a
+tray cannot receive an Agent invocation. All admitted routes preserve the tray
+instance as caller provenance. Grants and pending requests are
+endpoint/session-bound; closing or reopening the tray prevents reuse. A
+transient tray is therefore not a durable integration target.
 
 Exact methods declared in `capabilities.preapproved_self_calls.methods` remain
 available through `querySelf()` and `updateSelf()`. A tray may also use the
@@ -227,7 +229,7 @@ display context only.
 | Set the kernel badge | No. Only the exact current background may call `setTrayState()`. |
 | Dismiss UI | May call `dismissTray()` only for its own current live instance. |
 | Same-app tools and revision events | May expose, list, call, publish, and subscribe while open. Same-app routing needs no consent. |
-| Cross-app tools | Uses the normal one-call or session approval policy. |
+| Cross-app tools | Uses the normal one-call or session approval policy. A `provider_once` target requires a focused source tile and is rejected from a tray. |
 | Preapproved or confirmed self calls | Available under the same manifest and owner-consent rules as other app endpoints. |
 | Open a tile | A focused, transiently activated tray may open or reuse a tile of its own app without a dialog. Other requests use once-only consent. Navigation stays in the active workspace and always reuses an exact existing app/tile before opening one; callers cannot force a duplicate or switch workspace. |
 | Backend reservations | May read its app's reservation list when `backend_calls` is declared, but cannot request, add, or remove reservations. |

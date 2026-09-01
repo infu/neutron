@@ -47,6 +47,7 @@ import {
 import {
   MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
   MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
+  NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
   kernelCallPayloadSchema,
   kernelSchemaPayloadSchema,
 } from "../src/protocol.ts";
@@ -935,6 +936,174 @@ test("endpoint tools publish schemas and validate inputs and outputs", async () 
   expect(removeExposedTool("test_double")).toBe(true);
 });
 
+test("provider-reviewed handlers receive one private approval callback", async () => {
+  const fakeWindow = installFakeWindow();
+  const capability = "a".repeat(64);
+  let secondApprovalError = "";
+  const review = {
+    amount: "10.00000000 TEST",
+    fee: "0.00010000 TEST",
+    recipient: "aaaaa-aa",
+  };
+  exposeTool(
+    "provider_transfer",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        required: ["sent"],
+        properties: { sent: { type: "boolean" } },
+        additionalProperties: false,
+      },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    async (_args, context) => {
+      if (!context.requestApproval) {
+        throw new Error("Provider approval is unavailable");
+      }
+      await context.requestApproval(review);
+      try {
+        await context.requestApproval(review);
+      } catch (error) {
+        secondApprovalError = (error as Error).message;
+      }
+      return { sent: true };
+    },
+  );
+
+  const invocation = {
+    id: "1".repeat(16),
+    rootId: "2".repeat(16),
+    capability: "3".repeat(64),
+  };
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 61,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "provider_transfer",
+        arguments: {},
+        providerApproval: { capability },
+      },
+      context: { invocation },
+    },
+  });
+  await nextTick();
+  const approval = fakeWindow.parent.messages.find(
+    ({ message }) =>
+      (message as { type?: unknown }).type === "exec" &&
+      (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_approval.request",
+  )?.message as
+    | {
+        id: number;
+        payload: {
+          payload: unknown;
+          context?: { invocation?: unknown };
+        };
+      }
+    | undefined;
+  expect(approval).toMatchObject({
+    payload: {
+      action: "provider_approval.request",
+      payload: { capability, review },
+      context: { invocation },
+    },
+  });
+  if (!approval) throw new Error("Missing provider approval request");
+  fakeWindow.dispatch({
+    type: "response",
+    id: approval.id,
+    ok: { approved: true },
+  });
+  await nextTick();
+  expect(fakeWindow.parent.messages).toContainEqual({
+    message: { type: "response", id: 61, ok: { sent: true } },
+    targetOrigin: "port",
+  });
+  expect(secondApprovalError).toBe(
+    "Provider approval callback was already used",
+  );
+  expect(
+    fakeWindow.parent.messages.filter(
+      ({ message }) =>
+        (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_approval.request",
+    ),
+  ).toHaveLength(1);
+  removeExposedTool("provider_transfer");
+});
+
+test("provider-reviewed handlers receive no callback from an older Kernel", async () => {
+  const fakeWindow = installFakeWindow();
+  let callbackPresent = true;
+  exposeTool(
+    "provider_compatibility",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    (_args, context) => {
+      callbackPresent = context.requestApproval !== undefined;
+      if (!context.requestApproval) {
+        throw new Error("Provider approval is unavailable");
+      }
+      return null;
+    },
+  );
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 62,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: { name: "provider_compatibility", arguments: {} },
+    },
+  });
+  await nextTick();
+  expect(callbackPresent).toBe(false);
+  expect(fakeWindow.parent.messages[0]?.message).toMatchObject({
+    type: "response",
+    id: 62,
+    error: { message: "Provider approval is unavailable" },
+  });
+  removeExposedTool("provider_compatibility");
+});
+
+test("ordinary handlers reject injected provider approval capabilities", async () => {
+  const fakeWindow = installFakeWindow();
+  let handlerCalled = false;
+  exposeTool(
+    "ordinary_tool",
+    { inputSchema: { type: "object", additionalProperties: false } },
+    (_args, context) => {
+      handlerCalled = true;
+      expect(context.requestApproval).toBeUndefined();
+      return null;
+    },
+  );
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 63,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "ordinary_tool",
+        arguments: {},
+        providerApproval: { capability: "b".repeat(64) },
+      },
+    },
+  });
+  await nextTick();
+  expect(handlerCalled).toBe(false);
+  expect(fakeWindow.parent.messages[0]?.message).toMatchObject({
+    type: "response",
+    id: 63,
+    error: { message: "Unexpected provider approval capability" },
+  });
+  removeExposedTool("ordinary_tool");
+});
+
 test("endpoint tools settle oversized errors with a bounded fallback", async () => {
   const fakeWindow = installFakeWindow();
   exposeTool(
@@ -1330,6 +1499,66 @@ test("tool descriptors expose only the closed metadata-only audit profile", () =
         () => null,
       ),
     ).toThrow(/Unsupported neutron:audit/);
+  }
+});
+
+test("tool descriptors expose only provider-owned one-shot consent", () => {
+  exposeTool(
+    "provider_reviewed",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: {
+        "neutron:consent": NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
+      },
+    },
+    () => null,
+  );
+  expect(
+    listExposedTools().find(({ name }) => name === "provider_reviewed")
+      ?.annotations,
+  ).toEqual({ "neutron:consent": "provider_once" });
+  removeExposedTool("provider_reviewed");
+
+  for (const consent of ["provider_session", "once", "", null, 1, false]) {
+    expect(() =>
+      exposeTool(
+        "invalid_provider_consent",
+        {
+          inputSchema: { type: "object" },
+          annotations: { "neutron:consent": consent } as any,
+        },
+        () => null,
+      ),
+    ).toThrow(/Unsupported neutron:consent/);
+  }
+
+  for (const incompatible of [
+    { "neutron:control": "cancel" },
+    {
+      "neutron:attachments": {
+        version: 1,
+        input: {
+          name: "payload",
+          mediaTypes: ["application/octet-stream"],
+          maxBytes: 1,
+          required: true,
+        },
+      },
+    },
+  ]) {
+    expect(() =>
+      exposeTool(
+        "incompatible_provider_consent",
+        {
+          inputSchema: { type: "object" },
+          annotations: {
+            "neutron:consent": NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
+            ...incompatible,
+          },
+        },
+        () => null,
+      ),
+    ).toThrow(/cannot be combined with control or attachment/);
   }
 });
 

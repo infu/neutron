@@ -9,8 +9,10 @@ import {
   MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
   MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
   MSG_BUS_MAX_PAYLOAD_BYTES,
+  MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
   MSG_BUS_MAX_PROGRESS_BYTES,
   MSG_BUS_MAX_PROGRESS_EVENTS,
+  NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
   NEUTRON_TOOL_CONTROL_CANCEL,
   SELF_CALL_BINARY_MAX_BYTES,
   SELF_CALL_BINARY_MAX_COUNT,
@@ -937,6 +939,14 @@ async function callExposedTool(
     "caller" in payload && isJsonObject(payload.caller)
       ? (payload.caller as MsgBusCallerContext)
       : undefined;
+  const providerApprovalCapability = parseProviderApprovalCapability(payload);
+  if (
+    providerApprovalCapability &&
+    registered.descriptor.annotations?.["neutron:consent"] !==
+      NEUTRON_TOOL_CONSENT_PROVIDER_ONCE
+  ) {
+    throw new Error("Unexpected provider approval capability");
+  }
   validateToolArguments(registered.descriptor, args);
   const registration = invocation?.agentConsent
     ? createAgentConsentRegistration(invocation)
@@ -950,6 +960,15 @@ async function callExposedTool(
       ...(caller ? { caller } : {}),
       reportProgress,
       kernel: createRequestMsgBusClient(invocation, signal),
+      ...(providerApprovalCapability
+        ? {
+            requestApproval: createProviderApprovalRequester(
+              providerApprovalCapability,
+              invocation,
+              signal,
+            ),
+          }
+        : {}),
       agentMode: invocation !== undefined,
       ...(signal ? { signal } : {}),
       ...(registration ? { agentConsent: registration.api } : {}),
@@ -961,6 +980,69 @@ async function callExposedTool(
     abortRegistration?.dispose();
     registration?.dispose();
   }
+}
+
+const providerApprovalCapabilityPattern = /^[0-9a-f]{64}$/u;
+
+function parseProviderApprovalCapability(payload: JsonObject): string | undefined {
+  if (!("providerApproval" in payload)) return undefined;
+  const metadata = payload.providerApproval;
+  if (
+    !isJsonObject(metadata) ||
+    Object.keys(metadata).some((key) => key !== "capability") ||
+    typeof metadata.capability !== "string" ||
+    !providerApprovalCapabilityPattern.test(metadata.capability)
+  ) {
+    throw new Error("Invalid provider approval capability");
+  }
+  return metadata.capability;
+}
+
+async function requestProviderApproval(
+  capability: string,
+  review: JsonObject,
+  invocation?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isJsonObject(review)) {
+    throw new Error("Provider approval review must be a JSON object");
+  }
+  assertBoundedJson(
+    review,
+    "Provider approval review",
+    MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
+  );
+  const result = await execWithTransportContext<JsonValue>(
+    "provider_approval.request",
+    { capability, review },
+    MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+    invocation ? { invocation: Object.freeze({ ...invocation }) } : undefined,
+    signal,
+  );
+  if (
+    !isJsonObject(result) ||
+    Object.keys(result).length !== 1 ||
+    result.approved !== true
+  ) {
+    throw new Error("Invalid provider approval response");
+  }
+}
+
+function createProviderApprovalRequester(
+  capability: string,
+  invocation?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
+): (review: JsonObject) => Promise<void> {
+  let used = false;
+  return (review) => {
+    if (used) {
+      return Promise.reject(
+        new Error("Provider approval callback was already used"),
+      );
+    }
+    used = true;
+    return requestProviderApproval(capability, review, invocation, signal);
+  };
 }
 
 function createInvocationAbortRegistration(

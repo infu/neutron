@@ -900,6 +900,14 @@ is injected. See
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md)
 for the complete policy.
 
+Listing a state-changing method is an explicit trust decision for every live
+tile, tray, and background endpoint of that app. It does not let another app
+invoke the method directly. Wallet, for example, lists its released
+contact-bound `wallet_transfer` method so its own Send confirmation can call
+`updateSelf()` without a second Kernel backend-call dialog. A cross-app Swap
+must instead call Wallet's declared provider tool; Wallet alone may turn the
+approved request into its preapproved backend update.
+
 ### Use A Browser Ethereum Provider
 
 Browser extensions do not reliably inject providers into Neutron's isolated
@@ -1077,6 +1085,124 @@ adding `annotations: { "neutron:visibility": "same_app" }`. The kernel filters
 discovery and rejects direct cross-app invocation; handlers should still
 validate the caller role when a control is tile-only.
 
+### Let A Trusted Provider Prepare One Review
+
+Use `provider_once` when the target app must read authoritative state and
+prepare the consequence before an informed cross-app decision is possible:
+
+```ts
+exposeTool(
+  "wallet_fund_v1",
+  {
+    title: "Fund a swap",
+    description: "Prepare and execute one Wallet-reviewed funding operation.",
+    inputSchema: {
+      type: "object",
+      required: ["requestId", "ledger", "amountAtoms", "validUntilNs", "route"],
+      properties: {
+        requestId: {
+          type: "string",
+          minLength: 32,
+          maxLength: 32,
+          pattern: "^[0-9a-f]{32}$",
+        },
+        ledger: { type: "string", minLength: 5, maxLength: 63 },
+        amountAtoms: { type: "string", pattern: "^[1-9][0-9]{0,79}$" },
+        validUntilNs: { type: "string", pattern: "^[1-9][0-9]{0,19}$" },
+        // Define this separately as a closed `oneOf` for direct and allowance.
+        route: fundingRouteInputSchema,
+      },
+      additionalProperties: false,
+    },
+    outputSchema: fundingResultSchema,
+    annotations: {
+      "neutron:consent": "provider_once",
+      "neutron:effects": ["network", "write", "user_visible_ui"],
+      "neutron:audit": "metadata_only",
+    },
+  },
+  async (request, context) => {
+    if (!context.requestApproval) {
+      throw new Error("Provider approval is unavailable on this Kernel");
+    }
+
+    const prepared = await context.kernel.updateSelf(
+      "wallet_funding_prepare_v1",
+      [buildFundingPrepareRequest(request, context.caller, context.agentMode)],
+    );
+    await context.requestApproval(prepared.review);
+    return context.kernel.updateSelf(
+      "wallet_funding_execute_v1",
+      [{ command_key: prepared.command_key }],
+    );
+  },
+);
+```
+
+`fundingRouteInputSchema`, `fundingResultSchema`, and
+`buildFundingPrepareRequest` above stand for the provider's own closed schemas
+and validated Candid adapter; they are not SDK helpers. Treat this as a
+protocol sketch: the actual descriptor must close and bound every nested route
+and result field, and the Candid helpers must validate their exact generated
+result shapes. In particular:
+
+- require `context.requestApproval` before preparation or execution so an old
+  Kernel fails closed;
+- never put caller app, Wallet app, owner, or Agent claims in public arguments;
+  use `context.caller` and `context.agentMode`;
+- prepare and persist an immutable command before requesting approval;
+- provide only a bounded inert JSON object as the review—no HTML, Markdown,
+  image, or executable callback;
+- call `requestApproval()` exactly once and await it; returning without a
+  completed callback fails the whole provider invocation;
+- call the backend only with `context.kernel.updateSelf()` and only through
+  exact methods listed by the provider in `preapproved_self_calls`;
+- observe `context.signal`; cancellation prevents future work but cannot undo a
+  remote update already dispatched;
+- use durable request identity and reconcile an ambiguous outcome rather than
+  creating a fresh mutation; and
+- do not combine the first version with attachment or control annotations.
+
+Kernel validates the original tool arguments before handler dispatch, derives
+the exact requester and provider endpoints, and gives this invocation one
+private callback. Outside Agent Mode the request must originate in the focused
+source tile during transient user activation; the resulting dialog shows one
+approval, no session option, and the provider-authored review in fixed Kernel
+chrome. Exact and wildcard session grants do not satisfy it. A direct Agent
+root resolves automatically; a nested call sends the complete provider review
+to the root agent.
+
+The target resident does not declare `background_ui_requests` merely for this
+callback. It is responding inside the source-bound provider invocation, not
+starting an unrelated owner-dialog request from ambient background work.
+
+The provider remains an ordinary isolated app from Kernel's perspective. The
+owner has chosen to trust that exact installed provider to request approval
+before its own preapproved effect. Source review helps evaluate that trust, but
+does not replace the runtime AppScope, amount, account, expiry, cancellation,
+and idempotency checks.
+
+A Swap caller should use the exact stable target and versioned tool name rather
+than first listing another app's tools:
+
+```ts
+const funding = await callTool({
+  target: "app:wallet:background",
+  name: "wallet_fund_v1",
+  arguments: fundingRequest,
+});
+```
+
+Cross-app tool listing is itself a permission boundary and wildcard session
+access is inappropriate for a payment path. For direct deposits, Wallet
+performs one ICRC-1 transfer and returns its receipt. For pull-based protocols,
+Wallet creates one exact, short-lived ICRC-2 allowance; the Swap app then calls
+its own exact preapproved backend method to perform `icrc2_transfer_from`
+without a second owner prompt. The allowance is not intrinsically one-use, so
+the Wallet review must state its absolute amount, fees, spender, and expiration.
+Another asset standard belongs in another trusted Wallet provider exposing an
+analogous app-level tool; Kernel remains unaware of both standards.
+
 ### Declare An Agent Entrypoint
 
 An agent app can request a session-only Agent Mode grant for exact background
@@ -1153,6 +1279,13 @@ as cancellation of future work, not rollback of a remote call already sent.
 false otherwise. Use it only for a narrow app-owned policy; it is not a
 substitute for normal kernel permission checks or caller validation.
 
+For an annotated `provider_once` handler, call the optional
+`context.requestApproval()` in both human and Agent paths. Kernel resolves it
+automatically for a direct root and sends its complete bounded review to the
+root agent for a nested request. Do not branch around the callback merely
+because `agentMode` is true, and do not implement a public approval tool. The
+same one-use binding supplies the decision and preserves cancellation.
+
 Only the approved root agent handler receives `context.agentConsent`. Register
 its private decision and cancellation callbacks for the dynamic extent of the
 turn. They are kernel control messages on the existing private bus and are not
@@ -1162,6 +1295,13 @@ to receive challenge ids.
 `background_ui_requests.categories` lists which normal owner-dialog classes a
 resident may request outside Agent Mode. It does not preapprove them. Omit
 classes the background does not need.
+
+Enabling Agent Mode does not create an unattended background agent. A root turn
+still starts from the enabled exact agent version's focused tile during
+transient user activation. A trusted provider may execute without additional
+owner dialogs only inside that live, bounded invocation. Background roots,
+standing spend authority, and per-agent budgets require a separate future
+contract.
 
 ### Focus Or Open Another App Tile
 
@@ -1479,7 +1619,12 @@ the whole-principal ledger scope plus the exact history-index, native-route, and
 gas-ledger helper scopes required by that catalog entry. For a user-supplied
 custom ledger, it requests separate `exact` scopes for `icrc1_metadata`,
 `icrc1_balance_of`, `icrc1_fee`, `icrc1_transfer`, and `icrc3_get_blocks`
-instead of whole-principal access.
+instead of whole-principal access. Wallet allowance funding and enumeration add
+only `icrc2_allowance`, `icrc2_approve`, and
+`icrc103_get_allowances`. An existing custom-ledger installation retains its
+old scopes and behavior; the Wallet shows **permission required** until its
+normal ledger-settings batch grants those additional methods. A Swap or
+Approvals read must not create a surprise persistent-access prompt.
 
 The global helper above is for ordinary work outside a routed handler and uses
 the persistent-access owner dialog. During a routed Agent Mode invocation, an
@@ -1634,8 +1779,12 @@ Handle `#outcome_unknown` as final for that attempt; do not retry it
 automatically. Local assembly supports ECDSA `dfx_test_key` only, so a local
 Schnorr slot honestly returns `#key_unavailable`. Assertions are visible to
 subnet replicas during replicated canister execution and must not contain
-plaintext secrets. Future value-moving transaction adapters require separate,
-one-shot owner confirmation; this install grant never supplies that consent.
+plaintext secrets. A future Kernel-provided raw threshold-transaction adapter
+requires a separate, one-shot owner confirmation; this assertion install grant
+never supplies that consent, and an ordinary tool/agent grant cannot replace
+it. This stricter raw-signing rule is separate from an owner-trusted Wallet app
+which owns its protocol semantics, prepares a `provider_once` review, and uses
+its own exact preapproved backend method.
 An external verifier can still assign high-impact authority to a signed
 assertion, so constrain assertion semantics and verifier policy. See
 [App-Isolated Chain-Key Assertion Signing
@@ -2466,13 +2615,24 @@ Current important gaps:
 - persistent cross-app grants and browser resource quotas are still follow-up
   work; camera and microphone are separately gated by exact per-tile
   `browser_permissions`, while current frontend message-bus grants are one-call
-  or session scoped;
+  or session scoped and `provider_once` deliberately accepts neither kind as
+  its per-operation decision;
 - package publisher signatures remain separate from the implemented memory
   ownership and schema-hash checks.
 
 Do not ask users to trust package-provided schemas. Apps can use schemas for
 their own UI rendering, but the kernel must derive and validate schemas itself
 before making calls.
+
+A direct root agent may inspect the exact current installation through the
+bounded `source.*` tools. That view is useful defense in depth but is installed
+build output, not necessarily the complete repository: bundles may be minified,
+retained Motoko is transformed, and generated, omitted, or binary content may
+be unavailable. Review never replaces closed capabilities, Kernel-derived
+endpoint and Agent provenance, exact amounts/accounts/expiry, post-`await`
+rechecks, or durable retry safety. Updating the provider also invalidates the
+old endpoint and Agent authority even if a prior review found no malicious
+code.
 
 ## Package Contents
 

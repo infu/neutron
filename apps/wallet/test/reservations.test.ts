@@ -135,7 +135,10 @@ test("Wallet gives a custom ledger only the required ICRC reservations", () => {
       "icrc1_balance_of",
       "icrc1_fee",
       "icrc1_transfer",
+      "icrc2_allowance",
+      "icrc2_approve",
       "icrc3_get_blocks",
+      "icrc103_get_allowances",
     ].map((method) => ({ kind: "exact", principal: custom, method })),
   );
 });

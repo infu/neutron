@@ -40,6 +40,7 @@ export const KITCHEN_GUIDE_IDS = [
   "composition",
   "memory",
   "bus",
+  "wallet_funding",
   "tray",
   "schemas",
   "data",
@@ -601,6 +602,43 @@ await bus.callTool({
   name: "tile_snapshot",
   arguments: {},
 }, 30);`,
+    },
+  },
+  wallet_funding: {
+    benefit:
+      "A swap or commerce app can ask the user's trusted Wallet to fund one exact action without learning token implementation details or asking for a second approval.",
+    flow: [
+      "Kitchen Sink sends one fixed ICP intent to Wallet's exact resident wallet_fund_v1 tool directly from the user's click.",
+      "Wallet reads authoritative ledger metadata and fees, prepares the token-aware review, and asks the Kernel to bind one decision to that request.",
+      "Wallet either transfers directly or creates a five-minute allowance; only Neutrinite governance can later consume its own allowance with transfer_from.",
+    ],
+    security: {
+      enforced:
+        "The Kernel source-binds Kitchen Sink and Wallet, validates the tool schemas, and permits only one request decision; it routes but does not interpret ICP amounts, decimals, or fees.",
+      authority:
+        "Wallet owns the ledger reservations and execution. Kitchen Sink fixes the ledger, amount, and governance account and cannot spend Neutrinite governance's allowance or fall back to a direct ledger call.",
+      visibility:
+        "The intent and Wallet-authored review are visible to Kitchen Sink, Wallet, and the trusted Kernel. Ledger transfers and approvals are public replicated ledger state.",
+    },
+    example: {
+      title: "Ask Wallet to prepare and execute one exact funding intent",
+      source: "src/wallet_funding_demo.ts",
+      language: "TypeScript",
+      code: `await bus.callTool({
+  target: "app:wallet:background",
+  name: "wallet_fund_v1",
+  arguments: {
+    requestId,
+    ledger: "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    amountAtoms: "1000000",
+    validUntilNs,
+    route: {
+      kind: "allowance",
+      spender: "eqsml-lyaaa-aaaaq-aacdq-cai",
+      expiresAtNs,
+    },
+  },
+}, 180);`,
     },
   },
   tray: {

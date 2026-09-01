@@ -114,6 +114,22 @@ The tests cover:
   without asserting the challenge action payload;
 - quoted and escape-safe trusted display of arbitrary Candid method names;
 - live tool discovery instead of app-specific Kernel schemas;
+- closed normalization of `{"neutron:consent":"provider_once"}` and rejection
+  of every other value;
+- validation of provider-tool arguments before handler dispatch, with no
+  preliminary ordinary tool prompt;
+- one-use `requestApproval` binding to exact caller, provider, tool, sessions,
+  versions, cancellation, and Agent invocation;
+- exact and wildcard session grants failing to bypass provider review, and
+  approval creating no grant;
+- bounded canonical inert rendering of the complete provider review with one
+  owner action and no session action;
+- reject, Escape, timeout, abort, endpoint replacement, invocation end, handler
+  return without approval, second callback, and replay all failing closed;
+- direct Agent roots producing no owner dialog and nested provider calls sending
+  the complete review, rather than only counts, to the root allow/deny path;
+- old apps and every non-annotated tool retaining their released one-call and
+  session-grant behavior;
 - direct-root-only exact installed-artifact tools, including closed schemas,
   cancellation, metadata-only audit, revision and cursor binding, and rejection
   before asset I/O for unscoped or delegated-child calls;
@@ -136,6 +152,66 @@ content-addressed artifacts handled by the runtime catalog. These tests
 exercise the bounded frontend inspection functions and installed-path mapping.
 They do not claim to recover original workspace source or inspect generated
 Wasm as source text.
+
+### Wallet provider funding and approvals
+
+Qualify the generic Kernel/SDK contract independently from Wallet's financial
+semantics. Kernel fixtures use a neutral provider tool and hostile bounded JSON
+objects; Wallet fixtures use the exact ICRC and ICP adapters. Do not put Wallet
+or token branches into the generic routing harness.
+
+Run the rolling compatibility matrix:
+
+| Installed combination | Required assertion |
+| --- | --- |
+| New Kernel + representative old apps | Valid existing tools, session grants, attachments, controls, self calls, and Agent flows are unchanged; malformed tool input fails before permission UI. |
+| New Kernel + exact released Wallet | Existing Wallet remains usable; funding and Approvals are absent. |
+| Old Kernel + new Wallet | Existing Wallet remains usable; funding checks for missing `requestApproval` and moves no value. It never falls back to a reusable grant. |
+| New Kernel + new Wallet | One provider review gates direct and allowance funding. |
+| Existing custom-ledger state | Existing balances/history/deposits/sends work; allowance UI reports permission required until exact new scopes are granted. |
+
+Kernel and SDK tests must additionally prove that malformed input fails before
+provider preparation, provider review is one-use and immutable for display, and
+an older exact or wildcard session grant cannot suppress either the owner or
+root-agent decision. Test endpoint replacement and cancellation before review,
+during review, after approval but before self dispatch, and after an update is
+already dispatched; the last case must remain an unknown outcome, not a safe
+retry claim.
+
+Wallet backend and managed-memory tests must cover:
+
+- clean initialization of the unchanged `wallet` v1 root plus the additive
+  `wallet_commands` v1 root;
+- a state-preserving upgrade from the exact archived production Wallet with
+  representative selected ledgers, metadata, history, native-deposit state,
+  and settings;
+- same caller/request id and same intent replaying one command, while the same
+  key with a different intent conflicts;
+- exact ledger arguments and fixed `created_at_time` surviving lost replies and
+  upgrades, exact `Duplicate` reconciliation, definite rejection, pending-entry
+  retention, expiry, and bounded-capacity failure;
+- direct ICRC-1 transfer and ICRC-2 approve/revoke arguments, fee and metadata
+  races, `expected_allowance` CAS failure, rejection of legacy ICP allowance
+  creation, malformed replies, and rejection of arbitrary canister/method
+  input;
+- draft ICRC-103 pagination, strict cursor progress, default-account filtering,
+  account/reply bounds, ICP `get_allowances`/`remove_approval`, unsupported
+  custom ledgers, and missing-reservation behavior.
+
+Wallet frontend and installed end-to-end tests must cover one Wallet-owned
+decision for its existing Send action; one Kernel review for human direct or
+allowance funding; no value movement on rejection; one transfer on approval;
+allowance funding followed by fixture `icrc2_transfer_from` without a second
+owner prompt; appearance and successful revocation of that approval; and zero
+owner dialogs for immediate root-Agent funding or root-approved nested Agent
+Mode. Approvals rendering must cover exact accounts, formatted decimals, fees,
+expiration, empty/loading/error, permission-required, and
+enumeration-unsupported states.
+
+Source-review fixtures may show that an Agent can inspect the installed Wallet
+and calling app, but such evidence must be described as defense in depth. The
+installed catalog can contain minified or transformed material and is not a
+substitute for the runtime assertions above.
 
 ### Browser surfaces and media
 

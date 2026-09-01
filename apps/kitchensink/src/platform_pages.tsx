@@ -24,16 +24,33 @@ import {
   type TrayDemoSnapshot,
 } from "./tray_demo.ts";
 import {
+  CapabilityFrame,
   CopyValue,
+  EvidenceList,
   OperationResult,
   formatError,
   useOperation,
 } from "./lab_ui.tsx";
+import {
+  ICP_LEDGER,
+  ICP_SWAP_AMOUNT_ATOMS,
+  ICP_SWAP_AMOUNT_DISPLAY,
+  NEUTRINITE_GOVERNANCE,
+  WALLET_FUNDING_TARGET,
+  WALLET_FUNDING_TOOL,
+  callWalletFundingDemo,
+  createWalletFundingDemoRequest,
+  walletFundingDemoRequestExpired,
+  walletFundingDemoResultIsTerminal,
+  type WalletFundingDemoKind,
+  type WalletFundingDemoRequest,
+} from "./wallet_funding_demo.ts";
 
 export const PLATFORM_IDS = [
   "overview",
   "memory",
   "bus",
+  "wallet_funding",
   "tray",
   "schemas",
   "data",
@@ -70,11 +87,74 @@ export function PlatformPage({
     case "overview": return <OverviewPage runtime={runtime} context={context} navigate={navigate} />;
     case "memory": return <MemoryPage runtime={runtime} />;
     case "bus": return <MessageBusPage />;
+    case "wallet_funding": return <WalletFundingPage />;
     case "tray": return <TrayPage />;
     case "schemas": return <SchemasPage runtime={runtime} methods={methods} />;
     case "data": return <DataPage context={context} runtime={runtime} />;
     case "design": return <DesignPage />;
   }
+}
+
+function WalletFundingPage() {
+  const bus = useMemo(() => createMsgBusClient(), []);
+  const operation = useOperation();
+  const requests = useRef<Partial<Record<WalletFundingDemoKind, WalletFundingDemoRequest>>>({});
+
+  const fund = (kind: WalletFundingDemoKind) => {
+    void operation.run(
+      kind === "direct" ? "ICP transfer" : "ICP allowance",
+      () => {
+        const previous = requests.current[kind];
+        const request = previous && !walletFundingDemoRequestExpired(previous)
+          ? previous
+          : createWalletFundingDemoRequest(kind);
+        requests.current[kind] = request;
+        return callWalletFundingDemo(bus, request).then((result) => {
+          if (walletFundingDemoResultIsTerminal(kind, result)) {
+            delete requests.current[kind];
+          }
+          return result;
+        });
+      },
+    );
+  };
+
+  return (
+    <CapabilityFrame
+      status="ready"
+      statusLabel="Wallet provider"
+      purpose="Exercise the two funding rails a swap app needs. Wallet—not Kitchen Sink or the Kernel—reads ICP metadata, calculates fees, prepares the human-readable review, and executes the ledger mutation."
+      boundary="Each button targets one exact resident Wallet tool and receives one Wallet-authored Kernel decision in interactive mode. Kitchen Sink cannot alter the ledger, amount, or governance account, and it cannot consume an allowance owned by Neutrinite governance. Root Agent Mode can decide the same one-shot request without owner UI."
+      declaration={`target = ${WALLET_FUNDING_TARGET}\ntool = ${WALLET_FUNDING_TOOL}\nledger = ${ICP_LEDGER}\namount_atoms = ${ICP_SWAP_AMOUNT_ATOMS}\ngovernance = ${NEUTRINITE_GOVERNANCE}`}
+      evidence={<EvidenceList items={[
+        { label: "Ledger", value: <code>{ICP_LEDGER}</code> },
+        { label: "Requested value", value: `${ICP_SWAP_AMOUNT_DISPLAY} (${ICP_SWAP_AMOUNT_ATOMS} e8s)` },
+        { label: "Destination / spender", value: <code>{NEUTRINITE_GOVERNANCE}</code> },
+        { label: "Provider", value: <code>{WALLET_FUNDING_TARGET} / {WALLET_FUNDING_TOOL}</code> },
+        { label: "Consent", value: "One exact decision; no reusable session grant" },
+      ]} />}
+    >
+      <div className="ks-two-column">
+        <section className="ks-action-group" aria-labelledby="wallet-direct-title">
+          <h2 id="wallet-direct-title">Direct funding</h2>
+          <p className="nt-text">Send exactly {ICP_SWAP_AMOUNT_DISPLAY} to the Neutrinite governance account. Wallet adds the live ICP transfer fee to the source debit.</p>
+          <button className="nt-button" disabled={Boolean(operation.busy)} onClick={() => fund("direct")} type="button">Transfer {ICP_SWAP_AMOUNT_DISPLAY}</button>
+        </section>
+        <section className="ks-action-group" aria-labelledby="wallet-allowance-title">
+          <h2 id="wallet-allowance-title">Transfer-from funding</h2>
+          <p className="nt-text">Grant Neutrinite governance a five-minute allowance for a {ICP_SWAP_AMOUNT_DISPLAY} pull. Wallet includes the live transfer fee; approval alone moves no ICP.</p>
+          <button className="nt-button" disabled={Boolean(operation.busy)} onClick={() => fund("allowance")} type="button">Approve {ICP_SWAP_AMOUNT_DISPLAY} swap funding</button>
+        </section>
+      </div>
+      <OperationResult
+        {...operation}
+        idle="Wallet receipts appear here. Pending or ambiguous attempts reuse the same request ID instead of risking a duplicate transfer."
+        testId="wallet-funding-result"
+      />
+      <aside className="ks-note"><strong>External spender boundary</strong><span>Only <code>{NEUTRINITE_GOVERNANCE}</code> can call <code>icrc2_transfer_from</code> against its allowance. Kitchen Sink stops after Wallet returns <code>approved</code>; that is the safe handoff a swap app needs.</span></aside>
+      <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy)} onClick={() => void operation.run("Wallet approvals", () => openAppTile({ appId: "wallet", tileId: "wallet", reuseExisting: true, view: "approvals" }))} type="button">Open Wallet approvals</button>
+    </CapabilityFrame>
+  );
 }
 
 function OverviewPage({

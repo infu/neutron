@@ -30,6 +30,16 @@ catalogued installed artifacts without adding a backend API or state schema.
 See [Kernel-App Communication](../../doc/kernel-app-communication.md#exact-installed-artifact-inspection)
 and [Kernel Frontend Runtime](../../doc/kernel-frontend-runtime.md#exact-installed-artifact-inspection).
 
+The frontend message bus also supports the generic
+`{"neutron:consent":"provider_once"}` tool annotation. It lets an exact target
+app prepare one bounded review before the Kernel routes a decision. Kernel
+attests caller/provider identity, renders inert JSON in fixed chrome, binds the
+one-use callback to the live invocation, and prevents session grants from
+bypassing it; it does not interpret Wallet, token, amount, fee, or other
+provider fields. Direct Agent roots resolve without owner UI, while descendants
+send the complete provider review to the root agent. See
+[App Method Access And Call Consent](../../doc/app-method-access-and-call-consent.md#provider-mediated-one-shot-tools).
+
 Kernel-authorized principals are never request-rate-limited or counted. Fixed-
 hour request windows protect only callers outside that set on declared public-
 ingress updates and anonymous HTTP gateway POST handlers; route caller-policy

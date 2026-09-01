@@ -163,8 +163,12 @@ maintainers before becoming roadmap commitments.
   loads retire and reprobe the port. All operational traffic uses the current
   private port.
 - Tool arguments/results are draft-07 validated and JSON/size/time/concurrency
-  bounded. Same-app calls are automatic; cross-app calls require a user grant
-  and are audited in memory.
+  bounded. Same-app calls are automatic. Ordinary cross-app calls require a
+  one-call or session grant and are audited in memory. An exact
+  `provider_once` tool instead requires the target provider to prepare one
+  bounded review and consume its invocation-scoped callback before returning;
+  that decision ignores session grants, creates no grant, and is routed to the
+  owner or live root agent.
 - The launcher checks required iframe/Window credentialless state and fails
   closed on a mismatch. Persistent grant management, storage quotas, and
   uninstall cleanup remain open.
@@ -278,6 +282,13 @@ they do not answer who authored or approved the package. A user can install a
 package that is structurally valid and content-consistent without any verified
 publisher or DAO signature.
 
+Direct-root installed-artifact inspection improves review of an exact current
+installation, including Wallet and Swap code, but remains defense in depth.
+The catalog is transformed build output: frontend bundles may be minified and
+generated, unretained, or binary material may be unavailable. A favorable
+review cannot replace AppScope isolation, exact runtime decisions, amount and
+account validation, or durable ambiguous-outcome handling.
+
 ### Security Gate Risk
 
 The install compiler hard-rejects dangerous AST findings for ordinary apps.
@@ -305,6 +316,17 @@ is concentrated in unsupported browser behavior, unbounded browser resources,
 and hostile tool metadata shown to an AI agent. The direct canister `call`
 action remains unavailable.
 
+`provider_once` adds provider-authored review content to trusted Kernel chrome.
+That content is bounded canonical JSON rendered as inert text and visibly
+attributed to the exact provider; it never becomes HTML, policy, identity, or
+backend arguments. Kernel binds the one-use callback to both endpoint sessions,
+versions, AppScopes, cancellation, and Agent invocation. The residual risk is
+intentional: an owner-trusted provider could misuse its own preapproved
+authority without requesting the review, just as its resident could misuse
+that authority independently. Source review and install disclosure help the
+owner decide whether to trust that package, but Kernel does not understand or
+prove provider-specific ordering.
+
 ### Install Consistency Risk
 
 App install stages mutable assets and uses a persistent journal around actor
@@ -323,11 +345,17 @@ prove semantic compatibility.
   key names, derivation paths, BIP341 auxiliary data, cycle attachment,
   transactions, and automatic retries.
 - This closes the generic chain-key slice; it does **not** answer how a future
-  Bitcoin, EVM, Solana, credential, or package-signing adapter should encode
-  and present its protocol-specific operation.
-- A future value-moving adapter must require transaction-shaped bounds and
-  one-shot owner presence immediately before signing. An install-time
-  `chain_key_signing` grant cannot be reused as that consent.
+  Kernel-provided raw Bitcoin, EVM, Solana, credential, or package-signing
+  adapter should encode and present its protocol-specific operation.
+- A future raw threshold-transaction signing adapter must require
+  transaction-shaped bounds and one-shot owner presence immediately before
+  signing. An install-time `chain_key_signing` grant or ordinary agent/tool
+  grant cannot be reused as that consent.
+- This stricter raw-signing rule does not prohibit an exact installed Wallet
+  app from owning another protocol's semantics, preparing a bounded
+  `provider_once` review, and exercising only its own preapproved backend
+  methods. ICRC Wallet funding follows that app-level model and adds no raw
+  transaction signer to Kernel.
 - `canister_signatures` remain a separate proposed capability because their
   certificate-tree, seed, witness, expiry, and verification model is not the
   threshold ECDSA/Schnorr broker.
@@ -388,9 +416,14 @@ fixture publish/discover/review/deploy browser test.
 13. What is the intended subnet selection and multi-dispenser routing model?
 14. Which automated tests are required before treating app install and security
     enforcement as production-ready?
-15. Which typed transaction adapter should be first, and which exact fields,
-    value/network limits, one-shot presence proof, simulation evidence, and
-    ambiguous-outcome recovery must its kernel confirmation bind?
+15. If Kernel ever gains a raw threshold-transaction adapter, which network
+    should be first, and which exact fields, value/network limits, one-shot
+    owner-presence proof, simulation evidence, and ambiguous-outcome recovery
+    must its Kernel confirmation bind?
 16. Should package authenticity use IC canister signatures, threshold signing,
     or an external publisher scheme, and how should that trust root remain
     distinct from an installed app's assertion key?
+17. What separate authority, budgets, recovery, and revocation model would be
+    required before Agent Mode could start unattended background roots? The
+    current `provider_once` Wallet flow is automatic only inside an
+    owner-started live root turn.

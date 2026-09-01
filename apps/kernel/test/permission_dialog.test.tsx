@@ -13,8 +13,10 @@ import {
   BinaryFieldInspectionList,
   CandidMethodName,
   CanonicalJsonReview,
+  FrontendToolRequest,
   canonicalJsonForDisplay,
 } from "../src/Requests.tsx";
+import { useMsgBusPermissionStore } from "../src/reducer/msg_bus.ts";
 import { configInstallDisclosures } from "../src/lib/perm.ts";
 import {
   isAuthorityPendingState,
@@ -46,6 +48,7 @@ afterEach(() => {
     pendingInstallRecovery: null,
     runtimeAuthorityFence: null,
   });
+  useMsgBusPermissionStore.setState({ requests: {} });
 });
 
 type FixtureInstallRequest = Omit<
@@ -1550,6 +1553,60 @@ test("generic canister consent review renders exact canonical JSON arguments", (
   expect(html).toContain("zero\\u200bwidth");
   expect(html).not.toContain("\u202e");
   expect(html).not.toContain("\u200b");
+});
+
+test("provider-owned tool consent renders the provider review canonically", () => {
+  useAppsStore.setState({
+    list: {
+      swap: registryApp({ id: "swap", name: "Swap" }),
+      wallet: registryApp({ id: "wallet", name: "Wallet" }),
+    },
+  });
+  useMsgBusPermissionStore.setState({
+    requests: {
+      71: {
+        cid: 71,
+        caller: {
+          endpoint: "app:swap:tile:main:instance:swap-one",
+          appId: "swap",
+          role: "tile",
+        },
+        target: "app:wallet:background",
+        tool: "wallet_transfer",
+        toolTitle: "Transfer Tokens",
+        arguments: {},
+        providerReview: {
+          amount: "1.00000000 TEST",
+          fee: "0.00010000 TEST",
+          warning: "Kernel\u202e approved\u200b",
+        },
+        sessionOnly: false,
+        onceOnly: true,
+        callerSessionId: "swap-session",
+        targetSessionId: "wallet-session",
+        attentionToken: "attention-token",
+      },
+    },
+  });
+
+  const request = useMsgBusPermissionStore.getState().requests[71];
+  if (!request) throw new Error("Missing provider tool UI fixture");
+  const html = renderToStaticMarkup(
+    <FrontendToolRequest request={request} uiMode="normal" />,
+  );
+  expect(html).toContain("Allow swap to use wallet?");
+  expect(html).toContain("wallet</strong> prepared the exact review below");
+  expect(html).toContain("Review from wallet");
+  expect(html).toContain(
+    'aria-label="Canonical review prepared by wallet"',
+  );
+  expect(html).toContain("1.00000000 TEST");
+  expect(html).toContain("0.00010000 TEST");
+  expect(html).toContain("Kernel\\u202e approved\\u200b");
+  expect(html).not.toContain("\u202e");
+  expect(html).not.toContain("\u200b");
+  expect(html).toContain("Allow once");
+  expect(html).not.toContain("Allow session");
 });
 
 test("generic canister consent quotes and escapes an arbitrary Candid method name", () => {

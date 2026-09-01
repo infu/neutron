@@ -14,7 +14,7 @@
   "manifests": [
     {
       "id": "demopack",
-      "revision": 4,
+      "revision": 5,
       "name": "Demo Pack",
       "description": "Hello and Kitchen Sink examples",
       "packages": [
@@ -27,7 +27,7 @@
           "source": "https://example.invalid/source/hello"
         },
         {
-          "file": "../../apps/kitchensink/kitchensink.v0.3.4.neutron",
+          "file": "../../apps/kitchensink/kitchensink.v0.3.5.neutron",
           "publisher": {
             "name": "Example publisher",
             "website": "https://example.invalid/"

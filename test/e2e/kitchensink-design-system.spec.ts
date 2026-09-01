@@ -27,6 +27,7 @@ const guidePages = [
   "composition",
   "memory",
   "bus",
+  "wallet_funding",
   "tray",
   "schemas",
   "data",

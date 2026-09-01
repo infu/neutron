@@ -4,10 +4,7 @@ import type {
 } from "neutron-compiler/src/install.js";
 import { IDL, idlLabelToId } from "@dfinity/candid";
 import { physicalAppMethodName } from "neutron-tools/src/physical_names.js";
-import {
-  KernelPolicyError,
-  type JsonValue,
-} from "neutron-tools/protocol";
+import { KernelPolicyError, type JsonValue } from "neutron-tools/protocol";
 import { declaredCapability } from "./capabilities/plan.ts";
 
 export type PreapprovedSelfCallType = "query" | "update";
@@ -412,8 +409,11 @@ export function preflightSelfCallReply(
   ) {
     throw new Error("Self-call Candid reply exceeds the raw byte limit");
   }
-  const { cursor, table, budget, rootReferences } =
-    parseRawCandidValues(bytes, 1, "reply");
+  const { cursor, table, budget, rootReferences } = parseRawCandidValues(
+    bytes,
+    1,
+    "reply",
+  );
   if (rootReferences.length !== 1) {
     throw new Error("Self-call reply must contain one Candid value");
   }
@@ -464,7 +464,9 @@ export function preflightSelfCallRequest(
     "argument",
   );
   if (rootReferences.length !== expectedInputTypes.length) {
-    throw new Error("Self-call request argument count does not match live Candid");
+    throw new Error(
+      "Self-call request argument count does not match live Candid",
+    );
   }
   for (let index = 0; index < expectedInputTypes.length; index += 1) {
     scanRawCandidValueAgainstExpected(
@@ -505,18 +507,12 @@ function addReplyAllocation(
   byteLength: number,
 ): void {
   budget.allocationBytes += byteLength;
-  if (
-    budget.allocationBytes >
-    SELF_CALL_CANDID_DECODER_ALLOCATION_MAX_BYTES
-  ) {
+  if (budget.allocationBytes > SELF_CALL_CANDID_DECODER_ALLOCATION_MAX_BYTES) {
     throw new Error("Candid reply exceeds the decoder allocation limit");
   }
 }
 
-function addReplyBlob(
-  budget: CandidReplyBudget,
-  byteLength: number,
-): void {
+function addReplyBlob(budget: CandidReplyBudget, byteLength: number): void {
   budget.blobCount += 1;
   budget.blobBytes += byteLength;
   if (budget.blobCount > SELF_CALL_BINARY_MAX_COUNT) {
@@ -638,10 +634,7 @@ function assertRawCandidTypeGraph(
 }
 
 function isRawCandidPrimitive(reference: number): boolean {
-  return (
-    (reference >= -17 && reference <= -1) ||
-    reference === -24
-  );
+  return (reference >= -17 && reference <= -1) || reference === -24;
 }
 
 /**
@@ -731,13 +724,7 @@ function scanRawCandidValueAgainstExpected(
           depth + 1,
         );
       } else {
-        scanRawCandidValue(
-          cursor,
-          wireField.type,
-          table,
-          budget,
-          depth + 1,
-        );
+        scanRawCandidValue(cursor, wireField.type, table, budget, depth + 1);
       }
     }
     return true;
@@ -759,7 +746,9 @@ function scanRawCandidValueAgainstExpected(
       const wireField = wire.fields[wireIndex];
       const expectedField = expected._fields[expectedIndex];
       const expectedId =
-        expectedField === undefined ? undefined : idlLabelToId(expectedField[0]);
+        expectedField === undefined
+          ? undefined
+          : idlLabelToId(expectedField[0]);
       if (
         wireField !== undefined &&
         expectedField !== undefined &&
@@ -795,13 +784,7 @@ function scanRawCandidValueAgainstExpected(
       }
       // The live expected type ignores this additive wire field, but the
       // decoder still walks and allocates its value before discarding it.
-      scanRawCandidValue(
-        cursor,
-        wireField.type,
-        table,
-        budget,
-        depth + 1,
-      );
+      scanRawCandidValue(cursor, wireField.type, table, budget, depth + 1);
       wireIndex += 1;
     }
     return true;
@@ -851,10 +834,7 @@ function scanRawCandidValueAgainstExpected(
     if (wire.kind !== "variant") {
       throw new Error("Candid reply variant type is incompatible");
     }
-    const index = cursor.readUnsigned(
-      wire.fields.length - 1,
-      "variant index",
-    );
+    const index = cursor.readUnsigned(wire.fields.length - 1, "variant index");
     const selected = wire.fields[index];
     if (!selected) throw new Error("Invalid Candid variant index");
     const expectedField = expected._fields.find(
@@ -866,13 +846,7 @@ function scanRawCandidValueAgainstExpected(
       if (!allowUnknownVariant) {
         throw new Error("Decoded an unknown Candid variant option");
       }
-      scanRawCandidValue(
-        cursor,
-        selected.type,
-        table,
-        budget,
-        depth + 1,
-      );
+      scanRawCandidValue(cursor, selected.type, table, budget, depth + 1);
       return false;
     }
     scanRawCandidValueAgainstExpected(
@@ -897,8 +871,7 @@ function scanRawCandidValueAgainstExpected(
 function isSynthesizedCandidField(type: IDL.Type): boolean {
   const expected = unwrapExpectedCandidType(type);
   return (
-    expected instanceof IDL.OptClass ||
-    expected instanceof IDL.ReservedClass
+    expected instanceof IDL.OptClass || expected instanceof IDL.ReservedClass
   );
 }
 
@@ -967,13 +940,7 @@ function scanRawCandidValue(
     addReplyAllocation(budget, 16);
     if (tag === 1) {
       addReplyElements(budget, 1);
-      scanRawCandidValue(
-        cursor,
-        type.child,
-        table,
-        budget,
-        depth + 1,
-      );
+      scanRawCandidValue(cursor, type.child, table, budget, depth + 1);
     }
     return;
   }
@@ -994,13 +961,7 @@ function scanRawCandidValue(
     addReplyElements(budget, length);
     addReplyAllocation(budget, length * 8 + 24);
     for (let index = 0; index < length; index += 1) {
-      scanRawCandidValue(
-        cursor,
-        type.child,
-        table,
-        budget,
-        depth + 1,
-      );
+      scanRawCandidValue(cursor, type.child, table, budget, depth + 1);
     }
     return;
   }
@@ -1008,13 +969,7 @@ function scanRawCandidValue(
     addReplyElements(budget, type.fields.length);
     addReplyAllocation(budget, type.fields.length * 24 + 32);
     for (const field of type.fields) {
-      scanRawCandidValue(
-        cursor,
-        field.type,
-        table,
-        budget,
-        depth + 1,
-      );
+      scanRawCandidValue(cursor, field.type, table, budget, depth + 1);
     }
     return;
   }
@@ -1024,13 +979,7 @@ function scanRawCandidValue(
     if (!field) throw new Error("Invalid Candid variant index");
     addReplyElements(budget, 1);
     addReplyAllocation(budget, 32);
-    scanRawCandidValue(
-      cursor,
-      field.type,
-      table,
-      budget,
-      depth + 1,
-    );
+    scanRawCandidValue(cursor, field.type, table, budget, depth + 1);
     return;
   }
   if (type.kind === "func") {
@@ -1091,7 +1040,9 @@ export function requireSelfCallCandidMethod(
     candidate.annotations.includes("query") ||
     candidate.annotations.includes("composite_query");
   if ((mode === "query") !== isQuery) {
-    throw new Error("Installed self-call method mode does not match live Candid");
+    throw new Error(
+      "Installed self-call method mode does not match live Candid",
+    );
   }
   if (candidate.retTypes.length !== 1) {
     throw new Error("Self-call methods must return exactly one Candid value");
@@ -1117,10 +1068,11 @@ export function assertSelfCallJavaScriptTypeSafety(
     seen.add(type);
     if (
       type instanceof IDL.RecordClass &&
-      type._fields.some(([name]) =>
-        name === "__proto__" ||
-        name === "constructor" ||
-        name === "prototype"
+      type._fields.some(
+        ([name]) =>
+          name === "__proto__" ||
+          name === "constructor" ||
+          name === "prototype",
       )
     ) {
       throw new Error(
@@ -1128,13 +1080,10 @@ export function assertSelfCallJavaScriptTypeSafety(
       );
     }
     if (
-      (type instanceof IDL.RecordClass ||
-        type instanceof IDL.VariantClass) &&
+      (type instanceof IDL.RecordClass || type instanceof IDL.VariantClass) &&
       type._fields.some(([name]) => name.length === 0 || name.length > 256)
     ) {
-      throw new Error(
-        "Self-call Candid labels exceed the binary path limit",
-      );
+      throw new Error("Self-call Candid labels exceed the binary path limit");
     }
     for (const child of candidTypeChildren(type)) visit(child);
   };
@@ -1142,10 +1091,7 @@ export function assertSelfCallJavaScriptTypeSafety(
 }
 
 export function parseSelfCallWireBlobs(value: unknown): SelfCallWireBlob[] {
-  if (
-    !isDensePlainArray(value) ||
-    value.length > SELF_CALL_BINARY_MAX_COUNT
-  ) {
+  if (!isDensePlainArray(value) || value.length > SELF_CALL_BINARY_MAX_COUNT) {
     throw new Error("Invalid self-call binary field list");
   }
   let aggregateBytes = 0;
@@ -1158,9 +1104,7 @@ export function parseSelfCallWireBlobs(value: unknown): SelfCallWireBlob[] {
       candidate.path.length > SELF_CALL_CANDID_MAX_DEPTH ||
       !candidate.path.every(
         (part) =>
-          (typeof part === "string" &&
-            part.length > 0 &&
-            part.length <= 256) ||
+          (typeof part === "string" && part.length > 0 && part.length <= 256) ||
           (typeof part === "number" &&
             Number.isSafeInteger(part) &&
             part >= 0 &&
@@ -1175,7 +1119,9 @@ export function parseSelfCallWireBlobs(value: unknown): SelfCallWireBlob[] {
     }
     aggregateBytes += Number(candidate.byteLength);
     if (aggregateBytes > SELF_CALL_BINARY_MAX_BYTES) {
-      throw new Error("Self-call value exceeds the aggregate binary byte limit");
+      throw new Error(
+        "Self-call value exceeds the aggregate binary byte limit",
+      );
     }
     const key = JSON.stringify(candidate.path);
     if (paths.has(key)) {
@@ -1237,7 +1183,7 @@ export function materializeSelfCallArguments(
       (candidate) =>
         candidate.path.length >= path.length &&
         path.every((part, index) => candidate.path[index] === part),
-  );
+    );
 
   type BoundValue = {
     call: unknown;
@@ -1310,10 +1256,7 @@ export function materializeSelfCallArguments(
       };
     }
     if (type instanceof IDL.TupleClass) {
-      if (
-        !isDensePlainArray(value) ||
-        value.length !== type._fields.length
-      ) {
+      if (!isDensePlainArray(value) || value.length !== type._fields.length) {
         throw new Error("Self-call Candid tuple has an invalid shape");
       }
       elements += value.length;
@@ -1329,9 +1272,23 @@ export function materializeSelfCallArguments(
     }
     if (type instanceof IDL.RecordClass) {
       if (!isPlainRecord(value)) {
+        // Some generated JSON contracts expose a scalar shorthand for a
+        // Candid record and expand it immediately before live encoding. Keep
+        // that projection opaque here; the generated method schema must still
+        // accept it, and the encoded request is still checked against live
+        // Candid below. Binary sidecars can never hide inside a shorthand.
+        if (
+          (typeof value === "string" ||
+            typeof value === "boolean" ||
+            (typeof value === "number" && Number.isFinite(value))) &&
+          !hasSidecarAtOrBelow(path)
+        ) {
+          return { call: value, validation: value, metadata: value };
+        }
         throw new Error("Self-call Candid record has an invalid shape");
       }
-      if (active.has(value)) throw new Error("Self-call value contains a cycle");
+      if (active.has(value))
+        throw new Error("Self-call value contains a cycle");
       const suppliedKeys = Reflect.ownKeys(value);
       if (
         suppliedKeys.some((key) => typeof key !== "string") ||
@@ -1351,9 +1308,7 @@ export function materializeSelfCallArguments(
       }
       const fields = new Map(type._fields);
       if (
-        suppliedKeys.some(
-          (key) => typeof key !== "string" || !fields.has(key),
-        )
+        suppliedKeys.some((key) => typeof key !== "string" || !fields.has(key))
       ) {
         throw new Error("Self-call Candid record contains an unknown field");
       }
@@ -1386,12 +1341,10 @@ export function materializeSelfCallArguments(
           // record by omitting the property. Keep the null needed by the live
           // Candid encoder, but do not synthesize a schema-invalid null in the
           // validation shadow.
-          if (
-            !(
-              unwrapExpectedCandidType(child) instanceof IDL.OptClass &&
-              bound.validation === null
-            )
-          ) {
+          if (!(
+            unwrapExpectedCandidType(child) instanceof IDL.OptClass &&
+            bound.validation === null
+          )) {
             validationEntries.push([name, bound.validation]);
           }
           metadataEntries.push([name, bound.metadata]);
@@ -1406,26 +1359,20 @@ export function materializeSelfCallArguments(
       }
     }
     if (type instanceof IDL.VariantClass) {
-      if (
-        !isPlainRecord(value) ||
-        !hasOneEnumerableDataField(value)
-      ) {
+      if (!isPlainRecord(value) || !hasOneEnumerableDataField(value)) {
         throw new Error("Self-call Candid variant has an invalid shape");
       }
-      if (active.has(value)) throw new Error("Self-call value contains a cycle");
+      if (active.has(value))
+        throw new Error("Self-call value contains a cycle");
       const name = Object.keys(value)[0]!;
       const child = type._fields.find(([label]) => label === name)?.[1];
-      if (!child) throw new Error("Self-call selected an unknown Candid variant");
+      if (!child)
+        throw new Error("Self-call selected an unknown Candid variant");
       elements += 1;
       assertSelfCallElementBudget(elements);
       active.add(value);
       try {
-        const bound = visit(
-          value[name],
-          child,
-          [...path, name],
-          depth + 1,
-        );
+        const bound = visit(value[name], child, [...path, name], depth + 1);
         return {
           call: Object.fromEntries([[name, bound.call]]),
           validation: Object.fromEntries([[name, bound.validation]]),
@@ -1453,7 +1400,9 @@ export function materializeSelfCallArguments(
     visit(encodedArgs[index], type, [index], 0),
   );
   if (used.size !== blobs.length) {
-    throw new Error("Self-call contains binary data outside the live Candid shape");
+    throw new Error(
+      "Self-call contains binary data outside the live Candid shape",
+    );
   }
   return {
     args: boundArgs.map((bound) => bound.call),
@@ -1499,12 +1448,7 @@ export function isSelfCallDomainErrorResult(
   }
   const ok = type._fields.find(([name]) => name === "ok" || name === "Ok");
   const err = type._fields.find(([name]) => name === "err" || name === "Err");
-  return Boolean(
-    ok &&
-      err &&
-      isRecord(value) &&
-      Object.hasOwn(value, err[0]),
-  );
+  return Boolean(ok && err && isRecord(value) && Object.hasOwn(value, err[0]));
 }
 
 const ABSENT_SELF_CALL_OPTION = Symbol("absent-self-call-option");
@@ -1542,7 +1486,10 @@ function createSelfCallResultProjector() {
       });
     }
     if (type instanceof IDL.TupleClass) {
-      if (!Array.isArray(candidate) || candidate.length !== type._fields.length) {
+      if (
+        !Array.isArray(candidate) ||
+        candidate.length !== type._fields.length
+      ) {
         throw new Error("Invalid decoded Candid tuple");
       }
       return type._fields.map(([, child], index) => {
@@ -1570,7 +1517,8 @@ function createSelfCallResultProjector() {
       const selected = type._fields.find(([name]) =>
         Object.hasOwn(candidate, name),
       );
-      if (!selected) throw new Error("Decoded an unknown Candid variant option");
+      if (!selected)
+        throw new Error("Decoded an unknown Candid variant option");
       const projected = visit(candidate[selected[0]], selected[1]);
       // convertBack first creates { arm: undefined }; toState then omits that
       // property. Preserve that long-standing (if unusual) representation.
@@ -1600,10 +1548,7 @@ function createSelfCallResultProjector() {
   return visit;
 }
 
-function projectSelfCallResult(
-  value: unknown,
-  outputType: IDL.Type,
-): unknown {
+function projectSelfCallResult(value: unknown, outputType: IDL.Type): unknown {
   const visit = createSelfCallResultProjector();
   const type = unwrapExpectedCandidType(outputType);
   if (type instanceof IDL.VariantClass && type._fields.length === 2) {
@@ -1643,7 +1588,9 @@ function decodedBlobBytes(value: unknown): Uint8Array {
 
 function assertSelfCallElementBudget(elements: number): void {
   if (elements > SELF_CALL_CANDID_MAX_CONTAINER_ELEMENTS) {
-    throw new Error("Self-call value exceeds the Candid container element limit");
+    throw new Error(
+      "Self-call value exceeds the Candid container element limit",
+    );
   }
 }
 
@@ -1663,9 +1610,7 @@ export function assertSelfCallRawRequestBytes(
   }
 }
 
-export function selfCallReservationBytes(
-  inputBinaryBytes: number,
-): number {
+export function selfCallReservationBytes(inputBinaryBytes: number): number {
   if (
     !Number.isSafeInteger(inputBinaryBytes) ||
     inputBinaryBytes < 0 ||
@@ -1692,9 +1637,10 @@ export function normalizeSelfCallResult(
   return projectSelfCallResult(value, outputType);
 }
 
-export function encodeSelfCallResult(
-  value: unknown,
-): { value: JsonValue; blobs: SelfCallWireBlob[] } {
+export function encodeSelfCallResult(value: unknown): {
+  value: JsonValue;
+  blobs: SelfCallWireBlob[];
+} {
   const blobs: SelfCallWireBlob[] = [];
   const active = new Set<object>();
   let elements = 0;
@@ -1722,18 +1668,20 @@ export function encodeSelfCallResult(
     }
     if (candidate instanceof Uint8Array || candidate instanceof ArrayBuffer) {
       if (blobs.length >= SELF_CALL_BINARY_MAX_COUNT) {
-        throw new Error("Self-call result exceeds the binary field count limit");
+        throw new Error(
+          "Self-call result exceeds the binary field count limit",
+        );
       }
       const source =
-        candidate instanceof Uint8Array
-          ? candidate
-          : new Uint8Array(candidate);
+        candidate instanceof Uint8Array ? candidate : new Uint8Array(candidate);
       const snapshot = Uint8Array.from(source);
       const nextBytes =
         blobs.reduce((total, blob) => total + blob.byteLength, 0) +
         snapshot.byteLength;
       if (nextBytes > SELF_CALL_BINARY_MAX_BYTES) {
-        throw new Error("Self-call result exceeds the aggregate binary byte limit");
+        throw new Error(
+          "Self-call result exceeds the aggregate binary byte limit",
+        );
       }
       const data = snapshot.buffer as ArrayBuffer;
       blobs.push({ path: [...path], byteLength: data.byteLength, data });
@@ -1742,7 +1690,8 @@ export function encodeSelfCallResult(
     if (typeof candidate !== "object") {
       throw new Error("Self-call result is not JSON/Candid safe");
     }
-    if (active.has(candidate)) throw new Error("Self-call result contains a cycle");
+    if (active.has(candidate))
+      throw new Error("Self-call result contains a cycle");
     active.add(candidate);
     try {
       if (Array.isArray(candidate)) {
@@ -1776,10 +1725,7 @@ export function encodeSelfCallResult(
   return { value: encoded, blobs };
 }
 
-export function assertCandidBoundaryValue(
-  value: unknown,
-  label: string,
-): void {
+export function assertCandidBoundaryValue(value: unknown, label: string): void {
   let elements = 0;
   const seen = new Set<object>();
   const visit = (candidate: unknown, depth: number): void => {
@@ -1803,10 +1749,7 @@ export function assertCandidBoundaryValue(
       const elementBytes = (
         candidate as ArrayBufferView & { BYTES_PER_ELEMENT?: unknown }
       ).BYTES_PER_ELEMENT;
-      if (
-        typeof elementBytes !== "number" ||
-        elementBytes === 1
-      ) {
+      if (typeof elementBytes !== "number" || elementBytes === 1) {
         throw new Error(`${label} contains undeclared binary data`);
       }
       elements += candidate.byteLength / elementBytes;
@@ -1818,10 +1761,7 @@ export function assertCandidBoundaryValue(
     if (typeof candidate !== "object") {
       throw new Error(`${label} is not Candid/JSON safe`);
     }
-    if (
-      "toText" in candidate &&
-      typeof candidate.toText === "function"
-    ) {
+    if ("toText" in candidate && typeof candidate.toText === "function") {
       return;
     }
     if (seen.has(candidate)) {
@@ -1850,10 +1790,7 @@ export function normalizeCandidBoundaryValue(
   return projected === ABSENT_SELF_CALL_OPTION ? null : projected;
 }
 
-function assertTypeGraphLimits(
-  root: IDL.Type,
-  label: string,
-): void {
+function assertTypeGraphLimits(root: IDL.Type, label: string): void {
   const seen = new Set<IDL.Type>();
   const active = new Set<IDL.Type>();
   let aggregateFields = 0;
@@ -1892,8 +1829,7 @@ function assertTypeGraphLimits(
       throw new Error(`${label} exceeds the aggregate Candid field limit`);
     }
     if (
-      metadataAllocationBytes >
-      SELF_CALL_CANDID_DECODER_ALLOCATION_MAX_BYTES
+      metadataAllocationBytes > SELF_CALL_CANDID_DECODER_ALLOCATION_MAX_BYTES
     ) {
       throw new Error(`${label} exceeds the Candid type-metadata limit`);
     }
@@ -1986,9 +1922,7 @@ function hasExactOwnDataKeys(
   });
 }
 
-function hasOneEnumerableDataField(
-  value: Record<string, unknown>,
-): boolean {
+function hasOneEnumerableDataField(value: Record<string, unknown>): boolean {
   const keys = Reflect.ownKeys(value);
   if (keys.length !== 1 || typeof keys[0] !== "string") return false;
   const descriptor = Object.getOwnPropertyDescriptor(value, keys[0]);
@@ -1999,9 +1933,7 @@ function hasOneEnumerableDataField(
   );
 }
 
-function formatSelfCallPath(
-  path: readonly SelfCallBlobPathSegment[],
-): string {
+function formatSelfCallPath(path: readonly SelfCallBlobPathSegment[]): string {
   let output = "args";
   for (const part of path) {
     if (typeof part === "number") {

@@ -13,6 +13,16 @@ module {
 
     public type Metadata = [(Text, Value)];
 
+    public type AllowanceArgs = {
+        account : Account;
+        spender : Account;
+    };
+
+    public type Allowance = {
+        allowance : Nat;
+        expires_at : ?Nat64;
+    };
+
     public type TransferArg = {
         from_subaccount : ?Blob;
         to : Account;

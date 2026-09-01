@@ -278,6 +278,64 @@ body {
     min-height: 0;
   }
 
+  .wallet-approval-state {
+    align-items: center;
+    box-shadow: inset 0 -1px var(--nt-line-subtle);
+    color: var(--nt-text-muted);
+    display: grid;
+    gap: 9px;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    min-height: 54px;
+    padding: 7px 11px;
+
+    > .wallet-token-mark {
+      height: 28px;
+      width: 28px;
+    }
+
+    > span {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    strong {
+      font-size: 0.65rem;
+    }
+
+    small {
+      color: var(--nt-text-faint);
+      font-size: 0.56rem;
+      line-height: 1.35;
+    }
+
+    &.is-permission small {
+      color: #dfbf75;
+    }
+  }
+
+  .wallet-approval-revoke {
+    color: var(--nt-danger);
+    min-width: 76px;
+
+    svg {
+      height: 13px;
+      width: 13px;
+    }
+  }
+
+  .wallet-approval-details {
+    .wallet-copy-value {
+      max-width: 100%;
+    }
+  }
+
+  .wallet-approval-action dd {
+    align-items: center;
+    display: flex;
+    min-height: 30px;
+  }
+
   .wallet-activity-filters {
     align-items: center;
     box-shadow: inset 0 -1px var(--nt-line-subtle);
@@ -2025,6 +2083,7 @@ body {
 
       .wallet-ledgers,
       .wallet-activity-list,
+      .wallet-approval-list,
       .wallet-catalog,
       .wallet-deposit-routes,
       .wallet-destination-list,
@@ -2075,6 +2134,10 @@ body {
         }
       }
 
+      .wallet-approval-filters {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
       .wallet-activity-row {
         gap: 6px;
         grid-template-columns: 22px minmax(0, 1fr) minmax(54px, auto);
@@ -2084,6 +2147,21 @@ body {
         .wallet-activity-pending,
         .wallet-activity-chevron {
           display: none;
+        }
+      }
+
+      .wallet-approval-state {
+        grid-template-columns: 25px minmax(0, 1fr);
+        padding-inline: 7px;
+
+        > .wallet-token-mark {
+          height: 24px;
+          width: 24px;
+        }
+
+        > .nt-button {
+          grid-column: 2;
+          justify-self: start;
         }
       }
 
