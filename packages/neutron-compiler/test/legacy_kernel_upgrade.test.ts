@@ -3,15 +3,18 @@ import {
   LEGACY_KERNEL_RELEASES,
   PRODUCTION_KERNEL_V323_RELEASE,
   PRODUCTION_KERNEL_V324_RELEASE,
+  PRODUCTION_KERNEL_V325_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   TEST_CANDIDATE_KERNEL_VERSION,
   compileFinalCandidateLegacyKernelUpgradeFixture,
   compileFinalCandidateProductionKernelUpgradeFixture,
   compileFinalCandidateProductionKernelV324UpgradeFixture,
+  compileFinalCandidateProductionKernelV325UpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   loadLegacyKernelIdentityFixture,
   loadProductionKernelV324Fixture,
+  loadProductionKernelV325Fixture,
 } from "./legacy_kernel_upgrade_fixture.ts";
 
 for (const release of LEGACY_KERNEL_RELEASES) {
@@ -89,6 +92,29 @@ test("the exact production v0.3.24 predecessor is identity-bound", async () => {
   });
   await expect(
     compileFinalCandidateProductionKernelV324UpgradeFixture({
+      expectedSha256: "",
+    }),
+  ).rejects.toThrow(
+    "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+  );
+});
+
+test("the exact production v0.3.25 predecessor is identity-bound", async () => {
+  expect(PRODUCTION_KERNEL_V325_RELEASE).toMatchObject({
+    version: 325,
+    bytes: 2_415_653,
+    sha256: "3f7293fb8ab0fe25fd59b2a02e20b66eb4c2920858ed660e163265a4481a098b",
+    persistenceMode: "classical",
+  });
+  const fixture = await loadProductionKernelV325Fixture();
+  expect(fixture.archive.byteLength).toBe(PRODUCTION_KERNEL_V325_RELEASE.bytes);
+  expect(fixture.identity).toMatchObject({
+    bytes: PRODUCTION_KERNEL_V325_RELEASE.bytes,
+    sha256: PRODUCTION_KERNEL_V325_RELEASE.sha256,
+    package: { version: PRODUCTION_KERNEL_V325_RELEASE.version },
+  });
+  await expect(
+    compileFinalCandidateProductionKernelV325UpgradeFixture({
       expectedSha256: "",
     }),
   ).rejects.toThrow(

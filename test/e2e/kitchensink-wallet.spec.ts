@@ -89,7 +89,12 @@ test("Kitchen Sink funds governance with one Wallet decision and no Kernel dialo
   await expect(page.locator('[data-tid="auth-error"]')).toHaveCount(0);
   await expect(
     page.locator('[data-tid="app-background-frame"][data-app-id="wallet"]'),
-  ).toHaveCount(1);
+  ).toHaveAttribute("data-resident-launch", "ready", { timeout: 120_000 });
+  await expect(
+    page.locator(
+      '[data-tid="app-background-frame"][data-app-id="kitchensink"]',
+    ),
+  ).toHaveAttribute("data-resident-launch", "ready", { timeout: 120_000 });
 
   await openKitchenSink(page);
   const kitchen = page.frameLocator(
@@ -268,8 +273,6 @@ async function runWalletAction({
     }, walletReuse.marker);
     walletReuse.established = true;
   }
-  await kitchenFrame.focus();
-  await expect(kitchenFrame).toBeFocused();
   await kitchen.getByRole("button", { name: buttonName, exact: true }).click();
 
   await expect(page.locator(KERNEL_DIALOG_SELECTOR)).toHaveCount(0);
@@ -378,14 +381,15 @@ async function runWalletAction({
     kitchen.locator('[data-tid="wallet-funding-result"]'),
   ).toContainText(`"status": "${expectedStatus}"`, { timeout: 120_000 });
   await expect(dialog).toHaveCount(0);
+  await expect(walletFrame).not.toBeFocused();
+  await expect(kitchenFrame).not.toBeFocused();
   await expect(page.locator(KERNEL_DIALOG_SELECTOR)).toHaveCount(0);
   expect((await stopKernelDialogAudit(page)).seen).toEqual([]);
 }
 
 function fundingRow(dialog: Locator, label: string): Locator {
   return dialog
-    .locator("dt")
-    .filter({ hasText: new RegExp(`^${label}$`, "u") })
+    .getByText(label, { exact: true })
     .locator("xpath=following-sibling::dd");
 }
 

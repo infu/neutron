@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { encodeSelfCallValues } from "neutron-tools/app";
 import {
   decodeIcrcAccount,
   encodeIcrcAccount,
@@ -16,6 +17,7 @@ const accountWithSubaccount = encodeIcrcAccount({
   owner: decodeIcrcAccount(icpLedger).owner,
   subaccount,
 });
+const candidAccountWithSubaccount = { owner: icpLedger, subaccount };
 
 test("parses typed IC and native Contact destinations", () => {
   const page = parseWalletContactDestinations({
@@ -90,8 +92,26 @@ test("preserves an ICRC subaccount in canonical textual form", () => {
     account: accountWithSubaccount,
   });
   expect(walletDestinationVariant(page.destinations[0]!.destination)).toEqual({
-    internet_computer: accountWithSubaccount,
+    internet_computer: candidAccountWithSubaccount,
   });
+  const encoded = encodeSelfCallValues([
+    {
+      expected_destination: walletDestinationVariant(
+        page.destinations[0]!.destination,
+      ),
+    },
+  ]);
+  expect(encoded.blobs).toHaveLength(1);
+  expect(encoded.blobs[0]).toMatchObject({
+    path: [
+      0,
+      "expected_destination",
+      "internet_computer",
+      "subaccount",
+    ],
+    byteLength: 32,
+  });
+  expect(new Uint8Array(encoded.blobs[0]!.data)).toEqual(subaccount);
 });
 
 test("accepts omitted and null Candid subaccounts as the default account", () => {
@@ -142,9 +162,16 @@ test("accepts omitted and null Candid subaccounts as the default account", () =>
     network: "internet_computer",
     account: principalOnlyAccount,
   });
-  expect(walletDestinationVariant(page.destinations[0]!.destination)).toEqual({
-    internet_computer: principalOnlyAccount,
+  const variant = walletDestinationVariant(page.destinations[0]!.destination);
+  expect(variant).toEqual({
+    internet_computer: {
+      owner: principalOnlyAccount,
+      subaccount: null,
+    },
   });
+  expect(encodeSelfCallValues([{ expected_destination: variant }]).blobs).toEqual(
+    [],
+  );
 });
 
 test("rejects string-shaped, inherited, accessor, and malformed projections", () => {

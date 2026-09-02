@@ -3,7 +3,10 @@ import {
   type JsonObject,
   type SelfCallObject,
 } from "neutron-tools/app";
-import { parseCandidIcrcAccount } from "./icrc_account.ts";
+import {
+  candidIcrcAccountFromText,
+  parseCandidIcrcAccount,
+} from "./icrc_account.ts";
 
 export type ContactKind = "person" | "self";
 export type DestinationNetwork =
@@ -78,7 +81,12 @@ export function walletDestinationVariant(
   destination: WalletDestination,
 ): SelfCallObject {
   return destination.network === "internet_computer"
-    ? { internet_computer: destination.account }
+    ? {
+        internet_computer: candidIcrcAccountFromText(
+          destination.account,
+          "IC account",
+        ),
+      }
     : { [destination.network]: destination.address };
 }
 

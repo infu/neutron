@@ -18,6 +18,13 @@ const releasedWallet307 = new URL(
 const releasedWallet307Bytes = 677_271;
 const releasedWallet307Sha256 =
   "20ba3b00349e9386713a789622ce6a570fc7123e7daf89cda38daedcfc74fac1";
+const releasedWallet308 = new URL(
+  "../wallet.v0.3.8.neutron",
+  import.meta.url,
+);
+const releasedWallet308Bytes = 677_493;
+const releasedWallet308Sha256 =
+  "2f3626d2800ddf3e6c0734268c66627931c934811722d39de41c8d1505873858";
 const kernel: PackagedNeutronManifest = {
   format: 3,
   id: "kernel",
@@ -112,42 +119,70 @@ test("Wallet candidate keeps production wallet v1 and initializes wallet_command
 });
 
 test("Wallet 0.3.8 keeps both exact Wallet 0.3.7 memory roots", async () => {
-  const [releasedBytes, sourceText, lockText] = await Promise.all([
-    readFile(releasedWallet307),
-    readFile(new URL("../neutron.json", import.meta.url), "utf8"),
+  await assertWalletCodeOnlyRelease({
+    productionArchive: releasedWallet307,
+    productionVersion: 307,
+    productionBytes: releasedWallet307Bytes,
+    productionSha256: releasedWallet307Sha256,
+    candidateArchive: releasedWallet308,
+    candidateVersion: 308,
+  });
+});
+
+test("Wallet 0.3.9 keeps both exact production 0.3.8 memory roots", async () => {
+  await assertWalletCodeOnlyRelease({
+    productionArchive: releasedWallet308,
+    productionVersion: 308,
+    productionBytes: releasedWallet308Bytes,
+    productionSha256: releasedWallet308Sha256,
+    candidateArchive: new URL("../wallet.v0.3.9.neutron", import.meta.url),
+    candidateVersion: 309,
+  });
+});
+
+async function assertWalletCodeOnlyRelease(value: {
+  productionArchive: URL;
+  productionVersion: number;
+  productionBytes: number;
+  productionSha256: string;
+  candidateArchive: URL;
+  candidateVersion: number;
+}): Promise<void> {
+  const [productionBytes, candidateBytes, lockText] = await Promise.all([
+    readFile(value.productionArchive),
+    readFile(value.candidateArchive),
     readFile(new URL("../neutron.lock.json", import.meta.url), "utf8"),
   ]);
-  expect(releasedBytes.byteLength).toBe(releasedWallet307Bytes);
-  expect(createHash("sha256").update(releasedBytes).digest("hex")).toBe(
-    releasedWallet307Sha256,
+  expect(productionBytes.byteLength).toBe(value.productionBytes);
+  expect(createHash("sha256").update(productionBytes).digest("hex")).toBe(
+    value.productionSha256,
   );
+  const production = packageManifest(productionBytes);
+  const candidate = packageManifest(candidateBytes);
+  expect(production).toMatchObject({
+    id: "wallet",
+    version: value.productionVersion,
+  });
+  expect(candidate).toMatchObject({
+    id: "wallet",
+    version: value.candidateVersion,
+  });
 
-  const released = packageManifest(releasedBytes);
-  const source = JSON.parse(sourceText) as NeutronManifest;
   const lock = JSON.parse(lockText) as ReturnType<typeof createMemoryLock>;
-  expect(released).toMatchObject({ id: "wallet", version: 307 });
-  expect(source).toMatchObject({ id: "wallet", version: 308 });
-
-  const releasedLock = createMemoryLock(released);
-  const candidateMemory = Object.fromEntries(
-    ["wallet", "wallet_commands"].map((memoryId) => {
-      const releasedRoot = requiredMemory(released, memoryId);
-      const sourceRoot = requiredMemory(source, memoryId);
-      expect(sourceShape(releasedRoot)).toEqual(sourceRoot);
-      expect(lock.memory[memoryId]).toEqual(releasedLock.memory[memoryId]);
-      return [memoryId, packageMemory(sourceRoot, lock.memory[memoryId])];
-    }),
-  );
-  const candidate: PackagedNeutronManifest = {
-    ...released,
-    ...source,
-    entry: released.entry,
-    memory: candidateMemory,
-  };
-
+  const productionLock = createMemoryLock(production);
+  const candidateLock = createMemoryLock(candidate);
+  for (const memoryId of ["wallet", "wallet_commands"]) {
+    expect(requiredMemory(candidate, memoryId)).toEqual(
+      requiredMemory(production, memoryId),
+    );
+    expect(lock.memory[memoryId]).toEqual(productionLock.memory[memoryId]);
+    expect(candidateLock.memory[memoryId]).toEqual(
+      productionLock.memory[memoryId],
+    );
+  }
   expect(
     planMemoryMigrations(
-      { kernel, wallet: released },
+      { kernel, wallet: production },
       { kernel, wallet: candidate },
     ),
   ).toEqual({
@@ -163,7 +198,7 @@ test("Wallet 0.3.8 keeps both exact Wallet 0.3.7 memory roots", async () => {
     removedApps: [],
     destructiveMemoryRoots: [],
   });
-});
+}
 
 function packageManifest(bytes: Uint8Array): PackagedNeutronManifest {
   const manifest = unpackNeutronPackage(bytes)["neutron.json"];

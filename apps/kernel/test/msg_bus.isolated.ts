@@ -252,6 +252,8 @@ mock.module("../src/source_inspection/runtime.ts", () => ({
 const originalWindow = globalThis.window;
 const originalNavigator = globalThis.navigator;
 const originalFetch = globalThis.fetch;
+const originalDocument = globalThis.document;
+const originalHTMLIFrameElement = globalThis.HTMLIFrameElement;
 Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: {
@@ -355,6 +357,87 @@ function installFakeWindow(): FakeWindow {
   return fakeWindow;
 }
 
+type TestTileFrameConfig = Readonly<{
+  appId: string;
+  tileId: string;
+  instanceId: string;
+  source: Window;
+  blurError?: Error;
+}>;
+
+type TestFocusDocument = {
+  activeElement: TestTileFrame | object | null;
+  addFrame(config: TestTileFrameConfig): TestTileFrame;
+  querySelectorAll(selector: string): TestTileFrame[];
+};
+
+class TestTileFrame {
+  readonly classList = {
+    contains: (value: string) => value === "tile-iframe",
+  };
+  readonly dataset: DOMStringMap;
+  readonly contentWindow: Window;
+  focusCalls = 0;
+  blurCalls = 0;
+  scrollIntoViewCalls = 0;
+
+  constructor(
+    private readonly ownerDocument: TestFocusDocument,
+    config: TestTileFrameConfig,
+  ) {
+    this.dataset = {
+      appId: config.appId,
+      tileId: config.tileId,
+      instanceId: config.instanceId,
+    };
+    this.contentWindow = config.source;
+    this.blurError = config.blurError;
+  }
+
+  private readonly blurError: Error | undefined;
+
+  focus(): void {
+    this.focusCalls += 1;
+    this.ownerDocument.activeElement = this;
+  }
+
+  blur(): void {
+    this.blurCalls += 1;
+    if (this.blurError) throw this.blurError;
+    if (this.ownerDocument.activeElement === this) {
+      this.ownerDocument.activeElement = null;
+    }
+  }
+
+  scrollIntoView(): void {
+    this.scrollIntoViewCalls += 1;
+  }
+}
+
+function installTestFocusDocument(): TestFocusDocument {
+  const frames: TestTileFrame[] = [];
+  const focusDocument: TestFocusDocument = {
+    activeElement: null,
+    addFrame(config) {
+      const frame = new TestTileFrame(this, config);
+      frames.push(frame);
+      return frame;
+    },
+    querySelectorAll(selector) {
+      return selector === "iframe.tile-iframe" ? frames : [];
+    },
+  };
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: focusDocument,
+  });
+  Object.defineProperty(globalThis, "HTMLIFrameElement", {
+    configurable: true,
+    value: TestTileFrame,
+  });
+  return focusDocument;
+}
+
 function authenticateLoadedTestFrame(
   source: Window,
   origin = TEST_FRAME_ORIGIN,
@@ -407,6 +490,7 @@ function createCapturingToolEndpoint(
   options: {
     descriptorGate?: Promise<void>;
     resultGate?: Promise<void>;
+    resultGates?: readonly Promise<void>[];
   } = {},
 ): {
   source: Window;
@@ -448,7 +532,9 @@ function createCapturingToolEndpoint(
         state.payloads.push(request.payload.payload);
         const respond = () =>
           port.postMessage({ type: "response", id: request.id, ok: result });
-        if (options.resultGate) void options.resultGate.then(respond);
+        const resultGate =
+          options.resultGates?.[state.calls - 1] ?? options.resultGate;
+        if (resultGate) void resultGate.then(respond);
         else respond();
       });
       port.start();
@@ -781,6 +867,7 @@ function registerScopedTileEndpoint(
   tileId: string,
   instanceId: string,
   appScope: { appId: string; installationUid: string },
+  options: { connect?: boolean } = {},
 ) {
   const app = useAppsStore.getState().list[appId];
   if (!app) throw new Error(`${appId} is not installed`);
@@ -795,7 +882,7 @@ function registerScopedTileEndpoint(
       },
     ),
   );
-  authenticateLoadedTestFrame(source);
+  if (options.connect !== false) authenticateLoadedTestFrame(source);
   const endpoint = getRegisteredEndpoint(
     `app:${appId}:tile:${tileId}:instance:${instanceId}`,
   );
@@ -1188,6 +1275,14 @@ afterEach(() => {
     writable: true,
     value: originalNavigator,
   });
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: originalDocument,
+  });
+  Object.defineProperty(globalThis, "HTMLIFrameElement", {
+    configurable: true,
+    value: originalHTMLIFrameElement,
+  });
   globalThis.fetch = originalFetch;
 });
 
@@ -1539,6 +1634,125 @@ function openProviderTile(appId = "provider") {
     path: "index.html",
     icon: "static/icon.svg",
   });
+}
+
+function createProviderFocusFixture(options: {
+  key: string;
+  callerCount?: number;
+  descriptorGate?: Promise<void>;
+  resultGates?: readonly Promise<void>[];
+  providerBlurError?: Error;
+  includeProviderFrame?: boolean;
+  connectProviderTile?: boolean;
+  registerProviderTile?: boolean;
+}) {
+  installFakeWindow();
+  authorizeTestOwner();
+  setTransientUserActivation(true);
+  const callerCount = options.callerCount ?? 1;
+  const callerRecords = Array.from({ length: callerCount }, (_, index) => {
+    const appId = `focus_${options.key}_requester_${index}`;
+    const instanceId = `focus-${options.key}-caller-${index}`;
+    const source = {} as Window;
+    return {
+      appId,
+      instanceId,
+      source,
+      endpoint: registerTile(source, appId, instanceId),
+    };
+  });
+  const appId = `focus_${options.key}_provider`;
+  const result = { receipt: `${options.key}-ok` };
+  const provider = createPresentationProvider(result);
+  const { appScope } = registerScopedBackgroundEndpoint(
+    provider.source,
+    appId,
+    "821",
+    "review",
+  );
+  const tile = openProviderTile(appId);
+  const presentation = createCapturingToolEndpoint(
+    providerPresentationDescriptor,
+    result,
+    {
+      ...(options.descriptorGate
+        ? { descriptorGate: options.descriptorGate }
+        : {}),
+      ...(options.resultGates ? { resultGates: options.resultGates } : {}),
+    },
+  );
+  if (options.registerProviderTile !== false) {
+    registerScopedTileEndpoint(
+      presentation.source,
+      appId,
+      "review",
+      tile.id,
+      appScope,
+      { connect: options.connectProviderTile !== false },
+    );
+  }
+  const includeProviderFrame = options.includeProviderFrame !== false;
+  const focusDocument = installTestFocusDocument();
+  const callers = callerRecords.map((record) => ({
+    ...record,
+    frame: focusDocument.addFrame({
+      appId: record.appId,
+      tileId: "main",
+      instanceId: record.instanceId,
+      source: record.source,
+    }),
+  }));
+  const providerFrame = includeProviderFrame
+    ? focusDocument.addFrame({
+        appId,
+        tileId: "review",
+        instanceId: tile.id,
+        source: presentation.source,
+        ...(options.providerBlurError
+          ? { blurError: options.providerBlurError }
+          : {}),
+      })
+    : null;
+  const activateCaller = (index = 0): void => {
+    const caller = callers[index];
+    if (!caller) throw new Error("Missing focus-test caller");
+    focusTestTile(caller.instanceId);
+    focusDocument.activeElement = caller.frame;
+  };
+  const call = (index = 0): Promise<JsonValue> => {
+    const caller = callers[index];
+    if (!caller) throw new Error("Missing focus-test caller");
+    return routeToolCall(providerActionCall(appId), caller.endpoint);
+  };
+  const start = (index = 0): Promise<JsonValue> => {
+    activateCaller(index);
+    const pending = call(index);
+    void pending.catch(() => undefined);
+    return pending;
+  };
+  const waitForCalls = async (count: number): Promise<void> => {
+    for (
+      let turn = 0;
+      turn < 50 && presentation.state.calls < count;
+      turn += 1
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(presentation.state.calls).toBe(count);
+  };
+  return {
+    appId,
+    appScope,
+    call,
+    callers,
+    focusDocument,
+    presentation,
+    providerFrame,
+    result,
+    start,
+    tile,
+    waitForCalls,
+  };
 }
 
 test("a new Kernel keeps a released provider surface and fails closed for an absent successor tool", async () => {
@@ -4657,6 +4871,296 @@ test("provider presentation opens then reuses the exact focused tile with caller
   expect(presentation.state.calls).toBe(2);
   expect(useMsgBusPermissionStore.getState().requests).toEqual({});
   expect(useRequestStore.getState().calls).toEqual({});
+});
+
+test.each([
+  {
+    case: "blurs only the settled provider frame",
+    activeAtSettlement: "provider" as const,
+    blurThrows: false,
+  },
+  {
+    case: "does not steal unrelated frame focus",
+    activeAtSettlement: "unrelated" as const,
+    blurThrows: false,
+  },
+  {
+    case: "does not blur a replacement provider frame",
+    activeAtSettlement: "replacement" as const,
+    blurThrows: false,
+  },
+  {
+    case: "preserves the provider result when blur fails",
+    activeAtSettlement: "provider" as const,
+    blurThrows: true,
+  },
+])(
+  "provider presentation focus cleanup $case",
+  async ({ activeAtSettlement, blurThrows }) => {
+    let releaseResult!: () => void;
+    const resultGate = new Promise<void>((resolve) => {
+      releaseResult = resolve;
+    });
+    const fixture = createProviderFocusFixture({
+      key: "cleanup",
+      resultGates: [resultGate],
+      ...(blurThrows
+        ? { providerBlurError: new Error("Synthetic provider blur failure") }
+        : {}),
+    });
+    const callerFrame = fixture.callers[0]?.frame;
+    const providerFrame = fixture.providerFrame;
+    if (!callerFrame || !providerFrame) throw new Error("Missing test frame");
+
+    const pending = fixture.start();
+    await fixture.waitForCalls(1);
+    expect(providerFrame.focusCalls).toBe(1);
+    expect(providerFrame.scrollIntoViewCalls).toBe(1);
+    expect(fixture.focusDocument.activeElement).toBe(providerFrame);
+    let retainedFrame: TestTileFrame | null = null;
+    if (activeAtSettlement === "unrelated") {
+      retainedFrame = fixture.focusDocument.addFrame({
+        appId: "unrelated",
+        tileId: "main",
+        instanceId: "unrelated-frame",
+        source: {} as Window,
+      });
+      fixture.focusDocument.activeElement = retainedFrame;
+    } else if (activeAtSettlement === "replacement") {
+      const replacement = createCapturingToolEndpoint(
+        providerPresentationDescriptor,
+        fixture.result,
+      );
+      retainedFrame = fixture.focusDocument.addFrame({
+        appId: fixture.appId,
+        tileId: "review",
+        instanceId: fixture.tile.id,
+        source: replacement.source,
+      });
+      fixture.focusDocument.activeElement = retainedFrame;
+      registerScopedTileEndpoint(
+        replacement.source,
+        fixture.appId,
+        "review",
+        fixture.tile.id,
+        fixture.appScope,
+      );
+    }
+
+    releaseResult();
+
+    if (activeAtSettlement === "replacement") {
+      await expect(pending).rejects.toThrow("Message bus endpoint retired");
+    } else {
+      await expect(pending).resolves.toEqual(fixture.result);
+    }
+    expect(callerFrame.focusCalls).toBe(0);
+    expect(useWorkspaceStore.getState().workspaces[1].focusedTileId).toBe(
+      fixture.tile.id,
+    );
+    if (activeAtSettlement !== "provider") {
+      if (!retainedFrame) throw new Error("Missing retained focus frame");
+      expect(providerFrame.blurCalls).toBe(0);
+      expect(retainedFrame.blurCalls).toBe(0);
+      expect(fixture.focusDocument.activeElement).toBe(retainedFrame);
+    } else {
+      expect(providerFrame.blurCalls).toBe(1);
+      if (blurThrows) {
+        expect(fixture.focusDocument.activeElement).toBe(providerFrame);
+      } else {
+        expect(fixture.focusDocument.activeElement).toBeNull();
+      }
+    }
+    if (activeAtSettlement === "provider" && !blurThrows) {
+      await expect(fixture.call()).rejects.toMatchObject({
+        code: "OWNER_REQUIRED",
+      });
+    }
+  },
+);
+
+test.each([
+  { phase: "descriptor" as const },
+  { phase: "result" as const },
+])(
+  "provider presentation does not blur a reconnected document during $phase dispatch",
+  async ({ phase }) => {
+    let releaseResult!: () => void;
+    const resultGate = new Promise<void>((resolve) => {
+      releaseResult = resolve;
+    });
+    const fixture = createProviderFocusFixture({
+      key: phase === "descriptor" ? "rd" : "rr",
+      ...(phase === "descriptor"
+        ? { descriptorGate: resultGate }
+        : { resultGates: [resultGate] }),
+    });
+    const providerFrame = fixture.providerFrame;
+    if (!providerFrame) throw new Error("Missing provider focus test frame");
+
+    const pending = fixture.start();
+    if (phase === "result") {
+      await fixture.waitForCalls(1);
+    } else {
+      for (
+        let turn = 0;
+        turn < 50 && fixture.presentation.state.descriptorRequests < 1;
+        turn += 1
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      expect(fixture.presentation.state.descriptorRequests).toBe(1);
+    }
+    expect(fixture.focusDocument.activeElement).toBe(providerFrame);
+    const endpoint = getRegisteredEndpoint(
+      `app:${fixture.appId}:tile:review:instance:${fixture.tile.id}`,
+    );
+    if (!endpoint?.sessionId) {
+      throw new Error("Missing provider endpoint session");
+    }
+    const originalSessionId = endpoint.sessionId;
+
+    expect(connectFrameEndpoint(fixture.presentation.source)).toBe(true);
+    expect(endpoint.sessionId).not.toBe(originalSessionId);
+    releaseResult();
+
+    await expect(pending).rejects.toThrow();
+    expect(providerFrame.blurCalls).toBe(0);
+    expect(fixture.focusDocument.activeElement).toBe(providerFrame);
+  },
+);
+
+test("provider presentation keeps shared provider focus until the final concurrent request settles", async () => {
+  let releaseFirst!: () => void;
+  let releaseSecond!: () => void;
+  const firstResultGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const secondResultGate = new Promise<void>((resolve) => {
+    releaseSecond = resolve;
+  });
+  const fixture = createProviderFocusFixture({
+    key: "concurrent",
+    callerCount: 2,
+    resultGates: [firstResultGate, secondResultGate],
+  });
+  const firstCallerFrame = fixture.callers[0]?.frame;
+  const secondCallerFrame = fixture.callers[1]?.frame;
+  const providerFrame = fixture.providerFrame;
+  if (!firstCallerFrame || !secondCallerFrame || !providerFrame) {
+    throw new Error("Missing concurrent focus test frame");
+  }
+  const firstPending = fixture.start(0);
+  await fixture.waitForCalls(1);
+
+  const secondPending = fixture.start(1);
+  await fixture.waitForCalls(2);
+  expect(providerFrame.focusCalls).toBe(2);
+  expect(providerFrame.scrollIntoViewCalls).toBe(2);
+  expect(fixture.focusDocument.activeElement).toBe(providerFrame);
+
+  releaseSecond();
+
+  await expect(secondPending).resolves.toEqual(fixture.result);
+  expect(providerFrame.blurCalls).toBe(0);
+  expect(fixture.focusDocument.activeElement).toBe(providerFrame);
+
+  releaseFirst();
+
+  await expect(firstPending).resolves.toEqual(fixture.result);
+  expect(providerFrame.blurCalls).toBe(1);
+  expect(fixture.focusDocument.activeElement).toBeNull();
+  expect(firstCallerFrame.focusCalls).toBe(0);
+  expect(secondCallerFrame.focusCalls).toBe(0);
+});
+
+test("provider presentation cancels delayed provider-frame focus after settlement", async () => {
+  const fixture = createProviderFocusFixture({
+    key: "delayed",
+    includeProviderFrame: false,
+  });
+  const callerFrame = fixture.callers[0]?.frame;
+  if (!callerFrame) throw new Error("Missing delayed-focus caller frame");
+  await expect(fixture.start()).resolves.toEqual(fixture.result);
+
+  const delayedProviderFrame = fixture.focusDocument.addFrame({
+    appId: fixture.appId,
+    tileId: "review",
+    instanceId: fixture.tile.id,
+    source: fixture.presentation.source,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+
+  expect(delayedProviderFrame.focusCalls).toBe(0);
+  expect(delayedProviderFrame.scrollIntoViewCalls).toBe(0);
+  expect(fixture.focusDocument.activeElement).toBe(callerFrame);
+});
+
+test("provider presentation focuses the exact frame as soon as its endpoint registers", async () => {
+  const fixture = createProviderFocusFixture({
+    key: "register",
+    includeProviderFrame: false,
+    registerProviderTile: false,
+  });
+  const callerFrame = fixture.callers[0]?.frame;
+  if (!callerFrame) throw new Error("Missing registration focus caller frame");
+
+  const pending = fixture.start();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(fixture.focusDocument.activeElement).toBe(callerFrame);
+
+  const providerFrame = fixture.focusDocument.addFrame({
+    appId: fixture.appId,
+    tileId: "review",
+    instanceId: fixture.tile.id,
+    source: fixture.presentation.source,
+  });
+  registerScopedTileEndpoint(
+    fixture.presentation.source,
+    fixture.appId,
+    "review",
+    fixture.tile.id,
+    fixture.appScope,
+  );
+
+  await expect(pending).resolves.toEqual(fixture.result);
+  expect(providerFrame.focusCalls).toBe(1);
+  expect(providerFrame.blurCalls).toBe(1);
+  expect(fixture.focusDocument.activeElement).toBeNull();
+  expect(callerFrame.focusCalls).toBe(0);
+});
+
+test("provider presentation releases its exact focused frame when port connection is cancelled", async () => {
+  const fixture = createProviderFocusFixture({
+    key: "unconnected",
+    connectProviderTile: false,
+  });
+  const callerFrame = fixture.callers[0]?.frame;
+  const providerFrame = fixture.providerFrame;
+  if (!callerFrame || !providerFrame) {
+    throw new Error("Missing unconnected focus test frame");
+  }
+
+  const pending = fixture.start();
+  for (
+    let turn = 0;
+    turn < 50 && fixture.focusDocument.activeElement !== providerFrame;
+    turn += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  expect(fixture.focusDocument.activeElement).toBe(providerFrame);
+  expect(fixture.presentation.state.descriptorRequests).toBe(0);
+
+  useAuthStore.setState((state) => ({
+    sessionGeneration: state.sessionGeneration + 1,
+  }));
+
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(providerFrame.blurCalls).toBe(1);
+  expect(fixture.focusDocument.activeElement).toBeNull();
+  expect(callerFrame.focusCalls).toBe(0);
+  expect(fixture.presentation.state.calls).toBe(0);
 });
 
 test("provider presentation rejects a replaced tile during descriptor and result waits", async () => {

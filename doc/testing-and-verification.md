@@ -127,6 +127,15 @@ Transport coverage must include:
   exact live endpoint, and routing only to a private
   `same_app` + `foreground_tile` tool with the original caller and closed
   audience attestation;
+- releasing browser focus only for the final live presentation when the
+  captured provider endpoint/session is still current, its exact frame remains
+  focused, and browser blur succeeds, without focusing the caller, changing
+  `focusedTileId`, or stealing focus from another frame/control or a concurrent
+  live presentation;
+- requiring the next human `provider_once` request to have actual caller-frame
+  focus and transient activation, with a fresh caller click as the ordinary
+  user path, while selected/red tile chrome remains layout/presentation state
+  and is insufficient caller authority;
 - opaque provider arguments and results receiving normal schema and size
   validation without any Wallet, ICRC, token-formatting, or provider-dialog
   branch in Kernel;
@@ -190,6 +199,9 @@ asserting human and root behavior independently:
   funding because the explicit provider-UI marker is absent, while direct root
   still succeeds without UI.
 - K325/W307 and K325/W308 succeed through Wallet UI and direct root.
+- K326 preserves those results and releases an unchanged settled provider
+  session's frame focus; retry requires caller focus under transient
+  activation.
 
 Representative old apps must retain valid session-grant, attachment, control,
 self-call, and Agent behavior, while malformed tool input still fails before
@@ -233,7 +245,13 @@ decision for its existing Send action; a Kitchen Sink `wallet_fund_v1` click
 opening, reusing, and focusing Wallet; normalized token, amount, fee,
 destination or spender, and expiration details in one Wallet modal; no Kernel
 call or permission dialog; no value movement on Cancel; and one exact effect
-after the primary action. The ICP fixture uses ledger
+after the primary action. After accept, cancel, or failure, the final sole
+presentation must release the exact Wallet frame when its captured
+endpoint/session is still current and browser blur succeeds. A concurrent
+presentation or replaced/reconnected session must retain its focus, no caller
+is focused automatically, and another request requires actual Kitchen Sink
+frame focus plus transient activation; a fresh Kitchen Sink click is the
+ordinary user path. The ICP fixture uses ledger
 `ryjl3-tyaaa-aaaaa-aaaba-cai`,
 `1_000_000` e8s (`0.01 ICP`), and governance canister
 `eqsml-lyaaa-aaaaq-aacdq-cai` as the direct target or allowance spender.

@@ -16,14 +16,14 @@
   "artifacts": {
     "kind": "inline",
     "kernel": {
-      "path": "apps/kernel/kernel.v0.3.25.neutron"
+      "path": "apps/kernel/kernel.v0.3.26.neutron"
     },
     "packages": [
       {
-        "path": "apps/contacts/contacts.v0.3.5.neutron"
+        "path": "apps/contacts/contacts.v0.3.6.neutron"
       },
       {
-        "path": "apps/wallet/wallet.v0.3.8.neutron"
+        "path": "apps/wallet/wallet.v0.3.9.neutron"
       },
       {
         "path": "apps/mail/mail.v0.3.5.neutron"

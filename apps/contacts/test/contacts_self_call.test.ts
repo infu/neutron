@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { encodeSelfCallValues } from "neutron-tools/app";
 import { decodeIcrcAccount } from "neutron-tools/src/icrc_account.js";
 import {
   encodeDestination,
@@ -11,21 +12,61 @@ const ACCOUNT = `${OWNER}-t5ic6yq.ff`;
 const SUBACCOUNT = Uint8Array.from([...new Array(31).fill(0), 255]);
 
 describe("Contacts canonical API-1 account boundary", () => {
-  test("encodes canonical account text for icblast input", () => {
+  test("encodes ICRC accounts structurally for the binary-safe self-call", () => {
     expect(
       encodeDestination({
         network: "internet_computer",
         account: CANISTER_OWNER,
       }),
     ).toEqual({
-      internet_computer: CANISTER_OWNER,
+      internet_computer: {
+        owner: CANISTER_OWNER,
+        subaccount: null,
+      },
     });
-    expect(
-      encodeDestination({
-        network: "internet_computer",
-        account: ACCOUNT,
-      }),
-    ).toEqual({ internet_computer: ACCOUNT });
+    const encoded = encodeDestination({
+      network: "internet_computer",
+      account: ACCOUNT,
+    });
+    expect(encoded).toEqual({
+      internet_computer: {
+        owner: OWNER,
+        subaccount: SUBACCOUNT,
+      },
+    });
+
+    const wire = encodeSelfCallValues([
+      {
+        addresses: [{ destination: encoded }],
+      },
+    ]);
+    expect(wire.value).toEqual([
+      {
+        addresses: [
+          {
+            destination: {
+              internet_computer: {
+                owner: OWNER,
+                subaccount: null,
+              },
+            },
+          },
+        ],
+      },
+    ]);
+    expect(wire.blobs).toHaveLength(1);
+    expect(wire.blobs[0]).toMatchObject({
+      path: [
+        0,
+        "addresses",
+        0,
+        "destination",
+        "internet_computer",
+        "subaccount",
+      ],
+      byteLength: 32,
+    });
+    expect(new Uint8Array(wire.blobs[0]!.data)).toEqual(SUBACCOUNT);
   });
 
   test("parses absent and explicit-null output subaccounts identically", () => {
@@ -69,7 +110,12 @@ describe("Contacts canonical API-1 account boundary", () => {
       subaccount: SUBACCOUNT,
     });
     incoming.fill(0);
-    expect(encodeDestination(parsed)).toEqual({ internet_computer: ACCOUNT });
+    expect(encodeDestination(parsed)).toEqual({
+      internet_computer: {
+        owner: OWNER,
+        subaccount: SUBACCOUNT,
+      },
+    });
   });
 
   test("rejects scalar replies and noncanonical output account records", () => {

@@ -262,6 +262,19 @@ execute method; cancel may persist rejection. Kernel neither renders a dialog
 nor interprets the payload. No exact or wildcard session grant is consulted,
 and the interaction creates no grant.
 
+Opening the provider UI gives its iframe programmatic browser focus. The
+private `foreground_tile` route also requires the exact presentation tile to
+remain selected in the active workspace; that lifecycle check alone cannot
+authorize a caller. When the final presentation settles, Kernel releases focus
+only if the captured provider endpoint/session remains current, its exact frame
+is still focused, no other live presentation needs it, and browser blur
+succeeds. Kernel does not focus the caller or change the workspace's
+selected-tile state. The next `provider_once` request therefore requires actual
+caller-frame focus while transient user activation is active; a fresh click in
+that caller is the ordinary user path. The workspace `focusedTileId` (including
+its selected/red tile chrome) is layout state and a conservative presentation
+lifecycle condition, not sufficient caller authority.
+
 The pending capability and presentation binding are ephemeral browser state.
 This route adds no Kernel managed-memory schema and no durable permission
 record; existing audit projection remains the only persistent generic record.

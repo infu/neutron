@@ -303,6 +303,7 @@ const MAX_CONCURRENT_CONTROL_CALLS_PER_ENDPOINT = 1;
 const MAX_PENDING_PROVIDER_APPROVALS = 16;
 const PROVIDER_APPROVAL_TTL_MS =
   MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS * 1_000;
+const ENDPOINT_TOOL_DISCOVERY_TIMEOUT_SECONDS = 10;
 const CONTROL_CALL_TIMEOUT_SECONDS = 5;
 const MAX_PENDING_TILE_VIEWS = 16;
 const MAX_RETAINED_STATE_APPS = 128;
@@ -335,6 +336,12 @@ type PendingProviderApproval = {
   timer?: ReturnType<typeof setTimeout>;
   sourceSignal?: AbortSignal;
   sourceAbort?: () => void;
+  presentation?: Readonly<{
+    endpointId: MsgBusEndpointId;
+    appId: string;
+    tileId: string;
+    instanceId: string;
+  }>;
   state: "pending" | "deciding" | "completed" | "denied";
 };
 const pendingProviderApprovals = new Map<string, PendingProviderApproval>();
@@ -1881,13 +1888,14 @@ function openOrFocusAppTile(
   workspace: WorkspaceId,
   view: string | null,
   invocation: InvocationNode | null,
+  focusSignal?: AbortSignal,
 ): OpenAppTileResult {
   const tile = requireInstalledAppTile(appId, tileId);
   const existing = findOpenAppTile(appId, tileId, workspace);
   assertAppTileCapacity(workspace, Boolean(existing), invocation);
   if (invocation) admitAgentWorkspaceMutation(invocation, !existing);
   if (existing) {
-    focusOpenAppTile(existing.workspace, existing.instanceId);
+    focusOpenAppTile(existing.workspace, existing.instanceId, focusSignal);
     if (view) queueTileView(appId, tileId, existing.instanceId, view);
     return {
       instanceId: existing.instanceId,
@@ -1902,7 +1910,7 @@ function openOrFocusAppTile(
     path: tile.path,
     icon: tile.icon,
   });
-  focusTileElement(instance.id);
+  focusTileElement(instance.id, focusSignal);
   if (view) queueTileView(appId, tileId, instance.id, view);
   return { instanceId: instance.id, workspace, opened: true };
 }
@@ -1976,15 +1984,13 @@ function assertInstallOfferFlowsIdle(): void {
 
 function isFocusedTileCaller(caller: RegisteredEndpoint): boolean {
   if (caller.context.role !== "tile") return false;
+  // Browser iframe focus is live authority. The persisted workspace selection
+  // below is only a no-DOM fallback for isolated execution and tests.
   if (
     typeof document !== "undefined" &&
     typeof HTMLIFrameElement !== "undefined"
   ) {
-    const active = document.activeElement;
-    return (
-      active instanceof HTMLIFrameElement &&
-      active.contentWindow === caller.source
-    );
+    return activeIframe()?.contentWindow === caller.source;
   }
   const state = useWorkspaceStore.getState();
   return (
@@ -1994,19 +2000,21 @@ function isFocusedTileCaller(caller: RegisteredEndpoint): boolean {
   );
 }
 
-function isFocusedTrayCaller(caller: RegisteredEndpoint): boolean {
+function activeIframe(): HTMLIFrameElement | null {
   if (
-    caller.context.role !== "tray" ||
     typeof document === "undefined" ||
     typeof HTMLIFrameElement === "undefined"
   ) {
-    return false;
+    return null;
   }
   const active = document.activeElement;
-  return (
-    active instanceof HTMLIFrameElement &&
-    active.contentWindow === caller.source
-  );
+  return active instanceof HTMLIFrameElement ? active : null;
+}
+
+function isFocusedTrayCaller(caller: RegisteredEndpoint): boolean {
+  if (caller.context.role !== "tray") return false;
+  const active = activeIframe();
+  return active !== null && active.contentWindow === caller.source;
 }
 
 function hasTransientUserActivation(): boolean {
@@ -2014,13 +2022,22 @@ function hasTransientUserActivation(): boolean {
   return navigator.userActivation?.isActive === true;
 }
 
-function focusOpenAppTile(workspace: WorkspaceId, instanceId: string): void {
+function focusOpenAppTile(
+  workspace: WorkspaceId,
+  instanceId: string,
+  signal?: AbortSignal,
+): void {
   useWorkspaceStore.getState().switchWorkspace(workspace);
   useWorkspaceStore.getState().focusTile(instanceId);
-  focusTileElement(instanceId);
+  focusTileElement(instanceId, signal);
 }
 
-function focusTileElement(instanceId: string, attempt = 0): void {
+function focusTileElement(
+  instanceId: string,
+  signal?: AbortSignal,
+  attempt = 0,
+): void {
+  if (signal?.aborted) return;
   if (typeof document === "undefined" || typeof window === "undefined") return;
   const frame = [
     ...document.querySelectorAll<HTMLIFrameElement>("iframe.tile-iframe"),
@@ -2031,7 +2048,10 @@ function focusTileElement(instanceId: string, attempt = 0): void {
     return;
   }
   if (attempt < 30) {
-    globalThis.setTimeout(() => focusTileElement(instanceId, attempt + 1), 16);
+    globalThis.setTimeout(
+      () => focusTileElement(instanceId, signal, attempt + 1),
+      16,
+    );
   }
 }
 
@@ -3371,7 +3391,15 @@ async function presentProviderUiForEndpoint(
       const args = payload.arguments;
       const appId = binding.target.context.appId;
       const workspace = useWorkspaceStore.getState().activeWorkspaceId;
-      const opened = openOrFocusAppTile(appId, tileId, workspace, null, null);
+      const focusController = new AbortController();
+      const opened = openOrFocusAppTile(
+        appId,
+        tileId,
+        workspace,
+        null,
+        null,
+        focusController.signal,
+      );
       const endpointId = endpointIdForContext({
         role: "tile",
         appId,
@@ -3379,89 +3407,161 @@ async function presentProviderUiForEndpoint(
         instanceId: opened.instanceId,
         workspace: opened.workspace,
       }) as MsgBusEndpointId;
-      const tile = await waitForRegisteredEndpoint(
+      const presentation = Object.freeze({
         endpointId,
-        MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
-        binding.controller.signal,
-      );
-      assertProviderPresentationTileCurrent(
-        binding,
-        tile,
-        endpointId,
+        appId,
         tileId,
-        opened.instanceId,
-        workspace,
-        true,
-      );
-      const descriptors = await readEndpointTools(
-        tile,
-        binding.controller.signal,
-      );
-      const tileDispatch = bindEndpointDispatch(tile);
-      assertProviderPresentationTileCurrent(
-        binding,
-        tile,
-        endpointId,
-        tileId,
-        opened.instanceId,
-        workspace,
-        true,
-      );
-      const descriptor = descriptors.find(
-        (candidate) => candidate.name === toolName,
-      );
-      if (
-        !descriptor ||
-        descriptor.annotations?.["neutron:visibility"] !==
-          NEUTRON_TOOL_VISIBILITY_SAME_APP ||
-        descriptor.annotations?.["neutron:audience"] !==
-          NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE
-      ) {
-        throw new KernelPolicyError(
-          "INVALID_REQUEST",
-          `Unknown provider presentation tool '${toolName}'`,
+        instanceId: opened.instanceId,
+      });
+      binding.presentation = presentation;
+      let presentationDispatch: EndpointDispatchBinding | null = null;
+      try {
+        const tile = await waitForRegisteredEndpoint(
+          endpointId,
+          MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+          binding.controller.signal,
+        );
+        assertProviderPresentationTileCurrent(
+          binding,
+          tile,
+          endpointId,
+          tileId,
+          opened.instanceId,
+          workspace,
+          true,
+        );
+        // Retain the exact registered frame identity while its private port is
+        // still connecting. This lets failure cleanup release only that frame;
+        // a replacement or newly connected session invalidates this binding.
+        presentationDispatch = bindEndpointDispatch(tile);
+        if (activeIframe()?.contentWindow !== tile.source) {
+          focusTileElement(opened.instanceId, focusController.signal);
+        }
+        await waitForFrameEndpointPort(
+          tile,
+          ENDPOINT_TOOL_DISCOVERY_TIMEOUT_SECONDS,
+          binding.controller.signal,
+        );
+        const tileDispatch = bindEndpointDispatch(tile);
+        presentationDispatch = tileDispatch;
+        const descriptors = await readEndpointTools(
+          tile,
+          binding.controller.signal,
+        );
+        assertEndpointDispatchCurrent(tileDispatch);
+        assertProviderPresentationTileCurrent(
+          binding,
+          tile,
+          endpointId,
+          tileId,
+          opened.instanceId,
+          workspace,
+          true,
+        );
+        const descriptor = descriptors.find(
+          (candidate) => candidate.name === toolName,
+        );
+        if (
+          !descriptor ||
+          descriptor.annotations?.["neutron:visibility"] !==
+            NEUTRON_TOOL_VISIBILITY_SAME_APP ||
+          descriptor.annotations?.["neutron:audience"] !==
+            NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE
+        ) {
+          throw new KernelPolicyError(
+            "INVALID_REQUEST",
+            `Unknown provider presentation tool '${toolName}'`,
+          );
+        }
+        validateToolArguments(descriptor, args);
+        assertEndpointDispatchCurrent(tileDispatch);
+        assertProviderPresentationTileCurrent(
+          binding,
+          tile,
+          endpointId,
+          tileId,
+          opened.instanceId,
+          workspace,
+          true,
+        );
+        const result = await execEndpoint(
+          tile,
+          msgBusLocalActions.toolsCall,
+          {
+            name: toolName,
+            arguments: args,
+            caller: callerContext(binding.caller),
+            audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+          },
+          MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+          undefined,
+          undefined,
+          binding.controller.signal,
+        );
+        assertEndpointDispatchCurrent(tileDispatch);
+        assertProviderPresentationTileCurrent(
+          binding,
+          tile,
+          endpointId,
+          tileId,
+          opened.instanceId,
+          workspace,
+          false,
+        );
+        assertBoundedJson(result, `Tool '${toolName}' result`);
+        validateToolResult(descriptor, result);
+        return result;
+      } finally {
+        releaseProviderPresentationFocus(
+          binding,
+          presentation,
+          presentationDispatch,
+          focusController,
         );
       }
-      validateToolArguments(descriptor, args);
-      assertEndpointDispatchCurrent(tileDispatch);
-      assertProviderPresentationTileCurrent(
-        binding,
-        tile,
-        endpointId,
-        tileId,
-        opened.instanceId,
-        workspace,
-        true,
-      );
-      const result = await execEndpoint(
-        tile,
-        msgBusLocalActions.toolsCall,
-        {
-          name: toolName,
-          arguments: args,
-          caller: callerContext(binding.caller),
-          audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
-        },
-        MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
-        undefined,
-        undefined,
-        binding.controller.signal,
-      );
-      assertEndpointDispatchCurrent(tileDispatch);
-      assertProviderPresentationTileCurrent(
-        binding,
-        tile,
-        endpointId,
-        tileId,
-        opened.instanceId,
-        workspace,
-        false,
-      );
-      assertBoundedJson(result, `Tool '${toolName}' result`);
-      validateToolResult(descriptor, result);
-      return result;
     },
   );
+}
+
+function releaseProviderPresentationFocus(
+  binding: PendingProviderApproval,
+  presentation: NonNullable<PendingProviderApproval["presentation"]>,
+  dispatch: EndpointDispatchBinding | null,
+  focusController: AbortController,
+): void {
+  try {
+    focusController.abort();
+    if (binding.presentation === presentation) {
+      delete binding.presentation;
+    }
+    if (
+      [...pendingProviderApprovals.values()].some(
+        (candidate) =>
+          candidate !== binding &&
+          !candidate.controller.signal.aborted &&
+          candidate.presentation?.endpointId === presentation.endpointId,
+      )
+    ) {
+      return;
+    }
+    if (!dispatch) return;
+    assertEndpointDispatchCurrent(dispatch);
+    const active = activeIframe();
+    if (
+      active &&
+      active.classList.contains("tile-iframe") &&
+      active.dataset.appId === presentation.appId &&
+      active.dataset.tileId === presentation.tileId &&
+      active.dataset.instanceId === presentation.instanceId &&
+      active.contentWindow === dispatch.endpoint.source
+    ) {
+      // Release only the provider's exact browser focus. Focusing the caller
+      // here would let it reuse the provider button's transient activation.
+      active.blur();
+    }
+  } catch {
+    // Focus cleanup must never replace the provider's authoritative result.
+  }
 }
 
 function assertProviderPresentationTileCurrent(
@@ -3667,7 +3767,7 @@ async function readEndpointTools(
     endpoint,
     msgBusLocalActions.toolsList,
     null,
-    10,
+    ENDPOINT_TOOL_DISCOVERY_TIMEOUT_SECONDS,
     undefined,
     undefined,
     signal,

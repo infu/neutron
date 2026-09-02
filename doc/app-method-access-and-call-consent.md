@@ -384,6 +384,18 @@ fails closed. Kernel binds the callback to the selected tool's originating live
 handler call and rechecks the original caller, target, sessions, AppScopes,
 versions, and cancellation state after asynchronous steps.
 
+Opening the provider UI programmatically focuses its exact iframe. The private
+`foreground_tile` route also requires the exact presentation tile to remain
+selected in the active workspace; that condition alone cannot authorize a
+caller. On the final settlement, Kernel blurs only when the captured provider
+endpoint/session remains current, its exact frame is still focused, no other
+live presentation needs it, and browser blur succeeds. Kernel never focuses
+the caller or changes the workspace's selected `focusedTileId`. A subsequent
+human `provider_once` call must regain actual caller-iframe focus while
+transient user activation is active; a fresh click in that caller is the
+ordinary user path. The selected/red tile chrome reflects workspace layout and
+presentation lifecycle state, not sufficient security authority for a call.
+
 The annotation deliberately trusts the target provider to call
 `presentUserInterface()` before its own preapproved effect and trusts the
 provider tile to keep preparation, display, decision, and execution correctly
@@ -420,6 +432,7 @@ arguments and results remain opaque to Kernel and are never rendered there.
 | K323 | Human funding uses the released generic raw review. W306 has no root tool. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. |
 | K324 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Human funding fails before preparation or effect because K324 lacks W308's explicit provider-UI feature marker. Direct-root funding remains UI-free. |
 | K325 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Human funding uses one provider-owned decision; direct-root funding is UI-free. |
+| K326 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. | Human funding uses one provider-owned decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. |
 
 Every valid released ordinary tool, grant, self-call, attachment, control, and
 Agent route remains compatible. Malformed tool input still fails before any

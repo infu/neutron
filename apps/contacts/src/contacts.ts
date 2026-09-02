@@ -316,7 +316,16 @@ export function encodeDestination(destination: Destination): SelfCallObject {
     return { neutron: destination.principal };
   }
   if (destination.network === "internet_computer") {
-    return { internet_computer: destination.account };
+    const account = decodeIcrcAccount(destination.account);
+    return {
+      internet_computer: {
+        owner: account.owner.toText(),
+        subaccount:
+          account.subaccount === undefined
+            ? null
+            : Uint8Array.from(account.subaccount),
+      },
+    };
   }
   return { [destination.network]: destination.address };
 }

@@ -7,6 +7,7 @@ import {
 } from "neutron-tools/app";
 import {
   bytesToHex,
+  candidIcrcAccountFromText,
   canonicalIcrcAccountText,
   hexToBytes,
   parseCandidIcrcAccount,
@@ -389,7 +390,10 @@ export function fundingPrepareArgs(
       ? {
           direct: {
             amount_atoms: request.amountAtoms,
-            to: request.route.to,
+            to: candidIcrcAccountFromText(
+              request.route.to,
+              "transfer destination",
+            ),
             ...(request.route.memoHex === null
               ? {}
               : { memo: hexToBytes(request.route.memoHex, "transfer memo") }),
@@ -398,7 +402,10 @@ export function fundingPrepareArgs(
       : {
           allowance: {
             amount_atoms: request.amountAtoms,
-            spender: request.route.spender,
+            spender: candidIcrcAccountFromText(
+              request.route.spender,
+              "allowance spender",
+            ),
             expires_at_ns: request.route.expiresAtNs,
           },
         };
@@ -613,7 +620,10 @@ export function walletRevokePrepareArgs(
   const spender: SelfCallObject =
     entry.spender.kind === "icrc"
       ? {
-          icrc: entry.spender.account,
+          icrc: candidIcrcAccountFromText(
+            entry.spender.account,
+            "allowance spender",
+          ),
         }
       : {
           icp_account_identifier: hexToBytes(
@@ -1081,8 +1091,14 @@ function allowanceCursorWire(cursor: WalletAllowanceCursor): SelfCallObject {
   return cursor.kind === "icrc103"
     ? {
         icrc103: {
-          from_account: cursor.fromAccount,
-          to_spender: cursor.toSpender,
+          from_account: candidIcrcAccountFromText(
+            cursor.fromAccount,
+            "allowance cursor source",
+          ),
+          to_spender: candidIcrcAccountFromText(
+            cursor.toSpender,
+            "allowance cursor spender",
+          ),
           pages: cursor.pages,
           entries: cursor.entries,
         },

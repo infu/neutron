@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  encodeSelfCallValues,
   normalizeToolDescriptor,
   validateToolArguments,
   validateToolResult,
@@ -172,7 +173,7 @@ test("funding replies accept only exact Candid ICRC account records", () => {
   }
 });
 
-test("funding self-call arguments use the generated JSON wire contract", () => {
+test("funding self-call arguments expose every binary Candid sidecar", () => {
   const caller = {
     endpoint: "app:swap:background",
     appId: callerApp,
@@ -198,10 +199,23 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       direct: {
         amount_atoms: "123456789",
-        to: accountWithSubaccount,
+        to: candidAccountWithSubaccount,
       },
     },
   });
+  const directWire = encodeSelfCallValues([direct]);
+  expect(directWire.blobs.map(({ path, byteLength }) => ({ path, byteLength })))
+    .toEqual([
+      {
+        path: [0, "request_id"],
+        byteLength: 16,
+      },
+      {
+        path: [0, "intent", "direct", "to", "subaccount"],
+        byteLength: 32,
+      },
+    ]);
+  expect(new Uint8Array(directWire.blobs[1]!.data)).toEqual(subaccount);
 
   const allowance = fundingPrepareArgs(
     parseWalletFundingRequest({
@@ -223,51 +237,72 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       allowance: {
         amount_atoms: "500000000",
-        spender: accountWithSubaccount,
+        spender: candidAccountWithSubaccount,
         expires_at_ns: "1800000300000000000",
       },
     },
   });
+  const allowanceWire = encodeSelfCallValues([allowance]);
+  expect(
+    allowanceWire.blobs.map(({ path, byteLength }) => ({ path, byteLength })),
+  ).toEqual([
+    {
+      path: [0, "request_id"],
+      byteLength: 16,
+    },
+    {
+      path: [0, "intent", "allowance", "spender", "subaccount"],
+      byteLength: 32,
+    },
+  ]);
+  expect(new Uint8Array(allowanceWire.blobs[1]!.data)).toEqual(subaccount);
 
   expect(walletAllowancesPageArgs(ledger, null)).toEqual({
     ledger,
     limit: "40",
   });
-  expect(
-    walletAllowancesPageArgs(ledger, {
-      kind: "icrc103",
-      fromAccount: ledger,
-      toSpender: accountWithSubaccount,
-      pages: "1",
-      entries: "40",
-    }),
-  ).toEqual({
+  const pageArgs = walletAllowancesPageArgs(ledger, {
+    kind: "icrc103",
+    fromAccount: ledger,
+    toSpender: accountWithSubaccount,
+    pages: "1",
+    entries: "40",
+  });
+  expect(pageArgs).toEqual({
     ledger,
     cursor: {
       icrc103: {
-        from_account: ledger,
-        to_spender: accountWithSubaccount,
+        from_account: { owner: ledger, subaccount: null },
+        to_spender: candidAccountWithSubaccount,
         pages: "1",
         entries: "40",
       },
     },
     limit: "40",
   });
-
-  expect(
-    walletRevokePrepareArgs(
+  const pageWire = encodeSelfCallValues([pageArgs]);
+  expect(pageWire.blobs.map(({ path, byteLength }) => ({ path, byteLength })))
+    .toEqual([
       {
-        key: `${ledger}:icrc:${accountWithSubaccount}`,
-        ledger,
-        spender: { kind: "icrc", account: accountWithSubaccount },
-        amountAtoms: "200",
-        expiresAtNs: null,
+        path: [0, "cursor", "icrc103", "to_spender", "subaccount"],
+        byteLength: 32,
       },
-      caller,
-      requestId,
-      "1800000000000000000",
-    ),
-  ).toMatchObject({
+    ]);
+  expect(new Uint8Array(pageWire.blobs[0]!.data)).toEqual(subaccount);
+
+  const revokeArgs = walletRevokePrepareArgs(
+    {
+      key: `${ledger}:icrc:${accountWithSubaccount}`,
+      ledger,
+      spender: { kind: "icrc", account: accountWithSubaccount },
+      amountAtoms: "200",
+      expiresAtNs: null,
+    },
+    caller,
+    requestId,
+    "1800000000000000000",
+  );
+  expect(revokeArgs).toMatchObject({
     caller: {
       endpoint: "app:swap:background",
       app_id: callerApp,
@@ -275,11 +310,24 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       revoke: {
         source: { icrc: null },
-        spender: { icrc: accountWithSubaccount },
+        spender: { icrc: candidAccountWithSubaccount },
         expected_allowance_atoms: "200",
       },
     },
   });
+  const revokeWire = encodeSelfCallValues([revokeArgs]);
+  expect(revokeWire.blobs.map(({ path, byteLength }) => ({ path, byteLength })))
+    .toEqual([
+      {
+        path: [0, "request_id"],
+        byteLength: 16,
+      },
+      {
+        path: [0, "intent", "revoke", "spender", "icrc", "subaccount"],
+        byteLength: 32,
+      },
+    ]);
+  expect(new Uint8Array(revokeWire.blobs[1]!.data)).toEqual(subaccount);
 });
 
 test("funding fails before preparation when provider UI is unavailable", async () => {

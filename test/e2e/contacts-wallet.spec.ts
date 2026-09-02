@@ -3,6 +3,7 @@ import { localCanisterOrigin } from "neutron-tools/src/runtime.js";
 import { resolveLocalNeutronRuntime } from "../../packages/neutron-provision/src/local_session.ts";
 
 const PRINCIPAL_ONLY_IC_ACCOUNT = "togwv-zqaaa-aaaal-qr7aa-cai";
+const ICP_LEDGER = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 // Canonical ICRC text for the same owner with a 32-byte subaccount containing
 // 31 zero bytes followed by 0xff.
 const SUBACCOUNT_IC_ACCOUNT = "togwv-zqaaa-aaaal-qr7aa-cai-dzl4y5q.ff";
@@ -16,6 +17,7 @@ test.skip(
 test("Contacts CRUD is shared with Wallet destination discovery", async ({
   page,
 }) => {
+  test.setTimeout(300_000);
   const runtime = resolveLocalNeutronRuntime();
   await page.goto(localCanisterOrigin(runtime.canisterId, runtime.gatewayUrl));
   await expect(page.locator('[data-tid="login-button"]')).toBeVisible();
@@ -123,6 +125,23 @@ test("Contacts CRUD is shared with Wallet destination discovery", async ({
     await page.locator('[data-tid="backend-call-approve"]').click();
     await expect(walletSetup).not.toBeVisible();
   }
+  const icpToken = wallet.locator(
+    `article.wallet-token[data-ledger="${ICP_LEDGER}"]`,
+  );
+  const icpDetails = icpToken.locator(".wallet-token-balance");
+  const icpBalance = icpDetails.locator("strong");
+  await expect(icpToken).toBeVisible();
+  await wallet
+    .getByRole("button", { name: "Refresh token metadata" })
+    .click();
+  await expect(icpDetails).toHaveAttribute("title", /Fee /, {
+    timeout: 120_000,
+  });
+  await wallet.getByRole("button", { name: "Refresh balances" }).click();
+  await expect(icpBalance).not.toHaveText("-", { timeout: 120_000 });
+  await expect(
+    page.locator('[data-tid="backend-call-dialog"]'),
+  ).toHaveCount(0);
   const destinationButton = wallet
     .getByRole("button", { name: /^Send / })
     .first();

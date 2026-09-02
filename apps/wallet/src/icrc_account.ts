@@ -9,11 +9,29 @@ export function canonicalIcrcAccountText(
   value: unknown,
   label: string,
 ): string {
+  return encodeIcrcAccount(canonicalIcrcAccount(value, label));
+}
+
+export function candidIcrcAccountFromText(
+  value: string,
+  label: string,
+): { owner: string; subaccount: Uint8Array | null } {
+  const account = canonicalIcrcAccount(value, label);
+  return {
+    owner: account.owner.toText(),
+    subaccount:
+      account.subaccount === undefined
+        ? null
+        : Uint8Array.from(account.subaccount),
+  };
+}
+
+function canonicalIcrcAccount(value: unknown, label: string): IcrcAccount {
   try {
     if (typeof value !== "string") throw new Error("not text");
     const account = decodeIcrcAccount(value);
     if (encodeIcrcAccount(account) !== value) throw new Error("noncanonical");
-    return value;
+    return account;
   } catch {
     throw new Error(`Invalid ${label}`);
   }
