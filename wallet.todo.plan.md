@@ -79,7 +79,7 @@ without rebuilding or republishing unrelated same-version apps.
 
 Browser qualification found that a settled provider interaction could leave
 the provider iframe with programmatic browser focus. Kernel 0.3.26 (326) is the
-unreleased generic correction; it releases only the exact still-focused frame
+published generic correction; it releases only the exact still-focused frame
 of an unchanged captured provider session and does not change provider
 semantics or app contracts. The same gate exposed a Contacts 0.3.5 frontend
 regression: scalar ICRC account input omitted the API-1 binary sidecar for a
@@ -94,10 +94,10 @@ Kitchen Sink 307 remains unchanged and compatible.
 
 | App | Corrective state |
 | --- | --- |
-| Kernel 0.3.26 (326) | Frozen and qualified from exact 0.3.25; production publication pending. |
-| Wallet 0.3.9 (309) | Frozen and qualified by a checked exact-0.3.8 state-preserving upgrade; production publication pending. |
+| Kernel 0.3.26 (326) | Frozen, qualified from exact 0.3.25, and published in atomic production batch 39. |
+| Wallet 0.3.9 (309) | Frozen, qualified by a checked exact-0.3.8 state-preserving upgrade, and published in batch 39. |
 | Kitchen Sink 0.3.7 (307) | Existing published bytes; no successor required for this correction. |
-| Contacts 0.3.6 (306) | Frozen and qualified by a checked exact-0.3.5 state-preserving upgrade; production publication pending. |
+| Contacts 0.3.6 (306) | Frozen, qualified by a checked exact-0.3.5 state-preserving upgrade, and published in batch 39. |
 
 The frozen corrective candidates and matching Complete App Source artifacts
 are:
@@ -145,6 +145,24 @@ focus or authorization paths. The focused Kernel compatibility suite passed
 212 tests/1,834 assertions; Wallet passed 84 Bun tests plus its three Motoko
 suites and memory restore; Contacts passed all 26 frontend/package tests plus
 its Motoko and memory gates; the focused SDK codec suites passed 89 tests.
+
+Production publication committed atomic batch `39` at
+`2026-09-02T15:25:09.515Z` through the production catalog publisher using a
+reviewed catalog containing only Kernel, Contacts, and Wallet. All three
+release pointers, exact packages, and matching Complete App Source artifacts
+were reported `published`. Kitchen Sink 307 remained on its already-published
+exact bytes. The publication receipt SHA-256 is
+`aa43781e8b6daf04b04d593c6dbdbfc7a80354ed23decffbf911993ad4846de9`.
+
+The first read-only postflight reached all three verification steps but the IC
+gateway omitted the certified HTTP-v2 proof for the Wallet package response;
+it created no batch and produced no receipt. The required exact-byte retry at
+`2026-09-02T15:26:31.431Z` returned `batch_id: null`, with every package and
+source row `unchanged` and matching the version, path, size, URL, and SHA-256
+above. Its receipt SHA-256 is
+`040f9dce9460f20eec02de7d2e06f4774fb033a0b69277268a66ea5ce7ef85e2`.
+No package or source artifact was rebuilt between publication and either
+postflight attempt.
 
 ## Required outcome
 
@@ -449,9 +467,10 @@ the frozen Kernel 326, Wallet 309, and Contacts 306 candidates.
    CRUD/Wallet-discovery/send gates on the same final sources.
 5. Review all three candidate archives and their matching offered-source
    artifacts.
-6. Publish Kernel 326, Wallet 309, and Contacts 306 atomically with
-   `npm run updates:publish`.
-7. Rerun the same command against the exact same bytes. Require
+6. Publish Kernel 326, Wallet 309, and Contacts 306 atomically with the
+   production catalog publisher and a reviewed catalog containing exactly
+   those three packages.
+7. Rerun the exact same catalog command against the exact same bytes. Require
    `batch_id: null` and every selected package/source row `unchanged` with
    matching version, path, size, URL, and SHA-256.
 8. Add the exact Kernel 326/Wallet 309/Contacts 306 qualification and
