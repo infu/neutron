@@ -20,7 +20,7 @@
     },
     "packages": [
       {
-        "path": "apps/contacts/contacts.v0.3.4.neutron"
+        "path": "apps/contacts/contacts.v0.3.5.neutron"
       },
       {
         "path": "apps/wallet/wallet.v0.3.7.neutron"

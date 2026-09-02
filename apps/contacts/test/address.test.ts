@@ -104,9 +104,9 @@ test("Solana requires one canonical 32-byte Base58 key", () => {
 });
 
 test("IC accounts use canonical ICRC textual encoding", () => {
-  expect(normalizeInternetComputer(" ryjl3-tyaaa-aaaaa-aaaba-cai ")).toEqual({
+  expect(normalizeInternetComputer(" togwv-zqaaa-aaaal-qr7aa-cai ")).toEqual({
     network: "internet_computer",
-    account: "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    account: "togwv-zqaaa-aaaal-qr7aa-cai",
   });
   expect(
     normalizeInternetComputer("ryjl3-tyaaa-aaaaa-aaaba-cai-t5ic6yq.ff"),

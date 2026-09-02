@@ -1,6 +1,6 @@
 # Wallet-owned funding UI: implementation and release plan
 
-Status date: 2026-09-01
+Status date: 2026-09-02
 
 This is the authoritative plan for the corrective Wallet funding release. The
 previous design in which Wallet supplied JSON for a Kernel approval dialog is
@@ -58,6 +58,18 @@ are `e6bb8b75b7e172e246c87f7ff9fa3851e90e74c89786543c2f41fb08d0eaf2bd`
 for batch 37 and
 `36b630e3a1a459a8c979370b774c897f739887c8d715f85bb572061e5963e107`
 for the no-op postflight.
+
+The Kernel correction exposed a second, previously unreachable Contacts reply
+bug: API-1 correctly omits an absent optional field inside a returned record,
+while Contacts 0.3.4 required the returned Account record to contain an
+explicit `subaccount` key. Contacts 0.3.5 is the code-only candidate that
+accepts both `{ owner }` and `{ owner, subaccount : null }` as the same default
+account while retaining strict owner, 32-byte subaccount, and extra-field
+validation. It is packaged and release-qualified but is not yet published.
+The reproducible candidate is 297,477 bytes with SHA-256
+`644720d915a34148f66b2b3aad8a82c619c16ec724b1704a45f5008bd1f0b7df`;
+its 334,420-byte offered source has SHA-256
+`17dbd15db746206890568361f71227a9242e7df242efb3fe5df10fd885769a14`.
 
 ## Required outcome
 
@@ -255,10 +267,9 @@ and post-funding result. Wallet provides the direct transfer or allowance
 needed by that swap; Kitchen Sink deliberately does not pretend it can consume
 an allowance whose spender is the governance canister.
 
-## Contacts regression fix
+## Contacts boundary regressions
 
-Do not change Contacts or its public contract. Contacts correctly supplies the
-structural Candid ICRC Account
+Contacts correctly supplies the structural Candid ICRC Account
 `{ owner : principal; subaccount : opt blob }`. The regression came from
 running icblast's public generated JSON schema after arguments had already been
 materialized against the exact installed live-Candid method. That public schema
@@ -274,10 +285,21 @@ generic string-record shorthand contract exposed by the pinned ICBlast release,
 with no sidecar beneath it; ICBlast encoding and exact raw-Candid preflight must
 still reject strings unsupported by the live method.
 
-Tests must cover Contacts Account values with absent and present 32-byte
-subaccounts, W306's published shorthand, and rejection of shorthand plus a
-binary sidecar. This fixes the generic boundary without weakening external
-canister-call validation or adding a Contacts exception.
+On the reply path, Kernel's established API-1 projection omits an empty
+`subaccount : opt blob` field. Contacts must therefore accept the exact records
+`{ owner }` and `{ owner, subaccount : null }`, treat both as the default
+account, and continue accepting only a 32-byte `Uint8Array` when the subaccount
+is present. Raw strings, explicit `undefined`, malformed owners, wrong-length
+bytes, and extra fields remain invalid. This is a narrow Contacts parser fix;
+do not change Kernel's generic option projection or the public Contacts tool
+contract.
+
+Tests must cover the reported principal
+`togwv-zqaaa-aaaal-qr7aa-cai`, default and present 32-byte subaccounts, W306's
+published shorthand, rejection of shorthand plus a binary sidecar, and the
+strict malformed reply cases above. Together the two fixes preserve exact
+live-Candid authority without weakening external canister-call validation or
+adding token-specific Kernel behavior.
 
 ## Managed memory
 
@@ -289,6 +311,8 @@ This is a code-only successor release:
   lineage published in W306 are immutable; do not edit them or add a fake
   migration.
 - Kitchen Sink keeps its released memory declaration unchanged.
+- Contacts keeps its released `contacts` v2 root, schemas, v1-to-v2 migration,
+  and lock lineage unchanged; the 0.3.5 parser correction needs no migration.
 
 Qualify fresh installation and a real state-preserving upgrade from the exact
 published archives. W306 -> W307 must restore representative Wallet state and
@@ -343,7 +367,9 @@ or migration for either v1 root.
   cursor progress, unsupported/reservation-required states, CAS revoke races,
   ambiguous ICP removal, and refresh after success.
 - Contacts: structural default/present-subaccount calls work and malformed
-  shapes, sidecars, or Candid bytes still fail closed.
+  shapes, sidecars, Candid bytes, and returned account records still fail
+  closed; missing and explicit-null returned subaccounts both normalize to the
+  owner principal.
 
 ### Integration and browser gates
 
@@ -372,6 +398,7 @@ npm --workspace neutron-tools test
 npm --workspace neutron-kernel test
 npm --workspace neutron-wallet test
 npm --workspace neutron-kitchensink test
+npm --workspace neutron-contacts test
 npm --workspace neutron-compiler test
 npm run typecheck
 npm run security:check

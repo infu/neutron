@@ -5,6 +5,7 @@ import {
 } from "../src/contacts.ts";
 
 const OWNER = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+const CANISTER_OWNER = "togwv-zqaaa-aaaal-qr7aa-cai";
 const ACCOUNT = `${OWNER}-t5ic6yq.ff`;
 const SUBACCOUNT = Uint8Array.from([...new Array(31).fill(0), 255]);
 
@@ -70,11 +71,36 @@ describe("Contacts canonical API-1 account boundary", () => {
     });
   });
 
+  test("parses a principal owner when the absent subaccount field is omitted", () => {
+    expect(
+      parseDestination({
+        internet_computer: {
+          owner: CANISTER_OWNER,
+        },
+      }),
+    ).toEqual({
+      network: "internet_computer",
+      account: CANISTER_OWNER,
+    });
+
+    expect(
+      parseDestination({
+        internet_computer: {
+          owner: CANISTER_OWNER,
+          subaccount: null,
+        },
+      }),
+    ).toEqual({
+      network: "internet_computer",
+      account: CANISTER_OWNER,
+    });
+  });
+
   test("rejects legacy strings and noncanonical account record shapes", () => {
     for (const account of [
       ACCOUNT,
-      { owner: OWNER },
       { owner: OWNER, subaccount: new ArrayBuffer(32) },
+      { owner: OWNER, subaccount: undefined },
       { owner: OWNER, subaccount: new Uint8Array(31) },
       { owner: "2vxsx-fae", subaccount: null },
       { owner: OWNER, subaccount: null, extra: null },

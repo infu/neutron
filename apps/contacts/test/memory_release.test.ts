@@ -1,13 +1,13 @@
 import { test } from "bun:test";
 import { assertManagedMemoryCodeOnlyRelease } from "../../release-test-support/managed_memory.mjs";
 
-test("Contacts 0.3.4 keeps the exact production v2 memory root", async () => {
+test("Contacts 0.3.5 keeps the exact production v2 memory root", async () => {
   await assertManagedMemoryCodeOnlyRelease({
     appId: "contacts",
     memoryId: "contacts",
     memoryVersion: 2,
     productionArchive: new URL("../contacts.v0.3.1.neutron", import.meta.url),
-    candidateArchive: new URL("../contacts.v0.3.4.neutron", import.meta.url),
+    candidateArchive: new URL("../contacts.v0.3.5.neutron", import.meta.url),
     lock: new URL("../neutron.lock.json", import.meta.url),
     production: {
       version: 301,
@@ -15,6 +15,6 @@ test("Contacts 0.3.4 keeps the exact production v2 memory root", async () => {
       sha256:
         "19591c8db038db92c182b70ce0761e855efc1e7e7f37d3b1503866baa11d097a",
     },
-    candidateVersion: 304,
+    candidateVersion: 305,
   });
 });

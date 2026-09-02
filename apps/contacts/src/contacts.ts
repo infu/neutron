@@ -332,7 +332,15 @@ export function encodeDestination(destination: Destination): SelfCallObject {
 
 function parseIcrcAccount(value: unknown): string {
   const record = requiredObject(value, "IC account");
-  assertExactKeys(record, ["owner", "subaccount"], "IC account");
+  const hasSubaccount = Object.prototype.hasOwnProperty.call(
+    record,
+    "subaccount",
+  );
+  assertExactKeys(
+    record,
+    hasSubaccount ? ["owner", "subaccount"] : ["owner"],
+    "IC account",
+  );
   const ownerText = requiredString(record.owner, "IC account owner");
 
   let owner;
@@ -349,7 +357,11 @@ function parseIcrcAccount(value: unknown): string {
   }
 
   const rawSubaccount = record.subaccount;
-  if (rawSubaccount !== null && !(rawSubaccount instanceof Uint8Array)) {
+  if (
+    hasSubaccount &&
+    rawSubaccount !== null &&
+    !(rawSubaccount instanceof Uint8Array)
+  ) {
     throw new Error("Invalid IC account subaccount");
   }
   if (
