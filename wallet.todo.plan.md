@@ -70,6 +70,9 @@ The reproducible candidate is 297,477 bytes with SHA-256
 `644720d915a34148f66b2b3aad8a82c619c16ec724b1704a45f5008bd1f0b7df`;
 its 334,420-byte offered source has SHA-256
 `17dbd15db746206890568361f71227a9242e7df242efb3fe5df10fd885769a14`.
+An isolated browser run against those exact Kernel 0.3.24 and Contacts 0.3.5
+archives saved, rendered, reloaded, reread, and removed the exact principal-only
+account `togwv-zqaaa-aaaal-qr7aa-cai` (`1 passed`, 6.0 seconds).
 
 ## Required outcome
 
