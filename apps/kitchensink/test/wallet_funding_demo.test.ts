@@ -24,7 +24,7 @@ test("the direct demo builds one closed fixed ICP transfer intent", () => {
     requestId: REQUEST_ID,
     ledger: ICP_LEDGER,
     amountAtoms: ICP_SWAP_AMOUNT_ATOMS,
-    validUntilNs: "1700000120000000000",
+    validUntilNs: "1700000240000000000",
     route: {
       kind: "direct",
       to: NEUTRINITE_GOVERNANCE,
@@ -37,7 +37,7 @@ test("the allowance demo binds the same governance account for five minutes", ()
     requestId: REQUEST_ID,
     ledger: ICP_LEDGER,
     amountAtoms: ICP_SWAP_AMOUNT_ATOMS,
-    validUntilNs: "1700000120000000000",
+    validUntilNs: "1700000240000000000",
     route: {
       kind: "allowance",
       spender: NEUTRINITE_GOVERNANCE,
@@ -46,14 +46,20 @@ test("the allowance demo binds the same governance account for five minutes", ()
   });
 });
 
-test("request IDs use sixteen cryptographic bytes and expired requests rotate", () => {
+test("request IDs use sixteen cryptographic bytes and outlive transport timeout", () => {
   const request = createWalletFundingDemoRequest("direct");
   expect(request.requestId).toMatch(/^[0-9a-f]{32}$/u);
   expect(walletFundingDemoRequestExpired(request)).toBe(false);
   expect(
     walletFundingDemoRequestExpired(
       createWalletFundingDemoRequest("direct", deterministicOptions()),
-      NOW_MS + 120_000,
+      NOW_MS + 180_000,
+    ),
+  ).toBe(false);
+  expect(
+    walletFundingDemoRequestExpired(
+      createWalletFundingDemoRequest("direct", deterministicOptions()),
+      NOW_MS + 240_000,
     ),
   ).toBe(true);
   expect(() => createWalletFundingDemoRequest("direct", { nowMs: -1 }))
@@ -95,23 +101,38 @@ test("the demo calls only Wallet's exact resident tool once", async () => {
   }]);
 });
 
-test("only terminal results permit the next click to use a new request ID", () => {
-  expect(walletFundingDemoResultIsTerminal("direct", {
+test("only a matching terminal result permits a new request ID", () => {
+  const direct = createWalletFundingDemoRequest("direct", deterministicOptions());
+  const allowance = createWalletFundingDemoRequest(
+    "allowance",
+    deterministicOptions(),
+  );
+  const commandId = `kitchensink:${REQUEST_ID}`;
+  expect(walletFundingDemoResultIsTerminal("direct", direct, {
     status: "transferred",
+    commandId,
   })).toBe(true);
-  expect(walletFundingDemoResultIsTerminal("allowance", {
+  expect(walletFundingDemoResultIsTerminal("allowance", allowance, {
     status: "approved",
+    commandId,
   })).toBe(true);
-  expect(walletFundingDemoResultIsTerminal("direct", {
+  expect(walletFundingDemoResultIsTerminal("direct", direct, {
     status: "rejected",
+    commandId,
   })).toBe(true);
-  expect(walletFundingDemoResultIsTerminal("direct", {
+  expect(walletFundingDemoResultIsTerminal("direct", direct, {
     status: "pending",
+    commandId,
   })).toBe(false);
-  expect(walletFundingDemoResultIsTerminal("direct", {
+  expect(walletFundingDemoResultIsTerminal("direct", direct, {
     status: "approved",
+    commandId,
   })).toBe(false);
-  expect(walletFundingDemoResultIsTerminal("direct", null)).toBe(false);
+  expect(walletFundingDemoResultIsTerminal("direct", direct, {
+    status: "transferred",
+    commandId: `kitchensink:${"f".repeat(32)}`,
+  })).toBe(false);
+  expect(walletFundingDemoResultIsTerminal("direct", direct, null)).toBe(false);
 });
 
 function deterministicOptions() {

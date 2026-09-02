@@ -65,11 +65,12 @@ provider's review.
 
 The presentation callback is a one-use invocation capability, not a global
 helper, session grant, or discoverable tool. Returning without consuming it
-fails the invocation. An old Kernel supplies no presentation callback, so new
-provider code must fail closed before preparation instead of falling back to
-ordinary tool consent. `context.requestApproval(review)` is deprecated and
-retained only for compatibility with already-published Wallet 0.3.6 and its raw
-Kernel JSON dialog; new providers must not use it.
+fails the invocation. Current SDK code exposes it only when Kernel supplies the
+explicit provider-UI support marker. Without that marker, a provider which
+requires presentation must fail closed before preparation instead of falling
+back to ordinary tool consent. `context.requestApproval(review)` is deprecated
+and retained as a generic compatibility surface. Published Wallet 0.3.6 depends
+on its raw Kernel JSON dialog, but current providers must not use it.
 
 An automation tool may instead combine
 `"neutron:visibility": "same_app"` with

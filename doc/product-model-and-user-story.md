@@ -194,9 +194,10 @@ replace the browser's permission prompt and device indicators.
 Apps can call their own backend with native nested binary values. User review
 shows binary path, size, and digest instead of rendering arbitrary bytes.
 
-An exact app tool may opt into one provider-owned decision. Kernel first
-authenticates the requesting and provider endpoints and validates the tool
-input. The provider resident must then call its one-use
+On the current provider-UI lane, an exact app tool may opt into one
+provider-owned decision. Kernel first authenticates the requesting and provider
+endpoints and validates the tool input. The provider resident must then call
+its one-use
 `presentUserInterface()` callback before preparing an effect. Kernel opens or
 focuses that provider's exact tile and routes a bounded opaque request only to
 its private foreground tool. The provider tile prepares authoritative facts,
@@ -211,7 +212,8 @@ pull-based Swap then executes `icrc2_transfer_from` through its own reviewed
 authority without another owner prompt. Wallet, not Kernel, owns token
 metadata, formatting, fee and spender meaning, durable idempotency, approval
 enumeration, and revocation. Kernel retains the old raw-review callback only as
-a compatibility lane for already-published providers such as Wallet 0.3.6.
+a deprecated generic compatibility surface; published Wallet 0.3.6 depends on
+it, while current providers must use provider-owned UI.
 
 ### 5. Connect External Authority
 

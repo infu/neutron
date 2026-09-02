@@ -8,15 +8,13 @@ import {
 } from "neutron-tools/app";
 import { historyPageRequest, parseHistoryPage } from "./history.ts";
 import {
-  WALLET_FUNDING_EXECUTE_METHOD,
   WALLET_FUNDING_ROOT_TOOL,
   WALLET_FUNDING_TOOL,
-  executeWalletFundingOperation,
   handleWalletFunding,
-  prepareWalletFundingOperation,
+  handleWalletRootFunding,
+  walletFundingResultNeedsRefresh,
   walletFundingInputSchema,
   walletFundingOutputSchema,
-  type WalletFundingToolContext,
 } from "./funding.ts";
 import {
   WALLET_PROJECTION_ACTIVITY_LIMIT,
@@ -78,11 +76,7 @@ exposeTool(
       "neutron:effects": ["write", "network", "user_visible_ui"],
     },
   },
-  (args, context) =>
-    handleWalletFunding(
-      args,
-      context as WalletFundingToolContext,
-    ),
+  (args, context) => handleWalletFunding(args, context),
 );
 
 exposeTool(
@@ -101,30 +95,27 @@ exposeTool(
     },
   },
   async (args, context) => {
-    if (context.audience !== "agent_root") {
-      throw new Error("Wallet root funding requires root-agent attestation");
-    }
-    const operation = await prepareWalletFundingOperation(
-      args,
-      context as WalletFundingToolContext,
-      true,
-    );
-    const result = await executeWalletFundingOperation(
-      operation,
-      (executeArgs) =>
-        context.kernel.updateSelf(
-          WALLET_FUNDING_EXECUTE_METHOD,
-          [executeArgs],
-          120,
-        ),
-      context.signal,
-    );
     try {
-      await publishAppStateChange(WALLET_PROJECTION_TOPIC, Date.now());
-    } catch {
-      // The durable funding result is authoritative; notification is best effort.
+      const result = await handleWalletRootFunding(args, context);
+      if (walletFundingResultNeedsRefresh(result)) {
+        try {
+          await context.kernel.updateSelf(
+            "wallet_refresh_balances",
+            [null],
+            60,
+          );
+        } catch {
+          // The durable funding result is authoritative; refresh is best effort.
+        }
+      }
+      return result;
+    } finally {
+      try {
+        await publishAppStateChange(WALLET_PROJECTION_TOPIC, Date.now());
+      } catch {
+        // The durable funding result is authoritative; notification is best effort.
+      }
     }
-    return result;
   },
 );
 

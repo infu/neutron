@@ -15,6 +15,13 @@ import {
 } from "./profile.ts";
 
 describe("Certified Assets qualification clock budgets", () => {
+  test("binds bounded operational sample concurrency", () => {
+    expect(
+      CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE
+        .operational_sample_concurrency,
+    ).toBe(3);
+  });
+
   test("binds setup drift to two maximum-chunk installs and fixed ingresses", () => {
     const compilerInstallSource = readFileSync(
       path.resolve(

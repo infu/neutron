@@ -28,6 +28,7 @@ import {
   certifiedAssetsQualificationManifestBytes,
   generateCertifiedAssetsQualificationManifest,
 } from "./fixture_manifests.ts";
+import { awaitQualificationPrerequisites } from "./prerequisites.ts";
 
 const executeFile = promisify(execFile);
 const FOCUSED_TEST_FILES = [
@@ -72,31 +73,38 @@ export async function runFocusedMotokoGates(
     MOTOKO_PACKAGES_JSON: _callerSelectedPackages,
     ...fixedEnvironment
   } = process.env;
-  const { stdout, stderr } = await executeFile(
-    process.execPath,
-    [path.join(kernelRoot, "test", "motoko", "run.ts")],
-    {
-      cwd: kernelRoot,
-      env: {
-        ...fixedEnvironment,
-        MOTOKO_EXACT_PASS_TRANSCRIPT: "1",
-        MOTOKO_PACKAGES_JSON: JSON.stringify(motokoPackages),
-        MOTOKO_TEST: FOCUSED_TEST_NAMES.join(","),
-        WASMTIME: wasmtime.executable,
+  const executions = await awaitQualificationPrerequisites(
+    FOCUSED_TEST_NAMES.map((test) => executeFile(
+      process.execPath,
+      [path.join(kernelRoot, "test", "motoko", "run.ts")],
+      {
+        cwd: kernelRoot,
+        env: {
+          ...fixedEnvironment,
+          MOTOKO_EXACT_PASS_TRANSCRIPT: "1",
+          MOTOKO_PACKAGES_JSON: JSON.stringify(motokoPackages),
+          MOTOKO_TEST: test,
+          WASMTIME: wasmtime.executable,
+        },
+        maxBuffer: 4 * 1024 * 1024,
       },
-      maxBuffer: 4 * 1024 * 1024,
-    },
+    )),
   );
-  if (stderr !== "") {
-    throw new Error(
-      "Focused Certified Assets Motoko gates wrote an unexpected stderr transcript",
-    );
-  }
-  const expectedStdout = `${EXPECTED_PASS_LINES.join("\n")}\n`;
-  if (stdout !== expectedStdout) {
-    throw new Error(
-      "Focused Certified Assets Motoko gates did not produce the exact pass transcript",
-    );
+  let stdout = "";
+  for (const [index, execution] of executions.entries()) {
+    const test = FOCUSED_TEST_NAMES[index]!;
+    if (execution.stderr !== "") {
+      throw new Error(
+        `Focused Certified Assets Motoko gate ${test} wrote an unexpected stderr transcript`,
+      );
+    }
+    const expectedStdout = `${EXPECTED_PASS_LINES[index]}\n`;
+    if (execution.stdout !== expectedStdout) {
+      throw new Error(
+        `Focused Certified Assets Motoko gate ${test} did not produce its exact pass transcript`,
+      );
+    }
+    stdout += execution.stdout;
   }
   const testFiles = await Promise.all(
     FOCUSED_TEST_FILES.map(async (relativePath) => ({

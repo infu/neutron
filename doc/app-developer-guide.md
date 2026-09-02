@@ -1073,12 +1073,13 @@ successful mutation into an apparent write failure.
 
 Use the global `createMsgBusClient()` for ordinary work outside a routed tool
 handler to list installed apps, live endpoints, and allowed tools. Same-app
-calls are allowed by default. Outside Agent Mode, cross-app tool listing or
-calls show a kernel-owned approval dialog and require a one-call or session
-grant. Inside a routed handler, use `context.kernel`; nested Agent Mode policy
-applies only to that scoped request. Arguments are JSON objects and schemas use
-JSON Schema draft-07. Tool metadata is treated as untrusted when shown to users
-or agents.
+calls are allowed by default. Outside Agent Mode, ordinary cross-app tool
+listing or calls show a kernel-owned approval dialog and require a one-call or
+session grant. A direct `provider_once` call is the exception described below:
+it bypasses that preliminary prompt and grant. Inside a routed handler, use
+`context.kernel`; nested Agent Mode policy applies only to that scoped request.
+Arguments are JSON objects and schemas use JSON Schema draft-07. Tool metadata
+is treated as untrusted when shown to users or agents.
 
 Keep tile-only control methods out of other apps' and agents' live catalogs by
 adding `annotations: { "neutron:visibility": "same_app" }`. The kernel filters
@@ -1098,24 +1099,7 @@ exposeTool(
   {
     title: "Fund a swap",
     description: "Open Wallet to review and execute one funding operation.",
-    inputSchema: {
-      type: "object",
-      required: ["requestId", "ledger", "amountAtoms", "validUntilNs", "route"],
-      properties: {
-        requestId: {
-          type: "string",
-          minLength: 32,
-          maxLength: 32,
-          pattern: "^[0-9a-f]{32}$",
-        },
-        ledger: { type: "string", minLength: 5, maxLength: 63 },
-        amountAtoms: { type: "string", pattern: "^[1-9][0-9]{0,79}$" },
-        validUntilNs: { type: "string", pattern: "^[1-9][0-9]{0,19}$" },
-        // Define this separately as a closed `oneOf` for direct and allowance.
-        route: fundingRouteInputSchema,
-      },
-      additionalProperties: false,
-    },
+    inputSchema: walletFundingInputSchema,
     outputSchema: fundingResultSchema,
     annotations: {
       "neutron:consent": "provider_once",
@@ -1137,9 +1121,8 @@ exposeTool(
 );
 ```
 
-`fundingRouteInputSchema`, `fundingResultSchema`, and
-`validateFundingCallerAndRequest` above stand for the provider's own closed
-schemas and validation; they are not SDK helpers. The named foreground tool is
+The schema and validation names above stand for the provider's own closed,
+bounded contracts; they are not SDK helpers. The named foreground tool is
 private to the same installation and declares its exact audience:
 
 ```ts
@@ -1171,53 +1154,25 @@ exposeTool(
 );
 ```
 
-The Kernel derives the provider app from the original tool target, opens or
-focuses that app's exact declared tile in the active workspace, waits for its
-matching endpoint, and routes only the bounded opaque arguments to the named
-`same_app` + `foreground_tile` tool. It attests the original requester in
-`context.caller` and the private audience in `context.audience`. Kernel does
-not parse token metadata, decimals, fees, accounts, routes, or provider UI, and
-it displays no approval dialog for this path.
+Kernel treats the request and result as schema-validated opaque JSON. It opens
+or focuses the exact provider tile, attests `context.caller` and
+`context.audience`, and displays no provider-domain dialog.
 
-Treat the snippets as a protocol sketch: every nested request/result field
-must be closed and bounded, and Candid adapters must validate their exact
-generated shapes. In particular:
+For every provider flow:
 
-- require `context.presentUserInterface` before any preparation or execution
-  so a Kernel without provider-UI support fails before an effect;
-- never put caller app, Wallet app, owner, or Agent claims in public arguments;
-  use the Kernel-attested `context.caller` and `context.audience`;
-- call `presentUserInterface()` exactly once and return or await it; the
-  provider invocation fails if its one-use interaction is never completed;
-- prepare and persist an immutable command only inside the attested provider
-  tile, before showing its modal;
-- render normalized domain facts in the provider tile and make Accept and
-  Reject the only decision controls for that operation;
-- call the backend only with `context.kernel.updateSelf()` and only through
-  exact methods listed by the provider in `preapproved_self_calls`;
-- observe `context.signal`; cancellation prevents future work but cannot undo a
-  remote update already dispatched;
-- use durable request identity and reconcile an ambiguous outcome rather than
-  creating a fresh mutation; and
-- do not combine the first version with attachment or control annotations.
+- feature-detect and consume `presentUserInterface()` before preparation or
+  execution, and use only Kernel-attested caller and audience facts;
+- keep request/result schemas closed and bounded; the attested tile may use
+  exact preapproved methods to prepare immutable non-value-moving review state
+  and persist terminal rejection, while only the affirmative action may
+  dispatch a
+  value-moving execute method; and
+- observe cancellation and use durable request identity, because cancellation
+  cannot undo a remote update already dispatched.
 
-Kernel validates the original tool arguments before handler dispatch and binds
-the one-use presentation capability to the exact requester, provider,
-installations, versions, endpoint sessions, invocation, cancellation signal,
-and original argument digest. A human request must originate in the focused
-source tile during transient user activation. Exact and wildcard session
-grants do not replace the provider-owned decision, and the Wallet modal gives
-the user one Accept or Reject action for the complete operation.
-
-The target resident does not declare `background_ui_requests` merely for this
-callback. It is responding inside the source-bound provider invocation, not
-starting an unrelated owner-dialog request from ambient background work.
-
-The provider remains an ordinary isolated app from Kernel's perspective. The
-owner has chosen to trust that exact installed provider and its UI to govern
-its own preapproved effects. Source review helps evaluate that trust, but does
-not replace runtime AppScope, audience, amount, account, expiry, cancellation,
-and idempotency checks.
+The callback does not require `background_ui_requests`; it belongs to the
+source-bound invocation. Exact and wildcard grants cannot replace the one
+provider-owned decision.
 
 A Swap caller should use the exact stable target and versioned tool name rather
 than first listing another app's tools:
@@ -1230,23 +1185,17 @@ const funding = await callTool({
 });
 ```
 
-Cross-app tool listing is itself a permission boundary and wildcard session
-access is inappropriate for a payment path. For direct deposits, Wallet
-performs one ICRC-1 transfer and returns its receipt. For pull-based protocols,
-Wallet creates one exact, short-lived ICRC-2 allowance; the Swap app then calls
-its own exact preapproved backend method to perform `icrc2_transfer_from`
-without a second owner prompt. The allowance is not intrinsically one-use, so
-the Wallet review must state its absolute amount, fees, spender, and expiration.
-Another asset standard belongs in another trusted Wallet provider exposing an
-analogous app-level tool; Kernel remains unaware of both standards.
+Do not rely on wildcard payment grants. `context.requestApproval()` is a
+deprecated generic compatibility member, not an app/version allowlist. Current
+providers must use `presentUserInterface()` and cannot stack the two members of
+the shared one-use interaction. Released provider SDKs which predate and ignore
+the provider-UI marker, including Wallet 0.3.6, expose only
+`requestApproval()` and retain the generic Kernel raw-JSON review.
 
-The `provider_once` annotation remains on `wallet_fund_v1`, so existing Swap
-callers keep the same public target, tool name, and request/result contract.
-The deprecated `context.requestApproval()` member is retained only for
-already-published providers such as Wallet 0.3.6. That compatibility lane may
-render the old bounded JSON review in Kernel; new providers must use
-`presentUserInterface()` and must not call both members of the shared one-use
-interaction.
+The complete protocol, security invariants, and Wallet funding contract live in
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md#provider-mediated-one-shot-tools),
+[Kernel-App Communication](./kernel-app-communication.md#provider-mediated-one-shot-consent),
+and [Wallet](../apps/wallet/README.md#app-funding-contract).
 
 For an active root agent, expose a separate exact tool instead of bypassing the
 human flow inside `wallet_fund_v1`:

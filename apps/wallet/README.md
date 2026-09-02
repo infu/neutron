@@ -10,11 +10,12 @@ Neutron apps. Kernel authenticates the requesting and Wallet endpoints and
 opens or focuses Wallet's exact tile, but it forwards only opaque presentation
 data and does not render or interpret token decisions. Wallet reads the ledger,
 formats symbols, decimals, fees, recipients, spenders, and allowances, renders
-the one approval modal, and executes only through its exact preapproved backend
-methods after acceptance. This is an operational Wallet for owner-trusted apps
-and live agents, not a cold-storage boundary against the installed Wallet
-package. Installing or updating Wallet is therefore a consequential trust
-decision.
+the one approval modal, and uses only exact preapproved backend methods. Those
+methods may prepare review state or persist rejection; only acceptance may
+dispatch value-moving execution. This is an operational Wallet for
+owner-trusted apps and live agents, not a cold-storage boundary against the
+installed Wallet package. Installing or updating Wallet is therefore a
+consequential trust decision.
 
 ## App Funding Contract
 
@@ -46,13 +47,13 @@ routes the opaque request only to Wallet's private
 attestation, reads authoritative ledger metadata, decimals, current fees, and
 allowance state, freezes the command, and renders Wallet's modal.
 
-The owner makes one decision in Wallet. **Accept** executes the frozen command
-through Wallet's exact preapproved self call; **Reject** records a definite
+The owner makes one decision in Wallet. The primary action executes the frozen
+command through Wallet's exact preapproved self call; Cancel records a definite
 rejection without a ledger call. Kernel displays no approval dialog and never
-sees token semantics. The presentation capability is bound to the original
-caller, provider, and live invocation and can be consumed only once. A calling
-app cannot invoke the private tile tool directly, and exact or wildcard tool
-session grants cannot replace this decision.
+interprets token semantics. The presentation capability is bound to the
+original caller, provider, and originating live public handler call and can be
+consumed only once. A calling app cannot invoke the private tile tool directly,
+and exact or wildcard tool session grants cannot replace this decision.
 
 The funding descriptor uses metadata-only Kernel audit projection. Kernel keeps
 bounded caller/provider/tool/outcome facts rather than financial arguments or
@@ -111,20 +112,25 @@ background authority: the current root turn still begins from the enabled
 exact agent's focused tile with transient user activation.
 
 Published Wallet 0.3.6 used the now-deprecated scoped
-`context.requestApproval()` callback. A provider-UI Kernel retains its raw JSON
-dialog only as a compatibility lane for that exact published Wallet. New Wallet
-code requires `context.presentUserInterface()` before preparation and never
-falls back to the legacy callback or an ordinary reusable tool grant. Existing
-Wallet features remain usable in every partial-upgrade combination.
+`context.requestApproval()` callback. Kernel retains that generic compatibility
+member and its raw JSON dialog; published Wallet 0.3.6 depends on it, but the
+runtime does not version-gate it. Current Wallet code requires
+`context.presentUserInterface()` before preparation and never falls back to the
+legacy callback or an ordinary reusable tool grant. Wallet features unrelated
+to provider funding and direct-root routing are required to remain usable in
+every partial-upgrade combination.
 
-| Installed combination | Funding behavior |
-| --- | --- |
-| Provider-UI Kernel + existing caller app | The unchanged `wallet_fund_v1` endpoint and schema open Wallet's approval modal; callers need no migration. |
-| Provider-UI Kernel + published Wallet 0.3.6 | `wallet_fund_v1` still works through the deprecated raw Kernel JSON dialog until Wallet is updated. |
-| Wallet before 0.3.6 | Existing Wallet features work; cross-app funding and Approvals are absent. |
-| Kernel without provider UI + new Wallet | Existing Wallet features work; human funding fails before preparation and the root-only tool remains unavailable. |
-| Provider-UI Kernel + new Wallet | Human funding uses one Wallet modal; a direct root Agent may use the separate UI-free root tool. |
-| Existing custom-ledger setup | Existing balances, history, deposits, and sends work; allowance features require the additional exact scopes described below. |
+The compatibility contract for the pending K325/W308 successors, together with
+the released K323/K324/W306/W307 lanes, is the exact matrix in
+[App Method Access And Call Consent](../../doc/app-method-access-and-call-consent.md#provider-mediated-one-shot-tools).
+It distinguishes human presentation from root-tool availability, including the
+K324/W308 lane where human funding fails closed but direct-root funding works.
+Final pending-successor cells remain subject to qualification against the exact
+candidate archives. At the source-contract level, existing callers need no
+migration: W308 retains the endpoint, schemas, provider annotation, and caller
+semantics of `wallet_fund_v1`. Existing custom ledger state is required to
+remain usable; allowance features require the additional exact scopes described
+below.
 
 The ledger picker offers both reviewed presets and an **Add custom ledger**
 action. A custom canister id is parsed and canonicalized as an IC principal
@@ -145,10 +151,10 @@ Wallet supports up to 16 selected ledgers and retains at most 64 historical
 custom ledger records. A deselected custom ledger without activity is reclaimed;
 one with locally recorded transfers stays available to Activity history. If a
 custom ledger does not provide the complete ICRC-103 listing route, Wallet
-reports **enumeration unsupported** rather than presenting a history-derived
-list as complete. The distinct legacy ICP approval adapter is selected only for
-the reviewed ICP ledger; matching method names on an arbitrary custom ledger do
-not make it an ICP ledger.
+shows the approval view as degraded or incomplete rather than presenting a
+history-derived list as complete. The distinct legacy ICP approval adapter is
+selected only for the reviewed ICP ledger; matching method names on an
+arbitrary custom ledger do not make it an ICP ledger.
 
 Fresh installs activate ICP, ckBTC, and ckUSDC. Their reviewed ledger, index,
 minter, and ckETH gas-helper reservations are accepted with the app installation;

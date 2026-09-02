@@ -25,6 +25,27 @@ module {
         var seen : Bool;
     };
 
+    func validUntil(command : CommandMemory.Command) : Int {
+        Int.fromNat(Nat64.toNat(command.valid_until));
+    };
+
+    // `retain_until` was originally calculated from `valid_until`. Preserve
+    // that interval when a command reaches a terminal state after its original
+    // deadline, without changing the released command-memory schema.
+    func terminalRetainUntil(
+        command : CommandMemory.Command,
+        terminalAt : Int,
+    ) : Int {
+        let deadline = validUntil(command);
+        let retention = if (command.retain_until > deadline) {
+            command.retain_until - deadline;
+        } else 0;
+        let completedRetention = terminalAt + retention;
+        if (completedRetention > command.retain_until) {
+            completedRetention;
+        } else command.retain_until;
+    };
+
     public func pruneExpiredCommands(
         commands : Map.Map<CommandMemory.CommandKey, CommandMemory.Command>,
         compare : (CommandMemory.CommandKey, CommandMemory.CommandKey) -> Order.Order,
@@ -35,10 +56,20 @@ module {
         label entries for ((key, command) in Map.entries(commands)) {
             if (List.size(discarded) >= limit) break entries;
             let removable = switch (command.status) {
-                case (#prepared) now > Int.fromNat(Nat64.toNat(command.valid_until));
-                case (#succeeded(_)) now >= command.retain_until;
-                case (#rejected(_)) now >= command.retain_until;
-                case (#pending(_)) false;
+                case (#prepared) now > validUntil(command);
+                case (#succeeded(receipt)) {
+                    now >= terminalRetainUntil(command, receipt.completed_at);
+                };
+                case (#rejected(error)) {
+                    now >= terminalRetainUntil(command, error.at);
+                };
+                // Accepting while another Wallet call owns the dispatch slot
+                // creates pending work with no frozen args. It is still known
+                // never to have executed, so it may expire like #prepared.
+                // Once args are frozen, retain the ambiguous command forever.
+                case (#pending(_)) {
+                    command.call_args == null and now > validUntil(command);
+                };
             };
             if (removable) List.add(discarded, key);
         };
@@ -72,6 +103,20 @@ module {
         });
         command.updated_at := now;
         if (anotherInFlight) #waiting else #dispatch;
+    };
+
+    public func requiresCurrentAuthority(
+        command : CommandMemory.Command,
+    ) : Bool {
+        switch (command.status) {
+            case (#prepared) true;
+            case (#pending(_)) command.call_args == null;
+            // Frozen pending work must remain replayable for reconciliation,
+            // and terminal outcomes remain replayable until their tombstones
+            // expire even if older state lacks frozen call arguments.
+            case (#succeeded(_)) false;
+            case (#rejected(_)) false;
+        };
     };
 
     public func activeCommandCount(
@@ -112,7 +157,10 @@ module {
             if (command.ledger == ledger) {
                 let active = switch (command.status) {
                     case (#prepared) now <= command.valid_until;
-                    case (#pending(_)) true;
+                    case (#pending(_)) switch (command.call_args) {
+                        case null now <= command.valid_until;
+                        case (?_) true;
+                    };
                     case (_) false;
                 };
                 if (active) switch (command.operation) {

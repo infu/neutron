@@ -5,6 +5,7 @@ import Iter "mo:core/Iter";
 import List "mo:core/List";
 import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";
+import Order "mo:core/Order";
 import Principal "mo:core/Principal";
 import Text "mo:core/Text";
 import VarArray "mo:core/VarArray";
@@ -74,6 +75,25 @@ module {
 
     public func isValid(value : Blob) : Bool {
         let bytes = Blob.toArray(value);
+        validBytes(bytes);
+    };
+
+    // The ICP ledger orders the 28-byte SHA-224 payload stored in its
+    // AccountIdentifier, not the four-byte CRC-prefixed wire representation.
+    public func compare(left : Blob, right : Blob) : ?Order.Order {
+        let leftBytes = Blob.toArray(left);
+        let rightBytes = Blob.toArray(right);
+        if (not validBytes(leftBytes) or not validBytes(rightBytes)) return null;
+        var index = 4;
+        while (index < 32) {
+            if (leftBytes[index] < rightBytes[index]) return ?#less;
+            if (leftBytes[index] > rightBytes[index]) return ?#greater;
+            index += 1;
+        };
+        ?#equal;
+    };
+
+    func validBytes(bytes : [Nat8]) : Bool {
         if (bytes.size() != 32) return false;
         let digest = Array.tabulate<Nat8>(28, func(index) { bytes[index + 4] });
         let expected = crc32(digest);

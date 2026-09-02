@@ -11,13 +11,13 @@ import type {
 } from "neutron-tools/src/schema.js";
 
 const decoder = new TextDecoder();
-const releasedWallet306 = new URL(
-  "../wallet.v0.3.6.neutron",
+const releasedWallet307 = new URL(
+  "../wallet.v0.3.7.neutron",
   import.meta.url,
 );
-const releasedWallet306Bytes = 666_413;
-const releasedWallet306Sha256 =
-  "bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae";
+const releasedWallet307Bytes = 677_271;
+const releasedWallet307Sha256 =
+  "20ba3b00349e9386713a789622ce6a570fc7123e7daf89cda38daedcfc74fac1";
 const kernel: PackagedNeutronManifest = {
   format: 3,
   id: "kernel",
@@ -111,22 +111,22 @@ test("Wallet candidate keeps production wallet v1 and initializes wallet_command
   });
 });
 
-test("Wallet 0.3.7 keeps both exact Wallet 0.3.6 memory roots", async () => {
+test("Wallet 0.3.8 keeps both exact Wallet 0.3.7 memory roots", async () => {
   const [releasedBytes, sourceText, lockText] = await Promise.all([
-    readFile(releasedWallet306),
+    readFile(releasedWallet307),
     readFile(new URL("../neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../neutron.lock.json", import.meta.url), "utf8"),
   ]);
-  expect(releasedBytes.byteLength).toBe(releasedWallet306Bytes);
+  expect(releasedBytes.byteLength).toBe(releasedWallet307Bytes);
   expect(createHash("sha256").update(releasedBytes).digest("hex")).toBe(
-    releasedWallet306Sha256,
+    releasedWallet307Sha256,
   );
 
   const released = packageManifest(releasedBytes);
   const source = JSON.parse(sourceText) as NeutronManifest;
   const lock = JSON.parse(lockText) as ReturnType<typeof createMemoryLock>;
-  expect(released).toMatchObject({ id: "wallet", version: 306 });
-  expect(source).toMatchObject({ id: "wallet", version: 307 });
+  expect(released).toMatchObject({ id: "wallet", version: 307 });
+  expect(source).toMatchObject({ id: "wallet", version: 308 });
 
   const releasedLock = createMemoryLock(released);
   const candidateMemory = Object.fromEntries(

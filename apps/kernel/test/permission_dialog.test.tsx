@@ -1558,8 +1558,8 @@ test("generic canister consent review renders exact canonical JSON arguments", (
 test("provider-owned tool consent renders the provider review canonically", () => {
   useAppsStore.setState({
     list: {
-      swap: registryApp({ id: "swap", name: "Swap" }),
-      wallet: registryApp({ id: "wallet", name: "Wallet" }),
+      requester: registryApp({ id: "requester", name: "Requester" }),
+      provider: registryApp({ id: "provider", name: "Provider" }),
     },
   });
   useMsgBusPermissionStore.setState({
@@ -1567,23 +1567,23 @@ test("provider-owned tool consent renders the provider review canonically", () =
       71: {
         cid: 71,
         caller: {
-          endpoint: "app:swap:tile:main:instance:swap-one",
-          appId: "swap",
+          endpoint: "app:requester:tile:main:instance:requester-one",
+          appId: "requester",
           role: "tile",
         },
-        target: "app:wallet:background",
-        tool: "wallet_transfer",
-        toolTitle: "Transfer Tokens",
+        target: "app:provider:background",
+        tool: "provider_action",
+        toolTitle: "Perform Provider Action",
         arguments: {},
         providerReview: {
-          amount: "1.00000000 TEST",
-          fee: "0.00010000 TEST",
+          action: "create entry",
+          cost: "one credit",
           warning: "Kernel\u202e approved\u200b",
         },
         sessionOnly: false,
         onceOnly: true,
-        callerSessionId: "swap-session",
-        targetSessionId: "wallet-session",
+        callerSessionId: "requester-session",
+        targetSessionId: "provider-session",
         attentionToken: "attention-token",
       },
     },
@@ -1594,19 +1594,55 @@ test("provider-owned tool consent renders the provider review canonically", () =
   const html = renderToStaticMarkup(
     <FrontendToolRequest request={request} uiMode="normal" />,
   );
-  expect(html).toContain("Allow swap to use wallet?");
-  expect(html).toContain("wallet</strong> prepared the exact review below");
-  expect(html).toContain("Review from wallet");
+  expect(html).toContain("Allow requester to use provider?");
+  expect(html).toContain("provider</strong> prepared the exact review below");
+  expect(html).toContain("Review from provider");
   expect(html).toContain(
-    'aria-label="Canonical review prepared by wallet"',
+    'aria-label="Canonical review prepared by provider"',
   );
-  expect(html).toContain("1.00000000 TEST");
-  expect(html).toContain("0.00010000 TEST");
+  expect(html).toContain("create entry");
+  expect(html).toContain("one credit");
   expect(html).toContain("Kernel\\u202e approved\\u200b");
   expect(html).not.toContain("\u202e");
   expect(html).not.toContain("\u200b");
   expect(html).toContain("Allow once");
   expect(html).not.toContain("Allow session");
+});
+
+test("an app-defined workspace tool name stays in the generic consent dialog", () => {
+  useMsgBusPermissionStore.setState({
+    requests: {
+      72: {
+        cid: 72,
+        caller: {
+          endpoint: "app:requester:tile:main:instance:requester-one",
+          appId: "requester",
+          role: "tile",
+        },
+        target: "app:provider:background",
+        tool: "workspace.open_tile",
+        toolTitle: "Provider Action",
+        arguments: {},
+        providerReview: { exactAction: "provider-owned effect" },
+        sessionOnly: false,
+        onceOnly: true,
+        callerSessionId: "requester-session",
+        targetSessionId: "provider-session",
+        attentionToken: "attention-token",
+      },
+    },
+  });
+
+  const request = useMsgBusPermissionStore.getState().requests[72];
+  if (!request) throw new Error("Missing colliding tool-name fixture");
+  const html = renderToStaticMarkup(
+    <FrontendToolRequest request={request} uiMode="normal" />,
+  );
+
+  expect(html).toContain('data-tid="frontend-tool-dialog"');
+  expect(html).not.toContain('data-tid="workspace-tile-dialog"');
+  expect(html).toContain("Provider Action");
+  expect(html).toContain("provider-owned effect");
 });
 
 test("generic canister consent quotes and escapes an arbitrary Candid method name", () => {

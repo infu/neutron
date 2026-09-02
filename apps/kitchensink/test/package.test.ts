@@ -8,7 +8,10 @@ import {
   generateAppMethodSchemaArtifact,
   validateAppMethodArgs,
 } from "neutron-scripts/src/method_schema.js";
-import { normalizeToolDescriptor } from "neutron-tools/src/app.ts";
+import {
+  normalizeToolDescriptor,
+  validateToolArguments,
+} from "neutron-tools/src/app.ts";
 import {
   buildCapabilityPlan,
   getCapabilityPlanEntry,
@@ -21,6 +24,10 @@ import { type NeutronManifest } from "neutron-tools/src/schema.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 import { trayDemoSnapshotSchema } from "../src/tray_demo.ts";
 import { counterIncrementInputSchema } from "../src/tile_tools.ts";
+import {
+  walletFundingIntentActionSchema,
+  walletFundingIntentResultSchema,
+} from "../src/wallet_funding_intent_storage.ts";
 
 const manifestUrl = new URL("../neutron.json", import.meta.url);
 const backendUrl = new URL("../backend/main.mo", import.meta.url);
@@ -29,6 +36,10 @@ const capabilityFrontendUrl = new URL("../src/capability_lab.tsx", import.meta.u
 const derivedFrontendUrl = new URL("../src/derived_capabilities.tsx", import.meta.url);
 const platformFrontendUrl = new URL("../src/platform_pages.tsx", import.meta.url);
 const walletFundingDemoUrl = new URL("../src/wallet_funding_demo.ts", import.meta.url);
+const walletFundingIntentStorageUrl = new URL(
+  "../src/wallet_funding_intent_storage.ts",
+  import.meta.url,
+);
 const contactsManifestUrl = new URL("../../contacts/neutron.json", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
@@ -36,7 +47,7 @@ const htmlUrl = new URL("../dist/web/index.html", import.meta.url);
 const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const trayHtmlUrl = new URL("../dist/web/tray.html", import.meta.url);
 const trayCssUrl = new URL("../dist/web/tray.css", import.meta.url);
-const packageUrl = new URL("../kitchensink.v0.3.6.neutron", import.meta.url);
+const packageUrl = new URL("../kitchensink.v0.3.7.neutron", import.meta.url);
 const decoder = new TextDecoder();
 
 async function readManifest(): Promise<NeutronManifest> {
@@ -141,7 +152,7 @@ test("kitchen sink declares the complete closed capability lab", async () => {
   expect(manifest).toMatchObject({
     id: "kitchensink",
     name: "Kitchen Sink",
-    version: 306,
+    version: 307,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [
@@ -500,7 +511,8 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   expect(platformFrontend).toContain("new TrayDemoClient()");
   expect(platformFrontend).toContain("BigInt(next.revision) >= BigInt(current.revision)");
   expect(platformFrontend).toContain("function WalletFundingPage()");
-  expect(platformFrontend).toContain("Kitchen Sink stops after Wallet returns");
+  expect(platformFrontend).toContain("failClosedIntentMutation(intent, reason)");
+  expect(platformFrontend).toContain("This fixture stops after Wallet returns");
   expect(platformFrontend).toContain('view: "approvals"');
   expect(walletFundingDemo).toContain('WALLET_FUNDING_TARGET = "app:wallet:background"');
   expect(walletFundingDemo).toContain('WALLET_FUNDING_TOOL = "wallet_fund_v1"');
@@ -510,11 +522,17 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   expect(walletFundingDemo).not.toContain("icrc1_transfer");
   expect(walletFundingDemo).not.toContain("icrc2_approve");
   expect(walletFundingDemo).not.toContain("icrc2_transfer_from");
+  expect(backend).not.toContain("icrc1_transfer");
+  expect(backend).not.toContain("icrc2_approve");
   expect(backend).not.toContain("icrc2_transfer_from");
 });
 
 test("kitchen sink resident service owns bounded tray state", async () => {
   const service = await readFile(serviceUrl, "utf8");
+  const walletFundingIntentStorage = await readFile(
+    walletFundingIntentStorageUrl,
+    "utf8",
+  );
   const trayFrontend = await readFile(trayFrontendUrl, "utf8");
 
   expect(service).toContain("let notifications: TrayDemoNotification[] = []");
@@ -538,6 +556,13 @@ test("kitchen sink resident service owns bounded tray state", async () => {
     expect(service).toContain(`"${tool}"`);
   }
   expect(service).toContain("requireOwnTile(context)");
+  expect(service).toContain("WALLET_FUNDING_INTENT_TOOL");
+  expect(service).toContain("globalThis.navigator?.locks");
+  expect(service).toContain('{ mode: "exclusive", signal: context.signal }');
+  expect(walletFundingIntentStorage).toContain(
+    'WALLET_FUNDING_INTENT_TOOL = "wallet_funding_intent_v1"',
+  );
+  expect(service).toContain('"neutron:visibility": "same_app"');
   expect(service).toContain("if (!context.signal)");
   expect(service).toContain("requiredCrossAppEndpoint(args.target)");
   expect(service).toContain("queueTraySync(committedRevision)");
@@ -573,6 +598,21 @@ test("kitchen sink exposed schemas pass shared tool hardening", () => {
       outputSchema: trayDemoSnapshotSchema,
     }),
   ).not.toThrow();
+  const fundingIntent = normalizeToolDescriptor({
+    name: "wallet_funding_intent_v1",
+    inputSchema: walletFundingIntentActionSchema,
+    outputSchema: walletFundingIntentResultSchema,
+    annotations: { "neutron:visibility": "same_app" },
+  });
+  expect(() => validateToolArguments(fundingIntent, {
+    action: "reset",
+    kind: "direct",
+  })).not.toThrow();
+  expect(() => validateToolArguments(fundingIntent, {
+    action: "reset",
+    kind: "direct",
+    unexpected: true,
+  })).toThrow("Invalid arguments");
 
   expect(() =>
     normalizeToolDescriptor({

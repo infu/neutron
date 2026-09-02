@@ -22,6 +22,20 @@ async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
 }
 
+function internetComputerPropertySchemas(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(internetComputerPropertySchemas);
+  }
+  if (value === null || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  return [
+    ...(Object.prototype.hasOwnProperty.call(record, "internet_computer")
+      ? [record.internet_computer]
+      : []),
+    ...Object.values(record).flatMap(internetComputerPropertySchemas),
+  ];
+}
+
 test("Contacts V2 declares one migrated private memory and five resident tools", async () => {
   const value = await manifest();
   expect(validate_neutron_conf(value).errors).toEqual([]);
@@ -109,6 +123,19 @@ test("Contacts public variants generate method schemas", async () => {
   });
   expect(JSON.stringify(artifact.methods.contacts_save)).toContain("neutron");
   expect(JSON.stringify(artifact.methods.contacts_save)).toContain("principal");
+  const accountStringSchema = {
+    type: "string",
+    description: "icrc1 account or 'id[-sub]' shorthand",
+  };
+  // icblast advertises its string adapter for both schema directions. Kernel
+  // uses that adapter for input, while its API-1 live output projection stays
+  // structural; contacts_self_call.test.ts covers that deliberate asymmetry.
+  expect(
+    internetComputerPropertySchemas(artifact.methods.contacts_save?.input),
+  ).toEqual([accountStringSchema]);
+  expect(
+    internetComputerPropertySchemas(artifact.methods.contacts_save?.output),
+  ).toEqual([accountStringSchema]);
 });
 
 test("Contacts keeps V1 immutable and V2 memory self-contained", async () => {

@@ -11,6 +11,7 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Catalog "../Catalog";
 import Capabilities "../capabilities/Types";
+import ChainKeyClient "../chainkey/Client";
 import IcrcClient "../icrc1/Client";
 import Memory "../memory/wallet/v1";
 import AccountIdentifier "AccountIdentifier";
@@ -382,10 +383,45 @@ module {
                 case (?#icrc(account)) ?historyAddress(ledgerPrincipal, account);
                 case (_) destination;
             };
+            let selfTransfer = operation == #transfer and isWalletHistoryAddress(
+                ledgerPrincipal,
+                canonicalDestination,
+                calls.canister_principal,
+            );
+            func localReceipt(timestamp : Nat64) : Memory.HistoryTransaction {
+                {
+                    block_index = blockIndex;
+                    operation;
+                    timestamp_ns = timestamp;
+                    amount;
+                    fee;
+                    balance_effect = if (selfTransfer) {
+                        -Int.fromNat(effectFee)
+                    } else -Int.fromNat(amount + effectFee);
+                    from = ?historyAddress(ledgerPrincipal, {
+                        owner = calls.canister_principal;
+                        subaccount = null;
+                    });
+                    to = canonicalDestination;
+                    spender = null;
+                    memo;
+                    intent;
+                    native;
+                    provenance = #local_pending;
+                    verification = #pending;
+                };
+            };
             switch (Map.get(ledger.history.transactions, Nat.compare, blockIndex)) {
                 case (?existing) {
-                    if (existing.amount != amount) {
-                        return #err("Block already has a conflicting Wallet amount");
+                    let transaction = localReceipt(existing.timestamp_ns);
+                    if (not recordedReceiptMatches(
+                        ledgerPrincipal,
+                        calls.canister_principal,
+                        transaction,
+                        existing,
+                        relatedTransactionFor(transaction),
+                    )) {
+                        return #err("Block already has a conflicting Wallet transfer receipt");
                     };
                     switch (existing.intent, intent) {
                         case (?previous, ?next) {
@@ -395,35 +431,23 @@ module {
                         };
                         case (_) {};
                     };
-                    let merged = {
-                        existing with
-                        memo = preferBlob(memo, existing.memo);
-                        intent = preferIntent(intent, existing.intent);
-                        native = preferNative(native, existing.native);
+                    switch (existing.native, native) {
+                        case (?previous, ?next) {
+                            if (previous != next) {
+                                return #err("Block already has conflicting Wallet native context");
+                            };
+                        };
+                        case (_) {};
                     };
-                    ignore Store.putTransaction(mem, ledgerPrincipal, merged);
+                    ignore Store.putTransaction(mem, ledgerPrincipal, {
+                        existing with
+                        intent = prefer(intent, existing.intent);
+                        native = prefer(native, existing.native);
+                    });
                     #ok(());
                 };
                 case null {
-                    let transaction : Memory.HistoryTransaction = {
-                        block_index = blockIndex;
-                        operation;
-                        timestamp_ns = Store.nowNanos();
-                        amount;
-                        fee;
-                        balance_effect = -Int.fromNat(amount + effectFee);
-                        from = ?historyAddress(ledgerPrincipal, {
-                            owner = calls.canister_principal;
-                            subaccount = null;
-                        });
-                        to = canonicalDestination;
-                        spender = null;
-                        memo;
-                        intent;
-                        native;
-                        provenance = #local_pending;
-                        verification = #pending;
-                    };
+                    let transaction = localReceipt(Store.nowNanos());
                     if (Store.putTransaction(mem, ledgerPrincipal, transaction)) {
                         #ok(());
                     } else #err("Ledger disappeared while recording transfer");
@@ -442,38 +466,44 @@ module {
             let ?ledger = Map.get(mem.ledgers, Principal.compare, ledgerPrincipal) else {
                 return #err("Ledger is not configured");
             };
+            func localReceipt(timestamp : Nat64) : Memory.HistoryTransaction {
+                {
+                    block_index = blockIndex;
+                    operation = #approve;
+                    timestamp_ns = timestamp;
+                    amount;
+                    fee = ?fee;
+                    balance_effect = -Int.fromNat(fee);
+                    from = ?historyAddress(ledgerPrincipal, {
+                        owner = calls.canister_principal;
+                        subaccount = null;
+                    });
+                    to = null;
+                    spender = ?spender;
+                    memo;
+                    intent = null;
+                    native = null;
+                    provenance = #local_pending;
+                    verification = #pending;
+                };
+            };
             switch (Map.get(ledger.history.transactions, Nat.compare, blockIndex)) {
                 case (?existing) {
-                    if (existing.operation != #approve or existing.amount != amount) {
+                    let transaction = localReceipt(existing.timestamp_ns);
+                    if (not recordedReceiptMatches(
+                        ledgerPrincipal,
+                        calls.canister_principal,
+                        transaction,
+                        existing,
+                        null,
+                    )) {
                         return #err("Block already has a conflicting Wallet approval");
                     };
-                    ignore Store.putTransaction(mem, ledgerPrincipal, {
-                        existing with
-                        spender = ?spender;
-                        memo = preferBlob(memo, existing.memo);
-                    });
+                    // Preserve the index/ledger spender and memo.
                     #ok(());
                 };
                 case null {
-                    let transaction : Memory.HistoryTransaction = {
-                        block_index = blockIndex;
-                        operation = #approve;
-                        timestamp_ns = Store.nowNanos();
-                        amount;
-                        fee = ?fee;
-                        balance_effect = -Int.fromNat(fee);
-                        from = ?historyAddress(ledgerPrincipal, {
-                            owner = calls.canister_principal;
-                            subaccount = null;
-                        });
-                        to = null;
-                        spender = ?spender;
-                        memo;
-                        intent = null;
-                        native = null;
-                        provenance = #local_pending;
-                        verification = #pending;
-                    };
+                    let transaction = localReceipt(Store.nowNanos());
                     if (Store.putTransaction(mem, ledgerPrincipal, transaction)) {
                         #ok(());
                     } else #err("Ledger disappeared while recording approval");
@@ -488,29 +518,51 @@ module {
             native : Memory.NativeHistoryContext,
         ) : () {
             let ?ledger = Map.get(mem.ledgers, Principal.compare, ledgerPrincipal) else return;
+            func localReceipt(timestamp : Nat64) : Memory.HistoryTransaction {
+                {
+                    block_index = blockIndex;
+                    operation = #mint;
+                    timestamp_ns = timestamp;
+                    amount;
+                    fee = null;
+                    balance_effect = Int.fromNat(amount);
+                    from = null;
+                    to = ?historyAddress(ledgerPrincipal, {
+                        owner = calls.canister_principal;
+                        subaccount = null;
+                    });
+                    spender = null;
+                    memo = null;
+                    intent = null;
+                    native = ?native;
+                    provenance = #local_pending;
+                    verification = #pending;
+                };
+            };
             switch (Map.get(ledger.history.transactions, Nat.compare, blockIndex)) {
                 case (?existing) {
+                    let transaction = localReceipt(existing.timestamp_ns);
+                    if (not recordedReceiptMatches(
+                        ledgerPrincipal,
+                        calls.canister_principal,
+                        transaction,
+                        existing,
+                        null,
+                    )) return;
+                    switch (existing.native) {
+                        case (?_) return;
+                        case null {};
+                    };
                     ignore Store.putTransaction(mem, ledgerPrincipal, {
-                        existing with native = preferNative(?native, existing.native)
+                        existing with native = ?native
                     });
                 };
                 case null {
-                    ignore Store.putTransaction(mem, ledgerPrincipal, {
-                        block_index = blockIndex;
-                        operation = #mint;
-                        timestamp_ns = Store.nowNanos();
-                        amount;
-                        fee = null;
-                        balance_effect = Int.fromNat(amount);
-                        from = null;
-                        to = ?#icrc({ owner = calls.canister_principal; subaccount = null });
-                        spender = null;
-                        memo = null;
-                        intent = null;
-                        native = ?native;
-                        provenance = #local_pending;
-                        verification = #pending;
-                    });
+                    ignore Store.putTransaction(
+                        mem,
+                        ledgerPrincipal,
+                        localReceipt(Store.nowNanos()),
+                    );
                 };
             };
         };
@@ -988,8 +1040,8 @@ module {
                     case (?local) {
                         {
                             canonical with
-                            intent = preferIntent(local.intent, canonical.intent);
-                            native = preferNative(local.native, canonical.native);
+                            intent = prefer(local.intent, canonical.intent);
+                            native = prefer(local.native, canonical.native);
                             verification = #verified;
                         };
                     };
@@ -1104,8 +1156,8 @@ module {
                     case (?local) {
                         {
                             canonical with
-                            intent = preferIntent(local.intent, canonical.intent);
-                            native = preferNative(local.native, canonical.native);
+                            intent = prefer(local.intent, canonical.intent);
+                            native = prefer(local.native, canonical.native);
                             verification = #verified;
                         };
                     };
@@ -1427,10 +1479,7 @@ module {
         };
     };
 
-    func preferIntent(
-        preferred : ?Memory.TransferIntent,
-        fallback : ?Memory.TransferIntent,
-    ) : ?Memory.TransferIntent {
+    func prefer<T>(preferred : ?T, fallback : ?T) : ?T {
         switch (preferred) { case (?value) ?value; case null fallback };
     };
 
@@ -1447,17 +1496,6 @@ module {
         left.native == right.native;
     };
 
-    func preferNative(
-        preferred : ?Memory.NativeHistoryContext,
-        fallback : ?Memory.NativeHistoryContext,
-    ) : ?Memory.NativeHistoryContext {
-        switch (preferred) { case (?value) ?value; case null fallback };
-    };
-
-    func preferBlob(preferred : ?Blob, fallback : ?Blob) : ?Blob {
-        switch (preferred) { case (?value) ?value; case null fallback };
-    };
-
     public func pendingMatches(
         ledgerPrincipal : Principal,
         walletPrincipal : Principal,
@@ -1466,17 +1504,230 @@ module {
         related : ?Memory.HistoryTransaction,
     ) : Bool {
         if (
-            pending.operation == canonical.operation and
-            pending.amount == canonical.amount and
-            optionalAddressMatches(ledgerPrincipal, pending.to, canonical.to)
-        ) return true;
+            pending.provenance != #local_pending or
+            canonical.provenance == #local_pending or
+            pending.block_index != canonical.block_index or
+            pending.operation != canonical.operation
+        ) return false;
+        switch (pending.operation) {
+            case (#approve) {
+                let ?fee = pending.fee else return false;
+                let ?spender = pending.spender else return false;
+                if (
+                    pending.to != null or
+                    pending.balance_effect != -Int.fromNat(fee)
+                ) return false;
+                outgoingPendingMatches(
+                    ledgerPrincipal,
+                    walletPrincipal,
+                    pending,
+                    canonical,
+                    -Int.fromNat(fee),
+                ) and optionalAddressesEqual(
+                    ledgerPrincipal,
+                    ?spender,
+                    canonical.spender,
+                );
+            };
+            case (#burn) {
+                if (isCkErc20GasBurn(ledgerPrincipal, pending)) {
+                    return ckErc20GasBurnMatches(
+                        ledgerPrincipal,
+                        walletPrincipal,
+                        pending,
+                        canonical,
+                        related,
+                    );
+                };
+                if (
+                    pending.fee != null or
+                    pending.to != null or
+                    pending.spender != null or
+                    pending.balance_effect != -Int.fromNat(pending.amount)
+                ) return false;
+                outgoingPendingMatches(
+                    ledgerPrincipal,
+                    walletPrincipal,
+                    pending,
+                    canonical,
+                    -Int.fromNat(pending.amount),
+                ) and nativeBurnSpenderAllowed(
+                    ledgerPrincipal,
+                    canonical.spender,
+                );
+            };
+            case (#transfer) {
+                let ?fee = pending.fee else return false;
+                if (pending.spender != null) return false;
+                let selfTransfer = isWalletHistoryAddress(
+                    ledgerPrincipal,
+                    pending.to,
+                    walletPrincipal,
+                );
+                let expectedEffect = if (selfTransfer) {
+                    -Int.fromNat(fee)
+                } else -Int.fromNat(pending.amount + fee);
+                // Released Wallets recorded self-transfers as amount + fee.
+                // Accept that local field, but require the ledger's true effect.
+                if (
+                    pending.balance_effect != expectedEffect and not (
+                        selfTransfer and
+                        pending.balance_effect == -Int.fromNat(pending.amount + fee)
+                    )
+                ) return false;
+                outgoingPendingMatches(
+                    ledgerPrincipal,
+                    walletPrincipal,
+                    pending,
+                    canonical,
+                    expectedEffect,
+                ) and (
+                    canonical.spender == null or
+                    optionalAddressesEqual(
+                        ledgerPrincipal,
+                        canonical.spender,
+                        canonical.from,
+                    )
+                );
+            };
+            case (#mint) receiptFieldsMatch(
+                ledgerPrincipal,
+                pending,
+                canonical,
+            );
+            case (#authorized_mint or #authorized_burn) false;
+        };
+    };
 
-        ckErc20GasBurnMatches(
+    func recordedReceiptMatches(
+        ledgerPrincipal : Principal,
+        walletPrincipal : Principal,
+        receipt : Memory.HistoryTransaction,
+        existing : Memory.HistoryTransaction,
+        related : ?Memory.HistoryTransaction,
+    ) : Bool {
+        if (existing.provenance == #local_pending) {
+            return localReceiptsMatch(
+                ledgerPrincipal,
+                walletPrincipal,
+                receipt,
+                existing,
+            );
+        };
+        pendingMatches(
             ledgerPrincipal,
             walletPrincipal,
-            pending,
-            canonical,
+            receipt,
+            existing,
             related,
+        );
+    };
+
+    func localReceiptsMatch(
+        ledgerPrincipal : Principal,
+        walletPrincipal : Principal,
+        left : Memory.HistoryTransaction,
+        right : Memory.HistoryTransaction,
+    ) : Bool {
+        let comparableRight = switch (left.fee) {
+            case (?fee) {
+                if (
+                    left.operation == #transfer and
+                    isWalletHistoryAddress(
+                        ledgerPrincipal,
+                        left.to,
+                        walletPrincipal,
+                    ) and
+                    left.balance_effect == -Int.fromNat(fee) and
+                    right.balance_effect == -Int.fromNat(left.amount + fee)
+                ) {
+                    // Released Wallets stored self-transfer receipts with the
+                    // amount plus fee effect. Keep exact duplicate recording
+                    // compatible while every other receipt field stays exact.
+                    { right with balance_effect = left.balance_effect };
+                } else right;
+            };
+            case null right;
+        };
+        receiptFieldsMatch(ledgerPrincipal, left, comparableRight) and
+        localMemoMatches(ledgerPrincipal, left.memo, right.memo, right.provenance);
+    };
+
+    func receiptFieldsMatch(
+        ledgerPrincipal : Principal,
+        left : Memory.HistoryTransaction,
+        right : Memory.HistoryTransaction,
+    ) : Bool {
+        left.block_index == right.block_index and
+        left.operation == right.operation and
+        left.amount == right.amount and
+        left.fee == right.fee and
+        left.balance_effect == right.balance_effect and
+        optionalAddressesEqual(ledgerPrincipal, left.from, right.from) and
+        optionalAddressesEqual(ledgerPrincipal, left.to, right.to) and
+        optionalAddressesEqual(ledgerPrincipal, left.spender, right.spender);
+    };
+
+    func outgoingPendingMatches(
+        ledgerPrincipal : Principal,
+        walletPrincipal : Principal,
+        pending : Memory.HistoryTransaction,
+        canonical : Memory.HistoryTransaction,
+        expectedEffect : Int,
+    ) : Bool {
+        pending.amount == canonical.amount and
+        pending.fee == canonical.fee and
+        canonical.balance_effect == expectedEffect and
+        isWalletHistoryAddress(ledgerPrincipal, pending.from, walletPrincipal) and
+        isWalletHistoryAddress(ledgerPrincipal, canonical.from, walletPrincipal) and
+        optionalAddressesEqual(ledgerPrincipal, pending.to, canonical.to) and
+        pendingMemoMatches(ledgerPrincipal, pending, canonical);
+    };
+
+    func isWalletHistoryAddress(
+        ledgerPrincipal : Principal,
+        value : ?Memory.HistoryAddress,
+        walletPrincipal : Principal,
+    ) : Bool {
+        optionalAddressesEqual(
+            ledgerPrincipal,
+            value,
+            ?#icrc({
+                owner = walletPrincipal;
+                subaccount = null;
+            }),
+        );
+    };
+
+    func isCkErc20GasBurn(
+        ledgerPrincipal : Principal,
+        pending : Memory.HistoryTransaction,
+    ) : Bool {
+        let ?catalogLedger = Catalog.find(ledgerPrincipal) else return false;
+        switch (catalogLedger.native_route, pending.native) {
+            case (?#cketh(_), ?native) {
+                native.related_ledger != null or native.related_block_index != null;
+            };
+            case (_) false;
+        };
+    };
+
+    func nativeBurnSpenderAllowed(
+        ledgerPrincipal : Principal,
+        canonical : ?Memory.HistoryAddress,
+    ) : Bool {
+        // ICRC indexes may omit a burn spender. If present for a Wallet native
+        // withdrawal, it must be the catalogued chain-key minter.
+        if (canonical == null) return true;
+        let ?catalogLedger = Catalog.find(ledgerPrincipal) else return false;
+        let ?route = catalogLedger.native_route else return false;
+        optionalAddressesEqual(
+            ledgerPrincipal,
+            canonical,
+            ?#icrc({
+                owner = ChainKeyClient.routeMinter(route);
+                subaccount = null;
+            }),
         );
     };
 
@@ -1488,20 +1739,25 @@ module {
         related : ?Memory.HistoryTransaction,
     ) : Bool {
         if (
-            pending.block_index != canonical.block_index or
-            pending.operation != #burn or
-            canonical.operation != #burn or
-            pending.provenance != #local_pending or
             canonical.provenance != #index or
             pending.amount == 0 or
             canonical.amount == 0 or
+            pending.balance_effect != -Int.fromNat(pending.amount) or
             canonical.balance_effect != -Int.fromNat(canonical.amount) or
+            pending.spender != null or
             not isDefaultIcrcAddress(pending.from, walletPrincipal) or
             not isDefaultIcrcAddress(canonical.from, walletPrincipal)
         ) return false;
         switch (pending.to, pending.fee, canonical.to, canonical.fee) {
             case (null, null, null, null) {};
             case (_) return false;
+        };
+        if (not pendingMemoMatches(
+            ledgerPrincipal,
+            pending,
+            canonical,
+        )) {
+            return false;
         };
 
         let ?catalogLedger = Catalog.find(ledgerPrincipal) else return false;
@@ -1560,16 +1816,56 @@ module {
         };
     };
 
-    func optionalAddressMatches(
+    func optionalAddressesEqual(
         ledgerPrincipal : Principal,
-        expected : ?Memory.HistoryAddress,
-        actual : ?Memory.HistoryAddress,
+        left : ?Memory.HistoryAddress,
+        right : ?Memory.HistoryAddress,
     ) : Bool {
-        switch (expected, actual) {
-            case (null, _) true;
-            case (?left, ?right) addressMatches(ledgerPrincipal, left, right);
-            case (?_, null) false;
+        switch (left, right) {
+            case (null, null) true;
+            case (?a, ?b) addressMatches(ledgerPrincipal, a, b);
+            case (_) false;
         };
+    };
+
+    func localMemoMatches(
+        ledgerPrincipal : Principal,
+        local : ?Blob,
+        canonical : ?Blob,
+        provenance : { #local_pending; #index; #ledger },
+    ) : Bool {
+        switch (local) {
+            case (?value) canonical == ?value;
+            case null switch (canonical) {
+                case null true;
+                case (?value) {
+                    if (provenance != #index or value.size() != 8) return false;
+                    let ?catalogLedger = Catalog.find(ledgerPrincipal) else return false;
+                    catalogLedger.history_kind == #icp;
+                };
+            };
+        };
+    };
+
+    func pendingMemoMatches(
+        ledgerPrincipal : Principal,
+        pending : Memory.HistoryTransaction,
+        canonical : Memory.HistoryTransaction,
+    ) : Bool {
+        // Chain-key minters generate the memo for native burns after Wallet
+        // submits the withdrawal. Preserve that canonical memo as unknown to
+        // Wallet; an explicit local memo and every non-native memo stay exact.
+        if (
+            pending.operation == #burn and
+            pending.native != null and
+            pending.memo == null
+        ) return true;
+        localMemoMatches(
+            ledgerPrincipal,
+            pending.memo,
+            canonical.memo,
+            canonical.provenance,
+        );
     };
 
     func addressMatches(

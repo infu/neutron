@@ -139,6 +139,9 @@ module {
         if (not Types.capturedHeadMatches(firstBlockId, start, floor, targetTip)) {
             return #err("ICP index transaction page does not begin at the captured account head");
         };
+        if (response.transactions.size() == 0 and targetTip > floor) {
+            return #err("ICP index transaction page made no progress");
+        };
 
         let walletId = AccountIdentifier.fromPrincipal(owner);
         let transactions = List.empty<Memory.HistoryTransaction>();

@@ -35,11 +35,10 @@ to discover apps, inspect one tool schema, and call tools. Direct agent actions
 do not show owner dialogs. If a called app requests a new permission, the
 kernel suspends that exact request and sends a bounded, kernel-produced
 challenge to the resident runtime. Frontend, backend, connection, and workspace
-challenges normally exclude raw tool arguments. One deliberate exception
-carries the complete bounded value being decided: a v2 external signed-call
-challenge includes its canonical prepared argument array. The runtime makes
-one separate `generateText` request with the selected OpenRouter model and one
-forced `permission_decision` tool.
+challenges exclude raw tool arguments. A v2 external signed-call challenge is
+the deliberate exception: it includes the complete canonical prepared argument
+array shown for approval. The runtime makes one separate `generateText` request
+with the selected OpenRouter model and one forced `permission_decision` tool.
 It receives the current owner goal and those permission facts, not the
 transcript, tool output, credentials, private keys, or transport ids.
 

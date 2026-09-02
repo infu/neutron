@@ -48,7 +48,7 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 324;
+export const KERNEL_NPL_RELEASE_VERSION = 325;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
@@ -186,6 +186,7 @@ const EXCLUDED_SOURCE_DIRECTORIES = new Set([
 const KERNEL_KNOWN_DETACHED_GENERATED_PATHS = new Set([
   "apps/kernel/certified-assets-qualification-receipt.json",
   "apps/kernel/kernel.v0.3.23.neutron",
+  "apps/kernel/kernel.v0.3.24.neutron",
 ]);
 const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
   string,
@@ -233,6 +234,8 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/generate_package_metadata.ts",
   "apps/kernel/public/system/browser-origin-cleanup.html",
   "apps/kernel/evidence/qualification/failure.ts",
+  "apps/kernel/evidence/qualification/prerequisites.test.ts",
+  "apps/kernel/evidence/qualification/prerequisites.ts",
   "apps/kernel/evidence/qualification/profile.test.ts",
   "apps/kernel/evidence/qualification/run_failure.test.ts",
   "apps/kernel/evidence/qualification/run_metric.test.ts",
@@ -1266,7 +1269,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.24 (packed version 324)",
+    "Package release: v0.3.25 (packed version 325)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

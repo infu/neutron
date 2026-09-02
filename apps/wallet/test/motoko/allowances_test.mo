@@ -1,7 +1,9 @@
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
+import Char "mo:core/Char";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Text "mo:core/Text";
 import AccountIdentifier "../../backend/history/AccountIdentifier";
 import AllowanceAccount "../../backend/allowances/Account";
 import IcpLegacy "../../backend/allowances/IcpLegacy";
@@ -38,6 +40,10 @@ func subaccount(lastByte : Nat8) : Blob {
     );
 };
 
+func repeatedText(size : Nat) : Text {
+    Text.fromArray(Array.tabulate<Char>(size, func(_) { 'x' }));
+};
+
 let owner = Principal.fromText("aaaaa-aa");
 let otherOwner = Principal.fromText("2vxsx-fae");
 let ledger = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
@@ -67,9 +73,19 @@ let thirdSpender : IcrcTypes.Account = {
     owner = otherOwner;
     subaccount = ?secondSubaccount;
 };
+let oneBytePrincipal = Principal.fromText("74aaa-ah7");
+let twoBytePrincipal = Principal.fromText("ihmrf-7yaaa");
+let shorterPrincipalSpender : IcrcTypes.Account = {
+    owner = oneBytePrincipal;
+    subaccount = null;
+};
+let longerPrincipalSpender : IcrcTypes.Account = {
+    owner = twoBytePrincipal;
+    subaccount = null;
+};
 
-assert (AllowanceAccount.isValid(defaultAccount));
-assert (AllowanceAccount.isValid(explicitZeroAccount));
+assert (AllowanceAccount.canonical(defaultAccount) != null);
+assert (AllowanceAccount.canonical(explicitZeroAccount) != null);
 assert (AllowanceAccount.isDefaultFor(defaultAccount, owner));
 assert (AllowanceAccount.isDefaultFor(explicitZeroAccount, owner));
 assert (AllowanceAccount.compare(defaultAccount, explicitZeroAccount) == ?#equal);
@@ -80,7 +96,23 @@ assert (
     ).subaccount == null
 );
 assert (
-    not AllowanceAccount.isValid({ owner; subaccount = ?Blob.fromArray([0]) })
+    AllowanceAccount.canonical({ owner; subaccount = ?Blob.fromArray([0]) }) == null
+);
+let canonicalAnonymous = unwrapOption(
+    AllowanceAccount.canonical({
+        owner = otherOwner;
+        subaccount = ?zeroSubaccount;
+    }),
+    "anonymous ICRC account did not canonicalize",
+);
+assert (canonicalAnonymous.owner == otherOwner);
+assert (canonicalAnonymous.subaccount == null);
+// Motoko compares Principal blobs bytewise, but the reference ICRC ledger's
+// Principal order compares byte length before contents.
+assert (Principal.compare(oneBytePrincipal, twoBytePrincipal) == #greater);
+assert (
+    AllowanceAccount.compare(shorterPrincipalSpender, longerPrincipalSpender) ==
+    ?#less
 );
 
 let initialIcrcScan = Icrc103.startScan();
@@ -146,12 +178,6 @@ assert (
     AllowanceAccount.compare(firstIcrcCursor.prev_spender, thirdSpender) ==
     ?#equal
 );
-let foundIcrc = unwrap(Icrc103.findAllowance(firstIcrcPage, {
-    owner = otherOwner;
-    subaccount = ?zeroSubaccount;
-}));
-assert (unwrapOption(foundIcrc, "active ICRC allowance not found").allowance == 25);
-
 let nextIcrcRequest = unwrap(
     Icrc103.getAllowancesRequest(ledger, owner, firstIcrcPage.scan, 3),
 );
@@ -212,6 +238,108 @@ assert (
             nowNs,
         )
     )
+);
+
+let mixedPrincipalIcrcWire : Icrc103.DraftGetAllowancesResult = #Ok([
+    {
+        from_account = defaultAccount;
+        to_spender = shorterPrincipalSpender;
+        allowance = 11;
+        expires_at = null;
+    },
+    {
+        from_account = defaultAccount;
+        to_spender = longerPrincipalSpender;
+        allowance = 12;
+        expires_at = null;
+    },
+]);
+let mixedPrincipalIcrcPage = unwrap(
+    Icrc103.decodeAllowances(
+        #ok(to_candid (mixedPrincipalIcrcWire)),
+        owner,
+        initialIcrcScan,
+        2,
+        nowNs,
+    ),
+);
+assert (mixedPrincipalIcrcPage.allowances.size() == 2);
+let mixedPrincipalCursor = unwrapOption(
+    mixedPrincipalIcrcPage.scan.cursor,
+    "mixed-principal ICRC page omitted cursor",
+);
+assert (
+    AllowanceAccount.compare(
+        mixedPrincipalCursor.prev_spender,
+        longerPrincipalSpender,
+    ) == ?#equal
+);
+let reversedPrincipalIcrcWire : Icrc103.DraftGetAllowancesResult = #Ok([
+    {
+        from_account = defaultAccount;
+        to_spender = longerPrincipalSpender;
+        allowance = 12;
+        expires_at = null;
+    },
+    {
+        from_account = defaultAccount;
+        to_spender = shorterPrincipalSpender;
+        allowance = 11;
+        expires_at = null;
+    },
+]);
+assert (
+    isError(
+        Icrc103.decodeAllowances(
+            #ok(to_candid (reversedPrincipalIcrcWire)),
+            owner,
+            initialIcrcScan,
+            2,
+            nowNs,
+        )
+    )
+);
+
+let shorterPrincipalIcrcWire : Icrc103.DraftGetAllowancesResult = #Ok([{
+    from_account = defaultAccount;
+    to_spender = shorterPrincipalSpender;
+    allowance = 11;
+    expires_at = null;
+}]);
+let shorterPrincipalIcrcPage = unwrap(
+    Icrc103.decodeAllowances(
+        #ok(to_candid (shorterPrincipalIcrcWire)),
+        owner,
+        initialIcrcScan,
+        2,
+        nowNs,
+    ),
+);
+let longerPrincipalIcrcWire : Icrc103.DraftGetAllowancesResult = #Ok([{
+    from_account = defaultAccount;
+    to_spender = longerPrincipalSpender;
+    allowance = 12;
+    expires_at = null;
+}]);
+let longerPrincipalIcrcPage = unwrap(
+    Icrc103.decodeAllowances(
+        #ok(to_candid (longerPrincipalIcrcWire)),
+        owner,
+        shorterPrincipalIcrcPage.scan,
+        2,
+        nowNs,
+    ),
+);
+assert (longerPrincipalIcrcPage.allowances.size() == 1);
+let longerPrincipalCursor = unwrapOption(
+    longerPrincipalIcrcPage.scan.cursor,
+    "mixed-principal ICRC continuation omitted cursor",
+);
+assert (
+    AllowanceAccount.compare(
+        longerPrincipalCursor.prev_spender,
+        longerPrincipalSpender,
+    ) == ?#equal
 );
 
 let wrongOwnerWire : Icrc103.DraftGetAllowancesResult = #Ok([{
@@ -338,20 +466,24 @@ assert (
     )
 );
 
-let oversizedReply = Blob.fromArray(
-    Array.tabulate<Nat8>(Icrc103.MAX_REPLY_BYTES + 1, func(_) { 0 }),
-);
-assert (
-    isError(
-        Icrc103.decodeAllowances(
-            #ok(oversizedReply),
-            owner,
-            initialIcrcScan,
-            3,
-            nowNs,
-        )
-    )
-);
+let oversizedIcrcWire : Icrc103.DraftGetAllowancesResult = #Err(#GenericError({
+    error_code = 1;
+    message = repeatedText(Icrc103.MAX_REPLY_BYTES + 1);
+}));
+let oversizedIcrcReply = to_candid (oversizedIcrcWire);
+assert (oversizedIcrcReply.size() > Icrc103.MAX_REPLY_BYTES);
+switch (Icrc103.decodeAllowances(
+    #ok(oversizedIcrcReply),
+    owner,
+    initialIcrcScan,
+    3,
+    nowNs,
+)) {
+    case (#err(message)) {
+        assert (message == "ICRC-103 allowance reply exceeds the Wallet limit");
+    };
+    case (#ok(_)) assert false;
+};
 
 let icpSource = AccountIdentifier.fromPrincipal(owner);
 let icpSpenderOne = unwrapOption(
@@ -367,6 +499,10 @@ let icpSpenderTwo = unwrapOption(
     "invalid second ICP test account identifier",
 );
 assert (Blob.compare(icpSpenderOne, icpSpenderTwo) == #less);
+assert (AccountIdentifier.compare(icpSpenderTwo, icpSpenderOne) == ?#less);
+assert (
+    AccountIdentifier.compare(Blob.fromArray([1]), icpSpenderOne) == null
+);
 
 let initialIcpScan = IcpLegacy.startScan();
 let firstIcpRequest = unwrap(
@@ -384,15 +520,15 @@ assert (firstIcpArgs.take == ?2);
 let firstIcpWire : [IcpLegacy.LegacyAllowance] = [
     {
         from_account_id = AccountIdentifier.toHex(icpSource);
-        to_spender_id = AccountIdentifier.toHex(icpSpenderOne);
-        allowance = { e8s = 75 };
-        expires_at = null;
-    },
-    {
-        from_account_id = AccountIdentifier.toHex(icpSource);
         to_spender_id = AccountIdentifier.toHex(icpSpenderTwo);
         allowance = { e8s = 90 };
         expires_at = ?nowNs;
+    },
+    {
+        from_account_id = AccountIdentifier.toHex(icpSource);
+        to_spender_id = AccountIdentifier.toHex(icpSpenderOne);
+        allowance = { e8s = 75 };
+        expires_at = null;
     },
 ];
 let firstIcpPage = unwrap(
@@ -404,6 +540,21 @@ let firstIcpPage = unwrap(
         nowNs,
     ),
 );
+let reversedHashIcpWire : [IcpLegacy.LegacyAllowance] = [
+    firstIcpWire[1],
+    firstIcpWire[0],
+];
+assert (
+    isError(
+        IcpLegacy.decodeAllowances(
+            #ok(to_candid (reversedHashIcpWire)),
+            owner,
+            initialIcpScan,
+            2,
+            nowNs,
+        )
+    )
+);
 assert (firstIcpPage.allowances.size() == 1);
 assert (firstIcpPage.allowances[0].allowance == 75);
 assert (not firstIcpPage.complete);
@@ -412,13 +563,45 @@ let firstIcpCursor = unwrapOption(
     "nonempty ICP page omitted cursor",
 );
 assert (firstIcpCursor.from_account_id == icpSource);
-assert (firstIcpCursor.prev_spender_id == icpSpenderTwo);
+assert (firstIcpCursor.prev_spender_id == icpSpenderOne);
 assert (
     unwrapOption(
         unwrap(IcpLegacy.findAllowance(firstIcpPage, icpSpenderOne)),
         "active ICP allowance not found",
     ).allowance == 75
 );
+
+let lowerHashIcpWire : [IcpLegacy.LegacyAllowance] = [{
+    from_account_id = AccountIdentifier.toHex(icpSource);
+    to_spender_id = AccountIdentifier.toHex(icpSpenderTwo);
+    allowance = { e8s = 80 };
+    expires_at = null;
+}];
+let lowerHashIcpPage = unwrap(
+    IcpLegacy.decodeAllowances(
+        #ok(to_candid (lowerHashIcpWire)),
+        owner,
+        initialIcpScan,
+        2,
+        nowNs,
+    ),
+);
+let higherHashIcpWire : [IcpLegacy.LegacyAllowance] = [{
+    from_account_id = AccountIdentifier.toHex(icpSource);
+    to_spender_id = AccountIdentifier.toHex(icpSpenderOne);
+    allowance = { e8s = 81 };
+    expires_at = null;
+}];
+let higherHashIcpPage = unwrap(
+    IcpLegacy.decodeAllowances(
+        #ok(to_candid (higherHashIcpWire)),
+        owner,
+        lowerHashIcpPage.scan,
+        2,
+        nowNs,
+    ),
+);
+assert (higherHashIcpPage.allowances.size() == 1);
 
 let nextIcpRequest = unwrap(
     IcpLegacy.getAllowancesRequest(ledger, owner, firstIcpPage.scan, 2),
@@ -429,7 +612,7 @@ let nextIcpArgs = unwrapOption<IcpLegacy.LegacyGetAllowancesArgs>(
 );
 assert (
     nextIcpArgs.prev_spender_id ==
-    ?AccountIdentifier.toHex(icpSpenderTwo)
+    ?AccountIdentifier.toHex(icpSpenderOne)
 );
 let emptyIcpPage = unwrap(
     IcpLegacy.decodeAllowances(
@@ -445,7 +628,7 @@ assert (emptyIcpPage.scan.cursor == null);
 
 let repeatedIcpWire : [IcpLegacy.LegacyAllowance] = [{
     from_account_id = AccountIdentifier.toHex(icpSource);
-    to_spender_id = AccountIdentifier.toHex(icpSpenderTwo);
+    to_spender_id = AccountIdentifier.toHex(icpSpenderOne);
     allowance = { e8s = 1 };
     expires_at = null;
 }];
@@ -507,17 +690,26 @@ assert (
         )
     )
 );
-assert (
-    isError(
-        IcpLegacy.decodeAllowances(
-            #ok(oversizedReply),
-            owner,
-            initialIcpScan,
-            2,
-            nowNs,
-        )
-    )
-);
+let oversizedIcpWire : [IcpLegacy.LegacyAllowance] = [{
+    from_account_id = repeatedText(IcpLegacy.MAX_REPLY_BYTES + 1);
+    to_spender_id = AccountIdentifier.toHex(icpSpenderOne);
+    allowance = { e8s = 1 };
+    expires_at = null;
+}];
+let oversizedIcpReply = to_candid (oversizedIcpWire);
+assert (oversizedIcpReply.size() > IcpLegacy.MAX_REPLY_BYTES);
+switch (IcpLegacy.decodeAllowances(
+    #ok(oversizedIcpReply),
+    owner,
+    initialIcpScan,
+    2,
+    nowNs,
+)) {
+    case (#err(message)) {
+        assert (message == "ICP allowance reply exceeds the Wallet limit");
+    };
+    case (#ok(_)) assert false;
+};
 
 let removeRequest = unwrap(
     IcpLegacy.removeApprovalRequest(ledger, icpSpenderOne, ?10_000),
@@ -535,20 +727,6 @@ assert (
         IcpLegacy.removeApprovalRequest(ledger, Blob.fromArray([1]), ?10_000)
     )
 );
-let removeResult : IcrcTypes.ApproveResult = #Ok(44);
-assert (
-    unwrap(
-        IcpLegacy.decodeRemoveApproval(#ok(to_candid (removeResult)))
-    ) == #Ok(44)
-);
-assert (
-    isError(
-        IcpLegacy.decodeRemoveApproval(
-            #err({ code = "SYS_UNKNOWN"; message = "unknown outcome" })
-        )
-    )
-);
-assert (isError(IcpLegacy.decodeRemoveApproval(#ok(oversizedReply))));
 
 let cappedIcpScan : IcpLegacy.Scan = {
     cursor = ?firstIcpCursor;

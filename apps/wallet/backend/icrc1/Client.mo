@@ -4,6 +4,8 @@ import Nat64 "mo:core/Nat64";
 import Types "Types";
 
 module {
+    public let MAX_EXECUTION_REPLY_BYTES : Nat = 16_384;
+
     public type ExecutionReceipt = {
         block_index : Nat;
         duplicate : Bool;
@@ -67,13 +69,6 @@ module {
         };
     };
 
-    public func transferRequest(
-        ledger : Principal,
-        args : Types.TransferArg,
-    ) : Capabilities.CallRequest {
-        transferCandidRequest(ledger, to_candid (args));
-    };
-
     public func transferCandidRequest(
         ledger : Principal,
         args : Blob,
@@ -84,13 +79,6 @@ module {
             args;
             cycles = 0;
         };
-    };
-
-    public func approveRequest(
-        ledger : Principal,
-        args : Types.ApproveArg,
-    ) : Capabilities.CallRequest {
-        approveCandidRequest(ledger, to_candid (args));
     };
 
     public func approveCandidRequest(
@@ -127,6 +115,11 @@ module {
         switch (result) {
             case (#err(error)) callFailure(error);
             case (#ok(reply)) {
+                if (reply.size() > MAX_EXECUTION_REPLY_BYTES) {
+                    return #unknown(
+                        "Ledger transfer reply exceeds the Wallet limit after dispatch"
+                    );
+                };
                 let decoded : ?Types.TransferResult = from_candid reply;
                 switch (decoded) {
                     case (?#Ok(blockIndex)) #ok({
@@ -168,6 +161,11 @@ module {
         switch (result) {
             case (#err(error)) callFailure(error);
             case (#ok(reply)) {
+                if (reply.size() > MAX_EXECUTION_REPLY_BYTES) {
+                    return #unknown(
+                        "Ledger approval reply exceeds the Wallet limit after dispatch"
+                    );
+                };
                 let decoded : ?Types.ApproveResult = from_candid reply;
                 switch (decoded) {
                     case (?#Ok(blockIndex)) #ok({
@@ -231,36 +229,6 @@ module {
                 switch (decoded) {
                     case (?allowance) #ok(allowance);
                     case null #err("Ledger returned an unexpected allowance");
-                };
-            };
-        };
-    };
-
-    public func decodeTransfer(
-        result : Capabilities.CallResult,
-    ) : Types.Result<Types.TransferResult> {
-        switch (result) {
-            case (#err(error)) #err(FundingDisplay.callError(error.code, error.message));
-            case (#ok(reply)) {
-                let decoded : ?Types.TransferResult = from_candid reply;
-                switch (decoded) {
-                    case (?transfer) #ok(transfer);
-                    case null #err("Ledger returned an unexpected transfer result");
-                };
-            };
-        };
-    };
-
-    public func decodeApprove(
-        result : Capabilities.CallResult,
-    ) : Types.Result<Types.ApproveResult> {
-        switch (result) {
-            case (#err(error)) #err(FundingDisplay.callError(error.code, error.message));
-            case (#ok(reply)) {
-                let decoded : ?Types.ApproveResult = from_candid reply;
-                switch (decoded) {
-                    case (?approval) #ok(approval);
-                    case null #err("Ledger returned an unexpected approval result");
                 };
             };
         };

@@ -1,10 +1,15 @@
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 import Map "mo:core/Map";
+import Nat "mo:core/Nat";
 import Principal "mo:core/Principal";
+import Capabilities "../../backend/capabilities/Types";
 import AccountIdentifier "../../backend/history/AccountIdentifier";
+import IcpIndex "../../backend/history/IcpIndex";
+import IcrcIndex "../../backend/history/IcrcIndex";
 import IcrcLedger "../../backend/history/IcrcLedger";
 import Reconcile "../../backend/history/Reconcile";
+import Store "../../backend/history/Store";
 import HistoryTypes "../../backend/history/Types";
 import Memory "../../backend/memory/wallet/v1";
 import Wallet "../../backend/main";
@@ -109,6 +114,38 @@ assert (not HistoryTypes.capturedHeadMatches(?104, ?106, 80, 106));
 assert (HistoryTypes.capturedHeadMatches(?74, ?75, 40, 106));
 assert (HistoryTypes.capturedHeadMatches(null, ?80, 80, 80));
 
+let emptyIcpContinuation : Capabilities.CallResult = #ok(to_candid (#Ok({
+    balance = (25 : Nat64);
+    transactions = ([] : [None]);
+    oldest_tx_id = ?(10 : Nat64);
+})));
+assert (switch (IcpIndex.decodePage(
+    emptyIcpContinuation,
+    Principal.fromText("aaaaa-aa"),
+    ?75,
+    40,
+    106,
+)) {
+    case (#err(error)) error == "ICP index transaction page made no progress";
+    case (#ok(_)) false;
+});
+
+let emptyIcrcContinuation : Capabilities.CallResult = #ok(to_candid (#Ok({
+    balance = (25 : Nat);
+    transactions = ([] : [None]);
+    oldest_tx_id = ?(10 : Nat);
+})));
+assert (switch (IcrcIndex.decodePage(
+    emptyIcrcContinuation,
+    Principal.fromText("aaaaa-aa"),
+    ?75,
+    40,
+    106,
+)) {
+    case (#err(error)) error == "Index transaction page made no progress";
+    case (#ok(_)) false;
+});
+
 let walletPrincipal = Principal.fromText("aaaaa-aa");
 let otherPrincipal = Principal.fromText("2vxsx-fae");
 let icpLedger = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
@@ -149,6 +186,14 @@ let minterAddress : Memory.HistoryAddress = #icrc({
     owner = ckethMinter;
     subaccount = null;
 });
+func reconciles(
+    ledger : Principal,
+    pending : Memory.HistoryTransaction,
+    canonical : Memory.HistoryTransaction,
+    related : ?Memory.HistoryTransaction,
+) : Bool {
+    Reconcile.pendingMatches(ledger, walletPrincipal, pending, canonical, related);
+};
 assert (
     Reconcile.historyAddress(icpLedger, {
         owner = otherPrincipal;
@@ -184,31 +229,13 @@ let canonicalIcpTransfer : Memory.HistoryTransaction = {
     to = ?#icp_account_identifier(AccountIdentifier.fromPrincipal(otherPrincipal));
     provenance = #index;
 };
-assert (Reconcile.pendingMatches(
-    icpLedger,
-    walletPrincipal,
-    pendingIcpTransfer,
-    canonicalIcpTransfer,
-    null,
-));
-assert (not Reconcile.pendingMatches(
-    ckbtcLedger,
-    walletPrincipal,
-    pendingIcpTransfer,
-    canonicalIcpTransfer,
-    null,
-));
+assert (reconciles(icpLedger, pendingIcpTransfer, canonicalIcpTransfer, null));
+assert (not reconciles(ckbtcLedger, pendingIcpTransfer, canonicalIcpTransfer, null));
 let wrongIcpDestination = {
     canonicalIcpTransfer with
     to = ?#icp_account_identifier(AccountIdentifier.fromPrincipal(walletPrincipal));
 };
-assert (not Reconcile.pendingMatches(
-    icpLedger,
-    walletPrincipal,
-    pendingIcpTransfer,
-    wrongIcpDestination,
-    null,
-));
+assert (not reconciles(icpLedger, pendingIcpTransfer, wrongIcpDestination, null));
 let pendingSubaccountTransfer = {
     pendingIcpTransfer with
     to = ?#icrc({ owner = otherPrincipal; subaccount = ?nonzeroSubaccount });
@@ -217,13 +244,7 @@ let canonicalSubaccountTransfer = {
     canonicalIcpTransfer with
     to = ?#icp_account_identifier(nonzeroAccountIdentifier);
 };
-assert (Reconcile.pendingMatches(
-    icpLedger,
-    walletPrincipal,
-    pendingSubaccountTransfer,
-    canonicalSubaccountTransfer,
-    null,
-));
+assert (reconciles(icpLedger, pendingSubaccountTransfer, canonicalSubaccountTransfer, null));
 let wrongSubaccountIdentifier = switch (AccountIdentifier.fromAccount(
     otherPrincipal,
     ?Blob.fromArray(Array.tabulate<Nat8>(32, func(index) {
@@ -240,13 +261,117 @@ let wrongSubaccountTransfer = {
     canonicalSubaccountTransfer with
     to = ?#icp_account_identifier(wrongSubaccountIdentifier);
 };
-assert (not Reconcile.pendingMatches(
+assert (not reconciles(icpLedger, pendingSubaccountTransfer, wrongSubaccountTransfer, null));
+
+let legacyMemo = Blob.fromArray([0, 0, 0, 0, 0, 0, 0, 7]);
+let nativeBurnMemo = Blob.fromArray([217, 217, 247, 161, 0, 1]);
+let pendingApproval : Memory.HistoryTransaction = {
+    pendingIcpTransfer with
+    block_index = 450;
+    operation = #approve;
+    amount = 500;
+    fee = ?10;
+    balance_effect = -10;
+    to = null;
+    spender = ?#icrc({ owner = otherPrincipal; subaccount = null });
+};
+let canonicalApproval : Memory.HistoryTransaction = {
+    pendingApproval with
+    from = ?#icp_account_identifier(AccountIdentifier.fromPrincipal(walletPrincipal));
+    spender = ?#icp_account_identifier(AccountIdentifier.fromPrincipal(otherPrincipal));
+    memo = ?legacyMemo;
+    provenance = #index;
+};
+
+// Approval reconciliation is exact. The sole memo exception is a null local
+// memo against the legacy Nat64 memo synthesized by the ICP index.
+assert (reconciles(icpLedger, pendingApproval, canonicalApproval, null));
+let approvalConflicts : [Memory.HistoryTransaction] = [
+    { canonicalApproval with block_index = 451 },
+    { canonicalApproval with operation = #transfer },
+    { canonicalApproval with amount = 501 },
+    { canonicalApproval with fee = ?11 },
+    { canonicalApproval with balance_effect = -11 },
+    { canonicalApproval with from = ?#icp_account_identifier(
+        AccountIdentifier.fromPrincipal(otherPrincipal)
+    ) },
+    { canonicalApproval with to = ?walletAddress },
+    { canonicalApproval with spender = ?#icp_account_identifier(
+        AccountIdentifier.fromPrincipal(walletPrincipal)
+    ) },
+    { canonicalApproval with provenance = #local_pending },
+    { canonicalApproval with provenance = #ledger },
+    { canonicalApproval with memo = ?Blob.fromArray([7]) },
+];
+for (conflict in approvalConflicts.vals()) {
+    assert (not reconciles(icpLedger, pendingApproval, conflict, null));
+};
+assert (not reconciles(
     icpLedger,
-    walletPrincipal,
-    pendingSubaccountTransfer,
-    wrongSubaccountTransfer,
+    { pendingApproval with provenance = #index },
+    canonicalApproval,
     null,
 ));
+
+let transferConflicts : [Memory.HistoryTransaction] = [
+    { canonicalIcpTransfer with block_index = 401 },
+    { canonicalIcpTransfer with operation = #approve },
+    { canonicalIcpTransfer with amount = 1_000_001 },
+    { canonicalIcpTransfer with fee = ?10_001 },
+    { canonicalIcpTransfer with balance_effect = -1_010_001 },
+    { canonicalIcpTransfer with from = ?#icp_account_identifier(
+        AccountIdentifier.fromPrincipal(otherPrincipal)
+    ) },
+    { canonicalIcpTransfer with spender = ?#icp_account_identifier(
+        AccountIdentifier.fromPrincipal(otherPrincipal)
+    ) },
+    { canonicalIcpTransfer with provenance = #local_pending },
+    { canonicalIcpTransfer with memo = ?Blob.fromArray([7]) },
+];
+for (conflict in transferConflicts.vals()) {
+    assert (not reconciles(icpLedger, pendingIcpTransfer, conflict, null));
+};
+
+// ICRC-3 permits a 1xfer block to include the source account as its spender.
+// Accept that direct-transfer representation, but never a third-party spender.
+let canonicalIcrcTransfer = {
+    pendingIcpTransfer with provenance = #index
+};
+assert (reconciles(ckbtcLedger, pendingIcpTransfer, canonicalIcrcTransfer, null));
+assert (reconciles(
+    ckbtcLedger,
+    pendingIcpTransfer,
+    { canonicalIcrcTransfer with spender = canonicalIcrcTransfer.from },
+    null,
+));
+assert (not reconciles(
+    ckbtcLedger,
+    pendingIcpTransfer,
+    { canonicalIcrcTransfer with spender = ?#icrc({
+        owner = otherPrincipal;
+        subaccount = null;
+    }) },
+    null,
+));
+
+// Canonical self-transfers affect the Wallet by the fee only. Keep released
+// local receipts with the old amount-plus-fee effect reconcilable.
+let pendingSelfTransfer = {
+    pendingIcpTransfer with to = ?walletAddress
+};
+let canonicalSelfTransfer = {
+    canonicalIcpTransfer with
+    to = ?#icp_account_identifier(AccountIdentifier.fromPrincipal(walletPrincipal));
+    balance_effect = -10_000;
+};
+assert (reconciles(icpLedger, pendingSelfTransfer, canonicalSelfTransfer, null));
+assert (not reconciles(
+    icpLedger,
+    pendingSelfTransfer,
+    { canonicalSelfTransfer with balance_effect = -1_010_000 },
+    null,
+));
+
 let staleGasQuote = 100;
 let canonicalGasAmount = 125;
 let pendingGasBurn : Memory.HistoryTransaction = {
@@ -277,6 +402,7 @@ let canonicalGasBurn : Memory.HistoryTransaction = {
     amount = canonicalGasAmount;
     balance_effect = -canonicalGasAmount;
     spender = ?minterAddress;
+    memo = ?nativeBurnMemo;
     intent = null;
     native = null;
     provenance = #index;
@@ -285,10 +411,16 @@ let canonicalGasBurn : Memory.HistoryTransaction = {
 // The queried ckETH quote is not sent to withdraw_erc20. The canonical minter
 // burn wins even when a refreshed fee is greater than that stale quote.
 assert (canonicalGasAmount > staleGasQuote);
-assert (Reconcile.pendingMatches(
+assert (reconciles(ckethLedger, pendingGasBurn, canonicalGasBurn, ?relatedAssetBurn));
+assert (reconciles(
     ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
+    { pendingGasBurn with memo = ?nativeBurnMemo },
+    canonicalGasBurn,
+    ?relatedAssetBurn,
+));
+assert (not reconciles(
+    ckethLedger,
+    { pendingGasBurn with memo = ?Blob.fromArray([9]) },
     canonicalGasBurn,
     ?relatedAssetBurn,
 ));
@@ -298,13 +430,8 @@ let exactGasBurn = {
     amount = staleGasQuote;
     balance_effect = -staleGasQuote;
 };
-assert (Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    exactGasBurn,
-    null,
-));
+assert (not reconciles(ckethLedger, pendingGasBurn, exactGasBurn, null));
+assert (reconciles(ckethLedger, pendingGasBurn, exactGasBurn, ?relatedAssetBurn));
 
 let brokenReverseNative = {
     assetNative with related_block_index = ?(gasBlockIndex + 1)
@@ -312,13 +439,7 @@ let brokenReverseNative = {
 let brokenReverseRecord = {
     relatedAssetBurn with native = ?brokenReverseNative
 };
-assert (not Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    canonicalGasBurn,
-    ?brokenReverseRecord,
-));
+assert (not reconciles(ckethLedger, pendingGasBurn, canonicalGasBurn, ?brokenReverseRecord));
 
 let differentIntent = {
     ethereumIntent with destination = "0x2222222222222222222222222222222222222222"
@@ -326,79 +447,73 @@ let differentIntent = {
 let wrongIntentRecord = {
     relatedAssetBurn with intent = ?differentIntent
 };
-assert (not Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    canonicalGasBurn,
-    ?wrongIntentRecord,
-));
-assert (not Reconcile.pendingMatches(
+assert (not reconciles(ckethLedger, pendingGasBurn, canonicalGasBurn, ?wrongIntentRecord));
+assert (not reconciles(ckerc20Ledger, pendingGasBurn, canonicalGasBurn, ?relatedAssetBurn));
+
+// Native-burn indexes may omit the spender; a reported spender must be the
+// catalogued minter.
+let canonicalAssetBurn : Memory.HistoryTransaction = {
+    relatedAssetBurn with
+    spender = ?minterAddress;
+    memo = ?nativeBurnMemo;
+    intent = null;
+    native = null;
+    provenance = #index;
+};
+assert (reconciles(ckerc20Ledger, relatedAssetBurn, canonicalAssetBurn, null));
+assert (reconciles(
     ckerc20Ledger,
-    walletPrincipal,
-    pendingGasBurn,
-    canonicalGasBurn,
-    ?relatedAssetBurn,
+    { relatedAssetBurn with memo = ?nativeBurnMemo },
+    canonicalAssetBurn,
+    null,
+));
+assert (not reconciles(
+    ckerc20Ledger,
+    { relatedAssetBurn with memo = ?Blob.fromArray([9]) },
+    canonicalAssetBurn,
+    null,
+));
+assert (reconciles(
+    ckerc20Ledger,
+    relatedAssetBurn,
+    { canonicalAssetBurn with spender = null },
+    null,
+));
+assert (not reconciles(
+    ckerc20Ledger,
+    relatedAssetBurn,
+    { canonicalAssetBurn with spender = ?walletAddress },
+    null,
 ));
 
 let wrongSpender = {
     canonicalGasBurn with spender = ?walletAddress
 };
-assert (not Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    wrongSpender,
-    ?relatedAssetBurn,
-));
+assert (not reconciles(ckethLedger, pendingGasBurn, wrongSpender, ?relatedAssetBurn));
 let wrongFrom = {
     canonicalGasBurn with from = ?#icrc({ owner = otherPrincipal; subaccount = null })
 };
-assert (not Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    wrongFrom,
-    ?relatedAssetBurn,
-));
+assert (not reconciles(ckethLedger, pendingGasBurn, wrongFrom, ?relatedAssetBurn));
 let nonNullDestination = {
     canonicalGasBurn with to = ?walletAddress
 };
-assert (not Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    nonNullDestination,
-    ?relatedAssetBurn,
-));
+assert (not reconciles(ckethLedger, pendingGasBurn, nonNullDestination, ?relatedAssetBurn));
 let nonNullFee = {
     canonicalGasBurn with fee = ?1
 };
-assert (not Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    nonNullFee,
-    ?relatedAssetBurn,
-));
+assert (not reconciles(ckethLedger, pendingGasBurn, nonNullFee, ?relatedAssetBurn));
 let zeroAmount = {
     canonicalGasBurn with amount = 0; balance_effect = 0
 };
-assert (not Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    zeroAmount,
-    ?relatedAssetBurn,
-));
+assert (not reconciles(ckethLedger, pendingGasBurn, zeroAmount, ?relatedAssetBurn));
 let wrongBalanceEffect = {
     canonicalGasBurn with balance_effect = -(canonicalGasAmount + 1)
 };
-assert (not Reconcile.pendingMatches(
+assert (not reconciles(ckethLedger, pendingGasBurn, wrongBalanceEffect, ?relatedAssetBurn));
+assert (not reconciles(
     ckethLedger,
-    walletPrincipal,
-    pendingGasBurn,
-    wrongBalanceEffect,
+    { pendingGasBurn with balance_effect = -(staleGasQuote + 1) },
+    canonicalGasBurn,
     ?relatedAssetBurn,
 ));
 
@@ -409,13 +524,349 @@ let directCkethBurn = {
         related_block_index = null;
     }
 };
-assert (not Reconcile.pendingMatches(
-    ckethLedger,
-    walletPrincipal,
-    directCkethBurn,
-    canonicalGasBurn,
+assert (not reconciles(ckethLedger, directCkethBurn, canonicalGasBurn, null));
+
+func testLedger(id : Nat, principal : Principal) : Memory.Ledger {
+    {
+        id;
+        principal;
+        name = null;
+        symbol = null;
+        decimals = null;
+        fee = null;
+        balance = null;
+        metadata_updated_at = null;
+        balance_updated_at = null;
+        metadata_error = null;
+        balance_error = null;
+        native_address = null;
+        native_address_updated_at = null;
+        native_address_error = null;
+        native_refresh_updated_at = null;
+        native_refresh_error = null;
+        native_deposit_progress = null;
+        logo = null;
+        enabled = true;
+        history = Store.emptyHistory(#unavailable);
+    };
+};
+
+func resultOk(result : HistoryTypes.Result<()>) : Bool {
+    switch (result) { case (#ok(())) true; case (#err(_)) false };
+};
+
+func transactionAt(
+    ledger : Memory.Ledger,
+    blockIndex : Nat,
+) : Memory.HistoryTransaction {
+    switch (Map.get(ledger.history.transactions, Nat.compare, blockIndex)) {
+        case (?transaction) transaction;
+        case null {
+            assert false;
+            pendingIcpTransfer;
+        };
+    };
+};
+
+let historyMem = Memory.init();
+let icpHistoryLedger = testLedger(1, icpLedger);
+let ckbtcHistoryLedger = testLedger(2, ckbtcLedger);
+let ckerc20HistoryLedger = testLedger(3, ckerc20Ledger);
+let ckethHistoryLedger = testLedger(4, ckethLedger);
+Map.add(historyMem.ledgers, Principal.compare, icpLedger, icpHistoryLedger);
+Map.add(historyMem.ledgers, Principal.compare, ckbtcLedger, ckbtcHistoryLedger);
+Map.add(historyMem.ledgers, Principal.compare, ckerc20Ledger, ckerc20HistoryLedger);
+Map.add(historyMem.ledgers, Principal.compare, ckethLedger, ckethHistoryLedger);
+let historyCalls : Capabilities.BackendCalls = {
+    canister_principal = walletPrincipal;
+    can_call = func(_canister : Principal, _method : Text) : Bool { false };
+    call = func(_request : Capabilities.CallRequest) : async* Capabilities.CallResult {
+        #err({ code = "unused"; message = "unused" });
+    };
+    call_batch = func(
+        _requests : [Capabilities.CallRequest]
+    ) : async* [Capabilities.CallResult] { [] };
+};
+let history = Reconcile.Service(historyMem, historyCalls);
+let otherAddress : Memory.HistoryAddress = #icrc({
+    owner = otherPrincipal;
+    subaccount = null;
+});
+let transferIntent : Memory.TransferIntent = {
+    ethereumIntent with
+    network = "internet_computer";
+    destination = Principal.toText(otherPrincipal);
+    native = false;
+};
+let authoritativeTransfer : Memory.HistoryTransaction = {
+    block_index = 800;
+    operation = #transfer;
+    timestamp_ns = 88;
+    amount = 1_000;
+    fee = ?10;
+    balance_effect = -1_010;
+    from = ?walletAddress;
+    to = ?otherAddress;
+    spender = null;
+    memo = ?legacyMemo;
+    intent = null;
+    native = null;
+    provenance = #index;
+    verification = #verified;
+};
+
+func recordAuthoritativeTransfer(memo : ?Blob) : HistoryTypes.Result<()> {
+    history.recordTransfer(
+        ckbtcLedger,
+        authoritativeTransfer.block_index,
+        #transfer,
+        authoritativeTransfer.amount,
+        authoritativeTransfer.fee,
+        ?otherAddress,
+        memo,
+        ?transferIntent,
+        null,
+    );
+};
+
+// An ICRC local null memo is not a wildcard.
+assert (Store.putTransaction(historyMem, ckbtcLedger, authoritativeTransfer));
+assert (not resultOk(recordAuthoritativeTransfer(null)));
+assert (transactionAt(ckbtcHistoryLedger, 800) == authoritativeTransfer);
+
+// A matching receipt may enrich local intent, but every canonical ledger field
+// (including memo and spender) remains authoritative.
+assert resultOk(recordAuthoritativeTransfer(?legacyMemo));
+let enrichedTransfer = transactionAt(ckbtcHistoryLedger, 800);
+assert (enrichedTransfer == {
+    authoritativeTransfer with intent = ?transferIntent
+});
+
+func expectTransferConflict(conflict : Memory.HistoryTransaction) : () {
+    assert (Store.putTransaction(historyMem, ckbtcLedger, conflict));
+    assert (not resultOk(recordAuthoritativeTransfer(?legacyMemo)));
+    assert (transactionAt(ckbtcHistoryLedger, 800) == conflict);
+};
+for (conflict in [
+    { authoritativeTransfer with operation = #approve },
+    { authoritativeTransfer with amount = 1_001 },
+    { authoritativeTransfer with from = ?otherAddress },
+    { authoritativeTransfer with to = ?walletAddress },
+    { authoritativeTransfer with spender = ?otherAddress },
+    { authoritativeTransfer with fee = ?11 },
+    { authoritativeTransfer with balance_effect = -1_011 },
+    { authoritativeTransfer with memo = ?Blob.fromArray([9]) },
+].vals()) {
+    expectTransferConflict(conflict);
+};
+
+let authoritativeSelfTransfer = {
+    canonicalSelfTransfer with block_index = 803; verification = #verified
+};
+assert (Store.putTransaction(historyMem, icpLedger, authoritativeSelfTransfer));
+assert resultOk(history.recordTransfer(
+    icpLedger,
+    803,
+    #transfer,
+    pendingSelfTransfer.amount,
+    pendingSelfTransfer.fee,
+    ?walletAddress,
+    null,
+    null,
     null,
 ));
+assert (transactionAt(icpHistoryLedger, 803) == authoritativeSelfTransfer);
+
+// A duplicate receipt recorded after an upgrade must also accept the released
+// local self-transfer effect while keeping every other receipt field exact.
+let legacyLocalSelfTransfer = {
+    pendingSelfTransfer with block_index = 805
+};
+func recordLegacySelfTransferDuplicate() : HistoryTypes.Result<()> {
+    history.recordTransfer(
+        icpLedger,
+        805,
+        #transfer,
+        legacyLocalSelfTransfer.amount,
+        legacyLocalSelfTransfer.fee,
+        ?walletAddress,
+        null,
+        null,
+        null,
+    );
+};
+assert (Store.putTransaction(historyMem, icpLedger, legacyLocalSelfTransfer));
+assert resultOk(recordLegacySelfTransferDuplicate());
+assert (transactionAt(icpHistoryLedger, 805) == legacyLocalSelfTransfer);
+
+func expectLegacySelfTransferConflict(
+    conflict : Memory.HistoryTransaction,
+) : () {
+    assert (Store.putTransaction(historyMem, icpLedger, conflict));
+    assert (not resultOk(recordLegacySelfTransferDuplicate()));
+    assert (transactionAt(icpHistoryLedger, 805) == conflict);
+};
+for (conflict in [
+    { legacyLocalSelfTransfer with operation = #approve },
+    { legacyLocalSelfTransfer with amount = legacyLocalSelfTransfer.amount + 1 },
+    { legacyLocalSelfTransfer with fee = ?10_001 },
+    { legacyLocalSelfTransfer with balance_effect = -1_010_001 },
+    { legacyLocalSelfTransfer with from = ?otherAddress },
+    { legacyLocalSelfTransfer with to = ?otherAddress },
+    { legacyLocalSelfTransfer with spender = ?otherAddress },
+    { legacyLocalSelfTransfer with memo = ?Blob.fromArray([9]) },
+].vals()) {
+    expectLegacySelfTransferConflict(conflict);
+};
+
+let authoritativeApproval : Memory.HistoryTransaction = {
+    authoritativeTransfer with
+    block_index = 801;
+    operation = #approve;
+    amount = 500;
+    fee = ?10;
+    balance_effect = -10;
+    to = null;
+    spender = ?otherAddress;
+};
+func recordAuthoritativeApproval() : HistoryTypes.Result<()> {
+    history.recordApproval(
+        ckbtcLedger,
+        authoritativeApproval.block_index,
+        authoritativeApproval.amount,
+        10,
+        otherAddress,
+        ?legacyMemo,
+    );
+};
+assert (Store.putTransaction(historyMem, ckbtcLedger, authoritativeApproval));
+assert resultOk(recordAuthoritativeApproval());
+assert (transactionAt(ckbtcHistoryLedger, 801) == authoritativeApproval);
+
+func expectApprovalConflict(conflict : Memory.HistoryTransaction) : () {
+    assert (Store.putTransaction(historyMem, ckbtcLedger, conflict));
+    assert (not resultOk(recordAuthoritativeApproval()));
+    assert (transactionAt(ckbtcHistoryLedger, 801) == conflict);
+};
+for (conflict in [
+    { authoritativeApproval with operation = #transfer },
+    { authoritativeApproval with amount = 501 },
+    { authoritativeApproval with from = ?otherAddress },
+    { authoritativeApproval with to = ?walletAddress },
+    { authoritativeApproval with spender = ?walletAddress },
+    { authoritativeApproval with fee = ?11 },
+    { authoritativeApproval with balance_effect = -11 },
+    { authoritativeApproval with memo = ?Blob.fromArray([9]) },
+].vals()) {
+    expectApprovalConflict(conflict);
+};
+
+// The narrow legacy ICP memo exception applies in the collision path too and
+// does not replace the index's canonical account-identifier or memo fields.
+let authoritativeIcpApproval = {
+    canonicalApproval with
+    block_index = 802;
+    verification = #verified;
+};
+assert (Store.putTransaction(historyMem, icpLedger, authoritativeIcpApproval));
+assert resultOk(history.recordApproval(
+    icpLedger,
+    802,
+    authoritativeIcpApproval.amount,
+    10,
+    otherAddress,
+    null,
+));
+assert (transactionAt(icpHistoryLedger, 802) == authoritativeIcpApproval);
+
+// Native burns validate the catalog minter but preserve its canonical spender
+// while adding Wallet-only intent/native correlation metadata.
+assert (Store.putTransaction(historyMem, ckerc20Ledger, canonicalAssetBurn));
+assert resultOk(history.recordTransfer(
+    ckerc20Ledger,
+    assetBlockIndex,
+    #burn,
+    canonicalAssetBurn.amount,
+    null,
+    null,
+    null,
+    ?ethereumIntent,
+    ?assetNative,
+));
+let enrichedBurn = transactionAt(ckerc20HistoryLedger, assetBlockIndex);
+assert (enrichedBurn.spender == canonicalAssetBurn.spender);
+assert (enrichedBurn.memo == canonicalAssetBurn.memo);
+assert (enrichedBurn.intent == ?ethereumIntent);
+assert (enrichedBurn.native == ?assetNative);
+assert (not resultOk(history.recordTransfer(
+    ckerc20Ledger,
+    assetBlockIndex,
+    #burn,
+    canonicalAssetBurn.amount,
+    null,
+    null,
+    null,
+    ?ethereumIntent,
+    ?{ assetNative with related_block_index = ?(gasBlockIndex + 1) },
+)));
+assert (transactionAt(ckerc20HistoryLedger, assetBlockIndex) == enrichedBurn);
+
+// The minter also generates the ckETH gas-burn memo. Accept it as unknown to
+// Wallet while preserving every authoritative field during collision merge.
+assert (Store.putTransaction(historyMem, ckethLedger, canonicalGasBurn));
+assert resultOk(history.recordTransfer(
+    ckethLedger,
+    gasBlockIndex,
+    #burn,
+    pendingGasBurn.amount,
+    null,
+    null,
+    null,
+    ?ethereumIntent,
+    ?gasNative,
+));
+let enrichedGasBurn = transactionAt(ckethHistoryLedger, gasBlockIndex);
+assert (enrichedGasBurn.memo == ?nativeBurnMemo);
+assert (enrichedGasBurn.spender == canonicalGasBurn.spender);
+assert (enrichedGasBurn.amount == canonicalGasBurn.amount);
+assert (enrichedGasBurn.intent == ?ethereumIntent);
+assert (enrichedGasBurn.native == ?gasNative);
+
+let authoritativeMint : Memory.HistoryTransaction = {
+    authoritativeTransfer with
+    block_index = 804;
+    operation = #mint;
+    amount = 75;
+    fee = null;
+    balance_effect = 75;
+    from = null;
+    to = ?walletAddress;
+    memo = ?legacyMemo;
+};
+assert (Store.putTransaction(historyMem, ckbtcLedger, authoritativeMint));
+history.recordNativeMint(ckbtcLedger, 804, 75, assetNative);
+assert (transactionAt(ckbtcHistoryLedger, 804) == {
+    authoritativeMint with native = ?assetNative
+});
+func expectMintConflict(conflict : Memory.HistoryTransaction) : () {
+    assert (Store.putTransaction(historyMem, ckbtcLedger, conflict));
+    history.recordNativeMint(ckbtcLedger, 804, 75, assetNative);
+    assert (transactionAt(ckbtcHistoryLedger, 804) == conflict);
+};
+for (conflict in [
+    { authoritativeMint with operation = #transfer },
+    { authoritativeMint with amount = 76 },
+    { authoritativeMint with fee = ?1 },
+    { authoritativeMint with balance_effect = 74 },
+    { authoritativeMint with from = ?otherAddress },
+    { authoritativeMint with to = ?otherAddress },
+    { authoritativeMint with spender = ?otherAddress },
+    { authoritativeMint with native = ?{
+        assetNative with related_block_index = ?(gasBlockIndex + 1)
+    } },
+].vals()) {
+    expectMintConflict(conflict);
+};
 
 func icrcAccount(owner : Principal, subaccount : ?Blob) : IcrcLedger.Value {
     #Array(switch (subaccount) {

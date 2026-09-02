@@ -2083,7 +2083,6 @@ body {
 
       .wallet-ledgers,
       .wallet-activity-list,
-      .wallet-approval-list,
       .wallet-catalog,
       .wallet-deposit-routes,
       .wallet-destination-list,
@@ -2268,8 +2267,6 @@ body {
 
   .wallet-funding-dialog {
     background: #101618;
-    border: 1px solid var(--nt-line);
-    border-radius: 12px;
     color: var(--nt-text);
     inline-size: min(520px, calc(100vw - 24px));
     max-block-size: calc(100dvh - 24px);
@@ -2290,7 +2287,6 @@ body {
 
     .nt-dialog-actions {
       background: #0d1214;
-      border-block-start: 1px solid var(--nt-line-subtle);
       padding: 12px 18px;
     }
   }
@@ -2333,10 +2329,7 @@ body {
 
   .wallet-funding-details {
     background: rgb(255 255 255 / 2%);
-    border: 1px solid var(--nt-line-subtle);
-    border-radius: 8px;
     margin: 0;
-    overflow: hidden;
 
     > div {
       align-items: start;
@@ -2346,7 +2339,7 @@ body {
       padding: 8px 10px;
 
       + div {
-        border-block-start: 1px solid var(--nt-line-subtle);
+        box-shadow: inset 0 1px var(--nt-line-subtle);
       }
     }
 
@@ -2384,7 +2377,7 @@ body {
   .wallet-funding-warning,
   .wallet-funding-error {
     align-items: start;
-    border-radius: 7px;
+    border-radius: var(--nt-radius-3);
     display: flex;
     font-size: 0.7rem;
     gap: 7px;

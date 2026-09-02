@@ -10,6 +10,7 @@ export const QUALIFICATION_ACTIVE_BOUNDARY_AWAITED_INGRESSES = 10;
 
 export const CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE = {
   maximum_wall_seconds: 180,
+  operational_sample_concurrency: 3,
   // Two transport installations may each upload the compiler's maximum 100
   // Wasm chunks. Fresh setup adds 13 fixed awaited ingresses and the probe /
   // reset path adds 11. PocketIC caps each awaited ingress at 100 rounds.

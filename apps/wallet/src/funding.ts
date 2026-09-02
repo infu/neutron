@@ -7,7 +7,7 @@ import {
 } from "neutron-tools/app";
 import {
   bytesToHex,
-  candidIcrcAccountFromText,
+  canonicalIcrcAccountText,
   hexToBytes,
   parseCandidIcrcAccount,
   parseFixedBytes,
@@ -21,10 +21,9 @@ export const WALLET_FUNDING_PREPARE_METHOD = "wallet_funding_prepare_v1";
 export const WALLET_FUNDING_EXECUTE_METHOD = "wallet_funding_execute_v1";
 export const WALLET_FUNDING_REJECT_METHOD = "wallet_funding_reject_v1";
 export const WALLET_ALLOWANCES_PAGE_METHOD = "wallet_allowances_page_v1";
-export const WALLET_ALLOWANCE_PAGE_LIMIT = 40;
+const WALLET_ALLOWANCE_PAGE_LIMIT = 40;
 
 const natPattern = "^0$|^[1-9][0-9]{0,79}$";
-const nat64Pattern = "^0$|^[1-9][0-9]{0,19}$";
 const positiveNatPattern = "^[1-9][0-9]{0,79}$";
 const positiveNat64Pattern = "^[1-9][0-9]{0,19}$";
 const accountPattern = "^[a-z0-9.-]{5,160}$";
@@ -140,8 +139,6 @@ export type ParsedWalletFundingResult = WalletFundingResult & {
   command: WalletFundingCommandId;
 };
 
-export type WalletFundingToolContext = MsgBusToolContext;
-
 export type WalletFundingReview = {
   commandId: WalletFundingCommandId;
   kind: "direct" | "allowance" | "revoke";
@@ -183,7 +180,7 @@ export type PreparedWalletFundingOperation = {
 
 export async function handleWalletFunding(
   rawRequest: JsonObject,
-  context: WalletFundingToolContext,
+  context: MsgBusToolContext,
 ): Promise<JsonObject> {
   const presentUserInterface = context.presentUserInterface;
   if (typeof presentUserInterface !== "function") {
@@ -201,9 +198,33 @@ export async function handleWalletFunding(
   });
 }
 
+export async function handleWalletRootFunding(
+  rawRequest: JsonObject,
+  context: MsgBusToolContext,
+): Promise<JsonObject> {
+  if (context.audience !== "agent_root") {
+    throw new Error("Wallet root funding requires root-agent attestation");
+  }
+  const operation = await prepareWalletFundingOperation(
+    rawRequest,
+    context,
+    true,
+  );
+  return executeWalletFundingOperation(
+    operation,
+    (executeArgs) =>
+      context.kernel.updateSelf(
+        WALLET_FUNDING_EXECUTE_METHOD,
+        [executeArgs],
+        120,
+      ),
+    context.signal,
+  );
+}
+
 export async function prepareWalletFundingOperation(
   rawRequest: JsonObject,
-  context: WalletFundingToolContext,
+  context: MsgBusToolContext,
   agentMode: boolean,
 ): Promise<PreparedWalletFundingOperation> {
   throwIfAborted(context.signal);
@@ -217,10 +238,7 @@ export async function prepareWalletFundingOperation(
     ),
   );
   throwIfAborted(context.signal);
-  const command =
-    preparation.kind === "prepared"
-      ? preparation.value.commandId
-      : preparation.value.result.command;
+  const command = fundingPreparationCommand(preparation);
   assertPreparedFundingMatchesRequest(
     preparation.value.review,
     command,
@@ -268,10 +286,7 @@ export async function resolveWalletFundingPreparation(
   ) {
     return prepared.value.result;
   }
-  const command =
-    prepared.kind === "prepared"
-      ? prepared.value.commandId
-      : prepared.value.result.command;
+  const command = fundingPreparationCommand(prepared);
   throwIfAborted(signal);
   const result = parseFundingExecutionResult(
     await execute(walletFundingExecuteArgs(command)),
@@ -339,7 +354,7 @@ export function parseWalletFundingRequest(
   throw new Error("Invalid funding route");
 }
 
-export function walletFundingRequestJson(
+function walletFundingRequestJson(
   request: WalletFundingRequest,
 ): JsonObject {
   return {
@@ -374,10 +389,7 @@ export function fundingPrepareArgs(
       ? {
           direct: {
             amount_atoms: request.amountAtoms,
-            to: candidIcrcAccountFromText(
-              request.route.to,
-              "transfer destination",
-            ),
+            to: request.route.to,
             ...(request.route.memoHex === null
               ? {}
               : { memo: hexToBytes(request.route.memoHex, "transfer memo") }),
@@ -386,10 +398,7 @@ export function fundingPrepareArgs(
       : {
           allowance: {
             amount_atoms: request.amountAtoms,
-            spender: candidIcrcAccountFromText(
-              request.route.spender,
-              "allowance spender",
-            ),
+            spender: request.route.spender,
             expires_at_ns: request.route.expiresAtNs,
           },
         };
@@ -413,7 +422,7 @@ export type WalletFundingCaller = {
   role: string | null;
 };
 
-export function requireFundingCaller(
+function requireFundingCaller(
   value: MsgBusCallerContext | undefined,
 ): WalletFundingCaller {
   if (!value)
@@ -604,10 +613,7 @@ export function walletRevokePrepareArgs(
   const spender: SelfCallObject =
     entry.spender.kind === "icrc"
       ? {
-          icrc: candidIcrcAccountFromText(
-            entry.spender.account,
-            "approval spender",
-          ),
+          icrc: entry.spender.account,
         }
       : {
           icp_account_identifier: hexToBytes(
@@ -769,7 +775,7 @@ export function parseFundingPrepareResult(
   };
 }
 
-export function parseFundingExecutionResult(
+function parseFundingExecutionResult(
   value: unknown,
 ): ParsedWalletFundingResult {
   const [status, payload] = variant(
@@ -812,7 +818,7 @@ export function parseFundingExecutionResult(
   };
 }
 
-export function walletFundingExecuteArgs(
+function walletFundingExecuteArgs(
   commandId: WalletFundingCommandId,
 ): SelfCallObject {
   return {
@@ -831,6 +837,14 @@ export function fundingPreparationCommand(
     : preparation.value.result.command;
 }
 
+export function walletFundingResultNeedsRefresh(result: JsonObject): boolean {
+  return (
+    result.status === "transferred" ||
+    result.status === "approved" ||
+    result.status === "pending"
+  );
+}
+
 export function createWalletRequestId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return bytesToHex(bytes);
@@ -844,10 +858,6 @@ export function walletRequestDeadlineNs(minutes = 5): string {
     BigInt(Date.now()) * 1_000_000n +
     BigInt(minutes) * 60_000_000_000n
   ).toString();
-}
-
-export function approvalSpenderText(spender: WalletApprovalSpender): string {
-  return spender.account;
 }
 
 export function approvalExpirationText(expiresAtNs: string | null): string {
@@ -1071,14 +1081,8 @@ function allowanceCursorWire(cursor: WalletAllowanceCursor): SelfCallObject {
   return cursor.kind === "icrc103"
     ? {
         icrc103: {
-          from_account: candidIcrcAccountFromText(
-            cursor.fromAccount,
-            "allowance cursor source",
-          ),
-          to_spender: candidIcrcAccountFromText(
-            cursor.toSpender,
-            "allowance cursor spender",
-          ),
+          from_account: cursor.fromAccount,
+          to_spender: cursor.toSpender,
           pages: cursor.pages,
           entries: cursor.entries,
         },
@@ -1252,12 +1256,6 @@ function optionalMemoHex(value: unknown): string | null {
 
 function canonicalPrincipalText(value: unknown, label: string): string {
   return parsePrincipal(value, label).toText();
-}
-
-function canonicalIcrcAccountText(value: unknown, label: string): string {
-  if (typeof value !== "string") throw new Error(`Invalid ${label}`);
-  const account = candidIcrcAccountFromText(value, label);
-  return parseCandidIcrcAccount(account, label);
 }
 
 function asFundingJson(value: WalletFundingResult): JsonObject {

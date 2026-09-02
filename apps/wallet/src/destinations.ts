@@ -1,4 +1,8 @@
-import { isJsonObject, type JsonObject } from "neutron-tools/app";
+import {
+  isJsonObject,
+  type JsonObject,
+  type SelfCallObject,
+} from "neutron-tools/app";
 import { parseCandidIcrcAccount } from "./icrc_account.ts";
 
 export type ContactKind = "person" | "self";
@@ -68,6 +72,14 @@ export function walletDestinationText(destination: WalletDestination): string {
     return destination.account;
   }
   return destination.address;
+}
+
+export function walletDestinationVariant(
+  destination: WalletDestination,
+): SelfCallObject {
+  return destination.network === "internet_computer"
+    ? { internet_computer: destination.account }
+    : { [destination.network]: destination.address };
 }
 
 function parseCandidate(value: unknown): WalletContactDestination {

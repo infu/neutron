@@ -58,11 +58,10 @@ import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
 import { parseRepositorySetupUrl } from "neutron-tools/repository";
 import { normalizeUntrustedText } from "neutron-tools/src/schema.js";
-import { canonicalJson } from "neutron-tools/src/canonical.js";
-import { hashContent } from "neutron-tools/src/hash.js";
 import icblast from "icblast";
 import { getNeutronId } from "./config.ts";
 import {
+  endpointIdForContext,
   getRegisteredEndpoint,
   installFrameEndpointHandshake,
   listRegisteredEndpoints,
@@ -173,6 +172,7 @@ import { sameAppScope } from "./app_scope.ts";
 import {
   admitAgentWorkspaceMutation,
   beginAgentRoot,
+  clearAgentModeForAuth,
   completeInvocation,
   createChildInvocation,
   hasActiveInvocationForApp,
@@ -301,7 +301,8 @@ const MAX_ENDPOINT_TOOLS = 64;
 const MAX_CONCURRENT_CALLS_PER_ENDPOINT = 8;
 const MAX_CONCURRENT_CONTROL_CALLS_PER_ENDPOINT = 1;
 const MAX_PENDING_PROVIDER_APPROVALS = 16;
-const PROVIDER_APPROVAL_TTL_MS = 60_000;
+const PROVIDER_APPROVAL_TTL_MS =
+  MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS * 1_000;
 const CONTROL_CALL_TIMEOUT_SECONDS = 5;
 const MAX_PENDING_TILE_VIEWS = 16;
 const MAX_RETAINED_STATE_APPS = 128;
@@ -321,6 +322,7 @@ type PendingProviderApproval = {
   authLogged: boolean;
   authAuthorized: boolean;
   authPrincipal: string;
+  authSessionGeneration: number;
   target: RegisteredEndpoint;
   targetSessionId: string;
   targetInstalledVersion: number;
@@ -328,9 +330,6 @@ type PendingProviderApproval = {
   targetAppGeneration: number | undefined;
   targetInstallationUid: string | undefined;
   descriptor: MsgBusToolDescriptor;
-  argumentsSha256: string;
-  sourceInvocation: InvocationNode | null;
-  targetInvocation: InvocationNode | null;
   expiresAt: number;
   controller: AbortController;
   timer?: ReturnType<typeof setTimeout>;
@@ -400,6 +399,15 @@ subscribeEndpointChanges(flushPendingTileViews);
 subscribeEndpointChanges(replayRetainedAppStateChanges);
 subscribeEndpointChanges(() => vetKeysBroker.reconcileEndpoints());
 subscribeEndpointChanges(reconcileProviderApprovalEndpoints);
+let currentAuthSessionGeneration =
+  useAuthStore.getState().sessionGeneration;
+useAuthStore.subscribe((auth) => {
+  if (auth.sessionGeneration !== currentAuthSessionGeneration) {
+    currentAuthSessionGeneration = auth.sessionGeneration;
+    clearAgentModeForAuth();
+  }
+  reconcileProviderApprovalEndpoints();
+});
 subscribeEndpointChanges(() =>
   reconcileAgentEndpoints((endpointId) => getRegisteredEndpoint(endpointId)),
 );
@@ -877,6 +885,51 @@ function assertCurrentEndpointVersion(endpoint: RegisteredEndpoint): void {
       (apps.runtimeGenerations[endpoint.context.appId] ?? 0)
   ) {
     throw new Error("App endpoint generation is no longer current");
+  }
+}
+
+type EndpointDispatchBinding = Readonly<{
+  endpoint: RegisteredEndpoint;
+  sessionId: string | null;
+  port: MessagePort | null;
+}>;
+
+function assertRegisteredEndpointCurrent(
+  endpoint: RegisteredEndpoint,
+): void {
+  if (getRegisteredEndpoint(endpoint.endpointId) !== endpoint) {
+    throw new KernelPolicyError(
+      "REQUEST_CANCELLED",
+      "An app endpoint changed before dispatch",
+    );
+  }
+  assertCurrentEndpointVersion(endpoint);
+}
+
+function bindEndpointDispatch(
+  endpoint: RegisteredEndpoint,
+): EndpointDispatchBinding {
+  assertRegisteredEndpointCurrent(endpoint);
+  return {
+    endpoint,
+    sessionId: endpoint.sessionId ?? null,
+    port: endpoint.port ?? null,
+  };
+}
+
+function assertEndpointDispatchCurrent(
+  binding: EndpointDispatchBinding,
+): void {
+  const { endpoint } = binding;
+  assertRegisteredEndpointCurrent(endpoint);
+  if (
+    (endpoint.sessionId ?? null) !== binding.sessionId ||
+    (endpoint.port ?? null) !== binding.port
+  ) {
+    throw new KernelPolicyError(
+      "REQUEST_CANCELLED",
+      "An app endpoint session changed before dispatch",
+    );
   }
 }
 
@@ -1635,19 +1688,12 @@ defineKernelTool(
     }
     const targetEndpoint = getRegisteredEndpoint(target);
     if (!targetEndpoint) throw new Error(`Unknown endpoint '${target}'`);
+    const callerDispatch = bindEndpointDispatch(caller);
+    const targetDispatch = bindEndpointDispatch(targetEndpoint);
     const assertEndpointsCurrent = (): void => {
       throwIfRequestCancelled(signal);
-      if (
-        getRegisteredEndpoint(caller.endpointId) !== caller ||
-        getRegisteredEndpoint(target) !== targetEndpoint
-      ) {
-        throw new KernelPolicyError(
-          "REQUEST_CANCELLED",
-          "An app surface changed while permission was pending",
-        );
-      }
-      assertCurrentEndpointVersion(caller);
-      assertCurrentEndpointVersion(targetEndpoint);
+      assertEndpointDispatchCurrent(callerDispatch);
+      assertEndpointDispatchCurrent(targetDispatch);
     };
     assertEndpointsCurrent();
     if (targetEndpoint.context.appId === caller.context.appId) {
@@ -1775,6 +1821,11 @@ defineKernelTool(
         (caller.context.appId === appId && isFocusedTrayCaller(caller)));
     const existing = findOpenAppTile(appId, tileId, workspace);
     assertAppTileCapacity(workspace, Boolean(existing), invocation);
+    const challengedAgentFocus =
+      Boolean(existing) &&
+      !foregroundApproved &&
+      invocation !== null &&
+      !isDirectAgentInvocation(invocation);
     const agentApproved = foregroundApproved
       ? false
       : await authorizeAgentPermission(caller, invocation, {
@@ -1802,6 +1853,16 @@ defineKernelTool(
         },
         onceOnly: true,
       });
+    }
+    const currentExisting = findOpenAppTile(appId, tileId, workspace);
+    if (
+      challengedAgentFocus &&
+      currentExisting?.instanceId !== existing?.instanceId
+    ) {
+      throw new KernelPolicyError(
+        "REQUEST_CANCELLED",
+        "The tile approved for focus is no longer open",
+      );
     }
     return openOrFocusAppTile(appId, tileId, workspace, view, invocation);
   },
@@ -2110,12 +2171,10 @@ function requireInstalledAppVersion(appId: string): number {
 }
 
 type PreparedBinarySelfMethod = {
-  target: any;
   method: string;
   logicalMethod: string;
   mode: PreapprovedSelfCallType;
   candidMethod: IDL.FuncClass;
-  args: unknown[];
   reviewArgs: JsonValue[];
   boundBlobs: SelfCallWireBlob[];
   inputBinary: { count: number; bytes: number };
@@ -2203,12 +2262,10 @@ async function prepareBinarySelfMethod(
     throw new Error("Self-call binary sidecars changed during Candid encoding");
   }
   return {
-    target,
     method: physicalMethod,
     logicalMethod,
     mode,
     candidMethod,
-    args: materialized.args,
     reviewArgs: materialized.metadata,
     boundBlobs: materialized.boundBlobs,
     inputBinary: {
@@ -2547,14 +2604,21 @@ export async function listTargetTools(
   }
   const endpoint = getRegisteredEndpoint(target);
   if (!endpoint) throw new Error(`Unknown endpoint '${target}'`);
-  assertCurrentEndpointVersion(caller);
-  assertCurrentEndpointVersion(endpoint);
+  const callerDispatch = bindEndpointDispatch(caller);
+  assertRegisteredEndpointCurrent(endpoint);
   if (invocation && endpoint.context.role === "tray") {
     throw new KernelPolicyError(
       "INVOCATION_INVALID",
       "Tray popouts are unavailable to delegated agent calls",
     );
   }
+  const descriptors = await readEndpointTools(endpoint, signal);
+  const targetDispatch = bindEndpointDispatch(endpoint);
+  const visible = descriptors.filter((descriptor) =>
+    endpointToolVisibleToCaller(descriptor, caller, endpoint, invocation),
+  );
+  assertEndpointDispatchCurrent(callerDispatch);
+  if (visible.length === 0) return [];
   await authorizeEndpointAccess(
     caller,
     endpoint,
@@ -2564,27 +2628,9 @@ export async function listTargetTools(
     undefined,
     signal,
   );
-  const value = await execEndpoint(
-    endpoint,
-    msgBusLocalActions.toolsList,
-    null,
-    10,
-    undefined,
-    undefined,
-    signal,
-  );
-  if (!Array.isArray(value) || value.length > MAX_ENDPOINT_TOOLS) {
-    throw new Error("Invalid endpoint tool list");
-  }
-  const descriptors = value.map((descriptor) => {
-    if (!isJsonObject(descriptor))
-      throw new Error("Invalid endpoint tool descriptor");
-    return normalizeToolDescriptor(descriptor as MsgBusToolDescriptor);
-  });
-  rememberEndpointAuditProfiles(endpoint, descriptors);
-  return descriptors.filter((descriptor) =>
-    endpointToolVisibleToCaller(descriptor, caller, endpoint, invocation),
-  );
+  assertEndpointDispatchCurrent(callerDispatch);
+  assertEndpointDispatchCurrent(targetDispatch);
+  return visible;
 }
 
 function captureInvocationContext(
@@ -2881,9 +2927,11 @@ async function invokeEndpointTool(
   throwIfRequestCancelled(signal);
   const endpoint = getRegisteredEndpoint(target);
   if (!endpoint) throw new Error(`Unknown endpoint '${target}'`);
-  assertCurrentEndpointVersion(endpoint);
-  const providerOwnerActivated =
-    !invocation && isFocusedTileCaller(caller) && hasTransientUserActivation();
+  const callerDispatch = bindEndpointDispatch(caller);
+  assertRegisteredEndpointCurrent(endpoint);
+  const ownerActivated =
+    isFocusedTileCaller(caller) && hasTransientUserActivation();
+  const providerOwnerActivated = !invocation && ownerActivated;
   if (
     control &&
     (caller.context.appId !== endpoint.context.appId ||
@@ -2902,12 +2950,13 @@ async function invokeEndpointTool(
       tool: name,
       ownerPrincipal: useAuthStore.getState().principal,
       installedVersion: requireInstalledAppVersion(endpoint.context.appId),
-      activated: isFocusedTileCaller(caller) && hasTransientUserActivation(),
+      activated: ownerActivated,
     });
   }
   try {
     const descriptors = await readEndpointTools(endpoint, signal);
     throwIfRequestCancelled(signal);
+    const targetDispatch = bindEndpointDispatch(endpoint);
     const descriptor = descriptors.find((candidate) => candidate.name === name);
     if (
       !descriptor ||
@@ -2918,20 +2967,10 @@ async function invokeEndpointTool(
     const agentRootAudience =
       descriptor.annotations?.["neutron:audience"] ===
       NEUTRON_TOOL_AUDIENCE_AGENT_ROOT;
-    if (agentRootAudience && !isDirectAgentInvocation(invocation)) {
-      throw new KernelPolicyError(
-        "INVOCATION_INVALID",
-        "This tool is available only to the active Agent root",
-      );
-    }
     if (control && descriptor.annotations?.["neutron:control"] !== control) {
       throw new Error(`Tool '${name}' is not declared as ${control} control`);
     }
     const attachmentContract = parseToolAttachmentContract(descriptor);
-    assertProviderConsentToolCompatible(
-      descriptor,
-      attachmentContract !== null,
-    );
     if (attachmentContract) {
       throw attachmentError(
         "ATTACHMENT_API_REQUIRED",
@@ -2953,6 +2992,12 @@ async function invokeEndpointTool(
         );
       }
     }
+    if (providerOnce && effectiveInvocation) {
+      throw new KernelPolicyError(
+        "INVOCATION_INVALID",
+        "Provider-confirmed tools are unavailable to Agent invocations",
+      );
+    }
     if (!providerOnce) {
       await authorizeEndpointAccess(
         caller,
@@ -2965,6 +3010,8 @@ async function invokeEndpointTool(
       );
       throwIfRequestCancelled(signal);
     }
+    assertEndpointDispatchCurrent(callerDispatch);
+    assertEndpointDispatchCurrent(targetDispatch);
     if (invocation) {
       targetInvocation = createChildInvocation(invocation, endpoint, name);
     }
@@ -2973,9 +3020,6 @@ async function invokeEndpointTool(
         caller,
         endpoint,
         descriptor,
-        args,
-        effectiveInvocation,
-        targetInvocation,
         signal,
       );
     }
@@ -2991,6 +3035,7 @@ async function invokeEndpointTool(
               providerApproval: {
                 capability: providerApproval.capability,
               },
+              providerUi: true,
             }
           : {}),
         ...(agentRootAudience
@@ -3025,30 +3070,10 @@ async function invokeEndpointTool(
   }
 }
 
-function assertProviderConsentToolCompatible(
-  descriptor: MsgBusToolDescriptor,
-  hasAttachmentContract: boolean,
-): void {
-  if (
-    descriptor.annotations?.["neutron:consent"] ===
-      NEUTRON_TOOL_CONSENT_PROVIDER_ONCE &&
-    (hasAttachmentContract ||
-      descriptor.annotations["neutron:control"] !== undefined)
-  ) {
-    throw new KernelPolicyError(
-      "INVALID_REQUEST",
-      "Provider-owned consent cannot be combined with control or attachment tools",
-    );
-  }
-}
-
 function createProviderApproval(
   caller: RegisteredEndpoint,
   target: RegisteredEndpoint,
   descriptor: MsgBusToolDescriptor,
-  args: JsonObject,
-  sourceInvocation: InvocationNode | null,
-  targetInvocation: InvocationNode | null,
   signal?: AbortSignal,
 ): PendingProviderApproval {
   throwIfRequestCancelled(signal);
@@ -3087,6 +3112,7 @@ function createProviderApproval(
     authLogged: auth.logged,
     authAuthorized: auth.authorized,
     authPrincipal: auth.principal,
+    authSessionGeneration: auth.sessionGeneration,
     target,
     targetSessionId: target.sessionId ?? "",
     targetInstalledVersion: requireInstalledAppVersion(target.context.appId),
@@ -3094,9 +3120,6 @@ function createProviderApproval(
     targetAppGeneration: target.appGeneration,
     targetInstallationUid: target.appScope?.installationUid,
     descriptor,
-    argumentsSha256: hashContent(canonicalJson(args)),
-    sourceInvocation,
-    targetInvocation,
     expiresAt: Date.now() + PROVIDER_APPROVAL_TTL_MS,
     controller,
     state: "pending",
@@ -3167,6 +3190,7 @@ function assertProviderApprovalCurrent(binding: PendingProviderApproval): void {
     auth.logged !== binding.authLogged ||
     auth.authorized !== binding.authAuthorized ||
     auth.principal !== binding.authPrincipal ||
+    auth.sessionGeneration !== binding.authSessionGeneration ||
     requireInstalledAppVersion(caller.context.appId) !==
       binding.callerInstalledVersion ||
     requireInstalledAppVersion(target.context.appId) !==
@@ -3175,16 +3199,6 @@ function assertProviderApprovalCurrent(binding: PendingProviderApproval): void {
     throw new KernelPolicyError(
       "REQUEST_CANCELLED",
       "An app surface changed during provider confirmation",
-    );
-  }
-  if (
-    (binding.sourceInvocation &&
-      binding.sourceInvocation.status !== "active") ||
-    (binding.targetInvocation && binding.targetInvocation.status !== "active")
-  ) {
-    throw new KernelPolicyError(
-      "AGENT_MODE_REVOKED",
-      "Provider confirmation invocation is no longer active",
     );
   }
   assertCurrentEndpointVersion(caller);
@@ -3239,46 +3253,25 @@ async function requestProviderApprovalForEndpoint(
         "Provider approval review",
         MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
       );
-      const agentApproved = await authorizeAgentPermission(
-        binding.caller,
-        binding.sourceInvocation,
-        {
-          kind: "frontend_tool",
-          persistence: "none",
-          risk: "high",
-          action: {
-            targetAppId: binding.target.context.appId,
-            targetRole: binding.target.context.role,
-            targetEndpoint: binding.target.endpointId,
-            tool: binding.descriptor.name,
-            originalArgumentsSha256: binding.argumentsSha256,
-            providerReview: review,
-          },
-        },
-        binding.controller.signal,
-      );
+      await requestFrontendToolPermission({
+        caller: callerContext(binding.caller),
+        callerSessionId: binding.callerSessionId,
+        target: binding.target.endpointId,
+        targetSessionId: binding.targetSessionId,
+        tool: binding.descriptor.name,
+        ...(binding.descriptor.title
+          ? { toolTitle: binding.descriptor.title }
+          : {}),
+        ...(binding.descriptor.description
+          ? { toolDescription: binding.descriptor.description }
+          : {}),
+        arguments: {},
+        providerReview: review,
+        onceOnly: true,
+        requireFreshDecision: true,
+        signal: binding.controller.signal,
+      });
       assertProviderApprovalCurrent(binding);
-      if (!agentApproved) {
-        await requestFrontendToolPermission({
-          caller: callerContext(binding.caller),
-          callerSessionId: binding.callerSessionId,
-          target: binding.target.endpointId,
-          targetSessionId: binding.targetSessionId,
-          tool: binding.descriptor.name,
-          ...(binding.descriptor.title
-            ? { toolTitle: binding.descriptor.title }
-            : {}),
-          ...(binding.descriptor.description
-            ? { toolDescription: binding.descriptor.description }
-            : {}),
-          arguments: {},
-          providerReview: review,
-          onceOnly: true,
-          requireFreshDecision: true,
-          signal: binding.controller.signal,
-        });
-        assertProviderApprovalCurrent(binding);
-      }
       return { approved: true };
     },
   );
@@ -3318,10 +3311,10 @@ async function consumeProviderInteraction<T>(
 ): Promise<T> {
   throwIfRequestCancelled(signal);
   assertProviderApprovalCurrent(binding);
-  if (callbackInvocation !== binding.targetInvocation) {
+  if (callbackInvocation !== null) {
     throw new KernelPolicyError(
       "INVOCATION_INVALID",
-      "Provider interaction invocation does not match the tool handler",
+      "Provider interactions are unavailable to Agent invocations",
     );
   }
   binding.state = "deciding";
@@ -3373,20 +3366,19 @@ async function presentProviderUiForEndpoint(
         "Provider presentation request",
         MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
       );
-      if (binding.sourceInvocation !== null) {
-        throw new KernelPolicyError(
-          "INVOCATION_INVALID",
-          "Agent calls must use the provider's direct-root tool",
-        );
-      }
       const tileId = payload.tileId;
       const toolName = payload.tool;
       const args = payload.arguments;
       const appId = binding.target.context.appId;
       const workspace = useWorkspaceStore.getState().activeWorkspaceId;
       const opened = openOrFocusAppTile(appId, tileId, workspace, null, null);
-      const endpointId =
-        `app:${appId}:tile:${tileId}:instance:${opened.instanceId}` as MsgBusEndpointId;
+      const endpointId = endpointIdForContext({
+        role: "tile",
+        appId,
+        tileId,
+        instanceId: opened.instanceId,
+        workspace: opened.workspace,
+      }) as MsgBusEndpointId;
       const tile = await waitForRegisteredEndpoint(
         endpointId,
         MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
@@ -3398,17 +3390,22 @@ async function presentProviderUiForEndpoint(
         endpointId,
         tileId,
         opened.instanceId,
+        workspace,
+        true,
       );
       const descriptors = await readEndpointTools(
         tile,
         binding.controller.signal,
       );
+      const tileDispatch = bindEndpointDispatch(tile);
       assertProviderPresentationTileCurrent(
         binding,
         tile,
         endpointId,
         tileId,
         opened.instanceId,
+        workspace,
+        true,
       );
       const descriptor = descriptors.find(
         (candidate) => candidate.name === toolName,
@@ -3426,12 +3423,15 @@ async function presentProviderUiForEndpoint(
         );
       }
       validateToolArguments(descriptor, args);
+      assertEndpointDispatchCurrent(tileDispatch);
       assertProviderPresentationTileCurrent(
         binding,
         tile,
         endpointId,
         tileId,
         opened.instanceId,
+        workspace,
+        true,
       );
       const result = await execEndpoint(
         tile,
@@ -3447,12 +3447,15 @@ async function presentProviderUiForEndpoint(
         undefined,
         binding.controller.signal,
       );
+      assertEndpointDispatchCurrent(tileDispatch);
       assertProviderPresentationTileCurrent(
         binding,
         tile,
         endpointId,
         tileId,
         opened.instanceId,
+        workspace,
+        false,
       );
       assertBoundedJson(result, `Tool '${toolName}' result`);
       validateToolResult(descriptor, result);
@@ -3467,6 +3470,8 @@ function assertProviderPresentationTileCurrent(
   endpointId: MsgBusEndpointId,
   tileId: string,
   instanceId: string,
+  workspace: WorkspaceId,
+  requireForeground: boolean,
 ): void {
   assertProviderApprovalCurrent(binding);
   if (
@@ -3481,6 +3486,27 @@ function assertProviderPresentationTileCurrent(
       "REQUEST_CANCELLED",
       "Provider tile authority does not match the resident provider",
     );
+  }
+  if (requireForeground) {
+    const workspaceRoot = useWorkspaceStore.getState();
+    const workspaceState = workspaceStateById(
+      workspaceRoot.workspaces,
+      workspace,
+    );
+    const instance = workspaceState.tiles.find(
+      (candidate) => candidate.id === instanceId,
+    );
+    if (
+      workspaceRoot.activeWorkspaceId !== workspace ||
+      workspaceState.focusedTileId !== instanceId ||
+      instance?.appId !== binding.target.context.appId ||
+      instance.tileId !== tileId
+    ) {
+      throw new KernelPolicyError(
+        "REQUEST_CANCELLED",
+        "Provider tile is no longer the active foreground surface",
+      );
+    }
   }
   assertCurrentEndpointVersion(tile);
 }
@@ -3497,7 +3523,8 @@ async function invokeEndpointAttachmentTool(
 ): Promise<AttachmentCallResult> {
   const endpoint = getRegisteredEndpoint(target);
   if (!endpoint) throw new Error(`Unknown endpoint '${target}'`);
-  assertCurrentEndpointVersion(endpoint);
+  const callerDispatch = bindEndpointDispatch(caller);
+  assertRegisteredEndpointCurrent(endpoint);
   if (!endpoint.port) {
     throw attachmentError(
       "ATTACHMENT_PRIVATE_PORT_REQUIRED",
@@ -3520,6 +3547,7 @@ async function invokeEndpointAttachmentTool(
       readEndpointTools(endpoint),
       reservation.signal,
     );
+    const targetDispatch = bindEndpointDispatch(endpoint);
     const descriptor = descriptors.find((candidate) => candidate.name === name);
     if (
       !descriptor ||
@@ -3528,7 +3556,6 @@ async function invokeEndpointAttachmentTool(
       throw new Error(`Unknown tool '${name}' on '${target}'`);
     }
     const contract = parseToolAttachmentContract(descriptor);
-    assertProviderConsentToolCompatible(descriptor, contract !== null);
     if (!contract) {
       throw attachmentError(
         "ATTACHMENT_UNDECLARED",
@@ -3557,6 +3584,8 @@ async function invokeEndpointAttachmentTool(
       ),
       reservation.signal,
     );
+    assertEndpointDispatchCurrent(callerDispatch);
+    assertEndpointDispatchCurrent(targetDispatch);
     if (invocation) {
       targetInvocation = createChildInvocation(invocation, endpoint, name);
     }
@@ -3705,8 +3734,40 @@ async function authorizeEndpointAccess(
   signal?: AbortSignal,
 ): Promise<void> {
   throwIfRequestCancelled(signal);
+  const callerDispatch = bindEndpointDispatch(caller);
+  const targetDispatch = bindEndpointDispatch(target);
   const tool = typeof descriptor === "string" ? descriptor : descriptor.name;
   if (caller.context.appId === target.context.appId) return;
+  const agentPermission: AgentPermissionSummary = {
+    kind: "frontend_tool",
+    persistence: "none",
+    risk: "medium",
+    action: {
+      targetAppId: target.context.appId,
+      targetRole: target.context.role,
+      tool,
+      argumentCount: Object.keys(args).length,
+      argumentBytes: JSON.stringify(args).length,
+      ...(attachmentBytes
+        ? {
+            attachmentInputBytes: attachmentBytes.input,
+            attachmentMaximumOutputBytes: attachmentBytes.maximumOutput,
+          }
+        : {}),
+    },
+  };
+  if (invocation) {
+    await authorizeAgentPermission(
+      caller,
+      invocation,
+      agentPermission,
+      signal,
+    );
+    throwIfRequestCancelled(signal);
+    assertEndpointDispatchCurrent(callerDispatch);
+    assertEndpointDispatchCurrent(targetDispatch);
+    return;
+  }
   if (
     hasFrontendToolGrant(
       callerContext(caller),
@@ -3716,35 +3777,20 @@ async function authorizeEndpointAccess(
       tool,
     )
   ) {
+    assertEndpointDispatchCurrent(callerDispatch);
+    assertEndpointDispatchCurrent(targetDispatch);
     return;
   }
   const agentApproved = await authorizeAgentPermission(
     caller,
-    invocation,
-    {
-      kind: "frontend_tool",
-      persistence: "none",
-      risk: "medium",
-      action: {
-        targetAppId: target.context.appId,
-        targetRole: target.context.role,
-        tool,
-        argumentCount: Object.keys(args).length,
-        argumentBytes: JSON.stringify(args).length,
-        ...(attachmentBytes
-          ? {
-              attachmentInputBytes: attachmentBytes.input,
-              attachmentMaximumOutputBytes: attachmentBytes.maximumOutput,
-            }
-          : {}),
-      },
-    },
+    null,
+    agentPermission,
     signal,
   );
   throwIfRequestCancelled(signal);
   if (agentApproved) {
-    assertCurrentEndpointVersion(caller);
-    assertCurrentEndpointVersion(target);
+    assertEndpointDispatchCurrent(callerDispatch);
+    assertEndpointDispatchCurrent(targetDispatch);
     return;
   }
   await requestFrontendToolPermission({
@@ -3764,8 +3810,8 @@ async function authorizeEndpointAccess(
     ...(signal ? { signal } : {}),
   });
   throwIfRequestCancelled(signal);
-  assertCurrentEndpointVersion(caller);
-  assertCurrentEndpointVersion(target);
+  assertEndpointDispatchCurrent(callerDispatch);
+  assertEndpointDispatchCurrent(targetDispatch);
 }
 
 async function authorizeAgentPermission(
@@ -3896,6 +3942,7 @@ async function execEndpoint(
   metadata?: MsgBusInvocationMetadata,
   signal?: AbortSignal,
 ): Promise<JsonValue> {
+  assertRegisteredEndpointCurrent(endpoint);
   const options =
     reportProgress || metadata || signal
       ? {
@@ -3905,8 +3952,26 @@ async function execEndpoint(
           ...(signal ? { signal } : {}),
         }
       : timeout;
-  if (endpoint.port) return execPort(endpoint.port, action, payload, options);
+  if (endpoint.port) {
+    const dispatch = bindEndpointDispatch(endpoint);
+    if (!dispatch.port) {
+      throw new KernelPolicyError(
+        "REQUEST_CANCELLED",
+        "An app endpoint disconnected before dispatch",
+      );
+    }
+    assertEndpointDispatchCurrent(dispatch);
+    return execPort(dispatch.port, action, payload, options);
+  }
   const port = await waitForFrameEndpointPort(endpoint, timeout, signal);
+  const dispatch = bindEndpointDispatch(endpoint);
+  if (dispatch.port !== port) {
+    throw new KernelPolicyError(
+      "REQUEST_CANCELLED",
+      "An app endpoint session changed before dispatch",
+    );
+  }
+  assertEndpointDispatchCurrent(dispatch);
   return execPort(port, action, payload, options);
 }
 

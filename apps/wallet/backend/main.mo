@@ -983,16 +983,20 @@ module {
             };
             switch (existingFundingCommand(key, intent, now)) {
                 case (#err(error)) return #err(error);
-                case (#ok(?outcome)) return #ok(outcome);
+                case (#ok(?outcome)) {
+                    return validateExistingFundingOutcome(request, outcome, now);
+                };
                 case (#ok(null)) {};
             };
-            switch (validateFundingRequest(request, now)) {
+            switch (validateCurrentFundingAuthority(request, now)) {
                 case (#err(error)) return #err(error);
                 case (#ok(())) {};
             };
             switch (existingActiveIcpRevoke(request, now)) {
                 case (#err(error)) return #err(error);
-                case (#ok(?outcome)) return #ok(outcome);
+                case (#ok(?outcome)) {
+                    return validateExistingFundingOutcome(request, outcome, now);
+                };
                 case (#ok(null)) {};
             };
 
@@ -1021,7 +1025,9 @@ module {
             // were awaited. Reuse its durable result and never overwrite it.
             switch (existingFundingCommand(key, intent, finishedAt)) {
                 case (#err(error)) return #err(error);
-                case (#ok(?outcome)) return #ok(outcome);
+                case (#ok(?outcome)) {
+                    return validateExistingFundingOutcome(request, outcome, finishedAt);
+                };
                 case (#ok(null)) {};
             };
             // Preparation awaits ledger facts. Recheck the global semantic
@@ -1029,8 +1035,17 @@ module {
             // prepare the same non-idempotent legacy removal.
             switch (existingActiveIcpRevoke(request, finishedAt)) {
                 case (#err(error)) return #err(error);
-                case (#ok(?outcome)) return #ok(outcome);
+                case (#ok(?outcome)) {
+                    return validateExistingFundingOutcome(request, outcome, finishedAt);
+                };
                 case (#ok(null)) {};
+            };
+            // Ledger reads yield to other Wallet updates. Require the ledger to
+            // still be selected and the exact route to still be reserved before
+            // persisting a fresh owner-reviewable command.
+            switch (validateCurrentFundingAuthority(request, finishedAt)) {
+                case (#err(error)) return #err(error);
+                case (#ok(())) {};
             };
             if (not ensureFundingCapacity(Time.now())) {
                 return #err("Wallet funding command capacity is full");
@@ -1154,10 +1169,6 @@ module {
             request : WalletFundingPrepareRequestV1,
             now : Nat64,
         ) : IcrcTypes.Result<()> {
-            switch (validateFundingKey(request)) {
-                case (#err(error)) return #err(error);
-                case (#ok(())) {};
-            };
             if (
                 request.valid_until_ns <= now or
                 request.valid_until_ns - now > MAX_FUNDING_VALIDITY_NS
@@ -1218,7 +1229,7 @@ module {
                             if (isIcpLedger(request.ledger)) {
                                 return #err("ICP approvals use the legacy revoke route");
                             };
-                            switch (canonicalFundingAccount(account)) {
+                            switch (canonicalIcrcAccount(account)) {
                                 case (#err(error)) return #err(error);
                                 case (#ok(_)) {};
                             };
@@ -1265,10 +1276,6 @@ module {
             request : WalletFundingPrepareRequestV1,
             now : Nat64,
         ) : async* IcrcTypes.Result<PreparedFunding> {
-            switch (preflightFundingCapabilities(request)) {
-                case (#err(error)) return #err(error);
-                case (#ok(())) {};
-            };
             let metadata = switch (await* readFundingMetadata(request.ledger)) {
                 case (#err(error)) return #err(error);
                 case (#ok(value)) value;
@@ -1345,7 +1352,7 @@ module {
                 case (#revoke(value)) {
                     switch (value.spender) {
                         case (#icrc(account)) {
-                            let spender = switch (canonicalFundingAccount(account)) {
+                            let spender = switch (canonicalIcrcAccount(account)) {
                                 case (#err(error)) return #err(error);
                                 case (#ok(canonical)) canonical;
                             };
@@ -1428,6 +1435,35 @@ module {
                 });
             };
             #ok(?outcome);
+        };
+
+        func validateExistingFundingOutcome(
+            request : WalletFundingPrepareRequestV1,
+            outcome : WalletFundingPrepareOutcomeV1,
+            now : Nat64,
+        ) : IcrcTypes.Result<WalletFundingPrepareOutcomeV1> {
+            switch (outcome) {
+                // Never-dispatched commands still depend on the owner's current
+                // Wallet selection. Pending and terminal results must remain
+                // available for exact replay and ambiguous-call reconciliation.
+                case (#prepared(_)) switch (validateCurrentFundingAuthority(request, now)) {
+                    case (#err(error)) return #err(error);
+                    case (#ok(())) {};
+                };
+                case (#completed(_)) {};
+            };
+            #ok(outcome);
+        };
+
+        func validateCurrentFundingAuthority(
+            request : WalletFundingPrepareRequestV1,
+            now : Nat64,
+        ) : IcrcTypes.Result<()> {
+            switch (validateFundingRequest(request, now)) {
+                case (#err(error)) return #err(error);
+                case (#ok(())) {};
+            };
+            preflightFundingCapabilities(request);
         };
 
         func existingActiveIcpRevoke(
@@ -1659,11 +1695,23 @@ module {
             };
         };
 
-        func canonicalFundingAccount(
+        // Existing ledger approvals may name any structurally valid Account.
+        // Destination admission below is deliberately stricter for new funds.
+        func canonicalIcrcAccount(
             account : IcrcTypes.Account,
         ) : IcrcTypes.Result<IcrcTypes.Account> {
             let ?canonical = AllowanceAccount.canonical(account) else {
                 return #err("ICRC account subaccount must be exactly 32 bytes");
+            };
+            #ok(canonical);
+        };
+
+        func canonicalFundingAccount(
+            account : IcrcTypes.Account,
+        ) : IcrcTypes.Result<IcrcTypes.Account> {
+            let canonical = switch (canonicalIcrcAccount(account)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
             };
             if (Principal.isAnonymous(canonical.owner)) {
                 return #err("Anonymous principal is not a funding account");
@@ -1697,6 +1745,16 @@ module {
                     };
                 };
                 case null #err("Ledger is not selected in Wallet");
+            };
+        };
+
+        func validateFundingDispatchAuthority(
+            command : CommandMemory.Command,
+        ) : IcrcTypes.Result<()> {
+            if (not FundingJournal.requiresCurrentAuthority(command)) return #ok(());
+            switch (selectedLedger(command.ledger)) {
+                case (#err(error)) #err(error);
+                case (#ok(_)) #ok(());
             };
         };
 
@@ -1771,6 +1829,12 @@ module {
             },
             metadata : FundingMetadata,
         ) : async* WalletFundingExecutionResultV1 {
+            switch (validateFundingDispatchAuthority(command)) {
+                case (#err(error)) {
+                    return rejectFundingCommand(key, command, "ledger_deselected", error);
+                };
+                case (#ok(())) {};
+            };
             let replay = command.call_args != null;
             let exactArgs = switch (command.call_args) {
                 case (?value) value;
@@ -1833,7 +1897,7 @@ module {
                         null,
                         null,
                     );
-                    invalidateFundingLedger(command.ledger, metadata.fee);
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
                     fundingExecution(key, command);
                 };
             };
@@ -1857,6 +1921,12 @@ module {
                 };
                 case (#ok(value)) value;
             };
+            switch (validateFundingDispatchAuthority(command)) {
+                case (#err(error)) {
+                    return rejectFundingCommand(key, command, "ledger_deselected", error);
+                };
+                case (#ok(())) {};
+            };
             let desired = switch (command.review.allowance) {
                 case null return rejectOrKeepPending(
                     key,
@@ -1868,7 +1938,7 @@ module {
             };
             if (current.amount == desired and current.expires_at == ?operation.expires_at) {
                 succeedFundingCommand(command, null, false);
-                invalidateFundingLedger(command.ledger, metadata.fee);
+                invalidateLedgerBalance(command.ledger, metadata.fee);
                 return fundingExecution(key, command);
             };
             if (
@@ -1963,7 +2033,7 @@ module {
                         #icrc(operation.spender),
                         null,
                     );
-                    invalidateFundingLedger(command.ledger, metadata.fee);
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
                     fundingExecution(key, command);
                 };
             };
@@ -1986,9 +2056,15 @@ module {
                 };
                 case (#ok(value)) value;
             };
+            switch (validateFundingDispatchAuthority(command)) {
+                case (#err(error)) {
+                    return rejectFundingCommand(key, command, "ledger_deselected", error);
+                };
+                case (#ok(())) {};
+            };
             if (current.amount == 0) {
                 succeedFundingCommand(command, null, false);
-                invalidateFundingLedger(command.ledger, metadata.fee);
+                invalidateLedgerBalance(command.ledger, metadata.fee);
                 return fundingExecution(key, command);
             };
             if (
@@ -2075,7 +2151,7 @@ module {
                         #icrc(spender),
                         null,
                     );
-                    invalidateFundingLedger(command.ledger, metadata.fee);
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
                     fundingExecution(key, command);
                 };
             };
@@ -2102,10 +2178,16 @@ module {
                 };
                 case (#ok(value)) value;
             };
+            switch (validateFundingDispatchAuthority(command)) {
+                case (#err(error)) {
+                    return rejectFundingCommand(key, command, "ledger_deselected", error);
+                };
+                case (#ok(())) {};
+            };
             switch (current) {
                 case null {
                     succeedFundingCommand(command, null, false);
-                    invalidateFundingLedger(command.ledger, metadata.fee);
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
                     return fundingExecution(key, command);
                 };
                 case (?value) {
@@ -2201,7 +2283,7 @@ module {
                         #icp_account_identifier(spender),
                         null,
                     );
-                    invalidateFundingLedger(command.ledger, metadata.fee);
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
                     fundingExecution(key, command);
                 };
             };
@@ -2455,7 +2537,7 @@ module {
             };
         };
 
-        func invalidateFundingLedger(ledger : Principal, fee : Nat) : () {
+        func invalidateLedgerBalance(ledger : Principal, fee : Nat) : () {
             mem.balance_epoch += 1;
             let ?current = Map.get(mem.ledgers, Principal.compare, ledger) else return;
             Map.add(mem.ledgers, Principal.compare, ledger, {
@@ -2523,18 +2605,6 @@ module {
                 case (#ok(value)) value;
             };
             let raw = await* calls.call(call);
-            switch (raw) {
-                case (#err(error)) if (error.code == "call_rejected") {
-                    return #ok(emptyAllowancesPage(
-                        request.ledger,
-                        metadata,
-                        #none,
-                        #unsupported,
-                        ?"Ledger does not expose ICRC-103 allowance enumeration",
-                    ));
-                };
-                case (_) {};
-            };
             let page = switch (Icrc103.decodeAllowances(
                 raw,
                 calls.canister_principal,
@@ -2634,7 +2704,7 @@ module {
                 nowNanos(),
             );
             if (reconciled > 0) {
-                invalidateFundingLedger(request.ledger, metadata.fee);
+                invalidateLedgerBalance(request.ledger, metadata.fee);
             };
             let call = switch (IcpAllowances.getAllowancesRequest(
                 request.ledger,
@@ -2646,18 +2716,6 @@ module {
                 case (#ok(value)) value;
             };
             let raw = await* calls.call(call);
-            switch (raw) {
-                case (#err(error)) if (error.code == "call_rejected") {
-                    return #ok(emptyAllowancesPage(
-                        request.ledger,
-                        metadata,
-                        #none,
-                        #unsupported,
-                        ?"ICP ledger does not expose legacy allowance enumeration",
-                    ));
-                };
-                case (_) {};
-            };
             let page = switch (IcpAllowances.decodeAllowances(
                 raw,
                 calls.canister_principal,
@@ -2675,18 +2733,6 @@ module {
                     ));
                 };
                 case (#ok(value)) value;
-            };
-            for (allowance in page.allowances.vals()) {
-                if (not FundingDisplay.nat(allowance.allowance)) {
-                    let error = "ICP allowance exceeds the Wallet protocol limit";
-                    return #ok(emptyAllowancesPage(
-                        request.ledger,
-                        metadata,
-                        #icp,
-                        #degraded(error),
-                        ?error,
-                    ));
-                };
             };
             let entries = Array.map<IcpAllowances.Allowance, WalletAllowanceEntryV1>(
                 page.allowances,
@@ -2768,9 +2814,6 @@ module {
                     case (#ok(value)) value;
                 };
                 for (allowance in page.allowances.vals()) {
-                    if (not FundingDisplay.nat(allowance.allowance)) {
-                        break pages 0;
-                    };
                     FundingJournal.noteIcpSpender(
                         candidates,
                         allowance.to_spender_id,
@@ -3126,15 +3169,7 @@ module {
                 ?intent,
                 nativeContext,
             );
-            mem.balance_epoch += 1;
-            let ?current = Map.get(mem.ledgers, Principal.compare, request.ledger) else {
-                return;
-            };
-            Map.add(mem.ledgers, Principal.compare, request.ledger, {
-                current with
-                fee = ?fee;
-                balance_error = null;
-            });
+            invalidateLedgerBalance(request.ledger, fee);
         };
 
         func recordSecondaryNativeBurn(

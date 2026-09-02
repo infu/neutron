@@ -15,6 +15,7 @@
     "src/tray_demo.ts",
     "src/vetkey_demo.ts",
     "src/wallet_funding_demo.ts",
+    "src/wallet_funding_intent_storage.ts",
     "test/**/*.ts",
     "types/**/*.d.ts"
   ]

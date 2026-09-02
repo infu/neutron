@@ -68,7 +68,7 @@ export type OpenAppTileResult = JsonObject & {
  * provider's own tile and delivers this opaque request to the named private
  * tile tool. The provider, not the Kernel, owns the rendered UI and decision.
  */
-export type ProviderPresentationRequest = JsonObject & {
+export type ProviderPresentationRequest = {
   tileId: string;
   tool: string;
   arguments?: JsonObject;
@@ -859,7 +859,7 @@ export function assertMsgBusV1Json(
 const isMessageId = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
-function hasExactEnumerableDataKeys(
+export function hasExactEnumerableDataKeys(
   value: unknown,
   expected: readonly string[],
 ): value is Record<string, unknown> {
@@ -888,14 +888,18 @@ function hasExactEnumerableDataKeys(
 
 function isTransportContext(value: unknown): value is MsgBusTransportContext {
   if (!isJsonObject(value)) return false;
-  if (Object.keys(value).some((key) => key !== "invocation")) return false;
+  if (!Object.hasOwn(value, "invocation")) {
+    return hasExactEnumerableDataKeys(value, []);
+  }
+  if (!hasExactEnumerableDataKeys(value, ["invocation"])) return false;
   if (value.invocation === undefined) return true;
   const invocation = value.invocation;
+  if (!isJsonObject(invocation)) return false;
+  const invocationKeys = Object.hasOwn(invocation, "agentConsent")
+    ? ["id", "rootId", "capability", "agentConsent"]
+    : ["id", "rootId", "capability"];
   return (
-    isJsonObject(invocation) &&
-    Object.keys(invocation).every((key) =>
-      ["id", "rootId", "capability", "agentConsent"].includes(key),
-    ) &&
+    hasExactEnumerableDataKeys(invocation, invocationKeys) &&
     typeof invocation.id === "string" &&
     invocation.id.length >= 16 &&
     typeof invocation.rootId === "string" &&
@@ -916,7 +920,9 @@ export function isExecEnvelope(value: unknown): value is ExecEnvelope {
     !isRecord(payload) ||
     typeof payload.action !== "string" ||
     payload.action.length === 0 ||
-    (payload.context !== undefined && !isTransportContext(payload.context))
+    (Object.hasOwn(payload, "context") &&
+      payload.context !== undefined &&
+      !isTransportContext(payload.context))
   ) {
     return false;
   }
@@ -1164,106 +1170,85 @@ export function normalizeToolDescriptor(
     "Tool description",
     1000,
   );
-  if (
-    descriptor.annotations !== undefined &&
-    !isJsonObject(descriptor.annotations)
-  ) {
+  const annotations = Object.hasOwn(descriptor, "annotations")
+    ? descriptor.annotations
+    : undefined;
+  if (annotations !== undefined && !isJsonObject(annotations)) {
     throw new Error("Tool annotations must be a JSON object");
   }
+  const consent =
+    annotations && Object.hasOwn(annotations, "neutron:consent")
+      ? annotations["neutron:consent"]
+      : undefined;
+  const visibility =
+    annotations && Object.hasOwn(annotations, "neutron:visibility")
+      ? annotations["neutron:visibility"]
+      : undefined;
+  const audience =
+    annotations && Object.hasOwn(annotations, "neutron:audience")
+      ? annotations["neutron:audience"]
+      : undefined;
   if (
-    descriptor.annotations &&
-    Object.prototype.hasOwnProperty.call(
-      descriptor.annotations,
-      "neutron:audit",
-    ) &&
-    descriptor.annotations["neutron:audit"] !== NEUTRON_TOOL_AUDIT_METADATA_ONLY
+    annotations &&
+    Object.hasOwn(annotations, "neutron:audit") &&
+    annotations["neutron:audit"] !== NEUTRON_TOOL_AUDIT_METADATA_ONLY
   ) {
     throw new Error("Unsupported neutron:audit tool annotation");
   }
   if (
-    descriptor.annotations &&
-    Object.prototype.hasOwnProperty.call(
-      descriptor.annotations,
-      "neutron:control",
-    ) &&
-    descriptor.annotations["neutron:control"] !== NEUTRON_TOOL_CONTROL_CANCEL
+    annotations &&
+    Object.hasOwn(annotations, "neutron:control") &&
+    annotations["neutron:control"] !== NEUTRON_TOOL_CONTROL_CANCEL
   ) {
     throw new Error("Unsupported neutron:control tool annotation");
   }
   if (
-    descriptor.annotations &&
-    Object.prototype.hasOwnProperty.call(
-      descriptor.annotations,
-      "neutron:consent",
-    ) &&
-    descriptor.annotations["neutron:consent"] !==
-      NEUTRON_TOOL_CONSENT_PROVIDER_ONCE
+    annotations &&
+    Object.hasOwn(annotations, "neutron:consent") &&
+    annotations["neutron:consent"] !== NEUTRON_TOOL_CONSENT_PROVIDER_ONCE
   ) {
     throw new Error("Unsupported neutron:consent tool annotation");
   }
   if (
-    descriptor.annotations?.["neutron:consent"] ===
-      NEUTRON_TOOL_CONSENT_PROVIDER_ONCE &&
-    (Object.prototype.hasOwnProperty.call(
-      descriptor.annotations,
-      "neutron:control",
-    ) ||
-      Object.prototype.hasOwnProperty.call(
-        descriptor.annotations,
-        "neutron:attachments",
-      ))
+    annotations !== undefined &&
+    consent === NEUTRON_TOOL_CONSENT_PROVIDER_ONCE &&
+    (Object.hasOwn(annotations, "neutron:control") ||
+      Object.hasOwn(annotations, "neutron:attachments"))
   ) {
     throw new Error(
       "Provider-owned consent cannot be combined with control or attachment tools",
     );
   }
   if (
-    descriptor.annotations &&
-    Object.prototype.hasOwnProperty.call(
-      descriptor.annotations,
-      "neutron:visibility",
-    ) &&
-    descriptor.annotations["neutron:visibility"] !==
-      NEUTRON_TOOL_VISIBILITY_SAME_APP
+    annotations &&
+    Object.hasOwn(annotations, "neutron:visibility") &&
+    annotations["neutron:visibility"] !== NEUTRON_TOOL_VISIBILITY_SAME_APP
   ) {
     throw new Error("Unsupported neutron:visibility tool annotation");
   }
   if (
-    descriptor.annotations &&
-    Object.prototype.hasOwnProperty.call(
-      descriptor.annotations,
-      "neutron:audience",
-    ) &&
-    descriptor.annotations["neutron:audience"] !==
-      NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE &&
-    descriptor.annotations["neutron:audience"] !==
-      NEUTRON_TOOL_AUDIENCE_AGENT_ROOT
+    annotations &&
+    Object.hasOwn(annotations, "neutron:audience") &&
+    annotations["neutron:audience"] !== NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE &&
+    annotations["neutron:audience"] !== NEUTRON_TOOL_AUDIENCE_AGENT_ROOT
   ) {
     throw new Error("Unsupported neutron:audience tool annotation");
   }
   if (
-    descriptor.annotations?.["neutron:audience"] !== undefined &&
-    descriptor.annotations["neutron:visibility"] !==
-      NEUTRON_TOOL_VISIBILITY_SAME_APP
+    annotations !== undefined &&
+    audience !== undefined &&
+    visibility !== NEUTRON_TOOL_VISIBILITY_SAME_APP
   ) {
     throw new Error(
       "Audience-restricted tools must also use same-app visibility",
     );
   }
   if (
-    descriptor.annotations?.["neutron:audience"] !== undefined &&
-    (Object.prototype.hasOwnProperty.call(
-      descriptor.annotations,
-      "neutron:attachments",
-    ) ||
-      Object.prototype.hasOwnProperty.call(
-        descriptor.annotations,
-        "neutron:control",
-      ) ||
-      Object.prototype.hasOwnProperty.call(
-        descriptor.annotations,
-        "neutron:consent",
-      ))
+    annotations !== undefined &&
+    audience !== undefined &&
+    (Object.hasOwn(annotations, "neutron:attachments") ||
+      Object.hasOwn(annotations, "neutron:control") ||
+      Object.hasOwn(annotations, "neutron:consent"))
   ) {
     throw new Error(
       "Audience-restricted tools cannot use attachments, control, or provider consent",
@@ -1273,8 +1258,8 @@ export function normalizeToolDescriptor(
   if (descriptor.outputSchema) {
     assertSafeJsonSchema(descriptor.outputSchema, "Tool outputSchema");
   }
-  if (descriptor.annotations) {
-    assertSafeAnnotationValue(descriptor.annotations, 0);
+  if (annotations) {
+    assertSafeAnnotationValue(annotations, 0);
   }
   assertBoundedJson(
     descriptor.inputSchema,
@@ -1301,7 +1286,7 @@ export function normalizeToolDescriptor(
     ...(descriptor.outputSchema
       ? { outputSchema: descriptor.outputSchema }
       : {}),
-    ...(descriptor.annotations ? { annotations: descriptor.annotations } : {}),
+    ...(annotations ? { annotations } : {}),
   };
 }
 

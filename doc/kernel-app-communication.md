@@ -222,15 +222,14 @@ authoritative state before the owner can make an informed decision. The
 annotation does not describe tokens, payments, wallets, or any other app
 domain.
 
-For a cross-app invocation, the Kernel validates the original JSON arguments
-against the target descriptor, bypasses the ordinary preliminary frontend-tool
-grant, and calls the exact provider endpoint with a private one-use
-`presentUserInterface` callback in that handler's context. The callback is
-bound to the captured caller object and session, caller AppScope/version,
+On the current provider-UI lane, the Kernel validates the original JSON
+arguments against the target descriptor, bypasses the ordinary preliminary
+frontend-tool grant, and calls the exact provider endpoint with a private
+one-use `presentUserInterface` callback in that handler's context. The callback
+is bound to the captured caller object and session, caller AppScope/version,
 target object and session, target AppScope/version, exact public tool, request
-cancellation signal, and canonical SHA-256 of the validated original
-arguments. It never appears in discovery, public tool arguments, progress, or
-the response.
+cancellation signal, and originating live handler call. It never appears in
+discovery, public tool arguments, progress, or the response.
 
 The provider invokes the callback before domain-specific preparation:
 
@@ -242,11 +241,12 @@ return context.presentUserInterface({
 });
 ```
 
-The request is a closed `{ tileId, tool, arguments }` object bounded to 16 KiB
-in addition to the ordinary depth and container-element limits. The Kernel
-opens or reuses and focuses that exact declared tile of the provider in the
-active workspace, waits for its exact registered endpoint, and routes the
-opaque `arguments` only to a private tool declaring both
+The SDK accepts a closed `{ tileId, tool, arguments }` object. Its exact private
+wire envelope `{ capability, tileId, tool, arguments }` is bounded to 16 KiB in
+addition to the ordinary depth and container-element limits. The Kernel opens
+or reuses and focuses that exact declared tile of the provider in the active
+workspace, waits for its exact registered endpoint, and routes the opaque
+`arguments` only to a private tool declaring both
 `{"neutron:visibility":"same_app"}` and
 `{"neutron:audience":"foreground_tile"}`. The Kernel injects the original
 caller context and the attested `foreground_tile` audience; neither value can
@@ -254,11 +254,13 @@ be supplied by an app argument. The SDK rejects a missing or mismatched
 audience before entering the private handler.
 
 Outside Agent Mode, the original request is admitted only from the focused
-source tile with transient user activation. The provider tile, not Kernel,
-loads authoritative facts, renders its own review UI, owns Accept and Reject,
-and performs its own preapproved self call only after Accept. Kernel neither
-renders a dialog nor interprets the payload. No exact or wildcard session grant
-is consulted, and the interaction creates no grant.
+source tile with transient user activation. The provider tile, not Kernel, may
+use exact preapproved methods to load and freeze non-value-moving review state,
+renders its own review UI, and owns the accept/reject decision with concrete
+action/cancel labels. Only the affirmative action may dispatch the value-moving
+execute method; cancel may persist rejection. Kernel neither renders a dialog
+nor interprets the payload. No exact or wildcard session grant is consulted,
+and the interaction creates no grant.
 
 The pending capability and presentation binding are ephemeral browser state.
 This route adds no Kernel managed-memory schema and no durable permission
@@ -273,16 +275,16 @@ are rechecked after every asynchronous step.
 
 The target provider, not Kernel, is trusted to keep preparation, display,
 decision, and execution correctly ordered. Kernel authenticates routing but
-cannot prove app-specific ordering without understanding the provider. A new
-provider must feature-detect `context.presentUserInterface` before preparation
-or execution. On an older Kernel it fails closed rather than falling back to an
-ordinary session grant.
+cannot prove app-specific ordering without understanding the provider. Current
+provider code must feature-detect `context.presentUserInterface` before
+preparation or execution. When the SDK withholds it because Kernel supplied no
+explicit provider-UI support marker, the provider fails closed rather than
+falling back to an ordinary session grant.
 
-`context.requestApproval(review)` is deprecated compatibility for providers
-already published with that contract, including Wallet 0.3.6. That legacy lane
-retains its Kernel-rendered inert raw-JSON review so those installed callers
-continue to work, but new providers must not use it and new Wallet flows do not
-open a Kernel dialog.
+`context.requestApproval(review)` is a deprecated generic compatibility
+surface. Published providers including Wallet 0.3.6 depend on its
+Kernel-rendered inert raw-JSON review, but the runtime does not app- or
+version-gate the member. Current providers must use provider-owned UI.
 
 Agent automation uses a separate provider tool declaring both
 `{"neutron:visibility":"same_app"}` and
@@ -395,8 +397,8 @@ continue to use the same context's `kernel` client for subsequent scoped self
 calls or nested tools. Audience-restricted handlers receive the corresponding
 Kernel-attested `context.audience`; the SDK rejects missing or mismatched
 attestation before invoking the handler. Deprecated `requestApproval(review)`
-exists only for released-provider compatibility and shares the same one-use
-gate.
+remains a generic compatibility member and shares the same one-use gate;
+current providers must not use it.
 
 ## Self Calls With Nested Binary Values
 
@@ -464,9 +466,12 @@ Before dispatch the Kernel:
 6. rechecks the endpoint and invocation before the signed query/update.
 
 The private self-call path does not apply ICBlast's public JSON Schema shadow.
-That public projection may intentionally represent Candid records with scalar
-conveniences and is not authoritative for a private structural Candid value.
-The live IDL encoding and raw-Candid preflight remain mandatory.
+At a live record position, it may leave a string opaque only for the pinned
+encoder's released record shorthand and only with no sidecar at or below that
+path. Generated schema does not authorize the exception. Exact live-IDL
+encoding and raw-Candid preflight remain mandatory, as does equality between
+the encoded raw Candid's blob count and aggregate blob-byte length and the
+materialized-sidecar statistics.
 
 The reply is raw-preflighted before decode, projected into the same native
 binary model, and transferred back through response sidecars.

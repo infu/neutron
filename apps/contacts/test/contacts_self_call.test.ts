@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { decodeIcrcAccount } from "neutron-tools/src/icrc_account.js";
 import {
   encodeDestination,
   parseDestination,
@@ -10,34 +11,46 @@ const ACCOUNT = `${OWNER}-t5ic6yq.ff`;
 const SUBACCOUNT = Uint8Array.from([...new Array(31).fill(0), 255]);
 
 describe("Contacts canonical API-1 account boundary", () => {
-  test("encodes an ICRC account as a principal record with a copied Blob", () => {
-    const encoded = encodeDestination({
-      network: "internet_computer",
-      account: ACCOUNT,
-    });
-    const account = encoded.internet_computer;
-    expect(account).toEqual({
-      owner: OWNER,
-      subaccount: SUBACCOUNT,
-    });
-    expect(
-      (account as { subaccount: Uint8Array }).subaccount,
-    ).not.toBe(SUBACCOUNT);
-
+  test("encodes canonical account text for icblast input", () => {
     expect(
       encodeDestination({
         network: "internet_computer",
-        account: OWNER,
+        account: CANISTER_OWNER,
       }),
     ).toEqual({
-      internet_computer: {
-        owner: OWNER,
-        subaccount: null,
-      },
+      internet_computer: CANISTER_OWNER,
+    });
+    expect(
+      encodeDestination({
+        network: "internet_computer",
+        account: ACCOUNT,
+      }),
+    ).toEqual({ internet_computer: ACCOUNT });
+  });
+
+  test("parses absent and explicit-null output subaccounts identically", () => {
+    expect(
+      parseDestination({
+        internet_computer: { owner: CANISTER_OWNER },
+      }),
+    ).toEqual({
+      network: "internet_computer",
+      account: CANISTER_OWNER,
+    });
+    expect(
+      parseDestination({
+        internet_computer: {
+          owner: CANISTER_OWNER,
+          subaccount: null,
+        },
+      }),
+    ).toEqual({
+      network: "internet_computer",
+      account: CANISTER_OWNER,
     });
   });
 
-  test("parses canonical account records into detached validated account text", () => {
+  test("round-trips one exact 32-byte ICRC subaccount as canonical text", () => {
     const incoming = SUBACCOUNT.slice();
     const parsed = parseDestination({
       internet_computer: {
@@ -49,58 +62,23 @@ describe("Contacts canonical API-1 account boundary", () => {
       network: "internet_computer",
       account: ACCOUNT,
     });
-
+    if (parsed.network !== "internet_computer") {
+      throw new Error("Expected an Internet Computer destination");
+    }
+    expect(decodeIcrcAccount(parsed.account)).toMatchObject({
+      subaccount: SUBACCOUNT,
+    });
     incoming.fill(0);
-    expect(encodeDestination(parsed)).toEqual({
-      internet_computer: {
-        owner: OWNER,
-        subaccount: SUBACCOUNT,
-      },
-    });
-
-    expect(
-      parseDestination({
-        internet_computer: {
-          owner: OWNER,
-          subaccount: null,
-        },
-      }),
-    ).toEqual({
-      network: "internet_computer",
-      account: OWNER,
-    });
+    expect(encodeDestination(parsed)).toEqual({ internet_computer: ACCOUNT });
   });
 
-  test("parses a principal owner when the absent subaccount field is omitted", () => {
-    expect(
-      parseDestination({
-        internet_computer: {
-          owner: CANISTER_OWNER,
-        },
-      }),
-    ).toEqual({
-      network: "internet_computer",
-      account: CANISTER_OWNER,
-    });
-
-    expect(
-      parseDestination({
-        internet_computer: {
-          owner: CANISTER_OWNER,
-          subaccount: null,
-        },
-      }),
-    ).toEqual({
-      network: "internet_computer",
-      account: CANISTER_OWNER,
-    });
-  });
-
-  test("rejects legacy strings and noncanonical account record shapes", () => {
+  test("rejects scalar replies and noncanonical output account records", () => {
     for (const account of [
-      ACCOUNT,
-      { owner: OWNER, subaccount: new ArrayBuffer(32) },
+      CANISTER_OWNER,
+      "2vxsx-fae",
+      `${OWNER}-bad.ff`,
       { owner: OWNER, subaccount: undefined },
+      { owner: OWNER, subaccount: new ArrayBuffer(32) },
       { owner: OWNER, subaccount: new Uint8Array(31) },
       { owner: "2vxsx-fae", subaccount: null },
       { owner: OWNER, subaccount: null, extra: null },
@@ -109,6 +87,53 @@ describe("Contacts canonical API-1 account boundary", () => {
         parseDestination({ internet_computer: account }),
       ).toThrow();
     }
+  });
+
+  test("rejects inherited and accessor output fields without invoking them", () => {
+    const previous = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      "subaccount",
+    );
+    Object.defineProperty(Object.prototype, "subaccount", {
+      configurable: true,
+      enumerable: true,
+      value: null,
+    });
+    try {
+      expect(() =>
+        parseDestination({
+          internet_computer: { owner: CANISTER_OWNER },
+        }),
+      ).toThrow();
+    } finally {
+      if (previous === undefined) {
+        Reflect.deleteProperty(Object.prototype, "subaccount");
+      } else {
+        Object.defineProperty(Object.prototype, "subaccount", previous);
+      }
+    }
+
+    let getterCalls = 0;
+    const accessor = Object.defineProperty({}, "owner", {
+      enumerable: true,
+      get() {
+        getterCalls += 1;
+        return CANISTER_OWNER;
+      },
+    });
+    expect(() =>
+      parseDestination({ internet_computer: accessor }),
+    ).toThrow();
+    expect(getterCalls).toBe(0);
+
+    expect(() =>
+      parseDestination({
+        internet_computer: Object.assign(
+          Object.create(null),
+          { owner: CANISTER_OWNER, [Symbol("extra")]: null },
+        ),
+      }),
+    ).toThrow();
   });
 
   test("leaves every non-IC destination variant unchanged", () => {

@@ -3,4 +3,5 @@ dist/
 node_modules/
 *.neutron
 !contacts.v0.3.1.neutron
+!contacts.v0.3.4.neutron
 *.tsbuildinfo

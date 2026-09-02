@@ -146,7 +146,7 @@ authorization boundary.
 | Make a canister call through the owner identity | `callCanisterDialog({ canister, method, args })` | When the source app has no active invocation | A same-Neutron target uses the private attachment-aware API-1 self-call wire and ordinary owner consent when the source app has no active invocation. While that app has an active invocation, an unscoped request fails with `SCOPED_CONTEXT_REQUIRED`, while a valid scoped request fails with `USER_INTERACTION_REQUIRED`. An eligible external call made through a live invocation-scoped client uses the generic JSON route and agent decision policy. The Kernel validates live input and calls only after the applicable decision. |
 | Call a tile, tray, or background tool in the same app | `callTool(...)` | No | Target must be a live endpoint; JSON Schema is checked at the endpoint and kernel. |
 | Call another app's live endpoint tool | `callTool(...)` | When the source app has no active invocation: one-call or session grant | Kernel identifies both endpoints. A matching live session grant is honored first; otherwise an invocation-scoped call uses the agent decision policy and an ordinary call uses the owner dialog. |
-| Call another app's `provider_once` tool | `callTool(...)`, then target-only `context.presentUserInterface(...)` | One decision in the provider's tile | Kernel validates the public tool input, ignores session grants, and gives that invocation one callback which can open or focus only the provider's exact tile and route opaque arguments to a private `same_app` + `foreground_tile` tool. The provider tile prepares authoritative facts, renders Accept/Reject, and uses its own preapproved authority after Accept. Kernel opens no dialog and learns no app-domain semantics. |
+| Call another app's `provider_once` tool on the current provider-UI lane | `callTool(...)`, then target-only `context.presentUserInterface(...)` | One decision in the provider's tile | Kernel validates the public tool input, ignores session grants, and gives that invocation one callback which can open or focus only the provider's exact tile and route opaque arguments to a private `same_app` + `foreground_tile` tool. The provider tile may use exact preapproved methods to prepare non-value-moving review state and persist cancellation; only the affirmative action may dispatch value-moving execution. Kernel opens no dialog and learns no app-domain semantics. |
 | Call a provider's root-agent tool | `callTool(...)` from the invocation-scoped root client | No | The exact target tool must declare `same_app` visibility and the `agent_root` audience. Kernel admits only the active depth-zero root, attests that audience, and rejects ordinary callers and delegated descendants before target dispatch. |
 | Add or remove backend-call reservations | `requestBackendCallReservations(...)` | When the source app has no active invocation: persistent-access dialog | Scopes must be declared by the app manifest. An invocation-scoped action-only request uses the agent decision policy, and an allowed reservation change persists. An optional same-app post-grant call uses the private attachment-aware API-1 wire and supports nested or repeated blobs; the generic JSON tool accepts actions only. |
 | Install package-declared backend-call reservations | `capabilities.backend_calls.install_reservations` | App install dialog | Every exact scope is kernel-normalized, displayed in install review, and applied only after the accepted app installation becomes active. |
@@ -177,6 +177,7 @@ per-call dialog:
         "wallet_transfer",
         "wallet_funding_prepare_v1",
         "wallet_funding_execute_v1",
+        "wallet_funding_reject_v1",
         "wallet_allowances_page_v1"
       ]
     }
@@ -236,11 +237,13 @@ in-flight limits. Replies receive equivalent raw-Candid preflight before a
 decoder can allocate their nested values.
 
 This private path does not validate the structural value against ICBlast's
-public JSON Schema projection. That projection may intentionally expose record
-shorthands and is not the private Candid authority. The Kernel instead binds
-sidecars against the exact live type graph, encodes through the live IDL method,
-and scans the resulting raw Candid against those same live types before
-dispatch.
+public JSON Schema projection. At a live record position, it may leave a string
+opaque only for the pinned encoder's released record shorthand and only with no
+sidecar at or below that path. Generated schema does not authorize the
+exception. The Kernel binds sidecars against the exact live type graph, encodes
+through the live IDL method, scans the raw Candid against those same types, and
+requires its blob count and aggregate blob-byte length to equal the
+materialized-sidecar statistics.
 
 One direction may contain at most 512 binary leaves but still only 1,900,000
 aggregate binary bytes. The leaf-count ceiling preserves bounded Mail list and
@@ -338,10 +341,10 @@ informed decision. Wallet, for example, must load ledger metadata, decimals,
 fees, and current allowance state; Kernel must not learn token standards or ask
 the untrusted calling Swap app to provide those facts.
 
-For a cross-app call, Kernel first validates the original arguments against the
-target's live JSON Schema. It then dispatches the exact target handler without
-the ordinary preliminary frontend-tool prompt and provides a private optional
-callback on that invocation:
+On the current provider-UI lane, Kernel first validates the original arguments
+against the target's live JSON Schema. It then dispatches the exact target
+handler without the ordinary preliminary frontend-tool prompt and provides a
+private optional callback on that invocation:
 
 ```ts
 return context.presentUserInterface({
@@ -364,10 +367,12 @@ requires the private tool to declare both
 Kernel validates the private tool's input and output schemas and injects the
 original caller plus the attested `foreground_tile` audience. It does not
 interpret or render the arguments. The provider tile verifies the audience,
-loads authoritative state, renders its own review and Accept/Reject controls,
-then calls its exact preapproved backend method only after Accept. Reject is a
-provider-owned terminal outcome. A caller therefore makes one decision in the
-trusted provider UI, not one app-tool decision plus one transfer decision.
+may use exact preapproved methods to load and freeze non-value-moving review
+state, and renders its own review and concrete action/cancel controls. Only the
+affirmative action may dispatch the value-moving execute method; cancel may
+persist a provider-owned terminal rejection. A caller therefore makes one
+decision in the trusted provider UI, not one app-tool decision plus one transfer
+decision.
 
 Outside Agent Mode, the original call must come from the focused source tile
 with transient user activation; a background, tray, or unfocused caller fails
@@ -375,9 +380,9 @@ before provider presentation. Existing exact or wildcard tool-session grants
 are ignored, and the interaction creates no grant. The handler must consume the
 callback exactly once; returning without a completed presentation is invalid.
 Timeout, source or target replacement, cancellation, a second use, or replay
-fails closed. Kernel rechecks the original caller, target, sessions, AppScopes,
-versions, tool, validated-argument digest, and cancellation state after every
-await.
+fails closed. Kernel binds the callback to the selected tool's originating live
+handler call and rechecks the original caller, target, sessions, AppScopes,
+versions, and cancellation state after asynchronous steps.
 
 The annotation deliberately trusts the target provider to call
 `presentUserInterface()` before its own preapproved effect and trusts the
@@ -387,9 +392,9 @@ or gating every possible app effect. This does not promote the provider into
 Kernel's trusted computing base: Kernel still isolates it and treats all app
 messages as untrusted input. The owner instead makes an app-level trust decision
 when installing and updating that exact provider package. A provider which
-does not receive the optional callback, including on an older Kernel, must
-reject before preparation or execution; it must not fall back to an ordinary
-session grant.
+does not receive the optional callback—for example, because Kernel omitted the
+support marker required by its SDK—must reject before preparation or execution;
+it must not fall back to an ordinary session grant.
 
 Agent automation is deliberately separate. A provider may expose an exact tool
 with both `{"neutron:visibility":"same_app"}` and
@@ -401,19 +406,24 @@ its own preapproved self calls without any provider or Kernel UI. Delegated
 descendants cannot call it, and Agent invocations cannot use the public
 provider-presentation route.
 
-`context.requestApproval(review)` is deprecated compatibility for providers
-already published with that contract, including Wallet 0.3.6. A new Kernel
-retains that provider-authored raw-JSON Kernel dialog solely for compatibility
-with those installed versions. It shares one use with
-`presentUserInterface`, so a handler cannot stack both paths. New providers
-must use provider-owned UI.
+`context.requestApproval(review)` is a deprecated generic compatibility
+surface. It remains available to `provider_once` handlers so providers already
+published with that contract, including Wallet 0.3.6, continue to work. This
+is a provider-development policy, not a Kernel app/version allowlist: current
+providers must use provider-owned UI. Both callbacks share one use, so a
+handler cannot stack the two paths. Only this deprecated path renders its
+separate bounded review as inert raw JSON. Current provider-presentation
+arguments and results remain opaque to Kernel and are never rendered there.
 
-| Runtime combination | Required compatibility behavior |
-| --- | --- |
-| New Kernel + old app | Every valid released ordinary tool, grant, self-call, attachment, control, and Agent route behaves as before. Malformed tool input fails before permission UI. |
-| New Kernel + Wallet 0.3.6 | Its released `requestApproval` flow remains compatible, including the legacy raw-JSON Kernel review. |
-| Old Kernel + new provider | Existing features work; provider presentation or root-audience support is absent, so the new operation fails before preparation or effect. |
-| New Kernel + new provider | The public tool opens the provider-owned tile UI; an active direct root may instead use the exact root-audience tool. |
+| Kernel \ Wallet | W306 | W307 | W308 |
+| --- | --- | --- | --- |
+| K323 | Human funding uses the released generic raw review. W306 has no root tool. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. |
+| K324 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Human funding fails before preparation or effect because K324 lacks W308's explicit provider-UI feature marker. Direct-root funding remains UI-free. |
+| K325 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Human funding uses one provider-owned decision; direct-root funding is UI-free. |
+
+Every valid released ordinary tool, grant, self-call, attachment, control, and
+Agent route remains compatible. Malformed tool input still fails before any
+permission UI.
 
 Ordinary tools retain their existing one-call/session-grant behavior. The first
 version rejects `provider_once` on attachment and control tools so the new path
@@ -547,8 +557,8 @@ Wallet demonstrates the relevant routes:
 - Wallet's private `wallet_funding_present_v1` tile tool declares `same_app` +
   `foreground_tile`. It prepares the ICRC-1 transfer or short-lived ICRC-2
   allowance through `wallet_funding_prepare_v1`, renders Wallet's own modal,
-  and on Accept executes only the returned command key through
-  `wallet_funding_execute_v1`. Reject records the Wallet-owned rejection. No
+  and its primary action executes only the returned command key through
+  `wallet_funding_execute_v1`. Cancel records the Wallet-owned rejection. No
   Kernel dialog is involved.
 - The resident's separate `wallet_fund_root_v1` tool declares `same_app` +
   `agent_root`. Only the active depth-zero root can call it; Wallet verifies the
@@ -610,8 +620,8 @@ Wallet enumerates ICRC approvals with the draft
 and revokes through `icrc2_approve(amount = 0, expected_allowance = current)`.
 ICP uses its separate paginated `get_allowances` and `remove_approval` API and
 displays its exact account-identifier spender. A custom ledger without a
-complete enumeration API is reported as unsupported; history is not presented
-as a complete allowance registry.
+complete enumeration API yields a degraded or incomplete approval view;
+history is not presented as a complete allowance registry.
 
 That legacy ICP adapter is for listing and revocation. The first
 `wallet_fund_v1` contract does not create a new ICP approval; a pull-based

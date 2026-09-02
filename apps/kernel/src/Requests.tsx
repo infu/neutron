@@ -688,7 +688,10 @@ export function FrontendToolRequest({
   useEffect(() => {
     focusConsentControl(rejectRef.current);
   }, [request.cid]);
-  if (request.tool === "workspace.open_tile") {
+  if (
+    request.target === "kernel" &&
+    request.tool === "workspace.open_tile"
+  ) {
     return <WorkspaceTileRequest request={request} uiMode={uiMode} />;
   }
   if (

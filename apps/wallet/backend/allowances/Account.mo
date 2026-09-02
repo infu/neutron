@@ -6,13 +6,6 @@ import IcrcTypes "../icrc1/Types";
 module {
     let ZERO_SUBACCOUNT : Blob = "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00";
 
-    public func isValid(account : IcrcTypes.Account) : Bool {
-        switch (account.subaccount) {
-            case null true;
-            case (?subaccount) subaccount.size() == 32;
-        };
-    };
-
     public func canonical(account : IcrcTypes.Account) : ?IcrcTypes.Account {
         switch (account.subaccount) {
             case null ?account;
@@ -43,7 +36,7 @@ module {
     ) : ?Order.Order {
         let ?leftSubaccount = effectiveSubaccount(left.subaccount) else return null;
         let ?rightSubaccount = effectiveSubaccount(right.subaccount) else return null;
-        switch (Principal.compare(left.owner, right.owner)) {
+        switch (ledgerPrincipalCompare(left.owner, right.owner)) {
             case (#equal) ?Blob.compare(leftSubaccount, rightSubaccount);
             case (order) ?order;
         };
@@ -69,6 +62,18 @@ module {
                 if (value.size() == 32) ?value else null;
             };
         };
+    };
+
+    // The reference ICRC ledger orders candid Principals by their in-memory
+    // `Principal` value: byte length first, then bytes. Motoko's native
+    // Principal comparison is a raw bytewise comparison and differs whenever
+    // principal lengths differ, so it cannot validate an ICRC-103 cursor.
+    func ledgerPrincipalCompare(left : Principal, right : Principal) : Order.Order {
+        let leftBytes = Principal.toBlob(left);
+        let rightBytes = Principal.toBlob(right);
+        if (leftBytes.size() < rightBytes.size()) return #less;
+        if (leftBytes.size() > rightBytes.size()) return #greater;
+        Blob.compare(leftBytes, rightBytes);
     };
 
 };

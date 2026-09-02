@@ -164,14 +164,16 @@ maintainers before becoming roadmap commitments.
   private port.
 - Tool arguments/results are draft-07 validated and JSON/size/time/concurrency
   bounded. Same-app calls are automatic. Ordinary cross-app calls require a
-  one-call or session grant and are audited in memory. An exact
-  `provider_once` tool instead receives a one-use presentation callback. Its
+  one-call or session grant and are audited in memory. On the current
+  provider-UI lane, an exact `provider_once` tool instead receives a one-use
+  presentation callback. Its
   resident must consume that callback before preparing an effect; Kernel opens
   or focuses the provider's exact tile and routes a bounded opaque request only
   to a private `same_app` + `foreground_tile` tool. The provider tile owns the
   modal and domain decision. This path ignores session grants, creates no
   grant, and renders no Kernel approval dialog. The deprecated raw-review
-  callback remains only for already-published providers such as Wallet 0.3.6.
+  callback remains a generic compatibility surface; published Wallet 0.3.6
+  depends on it, while current providers must use provider-owned UI.
 - A provider may expose a separate `same_app` + `agent_root` tool for
   autonomous work inside the active live depth-zero root invocation. Kernel
   rejects human and nested-agent calls before provider dispatch. This route
@@ -325,16 +327,18 @@ and hostile tool metadata shown to an AI agent. The direct canister `call`
 action remains unavailable.
 
 `provider_once` lets the exact provider own a modal in its foreground tile.
-Kernel binds the one-use presentation to both endpoint sessions, versions,
-AppScopes, cancellation, the original argument digest, and the exact private
-tile audience, but treats the routed payload as opaque. The residual risk is
-intentional: an owner-trusted provider controls both the displayed domain facts
-and its preapproved backend authority. It could misrepresent a request or use
-that authority independently. Source review and install disclosure help the
-owner decide whether to trust that package, but Kernel neither understands nor
-proves provider-specific formatting, validation, or ordering. The separate
-root-agent tool adds no standing grant: Kernel admits it only during the active
-depth-zero root invocation.
+Kernel binds the one-use capability to the originating caller, provider, and
+public tool handler, both endpoint sessions, versions, AppScopes, owner/auth
+state, and cancellation. When consumed, it separately validates and routes only
+to the selected private tile tool with the exact foreground audience, while
+treating the routed payload as opaque.
+The residual risk is intentional: an owner-trusted provider controls both the
+displayed domain facts and its preapproved backend authority. It could
+misrepresent a request or use that authority independently. Source review and
+install disclosure help the owner decide whether to trust that package, but
+Kernel neither understands nor proves provider-specific formatting, validation,
+or ordering. The separate root-agent tool adds no standing grant: Kernel admits
+it only during the active depth-zero root invocation.
 
 ### Install Consistency Risk
 

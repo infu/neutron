@@ -2,6 +2,10 @@ import { expect, test } from "bun:test";
 import { readFile, readdir } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import msgpack5 from "msgpack5";
+import {
+  NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH,
+  browserSurfaceOriginsPackageMarkerBytes,
+} from "neutron-tools/src/package_surface_origins.ts";
 import { physicalPublicIngressMethodName } from "neutron-tools/src/physical_names.js";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
@@ -354,7 +358,17 @@ test("Mail's checked-in install artifact carries the complete generated method s
 
   const packed = msgpack5().decode(archive) as Record<string, Uint8Array>;
   const distFiles = await readDistFiles(distUrl);
-  expect(Object.keys(packed).sort()).toEqual([...distFiles.keys()].sort());
+  const surfaceOriginsMarker = packed[NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH];
+  if (surfaceOriginsMarker !== undefined) {
+    expect(gunzipSync(surfaceOriginsMarker)).toEqual(
+      Buffer.from(browserSurfaceOriginsPackageMarkerBytes()),
+    );
+  }
+  expect(
+    Object.keys(packed)
+      .filter((path) => path !== NEUTRON_BROWSER_SURFACE_ORIGINS_MARKER_PATH)
+      .sort(),
+  ).toEqual([...distFiles.keys()].sort());
   for (const [path, bytes] of distFiles) {
     const packedBytes = packed[path];
     if (!packedBytes || !gunzipSync(packedBytes).equals(bytes)) {

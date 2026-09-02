@@ -352,13 +352,15 @@ An app may still use a concrete domain verb such as **Send**, **Approve
 allowance**, or **Revoke** for an operation which its own trusted UI fully
 reviews and then performs through an exact preapproved self call. It must not
 imitate Kernel chrome or imply that another app or Kernel verified its domain
-facts. For a cross-app `provider_once` tool, its resident first calls
+facts. On the current provider-UI lane, a cross-app `provider_once` resident
+first calls
 `context.presentUserInterface()` without preparing an effect. Kernel then
 opens or focuses the exact provider tile and routes a bounded opaque request to
 its private `same_app` + `foreground_tile` tool. The provider may use
 `nt-dialog` and its own components to show normalized domain facts with one
-**Accept**/**Reject** decision. Kernel owns the routing and audience
-attestation, not the modal, token formatting, focus management, or decision.
+accept/reject decision expressed through concrete action and cancel labels.
+Kernel owns the routing, tile open/focus, and audience attestation, not the
+modal's focus management, token formatting, or decision.
 The provider must implement Escape handling, focus trapping and restoration,
 cancellation, loading/error states, and prevention of duplicate acceptance.
 

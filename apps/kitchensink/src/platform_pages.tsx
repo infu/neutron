@@ -39,12 +39,15 @@ import {
   WALLET_FUNDING_TARGET,
   WALLET_FUNDING_TOOL,
   callWalletFundingDemo,
-  createWalletFundingDemoRequest,
   walletFundingDemoRequestExpired,
   walletFundingDemoResultIsTerminal,
   type WalletFundingDemoKind,
   type WalletFundingDemoRequest,
 } from "./wallet_funding_demo.ts";
+import {
+  WALLET_FUNDING_UNREADABLE_ERROR,
+  callWalletFundingIntent,
+} from "./wallet_funding_intent_storage.ts";
 
 export const PLATFORM_IDS = [
   "overview",
@@ -98,26 +101,93 @@ export function PlatformPage({
 function WalletFundingPage() {
   const bus = useMemo(() => createMsgBusClient(), []);
   const operation = useOperation();
-  const requests = useRef<Partial<Record<WalletFundingDemoKind, WalletFundingDemoRequest>>>({});
+  const direct = useWalletFundingIntent(bus, "direct");
+  const allowance = useWalletFundingIntent(bus, "allowance");
+  const intents = { direct, allowance } as const;
 
   const fund = (kind: WalletFundingDemoKind) => {
+    const intent = intents[kind];
+    const request = intent.request;
+    if (!request) return;
     void operation.run(
       kind === "direct" ? "ICP transfer" : "ICP allowance",
-      () => {
-        const previous = requests.current[kind];
-        const request = previous && !walletFundingDemoRequestExpired(previous)
-          ? previous
-          : createWalletFundingDemoRequest(kind);
-        requests.current[kind] = request;
-        return callWalletFundingDemo(bus, request).then((result) => {
-          if (walletFundingDemoResultIsTerminal(kind, result)) {
-            delete requests.current[kind];
-          }
-          return result;
-        });
+      async () => {
+        // Starting the provider call before the first await preserves click activation.
+        const result = await callWalletFundingDemo(bus, request);
+        if (!walletFundingDemoResultIsTerminal(kind, request, result)) return result;
+        try {
+          const next = await callWalletFundingIntent(bus, {
+            action: "complete",
+            kind,
+            requestId: request.requestId,
+          });
+          intent.setRequest(next);
+          intent.setError(null);
+          intent.setResetAllowed(false);
+        } catch (reason) {
+          intent.setRequest(null);
+          intent.setResetAllowed(false);
+          intent.setError(
+            `Wallet returned a terminal result, but Kitchen Sink could not prepare its next saved intent: ${formatError(reason)}`,
+          );
+        }
+        return result;
       },
     );
   };
+
+  const discard = (kind: WalletFundingDemoKind) => {
+    const intent = intents[kind];
+    const request = intent.request;
+    if (!request) return;
+    void operation.run(
+      kind === "direct"
+        ? "discard direct funding intent"
+        : "discard allowance funding intent",
+      async () => {
+        try {
+          const stored = await callWalletFundingIntent(bus, {
+            action: "discard",
+            kind,
+            requestId: request.requestId,
+          });
+          intent.setRequest(stored);
+          intent.setError(null);
+          intent.setResetAllowed(false);
+          return {
+            status: stored.requestId === request.requestId
+              ? "unchanged"
+              : "replaced",
+            requestId: stored.requestId,
+          };
+        } catch (reason) {
+          failClosedIntentMutation(intent, reason);
+          throw reason;
+        }
+      },
+    );
+  };
+
+  const resetUnreadable = (kind: WalletFundingDemoKind) => {
+    const intent = intents[kind];
+    void operation.run(`reset unreadable ${kind} funding intent`, async () => {
+      try {
+        const stored = await callWalletFundingIntent(bus, {
+          action: "reset",
+          kind,
+        });
+        intent.setRequest(stored);
+        intent.setError(null);
+        intent.setResetAllowed(false);
+        return { status: "reset", requestId: stored.requestId };
+      } catch (reason) {
+        failClosedIntentMutation(intent, reason);
+        throw reason;
+      }
+    });
+  };
+
+  const hasIntentError = Boolean(direct.error || allowance.error);
 
   return (
     <CapabilityFrame
@@ -138,22 +208,100 @@ function WalletFundingPage() {
         <section className="ks-action-group" aria-labelledby="wallet-direct-title">
           <h2 id="wallet-direct-title">Direct funding</h2>
           <p className="nt-text">Send exactly {ICP_SWAP_AMOUNT_DISPLAY} to the Neutrinite governance account. Wallet adds the live ICP transfer fee to the source debit.</p>
-          <button className="nt-button" disabled={Boolean(operation.busy)} onClick={() => fund("direct")} type="button">Transfer {ICP_SWAP_AMOUNT_DISPLAY}</button>
+          <button className="nt-button" disabled={Boolean(operation.busy) || !direct.request} onClick={() => fund("direct")} type="button">Transfer {ICP_SWAP_AMOUNT_DISPLAY}</button>
         </section>
         <section className="ks-action-group" aria-labelledby="wallet-allowance-title">
           <h2 id="wallet-allowance-title">Transfer-from funding</h2>
-          <p className="nt-text">Grant Neutrinite governance a five-minute allowance for a {ICP_SWAP_AMOUNT_DISPLAY} pull. Wallet includes the live transfer fee; approval alone moves no ICP.</p>
-          <button className="nt-button" disabled={Boolean(operation.busy)} onClick={() => fund("allowance")} type="button">Approve {ICP_SWAP_AMOUNT_DISPLAY} swap funding</button>
+          <p className="nt-text">Grant Neutrinite governance an allowance for a {ICP_SWAP_AMOUNT_DISPLAY} pull that expires five minutes after this intent was prepared. Wallet includes the live transfer fee; approval alone moves no ICP.</p>
+          <button className="nt-button" disabled={Boolean(operation.busy) || !allowance.request} onClick={() => fund("allowance")} type="button">Approve {ICP_SWAP_AMOUNT_DISPLAY} swap funding</button>
         </section>
       </div>
+      <aside className="ks-note" data-tid="wallet-funding-intents" role={hasIntentError ? "alert" : "note"}>
+        <strong>{hasIntentError ? "Some saved intents are unavailable" : "Saved retry protection"}</strong>
+        <span>Timeouts, errors, navigation, and reload keep each exact request ID until Wallet returns a matching terminal result.</span>
+        <span>Warning: discarding or resetting an unresolved intent can duplicate an earlier action whose outcome is still unknown.</span>
+        {(["direct", "allowance"] as const).map((kind) => {
+          const intent = intents[kind];
+          return (
+            <div className="nt-command-bar" data-tid={`wallet-funding-intent-${kind}`} key={kind}>
+              <span><strong>{kind === "direct" ? "Direct" : "Allowance"}:</strong> {intent.error ?? (intent.request
+                ? walletFundingDemoRequestExpired(intent.request)
+                  ? "deadline passed; retry still reconciles the saved ID"
+                  : "saved and within its preparation deadline"
+                : "preparing a durable request ID…")}</span>
+              {intent.error ? (
+                <>
+                  <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy)} onClick={intent.retry} type="button">Retry {kind} storage</button>
+                  {intent.resetAllowed ? (
+                    <button className="nt-button nt-button--ghost" data-tid={`wallet-funding-reset-${kind}`} disabled={Boolean(operation.busy)} onClick={() => resetUnreadable(kind)} type="button">Discard unreadable {kind} record and prepare new</button>
+                  ) : null}
+                </>
+              ) : intent.request ? (
+                <button className="nt-button nt-button--ghost" data-tid={`wallet-funding-discard-${kind}`} disabled={Boolean(operation.busy)} onClick={() => discard(kind)} type="button">Discard {kind} intent and prepare new</button>
+              ) : null}
+            </div>
+          );
+        })}
+      </aside>
       <OperationResult
         {...operation}
         idle="Wallet receipts appear here. Pending or ambiguous attempts reuse the same request ID instead of risking a duplicate transfer."
         testId="wallet-funding-result"
       />
-      <aside className="ks-note"><strong>External spender boundary</strong><span>Only <code>{NEUTRINITE_GOVERNANCE}</code> can call <code>icrc2_transfer_from</code> against its allowance. Kitchen Sink stops after Wallet returns <code>approved</code>; that is the safe handoff a swap app needs.</span></aside>
+      <aside className="ks-note"><strong>External spender boundary</strong><span>Only <code>{NEUTRINITE_GOVERNANCE}</code> can call <code>icrc2_transfer_from</code> against its allowance. This fixture stops after Wallet returns <code>approved</code> and does not perform the pull; a real swap backend named as spender would do that without a second user decision.</span></aside>
       <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy)} onClick={() => void operation.run("Wallet approvals", () => openAppTile({ appId: "wallet", tileId: "wallet", reuseExisting: true, view: "approvals" }))} type="button">Open Wallet approvals</button>
     </CapabilityFrame>
+  );
+}
+
+function useWalletFundingIntent(
+  bus: ReturnType<typeof createMsgBusClient>,
+  kind: WalletFundingDemoKind,
+) {
+  const [request, setRequest] = useState<WalletFundingDemoRequest | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [resetAllowed, setResetAllowed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setError(null);
+    setResetAllowed(false);
+    void callWalletFundingIntent(bus, { action: "prepare", kind })
+      .then((stored) => {
+        if (active) setRequest(stored);
+      })
+      .catch((reason) => {
+        if (!active) return;
+        const message = formatError(reason);
+        setRequest(null);
+        setError(message);
+        setResetAllowed(message.includes(WALLET_FUNDING_UNREADABLE_ERROR));
+      });
+    return () => {
+      active = false;
+    };
+  }, [attempt, bus, kind]);
+
+  return {
+    request,
+    error,
+    resetAllowed,
+    setRequest,
+    setError,
+    setResetAllowed,
+    retry: () => setAttempt((value) => value + 1),
+  };
+}
+
+function failClosedIntentMutation(
+  intent: ReturnType<typeof useWalletFundingIntent>,
+  reason: unknown,
+): void {
+  intent.setRequest(null);
+  intent.setResetAllowed(false);
+  intent.setError(
+    `Saved intent change has an unknown outcome. Retry this rail before funding: ${formatError(reason)}`,
   );
 }
 

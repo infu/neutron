@@ -44,7 +44,6 @@ import {
   type JsonObject,
   type JsonValue,
   type MsgBusToolContext,
-  type SelfCallObject,
 } from "neutron-tools/app";
 import {
   createContext,
@@ -77,7 +76,6 @@ import {
   WALLET_FUNDING_PRESENT_TOOL,
   WALLET_FUNDING_REJECT_METHOD,
   approvalExpirationText,
-  approvalSpenderText,
   assertRevokePreparedMatchesDisplay,
   createWalletRequestId,
   executeWalletFundingOperation,
@@ -90,6 +88,7 @@ import {
   rejectWalletFundingOperation,
   resolveWalletFundingPreparation,
   walletAllowancesPageArgs,
+  walletFundingResultNeedsRefresh,
   walletRequestDeadlineNs,
   walletRevokePrepareArgs,
   walletFundingInputSchema,
@@ -98,10 +97,8 @@ import {
   type WalletAllowancesPage,
   type WalletFundingCaller,
   type WalletFundingReview,
-  type WalletFundingToolContext,
   type PreparedWalletFundingOperation,
 } from "./funding.ts";
-import { candidIcrcAccountFromText } from "./icrc_account.ts";
 import {
   confirmationPercent,
   confirmationsRemaining,
@@ -115,10 +112,10 @@ import {
 import {
   destinationLabels,
   parseWalletContactDestinations,
+  walletDestinationVariant,
   walletDestinationText,
   type WalletContactDestination,
   type WalletContactDestinationsPage,
-  type WalletDestination,
 } from "./destinations.ts";
 import {
   defaultSubaccountWord,
@@ -223,10 +220,66 @@ type WalletFundingPrompt = {
   reject: (reason?: unknown) => void;
   removeAbortListener: (() => void) | null;
   signal: AbortSignal | undefined;
+  updateSelf: MsgBusToolContext["kernel"]["updateSelf"];
 };
 
 let walletFundingPrompt: WalletFundingPrompt | null = null;
 const walletFundingPromptListeners = new Set<() => void>();
+type WalletFundingRefreshUpdate = {
+  snapshot: WalletSnapshot | null;
+  error: string | null;
+};
+const walletFundingRefreshListeners = new Set<
+  (update: WalletFundingRefreshUpdate) => void
+>();
+let pendingWalletFundingRefresh: WalletFundingRefreshUpdate | null = null;
+
+export function subscribeWalletFundingRefresh(
+  listener: (update: WalletFundingRefreshUpdate) => void,
+): () => void {
+  walletFundingRefreshListeners.add(listener);
+  if (pendingWalletFundingRefresh !== null) {
+    const update = pendingWalletFundingRefresh;
+    pendingWalletFundingRefresh = null;
+    try {
+      listener(update);
+    } catch {
+      // Local rendering cannot change an authoritative funding result.
+    }
+  }
+  return () => walletFundingRefreshListeners.delete(listener);
+}
+
+function deliverWalletFundingRefresh(update: WalletFundingRefreshUpdate): void {
+  if (walletFundingRefreshListeners.size === 0) {
+    pendingWalletFundingRefresh = update;
+    return;
+  }
+  for (const listener of walletFundingRefreshListeners) {
+    try {
+      listener(update);
+    } catch {
+      // Local rendering cannot change an authoritative funding result.
+    }
+  }
+}
+
+async function refreshWalletAfterFunding(
+  updateSelfCall: MsgBusToolContext["kernel"]["updateSelf"],
+): Promise<void> {
+  try {
+    const value = await updateSelfCall("wallet_refresh_balances", [null], 60);
+    deliverWalletFundingRefresh({
+      snapshot: parseWalletSnapshotResult(value),
+      error: null,
+    });
+  } catch (reason) {
+    deliverWalletFundingRefresh({
+      snapshot: null,
+      error: `Wallet funding completed; balance refresh failed: ${errorMessage(reason)}`,
+    });
+  }
+}
 
 function currentWalletFundingPrompt(): WalletFundingPrompt | null {
   return walletFundingPrompt;
@@ -257,7 +310,6 @@ function finishWalletFundingPrompt(
 ): void {
   if (!removeWalletFundingPrompt(prompt)) return;
   prompt.resolve(result);
-  publishWalletInvalidation();
 }
 
 function restoreOrAbortWalletFundingPrompt(
@@ -297,7 +349,6 @@ function closeUncertainWalletFundingPrompt(prompt: WalletFundingPrompt): void {
     return;
   }
   prompt.reject(new Error(prompt.error ?? "Wallet funding outcome is uncertain"));
-  publishWalletInvalidation();
 }
 
 async function executePresentedWalletFunding(
@@ -316,12 +367,26 @@ async function executePresentedWalletFunding(
     const result = await executeWalletFundingOperation(
       prompt.operation,
       (args) =>
-        updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [args], 120),
+        prompt.updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [args], 120),
+      prompt.signal,
     );
+    if (walletFundingResultNeedsRefresh(result)) {
+      await refreshWalletAfterFunding(prompt.updateSelf);
+    }
     finishWalletFundingPrompt(prompt, result);
   } catch (reason) {
     markWalletFundingExecutionUncertain(prompt, reason);
+  } finally {
+    publishWalletInvalidation();
   }
+}
+
+export async function acceptWalletFundingPrompt(
+  promptId: string,
+): Promise<void> {
+  const prompt = currentWalletFundingPrompt();
+  if (prompt?.id !== promptId) return;
+  await executePresentedWalletFunding(prompt);
 }
 
 async function rejectPresentedWalletFunding(
@@ -339,15 +404,17 @@ async function rejectPresentedWalletFunding(
   try {
     const result = await rejectWalletFundingOperation(
       prompt.operation,
-      (args) => updateSelf(WALLET_FUNDING_REJECT_METHOD, [args], 30),
+      (args) => prompt.updateSelf(WALLET_FUNDING_REJECT_METHOD, [args], 30),
     );
     finishWalletFundingPrompt(prompt, result);
   } catch (reason) {
     restoreOrAbortWalletFundingPrompt(prompt, reason);
+  } finally {
+    publishWalletInvalidation();
   }
 }
 
-async function handleWalletFundingPresentation(
+export async function handleWalletFundingPresentation(
   args: JsonObject,
   context: MsgBusToolContext,
 ): Promise<JsonObject> {
@@ -356,20 +423,33 @@ async function handleWalletFundingPresentation(
   }
   const operation = await prepareWalletFundingOperation(
     args,
-    context as WalletFundingToolContext,
+    context,
     false,
   );
 
   // A pending command proves that Wallet already dispatched a previously
   // accepted operation. Reconcile it without asking the owner a second time.
   if (operation.preparation.kind === "completed") {
-    const result = await executeWalletFundingOperation(
-      operation,
-      (executeArgs) =>
-        updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [executeArgs], 120),
-    );
-    publishWalletInvalidation();
-    return result;
+    try {
+      const result = await executeWalletFundingOperation(
+        operation,
+        (executeArgs) =>
+          context.kernel.updateSelf(
+            WALLET_FUNDING_EXECUTE_METHOD,
+            [executeArgs],
+            120,
+          ),
+        context.signal,
+      );
+      if (walletFundingResultNeedsRefresh(result)) {
+        await refreshWalletAfterFunding((method, selfArgs, timeout) =>
+          context.kernel.updateSelf(method, selfArgs, timeout),
+        );
+      }
+      return result;
+    } finally {
+      publishWalletInvalidation();
+    }
   }
 
   const command = fundingPreparationCommand(operation.preparation);
@@ -381,8 +461,14 @@ async function handleWalletFundingPresentation(
     await rejectWalletFundingOperation(
       operation,
       (rejectArgs) =>
-        updateSelf(WALLET_FUNDING_REJECT_METHOD, [rejectArgs], 30),
-    ).catch(() => undefined);
+        context.kernel.updateSelf(
+          WALLET_FUNDING_REJECT_METHOD,
+          [rejectArgs],
+          30,
+        ),
+    )
+      .catch(() => undefined)
+      .finally(() => publishWalletInvalidation());
     throw new Error("Wallet is already reviewing another funding request");
   }
 
@@ -396,25 +482,14 @@ async function handleWalletFundingPresentation(
       reject,
       removeAbortListener: null,
       signal: context.signal,
+      updateSelf: (method, selfArgs, timeout) =>
+        context.kernel.updateSelf(method, selfArgs, timeout),
     };
     const abort = () => {
-      if (prompt.phase === "uncertain") {
-        if (removeWalletFundingPrompt(prompt)) {
-          reject(context.signal?.reason ?? new Error("Wallet funding was cancelled"));
-        }
-        return;
-      }
-      if (prompt.phase !== "review" || !removeWalletFundingPrompt(prompt)) {
-        return;
-      }
-      void rejectWalletFundingOperation(
-        operation,
-        (rejectArgs) =>
-          updateSelf(WALLET_FUNDING_REJECT_METHOD, [rejectArgs], 30),
-      )
-        .then(() => publishWalletInvalidation())
-        .catch(() => undefined);
-      reject(context.signal?.reason ?? new Error("Wallet funding was cancelled"));
+      if (!removeWalletFundingPrompt(prompt)) return;
+      reject(
+        context.signal?.reason ?? new Error("Wallet funding was cancelled"),
+      );
     };
     if (context.signal) {
       context.signal.addEventListener("abort", abort, { once: true });
@@ -623,7 +698,7 @@ function WalletFundingDialog({ prompt }: { prompt: WalletFundingPrompt }) {
                   <dd>
                     <code>
                       {review.spender
-                        ? approvalSpenderText(review.spender)
+                        ? review.spender.account
                         : "Unavailable"}
                     </code>
                   </dd>
@@ -738,7 +813,7 @@ function WalletFundingDialog({ prompt }: { prompt: WalletFundingPrompt }) {
             className="nt-button"
             data-tid="wallet-funding-accept"
             disabled={busy}
-            onClick={() => void executePresentedWalletFunding(prompt)}
+            onClick={() => void acceptWalletFundingPrompt(prompt.id)}
             type="button"
           >
             {busy ? (
@@ -877,6 +952,16 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const reloadSnapshot = useCallback(async () => {
     setSnapshot(parseWalletSnapshot(await querySelf("wallet_snapshot", [null])));
   }, []);
+
+  useEffect(
+    () =>
+      subscribeWalletFundingRefresh((update) => {
+        if (update.snapshot !== null) setSnapshot(update.snapshot);
+        setError(update.error);
+        setProjectionRevision((current) => current + 1);
+      }),
+    [],
+  );
 
   useEffect(() => {
     void load().catch((reason) => setError(errorMessage(reason)));
@@ -1757,7 +1842,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             contact_id: transferCandidate.contactId,
             contact_revision: transferCandidate.contactRevision,
             address_id: transferCandidate.addressId,
-            expected_destination: destinationVariant(
+            expected_destination: walletDestinationVariant(
               transferCandidate.destination,
             ),
             amount,
@@ -2040,13 +2125,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     >
       <div className="wallet-shell">
         <header className="wallet-toolbar">
-          <div className="wallet-view-switch" role="tablist" aria-label="Wallet view">
+          <div className="wallet-view-switch" role="group" aria-label="Wallet view">
             <button
               aria-label="Assets"
-              aria-selected={view === "assets"}
+              aria-pressed={view === "assets"}
               className={view === "assets" ? "is-active" : undefined}
               onClick={() => chooseView("assets")}
-              role="tab"
               type="button"
             >
               <IoWalletOutline aria-hidden="true" />
@@ -2054,10 +2138,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             </button>
             <button
               aria-label="Activity"
-              aria-selected={view === "activity"}
+              aria-pressed={view === "activity"}
               className={view === "activity" ? "is-active" : undefined}
               onClick={() => chooseView("activity")}
-              role="tab"
               type="button"
             >
               <IoReceiptOutline aria-hidden="true" />
@@ -2065,10 +2148,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             </button>
             <button
               aria-label="Approvals"
-              aria-selected={view === "approvals"}
+              aria-pressed={view === "approvals"}
               className={view === "approvals" ? "is-active" : undefined}
               onClick={() => chooseView("approvals")}
-              role="tab"
               type="button"
             >
               <IoShieldCheckmarkOutline aria-hidden="true" />
@@ -2410,7 +2492,7 @@ function TokenRow({
   );
 }
 
-function WalletApprovals({
+export function WalletApprovals({
   busy,
   ledgers,
   loading,
@@ -2443,6 +2525,9 @@ function WalletApprovals({
   );
   const hasState = visiblePages.some(
     (page) => page.state !== "ready" || page.warning !== null,
+  );
+  const hasContinuation = visiblePages.some(
+    (page) => page.hasMore && page.next !== null,
   );
 
   useEffect(() => {
@@ -2483,12 +2568,12 @@ function WalletApprovals({
           </div>
         ) : null}
 
-        <div className="wallet-activity-list wallet-approval-list">
+        <div className="wallet-activity-list">
           {loading && pages.length === 0 ? (
             <div className="wallet-loading" aria-label="Loading approvals">
               <span className="wallet-spinner" />
             </div>
-          ) : visibleCount === 0 && !hasState ? (
+          ) : visibleCount === 0 && !hasState && !hasContinuation ? (
             <div className="wallet-empty">
               <IoShieldCheckmarkOutline aria-hidden="true" />
               <span>No active approvals</span>
@@ -2510,12 +2595,14 @@ function WalletApprovals({
                   ) : null}
                   {page.entries.map((entry) => {
                     const isOpen = expanded === entry.key;
+                    const detailsId = `wallet-approval-details-${entry.key}`;
                     return (
                       <article
                         className="wallet-activity-entry wallet-approval-entry"
                         key={entry.key}
                       >
                         <button
+                          aria-controls={detailsId}
                           aria-expanded={isOpen}
                           className="wallet-activity-row"
                           onClick={() => setExpanded(isOpen ? null : entry.key)}
@@ -2530,8 +2617,8 @@ function WalletApprovals({
                           />
                           <span className="wallet-activity-main">
                             <strong>{page.tokenSymbol} allowance</strong>
-                            <small title={approvalSpenderText(entry.spender)}>
-                              {compactAddress(approvalSpenderText(entry.spender))}
+                            <small title={entry.spender.account}>
+                              {compactAddress(entry.spender.account)}
                             </small>
                           </span>
                           <span className="wallet-activity-value">
@@ -2554,7 +2641,10 @@ function WalletApprovals({
                           />
                         </button>
                         {isOpen ? (
-                          <dl className="wallet-history-details wallet-approval-details">
+                          <dl
+                            className="wallet-history-details wallet-approval-details"
+                            id={detailsId}
+                          >
                             <HistoryDetail label="Ledger" value={page.ledger} code />
                             <div>
                               <dt>
@@ -2569,7 +2659,7 @@ function WalletApprovals({
                                       ? "Copy spender ICRC account"
                                       : "Copy spender ICP account identifier"
                                   }
-                                  value={approvalSpenderText(entry.spender)}
+                                  value={entry.spender.account}
                                 />
                               </dd>
                             </div>
@@ -4299,17 +4389,6 @@ function canTransferNetwork(
 
 function networkVariant(network: CatalogNetwork): JsonObject {
   return { [network]: null };
-}
-
-function destinationVariant(destination: WalletDestination): SelfCallObject {
-  return destination.network === "internet_computer"
-    ? {
-        internet_computer: candidIcrcAccountFromText(
-          destination.account,
-          "transfer destination",
-        ),
-      }
-    : { [destination.network]: destination.address };
 }
 
 function asTransferReceipt(value: JsonValue): WalletTransferReceipt {

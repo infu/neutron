@@ -20,10 +20,6 @@ import {
 import { WorkspaceView } from "./WorkspaceView.tsx";
 import type { WorkspaceId } from "./types.ts";
 import { AgentModeIndicator } from "../AgentModeUI.tsx";
-import {
-  clearAgentModeForAuth,
-  useAgentModeStore,
-} from "../ui_attention/agent.ts";
 
 export function WorkspaceShell() {
   const { logged, authorized, loading, principal, sessionGeneration } =
@@ -105,13 +101,6 @@ export function WorkspaceShell() {
     if (!logged || !authorized || loading) return;
     return startRuntimeAuthorityMonitor();
   }, [logged, authorized, loading]);
-
-  useEffect(() => {
-    const grant = useAgentModeStore.getState().grant;
-    if (!logged || !authorized || (grant && grant.ownerPrincipal !== principal)) {
-      clearAgentModeForAuth();
-    }
-  }, [authorized, logged, principal]);
 
   const closeSettings = () => {
     setKernelView("workspace");

@@ -268,27 +268,27 @@ test("live blobs require their exact transferable sidecars", () => {
   ).toThrow(/missing its binary sidecar/);
 });
 
-test("structural nested account records bind absent and present subaccounts", () => {
-  const accountType = IDL.Record({
-    owner: IDL.Principal,
-    subaccount: IDL.Opt(blobType),
+test("structural nested records bind absent and present optional blobs", () => {
+  const referenceType = IDL.Record({
+    source: IDL.Principal,
+    digest: IDL.Opt(blobType),
   });
   const requestType = IDL.Record({
-    addresses: IDL.Vec(
+    entries: IDL.Vec(
       IDL.Record({
-        destination: IDL.Variant({ internet_computer: accountType }),
-        preferred: IDL.Bool,
+        reference: IDL.Variant({ remote: referenceType }),
+        active: IDL.Bool,
       }),
     ),
   });
-  const owner = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+  const source = "aaaaa-aa";
   const request = {
-    addresses: [
+    entries: [
       {
-        destination: {
-          internet_computer: { owner, subaccount: null },
+        reference: {
+          remote: { source, digest: null },
         },
-        preferred: false,
+        active: false,
       },
     ],
   };
@@ -299,32 +299,25 @@ test("structural nested account records bind absent and present subaccounts", ()
   expect(absent.binary).toEqual({ count: 0, bytes: 0 });
   expect(absent.boundBlobs).toEqual([]);
 
-  const subaccount = Uint8Array.from([...new Array(31).fill(0), 255]);
+  const digest = Uint8Array.from([...new Array(31).fill(0), 255]);
   const present = materializeSelfCallArguments(
     [request],
     [
       wireBlob(
-        [
-          0,
-          "addresses",
-          0,
-          "destination",
-          "internet_computer",
-          "subaccount",
-        ],
-        subaccount,
+        [0, "entries", 0, "reference", "remote", "digest"],
+        digest,
       ),
     ],
     [requestType],
   );
   expect(present.args).toEqual([
     {
-      addresses: [
+      entries: [
         {
-          destination: {
-            internet_computer: { owner, subaccount },
+          reference: {
+            remote: { source, digest },
           },
-          preferred: false,
+          active: false,
         },
       ],
     },
@@ -335,15 +328,15 @@ test("structural nested account records bind absent and present subaccounts", ()
 });
 
 test("released icblast string record shorthands stay opaque and sidecar-free", () => {
-  const accountType = IDL.Record({
-    owner: IDL.Principal,
-    subaccount: IDL.Opt(blobType),
+  const referenceType = IDL.Record({
+    subject: IDL.Principal,
+    digest: IDL.Opt(blobType),
   });
-  const shorthand = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+  const shorthand = "opaque-record-shorthand";
   const materialized = materializeSelfCallArguments(
     [shorthand],
     [],
-    [accountType],
+    [referenceType],
   );
 
   expect(materialized.args).toEqual([shorthand]);
@@ -353,8 +346,8 @@ test("released icblast string record shorthands stay opaque and sidecar-free", (
   expect(() =>
     materializeSelfCallArguments(
       [shorthand],
-      [wireBlob([0, "subaccount"], [1])],
-      [accountType],
+      [wireBlob([0, "digest"], [1])],
+      [referenceType],
     ),
   ).toThrow(/record has an invalid shape/);
   expect(
@@ -365,7 +358,7 @@ test("released icblast string record shorthands stay opaque and sidecar-free", (
     ).args,
   ).toEqual([shorthand]);
   expect(() =>
-    materializeSelfCallArguments([false], [], [accountType]),
+    materializeSelfCallArguments([false], [], [referenceType]),
   ).toThrow(/record has an invalid shape/);
 });
 
@@ -747,33 +740,33 @@ test("API-1 projection renders principals and bigints as text", () => {
   expect(projectSelfCallResult(value, outputType)).toEqual(expected);
 });
 
-test("generic projection never reinterprets an account-shaped record", () => {
-  const accountType = IDL.Record({
-    owner: IDL.Principal,
-    subaccount: IDL.Opt(blobType),
+test("generic projection never reinterprets a record with an optional blob", () => {
+  const referenceType = IDL.Record({
+    source: IDL.Principal,
+    digest: IDL.Opt(blobType),
   });
-  const owner = Principal.fromText("aaaaa-aa");
+  const source = Principal.fromText("aaaaa-aa");
   const arbitraryBytes = new Uint8Array(31);
 
-  expect(projectSelfCallResult({ owner, subaccount: [] }, accountType)).toEqual(
-    { owner: "aaaaa-aa" },
+  expect(projectSelfCallResult({ source, digest: [] }, referenceType)).toEqual(
+    { source: "aaaaa-aa" },
   );
   const projected = normalizeSelfCallResult(
-    { owner, subaccount: [arbitraryBytes] },
-    accountType,
+    { source, digest: [arbitraryBytes] },
+    referenceType,
   );
   expect(projected).toEqual({
-    owner: "aaaaa-aa",
-    subaccount: arbitraryBytes,
+    source: "aaaaa-aa",
+    digest: arbitraryBytes,
   });
   const encoded = encodeSelfCallResult(projected);
   expect(encoded.value).toEqual({
-    owner: "aaaaa-aa",
-    subaccount: null,
+    source: "aaaaa-aa",
+    digest: null,
   });
   expect(encoded.blobs).toHaveLength(1);
   expect(encoded.blobs[0]).toMatchObject({
-    path: ["subaccount"],
+    path: ["digest"],
     byteLength: 31,
   });
 });

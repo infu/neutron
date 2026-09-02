@@ -1,12 +1,17 @@
 import { expect, test } from "bun:test";
-import { Principal } from "@icp-sdk/core/principal";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   normalizeToolDescriptor,
   validateToolArguments,
   validateToolResult,
   type JsonObject,
+  type MsgBusToolContext,
 } from "neutron-tools/app";
-import { encodeIcrcAccount } from "neutron-tools/src/icrc_account.js";
+import {
+  decodeIcrcAccount,
+  encodeIcrcAccount,
+} from "neutron-tools/src/icrc_account.js";
 import {
   WALLET_FUNDING_EXECUTE_METHOD,
   WALLET_FUNDING_PREPARE_METHOD,
@@ -16,6 +21,7 @@ import {
   executeWalletFundingOperation,
   fundingPrepareArgs,
   handleWalletFunding,
+  handleWalletRootFunding,
   mergeWalletAllowancesPages,
   parseFundingPrepareResult,
   parseWalletAllowancesPage,
@@ -27,10 +33,16 @@ import {
   walletFundingInputSchema,
   walletFundingOutputSchema,
   walletRevokePrepareArgs,
-  type WalletFundingToolContext,
 } from "../src/funding.ts";
+import {
+  WalletApprovals,
+  acceptWalletFundingPrompt,
+  handleWalletFundingPresentation,
+  subscribeWalletFundingRefresh,
+} from "../src/index.tsx";
 
 const ledger = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+const principalOnlyAccount = "togwv-zqaaa-aaaal-qr7aa-cai";
 const callerApp = "swap";
 const requestId = "00112233445566778899aabbccddeeff";
 const requestIdBytes = Uint8Array.from(
@@ -41,14 +53,12 @@ const commandId = {
   caller_app_id: callerApp,
   request_id: requestIdBytes,
 };
+const subaccount = Uint8Array.from([...new Array(31).fill(0), 255]);
 const accountWithSubaccount = encodeIcrcAccount({
-  owner: Principal.fromText(ledger),
-  subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
+  owner: decodeIcrcAccount(ledger).owner,
+  subaccount,
 });
-const candidAccountWithSubaccount = {
-  owner: ledger,
-  subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
-};
+const candidAccountWithSubaccount = { owner: ledger, subaccount };
 
 const descriptor = normalizeToolDescriptor({
   name: WALLET_FUNDING_TOOL,
@@ -113,6 +123,53 @@ test("wallet_fund_v1 accepts closed canonical direct and allowance requests", ()
       route: { kind: "direct", to: ledger, memoHex: "0" },
     }),
   ).toThrow("Invalid transfer memo");
+
+  expect(() =>
+    parseWalletFundingRequest({
+      ...directRequest,
+      route: { kind: "direct", to: ` ${principalOnlyAccount} ` },
+    }),
+  ).toThrow("Invalid transfer destination");
+});
+
+test("funding replies accept only exact Candid ICRC account records", () => {
+  const prepared = parseFundingPrepareResult({
+    prepared: {
+      command_id: commandId,
+      review: {
+        ...directReview(),
+        destination: { owner: principalOnlyAccount },
+      },
+    },
+  });
+  expect(prepared.value.review.destination).toBe(principalOnlyAccount);
+
+  const explicitNull = parseFundingPrepareResult({
+    prepared: {
+      command_id: commandId,
+      review: {
+        ...directReview(),
+        destination: { owner: principalOnlyAccount, subaccount: null },
+      },
+    },
+  });
+  expect(explicitNull.value.review.destination).toBe(principalOnlyAccount);
+
+  for (const destination of [
+    principalOnlyAccount,
+    { owner: principalOnlyAccount, subaccount: undefined },
+    { owner: principalOnlyAccount, extra: null },
+    ` ${principalOnlyAccount} `,
+  ]) {
+    expect(() =>
+      parseFundingPrepareResult({
+        prepared: {
+          command_id: commandId,
+          review: { ...directReview(), destination },
+        },
+      })
+    ).toThrow(/Invalid review destination/u);
+  }
 });
 
 test("funding self-call arguments use the generated JSON wire contract", () => {
@@ -141,7 +198,7 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       direct: {
         amount_atoms: "123456789",
-        to: candidAccountWithSubaccount,
+        to: accountWithSubaccount,
       },
     },
   });
@@ -166,7 +223,7 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       allowance: {
         amount_atoms: "500000000",
-        spender: candidAccountWithSubaccount,
+        spender: accountWithSubaccount,
         expires_at_ns: "1800000300000000000",
       },
     },
@@ -188,8 +245,8 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     ledger,
     cursor: {
       icrc103: {
-        from_account: { owner: ledger, subaccount: null },
-        to_spender: candidAccountWithSubaccount,
+        from_account: ledger,
+        to_spender: accountWithSubaccount,
         pages: "1",
         entries: "40",
       },
@@ -218,7 +275,7 @@ test("funding self-call arguments use the generated JSON wire contract", () => {
     intent: {
       revoke: {
         source: { icrc: null },
-        spender: { icrc: candidAccountWithSubaccount },
+        spender: { icrc: accountWithSubaccount },
         expected_allowance_atoms: "200",
       },
     },
@@ -276,6 +333,219 @@ test("public funding forwards the canonical request to Wallet UI without prepari
     message: null,
   });
   expect(() => validateToolResult(descriptor, result)).not.toThrow();
+});
+
+test("accepting a prepared foreground request executes and refreshes exactly once", async () => {
+  const methods: string[] = [];
+  const localUpdates: Array<{ snapshot: unknown; error: string | null }> = [];
+  const unsubscribe = subscribeWalletFundingRefresh((update) =>
+    localUpdates.push(update),
+  );
+  const context = fundingContext(async (method) => {
+    methods.push(method);
+    if (method === WALLET_FUNDING_PREPARE_METHOD) return preparedDirect();
+    if (method === WALLET_FUNDING_EXECUTE_METHOD) {
+      return {
+        transferred: {
+          command_id: commandId,
+          block_index: "94",
+          duplicate: false,
+        },
+      };
+    }
+    if (method === "wallet_refresh_balances") {
+      return {
+        owner: principalOnlyAccount,
+        configured: true,
+        ledgers: [],
+      };
+    }
+    throw new Error(`Unexpected method ${method}`);
+  });
+  context.audience = "foreground_tile";
+
+  const presentation = handleWalletFundingPresentation(directRequest, context);
+  try {
+    for (
+      let attempt = 0;
+      !methods.includes(WALLET_FUNDING_EXECUTE_METHOD) && attempt < 20;
+      attempt += 1
+    ) {
+      await acceptWalletFundingPrompt(`${callerApp}:${requestId}`);
+      await Promise.resolve();
+    }
+    expect(methods).toContain(WALLET_FUNDING_EXECUTE_METHOD);
+    await expect(presentation).resolves.toMatchObject({
+      status: "transferred",
+      blockIndex: "94",
+      duplicate: false,
+    });
+  } finally {
+    unsubscribe();
+  }
+  expect(methods).toEqual([
+    WALLET_FUNDING_PREPARE_METHOD,
+    WALLET_FUNDING_EXECUTE_METHOD,
+    "wallet_refresh_balances",
+  ]);
+  expect(localUpdates).toHaveLength(1);
+  expect(localUpdates[0]?.error).toBeNull();
+});
+
+test("foreground funding reconciliation refreshes and updates its tile exactly once", async () => {
+  const methods: string[] = [];
+  const localUpdates: Array<{
+    snapshot: unknown;
+    error: string | null;
+  }> = [];
+  const unsubscribe = subscribeWalletFundingRefresh((update) =>
+    localUpdates.push(update),
+  );
+  const context = fundingContext(async (method) => {
+    methods.push(method);
+    if (method === WALLET_FUNDING_PREPARE_METHOD) {
+      return {
+        completed: {
+          review: directReview(),
+          result: {
+            pending: {
+              command_id: commandId,
+              message: "Ledger outcome is unknown",
+            },
+          },
+        },
+      };
+    }
+    if (method === WALLET_FUNDING_EXECUTE_METHOD) {
+      return {
+        transferred: {
+          command_id: commandId,
+          block_index: "93",
+          duplicate: true,
+        },
+      };
+    }
+    if (method === "wallet_refresh_balances") {
+      return {
+        owner: principalOnlyAccount,
+        configured: true,
+        ledgers: [],
+      };
+    }
+    throw new Error(`Unexpected method ${method}`);
+  });
+  context.audience = "foreground_tile";
+
+  try {
+    await expect(handleWalletFundingPresentation(directRequest, context)).resolves
+      .toMatchObject({
+        status: "transferred",
+        blockIndex: "93",
+        duplicate: true,
+      });
+  } finally {
+    unsubscribe();
+  }
+  expect(methods).toEqual([
+    WALLET_FUNDING_PREPARE_METHOD,
+    WALLET_FUNDING_EXECUTE_METHOD,
+    "wallet_refresh_balances",
+  ]);
+  expect(localUpdates).toEqual([
+    {
+      snapshot: {
+        owner: principalOnlyAccount,
+        configured: true,
+        ledgers: [],
+      },
+      error: null,
+    },
+  ]);
+});
+
+test("foreground funding preserves the terminal receipt when its one refresh fails", async () => {
+  const methods: string[] = [];
+  const localUpdates: Array<{
+    snapshot: unknown;
+    error: string | null;
+  }> = [];
+  const unsubscribe = subscribeWalletFundingRefresh((update) =>
+    localUpdates.push(update),
+  );
+  const context = fundingContext(async (method) => {
+    methods.push(method);
+    if (method === WALLET_FUNDING_PREPARE_METHOD) {
+      return {
+        completed: {
+          review: directReview(),
+          result: {
+            pending: {
+              command_id: commandId,
+              message: "Ledger outcome is unknown",
+            },
+          },
+        },
+      };
+    }
+    if (method === WALLET_FUNDING_EXECUTE_METHOD) {
+      return {
+        transferred: {
+          command_id: commandId,
+          block_index: "93",
+          duplicate: true,
+        },
+      };
+    }
+    if (method === "wallet_refresh_balances") {
+      throw new Error("refresh unavailable");
+    }
+    throw new Error(`Unexpected method ${method}`);
+  });
+  context.audience = "foreground_tile";
+
+  try {
+    await expect(handleWalletFundingPresentation(directRequest, context)).resolves
+      .toMatchObject({
+        status: "transferred",
+        blockIndex: "93",
+        duplicate: true,
+      });
+  } finally {
+    unsubscribe();
+  }
+  expect(methods).toEqual([
+    WALLET_FUNDING_PREPARE_METHOD,
+    WALLET_FUNDING_EXECUTE_METHOD,
+    "wallet_refresh_balances",
+  ]);
+  expect(localUpdates).toEqual([
+    {
+      snapshot: null,
+      error:
+        "Wallet funding completed; balance refresh failed: refresh unavailable",
+    },
+  ]);
+});
+
+test("cancelling a foreground review does not start a self-call on an aborted context", async () => {
+  const controller = new AbortController();
+  const methods: string[] = [];
+  const context = fundingContext(async (method) => {
+    methods.push(method);
+    if (method === WALLET_FUNDING_PREPARE_METHOD) return preparedDirect();
+    throw new Error(`Unexpected method ${method}`);
+  });
+  context.audience = "foreground_tile";
+  context.signal = controller.signal;
+
+  const presentation = handleWalletFundingPresentation(directRequest, context);
+  await waitFor(() => methods.length === 1);
+  await Promise.resolve();
+  controller.abort(new Error("cancelled"));
+
+  await expect(presentation).rejects.toThrow("cancelled");
+  await Promise.resolve();
+  expect(methods).toEqual([WALLET_FUNDING_PREPARE_METHOD]);
 });
 
 test("tile preparation returns authoritative allowance facts and shared execution", async () => {
@@ -378,41 +648,109 @@ test("funding rejects an execution receipt for another command", async () => {
   ).rejects.toThrow("execution command mismatch");
 });
 
-test("root-agent core marks preparation as agent mode and terminal replay never executes", async () => {
+test("root funding requires agent_root and uses only its scoped self-call client", async () => {
   const methods: string[] = [];
   const argumentsSeen: unknown[] = [];
   const context = fundingContext(async (method, args) => {
     methods.push(method);
     argumentsSeen.push(args);
-    return {
-      completed: {
-        review: directReview(),
-        result: {
-          transferred: {
-            command_id: commandId,
-            block_index: "91",
-            duplicate: true,
+    if (method === WALLET_FUNDING_PREPARE_METHOD) {
+      if (methods.length === 1) return preparedDirect();
+      return {
+        completed: {
+          review: directReview(),
+          result: {
+            transferred: {
+              command_id: commandId,
+              block_index: "91",
+              duplicate: false,
+            },
           },
         },
-      },
-    };
+      };
+    }
+    if (method === WALLET_FUNDING_EXECUTE_METHOD) {
+      return {
+        transferred: {
+          command_id: commandId,
+          block_index: "91",
+          duplicate: false,
+        },
+      };
+    }
+    throw new Error(`Unexpected method ${method}`);
   });
-  const operation = await prepareWalletFundingOperation(
-    directRequest,
-    context,
-    true,
+  let presentations = 0;
+  context.presentUserInterface = async () => {
+    presentations += 1;
+    throw new Error("root funding must not present UI");
+  };
+
+  await expect(handleWalletRootFunding(directRequest, context)).rejects.toThrow(
+    "requires root-agent attestation",
   );
-  let executions = 0;
-  const result = await executeWalletFundingOperation(operation, async () => {
-    executions += 1;
-    throw new Error("must not execute terminal replay");
-  });
-  expect(methods).toEqual([WALLET_FUNDING_PREPARE_METHOD]);
+  expect(methods).toEqual([]);
+  expect(presentations).toBe(0);
+
+  context.audience = "agent_root";
+  await expect(handleWalletRootFunding(directRequest, context)).resolves
+    .toMatchObject({
+      status: "transferred",
+      blockIndex: "91",
+      duplicate: false,
+    });
+  await expect(handleWalletRootFunding(directRequest, context)).resolves
+    .toMatchObject({
+      status: "transferred",
+      blockIndex: "91",
+      duplicate: false,
+    });
+  expect(methods).toEqual([
+    WALLET_FUNDING_PREPARE_METHOD,
+    WALLET_FUNDING_EXECUTE_METHOD,
+    WALLET_FUNDING_PREPARE_METHOD,
+  ]);
   expect(
     ((argumentsSeen[0] as unknown[])[0] as { agent_mode: boolean }).agent_mode,
   ).toBe(true);
-  expect(executions).toBe(0);
-  expect(result).toMatchObject({ status: "transferred", duplicate: true });
+  expect(
+    ((argumentsSeen[2] as unknown[])[0] as { agent_mode: boolean }).agent_mode,
+  ).toBe(true);
+  expect(argumentsSeen[1]).toEqual([{ command_id: commandId }]);
+  expect(presentations).toBe(0);
+});
+
+test("root funding preserves invocation cancellation across execution", async () => {
+  const controller = new AbortController();
+  const methods: string[] = [];
+  const context = fundingContext(async (method) => {
+    methods.push(method);
+    if (method === WALLET_FUNDING_PREPARE_METHOD) return preparedDirect();
+    if (method === WALLET_FUNDING_EXECUTE_METHOD) {
+      controller.abort(new Error("root invocation cancelled"));
+      return {
+        transferred: {
+          command_id: commandId,
+          block_index: "92",
+          duplicate: false,
+        },
+      };
+    }
+    throw new Error(`Unexpected method ${method}`);
+  });
+  context.audience = "agent_root";
+  context.signal = controller.signal;
+  context.presentUserInterface = async () => {
+    throw new Error("root funding must not present UI");
+  };
+
+  await expect(handleWalletRootFunding(directRequest, context)).rejects.toThrow(
+    "root invocation cancelled",
+  );
+  expect(methods).toEqual([
+    WALLET_FUNDING_PREPARE_METHOD,
+    WALLET_FUNDING_EXECUTE_METHOD,
+  ]);
 });
 
 test("pending direct replay re-enters reconciliation without another UI decision", async () => {
@@ -586,10 +924,7 @@ test("allowance pages preserve exact ICRC and ICP cursors and states", () => {
     entries: [
       {
         spender: {
-          icrc: {
-            owner: ledger,
-            subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
-          },
+          icrc: candidAccountWithSubaccount,
         },
         amount_atoms: "200",
         expires_at_ns: "1800000300000000000",
@@ -597,11 +932,8 @@ test("allowance pages preserve exact ICRC and ICP cursors and states", () => {
     ],
     next: {
       icrc103: {
-        from_account: { owner: ledger, subaccount: null },
-        to_spender: {
-          owner: ledger,
-          subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
-        },
+        from_account: { owner: ledger },
+        to_spender: candidAccountWithSubaccount,
         pages: "1",
         entries: "1",
       },
@@ -738,6 +1070,44 @@ test("allowance pages preserve exact ICRC and ICP cursors and states", () => {
   });
 });
 
+test("empty approval pages keep their continuation action visible", () => {
+  const page = parseWalletAllowancesPage({
+    ledger,
+    token_name: "Internet Computer",
+    token_symbol: "ICP",
+    decimals: "8",
+    revoke_fee_atoms: "10",
+    source: { icrc103: null },
+    state: { ready: null },
+    entries: [],
+    next: {
+      icrc103: {
+        from_account: { owner: ledger },
+        to_spender: { owner: ledger, subaccount: null },
+        pages: "1",
+        entries: "0",
+      },
+    },
+    has_more: true,
+    warning: null,
+  });
+  const markup = renderToStaticMarkup(
+    createElement(WalletApprovals, {
+      busy: null,
+      ledgers: [],
+      loading: false,
+      loadingMore: new Set<string>(),
+      onLoadMore: () => undefined,
+      onPermissionRequired: () => undefined,
+      onRevoke: () => undefined,
+      pages: [page],
+    }),
+  );
+
+  expect(markup).toContain("Load more ICP approvals");
+  expect(markup).not.toContain("No active approvals");
+});
+
 test("revoke execution is gated by every displayed review-sensitive fact", () => {
   const page = parseWalletAllowancesPage({
     ledger,
@@ -750,10 +1120,7 @@ test("revoke execution is gated by every displayed review-sensitive fact", () =>
     entries: [
       {
         spender: {
-          icrc: {
-            owner: ledger,
-            subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
-          },
+          icrc: candidAccountWithSubaccount,
         },
         amount_atoms: "200",
         expires_at_ns: "1800000300000000000",
@@ -791,7 +1158,7 @@ test("revoke execution is gated by every displayed review-sensitive fact", () =>
       state: { ready: null },
       entries: [
         {
-          spender: { icrc: { owner: ledger, subaccount: null } },
+          spender: { icrc: { owner: ledger } },
           amount_atoms: "1",
           expires_at_ns: "18446744073709551616",
         },
@@ -812,7 +1179,7 @@ function fundingContext(
     duplicate: null,
     message: "fixture",
   }),
-): WalletFundingToolContext {
+): MsgBusToolContext {
   return {
     caller: {
       endpoint: "app:swap:tile",
@@ -826,7 +1193,15 @@ function fundingContext(
     kernel: {
       updateSelf,
     },
-  } as unknown as WalletFundingToolContext;
+  } as unknown as MsgBusToolContext;
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await Promise.resolve();
+  }
+  throw new Error("Timed out waiting for Wallet funding state");
 }
 
 function preparedDirect() {
@@ -849,10 +1224,7 @@ function directReview() {
     amount_atoms: "123456789",
     transfer_fee_atoms: "10",
     total_debit_atoms: "123456799",
-    destination: {
-      owner: ledger,
-      subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
-    },
+    destination: candidAccountWithSubaccount,
     memo: Uint8Array.of(0, 255),
     valid_until_ns: "1800000000000000000",
   };
@@ -872,12 +1244,7 @@ function revokeReview() {
     current_allowance_atoms: "200",
     current_expires_at_ns: "1800000300000000000",
     total_debit_atoms: "10",
-    spender: {
-      icrc: {
-        owner: ledger,
-        subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
-      },
-    },
+    spender: { icrc: candidAccountWithSubaccount },
     valid_until_ns: "1800000000000000000",
   };
 }
@@ -897,12 +1264,7 @@ function allowanceReview() {
     current_allowance_atoms: "50",
     current_expires_at_ns: "1800000200000000000",
     total_debit_atoms: "120",
-    spender: {
-      icrc: {
-        owner: ledger,
-        subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
-      },
-    },
+    spender: { icrc: candidAccountWithSubaccount },
     valid_until_ns: "1800000000000000000",
     expires_at_ns: "1800000300000000000",
   };

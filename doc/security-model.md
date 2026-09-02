@@ -352,10 +352,13 @@ count, aggregate byte, allocation, concurrency, source, method, owner, and
 AppScope limits all remain enforced.
 
 Private self calls do not apply ICBlast's public JSON Schema projection after
-materialization. Kernel validates the exact live method and type graph, binds
-every sidecar directly to that graph, encodes through the live IDL method, and
-preflights the resulting raw Candid against the same expected types. Public
-record shorthands are not an authority over structural private Candid values.
+materialization. A string may remain opaque at a live record position only for
+the pinned encoder's released shorthand and only with no sidecar at or below
+that path; no generated schema, field, or domain special case authorizes it.
+Kernel validates the exact live method and type graph, binds every sidecar to
+that graph, encodes through the live IDL method, preflights the raw Candid, and
+requires the encoded blob count and aggregate blob-byte length to equal the
+materialized-sidecar statistics.
 
 ## Provider-Mediated One-Shot Review
 
@@ -365,10 +368,12 @@ exception to the ordinary pre-dispatch cross-app grant: the target provider
 must own the specialized UI and inspect authoritative state before a meaningful
 decision exists.
 
-Kernel validates the original tool input, captures its canonical digest plus
-both source and target endpoint/session/AppScope/version bindings, and, for an
-ordinary human route, requires the focused source tile with transient user
-activation. It dispatches the provider with a private one-use
+On the current provider-UI lane, Kernel validates the original tool input and
+binds a one-use capability to the originating validated public tool handler,
+both source and target endpoint/session/AppScope/version state, owner/auth
+state, and cancellation. For an ordinary human route, it requires the focused
+source tile with transient user activation. It dispatches the provider with a
+private one-use
 `presentUserInterface({ tileId, tool, arguments })` callback. Exact and wildcard
 session grants cannot satisfy it. The provider invokes that callback before
 domain-specific preparation or execution.
@@ -378,17 +383,20 @@ reuses and focuses only its exact declared tile, waits for the exact registered
 endpoint, and routes the bounded opaque arguments only to a private tool with
 `same_app` visibility and the `foreground_tile` audience. It injects the
 original caller context and audience attestation; neither can be supplied by
-app data. The provider tile verifies the audience, derives authoritative facts,
-renders its own modal, owns Accept and Reject, and exercises its own
-preapproved authority only after Accept. Kernel displays no provider dialog and
+app data. The provider tile verifies the audience, may exercise exact
+preapproved authority to derive and freeze non-value-moving review state,
+renders its own modal, and owns the accept/reject decision with concrete
+action/cancel labels. Only the affirmative action may dispatch value-moving
+execution; cancel may persist rejection. Kernel displays no provider dialog and
 interprets no app-domain fields.
 
-The callback is bound to one tool invocation, cancellation signal, and Agent
-state. The interaction creates no grant, and returning from the handler without
-one completed callback fails the invocation. Timeout, duplicate use, replay,
+The callback is bound to one live public handler call and cancellation signal
+and is unavailable to Agent invocations. The interaction creates no grant, and
+returning from the handler without one completed callback fails the call.
+Timeout, duplicate use, replay,
 endpoint replacement, logout, update, or authority change aborts the pending
-route. Kernel rechecks both endpoints after every await. The initial version
-rejects attachment and control tools so the path cannot smuggle a second
+route. Kernel rechecks both endpoints after asynchronous routing steps. The
+initial version rejects attachment and control tools so the path cannot smuggle a second
 transport or cancellation protocol.
 
 This primitive intentionally relies on the owner-trusted provider to call the
@@ -410,18 +418,21 @@ attested audience. The provider verifies it and may use its own preapproved
 authority without provider or Kernel UI. An Agent invocation of the public
 tool which attempts `presentUserInterface` fails closed.
 
-The deprecated `requestApproval(review)` callback remains only for
-already-published providers, including Wallet 0.3.6. Its bounded raw-JSON
-Kernel review is a compatibility lane, not the design for new provider code.
-Both callbacks share one use, preventing stacked consent flows.
+The deprecated `requestApproval(review)` callback remains a generic
+compatibility surface. Published providers including Wallet 0.3.6 depend on
+its bounded raw-JSON Kernel review, but current provider code must use
+provider-owned UI. Both callbacks share one use, preventing stacked consent
+flows.
 
-Wallet uses the path without adding token logic to Kernel. It prepares either
-an exact ICRC-1 transfer or a short-lived ICRC-2 allowance inside its private
-tile after presentation routing, then invokes only its own exact preapproved
-backend method after Accept. Its separate root tool performs the same bounded
-operation without UI only for the attested direct root. It lists ICRC approvals
-through the draft ICRC-103 API or ICP's distinct approval API and revokes under
-Wallet policy. Another asset standard belongs in another provider app.
+Wallet uses the path without adding token logic to Kernel. Inside its private
+tile after presentation routing, it uses exact preapproved methods to prepare
+either an ICRC-1 transfer or a short-lived ICRC-2 allowance and to persist
+rejection. Only the affirmative action may dispatch the value-moving execute
+method. Its separate root tool performs the same bounded operation without UI
+only for the attested direct root. It
+lists ICRC approvals through the draft ICRC-103 API or ICP's distinct approval
+API and revokes under Wallet policy. Another asset standard belongs in another
+provider app.
 
 Exact allowance and expiry bounds limit a spender's authority but do not attest
 the code behind its principal. An external DEX canister may be upgraded after

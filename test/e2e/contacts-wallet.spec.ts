@@ -2,11 +2,31 @@ import { expect, test, type Page } from "@playwright/test";
 import { localCanisterOrigin } from "neutron-tools/src/runtime.js";
 import { resolveLocalNeutronRuntime } from "../../packages/neutron-provision/src/local_session.ts";
 
+const PRINCIPAL_ONLY_IC_ACCOUNT = "togwv-zqaaa-aaaal-qr7aa-cai";
+// Canonical ICRC text for the same owner with a 32-byte subaccount containing
+// 31 zero bytes followed by 0xff.
+const SUBACCOUNT_IC_ACCOUNT = "togwv-zqaaa-aaaal-qr7aa-cai-dzl4y5q.ff";
+
+test.describe.configure({ retries: 0 });
+test.skip(
+  !process.env.NEUTRON_NDEPLOY_CONFIG?.endsWith("all-apps-local.ndeploy.json"),
+  "Contacts and Wallet value mutations require the full local fixture",
+);
+
 test("Contacts CRUD is shared with Wallet destination discovery", async ({
   page,
 }) => {
   const runtime = resolveLocalNeutronRuntime();
-  await page.goto(localKernelUrl());
+  await page.goto(localCanisterOrigin(runtime.canisterId, runtime.gatewayUrl));
+  await expect(page.locator('[data-tid="login-button"]')).toBeVisible();
+  await page.waitForFunction(
+    () =>
+      typeof (
+        window as typeof window & {
+          __NEUTRON_PLAYWRIGHT_LOGIN_AS__?: unknown;
+        }
+      ).__NEUTRON_PLAYWRIGHT_LOGIN_AS__ === "function",
+  );
   const principal = await page.evaluate(async (identitySeed) => {
     const login = (
       window as typeof window & {
@@ -30,14 +50,47 @@ test("Contacts CRUD is shared with Wallet destination discovery", async ({
   await expect(contacts.getByRole("button", { name: "Add contact" })).toBeVisible();
 
   const name = `Contact ${Date.now()}`;
+  const editedName = `${name} edited`;
   await contacts.getByRole("button", { name: "Add contact" }).click();
   await contacts.getByRole("textbox", { name: "Name" }).fill(name);
   await contacts.getByRole("button", { name: "Add destination" }).click();
   await contacts
     .getByRole("textbox", { name: "Destination 1 ICRC account" })
-    .fill(resolveCanisterId());
+    .fill(PRINCIPAL_ONLY_IC_ACCOUNT);
   await contacts.getByRole("button", { name: "Save" }).click();
   await expect(contacts.getByRole("heading", { name })).toBeVisible();
+
+  const contactsDocument = await contactsFrame.elementHandle().then((element) =>
+    element?.contentFrame(),
+  );
+  if (!contactsDocument) throw new Error("Contacts frame is unavailable");
+  await contactsDocument.goto(contactsDocument.url());
+  await expect(contacts.getByRole("button", { name: "Add contact" })).toBeVisible();
+  await contacts.locator(".contact-row").filter({ hasText: name }).click();
+  await expect(contacts.getByRole("heading", { name })).toBeVisible();
+  await expect(contacts.getByTitle(PRINCIPAL_ONLY_IC_ACCOUNT)).toBeVisible();
+
+  await contacts.getByRole("button", { name: "Edit contact" }).click();
+  await contacts.getByRole("textbox", { name: "Name" }).fill(editedName);
+  const accountEditor = contacts.getByRole("textbox", {
+    name: "Destination 1 ICRC account",
+  });
+  await expect(accountEditor).toHaveValue(PRINCIPAL_ONLY_IC_ACCOUNT);
+  await accountEditor.fill(SUBACCOUNT_IC_ACCOUNT);
+  await contacts.getByRole("button", { name: "Save" }).click();
+  await expect(contacts.getByRole("heading", { name: editedName })).toBeVisible();
+  await expect(contacts.getByTitle(SUBACCOUNT_IC_ACCOUNT)).toBeVisible();
+
+  await contactsDocument.goto(contactsDocument.url());
+  await expect(contacts.getByRole("button", { name: "Add contact" })).toBeVisible();
+  await contacts.locator(".contact-row").filter({ hasText: editedName }).click();
+  await expect(contacts.getByRole("heading", { name: editedName })).toBeVisible();
+  await expect(contacts.getByTitle(SUBACCOUNT_IC_ACCOUNT)).toBeVisible();
+  await contacts.getByRole("button", { name: "Edit contact" }).click();
+  await expect(
+    contacts.getByRole("textbox", { name: "Destination 1 ICRC account" }),
+  ).toHaveValue(SUBACCOUNT_IC_ACCOUNT);
+  await contacts.getByRole("button", { name: "Cancel" }).click();
 
   await contactsFrame.evaluate((frame) => {
     frame.style.width = "590px";
@@ -87,10 +140,13 @@ test("Contacts CRUD is shared with Wallet destination discovery", async ({
 
   await wallet
     .getByRole("searchbox", { name: "Search contact destinations" })
-    .fill(name);
-  await expect(wallet.locator(".wallet-destination-row").filter({ hasText: name }))
-    .toBeVisible();
-  await wallet.getByRole("button", { name: `Send to ${name}` }).click();
+    .fill(editedName);
+  const walletDestination = wallet
+    .locator(".wallet-destination-row")
+    .filter({ hasText: editedName });
+  await expect(walletDestination).toBeVisible();
+  await expect(walletDestination.getByTitle(SUBACCOUNT_IC_ACCOUNT)).toBeVisible();
+  await wallet.getByRole("button", { name: `Send to ${editedName}` }).click();
   await wallet.getByRole("textbox", { name: "Transfer amount" }).fill("0.001");
   await wallet.getByRole("button", { name: "Send", exact: true }).click();
   await expect(wallet.getByText("Transfer sent")).toBeVisible();
@@ -103,16 +159,17 @@ test("Contacts CRUD is shared with Wallet destination discovery", async ({
     });
   }
 
-  await contacts.locator(".contact-row").filter({ hasText: name }).click();
+  await contacts.locator(".contact-row").filter({ hasText: editedName }).click();
   await contacts.getByRole("button", { name: "Remove contact" }).click();
   await contacts.getByRole("button", { name: "Confirm remove contact" }).click();
-  await expect(contacts.getByText(name, { exact: true })).toHaveCount(0);
+  await expect(contacts.getByText(editedName, { exact: true })).toHaveCount(0);
+  await contactsDocument.goto(contactsDocument.url());
+  await expect(contacts.getByRole("button", { name: "Add contact" })).toBeVisible();
+  await contacts.getByRole("searchbox", { name: "Search contacts" }).fill(editedName);
+  await expect(
+    contacts.locator(".contact-row").filter({ hasText: editedName }),
+  ).toHaveCount(0);
 });
-
-function localKernelUrl(): string {
-  const runtime = resolveLocalNeutronRuntime();
-  return localCanisterOrigin(runtime.canisterId, runtime.gatewayUrl);
-}
 
 async function openLauncher(page: Page): Promise<void> {
   await page.locator('[data-tid="launcher-open"]').click();

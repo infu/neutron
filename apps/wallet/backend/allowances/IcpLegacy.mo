@@ -1,4 +1,3 @@
-import Blob "mo:core/Blob";
 import List "mo:core/List";
 import Nat64 "mo:core/Nat64";
 import Capabilities "../capabilities/Types";
@@ -54,7 +53,6 @@ module {
     public let MAX_SCAN_PAGES : Nat = 32;
     public let MAX_SCAN_ENTRIES : Nat = 4_096;
     public let MAX_REPLY_BYTES : Nat = 262_144;
-    public let MAX_UPDATE_REPLY_BYTES : Nat = 16_384;
 
     let limits : Pagination.Limits = {
         max_page_entries = MAX_PAGE_ENTRIES;
@@ -162,12 +160,10 @@ module {
                 case null {};
                 case (?prior) {
                     if (
-                        comparePair(
-                            prior.from_account_id,
+                        AccountIdentifier.compare(
                             prior.prev_spender_id,
-                            fromAccount,
                             spender,
-                        ) != #less
+                        ) != ?#less
                     ) {
                         return #err("Ledger returned a non-progressing ICP allowance cursor");
                     };
@@ -241,29 +237,6 @@ module {
         });
     };
 
-    // `remove_approval` has no idempotency timestamp or expected-allowance CAS.
-    // A broker error or malformed successful reply is an unknown outcome;
-    // callers must list this spender again before deciding whether another
-    // fee-bearing attempt is safe.
-    public func decodeRemoveApproval(
-        result : Capabilities.CallResult,
-    ) : IcrcTypes.Result<IcrcTypes.ApproveResult> {
-        let reply = switch (result) {
-            case (#err(error)) {
-                return #err(FundingDisplay.callError(error.code, error.message));
-            };
-            case (#ok(value)) value;
-        };
-        if (reply.size() > MAX_UPDATE_REPLY_BYTES) {
-            return #err("ICP remove-approval reply exceeds the Wallet limit");
-        };
-        let decoded : ?IcrcTypes.ApproveResult = from_candid reply;
-        switch (decoded) {
-            case null #err("Ledger returned an unexpected ICP remove-approval result");
-            case (?value) #ok(value);
-        };
-    };
-
     func canonicalCursor(
         owner : Principal,
         cursor : ?Cursor,
@@ -285,15 +258,4 @@ module {
         };
     };
 
-    func comparePair(
-        leftFrom : Blob,
-        leftSpender : Blob,
-        rightFrom : Blob,
-        rightSpender : Blob,
-    ) : { #less; #equal; #greater } {
-        switch (Blob.compare(leftFrom, rightFrom)) {
-            case (#equal) Blob.compare(leftSpender, rightSpender);
-            case (order) order;
-        };
-    };
 };

@@ -6,6 +6,7 @@ import {
 } from "neutron-tools/src/icrc_account.js";
 import { icHost } from "neutron-tools/src/runtime.js";
 import type { CatalogNativeRoute } from "./catalog.ts";
+import { bytesToHex } from "./icrc_account.ts";
 
 type EthereumMinterInfo = {
   minter_address: [] | [string];
@@ -55,7 +56,7 @@ export function ethereumPrincipalWord(owner: string): string {
   const word = new Uint8Array(32);
   word[0] = bytes.length;
   word.set(bytes, 1);
-  return `0x${toHex(word)}`;
+  return `0x${bytesToHex(word)}`;
 }
 
 export function defaultSubaccountWord(): string {
@@ -198,8 +199,4 @@ const cksolMinterIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
 
 function first<T>(value: [] | [T]): T | null {
   return value.length === 1 ? value[0] : null;
-}
-
-function toHex(value: Uint8Array): string {
-  return [...value].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }

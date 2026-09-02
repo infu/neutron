@@ -10,6 +10,7 @@ import Text "mo:core/Text";
 import FundingDisplay "../../backend/funding/Display";
 import FundingJournal "../../backend/funding/Journal";
 import Icrc "../../backend/icrc1/Client";
+import IcrcTypes "../../backend/icrc1/Types";
 import CommandMemory "../../backend/memory/wallet_commands/v1";
 
 let ledger = Principal.fromText("mxzaz-hqaaa-aaaar-qaada-cai");
@@ -190,6 +191,60 @@ assert (
 );
 assert (Map.size(retainedTerminals) == 0);
 
+// A terminal result that arrives after the original cutoff keeps the same
+// 1,000-nanosecond retention interval measured from its terminal timestamp.
+// The older retain_until remains the floor for ordinary prompt completions.
+let delayedTerminals = Map.empty<CommandMemory.CommandKey, CommandMemory.Command>();
+let delayedSuccessKey = key("swap", 9);
+let delayedRejectedKey = key("swap", 10);
+Map.add(
+    delayedTerminals,
+    compareKey,
+    delayedSuccessKey,
+    command("swap", ledger, spender, 500, ?900, #succeeded({
+        block_index = ?2;
+        duplicate = false;
+        completed_at = 2_500;
+    })),
+);
+Map.add(
+    delayedTerminals,
+    compareKey,
+    delayedRejectedKey,
+    command("swap", ledger, spender, 500, ?900, #rejected({
+        code = "delayed_rejection";
+        message = "rejected after reconciliation";
+        at = 3_000;
+    })),
+);
+assert (FundingJournal.pruneExpiredCommands(
+    delayedTerminals,
+    compareKey,
+    3_499,
+    64,
+) == 0);
+assert (FundingJournal.pruneExpiredCommands(
+    delayedTerminals,
+    compareKey,
+    3_500,
+    64,
+) == 1);
+switch (Map.get(delayedTerminals, compareKey, delayedSuccessKey)) {
+    case null {};
+    case (?_) assert false;
+};
+switch (Map.get(delayedTerminals, compareKey, delayedRejectedKey)) {
+    case (?_) {};
+    case null assert false;
+};
+assert (FundingJournal.pruneExpiredCommands(
+    delayedTerminals,
+    compareKey,
+    4_000,
+    64,
+) == 1);
+assert (Map.size(delayedTerminals) == 0);
+
 // An owner acceptance while another Wallet call is active is still journaled
 // as pending. The same request can later dispatch without becoming reviewable
 // or rejectable again.
@@ -216,6 +271,76 @@ switch (acceptedWhileBusy.status) {
     };
     case (_) assert false;
 };
+
+// Current ledger selection remains authoritative only until exact ledger call
+// arguments are frozen. Frozen pending work must remain replayable to reconcile
+// an ambiguous dispatch, and retained terminal outcomes remain replayable even
+// if legacy state does not contain frozen arguments.
+let authorityPrepared = command("swap", ledger, spender, 500, ?900, #prepared);
+assert (FundingJournal.requiresCurrentAuthority(authorityPrepared));
+let authorityQueued = command("swap", ledger, spender, 500, ?900, #prepared);
+switch (FundingJournal.acceptForExecution(authorityQueued, true, 1_300)) {
+    case (#waiting) {};
+    case (#dispatch) assert false;
+};
+assert (FundingJournal.requiresCurrentAuthority(authorityQueued));
+authorityQueued.call_args := ?Blob.fromArray([1]);
+assert (not FundingJournal.requiresCurrentAuthority(authorityQueued));
+let authoritySucceeded = command("swap", ledger, spender, 500, ?900, #succeeded({
+    block_index = ?3;
+    duplicate = false;
+    completed_at = 1_400;
+}));
+authoritySucceeded.call_args := null;
+assert (not FundingJournal.requiresCurrentAuthority(authoritySucceeded));
+let authorityRejected = command("swap", ledger, spender, 500, ?900, #rejected({
+    code = "definite";
+    message = "definite";
+    at = 1_500;
+}));
+authorityRejected.call_args := null;
+assert (not FundingJournal.requiresCurrentAuthority(authorityRejected));
+
+// Capacity cleanup may discard accepted work only while it still has no
+// frozen call args. The exact deadline remains live; one tick later the queued
+// command is removed, while a dispatched/ambiguous command remains durable.
+let queuedCapacityCommands = Map.empty<CommandMemory.CommandKey, CommandMemory.Command>();
+let queuedKey = key("swap", 11);
+let frozenKey = key("swap", 12);
+let queued = command("swap", ledger, spender, 500, ?900, #prepared);
+switch (FundingJournal.acceptForExecution(queued, true, 900)) {
+    case (#waiting) {};
+    case (#dispatch) assert false;
+};
+let frozen = command("swap", otherLedger, spender, 500, ?900, #pending({
+    attempts = 1;
+    started_at = 900;
+    last_error = null;
+}));
+Map.add(queuedCapacityCommands, compareKey, queuedKey, queued);
+Map.add(queuedCapacityCommands, compareKey, frozenKey, frozen);
+assert (FundingJournal.activeCommandCount(queuedCapacityCommands, "swap") == 2);
+assert (FundingJournal.pruneExpiredCommands(
+    queuedCapacityCommands,
+    compareKey,
+    1_000,
+    64,
+) == 0);
+assert (FundingJournal.pruneExpiredCommands(
+    queuedCapacityCommands,
+    compareKey,
+    1_001,
+    64,
+) == 1);
+switch (Map.get(queuedCapacityCommands, compareKey, queuedKey)) {
+    case null {};
+    case (?_) assert false;
+};
+switch (Map.get(queuedCapacityCommands, compareKey, frozenKey)) {
+    case (?_) {};
+    case null assert false;
+};
+assert (FundingJournal.activeCommandCount(queuedCapacityCommands, "swap") == 1);
 
 // A fresh request ID with the exact original facts resumes the durable pending
 // legacy removal rather than admitting another fee-bearing remove_approval.
@@ -316,6 +441,55 @@ switch (FundingJournal.activeIcpRevoke(
     1_001,
 )) {
     case (#none) {};
+    case (_) assert false;
+};
+
+// The same expiry distinction applies before capacity cleanup runs: an
+// accepted-but-undispatched revoke stops fencing after its deadline, while a
+// revoke with frozen args remains globally fenced because its outcome may be
+// ambiguous.
+let queuedFenceCommands = Map.empty<CommandMemory.CommandKey, CommandMemory.Command>();
+let queuedFence = command("swap", ledger, spender, 500, ?900, #prepared);
+switch (FundingJournal.acceptForExecution(queuedFence, true, 900)) {
+    case (#waiting) {};
+    case (#dispatch) assert false;
+};
+Map.add(queuedFenceCommands, compareKey, key("swap", 13), queuedFence);
+switch (FundingJournal.activeIcpRevoke(
+    queuedFenceCommands,
+    caller("swap"),
+    ledger,
+    spender,
+    500,
+    ?900,
+    1_000,
+)) {
+    case (#resume(_)) {};
+    case (_) assert false;
+};
+switch (FundingJournal.activeIcpRevoke(
+    queuedFenceCommands,
+    caller("swap"),
+    ledger,
+    spender,
+    500,
+    ?900,
+    1_001,
+)) {
+    case (#none) {};
+    case (_) assert false;
+};
+queuedFence.call_args := ?Blob.fromArray([1]);
+switch (FundingJournal.activeIcpRevoke(
+    queuedFenceCommands,
+    caller("swap"),
+    ledger,
+    spender,
+    500,
+    ?900,
+    9_999,
+)) {
+    case (#resume(_)) {};
     case (_) assert false;
 };
 
@@ -434,6 +608,80 @@ let boundedLedgerError = Icrc.transferErrorText(#GenericError({
 assert (
     boundedLedgerError.size() <=
     16 + 36 + 2 + FundingDisplay.MAX_ERROR_MESSAGE_CHARS
+);
+
+let approvalReceipt : IcrcTypes.ApproveResult = #Ok(44);
+switch (Icrc.classifyApproveResult(#ok(to_candid (approvalReceipt)))) {
+    case (#ok(receipt)) {
+        assert (receipt.block_index == 44);
+        assert (not receipt.duplicate);
+    };
+    case (_) assert false;
+};
+
+func executionClass(
+    result : Icrc.ExecutionResult,
+) : { #ok; #rejected; #unknown } {
+    switch (result) {
+        case (#ok(_)) #ok;
+        case (#rejected(_)) #rejected;
+        case (#unknown(_)) #unknown;
+    };
+};
+
+let duplicateApproval : IcrcTypes.ApproveResult = #Err(#Duplicate({
+    duplicate_of = 45;
+}));
+switch (Icrc.classifyApproveResult(#ok(to_candid (duplicateApproval)))) {
+    case (#ok(receipt)) {
+        assert (receipt.block_index == 45);
+        assert (receipt.duplicate);
+    };
+    case (_) assert false;
+};
+let rejectedApproval : IcrcTypes.ApproveResult = #Err(#AllowanceChanged({
+    current_allowance = 1;
+}));
+assert (
+    executionClass(
+        Icrc.classifyApproveResult(#ok(to_candid (rejectedApproval)))
+    ) == #rejected
+);
+for (code in ["argument_limit", "concurrency_limit"].vals()) {
+    assert (
+        executionClass(Icrc.classifyApproveResult(#err({ code; message = "test" }))) ==
+        #rejected
+    );
+};
+for (code in ["call_rejected", "reply_limit", "future_broker_code"].vals()) {
+    assert (
+        executionClass(Icrc.classifyApproveResult(#err({ code; message = "test" }))) ==
+        #unknown
+    );
+};
+
+let oversizedExecutionMessage = Text.fromArray(
+    Array.tabulate<Char>(Icrc.MAX_EXECUTION_REPLY_BYTES, func(_) { 'x' }),
+);
+let oversizedApproval : IcrcTypes.ApproveResult = #Err(#GenericError({
+    error_code = 1;
+    message = oversizedExecutionMessage;
+}));
+let oversizedApprovalReply = to_candid (oversizedApproval);
+assert (oversizedApprovalReply.size() > Icrc.MAX_EXECUTION_REPLY_BYTES);
+assert (
+    executionClass(Icrc.classifyApproveResult(#ok(oversizedApprovalReply))) ==
+    #unknown
+);
+let oversizedTransfer : IcrcTypes.TransferResult = #Err(#GenericError({
+    error_code = 1;
+    message = oversizedExecutionMessage;
+}));
+let oversizedTransferReply = to_candid (oversizedTransfer);
+assert (oversizedTransferReply.size() > Icrc.MAX_EXECUTION_REPLY_BYTES);
+assert (
+    executionClass(Icrc.classifyTransferResult(#ok(oversizedTransferReply))) ==
+    #unknown
 );
 
 assert (FundingDisplay.safeLabel(

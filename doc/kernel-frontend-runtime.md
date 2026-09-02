@@ -877,9 +877,10 @@ The same component renders cross-app frontend tool requests. It shows caller
 app/role, exact target endpoint, tool name, and JSON arguments. The user can
 allow one call, allow that endpoint/tool for the current session, or reject.
 
-An exact `{"neutron:consent":"provider_once"}` descriptor takes a separate
-branch outside `Requests`. The Kernel validates the caller's original arguments
-before dispatch and, outside Agent Mode, requires the focused source tile plus
+On the current provider-UI lane, an exact
+`{"neutron:consent":"provider_once"}` descriptor takes a separate branch outside
+`Requests`. The Kernel validates the caller's original arguments before
+dispatch and, outside Agent Mode, requires the focused source tile plus
 transient user activation. It skips the ordinary preliminary tool prompt and
 gives the target handler one invocation-scoped
 `presentUserInterface({ tileId, tool, arguments })` callback. Kernel opens or
@@ -888,18 +889,20 @@ its exact endpoint, and routes the opaque arguments only to a private tool
 declaring `same_app` visibility and the `foreground_tile` audience. It attests
 the original caller and audience rather than accepting them in app data.
 
-The provider tile loads authoritative facts, renders its own modal, owns Accept
-and Reject, and makes its own preapproved self call after Accept. No Kernel
-dialog renders or interprets the provider's domain data. The callback is
+The provider tile may use exact preapproved methods to load and freeze
+non-value-moving review state, renders its own modal, and owns the accept/reject
+decision with concrete action/cancel labels. Only the affirmative action may
+dispatch the value-moving execute method; cancel may persist rejection. No
+Kernel dialog renders or interprets the provider's domain data. The callback is
 one-use, creates no grant, and ignores pre-existing exact or wildcard grants.
 Timeout, cancellation, endpoint replacement, a second use, replay, or a handler
 return without one completed interaction fails closed.
 
-The deprecated `requestApproval(review)` callback remains only so
-already-published providers, including Wallet 0.3.6, continue to work with
-their old Kernel-rendered raw-JSON review. It shares the same one-use capability
-with `presentUserInterface`; new provider code must use the provider-owned tile
-path and cannot stack both flows.
+The deprecated `requestApproval(review)` callback remains a generic
+compatibility surface. Published providers including Wallet 0.3.6 depend on
+its old Kernel-rendered raw-JSON review; current provider code must use the
+provider-owned tile path. It shares the same one-use capability with
+`presentUserInterface`, so a handler cannot stack both flows.
 
 All Kernel-owned frontend tool, signed call, backend access, Connections,
 workspace navigation, and Agent Mode grant prompts first pass through the

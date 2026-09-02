@@ -61,8 +61,8 @@ module {
         code == 0x3000;
     };
 
-    // Ledger metadata is untrusted text rendered in Wallet and Kernel review
-    // surfaces. Reject controls, bidi/invisible formatting, line separators,
+    // Ledger metadata is untrusted text rendered in Wallet review surfaces.
+    // Reject controls, bidi/invisible formatting, line separators,
     // variation selectors, tags, and the remaining common default-ignorable
     // scalars rather than persisting an ambiguous command review.
     func unsafeScalar(code : Nat32) : Bool {

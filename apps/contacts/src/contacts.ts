@@ -293,7 +293,7 @@ export function parseDestination(value: unknown): Destination {
   if (network === "internet_computer") {
     return normalizeDestination({
       network,
-      account: parseIcrcAccount(payload),
+      account: parseIcrcAccountOutput(payload),
     });
   }
   return normalizeDestination({
@@ -316,52 +316,61 @@ export function encodeDestination(destination: Destination): SelfCallObject {
     return { neutron: destination.principal };
   }
   if (destination.network === "internet_computer") {
-    const account = decodeIcrcAccount(destination.account);
-    return {
-      internet_computer: {
-        owner: account.owner.toText(),
-        subaccount:
-          account.subaccount === undefined
-            ? null
-            : Uint8Array.from(account.subaccount),
-      },
-    };
+    return { internet_computer: destination.account };
   }
   return { [destination.network]: destination.address };
 }
 
-function parseIcrcAccount(value: unknown): string {
+function parseIcrcAccountOutput(value: unknown): string {
   const record = requiredObject(value, "IC account");
   const hasSubaccount = Object.prototype.hasOwnProperty.call(
     record,
     "subaccount",
   );
-  assertExactKeys(
-    record,
-    hasSubaccount ? ["owner", "subaccount"] : ["owner"],
-    "IC account",
-  );
-  const ownerText = requiredString(record.owner, "IC account owner");
+  const expectedKeys = hasSubaccount ? ["owner", "subaccount"] : ["owner"];
+  const keys = Reflect.ownKeys(record);
+  if (
+    keys.length !== expectedKeys.length ||
+    keys.some((key) => typeof key !== "string") ||
+    expectedKeys.some(
+      (key) => !Object.prototype.hasOwnProperty.call(record, key),
+    ) ||
+    ["owner", "subaccount"].some(
+      (key) => key in record && !Object.prototype.hasOwnProperty.call(record, key),
+    ) ||
+    expectedKeys.some((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(record, key);
+      return (
+        descriptor === undefined ||
+        !descriptor.enumerable ||
+        !("value" in descriptor)
+      );
+    }) ||
+    Object.keys(Object.getPrototypeOf(record) ?? {}).some(
+      (key) => !Object.prototype.hasOwnProperty.call(record, key),
+    )
+  ) {
+    throw new Error("Invalid IC account");
+  }
 
+  const ownerText = requiredString(
+    Object.getOwnPropertyDescriptor(record, "owner")!.value,
+    "IC account owner",
+  );
   let owner;
   try {
     owner = decodeIcrcAccount(ownerText);
   } catch {
     throw new Error("Invalid IC account owner");
   }
-  if (
-    owner.subaccount !== undefined ||
-    owner.owner.toText() !== ownerText
-  ) {
+  if (owner.subaccount !== undefined || owner.owner.toText() !== ownerText) {
     throw new Error("Invalid IC account owner");
   }
 
-  const rawSubaccount = record.subaccount;
-  if (
-    hasSubaccount &&
-    rawSubaccount !== null &&
-    !(rawSubaccount instanceof Uint8Array)
-  ) {
+  const rawSubaccount = hasSubaccount
+    ? Object.getOwnPropertyDescriptor(record, "subaccount")!.value
+    : null;
+  if (rawSubaccount !== null && !(rawSubaccount instanceof Uint8Array)) {
     throw new Error("Invalid IC account subaccount");
   }
   if (
@@ -370,13 +379,11 @@ function parseIcrcAccount(value: unknown): string {
   ) {
     throw new Error("Invalid IC account subaccount");
   }
-  const subaccount =
-    rawSubaccount instanceof Uint8Array
-      ? Uint8Array.from(rawSubaccount)
-      : undefined;
   return encodeIcrcAccount({
     owner: owner.owner,
-    ...(subaccount === undefined ? {} : { subaccount }),
+    ...(rawSubaccount instanceof Uint8Array
+      ? { subaccount: Uint8Array.from(rawSubaccount) }
+      : {}),
   });
 }
 
@@ -426,20 +433,6 @@ function optionalNat(value: unknown, label: string): string | null {
 function requiredObject(value: unknown, label: string): SelfCallObject {
   if (!isJsonObject(value)) throw new Error(`Invalid ${label}`);
   return value as SelfCallObject;
-}
-
-function assertExactKeys(
-  value: SelfCallObject,
-  expected: readonly string[],
-  label: string,
-): void {
-  const keys = Object.keys(value);
-  if (
-    keys.length !== expected.length ||
-    expected.some((key) => !Object.prototype.hasOwnProperty.call(value, key))
-  ) {
-    throw new Error(`Invalid ${label}`);
-  }
 }
 
 function requiredString(value: unknown, label: string, empty = false): string {

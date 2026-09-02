@@ -39,11 +39,12 @@ export type LegacyKernelReleaseFixture = Readonly<{
 }>;
 
 type RetainedKernelReleaseFixture = Readonly<{
-  label: "v0.3.21" | "v0.3.23";
-  version: 321 | 323;
+  label: "v0.3.21" | "v0.3.23" | "v0.3.24";
+  version: 321 | 323 | 324;
   archive:
     | "../../../apps/kernel/kernel.v0.3.21.neutron"
-    | "../../../apps/kernel/kernel.v0.3.23.neutron";
+    | "../../../apps/kernel/kernel.v0.3.23.neutron"
+    | "../../../apps/kernel/kernel.v0.3.24.neutron";
   bytes: number;
   sha256: string;
   persistenceMode: "classical";
@@ -142,6 +143,18 @@ export const PRODUCTION_KERNEL_V323_RELEASE = {
   ),
 } as const satisfies RetainedKernelReleaseFixture;
 
+export const PRODUCTION_KERNEL_V324_RELEASE = {
+  label: "v0.3.24",
+  version: 324,
+  archive: "../../../apps/kernel/kernel.v0.3.24.neutron",
+  bytes: 2_449_608,
+  sha256: "6ae401a934160410ec7d099f9d3a7f62c94126ab491fc115cc2e38b5b27c067a",
+  persistenceMode: "classical",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.24.neutron", import.meta.url),
+  ),
+} as const satisfies RetainedKernelReleaseFixture;
+
 /** Backward-compatible aliases for callers that mean the latest predecessor. */
 export const LEGACY_KERNEL_VERSION = LEGACY_KERNEL_RELEASES[3].version;
 export const LEGACY_KERNEL_ARCHIVE_BYTES = LEGACY_KERNEL_RELEASES[3].bytes;
@@ -219,6 +232,17 @@ const PRODUCTION_KERNEL_V323_IDENTITY = {
     version: PRODUCTION_KERNEL_V323_RELEASE.version,
   },
 } as const satisfies KernelUpgradeIdentityFixture<323>;
+
+const PRODUCTION_KERNEL_V324_IDENTITY = {
+  ...PRODUCTION_KERNEL_V323_IDENTITY,
+  archive: PRODUCTION_KERNEL_V324_RELEASE.archive,
+  bytes: PRODUCTION_KERNEL_V324_RELEASE.bytes,
+  sha256: PRODUCTION_KERNEL_V324_RELEASE.sha256,
+  package: {
+    ...PRODUCTION_KERNEL_V323_IDENTITY.package,
+    version: PRODUCTION_KERNEL_V324_RELEASE.version,
+  },
+} as const satisfies KernelUpgradeIdentityFixture<324>;
 
 export type LegacyUpgradeCompileFixture = Readonly<{
   release: KernelUpgradeReleaseFixture;
@@ -317,6 +341,23 @@ async function loadProductionKernelV323Fixture(): Promise<{
   return { identity: PRODUCTION_KERNEL_V323_IDENTITY, archive };
 }
 
+export async function loadProductionKernelV324Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<324>;
+  archive: Uint8Array;
+}> {
+  const archive = await loadKernelArchive(
+    PRODUCTION_KERNEL_V324_RELEASE.archivePath,
+    "The production v0.3.24 Kernel predecessor",
+  );
+  assertArchiveIdentity(
+    PRODUCTION_KERNEL_V324_RELEASE.label,
+    archive,
+    PRODUCTION_KERNEL_V324_RELEASE.bytes,
+    PRODUCTION_KERNEL_V324_RELEASE.sha256,
+  );
+  return { identity: PRODUCTION_KERNEL_V324_IDENTITY, archive };
+}
+
 export async function compileLegacyKernelUpgradeFixture(
   legacyVersion: LegacyKernelVersion = LEGACY_KERNEL_VERSION,
 ): Promise<LegacyUpgradeCompileFixture> {
@@ -372,6 +413,18 @@ export async function compileFinalCandidateProductionKernelUpgradeFixture({
     expectedSha256,
     release: PRODUCTION_KERNEL_V323_RELEASE,
     loadPredecessor: loadProductionKernelV323Fixture,
+  });
+}
+
+export async function compileFinalCandidateProductionKernelV324UpgradeFixture({
+  expectedSha256,
+}: {
+  expectedSha256: string;
+}): Promise<LegacyUpgradeCompileFixture> {
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release: PRODUCTION_KERNEL_V324_RELEASE,
+    loadPredecessor: loadProductionKernelV324Fixture,
   });
 }
 
@@ -463,7 +516,8 @@ async function compileKernelUpgradeCandidate(
   let initial: CompileResult;
   if (
     release.version === RETAINED_KERNEL_V321_RELEASE.version ||
-    release.version === PRODUCTION_KERNEL_V323_RELEASE.version
+    release.version === PRODUCTION_KERNEL_V323_RELEASE.version ||
+    release.version === PRODUCTION_KERNEL_V324_RELEASE.version
   ) {
     initial = await compileFreshPackages({
       packages: [legacyKernel, hello],
@@ -556,7 +610,8 @@ function assertPredecessorPackageRecord(
   if (
     release.version === 315 ||
     release.version === 321 ||
-    release.version === 323
+    release.version === 323 ||
+    release.version === 324
   ) {
     if (
       record?.package.version !== release.version ||

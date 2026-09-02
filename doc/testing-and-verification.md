@@ -118,9 +118,10 @@ Transport coverage must include:
   of every other value;
 - validation of provider-tool arguments before handler dispatch, with no
   preliminary ordinary tool prompt;
-- one-use `presentUserInterface` binding to the exact caller, provider, tool,
-  argument digest, endpoint sessions, versions, AppScopes, cancellation, and
-  invocation, with the deprecated `requestApproval` member sharing the same
+- one-use `presentUserInterface` binding to the originating validated public
+  tool handler, caller/provider endpoint sessions, versions, AppScopes,
+  owner/auth state, and cancellation, explicitly unavailable to Agent
+  invocations, with the deprecated `requestApproval` member sharing the same
   one-use gate;
 - opening or reusing and focusing the provider's exact tile, waiting for its
   exact live endpoint, and routing only to a private
@@ -136,16 +137,21 @@ Transport coverage must include:
 - `same_app` + `agent_root` tools being discoverable and callable only by the
   active live depth-zero root, with human and nested-agent attempts rejected
   before target dispatch and no owner or provider UI;
-- the legacy `requestApproval` route remaining available only for compatible
-  already-published providers;
+- the deprecated generic `requestApproval` route remaining available for
+  compatibility, while current provider source does not use it;
 - old apps and every non-annotated tool retaining their released one-call and
   session-grant behavior;
 - direct-root-only exact installed-artifact tools, including closed schemas,
   cancellation, metadata-only audit, revision and cursor binding, and rejection
   before asset I/O for unscoped or delegated-child calls;
 - private API-1 self-call sidecars for nested and repeated `vec nat8` values,
-  including structural ICRC Accounts with absent or present subaccounts and the
-  narrow released-Wallet scalar shorthand without a sidecar;
+  including structural records with absent or present optional blobs and the
+  pinned encoder's generic string-record shorthand only when no sidecar exists
+  at or below it;
+- shorthand rejection by exact live-Candid encoding or raw preflight, equality
+  between the encoded raw Candid's blob count and aggregate blob-byte length and
+  the materialized-sidecar statistics, and no generated-schema, field, or
+  domain-specific authorization;
 - exact Candid-path binding, byte/depth/element limits, and transferables; and
 - the separate generic tool-attachment protocol.
 
@@ -172,21 +178,31 @@ semantics. Kernel fixtures use a neutral provider tool and hostile bounded JSON
 objects; Wallet fixtures use the exact ICRC and ICP adapters. Do not put Wallet
 or token branches into the generic routing harness.
 
-Run the rolling compatibility matrix:
+Run every cell of the
+[exact compatibility matrix](./app-method-access-and-call-consent.md#provider-mediated-one-shot-tools),
+asserting human and root behavior independently:
 
-| Installed combination | Required assertion |
-| --- | --- |
-| New Kernel + representative old apps | Valid existing tools, session grants, attachments, controls, self calls, and Agent flows are unchanged; malformed tool input fails before permission UI. |
-| New Kernel + exact released Wallet 0.3.6 | Existing Wallet funding and Approvals remain usable; funding uses the compatibility-only raw-review callback and no successor-only tool or UI behavior is assumed. |
-| Kernel 0.3.23 + successor Wallet | Existing Wallet features remain usable; `wallet_fund_v1` detects missing `presentUserInterface` before preparation and moves no value, while the private root tool is not exposed cross-app. |
-| New Kernel + successor Wallet | Existing `wallet_fund_v1` callers open or focus Wallet and receive exactly one Wallet-owned decision for direct or allowance funding, with no Kernel approval dialog. |
-| Existing custom-ledger state | Existing balances/history/deposits/sends work; allowance UI reports permission required until exact new scopes are granted. |
+- W306 uses the generic raw review with K323, K324, and K325 and has no root
+  tool.
+- W307 and W308 fail human funding before preparation or effect on K323, where
+  their root tools are unavailable cross-app.
+- K324/W307 succeeds through Wallet UI and direct root. K324/W308 fails human
+  funding because the explicit provider-UI marker is absent, while direct root
+  still succeeds without UI.
+- K325/W307 and K325/W308 succeed through Wallet UI and direct root.
+
+Representative old apps must retain valid session-grant, attachment, control,
+self-call, and Agent behavior, while malformed tool input still fails before
+permission UI. Existing custom-ledger state must retain balances, history,
+deposits, and sends; allowance UI reports permission required until the exact
+new scopes are granted.
 
 Kernel and SDK tests must additionally prove that malformed input fails before
 provider presentation, the callback is one-use, and an older exact or wildcard
 session grant cannot suppress the Wallet decision. Test endpoint replacement
 and cancellation before presentation, while the Wallet modal is open, after
-Accept but before self dispatch, and after an update is already dispatched;
+the primary action but before self dispatch, and after an update is already
+dispatched;
 the last case must remain an unknown outcome, not a safe retry claim. Test the
 root audience independently: direct depth zero succeeds without UI, while
 human and nested calls fail before the Wallet handler runs.
@@ -195,9 +211,10 @@ Wallet backend and managed-memory tests must cover:
 
 - clean initialization of the unchanged `wallet` v1 and `wallet_commands` v1
   roots, with no schema or migration change for the successor release;
-- a state-preserving upgrade from exact Wallet 0.3.6 with representative
-  selected ledgers, metadata, history, native-deposit state, settings, and
-  prepared, pending, and terminal command-journal rows;
+- state-preserving upgrades from exact Wallet 0.3.7 and the supported 0.3.6
+  skip path, with representative selected ledgers, metadata, history,
+  native-deposit state, settings, and prepared, pending, and terminal
+  command-journal rows;
 - same caller/request id and same intent replaying one command, while the same
   key with a different intent conflicts;
 - exact ledger arguments and fixed `created_at_time` surviving lost replies and
@@ -208,28 +225,34 @@ Wallet backend and managed-memory tests must cover:
   creation, malformed replies, and rejection of arbitrary canister/method
   input;
 - draft ICRC-103 pagination, strict cursor progress, default-account filtering,
-  account/reply bounds, ICP `get_allowances`/`remove_approval`, unsupported
-  custom ledgers, and missing-reservation behavior.
+  account/reply bounds, ICP `get_allowances`/`remove_approval`, degraded custom
+  ledger replies, and missing-reservation behavior.
 
 Wallet frontend and installed end-to-end tests must cover one Wallet-owned
 decision for its existing Send action; a Kitchen Sink `wallet_fund_v1` click
 opening, reusing, and focusing Wallet; normalized token, amount, fee,
 destination or spender, and expiration details in one Wallet modal; no Kernel
-call or permission dialog; no value movement on Reject; and one exact effect on
-Accept. The ICP fixture uses ledger `ryjl3-tyaaa-aaaaa-aaaba-cai`,
+call or permission dialog; no value movement on Cancel; and one exact effect
+after the primary action. The ICP fixture uses ledger
+`ryjl3-tyaaa-aaaaa-aaaba-cai`,
 `1_000_000` e8s (`0.01 ICP`), and governance canister
 `eqsml-lyaaa-aaaaq-aacdq-cai` as the direct target or allowance spender.
 
-Allowance funding must then support fixture `icrc2_transfer_from` without a
-second owner decision, followed by appearance and successful revocation of the
-approval. The direct-root tool must produce the exact effect with zero Wallet
-or Kernel UI; human and nested-agent calls to that tool must fail before its
-handler runs. Approvals rendering must cover exact accounts, formatted
+The current governance-spender fixture must query the exact live allowance,
+show it in Wallet Approvals, revoke it successfully, and verify a zero ledger
+allowance afterward. Kitchen Sink has no authority to call
+`icrc2_transfer_from`; a future real Swap fixture with a reviewed spender
+backend should cover that pull without a second owner decision. The direct-root
+tool must produce the exact effect with zero Wallet or Kernel UI; human and
+nested-agent calls to that tool must fail before its handler runs. Approvals
+rendering must cover exact accounts, formatted
 decimals, fees, expiration, empty/loading/error, permission-required, and
-enumeration-unsupported states. The browser suite must also exercise Contacts
-entries whose Internet Computer destinations use, separately, an absent
-subaccount and an exact 32-byte subaccount, proving that unrelated structural
-Account calls remain compatible.
+degraded/incomplete enumeration states. Contacts parser/unit coverage must
+exercise the default-account forms `{ owner }` and
+`{ owner, subaccount: null }`, plus strict malformed and extra-field rejection.
+The installed browser suite must exercise the live omitted-subaccount default
+form and exact 32-byte-subaccount add/edit/reload/read/remove behavior. These are
+Contacts assertions; they must not require a Kernel account-specific branch.
 
 Source-review fixtures may show that an Agent can inspect the installed Wallet
 and calling app, but such evidence must be described as defense in depth. The

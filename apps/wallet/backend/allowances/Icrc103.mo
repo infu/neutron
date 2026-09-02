@@ -38,12 +38,7 @@ module {
         prev_spender : IcrcTypes.Account;
     };
 
-    public type Allowance = {
-        from_account : IcrcTypes.Account;
-        to_spender : IcrcTypes.Account;
-        allowance : Nat;
-        expires_at : ?Nat64;
-    };
+    public type Allowance = DraftAllowance;
 
     public type Scan = Pagination.Scan<Cursor>;
 
@@ -53,7 +48,6 @@ module {
         complete : Bool;
     };
 
-    public let DEFAULT_TAKE : Nat = 100;
     public let MAX_PAGE_ENTRIES : Nat = 500;
     public let MAX_SCAN_PAGES : Nat = 32;
     public let MAX_SCAN_ENTRIES : Nat = 4_096;
@@ -206,9 +200,6 @@ module {
             };
 
             if (Account.isDefaultFor(fromAccount, owner)) {
-                if (crossedDefaultAccount) {
-                    return #err("Ledger returned out-of-order ICRC-103 source accounts");
-                };
                 let active = switch (wireAllowance.expires_at) {
                     case null true;
                     case (?expiresAt) expiresAt > nowNs;
@@ -239,22 +230,6 @@ module {
                 entries = scan.entries + wireAllowances.size();
             };
         });
-    };
-
-    public func findAllowance(
-        page : Page,
-        spender : IcrcTypes.Account,
-    ) : IcrcTypes.Result<?Allowance> {
-        let canonicalSpender = switch (Account.canonical(spender)) {
-            case null return #err("Invalid ICRC-103 spender account");
-            case (?value) value;
-        };
-        for (allowance in page.allowances.vals()) {
-            if (Account.compare(allowance.to_spender, canonicalSpender) == ?#equal) {
-                return #ok(?allowance);
-            };
-        };
-        #ok(null);
     };
 
     func defaultAccount(owner : Principal) : IcrcTypes.Account {
