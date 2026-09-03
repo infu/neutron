@@ -41,7 +41,7 @@ test("kernel package assets use the HTTP asset reader", async () => {
     /function getStrictExternalDiscoveryCan[\s\S]*?allowNumberedPrincipals: false/,
   );
   expect(auth).toMatch(
-    /const underlyingFetch = browserFetch\.bind\(globalThis\)[\s\S]*?function checkedFetch[\s\S]*?assertAuthority\(\);[\s\S]*?underlyingFetch\(\.\.\.args\)/,
+    /function boundBrowserFetch[\s\S]*?browserFetch\.bind\(globalThis\)[\s\S]*?function authorityCheckedFetch[\s\S]*?const underlyingFetch = boundBrowserFetch\(\)[\s\S]*?function checkedFetch[\s\S]*?assertAuthority\(\);[\s\S]*?underlyingFetch\(\.\.\.args\)/,
   );
   expect(expose).not.toContain("getIC()(canister)");
   expect(expose).toMatch(

@@ -112,7 +112,6 @@ function WalletFundingPage() {
     void operation.run(
       kind === "direct" ? "ICP transfer" : "ICP allowance",
       async () => {
-        // Starting the provider call before the first await preserves click activation.
         const result = await callWalletFundingDemo(bus, request);
         if (!walletFundingDemoResultIsTerminal(kind, request, result)) return result;
         try {

@@ -3,6 +3,7 @@ import {
   parseWalletCatalog,
   parseWalletSnapshot,
   parseWalletSnapshotResult,
+  walletLedgerByPrincipal,
   walletLedgerIssue,
 } from "../src/wallet_data.ts";
 
@@ -55,6 +56,30 @@ test("shared Wallet parser accepts update wrappers and reports ledger issues", (
   });
   expect(walletLedgerIssue(snapshot.ledgers[0]!)).toBe("Ledger offline");
   expect(snapshot.ledgers[0]?.balance).toBeNull();
+});
+
+test("ledger selections resolve the latest snapshot by principal", () => {
+  const initial = parseWalletSnapshot({
+    owner: "aaaaa-aa",
+    configured: true,
+    ledgers: [{ ...ledger, balance: "0" }],
+  });
+  const principal = initial.ledgers[0]!.principal;
+  const refreshed = parseWalletSnapshot({
+    owner: "aaaaa-aa",
+    configured: true,
+    ledgers: [{ ...ledger, balance: "900000000" }],
+  });
+
+  expect(walletLedgerByPrincipal(initial, principal)?.balance).toBe("0");
+  expect(walletLedgerByPrincipal(refreshed, principal)).toBe(
+    refreshed.ledgers[0]!,
+  );
+  expect(walletLedgerByPrincipal(refreshed, principal)?.balance).toBe(
+    "900000000",
+  );
+  expect(walletLedgerByPrincipal(refreshed, null)).toBeNull();
+  expect(walletLedgerByPrincipal(null, principal)).toBeNull();
 });
 
 test("shared Wallet catalog parsing retains price and native route metadata", () => {

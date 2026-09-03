@@ -311,7 +311,6 @@ export function beginAgentRoot(input: {
   target: RegisteredEndpoint;
   tool: string;
   ownerPrincipal: string;
-  activated: boolean;
   installedVersion: number;
 }): InvocationNode | null {
   const grant = useAgentModeStore.getState().grant;
@@ -336,9 +335,6 @@ export function beginAgentRoot(input: {
       "INVOCATION_INVALID",
       "Agent mode must start from its own tile and resident process",
     );
-  }
-  if (!input.activated) {
-    throw policyError("OWNER_REQUIRED", "Start the agent from its focused tile");
   }
   if (useAgentModeStore.getState().activeRoot) {
     throw policyError("AGENT_MODE_LIMIT", "Another agent turn is already running");

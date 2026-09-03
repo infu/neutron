@@ -17,6 +17,8 @@
     "test:browser-media": "bun apps/kernel/test/browser/media-capabilities.qualification.ts",
     "test:e2e:kitchensink": "NEUTRON_NDEPLOY_CONFIG=all-apps-local.ndeploy.json playwright test test/e2e/kitchensink-design-system.spec.ts test/e2e/kitchensink-capabilities.spec.ts test/e2e/kitchensink-wallet.spec.ts test/e2e/wallet-root-agent.spec.ts test/e2e/contacts-wallet.spec.ts --workers=1",
     "test:e2e:kitchensink:fresh": "bun packages/neutron-provision/src/index.ts all-apps-local.ndeploy.json reinstall && npm run test:e2e:kitchensink",
+    "test:e2e:old-packages": "NEUTRON_E2E_OLD_PACKAGES=1 NEUTRON_NDEPLOY_CONFIG=local.ndeploy.json playwright test test/e2e/old-packages.spec.ts --workers=1",
+    "test:e2e:old-packages:fresh": "npm run local:deploy && npm run test:e2e:old-packages",
     "test:e2e:local": "playwright test test/e2e/local-kernel.spec.ts",
     "test:e2e:local:ii": "NEUTRON_E2E_WITH_II=1 playwright test test/e2e/local-kernel.spec.ts",
     "test:e2e:local:fresh": "npm run local:deploy && npm run test:e2e:local:ii",

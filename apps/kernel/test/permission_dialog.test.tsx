@@ -1640,7 +1640,6 @@ test("an app-defined workspace tool name stays in the generic consent dialog", (
   );
 
   expect(html).toContain('data-tid="frontend-tool-dialog"');
-  expect(html).not.toContain('data-tid="workspace-tile-dialog"');
   expect(html).toContain("Provider Action");
   expect(html).toContain("provider-owned effect");
 });

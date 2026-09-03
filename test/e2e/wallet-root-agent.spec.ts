@@ -15,7 +15,6 @@ const KERNEL_DIALOG_SELECTOR = [
   '[data-tid="frontend-tool-dialog"]',
   '[data-tid="call-dialog"]',
   '[data-tid="backend-call-dialog"]',
-  '[data-tid="workspace-tile-dialog"]',
 ].join(", ");
 
 // The per-page bundle is a deterministic caller fixture. Kernel, Wallet, the
@@ -83,7 +82,6 @@ test("only a direct root Agent funds through Wallet without UI", async ({
 
   const humanSource = await ledger.icrc1_balance_of(source);
   const humanTarget = await ledger.icrc1_balance_of(target);
-  await kitchenFrame.focus();
   await kitchen.locator('[data-tid="wallet-root-human"]').click();
   const humanError = await expectHarnessResult(
     kitchen,
@@ -96,7 +94,6 @@ test("only a direct root Agent funds through Wallet without UI", async ({
 
   const nestedSource = await ledger.icrc1_balance_of(source);
   const nestedTarget = await ledger.icrc1_balance_of(target);
-  await kitchenFrame.focus();
   await kitchen.locator('[data-tid="wallet-root-nested"]').click();
   const nestedError = await expectHarnessResult(
     kitchen,
@@ -109,8 +106,11 @@ test("only a direct root Agent funds through Wallet without UI", async ({
 
   const directSource = await ledger.icrc1_balance_of(source);
   const directTarget = await ledger.icrc1_balance_of(target);
-  await kitchenFrame.focus();
-  await kitchen.locator('[data-tid="wallet-root-direct"]').click();
+  await page.locator('[data-tid="launcher-open"]').focus();
+  await expect(kitchenFrame).not.toBeFocused();
+  await kitchen.locator('[data-tid="wallet-root-direct"]').evaluate(
+    (button: HTMLButtonElement) => button.click(),
+  );
   const directResult = JSON.parse(await expectHarnessResult(
     kitchen,
     "wallet-root-direct",

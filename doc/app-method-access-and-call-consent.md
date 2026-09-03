@@ -146,6 +146,7 @@ authorization boundary.
 | Make a canister call through the owner identity | `callCanisterDialog({ canister, method, args })` | When the source app has no active invocation | A same-Neutron target uses the private attachment-aware API-1 self-call wire and ordinary owner consent when the source app has no active invocation. While that app has an active invocation, an unscoped request fails with `SCOPED_CONTEXT_REQUIRED`, while a valid scoped request fails with `USER_INTERACTION_REQUIRED`. An eligible external call made through a live invocation-scoped client uses the generic JSON route and agent decision policy. The Kernel validates live input and calls only after the applicable decision. |
 | Call a tile, tray, or background tool in the same app | `callTool(...)` | No | Target must be a live endpoint; JSON Schema is checked at the endpoint and kernel. |
 | Call another app's live endpoint tool | `callTool(...)` | When the source app has no active invocation: one-call or session grant | Kernel identifies both endpoints. A matching live session grant is honored first; otherwise an invocation-scoped call uses the agent decision policy and an ordinary call uses the owner dialog. |
+| Open or focus an installed app tile | `openAppTile(...)` | No for a live direct app endpoint | Kernel confines navigation to the active workspace, forces exact app/tile reuse, and applies workspace capacity. This grants visible navigation only. Delegated Agent calls use the bounded Agent decision policy. |
 | Call another app's `provider_once` tool on the current provider-UI lane | `callTool(...)`, then target-only `context.presentUserInterface(...)` | One decision in the provider's tile | Kernel validates the public tool input, ignores session grants, and gives that invocation one callback which can open or focus only the provider's exact tile and route opaque arguments to a private `same_app` + `foreground_tile` tool. The provider tile may use exact preapproved methods to prepare non-value-moving review state and persist cancellation; only the affirmative action may dispatch value-moving execution. Kernel opens no dialog and learns no app-domain semantics. |
 | Call a provider's root-agent tool | `callTool(...)` from the invocation-scoped root client | No | The exact target tool must declare `same_app` visibility and the `agent_root` audience. Kernel admits only the active depth-zero root, attests that audience, and rejects ordinary callers and delegated descendants before target dispatch. |
 | Add or remove backend-call reservations | `requestBackendCallReservations(...)` | When the source app has no active invocation: persistent-access dialog | Scopes must be declared by the app manifest. An invocation-scoped action-only request uses the agent decision policy, and an allowed reservation change persists. An optional same-app post-grant call uses the private attachment-aware API-1 wire and supports nested or repeated blobs; the generic JSON tool accepts actions only. |
@@ -374,27 +375,25 @@ persist a provider-owned terminal rejection. A caller therefore makes one
 decision in the trusted provider UI, not one app-tool decision plus one transfer
 decision.
 
-Outside Agent Mode, the original call must come from the focused source tile
-with transient user activation; a background, tray, or unfocused caller fails
-before provider presentation. Existing exact or wildcard tool-session grants
-are ignored, and the interaction creates no grant. The handler must consume the
-callback exactly once; returning without a completed presentation is invalid.
+Outside Agent Mode, any exact live app endpoint may ask the provider to present
+the request. A background, tray, or unfocused tile gains no financial authority:
+the provider's own visible action remains the user decision. Existing exact or
+wildcard tool-session grants are ignored, and the interaction creates no grant.
+The handler must consume the callback exactly once; returning without a
+completed presentation is invalid.
 Timeout, source or target replacement, cancellation, a second use, or replay
 fails closed. Kernel binds the callback to the selected tool's originating live
 handler call and rechecks the original caller, target, sessions, AppScopes,
 versions, and cancellation state after asynchronous steps.
 
-Opening the provider UI programmatically focuses its exact iframe. The private
-`foreground_tile` route also requires the exact presentation tile to remain
-selected in the active workspace; that condition alone cannot authorize a
-caller. On the final settlement, Kernel blurs only when the captured provider
-endpoint/session remains current, its exact frame is still focused, no other
-live presentation needs it, and browser blur succeeds. Kernel never focuses
-the caller or changes the workspace's selected `focusedTileId`. A subsequent
-human `provider_once` call must regain actual caller-iframe focus while
-transient user activation is active; a fresh click in that caller is the
-ordinary user path. The selected/red tile chrome reflects workspace layout and
-presentation lifecycle state, not sufficient security authority for a call.
+Opening the provider UI programmatically focuses its exact iframe as ordinary
+navigation. The `foreground_tile` audience attests that Kernel selected and
+routed to that exact provider tile; it is not a continuing browser-focus
+capability. Moving focus or workspace selection while the dialog is open does
+not cancel the request while the bound endpoint/session remains live, but
+closing the provider tile before private dispatch does. Kernel does not blur
+the provider or restore the caller when the interaction settles; normal
+workspace interaction owns focus state.
 
 The annotation deliberately trusts the target provider to call
 `presentUserInterface()` before its own preapproved effect and trusts the
@@ -427,12 +426,13 @@ handler cannot stack the two paths. Only this deprecated path renders its
 separate bounded review as inert raw JSON. Current provider-presentation
 arguments and results remain opaque to Kernel and are never rendered there.
 
-| Kernel \ Wallet | W306 | W307 | W308 |
-| --- | --- | --- | --- |
-| K323 | Human funding uses the released generic raw review. W306 has no root tool. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. |
-| K324 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Human funding fails before preparation or effect because K324 lacks W308's explicit provider-UI feature marker. Direct-root funding remains UI-free. |
-| K325 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Human funding uses one provider-owned decision; direct-root funding is UI-free. |
-| K326 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. | Human funding uses one provider-owned decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. |
+| Kernel \ Wallet | W306 | W307 | W308 | W309 | W310 |
+| --- | --- | --- | --- | --- | --- |
+| K323 | Human funding uses the released generic raw review. W306 has no root tool. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Same public funding contract as W309; human funding fails before preparation or effect and the root tool is unavailable cross-app. |
+| K324 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Human funding fails before preparation or effect because K324 lacks W308's explicit provider-UI feature marker. Direct-root funding remains UI-free. | Same provider-marker behavior as W308; direct-root funding remains UI-free. | Same public funding contract and provider-marker behavior as W309; direct-root funding remains UI-free. |
+| K325 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Default-account funding works, but non-default account input has W308's hidden-sidecar regression. Direct-root funding is UI-free. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Same public funding contract as W309; an open Send view also follows refreshed ledger state. |
+| K326 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. | The focus correction applies, but non-default account input retains W308's hidden-sidecar regression. Direct-root funding is UI-free. | Human funding uses one provider-owned decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. | Same provider presentation behavior as W309; an open Send view also follows refreshed ledger state. |
+| K327 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision without source-focus admission or settlement blur; direct-root funding is UI-free. | The K327 presentation behavior applies, but non-default account input retains W308's hidden-sidecar regression. Direct-root funding is UI-free. | Human funding uses one provider-owned decision without source-focus admission or settlement blur; direct-root funding is UI-free. | Same public funding contract as W309, with K327 presentation behavior and live Send-view refresh. |
 
 Every valid released ordinary tool, grant, self-call, attachment, control, and
 Agent route remains compatible. Malformed tool input still fails before any
@@ -653,6 +653,13 @@ a new id is not a retry. Expiry stops a new dispatch but does not turn an
 already-dispatched command into a rejection or make that pending record
 evictable.
 
+Here the durable caller is the installed app, endpoint role, and Agent-mode
+provenance. A disposable tile or tray endpoint UUID may change when the caller
+is reopened: Wallet compares that retry using the original endpoint stored in
+the command. The exact request id, ledger, deadline, amount, account, memo or
+expiry, role, and Agent mode remain bound. This also replays released W306-W309
+command blobs in place; no memory rewrite or schema migration is involved.
+
 Kitchen Sink provides a bounded reference declaration: ordinary data methods
 such as `read_profile`, `read_counter`, and `bump_counter`, plus the exact
 capability-lab bridge methods such as `random_bytes`,
@@ -746,8 +753,10 @@ depth-zero root.
 
 Agent Mode changes who answers a frontend permission decision, not backend
 method authorization. The owner first enables one exact installed agent app
-version and resident entrypoint. A turn must start from that app's focused tile
-with transient user activation.
+version and resident entrypoint. A turn starts through a live tile in that app
+installation and the exact granted entrypoint; after the grant, starting it
+requires no browser-focus check, transient user activation, or repeated owner
+decision.
 
 During a live invocation, a direct agent-selected app tool or delegable kernel
 action does not show an owner dialog. This policy follows invocation provenance;
@@ -803,9 +812,10 @@ the generated Motoko owner check.
 
 Agent Mode does not currently create an unattended background principal. The
 owner first enables one exact agent app version and entrypoint, and each root
-turn begins from that agent's focused tile with transient user activation.
-Within that live turn, a trusted Wallet can fund an active direct root without
-another owner prompt. A delegated child cannot call the root-only tool.
+turn begins through a live tile in that Agent installation and the exact granted
+entrypoint without a per-turn browser-focus or transient-activation gate. Within
+that live turn, a trusted Wallet can fund an active direct root without another
+owner prompt. A delegated child cannot call the root-only tool.
 Standing autonomous roots, per-agent budgets, and background spending after
 the invocation ends are separate future authority designs.
 

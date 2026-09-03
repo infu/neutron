@@ -6,7 +6,6 @@ export type OwnerAttentionKind =
   | "signed_canister_call"
   | "backend_access"
   | "connection"
-  | "workspace_open"
   | "agent_grant"
   | "install_offer";
 

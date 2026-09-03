@@ -301,6 +301,31 @@ let authorityRejected = command("swap", ledger, spender, 500, ?900, #rejected({
 authorityRejected.call_args := null;
 assert (not FundingJournal.requiresCurrentAuthority(authorityRejected));
 
+// A replacement endpoint keeps the same durable caller. App, role, and Agent
+// mode remain immutable identity even though the browser session is not.
+let storedCaller : CommandMemory.Caller = {
+    endpoint = "app:swap:tile:old";
+    app_id = "swap";
+    role = ?"tile";
+    agent_mode = false;
+};
+let reopenedCaller : CommandMemory.Caller = {
+    storedCaller with endpoint = "app:swap:tile:new";
+};
+assert (FundingJournal.sameDurableCaller(storedCaller, reopenedCaller));
+assert (not FundingJournal.sameDurableCaller(
+    storedCaller,
+    { reopenedCaller with app_id = "other" },
+));
+assert (not FundingJournal.sameDurableCaller(
+    storedCaller,
+    { reopenedCaller with role = ?"background" },
+));
+assert (not FundingJournal.sameDurableCaller(
+    storedCaller,
+    { reopenedCaller with agent_mode = true },
+));
+
 // Capacity cleanup may discard accepted work only while it still has no
 // frozen call args. The exact deadline remains live; one tick later the queued
 // command is removed, while a dispatched/ambiguous command remains durable.
@@ -346,7 +371,7 @@ assert (FundingJournal.activeCommandCount(queuedCapacityCommands, "swap") == 1);
 // legacy removal rather than admitting another fee-bearing remove_approval.
 switch (FundingJournal.activeIcpRevoke(
     commands,
-    caller("swap"),
+    { caller("swap") with endpoint = "swap-reopened" },
     ledger,
     spender,
     500,
@@ -374,6 +399,30 @@ switch (FundingJournal.activeIcpRevoke(
 switch (FundingJournal.activeIcpRevoke(
     commands,
     caller("other"),
+    ledger,
+    spender,
+    500,
+    ?900,
+    500,
+)) {
+    case (#blocked) {};
+    case (_) assert false;
+};
+switch (FundingJournal.activeIcpRevoke(
+    commands,
+    { caller("swap") with role = ?"background" },
+    ledger,
+    spender,
+    500,
+    ?900,
+    500,
+)) {
+    case (#blocked) {};
+    case (_) assert false;
+};
+switch (FundingJournal.activeIcpRevoke(
+    commands,
+    { caller("swap") with agent_mode = true },
     ledger,
     spender,
     500,

@@ -48,7 +48,7 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 326;
+export const KERNEL_NPL_RELEASE_VERSION = 327;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
@@ -188,6 +188,7 @@ const KERNEL_KNOWN_DETACHED_GENERATED_PATHS = new Set([
   "apps/kernel/kernel.v0.3.23.neutron",
   "apps/kernel/kernel.v0.3.24.neutron",
   "apps/kernel/kernel.v0.3.25.neutron",
+  "apps/kernel/kernel.v0.3.26.neutron",
 ]);
 const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
   string,
@@ -245,6 +246,7 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/src/install_review/deployment_build_review.ts",
   "apps/kernel/src/install_review/prepare_browser_deployment.ts",
   "apps/kernel/src/install_review/provenance_binding.ts",
+  "apps/kernel/src/polling_update_agent.ts",
   "apps/kernel/src/request_cancel.ts",
   "apps/kernel/src/source_inspection/installed_artifacts.ts",
   "apps/kernel/src/source_inspection/runtime.ts",
@@ -273,6 +275,7 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/test/motoko/http_canonical_paths_test.mo",
   "apps/kernel/test/npl_hash_semantics.test.ts",
   "apps/kernel/test/package_metadata_generation.test.ts",
+  "apps/kernel/test/polling_update_agent.test.ts",
   "apps/kernel/test/prepare_browser_deployment.test.ts",
   "apps/kernel/test/provenance_binding.test.ts",
   "apps/kernel/test/repository_build_review_service.isolated.ts",
@@ -1270,7 +1273,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.26 (packed version 326)",
+    "Package release: v0.3.27 (packed version 327)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

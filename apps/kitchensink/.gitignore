@@ -3,3 +3,4 @@ dist
 *.neutron
 !kitchensink.v0.3.1.neutron
 !kitchensink.v0.3.6.neutron
+!kitchensink.v0.3.7.neutron

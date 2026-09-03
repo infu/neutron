@@ -35,17 +35,21 @@ approvals, but this first contract does not create a new legacy ICP approval
 for a Swap.
 
 The tool is annotated with `{"neutron:consent":"provider_once"}`. Kernel
-requires an ordinary human request to start from the focused calling tile with
-transient user activation and validates its JSON before dispatch. The Wallet
-background validates the request and feature-detects the invocation-scoped
+validates the exact live caller and request JSON before dispatch; a tile, tray,
+or background may ask Wallet to present the request because the Wallet action,
+not source-frame focus, is the user's financial consent. The Wallet background
+validates the request and feature-detects the invocation-scoped
 `context.presentUserInterface()` callback before preparing or changing any
 command. Kernel then opens, reuses, and focuses Wallet's `wallet` tile and
 routes the opaque request only to Wallet's private
 `wallet_funding_present_v1` tool. That tool is annotated with
 `"neutron:visibility":"same_app"` and
 `"neutron:audience":"foreground_tile"`; it checks Kernel's audience
-attestation, reads authoritative ledger metadata, decimals, current fees, and
-allowance state, freezes the command, and renders Wallet's modal.
+attestation for the Kernel-selected Wallet tile, reads authoritative ledger
+metadata, decimals, current fees, and allowance state, freezes the command,
+and renders Wallet's modal. Later browser-focus or workspace-selection changes
+do not replace or cancel that exact endpoint-bound interaction; closing the
+Wallet tile before private dispatch does.
 
 The owner makes one decision in Wallet. The primary action executes the frozen
 command through Wallet's exact preapproved self call; Cancel records a definite
@@ -108,8 +112,9 @@ approval UI. Human callers and nested Swap-to-Wallet agent calls are rejected
 before target dispatch; they cannot turn the root-only tool into delegated
 authority. The invocation and cancellation remain bound through
 `context.kernel.updateSelf()`. This is live root authority, not unattended
-background authority: the current root turn still begins from the enabled
-exact agent's focused tile with transient user activation.
+background authority: the current root turn still begins through a live tile in
+the enabled Agent installation and the exact granted entrypoint, without a
+per-turn browser-focus or transient-activation requirement.
 
 Published Wallet 0.3.6 used the now-deprecated scoped
 `context.requestApproval()` callback. Kernel retains that generic compatibility
@@ -120,14 +125,14 @@ legacy callback or an ordinary reusable tool grant. Wallet features unrelated
 to provider funding and direct-root routing are required to remain usable in
 every partial-upgrade combination.
 
-The compatibility contract for the pending K325/W308 successors, together with
-the released K323/K324/W306/W307 lanes, is the exact matrix in
+The compatibility contract for K323 through K327 and W306 through W310 is the
+exact matrix in
 [App Method Access And Call Consent](../../doc/app-method-access-and-call-consent.md#provider-mediated-one-shot-tools).
 It distinguishes human presentation from root-tool availability, including the
 K324/W308 lane where human funding fails closed but direct-root funding works.
-Final pending-successor cells remain subject to qualification against the exact
-candidate archives. At the source-contract level, existing callers need no
-migration: W308 retains the endpoint, schemas, provider annotation, and caller
+Release evidence for candidate cells requires exact-archive qualification. At
+the source-contract level, existing callers need no migration: W310 retains the
+endpoint, schemas, provider annotation, and caller
 semantics of `wallet_fund_v1`. Existing custom ledger state is required to
 remain usable; allowance features require the additional exact scopes described
 below.
@@ -306,6 +311,13 @@ ambiguous outcome as a fresh transaction. Replaying a terminal receipt does
 not dispatch another financial operation or require another decision; a fresh
 request id requires a fresh Wallet decision on the human path or a fresh
 direct-root invocation.
+
+The caller endpoint UUID is live routing provenance, not durable command
+identity. A retry from a replacement tile or tray endpoint is compared using
+the endpoint stored with the command, so released W306-W309 intent blobs replay
+without rewriting memory. Caller app, role, Agent mode, request id, ledger,
+deadline, and every financial intent field remain exact; changing any of them
+still conflicts.
 
 IC destinations use `icrc1_transfer`. Bitcoin, Dogecoin, Ethereum, ERC-20, and
 Solana destinations use the token's official approve-then-withdraw flow: Wallet

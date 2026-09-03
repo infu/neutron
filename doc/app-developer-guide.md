@@ -1158,6 +1158,16 @@ Kernel treats the request and result as schema-validated opaque JSON. It opens
 or focuses the exact provider tile, attests `context.caller` and
 `context.audience`, and displays no provider-domain dialog.
 
+An exact live tile, tray, or ordinary background endpoint may start this public
+flow without source-frame focus or transient activation. That permission only
+presents the provider: the action in the provider's UI remains the one user
+decision. `foreground_tile` attests that Kernel routed the private call to the
+exact selected provider tile; it is not a continuing browser-focus capability.
+Focus or workspace selection may move while the exact endpoint session remains
+live. The selected provider tile must remain mounted until private dispatch;
+Kernel neither blurs the provider nor refocuses the caller when the interaction
+settles.
+
 For every provider flow:
 
 - feature-detect and consume `presentUserInterface()` before preparation or
@@ -1257,8 +1267,10 @@ tools:
 
 `agent_entrypoints.entrypoints` may contain up to four exact resident tool
 names. It is an install disclosure, not a grant. The owner enables one exact
-entrypoint in a kernel danger dialog. A turn then starts only when the app's
-focused tile calls that entrypoint during transient user activation.
+entrypoint in a kernel danger dialog from a focused tile during transient user
+activation. A turn then starts only when a live tile in that app installation
+calls the exact granted entrypoint; the existing grant removes any per-turn
+browser-focus, transient-activation, or owner-dialog requirement.
 
 Inside every tool handler, use the supplied `context.kernel` client for calls
 that may be nested under another app or agent invocation:
@@ -1325,12 +1337,12 @@ to receive challenge ids.
 resident may request outside Agent Mode. It does not preapprove them. Omit
 classes the background does not need.
 
-Enabling Agent Mode does not create an unattended background agent. A root turn
-still starts from the enabled exact agent version's focused tile during
-transient user activation. A trusted provider may execute without additional
-owner dialogs only inside that live, bounded invocation. Background roots,
-standing spend authority, and per-agent budgets require a separate future
-contract.
+Enabling Agent Mode does not let the resident originate a root without a live
+tile. A root starts through a live tile in the enabled Agent installation and
+the exact granted entrypoint, but does not require browser focus or transient
+user activation. A trusted provider may execute without additional owner
+dialogs only inside that live, bounded invocation; its authority ends with the
+root or Agent Mode session.
 
 ### Focus Or Open Another App Tile
 
@@ -1350,22 +1362,21 @@ await openAppTile({
 
 The kernel always searches the current workspace for the exact app/tile pair
 and reuses it before opening another instance. It may focus that instance
-or open a missing one without a dialog when the request comes from the currently
-focused tile with transient user activation. A focused open tray has a narrower
-shortcut: during transient user activation it may open or reuse only a tile of
-its own app. Opening another app's tile retains kernel consent. These are
-user-visible navigation operations; they do not grant cross-app tools, backend
-methods, identities, or canister calls. Background processes and non-focused
-surfaces require the normal consent path.
+or open a missing one without a Kernel dialog for any live direct app endpoint,
+including a tile, tray, or resident background. This is intentional navigation
+authority for installed apps: it can change the visible workspace, but it does
+not grant cross-app tools, backend methods, identities, canister calls, or the
+right to accept another app's decision UI. Install only apps whose UI behavior
+you trust; a malicious app could otherwise interrupt the owner by repeatedly
+opening or focusing tiles.
 
-If no matching tile is open, the kernel shows one trusted Open Tile dialog
-unless a focused tile is handling the activated click or a focused tray is
-using the activated same-app shortcut. Approval is once-only and opens exactly
-one installed tile; there is no "allow for session" option. Omit `workspace` to
-use the active workspace. A supplied workspace must be the active workspace;
+No preliminary permission request or session grant is needed. Omit `workspace`
+to use the active workspace. A supplied workspace must be the active workspace;
 apps cannot switch workspaces, and `reuseExisting: false` cannot force a
-duplicate. App-driven navigation is throttled to one new tile per 20 seconds and
-one focus change per two seconds, and kernel workspace capacities still apply.
+duplicate. Delegated Agent navigation retains its separate bounded decision
+policy and is throttled to one new tile per 20 seconds
+and one focus change per two seconds. Kernel workspace capacities still apply
+to every caller.
 
 `view` is an optional navigation token matching
 `^[a-z][a-z0-9_/-]{0,63}$`. It carries no payload and no authority. A target
@@ -1450,9 +1461,10 @@ names exact tiles only. The transient endpoint is
 `app:<appId>:tray:instance:<instanceId>` and disappears when the popover closes,
 so fetch state from the resident process on every mount. Calls from the tray to
 its own background use the normal same-app message bus without approval. A tray
-does not inherit tile-only privileges. From a focused click, it may open or
-reuse a tile of the same app without a dialog; opening another app's tile keeps
-the normal kernel consent flow.
+does not inherit tile-only privileges. Any live direct tray endpoint may open or
+reuse an installed tile without a Kernel dialog. Navigation remains in the
+active workspace, always reuses the exact app/tile instance, and observes the
+normal tile-capacity bounds.
 
 See [App Tray](./app-tray.md) for the complete package, lifecycle, geometry,
 SDK, and security contract. Kitchen Sink is the reference for a quiet initial

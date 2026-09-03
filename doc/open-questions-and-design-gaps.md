@@ -438,5 +438,5 @@ fixture publish/discover/review/deploy browser test.
     distinct from an installed app's assertion key?
 17. What separate authority, budgets, recovery, and revocation model would be
     required before Agent Mode could start unattended background roots? The
-    current Wallet root tool is automatic only for an active, owner-started
+    current Wallet root tool is automatic only for an active, owner-enabled
     depth-zero root invocation.

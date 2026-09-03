@@ -88,6 +88,18 @@ The commit result is closed to `#committed` or `#blocked`. Reservation readiness
 is checked before the atomic metadata, memory-retirement, capability, and asset
 transition.
 
+Release coverage for the Kernel frontend update transport must separately
+prove that bootstrap actors, dynamic ICBlast actors, and raw self updates use
+the asynchronous v2 call path. An accepted logical mutation gets one signed
+request identity and certified polling of that same request ID; a transport
+retry may resend the identical signed envelope, but delayed, absent, or unknown
+replies never cause a newly signed second mutation. The adapter must
+leave queries and unrelated HTTP requests unchanged, preserve immediate v2
+rejects, and decode successful `null` method replies normally. Exercise the
+same behavior through the browser's real chunk-clear, chunk-upload,
+chunked-activation, cleanup, and commit sequence rather than only through an
+isolated actor mock.
+
 ### Kernel-app transport
 
 Within the message-bus protocol, transport tests assert that operational
@@ -123,19 +135,17 @@ Transport coverage must include:
   owner/auth state, and cancellation, explicitly unavailable to Agent
   invocations, with the deprecated `requestApproval` member sharing the same
   one-use gate;
-- opening or reusing and focusing the provider's exact tile, waiting for its
-  exact live endpoint, and routing only to a private
+- opening or reusing and initially focusing the provider's exact tile, waiting
+  for its exact live endpoint, and routing only to a private
   `same_app` + `foreground_tile` tool with the original caller and closed
   audience attestation;
-- releasing browser focus only for the final live presentation when the
-  captured provider endpoint/session is still current, its exact frame remains
-  focused, and browser blur succeeds, without focusing the caller, changing
-  `focusedTileId`, or stealing focus from another frame/control or a concurrent
-  live presentation;
-- requiring the next human `provider_once` request to have actual caller-frame
-  focus and transient activation, with a fresh caller click as the ordinary
-  user path, while selected/red tile chrome remains layout/presentation state
-  and is insufficient caller authority;
+- accepting `provider_once` from an exact live tile, tray, or background
+  endpoint without treating source-frame focus or transient activation as
+  authority; the provider's own UI action remains the one user decision;
+- treating provider-tile focus as one-time navigation rather than a continuing
+  capability: focus or workspace selection may move while the exact endpoint
+  session remains live, the provider tile must stay mounted until private
+  dispatch, and settlement neither blurs the provider nor focuses the caller;
 - opaque provider arguments and results receiving normal schema and size
   validation without any Wallet, ICRC, token-formatting, or provider-dialog
   branch in Kernel;
@@ -146,6 +156,9 @@ Transport coverage must include:
 - `same_app` + `agent_root` tools being discoverable and callable only by the
   active live depth-zero root, with human and nested-agent attempts rejected
   before target dispatch and no owner or provider UI;
+- one-time Agent Mode enablement still requiring a focused, transiently
+  activated tile and Kernel confirmation, followed by exact granted root starts
+  from an unfocused, unactivated live tile without another owner decision;
 - the deprecated generic `requestApproval` route remaining available for
   compatibility, while current provider source does not use it;
 - old apps and every non-annotated tool retaining their released one-call and
@@ -199,9 +212,10 @@ asserting human and root behavior independently:
   funding because the explicit provider-UI marker is absent, while direct root
   still succeeds without UI.
 - K325/W307 and K325/W308 succeed through Wallet UI and direct root.
-- K326 preserves those results and releases an unchanged settled provider
-  session's frame focus; retry requires caller focus under transient
-  activation.
+- The published K326 bytes preserve those results and historically release an
+  unchanged settled provider session's frame focus. The successor under test
+  removes that focus cleanup and the corresponding source-focus/activation
+  gate without changing the provider schemas or endpoint binding.
 
 Representative old apps must retain valid session-grant, attachment, control,
 self-call, and Agent behavior, while malformed tool input still fails before
@@ -223,12 +237,15 @@ Wallet backend and managed-memory tests must cover:
 
 - clean initialization of the unchanged `wallet` v1 and `wallet_commands` v1
   roots, with no schema or migration change for the successor release;
-- state-preserving upgrades from exact Wallet 0.3.7 and the supported 0.3.6
-  skip path, with representative selected ledgers, metadata, history,
+- state-preserving upgrades from exact Wallet 0.3.9 to 0.3.10 and the supported
+  0.3.6 skip path, plus Kitchen Sink 0.3.7 to 0.3.8, with representative
+  selected ledgers, metadata, history,
   native-deposit state, settings, and prepared, pending, and terminal
   command-journal rows;
-- same caller/request id and same intent replaying one command, while the same
-  key with a different intent conflicts;
+- the same caller app/request id and financial intent replaying one command
+  after its tile endpoint UUID is replaced, including prepared, pending, and
+  terminal W309 rows, while a changed role, Agent mode, ledger, amount, or
+  other intent field conflicts;
 - exact ledger arguments and fixed `created_at_time` surviving lost replies and
   upgrades, exact `Duplicate` reconciliation, definite rejection, pending-entry
   retention, expiry, and bounded-capacity failure;
@@ -245,13 +262,12 @@ decision for its existing Send action; a Kitchen Sink `wallet_fund_v1` click
 opening, reusing, and focusing Wallet; normalized token, amount, fee,
 destination or spender, and expiration details in one Wallet modal; no Kernel
 call or permission dialog; no value movement on Cancel; and one exact effect
-after the primary action. After accept, cancel, or failure, the final sole
-presentation must release the exact Wallet frame when its captured
-endpoint/session is still current and browser blur succeeds. A concurrent
-presentation or replaced/reconnected session must retain its focus, no caller
-is focused automatically, and another request requires actual Kitchen Sink
-frame focus plus transient activation; a fresh Kitchen Sink click is the
-ordinary user path. The ICP fixture uses ledger
+after the primary action. A normal Kitchen Sink click after Cancel, accept, or
+failure must open the next Wallet decision without a manual frame-focus helper.
+Changing focus or workspace selection must not invalidate an otherwise live
+presentation, and settlement must not blur or restore either frame. Closing the
+provider tile before private dispatch, endpoint replacement, or reconnection
+still invalidates the exact binding. The ICP fixture uses ledger
 `ryjl3-tyaaa-aaaaa-aaaba-cai`,
 `1_000_000` e8s (`0.01 ICP`), and governance canister
 `eqsml-lyaaa-aaaaq-aacdq-cai` as the direct target or allowance spender.
@@ -441,6 +457,8 @@ npm run test:e2e:local:ii
 npm run test:e2e:local:fresh
 npm run test:e2e:kitchensink
 npm run test:e2e:kitchensink:fresh
+npm run test:e2e:old-packages
+npm run test:e2e:old-packages:fresh
 NEUTRON_E2E_WITH_II=1 npm run test:e2e:package-updates
 npm run test:e2e:package-updates:fresh
 npm run test:browser-media
@@ -453,6 +471,19 @@ The `:fresh` commands run the format-3 provisioner's destructive local
 evidence that the spec ran. Use the explicit prefix above; the `:fresh` script
 sets it itself.
 
+The old-package compatibility command is intentionally gated to the local
+fixture and runs with one browser worker. Its `:fresh` form first provisions a
+clean Neutron from `local.ndeploy.json`; that reinstall is destructive only to
+the selected local development fixture and is not an application-upgrade or
+production release path. The spec pins every archive in `test/old_packages/`
+by filename, byte length, SHA-256, app ID, name, and version before opening the
+real launcher file chooser. For each package it waits for the normal package
+review and browser compile, clicks **Install**, follows the actual one-call or
+chunked upload and activation path, and verifies the committed registry,
+served manifest, runtime inventory, and empty install journal. This is the
+compatibility gate for Cast Away, Chipswap, Inspector Canister, and Principal
+Miner; a preparation-only archive test is not a substitute.
+
 Current browser specs exercise:
 
 - logged-out and locally authenticated Kernel startup;
@@ -461,6 +492,8 @@ Current browser specs exercise:
 - public static assets and multi-chunk asset reconstruction;
 - launcher, workspace, fullscreen, tray, and Settings behavior;
 - browser package selection, compilation, review, install, and typed calls;
+- pinned historical packages installed through that same visible browser
+  selection, review, compilation, upload, activation, and commit flow;
 - package-update discovery and review UI;
 - Kitchen Sink layout and capability interactions;
 - Files lifecycle, Wallet ledgers, Contacts integration, and Gemma background

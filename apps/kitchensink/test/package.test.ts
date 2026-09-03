@@ -47,7 +47,7 @@ const htmlUrl = new URL("../dist/web/index.html", import.meta.url);
 const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const trayHtmlUrl = new URL("../dist/web/tray.html", import.meta.url);
 const trayCssUrl = new URL("../dist/web/tray.css", import.meta.url);
-const packageUrl = new URL("../kitchensink.v0.3.7.neutron", import.meta.url);
+const packageUrl = new URL("../kitchensink.v0.3.8.neutron", import.meta.url);
 const decoder = new TextDecoder();
 
 async function readManifest(): Promise<NeutronManifest> {
@@ -152,7 +152,7 @@ test("kitchen sink declares the complete closed capability lab", async () => {
   expect(manifest).toMatchObject({
     id: "kitchensink",
     name: "Kitchen Sink",
-    version: 307,
+    version: 308,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [
@@ -895,6 +895,24 @@ test("kitchen sink emits wrapper-accurate app method schemas", async () => {
       "value",
     ]).valid,
   ).toBe(false);
+  for (const method of [
+    "publish_publication",
+    "delete_publication",
+    "publish_immutable_blob",
+    "put_mutable_blob",
+  ]) {
+    expect(
+      validateAppMethodArgs(artifact, method, [
+        ["message", "0123456789abcdef"],
+      ]).valid,
+    ).toBe(true);
+    expect(
+      validateAppMethodArgs(artifact, method, [
+        "message",
+        "0123456789abcdef",
+      ]).valid,
+    ).toBe(false);
+  }
   expect(
     validateAppMethodArgs(artifact, "stable_notes_list", [
       ["notes/", false, "0", ""],

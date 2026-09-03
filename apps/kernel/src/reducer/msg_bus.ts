@@ -232,9 +232,7 @@ export function requestFrontendToolPermission(input: {
   const cid = ++cidIncr;
   const attentionToken = admitOwnerAttention(
     input.caller.appId,
-    input.target === "kernel" && input.tool === "workspace.open_tile"
-      ? "workspace_open"
-      : "frontend_tool",
+    "frontend_tool",
   );
   const request: PendingFrontendToolRequest = {
     cid,

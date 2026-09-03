@@ -37,12 +37,16 @@ const commandMemoryUrl = new URL(
   "../backend/memory/wallet_commands/v1.mo",
   import.meta.url,
 );
+const fundingJournalUrl = new URL(
+  "../backend/funding/Journal.mo",
+  import.meta.url,
+);
 const frontendUrl = new URL("../src/index.tsx", import.meta.url);
 const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.9.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.10.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -54,7 +58,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 309,
+    version: 310,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -314,7 +318,7 @@ test("Wallet rechecks current ledger authority before funding persistence and di
   expect(prepareEnd).toBeGreaterThan(prepareStart);
   const prepare = backend.slice(prepareStart, prepareEnd);
   ordered(prepare, [
-    "existingFundingCommand(key, intent, now)",
+    "existingFundingCommand(key, request, now)",
     "validateExistingFundingOutcome(request, outcome, now)",
     "await* prepareFundingOperation(request, now)",
   ]);
@@ -366,6 +370,47 @@ test("Wallet rechecks current ledger authority before funding persistence and di
       effect,
     ]);
   }
+});
+
+test("Wallet durable funding identity replaces only the caller endpoint", async () => {
+  const backend = await readFile(backendUrl, "utf8");
+  const journal = await readFile(fundingJournalUrl, "utf8");
+  const body = (source: string, name: string, next: string): string => {
+    const start = source.indexOf(`        func ${name}(`);
+    const end = source.indexOf(`        func ${next}(`, start + 1);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    return source.slice(start, end);
+  };
+
+  const existing = body(
+    backend,
+    "existingFundingCommand",
+    "fundingIntentForEndpoint",
+  );
+  expect(existing).toContain("request,\n                command.caller.endpoint,");
+  expect(existing).toContain("command.intent != comparableIntent");
+  expect(existing).not.toContain("request.caller.endpoint");
+
+  const encoding = body(
+    backend,
+    "fundingIntentForEndpoint",
+    "fundingCaller",
+  );
+  expect(encoding).toContain(
+    "let encoded : WalletFundingPrepareRequestV1 = {",
+  );
+  expect(encoding).toContain(
+    "caller = { request.caller with endpoint };",
+  );
+  expect(encoding).toContain("to_candid (encoded)");
+
+  expect(journal).toContain(
+    "not sameDurableCaller(command.caller, caller) or",
+  );
+  expect(journal).toContain("stored.app_id == current.app_id");
+  expect(journal).toContain("stored.role == current.role");
+  expect(journal).toContain("stored.agent_mode == current.agent_mode");
 });
 
 test("Wallet tile and tray mount the same app and gate only focused capabilities", async () => {

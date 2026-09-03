@@ -232,9 +232,10 @@ work, Wallet exposes a separate direct-root tool which shares its checked
 prepare/execute core but opens no Wallet or Kernel UI. Kernel makes that tool
 visible only to the active live depth-zero root and rejects human or nested
 agent calls before provider dispatch. Agent Mode still requires the owner to
-enable an exact agent version and start each root turn from its focused tile
-with transient user activation; it does not yet create an unattended
-background principal or standing spend authority.
+enable an exact agent version. Each root starts through a live tile in that app
+installation and the exact granted entrypoint without a per-turn browser-focus
+or transient-activation gate. The resident cannot originate a root by itself,
+and all authority ends when the grant or invocation is revoked.
 
 Install-time backend reservation defaults may be approved with the package and
 materialized by the compiled target. The UI also supports later explicit

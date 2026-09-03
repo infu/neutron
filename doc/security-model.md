@@ -371,9 +371,10 @@ decision exists.
 On the current provider-UI lane, Kernel validates the original tool input and
 binds a one-use capability to the originating validated public tool handler,
 both source and target endpoint/session/AppScope/version state, owner/auth
-state, and cancellation. For an ordinary human route, it requires the focused
-source tile with transient user activation. It dispatches the provider with a
-private one-use
+state, and cancellation. Any exact live app surface may request presentation;
+that gives the source no authority to perform the operation because the trusted
+provider's visible action is the user's decision. Kernel dispatches the
+provider with a private one-use
 `presentUserInterface({ tileId, tool, arguments })` callback. Exact and wildcard
 session grants cannot satisfy it. The provider invokes that callback before
 domain-specific preparation or execution.
@@ -389,6 +390,12 @@ renders its own modal, and owns the accept/reject decision with concrete
 action/cancel labels. Only the affirmative action may dispatch value-moving
 execution; cancel may persist rejection. Kernel displays no provider dialog and
 interprets no app-domain fields.
+
+The audience marks the exact Kernel-selected provider tile, not continuously
+held browser focus. Focus or workspace selection may move while the exact
+endpoint/session remains live, while closing the provider tile before private
+dispatch cancels the request. Kernel performs no provider blur or caller focus
+restoration when the request settles.
 
 The callback is bound to one live public handler call and cancellation signal
 and is unavailable to Agent invocations. The interaction creates no grant, and
@@ -479,9 +486,9 @@ only for the active depth-zero root, receives Kernel-attested audience and
 caller context, and opens no UI. A descendant is rejected before target
 dispatch. The provider uses its invocation-scoped client for the exact
 preapproved self update, and that authority ends with the invocation. Each root
-still begins from the enabled exact agent version's focused, transiently
-owner-activated tile; current Agent Mode does not authorize unattended
-background roots.
+still begins through a live tile in the enabled Agent installation and the exact
+granted entrypoint without a per-turn browser-focus or transient-activation
+gate; the resident cannot originate a root by itself.
 
 A nested `canister.call_dialog_v2` decision must receive the exact review value
 rather than summary counts, and an oversized challenge fails before signing.

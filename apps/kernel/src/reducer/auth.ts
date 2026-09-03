@@ -44,6 +44,10 @@ import { kernelSetupStorage } from "../bootstrap.ts";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
 import { takePendingActivation } from "../activation_handoff.ts";
 import { redeemActivation, type ActivationResult } from "./activation.ts";
+import {
+  type PollingUpdateFetch,
+  usePollingUpdateFetch,
+} from "../polling_update_agent.ts";
 
 type IcblastFactory = (options?: Record<string, unknown>) => any;
 type IcblastPreset = string | IDL.InterfaceFactory;
@@ -464,33 +468,33 @@ function runtimeIcblastOptions(
   signal?: AbortSignal,
 ): Record<string, unknown> {
   const deployment = getRuntimeDeployment();
+  const checkedFetch = assertAuthority
+    ? authorityCheckedFetch(assertAuthority, signal)
+    : boundBrowserFetch();
   return {
     local: deployment.local,
     local_host: deployment.gateway,
     agentOptions: {
       host: deployment.gateway,
-      ...(assertAuthority
-        ? { fetch: authorityCheckedFetch(assertAuthority, signal) }
-        : {}),
+      fetch: usePollingUpdateFetch(checkedFetch),
     },
     didcWasm: didcWasmUrl,
   };
 }
 
-type FetchImplementation = (
-  this: unknown,
-  ...args: Parameters<typeof fetch>
-) => ReturnType<typeof fetch>;
-
-function authorityCheckedFetch(
-  assertAuthority: () => void,
-  requestSignal?: AbortSignal,
-): FetchImplementation {
+function boundBrowserFetch(): PollingUpdateFetch {
   const browserFetch = globalThis.fetch;
   if (typeof browserFetch !== "function") {
     throw new Error("A browser fetch implementation is required");
   }
-  const underlyingFetch = browserFetch.bind(globalThis);
+  return browserFetch.bind(globalThis);
+}
+
+function authorityCheckedFetch(
+  assertAuthority: () => void,
+  requestSignal?: AbortSignal,
+): PollingUpdateFetch {
+  const underlyingFetch = boundBrowserFetch();
   return function checkedFetch(
     this: unknown,
     ...args: Parameters<typeof fetch>
@@ -567,6 +571,7 @@ async function getBootstrapKernelCan(): Promise<ActorSubclass<KernelActor>> {
   const generation = neutronCanGeneration;
   const identity = activeIdentity ?? InternetIdentity.getIdentity();
   const agent = await HttpAgent.create({
+    fetch: usePollingUpdateFetch(boundBrowserFetch()) as typeof fetch,
     host: runtimeDeployment.gateway,
     identity,
     ...(runtimeDeployment.local ? { verifyQuerySignatures: false } : {}),

@@ -253,27 +253,22 @@ caller context and the attested `foreground_tile` audience; neither value can
 be supplied by an app argument. The SDK rejects a missing or mismatched
 audience before entering the private handler.
 
-Outside Agent Mode, the original request is admitted only from the focused
-source tile with transient user activation. The provider tile, not Kernel, may
-use exact preapproved methods to load and freeze non-value-moving review state,
-renders its own review UI, and owns the accept/reject decision with concrete
-action/cancel labels. Only the affirmative action may dispatch the value-moving
-execute method; cancel may persist rejection. Kernel neither renders a dialog
-nor interprets the payload. No exact or wildcard session grant is consulted,
-and the interaction creates no grant.
+Outside Agent Mode, any exact live tile, tray, or background may ask the
+provider to present a request. This grants no financial authority: the provider
+tile, not Kernel or source focus, owns the visible accept/reject decision. It
+may use exact preapproved methods to load and freeze non-value-moving review
+state and renders concrete action/cancel labels. Only the affirmative action
+may dispatch the value-moving execute method; cancel may persist rejection.
+Kernel neither renders a dialog nor interprets the payload. No exact or
+wildcard session grant is consulted, and the interaction creates no grant.
 
-Opening the provider UI gives its iframe programmatic browser focus. The
-private `foreground_tile` route also requires the exact presentation tile to
-remain selected in the active workspace; that lifecycle check alone cannot
-authorize a caller. When the final presentation settles, Kernel releases focus
-only if the captured provider endpoint/session remains current, its exact frame
-is still focused, no other live presentation needs it, and browser blur
-succeeds. Kernel does not focus the caller or change the workspace's
-selected-tile state. The next `provider_once` request therefore requires actual
-caller-frame focus while transient user activation is active; a fresh click in
-that caller is the ordinary user path. The workspace `focusedTileId` (including
-its selected/red tile chrome) is layout state and a conservative presentation
-lifecycle condition, not sufficient caller authority.
+Opening the provider UI gives its iframe programmatic browser focus as ordinary
+workspace navigation. The private `foreground_tile` audience attests the exact
+Kernel-selected provider tile; it does not require that tile to retain browser
+focus or workspace selection throughout the interaction. The provider tile
+must remain mounted until private dispatch. Kernel does not blur the provider
+or restore the caller at settlement. Endpoint/session liveness and mounted-tile
+membership, not a second focus model, fence the suspended request.
 
 The pending capability and presentation binding are ephemeral browser state.
 This route adds no Kernel managed-memory schema and no durable permission
@@ -569,21 +564,31 @@ state, and refresh after reconnect rather than depending on replay.
 view to the exact opened/reused tile through
 `{ type: "neutron:tile:view", version: 1, view }`.
 
+A live direct tile, tray, or resident background may open or focus any installed
+app tile without a Kernel dialog. The operation is confined to the active
+workspace, always reuses an exact existing app/tile pair, and remains subject to
+workspace capacity. This grants visible navigation only; it does not grant the
+caller another app's tools, backend methods, identity, or decision authority.
+Delegated Agent calls retain the separate bounded Agent decision policy.
+
 Apps use this for routes such as a selected post or thread. The view does not
 grant backend authority.
 
 ## Tray Boundary
 
 Tray actions are private to the declaring app and the current tray endpoint.
-The Kernel owns opening, focus, close, and state delivery. A tray cannot address
-another app, become a resident background, or retain authority after its
-session closes.
+The Kernel owns tray opening, focus, close, and state delivery. A tray cannot
+call another app's private tray surface or tools, become a resident background,
+or retain authority after its session closes. The generic
+`workspace.open_tile` navigation described above is the only cross-app tray
+exception and grants no target-app authority.
 
 ## Agent Invocations
 
-An Agent root starts only from the granted installed app's focused,
-owner-activated tile, targets that app's connected resident background, and
-names the exact declared entrypoint. Each root or child invocation binds its
+An Agent root starts only from an authenticated live tile in the granted app
+installation, targets that app's connected resident background, and names the
+exact granted entrypoint. Starting a granted root does not depend on browser
+focus or transient user activation. Each root or child invocation binds its
 node, parent, and root IDs; unguessable capability; target endpoint and session;
 installed app scope, role, and tool; expiry and cancellation state; and bounded
 depth, calls, parallel children, consent challenges, and progress.
@@ -623,10 +628,10 @@ with `USER_INTERACTION_REQUIRED`. Outside an active invocation, ordinary owner
 consent remains unchanged.
 
 Agent Mode remains a live invocation model. Enabling one exact agent version
-does not start an unattended background root: each root begins from that
-agent's focused, owner-activated tile. A provider's separate root-audience tool
-can execute without UI only while that bounded depth-zero invocation remains
-live.
+does not let the resident originate a root by itself: each root still begins
+through a live tile in that Agent installation and the exact granted entrypoint.
+A provider's separate root-audience tool can execute without UI only while that
+bounded depth-zero invocation remains live.
 
 ## Private Broker Actions
 

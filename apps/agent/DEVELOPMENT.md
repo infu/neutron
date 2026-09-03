@@ -22,9 +22,10 @@ The API cannot call `agent_chat`, stop a turn, connect OpenRouter, select a
 model, enable Agent Mode, grant permission, or access a provider credential. It
 can only put validated text into the existing React composer and inspect a
 bounded in-memory trace. Playwright must click the existing **Send** button.
-That real browser click supplies the same focus and transient user activation
-as a person and takes the normal source-bound tile-to-background message-bus
-route. `requireOwnTile` and all kernel Agent Mode checks remain unchanged.
+That real browser click exercises the same source-bound tile-to-background
+message-bus route as a person. Starting an already granted turn does not depend
+on browser focus or transient user activation; `requireOwnTile` still verifies
+a live tile in the granted Agent installation.
 
 The trace holds at most 256 events in tile memory. It contains the submitted
 prompt, the existing bounded `agent_chat` progress events, the final visible
@@ -155,9 +156,8 @@ await frame.evaluate((prompt) => {
 }, "Create a contact named Alice");
 ```
 
-Do not call `HTMLElement.click()` in `evaluate()`: a JavaScript-generated click
-does not provide trusted user activation. Use Playwright for the one real UI
-action:
+Use Playwright for the real UI action so this harness continues to exercise the
+same visible control as a person:
 
 ```ts
 await agent.getByRole("button", { name: "Send" }).click();

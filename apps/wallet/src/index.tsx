@@ -168,6 +168,7 @@ import {
   parseWalletCatalog,
   parseWalletSnapshot,
   parseWalletSnapshotResult,
+  walletLedgerByPrincipal,
   type WalletLedger,
   type WalletSnapshot,
 } from "./wallet_data.ts";
@@ -882,8 +883,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [destinationLedger, setDestinationLedger] =
-    useState<WalletLedger | null>(null);
+  const [destinationLedgerId, setDestinationLedgerId] = useState<string | null>(
+    null,
+  );
   const [destinationQuery, setDestinationQuery] = useState("");
   const [destinationPage, setDestinationPage] =
     useState<WalletContactDestinationsPage | null>(null);
@@ -1202,7 +1204,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setView(next);
     setError(null);
     setDepositLedgerId(null);
-    setDestinationLedger(null);
+    setDestinationLedgerId(null);
   };
 
   const update = useCallback(
@@ -1294,7 +1296,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     if (!snapshot) return;
     setError(null);
     setDepositLedgerId(null);
-    setDestinationLedger(null);
+    setDestinationLedgerId(null);
     setSelected(new Set(snapshot.ledgers.map((ledger) => ledger.principal)));
     setCustomLedgers(customLedgerIds(snapshot, catalog));
     setCustomLedgerOpen(false);
@@ -1454,6 +1456,10 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     }
     return { eligible, total, valued };
   }, [catalogByPrincipal, priceBook, snapshot]);
+  const destinationLedger = useMemo(
+    () => walletLedgerByPrincipal(snapshot, destinationLedgerId),
+    [destinationLedgerId, snapshot],
+  );
   const destinationCatalog = useMemo(
     () =>
       destinationLedger
@@ -1464,12 +1470,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     [catalog, destinationLedger],
   );
   const depositLedger = useMemo(
-    () =>
-      depositLedgerId
-        ? snapshot?.ledgers.find(
-            (ledger) => ledger.principal === depositLedgerId,
-          ) ?? null
-        : null,
+    () => walletLedgerByPrincipal(snapshot, depositLedgerId),
     [depositLedgerId, snapshot],
   );
   const depositCatalog = useMemo(
@@ -1642,12 +1643,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   ]);
 
   const loadDestinations = useCallback(async () => {
-    if (!destinationLedger) return;
+    if (!destinationLedgerId) return;
     setDestinationBusy(true);
     try {
       const value = await querySelf("wallet_contact_destinations", [
         {
-          ledger: destinationLedger.principal,
+          ledger: destinationLedgerId,
           network: networkVariant(destinationNetwork),
           search_text: destinationQuery.trim(),
           offset: "0",
@@ -1655,7 +1656,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
         },
       ]);
       const next = parseWalletContactDestinations(value);
-      if (next.ledger === destinationLedger.principal) {
+      if (next.ledger === destinationLedgerId) {
         setDestinationPage(next);
         setError(null);
       }
@@ -1664,13 +1665,13 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     } finally {
       setDestinationBusy(false);
     }
-  }, [destinationLedger, destinationNetwork, destinationQuery]);
+  }, [destinationLedgerId, destinationNetwork, destinationQuery]);
 
   useEffect(() => {
-    if (!destinationLedger) return;
+    if (!destinationLedgerId) return;
     const timer = window.setTimeout(() => void loadDestinations(), 180);
     return () => window.clearTimeout(timer);
-  }, [destinationLedger, loadDestinations]);
+  }, [destinationLedgerId, loadDestinations]);
 
   const openDestinations = (ledger: WalletLedger) => {
     setError(null);
@@ -1681,12 +1682,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setTransferCandidate(null);
     setTransferAmount("");
     setTransferReceipt(null);
-    setDestinationLedger(ledger);
+    setDestinationLedgerId(ledger.principal);
   };
 
   const openDeposit = (ledger: WalletLedger) => {
     setError(null);
-    setDestinationLedger(null);
+    setDestinationLedgerId(null);
     setDepositLedgerId(ledger.principal);
     setPublicNativeDeposit(null);
     setPublicNativeError(null);
@@ -1700,7 +1701,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   };
 
   const closeDestinations = () => {
-    setDestinationLedger(null);
+    setDestinationLedgerId(null);
     setDestinationQuery("");
     setDestinationPage(null);
     setDestinationNetwork("internet_computer");
@@ -1718,7 +1719,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
 
     if (requested === "setup") {
       setDepositLedgerId(null);
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       setSelected(
         new Set(snapshot.ledgers.map((ledger) => ledger.principal)),
       );
@@ -1734,7 +1735,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     if (requested === "activity") {
       setSetupOpen(false);
       setDepositLedgerId(null);
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       setView("activity");
       return;
     }
@@ -1742,7 +1743,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     if (requested === "approvals") {
       setSetupOpen(false);
       setDepositLedgerId(null);
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       setView("approvals");
       return;
     }
@@ -1758,12 +1759,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setView("assets");
     if (!assetRequest || !ledger) {
       setDepositLedgerId(null);
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       return;
     }
 
     if (assetRequest[1] === "receive" || assetRequest[1] === "deposit") {
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       setDepositLedgerId(ledger.principal);
       setPublicNativeDeposit(null);
       setPublicNativeError(null);
@@ -1777,7 +1778,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setTransferCandidate(null);
     setTransferAmount("");
     setTransferReceipt(null);
-    setDestinationLedger(ledger);
+    setDestinationLedgerId(ledger.principal);
   }, [catalog, requestedTileView, snapshot]);
 
   const chooseDestinationNetwork = (network: CatalogNetwork) => {

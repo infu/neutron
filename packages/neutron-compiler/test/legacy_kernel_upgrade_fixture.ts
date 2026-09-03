@@ -39,13 +39,14 @@ export type LegacyKernelReleaseFixture = Readonly<{
 }>;
 
 type RetainedKernelReleaseFixture = Readonly<{
-  label: "v0.3.21" | "v0.3.23" | "v0.3.24" | "v0.3.25";
-  version: 321 | 323 | 324 | 325;
+  label: "v0.3.21" | "v0.3.23" | "v0.3.24" | "v0.3.25" | "v0.3.26";
+  version: 321 | 323 | 324 | 325 | 326;
   archive:
     | "../../../apps/kernel/kernel.v0.3.21.neutron"
     | "../../../apps/kernel/kernel.v0.3.23.neutron"
     | "../../../apps/kernel/kernel.v0.3.24.neutron"
-    | "../../../apps/kernel/kernel.v0.3.25.neutron";
+    | "../../../apps/kernel/kernel.v0.3.25.neutron"
+    | "../../../apps/kernel/kernel.v0.3.26.neutron";
   bytes: number;
   sha256: string;
   persistenceMode: "classical";
@@ -168,6 +169,18 @@ export const PRODUCTION_KERNEL_V325_RELEASE = {
   ),
 } as const satisfies RetainedKernelReleaseFixture;
 
+export const PRODUCTION_KERNEL_V326_RELEASE = {
+  label: "v0.3.26",
+  version: 326,
+  archive: "../../../apps/kernel/kernel.v0.3.26.neutron",
+  bytes: 2_415_895,
+  sha256: "738aa64943c759b573d8dd5d9094c7ce9b3017768a9c2616f638a272a591bda4",
+  persistenceMode: "classical",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.26.neutron", import.meta.url),
+  ),
+} as const satisfies RetainedKernelReleaseFixture;
+
 /** Backward-compatible aliases for callers that mean the latest predecessor. */
 export const LEGACY_KERNEL_VERSION = LEGACY_KERNEL_RELEASES[3].version;
 export const LEGACY_KERNEL_ARCHIVE_BYTES = LEGACY_KERNEL_RELEASES[3].bytes;
@@ -267,6 +280,17 @@ const PRODUCTION_KERNEL_V325_IDENTITY = {
     version: PRODUCTION_KERNEL_V325_RELEASE.version,
   },
 } as const satisfies KernelUpgradeIdentityFixture<325>;
+
+const PRODUCTION_KERNEL_V326_IDENTITY = {
+  ...PRODUCTION_KERNEL_V325_IDENTITY,
+  archive: PRODUCTION_KERNEL_V326_RELEASE.archive,
+  bytes: PRODUCTION_KERNEL_V326_RELEASE.bytes,
+  sha256: PRODUCTION_KERNEL_V326_RELEASE.sha256,
+  package: {
+    ...PRODUCTION_KERNEL_V325_IDENTITY.package,
+    version: PRODUCTION_KERNEL_V326_RELEASE.version,
+  },
+} as const satisfies KernelUpgradeIdentityFixture<326>;
 
 export type LegacyUpgradeCompileFixture = Readonly<{
   release: KernelUpgradeReleaseFixture;
@@ -399,6 +423,23 @@ export async function loadProductionKernelV325Fixture(): Promise<{
   return { identity: PRODUCTION_KERNEL_V325_IDENTITY, archive };
 }
 
+export async function loadProductionKernelV326Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<326>;
+  archive: Uint8Array;
+}> {
+  const archive = await loadKernelArchive(
+    PRODUCTION_KERNEL_V326_RELEASE.archivePath,
+    "The production v0.3.26 Kernel predecessor",
+  );
+  assertArchiveIdentity(
+    PRODUCTION_KERNEL_V326_RELEASE.label,
+    archive,
+    PRODUCTION_KERNEL_V326_RELEASE.bytes,
+    PRODUCTION_KERNEL_V326_RELEASE.sha256,
+  );
+  return { identity: PRODUCTION_KERNEL_V326_IDENTITY, archive };
+}
+
 export async function compileLegacyKernelUpgradeFixture(
   legacyVersion: LegacyKernelVersion = LEGACY_KERNEL_VERSION,
 ): Promise<LegacyUpgradeCompileFixture> {
@@ -478,6 +519,18 @@ export async function compileFinalCandidateProductionKernelV325UpgradeFixture({
     expectedSha256,
     release: PRODUCTION_KERNEL_V325_RELEASE,
     loadPredecessor: loadProductionKernelV325Fixture,
+  });
+}
+
+export async function compileFinalCandidateProductionKernelV326UpgradeFixture({
+  expectedSha256,
+}: {
+  expectedSha256: string;
+}): Promise<LegacyUpgradeCompileFixture> {
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release: PRODUCTION_KERNEL_V326_RELEASE,
+    loadPredecessor: loadProductionKernelV326Fixture,
   });
 }
 
@@ -571,7 +624,8 @@ async function compileKernelUpgradeCandidate(
     release.version === RETAINED_KERNEL_V321_RELEASE.version ||
     release.version === PRODUCTION_KERNEL_V323_RELEASE.version ||
     release.version === PRODUCTION_KERNEL_V324_RELEASE.version ||
-    release.version === PRODUCTION_KERNEL_V325_RELEASE.version
+    release.version === PRODUCTION_KERNEL_V325_RELEASE.version ||
+    release.version === PRODUCTION_KERNEL_V326_RELEASE.version
   ) {
     initial = await compileFreshPackages({
       packages: [legacyKernel, hello],
@@ -666,7 +720,8 @@ function assertPredecessorPackageRecord(
     release.version === 321 ||
     release.version === 323 ||
     release.version === 324 ||
-    release.version === 325
+    release.version === 325 ||
+    release.version === 326
   ) {
     if (
       record?.package.version !== release.version ||

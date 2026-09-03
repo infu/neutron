@@ -21,6 +21,7 @@ import {
   isFrameEndpointReady,
   markFrameEndpointLoaded,
   registerFrameContext,
+  type RegisteredEndpoint,
 } from "../src/frame_context.ts";
 import { MSG_BUS_FRAME_READY } from "neutron-tools/src/frame_handshake.js";
 import type {
@@ -362,7 +363,6 @@ type TestTileFrameConfig = Readonly<{
   tileId: string;
   instanceId: string;
   source: Window;
-  blurError?: Error;
 }>;
 
 type TestFocusDocument = {
@@ -372,9 +372,6 @@ type TestFocusDocument = {
 };
 
 class TestTileFrame {
-  readonly classList = {
-    contains: (value: string) => value === "tile-iframe",
-  };
   readonly dataset: DOMStringMap;
   readonly contentWindow: Window;
   focusCalls = 0;
@@ -391,10 +388,7 @@ class TestTileFrame {
       instanceId: config.instanceId,
     };
     this.contentWindow = config.source;
-    this.blurError = config.blurError;
   }
-
-  private readonly blurError: Error | undefined;
 
   focus(): void {
     this.focusCalls += 1;
@@ -403,7 +397,6 @@ class TestTileFrame {
 
   blur(): void {
     this.blurCalls += 1;
-    if (this.blurError) throw this.blurError;
     if (this.ownerDocument.activeElement === this) {
       this.ownerDocument.activeElement = null;
     }
@@ -804,6 +797,44 @@ function focusTestTile(instanceId: string): void {
   }));
 }
 
+function installWorkspaceOpenTarget() {
+  useAppsStore.setState((state) => ({
+    list: {
+      ...state.list,
+      hello: registryApp({
+        id: "hello",
+        name: "Hello",
+        tiles: [
+          {
+            id: "main",
+            title: "Hello",
+            path: "index.html",
+            icon: "static/icon.png",
+          },
+        ],
+      }),
+    },
+  }));
+  return useWorkspaceStore.getState().openTile({
+    appId: "hello",
+    tileId: "main",
+    title: "Hello",
+    path: "index.html",
+    icon: "static/icon.png",
+  });
+}
+
+function openWorkspaceTarget(caller: RegisteredEndpoint): Promise<JsonValue> {
+  return routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.open_tile",
+      arguments: { appId: "hello", tileId: "main", reuseExisting: true },
+    },
+    caller,
+  );
+}
+
 function registerScopedBackgroundEndpoint(
   source: Window,
   appId: string,
@@ -1164,7 +1195,6 @@ async function beginSignedCallAgentInvocation(
     tool: "run",
     ownerPrincipal: "owner-principal",
     installedVersion: installed.version,
-    activated: true,
   });
   if (!root) throw new Error("Agent root did not start");
   return { resident, root };
@@ -1641,14 +1671,11 @@ function createProviderFocusFixture(options: {
   callerCount?: number;
   descriptorGate?: Promise<void>;
   resultGates?: readonly Promise<void>[];
-  providerBlurError?: Error;
-  includeProviderFrame?: boolean;
   connectProviderTile?: boolean;
-  registerProviderTile?: boolean;
 }) {
   installFakeWindow();
   authorizeTestOwner();
-  setTransientUserActivation(true);
+  setTransientUserActivation(false);
   const callerCount = options.callerCount ?? 1;
   const callerRecords = Array.from({ length: callerCount }, (_, index) => {
     const appId = `focus_${options.key}_requester_${index}`;
@@ -1681,17 +1708,14 @@ function createProviderFocusFixture(options: {
       ...(options.resultGates ? { resultGates: options.resultGates } : {}),
     },
   );
-  if (options.registerProviderTile !== false) {
-    registerScopedTileEndpoint(
-      presentation.source,
-      appId,
-      "review",
-      tile.id,
-      appScope,
-      { connect: options.connectProviderTile !== false },
-    );
-  }
-  const includeProviderFrame = options.includeProviderFrame !== false;
+  registerScopedTileEndpoint(
+    presentation.source,
+    appId,
+    "review",
+    tile.id,
+    appScope,
+    { connect: options.connectProviderTile !== false },
+  );
   const focusDocument = installTestFocusDocument();
   const callers = callerRecords.map((record) => ({
     ...record,
@@ -1702,17 +1726,12 @@ function createProviderFocusFixture(options: {
       source: record.source,
     }),
   }));
-  const providerFrame = includeProviderFrame
-    ? focusDocument.addFrame({
-        appId,
-        tileId: "review",
-        instanceId: tile.id,
-        source: presentation.source,
-        ...(options.providerBlurError
-          ? { blurError: options.providerBlurError }
-          : {}),
-      })
-    : null;
+  const providerFrame = focusDocument.addFrame({
+    appId,
+    tileId: "review",
+    instanceId: tile.id,
+    source: presentation.source,
+  });
   const activateCaller = (index = 0): void => {
     const caller = callers[index];
     if (!caller) throw new Error("Missing focus-test caller");
@@ -3391,7 +3410,6 @@ test("routed self dialogs require invocation provenance during an active agent c
     tool: "run",
     ownerPrincipal: "owner-principal",
     installedVersion: installed.version,
-    activated: true,
   });
   if (!root) throw new Error("Self-dialog agent root did not start");
 
@@ -3585,7 +3603,6 @@ test("scoped binary self calls bind invocation provenance and revoke closed", as
     tool: "run",
     ownerPrincipal: "aaaaa-aa",
     installedVersion: installed.version,
-    activated: true,
   });
   if (!root) throw new Error("Scoped self-call root did not start");
   const metadata = invocationMetadata(root);
@@ -4197,7 +4214,6 @@ test("one-use delegation preserves scoped provenance for a nested attachment cal
     tool: "run",
     ownerPrincipal: "aaaaa-aa",
     installedVersion: 100,
-    activated: true,
   });
   if (!root) throw new Error("agent root did not start");
 
@@ -4792,12 +4808,11 @@ test("a target session change during Agent consent cancels before dispatch", asy
   completeInvocation(root);
 });
 
-test("provider presentation opens then reuses the exact focused tile with caller and audience attestation", async () => {
+test("provider presentation opens then reuses the exact provider tile with caller and audience attestation", async () => {
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
+  setTransientUserActivation(false);
   const provider = createPresentationProvider({ receipt: "ui-77" });
   const { appScope } = registerScopedBackgroundEndpoint(
     provider.source,
@@ -4854,7 +4869,6 @@ test("provider presentation opens then reuses the exact focused tile with caller
     },
     audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
   });
-  focusTestTile("caller");
   await expect(
     routeToolCall(providerActionCall(), caller),
   ).resolves.toEqual({ receipt: "ui-77" });
@@ -4873,117 +4887,81 @@ test("provider presentation opens then reuses the exact focused tile with caller
   expect(useRequestStore.getState().calls).toEqual({});
 });
 
-test.each([
-  {
-    case: "blurs only the settled provider frame",
-    activeAtSettlement: "provider" as const,
-    blurThrows: false,
-  },
-  {
-    case: "does not steal unrelated frame focus",
-    activeAtSettlement: "unrelated" as const,
-    blurThrows: false,
-  },
-  {
-    case: "does not blur a replacement provider frame",
-    activeAtSettlement: "replacement" as const,
-    blurThrows: false,
-  },
-  {
-    case: "preserves the provider result when blur fails",
-    activeAtSettlement: "provider" as const,
-    blurThrows: true,
-  },
-])(
-  "provider presentation focus cleanup $case",
-  async ({ activeAtSettlement, blurThrows }) => {
-    let releaseResult!: () => void;
-    const resultGate = new Promise<void>((resolve) => {
-      releaseResult = resolve;
-    });
-    const fixture = createProviderFocusFixture({
-      key: "cleanup",
-      resultGates: [resultGate],
-      ...(blurThrows
-        ? { providerBlurError: new Error("Synthetic provider blur failure") }
-        : {}),
-    });
-    const callerFrame = fixture.callers[0]?.frame;
-    const providerFrame = fixture.providerFrame;
-    if (!callerFrame || !providerFrame) throw new Error("Missing test frame");
+test("provider presentation stays valid when focus moves and leaves the new focus alone", async () => {
+  let releaseResult!: () => void;
+  const resultGate = new Promise<void>((resolve) => {
+    releaseResult = resolve;
+  });
+  const fixture = createProviderFocusFixture({
+    key: "focus_moved",
+    resultGates: [resultGate],
+  });
+  const caller = fixture.callers[0];
+  const providerFrame = fixture.providerFrame;
+  if (!caller || !providerFrame) throw new Error("Missing test frame");
 
-    const pending = fixture.start();
-    await fixture.waitForCalls(1);
-    expect(providerFrame.focusCalls).toBe(1);
-    expect(providerFrame.scrollIntoViewCalls).toBe(1);
-    expect(fixture.focusDocument.activeElement).toBe(providerFrame);
-    let retainedFrame: TestTileFrame | null = null;
-    if (activeAtSettlement === "unrelated") {
-      retainedFrame = fixture.focusDocument.addFrame({
-        appId: "unrelated",
-        tileId: "main",
-        instanceId: "unrelated-frame",
-        source: {} as Window,
-      });
-      fixture.focusDocument.activeElement = retainedFrame;
-    } else if (activeAtSettlement === "replacement") {
-      const replacement = createCapturingToolEndpoint(
-        providerPresentationDescriptor,
-        fixture.result,
-      );
-      retainedFrame = fixture.focusDocument.addFrame({
-        appId: fixture.appId,
-        tileId: "review",
-        instanceId: fixture.tile.id,
-        source: replacement.source,
-      });
-      fixture.focusDocument.activeElement = retainedFrame;
-      registerScopedTileEndpoint(
-        replacement.source,
-        fixture.appId,
-        "review",
-        fixture.tile.id,
-        fixture.appScope,
-      );
-    }
+  const pending = fixture.start();
+  await fixture.waitForCalls(1);
+  expect(fixture.focusDocument.activeElement).toBe(providerFrame);
 
-    releaseResult();
+  focusTestTile(caller.instanceId);
+  fixture.focusDocument.activeElement = caller.frame;
+  releaseResult();
 
-    if (activeAtSettlement === "replacement") {
-      await expect(pending).rejects.toThrow("Message bus endpoint retired");
-    } else {
-      await expect(pending).resolves.toEqual(fixture.result);
-    }
-    expect(callerFrame.focusCalls).toBe(0);
-    expect(useWorkspaceStore.getState().workspaces[1].focusedTileId).toBe(
-      fixture.tile.id,
-    );
-    if (activeAtSettlement !== "provider") {
-      if (!retainedFrame) throw new Error("Missing retained focus frame");
-      expect(providerFrame.blurCalls).toBe(0);
-      expect(retainedFrame.blurCalls).toBe(0);
-      expect(fixture.focusDocument.activeElement).toBe(retainedFrame);
-    } else {
-      expect(providerFrame.blurCalls).toBe(1);
-      if (blurThrows) {
-        expect(fixture.focusDocument.activeElement).toBe(providerFrame);
-      } else {
-        expect(fixture.focusDocument.activeElement).toBeNull();
-      }
-    }
-    if (activeAtSettlement === "provider" && !blurThrows) {
-      await expect(fixture.call()).rejects.toMatchObject({
-        code: "OWNER_REQUIRED",
-      });
-    }
-  },
-);
+  await expect(pending).resolves.toEqual(fixture.result);
+  expect(fixture.focusDocument.activeElement).toBe(caller.frame);
+  expect(useWorkspaceStore.getState().workspaces[1].focusedTileId).toBe(
+    caller.instanceId,
+  );
+  expect(providerFrame.blurCalls).toBe(0);
+});
+
+test("a background app can request provider UI without focus or transient activation", async () => {
+  const fixture = createProviderFocusFixture({ key: "bg" });
+  setTransientUserActivation(false);
+  const source = {} as Window;
+  unregisters.push(registerBackground(source, "background_requester"));
+  const caller = getRegisteredEndpoint("app:background_requester:background");
+  if (!caller) throw new Error("Background caller did not register");
+
+  await expect(
+    routeToolCall(providerActionCall(fixture.appId), caller),
+  ).resolves.toEqual(fixture.result);
+  expect(fixture.presentation.state.calls).toBe(1);
+  expect(fixture.presentation.state.payloads[0]).toMatchObject({
+    caller: {
+      endpoint: "app:background_requester:background",
+      appId: "background_requester",
+      role: "background",
+    },
+    audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+  });
+});
+
+test("a tray app can request provider UI without focus or transient activation", async () => {
+  const fixture = createProviderFocusFixture({ key: "tray" });
+  setTransientUserActivation(false);
+  const caller = registerTray({} as Window, "tray_requester", "panel-one");
+
+  await expect(
+    routeToolCall(providerActionCall(fixture.appId), caller),
+  ).resolves.toEqual(fixture.result);
+  expect(fixture.presentation.state.calls).toBe(1);
+  expect(fixture.presentation.state.payloads[0]).toMatchObject({
+    caller: {
+      endpoint: "app:tray_requester:tray:instance:panel-one",
+      appId: "tray_requester",
+      role: "tray",
+    },
+    audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+  });
+});
 
 test.each([
   { phase: "descriptor" as const },
   { phase: "result" as const },
 ])(
-  "provider presentation does not blur a reconnected document during $phase dispatch",
+  "provider presentation rejects a reconnected endpoint during $phase dispatch",
   async ({ phase }) => {
     let releaseResult!: () => void;
     const resultGate = new Promise<void>((resolve) => {
@@ -5025,12 +5003,11 @@ test.each([
     releaseResult();
 
     await expect(pending).rejects.toThrow();
-    expect(providerFrame.blurCalls).toBe(0);
     expect(fixture.focusDocument.activeElement).toBe(providerFrame);
   },
 );
 
-test("provider presentation keeps shared provider focus until the final concurrent request settles", async () => {
+test("concurrent provider presentations reuse the provider tile without post-settlement focus changes", async () => {
   let releaseFirst!: () => void;
   let releaseSecond!: () => void;
   const firstResultGate = new Promise<void>((resolve) => {
@@ -5068,69 +5045,13 @@ test("provider presentation keeps shared provider focus until the final concurre
   releaseFirst();
 
   await expect(firstPending).resolves.toEqual(fixture.result);
-  expect(providerFrame.blurCalls).toBe(1);
-  expect(fixture.focusDocument.activeElement).toBeNull();
+  expect(providerFrame.blurCalls).toBe(0);
+  expect(fixture.focusDocument.activeElement).toBe(providerFrame);
   expect(firstCallerFrame.focusCalls).toBe(0);
   expect(secondCallerFrame.focusCalls).toBe(0);
 });
 
-test("provider presentation cancels delayed provider-frame focus after settlement", async () => {
-  const fixture = createProviderFocusFixture({
-    key: "delayed",
-    includeProviderFrame: false,
-  });
-  const callerFrame = fixture.callers[0]?.frame;
-  if (!callerFrame) throw new Error("Missing delayed-focus caller frame");
-  await expect(fixture.start()).resolves.toEqual(fixture.result);
-
-  const delayedProviderFrame = fixture.focusDocument.addFrame({
-    appId: fixture.appId,
-    tileId: "review",
-    instanceId: fixture.tile.id,
-    source: fixture.presentation.source,
-  });
-  await new Promise((resolve) => setTimeout(resolve, 40));
-
-  expect(delayedProviderFrame.focusCalls).toBe(0);
-  expect(delayedProviderFrame.scrollIntoViewCalls).toBe(0);
-  expect(fixture.focusDocument.activeElement).toBe(callerFrame);
-});
-
-test("provider presentation focuses the exact frame as soon as its endpoint registers", async () => {
-  const fixture = createProviderFocusFixture({
-    key: "register",
-    includeProviderFrame: false,
-    registerProviderTile: false,
-  });
-  const callerFrame = fixture.callers[0]?.frame;
-  if (!callerFrame) throw new Error("Missing registration focus caller frame");
-
-  const pending = fixture.start();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(fixture.focusDocument.activeElement).toBe(callerFrame);
-
-  const providerFrame = fixture.focusDocument.addFrame({
-    appId: fixture.appId,
-    tileId: "review",
-    instanceId: fixture.tile.id,
-    source: fixture.presentation.source,
-  });
-  registerScopedTileEndpoint(
-    fixture.presentation.source,
-    fixture.appId,
-    "review",
-    fixture.tile.id,
-    fixture.appScope,
-  );
-
-  await expect(pending).resolves.toEqual(fixture.result);
-  expect(providerFrame.focusCalls).toBe(1);
-  expect(providerFrame.blurCalls).toBe(1);
-  expect(fixture.focusDocument.activeElement).toBeNull();
-  expect(callerFrame.focusCalls).toBe(0);
-});
-
-test("provider presentation releases its exact focused frame when port connection is cancelled", async () => {
+test("provider presentation leaves normal tile focus unchanged when port connection is cancelled", async () => {
   const fixture = createProviderFocusFixture({
     key: "unconnected",
     connectProviderTile: false,
@@ -5157,8 +5078,8 @@ test("provider presentation releases its exact focused frame when port connectio
   }));
 
   await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
-  expect(providerFrame.blurCalls).toBe(1);
-  expect(fixture.focusDocument.activeElement).toBeNull();
+  expect(providerFrame.blurCalls).toBe(0);
+  expect(fixture.focusDocument.activeElement).toBe(providerFrame);
   expect(callerFrame.focusCalls).toBe(0);
   expect(fixture.presentation.state.calls).toBe(0);
 });
@@ -5167,7 +5088,6 @@ test("provider presentation rejects a replaced tile during descriptor and result
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  setTransientUserActivation(true);
 
   for (const [phase, appId, installationUid] of [
     ["descriptor", "providerdescriptor", "812"],
@@ -5199,8 +5119,6 @@ test("provider presentation rejects a replaced tile during descriptor and result
       tile.id,
       appScope,
     );
-    focusTestTile("caller");
-
     const pending = routeToolCall(providerActionCall(appId), caller);
     void pending.catch(() => undefined);
     for (let turn = 0; turn < 50; turn += 1) {
@@ -5243,11 +5161,10 @@ test("provider presentation rejects a replaced tile during descriptor and result
   }
 });
 
-test("provider presentation requires the exact tile to remain active and focused before dispatch", async () => {
+test("provider presentation allows focus and workspace changes but rejects a closed provider tile", async () => {
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  setTransientUserActivation(true);
 
   for (const [change, appId, installationUid] of [
     ["focus", "providerfocus", "814"],
@@ -5278,8 +5195,6 @@ test("provider presentation requires the exact tile to remain active and focused
       tile.id,
       appScope,
     );
-    focusTestTile("caller");
-
     const pending = routeToolCall(providerActionCall(appId), caller);
     void pending.catch(() => undefined);
     for (
@@ -5299,10 +5214,21 @@ test("provider presentation requires the exact tile to remain active and focused
     }
     release();
 
-    await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
-    expect(presentation.state.calls).toBe(0);
-    expect(provider.state.interactionResults).toEqual([]);
-    expect(provider.state.interactionErrors).toHaveLength(1);
+    if (change === "membership") {
+      await expect(pending).rejects.toMatchObject({
+        code: "REQUEST_CANCELLED",
+      });
+      expect(presentation.state.calls).toBe(0);
+      expect(provider.state.interactionResults).toEqual([]);
+      expect(provider.state.interactionErrors).toHaveLength(1);
+    } else {
+      await expect(pending).resolves.toEqual({ receipt: "must-not-return" });
+      expect(presentation.state.calls).toBe(1);
+      expect(provider.state.interactionResults).toEqual([
+        { receipt: "must-not-dispatch" },
+      ]);
+      expect(provider.state.interactionErrors).toEqual([]);
+    }
     useWorkspaceStore.setState({ activeWorkspaceId: 1 });
   }
 });
@@ -5311,7 +5237,6 @@ test("provider presentation cancels immediately when the owner session rotates",
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  setTransientUserActivation(true);
   let release!: () => void;
   const resultGate = new Promise<void>((resolve) => {
     release = resolve;
@@ -5336,8 +5261,6 @@ test("provider presentation cancels immediately when the owner session rotates",
     tile.id,
     appScope,
   );
-  focusTestTile("caller");
-
   const pending = routeToolCall(providerActionCall("providersession"), caller);
   void pending.catch(() => undefined);
   for (
@@ -5405,8 +5328,6 @@ test("provider presentation rejects forged and wrong-app capabilities without co
     ),
   ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
 
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const pending = routeToolCall(providerActionCall(), caller);
   void pending.catch(() => undefined);
   for (let turn = 0; turn < 50 && !provider.state.capability; turn += 1) {
@@ -5434,7 +5355,6 @@ test("provider presentation rejects wrong tools and wrong audiences before tile 
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  setTransientUserActivation(true);
   const cases: Array<{
     appId: string;
     installationUid: string;
@@ -5483,8 +5403,6 @@ test("provider presentation rejects wrong tools and wrong audiences before tile 
       existing.id,
       appScope,
     );
-    focusTestTile("caller");
-
     await expect(
       routeToolCall(providerActionCall(entry.appId), caller),
     ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
@@ -5523,9 +5441,6 @@ test("provider presentation capability is shared and consumed by exactly one cal
     existing.id,
     appScope,
   );
-  focusTestTile("caller");
-  setTransientUserActivation(true);
-
   await expect(
     routeToolCall(providerActionCall(), caller),
   ).resolves.toEqual({ receipt: "ui-once" });
@@ -5676,30 +5591,20 @@ test("agent-root tools reject nested invocations but attest and dispatch a direc
   completeInvocation(root);
 });
 
-test("provider-owned consent validates and requires captured tile activation before dispatch", async () => {
+test("provider-owned consent validates arguments without focus or activation", async () => {
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
   const provider = createProviderToolEndpoint(
     providerActionDescriptor,
     { detail: "one action" },
     { receipt: "1" },
   );
   unregisters.push(registerBackground(provider.source, "provider"));
-  const call = providerActionCall();
-
   setTransientUserActivation(false);
-  await expect(routeToolCall(call, caller)).rejects.toMatchObject({
-    code: "OWNER_REQUIRED",
-  });
-  expect(provider.state.calls).toBe(0);
-  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
-
-  setTransientUserActivation(true);
   await expect(
     routeToolCall(
-      { ...call, arguments: {} },
+      { ...providerActionCall(), arguments: {} },
       caller,
     ),
   ).rejects.toThrow("Invalid arguments");
@@ -5711,8 +5616,6 @@ test("provider-owned consent rejects control and attachment tool combinations", 
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const cases: Array<[string, JsonObject]> = [
     ["providercontrol", { "neutron:control": "cancel" }],
     [
@@ -5763,8 +5666,6 @@ test("provider-owned consent shows one canonical provider review and ignores gra
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const review = {
     action: "create entry",
     cost: "one credit",
@@ -5843,8 +5744,6 @@ test("provider-owned consent fails closed when the handler omits its callback", 
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const provider = createProviderToolEndpoint(
     providerActionDescriptor,
     { detail: "one action" },
@@ -5868,8 +5767,6 @@ test("provider-owned consent rejects oversized reviews and aborts the handler", 
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const provider = createProviderToolEndpoint(
     providerActionDescriptor,
     { detail: "x".repeat(17 * 1024) },
@@ -5893,8 +5790,6 @@ test("provider-owned consent rejects extended approval payloads and aborts the h
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const provider = createProviderToolEndpoint(
     providerActionDescriptor,
     { detail: "one action" },
@@ -5922,8 +5817,6 @@ test("provider-owned consent cancels when the provider endpoint is replaced", as
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const provider = createProviderToolEndpoint(
     providerActionDescriptor,
     { detail: "one action" },
@@ -5958,8 +5851,6 @@ test("provider-owned consent cancels when the caller session is replaced", async
   installFakeWindow();
   authorizeTestOwner();
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const provider = createProviderToolEndpoint(
     providerActionDescriptor,
     { detail: "one action" },
@@ -5989,8 +5880,6 @@ test("provider-owned consent rechecks the authorized owner after review", async 
   installFakeWindow();
   authorizeTestOwner("owner-one");
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   const provider = createProviderToolEndpoint(
     providerActionDescriptor,
     { detail: "one action" },
@@ -6019,8 +5908,6 @@ test("provider-owned consent rechecks owner authority after the approved handler
   installFakeWindow();
   authorizeTestOwner("owner-one");
   const caller = registerTile({} as Window, "requester", "caller");
-  focusTestTile("caller");
-  setTransientUserActivation(true);
   let releaseHandler!: () => void;
   const holdAfterApproval = new Promise<void>((resolve) => {
     releaseHandler = resolve;
@@ -6637,7 +6524,6 @@ test("a scoped agent invocation presents an owner-attributed install offer", asy
     tool: "run",
     ownerPrincipal: "owner-principal",
     installedVersion: app.version,
-    activated: true,
   });
   if (!root) throw new Error("Agent root did not start");
 
@@ -6820,7 +6706,7 @@ test("kernel discovery fails closed on non-canonical installed app metadata", as
   ).rejects.toThrow("Invalid installed app metadata");
 });
 
-test("approved kernel tool calls open tiles only in the current workspace", async () => {
+test("direct app calls open tiles only in the current workspace", async () => {
   installFakeWindow();
   const caller = registerTile({} as Window, "gemma", "caller");
   useAppsStore.setState({
@@ -6839,8 +6725,6 @@ test("approved kernel tool calls open tiles only in the current workspace", asyn
       }),
     },
   });
-  grantFrontendToolSession("gemma", "kernel", "workspace.open_tile");
-
   await expect(
     routeToolCall(
       {
@@ -6859,7 +6743,87 @@ test("approved kernel tool calls open tiles only in the current workspace", asyn
   });
 });
 
-test("approved calls reuse an existing app tile in the current workspace", async () => {
+test("workspace.open_tile does not depend on direct tile focus or activation", async () => {
+  installFakeWindow();
+  setTransientUserActivation(false);
+  const target = installWorkspaceOpenTarget();
+  const callerInstance = useWorkspaceStore.getState().openTile({
+    appId: "kitchensink",
+    tileId: "main",
+    title: "Kitchen Sink",
+    path: "index.html",
+    icon: "static/icon.svg",
+  });
+  const callerSource = {} as Window;
+  const caller = registerTile(
+    callerSource,
+    "kitchensink",
+    callerInstance.id,
+  );
+  const focusDocument = installTestFocusDocument();
+  focusDocument.addFrame({
+    appId: "kitchensink",
+    tileId: "main",
+    instanceId: callerInstance.id,
+    source: callerSource,
+  });
+  const targetFrame = focusDocument.addFrame({
+    appId: "hello",
+    tileId: "main",
+    instanceId: target.id,
+    source: {} as Window,
+  });
+  focusDocument.activeElement = null;
+
+  await expect(openWorkspaceTarget(caller)).resolves.toEqual({
+    instanceId: target.id,
+    workspace: 1,
+    opened: false,
+  });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  expect(focusDocument.activeElement as unknown).toBe(targetFrame);
+});
+
+test("workspace.open_tile lets a live background open an installed tile", async () => {
+  installFakeWindow();
+  setTransientUserActivation(false);
+  const target = installWorkspaceOpenTarget();
+  const focusDocument = installTestFocusDocument();
+  const targetFrame = focusDocument.addFrame({
+    appId: "hello",
+    tileId: "main",
+    instanceId: target.id,
+    source: {} as Window,
+  });
+  const source = {} as Window;
+  unregisters.push(registerBackground(source, "kitchensink"));
+  const caller = getRegisteredEndpoint("app:kitchensink:background");
+  if (!caller) throw new Error("Background caller did not register");
+
+  await expect(openWorkspaceTarget(caller)).resolves.toEqual({
+    instanceId: target.id,
+    workspace: 1,
+    opened: false,
+  });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  expect(focusDocument.activeElement as unknown).toBe(targetFrame);
+});
+
+test("workspace.open_tile lets a live tray open another app's tile", async () => {
+  installFakeWindow();
+  setTransientUserActivation(false);
+  const target = installWorkspaceOpenTarget();
+  const caller = registerTray({} as Window, "kitchensink", "panel-one");
+
+  await expect(openWorkspaceTarget(caller)).resolves.toEqual({
+    instanceId: target.id,
+    workspace: 1,
+    opened: false,
+  });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("direct calls reuse an existing app tile in the current workspace", async () => {
   installFakeWindow();
   const callerInstance = useWorkspaceStore.getState().openTile({
     appId: "gemma",
@@ -6893,8 +6857,6 @@ test("approved calls reuse an existing app tile in the current workspace", async
     icon: "/app/hello/static/icon.png",
   });
   useWorkspaceStore.getState().focusTile(callerInstance.id);
-  grantFrontendToolSession("gemma", "kernel", "workspace.open_tile");
-
   await expect(
     routeToolCall(
       {
@@ -6920,7 +6882,7 @@ test("approved calls reuse an existing app tile in the current workspace", async
   );
 });
 
-test("a challenged Agent focus cannot become a new tile after approval", async () => {
+test("a challenged Agent reuse cannot become a new tile after approval", async () => {
   installFakeWindow();
   authorizeTestOwner("owner-principal");
   let releaseDecision!: () => void;
@@ -6992,7 +6954,84 @@ test("a challenged Agent focus cannot become a new tile after approval", async (
   completeInvocation(root);
 });
 
-test("opening a missing reusable tile requires once-only consent", async () => {
+test("a challenged Agent navigation cannot restore a stale workspace", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  let releaseDecision!: () => void;
+  const decisionGate = new Promise<void>((resolve) => {
+    releaseDecision = resolve;
+  });
+  const agent = createAgentConsentEndpoint("allow", { decisionGate });
+  const { resident, root } = await beginSignedCallAgentInvocation(agent.source);
+  useAppsStore.setState((state) => ({
+    list: {
+      ...state.list,
+      targetapp: registryApp({
+        id: "targetapp",
+        name: "Target App",
+        tiles: [
+          {
+            id: "main",
+            title: "Target",
+            path: "index.html",
+            icon: "static/icon.svg",
+          },
+        ],
+      }),
+    },
+  }));
+  useWorkspaceStore.getState().openTile({
+    appId: "targetapp",
+    tileId: "main",
+    title: "Target",
+    path: "index.html",
+    icon: "static/icon.svg",
+  });
+  const ownerTile = useWorkspaceStore.getState().openTile({
+    appId: "owner",
+    tileId: "main",
+    title: "Owner",
+    path: "index.html",
+    icon: "static/icon.svg",
+  });
+  const child = createChildInvocation(root, resident, "focus_target");
+
+  const pending = routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.open_tile",
+      arguments: { appId: "targetapp", tileId: "main" },
+    },
+    resident,
+    undefined,
+    invocationMetadata(child),
+  );
+  void pending.catch(() => undefined);
+  for (
+    let turn = 0;
+    turn < 50 && agent.challenges.length === 0;
+    turn += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  expect(agent.challenges[0]).toMatchObject({
+    kind: "workspace_open",
+    action: { appId: "targetapp", tileId: "main", workspace: 1 },
+  });
+
+  useWorkspaceStore.getState().switchWorkspace(2);
+  releaseDecision();
+
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(2);
+  expect(useWorkspaceStore.getState().workspaces[1].focusedTileId).toBe(
+    ownerTile.id,
+  );
+  completeInvocation(child);
+  completeInvocation(root);
+});
+
+test("an unfocused direct caller opens a missing tile without consent", async () => {
   installFakeWindow();
   const callerInstance = useWorkspaceStore.getState().openTile({
     appId: "wallet",
@@ -7002,6 +7041,13 @@ test("opening a missing reusable tile requires once-only consent", async () => {
     icon: "/app/wallet/static/icon.svg",
   });
   const caller = registerTile({} as Window, "wallet", callerInstance.id);
+  useWorkspaceStore.getState().openTile({
+    appId: "notes",
+    tileId: "main",
+    title: "Notes",
+    path: "index.html",
+    icon: "/app/notes/static/icon.svg",
+  });
   useAppsStore.setState({
     list: {
       contacts: registryApp({
@@ -7019,30 +7065,87 @@ test("opening a missing reusable tile requires once-only consent", async () => {
     },
   });
 
-  const pending = routeToolCall(
+  await expect(
+    routeToolCall(
+      {
+        target: "kernel",
+        name: "workspace.open_tile",
+        arguments: {
+          appId: "contacts",
+          tileId: "contacts",
+          reuseExisting: true,
+          view: "create",
+        },
+      },
+      caller,
+    ),
+  ).resolves.toMatchObject({ opened: true, workspace: 1 });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  expect(useWorkspaceStore.getState().workspaces[1].tiles).toHaveLength(3);
+});
+
+test("a delayed tile mount follows the canonical workspace focus", async () => {
+  installFakeWindow();
+  const callerSource = {} as Window;
+  const callerInstance = useWorkspaceStore.getState().openTile({
+    appId: "requester",
+    tileId: "main",
+    title: "Requester",
+    path: "index.html",
+    icon: "static/icon.svg",
+  });
+  const caller = registerTile(
+    callerSource,
+    "requester",
+    callerInstance.id,
+  );
+  useAppsStore.setState({
+    list: {
+      target: registryApp({
+        id: "target",
+        name: "Target",
+        tiles: [
+          {
+            id: "main",
+            title: "Target",
+            path: "index.html",
+            icon: "static/icon.svg",
+          },
+        ],
+      }),
+    },
+  });
+  const focusDocument = installTestFocusDocument();
+  const callerFrame = focusDocument.addFrame({
+    appId: "requester",
+    tileId: "main",
+    instanceId: callerInstance.id,
+    source: callerSource,
+  });
+
+  await routeToolCall(
     {
       target: "kernel",
       name: "workspace.open_tile",
-      arguments: {
-        appId: "contacts",
-        tileId: "contacts",
-        reuseExisting: true,
-        view: "create",
-      },
+      arguments: { appId: "target", tileId: "main" },
     },
     caller,
   );
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const request = Object.values(
-    useMsgBusPermissionStore.getState().requests,
-  )[0];
-  expect(request).toMatchObject({
-    tool: "workspace.open_tile",
-    onceOnly: true,
-    arguments: { appId: "contacts", tileId: "contacts", view: "create" },
-  });
-  approveFrontendToolRequest(request!.cid, "once");
+  const targetInstance = useWorkspaceStore
+    .getState()
+    .workspaces[1].tiles.find((tile) => tile.appId === "target");
+  if (!targetInstance) throw new Error("Target tile did not open");
 
-  await expect(pending).resolves.toMatchObject({ opened: true, workspace: 1 });
-  expect(useWorkspaceStore.getState().workspaces[1].tiles).toHaveLength(2);
+  focusTestTile(callerInstance.id);
+  focusDocument.activeElement = callerFrame;
+  const targetFrame = focusDocument.addFrame({
+    appId: "target",
+    tileId: "main",
+    instanceId: targetInstance.id,
+    source: {} as Window,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+
+  expect(targetFrame.focusCalls).toBe(0);
+  expect(focusDocument.activeElement).toBe(callerFrame);
 });

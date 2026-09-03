@@ -119,6 +119,17 @@ module {
         };
     };
 
+    // Endpoint sessions are disposable routing authority. Durable financial
+    // work remains bound to the installed app, endpoint role, and Agent mode.
+    public func sameDurableCaller(
+        stored : CommandMemory.Caller,
+        current : CommandMemory.Caller,
+    ) : Bool {
+        stored.app_id == current.app_id and
+        stored.role == current.role and
+        stored.agent_mode == current.agent_mode;
+    };
+
     public func activeCommandCount(
         commands : Map.Map<CommandMemory.CommandKey, CommandMemory.Command>,
         callerAppId : Text,
@@ -171,7 +182,7 @@ module {
                     })) {
                         if (candidate == spender) {
                             if (
-                                command.caller != caller or
+                                not sameDurableCaller(command.caller, caller) or
                                 expected_allowance != expectedAllowance or
                                 expected_expires_at != expectedExpiresAt
                             ) {

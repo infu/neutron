@@ -981,7 +981,7 @@ module {
             if (intent.size() > MAX_FUNDING_INTENT_BYTES) {
                 return #err("Funding request exceeds the Wallet size limit");
             };
-            switch (existingFundingCommand(key, intent, now)) {
+            switch (existingFundingCommand(key, request, now)) {
                 case (#err(error)) return #err(error);
                 case (#ok(?outcome)) {
                     return validateExistingFundingOutcome(request, outcome, now);
@@ -1023,7 +1023,7 @@ module {
             };
             // Another identical prepare may have completed while ledger facts
             // were awaited. Reuse its durable result and never overwrite it.
-            switch (existingFundingCommand(key, intent, finishedAt)) {
+            switch (existingFundingCommand(key, request, finishedAt)) {
                 case (#err(error)) return #err(error);
                 case (#ok(?outcome)) {
                     return validateExistingFundingOutcome(request, outcome, finishedAt);
@@ -1410,13 +1410,20 @@ module {
 
         func existingFundingCommand(
             key : CommandMemory.CommandKey,
-            intent : Blob,
+            request : WalletFundingPrepareRequestV1,
             now : Nat64,
         ) : IcrcTypes.Result<?WalletFundingPrepareOutcomeV1> {
             let ?command = Map.get(commandMem.commands, commandKeyCompare, key) else {
                 return #ok(null);
             };
-            if (command.intent != intent) {
+            // W306-W309 stored the complete request, including its disposable
+            // endpoint UUID. Compare every retry using only the endpoint from
+            // that stored caller; no arbitrary historical endpoint is accepted.
+            let comparableIntent = fundingIntentForEndpoint(
+                request,
+                command.caller.endpoint,
+            );
+            if (command.intent != comparableIntent) {
                 return #err("Wallet funding request ID conflicts with another intent");
             };
             let outcome = switch (command.status) {
@@ -1435,6 +1442,28 @@ module {
                 });
             };
             #ok(?outcome);
+        };
+
+        func fundingIntentForEndpoint(
+            request : WalletFundingPrepareRequestV1,
+            endpoint : Text,
+        ) : Blob {
+            let encoded : WalletFundingPrepareRequestV1 = {
+                request with
+                caller = { request.caller with endpoint };
+            };
+            to_candid (encoded);
+        };
+
+        func fundingCaller(
+            request : WalletFundingPrepareRequestV1,
+        ) : CommandMemory.Caller {
+            {
+                endpoint = request.caller.endpoint;
+                app_id = request.caller.app_id;
+                role = request.caller.role;
+                agent_mode = request.agent_mode;
+            };
         };
 
         func validateExistingFundingOutcome(
@@ -1473,12 +1502,7 @@ module {
             let (#revoke(revoke)) = request.intent else return #ok(null);
             let (#icp) = revoke.source else return #ok(null);
             let (#icp_account_identifier(spender)) = revoke.spender else return #ok(null);
-            let caller : CommandMemory.Caller = {
-                endpoint = request.caller.endpoint;
-                app_id = request.caller.app_id;
-                role = request.caller.role;
-                agent_mode = request.agent_mode;
-            };
+            let caller = fundingCaller(request);
             switch (FundingJournal.activeIcpRevoke(
                 commandMem.commands,
                 caller,

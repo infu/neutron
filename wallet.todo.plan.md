@@ -92,6 +92,12 @@ for transfer destinations, direct and allowance funding, revocation, and
 ICRC-103 cursors. Kernel's generic sidecar-integrity fence is unchanged.
 Kitchen Sink 307 remains unchanged and compatible.
 
+Those K326 focus semantics are immutable release history, not the desired
+successor behavior. The current working tree removes both the source
+focus/transient-activation admission gate and settlement blur. Exact endpoint,
+session, AppScope, version, owner, cancellation, one-use callback, schema, and
+audience binding remain authoritative.
+
 | App | Corrective state |
 | --- | --- |
 | Kernel 0.3.26 (326) | Frozen, qualified from exact 0.3.25, and published in atomic production batch 39. |
@@ -164,6 +170,63 @@ above. Its receipt SHA-256 is
 No package or source artifact was rebuilt between publication and either
 postflight attempt.
 
+## Kernel 327, Wallet 310, and Kitchen Sink 308 corrective successors (pending)
+
+Kernel 326, Wallet 309, Contacts 306, and Kitchen Sink 307 are immutable
+published history. The current correction requires Kernel 0.3.27 (327), Wallet
+0.3.10 (310), and Kitchen Sink 0.3.8 (308):
+
+- remove K326's source-focus/transient-activation admission gate and its
+  post-settlement provider-frame blur while retaining exact live endpoint,
+  session, installation, owner, cancellation, schema, one-use, and audience
+  binding; and
+- make Kernel frontend mutations use one asynchronous v2 signed request
+  identity followed by certified request-status polling. Bootstrap actors,
+  dynamic ICBlast actors, and raw self updates share that transport. An
+  identical signed envelope may receive a transport retry, but a mutation is
+  never recreated under a new request ID because a v3 response omitted a
+  terminal reply. This covers Wallet-mediated execution and every ordinary or
+  chunked install control call, including methods whose valid Candid result is
+  `null`;
+- keep Wallet Send bound to the selected ledger principal so an already-open
+  Send view resolves each new balance snapshot instead of retaining a stale
+  ledger object; and
+- encode Kitchen Sink's four two-text backend methods as their declared single
+  Candid tuple argument, eliminating the existing publish/delete/mutable-blob
+  demo traps.
+
+Kernel remains generic: it adds no Wallet, token, ledger, ICRC, Contacts, or
+package-specific production branch. The Wallet and Kitchen Sink corrections
+stay inside their owning apps. None of the three changes modifies a Candid
+method or managed-memory schema; Contacts 306 remains on its exact published
+package bytes.
+
+Git-history diagnosis rules out an old-package format regression. The relevant
+compiler installer, package decoder, Kernel backend, actor factory, manifest
+schema, and package-record parser are byte-identical from pre-PR K322 through
+published K326. The Agent 3.4 v3-default/202-only-polling defect was already
+present in the initial `7a68349` snapshot. Commit `c18eb5c` (K316) exposed it
+reliably by increasing the generated 13-app actor from an inline request with
+11,963 bytes of headroom to a chunked request 7,400 bytes over the existing 2
+MiB cutoff. The browser-origin isolation introduced there remains a required
+security boundary; the correction belongs in shared update transport, not in
+the package decoder, chunk protocol, or archive-specific compatibility code.
+
+Release qualification is pending. Before the successors may be published,
+retain the exact published K326, W309, and Kitchen Sink 307 archives and pass
+their state-preserving upgrades to K327, W310, and Kitchen Sink 308. Also pass a
+realistic old-package browser gate: provision a fresh local Neutron using the
+three candidates, then install every exact archive in `test/old_packages/`
+through the launcher file chooser, package review, browser compile, **Install**
+action, real upload and activation, and committed-registry reconciliation. It
+must verify Cast Away 114, Chipswap 127, Inspector Canister 106, and Principal
+Miner 103 in the runtime and leave no install journal. Archive decoding or
+preparation alone is not sufficient evidence.
+
+The three versioned archives, complete qualification results, package and
+source hashes, production publication receipt, and exact-byte no-op postflight
+are not yet release evidence and must be recorded only after they succeed.
+
 ## Required outcome
 
 - Existing callers continue to use
@@ -172,11 +235,13 @@ postflight attempt.
 - A human funding request opens or focuses Wallet. Wallet loads authoritative
   facts and shows one polished Wallet decision. Its concrete primary label is
   `Send` or `Approve allowance`; `Cancel` rejects the prepared command.
-- When that interaction settles, Kernel releases browser focus only if the
-  captured Wallet endpoint session remains current and its exact frame remains
-  focused. It neither focuses the caller nor changes `focusedTileId`; a retry
-  requires actual caller focus under transient user activation, normally
-  supplied by a fresh caller click.
+- Any exact live app tile, tray, or background endpoint may request that Wallet
+  presentation without source-frame focus or transient activation. This only
+  presents Wallet; the Wallet action remains the human decision.
+- Opening or initially focusing Wallet is navigation, not continuing authority.
+  Focus and workspace selection may move while the bound endpoint session stays
+  live; the Wallet tile must remain mounted until private dispatch. Kernel
+  performs no blur or caller-focus restoration at settlement.
 - The affirmative action executes through Wallet's exact preapproved self-call
   path. Kernel shows no frontend-tool, raw-JSON, or backend-call dialog.
 - A live depth-zero root agent may use the separate
@@ -201,7 +266,7 @@ Kernel may know only generic protocol facts:
 - the closed `provider_once`, `same_app`, `foreground_tile`, and
   `agent_root` annotations;
 - live JSON Schema validation, bounded opaque JSON, one-use callback state,
-  tile open/reuse/focus, and audience attestation; and
+  tile open/reuse/initial-focus navigation, and audience attestation; and
 - exact preapproved self-call method declarations and live Candid types.
 
 Kernel must not contain Wallet, Swap, Contacts, token, ledger, ICRC, account,
@@ -237,9 +302,7 @@ Swap/Kitchen Sink
   -> Wallet prepares and freezes authoritative ledger facts
   -> one Wallet action: Send or Approve allowance; Cancel rejects
   -> Wallet executes or rejects the exact durable command
-  -> Wallet returns the result to the caller
-  -> Kernel releases the exact Wallet frame if its captured session is still
-     current and it still owns browser focus
+  -> Kernel returns the Wallet result; normal workspace interaction owns focus
 ```
 
 `wallet_fund_v1` retains
@@ -313,15 +376,25 @@ automation.
 
 ## Compatibility
 
-| Kernel \ Wallet | W306 | W307 | W308 | W309 |
-| --- | --- | --- | --- | --- |
-| K323 | Human funding uses the released generic raw review. W306 has no root tool. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. |
-| K324 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one Wallet decision; direct-root funding is UI-free. | Human funding fails before preparation or effect because K324 lacks W308's explicit provider-UI feature marker. Direct-root funding remains UI-free. | Same provider-marker behavior as W308; direct-root funding remains UI-free. |
-| K325 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one Wallet decision; direct-root funding is UI-free. | Human funding works for default accounts, but non-default account inputs have the W308 hidden-sidecar regression. | Human funding uses one Wallet decision; direct-root funding is UI-free; all ICRC account inputs carry explicit sidecars. |
-| K326 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one Wallet decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. | Human funding has the focus correction but retains W308's non-default-account input regression. | Human funding uses one Wallet decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free; all ICRC account inputs carry explicit sidecars. |
+| Kernel \ Wallet | W306 | W307 | W308 | W309 | W310 |
+| --- | --- | --- | --- | --- | --- |
+| K323 | Human funding uses the released generic raw review. W306 has no root tool. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Same public contract as W309; human funding fails before preparation or effect and the root tool is unavailable cross-app. |
+| K324 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one Wallet decision; direct-root funding is UI-free. | Human funding fails before preparation or effect because K324 lacks W308's explicit provider-UI feature marker. Direct-root funding remains UI-free. | Same provider-marker behavior as W308; direct-root funding remains UI-free. | Same public contract and provider-marker behavior as W309; direct-root funding remains UI-free. |
+| K325 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one Wallet decision; direct-root funding is UI-free. | Human funding works for default accounts, but non-default account inputs have the W308 hidden-sidecar regression. | Human funding uses one Wallet decision; direct-root funding is UI-free; all ICRC account inputs carry explicit sidecars. | Same public contract as W309; an open Send view also follows refreshed ledger state. |
+| K326 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one Wallet decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. | Human funding has the focus correction but retains W308's non-default-account input regression. | Human funding uses one Wallet decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free; all ICRC account inputs carry explicit sidecars. | Same provider behavior as W309; an open Send view also follows refreshed ledger state. |
+| K327 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one Wallet decision without source-focus admission or settlement blur; direct-root funding is UI-free. | K327 presentation applies, but W308 retains its non-default-account input regression. | Human funding uses one Wallet decision without source-focus admission or settlement blur; direct-root funding is UI-free. | Same public contract as W309, with K327 presentation behavior and live Send-view refresh. |
 
-Existing callers remain compatible with W309: the endpoint, tool name, schemas,
-provider annotation, and caller semantics do not change.
+Existing callers remain compatible with W310: the endpoint, tool name, schemas,
+provider annotation, and caller semantics do not change. Durable retries also
+survive caller tile replacement: Wallet normalizes only the disposable endpoint
+UUID to the endpoint already stored with the command, retaining exact app,
+role, Agent-mode, ledger, deadline, and financial-intent binding. This works
+directly with released W306-W309 intent blobs and changes no memory schema.
+
+The table records the compatibility contract, including successor cells that
+require exact-archive qualification. K327 keeps the public contracts but
+removes source-focus/activation admission and post-settlement blur; provider
+endpoint/session provenance remains exact.
 
 Contacts 0.3.6 retains the narrow API-1 reply-parser correction from 0.3.5. It
 accepts a default account as either `{ owner }` or
@@ -365,24 +438,25 @@ installed provider but do not replace runtime bindings or Wallet validation.
 
 ## Managed memory
 
-The intended successors are code/frontend releases with unchanged managed
-memory:
-
-- Kernel retains its released roots and versions.
-- Wallet retains `wallet` v1 and `wallet_commands` v1. Released schema,
-  migration, lock, and lineage files are immutable.
-- Kitchen Sink retains its released memory declaration.
-- Contacts retains `contacts` v2 and its released v1-to-v2 migration lineage.
+K327 retains Kernel's released roots and versions. Wallet 310 retains `wallet`
+v1 and `wallet_commands` v1. Kitchen Sink 308 retains `kitchensink` v1.
+Contacts 306 retains `contacts` v2 and its released v1-to-v2 migration lineage
+and receives no new package in this correction.
 
 Do not add a fake migration. Requalify clean initialization and state-preserving
-upgrades from the exact production archives, including representative Wallet
-state and prepared, pending, and terminal command rows.
+upgrades from exact published K326, W309, and Kitchen Sink 307 archives, then
+run the installed Wallet, Kitchen Sink, Contacts, and old-package compatibility
+gates against that upgraded runtime.
 
 ## Lean implementation rules
 
 - Reuse the existing provider capability, workspace tile open/focus path,
   endpoint registration, scoped self calls, Wallet funding journal, allowance
   adapters, formatter, and transaction executors.
+- Let any exact live direct app endpoint use the generic workspace open/focus
+  path without focus heuristics or a Kernel dialog. This is navigation authority
+  only; delegated Agent calls retain their bounded decision policy, and Wallet
+  retains the sole token decision.
 - Keep one generic Kernel/SDK route and one Wallet transaction core. Do not add
   a second Kernel dialog store, Wallet-specific Kernel API, copied codec,
   duplicate executor, or parallel approval state.
@@ -402,12 +476,20 @@ Before release, prove:
 - SDK and Kernel schema/audience normalization, one-use callback behavior,
   exact binding, cancellation/replacement/replay failure, no Kernel dialog, and
   direct-root-only routing;
-- session-bound exact provider-frame focus release, no caller auto-focus or
-  selected-tile mutation, no focus theft, and caller focus plus transient
-  activation before retry;
+- admission from exact live tile, tray, and background endpoints without a
+  source-focus or transient-activation gate; initial provider focus as
+  navigation only; focus/workspace movement during a live presentation; no
+  settlement blur or caller-focus restoration; and a natural Cancel-to-next
+  action sequence;
+- bootstrap, dynamic ICBlast, and raw-self-update paths issuing one logical v2
+  request identity and polling that request ID to a certified terminal reply,
+  with no v3 mutation request and no newly signed resubmission after ambiguity;
+- the actual chunked install control sequence accepting successful `null`
+  replies for clear, upload, activation, cleanup, and commit without reporting
+  an absent transport result;
 - W306 compatibility through the deprecated callback, state-preserving upgrades
-  from exact W307 plus the W306 skip path, exact W308-to-W309 memory retention,
-  and no legacy-callback call by W309;
+  from exact W309 to W310 plus the W306 skip path, exact Kitchen Sink 307 to
+  308 retention, and no legacy-callback call by W310;
 - Wallet prepare/execute/reject ordering, durable replay and reconciliation,
   direct transfer, allowance create/query/revoke, authoritative formatting,
   race handling, and no duplicate effect;
@@ -420,8 +502,10 @@ Before release, prove:
 - root execution with zero UI and rejection of human or nested-agent calls;
 - Contacts default and exact 32-byte subaccount add/edit/reload/remove behavior;
   and
-- all unchanged old-app, attachment, control, grant, Agent, and self-call
-  compatibility suites.
+- all unchanged attachment, control, grant, Agent, and self-call compatibility
+  suites, plus every pinned `test/old_packages/` archive installed through the
+  real launcher file chooser, review, compile, upload, activation, and commit
+  path on a fresh disposable local Neutron.
 
 Run the full repository gates and each app's release-specific memory, Motoko,
 browser/PocketIC, candidate-binding, Certified Assets, and exact-archive tests.
@@ -434,52 +518,50 @@ npm --workspace neutron-wallet test
 npm --workspace neutron-kitchensink test
 npm --workspace neutron-contacts test
 npm --workspace neutron-compiler test
+npm run test:e2e:old-packages:fresh
 npm run typecheck
 npm run security:check
 npm run license:check
 npm test
 ```
 
-Build the changed package through its complete workspace package command:
+Build each changed package through its complete workspace package command:
 
 ```sh
 npm --workspace neutron-kernel run package
 npm --workspace neutron-wallet run package
-npm --workspace neutron-contacts run package
+npm --workspace neutron-kitchensink run package
 ```
 
-Do not rebuild unchanged Kitchen Sink 307 bytes. Record final commands, results,
-archive paths, byte lengths, SHA-256 values, and offered-source artifacts for
-the frozen Kernel 326, Wallet 309, and Contacts 306 candidates.
+Do not rebuild or republish unchanged Contacts 306 bytes. Record final commands,
+results, archive paths, byte lengths, SHA-256 values, and matching offered-source
+artifacts for all three frozen candidates.
 
 ## Release procedure
 
-1. Finish the diff cleanup and security review; freeze source and tests.
-2. Prove unchanged memory roots by clean initialization and exact-production
-   upgrades.
-3. Verify and retain the exact published Kernel 325, Wallet 308, and Contacts
-   305 archives as predecessors. Prepare Kernel 326, Wallet 309, and Contacts
-   306 with production `update_source` `233tv-xiaaa-aaaay-aacta-cai`; Kitchen
-   Sink 307 remains an unchanged published package.
-4. Run Kernel qualification, exact-325 upgrade, compatibility, and complete
-   package workflows, plus Wallet exact-memory and checked 308-to-309 upgrade,
-   Contacts clean-init and checked 305-to-306 upgrade, and browser
-   CRUD/Wallet-discovery/send gates on the same final sources.
-5. Review all three candidate archives and their matching offered-source
-   artifacts.
-6. Publish Kernel 326, Wallet 309, and Contacts 306 atomically with the
-   production catalog publisher and a reviewed catalog containing exactly
-   those three packages.
+1. Finish the K327/W310/Kitchen Sink 308 diff cleanup and security review;
+   freeze source and tests.
+2. Audit all three managed-memory declarations and prove clean initialization
+   and state preservation from exact published K326, W309, and Kitchen Sink
+   307 predecessors. Retain those immutable archives as upgrade fixtures.
+3. Build all three production-source packages through their complete workspace
+   package commands.
+4. Run Kernel qualification, each exact predecessor-to-successor upgrade,
+   transport/provider compatibility, Kitchen Sink/Wallet regression flow, and
+   `npm run test:e2e:old-packages:fresh` on the exact candidate bytes.
+5. Review all three archives and matching offered-source artifacts, including
+   paths, versions, byte lengths, and SHA-256 values.
+6. Publish K327, W310, and Kitchen Sink 308 atomically through the production
+   catalog publisher; Contacts 306 remains unchanged.
 7. Rerun the exact same catalog command against the exact same bytes. Require
-   `batch_id: null` and every selected package/source row `unchanged` with
-   matching version, path, size, URL, and SHA-256.
-8. Add the exact Kernel 326/Wallet 309/Contacts 306 qualification and
-   publication evidence to the PR only after those steps succeed.
+   `batch_id: null` and every package/source row `unchanged` with matching
+   version, path, size, URL, and SHA-256.
+8. Add exact qualification and publication evidence to the PR only after those
+   steps succeed.
 
-Kernel 326, Wallet 309, and Contacts 306 form one corrective catalog
-transaction, not a staged rollout. Do not rebuild after an ambiguous
-publication or change the Dispenser starter unless that separate rollout is
-explicitly requested.
+These are one compatible corrective catalog transaction, not a staged rollout.
+Do not rebuild after an ambiguous publication or change the Dispenser starter
+unless that separate rollout is explicitly requested.
 
 ## Deferred
 

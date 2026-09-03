@@ -138,7 +138,15 @@ test("Contacts CRUD is shared with Wallet destination discovery", async ({
     timeout: 120_000,
   });
   await wallet.getByRole("button", { name: "Refresh balances" }).click();
-  await expect(icpBalance).not.toHaveText("-", { timeout: 120_000 });
+  await expect
+    .poll(
+      async () => Number((await icpBalance.textContent())?.trim() ?? "NaN"),
+      {
+        message: "expected the refreshed ICP fixture balance",
+        timeout: 120_000,
+      },
+    )
+    .toBeGreaterThan(0.0011);
   await expect(
     page.locator('[data-tid="backend-call-dialog"]'),
   ).toHaveCount(0);
@@ -151,7 +159,6 @@ test("Contacts CRUD is shared with Wallet destination discovery", async ({
     .toBeVisible();
 
   await wallet.getByRole("button", { name: "Add contact" }).click();
-  await expect(page.locator('[data-tid="workspace-tile-dialog"]')).toHaveCount(0);
   await expect(contacts.getByText("New contact", { exact: true })).toBeVisible();
   await expect(contacts.getByText("Person", { exact: true })).toHaveCount(0);
   await expect(contacts.getByText("My addresses", { exact: true })).toHaveCount(0);
@@ -166,9 +173,25 @@ test("Contacts CRUD is shared with Wallet destination discovery", async ({
   await expect(walletDestination).toBeVisible();
   await expect(walletDestination.getByTitle(SUBACCOUNT_IC_ACCOUNT)).toBeVisible();
   await wallet.getByRole("button", { name: `Send to ${editedName}` }).click();
+  const available = wallet
+    .locator(".wallet-transfer-details > div")
+    .filter({ hasText: "Available" })
+    .locator("dd");
+  const readAvailable = async (): Promise<number> => {
+    const text = (await available.textContent())?.trim() ?? "";
+    return Number(text.split(/\s+/)[0]?.replaceAll(",", "") ?? "NaN");
+  };
+  const availableBefore = await readAvailable();
+  expect(availableBefore).toBeGreaterThan(0.0011);
   await wallet.getByRole("textbox", { name: "Transfer amount" }).fill("0.001");
   await wallet.getByRole("button", { name: "Send", exact: true }).click();
   await expect(wallet.getByText("Transfer sent")).toBeVisible();
+  await expect
+    .poll(readAvailable, {
+      message: "expected the open Send view to use the refreshed ledger",
+      timeout: 120_000,
+    })
+    .toBeLessThan(availableBefore);
   await expect(page.locator('[data-tid="call-dialog"]')).toHaveCount(0);
   await wallet.getByRole("button", { name: "Done" }).click();
 

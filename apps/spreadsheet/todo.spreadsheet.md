@@ -219,9 +219,8 @@ this app-folder-only pass.
   `6b7c80acaa390c652d64c149b5aa4155e074e8cd6011275b375eb207ad2bb94d`)
   byte-for-byte to that archive.
 - The installed release suite passed **exactly 20 of 20** user flows in one
-  **3.2-minute**, single-worker run with **zero retries**. Flow 17 explicitly
-  honors Neutron's two-second tile-focus admission window and asserts that the
-  final Files retry produced no alert before accepting the workbook.
+  **3.2-minute**, single-worker run with **zero retries**. Flow 17 asserts that
+  the final Files retry produced no alert before accepting the workbook.
 
 ## Verified 2026-07-14 Third-Wave Hardening
 

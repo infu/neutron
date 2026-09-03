@@ -52,7 +52,6 @@ const KERNEL_DIALOG_SELECTOR = [
   '[data-tid="frontend-tool-dialog"]',
   '[data-tid="call-dialog"]',
   '[data-tid="backend-call-dialog"]',
-  '[data-tid="workspace-tile-dialog"]',
 ].join(", ");
 
 test.describe.configure({ retries: 0 });
@@ -133,6 +132,8 @@ test("Kitchen Sink funds governance with one Wallet decision and no Kernel dialo
     rejectedDirectGovernance,
   );
 
+  // Do not refocus Kitchen Sink here. Its next ordinary button click must open
+  // a fresh Wallet decision naturally after Cancel.
   const directSourceBefore = await ledger.icrc1_balance_of(source);
   const directGovernanceBefore = await ledger.icrc1_balance_of(governance);
   await runWalletAction({
@@ -189,6 +190,8 @@ test("Kitchen Sink funds governance with one Wallet decision and no Kernel dialo
     await ledger.icrc2_allowance({ account: source, spender: governance }),
   ).toEqual(rejectedAllowance);
 
+  // As with direct funding, the caller's next ordinary click must present a
+  // fresh Wallet decision after Cancel without a manual iframe focus step.
   const allowanceSourceBefore = await ledger.icrc1_balance_of(source);
   const allowanceGovernanceBefore = await ledger.icrc1_balance_of(governance);
   const allowanceStartedNs = BigInt(Date.now()) * 1_000_000n;
@@ -255,9 +258,6 @@ async function runWalletAction({
   walletReuse: WalletFrameReuseAudit;
 }): Promise<void> {
   await startKernelDialogAudit(page);
-  const kitchenFrame = page.locator(
-    'iframe[data-app-id="kitchensink"][data-tile-id="main"]',
-  );
   const walletFrame = page.locator(
     'iframe[data-app-id="wallet"][data-tile-id="wallet"]',
   );
@@ -381,8 +381,6 @@ async function runWalletAction({
     kitchen.locator('[data-tid="wallet-funding-result"]'),
   ).toContainText(`"status": "${expectedStatus}"`, { timeout: 120_000 });
   await expect(dialog).toHaveCount(0);
-  await expect(walletFrame).not.toBeFocused();
-  await expect(kitchenFrame).not.toBeFocused();
   await expect(page.locator(KERNEL_DIALOG_SELECTOR)).toHaveCount(0);
   expect((await stopKernelDialogAudit(page)).seen).toEqual([]);
 }
@@ -452,10 +450,8 @@ async function revokeGovernanceAllowance({
   }
 
   await startKernelDialogAudit(page);
-  await page.locator(
-    'iframe[data-app-id="kitchensink"][data-tile-id="main"]',
-  ).focus();
   await kitchen.getByRole("button", { name: "Open Wallet approvals" }).click();
+  await expect(page.locator(KERNEL_DIALOG_SELECTOR)).toHaveCount(0);
   await expect(walletFrame).toBeFocused();
   await expect(walletFrame).toHaveAttribute(
     "data-wallet-reuse-marker",

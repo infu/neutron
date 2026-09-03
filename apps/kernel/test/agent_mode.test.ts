@@ -100,7 +100,7 @@ test("request cancellation removes a pending agent grant", async () => {
   expect(useAgentModeStore.getState().grant?.appId).toBe("agent");
 });
 
-test("agent authority is bound to one activated declared root", async () => {
+test("an enabled exact root starts without per-turn focus or activation", async () => {
   await grantAgent();
   const caller = tile("agent");
   const resident = background("agent");
@@ -110,7 +110,6 @@ test("agent authority is bound to one activated declared root", async () => {
     tool: "agent_chat",
     ownerPrincipal: owner,
     installedVersion: 100,
-    activated: true,
   });
   expect(root).not.toBeNull();
   expect(isDirectAgentInvocation(root)).toBe(true);
@@ -135,7 +134,6 @@ test("agent authority does not survive an app reinstall at the same version", as
       tool: "agent_chat",
       ownerPrincipal: owner,
       installedVersion: 100,
-      activated: true,
     }),
   ).toBeNull();
 });
@@ -149,7 +147,6 @@ test("downstream permission requires one exact agent decision", async () => {
     tool: "agent_chat",
     ownerPrincipal: owner,
     installedVersion: 100,
-    activated: true,
   })!;
   const child = createChildInvocation(root, background("wallet"), "send");
   let challengeId = "";
@@ -191,7 +188,6 @@ test("request cancellation settles and removes a nested agent decision", async (
     tool: "agent_chat",
     ownerPrincipal: owner,
     installedVersion: 100,
-    activated: true,
   })!;
   const child = createChildInvocation(root, background("wallet"), "send");
   const controller = new AbortController();
@@ -239,7 +235,6 @@ test("an oversized agent consent challenge fails before dispatch", async () => {
     tool: "agent_chat",
     ownerPrincipal: owner,
     installedVersion: 100,
-    activated: true,
   })!;
   const child = createChildInvocation(root, background("wallet"), "send");
   let dispatched = false;
@@ -272,7 +267,6 @@ test("delegated agent calls cannot target a transient tray popout", async () => 
     tool: "agent_chat",
     ownerPrincipal: owner,
     installedVersion: 100,
-    activated: true,
   })!;
 
   expect(() => createChildInvocation(root, tray("wallet"), "send")).toThrow(
@@ -289,7 +283,6 @@ test("a denial closes the descendant permission path", async () => {
     tool: "agent_chat",
     ownerPrincipal: owner,
     installedVersion: 100,
-    activated: true,
   })!;
   const child = createChildInvocation(root, background("untrusted"), "run");
   const summary = {
@@ -328,7 +321,6 @@ test("agent root starts and workspace mutations are bounded", async () => {
       tool: "agent_chat",
       ownerPrincipal: owner,
       installedVersion: 100,
-      activated: true,
     })!;
     completeInvocation(root);
   }
@@ -339,7 +331,6 @@ test("agent root starts and workspace mutations are bounded", async () => {
       tool: "agent_chat",
       ownerPrincipal: owner,
       installedVersion: 100,
-      activated: true,
     }),
   ).toThrow("Agent turn start limit reached");
 });
@@ -352,7 +343,6 @@ test("workspace limits are root-bound and active descendants are app-wide", asyn
     tool: "agent_chat",
     ownerPrincipal: owner,
     installedVersion: 100,
-    activated: true,
   })!;
   const child = createChildInvocation(root, background("wallet"), "send");
   expect(hasActiveInvocationForApp("wallet")).toBe(true);
