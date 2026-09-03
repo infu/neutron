@@ -1495,7 +1495,7 @@ function CertifiedAssetsPage({ runtime }: { runtime: CapabilityRuntime }) {
 
   const publish = () => operation.run("publish", async () => {
     if (!runtime.client) throw new Error("Canister client is not ready");
-    return runtime.client.callDialog("publish_publication", [message, publicationToken], 60);
+    return runtime.client.callDialog("publish_publication", [[message, publicationToken]], 60);
   });
 
   return (
@@ -1522,7 +1522,7 @@ function CertifiedAssetsPage({ runtime }: { runtime: CapabilityRuntime }) {
       <div className="nt-command-bar">
         <button className="nt-button" disabled={Boolean(operation.busy) || !runtime.client || !message || messageBytes > 2048} onClick={() => void publish()} type="button">Review publish</button>
         <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy)} onClick={() => { setPublicationToken(newCapabilityToken()); operation.clear(); }} type="button">New publication token</button>
-        <button className="nt-button nt-button--ghost" disabled={Boolean(operation.busy) || !runtime.client || !message || messageBytes > 2048} onClick={() => void operation.run("delete", () => runtime.client!.callDialog("delete_publication", [message, publicationToken], 60))} type="button">Review conditional delete</button>
+        <button className="nt-button nt-button--ghost" disabled={Boolean(operation.busy) || !runtime.client || !message || messageBytes > 2048} onClick={() => void operation.run("delete", () => runtime.client!.callDialog("delete_publication", [[message, publicationToken]], 60))} type="button">Review conditional delete</button>
       </div>
       <p className="nt-text">Publish returns the exact generated URL path. Keep this page's body and token unchanged for a structurally identical retry or conditional delete.</p>
       <label className="nt-field">
@@ -1531,7 +1531,7 @@ function CertifiedAssetsPage({ runtime }: { runtime: CapabilityRuntime }) {
         <span className="nt-help">{immutableBytes} / 2,048 UTF-8 body bytes · nonce {immutableToken}</span>
       </label>
       <div className="nt-command-bar">
-        <button className="nt-button" disabled={Boolean(operation.busy) || !runtime.client || !immutableMessage || immutableBytes > 2048} onClick={() => void operation.run("immutable blob", () => runtime.client!.callDialog("publish_immutable_blob", [immutableMessage, immutableToken], 60))} type="button">Review immutable publish</button>
+        <button className="nt-button" disabled={Boolean(operation.busy) || !runtime.client || !immutableMessage || immutableBytes > 2048} onClick={() => void operation.run("immutable blob", () => runtime.client!.callDialog("publish_immutable_blob", [[immutableMessage, immutableToken]], 60))} type="button">Review immutable publish</button>
         <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy)} onClick={() => { setImmutableToken(newCapabilityToken()); operation.clear(); }} type="button">New immutable nonce</button>
       </div>
       <label className="nt-field">
@@ -1540,7 +1540,7 @@ function CertifiedAssetsPage({ runtime }: { runtime: CapabilityRuntime }) {
         <span className="nt-help">{mutableBytes} UTF-8 bytes before Candid encoding · nonce {mutableToken}</span>
       </label>
       <div className="nt-command-bar">
-        <button className="nt-button" disabled={Boolean(operation.busy) || !runtime.client || mutableBytes > 1800} onClick={() => void operation.run("mutable blob CAS", () => runtime.client!.callDialog("put_mutable_blob", [mutableMessage, mutableToken], 60))} type="button">Review inline/CAS put</button>
+        <button className="nt-button" disabled={Boolean(operation.busy) || !runtime.client || mutableBytes > 1800} onClick={() => void operation.run("mutable blob CAS", () => runtime.client!.callDialog("put_mutable_blob", [[mutableMessage, mutableToken]], 60))} type="button">Review inline/CAS put</button>
         <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy)} onClick={() => { setMutableToken(newCapabilityToken()); operation.clear(); }} type="button">New CAS nonce</button>
         <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy)} onClick={() => void operation.run("usage", () => querySelf("certified_assets_usage", [null], 30))} type="button">Read scoped usage</button>
       </div>

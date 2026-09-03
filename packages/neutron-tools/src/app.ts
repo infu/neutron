@@ -5,12 +5,17 @@ import {
 } from "./runtime.js";
 import { normalizeUntrustedText } from "./schema.js";
 import { isMsgBusFrameProbe, MSG_BUS_FRAME_READY } from "./frame_handshake.js";
+import { isValidTileId } from "./tile_ids.js";
 import {
   MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
   MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
   MSG_BUS_MAX_PAYLOAD_BYTES,
+  MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
   MSG_BUS_MAX_PROGRESS_BYTES,
   MSG_BUS_MAX_PROGRESS_EVENTS,
+  NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+  NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
   NEUTRON_TOOL_CONTROL_CANCEL,
   SELF_CALL_BINARY_MAX_BYTES,
   SELF_CALL_BINARY_MAX_COUNT,
@@ -22,6 +27,7 @@ import {
   assertBoundedJson,
   assertMsgBusActionName,
   assertToolName,
+  hasExactEnumerableDataKeys,
   isAppStateChangeEnvelope,
   isExecEnvelope,
   isJsonObject,
@@ -72,9 +78,11 @@ import type {
   MsgBusToolDescriptor,
   MsgBusToolHandler,
   MsgBusTransportContext,
+  NeutronToolAudience,
   NeutronCanisterClient,
   OpenAppTileRequest,
   OpenAppTileResult,
+  ProviderPresentationRequest,
   ProgressEnvelope,
   RequestCancelEnvelope,
   ResponseEnvelope,
@@ -319,13 +327,7 @@ async function handleLocalToolMessage(
   ) {
     return;
   }
-  if (
-    (action === msgBusLocalActions.agentConsentDecide ||
-      action === msgBusLocalActions.agentTurnCancel) &&
-    responseTarget !== kernelPort
-  ) {
-    return;
-  }
+  if (responseTarget !== kernelPort) return;
 
   const requestController = registerLocalRequest(responseTarget, request.id);
   if (!requestController) {
@@ -347,6 +349,13 @@ async function handleLocalToolMessage(
         value,
       });
     };
+    const transportContext = Object.hasOwn(request.payload, "context")
+      ? request.payload.context
+      : undefined;
+    const invocation =
+      transportContext && Object.hasOwn(transportContext, "invocation")
+        ? transportContext.invocation
+        : undefined;
     const ok =
       action === msgBusLocalActions.toolsList
         ? listExposedTools()
@@ -360,7 +369,7 @@ async function handleLocalToolMessage(
             : await callExposedTool(
                 request.payload.payload,
                 reportProgress,
-                request.payload.context?.invocation,
+                invocation,
                 requestController.signal,
               );
     assertBoundedJson(ok, "Tool result");
@@ -919,41 +928,108 @@ async function callExposedTool(
   invocation?: MsgBusInvocationMetadata,
   requestSignal?: AbortSignal,
 ): Promise<JsonValue> {
-  if (!isJsonObject(payload) || typeof payload.name !== "string") {
+  if (
+    !isJsonObject(payload) ||
+    !Object.hasOwn(payload, "name") ||
+    typeof payload.name !== "string"
+  ) {
     throw new Error("Invalid tool call payload");
   }
   const registered = localTools.get(payload.name);
   if (!registered) throw new Error(`Unknown tool '${payload.name}'`);
 
+  const hasArguments = Object.hasOwn(payload, "arguments");
   if (
-    "arguments" in payload &&
+    hasArguments &&
     payload.arguments !== undefined &&
     !isJsonObject(payload.arguments)
   ) {
     throw new Error("Tool arguments must be a JSON object");
   }
-  const args = isJsonObject(payload.arguments) ? payload.arguments : {};
-  const caller =
-    "caller" in payload && isJsonObject(payload.caller)
-      ? (payload.caller as MsgBusCallerContext)
+  const args =
+    hasArguments && isJsonObject(payload.arguments) ? payload.arguments : {};
+  let caller: MsgBusCallerContext | undefined;
+  if (Object.hasOwn(payload, "caller")) {
+    const value = payload.caller;
+    if (
+      !isJsonObject(value) ||
+      !Object.hasOwn(value, "endpoint") ||
+      typeof value.endpoint !== "string" ||
+      (["appId", "role", "sessionId"] as const).some(
+        (key) => Object.hasOwn(value, key) && typeof value[key] !== "string",
+      )
+    ) {
+      throw new Error("Invalid tool caller context");
+    }
+    caller = Object.assign(Object.create(null), value) as MsgBusCallerContext;
+  }
+  const annotations = registered.descriptor.annotations;
+  const declaredConsent =
+    annotations && Object.hasOwn(annotations, "neutron:consent")
+      ? annotations["neutron:consent"]
       : undefined;
+  const providerApprovalCapability = parseProviderApprovalCapability(payload);
+  if (
+    providerApprovalCapability &&
+    declaredConsent !== NEUTRON_TOOL_CONSENT_PROVIDER_ONCE
+  ) {
+    throw new Error("Unexpected provider approval capability");
+  }
+  const providerUiSupported = parseProviderUiSupport(payload);
+  if (providerUiSupported && !providerApprovalCapability) {
+    throw new Error("Provider UI support requires an approval capability");
+  }
+  const audience = parseToolAudience(payload);
+  const declaredAudience =
+    annotations && Object.hasOwn(annotations, "neutron:audience")
+      ? annotations["neutron:audience"]
+      : undefined;
+  if (
+    declaredAudience !== undefined &&
+    (audience === undefined || audience !== declaredAudience)
+  ) {
+    throw new Error("Tool audience attestation is missing or invalid");
+  }
+  if (audience !== undefined && declaredAudience !== audience) {
+    throw new Error("Unexpected tool audience attestation");
+  }
+  if (
+    audience === NEUTRON_TOOL_AUDIENCE_AGENT_ROOT &&
+    invocation === undefined
+  ) {
+    throw new Error("Root-agent audience requires invocation metadata");
+  }
   validateToolArguments(registered.descriptor, args);
-  const registration = invocation?.agentConsent
+  const registration =
+    invocation &&
+    Object.hasOwn(invocation, "agentConsent") &&
+    invocation.agentConsent === true
     ? createAgentConsentRegistration(invocation)
     : undefined;
   const abortRegistration = invocation
     ? createInvocationAbortRegistration(invocation, requestSignal)
     : undefined;
   const signal = abortRegistration?.signal ?? requestSignal;
+  const providerInteraction = providerApprovalCapability
+    ? createProviderInteractionRequester(
+        providerApprovalCapability,
+        providerUiSupported,
+        invocation,
+        signal,
+      )
+    : undefined;
   try {
-    const result = await registered.handler(args, {
+    const context = Object.assign(Object.create(null), {
       ...(caller ? { caller } : {}),
       reportProgress,
       kernel: createRequestMsgBusClient(invocation, signal),
+      ...(providerInteraction ?? {}),
+      ...(audience ? { audience } : {}),
       agentMode: invocation !== undefined,
       ...(signal ? { signal } : {}),
       ...(registration ? { agentConsent: registration.api } : {}),
-    });
+    }) as MsgBusToolContext;
+    const result = await registered.handler(args, context);
     assertBoundedJson(result, `Tool '${payload.name}' result`);
     validateToolResult(registered.descriptor, result);
     return result;
@@ -961,6 +1037,156 @@ async function callExposedTool(
     abortRegistration?.dispose();
     registration?.dispose();
   }
+}
+
+function parseToolAudience(
+  payload: JsonObject,
+): NeutronToolAudience | undefined {
+  if (!Object.hasOwn(payload, "audience")) return undefined;
+  const audience = payload.audience;
+  if (
+    audience !== NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE &&
+    audience !== NEUTRON_TOOL_AUDIENCE_AGENT_ROOT
+  ) {
+    throw new Error("Invalid tool audience attestation");
+  }
+  return audience;
+}
+
+const providerApprovalCapabilityPattern = /^[0-9a-f]{64}$/u;
+
+function parseProviderApprovalCapability(
+  payload: JsonObject,
+): string | undefined {
+  if (!Object.hasOwn(payload, "providerApproval")) return undefined;
+  const metadata = payload.providerApproval;
+  if (
+    !hasExactEnumerableDataKeys(metadata, ["capability"]) ||
+    typeof metadata.capability !== "string" ||
+    !providerApprovalCapabilityPattern.test(metadata.capability)
+  ) {
+    throw new Error("Invalid provider approval capability");
+  }
+  return metadata.capability;
+}
+
+function parseProviderUiSupport(payload: JsonObject): boolean {
+  if (!Object.hasOwn(payload, "providerUi")) return false;
+  if (payload.providerUi !== true) {
+    throw new Error("Invalid provider UI support marker");
+  }
+  return true;
+}
+
+async function requestProviderApproval(
+  capability: string,
+  review: JsonObject,
+  invocation?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isJsonObject(review)) {
+    throw new Error("Provider approval review must be a JSON object");
+  }
+  assertBoundedJson(
+    review,
+    "Provider approval review",
+    MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
+  );
+  const result = await execWithTransportContext<JsonValue>(
+    "provider_approval.request",
+    { capability, review },
+    MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+    invocation ? { invocation: Object.freeze({ ...invocation }) } : undefined,
+    signal,
+  );
+  if (
+    !hasExactEnumerableDataKeys(result, ["approved"]) ||
+    result.approved !== true
+  ) {
+    throw new Error("Invalid provider approval response");
+  }
+}
+
+function createProviderInteractionRequester(
+  capability: string,
+  providerUiSupported: boolean,
+  invocation?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
+): Pick<MsgBusToolContext, "requestApproval" | "presentUserInterface"> {
+  let used = false;
+  const consume = <T>(operation: () => Promise<T>): Promise<T> => {
+    if (used) {
+      return Promise.reject(
+        new Error("Provider interaction callback was already used"),
+      );
+    }
+    used = true;
+    return operation();
+  };
+  return {
+    requestApproval: (review) =>
+      consume(() =>
+        requestProviderApproval(capability, review, invocation, signal),
+      ),
+    ...(providerUiSupported
+      ? {
+          presentUserInterface: <T extends JsonValue = JsonValue>(
+            request: ProviderPresentationRequest,
+          ) =>
+            consume(() =>
+              requestProviderPresentation<T>(
+                capability,
+                request,
+                invocation,
+                signal,
+              ),
+            ),
+        }
+      : {}),
+  };
+}
+
+async function requestProviderPresentation<T extends JsonValue = JsonValue>(
+  capability: string,
+  request: ProviderPresentationRequest,
+  invocation?: MsgBusInvocationMetadata,
+  signal?: AbortSignal,
+): Promise<T> {
+  const hasArguments =
+    isJsonObject(request) && Object.hasOwn(request, "arguments");
+  const args = hasArguments ? request.arguments : undefined;
+  if (
+    !hasExactEnumerableDataKeys(
+      request,
+      hasArguments
+        ? ["tileId", "tool", "arguments"]
+        : ["tileId", "tool"],
+    ) ||
+    !isValidTileId(request.tileId) ||
+    typeof request.tool !== "string" ||
+    (args !== undefined && !isJsonObject(args))
+  ) {
+    throw new Error("Invalid provider presentation request");
+  }
+  assertToolName(request.tool);
+  const payload = {
+    capability,
+    tileId: request.tileId,
+    tool: request.tool,
+    arguments: args ?? {},
+  };
+  assertBoundedJson(
+    payload,
+    "Provider presentation request",
+    MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
+  );
+  return execWithTransportContext<T>(
+    "provider_ui.present",
+    payload,
+    MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+    invocation ? { invocation: Object.freeze({ ...invocation }) } : undefined,
+    signal,
+  );
 }
 
 function createInvocationAbortRegistration(
@@ -2376,25 +2602,6 @@ function isDenseDataArray(value: unknown): value is unknown[] {
     }
   }
   return true;
-}
-
-function hasExactEnumerableDataKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Reflect.ownKeys(value);
-  return (
-    keys.length === expected.length &&
-    keys.every((key) => typeof key === "string" && expected.includes(key)) &&
-    expected.every((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      return (
-        descriptor !== undefined &&
-        descriptor.enumerable === true &&
-        "value" in descriptor
-      );
-    })
-  );
 }
 
 function hasExactSelfCallResponseKeys(value: Record<string, unknown>): boolean {

@@ -30,7 +30,7 @@ import {
   MANIFEST_MAX_TILES,
   normalizeUntrustedText,
 } from "../schema.ts";
-import { compareCanonicalText } from "../canonical.ts";
+import { canonicalJson, compareCanonicalText } from "../canonical.ts";
 import { assertAppVersion } from "../version.ts";
 import { isValidTileId } from "../tile_ids.ts";
 
@@ -1058,16 +1058,6 @@ export function toCapabilityPlanWireV1(
     app: plan.app,
     entries: plan.entries,
   });
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort(compareCanonicalText)
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-    .join(",")}}`;
 }
 
 export function serializeCapabilityPlanWireV1(

@@ -28,6 +28,7 @@ entrypoint, and background-initiated permission example.
 | `ethereum_provider` | Connect an EIP-1193 provider, read `eth_chainId`, require mainnet, and request accounts once. | Implemented; needs a browser wallet. |
 | `connections` | Connect OpenRouter in the resident and prove credential delivery without returning the credential. | Credentials are available only to the exact resident background. |
 | `persistent_browser_storage` | Write, read, and clear a bounded resident `localStorage` value. | Origin isolation is implemented; explicit quota and orphan cleanup policy remain open. |
+| Wallet funding provider | Ask Wallet to transfer 0.01 ICP directly to Neutrinite governance or grant that governance canister a transfer-from allowance that expires five minutes after the intent is prepared, with one Wallet-owned decision per action. | Implemented; this flow gives Kitchen Sink no ledger mutation authority, and Kitchen Sink cannot consume an allowance whose spender is Neutrinite governance. |
 | `public_ingress` | Call the public `demo_v1:status` query through its compiler-generated dispatcher and inspect the stable nested-Candid result. | Implemented; `caller: "any"` is intentional for this harmless status fixture. |
 | Certified reads | Inspect the Host-bound publication route and portable blob route synthesized from the declared collection kinds. | Derived from Certified Assets; methods, authority, headers, cache/CORS policy, and certified absence are kernel-owned. |
 | `certified_assets` | Stage and commit an opaque publication, stage a content-addressed immutable blob, and create/replace one keyed mutable blob by exact CAS. | API 2 fixture; public bytes and mutation-attributed storage/cycles are disclosed. |
@@ -51,8 +52,29 @@ the portable blob `GET` policy from their kinds. API-1 HTTP routes remain the
 independent bounded POST-handler capability.
 
 Secondary pages cover managed memory, live method schemas, message-bus
-endpoints, tray state, dense data, and the shared design system. Roadmap-only
+endpoints, Wallet funding, tray state, dense data, and the shared design system. Roadmap-only
 capabilities are not represented as working buttons.
+
+The Wallet funding page is a fixed real-consumer example for swap integrations.
+Both actions call only `app:wallet:background / wallet_fund_v1` with the ICP
+ledger `ryjl3-tyaaa-aaaaa-aaaba-cai`, a requested value of 1,000,000 e8s
+(0.01 ICP), and Neutrinite governance
+`eqsml-lyaaa-aaaaq-aacdq-cai` as the destination or spender. Wallet reads live
+metadata and fees, prepares the review, and performs the ICRC-1 transfer or
+ICRC-2 approval after one decision in Wallet's own modal. The Kernel only
+authenticates and routes the request and opens or focuses Wallet; it does not
+render a token approval dialog. The allowance includes the live transfer fee
+and moves no funds by itself. Only Neutrinite governance can
+consume that allowance; Kitchen Sink deliberately has no `transfer_from`
+backend method or reservation for it. The resident persists each full intent
+before Wallet is called. Pending and ambiguous calls, navigation, and reload
+reuse that request ID; only a terminal Wallet result clears it. Starting over
+requires a per-rail discard action that warns about an unknown prior outcome;
+the same warning guards resetting an unreadable saved record, without disabling
+the other funding rail.
+Resident-origin mutations are serialized across browser windows. If a discard
+or reset reply is ambiguous, that rail stays disabled until it rereads the
+durable record.
 
 The Composition page demonstrates three compiler-derived capabilities rather
 than a second permission object. Contacts publishes one exact internal method
@@ -125,8 +147,10 @@ The resident service exposes strict, bounded tools:
 - `capability_storage_status`, `capability_storage_write`, `capability_storage_clear`
 - `capability_connection_status`, `capability_connection_connect`, `capability_connection_disconnect`
 - `tray_demo_snapshot`, `tray_demo_add`, `tray_demo_mark_read`, `tray_demo_mark_all_read`
+- `wallet_funding_intent_v1` (same-app, own-tile saved retry intent)
 
-Capability controls require a kernel-attested Kitchen Sink tile caller. The
+Capability controls and Wallet intent mutations require a kernel-attested
+Kitchen Sink tile caller. The
 OpenRouter credential is acquired only in the resident, reduced to a delivery
 boolean, cleared immediately, and never returned or logged. Nested agent and
 background calls use the handler's scoped `context.kernel`; they cannot bypass
@@ -151,7 +175,7 @@ npm run test:e2e:kitchensink
 
 The package build emits self-contained `main`, `service`, and `tray` web
 assets, generated Motoko modules, the method-schema artifact, and
-`kitchensink.v0.3.4.neutron`. The backend selects only the exact capability leaf
+`kitchensink.v0.3.8.neutron`. The backend selects only the exact capability leaf
 interfaces from `mo:neutron-capabilities`: backend calls, HTTPS outcalls,
 randomness, chain-key assertion signing, `CertifiedAssetsV2`, and Stable Store.
 It never receives a universal kernel capability object.

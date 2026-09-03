@@ -675,7 +675,7 @@ function jsonUnicodeEscape(codePoint: number): string {
     .padStart(4, "0")}`;
 }
 
-function FrontendToolRequest({
+export function FrontendToolRequest({
   request,
   uiMode,
 }: {
@@ -688,9 +688,6 @@ function FrontendToolRequest({
   useEffect(() => {
     focusConsentControl(rejectRef.current);
   }, [request.cid]);
-  if (request.tool === "workspace.open_tile") {
-    return <WorkspaceTileRequest request={request} uiMode={uiMode} />;
-  }
   if (
     request.target === "kernel" &&
     request.tool.startsWith("vetkeys.")
@@ -745,7 +742,14 @@ function FrontendToolRequest({
             <span id={summaryId}>
               <strong>{callerName}</strong> wants to run{" "}
               <strong>{toolTitle}</strong> in {targetName}.
-              {request.tool === "*" ? (
+              {request.providerReview ? (
+                <>
+                  {" "}
+                  <strong>{targetName}</strong> prepared the exact review below.
+                  Neutron binds this decision to one request but does not
+                  interpret the provider&apos;s values.
+                </>
+              ) : request.tool === "*" ? (
                 " Allowing this inspection once only lists the available tools; it does not run one."
               ) : request.toolDescription ? (
                 <>
@@ -771,32 +775,43 @@ function FrontendToolRequest({
               once” authorizes only this request.
             </ConsentNotice>
           ) : null}
-          <ConsentTechnicalDetails mode={uiMode}>
-          <div className="a-infogrid">
-            <div className="label">Requesting app</div>
-            <div className="val">
-              {request.caller.appId}/{request.caller.role}
+          {request.providerReview ? (
+            <div className="dialog-section provider-approval-review">
+              <CanonicalJsonReview
+                ariaLabel={`Canonical review prepared by ${targetName}`}
+                heading={`Review from ${targetName}`}
+                value={request.providerReview}
+              />
             </div>
-            <div className="label">Target</div>
-            <div className="val principal">{request.target}</div>
-            <div className="label">Tool</div>
-            <div className="val">{request.tool}</div>
-            {request.attachmentBytes ? (
-              <>
-                <div className="label">Binary input</div>
-                <div className="val">
-                  {formatByteCount(request.attachmentBytes.input)}
-                </div>
-                <div className="label">Maximum binary output</div>
-                <div className="val">
-                  {formatByteCount(request.attachmentBytes.maximumOutput)}
-                </div>
-              </>
+          ) : null}
+          <ConsentTechnicalDetails mode={uiMode}>
+            <div className="a-infogrid">
+              <div className="label">Requesting app</div>
+              <div className="val">
+                {request.caller.appId}/{request.caller.role}
+              </div>
+              <div className="label">Target</div>
+              <div className="val principal">{request.target}</div>
+              <div className="label">Tool</div>
+              <div className="val">{request.tool}</div>
+              {request.attachmentBytes ? (
+                <>
+                  <div className="label">Binary input</div>
+                  <div className="val">
+                    {formatByteCount(request.attachmentBytes.input)}
+                  </div>
+                  <div className="label">Maximum binary output</div>
+                  <div className="val">
+                    {formatByteCount(request.attachmentBytes.maximumOutput)}
+                  </div>
+                </>
+              ) : null}
+            </div>
+            {!request.providerReview ? (
+              <div className="a-args">
+                <Args args={request.arguments} />
+              </div>
             ) : null}
-          </div>
-          <div className="a-args">
-            <Args args={request.arguments} />
-          </div>
           </ConsentTechnicalDetails>
           <div className="btn-actions">
             <PauseRequests
@@ -1040,120 +1055,6 @@ function formatByteCount(bytes: number): string {
 function appIdFromEndpoint(endpoint: string): string | null {
   const match = /^app:([^:]+):/u.exec(endpoint);
   return match?.[1] ?? null;
-}
-
-function WorkspaceTileRequest({
-  request,
-  uiMode,
-}: {
-  request: PendingFrontendToolRequest;
-  uiMode: KernelUiMode;
-}) {
-  const apps = useAppsStore((state) => state.list);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const rejectRef = useRef<HTMLButtonElement>(null);
-  const targetAppId = String(request.arguments.appId ?? "");
-  const targetTileId = String(request.arguments.tileId ?? "");
-  const targetApp = apps[targetAppId];
-  const targetTile = targetApp?.tiles.find((tile) => tile.id === targetTileId);
-  const callerName = apps[request.caller.appId]?.name ?? request.caller.appId;
-  const targetName = targetTile?.title ?? targetApp?.name ?? targetAppId;
-  const view =
-    typeof request.arguments.view === "string"
-      ? request.arguments.view.replaceAll(/[_/-]+/gu, " ")
-      : null;
-  const titleId = `workspace-tile-title-${request.cid}`;
-  const summaryId = `workspace-tile-summary-${request.cid}`;
-  useEffect(() => {
-    focusConsentControl(rejectRef.current);
-  }, [request.cid]);
-
-  return (
-    <>
-      <div
-        className="backdrop"
-        onClick={() => rejectFrontendToolRequest(request.cid)}
-      />
-      <div
-        aria-describedby={summaryId}
-        aria-labelledby={titleId}
-        aria-modal="true"
-        className="dialog dialog-warning"
-        data-tid="workspace-tile-dialog"
-        onKeyDown={(event) => {
-          if (
-            dismissOnEscape(event, () =>
-              rejectFrontendToolRequest(request.cid),
-            )
-          ) {
-            return;
-          }
-          trapDialogFocus(event, dialogRef.current);
-        }}
-        ref={dialogRef}
-        role="alertdialog"
-      >
-        <div className="title" id={titleId}>
-          Open {targetName}?
-        </div>
-        <div className="call">
-          <ConsentNotice tone="neutral">
-            <span id={summaryId}>
-              <strong>{callerName}</strong> wants to open one{" "}
-              <strong>{targetName}</strong> tile in the current workspace. This
-              does not grant backend access or permission to control the opened
-              app.
-            </span>
-          </ConsentNotice>
-          <ConsentTechnicalDetails mode={uiMode}>
-          <div className="a-infogrid">
-            <div className="label">Requested by</div>
-            <div className="val">{callerName}</div>
-            <div className="label">Application</div>
-            <div className="val">
-              {targetApp?.name ?? targetAppId} ({targetAppId})
-            </div>
-            <div className="label">Tile</div>
-            <div className="val">{targetName}</div>
-            {view ? (
-              <>
-                <div className="label">View</div>
-                <div className="val">{view}</div>
-              </>
-            ) : null}
-          </div>
-          <div className="uninstall-warning">
-            This opens one installed app tile. It does not grant backend or
-            cross-app method access.
-          </div>
-          </ConsentTechnicalDetails>
-          <div className="btn-actions">
-            <PauseRequests
-              appId={request.caller.appId}
-              onPause={() => rejectFrontendToolRequest(request.cid)}
-            />
-            <button
-              className="btn btn-warning"
-              data-tid="workspace-tile-approve"
-              onClick={() => approveFrontendToolRequest(request.cid, "once")}
-              type="button"
-            >
-              Open
-            </button>
-            <button
-              className="btn btn-sec"
-              data-tid="workspace-tile-reject"
-              onClick={() => rejectFrontendToolRequest(request.cid)}
-              ref={rejectRef}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
 }
 
 export function PauseRequests({

@@ -78,6 +78,8 @@ test("auth agents take their gateway only from certified runtime", async () => {
     /agentOptions:\s*\{[\s\S]*?host:\s*deployment\.gateway[\s\S]*?\}/u,
   );
   expect(source).toContain("host: runtimeDeployment.gateway");
+  expect(source).toContain("fetch: usePollingUpdateFetch(boundBrowserFetch())");
+  expect(source).toContain("fetch: usePollingUpdateFetch(checkedFetch)");
   expect(source).not.toContain("process.env.LOCAL");
   expect(source).not.toContain("process.env.ICP_LOCAL_HOST");
   expect(source).not.toContain("process.env.ICP_II_PROVIDER");

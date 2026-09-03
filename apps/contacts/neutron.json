@@ -2,7 +2,7 @@
   "format": 3,
   "id": "contacts",
   "name": "Contacts",
-  "version": 304,
+  "version": 306,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Private multi-network contacts for Neutron apps and agents",
   "src": "main.mo",

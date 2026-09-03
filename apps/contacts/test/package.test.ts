@@ -16,10 +16,24 @@ const migrationUrl = new URL(
   "../backend/memory/contacts/v1_to_v2.mo",
   import.meta.url,
 );
-const packageUrl = new URL("../contacts.v0.3.4.neutron", import.meta.url);
+const packageUrl = new URL("../contacts.v0.3.6.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
+}
+
+function internetComputerPropertySchemas(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(internetComputerPropertySchemas);
+  }
+  if (value === null || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  return [
+    ...(Object.prototype.hasOwnProperty.call(record, "internet_computer")
+      ? [record.internet_computer]
+      : []),
+    ...Object.values(record).flatMap(internetComputerPropertySchemas),
+  ];
 }
 
 test("Contacts V2 declares one migrated private memory and five resident tools", async () => {
@@ -28,7 +42,7 @@ test("Contacts V2 declares one migrated private memory and five resident tools",
   expect(value).toMatchObject({
     format: 3,
     id: "contacts",
-    version: 304,
+    version: 306,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     capabilities: {
       preapproved_self_calls: {
@@ -109,6 +123,19 @@ test("Contacts public variants generate method schemas", async () => {
   });
   expect(JSON.stringify(artifact.methods.contacts_save)).toContain("neutron");
   expect(JSON.stringify(artifact.methods.contacts_save)).toContain("principal");
+  const accountStringSchema = {
+    type: "string",
+    description: "icrc1 account or 'id[-sub]' shorthand",
+  };
+  // icblast advertises its string adapter for both schema directions. Kernel
+  // uses that adapter for input, while its API-1 live output projection stays
+  // structural; contacts_self_call.test.ts covers that deliberate asymmetry.
+  expect(
+    internetComputerPropertySchemas(artifact.methods.contacts_save?.input),
+  ).toEqual([accountStringSchema]);
+  expect(
+    internetComputerPropertySchemas(artifact.methods.contacts_save?.output),
+  ).toEqual([accountStringSchema]);
 });
 
 test("Contacts keeps V1 immutable and V2 memory self-contained", async () => {

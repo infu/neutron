@@ -961,10 +961,6 @@ test.describe("Spreadsheet — 20 release user flows", () => {
     expect(discardedTarget.dirty).toBe(false);
     expect(discardedTarget.workbookId).not.toBe(dirtyTarget.workbookId);
 
-    // The previous handoff focused the existing Spreadsheet tile. Neutron
-    // admits app-requested tile focus at most once every two seconds, so a
-    // successful user retry must occur after that independent focus window.
-    await page.waitForTimeout(2_100);
     await openInSpreadsheet.click();
     await expect(permission).toHaveCount(0);
     // The handoff performs an app-focus request, a binary read, and an

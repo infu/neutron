@@ -1,8 +1,9 @@
-import { Principal } from "@icp-sdk/core/principal";
 import { isJsonObject, type JsonObject } from "neutron-tools/app";
 import {
-  encodeIcrcAccount,
-} from "neutron-tools/src/icrc_account.js";
+  bytesToHex,
+  parseCandidIcrcAccount,
+  parseFixedBytes,
+} from "./icrc_account.ts";
 
 export type HistoryOperation =
   | "transfer"
@@ -371,7 +372,10 @@ function parseOptionalAddress(value: unknown): HistoryAddress | null {
       value: fixedBlobHex(payload, 32, "ICP account id"),
     };
   }
-  return { kind, value: parseIcrcAccount(payload) };
+  return {
+    kind,
+    value: parseCandidIcrcAccount(payload, "ICRC history account"),
+  };
 }
 
 function parseIntent(value: unknown): HistoryIntent | null {
@@ -433,35 +437,6 @@ function variant<const T extends string>(
   return [key, record[key] ?? null];
 }
 
-function parseIcrcAccount(value: unknown): string {
-  const account = requiredObject(value, "ICRC history account");
-  const owner = requiredPrincipal(account.owner, "ICRC history account owner");
-  const subaccount = account.subaccount == null
-    ? undefined
-    : requiredBytes(
-      account.subaccount,
-      32,
-      "ICRC history account subaccount",
-    );
-  return encodeIcrcAccount({
-    owner,
-    ...(subaccount === undefined ? {} : { subaccount }),
-  });
-}
-
-function requiredPrincipal(value: unknown, label: string): Principal {
-  try {
-    if (typeof value !== "string" || value.length === 0) {
-      throw new Error("missing principal");
-    }
-    const principal = Principal.fromText(value);
-    if (principal.toText() !== value) throw new Error("noncanonical principal");
-    return principal;
-  } catch {
-    throw new Error(`Invalid ${label}`);
-  }
-}
-
 function optionalBlobHex(value: unknown, label: string): string | null {
   return value == null ? null : blobHex(value, label);
 }
@@ -471,29 +446,12 @@ function fixedBlobHex(
   byteLength: number,
   label: string,
 ): string {
-  return bytesToHex(requiredBytes(value, byteLength, label));
+  return bytesToHex(parseFixedBytes(value, byteLength, label));
 }
 
 function blobHex(value: unknown, label: string): string {
   if (!(value instanceof Uint8Array)) throw new Error(`Invalid ${label}`);
   return bytesToHex(value);
-}
-
-function requiredBytes(
-  value: unknown,
-  byteLength: number,
-  label: string,
-): Uint8Array {
-  if (!(value instanceof Uint8Array) || value.byteLength !== byteLength) {
-    throw new Error(`Invalid ${label}`);
-  }
-  return Uint8Array.from(value);
-}
-
-function bytesToHex(value: Uint8Array): string {
-  let result = "";
-  for (const byte of value) result += byte.toString(16).padStart(2, "0");
-  return result;
 }
 
 function requiredObject(value: unknown, label: string): JsonObject {

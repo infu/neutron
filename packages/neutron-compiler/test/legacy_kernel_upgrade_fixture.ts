@@ -39,9 +39,14 @@ export type LegacyKernelReleaseFixture = Readonly<{
 }>;
 
 type RetainedKernelReleaseFixture = Readonly<{
-  label: "v0.3.21";
-  version: 321;
-  archive: "../../../apps/kernel/kernel.v0.3.21.neutron";
+  label: "v0.3.21" | "v0.3.23" | "v0.3.24" | "v0.3.25" | "v0.3.26";
+  version: 321 | 323 | 324 | 325 | 326;
+  archive:
+    | "../../../apps/kernel/kernel.v0.3.21.neutron"
+    | "../../../apps/kernel/kernel.v0.3.23.neutron"
+    | "../../../apps/kernel/kernel.v0.3.24.neutron"
+    | "../../../apps/kernel/kernel.v0.3.25.neutron"
+    | "../../../apps/kernel/kernel.v0.3.26.neutron";
   bytes: number;
   sha256: string;
   persistenceMode: "classical";
@@ -128,6 +133,54 @@ export const RETAINED_KERNEL_V321_RELEASE = {
   ),
 } as const satisfies RetainedKernelReleaseFixture;
 
+export const PRODUCTION_KERNEL_V323_RELEASE = {
+  label: "v0.3.23",
+  version: 323,
+  archive: "../../../apps/kernel/kernel.v0.3.23.neutron",
+  bytes: 2_448_813,
+  sha256: "e2e5cea791af54a5052f227fcda57f07ecec1a5b4d11bfb5c79696c75d826334",
+  persistenceMode: "classical",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.23.neutron", import.meta.url),
+  ),
+} as const satisfies RetainedKernelReleaseFixture;
+
+export const PRODUCTION_KERNEL_V324_RELEASE = {
+  label: "v0.3.24",
+  version: 324,
+  archive: "../../../apps/kernel/kernel.v0.3.24.neutron",
+  bytes: 2_449_608,
+  sha256: "6ae401a934160410ec7d099f9d3a7f62c94126ab491fc115cc2e38b5b27c067a",
+  persistenceMode: "classical",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.24.neutron", import.meta.url),
+  ),
+} as const satisfies RetainedKernelReleaseFixture;
+
+export const PRODUCTION_KERNEL_V325_RELEASE = {
+  label: "v0.3.25",
+  version: 325,
+  archive: "../../../apps/kernel/kernel.v0.3.25.neutron",
+  bytes: 2_415_653,
+  sha256: "3f7293fb8ab0fe25fd59b2a02e20b66eb4c2920858ed660e163265a4481a098b",
+  persistenceMode: "classical",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.25.neutron", import.meta.url),
+  ),
+} as const satisfies RetainedKernelReleaseFixture;
+
+export const PRODUCTION_KERNEL_V326_RELEASE = {
+  label: "v0.3.26",
+  version: 326,
+  archive: "../../../apps/kernel/kernel.v0.3.26.neutron",
+  bytes: 2_415_895,
+  sha256: "738aa64943c759b573d8dd5d9094c7ce9b3017768a9c2616f638a272a591bda4",
+  persistenceMode: "classical",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.26.neutron", import.meta.url),
+  ),
+} as const satisfies RetainedKernelReleaseFixture;
+
 /** Backward-compatible aliases for callers that mean the latest predecessor. */
 export const LEGACY_KERNEL_VERSION = LEGACY_KERNEL_RELEASES[3].version;
 export const LEGACY_KERNEL_ARCHIVE_BYTES = LEGACY_KERNEL_RELEASES[3].bytes;
@@ -194,6 +247,50 @@ const RETAINED_KERNEL_V321_IDENTITY = {
     },
   ],
 } as const satisfies KernelUpgradeIdentityFixture<321>;
+
+const PRODUCTION_KERNEL_V323_IDENTITY = {
+  ...RETAINED_KERNEL_V321_IDENTITY,
+  archive: PRODUCTION_KERNEL_V323_RELEASE.archive,
+  bytes: PRODUCTION_KERNEL_V323_RELEASE.bytes,
+  sha256: PRODUCTION_KERNEL_V323_RELEASE.sha256,
+  package: {
+    ...RETAINED_KERNEL_V321_IDENTITY.package,
+    version: PRODUCTION_KERNEL_V323_RELEASE.version,
+  },
+} as const satisfies KernelUpgradeIdentityFixture<323>;
+
+const PRODUCTION_KERNEL_V324_IDENTITY = {
+  ...PRODUCTION_KERNEL_V323_IDENTITY,
+  archive: PRODUCTION_KERNEL_V324_RELEASE.archive,
+  bytes: PRODUCTION_KERNEL_V324_RELEASE.bytes,
+  sha256: PRODUCTION_KERNEL_V324_RELEASE.sha256,
+  package: {
+    ...PRODUCTION_KERNEL_V323_IDENTITY.package,
+    version: PRODUCTION_KERNEL_V324_RELEASE.version,
+  },
+} as const satisfies KernelUpgradeIdentityFixture<324>;
+
+const PRODUCTION_KERNEL_V325_IDENTITY = {
+  ...PRODUCTION_KERNEL_V324_IDENTITY,
+  archive: PRODUCTION_KERNEL_V325_RELEASE.archive,
+  bytes: PRODUCTION_KERNEL_V325_RELEASE.bytes,
+  sha256: PRODUCTION_KERNEL_V325_RELEASE.sha256,
+  package: {
+    ...PRODUCTION_KERNEL_V324_IDENTITY.package,
+    version: PRODUCTION_KERNEL_V325_RELEASE.version,
+  },
+} as const satisfies KernelUpgradeIdentityFixture<325>;
+
+const PRODUCTION_KERNEL_V326_IDENTITY = {
+  ...PRODUCTION_KERNEL_V325_IDENTITY,
+  archive: PRODUCTION_KERNEL_V326_RELEASE.archive,
+  bytes: PRODUCTION_KERNEL_V326_RELEASE.bytes,
+  sha256: PRODUCTION_KERNEL_V326_RELEASE.sha256,
+  package: {
+    ...PRODUCTION_KERNEL_V325_IDENTITY.package,
+    version: PRODUCTION_KERNEL_V326_RELEASE.version,
+  },
+} as const satisfies KernelUpgradeIdentityFixture<326>;
 
 export type LegacyUpgradeCompileFixture = Readonly<{
   release: KernelUpgradeReleaseFixture;
@@ -275,6 +372,74 @@ async function loadRetainedKernelV321Fixture(): Promise<{
   return { identity: RETAINED_KERNEL_V321_IDENTITY, archive };
 }
 
+async function loadProductionKernelV323Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<323>;
+  archive: Uint8Array;
+}> {
+  const archive = await loadKernelArchive(
+    PRODUCTION_KERNEL_V323_RELEASE.archivePath,
+    "The production v0.3.23 Kernel predecessor",
+  );
+  assertArchiveIdentity(
+    PRODUCTION_KERNEL_V323_RELEASE.label,
+    archive,
+    PRODUCTION_KERNEL_V323_RELEASE.bytes,
+    PRODUCTION_KERNEL_V323_RELEASE.sha256,
+  );
+  return { identity: PRODUCTION_KERNEL_V323_IDENTITY, archive };
+}
+
+export async function loadProductionKernelV324Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<324>;
+  archive: Uint8Array;
+}> {
+  const archive = await loadKernelArchive(
+    PRODUCTION_KERNEL_V324_RELEASE.archivePath,
+    "The production v0.3.24 Kernel predecessor",
+  );
+  assertArchiveIdentity(
+    PRODUCTION_KERNEL_V324_RELEASE.label,
+    archive,
+    PRODUCTION_KERNEL_V324_RELEASE.bytes,
+    PRODUCTION_KERNEL_V324_RELEASE.sha256,
+  );
+  return { identity: PRODUCTION_KERNEL_V324_IDENTITY, archive };
+}
+
+export async function loadProductionKernelV325Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<325>;
+  archive: Uint8Array;
+}> {
+  const archive = await loadKernelArchive(
+    PRODUCTION_KERNEL_V325_RELEASE.archivePath,
+    "The production v0.3.25 Kernel predecessor",
+  );
+  assertArchiveIdentity(
+    PRODUCTION_KERNEL_V325_RELEASE.label,
+    archive,
+    PRODUCTION_KERNEL_V325_RELEASE.bytes,
+    PRODUCTION_KERNEL_V325_RELEASE.sha256,
+  );
+  return { identity: PRODUCTION_KERNEL_V325_IDENTITY, archive };
+}
+
+export async function loadProductionKernelV326Fixture(): Promise<{
+  identity: KernelUpgradeIdentityFixture<326>;
+  archive: Uint8Array;
+}> {
+  const archive = await loadKernelArchive(
+    PRODUCTION_KERNEL_V326_RELEASE.archivePath,
+    "The production v0.3.26 Kernel predecessor",
+  );
+  assertArchiveIdentity(
+    PRODUCTION_KERNEL_V326_RELEASE.label,
+    archive,
+    PRODUCTION_KERNEL_V326_RELEASE.bytes,
+    PRODUCTION_KERNEL_V326_RELEASE.sha256,
+  );
+  return { identity: PRODUCTION_KERNEL_V326_IDENTITY, archive };
+}
+
 export async function compileLegacyKernelUpgradeFixture(
   legacyVersion: LegacyKernelVersion = LEGACY_KERNEL_VERSION,
 ): Promise<LegacyUpgradeCompileFixture> {
@@ -318,6 +483,54 @@ export async function compileFinalCandidateRetainedKernelUpgradeFixture({
     expectedSha256,
     release: RETAINED_KERNEL_V321_RELEASE,
     loadPredecessor: loadRetainedKernelV321Fixture,
+  });
+}
+
+export async function compileFinalCandidateProductionKernelUpgradeFixture({
+  expectedSha256,
+}: {
+  expectedSha256: string;
+}): Promise<LegacyUpgradeCompileFixture> {
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release: PRODUCTION_KERNEL_V323_RELEASE,
+    loadPredecessor: loadProductionKernelV323Fixture,
+  });
+}
+
+export async function compileFinalCandidateProductionKernelV324UpgradeFixture({
+  expectedSha256,
+}: {
+  expectedSha256: string;
+}): Promise<LegacyUpgradeCompileFixture> {
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release: PRODUCTION_KERNEL_V324_RELEASE,
+    loadPredecessor: loadProductionKernelV324Fixture,
+  });
+}
+
+export async function compileFinalCandidateProductionKernelV325UpgradeFixture({
+  expectedSha256,
+}: {
+  expectedSha256: string;
+}): Promise<LegacyUpgradeCompileFixture> {
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release: PRODUCTION_KERNEL_V325_RELEASE,
+    loadPredecessor: loadProductionKernelV325Fixture,
+  });
+}
+
+export async function compileFinalCandidateProductionKernelV326UpgradeFixture({
+  expectedSha256,
+}: {
+  expectedSha256: string;
+}): Promise<LegacyUpgradeCompileFixture> {
+  return compileFinalCandidateKernelUpgradeFixture({
+    expectedSha256,
+    release: PRODUCTION_KERNEL_V326_RELEASE,
+    loadPredecessor: loadProductionKernelV326Fixture,
   });
 }
 
@@ -407,7 +620,13 @@ async function compileKernelUpgradeCandidate(
   assertCandidatePackageRecord(candidateKernel);
 
   let initial: CompileResult;
-  if (release.version === RETAINED_KERNEL_V321_RELEASE.version) {
+  if (
+    release.version === RETAINED_KERNEL_V321_RELEASE.version ||
+    release.version === PRODUCTION_KERNEL_V323_RELEASE.version ||
+    release.version === PRODUCTION_KERNEL_V324_RELEASE.version ||
+    release.version === PRODUCTION_KERNEL_V325_RELEASE.version ||
+    release.version === PRODUCTION_KERNEL_V326_RELEASE.version
+  ) {
     initial = await compileFreshPackages({
       packages: [legacyKernel, hello],
       persistenceMode: release.persistenceMode,
@@ -496,7 +715,14 @@ function assertPredecessorPackageRecord(
     }
     return;
   }
-  if (release.version === 315 || release.version === 321) {
+  if (
+    release.version === 315 ||
+    release.version === 321 ||
+    release.version === 323 ||
+    release.version === 324 ||
+    release.version === 325 ||
+    release.version === 326
+  ) {
     if (
       record?.package.version !== release.version ||
       record.license.id !== "LicenseRef-Neutron-Public-License-1.0" ||

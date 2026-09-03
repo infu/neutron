@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
-import { Principal } from "@icp-sdk/core/principal";
-import { encodeIcrcAccount } from "neutron-tools/src/icrc_account.js";
+import {
+  decodeIcrcAccount,
+  encodeIcrcAccount,
+} from "neutron-tools/src/icrc_account.js";
 import {
   historyAddressText,
   historyPageRequest,
@@ -10,10 +12,15 @@ import {
 } from "../src/history.ts";
 
 const ledger = "mxzaz-hqaaa-aaaar-qaada-cai";
+const principalOnlyAccount = "togwv-zqaaa-aaaal-qr7aa-cai";
 const subaccount = Uint8Array.from([
   ...new Array(31).fill(0),
   255,
 ]);
+const accountWithSubaccount = encodeIcrcAccount({
+  owner: decodeIcrcAccount(ledger).owner,
+  subaccount,
+});
 const accountId = Uint8Array.from(
   { length: 32 },
   (_, index) => index,
@@ -36,16 +43,10 @@ test("Wallet history preserves exact amounts and structured cursors", () => {
             fee: "10",
             balance_effect: "-123456789012345678901244",
             from: {
-              icrc: {
-                owner: ledger,
-                subaccount,
-              },
+              icrc: { owner: ledger, subaccount },
             },
             to: {
-              icrc: {
-                owner: "aaaaa-aa",
-                subaccount: null,
-              },
+              icrc: { owner: principalOnlyAccount, subaccount: null },
             },
             spender: { icp_account_identifier: accountId },
             memo: Uint8Array.of(1, 2),
@@ -79,12 +80,9 @@ test("Wallet history preserves exact amounts and structured cursors", () => {
   const transaction = page.records[0]!;
   if (transaction.kind !== "transaction") throw new Error("fixture");
   expect(historyAddressText(transaction.from)).toBe(
-    encodeIcrcAccount({
-      owner: Principal.fromText(ledger),
-      subaccount,
-    }),
+    accountWithSubaccount,
   );
-  expect(historyAddressText(transaction.to)).toBe("aaaaa-aa");
+  expect(historyAddressText(transaction.to)).toBe(principalOnlyAccount);
   expect(historyAddressText(transaction.spender)).toBe(
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
   );
@@ -144,6 +142,18 @@ test("Wallet history rejects legacy and malformed blob projections", () => {
   ).toThrow("Invalid ICRC history account");
   expect(() =>
     parseHistoryPage(transaction({
+      from: { icrc: { owner: principalOnlyAccount } },
+    }))
+  ).not.toThrow();
+  expect(() =>
+    parseHistoryPage(transaction({
+      from: {
+        icrc: { owner: principalOnlyAccount, subaccount: null },
+      },
+    }))
+  ).not.toThrow();
+  expect(() =>
+    parseHistoryPage(transaction({
       from: { icp_account_identifier: new Uint8Array(31) },
     }))
   ).toThrow("Invalid ICP account id");
@@ -152,6 +162,21 @@ test("Wallet history rejects legacy and malformed blob projections", () => {
       from: { icp_account_identifier: new Array(32).fill(0) },
     }))
   ).toThrow("Invalid ICP account id");
+  expect(() =>
+    parseHistoryPage(transaction({
+      from: {
+        icrc: {
+          owner: principalOnlyAccount,
+          extra: null,
+        },
+      },
+    }))
+  ).toThrow("Invalid ICRC history account");
+  expect(() =>
+    parseHistoryPage(transaction({
+      from: { icrc: ` ${principalOnlyAccount} ` },
+    }))
+  ).toThrow("Invalid ICRC history account");
 });
 
 test("Wallet history decodes adjustment and sync status variants", () => {

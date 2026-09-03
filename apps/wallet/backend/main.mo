@@ -1,4 +1,5 @@
 import Array "mo:core/Array";
+import Blob "mo:core/Blob";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
 import List "mo:core/List";
@@ -6,6 +7,7 @@ import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Nat64 "mo:core/Nat64";
 import Nat8 "mo:core/Nat8";
+import Order "mo:core/Order";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Set "mo:core/Set";
@@ -13,6 +15,9 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import NeutronCapabilities "mo:neutron-capabilities";
 import Catalog "./Catalog";
+import AllowanceAccount "./allowances/Account";
+import IcpAllowances "./allowances/IcpLegacy";
+import Icrc103 "./allowances/Icrc103";
 import Capabilities "./capabilities/Types";
 import ChainKey "./chainkey/Client";
 import Withdrawals "./chainkey/Withdrawals";
@@ -21,7 +26,10 @@ import HistoryStore "./history/Store";
 import HistoryTypes "./history/Types";
 import Icrc "./icrc1/Client";
 import IcrcTypes "./icrc1/Types";
+import FundingDisplay "./funding/Display";
+import FundingJournal "./funding/Journal";
 import Memory "./memory/wallet/v1";
+import CommandMemory "./memory/wallet_commands/v1";
 
 module {
     let BATCH_SIZE = 20;
@@ -29,6 +37,17 @@ module {
     let MAX_RETAINED_CUSTOM_LEDGERS = 64;
     let MAX_SELECTED_LEDGERS = 16;
     let RECENT_MINTED_LIMIT = 20;
+    let COMMAND_CAPACITY = 256;
+    let COMMAND_PRUNE_LIMIT = 64;
+    let MAX_PREPARED_COMMANDS_PER_APP = 8;
+    let REQUEST_ID_BYTES = 16;
+    let MAX_FUNDING_INTENT_BYTES = 4_096;
+    let MAX_FUNDING_CALL_ARGS_BYTES = 4_096;
+    let MAX_FUNDING_MEMO_BYTES = 32;
+    let MAX_FUNDING_VALIDITY_NS : Nat64 = 600_000_000_000;
+    let MAX_ALLOWANCE_LIFETIME_NS : Nat64 = 600_000_000_000;
+    let COMMAND_RETENTION_NS : Int = 86_400_000_000_000;
+    let MAX_ALLOWANCE_PAGE_SIZE = 100;
 
     public type CatalogLedger = {
         principal : Principal;
@@ -287,6 +306,195 @@ module {
         #err : Text;
     };
 
+    public type WalletFundingCallerV1 = {
+        endpoint : Text;
+        app_id : Text;
+        role : ?Text;
+    };
+
+    public type WalletFundingSourceV1 = {
+        #icrc;
+        #icp;
+    };
+
+    public type WalletIcrcAccountV1 = {
+        owner : Principal;
+        subaccount : ?Blob;
+    };
+
+    public type WalletApprovalSpenderV1 = {
+        #icrc : WalletIcrcAccountV1;
+        #icp_account_identifier : Blob;
+    };
+
+    public type WalletFundingIntentV1 = {
+        #direct : {
+            amount_atoms : Nat;
+            to : WalletIcrcAccountV1;
+            memo : ?Blob;
+        };
+        #allowance : {
+            amount_atoms : Nat;
+            spender : WalletIcrcAccountV1;
+            expires_at_ns : Nat64;
+        };
+        #revoke : {
+            source : WalletFundingSourceV1;
+            spender : WalletApprovalSpenderV1;
+            expected_allowance_atoms : Nat;
+            expected_expires_at_ns : ?Nat64;
+        };
+    };
+
+    public type WalletFundingPrepareRequestV1 = {
+        request_id : Blob;
+        ledger : Principal;
+        valid_until_ns : Nat64;
+        caller : WalletFundingCallerV1;
+        agent_mode : Bool;
+        intent : WalletFundingIntentV1;
+    };
+
+    public type WalletFundingCommandIdV1 = {
+        caller_app_id : Text;
+        request_id : Blob;
+    };
+
+    public type WalletFundingReviewKindV1 = {
+        #direct;
+        #allowance;
+        #revoke;
+    };
+
+    public type WalletFundingReviewV1 = {
+        command_id : WalletFundingCommandIdV1;
+        kind : WalletFundingReviewKindV1;
+        ledger : Principal;
+        token_name : ?Text;
+        token_symbol : Text;
+        decimals : Nat;
+        amount_atoms : Nat;
+        transfer_fee_atoms : ?Nat;
+        approval_fee_atoms : ?Nat;
+        allowance_atoms : ?Nat;
+        current_allowance_atoms : ?Nat;
+        current_expires_at_ns : ?Nat64;
+        total_debit_atoms : Nat;
+        destination : ?WalletIcrcAccountV1;
+        spender : ?WalletApprovalSpenderV1;
+        memo : ?Blob;
+        valid_until_ns : Nat64;
+        expires_at_ns : ?Nat64;
+    };
+
+    public type WalletFundingPreparedV1 = {
+        command_id : WalletFundingCommandIdV1;
+        review : WalletFundingReviewV1;
+    };
+
+    public type WalletFundingTransferredV1 = {
+        command_id : WalletFundingCommandIdV1;
+        block_index : Nat;
+        duplicate : Bool;
+    };
+
+    public type WalletFundingApprovalReceiptV1 = {
+        command_id : WalletFundingCommandIdV1;
+        block_index : ?Nat;
+        duplicate : Bool;
+    };
+
+    public type WalletFundingExecutionMessageV1 = {
+        command_id : WalletFundingCommandIdV1;
+        message : Text;
+    };
+
+    public type WalletFundingExecutionResultV1 = {
+        #transferred : WalletFundingTransferredV1;
+        #approved : WalletFundingApprovalReceiptV1;
+        #revoked : WalletFundingApprovalReceiptV1;
+        #pending : WalletFundingExecutionMessageV1;
+        #rejected : WalletFundingExecutionMessageV1;
+    };
+
+    public type WalletFundingCompletedV1 = {
+        review : WalletFundingReviewV1;
+        result : WalletFundingExecutionResultV1;
+    };
+
+    public type WalletFundingPrepareOutcomeV1 = {
+        #prepared : WalletFundingPreparedV1;
+        #completed : WalletFundingCompletedV1;
+    };
+
+    public type WalletFundingPrepareResultV1 = {
+        #ok : WalletFundingPrepareOutcomeV1;
+        #err : Text;
+    };
+
+    public type WalletFundingExecuteRequestV1 = {
+        command_id : WalletFundingCommandIdV1;
+    };
+
+    public type WalletAllowanceCursorV1 = {
+        #icrc103 : {
+            from_account : WalletIcrcAccountV1;
+            to_spender : WalletIcrcAccountV1;
+            pages : Nat;
+            entries : Nat;
+        };
+        #icp : {
+            from_account_id : Blob;
+            prev_spender_id : Blob;
+            pages : Nat;
+            entries : Nat;
+        };
+    };
+
+    public type WalletAllowancesPageRequestV1 = {
+        ledger : Principal;
+        cursor : ?WalletAllowanceCursorV1;
+        limit : Nat;
+    };
+
+    public type WalletAllowanceEntryV1 = {
+        spender : WalletApprovalSpenderV1;
+        amount_atoms : Nat;
+        expires_at_ns : ?Nat64;
+    };
+
+    public type WalletAllowanceSourceV1 = {
+        #icrc103;
+        #icp;
+        #none;
+    };
+
+    public type WalletAllowancesStateV1 = {
+        #ready;
+        #unsupported;
+        #permission_required;
+        #degraded : Text;
+    };
+
+    public type WalletAllowancesPageV1 = {
+        ledger : Principal;
+        token_name : ?Text;
+        token_symbol : Text;
+        decimals : Nat;
+        revoke_fee_atoms : ?Nat;
+        source : WalletAllowanceSourceV1;
+        state : WalletAllowancesStateV1;
+        entries : [WalletAllowanceEntryV1];
+        next : ?WalletAllowanceCursorV1;
+        has_more : Bool;
+        warning : ?Text;
+    };
+
+    public type WalletAllowancesPageResultV1 = {
+        #ok : WalletAllowancesPageV1;
+        #err : Text;
+    };
+
     public type WalletHistoryOperation = {
         #transfer;
         #mint;
@@ -457,9 +665,27 @@ module {
         logo : ?Text;
     };
 
+    type FundingMetadata = {
+        name : ?Text;
+        symbol : Text;
+        decimals : Nat;
+        fee : Nat;
+    };
+
+    type PreparedFunding = {
+        operation : CommandMemory.Operation;
+        review : CommandMemory.ReviewFacts;
+    };
+
+    type CurrentApproval = {
+        amount : Nat;
+        expires_at : ?Nat64;
+    };
+
     public type AppBackendEnvironment = {
         stable_memory : {
             wallet : Memory.Mem;
+            wallet_commands : CommandMemory.Mem;
         };
         app_calls : AppCalls;
         capabilities : {
@@ -469,6 +695,7 @@ module {
 
     public class Init(env : AppBackendEnvironment) {
         let mem = env.stable_memory.wallet;
+        let commandMem = env.stable_memory.wallet_commands;
         let appCalls = env.app_calls;
         let calls = env.capabilities.backend_calls;
         let history = History.Service(mem, calls);
@@ -644,27 +871,23 @@ module {
                 case (#internet_computer(value)) value;
                 case (_) return #err("Contact destination is not an ICRC account");
             };
-            let transfer = Icrc.decodeTransfer(await* calls.call(
-                Icrc.transferRequest(
-                    request.ledger,
-                    account,
-                    request.amount,
-                    fee,
-                    Nat64.fromNat(Int.abs(Time.now())),
-                ),
-            ));
-            switch (transfer) {
-                case (#err(error)) #err(error);
-                case (#ok(#Ok(blockIndex))) {
-                    transferSucceeded(request, resolved, fee, blockIndex, false, null, null);
-                    #ok(transferReceipt(request, fee, blockIndex, null, false, false));
-                };
-                case (#ok(#Err(#Duplicate(value)))) {
+            let args : IcrcTypes.TransferArg = {
+                from_subaccount = null;
+                to = account;
+                amount = request.amount;
+                fee = ?fee;
+                memo = null;
+                created_at_time = ?Nat64.fromNat(Int.abs(Time.now()));
+            };
+            switch (await* Icrc.executeTransfer(calls, request.ledger, args)) {
+                case (#unknown(error)) #err(error);
+                case (#rejected(error)) #err(error);
+                case (#ok(receipt)) {
                     transferSucceeded(
                         request,
                         resolved,
                         fee,
-                        value.duplicate_of,
+                        receipt.block_index,
                         false,
                         null,
                         null,
@@ -672,13 +895,12 @@ module {
                     #ok(transferReceipt(
                         request,
                         fee,
-                        value.duplicate_of,
+                        receipt.block_index,
                         null,
                         false,
-                        true,
+                        receipt.duplicate,
                     ));
                 };
-                case (#ok(#Err(error))) #err(Icrc.transferErrorText(error));
             };
         };
 
@@ -740,6 +962,1962 @@ module {
                         false,
                     ));
                 };
+            };
+        };
+
+        public func /*update*/wallet_funding_prepare_v1(
+            request : WalletFundingPrepareRequestV1,
+        ) : async* WalletFundingPrepareResultV1 {
+            let now = nowNanos();
+            switch (validateFundingKey(request)) {
+                case (#err(error)) return #err(error);
+                case (#ok(())) {};
+            };
+            let key : CommandMemory.CommandKey = {
+                caller_app_id = request.caller.app_id;
+                request_id = request.request_id;
+            };
+            let intent = to_candid (request);
+            if (intent.size() > MAX_FUNDING_INTENT_BYTES) {
+                return #err("Funding request exceeds the Wallet size limit");
+            };
+            switch (existingFundingCommand(key, request, now)) {
+                case (#err(error)) return #err(error);
+                case (#ok(?outcome)) {
+                    return validateExistingFundingOutcome(request, outcome, now);
+                };
+                case (#ok(null)) {};
+            };
+            switch (validateCurrentFundingAuthority(request, now)) {
+                case (#err(error)) return #err(error);
+                case (#ok(())) {};
+            };
+            switch (existingActiveIcpRevoke(request, now)) {
+                case (#err(error)) return #err(error);
+                case (#ok(?outcome)) {
+                    return validateExistingFundingOutcome(request, outcome, now);
+                };
+                case (#ok(null)) {};
+            };
+
+            if (not ensureFundingCapacity(Time.now())) {
+                return #err("Wallet funding command capacity is full");
+            };
+            if (
+                FundingJournal.activeCommandCount(
+                    commandMem.commands,
+                    request.caller.app_id,
+                ) >=
+                MAX_PREPARED_COMMANDS_PER_APP
+            ) {
+                return #err("This app already has too many unresolved Wallet commands");
+            };
+
+            let prepared = switch (await* prepareFundingOperation(request, now)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            let finishedAt = nowNanos();
+            if (finishedAt > request.valid_until_ns) {
+                return #err("Funding request expired during preparation");
+            };
+            // Another identical prepare may have completed while ledger facts
+            // were awaited. Reuse its durable result and never overwrite it.
+            switch (existingFundingCommand(key, request, finishedAt)) {
+                case (#err(error)) return #err(error);
+                case (#ok(?outcome)) {
+                    return validateExistingFundingOutcome(request, outcome, finishedAt);
+                };
+                case (#ok(null)) {};
+            };
+            // Preparation awaits ledger facts. Recheck the global semantic
+            // fence before insertion so two fresh request IDs cannot both
+            // prepare the same non-idempotent legacy removal.
+            switch (existingActiveIcpRevoke(request, finishedAt)) {
+                case (#err(error)) return #err(error);
+                case (#ok(?outcome)) {
+                    return validateExistingFundingOutcome(request, outcome, finishedAt);
+                };
+                case (#ok(null)) {};
+            };
+            // Ledger reads yield to other Wallet updates. Require the ledger to
+            // still be selected and the exact route to still be reserved before
+            // persisting a fresh owner-reviewable command.
+            switch (validateCurrentFundingAuthority(request, finishedAt)) {
+                case (#err(error)) return #err(error);
+                case (#ok(())) {};
+            };
+            if (not ensureFundingCapacity(Time.now())) {
+                return #err("Wallet funding command capacity is full");
+            };
+            if (
+                FundingJournal.activeCommandCount(
+                    commandMem.commands,
+                    request.caller.app_id,
+                ) >=
+                MAX_PREPARED_COMMANDS_PER_APP
+            ) {
+                return #err("This app already has too many unresolved Wallet commands");
+            };
+
+            let command : CommandMemory.Command = {
+                caller = {
+                    endpoint = request.caller.endpoint;
+                    app_id = request.caller.app_id;
+                    role = request.caller.role;
+                    agent_mode = request.agent_mode;
+                };
+                ledger = request.ledger;
+                operation = prepared.operation;
+                intent;
+                prepared_at = Time.now();
+                valid_until = request.valid_until_ns;
+                retain_until = Int.fromNat(Nat64.toNat(request.valid_until_ns)) +
+                    COMMAND_RETENTION_NS;
+                review = prepared.review;
+                var call_args : ?Blob = null;
+                var updated_at : Int = Time.now();
+                var status : CommandMemory.Status = #prepared;
+            };
+            Map.add(commandMem.commands, commandKeyCompare, key, command);
+            #ok(#prepared({
+                command_id = commandId(key);
+                review = fundingReview(key, command);
+            }));
+        };
+
+        public func /*update*/wallet_funding_execute_v1(
+            request : WalletFundingExecuteRequestV1,
+        ) : async* WalletFundingExecutionResultV1 {
+            if (request.command_id.request_id.size() != REQUEST_ID_BYTES) {
+                return rejectedExecution(
+                    request.command_id,
+                    "Invalid Wallet funding command ID",
+                );
+            };
+            let key : CommandMemory.CommandKey = {
+                caller_app_id = request.command_id.caller_app_id;
+                request_id = request.command_id.request_id;
+            };
+            let ?command = Map.get(commandMem.commands, commandKeyCompare, key) else {
+                return rejectedExecution(request.command_id, "Wallet funding command was not found");
+            };
+            switch (command.status) {
+                case (#succeeded(_)) return fundingExecution(key, command);
+                case (#rejected(_)) return fundingExecution(key, command);
+                case (#prepared) if (nowNanos() > command.valid_until) {
+                    return rejectFundingCommand(
+                        key,
+                        command,
+                        "expired",
+                        "Wallet funding command expired before dispatch",
+                    );
+                };
+                case (_) {};
+            };
+            // Accept is durable even when another Wallet action currently owns
+            // the ledger-call slot. A retry then resumes without another owner
+            // decision, and reject cannot relabel the accepted command.
+            switch (FundingJournal.acceptForExecution(
+                command,
+                transferInFlight,
+                Time.now(),
+            )) {
+                case (#waiting) return pendingExecution(
+                    request.command_id,
+                    "Another Wallet transfer or approval is in progress",
+                );
+                case (#dispatch) {};
+            };
+            transferInFlight := true;
+            let result = await* executeFundingCommand(key, command);
+            transferInFlight := false;
+            result;
+        };
+
+        public func /*update*/wallet_funding_reject_v1(
+            request : WalletFundingExecuteRequestV1,
+        ) : async* WalletFundingExecutionResultV1 {
+            if (request.command_id.request_id.size() != REQUEST_ID_BYTES) {
+                return rejectedExecution(
+                    request.command_id,
+                    "Invalid Wallet funding command ID",
+                );
+            };
+            let key : CommandMemory.CommandKey = {
+                caller_app_id = request.command_id.caller_app_id;
+                request_id = request.command_id.request_id;
+            };
+            let ?command = Map.get(commandMem.commands, commandKeyCompare, key) else {
+                return rejectedExecution(request.command_id, "Wallet funding command was not found");
+            };
+            switch (command.status) {
+                case (#prepared) rejectFundingCommand(
+                    key,
+                    command,
+                    "owner_rejected",
+                    "Wallet funding was rejected by the owner",
+                );
+                // Reject is deliberately incapable of relabeling a dispatched
+                // or terminal command. The durable execution journal remains
+                // authoritative once an accepted operation starts.
+                case (_) fundingExecution(key, command);
+            };
+        };
+
+        func validateFundingRequest(
+            request : WalletFundingPrepareRequestV1,
+            now : Nat64,
+        ) : IcrcTypes.Result<()> {
+            if (
+                request.valid_until_ns <= now or
+                request.valid_until_ns - now > MAX_FUNDING_VALIDITY_NS
+            ) {
+                return #err("Wallet funding validity is outside the allowed window");
+            };
+            switch (selectedLedger(request.ledger)) {
+                case (#err(error)) return #err(error);
+                case (#ok(_)) {};
+            };
+            switch (request.intent) {
+                case (#direct(value)) {
+                    if (value.amount_atoms == 0) {
+                        return #err("Direct funding amount must be greater than zero");
+                    };
+                    if (not FundingDisplay.nat(value.amount_atoms)) {
+                        return #err("Direct funding amount exceeds the Wallet protocol limit");
+                    };
+                    switch (canonicalFundingAccount(value.to)) {
+                        case (#err(error)) return #err(error);
+                        case (#ok(_)) {};
+                    };
+                    switch (value.memo) {
+                        case (?memo) if (memo.size() > MAX_FUNDING_MEMO_BYTES) {
+                            return #err("Direct funding memo exceeds the Wallet limit");
+                        };
+                        case (_) {};
+                    };
+                };
+                case (#allowance(value)) {
+                    if (value.amount_atoms == 0) {
+                        return #err("Allowance funding amount must be greater than zero");
+                    };
+                    if (not FundingDisplay.nat(value.amount_atoms)) {
+                        return #err("Allowance funding amount exceeds the Wallet protocol limit");
+                    };
+                    if (
+                        value.expires_at_ns <= now or
+                        value.expires_at_ns - now > MAX_ALLOWANCE_LIFETIME_NS or
+                        value.expires_at_ns < request.valid_until_ns
+                    ) {
+                        return #err("Allowance expiration is outside the Wallet limit");
+                    };
+                    switch (canonicalAllowanceSpender(value.spender)) {
+                        case (#err(error)) return #err(error);
+                        case (#ok(_)) {};
+                    };
+                };
+                case (#revoke(value)) {
+                    if (value.expected_allowance_atoms == 0) {
+                        return #err("The approval is already zero");
+                    };
+                    if (not FundingDisplay.nat(value.expected_allowance_atoms)) {
+                        return #err("Expected allowance exceeds the Wallet protocol limit");
+                    };
+                    switch (value.source, value.spender) {
+                        case (#icrc, #icrc(account)) {
+                            if (isIcpLedger(request.ledger)) {
+                                return #err("ICP approvals use the legacy revoke route");
+                            };
+                            switch (canonicalIcrcAccount(account)) {
+                                case (#err(error)) return #err(error);
+                                case (#ok(_)) {};
+                            };
+                        };
+                        case (#icp, #icp_account_identifier(spender)) {
+                            if (not isIcpLedger(request.ledger)) {
+                                return #err("Legacy ICP revoke requires the ICP ledger");
+                            };
+                            if (spender.size() != 32) {
+                                return #err("Invalid ICP spender account identifier");
+                            };
+                        };
+                        case (_) return #err("Approval source and spender type do not match");
+                    };
+                };
+            };
+            #ok(());
+        };
+
+        func validateFundingKey(
+            request : WalletFundingPrepareRequestV1,
+        ) : IcrcTypes.Result<()> {
+            if (request.request_id.size() != REQUEST_ID_BYTES) {
+                return #err("Wallet funding request_id must be exactly 16 bytes");
+            };
+            if (
+                request.caller.app_id.size() == 0 or
+                request.caller.app_id.size() > 64 or
+                request.caller.endpoint.size() == 0 or
+                request.caller.endpoint.size() > 256
+            ) {
+                return #err("Invalid Wallet funding caller identity");
+            };
+            switch (request.caller.role) {
+                case (?role) if (role.size() == 0 or role.size() > 32) {
+                    return #err("Invalid Wallet funding caller role");
+                };
+                case (_) {};
+            };
+            #ok(());
+        };
+
+        func prepareFundingOperation(
+            request : WalletFundingPrepareRequestV1,
+            now : Nat64,
+        ) : async* IcrcTypes.Result<PreparedFunding> {
+            let metadata = switch (await* readFundingMetadata(request.ledger)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            switch (request.intent) {
+                case (#direct(value)) {
+                    let destination = switch (canonicalFundingAccount(value.to)) {
+                        case (#err(error)) return #err(error);
+                        case (#ok(account)) account;
+                    };
+                    let totalDebit = value.amount_atoms + metadata.fee;
+                    if (not FundingDisplay.nat(totalDebit)) {
+                        return #err("Direct funding total exceeds the Wallet protocol limit");
+                    };
+                    #ok({
+                        operation = #transfer({
+                            to = destination;
+                            amount = value.amount_atoms;
+                            memo = value.memo;
+                        });
+                        review = {
+                            token_name = metadata.name;
+                            token_symbol = metadata.symbol;
+                            decimals = metadata.decimals;
+                            fee = metadata.fee;
+                            transfer_fee = null;
+                            current_allowance = null;
+                            current_expires_at = null;
+                            allowance = null;
+                            total_debit = totalDebit;
+                            expires_at = null;
+                        };
+                    });
+                };
+                case (#allowance(value)) {
+                    let spender = switch (canonicalAllowanceSpender(value.spender)) {
+                        case (#err(error)) return #err(error);
+                        case (#ok(account)) account;
+                    };
+                    let current = switch (await* readIcrcAllowance(request.ledger, spender)) {
+                        case (#err(error)) return #err(error);
+                        case (#ok(allowance)) allowance;
+                    };
+                    let desired = value.amount_atoms + metadata.fee;
+                    let totalDebit = desired + metadata.fee;
+                    if (
+                        not FundingDisplay.nat(desired) or
+                        not FundingDisplay.nat(totalDebit)
+                    ) {
+                        return #err("Allowance funding total exceeds the Wallet protocol limit");
+                    };
+                    #ok({
+                        operation = #approve({
+                            spender;
+                            amount = value.amount_atoms;
+                            expected_allowance = current.amount;
+                            expected_expires_at = current.expires_at;
+                            expires_at = value.expires_at_ns;
+                        });
+                        review = {
+                            token_name = metadata.name;
+                            token_symbol = metadata.symbol;
+                            decimals = metadata.decimals;
+                            fee = metadata.fee;
+                            transfer_fee = ?metadata.fee;
+                            current_allowance = ?current.amount;
+                            current_expires_at = current.expires_at;
+                            allowance = ?desired;
+                            total_debit = totalDebit;
+                            expires_at = ?value.expires_at_ns;
+                        };
+                    });
+                };
+                case (#revoke(value)) {
+                    switch (value.spender) {
+                        case (#icrc(account)) {
+                            let spender = switch (canonicalIcrcAccount(account)) {
+                                case (#err(error)) return #err(error);
+                                case (#ok(canonical)) canonical;
+                            };
+                            let current = switch (await* readIcrcAllowance(
+                                request.ledger,
+                                spender,
+                            )) {
+                                case (#err(error)) return #err(error);
+                                case (#ok(allowance)) allowance;
+                            };
+                            if (
+                                current.amount != value.expected_allowance_atoms or
+                                current.expires_at != value.expected_expires_at_ns
+                            ) {
+                                return #err("Approval changed; refresh Wallet approvals");
+                            };
+                            #ok({
+                                operation = #revoke({
+                                    spender = #icrc(spender);
+                                    expected_allowance = current.amount;
+                                    expected_expires_at = current.expires_at;
+                                });
+                                review = revokeReview(metadata, current);
+                            });
+                        };
+                        case (#icp_account_identifier(spender)) {
+                            let current = switch (await* findIcpAllowance(
+                                request.ledger,
+                                spender,
+                                now,
+                            )) {
+                                case (#err(error)) return #err(error);
+                                case (#ok(null)) return #err("ICP approval is no longer active");
+                                case (#ok(?allowance)) allowance;
+                            };
+                            if (
+                                current.amount != value.expected_allowance_atoms or
+                                current.expires_at != value.expected_expires_at_ns
+                            ) {
+                                return #err("ICP approval changed; refresh Wallet approvals");
+                            };
+                            #ok({
+                                operation = #revoke({
+                                    spender = #icp_account_identifier(spender);
+                                    expected_allowance = current.amount;
+                                    expected_expires_at = current.expires_at;
+                                });
+                                review = revokeReview(metadata, current);
+                            });
+                        };
+                    };
+                };
+            };
+        };
+
+        func existingFundingCommand(
+            key : CommandMemory.CommandKey,
+            request : WalletFundingPrepareRequestV1,
+            now : Nat64,
+        ) : IcrcTypes.Result<?WalletFundingPrepareOutcomeV1> {
+            let ?command = Map.get(commandMem.commands, commandKeyCompare, key) else {
+                return #ok(null);
+            };
+            // W306-W309 stored the complete request, including its disposable
+            // endpoint UUID. Compare every retry using only the endpoint from
+            // that stored caller; no arbitrary historical endpoint is accepted.
+            let comparableIntent = fundingIntentForEndpoint(
+                request,
+                command.caller.endpoint,
+            );
+            if (command.intent != comparableIntent) {
+                return #err("Wallet funding request ID conflicts with another intent");
+            };
+            let outcome = switch (command.status) {
+                case (#prepared) {
+                    if (now > command.valid_until) {
+                        return #err("Wallet funding request expired before dispatch");
+                    };
+                    #prepared({
+                        command_id = commandId(key);
+                        review = fundingReview(key, command);
+                    });
+                };
+                case (_) #completed({
+                    review = fundingReview(key, command);
+                    result = fundingExecution(key, command);
+                });
+            };
+            #ok(?outcome);
+        };
+
+        func fundingIntentForEndpoint(
+            request : WalletFundingPrepareRequestV1,
+            endpoint : Text,
+        ) : Blob {
+            let encoded : WalletFundingPrepareRequestV1 = {
+                request with
+                caller = { request.caller with endpoint };
+            };
+            to_candid (encoded);
+        };
+
+        func fundingCaller(
+            request : WalletFundingPrepareRequestV1,
+        ) : CommandMemory.Caller {
+            {
+                endpoint = request.caller.endpoint;
+                app_id = request.caller.app_id;
+                role = request.caller.role;
+                agent_mode = request.agent_mode;
+            };
+        };
+
+        func validateExistingFundingOutcome(
+            request : WalletFundingPrepareRequestV1,
+            outcome : WalletFundingPrepareOutcomeV1,
+            now : Nat64,
+        ) : IcrcTypes.Result<WalletFundingPrepareOutcomeV1> {
+            switch (outcome) {
+                // Never-dispatched commands still depend on the owner's current
+                // Wallet selection. Pending and terminal results must remain
+                // available for exact replay and ambiguous-call reconciliation.
+                case (#prepared(_)) switch (validateCurrentFundingAuthority(request, now)) {
+                    case (#err(error)) return #err(error);
+                    case (#ok(())) {};
+                };
+                case (#completed(_)) {};
+            };
+            #ok(outcome);
+        };
+
+        func validateCurrentFundingAuthority(
+            request : WalletFundingPrepareRequestV1,
+            now : Nat64,
+        ) : IcrcTypes.Result<()> {
+            switch (validateFundingRequest(request, now)) {
+                case (#err(error)) return #err(error);
+                case (#ok(())) {};
+            };
+            preflightFundingCapabilities(request);
+        };
+
+        func existingActiveIcpRevoke(
+            request : WalletFundingPrepareRequestV1,
+            now : Nat64,
+        ) : IcrcTypes.Result<?WalletFundingPrepareOutcomeV1> {
+            let (#revoke(revoke)) = request.intent else return #ok(null);
+            let (#icp) = revoke.source else return #ok(null);
+            let (#icp_account_identifier(spender)) = revoke.spender else return #ok(null);
+            let caller = fundingCaller(request);
+            switch (FundingJournal.activeIcpRevoke(
+                commandMem.commands,
+                caller,
+                request.ledger,
+                spender,
+                revoke.expected_allowance_atoms,
+                revoke.expected_expires_at_ns,
+                now,
+            )) {
+                case (#none) #ok(null);
+                case (#blocked) #err(
+                    "Another ICP approval removal for this spender is already active"
+                );
+                case (#resume(value)) switch (value.command.status) {
+                    case (#prepared) #ok(?#prepared({
+                        command_id = commandId(value.key);
+                        review = fundingReview(value.key, value.command);
+                    }));
+                    case (_) #ok(?#completed({
+                        review = fundingReview(value.key, value.command);
+                        result = fundingExecution(value.key, value.command);
+                    }));
+                };
+            };
+        };
+
+        func ensureFundingCapacity(now : Int) : Bool {
+            ignore FundingJournal.pruneExpiredCommands(
+                commandMem.commands,
+                commandKeyCompare,
+                now,
+                COMMAND_PRUNE_LIMIT,
+            );
+            Map.size(commandMem.commands) < COMMAND_CAPACITY;
+        };
+
+        func preflightFundingCapabilities(
+            request : WalletFundingPrepareRequestV1,
+        ) : IcrcTypes.Result<()> {
+            for (method in ["icrc1_metadata", "icrc1_fee"].vals()) {
+                if (not calls.can_call(request.ledger, method)) {
+                    return #err("Ledger " # method # " access is not reserved for Wallet");
+                };
+            };
+            switch (request.intent) {
+                case (#direct(_)) {
+                    if (not calls.can_call(request.ledger, "icrc1_transfer")) {
+                        return #err("Ledger transfer access is not reserved for Wallet");
+                    };
+                };
+                case (#allowance(_)) {
+                    if (
+                        not calls.can_call(request.ledger, "icrc2_allowance") or
+                        not calls.can_call(request.ledger, "icrc2_approve")
+                    ) {
+                        return #err("Ledger allowance access is not reserved for Wallet");
+                    };
+                };
+                case (#revoke(value)) switch (value.source) {
+                    case (#icrc) {
+                        if (
+                            not calls.can_call(request.ledger, "icrc2_allowance") or
+                            not calls.can_call(request.ledger, "icrc2_approve")
+                        ) {
+                            return #err("Ledger allowance access is not reserved for Wallet");
+                        };
+                    };
+                    case (#icp) {
+                        if (
+                            not calls.can_call(request.ledger, "get_allowances") or
+                            not calls.can_call(request.ledger, "remove_approval")
+                        ) {
+                            return #err("ICP approval access is not reserved for Wallet");
+                        };
+                    };
+                };
+            };
+            #ok(());
+        };
+
+        func readFundingMetadata(
+            ledger : Principal,
+        ) : async* IcrcTypes.Result<FundingMetadata> {
+            let replies = await* calls.call_batch([
+                Icrc.metadataRequest(ledger),
+                Icrc.feeRequest(ledger),
+            ]);
+            if (replies.size() != 2) {
+                return #err("Wallet backend returned an incomplete ledger metadata batch");
+            };
+            let metadata = switch (Icrc.decodeMetadata(replies[0])) {
+                case (#err(error)) return #err("Could not read ledger metadata: " # error);
+                case (#ok(value)) value;
+            };
+            let parsed = switch (parseMetadata(metadata)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            let ?symbol = parsed.symbol else {
+                return #err("Ledger metadata does not include icrc1:symbol");
+            };
+            if (
+                not FundingDisplay.safeLabel(
+                    symbol,
+                    FundingDisplay.MAX_TOKEN_SYMBOL_BYTES,
+                    false,
+                )
+            ) {
+                return #err("Ledger symbol is empty or unsafe to display");
+            };
+            switch (parsed.name) {
+                case (?name) if (
+                    not FundingDisplay.safeLabel(
+                        name,
+                        FundingDisplay.MAX_TOKEN_NAME_BYTES,
+                        true,
+                    )
+                ) {
+                    return #err("Ledger name is empty or unsafe to display");
+                };
+                case (_) {};
+            };
+            let ?decimals = parsed.decimals else {
+                return #err("Ledger metadata does not include icrc1:decimals");
+            };
+            let fee = switch (Icrc.decodeFee(replies[1])) {
+                case (#err(error)) return #err("Could not read the current ledger fee: " # error);
+                case (#ok(value)) value;
+            };
+            if (not FundingDisplay.nat(fee)) {
+                return #err("Ledger fee exceeds the Wallet protocol limit");
+            };
+            #ok({ name = parsed.name; symbol; decimals; fee });
+        };
+
+        func readIcrcAllowance(
+            ledger : Principal,
+            spender : IcrcTypes.Account,
+        ) : async* IcrcTypes.Result<CurrentApproval> {
+            let source : IcrcTypes.Account = {
+                owner = calls.canister_principal;
+                subaccount = null;
+            };
+            switch (Icrc.decodeAllowance(await* calls.call(
+                Icrc.allowanceRequest(ledger, source, spender),
+            ))) {
+                case (#err(error)) #err("Could not read the current allowance: " # error);
+                case (#ok(value)) {
+                    if (not FundingDisplay.nat(value.allowance)) {
+                        return #err("Current allowance exceeds the Wallet protocol limit");
+                    };
+                    #ok({
+                        amount = value.allowance;
+                        expires_at = value.expires_at;
+                    });
+                };
+            };
+        };
+
+        func findIcpAllowance(
+            ledger : Principal,
+            spender : Blob,
+            now : Nat64,
+        ) : async* IcrcTypes.Result<?CurrentApproval> {
+            var scan = IcpAllowances.startScan();
+            label pages : IcrcTypes.Result<?CurrentApproval> loop {
+                let request = switch (IcpAllowances.getAllowancesRequest(
+                    ledger,
+                    calls.canister_principal,
+                    scan,
+                    IcpAllowances.DEFAULT_TAKE,
+                )) {
+                    case (#err(error)) break pages (#err(error));
+                    case (#ok(value)) value;
+                };
+                let page = switch (IcpAllowances.decodeAllowances(
+                    await* calls.call(request),
+                    calls.canister_principal,
+                    scan,
+                    IcpAllowances.DEFAULT_TAKE,
+                    now,
+                )) {
+                    case (#err(error)) break pages (#err(error));
+                    case (#ok(value)) value;
+                };
+                switch (IcpAllowances.findAllowance(page, spender)) {
+                    case (#err(error)) break pages (#err(error));
+                    case (#ok(?allowance)) break pages (#ok(?{
+                        amount = allowance.allowance;
+                        expires_at = allowance.expires_at;
+                    }));
+                    case (#ok(null)) {};
+                };
+                if (page.complete) break pages (#ok(null));
+                scan := page.scan;
+            };
+        };
+
+        func revokeReview(
+            metadata : FundingMetadata,
+            current : CurrentApproval,
+        ) : CommandMemory.ReviewFacts {
+            {
+                token_name = metadata.name;
+                token_symbol = metadata.symbol;
+                decimals = metadata.decimals;
+                fee = metadata.fee;
+                transfer_fee = null;
+                current_allowance = ?current.amount;
+                current_expires_at = current.expires_at;
+                allowance = ?0;
+                total_debit = metadata.fee;
+                expires_at = null;
+            };
+        };
+
+        // Existing ledger approvals may name any structurally valid Account.
+        // Destination admission below is deliberately stricter for new funds.
+        func canonicalIcrcAccount(
+            account : IcrcTypes.Account,
+        ) : IcrcTypes.Result<IcrcTypes.Account> {
+            let ?canonical = AllowanceAccount.canonical(account) else {
+                return #err("ICRC account subaccount must be exactly 32 bytes");
+            };
+            #ok(canonical);
+        };
+
+        func canonicalFundingAccount(
+            account : IcrcTypes.Account,
+        ) : IcrcTypes.Result<IcrcTypes.Account> {
+            let canonical = switch (canonicalIcrcAccount(account)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            if (Principal.isAnonymous(canonical.owner)) {
+                return #err("Anonymous principal is not a funding account");
+            };
+            if (Principal.toText(canonical.owner) == "aaaaa-aa") {
+                return #err("Management canister is not a funding account");
+            };
+            #ok(canonical);
+        };
+
+        func canonicalAllowanceSpender(
+            account : IcrcTypes.Account,
+        ) : IcrcTypes.Result<IcrcTypes.Account> {
+            let spender = switch (canonicalFundingAccount(account)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            if (AllowanceAccount.isDefaultFor(spender, calls.canister_principal)) {
+                return #err(
+                    "Wallet default account cannot be its own allowance spender"
+                );
+            };
+            #ok(spender);
+        };
+
+        func selectedLedger(ledger : Principal) : IcrcTypes.Result<Memory.Ledger> {
+            switch (Map.get(mem.ledgers, Principal.compare, ledger)) {
+                case (?value) {
+                    if (value.enabled) #ok(value) else {
+                        #err("Ledger is not selected in Wallet");
+                    };
+                };
+                case null #err("Ledger is not selected in Wallet");
+            };
+        };
+
+        func validateFundingDispatchAuthority(
+            command : CommandMemory.Command,
+        ) : IcrcTypes.Result<()> {
+            if (not FundingJournal.requiresCurrentAuthority(command)) return #ok(());
+            switch (selectedLedger(command.ledger)) {
+                case (#err(error)) #err(error);
+                case (#ok(_)) #ok(());
+            };
+        };
+
+        func isIcpLedger(ledger : Principal) : Bool {
+            switch (Catalog.find(ledger)) {
+                case (?value) value.history_kind == #icp;
+                case null false;
+            };
+        };
+
+        func executeFundingCommand(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+        ) : async* WalletFundingExecutionResultV1 {
+            let metadata = switch (await* readFundingMetadata(command.ledger)) {
+                case (#err(error)) {
+                    return rejectOrKeepPending(key, command, "metadata", error);
+                };
+                case (#ok(value)) value;
+            };
+            let expired = nowNanos() > command.valid_until;
+            if (expired and command.call_args == null) {
+                return rejectFundingCommand(
+                    key,
+                    command,
+                    "expired",
+                    "Wallet funding command expired before dispatch",
+                );
+            };
+            if (not fundingMetadataMatches(command.review, metadata)) {
+                return rejectOrKeepPending(
+                    key,
+                    command,
+                    "review_changed",
+                    "Ledger metadata or fee changed; prepare a new Wallet review",
+                );
+            };
+
+            switch (command.operation) {
+                case (#transfer(value)) {
+                    if (expired) {
+                        return keepFundingPending(
+                            key,
+                            command,
+                            "expired_after_dispatch",
+                            "Transfer outcome remains unknown after the command deadline",
+                        );
+                    };
+                    await* executeFundingTransfer(key, command, value, metadata);
+                };
+                case (#approve(value)) {
+                    await* executeFundingApproval(key, command, value, metadata);
+                };
+                case (#revoke(value)) switch (value.spender) {
+                    case (#icrc(spender)) {
+                        await* executeIcrcRevoke(key, command, value, spender, metadata);
+                    };
+                    case (#icp_account_identifier(spender)) {
+                        await* executeIcpRevoke(key, command, value, spender, metadata);
+                    };
+                };
+            };
+        };
+
+        func executeFundingTransfer(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+            operation : {
+                to : CommandMemory.Account;
+                amount : Nat;
+                memo : ?Blob;
+            },
+            metadata : FundingMetadata,
+        ) : async* WalletFundingExecutionResultV1 {
+            switch (validateFundingDispatchAuthority(command)) {
+                case (#err(error)) {
+                    return rejectFundingCommand(key, command, "ledger_deselected", error);
+                };
+                case (#ok(())) {};
+            };
+            let replay = command.call_args != null;
+            let exactArgs = switch (command.call_args) {
+                case (?value) value;
+                case null {
+                    let args : IcrcTypes.TransferArg = {
+                        from_subaccount = null;
+                        to = operation.to;
+                        amount = operation.amount;
+                        fee = ?metadata.fee;
+                        memo = operation.memo;
+                        created_at_time = ?nowNanos();
+                    };
+                    let value = to_candid (args);
+                    if (not freezeFundingArgs(command, value)) {
+                        return rejectFundingCommand(
+                            key,
+                            command,
+                            "argument_limit",
+                            "Ledger transfer arguments exceed the Wallet limit",
+                        );
+                    };
+                    value;
+                };
+            };
+            switch (await* Icrc.executeTransferCandid(
+                calls,
+                command.ledger,
+                exactArgs,
+            )) {
+                case (#unknown(error)) keepFundingPending(key, command, "outcome_unknown", error);
+                case (#rejected(error)) {
+                    if (replay) {
+                        keepFundingPending(key, command, "replay_rejected", error);
+                    } else {
+                        rejectFundingCommand(key, command, "ledger_rejected", error);
+                    };
+                };
+                case (#ok(receipt)) {
+                    if (not FundingDisplay.nat(receipt.block_index)) {
+                        return keepFundingPending(
+                            key,
+                            command,
+                            "invalid_receipt",
+                            "Ledger block index exceeds the Wallet protocol limit",
+                        );
+                    };
+                    succeedFundingCommand(
+                        command,
+                        ?receipt.block_index,
+                        receipt.duplicate,
+                    );
+                    ignore history.recordTransfer(
+                        command.ledger,
+                        receipt.block_index,
+                        #transfer,
+                        operation.amount,
+                        ?metadata.fee,
+                        ?#icrc(operation.to),
+                        operation.memo,
+                        null,
+                        null,
+                    );
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
+                    fundingExecution(key, command);
+                };
+            };
+        };
+
+        func executeFundingApproval(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+            operation : {
+                spender : CommandMemory.Account;
+                amount : Nat;
+                expected_allowance : Nat;
+                expected_expires_at : ?Nat64;
+                expires_at : Nat64;
+            },
+            metadata : FundingMetadata,
+        ) : async* WalletFundingExecutionResultV1 {
+            let current = switch (await* readIcrcAllowance(command.ledger, operation.spender)) {
+                case (#err(error)) {
+                    return rejectOrKeepPending(key, command, "allowance_read", error);
+                };
+                case (#ok(value)) value;
+            };
+            switch (validateFundingDispatchAuthority(command)) {
+                case (#err(error)) {
+                    return rejectFundingCommand(key, command, "ledger_deselected", error);
+                };
+                case (#ok(())) {};
+            };
+            let desired = switch (command.review.allowance) {
+                case null return rejectOrKeepPending(
+                    key,
+                    command,
+                    "invalid_command",
+                    "Prepared approval is missing its allowance",
+                );
+                case (?value) value;
+            };
+            if (current.amount == desired and current.expires_at == ?operation.expires_at) {
+                succeedFundingCommand(command, null, false);
+                invalidateLedgerBalance(command.ledger, metadata.fee);
+                return fundingExecution(key, command);
+            };
+            if (
+                current.amount != operation.expected_allowance or
+                current.expires_at != operation.expected_expires_at
+            ) {
+                if (command.call_args != null) {
+                    return keepFundingPending(
+                        key,
+                        command,
+                        "allowance_changed_after_dispatch",
+                        "Allowance changed after an unknown approval outcome; Wallet will not regrant it",
+                    );
+                };
+                return rejectFundingCommand(
+                    key,
+                    command,
+                    "allowance_changed",
+                    "Allowance changed; prepare a new Wallet review",
+                );
+            };
+            if (operation.expires_at <= nowNanos()) {
+                return rejectOrKeepPending(
+                    key,
+                    command,
+                    "expired",
+                    "Prepared allowance expired before dispatch",
+                );
+            };
+            if (nowNanos() > command.valid_until) {
+                return rejectOrKeepPending(
+                    key,
+                    command,
+                    "expired_after_dispatch",
+                    "Approval outcome remains unknown after the command deadline",
+                );
+            };
+            let replay = command.call_args != null;
+            let exactArgs = switch (command.call_args) {
+                case (?value) value;
+                case null {
+                    let args : IcrcTypes.ApproveArg = {
+                        from_subaccount = null;
+                        spender = operation.spender;
+                        amount = desired;
+                        expected_allowance = ?operation.expected_allowance;
+                        expires_at = ?operation.expires_at;
+                        fee = ?metadata.fee;
+                        memo = null;
+                        created_at_time = ?nowNanos();
+                    };
+                    let value = to_candid (args);
+                    if (not freezeFundingArgs(command, value)) {
+                        return rejectFundingCommand(
+                            key,
+                            command,
+                            "argument_limit",
+                            "Ledger approval arguments exceed the Wallet limit",
+                        );
+                    };
+                    value;
+                };
+            };
+            switch (await* Icrc.executeApproveCandid(calls, command.ledger, exactArgs)) {
+                case (#unknown(error)) keepFundingPending(key, command, "outcome_unknown", error);
+                case (#rejected(error)) {
+                    if (replay) {
+                        keepFundingPending(key, command, "replay_rejected", error);
+                    } else {
+                        rejectFundingCommand(key, command, "ledger_rejected", error);
+                    };
+                };
+                case (#ok(receipt)) {
+                    if (not FundingDisplay.nat(receipt.block_index)) {
+                        return keepFundingPending(
+                            key,
+                            command,
+                            "invalid_receipt",
+                            "Ledger block index exceeds the Wallet protocol limit",
+                        );
+                    };
+                    succeedFundingCommand(
+                        command,
+                        ?receipt.block_index,
+                        receipt.duplicate,
+                    );
+                    ignore history.recordApproval(
+                        command.ledger,
+                        receipt.block_index,
+                        desired,
+                        metadata.fee,
+                        #icrc(operation.spender),
+                        null,
+                    );
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
+                    fundingExecution(key, command);
+                };
+            };
+        };
+
+        func executeIcrcRevoke(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+            operation : {
+                spender : CommandMemory.ApprovalSpender;
+                expected_allowance : Nat;
+                expected_expires_at : ?Nat64;
+            },
+            spender : CommandMemory.Account,
+            metadata : FundingMetadata,
+        ) : async* WalletFundingExecutionResultV1 {
+            let current = switch (await* readIcrcAllowance(command.ledger, spender)) {
+                case (#err(error)) {
+                    return rejectOrKeepPending(key, command, "allowance_read", error);
+                };
+                case (#ok(value)) value;
+            };
+            switch (validateFundingDispatchAuthority(command)) {
+                case (#err(error)) {
+                    return rejectFundingCommand(key, command, "ledger_deselected", error);
+                };
+                case (#ok(())) {};
+            };
+            if (current.amount == 0) {
+                succeedFundingCommand(command, null, false);
+                invalidateLedgerBalance(command.ledger, metadata.fee);
+                return fundingExecution(key, command);
+            };
+            if (
+                current.amount != operation.expected_allowance or
+                current.expires_at != operation.expected_expires_at
+            ) {
+                if (command.call_args != null) {
+                    return keepFundingPending(
+                        key,
+                        command,
+                        "allowance_changed_after_dispatch",
+                        "Allowance changed after an unknown revoke outcome; Wallet will not overwrite it",
+                    );
+                };
+                return rejectFundingCommand(
+                    key,
+                    command,
+                    "allowance_changed",
+                    "Allowance changed; refresh Wallet approvals",
+                );
+            };
+            if (nowNanos() > command.valid_until) {
+                return rejectOrKeepPending(
+                    key,
+                    command,
+                    "expired_after_dispatch",
+                    "Revoke outcome remains unknown after the command deadline",
+                );
+            };
+            let replay = command.call_args != null;
+            let exactArgs = switch (command.call_args) {
+                case (?value) value;
+                case null {
+                    let args : IcrcTypes.ApproveArg = {
+                        from_subaccount = null;
+                        spender;
+                        amount = 0;
+                        expected_allowance = ?operation.expected_allowance;
+                        expires_at = null;
+                        fee = ?metadata.fee;
+                        memo = null;
+                        created_at_time = ?nowNanos();
+                    };
+                    let value = to_candid (args);
+                    if (not freezeFundingArgs(command, value)) {
+                        return rejectFundingCommand(
+                            key,
+                            command,
+                            "argument_limit",
+                            "Ledger revoke arguments exceed the Wallet limit",
+                        );
+                    };
+                    value;
+                };
+            };
+            switch (await* Icrc.executeApproveCandid(calls, command.ledger, exactArgs)) {
+                case (#unknown(error)) keepFundingPending(key, command, "outcome_unknown", error);
+                case (#rejected(error)) {
+                    if (replay) {
+                        keepFundingPending(key, command, "replay_rejected", error);
+                    } else {
+                        rejectFundingCommand(key, command, "ledger_rejected", error);
+                    };
+                };
+                case (#ok(receipt)) {
+                    if (not FundingDisplay.nat(receipt.block_index)) {
+                        return keepFundingPending(
+                            key,
+                            command,
+                            "invalid_receipt",
+                            "Ledger block index exceeds the Wallet protocol limit",
+                        );
+                    };
+                    succeedFundingCommand(
+                        command,
+                        ?receipt.block_index,
+                        receipt.duplicate,
+                    );
+                    ignore history.recordApproval(
+                        command.ledger,
+                        receipt.block_index,
+                        0,
+                        metadata.fee,
+                        #icrc(spender),
+                        null,
+                    );
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
+                    fundingExecution(key, command);
+                };
+            };
+        };
+
+        func executeIcpRevoke(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+            operation : {
+                spender : CommandMemory.ApprovalSpender;
+                expected_allowance : Nat;
+                expected_expires_at : ?Nat64;
+            },
+            spender : Blob,
+            metadata : FundingMetadata,
+        ) : async* WalletFundingExecutionResultV1 {
+            let current = switch (await* findIcpAllowance(
+                command.ledger,
+                spender,
+                nowNanos(),
+            )) {
+                case (#err(error)) {
+                    return rejectOrKeepPending(key, command, "allowance_read", error);
+                };
+                case (#ok(value)) value;
+            };
+            switch (validateFundingDispatchAuthority(command)) {
+                case (#err(error)) {
+                    return rejectFundingCommand(key, command, "ledger_deselected", error);
+                };
+                case (#ok(())) {};
+            };
+            switch (current) {
+                case null {
+                    succeedFundingCommand(command, null, false);
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
+                    return fundingExecution(key, command);
+                };
+                case (?value) {
+                    if (
+                        value.amount != operation.expected_allowance or
+                        value.expires_at != operation.expected_expires_at
+                    ) {
+                        if (command.call_args != null) {
+                            return keepFundingPending(
+                                key,
+                                command,
+                                "allowance_changed_after_dispatch",
+                                "ICP approval changed after an unknown revoke outcome",
+                            );
+                        };
+                        return rejectFundingCommand(
+                            key,
+                            command,
+                            "allowance_changed",
+                            "ICP approval changed; refresh Wallet approvals",
+                        );
+                    };
+                };
+            };
+            if (nowNanos() > command.valid_until) {
+                return rejectOrKeepPending(
+                    key,
+                    command,
+                    "expired_after_dispatch",
+                    "ICP revoke deadline passed before dispatch",
+                );
+            };
+            // ICP remove_approval has no timestamp or CAS. Once exact args may
+            // have been dispatched, only disappearance reconciles success;
+            // never issue a second fee-bearing removal automatically.
+            switch (command.call_args) {
+                case (?_) return keepFundingPending(
+                    key,
+                    command,
+                    "outcome_unknown",
+                    "ICP approval still exists after an unknown revoke outcome; Wallet will not retry it",
+                );
+                case null {};
+            };
+            let request = switch (IcpAllowances.removeApprovalRequest(
+                command.ledger,
+                spender,
+                ?metadata.fee,
+            )) {
+                case (#err(error)) return rejectFundingCommand(
+                    key,
+                    command,
+                    "invalid_command",
+                    error,
+                );
+                case (#ok(value)) value;
+            };
+            if (not freezeFundingArgs(command, request.args)) {
+                return rejectFundingCommand(
+                    key,
+                    command,
+                    "argument_limit",
+                    "ICP revoke arguments exceed the Wallet limit",
+                );
+            };
+            switch (Icrc.classifyApproveResult(await* calls.call(request))) {
+                case (#unknown(error)) keepFundingPending(key, command, "outcome_unknown", error);
+                case (#rejected(error)) rejectFundingCommand(
+                    key,
+                    command,
+                    "ledger_rejected",
+                    error,
+                );
+                case (#ok(receipt)) {
+                    if (not FundingDisplay.nat(receipt.block_index)) {
+                        return keepFundingPending(
+                            key,
+                            command,
+                            "invalid_receipt",
+                            "Ledger block index exceeds the Wallet protocol limit",
+                        );
+                    };
+                    succeedFundingCommand(
+                        command,
+                        ?receipt.block_index,
+                        receipt.duplicate,
+                    );
+                    ignore history.recordApproval(
+                        command.ledger,
+                        receipt.block_index,
+                        0,
+                        metadata.fee,
+                        #icp_account_identifier(spender),
+                        null,
+                    );
+                    invalidateLedgerBalance(command.ledger, metadata.fee);
+                    fundingExecution(key, command);
+                };
+            };
+        };
+
+        func freezeFundingArgs(
+            command : CommandMemory.Command,
+            args : Blob,
+        ) : Bool {
+            if (args.size() > MAX_FUNDING_CALL_ARGS_BYTES) return false;
+            switch (command.call_args) {
+                case null command.call_args := ?args;
+                case (?existing) {
+                    // Pending commands may only reuse the exact durable bytes.
+                    if (existing != args) return false;
+                };
+            };
+            command.updated_at := Time.now();
+            true;
+        };
+
+        func fundingMetadataMatches(
+            review : CommandMemory.ReviewFacts,
+            metadata : FundingMetadata,
+        ) : Bool {
+            review.token_name == metadata.name and
+            review.token_symbol == metadata.symbol and
+            review.decimals == metadata.decimals and
+            review.fee == metadata.fee and (
+            switch (review.transfer_fee) {
+                case null true;
+                case (?value) value == metadata.fee;
+            });
+        };
+
+        func rejectOrKeepPending(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+            code : Text,
+            message : Text,
+        ) : WalletFundingExecutionResultV1 {
+            if (command.call_args == null) {
+                rejectFundingCommand(key, command, code, message);
+            } else {
+                keepFundingPending(key, command, code, message);
+            };
+        };
+
+        func rejectFundingCommand(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+            code : Text,
+            message : Text,
+        ) : WalletFundingExecutionResultV1 {
+            switch (command.status) {
+                case (#succeeded(_)) return fundingExecution(key, command);
+                case (#rejected(_)) return fundingExecution(key, command);
+                case (_) {};
+            };
+            let error = commandError(code, message);
+            command.status := #rejected(error);
+            command.updated_at := Time.now();
+            fundingExecution(key, command);
+        };
+
+        func keepFundingPending(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+            code : Text,
+            message : Text,
+        ) : WalletFundingExecutionResultV1 {
+            switch (command.status) {
+                case (#succeeded(_)) return fundingExecution(key, command);
+                case (#rejected(_)) return fundingExecution(key, command);
+                case (_) {};
+            };
+            let previous = switch (command.status) {
+                case (#pending(value)) value;
+                case (_) {
+                    {
+                        attempts = 1;
+                        started_at = Time.now();
+                        last_error = null;
+                    };
+                };
+            };
+            command.status := #pending({
+                attempts = previous.attempts;
+                started_at = previous.started_at;
+                last_error = ?commandError(code, message);
+            });
+            command.updated_at := Time.now();
+            fundingExecution(key, command);
+        };
+
+        func succeedFundingCommand(
+            command : CommandMemory.Command,
+            blockIndex : ?Nat,
+            duplicate : Bool,
+        ) : () {
+            command.status := #succeeded({
+                block_index = blockIndex;
+                duplicate;
+                completed_at = Time.now();
+            });
+            command.updated_at := Time.now();
+        };
+
+        func commandError(code : Text, message : Text) : CommandMemory.CommandError {
+            {
+                code = boundedText(code, 64);
+                message = boundedText(message, 512);
+                at = Time.now();
+            };
+        };
+
+        func commandId(key : CommandMemory.CommandKey) : WalletFundingCommandIdV1 {
+            {
+                caller_app_id = key.caller_app_id;
+                request_id = key.request_id;
+            };
+        };
+
+        func fundingExecution(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+        ) : WalletFundingExecutionResultV1 {
+            let id = commandId(key);
+            switch (command.status) {
+                case (#prepared) pendingExecution(id, "Wallet funding command is prepared");
+                case (#pending(value)) {
+                    let message = switch (value.last_error) {
+                        case (?error) error.message;
+                        case null "Wallet funding command is in progress";
+                    };
+                    pendingExecution(id, message);
+                };
+                case (#rejected(error)) rejectedExecution(id, error.message);
+                case (#succeeded(receipt)) switch (command.operation) {
+                    case (#transfer(_)) switch (receipt.block_index) {
+                        case (?blockIndex) #transferred({
+                            command_id = id;
+                            block_index = blockIndex;
+                            duplicate = receipt.duplicate;
+                        });
+                        case null pendingExecution(
+                            id,
+                            "Transfer receipt is awaiting ledger reconciliation",
+                        );
+                    };
+                    case (#approve(_)) #approved({
+                        command_id = id;
+                        block_index = receipt.block_index;
+                        duplicate = receipt.duplicate;
+                    });
+                    case (#revoke(_)) #revoked({
+                        command_id = id;
+                        block_index = receipt.block_index;
+                        duplicate = receipt.duplicate;
+                    });
+                };
+            };
+        };
+
+        func pendingExecution(
+            id : WalletFundingCommandIdV1,
+            message : Text,
+        ) : WalletFundingExecutionResultV1 {
+            #pending({ command_id = id; message = boundedText(message, 512) });
+        };
+
+        func rejectedExecution(
+            id : WalletFundingCommandIdV1,
+            message : Text,
+        ) : WalletFundingExecutionResultV1 {
+            #rejected({ command_id = id; message = boundedText(message, 512) });
+        };
+
+        func fundingReview(
+            key : CommandMemory.CommandKey,
+            command : CommandMemory.Command,
+        ) : WalletFundingReviewV1 {
+            let common = command.review;
+            switch (command.operation) {
+                case (#transfer(value)) {
+                    {
+                        command_id = commandId(key);
+                        kind = #direct;
+                        ledger = command.ledger;
+                        token_name = common.token_name;
+                        token_symbol = common.token_symbol;
+                        decimals = common.decimals;
+                        amount_atoms = value.amount;
+                        transfer_fee_atoms = ?common.fee;
+                        approval_fee_atoms = null;
+                        allowance_atoms = null;
+                        current_allowance_atoms = null;
+                        current_expires_at_ns = null;
+                        total_debit_atoms = common.total_debit;
+                        destination = ?value.to;
+                        spender = null;
+                        memo = value.memo;
+                        valid_until_ns = command.valid_until;
+                        expires_at_ns = null;
+                    };
+                };
+                case (#approve(value)) {
+                    {
+                        command_id = commandId(key);
+                        kind = #allowance;
+                        ledger = command.ledger;
+                        token_name = common.token_name;
+                        token_symbol = common.token_symbol;
+                        decimals = common.decimals;
+                        amount_atoms = value.amount;
+                        transfer_fee_atoms = common.transfer_fee;
+                        approval_fee_atoms = ?common.fee;
+                        allowance_atoms = common.allowance;
+                        current_allowance_atoms = common.current_allowance;
+                        current_expires_at_ns = common.current_expires_at;
+                        total_debit_atoms = common.total_debit;
+                        destination = null;
+                        spender = ?#icrc(value.spender);
+                        memo = null;
+                        valid_until_ns = command.valid_until;
+                        expires_at_ns = common.expires_at;
+                    };
+                };
+                case (#revoke(value)) {
+                    {
+                        command_id = commandId(key);
+                        kind = #revoke;
+                        ledger = command.ledger;
+                        token_name = common.token_name;
+                        token_symbol = common.token_symbol;
+                        decimals = common.decimals;
+                        amount_atoms = value.expected_allowance;
+                        transfer_fee_atoms = null;
+                        approval_fee_atoms = ?common.fee;
+                        allowance_atoms = common.allowance;
+                        current_allowance_atoms = common.current_allowance;
+                        current_expires_at_ns = common.current_expires_at;
+                        total_debit_atoms = common.total_debit;
+                        destination = null;
+                        spender = ?value.spender;
+                        memo = null;
+                        valid_until_ns = command.valid_until;
+                        expires_at_ns = null;
+                    };
+                };
+            };
+        };
+
+        func invalidateLedgerBalance(ledger : Principal, fee : Nat) : () {
+            mem.balance_epoch += 1;
+            let ?current = Map.get(mem.ledgers, Principal.compare, ledger) else return;
+            Map.add(mem.ledgers, Principal.compare, ledger, {
+                current with
+                fee = ?fee;
+                balance_error = null;
+            });
+        };
+
+        public func /*update*/wallet_allowances_page_v1(
+            request : WalletAllowancesPageRequestV1,
+        ) : async* WalletAllowancesPageResultV1 {
+            if (request.limit == 0 or request.limit > MAX_ALLOWANCE_PAGE_SIZE) {
+                return #err("Allowance page size is outside the Wallet limit");
+            };
+            switch (selectedLedger(request.ledger)) {
+                case (#err(error)) return #err(error);
+                case (#ok(_)) {};
+            };
+            if (
+                not calls.can_call(request.ledger, "icrc1_metadata") or
+                not calls.can_call(request.ledger, "icrc1_fee")
+            ) {
+                return #err("Ledger metadata access is not reserved for Wallet");
+            };
+            let metadata = switch (await* readFundingMetadata(request.ledger)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            if (isIcpLedger(request.ledger)) {
+                await* icpAllowancesPage(request, metadata);
+            } else {
+                await* icrcAllowancesPage(request, metadata);
+            };
+        };
+
+        func icrcAllowancesPage(
+            request : WalletAllowancesPageRequestV1,
+            metadata : FundingMetadata,
+        ) : async* WalletAllowancesPageResultV1 {
+            let scan = switch (icrcAllowanceScan(request.cursor)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            if (
+                not calls.can_call(request.ledger, "icrc103_get_allowances") or
+                not calls.can_call(request.ledger, "icrc2_allowance") or
+                not calls.can_call(request.ledger, "icrc2_approve")
+            ) {
+                return #ok(emptyAllowancesPage(
+                    request.ledger,
+                    metadata,
+                    #icrc103,
+                    #permission_required,
+                    ?"The complete ICRC allowance review and revoke route is not reserved for Wallet",
+                ));
+            };
+            let call = switch (Icrc103.getAllowancesRequest(
+                request.ledger,
+                calls.canister_principal,
+                scan,
+                request.limit,
+            )) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            let raw = await* calls.call(call);
+            let page = switch (Icrc103.decodeAllowances(
+                raw,
+                calls.canister_principal,
+                scan,
+                request.limit,
+                nowNanos(),
+            )) {
+                case (#err(error)) {
+                    return #ok(emptyAllowancesPage(
+                        request.ledger,
+                        metadata,
+                        #icrc103,
+                        #degraded(error),
+                        ?error,
+                    ));
+                };
+                case (#ok(value)) value;
+            };
+            for (allowance in page.allowances.vals()) {
+                if (not FundingDisplay.nat(allowance.allowance)) {
+                    let error = "Ledger allowance exceeds the Wallet protocol limit";
+                    return #ok(emptyAllowancesPage(
+                        request.ledger,
+                        metadata,
+                        #icrc103,
+                        #degraded(error),
+                        ?error,
+                    ));
+                };
+            };
+            let entries = Array.map<Icrc103.Allowance, WalletAllowanceEntryV1>(
+                page.allowances,
+                func(allowance) {
+                    {
+                        spender = #icrc(allowance.to_spender);
+                        amount_atoms = allowance.allowance;
+                        expires_at_ns = allowance.expires_at;
+                    };
+                },
+            );
+            let capped = not page.complete and (
+                page.scan.pages >= Icrc103.MAX_SCAN_PAGES or
+                page.scan.entries >= Icrc103.MAX_SCAN_ENTRIES
+            );
+            let next : ?WalletAllowanceCursorV1 = if (page.complete or capped) null else {
+                switch (page.scan.cursor) {
+                    case null null;
+                    case (?cursor) ?#icrc103({
+                        from_account = cursor.from_account;
+                        to_spender = cursor.prev_spender;
+                        pages = page.scan.pages;
+                        entries = page.scan.entries;
+                    });
+                };
+            };
+            #ok({
+                ledger = request.ledger;
+                token_name = metadata.name;
+                token_symbol = metadata.symbol;
+                decimals = metadata.decimals;
+                revoke_fee_atoms = ?metadata.fee;
+                source = #icrc103;
+                state = if (capped) {
+                    #degraded("ICRC-103 allowance scan reached the Wallet limit");
+                } else #ready;
+                entries;
+                next;
+                has_more = next != null;
+                warning = if (capped) {
+                    ?"Additional allowances may exist beyond the Wallet scan limit";
+                } else null;
+            });
+        };
+
+        func icpAllowancesPage(
+            request : WalletAllowancesPageRequestV1,
+            metadata : FundingMetadata,
+        ) : async* WalletAllowancesPageResultV1 {
+            let scan = switch (icpAllowanceScan(request.cursor)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            if (
+                not calls.can_call(request.ledger, "get_allowances") or
+                not calls.can_call(request.ledger, "remove_approval")
+            ) {
+                return #ok(emptyAllowancesPage(
+                    request.ledger,
+                    metadata,
+                    #icp,
+                    #permission_required,
+                    ?"The complete ICP approval review and revoke route is not reserved for Wallet",
+                ));
+            };
+            let reconciled = await* reconcilePendingIcpRevokes(
+                request.ledger,
+                nowNanos(),
+            );
+            if (reconciled > 0) {
+                invalidateLedgerBalance(request.ledger, metadata.fee);
+            };
+            let call = switch (IcpAllowances.getAllowancesRequest(
+                request.ledger,
+                calls.canister_principal,
+                scan,
+                request.limit,
+            )) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            let raw = await* calls.call(call);
+            let page = switch (IcpAllowances.decodeAllowances(
+                raw,
+                calls.canister_principal,
+                scan,
+                request.limit,
+                nowNanos(),
+            )) {
+                case (#err(error)) {
+                    return #ok(emptyAllowancesPage(
+                        request.ledger,
+                        metadata,
+                        #icp,
+                        #degraded(error),
+                        ?error,
+                    ));
+                };
+                case (#ok(value)) value;
+            };
+            let entries = Array.map<IcpAllowances.Allowance, WalletAllowanceEntryV1>(
+                page.allowances,
+                func(allowance) {
+                    {
+                        spender = #icp_account_identifier(allowance.to_spender_id);
+                        amount_atoms = allowance.allowance;
+                        expires_at_ns = allowance.expires_at;
+                    };
+                },
+            );
+            let capped = not page.complete and (
+                page.scan.pages >= IcpAllowances.MAX_SCAN_PAGES or
+                page.scan.entries >= IcpAllowances.MAX_SCAN_ENTRIES
+            );
+            let next : ?WalletAllowanceCursorV1 = if (page.complete or capped) null else {
+                switch (page.scan.cursor) {
+                    case null null;
+                    case (?cursor) ?#icp({
+                        from_account_id = cursor.from_account_id;
+                        prev_spender_id = cursor.prev_spender_id;
+                        pages = page.scan.pages;
+                        entries = page.scan.entries;
+                    });
+                };
+            };
+            #ok({
+                ledger = request.ledger;
+                token_name = metadata.name;
+                token_symbol = metadata.symbol;
+                decimals = metadata.decimals;
+                revoke_fee_atoms = ?metadata.fee;
+                source = #icp;
+                state = if (capped) {
+                    #degraded("ICP allowance scan reached the Wallet limit");
+                } else #ready;
+                entries;
+                next;
+                has_more = next != null;
+                warning = if (capped) {
+                    ?"Additional ICP approvals may exist beyond the Wallet scan limit";
+                } else null;
+            });
+        };
+
+        // Legacy remove_approval has no replay-safe timestamp. Loading the ICP
+        // approvals view opportunistically resolves lost replies with one
+        // bounded read-only scan from the beginning. Partial scans never prove
+        // absence, and eligibility is snapshotted before the first await.
+        func reconcilePendingIcpRevokes(
+            ledger : Principal,
+            observedAt : Nat64,
+        ) : async* Nat {
+            let candidates = FundingJournal.snapshotPendingIcpRevokes(
+                commandMem.commands,
+                ledger,
+            );
+            if (candidates.size() == 0) return 0;
+
+            var scan = IcpAllowances.startScan();
+            label pages : Nat loop {
+                let request = switch (IcpAllowances.getAllowancesRequest(
+                    ledger,
+                    calls.canister_principal,
+                    scan,
+                    IcpAllowances.MAX_PAGE_ENTRIES,
+                )) {
+                    case (#err(_)) break pages 0;
+                    case (#ok(value)) value;
+                };
+                let page = switch (IcpAllowances.decodeAllowances(
+                    await* calls.call(request),
+                    calls.canister_principal,
+                    scan,
+                    IcpAllowances.MAX_PAGE_ENTRIES,
+                    observedAt,
+                )) {
+                    case (#err(_)) break pages 0;
+                    case (#ok(value)) value;
+                };
+                for (allowance in page.allowances.vals()) {
+                    FundingJournal.noteIcpSpender(
+                        candidates,
+                        allowance.to_spender_id,
+                    );
+                };
+                if (page.complete) {
+                    let reconciled = FundingJournal.reconcileIcpCompleteScan(
+                        candidates,
+                        ledger,
+                        Time.now(),
+                    );
+                    break pages reconciled;
+                };
+                scan := page.scan;
+            };
+        };
+
+        func icrcAllowanceScan(
+            cursor : ?WalletAllowanceCursorV1,
+        ) : IcrcTypes.Result<Icrc103.Scan> {
+            switch (cursor) {
+                case null #ok(Icrc103.startScan());
+                case (?#icrc103(value)) {
+                    if (value.pages == 0 or value.entries == 0) {
+                        return #err("Invalid ICRC-103 allowance cursor counters");
+                    };
+                    #ok({
+                        cursor = ?{
+                            from_account = value.from_account;
+                            prev_spender = value.to_spender;
+                        };
+                        pages = value.pages;
+                        entries = value.entries;
+                    });
+                };
+                case (_) #err("Allowance cursor does not match this ICRC ledger");
+            };
+        };
+
+        func icpAllowanceScan(
+            cursor : ?WalletAllowanceCursorV1,
+        ) : IcrcTypes.Result<IcpAllowances.Scan> {
+            switch (cursor) {
+                case null #ok(IcpAllowances.startScan());
+                case (?#icp(value)) {
+                    if (value.pages == 0 or value.entries == 0) {
+                        return #err("Invalid ICP allowance cursor counters");
+                    };
+                    #ok({
+                        cursor = ?{
+                            from_account_id = value.from_account_id;
+                            prev_spender_id = value.prev_spender_id;
+                        };
+                        pages = value.pages;
+                        entries = value.entries;
+                    });
+                };
+                case (_) #err("Allowance cursor does not match the ICP ledger");
+            };
+        };
+
+        func emptyAllowancesPage(
+            ledger : Principal,
+            metadata : FundingMetadata,
+            source : WalletAllowanceSourceV1,
+            state : WalletAllowancesStateV1,
+            warning : ?Text,
+        ) : WalletAllowancesPageV1 {
+            {
+                ledger;
+                token_name = metadata.name;
+                token_symbol = metadata.symbol;
+                decimals = metadata.decimals;
+                revoke_fee_atoms = ?metadata.fee;
+                source;
+                state;
+                entries = [];
+                next = null;
+                has_more = false;
+                warning;
             };
         };
 
@@ -1011,18 +3189,11 @@ module {
                 request.amount,
                 if (native) null else ?fee,
                 destination,
-                intent,
+                null,
+                ?intent,
                 nativeContext,
             );
-            mem.balance_epoch += 1;
-            let ?current = Map.get(mem.ledgers, Principal.compare, request.ledger) else {
-                return;
-            };
-            Map.add(mem.ledgers, Principal.compare, request.ledger, {
-                current with
-                fee = ?fee;
-                balance_error = null;
-            });
+            invalidateLedgerBalance(request.ledger, fee);
         };
 
         func recordSecondaryNativeBurn(
@@ -1040,7 +3211,8 @@ module {
                 gas.amount,
                 null,
                 null,
-                intent,
+                null,
+                ?intent,
                 ?{
                     network = intent.network;
                     transaction_id = null;
@@ -1911,6 +4083,20 @@ module {
         #ok({ name; symbol; decimals; fee; logo });
     };
 
+    func commandKeyCompare(
+        left : CommandMemory.CommandKey,
+        right : CommandMemory.CommandKey,
+    ) : Order.Order {
+        switch (Text.compare(left.caller_app_id, right.caller_app_id)) {
+            case (#equal) Blob.compare(left.request_id, right.request_id);
+            case (order) order;
+        };
+    };
+
+    func nowNanos() : Nat64 {
+        Nat64.fromNat(Int.abs(Time.now()));
+    };
+
     func min(left : Nat, right : Nat) : Nat {
         if (left < right) left else right;
     };
@@ -2154,6 +4340,18 @@ public type wallet_contact_destinations_Output = WalletContactDestinationsResult
 
 public type wallet_transfer_Input = (request : WalletTransferRequest,);
 public type wallet_transfer_Output = WalletTransferResult;
+
+public type wallet_funding_prepare_v1_Input = (request : WalletFundingPrepareRequestV1,);
+public type wallet_funding_prepare_v1_Output = WalletFundingPrepareResultV1;
+
+public type wallet_funding_execute_v1_Input = (request : WalletFundingExecuteRequestV1,);
+public type wallet_funding_execute_v1_Output = WalletFundingExecutionResultV1;
+
+public type wallet_funding_reject_v1_Input = (request : WalletFundingExecuteRequestV1,);
+public type wallet_funding_reject_v1_Output = WalletFundingExecutionResultV1;
+
+public type wallet_allowances_page_v1_Input = (request : WalletAllowancesPageRequestV1,);
+public type wallet_allowances_page_v1_Output = WalletAllowancesPageResultV1;
 
 public type wallet_set_ledgers_Input = (principals : [Principal],);
 public type wallet_set_ledgers_Output = WalletSnapshot;

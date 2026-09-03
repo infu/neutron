@@ -1,6 +1,10 @@
 node_modules
 dist
 *.neutron
+!kernel.v0.3.23.neutron
+!kernel.v0.3.24.neutron
+!kernel.v0.3.25.neutron
+!kernel.v0.3.26.neutron
 .mops
 .dfx
 meta.json

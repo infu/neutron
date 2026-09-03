@@ -1,12 +1,23 @@
 import { expect, test } from "bun:test";
 import {
   LEGACY_KERNEL_RELEASES,
+  PRODUCTION_KERNEL_V323_RELEASE,
+  PRODUCTION_KERNEL_V324_RELEASE,
+  PRODUCTION_KERNEL_V325_RELEASE,
+  PRODUCTION_KERNEL_V326_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   TEST_CANDIDATE_KERNEL_VERSION,
   compileFinalCandidateLegacyKernelUpgradeFixture,
+  compileFinalCandidateProductionKernelUpgradeFixture,
+  compileFinalCandidateProductionKernelV324UpgradeFixture,
+  compileFinalCandidateProductionKernelV325UpgradeFixture,
+  compileFinalCandidateProductionKernelV326UpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   loadLegacyKernelIdentityFixture,
+  loadProductionKernelV324Fixture,
+  loadProductionKernelV325Fixture,
+  loadProductionKernelV326Fixture,
 } from "./legacy_kernel_upgrade_fixture.ts";
 
 for (const release of LEGACY_KERNEL_RELEASES) {
@@ -45,6 +56,91 @@ test("the retained v0.3.21 predecessor is final-candidate-only and identity-boun
 test("the retained predecessor lane also requires the reviewed candidate digest", async () => {
   await expect(
     compileFinalCandidateRetainedKernelUpgradeFixture({
+      expectedSha256: "",
+    }),
+  ).rejects.toThrow(
+    "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+  );
+});
+
+test("the exact production v0.3.23 predecessor is identity-bound", async () => {
+  expect(PRODUCTION_KERNEL_V323_RELEASE).toMatchObject({
+    version: 323,
+    bytes: 2_448_813,
+    sha256: "e2e5cea791af54a5052f227fcda57f07ecec1a5b4d11bfb5c79696c75d826334",
+    persistenceMode: "classical",
+  });
+  await expect(
+    compileFinalCandidateProductionKernelUpgradeFixture({
+      expectedSha256: "",
+    }),
+  ).rejects.toThrow(
+    "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+  );
+});
+
+test("the exact production v0.3.24 predecessor is identity-bound", async () => {
+  expect(PRODUCTION_KERNEL_V324_RELEASE).toMatchObject({
+    version: 324,
+    bytes: 2_449_608,
+    sha256: "6ae401a934160410ec7d099f9d3a7f62c94126ab491fc115cc2e38b5b27c067a",
+    persistenceMode: "classical",
+  });
+  const fixture = await loadProductionKernelV324Fixture();
+  expect(fixture.archive.byteLength).toBe(PRODUCTION_KERNEL_V324_RELEASE.bytes);
+  expect(fixture.identity).toMatchObject({
+    bytes: PRODUCTION_KERNEL_V324_RELEASE.bytes,
+    sha256: PRODUCTION_KERNEL_V324_RELEASE.sha256,
+    package: { version: PRODUCTION_KERNEL_V324_RELEASE.version },
+  });
+  await expect(
+    compileFinalCandidateProductionKernelV324UpgradeFixture({
+      expectedSha256: "",
+    }),
+  ).rejects.toThrow(
+    "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+  );
+});
+
+test("the exact production v0.3.25 predecessor is identity-bound", async () => {
+  expect(PRODUCTION_KERNEL_V325_RELEASE).toMatchObject({
+    version: 325,
+    bytes: 2_415_653,
+    sha256: "3f7293fb8ab0fe25fd59b2a02e20b66eb4c2920858ed660e163265a4481a098b",
+    persistenceMode: "classical",
+  });
+  const fixture = await loadProductionKernelV325Fixture();
+  expect(fixture.archive.byteLength).toBe(PRODUCTION_KERNEL_V325_RELEASE.bytes);
+  expect(fixture.identity).toMatchObject({
+    bytes: PRODUCTION_KERNEL_V325_RELEASE.bytes,
+    sha256: PRODUCTION_KERNEL_V325_RELEASE.sha256,
+    package: { version: PRODUCTION_KERNEL_V325_RELEASE.version },
+  });
+  await expect(
+    compileFinalCandidateProductionKernelV325UpgradeFixture({
+      expectedSha256: "",
+    }),
+  ).rejects.toThrow(
+    "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+  );
+});
+
+test("the exact production v0.3.26 predecessor is identity-bound", async () => {
+  expect(PRODUCTION_KERNEL_V326_RELEASE).toMatchObject({
+    version: 326,
+    bytes: 2_415_895,
+    sha256: "738aa64943c759b573d8dd5d9094c7ce9b3017768a9c2616f638a272a591bda4",
+    persistenceMode: "classical",
+  });
+  const fixture = await loadProductionKernelV326Fixture();
+  expect(fixture.archive.byteLength).toBe(PRODUCTION_KERNEL_V326_RELEASE.bytes);
+  expect(fixture.identity).toMatchObject({
+    bytes: PRODUCTION_KERNEL_V326_RELEASE.bytes,
+    sha256: PRODUCTION_KERNEL_V326_RELEASE.sha256,
+    package: { version: PRODUCTION_KERNEL_V326_RELEASE.version },
+  });
+  await expect(
+    compileFinalCandidateProductionKernelV326UpgradeFixture({
       expectedSha256: "",
     }),
   ).rejects.toThrow(

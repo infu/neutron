@@ -104,6 +104,7 @@ test("Wallet projection schemas pass shared tool hardening", () => {
 test("Wallet tile views are bounded navigation, not financial commands", () => {
   expect(walletTileView("assets")).toBe("assets");
   expect(walletTileView("activity")).toBe("activity");
+  expect(walletTileView("approvals")).toBe("approvals");
   expect(walletTileView("setup")).toBe("setup");
   expect(walletTileView("receive", "7")).toBe("receive/7");
   expect(walletTileView("send", "7")).toBe("send/7");

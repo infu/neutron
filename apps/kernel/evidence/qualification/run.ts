@@ -100,6 +100,13 @@ import {
   type PhysicalPopulationUsageExpectation,
 } from "./physical_population.ts";
 import {
+  awaitQualificationPrerequisites,
+  runBoundedQualificationWorkset,
+} from "./prerequisites.ts";
+import {
+  CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE,
+} from "./profile.ts";
+import {
   CERTIFIED_ASSETS_HOSTILE_HTTP_GATE_SCHEMA,
   CERTIFIED_ASSETS_BOUNDED_PHYSICAL_OBSERVATION_SCHEMA,
   CERTIFIED_ASSETS_QUALIFICATION_GATES_SCHEMA,
@@ -158,9 +165,6 @@ async function executeReleaseQualification(): Promise<void> {
   const checkedBinding = await readCheckedBinding();
   assertQualificationFixtureSetAdmission();
   assertPhysicalWitnessCandidateDerivation();
-  const focusedMotoko = await runFocusedMotokoGates(REPOSITORY_ROOT);
-  const physicalOneOver =
-    await runPhysicalOneOverManifestGate(REPOSITORY_ROOT);
 
   const temporaryRoot = await mkdtemp(
     path.join(tmpdir(), "neutron-ca-release-"),
@@ -169,19 +173,43 @@ async function executeReleaseQualification(): Promise<void> {
   let receiptToPublish: CertifiedAssetsQualificationReceipt | undefined;
   let qualificationFailure: Readonly<{ error: unknown }> | undefined;
   try {
-    environment = await launchIsolatedQualificationPocketIc({
+    const environmentPromise = launchIsolatedQualificationPocketIc({
       repositoryRoot: REPOSITORY_ROOT,
+    }).then((launched) => {
+      environment = launched;
+      return launched;
     });
-    const replicaTimeStart = await environment.readReplicaTimeNs();
-    if (replicaTimeStart !== QUALIFICATION_INITIAL_TIME_NS.toString()) {
-      throw new Error(
-        `Qualification replica time must start at ${QUALIFICATION_INITIAL_TIME_NS}ns, found ${replicaTimeStart}ns`,
-      );
-    }
-    const deployment = await debugBuildQualificationDeployment(
-      temporaryRoot,
-      environment.rootKeyBase64,
-    );
+    const archivesPromise = buildReleaseQualificationArchives(temporaryRoot);
+    const deploymentPromise = awaitQualificationPrerequisites([
+      environmentPromise,
+      archivesPromise,
+    ] as const).then(async ([launched, archives]) => {
+      const replicaTimeStart = await launched.readReplicaTimeNs();
+      if (replicaTimeStart !== QUALIFICATION_INITIAL_TIME_NS.toString()) {
+        throw new Error(
+          `Qualification replica time must start at ${QUALIFICATION_INITIAL_TIME_NS}ns, found ${replicaTimeStart}ns`,
+        );
+      }
+      return {
+        environment: launched,
+        replicaTimeStart,
+        deployment: await prepareReleaseQualificationDeployment(
+          archives,
+          launched.rootKeyBase64,
+        ),
+      };
+    });
+    const [focusedMotoko, physicalOneOver, prepared] =
+      await awaitQualificationPrerequisites([
+        runFocusedMotokoGates(REPOSITORY_ROOT),
+        runPhysicalOneOverManifestGate(REPOSITORY_ROOT),
+        deploymentPromise,
+      ] as const);
+    const {
+      environment: qualificationEnvironment,
+      replicaTimeStart,
+      deployment,
+    } = prepared;
     const compilerFingerprint =
       await compilerSourceFingerprint(REPOSITORY_ROOT);
     const candidate = bindCertifiedAssetsQualificationCandidate({
@@ -198,19 +226,21 @@ async function executeReleaseQualification(): Promise<void> {
       boundedPhysicalSample,
       wallNormalization,
     } = await runBoundedPhysicalSample({
-      environment,
+      environment: qualificationEnvironment,
       deployment,
     });
     const { samples, browserCors } = await debugRunOperationalSamples({
-      environment,
+      environment: qualificationEnvironment,
       deployment,
     });
     const { upgrade, hostile } = await runUpgradeAndHostileGates({
-      environment,
+      environment: qualificationEnvironment,
       deployment,
     });
-    const gatewayPhaseEnd = await environment.readReplicaTimeNs();
-    const replicaTimeEnd = await environment.readReplicaTimeNs();
+    const gatewayPhaseEnd =
+      await qualificationEnvironment.readReplicaTimeNs();
+    const replicaTimeEnd =
+      await qualificationEnvironment.readReplicaTimeNs();
 
     const unsigned: Omit<
       CertifiedAssetsQualificationReceipt,
@@ -222,12 +252,15 @@ async function executeReleaseQualification(): Promise<void> {
       environment: {
         profile: "minimal",
         isolation: "fresh_temporary_pocketic_v1",
-        pocketic_version: environment.serverVersion,
-        pocketic_binary_sha256: environment.binarySha256,
-        instance_config_sha256: environment.instanceConfigSha256,
-        topology_sha256: sha256Canonical(environment.topologySummary),
+        pocketic_version: qualificationEnvironment.serverVersion,
+        pocketic_binary_sha256: qualificationEnvironment.binarySha256,
+        instance_config_sha256:
+          qualificationEnvironment.instanceConfigSha256,
+        topology_sha256: sha256Canonical(
+          qualificationEnvironment.topologySummary,
+        ),
         root_key_sha256: sha256Bytes(
-          canonicalBase64(environment.rootKeyBase64),
+          canonicalBase64(qualificationEnvironment.rootKeyBase64),
         ),
         replica_time_start_ns: replicaTimeStart,
         replica_time_end_ns: replicaTimeEnd,
@@ -346,10 +379,16 @@ async function readCheckedBinding():
   return value;
 }
 
-export async function debugBuildQualificationDeployment(
+type ReleaseQualificationArchives = Readonly<{
+  kernelArchive: string;
+  fixtureArchives: Awaited<
+    ReturnType<typeof buildQualificationFixtureArchives>
+  >;
+}>;
+
+async function buildReleaseQualificationArchives(
   temporaryRoot: string,
-  rootKeyBase64: string,
-): Promise<PreparedDeployment> {
+): Promise<ReleaseQualificationArchives> {
   const [kernelArchive, fixtureArchives] = await Promise.all([
     buildQualificationKernelArchive({
       repositoryRoot: REPOSITORY_ROOT,
@@ -360,19 +399,14 @@ export async function debugBuildQualificationDeployment(
       temporaryRoot,
     }),
   ]);
-  const installationContext = trustedInstallationContextFromRootKey(
-    canonicalBase64(rootKeyBase64),
-  );
-  const deployment = await prepareDeployment(
-    [
-      kernelArchive,
-      ...fixtureArchives.map(({ archivePath }) => archivePath),
-    ],
-    {
-      target: "local",
-      freshInstallationContext: installationContext,
-    },
-  );
+  return { kernelArchive, fixtureArchives };
+}
+
+async function prepareReleaseQualificationDeployment(
+  archives: ReleaseQualificationArchives,
+  rootKeyBase64: string,
+): Promise<PreparedDeployment> {
+  const { kernelArchive, fixtureArchives } = archives;
   const actualFixtureOrder = fixtureArchives.map(
     ({ fixture }) => fixture.app_id,
   );
@@ -389,7 +423,19 @@ export async function debugBuildQualificationDeployment(
       "Qualification fixture packages are not in candidate-bound order",
     );
   }
-  return deployment;
+  const installationContext = trustedInstallationContextFromRootKey(
+    canonicalBase64(rootKeyBase64),
+  );
+  return prepareDeployment(
+    [
+      kernelArchive,
+      ...fixtureArchives.map(({ archivePath }) => archivePath),
+    ],
+    {
+      target: "local",
+      freshInstallationContext: installationContext,
+    },
+  );
 }
 
 async function installFreshQualificationCanister(input: {
@@ -397,6 +443,16 @@ async function installFreshQualificationCanister(input: {
   deployment: PreparedDeployment;
 }): Promise<InstalledQualificationCanister> {
   const canisterId = await input.environment.createCanister();
+  return installQualificationCanister(input, canisterId);
+}
+
+async function installQualificationCanister(
+  input: {
+    environment: IsolatedQualificationPocketIc;
+    deployment: PreparedDeployment;
+  },
+  canisterId: string,
+): Promise<InstalledQualificationCanister> {
   await input.environment.ensureQualificationSelfController(canisterId);
   assertPreparedDeploymentTarget(input.deployment, canisterId);
   const installation = await input.environment.installTransportWasm(
@@ -511,8 +567,7 @@ export async function debugRunOperationalSamples(input: {
   samples: QualificationSample[];
   browserCors: CertifiedAssetsBrowserCorsEvidence;
 }> {
-  const samples: QualificationSample[] = [];
-  let browserSource: CertifiedHttpObservation | undefined;
+  const plan: OperationalQualificationPlan[] = [];
   for (const definition of CERTIFIED_ASSETS_QUALIFICATION_CASES) {
     for (
       let sampleIndex = 0;
@@ -520,95 +575,36 @@ export async function debugRunOperationalSamples(input: {
         CERTIFIED_ASSETS_QUALIFICATION_CONTRACT.minimum_samples_per_case;
       sampleIndex += 1
     ) {
-      const installed = await installFreshQualificationCanister(input);
-      const verifyGateway =
-        definition.id === "publication_lifecycle" ||
-        definition.metrics.some(
-          (metric) => metric === "proof_bytes",
-        );
-      const runtimes = qualificationCaseRuntimes({
-        environment: input.environment,
-        canisterId: installed.canisterId,
-        caseId: definition.id,
-        sample: sampleIndex,
-        verifyGateway,
-      });
-      const before = await Promise.all(
-        runtimes.map(({ runtime }) =>
-          runtime.snapshotUsageAndDiagnostics()
-        ),
-      );
-      const checkpoints = isMultiscopeCase(definition.id)
-        ? await executeMultiscopeQualificationCase(
-            runtimes,
-            definition.id,
-          )
-        : await executeQualificationCase(
-            runtimes[0]!.runtime,
-            definition.id,
-            BEHAVIOR_APP_ID,
-          );
-      const after = await Promise.all(
-        runtimes.map(({ runtime }) =>
-          runtime.snapshotUsageAndDiagnostics()
-        ),
-      );
-      const bracketed = runtimes.map(
-        ({ appId, runtime }, index): BracketedRuntime => ({
-          appId,
-          runtime,
-          before: before[index]!,
-          after: after[index]!,
-        }),
-      );
-      const candid = bracketed.flatMap(
-        ({ runtime }) => runtime.observations.candid,
-      );
-      const http = bracketed.flatMap(
-        ({ runtime }) => runtime.observations.http,
-      );
-      const sample: QualificationSample = {
-        schema: CERTIFIED_ASSETS_QUALIFICATION_SAMPLE_SCHEMA,
-        case_id: definition.id,
-        sample: sampleIndex,
-        canister_id: installed.canisterId,
-        installed_transport_wasm_sha256:
-          installed.installedTransportWasmSha256,
-        checkpoints,
-        metrics: qualificationMetrics(
-          definition.metrics,
-          bracketed,
-          candid,
-          http,
-        ),
-        candid,
-        http,
-      };
-      samples.push(sample);
-      if (
-        definition.id === "portable_certified_reads" &&
-        sampleIndex === 0
-      ) {
-        const matching = http.filter(
-          (observation) =>
-            observation.boundary === "raw_query" &&
-            observation.method === "GET" &&
-            observation.status === 200,
-        );
-        if (matching.length !== 1) {
-          throw new Error(
-            "Portable sample zero did not produce exactly one raw certified 200 GET",
-          );
-        }
-        browserSource = matching[0]!;
-      }
+      plan.push({ definition, sampleIndex });
     }
   }
-  if (browserSource === undefined) {
+  const work: OperationalQualificationWork[] = [];
+  for (const item of plan) {
+    work.push({
+      ...item,
+      canisterId: await input.environment.createCanister(),
+    });
+  }
+  if (new Set(work.map(({ canisterId }) => canisterId)).size !== work.length) {
     throw new Error(
-      "Qualification did not retain portable sample zero for the browser gate",
+      "Qualification operational work did not receive one unique fresh canister per sample",
     );
   }
+  const results = await runBoundedQualificationWorkset(
+    work,
+    CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE
+      .operational_sample_concurrency,
+    (item) => runOperationalQualificationSample(input, item),
+  );
+  const browserSources = results.flatMap(({ browserSource }) =>
+    browserSource === undefined ? [] : [browserSource]
+  );
+  if (browserSources.length !== 1) {
+    throw new Error(
+      "Qualification did not retain exactly one portable sample zero for the browser gate",
+    );
+  }
+  const browserSource = browserSources[0]!;
   const responseHeaders = new Map(browserSource.response_headers);
   const browserCors = await verifyPortableCorsInChromium({
     url: browserSource.url,
@@ -631,7 +627,107 @@ export async function debugRunOperationalSamples(input: {
       "portable sample zero",
     ),
   });
-  return { samples, browserCors };
+  return {
+    samples: results.map(({ sample }) => sample),
+    browserCors,
+  };
+}
+
+type OperationalQualificationPlan = Readonly<{
+  definition: (typeof CERTIFIED_ASSETS_QUALIFICATION_CASES)[number];
+  sampleIndex: number;
+}>;
+
+type OperationalQualificationWork = OperationalQualificationPlan & Readonly<{
+  canisterId: string;
+}>;
+
+type OperationalQualificationResult = Readonly<{
+  sample: QualificationSample;
+  browserSource?: CertifiedHttpObservation;
+}>;
+
+async function runOperationalQualificationSample(
+  input: {
+    environment: IsolatedQualificationPocketIc;
+    deployment: PreparedDeployment;
+  },
+  work: OperationalQualificationWork,
+): Promise<OperationalQualificationResult> {
+  const { definition, sampleIndex, canisterId } = work;
+  const installed = await installQualificationCanister(input, canisterId);
+  const verifyGateway =
+    definition.id === "publication_lifecycle" ||
+    definition.metrics.some((metric) => metric === "proof_bytes");
+  const runtimes = qualificationCaseRuntimes({
+    environment: input.environment,
+    canisterId: installed.canisterId,
+    caseId: definition.id,
+    sample: sampleIndex,
+    verifyGateway,
+  });
+  const before = await Promise.all(
+    runtimes.map(({ runtime }) => runtime.snapshotUsageAndDiagnostics()),
+  );
+  const checkpoints = isMultiscopeCase(definition.id)
+    ? await executeMultiscopeQualificationCase(runtimes, definition.id)
+    : await executeQualificationCase(
+        runtimes[0]!.runtime,
+        definition.id,
+        BEHAVIOR_APP_ID,
+      );
+  const after = await Promise.all(
+    runtimes.map(({ runtime }) => runtime.snapshotUsageAndDiagnostics()),
+  );
+  const bracketed = runtimes.map(
+    ({ appId, runtime }, index): BracketedRuntime => ({
+      appId,
+      runtime,
+      before: before[index]!,
+      after: after[index]!,
+    }),
+  );
+  const candid = bracketed.flatMap(
+    ({ runtime }) => runtime.observations.candid,
+  );
+  const http = bracketed.flatMap(
+    ({ runtime }) => runtime.observations.http,
+  );
+  const sample: QualificationSample = {
+    schema: CERTIFIED_ASSETS_QUALIFICATION_SAMPLE_SCHEMA,
+    case_id: definition.id,
+    sample: sampleIndex,
+    canister_id: installed.canisterId,
+    installed_transport_wasm_sha256:
+      installed.installedTransportWasmSha256,
+    checkpoints,
+    metrics: qualificationMetrics(
+      definition.metrics,
+      bracketed,
+      candid,
+      http,
+    ),
+    candid,
+    http,
+  };
+  if (
+    definition.id !== "portable_certified_reads" ||
+    sampleIndex !== 0
+  ) {
+    return { sample };
+  }
+  const matching = http.filter(
+    (observation) =>
+      observation.boundary === "raw_query" &&
+      observation.method === "GET" &&
+      observation.status === 200,
+  );
+  if (matching.length !== 1) {
+    throw new Error(
+      "Portable sample zero did not produce exactly one raw certified 200 GET",
+    );
+  }
+  return { sample, browserSource: matching[0]! };
 }
 
 function qualificationCaseRuntimes(input: {

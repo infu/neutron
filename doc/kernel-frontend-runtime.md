@@ -120,11 +120,13 @@ Each workspace stores:
 - `tiles`, the open tile instances in that workspace;
 - `focusedTileId`.
 
-Opening a tile always creates a new tile instance. The first tile fills an empty
+Opening a tile from the launcher creates a new tile instance. Kernel-authorized
+navigation, including provider presentation, may instead focus an exact
+existing app/tile instance before opening one. The first tile fills an empty
 workspace; later tiles split the focused tile to the right. Closing the final
 tile leaves the workspace empty. Open tile instances keep their own app id,
-tile id, title, path, and icon, so a later registry refresh does not
-immediately delete already-open windows.
+tile id, title, path, and icon, so a later registry refresh does not immediately
+delete already-open windows.
 
 ### Layout And Gestures
 
@@ -503,6 +505,19 @@ live interface and creates the dynamic actor. Concurrent callers share that
 one fetch and compilation promise, and later self-calls reuse the resulting
 actor. The same HTTP helper reads registry, package, compiler, and provenance
 assets; browser caching applies normally.
+
+Kernel frontend update calls use the asynchronous IC update endpoint. Each
+logical mutation creates one signed request identity for
+`/api/v2/canister/<id>/call`; after acceptance, the agent follows that request
+ID through certified request-status polling and decodes the terminal reply.
+Transport retry may send the identical signed envelope again, but it never
+creates a second mutation or request ID merely because the reply is delayed or
+the synchronous v3 response lacks a terminal reply. Bootstrap
+actors, dynamic ICBlast actors, and raw self updates share this transport;
+queries and certified HTTP asset reads are unchanged. This includes
+app-mediated calls such as Wallet execution and the control-plane calls used by
+ordinary and chunked app installation.
+
 Logout, identity replacement, or a committed runtime replacement clears all
 bootstrap and dynamic-actor caches, including an in-flight older-generation
 load. The workspace shell, launcher, and app iframes mount only when both
@@ -875,14 +890,49 @@ The same component renders cross-app frontend tool requests. It shows caller
 app/role, exact target endpoint, tool name, and JSON arguments. The user can
 allow one call, allow that endpoint/tool for the current session, or reject.
 
-All app-originated frontend tool, signed call, backend access, Connections,
-workspace navigation, and Agent Mode grant prompts first pass through the
-shared UI-attention policy in `src/ui_attention/owner.ts`. Only one may be
-active globally and there is no hidden queue. Rolling source-app and global
-limits reject excess attempts with structured errors. Requests expire, and
-rejecting, pressing Escape, or closing a backdrop applies a short recovery
-pause. Prompt controls can pause that source app for two minutes, ten minutes,
-or the browser session.
+On the current provider-UI lane, an exact
+`{"neutron:consent":"provider_once"}` descriptor takes a separate branch outside
+`Requests`. The Kernel validates the caller's original arguments before
+dispatch. Outside Agent Mode, an exact live tile, tray, or background may start
+the request because the provider's visible action is the consent boundary. The
+Kernel skips the ordinary preliminary tool prompt and gives the target handler
+one invocation-scoped
+`presentUserInterface({ tileId, tool, arguments })` callback. Kernel opens or
+reuses and focuses that exact provider tile in the active workspace, waits for
+its exact endpoint, and routes the opaque arguments only to a private tool
+declaring `same_app` visibility and the `foreground_tile` audience. It attests
+the original caller and audience rather than accepting them in app data.
+
+The provider tile may use exact preapproved methods to load and freeze
+non-value-moving review state, renders its own modal, and owns the accept/reject
+decision with concrete action/cancel labels. Only the affirmative action may
+dispatch the value-moving execute method; cancel may persist rejection. No
+Kernel dialog renders or interprets the provider's domain data. The callback is
+one-use, creates no grant, and ignores pre-existing exact or wildcard grants.
+Timeout, cancellation, endpoint replacement, a second use, replay, or a handler
+return without one completed interaction fails closed.
+
+The audience identifies the exact Kernel-selected provider tile; it is not a
+continuous browser-focus gate. Focus and workspace selection may move while the
+endpoint/session stays live; the provider tile must remain mounted until private
+dispatch. Kernel performs no special blur or focus restoration when the
+interaction settles.
+
+The deprecated `requestApproval(review)` callback remains a generic
+compatibility surface. Published providers including Wallet 0.3.6 depend on
+its old Kernel-rendered raw-JSON review; current provider code must use the
+provider-owned tile path. It shares the same one-use capability with
+`presentUserInterface`, so a handler cannot stack both flows.
+
+All Kernel-owned frontend tool, signed call, backend access, Connections, and
+Agent Mode grant prompts first pass through the shared UI-attention policy in
+`src/ui_attention/owner.ts`. Only one may be active globally and there is no
+hidden queue. Rolling source-app and global limits reject excess attempts with
+structured errors. Requests expire, and rejecting, pressing Escape, or closing
+a backdrop applies a short recovery pause. Prompt controls can pause that source
+app for two minutes, ten minutes, or the browser session. Direct workspace
+navigation has no Kernel prompt. A provider-owned modal is app UI inside its
+isolated tile and is bounded by that provider's implementation instead.
 
 ### Agent Mode Runtime
 
@@ -901,6 +951,14 @@ requested by descendants are suspended and sent to the root through the
 reserved consent action on the existing message bus. Invalid, stale, unscoped,
 late, or replayed authority fails closed.
 
+Provider-owned presentation is the human route and is rejected from Agent
+invocations. Autonomous provider work uses a separate tool declaring both
+`same_app` visibility and the `agent_root` audience. Kernel exposes and routes
+that tool only to the active depth-zero root, injects the attested audience,
+and opens neither Kernel nor provider UI. Ordinary app calls and delegated
+descendants are rejected before target dispatch. The provider checks the
+audience and uses only its own declared preapproved authority.
+
 For a nested `canister.call_dialog_v2` permission, the exact review value—not
 only summary counts—must fit the ordinary message-bus envelope before any
 decision or signature. The unversioned compatibility route rejects
@@ -914,11 +972,22 @@ budgets, and recent allow or deny summaries. These surfaces never display
 capabilities, challenge ids, credentials, or raw arguments.
 
 App-driven tile navigation remains in the current workspace, always reuses an
-exact existing app/tile instance first, and observes timing and capacity
-limits. Agent roots may navigate without a fresh click; descendants require a
-one-shot agent decision. Neither path can switch, close, move, resize, or reset
-another app's workspace UI. Tray endpoints cannot start Agent Mode or receive
-delegated agent calls.
+exact existing app/tile instance first, and observes capacity limits. Agent
+navigation additionally observes timing limits: roots may navigate without a
+fresh click, while descendants require a one-shot agent decision. Neither path
+can switch, close, move, resize, or reset another app's workspace UI. Tray
+endpoints cannot start Agent Mode or receive delegated agent calls.
+
+A provider presentation uses the same exact open-or-focus primitive but cannot
+choose another app: Kernel derives the provider app from the suspended public
+tool invocation and accepts only a declared tile and its private
+`foreground_tile` tool.
+
+Agent Mode remains live-turn authority. Enabling one exact entrypoint does not
+let the resident originate a root by itself; each root begins through a live
+tile in the granted Agent installation and the exact entrypoint without a
+per-turn browser-focus or transient-activation gate. The provider's `agent_root`
+audience ends with that bounded invocation.
 
 ### Exact Installed Artifact Inspection
 
@@ -1024,7 +1093,12 @@ package install workflow:
    otherwise the same compiler path clears the self-controller's management
    chunk store, uploads sequential 1 MiB journal-bound chunks, and calls
    `kernel_install_code_chunked` with only their hashes. It then verifies
-   runtime identity, clears temporary chunks, and commits.
+   runtime identity, clears temporary chunks, and commits. Each of those
+   update calls uses the single-logical-request v2 transport described above:
+   one signed request identity followed by certified request-status polling,
+   never a newly signed automatic resubmission. A successful Candid `null`
+   reply is decoded as the method result rather than mistaken for an absent
+   transport reply.
 8. Commit the same canonical record atomically with the target registry and
    package assets after the expected runtime responds. Re-read the runtime
    inventory with an absent journal on both sides of the

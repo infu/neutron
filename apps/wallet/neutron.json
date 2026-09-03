@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 305,
+  "version": 310,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Canister-owned ICRC token balances",
   "src": "main.mo",
@@ -44,7 +44,12 @@
         "wallet_history_page",
         "wallet_history_status",
         "wallet_history_sources",
-        "wallet_history_sync"
+        "wallet_history_sync",
+        "wallet_transfer",
+        "wallet_funding_prepare_v1",
+        "wallet_funding_execute_v1",
+        "wallet_funding_reject_v1",
+        "wallet_allowances_page_v1"
       ]
     },
     "scheduled_tasks": {
@@ -209,6 +214,22 @@
       "type": "update",
       "async": "async*"
     },
+    "wallet_funding_prepare_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_funding_execute_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_funding_reject_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_allowances_page_v1": {
+      "type": "update",
+      "async": "async*"
+    },
     "wallet_set_ledgers": {
       "type": "update",
       "async": "async*"
@@ -232,6 +253,15 @@
       "schemas": {
         "1": {
           "src": "memory/wallet/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "wallet_commands": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/wallet_commands/v1.mo"
         }
       },
       "migrations": []

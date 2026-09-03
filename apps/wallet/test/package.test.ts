@@ -4,7 +4,9 @@ import {
   preparePackageInstall,
   unpackNeutronPackage,
 } from "neutron-compiler/src/install.ts";
-import { generateAppMethodSchemaArtifact } from "neutron-scripts/src/method_schema.js";
+import {
+  generateAppMethodSchemaArtifact,
+} from "neutron-scripts/src/method_schema.js";
 import { normalizeToolDescriptor } from "neutron-tools/src/app.ts";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
@@ -15,6 +17,14 @@ import {
 } from "../src/catalog.ts";
 import { formatTokenAmount, parseTokenAmount } from "../src/format.ts";
 import {
+  WALLET_FUNDING_PRESENT_TOOL,
+  WALLET_FUNDING_REJECT_METHOD,
+  WALLET_FUNDING_ROOT_TOOL,
+  WALLET_FUNDING_TOOL,
+  walletFundingInputSchema,
+  walletFundingOutputSchema,
+} from "../src/funding.ts";
+import {
   walletProjectionEmptyInputSchema,
   walletProjectionSchema,
 } from "../src/wallet_projection.ts";
@@ -23,12 +33,20 @@ const manifestUrl = new URL("../neutron.json", import.meta.url);
 const backendUrl = new URL("../backend/main.mo", import.meta.url);
 const catalogUrl = new URL("../backend/Catalog.mo", import.meta.url);
 const memoryUrl = new URL("../backend/memory/wallet/v1.mo", import.meta.url);
+const commandMemoryUrl = new URL(
+  "../backend/memory/wallet_commands/v1.mo",
+  import.meta.url,
+);
+const fundingJournalUrl = new URL(
+  "../backend/funding/Journal.mo",
+  import.meta.url,
+);
 const frontendUrl = new URL("../src/index.tsx", import.meta.url);
 const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.5.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.10.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -40,7 +58,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 305,
+    version: 310,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -77,6 +95,11 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_history_status",
           "wallet_history_sources",
           "wallet_history_sync",
+          "wallet_transfer",
+          "wallet_funding_prepare_v1",
+          "wallet_funding_execute_v1",
+          "wallet_funding_reject_v1",
+          "wallet_allowances_page_v1",
         ],
       },
       backend_calls: {
@@ -112,13 +135,20 @@ test("Wallet declares managed memory and generic backend calls", async () => {
         ],
       },
     },
-    memory: { wallet: { version: 1 } },
+    memory: {
+      wallet: { version: 1 },
+      wallet_commands: { version: 1 },
+    },
   });
   expect(value).not.toHaveProperty("init_arg");
   expect(value.func).toHaveProperty("wallet_catalog");
   expect(value.func).toHaveProperty("wallet_set_ledgers");
   expect(value.func).toHaveProperty("wallet_contact_destinations");
   expect(value.func).toHaveProperty("wallet_transfer");
+  expect(value.func).toHaveProperty("wallet_funding_prepare_v1");
+  expect(value.func).toHaveProperty("wallet_funding_execute_v1");
+  expect(value.func).toHaveProperty("wallet_funding_reject_v1");
+  expect(value.func).toHaveProperty("wallet_allowances_page_v1");
   expect(value.func).toHaveProperty("wallet_refresh_deposits");
   expect(value.func?.wallet_history_tick).toEqual({
     type: "internal",
@@ -128,9 +158,9 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value.func).not.toHaveProperty("wallet_add_ledger");
   expect(value.func).not.toHaveProperty("wallet_remove_ledger");
   expect(value.background).not.toHaveProperty("storage");
-  expect(
-    value.capabilities?.backend_calls?.install_reservations,
-  ).toHaveLength(15);
+  expect(value.capabilities?.backend_calls?.install_reservations).toHaveLength(
+    15,
+  );
   expect(
     value.capabilities?.backend_calls?.install_reservations?.map(
       ({ kind, principal, method }) =>
@@ -203,10 +233,29 @@ test("Wallet method schemas preserve structured snapshots", async () => {
   });
 });
 
+test("generated API-1 ICRC Account inputs use the canonical string shorthand", async () => {
+  const artifact = generateAppMethodSchemaArtifact(
+    await manifest(),
+    await readFile(backendUrl, "utf8"),
+  );
+  const paths: string[] = [];
+  collectIcrcAccountSchemaPaths(artifact.methods, "", paths);
+
+  expect(paths).toEqual([
+    "wallet_transfer/input/prefixItems/0/properties/expected_destination/oneOf/0/properties/internet_computer",
+    "wallet_funding_prepare_v1/input/prefixItems/0/properties/intent/oneOf/0/properties/direct/properties/to",
+    "wallet_funding_prepare_v1/input/prefixItems/0/properties/intent/oneOf/1/properties/allowance/properties/spender",
+    "wallet_funding_prepare_v1/input/prefixItems/0/properties/intent/oneOf/2/properties/revoke/properties/spender/oneOf/0/properties/icrc",
+    "wallet_allowances_page_v1/input/prefixItems/0/properties/cursor/oneOf/0/properties/icrc103/properties/from_account",
+    "wallet_allowances_page_v1/input/prefixItems/0/properties/cursor/oneOf/0/properties/icrc103/properties/to_spender",
+  ]);
+});
+
 test("Wallet setup replaces one v1 ledger selection through one permission batch", async () => {
   const backend = await readFile(backendUrl, "utf8");
   const catalog = await readFile(catalogUrl, "utf8");
   const memory = await readFile(memoryUrl, "utf8");
+  const commandMemory = await readFile(commandMemoryUrl, "utf8");
   const frontend = await readFile(frontendUrl, "utf8");
 
   expect(catalog).toContain("ryjl3-tyaaa-aaaaa-aaaba-cai");
@@ -220,6 +269,8 @@ test("Wallet setup replaces one v1 ledger selection through one permission batch
   expect(memory).toContain("native_deposit_progress : ?NativeDepositProgress");
   expect(memory).toMatch(/^import Map "mo:core\/Map";$/m);
   expect(memory).not.toMatch(/^import\s+\w+\s+"(?:\.{1,2}\/|\/)/m);
+  expect(commandMemory).toMatch(/^import Map "mo:core\/Map";$/m);
+  expect(commandMemory).not.toMatch(/^import\s+\w+\s+"(?:\.{1,2}\/|\/)/m);
   expect(frontend).toContain("requestBackendCallReservations({");
   expect(frontend).toContain('method: "wallet_set_ledgers"');
   expect(frontend).toContain('updateSelf("wallet_refresh_deposits"');
@@ -230,11 +281,136 @@ test("Wallet setup replaces one v1 ledger selection through one permission batch
   expect(frontend).not.toContain("wallet_remove_ledger");
   expect(frontend).toContain("onTileViewRequest");
   expect(frontend).toContain('requested === "activity"');
+  expect(frontend).toContain('requested === "approvals"');
   expect(frontend).toContain("/^(receive|deposit|send)");
   expect(frontend).toContain("Wallet alpha warning");
   expect(frontend).toContain(
     "Alpha - not battle tested, don't put more tokens than you can",
   );
+});
+
+test("Wallet rechecks current ledger authority before funding persistence and dispatch", async () => {
+  const backend = await readFile(backendUrl, "utf8");
+  const body = (name: string, next: string): string => {
+    const start = backend.indexOf(`        func ${name}(`);
+    const end = backend.indexOf(`        func ${next}(`, start + 1);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    return backend.slice(start, end);
+  };
+  const ordered = (source: string, markers: string[]): void => {
+    let previous = -1;
+    for (const marker of markers) {
+      const current = source.indexOf(marker);
+      expect(current).toBeGreaterThan(previous);
+      previous = current;
+    }
+  };
+
+  const prepareStart = backend.indexOf(
+    "        public func /*update*/wallet_funding_prepare_v1(",
+  );
+  const prepareEnd = backend.indexOf(
+    "        public func /*update*/wallet_funding_execute_v1(",
+    prepareStart + 1,
+  );
+  expect(prepareStart).toBeGreaterThanOrEqual(0);
+  expect(prepareEnd).toBeGreaterThan(prepareStart);
+  const prepare = backend.slice(prepareStart, prepareEnd);
+  ordered(prepare, [
+    "existingFundingCommand(key, request, now)",
+    "validateExistingFundingOutcome(request, outcome, now)",
+    "await* prepareFundingOperation(request, now)",
+  ]);
+  ordered(prepare, [
+    "await* prepareFundingOperation(request, now)",
+    "validateCurrentFundingAuthority(request, finishedAt)",
+    "Map.add(commandMem.commands, commandKeyCompare, key, command)",
+  ]);
+
+  const existing = body(
+    "validateExistingFundingOutcome",
+    "validateCurrentFundingAuthority",
+  );
+  expect(existing).toContain("case (#prepared(_))");
+  expect(existing).toContain("validateCurrentFundingAuthority(request, now)");
+  expect(existing).toContain("case (#completed(_)) {};");
+
+  ordered(body("executeFundingCommand", "executeFundingTransfer"), [
+    "await* readFundingMetadata(command.ledger)",
+    "await* executeFundingTransfer(key, command, value, metadata)",
+  ]);
+  ordered(body("executeFundingTransfer", "executeFundingApproval"), [
+    "validateFundingDispatchAuthority(command)",
+    "await* Icrc.executeTransferCandid(",
+  ]);
+  for (const [name, next, read, effect] of [
+    [
+      "executeFundingApproval",
+      "executeIcrcRevoke",
+      "await* readIcrcAllowance(command.ledger, operation.spender)",
+      "await* Icrc.executeApproveCandid(",
+    ],
+    [
+      "executeIcrcRevoke",
+      "executeIcpRevoke",
+      "await* readIcrcAllowance(command.ledger, spender)",
+      "await* Icrc.executeApproveCandid(",
+    ],
+    [
+      "executeIcpRevoke",
+      "freezeFundingArgs",
+      "await* findIcpAllowance(",
+      "await* calls.call(request)",
+    ],
+  ] as const) {
+    ordered(body(name, next), [
+      read,
+      "validateFundingDispatchAuthority(command)",
+      effect,
+    ]);
+  }
+});
+
+test("Wallet durable funding identity replaces only the caller endpoint", async () => {
+  const backend = await readFile(backendUrl, "utf8");
+  const journal = await readFile(fundingJournalUrl, "utf8");
+  const body = (source: string, name: string, next: string): string => {
+    const start = source.indexOf(`        func ${name}(`);
+    const end = source.indexOf(`        func ${next}(`, start + 1);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    return source.slice(start, end);
+  };
+
+  const existing = body(
+    backend,
+    "existingFundingCommand",
+    "fundingIntentForEndpoint",
+  );
+  expect(existing).toContain("request,\n                command.caller.endpoint,");
+  expect(existing).toContain("command.intent != comparableIntent");
+  expect(existing).not.toContain("request.caller.endpoint");
+
+  const encoding = body(
+    backend,
+    "fundingIntentForEndpoint",
+    "fundingCaller",
+  );
+  expect(encoding).toContain(
+    "let encoded : WalletFundingPrepareRequestV1 = {",
+  );
+  expect(encoding).toContain(
+    "caller = { request.caller with endpoint };",
+  );
+  expect(encoding).toContain("to_candid (encoded)");
+
+  expect(journal).toContain(
+    "not sameDurableCaller(command.caller, caller) or",
+  );
+  expect(journal).toContain("stored.app_id == current.app_id");
+  expect(journal).toContain("stored.role == current.role");
+  expect(journal).toContain("stored.agent_mode == current.agent_mode");
 });
 
 test("Wallet tile and tray mount the same app and gate only focused capabilities", async () => {
@@ -280,6 +456,37 @@ test("Wallet resident tool schemas are closed and hardened", () => {
       outputSchema: walletProjectionSchema,
     }),
   ).not.toThrow();
+  expect(() =>
+    normalizeToolDescriptor({
+      name: WALLET_FUNDING_TOOL,
+      inputSchema: walletFundingInputSchema,
+      outputSchema: walletFundingOutputSchema,
+      annotations: { "neutron:consent": "provider_once" },
+    }),
+  ).not.toThrow();
+  expect(() =>
+    normalizeToolDescriptor({
+      name: WALLET_FUNDING_PRESENT_TOOL,
+      inputSchema: walletFundingInputSchema,
+      outputSchema: walletFundingOutputSchema,
+      annotations: {
+        "neutron:audience": "foreground_tile",
+        "neutron:visibility": "same_app",
+      },
+    }),
+  ).not.toThrow();
+  expect(() =>
+    normalizeToolDescriptor({
+      name: WALLET_FUNDING_ROOT_TOOL,
+      inputSchema: walletFundingInputSchema,
+      outputSchema: walletFundingOutputSchema,
+      annotations: {
+        "neutron:audience": "agent_root",
+        "neutron:visibility": "same_app",
+      },
+    }),
+  ).not.toThrow();
+  expect(WALLET_FUNDING_REJECT_METHOD).toBe("wallet_funding_reject_v1");
 });
 
 test("Wallet formats arbitrary Nat balances without Number conversion", () => {
@@ -367,3 +574,25 @@ test("Wallet package contains the tile, schema, and Motoko roots", async () => {
   expect(prepared.manifest.capabilities?.backend_calls).toBeDefined();
   expect(prepared.files.some((file) => file.path.startsWith("mo/"))).toBe(true);
 });
+
+function collectIcrcAccountSchemaPaths(
+  value: unknown,
+  path: string,
+  paths: string[],
+): void {
+  if (typeof value !== "object" || value === null) return;
+  if (!Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    if (
+      typeof record.description === "string" &&
+      record.description.startsWith("icrc1 account") &&
+      path.includes("/input/")
+    ) {
+      expect(record.type).toBe("string");
+      paths.push(path);
+    }
+  }
+  for (const [key, child] of Object.entries(value)) {
+    collectIcrcAccountSchemaPaths(child, path ? `${path}/${key}` : key, paths);
+  }
+}

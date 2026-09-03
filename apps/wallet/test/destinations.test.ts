@@ -1,12 +1,23 @@
 import { expect, test } from "bun:test";
-import { Principal } from "@icp-sdk/core/principal";
-import { encodeIcrcAccount } from "neutron-tools/src/icrc_account.js";
+import { encodeSelfCallValues } from "neutron-tools/app";
+import {
+  decodeIcrcAccount,
+  encodeIcrcAccount,
+} from "neutron-tools/src/icrc_account.js";
 import {
   parseWalletContactDestinations,
+  walletDestinationVariant,
   walletDestinationText,
 } from "../src/destinations.ts";
 
 const icpLedger = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+const principalOnlyAccount = "togwv-zqaaa-aaaal-qr7aa-cai";
+const subaccount = Uint8Array.from([...new Array(31).fill(0), 255]);
+const accountWithSubaccount = encodeIcrcAccount({
+  owner: decodeIcrcAccount(icpLedger).owner,
+  subaccount,
+});
+const candidAccountWithSubaccount = { owner: icpLedger, subaccount };
 
 test("parses typed IC and native Contact destinations", () => {
   const page = parseWalletContactDestinations({
@@ -25,10 +36,7 @@ test("parses typed IC and native Contact destinations", () => {
           address_label: "Main",
           preferred: true,
           destination: {
-            internet_computer: {
-              owner: icpLedger,
-              subaccount: null,
-            },
+            internet_computer: { owner: icpLedger },
           },
         },
       },
@@ -58,10 +66,6 @@ test("parses typed IC and native Contact destinations", () => {
 });
 
 test("preserves an ICRC subaccount in canonical textual form", () => {
-  const account = encodeIcrcAccount({
-    owner: Principal.fromText(icpLedger),
-    subaccount: Uint8Array.from([...new Array(31).fill(0), 255]),
-  });
   const page = parseWalletContactDestinations({
     ledger: icpLedger,
     book_revision: "1",
@@ -77,13 +81,7 @@ test("preserves an ICRC subaccount in canonical textual form", () => {
           id: "1",
           preferred: false,
           destination: {
-            internet_computer: {
-              owner: icpLedger,
-              subaccount: Uint8Array.from([
-                ...new Array(31).fill(0),
-                255,
-              ]),
-            },
+            internet_computer: { owner: icpLedger, subaccount },
           },
         },
       },
@@ -91,11 +89,92 @@ test("preserves an ICRC subaccount in canonical textual form", () => {
   });
   expect(page.destinations[0]?.destination).toEqual({
     network: "internet_computer",
-    account,
+    account: accountWithSubaccount,
   });
+  expect(walletDestinationVariant(page.destinations[0]!.destination)).toEqual({
+    internet_computer: candidAccountWithSubaccount,
+  });
+  const encoded = encodeSelfCallValues([
+    {
+      expected_destination: walletDestinationVariant(
+        page.destinations[0]!.destination,
+      ),
+    },
+  ]);
+  expect(encoded.blobs).toHaveLength(1);
+  expect(encoded.blobs[0]).toMatchObject({
+    path: [
+      0,
+      "expected_destination",
+      "internet_computer",
+      "subaccount",
+    ],
+    byteLength: 32,
+  });
+  expect(new Uint8Array(encoded.blobs[0]!.data)).toEqual(subaccount);
 });
 
-test("rejects legacy and malformed ICRC destination byte projections", () => {
+test("accepts omitted and null Candid subaccounts as the default account", () => {
+  const page = parseWalletContactDestinations({
+    ledger: icpLedger,
+    book_revision: "1",
+    total: "2",
+    destinations: [
+      {
+        contact_id: "1",
+        contact_revision: "1",
+        contact_kind: { person: null },
+        contact_name: "Neutrinite",
+        route: { icrc: null },
+        address: {
+          id: "1",
+          preferred: true,
+          destination: {
+            internet_computer: { owner: principalOnlyAccount },
+          },
+        },
+      },
+      {
+        contact_id: "2",
+        contact_revision: "1",
+        contact_kind: { person: null },
+        contact_name: "Neutrinite legacy",
+        route: { icrc: null },
+        address: {
+          id: "2",
+          preferred: false,
+          destination: {
+            internet_computer: {
+              owner: principalOnlyAccount,
+              subaccount: null,
+            },
+          },
+        },
+      },
+    ],
+  });
+
+  expect(page.destinations[0]?.destination).toEqual({
+    network: "internet_computer",
+    account: principalOnlyAccount,
+  });
+  expect(page.destinations[1]?.destination).toEqual({
+    network: "internet_computer",
+    account: principalOnlyAccount,
+  });
+  const variant = walletDestinationVariant(page.destinations[0]!.destination);
+  expect(variant).toEqual({
+    internet_computer: {
+      owner: principalOnlyAccount,
+      subaccount: null,
+    },
+  });
+  expect(encodeSelfCallValues([{ expected_destination: variant }]).blobs).toEqual(
+    [],
+  );
+});
+
+test("rejects string-shaped, inherited, accessor, and malformed projections", () => {
   const page = (destination: unknown) => ({
     ledger: icpLedger,
     book_revision: "1",
@@ -124,11 +203,39 @@ test("rejects legacy and malformed ICRC destination byte projections", () => {
       owner: icpLedger,
       subaccount: new Array(32).fill(0),
     }))
-  ).toThrow("Invalid IC account subaccount");
+  ).toThrow("Invalid IC account");
   expect(() =>
     parseWalletContactDestinations(page({
       owner: icpLedger,
       subaccount: new Uint8Array(31),
     }))
-  ).toThrow("Invalid IC account subaccount");
+  ).toThrow("Invalid IC account");
+  expect(() =>
+    parseWalletContactDestinations(page({
+      owner: principalOnlyAccount,
+      subaccount: undefined,
+    }))
+  ).toThrow("Invalid IC account");
+  expect(() =>
+    parseWalletContactDestinations(
+      page(Object.create({ owner: principalOnlyAccount })),
+    )
+  ).toThrow("Invalid IC account");
+  const accessor = {} as Record<string, unknown>;
+  Object.defineProperty(accessor, "owner", {
+    enumerable: true,
+    get: () => principalOnlyAccount,
+  });
+  expect(() => parseWalletContactDestinations(page(accessor))).toThrow(
+    "Invalid IC account",
+  );
+  expect(() =>
+    parseWalletContactDestinations(page({
+      owner: principalOnlyAccount,
+      extra: null,
+    }))
+  ).toThrow("Invalid IC account");
+  expect(() =>
+    parseWalletContactDestinations(page(` ${principalOnlyAccount} `))
+  ).toThrow("Invalid IC account");
 });

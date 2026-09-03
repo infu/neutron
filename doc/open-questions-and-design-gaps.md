@@ -163,8 +163,22 @@ maintainers before becoming roadmap commitments.
   loads retire and reprobe the port. All operational traffic uses the current
   private port.
 - Tool arguments/results are draft-07 validated and JSON/size/time/concurrency
-  bounded. Same-app calls are automatic; cross-app calls require a user grant
-  and are audited in memory.
+  bounded. Same-app calls are automatic. Ordinary cross-app calls require a
+  one-call or session grant and are audited in memory. On the current
+  provider-UI lane, an exact `provider_once` tool instead receives a one-use
+  presentation callback. Its
+  resident must consume that callback before preparing an effect; Kernel opens
+  or focuses the provider's exact tile and routes a bounded opaque request only
+  to a private `same_app` + `foreground_tile` tool. The provider tile owns the
+  modal and domain decision. This path ignores session grants, creates no
+  grant, and renders no Kernel approval dialog. The deprecated raw-review
+  callback remains a generic compatibility surface; published Wallet 0.3.6
+  depends on it, while current providers must use provider-owned UI.
+- A provider may expose a separate `same_app` + `agent_root` tool for
+  autonomous work inside the active live depth-zero root invocation. Kernel
+  rejects human and nested-agent calls before provider dispatch. This route
+  uses no provider or Kernel UI and does not create standing background
+  authority.
 - The launcher checks required iframe/Window credentialless state and fails
   closed on a mismatch. Persistent grant management, storage quotas, and
   uninstall cleanup remain open.
@@ -278,6 +292,13 @@ they do not answer who authored or approved the package. A user can install a
 package that is structurally valid and content-consistent without any verified
 publisher or DAO signature.
 
+Direct-root installed-artifact inspection improves review of an exact current
+installation, including Wallet and Swap code, but remains defense in depth.
+The catalog is transformed build output: frontend bundles may be minified and
+generated, unretained, or binary material may be unavailable. A favorable
+review cannot replace AppScope isolation, exact runtime decisions, amount and
+account validation, or durable ambiguous-outcome handling.
+
 ### Security Gate Risk
 
 The install compiler hard-rejects dangerous AST findings for ordinary apps.
@@ -305,6 +326,20 @@ is concentrated in unsupported browser behavior, unbounded browser resources,
 and hostile tool metadata shown to an AI agent. The direct canister `call`
 action remains unavailable.
 
+`provider_once` lets the exact provider own a modal in its foreground tile.
+Kernel binds the one-use capability to the originating caller, provider, and
+public tool handler, both endpoint sessions, versions, AppScopes, owner/auth
+state, and cancellation. When consumed, it separately validates and routes only
+to the selected private tile tool with the exact foreground audience, while
+treating the routed payload as opaque.
+The residual risk is intentional: an owner-trusted provider controls both the
+displayed domain facts and its preapproved backend authority. It could
+misrepresent a request or use that authority independently. Source review and
+install disclosure help the owner decide whether to trust that package, but
+Kernel neither understands nor proves provider-specific formatting, validation,
+or ordering. The separate root-agent tool adds no standing grant: Kernel admits
+it only during the active depth-zero root invocation.
+
 ### Install Consistency Risk
 
 App install stages mutable assets and uses a persistent journal around actor
@@ -323,11 +358,17 @@ prove semantic compatibility.
   key names, derivation paths, BIP341 auxiliary data, cycle attachment,
   transactions, and automatic retries.
 - This closes the generic chain-key slice; it does **not** answer how a future
-  Bitcoin, EVM, Solana, credential, or package-signing adapter should encode
-  and present its protocol-specific operation.
-- A future value-moving adapter must require transaction-shaped bounds and
-  one-shot owner presence immediately before signing. An install-time
-  `chain_key_signing` grant cannot be reused as that consent.
+  Kernel-provided raw Bitcoin, EVM, Solana, credential, or package-signing
+  adapter should encode and present its protocol-specific operation.
+- A future raw threshold-transaction signing adapter must require
+  transaction-shaped bounds and one-shot owner presence immediately before
+  signing. An install-time `chain_key_signing` grant or ordinary agent/tool
+  grant cannot be reused as that consent.
+- This stricter raw-signing rule does not prohibit an exact installed Wallet
+  app from owning another protocol's semantics and decision UI, then exercising
+  only its own preapproved backend methods. ICRC Wallet funding follows that
+  app-level model and adds no raw transaction signer or token interpretation to
+  Kernel.
 - `canister_signatures` remain a separate proposed capability because their
   certificate-tree, seed, witness, expiry, and verification model is not the
   threshold ECDSA/Schnorr broker.
@@ -388,9 +429,14 @@ fixture publish/discover/review/deploy browser test.
 13. What is the intended subnet selection and multi-dispenser routing model?
 14. Which automated tests are required before treating app install and security
     enforcement as production-ready?
-15. Which typed transaction adapter should be first, and which exact fields,
-    value/network limits, one-shot presence proof, simulation evidence, and
-    ambiguous-outcome recovery must its kernel confirmation bind?
+15. If Kernel ever gains a raw threshold-transaction adapter, which network
+    should be first, and which exact fields, value/network limits, one-shot
+    owner-presence proof, simulation evidence, and ambiguous-outcome recovery
+    must its Kernel confirmation bind?
 16. Should package authenticity use IC canister signatures, threshold signing,
     or an external publisher scheme, and how should that trust root remain
     distinct from an installed app's assertion key?
+17. What separate authority, budgets, recovery, and revocation model would be
+    required before Agent Mode could start unattended background roots? The
+    current Wallet root tool is automatic only for an active, owner-enabled
+    depth-zero root invocation.

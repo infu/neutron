@@ -21,6 +21,14 @@ import {
   trayDemoSnapshotSchema,
   type TrayDemoNotification,
 } from "./tray_demo.ts";
+import {
+  WALLET_FUNDING_INTENT_TOOL,
+  WALLET_FUNDING_INTENT_STORAGE_KEY,
+  runWalletFundingIntentAction,
+  walletFundingIntentActionSchema,
+  walletFundingIntentResultSchema,
+  type WalletFundingIntentAction,
+} from "./wallet_funding_intent_storage.ts";
 
 const emptyInputSchema: JsonObject = {
   type: "object",
@@ -360,6 +368,40 @@ exposeTool(
     const storage = requireBrowserStorage();
     storage.removeItem(STORAGE_KEY);
     return storageSnapshot();
+  },
+);
+
+exposeTool(
+  WALLET_FUNDING_INTENT_TOOL,
+  {
+    title: "Persist Kitchen Sink Wallet Funding Intent",
+    description:
+      "Prepare, complete, explicitly discard, or reset one fixed Kitchen Sink Wallet funding intent in the isolated resident origin.",
+    inputSchema: walletFundingIntentActionSchema,
+    outputSchema: walletFundingIntentResultSchema,
+    annotations: {
+      "neutron:effects": ["read", "write"],
+      "neutron:visibility": "same_app",
+    },
+  },
+  async (args, context) => {
+    requireOwnTile(context);
+    if (!context.signal) {
+      throw new Error("Wallet funding intent storage requires cancellation");
+    }
+    const locks = globalThis.navigator?.locks;
+    if (!locks) {
+      throw new Error("Exclusive Wallet funding intent storage is unavailable");
+    }
+    // exposeTool validates the closed action schema before entering this handler.
+    return locks.request(
+      WALLET_FUNDING_INTENT_STORAGE_KEY,
+      { mode: "exclusive", signal: context.signal },
+      () => runWalletFundingIntentAction(
+        requireBrowserStorage(),
+        args as WalletFundingIntentAction,
+      ),
+    );
   },
 );
 

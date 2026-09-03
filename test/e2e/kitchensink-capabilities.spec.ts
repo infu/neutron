@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Actor, HttpAgent, type ActorMethod } from "@dfinity/agent";
 import { IDL } from "@dfinity/candid";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   physicalAppMethodName,
   physicalPublicIngressMethodName,
@@ -11,6 +11,11 @@ import { localIdentityFromSeed } from "../../packages/neutron-provision/src/kern
 import { resolveLocalNeutronRuntime } from "../../packages/neutron-provision/src/local_session.ts";
 
 const APP_ID = "kitchensink";
+const TEXT_PAIR_UPDATE = IDL.Func(
+  [IDL.Tuple(IDL.Text, IDL.Text)],
+  [IDL.Text],
+  [],
+);
 let authorizedAgentPromise: Promise<HttpAgent> | null = null;
 
 type PublicIngressResult =
@@ -91,8 +96,8 @@ test.describe("Kitchen Sink capability transports", () => {
     const result = await callAuthorizedAppMethod<string>(
       canisterId,
       "publish_publication",
-      IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
-      [content, token],
+      TEXT_PAIR_UPDATE,
+      [[content, token]],
     );
     const path = /^Published staged fixture: (\S+) \(revision /.exec(
       result,
@@ -108,7 +113,7 @@ test.describe("Kitchen Sink capability transports", () => {
     expect(getResponse.headers()["content-type"]).toBe(
       "text/plain; charset=utf-8",
     );
-    expect(getResponse.headers()["content-encoding"]).toBe("identity");
+    expect(getResponse.headers()["content-encoding"]).toBeUndefined();
     expect(getResponse.headers()["cache-control"]).toBe("no-store");
     expect(getResponse.headers()["ic-certificate"]).toBeTruthy();
     expect(getResponse.headers()["ic-certificateexpression"]).toContain(
@@ -129,8 +134,8 @@ test.describe("Kitchen Sink capability transports", () => {
     const deleted = await callAuthorizedAppMethod<string>(
       canisterId,
       "delete_publication",
-      IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
-      [content, token],
+      TEXT_PAIR_UPDATE,
+      [[content, token]],
     );
     expect(deleted).toBe(`Deleted staged fixture: ${path}`);
     expect((await request.get(url)).status()).toBe(404);
@@ -144,8 +149,8 @@ test.describe("Kitchen Sink capability transports", () => {
     const first = await callAuthorizedAppMethod<string>(
       canisterId,
       "put_mutable_blob",
-      IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
-      [firstMessage, randomUUID().replaceAll("-", "").slice(0, 16)],
+      TEXT_PAIR_UPDATE,
+      [[firstMessage, randomUUID().replaceAll("-", "").slice(0, 16)]],
     );
     const firstRevision = BigInt(
       /\(kernel revision ([0-9]+)\)$/.exec(first)?.[1] ?? "-1",
@@ -155,8 +160,8 @@ test.describe("Kitchen Sink capability transports", () => {
     const second = await callAuthorizedAppMethod<string>(
       canisterId,
       "put_mutable_blob",
-      IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
-      [secondMessage, randomUUID().replaceAll("-", "").slice(0, 16)],
+      TEXT_PAIR_UPDATE,
+      [[secondMessage, randomUUID().replaceAll("-", "").slice(0, 16)]],
     );
     const secondRevision = BigInt(
       /\(kernel revision ([0-9]+)\)$/.exec(second)?.[1] ?? "-1",
@@ -182,6 +187,60 @@ test.describe("Kitchen Sink capability transports", () => {
     expect(decoded).toEqual({ schema: 1n, message: secondMessage });
   });
 
+  test("the installed Kitchen Sink UI sends each two-text capability tuple", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const runtime = resolveLocalNeutronRuntime();
+    await page.goto(localCanisterOrigin(runtime.canisterId, runtime.gatewayUrl));
+    await loginAsDeveloper(page, runtime.developerIdentitySeed);
+    await page.locator('[data-tid="launcher-open"]').click();
+    await expect(page.locator('[data-tid="launcher"]')).toBeVisible();
+    await page
+      .locator('[data-tid="launcher-tile-kitchensink-main"]')
+      .click();
+
+    const kitchen = page.frameLocator(
+      'iframe[data-app-id="kitchensink"][data-tile-id="main"]',
+    );
+    await kitchen.locator('[data-tid="kitchen-nav-certified_assets"]').click();
+    await expect(
+      kitchen.locator('[data-tid="kitchen-demo-certified_assets"]'),
+    ).toBeVisible();
+    const result = kitchen.locator('[data-tid="capability-assets-result"]');
+
+    await kitchen.getByLabel("Staged publication text").fill(
+      `UI publication ${randomUUID()}`,
+    );
+    await kitchen.getByRole("button", { name: "Review publish" }).click();
+    await approveCallDialog(page);
+    await expect(result).toContainText("Published staged fixture:");
+
+    await kitchen
+      .getByRole("button", { name: "Review conditional delete" })
+      .click();
+    await approveCallDialog(page);
+    await expect(result).toContainText("Deleted staged fixture:");
+
+    await kitchen.getByLabel("Staged immutable blob").fill(
+      `UI immutable ${randomUUID()}`,
+    );
+    await kitchen
+      .getByRole("button", { name: "Review immutable publish" })
+      .click();
+    await approveCallDialog(page);
+    await expect(result).toContainText("Published immutable blob:");
+
+    await kitchen.getByLabel("Inline/CAS mutable blob").fill(
+      `UI mutable ${randomUUID()}`,
+    );
+    await kitchen
+      .getByRole("button", { name: "Review inline/CAS put" })
+      .click();
+    await approveCallDialog(page);
+    await expect(result).toContainText("Published inline/CAS mutable blob:");
+  });
+
   test("the installed scheduler records the daily Kitchen Sink run-on-start", async () => {
     const canisterId = resolveCanisterId();
     const initial = await readScheduledStatus(canisterId);
@@ -200,6 +259,35 @@ test.describe("Kitchen Sink capability transports", () => {
       .toBeGreaterThan(0n);
   });
 });
+
+async function loginAsDeveloper(page: Page, seed: number) {
+  await expect(page.locator('[data-tid="login-button"]')).toBeVisible();
+  await page.waitForFunction(
+    () =>
+      typeof (
+        window as typeof window & {
+          __NEUTRON_PLAYWRIGHT_LOGIN_AS__?: unknown;
+        }
+      ).__NEUTRON_PLAYWRIGHT_LOGIN_AS__ === "function",
+  );
+  await page.evaluate(async (identitySeed) => {
+    const login = (
+      window as typeof window & {
+        __NEUTRON_PLAYWRIGHT_LOGIN_AS__?: (value: number) => Promise<string>;
+      }
+    ).__NEUTRON_PLAYWRIGHT_LOGIN_AS__;
+    if (!login) throw new Error("Local Playwright login is unavailable");
+    await login(identitySeed);
+  }, seed);
+  await expect(page.locator('[data-tid="auth-error"]')).toHaveCount(0);
+}
+
+async function approveCallDialog(page: Page) {
+  const dialog = page.locator('[data-tid="call-dialog"]');
+  await expect(dialog).toBeVisible({ timeout: 30_000 });
+  await page.locator('[data-tid="call-approve"]').click();
+  await expect(dialog).toHaveCount(0, { timeout: 120_000 });
+}
 
 async function readScheduledStatus(canisterId: string): Promise<{
   task_id: string;

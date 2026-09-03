@@ -35,7 +35,10 @@ export function desiredWalletReservationScopes(
       "icrc1_balance_of",
       "icrc1_fee",
       "icrc1_transfer",
+      "icrc2_allowance",
+      "icrc2_approve",
       "icrc3_get_blocks",
+      "icrc103_get_allowances",
     ]) {
       addScope(scopes, exact(principal, method));
     }

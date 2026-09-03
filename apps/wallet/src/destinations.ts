@@ -1,8 +1,12 @@
-import { Principal } from "@icp-sdk/core/principal";
-import { isJsonObject, type JsonObject } from "neutron-tools/app";
 import {
-  encodeIcrcAccount,
-} from "neutron-tools/src/icrc_account.js";
+  isJsonObject,
+  type JsonObject,
+  type SelfCallObject,
+} from "neutron-tools/app";
+import {
+  candidIcrcAccountFromText,
+  parseCandidIcrcAccount,
+} from "./icrc_account.ts";
 
 export type ContactKind = "person" | "self";
 export type DestinationNetwork =
@@ -73,6 +77,19 @@ export function walletDestinationText(destination: WalletDestination): string {
   return destination.address;
 }
 
+export function walletDestinationVariant(
+  destination: WalletDestination,
+): SelfCallObject {
+  return destination.network === "internet_computer"
+    ? {
+        internet_computer: candidIcrcAccountFromText(
+          destination.account,
+          "IC account",
+        ),
+      }
+    : { [destination.network]: destination.address };
+}
+
 function parseCandidate(value: unknown): WalletContactDestination {
   const record = requiredObject(value, "wallet contact destination");
   const address = requiredObject(record.address, "contact address");
@@ -97,7 +114,7 @@ function parseDestination(value: unknown): WalletDestination {
   if (network === "internet_computer") {
     return {
       network,
-      account: parseIcrcAccount(payload),
+      account: parseCandidIcrcAccount(payload, "IC account"),
     };
   }
   if (
@@ -122,40 +139,6 @@ function variant(value: unknown, label: string): [string, unknown] {
   const entries = Object.entries(record);
   if (entries.length !== 1) throw new Error(`Invalid ${label}`);
   return entries[0]!;
-}
-
-function parseIcrcAccount(value: unknown): string {
-  const account = requiredObject(value, "IC account");
-  const owner = requiredPrincipal(account.owner, "IC account owner");
-  const subaccount = account.subaccount == null
-    ? undefined
-    : requiredBytes(account.subaccount, 32, "IC account subaccount");
-  return encodeIcrcAccount({
-    owner,
-    ...(subaccount === undefined ? {} : { subaccount }),
-  });
-}
-
-function requiredPrincipal(value: unknown, label: string): Principal {
-  try {
-    const text = requiredString(value, label);
-    const principal = Principal.fromText(text);
-    if (principal.toText() !== text) throw new Error("noncanonical principal");
-    return principal;
-  } catch {
-    throw new Error(`Invalid ${label}`);
-  }
-}
-
-function requiredBytes(
-  value: unknown,
-  byteLength: number,
-  label: string,
-): Uint8Array {
-  if (!(value instanceof Uint8Array) || value.byteLength !== byteLength) {
-    throw new Error(`Invalid ${label}`);
-  }
-  return Uint8Array.from(value);
 }
 
 function requiredObject(value: unknown, label: string): JsonObject {

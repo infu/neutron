@@ -1211,7 +1211,6 @@ export function materializeSelfCallArguments(
   argumentTypes: readonly IDL.Type[],
 ): {
   args: unknown[];
-  validationArgs: JsonValue[];
   metadata: JsonValue[];
   binary: SelfCallBinaryStats;
   boundBlobs: SelfCallWireBlob[];
@@ -1241,12 +1240,6 @@ export function materializeSelfCallArguments(
 
   type BoundValue = {
     call: unknown;
-    /**
-     * JSON-schema-safe shadow used only by icblast's generated method
-     * validator. Binary leaves are represented by an empty byte array while
-     * the exact bytes remain bound separately for live-Candid encoding.
-     */
-    validation: JsonValue;
     metadata: JsonValue;
   };
 
@@ -1278,13 +1271,12 @@ export function materializeSelfCallArguments(
       boundBlobs.push(blob);
       return {
         call: new Uint8Array(blob.data),
-        validation: [],
         metadata: null,
       };
     }
     if (type instanceof IDL.OptClass) {
       if (value === null && !hasSidecarAtOrBelow(path)) {
-        return { call: null, validation: null, metadata: null };
+        return { call: null, metadata: null };
       }
       // API 1 represents an option as null or its direct child. A present
       // optional blob also has a null JSON placeholder, so the sidecar proves
@@ -1305,7 +1297,6 @@ export function materializeSelfCallArguments(
       );
       return {
         call: children.map((child) => child.call),
-        validation: children.map((child) => child.validation),
         metadata: children.map((child) => child.metadata),
       };
     }
@@ -1323,12 +1314,21 @@ export function materializeSelfCallArguments(
       );
       return {
         call: children.map((child) => child.call),
-        validation: children.map((child) => child.validation),
         metadata: children.map((child) => child.metadata),
       };
     }
     if (type instanceof IDL.RecordClass) {
       if (!isPlainRecord(value)) {
+        // Pinned icblast releases expose string shorthands for selected Candid
+        // records. Keep the scalar opaque here: icblast must expand it before
+        // exact live-Candid encoding, and raw preflight rejects an incompatible
+        // type or any hidden blob before dispatch.
+        if (
+          typeof value === "string" &&
+          !hasSidecarAtOrBelow(path)
+        ) {
+          return { call: value, metadata: value };
+        }
         throw new Error("Self-call Candid record has an invalid shape");
       }
       if (active.has(value)) throw new Error("Self-call value contains a cycle");
@@ -1362,7 +1362,6 @@ export function materializeSelfCallArguments(
         elements += type._fields.length;
         assertSelfCallElementBudget(elements);
         const callEntries: Array<[string, unknown]> = [];
-        const validationEntries: Array<[string, JsonValue]> = [];
         const metadataEntries: Array<[string, JsonValue]> = [];
         for (const [name, child] of type._fields) {
           if (!Object.hasOwn(value, name)) {
@@ -1382,23 +1381,10 @@ export function materializeSelfCallArguments(
           }
           const bound = visit(value[name], child, [...path, name], depth + 1);
           callEntries.push([name, bound.call]);
-          // Generated method schemas project an absent Candid option in a
-          // record by omitting the property. Keep the null needed by the live
-          // Candid encoder, but do not synthesize a schema-invalid null in the
-          // validation shadow.
-          if (
-            !(
-              unwrapExpectedCandidType(child) instanceof IDL.OptClass &&
-              bound.validation === null
-            )
-          ) {
-            validationEntries.push([name, bound.validation]);
-          }
           metadataEntries.push([name, bound.metadata]);
         }
         return {
           call: Object.fromEntries(callEntries),
-          validation: Object.fromEntries(validationEntries),
           metadata: Object.fromEntries(metadataEntries),
         };
       } finally {
@@ -1428,7 +1414,6 @@ export function materializeSelfCallArguments(
         );
         return {
           call: Object.fromEntries([[name, bound.call]]),
-          validation: Object.fromEntries([[name, bound.validation]]),
           metadata: Object.fromEntries([[name, bound.metadata]]),
         };
       } finally {
@@ -1444,7 +1429,7 @@ export function materializeSelfCallArguments(
       if (hasSidecarAtOrBelow(path)) {
         throw new Error("Binary data descends from a non-blob Candid position");
       }
-      return { call: value, validation: value, metadata: value };
+      return { call: value, metadata: value };
     }
     throw new Error("Self-call scalar does not match the live Candid type");
   };
@@ -1457,7 +1442,6 @@ export function materializeSelfCallArguments(
   }
   return {
     args: boundArgs.map((bound) => bound.call),
-    validationArgs: boundArgs.map((bound) => bound.validation),
     metadata: boundArgs.map((bound) => bound.metadata),
     binary: selfCallBlobStats(blobs),
     boundBlobs,

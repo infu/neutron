@@ -29,6 +29,7 @@ export type PendingFrontendToolRequest = {
   toolTitle?: string;
   toolDescription?: string;
   arguments: JsonObject;
+  providerReview?: JsonObject;
   sessionOnly: boolean;
   onceOnly: boolean;
   callerSessionId: string;
@@ -182,8 +183,11 @@ export function requestFrontendToolPermission(input: {
   toolTitle?: string;
   toolDescription?: string;
   arguments?: JsonObject;
+  providerReview?: JsonObject;
   sessionOnly?: boolean;
   onceOnly?: boolean;
+  /** Internal provider-review fence: prior grants must not satisfy this request. */
+  requireFreshDecision?: boolean;
   callerSessionId?: string;
   targetSessionId?: string;
   attachmentBytes?: {
@@ -201,6 +205,7 @@ export function requestFrontendToolPermission(input: {
     );
   }
   if (
+    !input.requireFreshDecision &&
     hasFrontendToolGrant(
       input.caller,
       input.callerSessionId,
@@ -227,7 +232,7 @@ export function requestFrontendToolPermission(input: {
   const cid = ++cidIncr;
   const attentionToken = admitOwnerAttention(
     input.caller.appId,
-    input.tool === "workspace.open_tile" ? "workspace_open" : "frontend_tool",
+    "frontend_tool",
   );
   const request: PendingFrontendToolRequest = {
     cid,
@@ -239,6 +244,7 @@ export function requestFrontendToolPermission(input: {
       ? { toolDescription: input.toolDescription }
       : {}),
     arguments: input.arguments ?? {},
+    ...(input.providerReview ? { providerReview: input.providerReview } : {}),
     sessionOnly: input.sessionOnly ?? false,
     onceOnly: input.onceOnly ?? false,
     callerSessionId: input.callerSessionId ?? "unconnected",

@@ -10,6 +10,15 @@
         }
       },
       "migrations": {}
+    },
+    "wallet_commands": {
+      "schemas": {
+        "1": {
+          "hash": "3221a53d8d9a2967e024db95fbaa138cb552501cda4aed4546176e2302a3c7b0",
+          "entry": "69112abe7e34e8fd066236a4031159abf28ba5d1554c33999f4ddf3cb68c1f49"
+        }
+      },
+      "migrations": {}
     }
   }
 }

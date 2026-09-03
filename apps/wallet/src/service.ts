@@ -8,6 +8,15 @@ import {
 } from "neutron-tools/app";
 import { historyPageRequest, parseHistoryPage } from "./history.ts";
 import {
+  WALLET_FUNDING_ROOT_TOOL,
+  WALLET_FUNDING_TOOL,
+  handleWalletFunding,
+  handleWalletRootFunding,
+  walletFundingResultNeedsRefresh,
+  walletFundingInputSchema,
+  walletFundingOutputSchema,
+} from "./funding.ts";
+import {
   WALLET_PROJECTION_ACTIVITY_LIMIT,
   WALLET_PROJECTION_TOOLS,
   WALLET_PROJECTION_TOPIC,
@@ -51,6 +60,63 @@ exposeTool(
     annotations: { "neutron:effects": ["write"] },
   },
   async () => asJson(await refreshProjection()),
+);
+
+exposeTool(
+  WALLET_FUNDING_TOOL,
+  {
+    title: "Fund an app with Wallet",
+    description:
+      "Open Wallet to review and execute one exact ICRC token transfer or short-lived spending allowance.",
+    inputSchema: walletFundingInputSchema,
+    outputSchema: walletFundingOutputSchema,
+    annotations: {
+      "neutron:audit": "metadata_only",
+      "neutron:consent": "provider_once",
+      "neutron:effects": ["write", "network", "user_visible_ui"],
+    },
+  },
+  (args, context) => handleWalletFunding(args, context),
+);
+
+exposeTool(
+  WALLET_FUNDING_ROOT_TOOL,
+  {
+    title: "Fund an app with Wallet as the root agent",
+    description:
+      "Prepare and execute one exact ICRC token transfer or short-lived spending allowance without interactive UI. Available only to the active root agent.",
+    inputSchema: walletFundingInputSchema,
+    outputSchema: walletFundingOutputSchema,
+    annotations: {
+      "neutron:audit": "metadata_only",
+      "neutron:audience": "agent_root",
+      "neutron:effects": ["write", "network"],
+      "neutron:visibility": "same_app",
+    },
+  },
+  async (args, context) => {
+    try {
+      const result = await handleWalletRootFunding(args, context);
+      if (walletFundingResultNeedsRefresh(result)) {
+        try {
+          await context.kernel.updateSelf(
+            "wallet_refresh_balances",
+            [null],
+            60,
+          );
+        } catch {
+          // The durable funding result is authoritative; refresh is best effort.
+        }
+      }
+      return result;
+    } finally {
+      try {
+        await publishAppStateChange(WALLET_PROJECTION_TOPIC, Date.now());
+      } catch {
+        // The durable funding result is authoritative; notification is best effort.
+      }
+    }
+  },
 );
 
 // Wallet does not yet have an unread cursor, so the tray icon intentionally has

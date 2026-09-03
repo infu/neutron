@@ -18,13 +18,17 @@ platform work under that interface, not terminology every app must expose.
    certification, and recovery surfaces.
 3. **Apps are ordinary packages.** They do not gain special Core behavior from
    their name or from being first-party.
-4. **Authority is explicit and finite.** A package can use only closed
+4. **The owner may trust a provider app.** An exact installed Wallet or other
+   provider may own domain semantics and decide how to use its own declared
+   authority. Kernel still isolates it as an ordinary app and never imports its
+   data model into platform policy.
+5. **Authority is explicit and finite.** A package can use only closed
    primitives declared in its manifest and approved for its exact
    installation.
-5. **One actor is still modular.** Kernel and app backends compile into one
+6. **One actor is still modular.** Kernel and app backends compile into one
    Motoko actor, while compiler-created scopes and handles preserve app
    boundaries.
-6. **Normal UI comes first.** Security detail belongs in install review,
+7. **Normal UI comes first.** Security detail belongs in install review,
    Settings, diagnostics, or help unless the user must act on it.
 
 ## The Neutron
@@ -81,6 +85,13 @@ or privately compiling that package does not make the Sovereign User a source
 publisher and does not disclose the user's selected package set or combined
 Wasm.
 
+Agent inspection of exact installed artifacts helps the owner evaluate provider
+code and detect suspicious use of authority. It remains defense in depth:
+installed frontend bundles may be minified, transformed or unretained build
+material may be unavailable, and review cannot prove runtime semantics. Closed
+capabilities, source-bound identity, exact one-shot decisions, bounded values,
+and retry reconciliation remain enforcement boundaries.
+
 ### App
 
 An app is a manifest, backend source, assets, memory declarations, and optional
@@ -96,6 +107,18 @@ frontend surfaces. It may be:
 Every newly added app ID receives a unique `installation_uid`. Updating that
 same ID retains its `AppScope`; removing and later re-adding it allocates a new
 UID and therefore new authority.
+
+An owner-trusted provider is still an app in this model. For example, Wallet
+may interpret ICRC metadata, decimals, fees, accounts, allowances, and Agent
+spending policy for its own tools. That trust does not let Wallet select Kernel
+identity, bypass AppScope isolation, access another app's memory, or turn ICRC
+into a Core concept. Another asset standard may use another Wallet app with an
+analogous app-level contract.
+
+That provider model is intended for operational balances delegated to the
+owner's trusted apps and live agents. It is not a promise that assets remain
+safe from a malicious installed Wallet package, and it does not yet provide
+standing unattended spend budgets.
 
 ### Kernel And Provisioner
 
@@ -171,6 +194,27 @@ replace the browser's permission prompt and device indicators.
 Apps can call their own backend with native nested binary values. User review
 shows binary path, size, and digest instead of rendering arbitrary bytes.
 
+On the current provider-UI lane, an exact app tool may opt into one
+provider-owned decision. Kernel first authenticates the requesting and provider
+endpoints and validates the tool input. The provider resident must then call
+its one-use
+`presentUserInterface()` callback before preparing an effect. Kernel opens or
+focuses that provider's exact tile and routes a bounded opaque request only to
+its private foreground tool. The provider tile prepares authoritative facts,
+renders its own modal, and performs or rejects the operation. Kernel does not
+render a dialog or interpret the provider's domain fields. A session grant
+cannot replace the decision, which resumes only that call.
+
+Wallet keeps the public `wallet_fund_v1` contract for existing cross-app Swap
+callers and uses this route for human funding. One Wallet decision accepts
+either a direct ICRC-1 transfer or an exact short-lived ICRC-2 allowance; a
+pull-based Swap then executes `icrc2_transfer_from` through its own reviewed
+authority without another owner prompt. Wallet, not Kernel, owns token
+metadata, formatting, fee and spender meaning, durable idempotency, approval
+enumeration, and revocation. Kernel retains the old raw-review callback only as
+a deprecated generic compatibility surface; published Wallet 0.3.6 depends on
+it, while current providers must use provider-owned UI.
+
 ### 5. Connect External Authority
 
 Some capabilities require an owner action after installation:
@@ -180,6 +224,18 @@ Some capabilities require an owner action after installation:
 - starting a focused browser-wallet session;
 - consenting to a one-off app backend call; or
 - enabling an app capability in Settings.
+
+A provider-mediated operation is different from a generic app backend call.
+The owner has already chosen to trust the exact provider package and receives
+one provider-owned per-operation decision in that app's tile. For autonomous
+work, Wallet exposes a separate direct-root tool which shares its checked
+prepare/execute core but opens no Wallet or Kernel UI. Kernel makes that tool
+visible only to the active live depth-zero root and rejects human or nested
+agent calls before provider dispatch. Agent Mode still requires the owner to
+enable an exact agent version. Each root starts through a live tile in that app
+installation and the exact granted entrypoint without a per-turn browser-focus
+or transient-activation gate. The resident cannot originate a root by itself,
+and all authority ends when the grant or invocation is revoked.
 
 Install-time backend reservation defaults may be approved with the package and
 materialized by the compiled target. The UI also supports later explicit

@@ -20,6 +20,7 @@ import {
   IoReceiptOutline,
   IoSearchOutline,
   IoSend,
+  IoShieldCheckmarkOutline,
   IoStar,
   IoTimeOutline,
   IoWarningOutline,
@@ -28,10 +29,11 @@ import {
 import {
   connectEthereumProvider,
   copyToClipboard,
-  createCanisterClient,
   dismissTray,
+  exposeTool,
   isJsonObject,
   listBackendCallReservations,
+  loadTileContext,
   onAppStateChange,
   onTileViewRequest,
   openAppTile,
@@ -41,6 +43,7 @@ import {
   updateSelf,
   type JsonObject,
   type JsonValue,
+  type MsgBusToolContext,
 } from "neutron-tools/app";
 import {
   createContext,
@@ -67,6 +70,36 @@ import {
   parseTransferAmount,
 } from "./format.ts";
 import {
+  WALLET_ALLOWANCES_PAGE_METHOD,
+  WALLET_FUNDING_EXECUTE_METHOD,
+  WALLET_FUNDING_PREPARE_METHOD,
+  WALLET_FUNDING_PRESENT_TOOL,
+  WALLET_FUNDING_REJECT_METHOD,
+  approvalExpirationText,
+  assertRevokePreparedMatchesDisplay,
+  createWalletRequestId,
+  executeWalletFundingOperation,
+  failedWalletAllowancesPage,
+  fundingPreparationCommand,
+  mergeWalletAllowancesPages,
+  parseFundingPrepareResult,
+  parseWalletAllowancesPage,
+  prepareWalletFundingOperation,
+  rejectWalletFundingOperation,
+  resolveWalletFundingPreparation,
+  walletAllowancesPageArgs,
+  walletFundingResultNeedsRefresh,
+  walletRequestDeadlineNs,
+  walletRevokePrepareArgs,
+  walletFundingInputSchema,
+  walletFundingOutputSchema,
+  type WalletAllowance,
+  type WalletAllowancesPage,
+  type WalletFundingCaller,
+  type WalletFundingReview,
+  type PreparedWalletFundingOperation,
+} from "./funding.ts";
+import {
   confirmationPercent,
   confirmationsRemaining,
   depositOutpoint,
@@ -79,10 +112,10 @@ import {
 import {
   destinationLabels,
   parseWalletContactDestinations,
+  walletDestinationVariant,
   walletDestinationText,
   type WalletContactDestination,
   type WalletContactDestinationsPage,
-  type WalletDestination,
 } from "./destinations.ts";
 import {
   defaultSubaccountWord,
@@ -135,6 +168,7 @@ import {
   parseWalletCatalog,
   parseWalletSnapshot,
   parseWalletSnapshotResult,
+  walletLedgerByPrincipal,
   type WalletLedger,
   type WalletSnapshot,
 } from "./wallet_data.ts";
@@ -147,6 +181,7 @@ type WalletTransferReceipt = {
 };
 
 export type WalletSurface = "tile" | "tray";
+type WalletView = "assets" | "activity" | "approvals";
 
 type WalletSurfaceContextValue = {
   surface: WalletSurface;
@@ -168,6 +203,334 @@ function useWalletSurface(): WalletSurfaceContextValue {
   const value = useContext(WalletSurfaceContext);
   if (!value) throw new Error("Wallet surface context is unavailable");
   return value;
+}
+
+type WalletFundingPromptPhase =
+  | "review"
+  | "executing"
+  | "checking"
+  | "uncertain"
+  | "rejecting";
+
+type WalletFundingPrompt = {
+  id: string;
+  operation: PreparedWalletFundingOperation;
+  phase: WalletFundingPromptPhase;
+  error: string | null;
+  resolve: (value: JsonObject) => void;
+  reject: (reason?: unknown) => void;
+  removeAbortListener: (() => void) | null;
+  signal: AbortSignal | undefined;
+  updateSelf: MsgBusToolContext["kernel"]["updateSelf"];
+};
+
+let walletFundingPrompt: WalletFundingPrompt | null = null;
+const walletFundingPromptListeners = new Set<() => void>();
+type WalletFundingRefreshUpdate = {
+  snapshot: WalletSnapshot | null;
+  error: string | null;
+};
+const walletFundingRefreshListeners = new Set<
+  (update: WalletFundingRefreshUpdate) => void
+>();
+let pendingWalletFundingRefresh: WalletFundingRefreshUpdate | null = null;
+
+export function subscribeWalletFundingRefresh(
+  listener: (update: WalletFundingRefreshUpdate) => void,
+): () => void {
+  walletFundingRefreshListeners.add(listener);
+  if (pendingWalletFundingRefresh !== null) {
+    const update = pendingWalletFundingRefresh;
+    pendingWalletFundingRefresh = null;
+    try {
+      listener(update);
+    } catch {
+      // Local rendering cannot change an authoritative funding result.
+    }
+  }
+  return () => walletFundingRefreshListeners.delete(listener);
+}
+
+function deliverWalletFundingRefresh(update: WalletFundingRefreshUpdate): void {
+  if (walletFundingRefreshListeners.size === 0) {
+    pendingWalletFundingRefresh = update;
+    return;
+  }
+  for (const listener of walletFundingRefreshListeners) {
+    try {
+      listener(update);
+    } catch {
+      // Local rendering cannot change an authoritative funding result.
+    }
+  }
+}
+
+async function refreshWalletAfterFunding(
+  updateSelfCall: MsgBusToolContext["kernel"]["updateSelf"],
+): Promise<void> {
+  try {
+    const value = await updateSelfCall("wallet_refresh_balances", [null], 60);
+    deliverWalletFundingRefresh({
+      snapshot: parseWalletSnapshotResult(value),
+      error: null,
+    });
+  } catch (reason) {
+    deliverWalletFundingRefresh({
+      snapshot: null,
+      error: `Wallet funding completed; balance refresh failed: ${errorMessage(reason)}`,
+    });
+  }
+}
+
+function currentWalletFundingPrompt(): WalletFundingPrompt | null {
+  return walletFundingPrompt;
+}
+
+function subscribeWalletFundingPrompt(listener: () => void): () => void {
+  walletFundingPromptListeners.add(listener);
+  listener();
+  return () => walletFundingPromptListeners.delete(listener);
+}
+
+function notifyWalletFundingPrompt(): void {
+  for (const listener of walletFundingPromptListeners) listener();
+}
+
+function removeWalletFundingPrompt(prompt: WalletFundingPrompt): boolean {
+  if (walletFundingPrompt !== prompt) return false;
+  walletFundingPrompt = null;
+  prompt.removeAbortListener?.();
+  prompt.removeAbortListener = null;
+  notifyWalletFundingPrompt();
+  return true;
+}
+
+function finishWalletFundingPrompt(
+  prompt: WalletFundingPrompt,
+  result: JsonObject,
+): void {
+  if (!removeWalletFundingPrompt(prompt)) return;
+  prompt.resolve(result);
+}
+
+function restoreOrAbortWalletFundingPrompt(
+  prompt: WalletFundingPrompt,
+  reason: unknown,
+): void {
+  if (currentWalletFundingPrompt() !== prompt) return;
+  if (prompt.signal?.aborted) {
+    if (removeWalletFundingPrompt(prompt)) {
+      prompt.reject(prompt.signal.reason ?? reason);
+    }
+    return;
+  }
+  prompt.phase = "review";
+  prompt.error = errorMessage(reason);
+  notifyWalletFundingPrompt();
+}
+
+function markWalletFundingExecutionUncertain(
+  prompt: WalletFundingPrompt,
+  reason: unknown,
+): void {
+  if (currentWalletFundingPrompt() !== prompt) return;
+  if (prompt.signal?.aborted) {
+    if (removeWalletFundingPrompt(prompt)) {
+      prompt.reject(prompt.signal.reason ?? reason);
+    }
+    return;
+  }
+  prompt.phase = "uncertain";
+  prompt.error = `Wallet could not confirm the ledger outcome: ${errorMessage(reason)} Check status before starting another request.`;
+  notifyWalletFundingPrompt();
+}
+
+function closeUncertainWalletFundingPrompt(prompt: WalletFundingPrompt): void {
+  if (prompt.phase !== "uncertain" || !removeWalletFundingPrompt(prompt)) {
+    return;
+  }
+  prompt.reject(new Error(prompt.error ?? "Wallet funding outcome is uncertain"));
+}
+
+async function executePresentedWalletFunding(
+  prompt: WalletFundingPrompt,
+): Promise<void> {
+  if (
+    currentWalletFundingPrompt() !== prompt ||
+    (prompt.phase !== "review" && prompt.phase !== "uncertain")
+  ) {
+    return;
+  }
+  prompt.phase = prompt.phase === "uncertain" ? "checking" : "executing";
+  prompt.error = null;
+  notifyWalletFundingPrompt();
+  try {
+    const result = await executeWalletFundingOperation(
+      prompt.operation,
+      (args) =>
+        prompt.updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [args], 120),
+      prompt.signal,
+    );
+    if (walletFundingResultNeedsRefresh(result)) {
+      await refreshWalletAfterFunding(prompt.updateSelf);
+    }
+    finishWalletFundingPrompt(prompt, result);
+  } catch (reason) {
+    markWalletFundingExecutionUncertain(prompt, reason);
+  } finally {
+    publishWalletInvalidation();
+  }
+}
+
+export async function acceptWalletFundingPrompt(
+  promptId: string,
+): Promise<void> {
+  const prompt = currentWalletFundingPrompt();
+  if (prompt?.id !== promptId) return;
+  await executePresentedWalletFunding(prompt);
+}
+
+async function rejectPresentedWalletFunding(
+  prompt: WalletFundingPrompt,
+): Promise<void> {
+  if (
+    currentWalletFundingPrompt() !== prompt ||
+    prompt.phase !== "review"
+  ) {
+    return;
+  }
+  prompt.phase = "rejecting";
+  prompt.error = null;
+  notifyWalletFundingPrompt();
+  try {
+    const result = await rejectWalletFundingOperation(
+      prompt.operation,
+      (args) => prompt.updateSelf(WALLET_FUNDING_REJECT_METHOD, [args], 30),
+    );
+    finishWalletFundingPrompt(prompt, result);
+  } catch (reason) {
+    restoreOrAbortWalletFundingPrompt(prompt, reason);
+  } finally {
+    publishWalletInvalidation();
+  }
+}
+
+export async function handleWalletFundingPresentation(
+  args: JsonObject,
+  context: MsgBusToolContext,
+): Promise<JsonObject> {
+  if (context.audience !== "foreground_tile") {
+    throw new Error("Wallet funding UI requires foreground-tile attestation");
+  }
+  const operation = await prepareWalletFundingOperation(
+    args,
+    context,
+    false,
+  );
+
+  // A pending command proves that Wallet already dispatched a previously
+  // accepted operation. Reconcile it without asking the owner a second time.
+  if (operation.preparation.kind === "completed") {
+    try {
+      const result = await executeWalletFundingOperation(
+        operation,
+        (executeArgs) =>
+          context.kernel.updateSelf(
+            WALLET_FUNDING_EXECUTE_METHOD,
+            [executeArgs],
+            120,
+          ),
+        context.signal,
+      );
+      if (walletFundingResultNeedsRefresh(result)) {
+        await refreshWalletAfterFunding((method, selfArgs, timeout) =>
+          context.kernel.updateSelf(method, selfArgs, timeout),
+        );
+      }
+      return result;
+    } finally {
+      publishWalletInvalidation();
+    }
+  }
+
+  const command = fundingPreparationCommand(operation.preparation);
+  const id = `${command.callerAppId}:${command.requestId}`;
+  if (walletFundingPrompt?.id === id) {
+    throw new Error("This Wallet funding request is already awaiting review");
+  }
+  if (walletFundingPrompt !== null) {
+    await rejectWalletFundingOperation(
+      operation,
+      (rejectArgs) =>
+        context.kernel.updateSelf(
+          WALLET_FUNDING_REJECT_METHOD,
+          [rejectArgs],
+          30,
+        ),
+    )
+      .catch(() => undefined)
+      .finally(() => publishWalletInvalidation());
+    throw new Error("Wallet is already reviewing another funding request");
+  }
+
+  return new Promise<JsonObject>((resolve, reject) => {
+    const prompt: WalletFundingPrompt = {
+      id,
+      operation,
+      phase: "review",
+      error: null,
+      resolve,
+      reject,
+      removeAbortListener: null,
+      signal: context.signal,
+      updateSelf: (method, selfArgs, timeout) =>
+        context.kernel.updateSelf(method, selfArgs, timeout),
+    };
+    const abort = () => {
+      if (!removeWalletFundingPrompt(prompt)) return;
+      reject(
+        context.signal?.reason ?? new Error("Wallet funding was cancelled"),
+      );
+    };
+    if (context.signal) {
+      context.signal.addEventListener("abort", abort, { once: true });
+      prompt.removeAbortListener = () =>
+        context.signal?.removeEventListener("abort", abort);
+    }
+    walletFundingPrompt = prompt;
+    notifyWalletFundingPrompt();
+    if (context.signal?.aborted) abort();
+  });
+}
+
+function isWalletTileRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const context = loadTileContext();
+    return context.app === "wallet" && context.tile === "wallet";
+  } catch {
+    return false;
+  }
+}
+
+if (isWalletTileRuntime()) {
+  exposeTool(
+    WALLET_FUNDING_PRESENT_TOOL,
+    {
+      title: "Review Wallet funding",
+      description:
+        "Show Wallet's authoritative review for one transfer or allowance and return the resulting receipt.",
+      inputSchema: walletFundingInputSchema,
+      outputSchema: walletFundingOutputSchema,
+      annotations: {
+        "neutron:audit": "metadata_only",
+        "neutron:audience": "foreground_tile",
+        "neutron:effects": ["write", "network", "user_visible_ui"],
+        "neutron:visibility": "same_app",
+      },
+    },
+    handleWalletFundingPresentation,
+  );
 }
 
 export function WalletApp({
@@ -204,13 +567,309 @@ export function WalletApp({
   return (
     <WalletSurfaceContext.Provider value={{ openInTile, surface }}>
       <WalletAppContent surface={surface} />
+      {surface === "tile" ? <WalletFundingPromptHost /> : null}
     </WalletSurfaceContext.Provider>
+  );
+}
+
+function WalletFundingPromptHost() {
+  const [, setRevision] = useState(0);
+  useEffect(
+    () =>
+      subscribeWalletFundingPrompt(() =>
+        setRevision((revision) => revision + 1),
+      ),
+    [],
+  );
+  const prompt = currentWalletFundingPrompt();
+  return prompt ? <WalletFundingDialog prompt={prompt} /> : null;
+}
+
+function WalletFundingDialog({ prompt }: { prompt: WalletFundingPrompt }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const review = prompt.operation.preparation.value.review;
+  const uncertain = prompt.phase === "uncertain";
+  const busy =
+    prompt.phase === "executing" ||
+    prompt.phase === "checking" ||
+    prompt.phase === "rejecting";
+  const symbol = review.tokenSymbol;
+  const amount = walletFundingAmount(review.amountAtoms, review);
+
+  useEffect(() => {
+    const node = dialog.current;
+    if (node && !node.open) node.showModal();
+    return () => {
+      if (node?.open) node.close();
+    };
+  }, [prompt.id]);
+
+  return (
+    <div className="nt-app wallet-funding-layer">
+      <dialog
+        aria-describedby="wallet-funding-summary"
+        aria-labelledby="wallet-funding-title"
+        aria-modal="true"
+        className="nt-dialog wallet-funding-dialog"
+        data-tid="wallet-funding-dialog"
+        onCancel={(event) => {
+          event.preventDefault();
+          if (uncertain) closeUncertainWalletFundingPrompt(prompt);
+          else if (!busy) void rejectPresentedWalletFunding(prompt);
+        }}
+        ref={dialog}
+      >
+        <div className="nt-dialog-body">
+          <header className="wallet-funding-heading">
+            <TokenMark logo={null} symbol={symbol} />
+            <span>
+              <small>Request from {prompt.operation.caller.appId}</small>
+              <h2 id="wallet-funding-title">
+                {review.kind === "direct"
+                  ? `Send ${amount}`
+                  : `Approve ${amount} allowance`}
+              </h2>
+            </span>
+          </header>
+
+          <p className="wallet-funding-summary" id="wallet-funding-summary">
+            <strong>{prompt.operation.caller.appId}</strong> asked Wallet to {review.kind === "direct"
+              ? "send tokens from your Neutron"
+              : "create a short-lived token allowance"}. Wallet read the token details and fees directly from the ledger.
+          </p>
+
+          <dl className="wallet-funding-details">
+            <div>
+              <dt>Token</dt>
+              <dd>
+                <strong>{review.tokenName}</strong>
+                <small>{symbol} · {review.decimals} decimals</small>
+              </dd>
+            </div>
+            <div>
+              <dt>Ledger</dt>
+              <dd>
+                <code>{review.ledger}</code>
+              </dd>
+            </div>
+            {review.kind === "direct" ? (
+              <>
+                <div>
+                  <dt>Recipient</dt>
+                  <dd>
+                    <code>{review.destination ?? "Unavailable"}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Amount</dt>
+                  <dd>
+                    {amount}
+                    <small>{review.amountAtoms} atoms</small>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Ledger fee</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.transferFeeAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div className="wallet-funding-total">
+                  <dt>Maximum debit</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.totalDebitAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                {review.memoHex !== null ? (
+                  <div>
+                    <dt>Memo</dt>
+                    <dd><code>{review.memoHex || "Empty"}</code></dd>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div>
+                  <dt>Spender</dt>
+                  <dd>
+                    <code>
+                      {review.spender
+                        ? review.spender.account
+                        : "Unavailable"}
+                    </code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Requested amount</dt>
+                  <dd>
+                    {amount}
+                    <small>{review.amountAtoms} atoms</small>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Current allowance</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.currentAllowanceAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt>New allowance</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.allowanceAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt>Approval fee</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.approvalFeeAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt>Transfer-from fee</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.transferFeeAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt>Current expiration</dt>
+                  <dd>{approvalExpirationText(review.currentExpiresAtNs)}</dd>
+                </div>
+                <div>
+                  <dt>New expiration</dt>
+                  <dd>{approvalExpirationText(review.expiresAtNs)}</dd>
+                </div>
+                <div className="wallet-funding-total">
+                  <dt>Maximum source debit</dt>
+                  <dd>
+                    <WalletFundingAmountDetail
+                      atoms={review.totalDebitAtoms}
+                      review={review}
+                    />
+                  </dd>
+                </div>
+              </>
+            )}
+            <div>
+              <dt>Request expires</dt>
+              <dd>{approvalExpirationText(review.validUntilNs)}</dd>
+            </div>
+            <div>
+              <dt>Command ID</dt>
+              <dd>
+                <code>{review.commandId.callerAppId}:{review.commandId.requestId}</code>
+              </dd>
+            </div>
+          </dl>
+
+          {review.kind === "allowance" ? (
+            <div className="wallet-funding-warning" role="note">
+              <IoWarningOutline aria-hidden="true" />
+              <span>
+                This spender can make multiple transfers and choose destinations until the allowance expires or you revoke it in Approvals.
+              </span>
+            </div>
+          ) : null}
+
+          {prompt.error ? (
+            <div className="wallet-funding-error" role="alert">
+              <IoAlertCircleOutline aria-hidden="true" />
+              <span>{prompt.error}</span>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="nt-dialog-actions">
+          <button
+            autoFocus
+            className="nt-button nt-button--secondary"
+            data-tid="wallet-funding-reject"
+            disabled={busy}
+            onClick={() => {
+              if (uncertain) closeUncertainWalletFundingPrompt(prompt);
+              else void rejectPresentedWalletFunding(prompt);
+            }}
+            type="button"
+          >
+            <IoClose aria-hidden="true" />
+            {uncertain ? "Close" : "Cancel"}
+          </button>
+          <button
+            className="nt-button"
+            data-tid="wallet-funding-accept"
+            disabled={busy}
+            onClick={() => void acceptWalletFundingPrompt(prompt.id)}
+            type="button"
+          >
+            {busy ? (
+              <span className="wallet-spinner" />
+            ) : uncertain ? (
+              <IoRefresh aria-hidden="true" />
+            ) : review.kind === "direct" ? (
+              <IoSend aria-hidden="true" />
+            ) : (
+              <IoShieldCheckmarkOutline aria-hidden="true" />
+            )}
+            {prompt.phase === "executing"
+              ? "Sending"
+              : prompt.phase === "checking"
+                ? "Checking status"
+              : prompt.phase === "rejecting"
+                ? "Cancelling"
+                : prompt.phase === "uncertain"
+                  ? "Check status"
+                : review.kind === "direct"
+                  ? "Send"
+                  : "Approve allowance"}
+          </button>
+        </div>
+      </dialog>
+    </div>
+  );
+}
+
+function walletFundingAmount(
+  atoms: string,
+  review: Pick<WalletFundingReview, "decimals" | "tokenSymbol">,
+): string {
+  return `${formatTokenAmount(atoms, review.decimals)} ${review.tokenSymbol}`;
+}
+
+function WalletFundingAmountDetail({
+  atoms,
+  review,
+}: {
+  atoms: string | null;
+  review: Pick<WalletFundingReview, "decimals" | "tokenSymbol">;
+}) {
+  if (atoms === null) return <>Unavailable</>;
+  return (
+    <>
+      {walletFundingAmount(atoms, review)}
+      <small>{atoms} atoms</small>
+    </>
   );
 }
 
 function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const { openInTile } = useWalletSurface();
-  const [view, setView] = useState<"assets" | "activity">("assets");
+  const [view, setView] = useState<WalletView>("assets");
   const [snapshot, setSnapshot] = useState<WalletSnapshot | null>(null);
   const [catalog, setCatalog] = useState<CatalogLedger[]>([]);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -224,8 +883,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [destinationLedger, setDestinationLedger] =
-    useState<WalletLedger | null>(null);
+  const [destinationLedgerId, setDestinationLedgerId] = useState<string | null>(
+    null,
+  );
   const [destinationQuery, setDestinationQuery] = useState("");
   const [destinationPage, setDestinationPage] =
     useState<WalletContactDestinationsPage | null>(null);
@@ -255,6 +915,14 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const [historySyncing, setHistorySyncing] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
+  const [allowancePages, setAllowancePages] = useState<WalletAllowancesPage[]>(
+    [],
+  );
+  const [allowancesLoading, setAllowancesLoading] = useState(false);
+  const [allowancesLoadingMore, setAllowancesLoadingMore] = useState<
+    Set<string>
+  >(new Set());
+  const [allowanceBusy, setAllowanceBusy] = useState<string | null>(null);
   const [priceBook, setPriceBook] = useState<UsdPriceBook | null>(null);
   const [priceRefreshing, setPriceRefreshing] = useState(false);
   const [priceError, setPriceError] = useState<string | null>(null);
@@ -262,6 +930,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const [projectionRevision, setProjectionRevision] = useState(0);
   const depositRefreshInFlight = useRef(false);
   const historyRequest = useRef(0);
+  const allowancesRequest = useRef(0);
   const priceRequest = useRef(0);
 
   const load = useCallback(async () => {
@@ -285,6 +954,16 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const reloadSnapshot = useCallback(async () => {
     setSnapshot(parseWalletSnapshot(await querySelf("wallet_snapshot", [null])));
   }, []);
+
+  useEffect(
+    () =>
+      subscribeWalletFundingRefresh((update) => {
+        if (update.snapshot !== null) setSnapshot(update.snapshot);
+        setError(update.error);
+        setProjectionRevision((current) => current + 1);
+      }),
+    [],
+  );
 
   useEffect(() => {
     void load().catch((reason) => setError(errorMessage(reason)));
@@ -367,11 +1046,165 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     }
   }, [historySyncing, loadHistory]);
 
-  const chooseView = (next: "assets" | "activity") => {
+  const loadAllowances = useCallback(async () => {
+    if (!snapshot) return;
+    const requestId = ++allowancesRequest.current;
+    setAllowancesLoading(true);
+    setAllowancesLoadingMore(new Set());
+    try {
+      const pages: WalletAllowancesPage[] = [];
+      for (let offset = 0; offset < snapshot.ledgers.length; offset += 4) {
+        const batch = await Promise.all(
+          snapshot.ledgers.slice(offset, offset + 4).map(async (ledger) => {
+            try {
+              const value = await updateSelf(
+                WALLET_ALLOWANCES_PAGE_METHOD,
+                [walletAllowancesPageArgs(ledger.principal, null)],
+                60,
+              );
+              const page = parseWalletAllowancesPage(value);
+              if (page.ledger !== ledger.principal) {
+                throw new Error("Wallet returned allowances for another ledger");
+              }
+              return page;
+            } catch (reason) {
+              return failedWalletAllowancesPage(
+                ledger.principal,
+                ledger.name ?? "Custom token",
+                ledger.symbol ?? compactPrincipal(ledger.principal),
+                ledger.decimals ?? 0,
+                errorMessage(reason),
+              );
+            }
+          }),
+        );
+        if (requestId !== allowancesRequest.current) return;
+        pages.push(...batch);
+      }
+      if (requestId === allowancesRequest.current) setAllowancePages(pages);
+    } finally {
+      if (requestId === allowancesRequest.current) setAllowancesLoading(false);
+    }
+  }, [snapshot]);
+
+  useEffect(() => {
+    if (view !== "approvals" || setupOpen) return;
+    void loadAllowances();
+  }, [loadAllowances, projectionRevision, setupOpen, view]);
+
+  const loadMoreAllowances = useCallback(
+    async (ledger: string) => {
+      const current = allowancePages.find((page) => page.ledger === ledger);
+      if (!current?.hasMore || current.next === null) return;
+      const requestId = allowancesRequest.current;
+      setAllowancesLoadingMore((active) => new Set(active).add(ledger));
+      try {
+        const value = await updateSelf(
+          WALLET_ALLOWANCES_PAGE_METHOD,
+          [walletAllowancesPageArgs(ledger, current.next)],
+          60,
+        );
+        const next = parseWalletAllowancesPage(value);
+        if (next.ledger !== ledger) {
+          throw new Error("Wallet returned allowances for another ledger");
+        }
+        const merged = mergeWalletAllowancesPages(current, next);
+        if (requestId !== allowancesRequest.current) return;
+        setAllowancePages((pages) =>
+          pages.map((page) =>
+            page.ledger === ledger ? merged : page,
+          ),
+        );
+      } catch (reason) {
+        if (requestId === allowancesRequest.current) {
+          const message = errorMessage(reason);
+          setAllowancePages((pages) =>
+            pages.map((page) =>
+              page.ledger === ledger
+                ? {
+                    ...page,
+                    state: "degraded",
+                    stateDetail: message,
+                    warning: message,
+                    next: null,
+                    hasMore: false,
+                  }
+                : page,
+            ),
+          );
+        }
+      } finally {
+        if (requestId === allowancesRequest.current) {
+          setAllowancesLoadingMore((active) => {
+            const next = new Set(active);
+            next.delete(ledger);
+            return next;
+          });
+        }
+      }
+    },
+    [allowancePages],
+  );
+
+  const revokeAllowance = useCallback(
+    async (entry: WalletAllowance, page: WalletAllowancesPage) => {
+      if (allowanceBusy !== null) return;
+      setAllowanceBusy(entry.key);
+      setError(null);
+      const caller: WalletFundingCaller = {
+        endpoint: "wallet_ui",
+        appId: "wallet",
+        role: surface,
+      };
+      try {
+        const prepared = parseFundingPrepareResult(
+          await updateSelf(
+            WALLET_FUNDING_PREPARE_METHOD,
+            [
+              walletRevokePrepareArgs(
+                entry,
+                caller,
+                createWalletRequestId(),
+                walletRequestDeadlineNs(),
+              ),
+            ],
+            60,
+          ),
+        );
+        assertRevokePreparedMatchesDisplay(prepared, page, entry);
+        const result = await resolveWalletFundingPreparation(
+          prepared,
+          (args) => updateSelf(WALLET_FUNDING_EXECUTE_METHOD, [args], 120),
+        );
+        if (result.status === "rejected") {
+          throw new Error(result.message ?? "The ledger rejected the revocation");
+        }
+        if (result.status !== "revoked" && result.status !== "pending") {
+          throw new Error("Wallet returned an invalid revocation result");
+        }
+        if (result.status === "pending") {
+          setError(
+            result.message ??
+              "The revocation outcome is pending. Wallet refreshed the live allowance.",
+          );
+        }
+        await reloadSnapshot();
+        publishWalletInvalidation();
+      } catch (reason) {
+        setError(errorMessage(reason));
+      } finally {
+        await loadAllowances();
+        setAllowanceBusy(null);
+      }
+    },
+    [allowanceBusy, loadAllowances, reloadSnapshot, surface],
+  );
+
+  const chooseView = (next: WalletView) => {
     setView(next);
     setError(null);
     setDepositLedgerId(null);
-    setDestinationLedger(null);
+    setDestinationLedgerId(null);
   };
 
   const update = useCallback(
@@ -463,7 +1296,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     if (!snapshot) return;
     setError(null);
     setDepositLedgerId(null);
-    setDestinationLedger(null);
+    setDestinationLedgerId(null);
     setSelected(new Set(snapshot.ledgers.map((ledger) => ledger.principal)));
     setCustomLedgers(customLedgerIds(snapshot, catalog));
     setCustomLedgerOpen(false);
@@ -483,6 +1316,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setCustomLedgerError(null);
     setSearch("");
     setSetupOpen(false);
+  };
+
+  const openApprovalSettings = () => {
+    if (surface === "tile") {
+      openSetup();
+      return;
+    }
+    setError(null);
+    void openInTile(walletTileView("setup")).catch((reason) =>
+      setError(errorMessage(reason)),
+    );
   };
 
   const toggleLedger = (principal: string) => {
@@ -612,6 +1456,10 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     }
     return { eligible, total, valued };
   }, [catalogByPrincipal, priceBook, snapshot]);
+  const destinationLedger = useMemo(
+    () => walletLedgerByPrincipal(snapshot, destinationLedgerId),
+    [destinationLedgerId, snapshot],
+  );
   const destinationCatalog = useMemo(
     () =>
       destinationLedger
@@ -622,12 +1470,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     [catalog, destinationLedger],
   );
   const depositLedger = useMemo(
-    () =>
-      depositLedgerId
-        ? snapshot?.ledgers.find(
-            (ledger) => ledger.principal === depositLedgerId,
-          ) ?? null
-        : null,
+    () => walletLedgerByPrincipal(snapshot, depositLedgerId),
     [depositLedgerId, snapshot],
   );
   const depositCatalog = useMemo(
@@ -800,12 +1643,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   ]);
 
   const loadDestinations = useCallback(async () => {
-    if (!destinationLedger) return;
+    if (!destinationLedgerId) return;
     setDestinationBusy(true);
     try {
       const value = await querySelf("wallet_contact_destinations", [
         {
-          ledger: destinationLedger.principal,
+          ledger: destinationLedgerId,
           network: networkVariant(destinationNetwork),
           search_text: destinationQuery.trim(),
           offset: "0",
@@ -813,7 +1656,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
         },
       ]);
       const next = parseWalletContactDestinations(value);
-      if (next.ledger === destinationLedger.principal) {
+      if (next.ledger === destinationLedgerId) {
         setDestinationPage(next);
         setError(null);
       }
@@ -822,13 +1665,13 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     } finally {
       setDestinationBusy(false);
     }
-  }, [destinationLedger, destinationNetwork, destinationQuery]);
+  }, [destinationLedgerId, destinationNetwork, destinationQuery]);
 
   useEffect(() => {
-    if (!destinationLedger) return;
+    if (!destinationLedgerId) return;
     const timer = window.setTimeout(() => void loadDestinations(), 180);
     return () => window.clearTimeout(timer);
-  }, [destinationLedger, loadDestinations]);
+  }, [destinationLedgerId, loadDestinations]);
 
   const openDestinations = (ledger: WalletLedger) => {
     setError(null);
@@ -839,12 +1682,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setTransferCandidate(null);
     setTransferAmount("");
     setTransferReceipt(null);
-    setDestinationLedger(ledger);
+    setDestinationLedgerId(ledger.principal);
   };
 
   const openDeposit = (ledger: WalletLedger) => {
     setError(null);
-    setDestinationLedger(null);
+    setDestinationLedgerId(null);
     setDepositLedgerId(ledger.principal);
     setPublicNativeDeposit(null);
     setPublicNativeError(null);
@@ -858,7 +1701,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   };
 
   const closeDestinations = () => {
-    setDestinationLedger(null);
+    setDestinationLedgerId(null);
     setDestinationQuery("");
     setDestinationPage(null);
     setDestinationNetwork("internet_computer");
@@ -876,7 +1719,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
 
     if (requested === "setup") {
       setDepositLedgerId(null);
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       setSelected(
         new Set(snapshot.ledgers.map((ledger) => ledger.principal)),
       );
@@ -892,8 +1735,16 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     if (requested === "activity") {
       setSetupOpen(false);
       setDepositLedgerId(null);
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       setView("activity");
+      return;
+    }
+
+    if (requested === "approvals") {
+      setSetupOpen(false);
+      setDepositLedgerId(null);
+      setDestinationLedgerId(null);
+      setView("approvals");
       return;
     }
 
@@ -908,12 +1759,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setView("assets");
     if (!assetRequest || !ledger) {
       setDepositLedgerId(null);
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       return;
     }
 
     if (assetRequest[1] === "receive" || assetRequest[1] === "deposit") {
-      setDestinationLedger(null);
+      setDestinationLedgerId(null);
       setDepositLedgerId(ledger.principal);
       setPublicNativeDeposit(null);
       setPublicNativeError(null);
@@ -927,7 +1778,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setTransferCandidate(null);
     setTransferAmount("");
     setTransferReceipt(null);
-    setDestinationLedger(ledger);
+    setDestinationLedgerId(ledger.principal);
   }, [catalog, requestedTileView, snapshot]);
 
   const chooseDestinationNetwork = (network: CatalogNetwork) => {
@@ -983,7 +1834,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setTransferBusy(true);
     setError(null);
     try {
-      const value = await createCanisterClient(snapshot.owner).callDialog(
+      const value = await updateSelf(
         "wallet_transfer",
         [
           {
@@ -992,7 +1843,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             contact_id: transferCandidate.contactId,
             contact_revision: transferCandidate.contactRevision,
             address_id: transferCandidate.addressId,
-            expected_destination: destinationVariant(
+            expected_destination: walletDestinationVariant(
               transferCandidate.destination,
             ),
             amount,
@@ -1275,13 +2126,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     >
       <div className="wallet-shell">
         <header className="wallet-toolbar">
-          <div className="wallet-view-switch" role="tablist" aria-label="Wallet view">
+          <div className="wallet-view-switch" role="group" aria-label="Wallet view">
             <button
               aria-label="Assets"
-              aria-selected={view === "assets"}
+              aria-pressed={view === "assets"}
               className={view === "assets" ? "is-active" : undefined}
               onClick={() => chooseView("assets")}
-              role="tab"
               type="button"
             >
               <IoWalletOutline aria-hidden="true" />
@@ -1289,14 +2139,23 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             </button>
             <button
               aria-label="Activity"
-              aria-selected={view === "activity"}
+              aria-pressed={view === "activity"}
               className={view === "activity" ? "is-active" : undefined}
               onClick={() => chooseView("activity")}
-              role="tab"
               type="button"
             >
               <IoReceiptOutline aria-hidden="true" />
               <span>Activity</span>
+            </button>
+            <button
+              aria-label="Approvals"
+              aria-pressed={view === "approvals"}
+              className={view === "approvals" ? "is-active" : undefined}
+              onClick={() => chooseView("approvals")}
+              type="button"
+            >
+              <IoShieldCheckmarkOutline aria-hidden="true" />
+              <span>Approvals</span>
             </button>
           </div>
           <span className="wallet-toolbar-spacer" />
@@ -1342,15 +2201,32 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
           </IconButton>
           <IconButton
             className="wallet-refresh-trigger"
-            label={view === "activity" ? "Sync activity" : "Refresh balances"}
+            label={
+              view === "activity"
+                ? "Sync activity"
+                : view === "approvals"
+                  ? "Refresh approvals"
+                  : "Refresh balances"
+            }
             disabled={
               busy !== null ||
               snapshot.ledgers.length === 0 ||
-              historySyncing
+              (view === "activity" && historySyncing) ||
+              (view === "approvals" &&
+                (allowancesLoading ||
+                  allowancesLoadingMore.size > 0 ||
+                  allowanceBusy !== null))
             }
-            active={view === "activity" ? historySyncing : busy === "balances"}
+            active={
+              view === "activity"
+                ? historySyncing
+                : view === "approvals"
+                  ? allowancesLoading
+                  : busy === "balances"
+            }
             onClick={() => {
               if (view === "activity") void syncHistory();
+              else if (view === "approvals") void loadAllowances();
               else {
                 void update("wallet_refresh_balances", [null], "balances");
                 void refreshPrices(true);
@@ -1376,6 +2252,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             records={historyRecords}
             status={historyStatus}
             warning={historyError ?? historyWarning}
+          />
+        ) : view === "approvals" ? (
+          <WalletApprovals
+            busy={allowanceBusy}
+            ledgers={snapshot.ledgers}
+            loading={allowancesLoading}
+            loadingMore={allowancesLoadingMore}
+            onLoadMore={(ledger) => void loadMoreAllowances(ledger)}
+            onPermissionRequired={openApprovalSettings}
+            onRevoke={(entry, page) => void revokeAllowance(entry, page)}
+            pages={allowancePages}
           />
         ) : depositLedger ? (
           <WalletDeposit
@@ -1604,6 +2491,317 @@ function TokenRow({
       </span>
     </article>
   );
+}
+
+export function WalletApprovals({
+  busy,
+  ledgers,
+  loading,
+  loadingMore,
+  onLoadMore,
+  onPermissionRequired,
+  onRevoke,
+  pages,
+}: {
+  busy: string | null;
+  ledgers: WalletLedger[];
+  loading: boolean;
+  loadingMore: ReadonlySet<string>;
+  onLoadMore: (ledger: string) => void;
+  onPermissionRequired: () => void;
+  onRevoke: (entry: WalletAllowance, page: WalletAllowancesPage) => void;
+  pages: WalletAllowancesPage[];
+}) {
+  const [ledger, setLedger] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const ledgerByPrincipal = new Map(
+    ledgers.map((item) => [item.principal, item]),
+  );
+  const visiblePages = ledger === null
+    ? pages
+    : pages.filter((page) => page.ledger === ledger);
+  const visibleCount = visiblePages.reduce(
+    (total, page) => total + page.entries.length,
+    0,
+  );
+  const hasState = visiblePages.some(
+    (page) => page.state !== "ready" || page.warning !== null,
+  );
+  const hasContinuation = visiblePages.some(
+    (page) => page.hasMore && page.next !== null,
+  );
+
+  useEffect(() => {
+    if (ledger === null || pages.some((page) => page.ledger === ledger)) return;
+    setLedger(null);
+  }, [ledger, pages]);
+
+  return (
+    <WalletFallbackViewContext.Provider value={walletTileView("approvals")}>
+      <section
+        className="wallet-activity wallet-approvals"
+        aria-label="Token approvals"
+      >
+        <div className="wallet-activity-filters wallet-approval-filters">
+          <label>
+            <span className="nt-sr-only">Token</span>
+            <select
+              aria-label="Filter approvals by token"
+              className="nt-select"
+              onChange={(event) => setLedger(event.target.value || null)}
+              value={ledger ?? ""}
+            >
+              <option value="">All tokens</option>
+              {pages.map((page) => (
+                <option key={page.ledger} value={page.ledger}>
+                  {page.tokenSymbol}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="wallet-activity-count">{visibleCount}</span>
+        </div>
+
+        {loading && pages.length > 0 ? (
+          <div className="wallet-activity-state" role="status">
+            <span className="wallet-spinner" />
+            <span>Refreshing live approvals</span>
+          </div>
+        ) : null}
+
+        <div className="wallet-activity-list">
+          {loading && pages.length === 0 ? (
+            <div className="wallet-loading" aria-label="Loading approvals">
+              <span className="wallet-spinner" />
+            </div>
+          ) : visibleCount === 0 && !hasState && !hasContinuation ? (
+            <div className="wallet-empty">
+              <IoShieldCheckmarkOutline aria-hidden="true" />
+              <span>No active approvals</span>
+            </div>
+          ) : (
+            visiblePages.map((page) => {
+              const token = ledgerByPrincipal.get(page.ledger);
+              return (
+                <section
+                  className="wallet-activity-day wallet-approval-ledger"
+                  key={page.ledger}
+                >
+                  {page.state !== "ready" || page.warning ? (
+                    <WalletAllowanceState
+                      logo={token?.logo ?? null}
+                      onPermissionRequired={onPermissionRequired}
+                      page={page}
+                    />
+                  ) : null}
+                  {page.entries.map((entry) => {
+                    const isOpen = expanded === entry.key;
+                    const detailsId = `wallet-approval-details-${entry.key}`;
+                    return (
+                      <article
+                        className="wallet-activity-entry wallet-approval-entry"
+                        key={entry.key}
+                      >
+                        <button
+                          aria-controls={detailsId}
+                          aria-expanded={isOpen}
+                          className="wallet-activity-row"
+                          onClick={() => setExpanded(isOpen ? null : entry.key)}
+                          type="button"
+                        >
+                          <span className="wallet-activity-operation neutral">
+                            <IoShieldCheckmarkOutline aria-hidden="true" />
+                          </span>
+                          <TokenMark
+                            logo={token?.logo ?? null}
+                            symbol={page.tokenSymbol}
+                          />
+                          <span className="wallet-activity-main">
+                            <strong>{page.tokenSymbol} allowance</strong>
+                            <small title={entry.spender.account}>
+                              {compactAddress(entry.spender.account)}
+                            </small>
+                          </span>
+                          <span className="wallet-activity-value">
+                            <strong>
+                              {formatTokenAmount(entry.amountAtoms, page.decimals)}
+                            </strong>
+                            <small>
+                              {approvalExpirationText(entry.expiresAtNs)}
+                            </small>
+                          </span>
+                          <span
+                            aria-hidden="true"
+                            className="wallet-activity-pending is-hidden"
+                          />
+                          <IoChevronDown
+                            aria-hidden="true"
+                            className={`wallet-activity-chevron${
+                              isOpen ? " is-open" : ""
+                            }`}
+                          />
+                        </button>
+                        {isOpen ? (
+                          <dl
+                            className="wallet-history-details wallet-approval-details"
+                            id={detailsId}
+                          >
+                            <HistoryDetail label="Ledger" value={page.ledger} code />
+                            <div>
+                              <dt>
+                                {entry.spender.kind === "icrc"
+                                  ? "Spender ICRC account"
+                                  : "Spender ICP account identifier"}
+                              </dt>
+                              <dd>
+                                <CopyValue
+                                  label={
+                                    entry.spender.kind === "icrc"
+                                      ? "Copy spender ICRC account"
+                                      : "Copy spender ICP account identifier"
+                                  }
+                                  value={entry.spender.account}
+                                />
+                              </dd>
+                            </div>
+                            <HistoryDetail
+                              label="Allowance atoms"
+                              value={entry.amountAtoms}
+                              code
+                            />
+                            <HistoryDetail
+                              label="Expires"
+                              value={approvalExpirationText(entry.expiresAtNs)}
+                            />
+                            <HistoryDetail
+                              label="Expiration (ns)"
+                              value={entry.expiresAtNs ?? "No expiration"}
+                              code={entry.expiresAtNs !== null}
+                            />
+                            <HistoryDetail
+                              label="Revoke fee"
+                              value={
+                                page.revokeFeeAtoms === null
+                                  ? "Unavailable"
+                                  : `${formatTokenAmount(
+                                      page.revokeFeeAtoms,
+                                      page.decimals,
+                                    )} ${page.tokenSymbol} (${page.revokeFeeAtoms} atoms)`
+                              }
+                            />
+                            <HistoryDetail
+                              label="Source"
+                              value={allowanceSourceLabel(page.source)}
+                            />
+                            <div className="wallet-approval-action">
+                              <dt>Action</dt>
+                              <dd>
+                                <button
+                                  aria-label={`Revoke ${page.tokenSymbol} approval`}
+                                  className="nt-button nt-button--sm wallet-approval-revoke"
+                                  disabled={
+                                    busy !== null ||
+                                    loading ||
+                                    loadingMore.has(page.ledger) ||
+                                    page.revokeFeeAtoms === null
+                                  }
+                                  onClick={() => onRevoke(entry, page)}
+                                  title={
+                                    page.revokeFeeAtoms === null
+                                      ? "Revoke fee is unavailable"
+                                      : `Revoke this ${page.tokenSymbol} approval`
+                                  }
+                                  type="button"
+                                >
+                                  {busy === entry.key ? (
+                                    <span className="wallet-spinner" />
+                                  ) : (
+                                    <IoClose aria-hidden="true" />
+                                  )}
+                                  <span>Revoke approval</span>
+                                </button>
+                              </dd>
+                            </div>
+                          </dl>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                  {page.hasMore && page.next !== null ? (
+                    <button
+                      className="wallet-activity-more"
+                      disabled={loadingMore.has(page.ledger) || busy !== null}
+                      onClick={() => onLoadMore(page.ledger)}
+                      type="button"
+                    >
+                      {loadingMore.has(page.ledger) ? (
+                        <span className="wallet-spinner" />
+                      ) : (
+                        `Load more ${page.tokenSymbol} approvals`
+                      )}
+                    </button>
+                  ) : null}
+                </section>
+              );
+            })
+          )}
+        </div>
+      </section>
+    </WalletFallbackViewContext.Provider>
+  );
+}
+
+function WalletAllowanceState({
+  logo,
+  onPermissionRequired,
+  page,
+}: {
+  logo: string | null;
+  onPermissionRequired: () => void;
+  page: WalletAllowancesPage;
+}) {
+  const message =
+    page.state === "permission_required"
+      ? "Permission required. Open Token settings and Apply to list and revoke approvals."
+      : page.state === "unsupported"
+        ? "This ledger cannot enumerate all active approvals"
+        : page.state === "degraded"
+          ? (page.stateDetail ?? "Approvals are temporarily unavailable")
+          : page.warning;
+  if (!message) return null;
+  return (
+    <article
+      className={`wallet-approval-state${
+        page.state === "permission_required" ? " is-permission" : ""
+      }`}
+      role={page.state === "degraded" ? "alert" : "status"}
+    >
+      <TokenMark logo={logo} symbol={page.tokenSymbol} />
+      <span>
+        <strong>
+          {page.tokenName} ({page.tokenSymbol})
+        </strong>
+        <small title={page.ledger}>
+          {compactPrincipal(page.ledger)} · {message}
+        </small>
+      </span>
+      {page.state === "permission_required" ? (
+        <button
+          className="nt-button nt-button--sm"
+          onClick={onPermissionRequired}
+          type="button"
+        >
+          Token settings
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function allowanceSourceLabel(source: WalletAllowancesPage["source"]): string {
+  if (source === "icrc103") return "ICRC-103 draft live ledger allowances";
+  if (source === "icp") return "ICP live ledger approvals";
+  return "Enumeration unavailable";
 }
 
 function WalletActivity({
@@ -3192,12 +4390,6 @@ function canTransferNetwork(
 
 function networkVariant(network: CatalogNetwork): JsonObject {
   return { [network]: null };
-}
-
-function destinationVariant(destination: WalletDestination): JsonObject {
-  return destination.network === "internet_computer"
-    ? { internet_computer: destination.account }
-    : { [destination.network]: destination.address };
 }
 
 function asTransferReceipt(value: JsonValue): WalletTransferReceipt {

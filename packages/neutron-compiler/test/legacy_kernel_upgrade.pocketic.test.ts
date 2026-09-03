@@ -9,6 +9,27 @@
  *   NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
  *   bun test packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts
  *
+ * Qualify the exact code-only Kitchen Sink and Contacts production transitions
+ * with their respective reviewed archive digests:
+ *
+ *   NEUTRON_RUN_FINAL_KITCHENSINK_CANDIDATE_POCKETIC=1 \
+ *   NEUTRON_FINAL_KITCHENSINK_CANDIDATE_SHA256=<reviewed-lowercase-sha256> \
+ *   NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
+ *   bun test packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts
+ *
+ *   NEUTRON_RUN_FINAL_CONTACTS_CANDIDATE_POCKETIC=1 \
+ *   NEUTRON_FINAL_CONTACTS_CANDIDATE_SHA256=<reviewed-lowercase-sha256> \
+ *   NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
+ *   bun test packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts
+ *
+ * Qualify exact current Wallet predecessor state and the supported skip path
+ * against the reviewed successor archive with:
+ *
+ *   NEUTRON_RUN_FINAL_WALLET_CANDIDATE_POCKETIC=1 \
+ *   NEUTRON_FINAL_WALLET_CANDIDATE_SHA256=<reviewed-lowercase-sha256> \
+ *   NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
+ *   bun test packages/neutron-compiler/test/legacy_kernel_upgrade.pocketic.test.ts
+ *
  * Qualify non-reuse across a real management snapshot restore with:
  *
  *   NEUTRON_RUN_BROWSER_ORIGIN_SNAPSHOT_POCKETIC=1 \
@@ -90,9 +111,17 @@ import {
 import { assertSupportedCertificateVersions } from "neutron-tools/src/wasm_metadata.js";
 import {
   LEGACY_KERNEL_RELEASES,
+  PRODUCTION_KERNEL_V323_RELEASE,
+  PRODUCTION_KERNEL_V324_RELEASE,
+  PRODUCTION_KERNEL_V325_RELEASE,
+  PRODUCTION_KERNEL_V326_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   assertLegacyUpgradeCompileInvariants,
   compileFinalCandidateLegacyKernelUpgradeFixture,
+  compileFinalCandidateProductionKernelUpgradeFixture,
+  compileFinalCandidateProductionKernelV324UpgradeFixture,
+  compileFinalCandidateProductionKernelV325UpgradeFixture,
+  compileFinalCandidateProductionKernelV326UpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   type LegacyUpgradeCompileFixture,
@@ -103,6 +132,18 @@ const pocketIcTest = RUN ? test : test.skip;
 const RUN_FINAL_CANDIDATE =
   process.env.NEUTRON_RUN_FINAL_KERNEL_CANDIDATE_POCKETIC === "1";
 const finalCandidateTest = RUN_FINAL_CANDIDATE ? test : test.skip;
+const finalWalletCandidateTest =
+  process.env.NEUTRON_RUN_FINAL_WALLET_CANDIDATE_POCKETIC === "1"
+    ? test
+    : test.skip;
+const finalKitchenSinkCandidateTest =
+  process.env.NEUTRON_RUN_FINAL_KITCHENSINK_CANDIDATE_POCKETIC === "1"
+    ? test
+    : test.skip;
+const finalContactsCandidateTest =
+  process.env.NEUTRON_RUN_FINAL_CONTACTS_CANDIDATE_POCKETIC === "1"
+    ? test
+    : test.skip;
 const RUN_BROWSER_ORIGIN_SNAPSHOT =
   process.env.NEUTRON_RUN_BROWSER_ORIGIN_SNAPSHOT_POCKETIC === "1";
 const browserOriginSnapshotTest = RUN_BROWSER_ORIGIN_SNAPSHOT
@@ -110,6 +151,7 @@ const browserOriginSnapshotTest = RUN_BROWSER_ORIGIN_SNAPSHOT
   : test.skip;
 const PINNED_POCKET_IC_SHA256 =
   "f5009e61bcbff297435a67a8ef9fc02178ebb9ab3ee1ec3ac81f4fc3d49319c4";
+const ICP_LEDGER = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const execFile = promisify(execFileCallback);
@@ -384,11 +426,786 @@ finalCandidateTest(
   300_000,
 );
 
+finalCandidateTest(
+  `the reviewed current Kernel archive preserves durable state through the exact production ${PRODUCTION_KERNEL_V323_RELEASE.label} checked self-upgrade`,
+  () =>
+    runLegacyUpgradeQualification(() =>
+      compileFinalCandidateProductionKernelUpgradeFixture({
+        expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
+      }),
+    ),
+  300_000,
+);
+
+finalCandidateTest(
+  `the reviewed current Kernel archive preserves durable state through the exact production ${PRODUCTION_KERNEL_V324_RELEASE.label} checked self-upgrade`,
+  () =>
+    runLegacyUpgradeQualification(() =>
+      compileFinalCandidateProductionKernelV324UpgradeFixture({
+        expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
+      }),
+    ),
+  300_000,
+);
+
+finalCandidateTest(
+  `the reviewed current Kernel archive preserves durable state through the exact production ${PRODUCTION_KERNEL_V325_RELEASE.label} checked self-upgrade`,
+  () =>
+    runLegacyUpgradeQualification(() =>
+      compileFinalCandidateProductionKernelV325UpgradeFixture({
+        expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
+      }),
+    ),
+  300_000,
+);
+
+finalCandidateTest(
+  `the reviewed current Kernel archive preserves durable state through the exact production ${PRODUCTION_KERNEL_V326_RELEASE.label} checked self-upgrade`,
+  () =>
+    runLegacyUpgradeQualification(() =>
+      compileFinalCandidateProductionKernelV326UpgradeFixture({
+        expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
+      }),
+    ),
+  300_000,
+);
+
+finalWalletCandidateTest(
+  "the reviewed Wallet v0.3.10 archive preserves exact v0.3.9 state through a checked upgrade",
+  runWalletUpgradeQualification,
+  600_000,
+);
+
+finalWalletCandidateTest(
+  "the reviewed Wallet v0.3.10 archive preserves exact v0.3.6 state through a skipped checked upgrade",
+  () => runProductionAppUpgradeQualification(walletV306UpgradeCase()),
+  600_000,
+);
+
+finalKitchenSinkCandidateTest(
+  "the reviewed Kitchen Sink v0.3.8 archive preserves exact v0.3.7 state through a checked upgrade",
+  () => runProductionAppUpgradeQualification(kitchenSinkUpgradeCase()),
+  600_000,
+);
+
+finalContactsCandidateTest(
+  "the reviewed Contacts v0.3.5 archive preserves exact v0.3.4 state through a checked upgrade",
+  () => runProductionAppUpgradeQualification(contactsUpgradeCase()),
+  600_000,
+);
+
 browserOriginSnapshotTest(
   "restored pre-begin and pending-dispatch branches never reuse browser origins",
   runBrowserOriginSnapshotQualification,
   900_000,
 );
+
+async function runWalletUpgradeQualification(): Promise<void> {
+  const releases = [
+    [
+      "Kernel v0.3.23",
+      "../../../apps/kernel/kernel.v0.3.23.neutron",
+      "kernel",
+      323,
+      2_448_813,
+      "e2e5cea791af54a5052f227fcda57f07ecec1a5b4d11bfb5c79696c75d826334",
+    ],
+    [
+      "Contacts v0.3.1",
+      "../../../apps/contacts/contacts.v0.3.1.neutron",
+      "contacts",
+      301,
+      253_319,
+      "19591c8db038db92c182b70ce0761e855efc1e7e7f37d3b1503866baa11d097a",
+    ],
+    [
+      "Wallet v0.3.9",
+      "../../../apps/wallet/wallet.v0.3.9.neutron",
+      "wallet",
+      309,
+      677_558,
+      "6deaf1dc0a05582dfc7cd9db56f7e2bb9705df14e825bd817689d31a1e9e0398",
+    ],
+  ] as const;
+  const initialArchives = await Promise.all(
+    releases.map(async ([label, relativePath, id, version, bytes, sha256]) => {
+      const archive = new Uint8Array(
+        await readFile(new URL(relativePath, import.meta.url)),
+      );
+      expect(archive.byteLength, `${label} bytes`).toBe(bytes);
+      expect(sha256Hex(archive), `${label} SHA-256`).toBe(sha256);
+      return {
+        archive,
+        prepared: preparePackageInstall(archive, {
+          expectedIdentity: { id, version, sha256 },
+        }),
+      } satisfies PreparedArchive;
+    }),
+  );
+  const initialPackages = initialArchives.map(({ prepared }) => prepared);
+  const predecessor = initialPackages.find(
+    ({ manifest }) => manifest.id === "wallet",
+  );
+  if (predecessor === undefined) throw new Error("Wallet v0.3.9 is missing");
+
+  const candidateSha256 =
+    process.env.NEUTRON_FINAL_WALLET_CANDIDATE_SHA256 ?? "";
+  if (!/^[a-f0-9]{64}$/u.test(candidateSha256)) {
+    throw new Error(
+      "NEUTRON_FINAL_WALLET_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+    );
+  }
+  const candidateArchive = new Uint8Array(
+    await readFile(
+      new URL("../../../apps/wallet/wallet.v0.3.10.neutron", import.meta.url),
+    ),
+  );
+  const candidate = preparePackageInstall(candidateArchive, {
+    expectedIdentity: {
+      id: "wallet",
+      version: 310,
+      sha256: candidateSha256,
+    },
+  });
+  expect(candidate.manifest.memory).toEqual(predecessor.manifest.memory);
+  const initial = await compileFreshPackages({
+    packages: initialPackages,
+    persistenceMode: "classical",
+  });
+  const state = freshPackageState(initialPackages, initial);
+  const upgraded = await compilePackages({
+    packages: [candidate],
+    existingModules: state.existingModules,
+    existingConfigs: state.existingConfigs,
+    existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
+    existingStable: state.previousStable,
+    connectionProviderSupport: state.connectionProviderSupport,
+    persistenceMode: "classical",
+    versionPolicy: "strict-upgrade",
+  });
+
+  const provision = await loadProvisionHarness();
+  const binary = requiredPocketIcBinary();
+  expect(sha256Hex(new Uint8Array(await readFile(binary)))).toBe(
+    PINNED_POCKET_IC_SHA256,
+  );
+  const temporaryRoot = await mkdtemp(
+    path.join(tmpdir(), "neutron-wallet-v307-upgrade-pocketic-"),
+  );
+  let server: ChildProcessWithoutNullStreams | undefined;
+  let client: DirectPocketIcClient | undefined;
+  let instanceId: number | undefined;
+
+  try {
+    const launched = await launchPocketIc(binary, temporaryRoot);
+    server = launched.server;
+    client = new provision.PocketIcRestClient(launched.controlUrl, {
+      requestTimeoutMs: 120_000,
+    }) as DirectPocketIcClient;
+    const created = await createApplicationInstance(
+      launched.controlUrl,
+      path.join(temporaryRoot, "state"),
+      true,
+    );
+    instanceId = created.instanceId;
+    const deployer = testPrincipal(91);
+    const owner = testPrincipal(92);
+    const recipients = [testPrincipal(93), testPrincipal(94), testPrincipal(95)];
+    const direct = new DirectPocketIcCalls(client, instanceId);
+    const canisterId = await direct.createCanister(
+      deployer,
+      created.defaultEffectiveCanisterId,
+    );
+    await fundIcp(direct, canisterId, 200_000_000n);
+    await direct.installInitial(canisterId, deployer, initial);
+    await direct.setControllers(canisterId, deployer, [deployer, canisterId]);
+
+    const actor = provision.createDirectPocketIcKernelActor({
+      controlUrl: launched.controlUrl,
+      instanceId,
+      canisterId: canisterId.toText(),
+      caller: deployer,
+      client,
+    });
+    await provision.seedFreshKernel({
+      actor,
+      canisterId: canisterId.toText(),
+      deployment: freshDeployment(initialArchives, initial),
+      concurrency: 32,
+      logger: silentLogger,
+    });
+    const token = new Uint8Array(32).fill(0x5c);
+    expect(
+      await direct.kernelActivation(canisterId, deployer, {
+        set: sha256(token),
+      }),
+    ).toEqual({ ready: null });
+    expect(
+      await direct.kernelActivation(canisterId, owner, { use: token }),
+    ).toEqual({ authorized: null });
+
+    const ownerActor = provision.createDirectPocketIcKernelActor({
+      controlUrl: launched.controlUrl,
+      instanceId,
+      canisterId: canisterId.toText(),
+      caller: owner,
+      client,
+    });
+    const runtimeBefore = await ownerActor.kernel_runtime_info();
+    const walletBefore = requiredAppInstance(
+      normalizeAppInstances(runtimeBefore.apps),
+      "wallet",
+    );
+    expect(walletBefore.version).toBe(309);
+    const methods = walletUpgradeMethods();
+    const callWallet = (
+      name: string,
+      method: IDL.FuncClass,
+      args: unknown[],
+    ) =>
+      direct.actorCall(
+        canisterId,
+        owner,
+        physicalAppMethodName("wallet", name),
+        method,
+        args,
+      );
+    await callWallet("wallet_set_ledgers", methods.setLedgers, [[ICP_LEDGER]]);
+
+    let seededHistory = (await callWallet(
+      "wallet_history_status",
+      methods.historyStatus,
+      [null],
+    )) as WalletUpgradeHistoryStatus;
+    for (
+      let attempt = 0;
+      historyRecordCount(seededHistory) === 0n && attempt < 20;
+      attempt += 1
+    ) {
+      await callWallet("wallet_history_sync", methods.historySync, [null]);
+      await delay(100);
+      seededHistory = (await callWallet(
+        "wallet_history_status",
+        methods.historyStatus,
+        [null],
+      )) as WalletUpgradeHistoryStatus;
+    }
+    const seededHistoryCount = historyRecordCount(seededHistory);
+    expect(seededHistoryCount).toBeGreaterThan(0n);
+
+    const requests = recipients.map((recipient, index) =>
+      walletUpgradeFundingRequest(0x31 + index, recipient, 100_001n + BigInt(index)),
+    );
+    const preparedResults: WalletUpgradePrepareResult[] = [];
+    for (const request of requests) {
+      const result = (await callWallet(
+        "wallet_funding_prepare_v1",
+        methods.fundingPrepare,
+        [request],
+      )) as WalletUpgradePrepareResult;
+      expect(result).toMatchObject({
+        ok: { prepared: { command_id: walletUpgradeCommandId(request) } },
+      });
+      preparedResults.push(result);
+    }
+
+    const submitted = [];
+    for (const request of requests.slice(1)) {
+      submitted.push({
+        request,
+        call: await direct.submitActorCall(
+          canisterId,
+          owner,
+          physicalAppMethodName("wallet", "wallet_funding_execute_v1"),
+          methods.fundingExecute,
+          [{ command_id: walletUpgradeCommandId(request) }],
+        ),
+      });
+    }
+    const dispatched = [];
+    for (const { request, call } of submitted) {
+      const result = (await direct.awaitActorCall(
+        call,
+      )) as WalletUpgradeExecution;
+      expect(walletUpgradeExecutionCommandId(result)).toEqual(
+        walletUpgradeCommandId(request),
+      );
+      dispatched.push({ request, result });
+    }
+    const pending = dispatched.find(({ result }) => "pending" in result);
+    const terminal = dispatched.find(({ result }) => "transferred" in result);
+    if (pending === undefined || terminal === undefined) {
+      throw new Error(
+        `Concurrent Wallet dispatch did not produce pending + terminal rows: ${JSON.stringify(
+          dispatched.map(({ result }) => Object.keys(result)[0]),
+        )}`,
+      );
+    }
+
+    const commandRows = [
+      {
+        state: "prepared",
+        request: requests[0]!,
+        before: preparedResults[0]!,
+      },
+      {
+        state: "pending",
+        request: pending.request,
+        before: (await callWallet(
+          "wallet_funding_prepare_v1",
+          methods.fundingPrepare,
+          [pending.request],
+        )) as WalletUpgradePrepareResult,
+      },
+      {
+        state: "terminal",
+        request: terminal.request,
+        before: (await callWallet(
+          "wallet_funding_prepare_v1",
+          methods.fundingPrepare,
+          [terminal.request],
+        )) as WalletUpgradePrepareResult,
+      },
+    ] as const;
+    expect(commandRows[1].before).toMatchObject({
+      ok: {
+        completed: {
+          result: {
+            pending: { command_id: walletUpgradeCommandId(pending.request) },
+          },
+        },
+      },
+    });
+    expect(commandRows[2].before).toMatchObject({
+      ok: {
+        completed: {
+          result: {
+            transferred: {
+              command_id: walletUpgradeCommandId(terminal.request),
+            },
+          },
+        },
+      },
+    });
+
+    await callWallet("wallet_refresh_balances", methods.refreshBalances, [null]);
+    const snapshotBefore = await callWallet("wallet_snapshot", methods.snapshot, [
+      null,
+    ]);
+    expect(snapshotBefore).toMatchObject({
+      configured: true,
+      ledgers: [
+        {
+          principal: ICP_LEDGER,
+          balance: [
+            200_000_000n -
+              terminal.request.intent.direct.amount_atoms -
+              10_000n,
+          ],
+        },
+      ],
+    });
+    const historyBefore = (await callWallet(
+      "wallet_history_status",
+      methods.historyStatus,
+      [null],
+    )) as WalletUpgradeHistoryStatus;
+    expect(historyRecordCount(historyBefore)).toBeGreaterThan(seededHistoryCount);
+
+    const deployed = await deployExactTransition({
+      actor: ownerActor,
+      canisterId,
+      packages: [candidate],
+      state,
+      compiled: upgraded,
+      expectedDeploymentId: initial.deploymentId,
+    });
+    expect(deployed.compiled.migrationPlan.removedApps).toEqual([]);
+    expect(deployed.compiled.migrationPlan.destructiveMemoryRoots).toEqual([]);
+    expect(
+      deployed.compiled.migrationPlan.upgrades
+        .map((upgrade) =>
+          upgrade.kind === "keep"
+            ? `${upgrade.owner}/${upgrade.memoryId}@${upgrade.version}`
+            : upgrade.kind,
+        )
+        .sort(),
+    ).toEqual([
+      "contacts/contacts@2",
+      "kernel/kernel@3",
+      "kernel/kernel_activation@1",
+      "wallet/wallet@1",
+      "wallet/wallet_commands@1",
+    ]);
+    const runtimeAfter = await ownerActor.kernel_runtime_info();
+    const walletAfter = requiredAppInstance(
+      normalizeAppInstances(runtimeAfter.apps),
+      "wallet",
+    );
+    const compiledWallet = requiredCompiledAppInstance(
+      upgraded.appInstanceInventory,
+      "wallet",
+    );
+    expect(walletAfter).toEqual({
+      ...walletBefore,
+      version: 310,
+      deployment_id: deployed.compiled.deploymentId,
+      capability_plan_fingerprint: compiledWallet.capability_plan_fingerprint,
+      resident_frame_security: compiledWallet.resident_frame_security,
+    });
+    expect(normalizeMemoryInventory(runtimeAfter.memories)).toEqual(
+      normalizeMemoryInventory(runtimeBefore.memories),
+    );
+    expect(await ownerActor.kernel_install_status(null)).toEqual([]);
+    expect(
+      await callWallet("wallet_snapshot", methods.snapshot, [null]),
+    ).toEqual(snapshotBefore);
+    expect(
+      await callWallet("wallet_history_status", methods.historyStatus, [null]),
+    ).toEqual(historyBefore);
+    for (const row of commandRows) {
+      for (const conflictRequest of conflictingWalletUpgradeRequests(
+        row.request,
+      )) {
+        const conflict = (await callWallet(
+          "wallet_funding_prepare_v1",
+          methods.fundingPrepare,
+          [conflictRequest],
+        )) as WalletUpgradePrepareResult;
+        if (!("err" in conflict)) {
+          throw new Error(`${row.state} Wallet command lost its durable intent`);
+        }
+        expect(conflict.err).toContain("conflicts with another intent");
+      }
+      expect(
+        await callWallet("wallet_funding_prepare_v1", methods.fundingPrepare, [
+          replacedEndpointWalletUpgradeRequest(row.request, row.state),
+        ]),
+      ).toEqual(row.before);
+    }
+    const candidateRequest = walletUpgradeFundingRequest(
+      0x3f,
+      testPrincipal(99),
+      100_099n,
+    );
+    const candidateCommand = await callWallet(
+      "wallet_funding_prepare_v1",
+      methods.fundingPrepare,
+      [candidateRequest],
+    );
+    expect(
+      await callWallet("wallet_funding_prepare_v1", methods.fundingPrepare, [
+        replacedEndpointWalletUpgradeRequest(candidateRequest, "candidate"),
+      ]),
+    ).toEqual(candidateCommand);
+    expect(direct.externalInstallModes).toEqual(["install"]);
+  } finally {
+    if (client !== undefined && instanceId !== undefined) {
+      await client.deleteInstance(instanceId).catch(() => undefined);
+    }
+    if (server !== undefined) await stopPocketIc(server);
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+type WalletUpgradeHistoryStatus = {
+  ledgers: Array<{
+    ledger: Principal;
+    transaction_count: bigint;
+    adjustment_count: bigint;
+  }>;
+};
+
+function historyRecordCount(status: WalletUpgradeHistoryStatus): bigint {
+  const ledger = status.ledgers.find(
+    (entry) => entry.ledger.toText() === ICP_LEDGER.toText(),
+  );
+  return ledger === undefined
+    ? 0n
+    : ledger.transaction_count + ledger.adjustment_count;
+}
+
+function walletUpgradeFundingRequest(
+  requestByte: number,
+  recipient: Principal,
+  amountAtoms: bigint,
+) {
+  return {
+    request_id: new Uint8Array(16).fill(requestByte),
+    ledger: ICP_LEDGER,
+    valid_until_ns: BigInt(Date.now() + 300_000) * 1_000_000n,
+    caller: {
+      endpoint: "app:wallet_upgrade_fixture:background",
+      app_id: "wallet_upgrade_fixture",
+      role: ["background"],
+    },
+    agent_mode: false,
+    intent: {
+      direct: {
+        amount_atoms: amountAtoms,
+        to: { owner: recipient, subaccount: [] },
+        memo: [],
+      },
+    },
+  };
+}
+
+type WalletUpgradeFundingRequest = ReturnType<
+  typeof walletUpgradeFundingRequest
+>;
+
+type WalletUpgradeCommandId = {
+  caller_app_id: string;
+  request_id: Uint8Array;
+};
+
+type WalletUpgradeExecution =
+  | {
+      transferred: {
+        command_id: WalletUpgradeCommandId;
+        block_index: bigint;
+        duplicate: boolean;
+      };
+    }
+  | {
+      approved: {
+        command_id: WalletUpgradeCommandId;
+        block_index: [] | [bigint];
+        duplicate: boolean;
+      };
+    }
+  | {
+      revoked: {
+        command_id: WalletUpgradeCommandId;
+        block_index: [] | [bigint];
+        duplicate: boolean;
+      };
+    }
+  | {
+      pending: { command_id: WalletUpgradeCommandId; message: string };
+    }
+  | {
+      rejected: { command_id: WalletUpgradeCommandId; message: string };
+    };
+
+type WalletUpgradePrepareResult =
+  | {
+      ok:
+        | {
+            prepared: {
+              command_id: WalletUpgradeCommandId;
+              review: null;
+            };
+          }
+        | {
+            completed: {
+              review: null;
+              result: WalletUpgradeExecution;
+            };
+          };
+    }
+  | { err: string };
+
+function walletUpgradeCommandId(
+  request: WalletUpgradeFundingRequest,
+): WalletUpgradeCommandId {
+  return {
+    caller_app_id: request.caller.app_id,
+    request_id: request.request_id,
+  };
+}
+
+function walletUpgradeExecutionCommandId(
+  result: WalletUpgradeExecution,
+): WalletUpgradeCommandId {
+  if ("transferred" in result) return result.transferred.command_id;
+  if ("approved" in result) return result.approved.command_id;
+  if ("revoked" in result) return result.revoked.command_id;
+  if ("pending" in result) return result.pending.command_id;
+  return result.rejected.command_id;
+}
+
+function conflictingWalletUpgradeRequests(
+  request: WalletUpgradeFundingRequest,
+): WalletUpgradeFundingRequest[] {
+  return [
+    {
+      ...request,
+      intent: {
+        direct: {
+          ...request.intent.direct,
+          amount_atoms: request.intent.direct.amount_atoms + 1n,
+        },
+      },
+    },
+    { ...request, ledger: testPrincipal(97) },
+    { ...request, caller: { ...request.caller, role: ["tile"] } },
+    { ...request, agent_mode: true },
+  ];
+}
+
+function replacedEndpointWalletUpgradeRequest(
+  request: WalletUpgradeFundingRequest,
+  suffix: string,
+): WalletUpgradeFundingRequest {
+  return {
+    ...request,
+    caller: {
+      ...request.caller,
+      endpoint: `app:wallet_upgrade_fixture:tile:${suffix}:replacement`,
+    },
+  };
+}
+
+function walletUpgradeMethods() {
+  const blob = IDL.Vec(IDL.Nat8);
+  const account = IDL.Record({
+    owner: IDL.Principal,
+    subaccount: IDL.Opt(blob),
+  });
+  const commandId = IDL.Record({
+    caller_app_id: IDL.Text,
+    request_id: blob,
+  });
+  const executionMessage = IDL.Record({
+    command_id: commandId,
+    message: IDL.Text,
+  });
+  const approvalReceipt = IDL.Record({
+    command_id: commandId,
+    block_index: IDL.Opt(IDL.Nat),
+    duplicate: IDL.Bool,
+  });
+  const execution = IDL.Variant({
+    transferred: IDL.Record({
+      command_id: commandId,
+      block_index: IDL.Nat,
+      duplicate: IDL.Bool,
+    }),
+    approved: approvalReceipt,
+    revoked: approvalReceipt,
+    pending: executionMessage,
+    rejected: executionMessage,
+  });
+  const prepareRequest = IDL.Record({
+    request_id: blob,
+    ledger: IDL.Principal,
+    valid_until_ns: IDL.Nat64,
+    caller: IDL.Record({
+      endpoint: IDL.Text,
+      app_id: IDL.Text,
+      role: IDL.Opt(IDL.Text),
+    }),
+    agent_mode: IDL.Bool,
+    intent: IDL.Variant({
+      direct: IDL.Record({
+        amount_atoms: IDL.Nat,
+        to: account,
+        memo: IDL.Opt(blob),
+      }),
+    }),
+  });
+  return {
+    setLedgers: IDL.Func([IDL.Vec(IDL.Principal)], [IDL.Reserved], []),
+    snapshot: IDL.Func(
+      [IDL.Null],
+      [
+        IDL.Record({
+          configured: IDL.Bool,
+          ledgers: IDL.Vec(
+            IDL.Record({
+              principal: IDL.Principal,
+              balance: IDL.Opt(IDL.Nat),
+            }),
+          ),
+        }),
+      ],
+      ["query"],
+    ),
+    refreshBalances: IDL.Func([IDL.Null], [IDL.Reserved], []),
+    historySync: IDL.Func([IDL.Null], [IDL.Reserved], []),
+    historyStatus: IDL.Func(
+      [IDL.Null],
+      [
+        IDL.Record({
+          ledgers: IDL.Vec(
+            IDL.Record({
+              ledger: IDL.Principal,
+              transaction_count: IDL.Nat,
+              adjustment_count: IDL.Nat,
+            }),
+          ),
+        }),
+      ],
+      ["query"],
+    ),
+    fundingPrepare: IDL.Func(
+      [prepareRequest],
+      [
+        IDL.Variant({
+          ok: IDL.Variant({
+            prepared: IDL.Record({
+              command_id: commandId,
+              review: IDL.Reserved,
+            }),
+            completed: IDL.Record({
+              review: IDL.Reserved,
+              result: execution,
+            }),
+          }),
+          err: IDL.Text,
+        }),
+      ],
+      [],
+    ),
+    fundingExecute: IDL.Func(
+      [IDL.Record({ command_id: commandId })],
+      [execution],
+      [],
+    ),
+  };
+}
+
+async function fundIcp(
+  direct: DirectPocketIcCalls,
+  owner: Principal,
+  amount: bigint,
+): Promise<void> {
+  const result = (await direct.actorCall(
+    ICP_LEDGER,
+    Principal.anonymous(),
+    "icrc1_transfer",
+    IDL.Func(
+      [
+        IDL.Record({
+          from_subaccount: IDL.Opt(IDL.Vec(IDL.Nat8)),
+          to: IDL.Record({
+            owner: IDL.Principal,
+            subaccount: IDL.Opt(IDL.Vec(IDL.Nat8)),
+          }),
+          amount: IDL.Nat,
+          fee: IDL.Opt(IDL.Nat),
+          memo: IDL.Opt(IDL.Vec(IDL.Nat8)),
+          created_at_time: IDL.Opt(IDL.Nat64),
+        }),
+      ],
+      [IDL.Variant({ Ok: IDL.Nat, Err: IDL.Reserved })],
+      [],
+    ),
+    [
+      {
+        from_subaccount: [],
+        to: { owner, subaccount: [] },
+        amount,
+        fee: [],
+        memo: [],
+        created_at_time: [],
+      },
+    ],
+  )) as { Ok: bigint } | { Err: null };
+  if (!("Ok" in result)) throw new Error("PocketIC ICP funding failed");
+}
 
 async function runBrowserOriginSnapshotQualification(): Promise<void> {
   const provision = await loadProvisionHarness();
@@ -721,6 +1538,581 @@ async function runBrowserOriginSnapshotQualification(): Promise<void> {
     if (server !== undefined) await stopPocketIc(server);
     await rm(temporaryRoot, { recursive: true, force: true });
   }
+}
+
+type PinnedProductionArchive = Readonly<{
+  label: string;
+  relativePath: string;
+  id: string;
+  version: number;
+  bytes: number;
+  sha256: string;
+}>;
+
+type ProductionAppUpgradeExercise = Readonly<{
+  direct: DirectPocketIcCalls;
+  canisterId: Principal;
+  owner: Principal;
+  callApp(
+    name: string,
+    method: IDL.FuncClass,
+    args: unknown[],
+  ): Promise<unknown>;
+}>;
+
+type ProductionAppUpgradeCase = Readonly<{
+  label: string;
+  targetId: string;
+  initial: readonly PinnedProductionArchive[];
+  candidatePath: string;
+  candidateVersion: number;
+  candidateSha256Environment: string;
+  withIcp?: boolean;
+  seedAndCapture(
+    exercise: ProductionAppUpgradeExercise,
+  ): Promise<() => Promise<void>>;
+}>;
+
+const PRODUCTION_KERNEL_V323_ARCHIVE: PinnedProductionArchive = {
+  label: "Kernel v0.3.23",
+  relativePath: "../../../apps/kernel/kernel.v0.3.23.neutron",
+  id: "kernel",
+  version: 323,
+  bytes: 2_448_813,
+  sha256: "e2e5cea791af54a5052f227fcda57f07ecec1a5b4d11bfb5c79696c75d826334",
+};
+
+const PRODUCTION_CONTACTS_V304_ARCHIVE: PinnedProductionArchive = {
+  label: "Contacts v0.3.4",
+  relativePath: "../../../apps/contacts/contacts.v0.3.4.neutron",
+  id: "contacts",
+  version: 304,
+  bytes: 284_475,
+  sha256: "8068c5e4df862c2e7cbf627eb62e00c1dbed79f1bfbeb18d0868ab8123f4196b",
+};
+
+const PRODUCTION_KITCHENSINK_V307_ARCHIVE: PinnedProductionArchive = {
+  label: "Kitchen Sink v0.3.7",
+  relativePath: "../../../apps/kitchensink/kitchensink.v0.3.7.neutron",
+  id: "kitchensink",
+  version: 307,
+  bytes: 430_099,
+  sha256: "5610bd8d4ae94bb7caa9e38841561913efa09b800b7b17bff1c3b2bb154cdb50",
+};
+
+const PRODUCTION_WALLET_V306_ARCHIVE: PinnedProductionArchive = {
+  label: "Wallet v0.3.6",
+  relativePath: "../../../apps/wallet/wallet.v0.3.6.neutron",
+  id: "wallet",
+  version: 306,
+  bytes: 666_413,
+  sha256: "bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae",
+};
+
+function kitchenSinkUpgradeCase(): ProductionAppUpgradeCase {
+  const methods = kitchenSinkUpgradeMethods();
+  return {
+    label: "kitchensink-v307-to-v308",
+    targetId: "kitchensink",
+    initial: [
+      PRODUCTION_KERNEL_V323_ARCHIVE,
+      PRODUCTION_CONTACTS_V304_ARCHIVE,
+      PRODUCTION_KITCHENSINK_V307_ARCHIVE,
+    ],
+    candidatePath:
+      "../../../apps/kitchensink/kitchensink.v0.3.8.neutron",
+    candidateVersion: 308,
+    candidateSha256Environment:
+      "NEUTRON_FINAL_KITCHENSINK_CANDIDATE_SHA256",
+    async seedAndCapture({ callApp }) {
+      expect(
+        await callApp("save_profile", methods.saveProfile, [
+          [
+            "Upgrade-qualified Ada",
+            "ada+upgrade@example.test",
+            "Exact Kitchen Sink v0.3.7 durable profile",
+            false,
+          ],
+        ]),
+      ).toBe("Saved Upgrade-qualified Ada <ada+upgrade@example.test>");
+      expect(
+        (await callApp("bump_counter", methods.bumpCounter, [731n])) as bigint,
+      ).toBeGreaterThanOrEqual(731n);
+      const profileBefore = await callApp(
+        "read_profile",
+        methods.readProfile,
+        [null],
+      );
+      const counterBefore = (await callApp(
+        "read_counter",
+        methods.readCounter,
+        [null],
+      )) as bigint;
+      return async () => {
+        expect(
+          await callApp("read_profile", methods.readProfile, [null]),
+        ).toEqual(profileBefore);
+        const counterAfter = (await callApp(
+          "read_counter",
+          methods.readCounter,
+          [null],
+        )) as bigint;
+        // A committed run-on-start task may advance the retained counter once;
+        // either value proves the non-default predecessor root was not reset.
+        expect([counterBefore, counterBefore + 1n]).toContain(counterAfter);
+      };
+    },
+  };
+}
+
+function contactsUpgradeCase(): ProductionAppUpgradeCase {
+  const methods = contactsUpgradeMethods();
+  const neutronPrincipal = Principal.fromText(
+    "rrkah-fqaaa-aaaaa-aaaaq-cai",
+  );
+  const icOwner = Principal.fromText("togwv-zqaaa-aaaal-qr7aa-cai");
+  const subaccount = Uint8Array.from(
+    { length: 32 },
+    (_, index) => index + 1,
+  );
+  return {
+    label: "contacts-v304-to-v305",
+    targetId: "contacts",
+    initial: [
+      PRODUCTION_KERNEL_V323_ARCHIVE,
+      PRODUCTION_CONTACTS_V304_ARCHIVE,
+    ],
+    candidatePath: "../../../apps/contacts/contacts.v0.3.5.neutron",
+    candidateVersion: 305,
+    candidateSha256Environment: "NEUTRON_FINAL_CONTACTS_CANDIDATE_SHA256",
+    async seedAndCapture({ callApp }) {
+      await callApp("contacts_save", methods.save, [
+        {
+          id: [],
+          expected_revision: [],
+          kind: { person: null },
+          name: "Exact retained contact",
+          notes: "Created by Contacts v0.3.4 before the checked upgrade",
+          addresses: [
+            {
+              id: [],
+              address_label: ["Neutron"],
+              destination: { neutron: neutronPrincipal },
+              preferred: false,
+            },
+            {
+              id: [],
+              address_label: ["ICRC subaccount"],
+              destination: {
+                internet_computer: {
+                  owner: icOwner,
+                  subaccount: [subaccount],
+                },
+              },
+              preferred: false,
+            },
+          ],
+        },
+      ]);
+      const contactBefore = await callApp("contacts_get", methods.get, [
+        { id: 1n },
+      ]);
+      expect(contactBefore).toMatchObject([
+        {
+          id: 1n,
+          revision: 1n,
+          name: "Exact retained contact",
+          addresses: [
+            { destination: { neutron: neutronPrincipal } },
+            {
+              destination: {
+                internet_computer: {
+                  owner: icOwner,
+                  subaccount: [subaccount],
+                },
+              },
+            },
+          ],
+        },
+      ]);
+      const revisionBefore = await callApp(
+        "contacts_revision",
+        methods.revision,
+        [null],
+      );
+      expect(revisionBefore).toEqual({ revision: 1n });
+      return async () => {
+        expect(await callApp("contacts_get", methods.get, [{ id: 1n }])).toEqual(
+          contactBefore,
+        );
+        expect(
+          await callApp("contacts_revision", methods.revision, [null]),
+        ).toEqual(revisionBefore);
+      };
+    },
+  };
+}
+
+function walletV306UpgradeCase(): ProductionAppUpgradeCase {
+  const methods = walletUpgradeMethods();
+  const request = walletUpgradeFundingRequest(
+    0x26,
+    testPrincipal(96),
+    123_456n,
+  );
+  return {
+    label: "wallet-v306-to-v310",
+    targetId: "wallet",
+    initial: [
+      PRODUCTION_KERNEL_V323_ARCHIVE,
+      PRODUCTION_CONTACTS_V304_ARCHIVE,
+      PRODUCTION_WALLET_V306_ARCHIVE,
+    ],
+    candidatePath: "../../../apps/wallet/wallet.v0.3.10.neutron",
+    candidateVersion: 310,
+    candidateSha256Environment: "NEUTRON_FINAL_WALLET_CANDIDATE_SHA256",
+    withIcp: true,
+    async seedAndCapture({ callApp }) {
+      await callApp("wallet_set_ledgers", methods.setLedgers, [[ICP_LEDGER]]);
+      await callApp("wallet_refresh_balances", methods.refreshBalances, [null]);
+      const snapshotBefore = await callApp(
+        "wallet_snapshot",
+        methods.snapshot,
+        [null],
+      );
+      expect(snapshotBefore).toMatchObject({
+        configured: true,
+        ledgers: [{ principal: ICP_LEDGER, balance: [200_000_000n] }],
+      });
+      const commandBefore = (await callApp(
+        "wallet_funding_prepare_v1",
+        methods.fundingPrepare,
+        [request],
+      )) as WalletUpgradePrepareResult;
+      expect(commandBefore).toMatchObject({
+        ok: { prepared: { command_id: walletUpgradeCommandId(request) } },
+      });
+      return async () => {
+        expect(
+          await callApp("wallet_snapshot", methods.snapshot, [null]),
+        ).toEqual(snapshotBefore);
+        expect(
+          await callApp("wallet_funding_prepare_v1", methods.fundingPrepare, [
+            replacedEndpointWalletUpgradeRequest(request, "v306"),
+          ]),
+        ).toEqual(commandBefore);
+        for (const conflictRequest of conflictingWalletUpgradeRequests(
+          request,
+        )) {
+          const conflict = (await callApp(
+            "wallet_funding_prepare_v1",
+            methods.fundingPrepare,
+            [conflictRequest],
+          )) as WalletUpgradePrepareResult;
+          if (!("err" in conflict)) {
+            throw new Error("Wallet v0.3.6 command lost its durable intent");
+          }
+          expect(conflict.err).toContain("conflicts with another intent");
+        }
+      };
+    },
+  };
+}
+
+async function runProductionAppUpgradeQualification(
+  qualification: ProductionAppUpgradeCase,
+): Promise<void> {
+  const initialArchives = await Promise.all(
+    qualification.initial.map(preparePinnedProductionArchive),
+  );
+  const initialPackages = initialArchives.map(({ prepared }) => prepared);
+  const predecessor = initialPackages.find(
+    ({ manifest }) => manifest.id === qualification.targetId,
+  );
+  if (predecessor === undefined) {
+    throw new Error(`${qualification.label} predecessor is missing`);
+  }
+
+  const candidateSha256 =
+    process.env[qualification.candidateSha256Environment] ?? "";
+  if (!/^[a-f0-9]{64}$/u.test(candidateSha256)) {
+    throw new Error(
+      `${qualification.candidateSha256Environment} must be a reviewed lowercase SHA-256`,
+    );
+  }
+  const candidateArchive = new Uint8Array(
+    await readFile(new URL(qualification.candidatePath, import.meta.url)),
+  );
+  const candidate = preparePackageInstall(candidateArchive, {
+    expectedIdentity: {
+      id: qualification.targetId,
+      version: qualification.candidateVersion,
+      sha256: candidateSha256,
+    },
+  });
+  expect(candidate.manifest.memory).toEqual(predecessor.manifest.memory);
+
+  const initial = await compileFreshPackages({
+    packages: initialPackages,
+    persistenceMode: "classical",
+  });
+  const state = freshPackageState(initialPackages, initial);
+  const upgraded = await compilePackages({
+    packages: [candidate],
+    existingModules: state.existingModules,
+    existingConfigs: state.existingConfigs,
+    existingApps: state.apps,
+    existingBrowserSurfaceOriginAppIds: state.browserSurfaceOriginAppIds,
+    existingStable: state.previousStable,
+    connectionProviderSupport: state.connectionProviderSupport,
+    persistenceMode: "classical",
+    versionPolicy: "strict-upgrade",
+  });
+  expect(upgraded.compatibilityDiagnostics).toEqual([]);
+  expect(upgraded.managedMemoryRetirements).toEqual([]);
+  expect(upgraded.migrationPlan.removedApps).toEqual([]);
+  expect(upgraded.migrationPlan.destructiveMemoryRoots).toEqual([]);
+
+  const provision = await loadProvisionHarness();
+  const binary = requiredPocketIcBinary();
+  expect(sha256Hex(new Uint8Array(await readFile(binary)))).toBe(
+    PINNED_POCKET_IC_SHA256,
+  );
+  const temporaryRoot = await mkdtemp(
+    path.join(tmpdir(), `neutron-${qualification.label}-pocketic-`),
+  );
+  let server: ChildProcessWithoutNullStreams | undefined;
+  let client: DirectPocketIcClient | undefined;
+  let instanceId: number | undefined;
+
+  try {
+    const launched = await launchPocketIc(binary, temporaryRoot);
+    server = launched.server;
+    client = new provision.PocketIcRestClient(launched.controlUrl, {
+      requestTimeoutMs: 120_000,
+    }) as DirectPocketIcClient;
+    const created = await createApplicationInstance(
+      launched.controlUrl,
+      path.join(temporaryRoot, "state"),
+      qualification.withIcp ?? false,
+    );
+    instanceId = created.instanceId;
+    const deployer = testPrincipal(101);
+    const owner = testPrincipal(102);
+    const direct = new DirectPocketIcCalls(client, instanceId);
+    const canisterId = await direct.createCanister(
+      deployer,
+      created.defaultEffectiveCanisterId,
+    );
+    if (qualification.withIcp === true) {
+      await fundIcp(direct, canisterId, 200_000_000n);
+    }
+    await direct.installInitial(canisterId, deployer, initial);
+    await direct.setControllers(canisterId, deployer, [deployer, canisterId]);
+
+    const deployerActor = provision.createDirectPocketIcKernelActor({
+      controlUrl: launched.controlUrl,
+      instanceId,
+      canisterId: canisterId.toText(),
+      caller: deployer,
+      client,
+    });
+    await provision.seedFreshKernel({
+      actor: deployerActor,
+      canisterId: canisterId.toText(),
+      deployment: freshDeployment(initialArchives, initial),
+      concurrency: 32,
+      logger: silentLogger,
+    });
+    const token = new Uint8Array(32).fill(0x6d);
+    expect(
+      await direct.kernelActivation(canisterId, deployer, {
+        set: sha256(token),
+      }),
+    ).toEqual({ ready: null });
+    expect(
+      await direct.kernelActivation(canisterId, owner, { use: token }),
+    ).toEqual({ authorized: null });
+
+    const ownerActor = provision.createDirectPocketIcKernelActor({
+      controlUrl: launched.controlUrl,
+      instanceId,
+      canisterId: canisterId.toText(),
+      caller: owner,
+      client,
+    });
+    const runtimeBefore = await ownerActor.kernel_runtime_info();
+    const appBefore = requiredAppInstance(
+      normalizeAppInstances(runtimeBefore.apps),
+      qualification.targetId,
+    );
+    expect(appBefore.version).toBe(predecessor.manifest.version);
+    const callApp = (
+      name: string,
+      method: IDL.FuncClass,
+      args: unknown[],
+    ) =>
+      direct.actorCall(
+        canisterId,
+        owner,
+        physicalAppMethodName(qualification.targetId, name),
+        method,
+        args,
+      );
+    const assertDurableState = await qualification.seedAndCapture({
+      direct,
+      canisterId,
+      owner,
+      callApp,
+    });
+
+    const deployed = await deployExactTransition({
+      actor: ownerActor,
+      canisterId,
+      packages: [candidate],
+      state,
+      compiled: upgraded,
+      expectedDeploymentId: initial.deploymentId,
+    });
+    const memoryRootsBefore = normalizeMemoryInventory(runtimeBefore.memories)
+      .map(([memoryOwner, id, version]) => `${memoryOwner}/${id}@${version}`)
+      .sort();
+    expect(
+      deployed.compiled.migrationPlan.upgrades
+        .map((upgrade) =>
+          upgrade.kind === "keep"
+            ? `${upgrade.owner}/${upgrade.memoryId}@${upgrade.version}`
+            : upgrade.kind,
+        )
+        .sort(),
+    ).toEqual(memoryRootsBefore);
+
+    const runtimeAfter = await ownerActor.kernel_runtime_info();
+    const appAfter = requiredAppInstance(
+      normalizeAppInstances(runtimeAfter.apps),
+      qualification.targetId,
+    );
+    const compiledApp = requiredCompiledAppInstance(
+      upgraded.appInstanceInventory,
+      qualification.targetId,
+    );
+    expect(appAfter).toEqual({
+      ...appBefore,
+      version: qualification.candidateVersion,
+      deployment_id: deployed.compiled.deploymentId,
+      capability_plan_fingerprint: compiledApp.capability_plan_fingerprint,
+      resident_frame_security: compiledApp.resident_frame_security,
+    });
+    expect(normalizeMemoryInventory(runtimeAfter.memories)).toEqual(
+      normalizeMemoryInventory(runtimeBefore.memories),
+    );
+    expect(await ownerActor.kernel_install_status(null)).toEqual([]);
+    await assertDurableState();
+    expect(direct.externalInstallModes).toEqual(["install"]);
+  } finally {
+    if (client !== undefined && instanceId !== undefined) {
+      await client.deleteInstance(instanceId).catch(() => undefined);
+    }
+    if (server !== undefined) await stopPocketIc(server);
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+async function preparePinnedProductionArchive(
+  release: PinnedProductionArchive,
+): Promise<PreparedArchive> {
+  const archive = new Uint8Array(
+    await readFile(new URL(release.relativePath, import.meta.url)),
+  );
+  expect(archive.byteLength, `${release.label} bytes`).toBe(release.bytes);
+  expect(sha256Hex(archive), `${release.label} SHA-256`).toBe(release.sha256);
+  return {
+    archive,
+    prepared: preparePackageInstall(archive, {
+      expectedIdentity: {
+        id: release.id,
+        version: release.version,
+        sha256: release.sha256,
+      },
+    }),
+  };
+}
+
+function kitchenSinkUpgradeMethods() {
+  return {
+    saveProfile: IDL.Func(
+      [IDL.Tuple(IDL.Text, IDL.Text, IDL.Text, IDL.Bool)],
+      [IDL.Text],
+      [],
+    ),
+    readProfile: IDL.Func([IDL.Null], [IDL.Text], ["query"]),
+    bumpCounter: IDL.Func([IDL.Nat], [IDL.Nat], []),
+    readCounter: IDL.Func([IDL.Null], [IDL.Nat], ["query"]),
+  };
+}
+
+function contactsUpgradeMethods() {
+  const blob = IDL.Vec(IDL.Nat8);
+  const contactKind = IDL.Variant({ person: IDL.Null, self: IDL.Null });
+  const destination = IDL.Variant({
+    neutron: IDL.Principal,
+    internet_computer: IDL.Record({
+      owner: IDL.Principal,
+      subaccount: IDL.Opt(blob),
+    }),
+    bitcoin_mainnet: IDL.Text,
+    dogecoin_mainnet: IDL.Text,
+    ethereum_mainnet: IDL.Text,
+    solana_mainnet: IDL.Text,
+  });
+  const addressInput = IDL.Record({
+    id: IDL.Opt(IDL.Nat),
+    address_label: IDL.Opt(IDL.Text),
+    destination,
+    preferred: IDL.Bool,
+  });
+  const address = IDL.Record({
+    id: IDL.Nat,
+    address_label: IDL.Opt(IDL.Text),
+    destination,
+    preferred: IDL.Bool,
+  });
+  const contact = IDL.Record({
+    id: IDL.Nat,
+    revision: IDL.Nat,
+    kind: contactKind,
+    name: IDL.Text,
+    notes: IDL.Text,
+    addresses: IDL.Vec(address),
+    created_at: IDL.Int,
+    updated_at: IDL.Int,
+  });
+  return {
+    save: IDL.Func(
+      [
+        IDL.Record({
+          id: IDL.Opt(IDL.Nat),
+          expected_revision: IDL.Opt(IDL.Nat),
+          kind: contactKind,
+          name: IDL.Text,
+          notes: IDL.Text,
+          addresses: IDL.Vec(addressInput),
+        }),
+      ],
+      [IDL.Reserved],
+      [],
+    ),
+    get: IDL.Func(
+      [IDL.Record({ id: IDL.Nat })],
+      [IDL.Opt(contact)],
+      ["query"],
+    ),
+    revision: IDL.Func(
+      [IDL.Null],
+      [IDL.Record({ revision: IDL.Nat })],
+      ["query"],
+    ),
+  };
 }
 
 type PreparedArchive = Readonly<{
@@ -1949,7 +3341,7 @@ class DirectPocketIcCalls {
     );
   }
 
-  private actorCall(
+  actorCall(
     canisterId: Principal,
     caller: Principal,
     name: string,
@@ -1957,6 +3349,40 @@ class DirectPocketIcCalls {
     args: unknown[],
   ): Promise<unknown> {
     return this.call(canisterId, caller, name, method, args);
+  }
+
+  async submitActorCall(
+    canisterId: Principal,
+    caller: Principal,
+    name: string,
+    method: IDL.FuncClass,
+    args: unknown[],
+  ): Promise<{ message: unknown; method: IDL.FuncClass }> {
+    if (method.annotations.includes("query")) {
+      throw new Error("Cannot submit a query as ingress");
+    }
+    const message = await this.client.submitIngressMessage(this.instanceId, {
+      canisterId,
+      sender: caller,
+      method: name,
+      payload: new Uint8Array(IDL.encode(method.argTypes, args)),
+    });
+    return { message, method };
+  }
+
+  async awaitActorCall({
+    message,
+    method,
+  }: {
+    message: unknown;
+    method: IDL.FuncClass;
+  }): Promise<unknown> {
+    const response = await this.client.awaitIngressMessage(
+      this.instanceId,
+      message,
+    );
+    const values = IDL.decode(method.retTypes, response);
+    return values.length === 0 ? undefined : values[0];
   }
 
   private async call(
@@ -2374,6 +3800,7 @@ async function launchPocketIc(
 async function createApplicationInstance(
   controlUrl: string,
   stateDirectory: string,
+  withIcp = false,
 ): Promise<{ instanceId: number; defaultEffectiveCanisterId: string }> {
   const subnet = {
     state_config: "New",
@@ -2383,10 +3810,10 @@ async function createApplicationInstance(
   };
   const config = {
     subnet_config_set: {
-      nns: null,
+      nns: withIcp ? subnet : null,
       sns: null,
       ii: null,
-      fiduciary: null,
+      fiduciary: withIcp ? subnet : null,
       bitcoin: null,
       test_threshold_keys: null,
       system: [],
@@ -2401,9 +3828,9 @@ async function createApplicationInstance(
     bitcoind_addr: null,
     dogecoind_addr: null,
     icp_features: {
-      registry: null,
-      cycles_minting: null,
-      icp_token: null,
+      registry: withIcp ? "DefaultConfig" : null,
+      cycles_minting: withIcp ? "DefaultConfig" : null,
+      icp_token: withIcp ? "DefaultConfig" : null,
       cycles_token: null,
       nns_governance: null,
       sns: null,
@@ -2415,7 +3842,7 @@ async function createApplicationInstance(
     },
     incomplete_state: "Disabled",
     initial_time: { AutoProgress: { artificial_delay_ms: null } },
-    mainnet_nns_subnet_id: false,
+    mainnet_nns_subnet_id: withIcp,
     disable_ingress_validation: false,
   };
   const response = await fetch(new URL("instances", controlUrl), {

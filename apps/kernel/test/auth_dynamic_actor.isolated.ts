@@ -59,6 +59,8 @@ const externalClientCalls: Array<{
 }> = [];
 let externalOwnerMethodCalls = 0;
 const fetchReceivers: unknown[] = [];
+const fetchInputs: string[] = [];
+const fetchBodies: Array<BodyInit | null | undefined> = [];
 const fetchSignals: Array<AbortSignal | null | undefined> = [];
 let blockedNativeFetch: Deferred<Response> | null = null;
 const EXTERNAL_CANISTER = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -132,6 +134,8 @@ globalThis.fetch = async function (
   init?: RequestInit,
 ) {
   fetchReceivers.push(this);
+  fetchInputs.push(String(input));
+  fetchBodies.push(init?.body);
   fetchSignals.push(init?.signal);
   assetFetchCount += 1;
   if (String(input).includes("/hang")) {
@@ -222,6 +226,8 @@ beforeEach(() => {
   externalOwnerMethodCalls = 0;
   externalIdlFactory = firstExternalIdlFactory;
   fetchReceivers.length = 0;
+  fetchInputs.length = 0;
+  fetchBodies.length = 0;
   fetchSignals.length = 0;
   blockedNativeFetch = null;
 });
@@ -482,15 +488,23 @@ test("strict schema discovery stays anonymous and every fetch is authority gated
   expect(guardedFetch).toBeFunction();
   if (!guardedFetch) throw new Error("Missing authority-checked fetch");
   const fakeAgentReceiver = { kind: "HttpAgent" };
+  const signedBody = new Uint8Array([1, 2, 3]);
+  const transportController = new AbortController();
   await Reflect.apply(guardedFetch, fakeAgentReceiver, [
-    "https://icp-api.io/api/v2/status",
+    "https://icp-api.io/api/v3/canister/aaaaa-aa/call",
+    { body: signedBody, method: "POST", signal: transportController.signal },
   ]);
   expect(fetchReceivers.at(-1)).toBe(globalThis);
+  expect(fetchInputs.at(-1)).toBe(
+    "https://icp-api.io/api/v2/canister/aaaaa-aa/call",
+  );
+  expect(fetchBodies.at(-1)).toBe(signedBody);
+  expect(fetchSignals.at(-1)).toBe(transportController.signal);
   const beforeRejectedFetch = assetFetchCount;
   authorityCurrent = false;
   expect(() =>
     Reflect.apply(guardedFetch, fakeAgentReceiver, [
-      "https://icp-api.io/api/v2/status",
+      "https://icp-api.io/api/v3/canister/aaaaa-aa/call",
     ]),
   ).toThrow("authority changed");
   expect(assetFetchCount).toBe(beforeRejectedFetch);

@@ -392,18 +392,22 @@ module {
         expiresAt : Nat64,
         calls : Capabilities.BackendCalls,
     ) : async* Result<Nat> {
-        switch (Icrc.decodeApprove(await* calls.call(Icrc.approveRequest(
-            ledger,
-            spender,
-            amount,
-            fee,
-            createdAt,
-            expiresAt,
-        )))) {
-            case (#err(error)) #err("Could not approve the minter: " # error);
-            case (#ok(#Ok(blockIndex))) #ok(blockIndex);
-            case (#ok(#Err(#Duplicate(value)))) #ok(value.duplicate_of);
-            case (#ok(#Err(error))) #err(Icrc.approveErrorText(error));
+        let args = {
+            from_subaccount = null;
+            spender = { owner = spender; subaccount = null };
+            amount;
+            expected_allowance = null;
+            expires_at = ?expiresAt;
+            fee = ?fee;
+            memo = null;
+            created_at_time = ?createdAt;
+        };
+        switch (await* Icrc.executeApprove(calls, ledger, args)) {
+            case (#ok(receipt)) #ok(receipt.block_index);
+            case (#rejected(error)) #err(error);
+            case (#unknown(error)) #err(
+                "Could not determine whether the minter approval completed: " # error,
+            );
         };
     };
 

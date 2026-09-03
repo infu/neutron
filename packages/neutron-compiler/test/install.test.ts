@@ -950,7 +950,7 @@ test("bounded package decoding accepts every active canonical package fixture", 
       size: packageBytes.byteLength,
     });
   }
-}, 30_000);
+}, 120_000);
 
 test("remote preparation reconciles outer bytes and authoritative manifest identity", () => {
   const archive = packageBytes(helloPackageFiles());

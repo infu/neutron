@@ -900,6 +900,14 @@ is injected. See
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md)
 for the complete policy.
 
+Listing a state-changing method is an explicit trust decision for every live
+tile, tray, and background endpoint of that app. It does not let another app
+invoke the method directly. Wallet, for example, lists its released
+contact-bound `wallet_transfer` method so its own Send confirmation can call
+`updateSelf()` without a second Kernel backend-call dialog. A cross-app Swap
+must instead call Wallet's declared provider tool; Wallet alone may turn the
+approved request into its preapproved backend update.
+
 ### Use A Browser Ethereum Provider
 
 Browser extensions do not reliably inject providers into Neutron's isolated
@@ -1065,17 +1073,173 @@ successful mutation into an apparent write failure.
 
 Use the global `createMsgBusClient()` for ordinary work outside a routed tool
 handler to list installed apps, live endpoints, and allowed tools. Same-app
-calls are allowed by default. Outside Agent Mode, cross-app tool listing or
-calls show a kernel-owned approval dialog and require a one-call or session
-grant. Inside a routed handler, use `context.kernel`; nested Agent Mode policy
-applies only to that scoped request. Arguments are JSON objects and schemas use
-JSON Schema draft-07. Tool metadata is treated as untrusted when shown to users
-or agents.
+calls are allowed by default. Outside Agent Mode, ordinary cross-app tool
+listing or calls show a kernel-owned approval dialog and require a one-call or
+session grant. A direct `provider_once` call is the exception described below:
+it bypasses that preliminary prompt and grant. Inside a routed handler, use
+`context.kernel`; nested Agent Mode policy applies only to that scoped request.
+Arguments are JSON objects and schemas use JSON Schema draft-07. Tool metadata
+is treated as untrusted when shown to users or agents.
 
 Keep tile-only control methods out of other apps' and agents' live catalogs by
 adding `annotations: { "neutron:visibility": "same_app" }`. The kernel filters
 discovery and rejects direct cross-app invocation; handlers should still
 validate the caller role when a control is tile-only.
+
+### Let A Trusted Provider Present One Decision
+
+Use `provider_once` when a trusted provider app must own one informed,
+domain-specific decision for a cross-app operation. Keep the public tool name
+and schema stable for callers, but have its resident handler present the
+provider's own foreground UI before preparing or executing any effect:
+
+```ts
+exposeTool(
+  "wallet_fund_v1",
+  {
+    title: "Fund a swap",
+    description: "Open Wallet to review and execute one funding operation.",
+    inputSchema: walletFundingInputSchema,
+    outputSchema: fundingResultSchema,
+    annotations: {
+      "neutron:consent": "provider_once",
+      "neutron:effects": ["network", "write", "user_visible_ui"],
+      "neutron:audit": "metadata_only",
+    },
+  },
+  async (request, context) => {
+    if (!context.presentUserInterface) {
+      throw new Error("Provider UI is unavailable on this Kernel");
+    }
+    validateFundingCallerAndRequest(request, context.caller);
+    return context.presentUserInterface({
+      tileId: "wallet",
+      tool: "wallet_funding_present_v1",
+      arguments: request,
+    });
+  },
+);
+```
+
+The schema and validation names above stand for the provider's own closed,
+bounded contracts; they are not SDK helpers. The named foreground tool is
+private to the same installation and declares its exact audience:
+
+```ts
+exposeTool(
+  "wallet_funding_present_v1",
+  {
+    title: "Review Wallet funding",
+    description: "Show and decide one exact transfer or allowance.",
+    inputSchema: walletFundingInputSchema,
+    outputSchema: fundingResultSchema,
+    annotations: {
+      "neutron:visibility": "same_app",
+      "neutron:audience": "foreground_tile",
+      "neutron:effects": ["write", "network", "user_visible_ui"],
+      "neutron:audit": "metadata_only",
+    },
+  },
+  async (request, context) => {
+    if (context.audience !== "foreground_tile") {
+      throw new Error("Foreground Wallet authority is required");
+    }
+    const prepared = await prepareExactFunding(
+      request,
+      context.caller,
+      context.kernel,
+    );
+    return showWalletFundingModal(prepared, context);
+  },
+);
+```
+
+Kernel treats the request and result as schema-validated opaque JSON. It opens
+or focuses the exact provider tile, attests `context.caller` and
+`context.audience`, and displays no provider-domain dialog.
+
+An exact live tile, tray, or ordinary background endpoint may start this public
+flow without source-frame focus or transient activation. That permission only
+presents the provider: the action in the provider's UI remains the one user
+decision. `foreground_tile` attests that Kernel routed the private call to the
+exact selected provider tile; it is not a continuing browser-focus capability.
+Focus or workspace selection may move while the exact endpoint session remains
+live. The selected provider tile must remain mounted until private dispatch;
+Kernel neither blurs the provider nor refocuses the caller when the interaction
+settles.
+
+For every provider flow:
+
+- feature-detect and consume `presentUserInterface()` before preparation or
+  execution, and use only Kernel-attested caller and audience facts;
+- keep request/result schemas closed and bounded; the attested tile may use
+  exact preapproved methods to prepare immutable non-value-moving review state
+  and persist terminal rejection, while only the affirmative action may
+  dispatch a
+  value-moving execute method; and
+- observe cancellation and use durable request identity, because cancellation
+  cannot undo a remote update already dispatched.
+
+The callback does not require `background_ui_requests`; it belongs to the
+source-bound invocation. Exact and wildcard grants cannot replace the one
+provider-owned decision.
+
+A Swap caller should use the exact stable target and versioned tool name rather
+than first listing another app's tools:
+
+```ts
+const funding = await callTool({
+  target: "app:wallet:background",
+  name: "wallet_fund_v1",
+  arguments: fundingRequest,
+});
+```
+
+Do not rely on wildcard payment grants. `context.requestApproval()` is a
+deprecated generic compatibility member, not an app/version allowlist. Current
+providers must use `presentUserInterface()` and cannot stack the two members of
+the shared one-use interaction. Released provider SDKs which predate and ignore
+the provider-UI marker, including Wallet 0.3.6, expose only
+`requestApproval()` and retain the generic Kernel raw-JSON review.
+
+The complete protocol, security invariants, and Wallet funding contract live in
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md#provider-mediated-one-shot-tools),
+[Kernel-App Communication](./kernel-app-communication.md#provider-mediated-one-shot-consent),
+and [Wallet](../apps/wallet/README.md#app-funding-contract).
+
+For an active root agent, expose a separate exact tool instead of bypassing the
+human flow inside `wallet_fund_v1`:
+
+```ts
+exposeTool(
+  "wallet_fund_root_v1",
+  {
+    title: "Fund an app as the root agent",
+    description: "Execute one exact Wallet funding operation without UI.",
+    inputSchema: walletFundingInputSchema,
+    outputSchema: fundingResultSchema,
+    annotations: {
+      "neutron:visibility": "same_app",
+      "neutron:audience": "agent_root",
+      "neutron:effects": ["write", "network"],
+      "neutron:audit": "metadata_only",
+    },
+  },
+  async (request, context) => {
+    if (context.audience !== "agent_root") {
+      throw new Error("Root-agent authority is required");
+    }
+    return prepareAndExecuteExactFunding(request, context);
+  },
+);
+```
+
+Kernel exposes and dispatches an `agent_root` tool only to the active live
+depth-zero root invocation and injects that audience into the handler. Human
+callers and nested agents are rejected before provider dispatch. The root tool
+shows neither Wallet nor Kernel UI, but it uses the same validation, durable
+command, exact preapproved self calls, and reconciliation logic as the human
+path.
 
 ### Declare An Agent Entrypoint
 
@@ -1103,8 +1267,10 @@ tools:
 
 `agent_entrypoints.entrypoints` may contain up to four exact resident tool
 names. It is an install disclosure, not a grant. The owner enables one exact
-entrypoint in a kernel danger dialog. A turn then starts only when the app's
-focused tile calls that entrypoint during transient user activation.
+entrypoint in a kernel danger dialog from a focused tile during transient user
+activation. A turn then starts only when a live tile in that app installation
+calls the exact granted entrypoint; the existing grant removes any per-turn
+browser-focus, transient-activation, or owner-dialog requirement.
 
 Inside every tool handler, use the supplied `context.kernel` client for calls
 that may be nested under another app or agent invocation:
@@ -1153,6 +1319,14 @@ as cancellation of future work, not rollback of a remote call already sent.
 false otherwise. Use it only for a narrow app-owned policy; it is not a
 substitute for normal kernel permission checks or caller validation.
 
+Do not call a human `provider_once` presentation flow from Agent Mode. A trusted
+provider that supports autonomous root work exposes a separate
+`same_app` + `agent_root` tool, checks `context.audience`, and shares only its
+validated prepare/execute core with the human path. Kernel admits that tool
+only for the active depth-zero root; human callers and nested agent invocations
+are rejected before target dispatch. Do not expose an ordinary public bypass
+or branch around Wallet UI based only on caller-supplied data.
+
 Only the approved root agent handler receives `context.agentConsent`. Register
 its private decision and cancellation callbacks for the dynamic extent of the
 turn. They are kernel control messages on the existing private bus and are not
@@ -1162,6 +1336,13 @@ to receive challenge ids.
 `background_ui_requests.categories` lists which normal owner-dialog classes a
 resident may request outside Agent Mode. It does not preapprove them. Omit
 classes the background does not need.
+
+Enabling Agent Mode does not let the resident originate a root without a live
+tile. A root starts through a live tile in the enabled Agent installation and
+the exact granted entrypoint, but does not require browser focus or transient
+user activation. A trusted provider may execute without additional owner
+dialogs only inside that live, bounded invocation; its authority ends with the
+root or Agent Mode session.
 
 ### Focus Or Open Another App Tile
 
@@ -1181,22 +1362,21 @@ await openAppTile({
 
 The kernel always searches the current workspace for the exact app/tile pair
 and reuses it before opening another instance. It may focus that instance
-or open a missing one without a dialog when the request comes from the currently
-focused tile with transient user activation. A focused open tray has a narrower
-shortcut: during transient user activation it may open or reuse only a tile of
-its own app. Opening another app's tile retains kernel consent. These are
-user-visible navigation operations; they do not grant cross-app tools, backend
-methods, identities, or canister calls. Background processes and non-focused
-surfaces require the normal consent path.
+or open a missing one without a Kernel dialog for any live direct app endpoint,
+including a tile, tray, or resident background. This is intentional navigation
+authority for installed apps: it can change the visible workspace, but it does
+not grant cross-app tools, backend methods, identities, canister calls, or the
+right to accept another app's decision UI. Install only apps whose UI behavior
+you trust; a malicious app could otherwise interrupt the owner by repeatedly
+opening or focusing tiles.
 
-If no matching tile is open, the kernel shows one trusted Open Tile dialog
-unless a focused tile is handling the activated click or a focused tray is
-using the activated same-app shortcut. Approval is once-only and opens exactly
-one installed tile; there is no "allow for session" option. Omit `workspace` to
-use the active workspace. A supplied workspace must be the active workspace;
+No preliminary permission request or session grant is needed. Omit `workspace`
+to use the active workspace. A supplied workspace must be the active workspace;
 apps cannot switch workspaces, and `reuseExisting: false` cannot force a
-duplicate. App-driven navigation is throttled to one new tile per 20 seconds and
-one focus change per two seconds, and kernel workspace capacities still apply.
+duplicate. Delegated Agent navigation retains its separate bounded decision
+policy and is throttled to one new tile per 20 seconds
+and one focus change per two seconds. Kernel workspace capacities still apply
+to every caller.
 
 `view` is an optional navigation token matching
 `^[a-z][a-z0-9_/-]{0,63}$`. It carries no payload and no authority. A target
@@ -1281,9 +1461,10 @@ names exact tiles only. The transient endpoint is
 `app:<appId>:tray:instance:<instanceId>` and disappears when the popover closes,
 so fetch state from the resident process on every mount. Calls from the tray to
 its own background use the normal same-app message bus without approval. A tray
-does not inherit tile-only privileges. From a focused click, it may open or
-reuse a tile of the same app without a dialog; opening another app's tile keeps
-the normal kernel consent flow.
+does not inherit tile-only privileges. Any live direct tray endpoint may open or
+reuse an installed tile without a Kernel dialog. Navigation remains in the
+active workspace, always reuses the exact app/tile instance, and observes the
+normal tile-capacity bounds.
 
 See [App Tray](./app-tray.md) for the complete package, lifecycle, geometry,
 SDK, and security contract. Kitchen Sink is the reference for a quiet initial
@@ -1479,7 +1660,12 @@ the whole-principal ledger scope plus the exact history-index, native-route, and
 gas-ledger helper scopes required by that catalog entry. For a user-supplied
 custom ledger, it requests separate `exact` scopes for `icrc1_metadata`,
 `icrc1_balance_of`, `icrc1_fee`, `icrc1_transfer`, and `icrc3_get_blocks`
-instead of whole-principal access.
+instead of whole-principal access. Wallet allowance funding and enumeration add
+only `icrc2_allowance`, `icrc2_approve`, and
+`icrc103_get_allowances`. An existing custom-ledger installation retains its
+old scopes and behavior; the Wallet shows **permission required** until its
+normal ledger-settings batch grants those additional methods. A Swap or
+Approvals read must not create a surprise persistent-access prompt.
 
 The global helper above is for ordinary work outside a routed handler and uses
 the persistent-access owner dialog. During a routed Agent Mode invocation, an
@@ -1634,8 +1820,12 @@ Handle `#outcome_unknown` as final for that attempt; do not retry it
 automatically. Local assembly supports ECDSA `dfx_test_key` only, so a local
 Schnorr slot honestly returns `#key_unavailable`. Assertions are visible to
 subnet replicas during replicated canister execution and must not contain
-plaintext secrets. Future value-moving transaction adapters require separate,
-one-shot owner confirmation; this install grant never supplies that consent.
+plaintext secrets. A future Kernel-provided raw threshold-transaction adapter
+requires a separate, one-shot owner confirmation; this assertion install grant
+never supplies that consent, and an ordinary tool/agent grant cannot replace
+it. This stricter raw-signing rule is separate from an owner-trusted Wallet app
+which owns its protocol semantics and modal, then uses its own exact
+preapproved backend method.
 An external verifier can still assign high-impact authority to a signed
 assertion, so constrain assertion semantics and verifier policy. See
 [App-Isolated Chain-Key Assertion Signing
@@ -2466,13 +2656,24 @@ Current important gaps:
 - persistent cross-app grants and browser resource quotas are still follow-up
   work; camera and microphone are separately gated by exact per-tile
   `browser_permissions`, while current frontend message-bus grants are one-call
-  or session scoped;
+  or session scoped and a `provider_once` presentation deliberately accepts
+  neither kind in place of its provider-owned per-operation decision;
 - package publisher signatures remain separate from the implemented memory
   ownership and schema-hash checks.
 
 Do not ask users to trust package-provided schemas. Apps can use schemas for
 their own UI rendering, but the kernel must derive and validate schemas itself
 before making calls.
+
+A direct root agent may inspect the exact current installation through the
+bounded `source.*` tools. That view is useful defense in depth but is installed
+build output, not necessarily the complete repository: bundles may be minified,
+retained Motoko is transformed, and generated, omitted, or binary content may
+be unavailable. Review never replaces closed capabilities, Kernel-derived
+endpoint and Agent provenance, exact amounts/accounts/expiry, post-`await`
+rechecks, or durable retry safety. Updating the provider also invalidates the
+old endpoint and Agent authority even if a prior review found no malicious
+code.
 
 ## Package Contents
 

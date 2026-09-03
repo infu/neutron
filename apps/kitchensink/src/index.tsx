@@ -25,6 +25,7 @@ import {
   IoServerOutline,
   IoStopwatchOutline,
   IoSwapHorizontalOutline,
+  IoWalletOutline,
 } from "react-icons/io5";
 import {
   createCanisterClient,
@@ -131,6 +132,7 @@ const DEMOS: readonly DemoDefinition[] = [
   { id: "composition", group: "Platform", label: "Composition", summary: "Typed app calls and ordered function resources.", icon: IoLinkOutline },
   { id: "memory", group: "Platform", label: "Memory", summary: "Managed stable memory and reviewed writes.", icon: IoAppsOutline },
   { id: "bus", group: "Platform", label: "Message bus", summary: "Live endpoint discovery and app tools.", icon: IoSwapHorizontalOutline },
+  { id: "wallet_funding", group: "Platform", label: "Wallet funding", summary: "Wallet-owned ICP transfer and allowance approval.", icon: IoWalletOutline },
   { id: "tray", group: "Platform", label: "Tray", summary: "Resident popout with optional live badge state.", icon: IoBrowsersOutline },
   { id: "schemas", group: "Platform", label: "Schemas", summary: "Installed Candid-derived method metadata.", icon: IoCodeSlashOutline },
   { id: "data", group: "Platform", label: "Dense data", summary: "Copy, wrapping, and JSON containment.", icon: IoGridOutline },

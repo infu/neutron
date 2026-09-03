@@ -37,6 +37,16 @@ export type WalletSnapshot = {
   ledgers: WalletLedger[];
 };
 
+export function walletLedgerByPrincipal(
+  snapshot: WalletSnapshot | null,
+  principal: string | null,
+): WalletLedger | null {
+  if (!snapshot || !principal) return null;
+  return (
+    snapshot.ledgers.find((ledger) => ledger.principal === principal) ?? null
+  );
+}
+
 export function parseWalletSnapshotResult(value: JsonValue): WalletSnapshot {
   if (isJsonObject(value) && isJsonObject(value.snapshot)) {
     return parseWalletSnapshot(value.snapshot as JsonValue);

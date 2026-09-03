@@ -30,6 +30,29 @@ catalogued installed artifacts without adding a backend API or state schema.
 See [Kernel-App Communication](../../doc/kernel-app-communication.md#exact-installed-artifact-inspection)
 and [Kernel Frontend Runtime](../../doc/kernel-frontend-runtime.md#exact-installed-artifact-inspection).
 
+The frontend message bus also supports the generic
+`{"neutron:consent":"provider_once"}` tool annotation. On the current provider-UI
+lane, it lets an exact target app ask once for its own foreground UI during the
+live public handler call. Kernel derives the provider and original caller from
+the one-use capability, opens or reuses and focuses the provider's exact tile,
+and routes the opaque request only to a private tool annotated with
+`"neutron:visibility":"same_app"` and
+`"neutron:audience":"foreground_tile"`. Kernel attests that audience and the
+caller but neither renders a decision dialog nor interprets provider-specific
+fields. The provider tile may use exact preapproved methods to prepare review
+state or persist rejection, owns the single user decision, and may dispatch a
+value-moving execute method only after acceptance. Ordinary session grants
+cannot bypass this path.
+
+A separate private tool annotated with
+`"neutron:visibility":"same_app"` and
+`"neutron:audience":"agent_root"` may be routed without UI only to the incoming
+live depth-zero Agent root. Human and nested-agent calls are rejected before
+target dispatch. The deprecated provider `requestApproval` callback and its
+raw Kernel JSON dialog remain as a generic compatibility surface for released
+providers, while current provider code uses `context.presentUserInterface`. See
+[App Method Access And Call Consent](../../doc/app-method-access-and-call-consent.md#provider-mediated-one-shot-tools).
+
 Kernel-authorized principals are never request-rate-limited or counted. Fixed-
 hour request windows protect only callers outside that set on declared public-
 ingress updates and anonymous HTTP gateway POST handlers; route caller-policy

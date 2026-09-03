@@ -22,10 +22,23 @@ assertion bytes. The kernel owns everything else:
 
 This deliberately leaves no app-controlled key name, derivation path, raw
 digest, cycle amount, BIP341 auxiliary value, or management-canister actor.
-Future Bitcoin, EVM, Solana, or credential flows need typed protocol adapters.
-Any adapter capable of moving value must require a one-shot, transaction-shaped
-owner review immediately before signing; installing this assertion capability
-must never preapprove one.
+Future Kernel-provided raw Bitcoin, EVM, Solana, or credential signing flows
+need typed protocol adapters. Any such adapter capable of moving value must
+require a one-shot, transaction-shaped owner review immediately before signing;
+installing this assertion capability and granting an ordinary app/agent tool
+must never preapprove that raw-signing decision.
+
+This stricter boundary is about a Kernel broker holding a generic threshold
+transaction-signing primitive. It does not govern a separately installed,
+owner-trusted Wallet app which understands its own asset protocol, prepares a
+bounded operation in its own foreground tile using exact preapproved methods,
+and dispatches value-moving execution only after the user accepts the Wallet
+modal. Kernel
+opens and focuses the exact provider tile but neither renders nor interprets
+the token decision. A separate direct-root Wallet tool may use the same checked
+prepare/execute core without UI only when Kernel attests the active depth-zero
+root. That app-level Wallet remains isolated and untrusted by Kernel; it
+receives no raw chain-key signer from this capability.
 
 A signature is still authority-bearing evidence: an external verifier can
 choose to interpret any assertion as permission for a high-impact action. App
@@ -337,8 +350,8 @@ V1 intentionally excludes arbitrary prehash/raw signing, direct transaction or
 protocol encoders, child derivation paths, caller-selected master keys, batch
 signing, BIP341 auxiliary data, delegated signing sessions, browser-held
 signing material, automatic retries, and canister signatures. Typed transaction
-adapters and `canister_signatures` are distinct future capabilities with their
-own consent and lifecycle models.
+adapters which expose raw Kernel threshold signing and `canister_signatures`
+are distinct future capabilities with their own consent and lifecycle models.
 
 See also the IC overview of [chain-key cryptography](https://docs.internetcomputer.org/concepts/chain-key-cryptography/)
 and the authoritative [management-canister interface](https://docs.internetcomputer.org/references/ic-interface-spec/management-canister/).

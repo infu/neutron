@@ -40,6 +40,7 @@ import {
   setTrayState,
   updateSelf,
   approveVetKeyDerivation,
+  type JsonObject,
   type MsgBusToolCall,
   type VetKeyPublicInfo,
   type VetKeySlotSummary,
@@ -47,8 +48,13 @@ import {
 import {
   MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
   MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
+  MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
+  NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+  NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
   kernelCallPayloadSchema,
   kernelSchemaPayloadSchema,
+  normalizeToolDescriptor,
 } from "../src/protocol.ts";
 import {
   executeExposedAction,
@@ -299,6 +305,47 @@ test("exec envelope guard rejects malformed postMessage data", () => {
       },
     }),
   ).toBe(true);
+
+  const inheritedInvocationFields = [
+    "id",
+    "rootId",
+    "capability",
+    "agentConsent",
+  ] as const;
+  const previousInvocationFields = new Map(
+    inheritedInvocationFields.map((name) => [
+      name,
+      Object.getOwnPropertyDescriptor(Object.prototype, name),
+    ]),
+  );
+  try {
+    Object.defineProperties(Object.prototype, {
+      id: { configurable: true, value: "i".repeat(16) },
+      rootId: { configurable: true, value: "r".repeat(16) },
+      capability: { configurable: true, value: "c".repeat(64) },
+      agentConsent: { configurable: true, value: true },
+    });
+    expect(
+      isExecEnvelope({
+        type: "exec",
+        id: 5,
+        payload: {
+          action: "call",
+          payload: null,
+          context: { invocation: {} },
+        },
+      }),
+    ).toBe(false);
+  } finally {
+    for (const name of inheritedInvocationFields) {
+      const descriptor = previousInvocationFields.get(name);
+      if (descriptor === undefined) {
+        Reflect.deleteProperty(Object.prototype, name);
+      } else {
+        Object.defineProperty(Object.prototype, name, descriptor);
+      }
+    }
+  }
 
   expect(isExecEnvelope(null)).toBe(false);
   expect(isExecEnvelope({ type: "exec", id: 0 })).toBe(false);
@@ -935,6 +982,585 @@ test("endpoint tools publish schemas and validate inputs and outputs", async () 
   expect(removeExposedTool("test_double")).toBe(true);
 });
 
+test("provider-reviewed handlers receive one private approval callback", async () => {
+  const fakeWindow = installFakeWindow();
+  const capability = "a".repeat(64);
+  let secondApprovalError = "";
+  const review = {
+    amount: "10.00000000 TEST",
+    fee: "0.00010000 TEST",
+    recipient: "aaaaa-aa",
+  };
+  exposeTool(
+    "provider_transfer",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        required: ["sent"],
+        properties: { sent: { type: "boolean" } },
+        additionalProperties: false,
+      },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    async (_args, context) => {
+      if (!context.requestApproval) {
+        throw new Error("Provider approval is unavailable");
+      }
+      expect(context.presentUserInterface).toBeUndefined();
+      await context.requestApproval(review);
+      try {
+        await context.requestApproval(review);
+      } catch (error) {
+        secondApprovalError = (error as Error).message;
+      }
+      return { sent: true };
+    },
+  );
+
+  const invocation = {
+    id: "1".repeat(16),
+    rootId: "2".repeat(16),
+    capability: "3".repeat(64),
+  };
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 61,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "provider_transfer",
+        arguments: {},
+        providerApproval: { capability },
+      },
+      context: { invocation },
+    },
+  });
+  await nextTick();
+  const approval = fakeWindow.parent.messages.find(
+    ({ message }) =>
+      (message as { type?: unknown }).type === "exec" &&
+      (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_approval.request",
+  )?.message as
+    | {
+        id: number;
+        payload: {
+          payload: unknown;
+          context?: { invocation?: unknown };
+        };
+      }
+    | undefined;
+  expect(approval).toMatchObject({
+    payload: {
+      action: "provider_approval.request",
+      payload: { capability, review },
+      context: { invocation },
+    },
+  });
+  if (!approval) throw new Error("Missing provider approval request");
+  fakeWindow.dispatch({
+    type: "response",
+    id: approval.id,
+    ok: { approved: true },
+  });
+  await nextTick();
+  expect(fakeWindow.parent.messages).toContainEqual({
+    message: { type: "response", id: 61, ok: { sent: true } },
+    targetOrigin: "port",
+  });
+  expect(secondApprovalError).toBe(
+    "Provider interaction callback was already used",
+  );
+  expect(
+    fakeWindow.parent.messages.filter(
+      ({ message }) =>
+        (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_approval.request",
+    ),
+  ).toHaveLength(1);
+  removeExposedTool("provider_transfer");
+});
+
+test("provider approval accepts only one own decision field", async () => {
+  const fakeWindow = installFakeWindow();
+  const capability = "2".repeat(64);
+  exposeTool(
+    "provider_exact_decision",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    async (_args, context) => {
+      if (!context.requestApproval) {
+        throw new Error("Provider approval is unavailable");
+      }
+      await context.requestApproval({ summary: "One bounded operation" });
+      return null;
+    },
+  );
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 610,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "provider_exact_decision",
+        arguments: {},
+        providerApproval: { capability },
+      },
+    },
+  });
+  await nextTick();
+  const approval = fakeWindow.parent.messages.find(
+    ({ message }) =>
+      (message as { payload?: { action?: unknown } }).payload?.action ===
+      "provider_approval.request",
+  )?.message as { id?: unknown } | undefined;
+  if (typeof approval?.id !== "number") {
+    throw new Error("Missing provider approval request");
+  }
+  const inheritedApproved = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    "approved",
+  );
+  try {
+    Object.defineProperty(Object.prototype, "approved", {
+      configurable: true,
+      value: true,
+    });
+    fakeWindow.dispatch({
+      type: "response",
+      id: approval.id,
+      ok: { unrelated: null },
+    });
+    await nextTick();
+  } finally {
+    if (inheritedApproved === undefined) {
+      Reflect.deleteProperty(Object.prototype, "approved");
+    } else {
+      Object.defineProperty(Object.prototype, "approved", inheritedApproved);
+    }
+  }
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 610,
+    error: { message: "Invalid provider approval response" },
+  });
+  removeExposedTool("provider_exact_decision");
+});
+
+test("provider presentation sends one exact closed request and shares the approval gate", async () => {
+  const fakeWindow = installFakeWindow();
+  const capability = "c".repeat(64);
+  const presentation = {
+    tileId: "approval_panel",
+    tool: "review_request_v1",
+    arguments: {
+      requestId: "00112233445566778899aabbccddeeff",
+      amountAtoms: "1000000",
+    },
+  };
+  let secondInteractionError = "";
+  exposeTool(
+    "provider_present",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        required: ["decision"],
+        properties: { decision: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    async (_args, context) => {
+      if (!context.presentUserInterface || !context.requestApproval) {
+        throw new Error("Provider interaction is unavailable");
+      }
+      const result = await context.presentUserInterface<{ decision: string }>(
+        presentation,
+      );
+      try {
+        await context.requestApproval({ amount: "must not be requested" });
+      } catch (error) {
+        secondInteractionError = (error as Error).message;
+      }
+      return result;
+    },
+  );
+
+  const invocation = {
+    id: "4".repeat(16),
+    rootId: "5".repeat(16),
+    capability: "6".repeat(64),
+  };
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 64,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "provider_present",
+        arguments: {},
+        providerApproval: { capability },
+        providerUi: true,
+      },
+      context: { invocation },
+    },
+  });
+  await nextTick();
+  const request = fakeWindow.parent.messages.find(
+    ({ message }) =>
+      (message as { type?: unknown }).type === "exec" &&
+      (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_ui.present",
+  )?.message as
+    | {
+        type: "exec";
+        id: number;
+        payload: {
+          action: string;
+          payload: unknown;
+          context?: { invocation?: unknown };
+        };
+      }
+    | undefined;
+  expect(request).toEqual({
+    type: "exec",
+    id: expect.any(Number),
+    payload: {
+      action: "provider_ui.present",
+      payload: { capability, ...presentation },
+      context: { invocation },
+    },
+  });
+  if (!request) throw new Error("Missing provider presentation request");
+  fakeWindow.dispatch({
+    type: "response",
+    id: request.id,
+    ok: { decision: "approved" },
+  });
+  await nextTick();
+
+  expect(fakeWindow.parent.messages).toContainEqual({
+    message: {
+      type: "response",
+      id: 64,
+      ok: { decision: "approved" },
+    },
+    targetOrigin: "port",
+  });
+  expect(secondInteractionError).toBe(
+    "Provider interaction callback was already used",
+  );
+  expect(
+    fakeWindow.parent.messages.some(
+      ({ message }) =>
+        (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_approval.request",
+    ),
+  ).toBe(false);
+  removeExposedTool("provider_present");
+});
+
+test("provider presentation requires own routing fields", async () => {
+  const fakeWindow = installFakeWindow();
+  const capability = "7".repeat(64);
+  exposeTool(
+    "provider_inherited_present",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    async (_args, context) => {
+      if (!context.presentUserInterface) {
+        throw new Error("Provider UI is unavailable");
+      }
+      const inheritedRequest = {} as {
+        tileId: string;
+        tool: string;
+        arguments: JsonObject;
+      };
+      return context.presentUserInterface(inheritedRequest);
+    },
+  );
+  const names = ["tileId", "tool", "arguments"] as const;
+  const previous = new Map(
+    names.map((name) => [
+      name,
+      Object.getOwnPropertyDescriptor(Object.prototype, name),
+    ]),
+  );
+  try {
+    Object.defineProperties(Object.prototype, {
+      tileId: { configurable: true, value: "approval_panel" },
+      tool: { configurable: true, value: "review_request_v1" },
+      arguments: { configurable: true, value: { inherited: true } },
+    });
+    fakeWindow.dispatch({
+      type: "exec",
+      id: 65,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: {
+          name: "provider_inherited_present",
+          arguments: {},
+          providerApproval: { capability },
+          providerUi: true,
+        },
+      },
+    });
+    await nextTick();
+    const unexpected = fakeWindow.parent.messages.find(
+      ({ message }) =>
+        (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_ui.present",
+    )?.message as { id?: unknown } | undefined;
+    if (typeof unexpected?.id === "number") {
+      fakeWindow.dispatch({ type: "response", id: unexpected.id, ok: null });
+      await nextTick();
+    }
+    expect(unexpected).toBeUndefined();
+    expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+      type: "response",
+      id: 65,
+      error: { message: "Invalid provider presentation request" },
+    });
+  } finally {
+    removeExposedTool("provider_inherited_present");
+    for (const name of names) {
+      const descriptor = previous.get(name);
+      if (descriptor === undefined) {
+        Reflect.deleteProperty(Object.prototype, name);
+      } else {
+        Object.defineProperty(Object.prototype, name, descriptor);
+      }
+    }
+  }
+});
+
+test("provider-reviewed handlers receive no callbacks from a pre-provider Kernel", async () => {
+  const fakeWindow = installFakeWindow();
+  let callbackPresent = true;
+  exposeTool(
+    "provider_compatibility",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    (_args, context) => {
+      callbackPresent = context.requestApproval !== undefined;
+      if (!context.requestApproval) {
+        throw new Error("Provider approval is unavailable");
+      }
+      return null;
+    },
+  );
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 62,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: { name: "provider_compatibility", arguments: {} },
+    },
+  });
+  await nextTick();
+  expect(callbackPresent).toBe(false);
+  expect(fakeWindow.parent.messages[0]?.message).toMatchObject({
+    type: "response",
+    id: 62,
+    error: { message: "Provider approval is unavailable" },
+  });
+  removeExposedTool("provider_compatibility");
+});
+
+test("a legacy provider capability does not claim provider UI support", async () => {
+  const fakeWindow = installFakeWindow();
+  let approvalPresent = false;
+  let presentationPresent = true;
+  exposeTool(
+    "provider_legacy_compatibility",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    (_args, context) => {
+      approvalPresent = context.requestApproval !== undefined;
+      presentationPresent = context.presentUserInterface !== undefined;
+      return null;
+    },
+  );
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 69,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "provider_legacy_compatibility",
+        arguments: {},
+        providerApproval: { capability: "d".repeat(64) },
+      },
+    },
+  });
+  await nextTick();
+  expect(approvalPresent).toBe(true);
+  expect(presentationPresent).toBe(false);
+  expect(fakeWindow.parent.messages[0]?.message).toEqual({
+    type: "response",
+    id: 69,
+    ok: null,
+  });
+  removeExposedTool("provider_legacy_compatibility");
+});
+
+test("provider UI support markers are closed and capability-bound", async () => {
+  const fakeWindow = installFakeWindow();
+  let handlerCalls = 0;
+  exposeTool(
+    "provider_ui_marker",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    () => {
+      handlerCalls += 1;
+      return null;
+    },
+  );
+
+  const dispatch = (id: number, metadata: Record<string, unknown>) => {
+    fakeWindow.dispatch({
+      type: "exec",
+      id,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: {
+          name: "provider_ui_marker",
+          arguments: {},
+          ...metadata,
+        },
+      },
+    });
+  };
+  dispatch(70, { providerUi: true });
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 70,
+    error: { message: "Provider UI support requires an approval capability" },
+  });
+  dispatch(71, {
+    providerApproval: { capability: "e".repeat(64) },
+    providerUi: false,
+  });
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 71,
+    error: { message: "Invalid provider UI support marker" },
+  });
+  expect(handlerCalls).toBe(0);
+  removeExposedTool("provider_ui_marker");
+});
+
+test("provider presentation bounds the exact normalized wire payload", async () => {
+  const fakeWindow = installFakeWindow();
+  const capability = "f".repeat(64);
+  const wireWithoutPadding = {
+    capability,
+    tileId: "approval_panel",
+    tool: "review_request_v1",
+    arguments: { padding: "" },
+  };
+  const fixedBytes = new TextEncoder().encode(
+    JSON.stringify(wireWithoutPadding),
+  ).byteLength;
+  const padding = "x".repeat(
+    MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES - fixedBytes + 1,
+  );
+  exposeTool(
+    "provider_wire_bound",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": "provider_once" },
+    },
+    async (_args, context) => {
+      if (!context.presentUserInterface) {
+        throw new Error("Provider UI is unavailable");
+      }
+      return context.presentUserInterface({
+        tileId: "approval_panel",
+        tool: "review_request_v1",
+        arguments: { padding },
+      });
+    },
+  );
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 72,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "provider_wire_bound",
+        arguments: {},
+        providerApproval: { capability },
+        providerUi: true,
+      },
+    },
+  });
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 72,
+    error: {
+      message: `Provider presentation request exceeds ${MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES} bytes`,
+    },
+  });
+  expect(
+    fakeWindow.parent.messages.some(
+      ({ message }) =>
+        (message as { payload?: { action?: unknown } }).payload?.action ===
+        "provider_ui.present",
+    ),
+  ).toBe(false);
+  removeExposedTool("provider_wire_bound");
+});
+
+test("ordinary handlers reject injected provider approval capabilities", async () => {
+  const fakeWindow = installFakeWindow();
+  let handlerCalled = false;
+  exposeTool(
+    "ordinary_tool",
+    { inputSchema: { type: "object", additionalProperties: false } },
+    (_args, context) => {
+      handlerCalled = true;
+      expect(context.requestApproval).toBeUndefined();
+      return null;
+    },
+  );
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 63,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "ordinary_tool",
+        arguments: {},
+        providerApproval: { capability: "b".repeat(64) },
+      },
+    },
+  });
+  await nextTick();
+  expect(handlerCalled).toBe(false);
+  expect(fakeWindow.parent.messages[0]?.message).toMatchObject({
+    type: "response",
+    id: 63,
+    error: { message: "Unexpected provider approval capability" },
+  });
+  removeExposedTool("ordinary_tool");
+});
+
 test("endpoint tools settle oversized errors with a bounded fallback", async () => {
   const fakeWindow = installFakeWindow();
   exposeTool(
@@ -1030,10 +1656,10 @@ test("agent consent uses a private invocation-bound control action", async () =>
         id: "challenge-0000001",
         rootId: invocation.rootId,
         expiresAt: Date.now() + 30_000,
-        requester: { appId: "wallet", role: "tray" },
+        requester: { appId: "records", role: "tray" },
         chain: [
           { appId: "agent", tool: "agent_chat" },
-          { appId: "wallet", tool: "send" },
+          { appId: "records", tool: "records_write" },
         ],
         kind: "backend_access",
         persistence: "durable",
@@ -1120,15 +1746,15 @@ test("agent consent request cancellation aborts its handler and releases the loc
     id: "challenge-0000002",
     rootId: invocation.rootId,
     expiresAt: Date.now() + 30_000,
-    requester: { appId: "wallet", role: "background" },
+    requester: { appId: "records", role: "background" },
     chain: [
       { appId: "agent", tool: "agent_chat" },
-      { appId: "wallet", tool: "send" },
+      { appId: "records", tool: "records_write" },
     ],
     kind: "connection",
     persistence: "durable",
     risk: "high",
-    action: { provider: "wallet" },
+    action: { provider: "records" },
   };
   fakeWindow.dispatch({
     type: "exec",
@@ -1333,6 +1959,66 @@ test("tool descriptors expose only the closed metadata-only audit profile", () =
   }
 });
 
+test("tool descriptors expose only provider-owned one-shot consent", () => {
+  exposeTool(
+    "provider_reviewed",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: {
+        "neutron:consent": NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
+      },
+    },
+    () => null,
+  );
+  expect(
+    listExposedTools().find(({ name }) => name === "provider_reviewed")
+      ?.annotations,
+  ).toEqual({ "neutron:consent": "provider_once" });
+  removeExposedTool("provider_reviewed");
+
+  for (const consent of ["provider_session", "once", "", null, 1, false]) {
+    expect(() =>
+      exposeTool(
+        "invalid_provider_consent",
+        {
+          inputSchema: { type: "object" },
+          annotations: { "neutron:consent": consent } as any,
+        },
+        () => null,
+      ),
+    ).toThrow(/Unsupported neutron:consent/);
+  }
+
+  for (const incompatible of [
+    { "neutron:control": "cancel" },
+    {
+      "neutron:attachments": {
+        version: 1,
+        input: {
+          name: "payload",
+          mediaTypes: ["application/octet-stream"],
+          maxBytes: 1,
+          required: true,
+        },
+      },
+    },
+  ]) {
+    expect(() =>
+      exposeTool(
+        "incompatible_provider_consent",
+        {
+          inputSchema: { type: "object" },
+          annotations: {
+            "neutron:consent": NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
+            ...incompatible,
+          },
+        },
+        () => null,
+      ),
+    ).toThrow(/cannot be combined with control or attachment/);
+  }
+});
+
 test("tool descriptors expose only the closed same-app visibility profile", () => {
   exposeTool(
     "same_app_private",
@@ -1359,6 +2045,766 @@ test("tool descriptors expose only the closed same-app visibility profile", () =
         () => null,
       ),
     ).toThrow(/Unsupported neutron:visibility/);
+  }
+});
+
+test("tool descriptors accept only closed same-app audience profiles", () => {
+  for (const audience of [
+    NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+    NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  ] as const) {
+    const name = `audience_${audience}`;
+    exposeTool(
+      name,
+      {
+        inputSchema: { type: "object", additionalProperties: false },
+        annotations: {
+          "neutron:visibility": "same_app",
+          "neutron:audience": audience,
+        },
+      },
+      () => null,
+    );
+    expect(
+      listExposedTools().find((descriptor) => descriptor.name === name)
+        ?.annotations,
+    ).toEqual({
+      "neutron:visibility": "same_app",
+      "neutron:audience": audience,
+    });
+    removeExposedTool(name);
+  }
+
+  expect(() =>
+    exposeTool(
+      "audience_without_visibility",
+      {
+        inputSchema: { type: "object", additionalProperties: false },
+        annotations: {
+          "neutron:audience": NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+        },
+      },
+      () => null,
+    ),
+  ).toThrow(/must also use same-app visibility/);
+
+  for (const audience of [
+    "foreground",
+    "root",
+    "same_app",
+    "",
+    null,
+    1,
+    false,
+  ]) {
+    expect(() =>
+      exposeTool(
+        "invalid_audience",
+        {
+          inputSchema: { type: "object", additionalProperties: false },
+          annotations: {
+            "neutron:visibility": "same_app",
+            "neutron:audience": audience,
+          } as any,
+        },
+        () => null,
+      ),
+    ).toThrow(/Unsupported neutron:audience/);
+  }
+});
+
+test("audience profiles reject incompatible tool annotations", () => {
+  const incompatibleAnnotations = [
+    {
+      "neutron:attachments": {
+        version: 1,
+        input: {
+          name: "payload",
+          mediaTypes: ["application/octet-stream"],
+          maxBytes: 1,
+          required: true,
+        },
+      },
+    },
+    { "neutron:control": "cancel" },
+    { "neutron:consent": NEUTRON_TOOL_CONSENT_PROVIDER_ONCE },
+  ];
+
+  for (const audience of [
+    NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+    NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+  ] as const) {
+    for (const incompatible of incompatibleAnnotations) {
+      expect(() =>
+        normalizeToolDescriptor({
+          name: `incompatible_${audience}`,
+          inputSchema: { type: "object", additionalProperties: false },
+          annotations: {
+            "neutron:visibility": "same_app",
+            "neutron:audience": audience,
+            ...incompatible,
+          },
+        }),
+      ).toThrow(
+        /Audience-restricted tools cannot use attachments, control, or provider consent/,
+      );
+    }
+  }
+});
+
+test("audience-restricted handlers require the exact Kernel attestation", async () => {
+  const fakeWindow = installFakeWindow();
+  let handlerCalls = 0;
+  exposeTool(
+    "foreground_only",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        required: ["audience"],
+        properties: { audience: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: {
+        "neutron:visibility": "same_app",
+        "neutron:audience": NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
+      },
+    },
+    (_args, context) => {
+      handlerCalls += 1;
+      return { audience: context.audience ?? "missing" };
+    },
+  );
+
+  const dispatch = (id: number, audience?: unknown) => {
+    fakeWindow.dispatch({
+      type: "exec",
+      id,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: {
+          name: "foreground_only",
+          arguments: {},
+          ...(audience === undefined ? {} : { audience }),
+        },
+      },
+    });
+  };
+
+  dispatch(65);
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 65,
+    error: {
+      message: "Tool audience attestation is missing or invalid",
+    },
+  });
+  expect(handlerCalls).toBe(0);
+
+  dispatch(66, NEUTRON_TOOL_AUDIENCE_AGENT_ROOT);
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 66,
+    error: {
+      message: "Tool audience attestation is missing or invalid",
+    },
+  });
+  expect(handlerCalls).toBe(0);
+
+  dispatch(67, "forged_root");
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 67,
+    error: { message: "Invalid tool audience attestation" },
+  });
+  expect(handlerCalls).toBe(0);
+
+  dispatch(68, NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE);
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toEqual({
+    type: "response",
+    id: 68,
+    ok: { audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE },
+  });
+  expect(handlerCalls).toBe(1);
+  removeExposedTool("foreground_only");
+});
+
+test("agent-root handlers require invocation metadata from the active Kernel port", async () => {
+  const fakeWindow = installFakeWindow();
+  const observedContexts: Array<{ audience?: string; agentMode: boolean }> = [];
+  exposeTool(
+    "root_only",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        required: ["accepted"],
+        properties: { accepted: { type: "boolean" } },
+        additionalProperties: false,
+      },
+      annotations: {
+        "neutron:visibility": "same_app",
+        "neutron:audience": NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+      },
+    },
+    (_args, context) => {
+      observedContexts.push({
+        ...(context.audience ? { audience: context.audience } : {}),
+        agentMode: context.agentMode === true,
+      });
+      return { accepted: true };
+    },
+  );
+
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 81,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "root_only",
+        arguments: {},
+        audience: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+      },
+    },
+  });
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 81,
+    error: { message: "Root-agent audience requires invocation metadata" },
+  });
+  expect(observedContexts).toEqual([]);
+
+  const inheritedInvocation = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    "invocation",
+  );
+  try {
+    Object.defineProperty(Object.prototype, "invocation", {
+      configurable: true,
+      value: {
+        id: "inherited1111111",
+        rootId: "inherited2222222",
+        capability: "7".repeat(64),
+      },
+    });
+    fakeWindow.dispatch({
+      type: "exec",
+      id: 810,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: {
+          name: "root_only",
+          arguments: {},
+          audience: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+        },
+        context: {},
+      },
+    });
+    await nextTick();
+  } finally {
+    if (inheritedInvocation === undefined) {
+      Reflect.deleteProperty(Object.prototype, "invocation");
+    } else {
+      Object.defineProperty(
+        Object.prototype,
+        "invocation",
+        inheritedInvocation,
+      );
+    }
+  }
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 810,
+    error: { message: "Root-agent audience requires invocation metadata" },
+  });
+  expect(observedContexts).toEqual([]);
+
+  const invocation = {
+    id: "8111111111111111",
+    rootId: "8222222222222222",
+    capability: "8".repeat(64),
+  };
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 82,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "root_only",
+        arguments: {},
+        audience: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+      },
+      context: { invocation },
+    },
+  });
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toEqual({
+    type: "response",
+    id: 82,
+    ok: { accepted: true },
+  });
+  expect(observedContexts).toEqual([
+    {
+      audience: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+      agentMode: true,
+    },
+  ]);
+  removeExposedTool("root_only");
+});
+
+test("alternate peer ports cannot invoke local tool or control actions", async () => {
+  installFakeWindow();
+  let handlerCalls = 0;
+  exposeTool(
+    "alternate_port_root_only",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: {
+        "neutron:visibility": "same_app",
+        "neutron:audience": NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+      },
+    },
+    () => {
+      handlerCalls += 1;
+      return null;
+    },
+  );
+
+  const alternate = new MessageChannel();
+  const replies: unknown[] = [];
+  alternate.port2.addEventListener("message", (event) => {
+    const message = event.data;
+    if (
+      isExecEnvelope(message) &&
+      message.payload.action === "install_listener_probe"
+    ) {
+      alternate.port2.postMessage({
+        type: "response",
+        id: message.id,
+        ok: null,
+      });
+      return;
+    }
+    replies.push(message);
+  });
+  alternate.port2.start();
+  await execAppPort(alternate.port1, "install_listener_probe", null, 1);
+
+  alternate.port2.postMessage({
+    type: "exec",
+    id: 83,
+    payload: { action: msgBusLocalActions.toolsList, payload: null },
+  });
+  alternate.port2.postMessage({
+    type: "exec",
+    id: 84,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "alternate_port_root_only",
+        arguments: {},
+        audience: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+      },
+      context: {
+        invocation: {
+          id: "8311111111111111",
+          rootId: "8322222222222222",
+          capability: "8".repeat(64),
+        },
+      },
+    },
+  });
+  alternate.port2.postMessage({
+    type: "exec",
+    id: 86,
+    payload: {
+      action: msgBusLocalActions.agentConsentDecide,
+      payload: null,
+    },
+  });
+  alternate.port2.postMessage({
+    type: "exec",
+    id: 87,
+    payload: {
+      action: msgBusLocalActions.agentTurnCancel,
+      payload: null,
+    },
+  });
+  await nextTick();
+  await nextTick();
+
+  expect(handlerCalls).toBe(0);
+  expect(replies).toEqual([]);
+  removeExposedTool("alternate_port_root_only");
+  alternate.port1.close();
+  alternate.port2.close();
+});
+
+test("inherited tool call fields and security metadata are ignored", async () => {
+  const fakeWindow = installFakeWindow();
+  const observations: Array<{
+    audience: boolean;
+    approval: boolean;
+    presentation: boolean;
+    caller: boolean;
+    callerAppId: boolean | null;
+    callerRole: boolean | null;
+    callerSession: boolean | null;
+    arguments: string[];
+  }> = [];
+  exposeTool(
+    "own_metadata_only",
+    { inputSchema: { type: "object", additionalProperties: false } },
+    (args, context) => {
+      observations.push({
+        audience: Object.hasOwn(context, "audience"),
+        approval: context.requestApproval !== undefined,
+        presentation: context.presentUserInterface !== undefined,
+        caller: Object.hasOwn(context, "caller"),
+        callerAppId: context.caller
+          ? Object.hasOwn(context.caller, "appId")
+          : null,
+        callerRole: context.caller
+          ? Object.hasOwn(context.caller, "role")
+          : null,
+        callerSession: context.caller
+          ? Object.hasOwn(context.caller, "sessionId")
+          : null,
+        arguments: Object.keys(args),
+      });
+      return null;
+    },
+  );
+
+  const names = [
+    "audience",
+    "providerApproval",
+    "providerUi",
+    "arguments",
+    "caller",
+    "name",
+    "endpoint",
+    "appId",
+    "role",
+    "sessionId",
+  ] as const;
+  const previous = new Map(
+    names.map((name) => [
+      name,
+      Object.getOwnPropertyDescriptor(Object.prototype, name),
+    ]),
+  );
+  try {
+    Object.defineProperties(Object.prototype, {
+      audience: {
+        configurable: true,
+        value: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+      },
+      providerApproval: {
+        configurable: true,
+        value: { capability: "a".repeat(64) },
+      },
+      providerUi: { configurable: true, value: true },
+      arguments: { configurable: true, value: { forged: true } },
+      caller: {
+        configurable: true,
+        value: {
+          endpoint: "app:forged:tile",
+          appId: "forged",
+          role: "tile",
+        },
+      },
+      name: { configurable: true, value: "own_metadata_only" },
+      endpoint: { configurable: true, value: "app:forged:tile" },
+      appId: { configurable: true, value: "forged" },
+      role: { configurable: true, value: "tile" },
+      sessionId: { configurable: true, value: "forged-session" },
+    });
+    fakeWindow.dispatch({
+      type: "exec",
+      id: 85,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: {},
+      },
+    });
+    await nextTick();
+    expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+      type: "response",
+      id: 85,
+      error: { message: "Invalid tool call payload" },
+    });
+    fakeWindow.dispatch({
+      type: "exec",
+      id: 86,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: { name: "own_metadata_only", caller: {} },
+      },
+    });
+    await nextTick();
+    expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+      type: "response",
+      id: 86,
+      error: { message: "Invalid tool caller context" },
+    });
+    fakeWindow.dispatch({
+      type: "exec",
+      id: 87,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: { name: "own_metadata_only" },
+      },
+    });
+    await nextTick();
+    fakeWindow.dispatch({
+      type: "exec",
+      id: 88,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: {
+          name: "own_metadata_only",
+          arguments: {},
+          caller: { endpoint: "kernel" },
+        },
+      },
+    });
+    await nextTick();
+  } finally {
+    for (const name of names) {
+      const descriptor = previous.get(name);
+      if (descriptor === undefined) {
+        Reflect.deleteProperty(Object.prototype, name);
+      } else {
+        Object.defineProperty(Object.prototype, name, descriptor);
+      }
+    }
+  }
+
+  expect(fakeWindow.parent.messages.at(-1)?.message).toEqual({
+    type: "response",
+    id: 88,
+    ok: null,
+  });
+  expect(observations).toEqual([
+    {
+      audience: false,
+      approval: false,
+      presentation: false,
+      caller: false,
+      callerAppId: null,
+      callerRole: null,
+      callerSession: null,
+      arguments: [],
+    },
+    {
+      audience: false,
+      approval: false,
+      presentation: false,
+      caller: true,
+      callerAppId: false,
+      callerRole: false,
+      callerSession: false,
+      arguments: [],
+    },
+  ]);
+  removeExposedTool("own_metadata_only");
+});
+
+test("provider approval metadata requires one own capability", async () => {
+  const fakeWindow = installFakeWindow();
+  let handlerCalls = 0;
+  exposeTool(
+    "own_provider_capability",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": NEUTRON_TOOL_CONSENT_PROVIDER_ONCE },
+    },
+    () => {
+      handlerCalls += 1;
+      return null;
+    },
+  );
+  const inheritedCapability = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    "capability",
+  );
+  try {
+    Object.defineProperty(Object.prototype, "capability", {
+      configurable: true,
+      value: "a".repeat(64),
+    });
+    fakeWindow.dispatch({
+      type: "exec",
+      id: 89,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: {
+          name: "own_provider_capability",
+          arguments: {},
+          providerApproval: {},
+        },
+      },
+    });
+    await nextTick();
+  } finally {
+    if (inheritedCapability === undefined) {
+      Reflect.deleteProperty(Object.prototype, "capability");
+    } else {
+      Object.defineProperty(
+        Object.prototype,
+        "capability",
+        inheritedCapability,
+      );
+    }
+    removeExposedTool("own_provider_capability");
+  }
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 89,
+    error: { message: "Invalid provider approval capability" },
+  });
+  expect(handlerCalls).toBe(0);
+});
+
+test("provider approval metadata is one exact enumerable data property", async () => {
+  const fakeWindow = installFakeWindow();
+  let handlerCalls = 0;
+  exposeTool(
+    "exact_provider_capability",
+    {
+      inputSchema: { type: "object", additionalProperties: false },
+      annotations: { "neutron:consent": NEUTRON_TOOL_CONSENT_PROVIDER_ONCE },
+    },
+    () => {
+      handlerCalls += 1;
+      return null;
+    },
+  );
+  const providerApproval = { capability: "9".repeat(64) };
+  Object.defineProperty(providerApproval, "hidden", {
+    value: true,
+    enumerable: false,
+  });
+  fakeWindow.dispatch({
+    type: "exec",
+    id: 90,
+    payload: {
+      action: msgBusLocalActions.toolsCall,
+      payload: {
+        name: "exact_provider_capability",
+        arguments: {},
+        providerApproval,
+      },
+    },
+  });
+  await nextTick();
+  expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+    type: "response",
+    id: 90,
+    error: { message: "Invalid provider approval capability" },
+  });
+  expect(handlerCalls).toBe(0);
+  removeExposedTool("exact_provider_capability");
+});
+
+test("inherited descriptor security annotations are ignored", async () => {
+  const fakeWindow = installFakeWindow();
+  const names = [
+    "annotations",
+    "neutron:consent",
+    "neutron:audience",
+    "neutron:visibility",
+  ] as const;
+  const previous = new Map(
+    names.map((name) => [
+      name,
+      Object.getOwnPropertyDescriptor(Object.prototype, name),
+    ]),
+  );
+  try {
+    Object.defineProperties(Object.prototype, {
+      annotations: {
+        configurable: true,
+        value: {
+          "neutron:visibility": "same_app",
+          "neutron:audience": NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+        },
+      },
+      "neutron:consent": {
+        configurable: true,
+        value: NEUTRON_TOOL_CONSENT_PROVIDER_ONCE,
+      },
+      "neutron:audience": {
+        configurable: true,
+        value: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+      },
+      "neutron:visibility": { configurable: true, value: "same_app" },
+    });
+
+    expect(() =>
+      normalizeToolDescriptor({
+        name: "inherited_consent",
+        inputSchema: { type: "object", additionalProperties: false },
+        annotations: { "neutron:control": "cancel" },
+      }),
+    ).not.toThrow();
+    const withoutOwnAnnotations = normalizeToolDescriptor({
+      name: "inherited_annotations_descriptor",
+      inputSchema: { type: "object", additionalProperties: false },
+    });
+    expect(Object.hasOwn(withoutOwnAnnotations, "annotations")).toBe(false);
+    expect(() =>
+      normalizeToolDescriptor({
+        name: "own_audience_without_own_visibility",
+        inputSchema: { type: "object", additionalProperties: false },
+        annotations: {
+          "neutron:audience": NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
+        },
+      }),
+    ).toThrow("Audience-restricted tools must also use same-app visibility");
+
+    exposeTool(
+      "inherited_annotations",
+      {
+        inputSchema: { type: "object", additionalProperties: false },
+        annotations: {},
+      },
+      (_args, context) => ({
+        audience: Object.hasOwn(context, "audience"),
+        approval: context.requestApproval !== undefined,
+      }),
+    );
+    fakeWindow.dispatch({
+      type: "exec",
+      id: 88,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: { name: "inherited_annotations", arguments: {} },
+      },
+    });
+    await nextTick();
+    expect(fakeWindow.parent.messages.at(-1)?.message).toEqual({
+      type: "response",
+      id: 88,
+      ok: { audience: false, approval: false },
+    });
+  } finally {
+    removeExposedTool("inherited_annotations");
+    for (const name of names) {
+      const descriptor = previous.get(name);
+      if (descriptor === undefined) {
+        Reflect.deleteProperty(Object.prototype, name);
+      } else {
+        Object.defineProperty(Object.prototype, name, descriptor);
+      }
+    }
   }
 });
 

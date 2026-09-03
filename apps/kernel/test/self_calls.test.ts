@@ -232,15 +232,6 @@ test("nested and repeated binary fields bind only at live Candid blob leaves", (
     omitted: null,
     explicitlyAbsent: null,
   });
-  expect(bound.validationArgs).toEqual([
-    {
-      title: "hello",
-      primary: [],
-      nested: { items: [{ label: "one", body: [] }] },
-      optional: { data: [] },
-      choice: { raw: [] },
-    },
-  ]);
   expect(bound.metadata).toEqual([
     {
       title: "hello",
@@ -275,6 +266,100 @@ test("live blobs require their exact transferable sidecars", () => {
       [requestType],
     ),
   ).toThrow(/missing its binary sidecar/);
+});
+
+test("structural nested records bind absent and present optional blobs", () => {
+  const referenceType = IDL.Record({
+    source: IDL.Principal,
+    digest: IDL.Opt(blobType),
+  });
+  const requestType = IDL.Record({
+    entries: IDL.Vec(
+      IDL.Record({
+        reference: IDL.Variant({ remote: referenceType }),
+        active: IDL.Bool,
+      }),
+    ),
+  });
+  const source = "aaaaa-aa";
+  const request = {
+    entries: [
+      {
+        reference: {
+          remote: { source, digest: null },
+        },
+        active: false,
+      },
+    ],
+  };
+
+  const absent = materializeSelfCallArguments([request], [], [requestType]);
+  expect(absent.args).toEqual([request]);
+  expect(absent.metadata).toEqual([request]);
+  expect(absent.binary).toEqual({ count: 0, bytes: 0 });
+  expect(absent.boundBlobs).toEqual([]);
+
+  const digest = Uint8Array.from([...new Array(31).fill(0), 255]);
+  const present = materializeSelfCallArguments(
+    [request],
+    [
+      wireBlob(
+        [0, "entries", 0, "reference", "remote", "digest"],
+        digest,
+      ),
+    ],
+    [requestType],
+  );
+  expect(present.args).toEqual([
+    {
+      entries: [
+        {
+          reference: {
+            remote: { source, digest },
+          },
+          active: false,
+        },
+      ],
+    },
+  ]);
+  expect(present.metadata).toEqual([request]);
+  expect(present.binary).toEqual({ count: 1, bytes: 32 });
+  expect(present.boundBlobs).toHaveLength(1);
+});
+
+test("released icblast string record shorthands stay opaque and sidecar-free", () => {
+  const referenceType = IDL.Record({
+    subject: IDL.Principal,
+    digest: IDL.Opt(blobType),
+  });
+  const shorthand = "opaque-record-shorthand";
+  const materialized = materializeSelfCallArguments(
+    [shorthand],
+    [],
+    [referenceType],
+  );
+
+  expect(materialized.args).toEqual([shorthand]);
+  expect(materialized.metadata).toEqual([shorthand]);
+  expect(materialized.binary).toEqual({ count: 0, bytes: 0 });
+  expect(materialized).not.toHaveProperty("validationArgs");
+  expect(() =>
+    materializeSelfCallArguments(
+      [shorthand],
+      [wireBlob([0, "digest"], [1])],
+      [referenceType],
+    ),
+  ).toThrow(/record has an invalid shape/);
+  expect(
+    materializeSelfCallArguments(
+      [shorthand],
+      [],
+      [IDL.Record({ value: IDL.Text })],
+    ).args,
+  ).toEqual([shorthand]);
+  expect(() =>
+    materializeSelfCallArguments([false], [], [referenceType]),
+  ).toThrow(/record has an invalid shape/);
 });
 
 test("non-binary containers are recursively bounded against live Candid", () => {
@@ -372,12 +457,6 @@ test("binary markers materialize through optional Candid fields", () => {
   expect(materialized.args).toEqual([
     {
       client_token: new Uint8Array(token),
-      title: "shared file",
-    },
-  ]);
-  expect(materialized.validationArgs).toEqual([
-    {
-      client_token: [],
       title: "shared file",
     },
   ]);
@@ -661,33 +740,33 @@ test("API-1 projection renders principals and bigints as text", () => {
   expect(projectSelfCallResult(value, outputType)).toEqual(expected);
 });
 
-test("generic projection never reinterprets an ICRC-shaped record", () => {
-  const accountType = IDL.Record({
-    owner: IDL.Principal,
-    subaccount: IDL.Opt(blobType),
+test("generic projection never reinterprets a record with an optional blob", () => {
+  const referenceType = IDL.Record({
+    source: IDL.Principal,
+    digest: IDL.Opt(blobType),
   });
-  const owner = Principal.fromText("aaaaa-aa");
+  const source = Principal.fromText("aaaaa-aa");
   const arbitraryBytes = new Uint8Array(31);
 
-  expect(projectSelfCallResult({ owner, subaccount: [] }, accountType)).toEqual(
-    { owner: "aaaaa-aa" },
+  expect(projectSelfCallResult({ source, digest: [] }, referenceType)).toEqual(
+    { source: "aaaaa-aa" },
   );
   const projected = normalizeSelfCallResult(
-    { owner, subaccount: [arbitraryBytes] },
-    accountType,
+    { source, digest: [arbitraryBytes] },
+    referenceType,
   );
   expect(projected).toEqual({
-    owner: "aaaaa-aa",
-    subaccount: arbitraryBytes,
+    source: "aaaaa-aa",
+    digest: arbitraryBytes,
   });
   const encoded = encodeSelfCallResult(projected);
   expect(encoded.value).toEqual({
-    owner: "aaaaa-aa",
-    subaccount: null,
+    source: "aaaaa-aa",
+    digest: null,
   });
   expect(encoded.blobs).toHaveLength(1);
   expect(encoded.blobs[0]).toMatchObject({
-    path: ["subaccount"],
+    path: ["digest"],
     byteLength: 31,
   });
 });

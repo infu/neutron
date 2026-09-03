@@ -12,9 +12,9 @@ assert (fresh.revision == 0);
 assert (Map.size(fresh.contacts) == 0);
 assert (Map.size(fresh.neutron_index) == 0);
 
-// Contacts 0.3.1 already runs v2. The archive transition test proves the
-// license-only 0.3.2 release is #keep, so representative production data must
-// be visible when the backend is rebuilt over the retained root.
+// Contacts 0.3.4 already runs v2. The exact archive transition test proves the
+// 0.3.4 -> 0.3.5 release is #keep, so representative production data must be
+// visible when the backend is rebuilt over the retained root.
 let principal = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
 let retained : Memory.Contact = {
     id = 7;

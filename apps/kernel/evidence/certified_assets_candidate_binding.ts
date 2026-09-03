@@ -30,7 +30,7 @@ export const CERTIFIED_ASSETS_IMPLEMENTATION_FINGERPRINT_SCHEMA =
 export const CERTIFIED_ASSETS_RUNNER_FINGERPRINT_SCHEMA =
   "neutron.kernel.certified-assets-qualification-runner.v2" as const;
 export const CERTIFIED_ASSETS_QUALIFICATION_PROFILE = {
-  schema: "neutron.kernel.certified-assets-qualification-profile.v2",
+  schema: "neutron.kernel.certified-assets-qualification-profile.v3",
   target: "local",
   isolation: "fresh_pocketic_canister_per_sample",
   gateway: "pocketic_http_gateway",

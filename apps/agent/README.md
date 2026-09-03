@@ -26,9 +26,10 @@ the newest messages and the count of earlier messages that remain retained.
 The app declares `agent_chat` as its exact Agent Mode entrypoint. Enabling
 Agent Mode requires a kernel-owned owner confirmation and binds the grant to
 this installed app version and entrypoint for the current frontend session.
-The tile must be focused and have transient user activation to start each turn.
-Reload, logout, app update, endpoint replacement, uninstall, or explicit
-disable revokes the grant.
+The one-time enable request starts from a focused Agent tile during transient
+user activation. Once granted, an exact live tile in that Agent installation
+may start a turn without another focus or activation check. Reload, logout, app
+update, endpoint replacement, uninstall, or explicit disable revokes the grant.
 
 During an active turn the model uses the invocation-scoped Neutron message bus
 to discover apps, inspect one tool schema, and call tools. Direct agent actions
@@ -41,6 +42,19 @@ array shown for approval. The runtime makes one separate `generateText` request
 with the selected OpenRouter model and one forced `permission_decision` tool.
 It receives the current owner goal and those permission facts, not the
 transcript, tool output, credentials, private keys, or transport ids.
+
+Tools that opt into both `"neutron:visibility":"same_app"` and
+`"neutron:audience":"agent_root"` are a separate automation surface. Kernel
+shows and routes such a tool only to the incoming live depth-zero Agent root,
+attests that audience to the handler, and adds no owner dialog. Human callers
+and nested agent calls are rejected before target dispatch. Provider-owned
+foreground UI is likewise unavailable to delegated Agent calls; an app that
+supports both people and root automation exposes a narrowly scoped root tool in
+addition to its human presentation flow. This remains live-turn authority.
+Enabling Agent Mode does not let the resident originate future roots by itself:
+every root still comes from a live tile in the granted Agent installation and
+the exact granted entrypoint, but it does not depend on browser focus or a
+fresh activation.
 
 Agent contains no app ids, app-specific paths, or app-specific calling rules.
 Its installed-app list, live endpoints, tool descriptions, schemas, and

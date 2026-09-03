@@ -213,6 +213,101 @@ call.
 An app learns app/tool behavior from live descriptors and `apps.describe`; the
 Kernel and Agent do not carry hardcoded ordinary-app tool schemas.
 
+### Provider-Mediated One-Shot Consent
+
+The closed descriptor annotation
+`{"neutron:consent":"provider_once"}` selects a target-mediated one-shot
+interaction. It is for a provider which must own the specialized UI and inspect
+authoritative state before the owner can make an informed decision. The
+annotation does not describe tokens, payments, wallets, or any other app
+domain.
+
+On the current provider-UI lane, the Kernel validates the original JSON
+arguments against the target descriptor, bypasses the ordinary preliminary
+frontend-tool grant, and calls the exact provider endpoint with a private
+one-use `presentUserInterface` callback in that handler's context. The callback
+is bound to the captured caller object and session, caller AppScope/version,
+target object and session, target AppScope/version, exact public tool, request
+cancellation signal, and originating live handler call. It never appears in
+discovery, public tool arguments, progress, or the response.
+
+The provider invokes the callback before domain-specific preparation:
+
+```ts
+return context.presentUserInterface({
+  tileId: "wallet",
+  tool: "wallet_funding_present_v1",
+  arguments: request,
+});
+```
+
+The SDK accepts a closed `{ tileId, tool, arguments }` object. Its exact private
+wire envelope `{ capability, tileId, tool, arguments }` is bounded to 16 KiB in
+addition to the ordinary depth and container-element limits. The Kernel opens
+or reuses and focuses that exact declared tile of the provider in the active
+workspace, waits for its exact registered endpoint, and routes the opaque
+`arguments` only to a private tool declaring both
+`{"neutron:visibility":"same_app"}` and
+`{"neutron:audience":"foreground_tile"}`. The Kernel injects the original
+caller context and the attested `foreground_tile` audience; neither value can
+be supplied by an app argument. The SDK rejects a missing or mismatched
+audience before entering the private handler.
+
+Outside Agent Mode, any exact live tile, tray, or background may ask the
+provider to present a request. This grants no financial authority: the provider
+tile, not Kernel or source focus, owns the visible accept/reject decision. It
+may use exact preapproved methods to load and freeze non-value-moving review
+state and renders concrete action/cancel labels. Only the affirmative action
+may dispatch the value-moving execute method; cancel may persist rejection.
+Kernel neither renders a dialog nor interprets the payload. No exact or
+wildcard session grant is consulted, and the interaction creates no grant.
+
+Opening the provider UI gives its iframe programmatic browser focus as ordinary
+workspace navigation. The private `foreground_tile` audience attests the exact
+Kernel-selected provider tile; it does not require that tile to retain browser
+focus or workspace selection throughout the interaction. The provider tile
+must remain mounted until private dispatch. Kernel does not blur the provider
+or restore the caller at settlement. Endpoint/session liveness and mounted-tile
+membership, not a second focus model, fence the suspended request.
+
+The pending capability and presentation binding are ephemeral browser state.
+This route adds no Kernel managed-memory schema and no durable permission
+record; existing audit projection remains the only persistent generic record.
+
+The public handler must complete exactly one provider interaction; returning
+without it is invalid. The SDK gives `requestApproval` and
+`presentUserInterface` one shared use, so a handler cannot stack the old and new
+paths. A second use, replay, wrong tool or endpoint, source/target replacement,
+timeout, abort, or cancellation fails closed. Endpoint and authority bindings
+are rechecked after every asynchronous step.
+
+The target provider, not Kernel, is trusted to keep preparation, display,
+decision, and execution correctly ordered. Kernel authenticates routing but
+cannot prove app-specific ordering without understanding the provider. Current
+provider code must feature-detect `context.presentUserInterface` before
+preparation or execution. When the SDK withholds it because Kernel supplied no
+explicit provider-UI support marker, the provider fails closed rather than
+falling back to an ordinary session grant.
+
+`context.requestApproval(review)` is a deprecated generic compatibility
+surface. Published providers including Wallet 0.3.6 depend on its
+Kernel-rendered inert raw-JSON review, but the runtime does not app- or
+version-gate the member. Current providers must use provider-owned UI.
+
+Agent automation uses a separate provider tool declaring both
+`{"neutron:visibility":"same_app"}` and
+`{"neutron:audience":"agent_root"}`. Kernel hides and rejects that tool for
+ordinary app calls and delegated Agent descendants; only the active depth-zero
+root invocation is admitted, and it receives an attested `agent_root` audience.
+The provider checks that audience, prepares and executes through its own
+preapproved authority, and opens no provider or Kernel UI. An Agent invocation
+which attempts `presentUserInterface` fails closed instead of opening a tile.
+
+The initial protocol rejects `provider_once` on attachment and control tools.
+Same-app calls and every tool without this exact annotation retain their
+released routing and grant behavior. Unknown annotation values never select
+this path.
+
 Current Kernel tools include:
 
 - `canister.schema`;
@@ -301,6 +396,18 @@ The app entry provides:
 
 Every helper ultimately uses the connected private port.
 
+An `exposeTool()` handler's context additionally contains optional
+`presentUserInterface({ tileId, tool, arguments })` only while Kernel is
+dispatching that exact cross-app `provider_once` invocation. It is invocation
+metadata, not a global app helper. Code must feature-detect it before
+preparation, must not copy it out of the dynamic handler lifetime, and must
+continue to use the same context's `kernel` client for subsequent scoped self
+calls or nested tools. Audience-restricted handlers receive the corresponding
+Kernel-attested `context.audience`; the SDK rejects missing or mismatched
+attestation before invoking the handler. Deprecated `requestApproval(review)`
+remains a generic compatibility member and shares the same one-use gate;
+current providers must not use it.
+
 ## Self Calls With Nested Binary Values
 
 Self calls use a private API-1 wire in parallel with the ordinary JSON
@@ -357,12 +464,22 @@ input.
 Before dispatch the Kernel:
 
 1. validates the endpoint, scope, method, and preapproval or dialog route;
-2. validates the live Candid type graph;
-3. binds sidecars and creates a schema-safe validation shadow;
-4. encodes exact raw Candid;
-5. independently scans that raw Candid for binary, allocation, element, and
+2. resolves and validates the exact live Candid method and type graph;
+3. binds every sidecar exactly to that graph and validates the structural
+   value;
+4. encodes the arguments through the exact live IDL method;
+5. independently scans that raw Candid against the live types for binary,
+   allocation, element, and
    depth limits; and
 6. rechecks the endpoint and invocation before the signed query/update.
+
+The private self-call path does not apply ICBlast's public JSON Schema shadow.
+At a live record position, it may leave a string opaque only for the pinned
+encoder's released record shorthand and only with no sidecar at or below that
+path. Generated schema does not authorize the exception. Exact live-IDL
+encoding and raw-Candid preflight remain mandatory, as does equality between
+the encoded raw Candid's blob count and aggregate blob-byte length and the
+materialized-sidecar statistics.
 
 The reply is raw-preflighted before decode, projected into the same native
 binary model, and transferred back through response sidecars.
@@ -447,21 +564,31 @@ state, and refresh after reconnect rather than depending on replay.
 view to the exact opened/reused tile through
 `{ type: "neutron:tile:view", version: 1, view }`.
 
+A live direct tile, tray, or resident background may open or focus any installed
+app tile without a Kernel dialog. The operation is confined to the active
+workspace, always reuses an exact existing app/tile pair, and remains subject to
+workspace capacity. This grants visible navigation only; it does not grant the
+caller another app's tools, backend methods, identity, or decision authority.
+Delegated Agent calls retain the separate bounded Agent decision policy.
+
 Apps use this for routes such as a selected post or thread. The view does not
 grant backend authority.
 
 ## Tray Boundary
 
 Tray actions are private to the declaring app and the current tray endpoint.
-The Kernel owns opening, focus, close, and state delivery. A tray cannot address
-another app, become a resident background, or retain authority after its
-session closes.
+The Kernel owns tray opening, focus, close, and state delivery. A tray cannot
+call another app's private tray surface or tools, become a resident background,
+or retain authority after its session closes. The generic
+`workspace.open_tile` navigation described above is the only cross-app tray
+exception and grants no target-app authority.
 
 ## Agent Invocations
 
-An Agent root starts only from the granted installed app's focused,
-owner-activated tile, targets that app's connected resident background, and
-names the exact declared entrypoint. Each root or child invocation binds its
+An Agent root starts only from an authenticated live tile in the granted app
+installation, targets that app's connected resident background, and names the
+exact granted entrypoint. Starting a granted root does not depend on browser
+focus or transient user activation. Each root or child invocation binds its
 node, parent, and root IDs; unguessable capability; target endpoint and session;
 installed app scope, role, and tool; expiry and cancellation state; and bounded
 depth, calls, parallel children, consent challenges, and progress.
@@ -479,6 +606,13 @@ signing. The unversioned compatibility route rejects Agent-scoped signed calls
 before discovery. The canonical v2 contract is in
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
+New provider-owned UI is not an Agent decision surface. A root that needs the
+provider's autonomous operation calls the separate `same_app` + `agent_root`
+tool. Kernel admits it only for the active depth-zero root and attests that
+audience; a descendant or ordinary caller is rejected before target dispatch.
+The provider performs no UI on that route and uses only its own declared
+preapproved authority. The public `provider_once` path remains the human route.
+
 An exposed-tool handler with `agentMode: true` must use its invocation-bound
 `context.kernel` client for nested Agent work. That client propagates invocation
 metadata, cancellation, and exposes `callTool`, `querySelf`, and `updateSelf`;
@@ -492,6 +626,12 @@ call-dialog request fails with `SCOPED_CONTEXT_REQUIRED` before Candid
 preparation and opens no owner UI. A valid invocation-scoped self-dialog fails
 with `USER_INTERACTION_REQUIRED`. Outside an active invocation, ordinary owner
 consent remains unchanged.
+
+Agent Mode remains a live invocation model. Enabling one exact agent version
+does not let the resident originate a root by itself: each root still begins
+through a live tile in that Agent installation and the exact granted entrypoint.
+A provider's separate root-audience tool can execute without UI only while that
+bounded depth-zero invocation remains live.
 
 ## Private Broker Actions
 
@@ -527,6 +667,12 @@ rechecks it against live state. Before effect and reply it verifies that:
 - any invocation is still active; and
 - the capability registry still permits the resource.
 
+A `provider_once` request captures both the original call and its one provider
+presentation under this same binding. The presentation cannot retarget the
+public tool, replace the caller, select another app, manufacture an audience,
+or authorize a second request. Its opaque arguments remain app-authored data
+which only the provider tile interprets and renders.
+
 Unrecognized envelopes and stale replies are ignored or rejected without
 changing callback ownership.
 
@@ -555,4 +701,7 @@ trusted browser shell is open and uses declared broker APIs for durable work.
 - Authority is rechecked after `await`.
 - Tool discovery describes live apps; Core code does not encode ordinary app
   behavior.
+- Provider presentation is one-use and source/target-bound; ordinary session
+  grants cannot satisfy it, and only the provider tile interprets its opaque
+  data. Root-agent execution is a separate exact audience-restricted tool.
 - Closing or replacing an endpoint cancels its pending authority.

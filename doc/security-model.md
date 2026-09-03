@@ -64,6 +64,14 @@ Trusted components are narrower:
   and
 - explicit owner and controller actions.
 
+An owner may additionally choose to trust one exact installed provider app,
+such as Wallet, to interpret its own protocol and use its own declared
+authority. That is an app-level trust decision, not an expansion of Kernel's
+trusted computing base. Kernel continues to treat the provider's code,
+descriptor, review text, and messages as attacker-controlled input for
+isolation, parsing, routing, rendering, and resource bounds. No provider app id
+or token standard becomes Core policy.
+
 ## Owner, Principals, And Controllers
 
 The product has one human owner. The Kernel maintains the authorized-owner
@@ -343,6 +351,123 @@ binary leaves independently before decode. Metadata, depth, element, binary
 count, aggregate byte, allocation, concurrency, source, method, owner, and
 AppScope limits all remain enforced.
 
+Private self calls do not apply ICBlast's public JSON Schema projection after
+materialization. A string may remain opaque at a live record position only for
+the pinned encoder's released shorthand and only with no sidecar at or below
+that path; no generated schema, field, or domain special case authorizes it.
+Kernel validates the exact live method and type graph, binds every sidecar to
+that graph, encodes through the live IDL method, preflights the raw Candid, and
+requires the encoded blob count and aggregate blob-byte length to equal the
+materialized-sidecar statistics.
+
+## Provider-Mediated One-Shot Review
+
+An exact endpoint tool may declare the closed
+`{"neutron:consent":"provider_once"}` annotation. This is a narrow generic
+exception to the ordinary pre-dispatch cross-app grant: the target provider
+must own the specialized UI and inspect authoritative state before a meaningful
+decision exists.
+
+On the current provider-UI lane, Kernel validates the original tool input and
+binds a one-use capability to the originating validated public tool handler,
+both source and target endpoint/session/AppScope/version state, owner/auth
+state, and cancellation. Any exact live app surface may request presentation;
+that gives the source no authority to perform the operation because the trusted
+provider's visible action is the user's decision. Kernel dispatches the
+provider with a private one-use
+`presentUserInterface({ tileId, tool, arguments })` callback. Exact and wildcard
+session grants cannot satisfy it. The provider invokes that callback before
+domain-specific preparation or execution.
+
+Kernel derives the provider app from the suspended public invocation, opens or
+reuses and focuses only its exact declared tile, waits for the exact registered
+endpoint, and routes the bounded opaque arguments only to a private tool with
+`same_app` visibility and the `foreground_tile` audience. It injects the
+original caller context and audience attestation; neither can be supplied by
+app data. The provider tile verifies the audience, may exercise exact
+preapproved authority to derive and freeze non-value-moving review state,
+renders its own modal, and owns the accept/reject decision with concrete
+action/cancel labels. Only the affirmative action may dispatch value-moving
+execution; cancel may persist rejection. Kernel displays no provider dialog and
+interprets no app-domain fields.
+
+The audience marks the exact Kernel-selected provider tile, not continuously
+held browser focus. Focus or workspace selection may move while the exact
+endpoint/session remains live, while closing the provider tile before private
+dispatch cancels the request. Kernel performs no provider blur or caller focus
+restoration when the request settles.
+
+The callback is bound to one live public handler call and cancellation signal
+and is unavailable to Agent invocations. The interaction creates no grant, and
+returning from the handler without one completed callback fails the call.
+Timeout, duplicate use, replay,
+endpoint replacement, logout, update, or authority change aborts the pending
+route. Kernel rechecks both endpoints after asynchronous routing steps. The
+initial version rejects attachment and control tools so the path cannot smuggle a second
+transport or cancellation protocol.
+
+This primitive intentionally relies on the owner-trusted provider to call the
+callback before using its own preapproved authority and to keep preparation,
+display, decision, and execution correctly ordered. Kernel cannot enforce that
+app-specific sequence without importing provider semantics or gating every
+effect. A malicious Wallet already able to invoke its preapproved transfer
+method remains dangerous; `provider_once` does not make it more trusted by
+Kernel. The safety argument is defense in depth: exact install disclosure and
+source review inform the owner's trust choice, while runtime AppScope, source
+binding, backend reservations, bounded routing, durable command identity, and
+reconciliation still constrain execution.
+
+Agent automation is a separate exact tool, not an automatic answer to the human
+UI callback. The descriptor must combine `same_app` visibility with the
+`agent_root` audience. Kernel hides and rejects it for ordinary app calls and
+delegated descendants, admits only the active depth-zero root, and injects the
+attested audience. The provider verifies it and may use its own preapproved
+authority without provider or Kernel UI. An Agent invocation of the public
+tool which attempts `presentUserInterface` fails closed.
+
+The deprecated `requestApproval(review)` callback remains a generic
+compatibility surface. Published providers including Wallet 0.3.6 depend on
+its bounded raw-JSON Kernel review, but current provider code must use
+provider-owned UI. Both callbacks share one use, preventing stacked consent
+flows.
+
+Wallet uses the path without adding token logic to Kernel. Inside its private
+tile after presentation routing, it uses exact preapproved methods to prepare
+either an ICRC-1 transfer or a short-lived ICRC-2 allowance and to persist
+rejection. Only the affirmative action may dispatch the value-moving execute
+method. Its separate root tool performs the same bounded operation without UI
+only for the attested direct root. It
+lists ICRC approvals through the draft ICRC-103 API or ICP's distinct approval
+API and revokes under Wallet policy. Another asset standard belongs in another
+provider app.
+
+Exact allowance and expiry bounds limit a spender's authority but do not attest
+the code behind its principal. An external DEX canister may be upgraded after
+the Wallet or Swap source was reviewed and then spend within the remaining
+approved bounds. Likewise, response validation cannot prove that a selected
+malicious ledger honestly enumerates every allowance; it may omit or fabricate
+rows or implement inconsistent transfer behavior.
+
+Where a trustworthy attestation source exists, a provider or consumer app may
+optionally pin reviewed external module hashes and require a new decision when
+they drift. This is app-level defense in depth, not a Kernel policy: Kernel must
+not acquire DEX, module-registry, ledger, token, or allowance semantics.
+
+All assembled app backends call external canisters as the same Neutron canister
+principal. For a Swap-owned `icrc2_transfer_from`, the ledger authenticates that
+principal and applies the supplied `spender_subaccount` and arguments; it does
+not attest the internal AppScope or Motoko module which requested the call.
+Security therefore depends on compiler-enforced capability isolation, the
+Swap's exact ledger-method reservation, and reviewed backend code which
+hard-codes or validates the spender subaccount and every financial argument.
+The allowance itself is not a cryptographic per-app sandbox, and Kernel remains
+token-agnostic.
+
+Wallet rejects its own default source account as spender, treating an absent
+(`null`) subaccount and the all-zero subaccount as equivalent. Direct-calling
+Swap apps and fixtures must use a distinct exact spender subaccount because
+ICRC-2 same-account `transfer_from` is not allowance-bounded.
+
 ## Agent Mode
 
 Agent Mode is a generic, owner-controlled delegation role. It does not bypass
@@ -354,6 +479,16 @@ endpoint. The Kernel revalidates the invocation and its app authority around
 every protected operation. Outside Agent Mode, interactive calls use owner UI.
 During Agent Mode, eligible external signed calls follow the nested-agent
 policy, while interactive same-Neutron self calls are rejected.
+
+Provider-owned presentation is the human path and is rejected inside an Agent
+invocation. A provider's separate `same_app` + `agent_root` tool is admitted
+only for the active depth-zero root, receives Kernel-attested audience and
+caller context, and opens no UI. A descendant is rejected before target
+dispatch. The provider uses its invocation-scoped client for the exact
+preapproved self update, and that authority ends with the invocation. Each root
+still begins through a live tile in the enabled Agent installation and the exact
+granted entrypoint without a per-turn browser-focus or transient-activation
+gate; the resident cannot originate a root by itself.
 
 A nested `canister.call_dialog_v2` decision must receive the exact review value
 rather than summary counts, and an oversized challenge fails before signing.
@@ -376,6 +511,13 @@ authorized listing and certified HTTP reads without adding backend methods,
 managed-memory state, or app authority. Exact classification and integrity
 behavior are documented in
 [Kernel Frontend Runtime](./kernel-frontend-runtime.md#exact-installed-artifact-inspection).
+
+The inspection catalog is installed build output, not proof of complete
+repository source. Frontend bundles may be minified, retained Motoko is
+transformed, and generated, unretained, or binary material can be unavailable.
+Review agents may detect malicious behavior and are valuable defense in depth,
+but their verdict is not a bearer capability and cannot replace runtime
+authorization, exact transaction bounds, or ambiguous-outcome reconciliation.
 
 ## Connections And Provider Drivers
 
@@ -450,6 +592,9 @@ Changes must preserve all of the following:
   verification, and trusted root-key validation;
 - decoder bounds for paths, sizes, nesting, gzip, Candid, JSON, and browser
   messages;
+- one-use provider presentation bound to exact source, target, tool, sessions,
+  versions, and cancellation, with no session-grant bypass or provider-domain
+  interpretation by Kernel; plus a separate exact direct-root audience tool;
 - random publication salt, never-reused generations, and positive semantic
   tombstones before destructive remote cleanup; and
 - bounded previous-generation vetKey rotation safety.
