@@ -1241,7 +1241,7 @@ export function PermissionDisclosure({
             External HTTPS endpoints ({permission.endpoints.length})
           </h4>
           <p className="permission-copy">
-            Make paid, replicated HTTPS requests only beneath these exact URL
+            Make paid, single-node HTTPS requests only beneath these exact URL
             prefixes. The app may use relative unreserved path segments and
             structured query values, but cannot choose another origin.
           </p>
@@ -1299,9 +1299,10 @@ export function PermissionDisclosure({
             safety.
           </p>
           <p className="permission-copy permission-persistence">
-            Redirect responses are rejected, every response header is removed,
-            and requests are never automatically retried. Each endpoint has a
-            live on/off control in Settings.
+            Responses are not cross-checked by subnet consensus and may be
+            forged by the selected node. Redirect responses are rejected and
+            every response header is removed. Each endpoint has a live on/off
+            control in Settings.
             {hasPost
               ? " POST requires a caller-supplied idempotency key, which the kernel places in its fixed header; the remote service must perform deduplication."
               : ""}

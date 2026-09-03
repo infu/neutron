@@ -237,7 +237,7 @@ function HttpsOutcallsPage() {
     <CapabilityFrame
       status="development"
       statusLabel="Network dependent"
-      purpose="Make a paid, replicated request to one exact public HTTPS prefix without exposing the management canister or cycle attachment to app code."
+      purpose="Make a paid, single-node request to one exact public HTTPS prefix without exposing the management canister or cycle attachment to app code."
       boundary="The injected handle captures this installation. The broker builds only https://example.com/ plus a canonical relative suffix, admits only declared methods and headers, enforces a per-call quote ceiling and low-cycle reserve, bounds concurrency, and rechecks the endpoint lease before releasing a response. Its fixed transform removes every response header."
       declaration={'"https_outcalls": {\n  "api": 1,\n  "endpoints": [{\n    "id": "example",\n    "url_prefix": "https://example.com/",\n    "methods": ["get", "head"],\n    "request_headers": ["accept"],\n    "max_request_bytes": 4096,\n    "max_response_bytes": 32768,\n    "transform": "strip_headers"\n  }]\n}'}
       evidence={<EvidenceList items={[
@@ -253,7 +253,7 @@ function HttpsOutcallsPage() {
         HTTPS outcalls have no confidentiality: subnet replicas can observe the request and response. This fixture sends no credential or private data.
       </div>
       <p className="nt-text">
-        <code>example.com</code> is the reserved Example Domain, so this demo avoids a mutable JSON API. A local PocketIC network may not provide an HTTPS adapter, and a live network request may still fail because of cycles, upstream availability, consensus, or runtime revocation. Those failures are shown as real broker results.
+        <code>example.com</code> is the reserved Example Domain, so this demo avoids a mutable JSON API. A local PocketIC network may not provide an HTTPS adapter, and a live network request may still fail because of cycles, upstream availability, timeout, or runtime revocation. The selected node's response is not cross-checked by consensus. Those outcomes are shown as real broker results.
       </p>
       <div className="nt-command-bar">
         <button

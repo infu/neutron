@@ -138,8 +138,8 @@ let certifiedAssets = env.capabilities.certified_assets;`,
       "A backend can read one tightly bounded public HTTPS service without receiving arbitrary URL, transform, management-canister, or cycle-spending authority.",
     flow: [
       "App code selects the declared example endpoint and a canonical relative path.",
-      "The kernel constructs the final HTTPS URL, validates method and headers, quotes cycles, and dispatches a replicated HTTPS outcall.",
-      "A fixed transform strips response headers so replicas can agree, then the kernel bounds and releases the response.",
+      "The kernel constructs the final HTTPS URL, validates method and headers, quotes cycles, and dispatches a single-node HTTPS outcall.",
+      "A fixed transform strips response headers, then the kernel bounds and releases the response without cross-node consensus.",
     ],
     security: {
       enforced:
@@ -147,7 +147,7 @@ let certifiedAssets = env.capabilities.certified_assets;`,
       authority:
         "Kitchen Sink cannot redirect the request to another host, attach credentials or cycles freely, or choose its own transform.",
       visibility:
-        "There is no confidentiality: subnet replicas can observe requests and responses, and the remote server may receive one request per replica.",
+        "There is no confidentiality or response consensus: subnet replicas can observe the data, and the selected node could forge a response.",
     },
     example: {
       title: "Use the compiler-injected endpoint handle",

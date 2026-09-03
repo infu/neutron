@@ -1064,7 +1064,7 @@ function NormalAppDetails({
 
         {httpsOutcalls ? (
           <NormalPermissionCard
-            description="This app can send data to the services below. The destination and IC subnet replicas can read that data, and each request spends Neutron cycles."
+            description="This app can make single-node requests to the services below. Replies are not cross-checked by subnet consensus. The destination and IC subnet replicas can read the data, and each request spends Neutron cycles."
             kind="https_outcalls"
             title="External services"
           >
@@ -1971,7 +1971,7 @@ function HttpsOutcallsSettingsDetails({ endpoints }: {
   return (
     <>
       <AppDetailItem
-        description="Paid replicated HTTPS. Request and response plaintext is visible to subnet replicas and each destination. Response headers are stripped, redirects are rejected, and no request is automatically retried."
+        description="Paid single-node HTTPS with no response consensus. Request and response plaintext is visible to subnet replicas and each destination. Response headers are stripped and redirects are rejected."
         fullDescription
         meta={[
           "bounded concurrency and per-call cost safety",

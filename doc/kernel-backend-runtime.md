@@ -523,9 +523,10 @@ It quotes the current platform cost, enforces one/two/eight
 endpoint/app/global concurrency and a 250-billion-cycle reserve, and returns
 `#cost_too_high` for a quote above the 50-billion-cycle per-call ceiling. It
 keeps no fixed-hour call or cycle counter. The
-management adapter always requests replicated execution and installs the one
-management-caller-only transform, which returns status/body with headers
-removed. Observed redirects and raw rejects collapse to closed results.
+management adapter always requests non-replicated single-node execution and
+installs the one management-caller-only transform, which returns status/body
+with headers removed. The response has no cross-node integrity guarantee.
+Observed redirects and raw rejects collapse to closed results.
 
 Every paid dispatch captures the exact endpoint registry lease and repeats
 scope, declaration, fingerprint, and lease checks after the await. Revocation

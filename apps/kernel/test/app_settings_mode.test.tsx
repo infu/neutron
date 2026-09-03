@@ -71,7 +71,9 @@ test("normal app details keep material access and controls without developer dia
   expect(html).toContain("Revoke backend access 4");
   expect(html).toContain("External services");
   expect(html).toContain("https://api.example.com/v1/");
-  expect(html).toContain("The destination and IC subnet replicas can read that data");
+  expect(html).toContain("single-node requests");
+  expect(html).toContain("not cross-checked by subnet consensus");
+  expect(html).toContain("The destination and IC subnet replicas can read the data");
   expect(html).toContain("Runs automatically");
   expect(html).toContain("Background activity");
   expect(html).toContain("Other app features");

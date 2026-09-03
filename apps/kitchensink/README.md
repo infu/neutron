@@ -16,7 +16,7 @@ entrypoint, and background-initiated permission example.
 | Capability | Live demonstration | State |
 | --- | --- | --- |
 | `backend_calls` | Review an exact `icrc1_fee` reservation, attach one million cycles within the installed financial ceilings, and read the ICP ledger fee in one flow. | Implemented; a destination that retains no cycles refunds them, and the durable reservation remains if the probe fails. |
-| `https_outcalls` | Run a paid, replicated GET or HEAD against the exact `https://example.com/` prefix and inspect the bounded status/body result. | Development implementation; PocketIC may lack an HTTPS adapter and a live call can fail without fabricating success. |
+| `https_outcalls` | Run a paid, single-node GET or HEAD against the exact `https://example.com/` prefix and inspect the bounded status/body result. | Development implementation; PocketIC may lack an HTTPS adapter and a live call can fail without fabricating success. |
 | `randomness` | Fetch one app-scoped 32-byte consensus seed. | Implemented; concurrency and low-cycle safety remain, with no hourly request limit. |
 | `chain_key_signing` | Fetch the app-installation public key and sign one fixed, harmless receipt assertion while showing the domain, digest, fingerprint, key, and signature evidence. | Development implementation; the page reports an unavailable local key or management failure honestly and never fabricates or retries a signature. |
 | `vetkeys` | Encrypt a local plaintext with the public IBE key, derive the challenge-bound private key, verify local decrypt, and exercise current/previous-generation lifecycle controls. | Implemented; private key bytes are never rendered or stored, and local use requires the vetKD bootstrap. |
@@ -108,8 +108,8 @@ uses no credentials or private data, and exposes both GET and HEAD. Its backend
 receives only the scoped `HttpsOutcallsV1` leaf: it cannot choose another host,
 attach cycles, retain response headers, select a transform, or reach the
 management actor. The page reports real local/mainnet adapter, per-call cost,
-consensus, concurrency, and revocation failures. HTTPS outcalls provide integrity through
-replicated execution but no confidentiality from subnet replicas.
+timeout, concurrency, and revocation failures. HTTPS outcalls use one selected
+node, provide no response consensus, and have no confidentiality from subnet replicas.
 
 The chain-key fixture uses only the `receipt_assertions` ECDSA slot. Its backend
 can ask for that slot's public key or submit an assertion blob; it cannot choose
@@ -175,7 +175,7 @@ npm run test:e2e:kitchensink
 
 The package build emits self-contained `main`, `service`, and `tray` web
 assets, generated Motoko modules, the method-schema artifact, and
-`kitchensink.v0.3.9.neutron`. The backend selects only the exact capability leaf
+`kitchensink.v0.3.10.neutron`. The backend selects only the exact capability leaf
 interfaces from `mo:neutron-capabilities`: backend calls, HTTPS outcalls,
 randomness, chain-key assertion signing, `CertifiedAssetsV2`, and Stable Store.
 It never receives a universal kernel capability object.
