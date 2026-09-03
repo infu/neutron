@@ -125,13 +125,13 @@ legacy callback or an ordinary reusable tool grant. Wallet features unrelated
 to provider funding and direct-root routing are required to remain usable in
 every partial-upgrade combination.
 
-The compatibility contract for K323 through K327 and W306 through W310 is the
+The compatibility contract for K323 through K328 and W306 through W311 is the
 exact matrix in
 [App Method Access And Call Consent](../../doc/app-method-access-and-call-consent.md#provider-mediated-one-shot-tools).
 It distinguishes human presentation from root-tool availability, including the
 K324/W308 lane where human funding fails closed but direct-root funding works.
 Release evidence for candidate cells requires exact-archive qualification. At
-the source-contract level, existing callers need no migration: W310 retains the
+the source-contract level, existing callers need no migration: W311 retains the
 endpoint, schemas, provider annotation, and caller
 semantics of `wallet_fund_v1`. Existing custom ledger state is required to
 remain usable; allowance features require the additional exact scopes described
@@ -185,14 +185,17 @@ the setup page uses an explicit **Open Wallet** action, copy affordances use an
 open icon instead of pretending to copy, and Ethereum deposit entry starts only
 after the handoff so no draft is discarded. Escape dismisses the popout.
 
-The non-persistent resident exposes three public tools:
+The non-persistent resident exposes four public tools:
 `wallet_overview` reads the bounded wallet projection, `wallet_refresh`
-refreshes selected ledger balances and returns that same projection, and
-`wallet_fund_v1` performs the human funding flow above. It also declares the
-private, direct-root-only `wallet_fund_root_v1` automation tool. All use closed
-schemas and preserve `Nat`/`Int` values as decimal strings. Wallet intentionally
-publishes no tray badge: it has no unread cursor, and balance errors are not
-unread items.
+refreshes selected ledger balances and returns that same projection,
+`wallet_token_info_v1` reads live metadata, the authoritative current fee, and
+the Wallet default-account balance for one selected ICRC ledger, and
+`wallet_fund_v1` performs the human funding flow above. The token-info fee is an
+advisory quote; funding reads it again before dispatch. The resident also
+declares the private, direct-root-only `wallet_fund_root_v1` automation tool.
+All use closed schemas and preserve `Nat`/`Int` values as decimal strings.
+Wallet intentionally publishes no tray badge: it has no unread cursor, and
+balance errors are not unread items.
 
 Assets show an indicative USD position value and portfolio total using the
 native asset behind each reviewed ledger (`ckBTC` uses BTC, `ckETH` uses ETH,

@@ -48,14 +48,10 @@ export function admitOwnerAttention(
   return token;
 }
 
-export function finishOwnerAttention(
-  token: string,
-  options: { recoveryPause?: boolean } = {},
-): void {
+export function finishOwnerAttention(token: string): void {
   const active = useUiAttentionStore.getState().active;
   if (!active || active.token !== token) return;
   useUiAttentionStore.setState({ active: null });
-  if (options.recoveryPause) pauseAppAttention(active.appId, 10_000);
 }
 
 export function pauseAppAttention(appId: string, milliseconds: number): void {

@@ -55,6 +55,50 @@ afterAll(() => {
   mock.restore();
 });
 
+test("token information uses one exact Wallet self-call", async () => {
+  const handler = handlers.get("wallet_token_info_v1");
+  if (!handler) throw new Error("Wallet token information tool was not exposed");
+  const calls: unknown[][] = [];
+
+  await expect(
+    handler(
+      { ledger: fundingRequest.ledger },
+      {
+        kernel: {
+          updateSelf: async (...args: unknown[]): Promise<unknown> => {
+            calls.push(args);
+            return {
+              ledger: fundingRequest.ledger,
+              account: {
+                owner: "togwv-zqaaa-aaaal-qr7aa-cai",
+                subaccount: null,
+              },
+              token_name: "Internet Computer",
+              token_symbol: "ICP",
+              decimals: "8",
+              fee_atoms: "10000",
+              balance_atoms: "123456789",
+              observed_at_ns: "1800000000000000000",
+            };
+          },
+        },
+      },
+    ),
+  ).resolves.toEqual({
+    ledger: fundingRequest.ledger,
+    account: "togwv-zqaaa-aaaal-qr7aa-cai",
+    name: "Internet Computer",
+    symbol: "ICP",
+    decimals: 8,
+    feeAtoms: "10000",
+    balanceAtoms: "123456789",
+    observedAtNs: "1800000000000000000",
+  });
+  expect(calls).toEqual([
+    ["wallet_token_info_v1", [{ ledger: fundingRequest.ledger }], 60],
+  ]);
+});
+
 test("root funding invalidates the Wallet projection after a failed attempt", async () => {
   publications.length = 0;
   const handler = handlers.get("wallet_fund_root_v1");

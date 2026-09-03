@@ -110,6 +110,39 @@ test("Kitchen Sink funds governance with one Wallet decision and no Kernel dialo
   const amount = BigInt(ICP_SWAP_AMOUNT_ATOMS);
   const source = account(runtime.canisterId);
   const governance = account(NEUTRINITE_GOVERNANCE);
+  const sourceBalance = await ledger.icrc1_balance_of(source);
+  const walletFrame = page.locator(
+    'iframe[data-app-id="wallet"][data-tile-id="wallet"]',
+  );
+
+  await expect(walletFrame).toHaveCount(0);
+  await kitchen
+    .getByRole("button", {
+      name: "Read live ICP fee and Wallet balance",
+      exact: true,
+    })
+    .click();
+  const tokenInfoPermission = page.locator('[data-tid="frontend-tool-dialog"]');
+  await expect(tokenInfoPermission).toBeVisible();
+  await expect(tokenInfoPermission).toContainText("wallet_token_info_v1");
+  await tokenInfoPermission
+    .locator('[data-tid="frontend-tool-approve-once"]')
+    .click();
+  const tokenInfoResult = kitchen.locator('[data-tid="wallet-funding-result"]');
+  await expect(tokenInfoResult).toContainText(`"feeAtoms": "${fee}"`, {
+    timeout: 120_000,
+  });
+  await expect(tokenInfoResult).toContainText(
+    `"balanceAtoms": "${sourceBalance}"`,
+  );
+  await expect(tokenInfoResult).toContainText('"decimals": 8');
+  await expect(tokenInfoResult).toContainText('"symbol": "ICP"');
+  await expect(tokenInfoResult).toContainText(
+    `"account": "${runtime.canisterId}"`,
+  );
+  await expect(tokenInfoPermission).toHaveCount(0);
+  await expect(walletFrame).toHaveCount(0);
+
   const walletReuse: WalletFrameReuseAudit = {
     established: false,
     marker: `wallet-reuse-${Date.now()}-${Math.random()}`,

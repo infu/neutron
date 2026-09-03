@@ -197,7 +197,6 @@ export function requestAgentGrant(
           signal,
           "The agent permission request was cancelled by the requesting app",
         ),
-        false,
       );
     };
     if (signal) callbacks.abort = abort;
@@ -227,7 +226,6 @@ export function approveAgentGrant(): void {
 export function rejectAgentGrant(): void {
   rejectPendingAgentGrant(
     policyError("REQUEST_CANCELLED", "Agent mode was not enabled"),
-    true,
   );
 }
 
@@ -621,7 +619,7 @@ export async function requestAgentConsent(
   }
 }
 
-function rejectPendingAgentGrant(error: Error, recoveryPause: boolean): void {
+function rejectPendingAgentGrant(error: Error): void {
   const callbacks = grantCallbacks;
   grantCallbacks = null;
   if (callbacks) {
@@ -629,7 +627,7 @@ function rejectPendingAgentGrant(error: Error, recoveryPause: boolean): void {
     callbacks.reject(error);
   }
   if (grantAttentionToken) {
-    finishOwnerAttention(grantAttentionToken, { recoveryPause });
+    finishOwnerAttention(grantAttentionToken);
   }
   grantAttentionToken = null;
   useAgentModeStore.setState({ pendingGrant: null });

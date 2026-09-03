@@ -146,11 +146,7 @@ export function removeFrontendAppState(appId: string): void {
       request.caller.appId === appId ||
       targetBelongsToApp(request.target, appId)
     ) {
-      rejectRequest(
-        request.cid,
-        new Error(`App ${appId} was uninstalled`),
-        false,
-      );
+      rejectRequest(request.cid, new Error(`App ${appId} was uninstalled`));
     }
   }
   for (let index = auditEntries.length - 1; index >= 0; index -= 1) {
@@ -217,18 +213,6 @@ export function requestFrontendToolPermission(input: {
     return Promise.resolve();
   }
 
-  const pending = Object.values(useMsgBusPermissionStore.getState().requests);
-  if (pending.length >= 16) {
-    return Promise.reject(new Error("Too many pending frontend tool requests"));
-  }
-  if (
-    pending.some((request) => request.caller.endpoint === input.caller.endpoint)
-  ) {
-    return Promise.reject(
-      new Error("This app endpoint already has a pending tool request"),
-    );
-  }
-
   const cid = ++cidIncr;
   const attentionToken = admitOwnerAttention(
     input.caller.appId,
@@ -263,7 +247,6 @@ export function requestFrontendToolPermission(input: {
           input.signal,
           "App request was cancelled by the requesting surface",
         ),
-        false,
       );
     };
     callbacks.set(cid, {
@@ -274,7 +257,6 @@ export function requestFrontendToolPermission(input: {
         rejectRequest(
           cid,
           new KernelPolicyError("REQUEST_EXPIRED", "App request expired"),
-          false,
         );
       }, 60_000),
     });
@@ -312,19 +294,17 @@ export function approveFrontendToolRequest(
 
 export function rejectFrontendToolRequest(cidValue: number | string): void {
   const cid = Number(cidValue);
-  rejectRequest(cid, new Error("User rejected frontend tool access"), true);
+  rejectRequest(cid, new Error("User rejected frontend tool access"));
 }
 
-function rejectRequest(cid: number, error: Error, recoveryPause: boolean): void {
+function rejectRequest(cid: number, error: Error): void {
   const request = useMsgBusPermissionStore.getState().requests[cid];
   const callback = callbacks.get(cid);
   if (callback) cleanupCallback(callback);
   callback?.reject(error);
   callbacks.delete(cid);
   if (request) {
-    finishOwnerAttention(request.attentionToken, {
-      recoveryPause,
-    });
+    finishOwnerAttention(request.attentionToken);
   }
   useMsgBusPermissionStore.getState().removeRequest(cid);
 }
@@ -361,7 +341,6 @@ subscribeEndpointChanges(() => {
           "REQUEST_CANCELLED",
           "An app surface changed while permission was pending",
         ),
-        false,
       );
     }
   }

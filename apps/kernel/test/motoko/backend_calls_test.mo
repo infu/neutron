@@ -199,10 +199,9 @@ assert (not Memory.allows(mem, appA, ledger, "future_method"));
 assert (Memory.allows(mem, appA, other, "future_method"));
 assert (Memory.allows(mem, appA, other, "read"));
 
-// Reservations are exclusive ownership at each point. Whole-canister
-// ownership wins over a global method, and a global method wins over an exact
-// point. Lower tiers remain dormant and become effective when the higher tier
-// is released.
+// Reservations retain exclusive ownership within each scope tier. Distinct
+// tiers are independently effective, so another app's broader grant cannot
+// silently disable an already-approved narrower grant.
 let ownership : Types.Memory = {
     var next_id = 1;
     reservations = Map.empty<Nat, Types.Reservation>();
@@ -230,7 +229,7 @@ let filesExact = require(Memory.put(
     11,
 ));
 assert (Memory.allows(ownership, mail, other, "mail_receive_v1"));
-assert (not Memory.allows(ownership, files, other, "mail_receive_v1"));
+assert (Memory.allows(ownership, files, other, "mail_receive_v1"));
 
 let filesCanister = require(Memory.put(
     ownership,
@@ -240,7 +239,7 @@ let filesCanister = require(Memory.put(
     12,
 ));
 assert (Memory.allows(ownership, files, ledger, "mail_receive_v1"));
-assert (not Memory.allows(ownership, mail, ledger, "mail_receive_v1"));
+assert (Memory.allows(ownership, mail, ledger, "mail_receive_v1"));
 assert (Memory.allows(ownership, mail, other, "mail_receive_v1"));
 
 // Same-app reserve is idempotent; another app cannot become a second owner at
@@ -314,8 +313,10 @@ Map.add(
 );
 assert (not Memory.allows(ownership, mail, other, "mail_receive_v1"));
 assert (not Memory.allows(ownership, appB, other, "mail_receive_v1"));
+assert (not Memory.allows(ownership, files, other, "mail_receive_v1"));
 assert (Memory.remove(ownership, duplicateConflict.id));
 assert (Memory.allows(ownership, mail, other, "mail_receive_v1"));
+assert (Memory.allows(ownership, files, other, "mail_receive_v1"));
 
 assert (Memory.remove(ownership, filesCanister.id));
 assert (not Memory.allows(ownership, files, ledger, "mail_receive_v1"));

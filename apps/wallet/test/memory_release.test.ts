@@ -32,6 +32,13 @@ const releasedWallet309 = new URL(
 const releasedWallet309Bytes = 677_558;
 const releasedWallet309Sha256 =
   "6deaf1dc0a05582dfc7cd9db56f7e2bb9705df14e825bd817689d31a1e9e0398";
+const releasedWallet310 = new URL(
+  "../wallet.v0.3.10.neutron",
+  import.meta.url,
+);
+const releasedWallet310Bytes = 677_819;
+const releasedWallet310Sha256 =
+  "a2077b5da0f5623b61e8f8a88f465bcac89ceb43908eed8fa9a5da5aa1aa7442";
 const kernel: PackagedNeutronManifest = {
   format: 3,
   id: "kernel",
@@ -155,6 +162,17 @@ test("Wallet 0.3.10 keeps both exact production 0.3.9 memory roots", async () =>
     productionSha256: releasedWallet309Sha256,
     candidateArchive: new URL("../wallet.v0.3.10.neutron", import.meta.url),
     candidateVersion: 310,
+  });
+});
+
+test("Wallet 0.3.11 keeps both exact production 0.3.10 memory roots", async () => {
+  await assertWalletCodeOnlyRelease({
+    productionArchive: releasedWallet310,
+    productionVersion: 310,
+    productionBytes: releasedWallet310Bytes,
+    productionSha256: releasedWallet310Sha256,
+    candidateArchive: new URL("../wallet.v0.3.11.neutron", import.meta.url),
+    candidateVersion: 311,
   });
 });
 

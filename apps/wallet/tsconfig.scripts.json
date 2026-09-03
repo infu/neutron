@@ -23,6 +23,7 @@
     "src/prices.ts",
     "src/reservations.ts",
     "src/service.ts",
+    "src/token_info.ts",
     "src/token_mark.tsx",
     "src/tray.tsx",
     "src/wallet_data.ts",

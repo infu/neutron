@@ -2,7 +2,7 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 327,
+  "version": 328,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "src": "main.mo",
   "init_arg": [

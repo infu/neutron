@@ -213,9 +213,10 @@ asserting human and root behavior independently:
   still succeeds without UI.
 - K325/W307 and K325/W308 succeed through Wallet UI and direct root.
 - The published K326 bytes preserve those results and historically release an
-  unchanged settled provider session's frame focus. The successor under test
-  removes that focus cleanup and the corresponding source-focus/activation
-  gate without changing the provider schemas or endpoint binding.
+  unchanged settled provider session's frame focus. K327 removes that focus
+  cleanup and the corresponding source-focus/activation gate. K328 retains the
+  same provider contract, removes the automatic post-rejection cooldown, and
+  evaluates approved backend-reservation tiers independently.
 
 Representative old apps must retain valid session-grant, attachment, control,
 self-call, and Agent behavior, while malformed tool input still fails before
@@ -237,14 +238,14 @@ Wallet backend and managed-memory tests must cover:
 
 - clean initialization of the unchanged `wallet` v1 and `wallet_commands` v1
   roots, with no schema or migration change for the successor release;
-- state-preserving upgrades from exact Wallet 0.3.9 to 0.3.10 and the supported
-  0.3.6 skip path, plus Kitchen Sink 0.3.7 to 0.3.8, with representative
+- state-preserving upgrades from exact Wallet 0.3.10 to 0.3.11 and the supported
+  0.3.6 skip path, plus Kitchen Sink 0.3.8 to 0.3.9, with representative
   selected ledgers, metadata, history,
   native-deposit state, settings, and prepared, pending, and terminal
   command-journal rows;
 - the same caller app/request id and financial intent replaying one command
   after its tile endpoint UUID is replaced, including prepared, pending, and
-  terminal W309 rows, while a changed role, Agent mode, ledger, amount, or
+  terminal W310 rows, while a changed role, Agent mode, ledger, amount, or
   other intent field conflicts;
 - exact ledger arguments and fixed `created_at_time` surviving lost replies and
   upgrades, exact `Duplicate` reconciliation, definite rejection, pending-entry

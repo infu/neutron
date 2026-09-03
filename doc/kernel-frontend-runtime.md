@@ -927,12 +927,12 @@ provider-owned tile path. It shares the same one-use capability with
 All Kernel-owned frontend tool, signed call, backend access, Connections, and
 Agent Mode grant prompts first pass through the shared UI-attention policy in
 `src/ui_attention/owner.ts`. Only one may be active globally and there is no
-hidden queue. Rolling source-app and global limits reject excess attempts with
-structured errors. Requests expire, and rejecting, pressing Escape, or closing
-a backdrop applies a short recovery pause. Prompt controls can pause that source
-app for two minutes, ten minutes, or the browser session. Direct workspace
-navigation has no Kernel prompt. A provider-owned modal is app UI inside its
-isolated tile and is bounded by that provider's implementation instead.
+hidden queue. Requests expire, but rejecting, pressing Escape, or closing a
+backdrop does not impose an automatic cooldown. Prompt controls can explicitly
+pause that source app for two minutes, ten minutes, or the browser session.
+Direct workspace navigation has no Kernel prompt. A provider-owned modal is app
+UI inside its isolated tile and is bounded by that provider's implementation
+instead.
 
 ### Agent Mode Runtime
 

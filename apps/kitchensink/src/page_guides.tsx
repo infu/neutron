@@ -110,14 +110,14 @@ let certifiedAssets = env.capabilities.certified_assets;`,
       "A backend can call one owner-reserved canister method and transfer a manifest-bounded cycle amount without receiving actor construction, arbitrary raw calls, or raw cycle primitives.",
     flow: [
       "The tile asks the kernel to reserve the exact target principal plus icrc1_fee method for this installation.",
-      "The injected Motoko handle checks the winning reservation and the per-call/day cycle ceilings, then the kernel performs the inter-canister call as the Neutron canister.",
+      "The injected Motoko handle checks a matching reservation and the per-call/day cycle ceilings, then the kernel performs the inter-canister call as the Neutron canister.",
       "Kitchen Sink decodes the bounded reply as the expected Candid type and reports malformed replies as errors.",
     ],
     security: {
       enforced:
         "Exact reservation, source installation, target and method, argument/reply limits, concurrency, gross cycles per call, charged plus unresolved cycles per UTC day, low-balance reserve, runtime toggle, and post-await revocation.",
       authority:
-        "The app cannot call Neutron itself, the management canister, anonymous targets, or a method outside its winning reservation.",
+        "The app cannot call Neutron itself, the management canister, anonymous targets, or a method outside an approved matching reservation.",
       visibility:
         "Arguments and replies are replicated canister data. A successful transport does not make the remote reply semantically trustworthy.",
     },
@@ -606,17 +606,17 @@ await bus.callTool({
   },
   wallet_funding: {
     benefit:
-      "A swap or commerce app can ask the user's trusted Wallet to fund one exact action without learning token implementation details or asking for a second approval.",
+      "A swap or commerce app can ask the user's trusted Wallet for live token fee and balance information, then fund one exact action without reserving the ledger or asking for a second funding approval.",
     flow: [
-      "Kitchen Sink's resident serializes and prepares or reuses one persisted fixed ICP intent per rail before enabling that control; a warned discard/reset is the only way to replace an unresolved or unreadable record, and an ambiguous storage reply disables only that rail until reread. The user's click sends the exact saved intent to Wallet's resident wallet_fund_v1 tool.",
-      "The Kernel authenticates and routes the request and opens or focuses Wallet without displaying a token approval dialog.",
+      "The separate wallet_token_info_v1 demo asks Wallet for live ICP metadata, fee, and its fixed default-account balance without granting Kitchen Sink ledger access or joining the funding click. Kitchen Sink's resident separately prepares or reuses one persisted fixed ICP intent per rail before enabling that control; only an explicit warned discard/reset replaces unresolved or unreadable state. The user's click sends that exact saved intent to wallet_fund_v1.",
+      "For funding, the Kernel authenticates and routes the request and opens or focuses Wallet without displaying a token approval dialog. The separate token-information read uses ordinary cross-app consent and does not open Wallet.",
       "Wallet reads authoritative ledger metadata and fees, shows its own token-aware modal, then transfers directly or creates an allowance that expires five minutes after the intent was prepared.",
     ],
     security: {
       enforced:
-        "The Kernel source-binds Kitchen Sink and Wallet, validates the tool schemas, and opens the exact Wallet tile; it routes but does not interpret or display ICP amounts, decimals, or fees.",
+        "The Kernel source-binds Kitchen Sink and Wallet and validates both tool schemas. For funding it opens the exact Wallet tile; it routes but does not interpret or display ICP amounts, decimals, or fees.",
       authority:
-        "Wallet owns the mutation reservations and execution. Kitchen Sink fixes the ledger, amount, and governance account and cannot spend Neutrinite governance's allowance or fall back to a ledger mutation call.",
+        "Wallet owns the read and mutation reservations and execution. Token info is limited to a selected ledger and Wallet's default account. Kitchen Sink fixes the funding ledger, amount, and governance account and cannot spend Neutrinite governance's allowance or fall back to a ledger call.",
       visibility:
         "The intent and receipt traverse the trusted Kernel router, while the token-aware review is rendered inside Wallet. Ledger transfers and approvals are public replicated ledger state.",
     },

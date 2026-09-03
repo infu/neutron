@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 310,
+  "version": 311,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Canister-owned ICRC token balances",
   "src": "main.mo",
@@ -49,7 +49,8 @@
         "wallet_funding_prepare_v1",
         "wallet_funding_execute_v1",
         "wallet_funding_reject_v1",
-        "wallet_allowances_page_v1"
+        "wallet_allowances_page_v1",
+        "wallet_token_info_v1"
       ]
     },
     "scheduled_tasks": {
@@ -227,6 +228,10 @@
       "async": "async*"
     },
     "wallet_allowances_page_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_token_info_v1": {
       "type": "update",
       "async": "async*"
     },

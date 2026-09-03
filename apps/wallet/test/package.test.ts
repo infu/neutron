@@ -28,6 +28,11 @@ import {
   walletProjectionEmptyInputSchema,
   walletProjectionSchema,
 } from "../src/wallet_projection.ts";
+import {
+  WALLET_TOKEN_INFO_TOOL,
+  walletTokenInfoInputSchema,
+  walletTokenInfoOutputSchema,
+} from "../src/token_info.ts";
 
 const manifestUrl = new URL("../neutron.json", import.meta.url);
 const backendUrl = new URL("../backend/main.mo", import.meta.url);
@@ -46,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.10.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.11.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -58,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 310,
+    version: 311,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -100,6 +105,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_funding_execute_v1",
           "wallet_funding_reject_v1",
           "wallet_allowances_page_v1",
+          "wallet_token_info_v1",
         ],
       },
       backend_calls: {
@@ -149,6 +155,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value.func).toHaveProperty("wallet_funding_execute_v1");
   expect(value.func).toHaveProperty("wallet_funding_reject_v1");
   expect(value.func).toHaveProperty("wallet_allowances_page_v1");
+  expect(value.func).toHaveProperty("wallet_token_info_v1");
   expect(value.func).toHaveProperty("wallet_refresh_deposits");
   expect(value.func?.wallet_history_tick).toEqual({
     type: "internal",
@@ -231,6 +238,24 @@ test("Wallet method schemas preserve structured snapshots", async () => {
       snapshot: { type: "object" },
     },
   });
+  expect(artifact.methods.wallet_token_info_v1).toMatchObject({
+    input: {
+      prefixItems: [
+        {
+          properties: {
+            ledger: expect.any(Object),
+          },
+        },
+      ],
+    },
+    output: {
+      properties: {
+        account: expect.any(Object),
+        fee_atoms: expect.any(Object),
+        balance_atoms: expect.any(Object),
+      },
+    },
+  });
 });
 
 test("generated API-1 ICRC Account inputs use the canonical string shorthand", async () => {
@@ -249,6 +274,29 @@ test("generated API-1 ICRC Account inputs use the canonical string shorthand", a
     "wallet_allowances_page_v1/input/prefixItems/0/properties/cursor/oneOf/0/properties/icrc103/properties/from_account",
     "wallet_allowances_page_v1/input/prefixItems/0/properties/cursor/oneOf/0/properties/icrc103/properties/to_spender",
   ]);
+});
+
+test("Wallet token information is selected-ledger and default-account only", async () => {
+  const backend = await readFile(backendUrl, "utf8");
+  const start = backend.indexOf(
+    "        public func /*update*/wallet_token_info_v1(",
+  );
+  const end = backend.indexOf("        func icrcAllowancesPage(", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const body = backend.slice(start, end);
+
+  expect(body.match(/selectedLedger\(request\.ledger\)/gu)).toHaveLength(2);
+  expect(body).toContain('calls.can_call(request.ledger, "icrc1_metadata")');
+  expect(body).toContain('calls.can_call(request.ledger, "icrc1_fee")');
+  expect(body).toContain('calls.can_call(request.ledger, "icrc1_balance_of")');
+  expect(body).toContain("Icrc.metadataRequest(request.ledger)");
+  expect(body).toContain("Icrc.feeRequest(request.ledger)");
+  expect(body).toContain(
+    "Icrc.balanceRequest(request.ledger, calls.canister_principal)",
+  );
+  expect(body).not.toContain("request.account");
+  expect(body).not.toContain("request.subaccount");
 });
 
 test("Wallet setup replaces one v1 ledger selection through one permission batch", async () => {
@@ -422,6 +470,8 @@ test("Wallet tile and tray mount the same app and gate only focused capabilities
 
   expect(service).toContain("WALLET_PROJECTION_TOOLS.overview");
   expect(service).toContain("WALLET_PROJECTION_TOOLS.refresh");
+  expect(service).toContain("WALLET_TOKEN_INFO_TOOL");
+  expect(service).toContain("WALLET_TOKEN_INFO_METHOD");
   expect(service).toContain('updateSelf("wallet_refresh_balances"');
   expect(service).toContain("setTrayState({ badge: null })");
   expect(service).toContain("publishAppStateChange(WALLET_PROJECTION_TOPIC");
@@ -462,6 +512,14 @@ test("Wallet resident tool schemas are closed and hardened", () => {
       inputSchema: walletFundingInputSchema,
       outputSchema: walletFundingOutputSchema,
       annotations: { "neutron:consent": "provider_once" },
+    }),
+  ).not.toThrow();
+  expect(() =>
+    normalizeToolDescriptor({
+      name: WALLET_TOKEN_INFO_TOOL,
+      inputSchema: walletTokenInfoInputSchema,
+      outputSchema: walletTokenInfoOutputSchema,
+      annotations: { "neutron:effects": ["read", "network"] },
     }),
   ).not.toThrow();
   expect(() =>

@@ -2330,12 +2330,12 @@ function reservationLabel(reservation: BackendCallReservation): string {
 
 function reservationDescription(reservation: BackendCallReservation): string {
   if (reservation.scopeKind === "method") {
-    return `One method on eligible non-system canisters except targets owned as whole canisters. This tier takes priority over exact grants. ${BACKEND_CALL_PERSISTENCE_DISCLOSURE}`;
+    return `One method on eligible non-system canisters. ${BACKEND_CALL_PERSISTENCE_DISCLOSURE}`;
   }
   if (reservation.scopeKind === "principal") {
-    return `${reservation.principal ?? "Unknown canister"}. Every current and future method; this tier takes priority over method-wide and exact grants. ${BACKEND_CALL_PERSISTENCE_DISCLOSURE}`;
+    return `${reservation.principal ?? "Unknown canister"}. Every current and future method. ${BACKEND_CALL_PERSISTENCE_DISCLOSURE}`;
   }
-  return `${reservation.principal ?? "Unknown canister"}. One exact method, effective only when no whole-canister or method-wide owner has priority. ${BACKEND_CALL_PERSISTENCE_DISCLOSURE}`;
+  return `${reservation.principal ?? "Unknown canister"}. One exact method on this canister. ${BACKEND_CALL_PERSISTENCE_DISCLOSURE}`;
 }
 
 function formatCanisterTimestamp(value: bigint): string {

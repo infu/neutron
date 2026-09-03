@@ -91,7 +91,6 @@ export function requestConnectionConsent(
       timeout: setTimeout(() => {
         rejectPending(
           new KernelPolicyError("REQUEST_EXPIRED", "Connection request expired"),
-          false,
         );
         useConnectionsStore.getState().setDialog(null);
         clearPendingFlow(consent.flowId);
@@ -109,7 +108,6 @@ export function approveConnectionConsent(): void {
         "REQUEST_CANCELLED",
         "The requesting app endpoint is no longer active",
       ),
-      false,
     );
     useConnectionsStore.getState().setDialog(null);
     clearPendingFlow(dialog.flowId);
@@ -139,7 +137,6 @@ export function approveConnectionConsent(): void {
       pendingConnect.timeout = setTimeout(() => {
         rejectPending(
           new KernelPolicyError("REQUEST_EXPIRED", "Connection flow expired"),
-          false,
         );
         clearPendingFlow(dialog.flowId);
       }, 10 * 60_000);
@@ -178,7 +175,6 @@ export function requestDisconnectConsent(
       timeout: setTimeout(() => {
         rejectPending(
           new KernelPolicyError("REQUEST_EXPIRED", "Disconnect request expired"),
-          false,
         );
         useConnectionsStore.getState().setDialog(null);
       }, 60_000),
@@ -195,7 +191,6 @@ export function approveDisconnectConsent(): void {
         "REQUEST_CANCELLED",
         "The requesting app endpoint is no longer active",
       ),
-      false,
     );
     useConnectionsStore.getState().setDialog(null);
     return;
@@ -229,7 +224,7 @@ export async function completeConnectionCallback(
       "REQUEST_CANCELLED",
       "The requesting app endpoint is no longer active",
     );
-    rejectPending(error, false);
+    rejectPending(error);
     clearPendingFlow(flowId);
     throw error;
   }
@@ -239,7 +234,7 @@ export async function completeConnectionCallback(
       "REQUEST_CANCELLED",
       "The requesting app endpoint is no longer active",
     );
-    rejectPending(error, false);
+    rejectPending(error);
     clearPendingFlow(flowId);
     throw error;
   }
@@ -264,7 +259,7 @@ export async function completeConnectionCallback(
       "REQUEST_CANCELLED",
       "The requesting app endpoint is no longer active",
     );
-    if (pendingConnect) rejectPending(error, false);
+    if (pendingConnect) rejectPending(error);
     clearPendingFlow(flowId);
     throw error;
   }
@@ -297,7 +292,7 @@ export function failConnectionCallback(flowId: string, error: unknown): void {
   clearPendingFlow(flowId);
 }
 
-function rejectPending(error: Error, recoveryPause = true): void {
+function rejectPending(error: Error): void {
   const token = useConnectionsStore.getState().dialog?.attentionToken;
   if (pendingConnect) clearTimeout(pendingConnect.timeout);
   if (pendingDisconnect) clearTimeout(pendingDisconnect.timeout);
@@ -305,7 +300,7 @@ function rejectPending(error: Error, recoveryPause = true): void {
   pendingDisconnect?.reject(error);
   pendingConnect = null;
   pendingDisconnect = null;
-  if (token) finishOwnerAttention(token, { recoveryPause });
+  if (token) finishOwnerAttention(token);
 }
 
 function clearPendingFlow(flowId: string): void {
@@ -332,10 +327,7 @@ export function removeConnectionRequestsForApp(appId: string): void {
     return;
   }
   const flowId = pendingConnect?.flowId;
-  rejectPending(
-    new Error(`Connection request for '${appId}' was cancelled`),
-    false,
-  );
+  rejectPending(new Error(`Connection request for '${appId}' was cancelled`));
   useConnectionsStore.getState().setDialog(null);
   if (flowId) clearPendingFlow(flowId);
 }
@@ -348,7 +340,6 @@ export function clearConnectionRequestsForAuth({
   if (pendingConnect || pendingDisconnect) {
     rejectPending(
       new Error("Connection request was cancelled by an authentication change"),
-      false,
     );
   }
   useConnectionsStore.getState().setDialog(null);
@@ -369,7 +360,6 @@ subscribeEndpointChanges(() => {
       "REQUEST_CANCELLED",
       "The requesting app endpoint is no longer active",
     ),
-    false,
   );
   useConnectionsStore.getState().setDialog(null);
   if (flowId) clearPendingFlow(flowId);

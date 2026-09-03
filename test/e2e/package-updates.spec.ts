@@ -70,8 +70,21 @@ test("Settings load and refresh check app updates without a separate control", a
   const statuses = await rows
     .locator(".settings-app-cell--update")
     .allTextContents();
-  expect(statuses.every((status) => status.trim().endsWith("Manual")))
-    .toBe(true);
+  expect(
+    statuses.every((status) => {
+      const value = status.trim();
+      return value.endsWith("Not published") || value.endsWith("Manual");
+    }),
+  ).toBe(true);
+  const appIds = await rows.evaluateAll((entries) =>
+    entries.map((entry) => entry.getAttribute("data-app-id")),
+  );
+  expect(appIds.every((appId) => appId !== null)).toBe(true);
+  const expectedReleasePaths = appIds.flatMap((appId, index) =>
+    statuses[index]?.trim().endsWith("Not published")
+      ? [`/repo/v1/releases/${appId}.json`]
+      : [],
+  );
   const versions = await rows
     .locator(".settings-app-cell--version > span:last-child")
     .allTextContents();
@@ -80,7 +93,9 @@ test("Settings load and refresh check app updates without a separate control", a
   await expect(
     installedApps.getByRole("button", { name: "Update All", exact: true }),
   ).toHaveCount(0);
-  expect(updateRequests).toEqual([]);
+  expect(updatePaths(updateRequests).sort()).toEqual(
+    [...expectedReleasePaths].sort(),
+  );
 
   const settingsRefresh = page.locator('[data-tid="settings-refresh"]');
   await settingsRefresh.focus();
@@ -99,6 +114,9 @@ test("Settings load and refresh check app updates without a separate control", a
     firstCheckedAt,
   );
   await expect(settingsRefresh).toBeEnabled();
+  expect(updatePaths(updateRequests).sort()).toEqual(
+    [...expectedReleasePaths, ...expectedReleasePaths].sort(),
+  );
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(installedApps).toBeVisible();
@@ -120,6 +138,10 @@ function isUpdateSourceRequest(value: string): boolean {
     path.startsWith("/repo/v1/releases/") ||
     path.startsWith("/repo/v1/packages/")
   );
+}
+
+function updatePaths(values: string[]): string[] {
+  return values.map((value) => new URL(value).pathname);
 }
 
 function localKernelUrl(): string {
