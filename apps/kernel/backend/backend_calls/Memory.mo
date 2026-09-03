@@ -533,13 +533,16 @@ module {
         canister : Principal,
         method : Text,
     ) : Bool {
+        var allowed = false;
         switch (owner(mem, func(reservation) {
             switch (reservation.scope) {
                 case (#principal(principal)) Principal.equal(principal, canister);
                 case (_) false;
             };
         })) {
-            case (#owner(ownerScope)) return CapabilityScope.equal(ownerScope, appScope);
+            case (#owner(ownerScope)) {
+                if (CapabilityScope.equal(ownerScope, appScope)) allowed := true;
+            };
             case (#conflict) return false;
             case (#none) {};
         };
@@ -549,7 +552,9 @@ module {
                 case (_) false;
             };
         })) {
-            case (#owner(ownerScope)) return CapabilityScope.equal(ownerScope, appScope);
+            case (#owner(ownerScope)) {
+                if (CapabilityScope.equal(ownerScope, appScope)) allowed := true;
+            };
             case (#conflict) return false;
             case (#none) {};
         };
@@ -561,10 +566,13 @@ module {
                 case (_) false;
             };
         })) {
-            case (#owner(ownerScope)) CapabilityScope.equal(ownerScope, appScope);
-            case (#conflict) false;
-            case (#none) false;
+            case (#owner(ownerScope)) {
+                if (CapabilityScope.equal(ownerScope, appScope)) allowed := true;
+            };
+            case (#conflict) return false;
+            case (#none) {};
         };
+        allowed;
     };
 
     public func conflicts(

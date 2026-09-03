@@ -675,6 +675,32 @@ test("pending backend consent clones and freezes source and reservation facts", 
   await expect(consent).rejects.toThrow("User rejected");
 });
 
+test("rejecting backend consent does not pause an immediate retry", async () => {
+  const first = requestBackendCallConsent({
+    endpoint: endpoint.endpointId,
+    appId: "wallet",
+    source: endpointContext,
+    actions: [],
+  });
+  const firstRequest = Object.values(
+    useBackendCallConsentStore.getState().requests,
+  )[0]!;
+  rejectBackendCallRequest(firstRequest.id);
+  await expect(first).rejects.toThrow("User rejected");
+
+  const retry = requestBackendCallConsent({
+    endpoint: endpoint.endpointId,
+    appId: "wallet",
+    source: endpointContext,
+    actions: [],
+  });
+  const retryRequest = Object.values(
+    useBackendCallConsentStore.getState().requests,
+  )[0]!;
+  approveBackendCallRequest(retryRequest.id);
+  await expect(retry).resolves.toBeUndefined();
+});
+
 test("consent annotates authoritative existing state and applies its exact snapshot", async () => {
   installWalletDeclaration();
   const principal = "ryjl3-tyaaa-aaaaa-aaaba-cai";

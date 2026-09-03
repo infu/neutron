@@ -24,7 +24,7 @@ export const WALLET_FUNDING_REJECT_METHOD = "wallet_funding_reject_v1";
 export const WALLET_ALLOWANCES_PAGE_METHOD = "wallet_allowances_page_v1";
 const WALLET_ALLOWANCE_PAGE_LIMIT = 40;
 
-const natPattern = "^0$|^[1-9][0-9]{0,79}$";
+export const WALLET_NAT_PATTERN = "^0$|^[1-9][0-9]{0,79}$";
 const positiveNatPattern = "^[1-9][0-9]{0,79}$";
 const positiveNat64Pattern = "^[1-9][0-9]{0,19}$";
 const accountPattern = "^[a-z0-9.-]{5,160}$";
@@ -84,7 +84,7 @@ export const walletFundingInputSchema: JsonObject = {
 };
 
 const nullableNatSchema: JsonObject = {
-  oneOf: [{ type: "string", pattern: natPattern }, { type: "null" }],
+  oneOf: [{ type: "string", pattern: WALLET_NAT_PATTERN }, { type: "null" }],
 };
 
 const nullableTextSchema: JsonObject = {
@@ -1159,7 +1159,7 @@ function variant<const T extends string>(
   return [kind, record[kind] ?? null];
 }
 
-function exactObject(
+export function exactObject(
   value: unknown,
   required: readonly string[],
   label: string,
@@ -1191,7 +1191,7 @@ function requiredObject(value: unknown, label: string): JsonObject {
   return value as JsonObject;
 }
 
-function boundedString(
+export function boundedString(
   value: unknown,
   minLength: number,
   maxLength: number,
@@ -1207,7 +1207,7 @@ function boundedString(
   return value;
 }
 
-function optionalBoundedString(
+export function optionalBoundedString(
   value: unknown,
   maxLength: number,
   label: string,
@@ -1215,14 +1215,14 @@ function optionalBoundedString(
   return value == null ? null : boundedString(value, 1, maxLength, label);
 }
 
-function requiredNat(value: unknown, label: string): string {
+export function requiredNat(value: unknown, label: string): string {
   if (typeof value !== "string" || !/^(0|[1-9][0-9]{0,79})$/.test(value)) {
     throw new Error(`Invalid ${label}`);
   }
   return value;
 }
 
-function requiredNat64(value: unknown, label: string): string {
+export function requiredNat64(value: unknown, label: string): string {
   const parsed = requiredNat(value, label);
   if (BigInt(parsed) > 18_446_744_073_709_551_615n) {
     throw new Error(`Invalid ${label}`);
@@ -1238,14 +1238,17 @@ function optionalNat64(value: unknown, label: string): string | null {
   return value == null ? null : requiredNat64(value, label);
 }
 
-function requiredDecimals(value: unknown): number {
+export function requiredDecimals(
+  value: unknown,
+  label = "token decimals",
+): number {
   const parsed =
     typeof value === "number" && Number.isInteger(value)
       ? value
       : typeof value === "string" && /^(0|[1-9][0-9]{0,2})$/.test(value)
         ? Number(value)
         : -1;
-  if (parsed < 0 || parsed > 255) throw new Error("Invalid token decimals");
+  if (parsed < 0 || parsed > 255) throw new Error(`Invalid ${label}`);
   return parsed;
 }
 

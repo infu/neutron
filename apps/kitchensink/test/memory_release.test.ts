@@ -1,9 +1,9 @@
 import { test } from "bun:test";
 import { assertManagedMemoryCodeOnlyRelease } from "../../release-test-support/managed_memory.mjs";
 
-test("Kitchen Sink 0.3.8 keeps the exact production 0.3.7 v1 memory root", async () => {
+test("Kitchen Sink 0.3.9 keeps the exact production 0.3.8 v1 memory root", async () => {
   const productionArchive = new URL(
-    "../kitchensink.v0.3.7.neutron",
+    "../kitchensink.v0.3.8.neutron",
     import.meta.url,
   );
   await assertManagedMemoryCodeOnlyRelease({
@@ -11,15 +11,15 @@ test("Kitchen Sink 0.3.8 keeps the exact production 0.3.7 v1 memory root", async
     memoryId: "kitchensink",
     productionArchive,
     candidateArchive: new URL(
-      "../kitchensink.v0.3.8.neutron",
+      "../kitchensink.v0.3.9.neutron",
       import.meta.url,
     ),
     lock: new URL("../neutron.lock.json", import.meta.url),
     production: {
-      version: 307,
-      bytes: 430_099,
-      sha256: "5610bd8d4ae94bb7caa9e38841561913efa09b800b7b17bff1c3b2bb154cdb50",
+      version: 308,
+      bytes: 430_105,
+      sha256: "b92d77a9dc9475116c04311cfad2114275ec264df32303937bdb65c693b6ea96",
     },
-    candidateVersion: 308,
+    candidateVersion: 309,
   });
 });

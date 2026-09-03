@@ -36,6 +36,10 @@ const capabilityFrontendUrl = new URL("../src/capability_lab.tsx", import.meta.u
 const derivedFrontendUrl = new URL("../src/derived_capabilities.tsx", import.meta.url);
 const platformFrontendUrl = new URL("../src/platform_pages.tsx", import.meta.url);
 const walletFundingDemoUrl = new URL("../src/wallet_funding_demo.ts", import.meta.url);
+const walletTokenInfoDemoUrl = new URL(
+  "../src/wallet_token_info_demo.ts",
+  import.meta.url,
+);
 const walletFundingIntentStorageUrl = new URL(
   "../src/wallet_funding_intent_storage.ts",
   import.meta.url,
@@ -47,7 +51,7 @@ const htmlUrl = new URL("../dist/web/index.html", import.meta.url);
 const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const trayHtmlUrl = new URL("../dist/web/tray.html", import.meta.url);
 const trayCssUrl = new URL("../dist/web/tray.css", import.meta.url);
-const packageUrl = new URL("../kitchensink.v0.3.8.neutron", import.meta.url);
+const packageUrl = new URL("../kitchensink.v0.3.9.neutron", import.meta.url);
 const decoder = new TextDecoder();
 
 async function readManifest(): Promise<NeutronManifest> {
@@ -152,7 +156,7 @@ test("kitchen sink declares the complete closed capability lab", async () => {
   expect(manifest).toMatchObject({
     id: "kitchensink",
     name: "Kitchen Sink",
-    version: 308,
+    version: 309,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     src: "main.mo",
     tiles: [
@@ -391,6 +395,7 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   const derivedFrontend = await readFile(derivedFrontendUrl, "utf8");
   const platformFrontend = await readFile(platformFrontendUrl, "utf8");
   const walletFundingDemo = await readFile(walletFundingDemoUrl, "utf8");
+  const walletTokenInfoDemo = await readFile(walletTokenInfoDemoUrl, "utf8");
 
   for (const demo of [
     "overview",
@@ -511,6 +516,7 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   expect(platformFrontend).toContain("new TrayDemoClient()");
   expect(platformFrontend).toContain("BigInt(next.revision) >= BigInt(current.revision)");
   expect(platformFrontend).toContain("function WalletFundingPage()");
+  expect(platformFrontend).toContain("callWalletTokenInfoDemo(bus)");
   expect(platformFrontend).toContain("failClosedIntentMutation(intent, reason)");
   expect(platformFrontend).toContain("This fixture stops after Wallet returns");
   expect(platformFrontend).toContain('view: "approvals"');
@@ -522,6 +528,12 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   expect(walletFundingDemo).not.toContain("icrc1_transfer");
   expect(walletFundingDemo).not.toContain("icrc2_approve");
   expect(walletFundingDemo).not.toContain("icrc2_transfer_from");
+  expect(walletTokenInfoDemo).toContain(
+    'WALLET_TOKEN_INFO_TOOL = "wallet_token_info_v1"',
+  );
+  expect(walletTokenInfoDemo).toContain("WALLET_FUNDING_TARGET");
+  expect(walletTokenInfoDemo).not.toContain("icrc1_fee");
+  expect(walletTokenInfoDemo).not.toContain("icrc1_balance_of");
   expect(backend).not.toContain("icrc1_transfer");
   expect(backend).not.toContain("icrc2_approve");
   expect(backend).not.toContain("icrc2_transfer_from");

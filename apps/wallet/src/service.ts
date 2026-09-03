@@ -31,6 +31,15 @@ import {
   parseWalletSnapshotResult,
   type WalletSnapshot,
 } from "./wallet_data.ts";
+import {
+  WALLET_TOKEN_INFO_METHOD,
+  WALLET_TOKEN_INFO_TOOL,
+  parseWalletTokenInfo,
+  walletTokenInfoInputSchema,
+  walletTokenInfoJson,
+  walletTokenInfoOutputSchema,
+  walletTokenInfoRequest,
+} from "./token_info.ts";
 
 let revision = 0;
 let readInFlight: Promise<WalletProjection> | null = null;
@@ -60,6 +69,31 @@ exposeTool(
     annotations: { "neutron:effects": ["write"] },
   },
   async () => asJson(await refreshProjection()),
+);
+
+exposeTool(
+  WALLET_TOKEN_INFO_TOOL,
+  {
+    title: "Read live Wallet token information",
+    description:
+      "Read current metadata, fee, and Wallet default-account balance for one selected ICRC ledger. Atomic amounts are decimal strings. The fee is advisory; Wallet rechecks it before funding.",
+    inputSchema: walletTokenInfoInputSchema,
+    outputSchema: walletTokenInfoOutputSchema,
+    annotations: { "neutron:effects": ["read", "network"] },
+  },
+  async (args, context) => {
+    const request = walletTokenInfoRequest(args);
+    return walletTokenInfoJson(
+      parseWalletTokenInfo(
+        await context.kernel.updateSelf(
+          WALLET_TOKEN_INFO_METHOD,
+          [request.wire],
+          60,
+        ),
+        request.ledger,
+      ),
+    );
+  },
 );
 
 exposeTool(

@@ -16,6 +16,7 @@
     "src/vetkey_demo.ts",
     "src/wallet_funding_demo.ts",
     "src/wallet_funding_intent_storage.ts",
+    "src/wallet_token_info_demo.ts",
     "test/**/*.ts",
     "types/**/*.d.ts"
   ]

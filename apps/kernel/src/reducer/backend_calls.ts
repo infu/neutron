@@ -97,8 +97,6 @@ export const useBackendCallConsentStore = create<BackendCallConsentState>(
 
 const callbacks = new Map<number, ConsentCallbacks>();
 let nextId = 0;
-const MAX_PENDING_REQUESTS = 16;
-const MAX_PENDING_REQUESTS_PER_APP = 4;
 
 export function requestBackendCallConsent(
   request: Omit<PendingBackendCallRequest, "id" | "attentionToken">,
@@ -112,24 +110,6 @@ export function requestBackendCallConsent(
       ),
     );
   }
-  const pending = Object.values(useBackendCallConsentStore.getState().requests);
-  if (pending.length >= MAX_PENDING_REQUESTS) {
-    return Promise.reject(new Error("Too many pending backend access requests"));
-  }
-  if (
-    pending.filter((candidate) => candidate.appId === request.appId).length >=
-    MAX_PENDING_REQUESTS_PER_APP
-  ) {
-    return Promise.reject(
-      new Error("This app has too many pending backend access requests"),
-    );
-  }
-  if (pending.some((candidate) => candidate.endpoint === request.endpoint)) {
-    return Promise.reject(
-      new Error("This app endpoint already has a backend access request"),
-    );
-  }
-
   const id = ++nextId;
   const attentionToken = admitOwnerAttention(request.appId, "backend_access");
   useBackendCallConsentStore.getState().add({
@@ -145,7 +125,6 @@ export function requestBackendCallConsent(
           signal,
           "Backend access request was cancelled by the requesting app",
         ),
-        false,
       );
     };
     callbacks.set(id, {
@@ -156,7 +135,6 @@ export function requestBackendCallConsent(
         rejectRequest(
           id,
           new KernelPolicyError("REQUEST_EXPIRED", "Backend request expired"),
-          false,
         );
       }, 60_000),
     });
@@ -268,7 +246,7 @@ export function approveBackendCallRequest(id: number): void {
 }
 
 export function rejectBackendCallRequest(id: number): void {
-  rejectRequest(id, new Error("User rejected backend access"), true);
+  rejectRequest(id, new Error("User rejected backend access"));
 }
 
 export function removeBackendCallRequestsForApp(appId: string): void {
@@ -276,18 +254,18 @@ export function removeBackendCallRequestsForApp(appId: string): void {
     useBackendCallConsentStore.getState().requests,
   )) {
     if (request.appId !== appId) continue;
-    rejectRequest(request.id, new Error(`App ${appId} was uninstalled`), false);
+    rejectRequest(request.id, new Error(`App ${appId} was uninstalled`));
   }
 }
 
-function rejectRequest(id: number, error: Error, recoveryPause: boolean): void {
+function rejectRequest(id: number, error: Error): void {
   const callback = callbacks.get(id);
   if (callback) cleanupCallback(callback);
   callback?.reject(error);
   callbacks.delete(id);
   const request = useBackendCallConsentStore.getState().requests[id];
   if (request) {
-    finishOwnerAttention(request.attentionToken, { recoveryPause });
+    finishOwnerAttention(request.attentionToken);
   }
   useBackendCallConsentStore.getState().remove(id);
 }
@@ -308,7 +286,6 @@ subscribeEndpointChanges(() => {
       rejectRequest(
         request.id,
         new Error("The requesting app surface was closed or reloaded"),
-        false,
       );
     }
   }

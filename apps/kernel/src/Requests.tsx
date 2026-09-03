@@ -450,12 +450,6 @@ function BackendAccessDecisionSummary({
           cannot attest the app-defined meaning.
         </ConsentNotice>
       ) : null}
-      {removals.some(({ scope }) => scope.kind !== "exact") ? (
-        <ConsentNotice tone="warning">
-          Removing broad access can make a previously approved narrower
-          permission active again.
-        </ConsentNotice>
-      ) : null}
     </div>
   );
 }
@@ -511,7 +505,7 @@ function BackendAccessAction({
 
 function scopeLabel(scope: BackendCallScope): string {
   if (scope.kind === "principal") return "Entire canister";
-  if (scope.kind === "method") return "Method except reserved canisters";
+  if (scope.kind === "method") return "Method on eligible canisters";
   return "One canister method";
 }
 
@@ -542,15 +536,15 @@ function backendAccessWarning(actions: BackendCallReservationAction[]): string {
   }
   const additions = actions.filter((action) => action.kind === "reserve");
   if (additions.some((action) => action.scope.kind === "method")) {
-    return "Added method ownership applies to eligible non-system canisters unless another app owns the whole target canister. It takes priority over exact grants and persists until removed, incompatible, or uninstalled. Removing higher-priority ownership can reactivate a previously approved lower tier. Repeated matching calls may use future app-chosen arguments.";
+    return "Added method-wide access applies to that method on eligible non-system canisters. It persists until removed, incompatible, or uninstalled. Repeated matching calls may use future app-chosen arguments.";
   }
   if (additions.some((action) => action.scope.kind === "principal")) {
-    return "Added whole-canister ownership takes priority over method-wide and exact grants for every current and future method. It persists until removed, incompatible, or uninstalled. Removing it can reactivate previously approved lower-tier ownership. Repeated calls may use future app-chosen arguments.";
+    return "Added whole-canister access applies to every current and future method on that canister. It persists until removed, incompatible, or uninstalled. Repeated calls may use future app-chosen arguments.";
   }
   if (additions.length > 0) {
-    return "Added exact ownership applies only when no whole-canister or method-wide owner has priority. It persists until removed, incompatible, or uninstalled and may become effective later when a higher tier is removed. Matching calls may use future app-chosen arguments.";
+    return "Added exact access applies only to the listed canister and method. It persists until removed, incompatible, or uninstalled. Matching calls may use future app-chosen arguments.";
   }
-  return "The listed backend ownership will be removed immediately. Removing a higher tier can reactivate previously approved lower-tier ownership. Each status above reflects the authoritative stored snapshot taken when this request opened.";
+  return "The listed backend access will be removed immediately. Each status above reflects the authoritative stored snapshot taken when this request opened.";
 }
 
 const AMBIGUOUS_JSON_TEXT_PATTERN =

@@ -1488,8 +1488,7 @@ test("runtime backend consent renders its retained source, scope, and complete c
   expect(html).toContain("ryjl3-tyaaa-aaaaa-aaaba-cai");
   expect(html).toContain("app_chess__chess_remote_exchange_v1");
   expect(html).toContain("Equivalent reservation not stored at request time");
-  expect(html).toContain("exact ownership applies only when no whole-canister or method-wide owner has priority");
-  expect(html).toContain("may become effective later when a higher tier is removed");
+  expect(html).toContain("exact access applies only to the listed canister and method");
   expect(html).toContain("Complete attached-call arguments");
   expect(html).toContain("chess_join_game");
   expect(html).toContain("invite-123456789012345678901234");
@@ -1695,7 +1694,7 @@ test("runtime backend consent gives broad scopes stronger persistent warnings", 
     expect(html).toContain(target);
     expect(html).toContain(warning);
     expect(html).toContain("persists until removed");
-    expect(html).toMatch(/reactivate (?:a )?previously approved/u);
+    expect(html).not.toContain("reactivate");
     expect(html).toContain("future app-chosen arguments");
   }
 });

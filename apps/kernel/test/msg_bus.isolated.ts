@@ -1993,13 +1993,13 @@ test("declared cancellation control remains available at ordinary lane saturatio
       ),
     );
 
-  const saturated = Array.from({ length: 8 }, (_, index) =>
+  const saturated = Array.from({ length: 64 }, (_, index) =>
     callFrom(callerSource, "tools.call", "verify", `request-${index}`),
   );
-  for (let turn = 0; turn < 20 && workDispatches < 8; turn += 1) {
+  for (let turn = 0; turn < 100 && workDispatches < 64; turn += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  expect(workDispatches).toBe(8);
+  expect(workDispatches).toBe(64);
 
   await expect(
     callFrom(callerSource, "tools.call", "verify", "ordinary-overflow"),
@@ -2043,10 +2043,10 @@ test("declared cancellation control remains available at ordinary lane saturatio
     "verify",
     "replacement",
   );
-  for (let turn = 0; turn < 20 && workDispatches < 9; turn += 1) {
+  for (let turn = 0; turn < 100 && workDispatches < 65; turn += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  expect(workDispatches).toBe(9);
+  expect(workDispatches).toBe(65);
 
   for (const pendingId of pendingWork.values()) {
     targetPort?.postMessage({
@@ -2058,7 +2058,7 @@ test("declared cancellation control remains available at ordinary lane saturatio
   pendingWork.clear();
   await expect(
     Promise.all([...saturated.slice(1), replacement]),
-  ).resolves.toHaveLength(8);
+  ).resolves.toHaveLength(64);
 });
 
 test("a tray endpoint calls its own background without prompting", async () => {

@@ -151,7 +151,6 @@ export function callRequest(req: {
           req.signal,
           "Signature request was cancelled by the requesting app",
         ),
-        false,
       );
     };
     callbacks[cid] = {
@@ -163,7 +162,6 @@ export function callRequest(req: {
         rejectCall(
           cid,
           new KernelPolicyError("REQUEST_EXPIRED", "Signature request expired"),
-          false,
         );
       }, 60_000),
     };
@@ -182,7 +180,6 @@ subscribeEndpointChanges(() => {
           "REQUEST_CANCELLED",
           "The requesting app surface changed",
         ),
-        false,
       );
     }
   }
@@ -198,7 +195,6 @@ export function callApprove({ cid }: { cid: number | string }): void {
         "REQUEST_CANCELLED",
         "The requesting app surface changed",
       ),
-      false,
     );
     return;
   }
@@ -211,7 +207,7 @@ export function callApprove({ cid }: { cid: number | string }): void {
 }
 
 export function callReject({ cid }: { cid: number | string }): void {
-  rejectCall(Number(cid), new Error("User rejected"), true);
+  rejectCall(Number(cid), new Error("User rejected"));
 }
 
 export function captureSignedCallEndpoint(
@@ -270,7 +266,6 @@ export function removeCallRequestsForApp(appId: string): void {
           "REQUEST_CANCELLED",
           `App ${appId} authority changed while a signature request was pending`,
         ),
-        false,
       );
     }
   }
@@ -285,7 +280,6 @@ export function removeAllCallRequests(): void {
         "REQUEST_CANCELLED",
         "App authority changed while a signature request was pending",
       ),
-      false,
     );
   }
 }
@@ -346,14 +340,14 @@ function sameFrameContext(left: FrameContext, right: FrameContext): boolean {
   );
 }
 
-function rejectCall(cid: number, error: Error, recoveryPause: boolean): void {
+function rejectCall(cid: number, error: Error): void {
   const callback = callbacks[cid];
   if (callback) cleanupCallback(callback);
   callback?.reject(error);
   delete callbacks[cid];
   const request = useRequestStore.getState().calls[cid];
   if (request) {
-    finishOwnerAttention(request.attentionToken, { recoveryPause });
+    finishOwnerAttention(request.attentionToken);
   }
   useRequestStore.getState().removeCallRequest(cid);
 }

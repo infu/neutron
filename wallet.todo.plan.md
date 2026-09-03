@@ -170,11 +170,11 @@ above. Its receipt SHA-256 is
 No package or source artifact was rebuilt between publication and either
 postflight attempt.
 
-## Kernel 327, Wallet 310, and Kitchen Sink 308 corrective successors (pending)
+## Kernel 327, Wallet 310, and Kitchen Sink 308 corrective successors (released)
 
 Kernel 326, Wallet 309, Contacts 306, and Kitchen Sink 307 are immutable
-published history. The current correction requires Kernel 0.3.27 (327), Wallet
-0.3.10 (310), and Kitchen Sink 0.3.8 (308):
+published history. The completed correction released Kernel 0.3.27 (327),
+Wallet 0.3.10 (310), and Kitchen Sink 0.3.8 (308):
 
 - remove K326's source-focus/transient-activation admission gate and its
   post-settlement provider-frame blur while retaining exact live endpoint,
@@ -212,9 +212,9 @@ MiB cutoff. The browser-origin isolation introduced there remains a required
 security boundary; the correction belongs in shared update transport, not in
 the package decoder, chunk protocol, or archive-specific compatibility code.
 
-Release qualification is pending. Before the successors may be published,
-retain the exact published K326, W309, and Kitchen Sink 307 archives and pass
-their state-preserving upgrades to K327, W310, and Kitchen Sink 308. Also pass a
+Release qualification completed before publication. The exact published K326,
+W309, and Kitchen Sink 307 archives were retained for their state-preserving
+upgrades to K327, W310, and Kitchen Sink 308. Qualification also included a
 realistic old-package browser gate: provision a fresh local Neutron using the
 three candidates, then install every exact archive in `test/old_packages/`
 through the launcher file chooser, package review, browser compile, **Install**
@@ -223,9 +223,8 @@ must verify Cast Away 114, Chipswap 127, Inspector Canister 106, and Principal
 Miner 103 in the runtime and leave no install journal. Archive decoding or
 preparation alone is not sufficient evidence.
 
-The three versioned archives, complete qualification results, package and
-source hashes, production publication receipt, and exact-byte no-op postflight
-are not yet release evidence and must be recorded only after they succeed.
+The three versioned archives are now immutable predecessor fixtures. Their
+publication is historical and must not be repeated or rebuilt.
 
 ## Required outcome
 
@@ -374,7 +373,7 @@ Ordinary app calls, humans, and delegated agent descendants fail before the
 Wallet handler runs. The public human tool never silently falls back to root
 automation.
 
-## Compatibility
+## Compatibility through K327 and W310 (historical)
 
 | Kernel \ Wallet | W306 | W307 | W308 | W309 | W310 |
 | --- | --- | --- | --- | --- | --- |
@@ -436,7 +435,7 @@ Wallet still guarantees financial correctness:
 Source-review agents are defense in depth. They inform the owner's trust in an
 installed provider but do not replace runtime bindings or Wallet validation.
 
-## Managed memory
+## Managed memory through K327, W310, and Kitchen Sink 308 (historical)
 
 K327 retains Kernel's released roots and versions. Wallet 310 retains `wallet`
 v1 and `wallet_commands` v1. Kitchen Sink 308 retains `kitchensink` v1.
@@ -469,7 +468,7 @@ gates against that upgraded runtime.
   exact released-archive compatibility fixtures so they cannot create
   production branches.
 
-## Required verification
+## Historical K327/W310/Kitchen Sink 308 verification
 
 Before release, prove:
 
@@ -537,7 +536,7 @@ Do not rebuild or republish unchanged Contacts 306 bytes. Record final commands,
 results, archive paths, byte lengths, SHA-256 values, and matching offered-source
 artifacts for all three frozen candidates.
 
-## Release procedure
+## Historical K327/W310/Kitchen Sink 308 release procedure
 
 1. Finish the K327/W310/Kitchen Sink 308 diff cleanup and security review;
    freeze source and tests.
@@ -562,6 +561,51 @@ artifacts for all three frozen candidates.
 These are one compatible corrective catalog transaction, not a staged rollout.
 Do not rebuild after an ambiguous publication or change the Dispenser starter
 unless that separate rollout is explicitly requested.
+
+## Kernel 328, Wallet 311, and Kitchen Sink 309 successor (current)
+
+The current release keeps the Wallet-owned funding contract and adds the lean
+read path that swap and commerce apps need:
+
+- Kernel 328 evaluates whole-canister, method-wide, and exact backend-call
+  reservations independently, so an app's exact ledger reservation is not
+  hidden by another app's broader reservation. The implementation remains
+  generic and contains no Wallet, ledger, token, or ICRC-specific branch.
+- Kernel 328 removes automatic request pauses after ordinary rejection or
+  cancellation and raises existing frontend backpressure ceilings. Explicit
+  owner Pause controls remain; no new focus, cooldown, quota, or policy gate is
+  introduced.
+- Wallet 311 exposes `wallet_token_info_v1` from its resident background. It
+  accepts one selected ledger and returns live name, symbol, decimals,
+  authoritative `icrc1_fee`, and the Wallet default-account balance. The
+  caller cannot select another account or reserve/call the ledger directly.
+- Kitchen Sink 309 demonstrates that read separately, then demonstrates the
+  existing one-decision Wallet-owned direct-transfer and allowance funding
+  flows against ICP and the Neutrinite governance canister. Reading token
+  information is not joined to the funding click and cannot add a second
+  approval to it.
+
+Existing apps retain their public contracts. Wallet funding still uses
+`wallet_fund_v1`; root agents still use the UI-free `wallet_fund_root_v1` path;
+older packages remain installable through the same chooser, review, compile,
+chunked upload, activation, and commit flow. Kernel only authenticates and
+routes Wallet presentation. Wallet alone interprets token standards and owns
+the human token approval.
+
+No persistent schema changes. Kernel retains `kernel` v3 and
+`kernel_activation` v1, Wallet retains `wallet` v1 and `wallet_commands` v1,
+and Kitchen Sink retains `kitchensink` v1. Exact released K327, W310, and
+Kitchen Sink 308 archives are retained as the predecessor fixtures.
+
+Before publication, build all three workspaces, pass their complete tests,
+typecheck the repository, qualify the exact K328/W311/Kitchen Sink 309 archives
+through the PocketIC predecessor upgrades, and pass the realistic Kitchen
+Sink, old-package, and package-update browser flows. Publish the three packages
+and offered-source artifacts in one production catalog transaction, then rerun
+the publisher against the unchanged bytes and require `batch_id: null` with
+every package and source reported `unchanged`. Do not rebuild between those two
+publication calls and do not change the Dispenser starter without a separate
+request.
 
 ## Deferred
 

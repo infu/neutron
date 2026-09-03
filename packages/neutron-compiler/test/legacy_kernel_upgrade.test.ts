@@ -5,6 +5,7 @@ import {
   PRODUCTION_KERNEL_V324_RELEASE,
   PRODUCTION_KERNEL_V325_RELEASE,
   PRODUCTION_KERNEL_V326_RELEASE,
+  PRODUCTION_KERNEL_V327_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   TEST_CANDIDATE_KERNEL_VERSION,
   compileFinalCandidateLegacyKernelUpgradeFixture,
@@ -12,12 +13,14 @@ import {
   compileFinalCandidateProductionKernelV324UpgradeFixture,
   compileFinalCandidateProductionKernelV325UpgradeFixture,
   compileFinalCandidateProductionKernelV326UpgradeFixture,
+  compileFinalCandidateProductionKernelV327UpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   loadLegacyKernelIdentityFixture,
   loadProductionKernelV324Fixture,
   loadProductionKernelV325Fixture,
   loadProductionKernelV326Fixture,
+  loadProductionKernelV327Fixture,
 } from "./legacy_kernel_upgrade_fixture.ts";
 
 for (const release of LEGACY_KERNEL_RELEASES) {
@@ -141,6 +144,29 @@ test("the exact production v0.3.26 predecessor is identity-bound", async () => {
   });
   await expect(
     compileFinalCandidateProductionKernelV326UpgradeFixture({
+      expectedSha256: "",
+    }),
+  ).rejects.toThrow(
+    "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+  );
+});
+
+test("the exact production v0.3.27 predecessor is identity-bound", async () => {
+  expect(PRODUCTION_KERNEL_V327_RELEASE).toMatchObject({
+    version: 327,
+    bytes: 2_414_971,
+    sha256: "b3a1e57c6201147eb8c5956592e1e389f23f8cef4ae972d831aa67de5151c65b",
+    persistenceMode: "classical",
+  });
+  const fixture = await loadProductionKernelV327Fixture();
+  expect(fixture.archive.byteLength).toBe(PRODUCTION_KERNEL_V327_RELEASE.bytes);
+  expect(fixture.identity).toMatchObject({
+    bytes: PRODUCTION_KERNEL_V327_RELEASE.bytes,
+    sha256: PRODUCTION_KERNEL_V327_RELEASE.sha256,
+    package: { version: PRODUCTION_KERNEL_V327_RELEASE.version },
+  });
+  await expect(
+    compileFinalCandidateProductionKernelV327UpgradeFixture({
       expectedSha256: "",
     }),
   ).rejects.toThrow(

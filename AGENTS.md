@@ -5,7 +5,27 @@ state must be treated as durable user data. Development-only clean-reinstall,
 state-reset, and backward-incompatible shortcuts are not acceptable release
 paths.
 
+## Ask Before Adding Kernel Restrictions
+
+- Do not add restrictions, cooldowns, focus requirements, rate limits, quotas,
+  or other policy limits in the Kernel without first asking the user exactly
+  how the behavior should work.
+- Keep resource-safety bounds distinct from user-facing policy. If a finite
+  safety bound is required, explain the concrete failure or abuse it prevents
+  and agree its behavior and threshold with the user before implementing it.
+
 These rules apply to the Kernel and every production app in this repository.
+
+## Treat Audit Hardening As Advice, Not A Change Request
+
+- Use auditor and subagent findings to fix demonstrated bugs, regressions,
+  incompatibilities, duplicate implementations, and dead code.
+- Do not implement speculative hardening suggested by an auditor or subagent
+  unless the user explicitly asks for it. In particular, do not turn an audit
+  suggestion into ad hoc Kernel policy that narrows the variety of apps the
+  platform can support.
+- If an audit proposes a restriction rather than identifying a concrete bug,
+  report the tradeoff and leave the behavior unchanged.
 
 ## Recommended License For New Apps
 

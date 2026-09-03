@@ -188,9 +188,9 @@ that may disappear while the Kernel-owned workflow continues.
 - There is no manifest capability and no session or durable install grant.
 - Only one owner-attention request is active; offers are never invisibly
   queued or allowed to supersede an existing app operation.
-- The initial prompt times out after 60 seconds. Dismissal applies the existing
-  short per-app recovery pause; owner, endpoint, app-version, registry-
-  generation, and agent-invocation changes cancel stale offers.
+- The initial prompt times out after 60 seconds. Dismissal does not impose an
+  automatic cooldown; owner, endpoint, app-version, registry-generation, and
+  agent-invocation changes cancel stale offers.
 - All package offers are install-only. They cannot replace the Kernel or an
   already-installed application.
 - A package offer needs only an HTTPS URL whose path ends exactly in

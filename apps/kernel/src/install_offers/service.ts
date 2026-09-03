@@ -80,7 +80,6 @@ export function requestInstallOffer({
           "REQUEST_EXPIRED",
           "The install offer expired",
         ),
-        false,
       );
     }, timeoutMs),
   };
@@ -116,7 +115,6 @@ export function approveInstallOffer(requestId: string): void {
   } catch (error) {
     rejectActive(
       error instanceof KernelPolicyError ? error : staleRequesterError(),
-      false,
     );
     return;
   }
@@ -160,7 +158,7 @@ export function reconcileInstallOffer(): boolean {
     // Reconciliation deliberately converts all attestation failures to the
     // same non-disclosing cancellation result.
   }
-  rejectActive(staleRequesterError(), false);
+  rejectActive(staleRequesterError());
   return false;
 }
 
@@ -173,7 +171,6 @@ export function clearInstallOffer(
   }
   rejectActive(
     new KernelPolicyError("REQUEST_CANCELLED", reason),
-    false,
   );
 }
 
@@ -185,25 +182,22 @@ export function clearInstallOfferForApp(
   clearInstallOffer(reason);
 }
 
-function rejectActive(error: Error, recoveryPause = true): void {
+function rejectActive(error: Error): void {
   const active = runtime;
   if (!active) {
     useInstallOfferStore.setState({ pending: null });
     return;
   }
-  detachActive(active, recoveryPause);
+  detachActive(active);
   active.reject(error);
 }
 
-function detachActive(
-  active: PendingRuntime,
-  recoveryPause = false,
-): void {
+function detachActive(active: PendingRuntime): void {
   if (runtime !== active) return;
   runtime = null;
   clearTimeout(active.timeout);
   useInstallOfferStore.setState({ pending: null });
-  finishOwnerAttention(active.attentionToken, { recoveryPause });
+  finishOwnerAttention(active.attentionToken);
 }
 
 function freezeApproval(

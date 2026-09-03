@@ -48,6 +48,10 @@ import {
   WALLET_FUNDING_UNREADABLE_ERROR,
   callWalletFundingIntent,
 } from "./wallet_funding_intent_storage.ts";
+import {
+  WALLET_TOKEN_INFO_TOOL,
+  callWalletTokenInfoDemo,
+} from "./wallet_token_info_demo.ts";
 
 export const PLATFORM_IDS = [
   "overview",
@@ -193,16 +197,29 @@ function WalletFundingPage() {
       status="ready"
       statusLabel="Wallet provider"
       purpose="Exercise the two funding rails a swap app needs. Wallet—not Kitchen Sink or the Kernel—reads ICP metadata, calculates fees, shows the human-readable approval, and executes the ledger mutation."
-      boundary="Each button sends one exact intent to Wallet. The Kernel authenticates and routes it and opens or focuses Wallet, but renders no token approval UI and does not interpret token details. One decision in Wallet authorizes only the frozen transfer or allowance. Kitchen Sink cannot alter the ledger, amount, or governance account, and it cannot consume an allowance owned by Neutrinite governance."
-      declaration={`target = ${WALLET_FUNDING_TARGET}\ntool = ${WALLET_FUNDING_TOOL}\nledger = ${ICP_LEDGER}\namount_atoms = ${ICP_SWAP_AMOUNT_ATOMS}\ngovernance = ${NEUTRINITE_GOVERNANCE}`}
+      boundary="Each funding button sends one exact intent to Wallet. The separate metadata button reads through Wallet without opening its tile. For funding, the Kernel authenticates and routes the request and opens or focuses Wallet, but renders no token approval UI and does not interpret token details. One decision in Wallet authorizes only the frozen transfer or allowance. Kitchen Sink cannot alter the ledger, amount, or governance account, and it cannot consume an allowance owned by Neutrinite governance."
+      declaration={`target = ${WALLET_FUNDING_TARGET}\ntools = ${WALLET_TOKEN_INFO_TOOL}, ${WALLET_FUNDING_TOOL}\nledger = ${ICP_LEDGER}\namount_atoms = ${ICP_SWAP_AMOUNT_ATOMS}\ngovernance = ${NEUTRINITE_GOVERNANCE}`}
       evidence={<EvidenceList items={[
         { label: "Ledger", value: <code>{ICP_LEDGER}</code> },
         { label: "Requested value", value: `${ICP_SWAP_AMOUNT_DISPLAY} (${ICP_SWAP_AMOUNT_ATOMS} e8s)` },
         { label: "Destination / spender", value: <code>{NEUTRINITE_GOVERNANCE}</code> },
         { label: "Provider", value: <code>{WALLET_FUNDING_TARGET} / {WALLET_FUNDING_TOOL}</code> },
-        { label: "Consent", value: "One Wallet approval; no Kernel dialog or session grant" },
+        { label: "Funding consent", value: "One Wallet approval; no Kernel funding dialog or session grant" },
       ]} />}
     >
+      <div className="nt-command-bar">
+        <button
+          className="nt-button nt-button--secondary"
+          disabled={Boolean(operation.busy)}
+          onClick={() => void operation.run(
+            "live ICP Wallet token information",
+            () => callWalletTokenInfoDemo(bus),
+          )}
+          type="button"
+        >
+          Read live ICP fee and Wallet balance
+        </button>
+      </div>
       <div className="ks-two-column">
         <section className="ks-action-group" aria-labelledby="wallet-direct-title">
           <h2 id="wallet-direct-title">Direct funding</h2>

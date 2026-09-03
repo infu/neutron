@@ -322,6 +322,26 @@ module {
         subaccount : ?Blob;
     };
 
+    public type WalletTokenInfoRequestV1 = {
+        ledger : Principal;
+    };
+
+    public type WalletTokenInfoV1 = {
+        ledger : Principal;
+        account : WalletIcrcAccountV1;
+        token_name : ?Text;
+        token_symbol : Text;
+        decimals : Nat;
+        fee_atoms : Nat;
+        balance_atoms : Nat;
+        observed_at_ns : Nat64;
+    };
+
+    public type WalletTokenInfoResultV1 = {
+        #ok : WalletTokenInfoV1;
+        #err : Text;
+    };
+
     public type WalletApprovalSpenderV1 = {
         #icrc : WalletIcrcAccountV1;
         #icp_account_identifier : Blob;
@@ -1593,7 +1613,14 @@ module {
             if (replies.size() != 2) {
                 return #err("Wallet backend returned an incomplete ledger metadata batch");
             };
-            let metadata = switch (Icrc.decodeMetadata(replies[0])) {
+            decodeFundingMetadata(replies[0], replies[1]);
+        };
+
+        func decodeFundingMetadata(
+            metadataReply : Capabilities.CallResult,
+            feeReply : Capabilities.CallResult,
+        ) : IcrcTypes.Result<FundingMetadata> {
+            let metadata = switch (Icrc.decodeMetadata(metadataReply)) {
                 case (#err(error)) return #err("Could not read ledger metadata: " # error);
                 case (#ok(value)) value;
             };
@@ -1628,7 +1655,7 @@ module {
             let ?decimals = parsed.decimals else {
                 return #err("Ledger metadata does not include icrc1:decimals");
             };
-            let fee = switch (Icrc.decodeFee(replies[1])) {
+            let fee = switch (Icrc.decodeFee(feeReply)) {
                 case (#err(error)) return #err("Could not read the current ledger fee: " # error);
                 case (#ok(value)) value;
             };
@@ -2596,6 +2623,58 @@ module {
             } else {
                 await* icrcAllowancesPage(request, metadata);
             };
+        };
+
+        public func /*update*/wallet_token_info_v1(
+            request : WalletTokenInfoRequestV1,
+        ) : async* WalletTokenInfoResultV1 {
+            switch (selectedLedger(request.ledger)) {
+                case (#err(error)) return #err(error);
+                case (#ok(_)) {};
+            };
+            if (
+                not calls.can_call(request.ledger, "icrc1_metadata") or
+                not calls.can_call(request.ledger, "icrc1_fee") or
+                not calls.can_call(request.ledger, "icrc1_balance_of")
+            ) {
+                return #err("Ledger token information is not reserved for Wallet");
+            };
+            let replies = await* calls.call_batch([
+                Icrc.metadataRequest(request.ledger),
+                Icrc.feeRequest(request.ledger),
+                Icrc.balanceRequest(request.ledger, calls.canister_principal),
+            ]);
+            if (replies.size() != 3) {
+                return #err("Wallet backend returned an incomplete token information batch");
+            };
+            let metadata = switch (decodeFundingMetadata(replies[0], replies[1])) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            let balance = switch (Icrc.decodeBalance(replies[2])) {
+                case (#err(error)) return #err("Could not read the Wallet balance: " # error);
+                case (#ok(value)) value;
+            };
+            if (not FundingDisplay.nat(balance)) {
+                return #err("Wallet balance exceeds the Wallet protocol limit");
+            };
+            switch (selectedLedger(request.ledger)) {
+                case (#err(error)) return #err(error);
+                case (#ok(_)) {};
+            };
+            #ok({
+                ledger = request.ledger;
+                account = {
+                    owner = calls.canister_principal;
+                    subaccount = null;
+                };
+                token_name = metadata.name;
+                token_symbol = metadata.symbol;
+                decimals = metadata.decimals;
+                fee_atoms = metadata.fee;
+                balance_atoms = balance;
+                observed_at_ns = nowNanos();
+            });
         };
 
         func icrcAllowancesPage(
@@ -4352,6 +4431,9 @@ public type wallet_funding_reject_v1_Output = WalletFundingExecutionResultV1;
 
 public type wallet_allowances_page_v1_Input = (request : WalletAllowancesPageRequestV1,);
 public type wallet_allowances_page_v1_Output = WalletAllowancesPageResultV1;
+
+public type wallet_token_info_v1_Input = (request : WalletTokenInfoRequestV1,);
+public type wallet_token_info_v1_Output = WalletTokenInfoResultV1;
 
 public type wallet_set_ledgers_Input = (principals : [Principal],);
 public type wallet_set_ledgers_Output = WalletSnapshot;
