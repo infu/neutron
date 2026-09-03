@@ -742,7 +742,8 @@ test("HTTPS consent groups endpoints and discloses cost and plaintext boundaries
   expect(html).not.toContain("cycles per hour");
   expect(html).toContain("visible to the IC subnet replicas");
   expect(html).toContain("Redirect responses are rejected");
-  expect(html).toContain("never automatically retried");
+  expect(html).toContain("single-node HTTPS requests");
+  expect(html).toContain("not cross-checked by subnet consensus");
   expect(html).toContain("live on/off control in Settings");
   expect(html).toContain("POST requires a caller-supplied idempotency key");
   expect(html).toContain("Authorization is allowed for a declared endpoint");
@@ -2168,6 +2169,8 @@ test("Settings shows HTTPS endpoint authority beside its live toggle", () => {
   );
 
   expect(html).toContain("HTTPS transport policy");
+  expect(html).toContain("Paid single-node HTTPS");
+  expect(html).toContain("no response consensus");
   expect(html).toContain("External HTTPS endpoint");
   expect(html).toContain("https://api.example.com/v1/");
   expect(html).toContain("GET, POST");

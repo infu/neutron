@@ -1914,9 +1914,9 @@ limits, lifecycle, migration rules, and release gates.
 
 ### Use HTTPS Outcalls (Development V1)
 
-Declare exact external URL prefixes and select the scoped backend leaf. V1 is
-replicated GET/HEAD/POST only, strips every response header, and has no
-confidentiality from subnet replicas:
+Declare exact external URL prefixes and select the scoped backend leaf. V1 uses
+single-node GET/HEAD/POST only, strips every response header, and has no
+response-consensus or confidentiality guarantee:
 
 ```json
 {
@@ -1974,7 +1974,7 @@ public class Init(env : AppBackendEnvironment) {
 Runtime `path` is a canonical relative suffix capped at 1,024 UTF-8 bytes and
 64 segments; query pairs are structured and percent-encoded by the kernel. The
 app cannot replace the declared scheme,
-host, port, prefix, transform, replication mode, response ceiling, or attached
+host, port, prefix, fixed single-node mode, response ceiling, or attached
 cycle amount. Header values must be printable ASCII and are capped at 4,096 bytes
 each and 16 KiB in aggregate. GET/HEAD require an empty body and no key. POST requires a 16–64
 character idempotency key, but the remote service must actually deduplicate it;
@@ -1985,10 +1985,11 @@ KiB; endpoint/app/global concurrency, a 50-billion-cycle per-call quote cap,
 and a 250-billion-cycle reserve apply. Authority loss after the await
 suppresses response bytes but cannot undo a remote POST.
 
-Do not put secrets in URL parameters, headers, or bodies: replicated HTTPS
-outcalls are visible to subnet replicas. PocketIC may not provide an HTTPS
-adapter, and mainnet calls can still fail for cycles, upstream availability,
-timeout, or response-consensus reasons. Use an injected adapter for deterministic
+Do not put secrets in URL parameters, headers, or bodies: HTTPS outcalls have
+no confidentiality from subnet replicas. A selected node can forge a response,
+so verify integrity separately whenever it matters. PocketIC may not provide an
+HTTPS adapter, and mainnet calls can still fail for cycles, upstream availability,
+or timeout. Use an injected adapter for deterministic
 unit tests and keep a separate live-network smoke. The Kitchen Sink
 `https_outcalls` page demonstrates this honest failure behavior against the
 reserved Example Domain.

@@ -3779,9 +3779,9 @@ module {
             };
         };
 
-        // The IC invokes this pure query separately on each replica before
-        // response consensus. Only the management principal may enter it;
-        // app code cannot select the callback or its one-byte context.
+        // The IC invokes this pure query on the selected response. Only the
+        // management principal may enter it; app code cannot select the
+        // callback or its one-byte context.
         public func /*query:unauthorized*/kernel_https_outcall_transform(
             args : IC.http_transform_args,
             /*caller*/ caller : Principal,

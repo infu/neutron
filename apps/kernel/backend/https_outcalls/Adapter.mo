@@ -34,9 +34,9 @@ module {
                             function = self.kernel_https_outcall_transform;
                             context = request.transform_context;
                         };
-                        // V1 deliberately excludes the experimental weak-
-                        // integrity single-replica mode.
-                        is_replicated = ?true;
+                        // App-facing HTTPS uses one replica so one logical
+                        // outcall does not fan out across the subnet.
+                        is_replicated = ?false;
                     });
                     #ok({
                         response;

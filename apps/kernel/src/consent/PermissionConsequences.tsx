@@ -231,7 +231,7 @@ function networkConsequences(
     const origins = uniqueOrigins(https.endpoints.map(({ urlPrefix }) => urlPrefix));
     const hasPost = https.endpoints.some(({ methods }) => methods.includes("post"));
     facts.push(
-      `Can make paid HTTPS requests to ${formatShortList(origins)}. Request and reply plaintext is visible to the destination and IC subnet replicas${hasPost ? ", and POST requests can send data or trigger remote changes" : ""}.`,
+      `Can make paid single-node HTTPS requests to ${formatShortList(origins)}. Replies are not cross-checked by subnet consensus. Request and reply plaintext is visible to the destination and IC subnet replicas${hasPost ? ", and POST requests can send data or trigger remote changes" : ""}.`,
     );
   }
   if (ethereum) {

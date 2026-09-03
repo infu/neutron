@@ -17,7 +17,7 @@ assert (fresh.lastHttpPostRequestId == "");
 assert (fresh.lastHttpPostCounter == 0);
 
 // Exercise non-default representative data across the whole root. The archive
-// transition test proves that 0.3.8 -> 0.3.9 is #keep, so restoration reuses
+// transition test proves that 0.3.9 -> 0.3.10 is #keep, so restoration reuses
 // this object and never calls init().
 fresh.profileName := "Grace";
 fresh.profileEmail := "grace@example.test";
