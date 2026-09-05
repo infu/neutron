@@ -8,6 +8,8 @@
   "include": [
     "build.ts",
     "src/agent_work.ts",
+    "src/agent_workers.ts",
+    "src/agent_step.ts",
     "src/agent_context.ts",
     "src/chat_progress.ts",
     "src/chat_types.ts",

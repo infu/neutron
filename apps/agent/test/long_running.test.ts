@@ -1,59 +1,12 @@
 import { expect, test } from "bun:test";
-import "fake-indexeddb/auto";
-import { generateText, streamText, type ModelMessage } from "ai";
+import type { ModelMessage } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
-import type { AgentChatTileEndpointId, AgentProgress } from "../src/chat_types.ts";
+import type { AgentProgress } from "../src/chat_types.ts";
 import { AgentRuntime, modelMessages } from "../src/agent_runtime.ts";
-import { AgentStorage } from "../src/storage.ts";
 import { sleepUntil } from "../src/agent_work.ts";
 import { assertBoundedJson, MSG_BUS_MAX_PROGRESS_BYTES } from "neutron-tools/protocol";
 
-const historyId: AgentChatTileEndpointId = "app:agent:tile:chat:instance:long-task";
-const usage = { inputTokens: { total: 12, noCache: 12, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 8, text: 8, reasoning: 0 } };
-const finish = (unified: "stop" | "tool-calls" | "length" = "stop"): LanguageModelV4StreamPart => ({
-  type: "finish", finishReason: { unified, raw: unified }, usage,
-});
-const call = (toolName: string, input: object, id = crypto.randomUUID()): LanguageModelV4StreamPart => ({
-  type: "tool-call", toolCallId: id, toolName, input: JSON.stringify(input),
-});
-function response(parts: LanguageModelV4StreamPart[]) {
-  return { stream: new ReadableStream<LanguageModelV4StreamPart>({ start(controller) {
-    controller.enqueue({ type: "stream-start", warnings: [] });
-    for (const part of parts) controller.enqueue(part);
-    controller.close();
-  } }) };
-}
-const answer = (text: string) => response([
-  { type: "text-start", id: "text" }, { type: "text-delta", id: "text", delta: text },
-  { type: "text-end", id: "text" }, finish(),
-]);
-
-async function fixture(model: MockLanguageModelV4, busOverrides: object = {}) {
-  const storage = await AgentStorage.open(`agent-long-task-${crypto.randomUUID()}`);
-  const selected = { id: "test/model", name: "Test", contextLength: 32_000,
-    promptPrice: "0", completionPrice: "0", supportsToolChoice: true, supportsReasoning: false };
-  const shared = { selectedModelId: selected.id, models: [selected], modelsFetchedAt: 1 };
-  await storage.saveShared(shared);
-  const connection = { appId: "agent", installationUid: "test", provider: "openrouter", createdAt: "1" };
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
-  const bus = {
-    listApps: async () => ({ apps: [{ id: "records", description: "Records" }] }),
-    listTools: async () => [{ name: "create", inputSchema: { type: "object" }, annotations: { "neutron:effects": ["write"] } }],
-    callTool: async () => ({ id: "saved-record-42" }),
-    ...busOverrides,
-  };
-  Object.assign(runtime, {
-    storage, bus, fetcher: fetch, connectionLister: async () => [connection],
-    persisted: shared, provider: { chat: () => model }, connection,
-    conversations: new Map(), conversationLoads: new Map(), workStates: new Map(),
-    errors: new Map(), activeTurns: new Map(), startupError: null,
-    modelCatalogRequestsInFlight: 0, mutationActive: false,
-    stream: (options: Parameters<typeof streamText>[0]) => streamText(options), generate: generateText,
-  });
-  await runtime.activateConversation(historyId);
-  return { runtime, storage };
-}
+import { historyId, finish, call, response, answer, fixture, usage } from "./runtime_fixture.ts";
 
 test("a fresh reviewer rejects early completion and the worker continues with actual evidence", async () => {
   let review = 0;
@@ -81,7 +34,7 @@ test("a fresh reviewer rejects early completion and the worker continues with ac
   expect((await storage.loadConversation(historyId)).modelTurns).toHaveLength(1);
 });
 
-for (const ending of ["abort", "error", "length"] as const) {
+for (const ending of ["abort", "error"] as const) {
   test(`a ${ending} after a completed write never becomes a successful empty answer`, async () => {
     let runtime: AgentRuntime;
     let requests = 0;
@@ -93,14 +46,13 @@ for (const ending of ["abort", "error", "length"] as const) {
         await runtime.stop(historyId);
         return answer("Should be ignored");
       }
-      return ending === "length" ? response([finish("length")])
-        : response([{ type: "error", error: new Error("Provider stream failed") }]);
+      return response([{ type: "error", error: new Error("Provider stream failed") }]);
     } });
     const state = await fixture(model);
     runtime = state.runtime;
     const run = runtime.chat(historyId, "Create one record.", () => undefined);
     if (ending === "abort") await run;
-    else await expect(run).rejects.toThrow(ending === "length" ? "before completion" : "Provider stream failed");
+    else await expect(run).rejects.toThrow("Provider stream failed");
     const saved = await state.storage.loadConversation(historyId);
     expect(JSON.stringify(saved.modelTurns)).toContain("saved-record-42");
     expect(JSON.stringify(saved.messages)).not.toContain("completed without a text response");
@@ -108,6 +60,47 @@ for (const ending of ["abort", "error", "length"] as const) {
     expect(runtime.snapshot(historyId).generatingHere).toBe(false);
   });
 }
+
+test("a truncated root response continues without replaying a completed write or prematurely reviewing the goal", async () => {
+  let calls = 0;
+  let requests = 0;
+  const model = new MockLanguageModelV4({
+    doStream: async (options) => {
+      if (++requests === 1) return response([
+        call("call_app_tool", { target: "app:records:background", name: "create", arguments: {} }),
+        { type: "text-start", id: "partial" },
+        { type: "text-delta", id: "partial", delta: "Unfinished draft: the record" },
+        { type: "text-end", id: "partial" }, finish("length"),
+      ]);
+      expect(model.doGenerateCalls).toHaveLength(0);
+      const context = JSON.stringify(options.prompt);
+      expect(context).toContain("saved-record-42");
+      expect(context).toContain("Unfinished draft: the record");
+      expect(context).toContain("not task completion");
+      expect(context).toContain("Avoid repeating collection or completed actions");
+      return answer("Created saved-record-42 and verified its identifier.");
+    },
+    doGenerate: async (options) => {
+      expect(requests).toBe(2);
+      expect(JSON.stringify(options.prompt)).toContain("saved-record-42");
+      return {
+        content: [{ type: "tool-call", toolCallId: "review", toolName: "goal_review", input: JSON.stringify({ status: "complete", checkpoint: "Verified the created record in its saved tool result." }) }],
+        finishReason: { unified: "tool-calls", raw: "tool_calls" }, usage, warnings: [],
+      };
+    },
+  });
+  const { runtime, storage } = await fixture(model, { callTool: async () => { calls += 1; return { id: "saved-record-42" }; } });
+  const result = await runtime.chat(historyId, "/goal Create one record and verify its identifier.", () => {});
+  expect(calls).toBe(1);
+  expect(model.doStreamCalls).toHaveLength(2);
+  expect(model.doGenerateCalls).toHaveLength(1);
+  expect(result.work?.goal?.status).toBe("complete");
+  expect(result.error).toBeNull();
+  const saved = await storage.loadConversation(historyId);
+  expect(saved.pendingStateChangeJournal).toBeNull();
+  expect(JSON.stringify(saved.messages)).not.toContain("Unfinished draft");
+  expect(JSON.stringify(saved.modelTurns)).toContain("saved-record-42");
+});
 
 test("steering wakes a day-long sleep and arrives as an owner message at the next step", async () => {
   const model = new MockLanguageModelV4({ doStream: [

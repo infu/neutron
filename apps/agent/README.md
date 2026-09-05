@@ -155,9 +155,54 @@ and applied messages are retained as user messages in model history. Goal and
 inbox records use separate IndexedDB keys so released residents cannot erase
 them when saving their older conversation shape.
 
+In **Agent Mode**, the main agent can delegate independent tasks to parallel
+workers inside the same tile. `spawn_agent` starts a worker with a separate
+context and the current model, or an explicit available `modelId`.
+`send_message` steers a worker or resumes its saved context; `wait_agents`
+waits without model requests; `stop_agent` cancels one worker with a recorded
+reason. `list_agents`
+lists saved workers and `get_agent_result` retrieves a worker's report and
+actual tool evidence. Only the main agent receives these coordination tools.
+The **Workers** panel shows tasks, models, status, results, and the latest stop
+and recovery details. Intentional cancellation is shown as stopped, with its
+reason, rather than as a worker error. A recovered worker retains the issue it
+resumed from; a recovery is marked successful only when that worker completes.
+
+Both the main agent and workers automatically continue responses that end at
+the model's output limit. Completed tool results and partial text are saved
+before the next request; partial text is not presented as a final answer, and
+goal review cannot accept the truncated response as completion. Continuation
+asks the model to synthesize saved evidence before collecting more and to
+reconcile uncertain writes before retrying. Workers are also prompted to leave
+brief summaries with source identifiers after meaningful batches of reads.
+Output exhaustion is recorded as a generation limit, without guessing that
+input context overflowed. Other stream errors still preserve the existing
+interruption and uncertain-write recovery behavior. Steering and Stop remain
+available during continuation.
+
+Workers are internal model contexts sharing the live root's authority, not
+additional tiles or Kernel roots. Model requests run concurrently. App calls
+share the root's existing serial queue, so permission challenges cannot overlap.
+The root permission judge receives the owner's goal and applied owner steering;
+worker tasks, messages, reports, and app output cannot expand that authority.
+Coordination tools are absent outside the live Agent Mode permission context.
+
+The main agent receives completed worker reports with saved tool evidence and
+keeps the root alive until active workers settle. It remains responsible for
+checking the overall result. Applied owner steering reaches active workers at
+their next safe step and wakes their sleep. Stop, tile closure, and Kernel
+revocation cancel all workers before the root releases its permission handler.
+Each worker has a separate durable conversation and mutation recovery journal;
+one worker's successful step cannot clear another worker's uncertain write.
+Worker records use a separate IndexedDB key that older resident saves preserve.
+After a browser interruption, a new Agent Mode root can inspect paused workers
+and use `send_message` to resume them. Clearing the conversation clears its
+saved workers too.
+
 The `current_time` tool returns UTC time. `sleep` waits for a finite non-negative
 number of seconds without model requests, returning elapsed seconds and either
-`elapsed` or `steering`. Stop cancels sleep. Browser timer delays are chunked to
+`elapsed`, `steering`, or `agent` when a worker report wakes the main agent.
+Stop cancels sleep. Browser timer delays are chunked to
 avoid timer overflow; they do not cap the requested wait. Sleep runs between
 SDK requests, outside the model-step deadline. Individual app-tool and model
 request deadlines remain; Kernel roots have no total duration, call-count,
@@ -166,7 +211,7 @@ permission-count, or start-rate cap. One root remains active at a time.
 Each complete model step is saved, and context compaction retains the owner
 request and recent quoted tool evidence when a single turn exceeds the model
 window. Omitted details are marked, with reconciliation required for uncertain
-mutations. The composer shows worker steps and reported token usage. Completed model
+mutations. The composer shows sleep and queue status. Completed model
 messages appear while work continues; oversized progress falls back to a fresh
 bounded status response. The periodic status refresh also covers the message
 bus's existing progress-event limit.

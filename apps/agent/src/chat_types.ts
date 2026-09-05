@@ -38,6 +38,47 @@ export type AgentSnapshot = JsonObject & {
   messages: TranscriptMessage[];
   error: string | null;
   work?: AgentWorkSnapshot;
+  workers?: AgentWorkersSnapshot;
+};
+
+export type AgentWorkerStatus = "running" | "waiting" | "completed" | "stopped" | "paused" | "error";
+
+export type AgentWorkerStop = JsonObject & {
+  by: "coordinator" | "parent" | "unknown";
+  reason: string;
+};
+
+export type AgentWorkerRecovery = JsonObject & {
+  from: "length" | "error" | "stopped" | "paused";
+  detail: string;
+  state: "continuing" | "recovered" | "interrupted";
+};
+
+export type AgentWorkerRecord = {
+  id: string;
+  task: string;
+  modelId: string;
+  status: AgentWorkerStatus;
+  result: string;
+  error: string | null;
+  messages: string[];
+  conversation: PersistedConversationState;
+  steps: number;
+  inputTokens: number;
+  outputTokens: number;
+  reported: boolean;
+  lastStop?: AgentWorkerStop | null;
+  lastRecovery?: AgentWorkerRecovery | null;
+};
+
+export type AgentWorkerSnapshot = JsonObject & Pick<AgentWorkerRecord,
+  "id" | "task" | "modelId" | "status" | "result" | "error" | "steps" | "inputTokens" | "outputTokens" | "lastStop" | "lastRecovery">;
+
+export type AgentWorkersSnapshot = JsonObject & {
+  items: AgentWorkerSnapshot[];
+  total: number;
+  active: number;
+  omitted: number;
 };
 
 export type AgentGoal = {
@@ -76,6 +117,7 @@ export type AgentWorkSnapshot = JsonObject & {
 };
 
 export type AgentProgress =
+  | (JsonObject & { type: "workers"; workers: AgentWorkersSnapshot })
   | (JsonObject & { type: "refresh" })
   | (JsonObject & { type: "work"; work: AgentWorkSnapshot })
   | (JsonObject & { type: "message"; message: TranscriptMessage })
