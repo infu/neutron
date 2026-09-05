@@ -274,6 +274,24 @@ and errors after writes, output exhaustion, steering during sleep and tool
 execution, queue ordering, and oversized context. No provider key or live app
 mutation is used.
 
+Run `bun test ./test/subagents.test.ts` for internal Agent Mode workers. These
+checks exercise concurrent model requests with separate contexts, shared root
+permission handling, parent completion waiting for workers, steering, Stop and
+revocation, individual worker cancellation, messages arriving during final
+persistence, old-resident storage compatibility, and interrupted-write recovery.
+They also cover output-limit continuation with saved read and write results,
+malformed truncated tool arguments without dispatch, repeated truncation during
+steering and Stop, retained error/recovery details, and loading released worker
+records with the older cancellation-as-error representation. The root tests
+verify that truncation neither replays a completed write nor triggers early
+goal completion review. These use the real installed SDK with synthetic model
+responses; they do not establish a live model's summary quality.
+
+For a browser check, enable Agent Mode in one tile and ask it to delegate two
+independent subtasks. Expand **Workers** to inspect their separate status and
+results, steer while they wait, and use Stop to cancel the whole invocation.
+Disable Agent Mode and verify ordinary chat has no worker coordination tools.
+
 For an installed browser check, start `/goal <objective>`, switch workspaces
 while it works, return and steer with Enter, queue a follow-up with Tab, then
 pause during sleep. Reload and use Resume to check recovery. Closing the

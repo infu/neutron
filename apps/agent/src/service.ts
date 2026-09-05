@@ -47,6 +47,7 @@ const snapshotSchema: JsonObject = {
     messages: { type: "array" },
     error: { type: ["string", "null"] },
     work: { type: "object" },
+    workers: { type: "object" },
   },
   additionalProperties: false,
 };
