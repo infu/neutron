@@ -440,6 +440,15 @@ requires deployment to provide the same package set and exactly one provenance
 entry per package. Trusted frontend callers cannot accidentally compile one
 set and stage another.
 
+The reviewed compiler result and deterministic Wasm compression are reused at
+approval; current raw bytes are still hashed before cached compression is used.
+Returning to repository selection also retains the build while the effective
+package set is unchanged. Approval still rechecks the live installed baseline.
+Independent baseline reads overlap, and deployment uploads only incoming
+content-addressed source modules absent from that checked baseline. Existing
+module verification, checked journal, and obsolete-module cleanup remain in
+effect.
+
 For the selected update set, the kernel:
 
 1. prepares every selected package;

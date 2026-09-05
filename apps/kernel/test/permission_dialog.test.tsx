@@ -115,9 +115,12 @@ test("manual install exposes the exact build review before enabling its final ac
   const acceptIndex = html.indexOf('data-tid="install-accept"');
   expect(reviewIndex).toBeGreaterThan(-1);
   expect(acceptIndex).toBeGreaterThan(reviewIndex);
-  expect(html).toContain("Deployment ready");
+  expect(html).toContain("Ready to continue");
   expect(html).not.toContain("Raw compiler Wasm");
   expect(html).not.toContain("Transport Wasm");
+  expect(html).toContain('data-tid="install-compiled"');
+  expect(html).not.toContain("Review the exact deployment before deciding");
+  expect(html).not.toContain('class="compile-done"');
   const accept = html.match(/<button[^>]*data-tid="install-accept"[^>]*>/u)?.[0];
   expect(accept).toBeDefined();
   expect(accept).not.toContain("disabled");
@@ -154,6 +157,41 @@ test("manual install exposes the exact build review before enabling its final ac
   expect(developerHtml).not.toContain(
     '<details open=""><summary>Build and installation details</summary>',
   );
+});
+
+test("manual install gives a short source summary and keeps exact checks in details", () => {
+  const request = fixtureAppInstallRequest({
+    id: "hello",
+    packageName: "Hello",
+    acquisition: "url",
+    size: 1,
+    capabilityPlanFingerprint: "a".repeat(64),
+    capabilityDisclosures: [],
+    permissions: [],
+  });
+  const html = renderToStaticMarkup(
+    <AppRequestDialog compiled={null} request={request} uiMode="normal" />,
+  );
+  const visibleSummary = html.slice(
+    html.indexOf('id="install-permission-summary"'),
+    html.indexOf('data-tid="consent-technical-details"'),
+  );
+  expect(visibleSummary).toContain("Hello");
+  expect(visibleSummary).toContain("v0.1.0");
+  expect(visibleSummary).toContain("From the download link you entered.");
+  expect(visibleSummary).toContain("Only install apps from a source you trust.");
+  expect(visibleSummary).not.toContain("executable rules");
+  expect(html).toContain("who published it or endorsed its code");
+  expect(html).toContain("Preparing app…");
+  expect(html).toMatch(/data-tid="install-reject"[^>]*>Cancel<\/button>/u);
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-tid="install-accept"/u);
+
+  const developerHtml = renderToStaticMarkup(
+    <AppRequestDialog compiled={null} request={request} uiMode="developer" />,
+  );
+  expect(developerHtml).toContain("executable rules");
+  expect(developerHtml).toContain("Compiling...");
+  expect(developerHtml).toMatch(/data-tid="install-reject"[^>]*>Reject<\/button>/u);
 });
 
 test("launcher exposes a real modal dialog boundary", () => {
@@ -1370,6 +1408,11 @@ test("update consent shows an exact installed-to-target capability diff", () => 
   expect(html).not.toContain("Old unverified explanation");
   expect(html).not.toContain("New unverified explanation");
   expect(html).not.toContain("Unverified purpose");
+  const visibleSummary = html.slice(
+    0,
+    html.indexOf('data-tid="consent-technical-details"'),
+  );
+  expect(visibleSummary).not.toContain('data-consequence="outside-services"');
 });
 
 test("browser permission updates show the exact feature change", () => {
@@ -1451,6 +1494,59 @@ test("update consent identifies a version-only plan change", () => {
   expect(html).toContain("No capability authority entries changed.");
   expect(html).toContain("Installed plan");
   expect(html).toContain("Target plan");
+  expect(html).not.toContain('data-tid="consent-consequences"');
+  expect(html).not.toContain('data-tid="consent-no-unusual-access"');
+
+  const developer = renderToStaticMarkup(
+    <AppRequestDialog compiled={{ size: 5 }} request={request} uiMode="developer" />,
+  );
+  expect(developer.slice(0, developer.indexOf('data-tid="consent-technical-details"')))
+    .toContain('data-tid="consent-consequences"');
+});
+
+test("manual update removing access does not repeat unchanged permissions", () => {
+  const previous: NeutronManifest = {
+    format: 3,
+    id: "less_access",
+    name: "Less Access",
+    version: 100,
+    capabilities: {
+      randomness: { api: 1 },
+      vetkeys: {
+        api: 1,
+        description: "Protect app data",
+        slots: [{ id: "private_data", purpose: "Private app data" }],
+      },
+    },
+  };
+  const target: NeutronManifest = {
+    ...previous,
+    version: 101,
+    capabilities: { randomness: { api: 1 } },
+  };
+  const disclosure = configInstallDisclosures(target);
+  const html = renderToStaticMarkup(
+    <AppRequestDialog
+      compiled={{ size: 1 }}
+      request={fixtureAppInstallRequest({
+        id: target.id,
+        size: 1,
+        operation: "update",
+        capabilityPlanFingerprint: disclosure.planFingerprint,
+        capabilityPlanDiff: diffCapabilityPlans(
+          buildCapabilityPlan(previous),
+          buildCapabilityPlan(target),
+        ),
+        capabilityDisclosures: disclosure.capabilityDisclosures,
+        permissions: disclosure.permissions,
+      })}
+      uiMode="normal"
+    />,
+  );
+  expect(html).toContain("Removed · Private key slots");
+  expect(html).toContain("Consensus randomness");
+  expect(html).not.toContain('data-tid="consent-consequences"');
+  expect(html).not.toContain('data-tid="consent-no-unusual-access"');
 });
 
 test("runtime backend consent renders its retained source, scope, and complete call", () => {

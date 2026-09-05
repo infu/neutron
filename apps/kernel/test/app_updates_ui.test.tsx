@@ -14,6 +14,7 @@ import {
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
 import type { DeploymentBuildReviewInput } from "../src/install_review/deployment_build_review.ts";
+import type { Permission } from "../src/lib/perm.ts";
 import { useKernelUiModeStore } from "../src/ui_mode.ts";
 
 mock.module("icblast", () => ({
@@ -309,9 +310,20 @@ test("failure feedback distinguishes preparation from uncertain deployment", () 
     error: "Status is unknown.",
     errorStage: "apply",
   });
-  expect(deployment).toContain("Deployment did not report success.");
-  expect(deployment).toContain("checked deployment journal");
-  expect(deployment).toContain("do not assume");
+  expect(deployment).toContain("Update status is unclear.");
+  expect(deployment).toContain("Wait for Settings to confirm which version is installed.");
+  expect(deployment).not.toContain("checked deployment journal");
+
+  useKernelUiModeStore.setState({ mode: "developer" });
+  const developer = renderSurface({
+    ...idleState,
+    phase: "error",
+    error: "Status is unknown.",
+    errorStage: "apply",
+  });
+  expect(developer).toContain("Deployment did not report success.");
+  expect(developer).toContain("checked deployment journal");
+  expect(developer).toContain("do not assume");
 });
 
 test("verified review and apply stay in the consolidated per-app update flow", () => {
@@ -332,7 +344,7 @@ test("verified review and apply stay in the consolidated per-app update flow", (
 
   expect(html).toContain('data-tid="app-update-review-dialog"');
   expect(html.match(/data-tid="deployment-build-review"/gu)).toHaveLength(1);
-  expect(html).toContain("Deployment ready");
+  expect(html).toContain("Ready to continue");
   expect(html).not.toContain('data-tid="deployment-build-review-download-record"');
   expect(html).not.toContain(
     'data-tid="deployment-build-review-download-archive-mail"',
@@ -347,8 +359,9 @@ test("verified review and apply stay in the consolidated per-app update flow", (
   ) ?? [];
   expect(technicalDetails).not.toHaveLength(0);
   expect(technicalDetails.every((tag) => !tag.includes(" open"))).toBe(true);
-  expect(html).toContain("verified certified transport");
-  expect(html).toContain("not publisher identity or code endorsement");
+  expect(html).toContain("Only update apps from a source you trust.");
+  expect(developerHtml).toContain("verified certified transport");
+  expect(developerHtml).toContain("not publisher identity or code endorsement");
   expect(html).toContain(`Copy source ${SOURCE}`);
   expect(html).toContain("Dependency requirements");
   expect(html).toContain("address_book");
@@ -374,6 +387,11 @@ test("bulk review stays plural and preserves a bulk return target", () => {
   expect(html.match(/data-tid="deployment-build-review"/gu)).toHaveLength(1);
   expect(html).toContain("Reviewing updates");
   expect(html).toContain("Update 2 apps");
+  expect(html.match(/Apps will restart after the update\./gu)).toHaveLength(1);
+  const firstApp = html.slice(0, html.indexOf("<details"));
+  expect(firstApp).not.toContain("compiled Wasm");
+  expect(firstApp).not.toContain("memory changes");
+  expect(firstApp).not.toContain("Same source");
 });
 
 test("review distinguishes update-source add, change, and removal", () => {
@@ -404,6 +422,31 @@ test("review distinguishes update-source add, change, and removal", () => {
   expect(html).toContain(`Adds source ${nextSource}`);
   expect(html).toContain(`Changes source ${SOURCE} → ${nextSource}`);
   expect(html).toContain(`Removes source ${SOURCE} · manual updates`);
+  expect(html).toContain("Future updates will be available here.");
+  expect(html).toContain("Future updates will come from a different source.");
+  expect(html).toContain("Future updates must be installed manually.");
+  expect(html.match(new RegExp(`Copy new source ${nextSource}`, "gu"))).toHaveLength(2);
+  expect(html).not.toContain("automatic updates");
+});
+
+test("normal updates keep system authority visible without repeating unchanged access", () => {
+  const html = renderSurface(reviewState([
+    reviewApp({
+      appId: "kernel",
+      name: "Neutron",
+      permissions: [
+        { source: "kernel", kind: "kernel_replacement" },
+        { source: "kernel", kind: "persistent_background_storage" },
+      ],
+    }),
+  ]));
+  const summary = html.slice(0, html.indexOf("<details"));
+
+  expect(summary).toContain('data-consequence="system"');
+  expect(summary).not.toContain('data-consequence="browser-data"');
+  expect(summary).not.toContain('data-consequence="background"');
+  expect(summary).toContain("Neutron will reload after the update.");
+  expect(html).toContain("Target package access (2)");
 });
 
 test("success feedback reports the committed app count", () => {
@@ -413,7 +456,14 @@ test("success feedback reports the committed app count", () => {
     updatedAppCount: 1,
   });
   expect(html).toContain("Updated 1 app.");
-  expect(html).toContain("Installed version and integrity records were committed together.");
+  expect(html).not.toContain("Installed version and integrity records were committed together.");
+  useKernelUiModeStore.setState({ mode: "developer" });
+  const developer = renderSurface({
+    ...idleState,
+    phase: "success",
+    updatedAppCount: 1,
+  });
+  expect(developer).toContain("Installed version and integrity records were committed together.");
 });
 
 test("preparing one app keeps one toolbar cancel and passive row status", () => {
@@ -558,6 +608,7 @@ function reviewApp(input: {
   name: string;
   currentUpdateSource?: string;
   targetUpdateSource?: string;
+  permissions?: Permission[];
   dependencies?: Record<string, { app: string; min_version: number; functions: string[] }>;
 }) {
   const { appId, name, dependencies = {} } = input;
@@ -580,7 +631,7 @@ function reviewApp(input: {
     releaseDigest: "b".repeat(64),
     capabilityPlanDiff: { entries: [] },
     capabilityDisclosures: [],
-    permissions: [],
+    permissions: input.permissions ?? [],
     appExplanations: [],
     dependencies,
   };
@@ -721,7 +772,7 @@ function preparedUpdatePackage(
     `module { public let fixtureVersion : Nat = ${app.targetVersion} }`,
   );
   const entry = hashContent(moduleContent);
-  const files = {
+  const files: Record<string, Uint8Array> = {
     "neutron.json": encoder.encode(
       JSON.stringify({
         format: 3,
@@ -736,6 +787,12 @@ function preparedUpdatePackage(
     ),
     [`mo/${entry}.mo`]: moduleContent,
   };
+  if (app.appId === "kernel") {
+    files["connection-providers.json"] = encoder.encode(JSON.stringify({
+      schema: "neutron.connection-provider-support.v1",
+      providers: [],
+    }));
+  }
   const archiveBytes = msgpack.encode(
     Object.fromEntries(
       Object.entries(files).map(([path, content]) => [

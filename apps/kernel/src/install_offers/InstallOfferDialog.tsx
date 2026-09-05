@@ -12,16 +12,23 @@ import {
   ConsentNotice,
   ConsentTechnicalDetails,
   focusConsentControl,
+  useConsentUiMode,
 } from "../consent/ConsentPresentation.tsx";
+import type { KernelUiMode } from "../ui_mode.ts";
 
 export function InstallOfferDialog() {
   const pending = useInstallOfferStore((state) => state.pending);
   return <InstallOfferDialogView pending={pending} />;
 }
 
-export function InstallOfferDialogView({ pending }: {
+export function InstallOfferDialogView({
+  pending,
+  uiMode: uiModeOverride,
+}: {
   pending: PendingInstallOffer | null;
+  uiMode?: KernelUiMode;
 }) {
+  const uiMode = useConsentUiMode(uiModeOverride);
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -49,7 +56,7 @@ export function InstallOfferDialogView({ pending }: {
         aria-describedby={noticeId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="dialog dialog-warning install-offer-dialog"
+        className={`dialog install-offer-dialog${uiMode === "developer" ? " dialog-warning" : ""}`}
         data-tid="install-offer-dialog"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
@@ -64,29 +71,55 @@ export function InstallOfferDialogView({ pending }: {
         role="alertdialog"
       >
         <div className="title" id={titleId}>
-          Review third-party software?
+          {uiMode === "developer"
+            ? "Review third-party software?"
+            : pending.offer.kind === "package_url"
+              ? "Review suggested app?"
+              : "Review suggested apps?"}
         </div>
         <div className="call">
-          <p>{offerIntroduction(pending)}</p>
-          <ConsentNotice tone="warning">
-            <span id={noticeId}>
-              <strong>Review does not install anything.</strong> It contacts{" "}
-              <span className="consent-source-host">
-                {safeInstallOfferUrl(pending.offer.url)}
-              </span>{" "}
-              to load the package or application group. You will get a separate
-              final review before installation.
-            </span>
-          </ConsentNotice>
-          <ConsentNotice tone="neutral">
-            {pending.offer.kind === "package_url"
-              ? "The download sends no browser credentials or referrer. The source and network can still observe request metadata."
-              : "Neutron anonymously queries the repository and verifies certified data. Gateways and the repository can still observe request metadata."}
-          </ConsentNotice>
-          <div className="repository-third-party">
-            Third-party software — Neutron has not reviewed, hosted, sold, or
-            endorsed it, and has not verified its publisher.
-          </div>
+          <p>{offerIntroduction(pending, uiMode)}</p>
+          {uiMode === "developer" ? (
+            <>
+              <ConsentNotice tone="warning">
+                <span id={noticeId}>
+                  <strong>Review does not install anything.</strong> It contacts{" "}
+                  <span className="consent-source-host">
+                    {safeInstallOfferUrl(pending.offer.url)}
+                  </span>{" "}
+                  to load the package or application group. You will get a separate
+                  final review before installation.
+                </span>
+              </ConsentNotice>
+              <ConsentNotice tone="neutral">
+                {pending.offer.kind === "package_url"
+                  ? "The download sends no browser credentials or referrer. The source and network can still observe request metadata."
+                  : "Neutron anonymously queries the repository and verifies certified data. Gateways and the repository can still observe request metadata."}
+              </ConsentNotice>
+              <div className="repository-third-party">
+                Third-party software — Neutron has not reviewed, hosted, sold, or
+                endorsed it, and has not verified its publisher.
+              </div>
+            </>
+          ) : (
+            <>
+              <ConsentNotice tone="neutral">
+                <span id={noticeId}>
+                  Load from{" "}
+                  <span className="consent-source-host">
+                    {pending.offer.kind === "package_url"
+                      ? safeInstallOfferUrl(pending.offer.url)
+                      : `repository ${pending.offer.reference.repo}`}
+                  </span>
+                  . You decide before installing.
+                </span>
+              </ConsentNotice>
+              <p className="repository-third-party">
+                The source can see your request. Publisher and app safety have
+                not been verified.
+              </p>
+            </>
+          )}
           <ConsentTechnicalDetails>
           <div className="a-infogrid">
             <RequesterFacts requester={pending.requester} />
@@ -130,7 +163,7 @@ export function InstallOfferDialogView({ pending }: {
           </ConsentTechnicalDetails>
           <div className="btn-actions">
             <button
-              className="btn btn-warning"
+              className={uiMode === "developer" ? "btn btn-warning" : "btn"}
               data-tid="install-offer-approve"
               onClick={() => approveInstallOffer(pending.requestId)}
               type="button"
@@ -192,11 +225,17 @@ function RequesterFacts({
   );
 }
 
-function offerIntroduction(pending: PendingInstallOffer): string {
+function offerIntroduction(
+  pending: PendingInstallOffer,
+  uiMode: KernelUiMode,
+): string {
   const actor =
     pending.requester.kind === "agent"
       ? `An agent from ${pending.requester.rootAppName}`
       : pending.requester.appName;
+  if (uiMode === "normal") {
+    return `${actor} suggests ${pending.offer.kind === "package_url" ? "an app" : "a group of apps"}.`;
+  }
   return pending.offer.kind === "package_url"
     ? `${actor} is offering an application package.`
     : `${actor} is offering a group of applications.`;

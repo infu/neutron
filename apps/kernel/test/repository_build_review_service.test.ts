@@ -20,5 +20,5 @@ test("isolated repository pre-dispatch build review", async () => {
   ]);
 
   expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
-  expect(`${stdout}\n${stderr}`).toContain("2 pass");
+  expect(`${stdout}\n${stderr}`).toContain("7 pass");
 });

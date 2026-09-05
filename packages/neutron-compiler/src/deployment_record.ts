@@ -307,6 +307,22 @@ export type PreparedCompleteDeploymentBuild = Readonly<{
   transportWasm: Uint8Array;
 }>;
 
+// Keep deterministic compression with its live compiler bytes, not in a global
+// digest cache. Callers only receive copies of the cached compressed buffer.
+const wasmTransportCache = new WeakMap<
+  Uint8Array,
+  PreparedDeterministicWasmTransport
+>();
+
+/** Preserve prepared compression across the installer's private raw snapshot. */
+export function snapshotWasmForDeployment(rawWasm: Uint8Array): Uint8Array {
+  const snapshot = Uint8Array.from(rawWasm);
+  const cached = wasmTransportCache.get(rawWasm);
+  if (cached) wasmTransportCache.set(snapshot, cached);
+  // Cache reuse still requires a matching digest in prepareDeterministicWasmTransport.
+  return snapshot;
+}
+
 /**
  * Validate and normalize a deployment record into its one canonical ordering.
  * The input language deliberately contains no credentials, raw install args,
@@ -524,11 +540,22 @@ export function prepareDeterministicWasmTransport(
   if (!(rawWasm instanceof Uint8Array)) fail("raw Wasm must be exact bytes");
   const rawSnapshot = Uint8Array.from(rawWasm);
   assertRawWasm(rawSnapshot);
+  const rawSha256 = hashContent(rawSnapshot);
+  const cached = wasmTransportCache.get(rawWasm);
+  if (
+    cached?.wasmRecord.raw.bytes === rawSnapshot.byteLength &&
+    cached.wasmRecord.raw.sha256 === rawSha256
+  ) {
+    return Object.freeze({
+      transportWasm: cached.transportWasm.slice(),
+      wasmRecord: cached.wasmRecord,
+    });
+  }
   const transportWasm = gzipSync(rawSnapshot, { mtime: 0 });
   assertWasmSize(transportWasm, "gzip installation payload");
   const wasmRecord: DeploymentWasmRecord = deepFreeze({
     raw: {
-      sha256: hashContent(rawSnapshot),
+      sha256: rawSha256,
       bytes: rawSnapshot.byteLength,
       representation: "neutron_compile_result_wasm",
       content_encoding: "identity",
@@ -541,7 +568,8 @@ export function prepareDeterministicWasmTransport(
       encoder: DEPLOYMENT_WASM_TRANSPORT_ENCODER,
     },
   });
-  return Object.freeze({ transportWasm, wasmRecord });
+  wasmTransportCache.set(rawWasm, { transportWasm, wasmRecord });
+  return Object.freeze({ transportWasm: transportWasm.slice(), wasmRecord });
 }
 
 /** Verify hashes, sizes, and the exact deterministic gzip representation. */

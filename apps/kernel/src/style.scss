@@ -2695,6 +2695,48 @@ button:focus-visible,
     gap: 8px;
 }
 
+.consent-permission-rows {
+    border: 1px solid var(--k-line-subtle);
+    border-radius: 6px;
+    list-style: none;
+    margin: 0;
+    overflow: hidden;
+    padding: 0;
+}
+
+.consent-permission-row {
+    background: transparent;
+    box-shadow: none;
+    color: var(--k-text-muted);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    padding: 8px 10px;
+
+    + .consent-permission-row {
+        border-top: 1px solid var(--k-line-subtle);
+    }
+
+    strong {
+        color: var(--k-text);
+    }
+
+    &.perm-level-3 {
+        box-shadow: inset 2px 0 rgba(243, 204, 114, 0.72);
+    }
+
+    &.perm-level-4 {
+        background: rgba(255, 120, 133, 0.08);
+        box-shadow: inset 2px 0 rgba(255, 120, 133, 0.78);
+    }
+}
+
+.consent-compact-empty,
+.consent-change-summary {
+    color: var(--k-text-muted);
+    line-height: 1.4;
+    margin: 0;
+}
+
 .consent-consequence {
     border-radius: 8px;
     display: grid;
@@ -3445,6 +3487,15 @@ button:focus-visible,
 
     .btn {
         justify-self: start;
+    }
+}
+
+.deployment-build-review--compact {
+    color: var(--k-text-muted);
+    gap: 8px;
+
+    > p[role="status"] {
+        font-size: 12px;
     }
 }
 

@@ -52,8 +52,14 @@ type GeneratedAliases = Record<
 type PublicTypeAliases = Record<string, string>;
 
 export function extractGeneratedAliases(source: string): GeneratedAliases {
+  return generatedAliasesFromPublicTypes(extractPublicTypeAliases(source));
+}
+
+function generatedAliasesFromPublicTypes(
+  publicTypes: PublicTypeAliases,
+): GeneratedAliases {
   const aliases: GeneratedAliases = {};
-  for (const [name, value] of Object.entries(extractPublicTypeAliases(source))) {
+  for (const [name, value] of Object.entries(publicTypes)) {
     const match = /^([A-Za-z_][A-Za-z0-9_]*)_(Input|Output)$/.exec(name);
     const method = match?.[1];
     const kind = match?.[2];
@@ -69,8 +75,8 @@ export function generateAppMethodSchemaArtifact(
   manifest: NeutronManifest,
   source: string
 ): AppMethodSchemaArtifact {
-  const aliases = extractGeneratedAliases(source);
   const publicTypes = extractPublicTypeAliases(source);
+  const aliases = generatedAliasesFromPublicTypes(publicTypes);
   const idlSpecs: MethodIdlSpec[] = [];
   const methods: AppMethodSchemaArtifact["methods"] = {};
 

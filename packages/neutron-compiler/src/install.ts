@@ -131,6 +131,7 @@ import {
   parseDeploymentBuildRecord,
   prepareDeterministicWasmTransport,
   serializeDeploymentBuildRecord,
+  snapshotWasmForDeployment,
   type CompleteDeploymentBuildRecord,
   type DeploymentBuildRecord,
   type DeploymentPackageArchiveRecord,
@@ -1483,7 +1484,9 @@ function assertMotokoFileContentAddress(
 
 function uniquePreparedModuleFiles(
   packages: PreparedPackageInstall[],
+  previousModulePaths: readonly string[] = [],
 ): PreparedPackageFile[] {
+  const installed = new Set(previousModulePaths);
   const modules = new Map<string, PreparedPackageFile>();
   for (const preparedPackage of packages) {
     for (const file of preparedPackage.files) {
@@ -1498,10 +1501,15 @@ function uniquePreparedModuleFiles(
       modules.set(file.path, file);
     }
   }
-  return [...modules.values()].map(({ path, content }) => ({
-    path,
-    content: content.slice(),
-  }));
+  // Both the checked baseline and incoming package modules have already had
+  // their content-addressed paths verified. Retain matching installed bytes,
+  // just as we retain modules belonging to packages outside this update.
+  return [...modules.values()]
+    .filter(({ path }) => !installed.has(path.slice("mo/".length)))
+    .map(({ path, content }) => ({
+      path,
+      content: content.slice(),
+    }));
 }
 
 export function buildPackageCompileInput({
@@ -2069,40 +2077,71 @@ export async function readKernelPackageState({
   fetchText,
   fetchJson,
 }: KernelPackageStateReader): Promise<KernelPackageState> {
-  const modulePaths = await listStatic("/mo/");
-  const existingModules = await mapWithConcurrency(
-    modulePaths,
-    10,
-    async (path) => ({
+  const moduleReads = Promise.resolve().then(async () => {
+    const modulePaths = await listStatic("/mo/");
+    return mapWithConcurrency(modulePaths, 10, async (path) => ({
       path: path.replace(/^\/mo\//, ""),
       content: await fetchText(path),
-    }),
+    }));
+  });
+  const registryRead = Promise.resolve().then(async () => {
+    const registry = normalizeAppRegistry(
+      await fetchJson<PartialAppRegistry>("/system/apps.json", {}),
+    );
+    if (!registry.kernel) {
+      throw new Error(
+        "Installed app registry is missing the kernel package manifest entry",
+      );
+    }
+    return registry;
+  });
+  const configReads = registryRead.then((registry) =>
+    mapWithConcurrency(
+      Object.keys(registry).sort(compareCanonicalText),
+      10,
+      async (id) => {
+        const path =
+          id === "kernel" ? "/pkg/neutron.json" : `/app/${id}/pkg/neutron.json`;
+        return {
+          id,
+          path,
+          value: await fetchJson<unknown | undefined>(path, undefined),
+        };
+      },
+    ),
   );
+  // Only manifests depend on the registry. Start the other baseline reads
+  // together so module downloads do not delay unrelated metadata requests.
+  const [
+    existingModules,
+    registry,
+    rawBrowserSurfaceOrigins,
+    configs,
+    rawConnectionProviderSupport,
+    previousStable,
+  ] = await Promise.all([
+    moduleReads,
+    registryRead,
+    Promise.resolve().then(() =>
+      fetchJson<unknown | undefined>(BROWSER_SURFACE_ORIGINS_PATH, undefined),
+    ),
+    configReads,
+    Promise.resolve().then(() =>
+      fetchJson<unknown | undefined>(
+        KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH,
+        undefined,
+      ),
+    ),
+    Promise.resolve().then(() => fetchText("/pkg/neutron.most")),
+  ]);
   for (const module of existingModules) {
     assertMotokoFileContentAddress(module, true);
   }
-
-  const registry = normalizeAppRegistry(
-    await fetchJson<PartialAppRegistry>("/system/apps.json", {}),
-  );
-  if (!registry.kernel) {
-    throw new Error(
-      "Installed app registry is missing the kernel package manifest entry",
-    );
-  }
-  const rawBrowserSurfaceOrigins = await fetchJson<unknown | undefined>(
-    BROWSER_SURFACE_ORIGINS_PATH,
-    undefined,
-  );
   const browserSurfaceOriginAppIds = parseBrowserSurfaceOriginsSidecar(
     rawBrowserSurfaceOrigins,
     Object.keys(registry),
   );
-  const appIds = Object.keys(registry).sort(compareCanonicalText);
-  const configEntries = await mapWithConcurrency(appIds, 10, async (id) => {
-    const path =
-      id === "kernel" ? "/pkg/neutron.json" : `/app/${id}/pkg/neutron.json`;
-    const value = await fetchJson<unknown | undefined>(path, undefined);
+  const configEntries = configs.map(({ id, path, value }) => {
     if (value === undefined) {
       throw new Error(`Installed package manifest ${path} is missing`);
     }
@@ -2135,10 +2174,6 @@ export async function readKernelPackageState({
 
   const existingConfigs: CompileConfig = Object.fromEntries(configEntries);
 
-  const rawConnectionProviderSupport = await fetchJson<unknown | undefined>(
-    KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH,
-    undefined,
-  );
   if (rawConnectionProviderSupport === undefined) {
     throw new Error(
       `Installed Kernel package metadata ${KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH} is missing`,
@@ -2160,7 +2195,6 @@ export async function readKernelPackageState({
     connectionProviderSupport,
   );
 
-  const previousStable = await fetchText("/pkg/neutron.most");
   if (previousStable.trim().length === 0) {
     throw new Error("Installed stable signature /pkg/neutron.most is empty");
   }
@@ -3750,7 +3784,7 @@ function snapshotCompileResultForDeployment(
   const { wasm, ...metadata } = compiled;
   const snapshot: CompileResult = {
     ...structuredClone(metadata),
-    wasm: Uint8Array.from(wasm),
+    wasm: snapshotWasmForDeployment(wasm),
   };
   const seen = new WeakSet<object>();
 
@@ -3887,7 +3921,7 @@ export async function deployPreparedPackages({
     deploymentCompiled.stable,
     "text/plain",
   );
-  const moduleFiles = uniquePreparedModuleFiles(packages);
+  const moduleFiles = uniquePreparedModuleFiles(packages, previousModulePaths);
   const moduleGcOperation = createModuleGcOperation({
     deploymentId: deploymentCompiled.deploymentId,
     previousModulePaths,

@@ -753,12 +753,9 @@ async function resolveLocalSourceClosure(
     }
   }
   return Object.freeze(
-    [...included.values()].sort((left, right) =>
-      compareCanonicalText(
-        repositoryRelativePath(repositoryRoot, left, "workspace"),
-        repositoryRelativePath(repositoryRoot, right, "workspace"),
-      ),
-    ),
+    [...included.entries()]
+      .sort(([left], [right]) => compareCanonicalText(left, right))
+      .map(([, root]) => root),
   );
 }
 

@@ -9,7 +9,7 @@ import {
   type DeploymentBuildReviewInput,
   type DeploymentBuildReviewPackage,
 } from "./deployment_build_review.ts";
-import { useConsentUiMode } from "../consent/ConsentPresentation.tsx";
+import { ConsentNotice, useConsentUiMode } from "../consent/ConsentPresentation.tsx";
 import type { KernelUiMode } from "../ui_mode.ts";
 
 export type DeploymentBuildReviewProps = DeploymentBuildReviewInput &
@@ -47,6 +47,10 @@ export function DeploymentBuildReview({
       setDownloadError(error instanceof Error ? error.message : String(error));
     }
   };
+
+  if (uiMode === "normal") {
+    return <CompactBuildReview model={model} />;
+  }
 
   return (
     <section
@@ -263,6 +267,60 @@ export function DeploymentBuildReview({
             <WarningDetails warnings={model.warnings} />
           </details>
         </div>
+      ) : null}
+    </section>
+  );
+}
+
+function CompactBuildReview({
+  model,
+}: {
+  model: ReturnType<typeof createDeploymentBuildReviewModel>;
+}) {
+  const { warnings } = model;
+  const appNames = (ids: readonly string[]) => [...new Set(ids)].map(
+    (id) => model.packages.find((pkg) => pkg.appId === id)?.displayName ?? id,
+  ).join(", ");
+  const migrations = warnings.memory_changes.filter((change) => change.kind === "migrate");
+  const deletedRoots = warnings.destructive_memory_roots.filter((root) =>
+    !migrations.some((change) => change.owner === root.owner &&
+      change.path.some((edge) => edge.consume.includes(root.memory_id))),
+  );
+  const diagnostics = [...warnings.diagnostics, ...warnings.compatibility_diagnostics];
+  // Classical Motoko upgrades use Wasm "replace" while preserving stable data.
+  const replacesData = model.installation.mode === "reinstall";
+
+  return (
+    <section
+      aria-label="Installation checks"
+      className="deployment-build-review deployment-build-review--compact"
+      data-tid="deployment-build-review"
+    >
+      <p role="status">Ready to continue.</p>
+      {replacesData ? (
+        <ConsentNotice tone="danger">
+          <strong>This installation replaces existing storage.</strong>{" "}
+          Saved data may be lost.
+        </ConsentNotice>
+      ) : null}
+      {warnings.removed_apps.length > 0 ? (
+        <ConsentNotice tone="danger">
+          <strong>Removes {appNames(warnings.removed_apps)}.</strong>
+        </ConsentNotice>
+      ) : null}
+      {deletedRoots.length > 0 ? (
+        <ConsentNotice tone="danger">
+          <strong>Permanently deletes saved data from {appNames(deletedRoots.map(({ owner }) => owner))}.</strong>
+        </ConsentNotice>
+      ) : null}
+      {migrations.length > 0 ? (
+        <p>Updates the saved-data format for {appNames(migrations.map(({ owner }) => owner))}.</p>
+      ) : null}
+      {diagnostics.length > 0 ? (
+        <details className="consent-technical-details">
+          <summary>{diagnostics.length} build {diagnostics.length === 1 ? "warning" : "warnings"} to review</summary>
+          <DiagnosticReview diagnostics={diagnostics} heading="Build warnings" />
+        </details>
       ) : null}
     </section>
   );

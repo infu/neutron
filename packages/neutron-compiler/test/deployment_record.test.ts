@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as fflate from "fflate";
 import { gunzipSync } from "fflate";
 import { hashContent } from "neutron-tools/src/hash.js";
 import {
@@ -15,6 +16,7 @@ import {
   parseDeploymentBuildRecordJson,
   prepareDeterministicWasmTransport,
   serializeDeploymentBuildRecord,
+  snapshotWasmForDeployment,
 } from "../src/deployment_record.ts";
 
 const sha = (byte: string): string => byte.repeat(64);
@@ -172,6 +174,59 @@ function clone<T>(value: T): T {
 }
 
 describe("deterministic deployment Wasm integrity", () => {
+  test("compresses once across review, revalidation, and deployment snapshots", () => {
+    const raw = rawWasm.slice();
+    const compress = spyOn(fflate, "gzipSync");
+    try {
+      const reviewed = prepareDeterministicWasmTransport(raw);
+      const revalidated = prepareDeterministicWasmTransport(raw);
+      const snapshot = snapshotWasmForDeployment(raw);
+      const deployment = prepareDeterministicWasmTransport(snapshot);
+      assertWasmRecord(snapshot, deployment.transportWasm, reviewed.wasmRecord);
+      const expected = prepareDeterministicWasmTransport(snapshot);
+      expect(compress).toHaveBeenCalledTimes(1);
+      expect(revalidated.wasmRecord).toBe(reviewed.wasmRecord);
+      expect(expected.wasmRecord).toBe(reviewed.wasmRecord);
+      expect(deployment.transportWasm).toEqual(reviewed.transportWasm);
+      expect(deployment.transportWasm).not.toBe(reviewed.transportWasm);
+      expect(snapshot).not.toBe(raw);
+    } finally {
+      compress.mockRestore();
+    }
+  });
+
+  test("returned gzip buffers cannot mutate cached transport", () => {
+    const raw = rawWasm.slice();
+    const first = prepareDeterministicWasmTransport(raw);
+    first.transportWasm[0] = first.transportWasm[0]! ^ 1;
+    const second = prepareDeterministicWasmTransport(raw);
+    expect(gunzipSync(second.transportWasm)).toEqual(raw);
+    expect(second.wasmRecord).toBe(first.wasmRecord);
+    expect(() => assertWasmRecord(raw, first.transportWasm, first.wasmRecord))
+      .toThrow(/not the deterministic gzip payload/);
+  });
+
+  test("raw mutations invalidate compression reuse without changing an existing snapshot", () => {
+    // A small valid custom section whose name can change without changing size.
+    const raw = Uint8Array.of(...rawWasm, 0, 2, 1, 97);
+    const reviewed = prepareDeterministicWasmTransport(raw);
+    const snapshot = snapshotWasmForDeployment(raw);
+    new Uint8Array(raw.buffer)[raw.length - 1] = 98;
+    const staleCacheSnapshot = snapshotWasmForDeployment(raw);
+    expect(prepareDeterministicWasmTransport(staleCacheSnapshot).wasmRecord.raw.sha256)
+      .not.toBe(reviewed.wasmRecord.raw.sha256);
+    const changed = prepareDeterministicWasmTransport(raw);
+    expect(changed.wasmRecord.raw.sha256).not.toBe(reviewed.wasmRecord.raw.sha256);
+    expect(gunzipSync(changed.transportWasm)).toEqual(raw);
+    expect(prepareDeterministicWasmTransport(snapshot).wasmRecord).toBe(reviewed.wasmRecord);
+    expect(() => assertWasmRecord(raw, reviewed.transportWasm, reviewed.wasmRecord))
+      .toThrow(/not the deterministic gzip payload/);
+    const changedSnapshot = snapshotWasmForDeployment(raw);
+    changedSnapshot[changedSnapshot.length - 1] = 99;
+    expect(prepareDeterministicWasmTransport(changedSnapshot).wasmRecord.raw.sha256)
+      .not.toBe(changed.wasmRecord.raw.sha256);
+  });
+
   test("binds raw compiler output and exact gzip install bytes", () => {
     const first = prepareDeterministicWasmTransport(rawWasm);
     const second = prepareDeterministicWasmTransport(rawWasm);

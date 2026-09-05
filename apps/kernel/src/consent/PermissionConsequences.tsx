@@ -1,4 +1,6 @@
 import type { Permission, PermissionLevel } from "../lib/perm.ts";
+import type { CapabilityPlanDiffV1 } from "neutron-tools/src/capabilities/wire.js";
+import type { CapabilityId } from "neutron-tools/src/capabilities/catalog.js";
 import {
   BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
   browserPermissionFeaturesTitle,
@@ -6,6 +8,9 @@ import {
   permissionLevel,
 } from "../lib/perm.ts";
 import { formatBytes, formatCycles } from "../settings/format.ts";
+import { useConsentUiMode } from "./ConsentPresentation.tsx";
+import type { KernelUiMode } from "../ui_mode.ts";
+import { compactPermissionConsequences } from "./compact_permission_summary.ts";
 
 export type PermissionConsequence = Readonly<{
   id: string;
@@ -16,12 +21,47 @@ export type PermissionConsequence = Readonly<{
 }>;
 
 export function PermissionConsequences({
-  emptyCopy = "This app stays within its own protected space and asks separately before individual sensitive actions.",
+  emptyCopy = "Uses standard app features.",
+  mode,
   permissions,
 }: {
   emptyCopy?: string;
+  mode?: KernelUiMode;
   permissions: readonly Permission[];
 }) {
+  const uiMode = useConsentUiMode(mode);
+  if (uiMode === "normal") {
+    const rows = compactPermissionConsequences(permissions);
+    if (rows.length === 0) {
+      return (
+        <p className="consent-compact-empty" data-tid="consent-no-unusual-access">
+          {emptyCopy}
+        </p>
+      );
+    }
+    return (
+      <section
+        aria-label="App permissions"
+        className="consent-consequences consent-consequences--compact"
+        data-tid="consent-consequences"
+      >
+        <h3>App permissions</h3>
+        <ul className="consent-permission-rows">
+          {rows.map((row) => (
+            <li
+              className={`consent-permission-row perm-level-${row.level}`}
+              data-consequence={row.id}
+              data-level={row.level}
+              key={row.id}
+            >
+              <strong>{row.title}</strong>{" "}
+              <span>{row.description}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
   const consequences = permissionConsequences(permissions);
   if (consequences.length === 0) {
     return (
@@ -63,6 +103,64 @@ export function PermissionConsequences({
       </div>
     </section>
   );
+}
+
+const permissionCapabilityIds = {
+  persistent_background_storage: "persistent_browser_storage",
+  dedicated_resident_origin: "dedicated_resident_origin",
+  browser_permissions: "browser_permissions",
+  backend_calls: "backend_calls",
+  randomness: "randomness",
+  chain_key_signing: "chain_key_signing",
+  stable_store: "stable_store",
+  https_outcalls: "https_outcalls",
+  public_ingress_route: "public_ingress",
+  certified_assets: "certified_assets",
+  vetkeys: "vetkeys",
+  preapproved_self_call: "preapproved_self_calls",
+  agent_entrypoint: "agent_entrypoints",
+  scheduled_task: "scheduled_tasks",
+  background_ui_request: "background_ui_requests",
+  ethereum_provider: "ethereum_provider",
+  app_dependency: "app_calls",
+  connection: "connections",
+  internal_app_function: "app_exports",
+  function_resources: "function_resources",
+} satisfies Record<
+  Exclude<
+    Permission["kind"],
+    "kernel_replacement" | "kernel_memory_replacement" | "memory_retirement" | "http_route" | "public_method"
+  >,
+  CapabilityId
+>;
+
+/** Presentation only: spotlight changed access without changing approval scope. */
+export function getPermissionChangesForReview(
+  permissions: readonly Permission[],
+  diff: CapabilityPlanDiffV1 | undefined,
+): readonly Permission[] {
+  if (!diff) return permissions;
+  const changedIds = new Set(
+    diff.entries.filter(({ after }) => after !== null).map(({ id }) => id),
+  );
+  return permissions.filter((permission) => {
+    switch (permission.kind) {
+      case "kernel_replacement":
+      case "kernel_memory_replacement":
+      case "memory_retirement":
+      case "public_method":
+        return true;
+      case "http_route":
+        return changedIds.has(
+          permission.mode === "certified_store" ? "certified_read_routes" : "http_routes",
+        );
+      case "function_resources":
+        return permission.resources.some(({ kind }) => kind === "actor_self") ||
+          changedIds.has("function_resources");
+      default:
+        return changedIds.has(permissionCapabilityIds[permission.kind]);
+    }
+  });
 }
 
 export function permissionConsequences(

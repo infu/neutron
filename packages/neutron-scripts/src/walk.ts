@@ -196,7 +196,8 @@ export async function getDependencies(
   // WARNING!!! Changing even a comma here may break the whole security
   const content = await fs.readFile(filePath, "utf-8");
 
-  const imports = parseImports(removeCommentsAndEmptyLines(content));
+  const normalizedContent = removeCommentsAndEmptyLines(content);
+  const imports = parseImports(normalizedContent);
   const fileHash = hashContent(content);
   console.log("Processing", filePath);
   if (dependencyCache[filePath]) {
@@ -211,7 +212,7 @@ export async function getDependencies(
 
   if (!hashfiles[fileHash]) {
     hashfiles[fileHash] = {
-      content: removeCommentsAndEmptyLines(content),
+      content: normalizedContent,
       path: filePath,
     };
   }

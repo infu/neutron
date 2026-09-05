@@ -349,15 +349,74 @@ describe("pre-dispatch deployment build review", () => {
       createElement(DeploymentBuildReview, { ...input, uiMode: "normal" }),
     );
 
-    expect(html).toContain("Deployment ready");
-    expect(html).toContain("Package checks and compilation completed");
-    expect(html).toContain("No data-loss or compatibility warnings");
+    expect(html).toContain("Ready to continue.");
+    expect(html).not.toContain("No data-loss or compatibility warnings");
+    expect(html).not.toContain("replaces existing storage");
     expect(html).not.toContain('data-tid="deployment-build-review-developer"');
     expect(html).not.toContain("Build identity");
     expect(html).not.toContain("Deployment Wasm");
     expect(html).not.toContain("Package Information Record");
     expect(html).not.toContain("Verified license declarations");
     expect(html).not.toContain("Source revision");
+  });
+
+  test("normal review distinguishes classical upgrades from a storage-resetting reinstall", () => {
+    const kernel = packageFixture();
+    const base = completeRecord([{ fixture: kernel }]);
+    for (const mode of ["upgrade", "reinstall"] as const) {
+      const record = parseDeploymentBuildRecord({
+        ...base,
+        installation: { ...base.installation, mode, wasm_memory_persistence: "replace" },
+      });
+      if (record.state !== "complete") throw new Error("expected complete fixture");
+      const html = renderToStaticMarkup(
+        createElement(DeploymentBuildReview, {
+          record, suppliedPackages: [kernel.prepared], uiMode: "normal",
+        }),
+      );
+      expect(html.includes("replaces existing storage")).toBe(mode === "reinstall");
+    }
+  });
+
+  test("normal review distinguishes migrated storage from deletion without migration", () => {
+    const kernel = packageFixture();
+    const base = completeRecord([{ fixture: kernel }]);
+    const root = { owner: "kernel", version: 1, schema: "a".repeat(64) };
+    const record = parseDeploymentBuildRecord({
+      ...base,
+      previous: {
+        ...base.previous,
+        apps: base.target.apps,
+        memories: [{ ...root, id: "state" }, { ...root, id: "old" }],
+      },
+      target: {
+        ...base.target,
+        memories: [{ ...root, id: "state", version: 2, schema: "b".repeat(64) }],
+      },
+      warnings: {
+        ...base.warnings,
+        memory_changes: [
+          {
+            kind: "migrate", owner: "kernel", memory_id: "state", from: 1, to: 2,
+            old_schema_entry_sha256: "c".repeat(64),
+            path: [{ from: 1, to: 2, entry_sha256: "d".repeat(64), consume: ["old"] }],
+          },
+          {
+            kind: "retire", reason: "memory-retirement", owner: "kernel",
+            memory_id: "old", from: 1, old_schema_entry_sha256: "e".repeat(64),
+          },
+        ],
+        destructive_memory_roots: [{ owner: "kernel", memory_id: "old" }],
+      },
+    });
+    if (record.state !== "complete") throw new Error("expected complete fixture");
+    const html = renderToStaticMarkup(
+      createElement(DeploymentBuildReview, {
+        record, suppliedPackages: [kernel.prepared], uiMode: "normal",
+      }),
+    );
+    expect(html).toContain("Updates the saved-data format for kernel.");
+    expect(html).not.toContain("Permanently deletes saved data");
   });
 
   test("recordless unofficial input stays explicitly unknown", () => {
@@ -646,6 +705,20 @@ describe("pre-dispatch deployment build review", () => {
     expect(html).toContain("Removed apps");
     expect(html).toContain("Destructive memory roots");
     expect(occurrences(html, "old_app/state")).toBeGreaterThanOrEqual(2);
+
+    const normal = renderToStaticMarkup(
+      createElement(DeploymentBuildReview, {
+        record: parsed,
+        suppliedPackages: [kernel.prepared],
+        uiMode: "normal",
+      }),
+    );
+    expect(normal).toContain("Removes old_app.");
+    expect(normal).toContain("Permanently deletes saved data from old_app.");
+    expect(normal).toContain("2 build warnings to review");
+    expect(normal).toContain("review the removal");
+    expect(normal).not.toContain("Destructive memory roots");
+    expect(normal.indexOf("Permanently deletes")).toBeLessThan(normal.indexOf("<details"));
   });
 
   test("all app-authored and diagnostic text is escaped and rendering does no network I/O", () => {

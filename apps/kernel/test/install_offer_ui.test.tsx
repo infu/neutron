@@ -131,9 +131,20 @@ test("install offers keep exact provenance collapsed", () => {
   const html = renderToStaticMarkup(<InstallOfferDialogView pending={pending} />);
 
   expect(consentDetailsTag(html)).not.toContain(" open");
-  expect(html).toContain("Review does not install anything");
-  expect(html).toContain("separate final review");
-  expect(html).toContain("has not verified its publisher");
+  const summary = html.slice(0, html.indexOf("<details"));
+  expect(summary).toContain("Neutron Mail suggests an app.");
+  expect(summary).toContain("You decide before installing.");
+  expect(summary).toContain("The source can see your request.");
+  expect(summary).toContain("Publisher and app safety have not been verified.");
+  expect(summary).not.toContain("request metadata");
+  expect(summary).not.toContain("reviewed, hosted, sold");
+
+  const developer = renderToStaticMarkup(
+    <InstallOfferDialogView pending={pending} uiMode="developer" />,
+  );
+  expect(developer).toContain("Review does not install anything");
+  expect(developer).toContain("separate final review");
+  expect(developer).toContain("has not verified its publisher");
 });
 
 function consentDetailsTag(html: string): string {

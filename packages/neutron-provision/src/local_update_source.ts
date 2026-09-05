@@ -646,19 +646,21 @@ async function collectAssetFiles(
   directory: string,
   files: string[],
 ): Promise<void> {
-  for (const name of (await readdir(directory)).sort()) {
-    const filename = path.join(directory, name);
+  const entries = (await readdir(directory, { withFileTypes: true })).sort(
+    (left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+  );
+  for (const entry of entries) {
+    const filename = path.join(directory, entry.name);
     const relative = path.relative(root, filename);
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
       throw new Error(`Update-source asset escapes its root: ${filename}`);
     }
-    const metadata = await lstat(filename);
-    if (metadata.isSymbolicLink()) {
+    if (entry.isSymbolicLink()) {
       throw new Error(`Refusing symlink update-source asset: ${filename}`);
     }
-    if (metadata.isDirectory()) {
+    if (entry.isDirectory()) {
       await collectAssetFiles(root, filename, files);
-    } else if (metadata.isFile()) {
+    } else if (entry.isFile()) {
       files.push(filename);
     } else {
       throw new Error(`Update-source asset is not a regular file: ${filename}`);
