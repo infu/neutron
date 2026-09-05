@@ -159,10 +159,26 @@ In **Agent Mode**, the main agent can delegate independent tasks to parallel
 workers inside the same tile. `spawn_agent` starts a worker with a separate
 context and the current model, or an explicit available `modelId`.
 `send_message` steers a worker or resumes its saved context; `wait_agents`
-waits without model requests; `stop_agent` cancels one worker. `list_agents`
+waits without model requests; `stop_agent` cancels one worker with a recorded
+reason. `list_agents`
 lists saved workers and `get_agent_result` retrieves a worker's report and
 actual tool evidence. Only the main agent receives these coordination tools.
-The **Workers** panel shows tasks, models, status, and results.
+The **Workers** panel shows tasks, models, status, results, and the latest stop
+and recovery details. Intentional cancellation is shown as stopped, with its
+reason, rather than as a worker error. A recovered worker retains the issue it
+resumed from; a recovery is marked successful only when that worker completes.
+
+Both the main agent and workers automatically continue responses that end at
+the model's output limit. Completed tool results and partial text are saved
+before the next request; partial text is not presented as a final answer, and
+goal review cannot accept the truncated response as completion. Continuation
+asks the model to synthesize saved evidence before collecting more and to
+reconcile uncertain writes before retrying. Workers are also prompted to leave
+brief summaries with source identifiers after meaningful batches of reads.
+Output exhaustion is recorded as a generation limit, without guessing that
+input context overflowed. Other stream errors still preserve the existing
+interruption and uncertain-write recovery behavior. Steering and Stop remain
+available during continuation.
 
 Workers are internal model contexts sharing the live root's authority, not
 additional tiles or Kernel roots. Model requests run concurrently. App calls

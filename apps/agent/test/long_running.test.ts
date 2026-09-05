@@ -34,7 +34,7 @@ test("a fresh reviewer rejects early completion and the worker continues with ac
   expect((await storage.loadConversation(historyId)).modelTurns).toHaveLength(1);
 });
 
-for (const ending of ["abort", "error", "length"] as const) {
+for (const ending of ["abort", "error"] as const) {
   test(`a ${ending} after a completed write never becomes a successful empty answer`, async () => {
     let runtime: AgentRuntime;
     let requests = 0;
@@ -46,14 +46,13 @@ for (const ending of ["abort", "error", "length"] as const) {
         await runtime.stop(historyId);
         return answer("Should be ignored");
       }
-      return ending === "length" ? response([finish("length")])
-        : response([{ type: "error", error: new Error("Provider stream failed") }]);
+      return response([{ type: "error", error: new Error("Provider stream failed") }]);
     } });
     const state = await fixture(model);
     runtime = state.runtime;
     const run = runtime.chat(historyId, "Create one record.", () => undefined);
     if (ending === "abort") await run;
-    else await expect(run).rejects.toThrow(ending === "length" ? "before completion" : "Provider stream failed");
+    else await expect(run).rejects.toThrow("Provider stream failed");
     const saved = await state.storage.loadConversation(historyId);
     expect(JSON.stringify(saved.modelTurns)).toContain("saved-record-42");
     expect(JSON.stringify(saved.messages)).not.toContain("completed without a text response");
@@ -61,6 +60,47 @@ for (const ending of ["abort", "error", "length"] as const) {
     expect(runtime.snapshot(historyId).generatingHere).toBe(false);
   });
 }
+
+test("a truncated root response continues without replaying a completed write or prematurely reviewing the goal", async () => {
+  let calls = 0;
+  let requests = 0;
+  const model = new MockLanguageModelV4({
+    doStream: async (options) => {
+      if (++requests === 1) return response([
+        call("call_app_tool", { target: "app:records:background", name: "create", arguments: {} }),
+        { type: "text-start", id: "partial" },
+        { type: "text-delta", id: "partial", delta: "Unfinished draft: the record" },
+        { type: "text-end", id: "partial" }, finish("length"),
+      ]);
+      expect(model.doGenerateCalls).toHaveLength(0);
+      const context = JSON.stringify(options.prompt);
+      expect(context).toContain("saved-record-42");
+      expect(context).toContain("Unfinished draft: the record");
+      expect(context).toContain("not task completion");
+      expect(context).toContain("Avoid repeating collection or completed actions");
+      return answer("Created saved-record-42 and verified its identifier.");
+    },
+    doGenerate: async (options) => {
+      expect(requests).toBe(2);
+      expect(JSON.stringify(options.prompt)).toContain("saved-record-42");
+      return {
+        content: [{ type: "tool-call", toolCallId: "review", toolName: "goal_review", input: JSON.stringify({ status: "complete", checkpoint: "Verified the created record in its saved tool result." }) }],
+        finishReason: { unified: "tool-calls", raw: "tool_calls" }, usage, warnings: [],
+      };
+    },
+  });
+  const { runtime, storage } = await fixture(model, { callTool: async () => { calls += 1; return { id: "saved-record-42" }; } });
+  const result = await runtime.chat(historyId, "/goal Create one record and verify its identifier.", () => {});
+  expect(calls).toBe(1);
+  expect(model.doStreamCalls).toHaveLength(2);
+  expect(model.doGenerateCalls).toHaveLength(1);
+  expect(result.work?.goal?.status).toBe("complete");
+  expect(result.error).toBeNull();
+  const saved = await storage.loadConversation(historyId);
+  expect(saved.pendingStateChangeJournal).toBeNull();
+  expect(JSON.stringify(saved.messages)).not.toContain("Unfinished draft");
+  expect(JSON.stringify(saved.modelTurns)).toContain("saved-record-42");
+});
 
 test("steering wakes a day-long sleep and arrives as an owner message at the next step", async () => {
   const model = new MockLanguageModelV4({ doStream: [

@@ -405,6 +405,13 @@ function App() {
                   <summary><span>{worker.task}</span><strong>{worker.status}</strong></summary>
                   <p>{worker.task}</p>
                   <p className="ora-worker-meta">{worker.modelId}</p>
+                  {worker.lastStop && <p role="status">
+                    {worker.status === "stopped" || worker.status === "paused" ? "Stopped" : "Previously stopped"}{worker.lastStop.by === "unknown" ? "" : ` by ${worker.lastStop.by === "coordinator" ? "coordinator" : "parent agent"}`}: {worker.lastStop.reason}
+                  </p>}
+                  {worker.lastRecovery && <p role="status">
+                    {worker.lastRecovery.state === "recovered" ? "Recovered" : worker.lastRecovery.state === "continuing" ? "Continuing" : "Recovery interrupted"}
+                    {worker.lastRecovery.from === "length" ? " after reaching the response output limit." : ` after ${worker.lastRecovery.from === "error" ? "an error" : "an interruption"}: ${worker.lastRecovery.detail}`}
+                  </p>}
                   {worker.result && <p>{worker.result}</p>}
                   {worker.error && <p role="status">{worker.error}</p>}
                 </details>

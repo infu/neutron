@@ -4,6 +4,8 @@ import type {
   AgentChatTileEndpointId,
   AgentWorkState,
   AgentWorkerRecord,
+  AgentWorkerStop,
+  AgentWorkerRecovery,
   OpenRouterModel,
   PendingStateChangeAttempt,
   PendingStateChangeJournal,
@@ -90,7 +92,9 @@ export class AgentStorage {
     ).map((entry) => ({
       id: entry.id, task: entry.task, modelId: entry.modelId, status: entry.status,
       result: typeof entry.result === "string" ? entry.result : "",
-      error: typeof entry.error === "string" ? entry.error : null,
+      error: entry.status === "stopped" ? null : typeof entry.error === "string" ? entry.error : null,
+      lastStop: normalizeWorkerStop(entry.lastStop, entry.status, entry.error),
+      lastRecovery: normalizeWorkerRecovery(entry.lastRecovery),
       messages: Array.isArray(entry.messages) ? entry.messages.filter((text) => typeof text === "string") : [],
       conversation: normalizePersistedConversationState(entry.conversation, entry.modelId),
       steps: finiteCount(entry.steps), inputTokens: finiteCount(entry.inputTokens), outputTokens: finiteCount(entry.outputTokens),
@@ -651,6 +655,28 @@ function normalizeModelTurn(value: unknown): ModelMessage[] | null {
     return null;
   }
   return cloned as ModelMessage[];
+}
+
+function normalizeWorkerStop(value: unknown, status: string, error: unknown): AgentWorkerStop | null {
+  if (isRecord(value) && (value.by === "coordinator" || value.by === "parent" || value.by === "unknown") && typeof value.reason === "string") {
+    return { by: value.by, reason: value.reason };
+  }
+  if (status !== "stopped") return null;
+  // Older releases represented an intentional cancellation as an error.
+  if (error === "Worker stopped" || error === "Error: Worker stopped") {
+    return { by: "coordinator", reason: "The previous Agent version did not record a stop reason." };
+  }
+  return { by: "unknown", reason: typeof error === "string" ? error : "The previous Agent version did not record who stopped this worker or why." };
+}
+
+function normalizeWorkerRecovery(value: unknown): AgentWorkerRecovery | null {
+  if (!isRecord(value) || typeof value.detail !== "string" ||
+    !["length", "error", "stopped", "paused"].includes(String(value.from)) ||
+    !["continuing", "recovered", "interrupted"].includes(String(value.state))) return null;
+  return {
+    from: value.from as AgentWorkerRecovery["from"], detail: value.detail,
+    state: value.state as AgentWorkerRecovery["state"],
+  };
 }
 
 function jsonBytes(value: unknown): number {

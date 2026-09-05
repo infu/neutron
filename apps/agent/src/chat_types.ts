@@ -43,6 +43,17 @@ export type AgentSnapshot = JsonObject & {
 
 export type AgentWorkerStatus = "running" | "waiting" | "completed" | "stopped" | "paused" | "error";
 
+export type AgentWorkerStop = JsonObject & {
+  by: "coordinator" | "parent" | "unknown";
+  reason: string;
+};
+
+export type AgentWorkerRecovery = JsonObject & {
+  from: "length" | "error" | "stopped" | "paused";
+  detail: string;
+  state: "continuing" | "recovered" | "interrupted";
+};
+
 export type AgentWorkerRecord = {
   id: string;
   task: string;
@@ -56,10 +67,12 @@ export type AgentWorkerRecord = {
   inputTokens: number;
   outputTokens: number;
   reported: boolean;
+  lastStop?: AgentWorkerStop | null;
+  lastRecovery?: AgentWorkerRecovery | null;
 };
 
 export type AgentWorkerSnapshot = JsonObject & Pick<AgentWorkerRecord,
-  "id" | "task" | "modelId" | "status" | "result" | "error" | "steps" | "inputTokens" | "outputTokens">;
+  "id" | "task" | "modelId" | "status" | "result" | "error" | "steps" | "inputTokens" | "outputTokens" | "lastStop" | "lastRecovery">;
 
 export type AgentWorkersSnapshot = JsonObject & {
   items: AgentWorkerSnapshot[];

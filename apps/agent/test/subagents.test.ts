@@ -230,7 +230,7 @@ test("stopping one worker leaves its sibling running", async () => {
     if (root === 2) {
       await sleeping.promise;
       const id = runtime.snapshot(historyId).workers!.items.find((worker) => worker.task === "Slow monitor")!.id;
-      return response([call("stop_agent", { id }), finish("tool-calls")]);
+      return response([call("stop_agent", { id, reason: "The independent check covers the requested scope; monitoring is no longer needed." }), finish("tool-calls")]);
     }
     return answer("Independent check finished; monitor stopped.");
   } });
@@ -247,6 +247,9 @@ test("stopping one worker leaves its sibling running", async () => {
   releaseSibling.resolve();
   const result = await run;
   expect(result.workers?.items.map((worker) => worker.status)).toEqual(["stopped", "completed"]);
+  expect(result.workers?.items[0]?.error).toBeNull();
+  expect(result.workers?.items[0]?.lastStop).toEqual({ by: "coordinator", reason: "The independent check covers the requested scope; monitoring is no longer needed." });
+  expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).toContain("monitoring is no longer needed");
 });
 
 test("a message arriving during final persistence starts another worker cycle", async () => {
@@ -385,4 +388,189 @@ test("a parent stream failure cancels its active workers", async () => {
   await expect(run).rejects.toThrow("Parent provider failed");
   expect((await storage.loadWorkers(historyId))[0]?.status).toBe("stopped");
   expect(runtime.snapshot(historyId).generatingHere).toBe(false);
+});
+
+test("a worker continues truncated synthesis with saved reads and same-step write evidence", async () => {
+  let root = 0;
+  let child = 0;
+  const called: string[] = [];
+  const recoveryStates: string[] = [];
+  const model = new MockLanguageModelV4({ doStream: async (options) => {
+    if (!workerRequest(options)) return ++root === 1
+      ? response([call("spawn_agent", { task: "Read the source messages, save the requested digest, and summarize." }), finish("tool-calls")])
+      : answer("The worker completed the requested digest.");
+    if (++child === 1) return response([call("call_app_tool", { target: "app:records:background", name: "read", arguments: {} }), finish("tool-calls")]);
+    if (child === 2) return response([
+      call("call_app_tool", { target: "app:records:background", name: "create", arguments: {} }),
+      { type: "text-start", id: "partial" }, { type: "text-delta", id: "partial", delta: "Partial synthesis still missing its conclusion" },
+      { type: "text-end", id: "partial" }, finish("length"),
+    ]);
+    const context = JSON.stringify(options.prompt);
+    expect(context).toContain("source-message-81");
+    expect(context).toContain("saved-digest-42");
+    expect(context).toContain("Partial synthesis still missing its conclusion");
+    expect(context).toContain("does not establish an input-context overflow");
+    expect(context).toContain("Avoid repeating collection or completed actions");
+    return answer("Saved digest saved-digest-42 from source-message-81. No gaps remain for the assigned scope.");
+  } });
+  const { runtime, storage } = await fixture(model, {
+    listTools: async () => [
+      { name: "read", inputSchema: { type: "object" }, annotations: { "neutron:effects": ["read"] } },
+      { name: "create", inputSchema: { type: "object" }, annotations: { "neutron:effects": ["write"] } },
+    ],
+    callTool: async ({ name }: { name: string }) => {
+      called.push(name);
+      return name === "read" ? { id: "source-message-81", content: "Source information. ".repeat(2_000) } : { id: "saved-digest-42" };
+    },
+  });
+  const result = await runtime.chat(historyId, "Read the source and save a digest.", (value) => {
+    const progress = value as AgentProgress;
+    if (progress.type !== "workers") return;
+    for (const worker of progress.workers.items) {
+      expect(worker.status).not.toBe("error");
+      expect(worker.result).not.toContain("Partial synthesis");
+      if (worker.lastRecovery) recoveryStates.push(worker.lastRecovery.state);
+    }
+  }, undefined, mode());
+  expect(child).toBe(3);
+  expect(called).toEqual(["read", "create"]);
+  expect(recoveryStates).toContain("continuing");
+  expect(recoveryStates).toContain("recovered");
+  expect(result.workers?.items[0]).toMatchObject({ status: "completed", error: null, lastRecovery: { from: "length", state: "recovered" } });
+  const record = (await storage.loadWorkers(historyId))[0]!;
+  expect(record.lastRecovery?.state).toBe("recovered");
+  expect(record.conversation.pendingStateChangeJournal).toBeNull();
+  expect(JSON.stringify(record.conversation.modelTurns)).toContain("saved-digest-42");
+  const parent = model.doStreamCalls.filter((options) => !workerRequest(options)).at(-1)!;
+  const report = parent.prompt.flatMap((entry) => entry.role === "assistant"
+    ? entry.content.flatMap((part) => part.type === "text" ? [part.text] : []) : [])
+    .find((text) => text.startsWith("Worker reports and actual tool records"))!;
+  expect(JSON.parse(report.slice(report.indexOf("\n") + 1))[0].lastRecovery).toMatchObject({ from: "length", state: "recovered" });
+  expect(JSON.stringify(parent.prompt)).toContain("saved-digest-42");
+});
+
+test("a truncated malformed tool call is never dispatched and can be corrected on continuation", async () => {
+  let root = 0;
+  let child = 0;
+  let calls = 0;
+  const model = new MockLanguageModelV4({ doStream: async (options) => {
+    if (!workerRequest(options)) return ++root === 1
+      ? response([call("spawn_agent", { task: "Create one requested record." }), finish("tool-calls")]) : answer("Created one record.");
+    if (++child === 1) return response([
+      { type: "tool-call", toolCallId: "incomplete", toolName: "call_app_tool", input: '{"target":"app:records:background","name":"create","arguments":{' },
+      finish("length"),
+    ]);
+    if (child === 2) {
+      expect(calls).toBe(0);
+      return response([call("call_app_tool", { target: "app:records:background", name: "create", arguments: {} }), finish("tool-calls")]);
+    }
+    return answer("Created saved-record-42.");
+  } });
+  const { runtime } = await fixture(model, { callTool: async () => { calls += 1; return { id: "saved-record-42" }; } });
+  const result = await runtime.chat(historyId, "Create one record.", () => {}, undefined, mode());
+  expect(calls).toBe(1);
+  expect(child).toBe(3);
+  expect(result.workers?.items[0]).toMatchObject({ status: "completed", error: null, lastRecovery: { from: "length", state: "recovered" } });
+});
+
+test("resuming an errored worker retains its actual failure and marks recovery only after completion", async () => {
+  const failed = deferred();
+  let runtime: AgentRuntime;
+  let root = 0;
+  let child = 0;
+  const states: string[] = [];
+  const model = new MockLanguageModelV4({ doStream: async (options) => {
+    if (workerRequest(options)) return ++child === 1
+      ? response([{ type: "error", error: new Error("Source provider temporarily unavailable") }])
+      : answer("The source is readable again; here are the verified findings.");
+    if (++root === 1) return response([call("spawn_agent", { task: "Inspect the source." }), finish("tool-calls")]);
+    if (root === 2) {
+      await failed.promise;
+      const id = runtime.snapshot(historyId).workers!.items[0]!.id;
+      return response([call("send_message", { id, message: "Retry the source read and report verified findings." }), finish("tool-calls")]);
+    }
+    return answer("The source check recovered.");
+  } });
+  const state = await fixture(model);
+  runtime = state.runtime;
+  const result = await runtime.chat(historyId, "Inspect the source.", (value) => {
+    const progress = value as AgentProgress;
+    if (progress.type !== "workers") return;
+    const worker = progress.workers.items[0];
+    if (worker?.status === "error") failed.resolve();
+    if (worker?.lastRecovery) states.push(worker.lastRecovery.state);
+  }, undefined, mode());
+  expect(child).toBe(2);
+  expect(states).toContain("continuing");
+  expect(states.at(-1)).toBe("recovered");
+  expect(result.workers?.items[0]).toMatchObject({
+    status: "completed", error: null,
+    lastRecovery: { from: "error", detail: "Source provider temporarily unavailable", state: "recovered" },
+  });
+  expect((await state.storage.loadWorkers(historyId))[0]?.lastRecovery).toEqual(result.workers?.items[0]?.lastRecovery);
+});
+
+test("repeated output-limit continuation accepts owner steering and Stop retains an interrupted recovery", async () => {
+  const secondStarted = deferred();
+  const releaseSecond = deferred();
+  const steeringApplied = deferred();
+  const thirdStarted = deferred();
+  const releaseThird = deferred();
+  let root = 0;
+  let child = 0;
+  const model = new MockLanguageModelV4({ doStream: async (options) => {
+    if (!workerRequest(options)) return ++root === 1
+      ? response([call("spawn_agent", { task: "Summarize the source." }), finish("tool-calls")])
+      : answer("Waiting for the worker's verified findings.");
+    if (++child === 1) return response([finish("length")]);
+    if (child === 2) {
+      secondStarted.resolve();
+      await releaseSecond.promise;
+      return response([finish("length")]);
+    }
+    expect(JSON.stringify(options.prompt)).toContain("Focus only on the newest messages.");
+    thirdStarted.resolve();
+    await releaseThird.promise;
+    return answer("This response must be ignored after Stop.");
+  } });
+  const { runtime, storage } = await fixture(model);
+  const run = runtime.chat(historyId, "Summarize the source.", (value) => {
+    const progress = value as AgentProgress;
+    if (progress.type === "turn_start" && progress.user.text === "Focus only on the newest messages.") steeringApplied.resolve();
+  }, undefined, mode());
+  await secondStarted.promise;
+  expect(runtime.snapshot(historyId).workers?.items[0]?.lastRecovery?.state).toBe("continuing");
+  await runtime.enqueue(historyId, "Focus only on the newest messages.", "steer");
+  await steeringApplied.promise;
+  releaseSecond.resolve();
+  await thirdStarted.promise;
+  await runtime.stop(historyId);
+  releaseThird.resolve();
+  await run;
+  expect(child).toBe(3);
+  const worker = (await storage.loadWorkers(historyId))[0]!;
+  expect(worker).toMatchObject({ status: "stopped", error: null, lastStop: { by: "parent" }, lastRecovery: { from: "length", state: "interrupted" } });
+  expect(worker.result).not.toContain("must be ignored");
+  expect(JSON.stringify(worker.conversation.modelTurns)).toContain("Focus only on the newest messages.");
+  expect(runtime.snapshot(historyId).generatingHere).toBe(false);
+});
+
+test("released worker records preserve saved evidence and normalize intentional stop errors on upgrade", async () => {
+  const { storage } = await fixture(new MockLanguageModelV4({ doStream: answer("Unused") }));
+  const conversation = {
+    selectedModelId: "test/model", messages: [], pendingStateChangeJournal: null,
+    modelTurns: [[{ role: "user" as const, content: "Inspect the record." }, { role: "assistant" as const, content: "Saved evidence: source-message-81." }]],
+  };
+  await storage.saveWorkers(historyId, [{
+    id: "released-worker", task: "Inspect the record.", modelId: "test/model", status: "stopped", result: "Saved findings.",
+    error: "Worker stopped", messages: [], conversation, steps: 3, inputTokens: 100, outputTokens: 30, reported: true,
+  }]);
+  const [worker] = await storage.loadWorkers(historyId);
+  expect(worker).toMatchObject({ id: "released-worker", status: "stopped", error: null, lastStop: { by: "coordinator" }, lastRecovery: null });
+  expect(worker!.lastStop!.reason).toContain("did not record a stop reason");
+  expect(worker!.conversation.modelTurns).toEqual(conversation.modelTurns);
+  worker!.lastRecovery = { from: "stopped", detail: worker!.lastStop!.reason, state: "recovered" };
+  worker!.status = "completed";
+  await storage.saveWorkers(historyId, [worker!]);
+  expect((await storage.loadWorkers(historyId))[0]).toEqual(worker!);
 });

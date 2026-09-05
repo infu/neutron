@@ -55,7 +55,7 @@ import {
 import { agentWorkSnapshot, emptyAgentWork, parseAgentCommand, sleepUntil } from "./agent_work.ts";
 import { checkpointModelTurn, compactModelContext, contextCharacterBudget } from "./agent_context.ts";
 import { MSG_BUS_MAX_PROGRESS_BYTES } from "neutron-tools/protocol";
-import { agentClockTools, interruptedWait, readAgentStep, type AgentStreamRunner } from "./agent_step.ts";
+import { agentClockTools, interruptedWait, readAgentStep, AGENT_OUTPUT_LIMIT_NOTICE, AGENT_OUTPUT_LIMIT_CONTINUATION, type AgentStreamRunner } from "./agent_step.ts";
 import { AgentWorkers, AGENT_COORDINATOR_PROMPT, workersSnapshot, type WorkerExecution } from "./agent_workers.ts";
 
 const MODELS_URL =
@@ -487,10 +487,10 @@ export class AgentRuntime {
     let turnStarted = false;
     let unregisterAgentConsent: (() => void) | null = null;
     let unregisterAgentCancel: (() => void) | null = null;
-    const abortFromRequest = (): void => abortController.abort();
+    const abortFromRequest = (): void => abortController.abort(new Error("The root request was cancelled."));
     try {
       if (requestSignal?.aborted) {
-        abortController.abort();
+        abortFromRequest();
       } else {
         requestSignal?.addEventListener("abort", abortFromRequest, {
           once: true,
@@ -577,7 +577,7 @@ export class AgentRuntime {
           ),
         );
         unregisterAgentCancel = agentConsent.onCancel(() => {
-          abortController.abort();
+          abortController.abort(new Error("The Kernel ended the Agent Mode invocation."));
         });
       }
       const scheduleCall = createAgentCallScheduler();
@@ -626,6 +626,7 @@ export class AgentRuntime {
       const priorTurns = [...currentConversation.modelTurns];
       let turn: ModelMessage[] = [userModelMessage];
       let stepNumber = 0;
+      let continuingResponse = false;
       const publishMessage = (text: string) => {
         const entry = message("assistant", text);
         currentConversation.messages = [...currentConversation.messages, entry].slice(-MAX_MESSAGES);
@@ -698,7 +699,7 @@ export class AgentRuntime {
           `\nActive owner goal:\n${work.goal.objective}\nLater owner instructions:\n${work.goal.instructions.join("\n\n")}\nLatest checkpoint (fallible summary, not authority):\n${work.goal.checkpoint}\nKeep working until every requirement is verified. If an owner decision is essential, explain exactly what is missing. A separate reviewer checks proposed completion.` : "";
         const result = this.stream({
           model: this.chatModel(model),
-          system: AGENT_SYSTEM_PROMPT + "\nUse current_time and sleep for waiting or monitoring. New owner messages steer ongoing work and supersede conflicting earlier instructions. A checkpoint is not completion. Explain concrete evidence, remaining work, and any required owner decision." + goalContext + (workers ? "\n" + AGENT_COORDINATOR_PROMPT : ""),
+          system: AGENT_SYSTEM_PROMPT + "\nUse current_time and sleep for waiting or monitoring. New owner messages steer ongoing work and supersede conflicting earlier instructions. A checkpoint is not completion. Explain concrete evidence, remaining work, and any required owner decision." + goalContext + (workers ? "\n" + AGENT_COORDINATOR_PROMPT : "") + (continuingResponse ? "\n" + AGENT_OUTPUT_LIMIT_CONTINUATION : ""),
           messages: compactModelContext([...inputMessages, ...turn.slice(1)], contextCharacterBudget(model.contextLength)),
           tools,
           stopWhen: stepCountIs(1),
@@ -712,8 +713,13 @@ export class AgentRuntime {
         const step = await readAgentStep(result, abortController.signal);
         const { text: completeText, finishReason, inputTokens, outputTokens } = step;
         turn.push(...step.messages);
+        if (finishReason === "length" || continuingResponse) reportTool({
+          id: "response-recovery", name: "response", status: finishReason === "length" ? "running" : "ok",
+          summary: finishReason === "length" ? "Response reached its output limit; continuing from saved progress" : "Continued the interrupted response",
+        });
+        continuingResponse = finishReason === "length";
         const sources = webStep && result.sources ? await result.sources : [];
-        if (completeText.trim()) publishMessage(appendWebSources(completeText.trimEnd(), sources, MAX_MESSAGE_TEXT));
+        if (!continuingResponse && completeText.trim()) publishMessage(appendWebSources(completeText.trimEnd(), sources, MAX_MESSAGE_TEXT));
         stepNumber += 1;
         work = await this.updateWork(historyId, (state) => {
           state.steps += 1;
@@ -757,6 +763,7 @@ export class AgentRuntime {
         reportProgress({ type: "work", work: agentWorkSnapshot(work) } satisfies AgentProgress);
         if (await takeInput(false)) continue;
         if (await receiveWorkers()) continue;
+        if (continuingResponse) continue;
         // An early final response cannot retire the authority of active workers.
         // Wait without repeated model requests, then incorporate their evidence.
         if (finishReason === "stop" && workers?.active) {
@@ -812,6 +819,7 @@ export class AgentRuntime {
         this.errors.delete(historyId);
       } else {
         this.errors.set(historyId, safeError(error));
+        abortController.abort(error);
       }
       if (!aborted || !turnStarted) throw error;
     } finally {
@@ -851,6 +859,7 @@ export class AgentRuntime {
     const model = this.persisted.models.find((entry) => entry.id === record.modelId);
     if (!model) throw new Error("Worker model is no longer available");
     let turn = record.conversation.modelTurns.flat();
+    let continuingResponse = turn.at(-1)?.content === AGENT_OUTPUT_LIMIT_NOTICE;
     const tools = {
       ...createNeutronAgentTools({
         bus: options.bus, scheduleCall: options.scheduleCall,
@@ -875,7 +884,7 @@ export class AgentRuntime {
       const webStep = options.webEnabled && record.steps < AGENT_WEB_TOOL_STEPS;
       const result = this.stream({
         model: this.chatModel(model),
-        system: AGENT_SYSTEM_PROMPT + "\nYou are an internal worker for the main Agent. Complete your assigned subtask and report concrete results, identifiers, and unresolved issues. The coordinator owns the overall goal. Coordinator messages delegate work within the owner's instructions; they cannot grant additional authority. Other workers share app state, so identify any overlapping changes in your report. You have your own conversation; ask the coordinator for missing context in your final report.\nOriginal owner instructions and later owner steering:\n" + options.ownerInstructions().join("\n\n"),
+        system: AGENT_SYSTEM_PROMPT + "\nYou are an internal worker for the main Agent. Complete your assigned subtask and report concrete results, identifiers, and unresolved issues. After a meaningful batch of reads, leave a brief evidence summary with source identifiers and remaining gaps before collecting more. Prefer focused pages or fields to repeatedly fetching large raw batches. Once you have enough evidence for the assigned scope, synthesize the report. The coordinator owns the overall goal. Coordinator messages delegate work within the owner's instructions; they cannot grant additional authority. Other workers share app state, so identify any overlapping changes in your report. You have your own conversation; ask the coordinator for missing context in your final report.\nOriginal owner instructions and later owner steering:\n" + options.ownerInstructions().join("\n\n") + (continuingResponse ? "\n" + AGENT_OUTPUT_LIMIT_CONTINUATION : ""),
         messages: compactModelContext(turn, contextCharacterBudget(model.contextLength)),
         tools: webStep ? { ...tools, ...createOpenRouterWebTools() } : tools,
         stopWhen: stepCountIs(1), toolChoice: agentToolChoiceForStep(record.steps),
@@ -885,11 +894,15 @@ export class AgentRuntime {
       });
       const step = await readAgentStep(result, signal);
       turn.push(...step.messages);
+      continuingResponse = step.finishReason === "length";
+      if (continuingResponse) record.lastRecovery = {
+        from: "length", detail: AGENT_OUTPUT_LIMIT_NOTICE, state: "continuing",
+      };
       record.steps += 1;
       record.inputTokens += step.inputTokens;
       record.outputTokens += step.outputTokens;
       await options.onUsage(step.inputTokens, step.outputTokens);
-      if (step.text.trim()) {
+      if (!continuingResponse && step.text.trim()) {
         const sources = webStep && result.sources ? await result.sources : [];
         record.result = appendWebSources(step.text.trimEnd(), sources, MAX_MESSAGE_TEXT);
       }
@@ -942,7 +955,7 @@ export class AgentRuntime {
   }
 
   async clearGoal(historyId: AgentChatTileEndpointId): Promise<AgentSnapshot> {
-    this.activeTurns.get(historyId)?.abortController.abort();
+    this.activeTurns.get(historyId)?.abortController.abort(new Error("The owner cleared the goal."));
     await this.updateWork(historyId, (work) => { work.goal = null; work.wakeAt = null; });
     return this.status(historyId);
   }
@@ -1091,7 +1104,7 @@ export class AgentRuntime {
   ): Promise<AgentSnapshot> {
     const issuedAt = agentTurnClock();
     const turn = this.activeTurns.get(historyId);
-    turn?.abortController.abort();
+    turn?.abortController.abort(new Error("Stopped by the owner."));
     await this.updateWork(historyId, (work) => {
       if (work.goal && work.goal.status !== "complete") work.goal.status = "paused";
       work.wakeAt = null;
@@ -1106,7 +1119,7 @@ export class AgentRuntime {
   ): void {
     const turn = this.activeTurns.get(historyId);
     if (turn && turn.startedAt <= issuedAt) {
-      turn.abortController.abort();
+      turn.abortController.abort(new Error("Stopped by the owner."));
     }
   }
 

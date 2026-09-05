@@ -28,8 +28,14 @@ export type AgentWaitRequest =
   | { toolCallId: string; name: "sleep"; seconds: number }
   | { toolCallId: string; name: "wait_agents"; ids?: string[] };
 
-/** Both the coordinator and workers accept only complete SDK steps. Waiting
- * happens after this function returns, outside the model request deadline. */
+export const AGENT_OUTPUT_LIMIT_NOTICE = "Runtime notice: the model response reached its output limit (finish reason: length). This is an unfinished response, not task completion. Completed tool calls and their results above are saved; partial text is not a final report. This finish reason alone does not establish an input-context overflow or its cause.";
+
+export const AGENT_OUTPUT_LIMIT_CONTINUATION = "Continue the unfinished response from the saved evidence. First synthesize a concise account of what is already established and what is still missing. Avoid repeating collection or completed actions; use further focused reads only for a specific remaining gap. Preserve uncertainty about failed or interrupted writes and reconcile them before retrying. If the evidence already answers the assigned task, return the concise final report now. A response limit is not a reason to abandon the task.";
+
+/** A length finish preserves the completed SDK tool records for continuation,
+ * but is never accepted as task completion. Errors and interrupted streams
+ * still use the existing uncertain-write recovery path. Waiting happens after
+ * this function returns, outside the model request deadline. */
 export async function readAgentStep(result: ReturnType<AgentStreamRunner>, signal: AbortSignal) {
   let text = "";
   let finishReason: string | undefined;
@@ -56,12 +62,17 @@ export async function readAgentStep(result: ReturnType<AgentStreamRunner>, signa
     }
   }
   signal.throwIfAborted();
-  if (finishReason !== "stop" && finishReason !== "tool-calls") {
+  if (finishReason !== "stop" && finishReason !== "tool-calls" && finishReason !== "length") {
     throw new Error(`Model response ended before completion (${finishReason ?? "missing finish event"}). Resume to continue from saved progress.`);
   }
   const messages = await result.responseMessages;
   signal.throwIfAborted();
-  return { text, finishReason, inputTokens, outputTokens, messages, waits };
+  return {
+    text, finishReason, inputTokens, outputTokens, waits,
+    messages: finishReason === "length"
+      ? [...messages, { role: "assistant", content: AGENT_OUTPUT_LIMIT_NOTICE } satisfies ModelMessage]
+      : messages,
+  };
 }
 
 export function interruptedWait(request: AgentWaitRequest): ModelMessage {
