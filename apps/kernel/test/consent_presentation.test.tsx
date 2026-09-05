@@ -6,7 +6,12 @@ import {
 import {
   PermissionConsequences,
   permissionConsequences,
+  getPermissionChangesForReview,
 } from "../src/consent/PermissionConsequences.tsx";
+import { compactPermissionConsequences } from "../src/consent/compact_permission_summary.ts";
+import { CapabilityChangeSummary } from "../src/consent/CapabilityChangeSummary.tsx";
+import { buildCapabilityPlan } from "neutron-tools/src/capabilities/plan.js";
+import { diffCapabilityPlans } from "neutron-tools/src/capabilities/wire.js";
 import type { Permission } from "../src/lib/perm.ts";
 import { IDL } from "@dfinity/candid";
 import { verifiedCallMode } from "../src/trusted_call_mode.ts";
@@ -30,7 +35,7 @@ test("developer mode expands technical details while omission starts collapsed",
   expect(developer).toContain("exact-app-id");
 });
 
-test("normal consent has a consequence for every verified permission kind", () => {
+test("detailed consent has a consequence for every verified permission kind", () => {
   for (const permission of Object.values(representativePermissions)) {
     const consequences = permissionConsequences([permission as Permission]);
     expect(consequences.length).toBeGreaterThan(0);
@@ -51,9 +56,9 @@ test("material danger is shown first while technical identifiers stay out of the
 
   expect(consequences[0]?.id).toBe("system");
   expect(consequences[0]?.level).toBe(4);
-  expect(html).toContain("Control Neutron itself");
-  expect(html).toContain("as often as 1 day");
-  expect(html).toContain("Use verified backend request context");
+  expect(html).toContain("Full Neutron control");
+  expect(html).toContain("Scheduled work can run even when Neutron is closed");
+  expect(html).not.toContain("Use verified backend request context");
   expect(html).not.toContain("raw_context_method");
 });
 
@@ -63,20 +68,11 @@ test("browser-device consequences disclose requestable access without claiming u
       permissions={[representativePermissions.browser_permissions]}
     />,
   );
-  expect(html).toContain("Request camera and microphone access");
-  expect(html).toContain(
-    "Allow tile `call` to request access to cameras on this device",
-  );
-  expect(html).toContain(
-    "Allow tile `call` to request access to microphones on this device",
-  );
-  expect(html).toContain("The browser may show its own prompt");
-  expect(html).toContain("Installing the app does not activate a device");
-  expect(html).toContain(
-    "including while its workspace is hidden",
-  );
-  expect(html).toContain("browser&#x27;s device indicator remains authoritative");
-  expect(html).toContain("Browser and site settings can separately deny it");
+  expect(html).toContain("Camera and microphone");
+  expect(html).toContain("Can ask your browser for access");
+  expect(html).toContain("Installing does not turn a device on");
+  expect(html).toContain("while the app view is open, even when hidden");
+  expect(html).not.toContain("tile `call`");
   expect(html).not.toContain("currently active");
   expect(html).not.toContain("camera is active");
 
@@ -91,8 +87,56 @@ test("browser-device consequences disclose requestable access without claiming u
       ]}
     />,
   );
-  expect(microphoneHtml).toContain("Request microphone access");
-  expect(microphoneHtml).not.toContain("Request camera access");
+  expect(microphoneHtml).toContain("Microphone");
+  expect(microphoneHtml).not.toContain("Camera");
+
+  const developerHtml = renderToStaticMarkup(<PermissionConsequences
+    mode="developer" permissions={[representativePermissions.browser_permissions]}
+  />);
+  expect(developerHtml).toContain("Allow tile `call` to request access to cameras");
+  expect(developerHtml).toContain("browser&#x27;s device indicator remains authoritative");
+});
+
+test("normal permission rows are shorter while retaining meaningful consequences", () => {
+  const permissions = Object.values(representativePermissions);
+  const normal = renderToStaticMarkup(<PermissionConsequences mode="normal" permissions={permissions} />);
+  const developer = renderToStaticMarkup(<PermissionConsequences mode="developer" permissions={permissions} />);
+  const wordCount = (html: string) => html.replace(/<[^>]*>/gu, " ").trim().split(/\s+/u).length;
+  expect(wordCount(normal)).toBeLessThan(wordCount(developer) * 0.65);
+  expect(normal).not.toContain("High impact");
+  expect(normal).not.toContain("Reviewed interface");
+  expect(normal).toContain("Can permanently delete stored app data");
+  expect(normal).toContain("Published data is public and not encrypted");
+  expect(normal).toContain("without asking each time");
+  expect(normal).toContain("separate approval");
+  expect(normal).toContain("disabling access cannot erase copies");
+  expect(developer).toContain("Use verified backend request context");
+});
+
+test("normal review distinguishes future broad requests from grants created now", () => {
+  const backend = { ...representativePermissions.backend_calls, reservationScopes: ["exact", "principal"] as const };
+  const future = compactPermissionConsequences([backend]);
+  expect(future[0]?.description).toContain("no destination is approved here");
+  expect(future[0]?.description).not.toContain("Gets broad");
+  const exact = compactPermissionConsequences([{ ...backend, installReservations: [{ kind: "exact", principal: "aaaaa-aa", method: "ping" }] }]);
+  expect(exact[0]?.description).toContain("Gets specific ongoing access");
+  expect(exact[0]?.description).not.toContain("Gets broad");
+  const broad = compactPermissionConsequences([{ ...backend, installReservations: [{ kind: "principal", principal: "aaaaa-aa" }] }]);
+  expect(broad[0]?.description).toContain("Gets broad ongoing access");
+  expect(broad[0]?.description).toContain("until revoked");
+});
+
+test("update spotlight keeps system and deletion risks even without permission changes", () => {
+  const previous = buildCapabilityPlan({ format: 3, id: "example", name: "Example", version: 100 });
+  const target = buildCapabilityPlan({ format: 3, id: "example", name: "Example", version: 101 });
+  const diff = diffCapabilityPlans(previous, target);
+  const permissions = [representativePermissions.kernel_replacement, representativePermissions.memory_retirement, representativePermissions.stable_store];
+  expect(getPermissionChangesForReview(permissions, diff)).toEqual(permissions.slice(0, 2));
+  expect(getPermissionChangesForReview([representativePermissions.stable_store], diff)).toEqual([]);
+  expect(getPermissionChangesForReview(permissions, undefined)).toBe(permissions);
+  const normal = renderToStaticMarkup(<CapabilityChangeSummary diff={diff} mode="normal" />);
+  expect(normal).toContain("Permissions unchanged.");
+  expect(normal).not.toContain("structured permission plan");
 });
 
 test("signed-call consent derives read versus change only from live Candid", () => {

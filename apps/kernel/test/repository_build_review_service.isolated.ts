@@ -87,6 +87,9 @@ let preparedCalls: Array<{
 }> = [];
 let deployCalls: DeployInput[] = [];
 let preparedByCompiled = new Map<CompileResult, FakePreparedDeployment>();
+let compileGate: Promise<void> | null = null;
+let sessionCount = 0;
+let cancelledSessionCount = 0;
 
 const originalNow = Date.now;
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -118,46 +121,60 @@ mock.module(new URL("../src/lib/perm.ts", import.meta.url).pathname, () => ({
 mock.module(
   new URL("../src/reducer/apps.ts", import.meta.url).pathname,
   () => ({
-    beginRepositoryInstallSession: async () => ({
-      baseline: {
-        state: { apps: {}, existingConfigs: {} },
-        runtime: {
-          deployment_id: "deployment",
-          assembler_id: "assembler",
-          compiler_id: "compiler",
-          apps: [],
-          memories: [],
+    beginRepositoryInstallSession: async () => {
+      sessionCount += 1;
+      let cancelled = false;
+      return {
+        baseline: {
+          state: { apps: {}, existingConfigs: {} },
+          runtime: {
+            deployment_id: "deployment",
+            assembler_id: "assembler",
+            compiler_id: "compiler",
+            apps: [],
+            memories: [],
+          },
         },
-      },
-      compile: async (packages: readonly PreparedPackageInstall[]) => {
-        compileCalls.push(Object.freeze([...packages]));
-        return Object.freeze({
-          wasm: new Uint8Array([compileCalls.length]),
-        }) as CompileResult;
-      },
-      getPreparedDeployment: (
-        packages: readonly PreparedPackageInstall[],
-        compiled: CompileResult,
-      ) => {
-        const deployment = fakePreparedDeployment(packages, preparedCalls.length + 1);
-        preparedCalls.push({
-          packages: Object.freeze([...packages]),
-          compiled,
-          deployment,
-        });
-        preparedByCompiled.set(compiled, deployment);
-        return deployment;
-      },
-      deploy: async (input: DeployInput) => {
-        const prepared = preparedByCompiled.get(input.compiled);
-        if (!prepared || prepared.prepared.record !== input.deploymentBuildRecord) {
-          throw new Error("Unexpected unreviewed deployment record");
-        }
-        deployCalls.push(input);
-        return {};
-      },
-      cancel: () => undefined,
-    }),
+        compile: async (packages: readonly PreparedPackageInstall[]) => {
+          compileCalls.push(Object.freeze([...packages]));
+          const compiled = Object.freeze({
+            wasm: new Uint8Array([compileCalls.length]),
+          }) as CompileResult;
+          preparedByCompiled.set(
+            compiled,
+            fakePreparedDeployment(packages, compileCalls.length),
+          );
+          if (compileGate) await compileGate;
+          return compiled;
+        },
+        getPreparedDeployment: (
+          packages: readonly PreparedPackageInstall[],
+          compiled: CompileResult,
+        ) => {
+          if (cancelled) throw new Error("Repository setup was cancelled");
+          const deployment = preparedByCompiled.get(compiled);
+          if (!deployment) throw new Error("Unexpected uncompiled deployment");
+          preparedCalls.push({
+            packages: Object.freeze([...packages]),
+            compiled,
+            deployment,
+          });
+          return deployment;
+        },
+        deploy: async (input: DeployInput) => {
+          const prepared = preparedByCompiled.get(input.compiled);
+          if (!prepared || prepared.prepared.record !== input.deploymentBuildRecord) {
+            throw new Error("Unexpected unreviewed deployment record");
+          }
+          deployCalls.push(input);
+          return {};
+        },
+        cancel: () => {
+          if (!cancelled) cancelledSessionCount += 1;
+          cancelled = true;
+        },
+      };
+    },
   }),
 );
 
@@ -195,6 +212,9 @@ beforeEach(async () => {
   preparedCalls = [];
   deployCalls = [];
   preparedByCompiled = new Map();
+  compileGate = null;
+  sessionCount = 0;
+  cancelledSessionCount = 0;
 });
 
 afterEach(async () => {
@@ -207,7 +227,7 @@ afterAll(() => {
   globalThis.requestAnimationFrame = originalRequestAnimationFrame;
 });
 
-test("reviews selected exact archives before dispatch and deploys the same record", async () => {
+test("Back then Review reuses the selected exact build and deploys the same record", async () => {
   const base = packageFixture("base_app");
   const uses = packageFixture("uses_app", {
     base: {
@@ -240,9 +260,10 @@ test("reviews selected exact archives before dispatch and deploys the same recor
 
   await service.reviewRepositorySelection();
   const secondReview = useRepositorySetupStore.getState().deploymentReview!;
-  expect(secondReview).not.toBe(firstReview);
-  expect(compileCalls).toHaveLength(2);
+  expect(secondReview).toBe(firstReview);
+  expect(compileCalls).toHaveLength(1);
   expect(preparedCalls).toHaveLength(2);
+  expect(preparedCalls[1]!.compiled).toBe(preparedCalls[0]!.compiled);
 
   await service.installRepositorySelection();
   expect(deployCalls).toHaveLength(1);
@@ -263,6 +284,111 @@ test("reviews selected exact archives before dispatch and deploys the same recor
   }
   expect(useRepositorySetupStore.getState().phase).toBe("success");
   expect(useRepositorySetupStore.getState().deploymentReview).toBeNull();
+});
+
+test("changing the selected package set discards the previous build", async () => {
+  await loadFixture([packageFixture("first_app"), packageFixture("second_app")]);
+  service.toggleRepositoryPackage("first_app");
+  await service.reviewRepositorySelection();
+  const firstReview = useRepositorySetupStore.getState().deploymentReview!;
+
+  service.backToRepositorySelection();
+  service.toggleRepositoryPackage("second_app");
+  await service.reviewRepositorySelection();
+
+  expect(compileCalls).toHaveLength(2);
+  const secondReview = useRepositorySetupStore.getState().deploymentReview!;
+  expect(secondReview).not.toBe(firstReview);
+  expect(secondReview.suppliedPackages.map(({ manifest }) => manifest.id)).toEqual([
+    "first_app",
+    "second_app",
+  ]);
+  await service.installRepositorySelection();
+  expect(deployCalls[0]!.deploymentBuildRecord).toBe(secondReview.record);
+});
+
+test("an unchanged Select all action preserves the compiled package set", async () => {
+  await loadFixture([packageFixture("first_app"), packageFixture("second_app")]);
+  service.selectAllRepositoryPackages(true);
+  await service.reviewRepositorySelection();
+  const firstReview = useRepositorySetupStore.getState().deploymentReview!;
+
+  service.backToRepositorySelection();
+  service.selectAllRepositoryPackages(true);
+  await service.reviewRepositorySelection();
+
+  expect(compileCalls).toHaveLength(1);
+  expect(useRepositorySetupStore.getState().deploymentReview).toBe(firstReview);
+});
+
+test("cancelling and reloading the same packages never reuses the old build", async () => {
+  const packages = [packageFixture("first_app")];
+  await loadFixture(packages);
+  service.selectAllRepositoryPackages(true);
+  await service.reviewRepositorySelection();
+  const firstReview = useRepositorySetupStore.getState().deploymentReview!;
+
+  await service.dismissRepositorySetup();
+  expect(cancelledSessionCount).toBe(1);
+  await service.installRepositorySelection();
+  expect(deployCalls).toEqual([]);
+
+  await loadFixture(packages);
+  service.selectAllRepositoryPackages(true);
+  await service.reviewRepositorySelection();
+  expect(sessionCount).toBe(2);
+  expect(compileCalls).toHaveLength(2);
+  expect(useRepositorySetupStore.getState().deploymentReview).not.toBe(firstReview);
+});
+
+test("a retained build still requires the current setup reference", async () => {
+  await loadFixture([packageFixture("first_app")]);
+  service.selectAllRepositoryPackages(true);
+  await service.reviewRepositorySelection();
+
+  service.backToRepositorySelection();
+  storage.values.clear();
+  await service.reviewRepositorySelection();
+
+  expect(compileCalls).toHaveLength(1);
+  expect(preparedCalls).toHaveLength(1);
+  expect(cancelledSessionCount).toBe(1);
+  expect(useRepositorySetupStore.getState()).toMatchObject({
+    phase: "error",
+    errorStage: "load",
+    deploymentReview: null,
+  });
+  await service.installRepositorySelection();
+  expect(deployCalls).toEqual([]);
+});
+
+test("a cancelled generation's late compile cannot replace a reloaded review", async () => {
+  const packages = [packageFixture("first_app")];
+  await loadFixture(packages);
+  service.selectAllRepositoryPackages(true);
+  let finishCompile!: () => void;
+  compileGate = new Promise<void>((resolve) => {
+    finishCompile = resolve;
+  });
+  const staleReview = service.reviewRepositorySelection();
+  expect(useRepositorySetupStore.getState().phase).toBe("compiling");
+
+  await service.dismissRepositorySetup();
+  compileGate = null;
+  await loadFixture(packages);
+  service.selectAllRepositoryPackages(true);
+  await service.reviewRepositorySelection();
+  const currentReview = useRepositorySetupStore.getState().deploymentReview!;
+
+  finishCompile();
+  await staleReview;
+  expect(useRepositorySetupStore.getState().deploymentReview).toBe(currentReview);
+  service.backToRepositorySelection();
+  await service.reviewRepositorySelection();
+  expect(compileCalls).toHaveLength(2);
+  expect(useRepositorySetupStore.getState().deploymentReview).toBe(currentReview);
+  await service.installRepositorySelection();
+  expect(deployCalls[0]!.deploymentBuildRecord).toBe(currentReview.record);
 });
 
 test("copy preflight reserves the fifth fixed slot for the build record", async () => {

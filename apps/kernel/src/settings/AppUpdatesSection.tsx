@@ -29,7 +29,10 @@ import {
   focusConsentControl,
   useConsentUiMode,
 } from "../consent/ConsentPresentation.tsx";
-import { PermissionConsequences } from "../consent/PermissionConsequences.tsx";
+import {
+  getPermissionChangesForReview,
+  PermissionConsequences,
+} from "../consent/PermissionConsequences.tsx";
 import { CapabilityChangeSummary } from "../consent/CapabilityChangeSummary.tsx";
 import type { KernelUiMode } from "../ui_mode.ts";
 import { DeploymentBuildReview } from "../install_review/DeploymentBuildReview.tsx";
@@ -87,6 +90,7 @@ export function AppUpdatesCoordinator({
 }
 
 export function AppUpdatesFeedback() {
+  const uiMode = useConsentUiMode();
   const state = useUpdateCheckStore();
   if (!state.error && state.phase !== "success") return null;
 
@@ -94,9 +98,11 @@ export function AppUpdatesFeedback() {
     return (
       <div className="settings-success settings-app-updates-feedback">
         <strong>Updated {applicationCount(state.updatedAppCount)}.</strong>
-        <span>
-          Installed version and integrity records were committed together.
-        </span>
+        {uiMode === "developer" ? (
+          <span>
+            Installed version and integrity records were committed together.
+          </span>
+        ) : null}
       </div>
     );
   }
@@ -106,13 +112,17 @@ export function AppUpdatesFeedback() {
       className="settings-warning settings-app-updates-feedback"
       role="alert"
     >
-      <strong>{errorHeading(state.errorStage)}</strong>
+      <strong>
+        {uiMode === "normal" && state.errorStage === "apply"
+          ? "Update status is unclear."
+          : errorHeading(state.errorStage)}
+      </strong>
       <span>{state.error}</span>
       {state.errorStage === "apply" ? (
         <span>
-          Neutron will use the checked deployment journal and existing recovery
-          status; do not assume the installed version changed until Settings
-          refreshes it.
+          {uiMode === "developer"
+            ? "Neutron will use the checked deployment journal and existing recovery status; do not assume the installed version changed until Settings refreshes it."
+            : "Wait for Settings to confirm which version is installed."}
         </span>
       ) : null}
       {state.results.length > 0 && state.errorStage !== "apply" ? (
@@ -429,32 +439,47 @@ function UpdateReviewDialog({
           Review app {review.apps.length === 1 ? "update" : "updates"}
         </h2>
         <div className="call app-update-review-content">
-          <ConsentNotice tone="warning">
+          <ConsentNotice tone={uiMode === "developer" ? "warning" : "neutral"}>
             <span id="app-update-review-summary">
-              Neutron verified certified transport, package integrity, and
-              executable rules, then compiled the update. This verifies the
-              package facts, not publisher identity or code endorsement. The
-              reviewed batch commits completely or not at all.
+              {uiMode === "developer"
+                ? "Neutron verified certified transport, package integrity, and executable rules, then compiled the update. This verifies the package facts, not publisher identity or code endorsement. The reviewed batch commits completely or not at all."
+                : "Only update apps from a source you trust."}
             </span>
           </ConsentNotice>
-          <div className="app-update-review-summary">
-            <span>
-              <strong>{review.apps.length}</strong> apps
-            </span>
-            <span>
-              <strong>{formatBytes(review.compiledSizeKiB * 1024)}</strong>{" "}
-              compiled Wasm
-            </span>
-            <span>
-              <strong>{migrationRows.length}</strong> memory changes
-            </span>
-          </div>
+          {uiMode === "developer" ? (
+            <div className="app-update-review-summary">
+              <span>
+                <strong>{review.apps.length}</strong> apps
+              </span>
+              <span>
+                <strong>{formatBytes(review.compiledSizeKiB * 1024)}</strong>{" "}
+                compiled Wasm
+              </span>
+              <span>
+                <strong>{migrationRows.length}</strong> memory changes
+              </span>
+            </div>
+          ) : null}
 
           <DeploymentBuildReview {...review.deploymentBuild} uiMode={uiMode} />
+          {uiMode === "normal" ? (
+            <p className="app-update-normal-facts">
+              {reviewedAppIds.has("kernel")
+                ? "Neutron will reload after the update."
+                : "Apps will restart after the update."}
+            </p>
+          ) : null}
 
           <div className="app-update-review-list">
-            {review.apps.map((app) => (
-              <article className="app-update-review-app" key={app.appId}>
+            {review.apps.map((app) => {
+              const reviewedPermissions =
+                uiMode === "developer"
+                  ? app.permissions
+                  : getPermissionChangesForReview(
+                      app.permissions,
+                      app.capabilityPlanDiff,
+                    );
+              return <article className="app-update-review-app" key={app.appId}>
                 <header>
                   <div>
                     <strong>{app.name}</strong>
@@ -466,26 +491,56 @@ function UpdateReviewDialog({
                     <strong>{formatAppVersionLabel(app.targetVersion)}</strong>
                   </span>
                 </header>
-                <CapabilityChangeSummary diff={app.capabilityPlanDiff} />
-                {app.capabilityPlanDiff.entries.length > 0 ? (
-                  <PermissionConsequences permissions={app.permissions} />
+                <CapabilityChangeSummary
+                  diff={app.capabilityPlanDiff}
+                  mode={uiMode}
+                />
+                {reviewedPermissions.length > 0 &&
+                (uiMode === "normal" || app.capabilityPlanDiff.entries.length > 0) ? (
+                  <PermissionConsequences
+                    mode={uiMode}
+                    permissions={reviewedPermissions}
+                  />
                 ) : null}
-                <div className="app-update-normal-facts">
-                  <span>
-                    <strong>Future updates:</strong>{" "}
-                    {futureUpdateSourceLabel(
-                      app.currentUpdateSource,
-                      app.targetUpdateSource,
-                    )}
-                  </span>
-                  <span>
-                    {app.appId === "kernel"
-                      ? "Neutron reloads after the atomic commit."
-                      : "The app restarts after the atomic commit."}
-                  </span>
-                </div>
+                {uiMode === "developer" ? (
+                  <div className="app-update-normal-facts">
+                    <span>
+                      <strong>Future updates:</strong>{" "}
+                      {futureUpdateSourceLabel(
+                        app.currentUpdateSource,
+                        app.targetUpdateSource,
+                      )}
+                    </span>
+                    <span>
+                      {app.appId === "kernel"
+                        ? "Neutron reloads after the atomic commit."
+                        : "The app restarts after the atomic commit."}
+                    </span>
+                  </div>
+                ) : app.currentUpdateSource !== app.targetUpdateSource ? (
+                  <ConsentNotice tone="warning">
+                    <strong>Update source changes</strong>
+                    <span>
+                      {!app.targetUpdateSource
+                        ? "Future updates must be installed manually."
+                        : !app.currentUpdateSource
+                          ? "Future updates will be available here."
+                          : "Future updates will come from a different source."}
+                    </span>
+                    {app.targetUpdateSource ? (
+                      <dl>
+                        <ReviewCopyFact
+                          label="New source"
+                          value={app.targetUpdateSource}
+                        />
+                      </dl>
+                    ) : null}
+                  </ConsentNotice>
+                ) : null}
                 <ConsentTechnicalDetails
-                  summary="Package and capability technical details"
+                  summary={uiMode === "developer"
+                    ? "Package and capability technical details"
+                    : "Details"}
                 >
                 <dl>
                   <ReviewFact
@@ -605,8 +660,8 @@ function UpdateReviewDialog({
                   </details>
                 ) : null}
                 </ConsentTechnicalDetails>
-              </article>
-            ))}
+              </article>;
+            })}
           </div>
 
           {migrationRows.length > 0 && uiMode === "developer" ? (
@@ -622,32 +677,20 @@ function UpdateReviewDialog({
             </section>
           ) : null}
 
-          {review.migrationPlan.destructiveMemoryRoots.length > 0 ? (
+          {review.migrationPlan.destructiveMemoryRoots.length > 0 && uiMode === "developer" ? (
             <ConsentNotice tone="danger">
               <strong>Destructive managed-memory changes</strong>
               <span>
                 {" "}
-                {uiMode === "developer"
-                  ? review.migrationPlan.destructiveMemoryRoots
-                      .map(({ owner, memoryId }) => `${owner}.${memoryId}`)
-                      .join(", ")
-                  : `${review.migrationPlan.destructiveMemoryRoots.length} app data ${
-                      review.migrationPlan.destructiveMemoryRoots.length === 1
-                        ? "area will"
-                        : "areas will"
-                    } be permanently retired or deleted.`}
+                {review.migrationPlan.destructiveMemoryRoots
+                  .map(({ owner, memoryId }) => `${owner}.${memoryId}`)
+                  .join(", ")}
               </span>
-            </ConsentNotice>
-          ) : migrationRows.length > 0 && uiMode === "normal" ? (
-            <ConsentNotice tone="neutral">
-              {migrationRows.length} managed app data{" "}
-              {migrationRows.length === 1 ? "area changes" : "areas change"} as
-              part of this update. No destructive retirement is planned.
             </ConsentNotice>
           ) : null}
 
-          {review.diagnostics.length > 0 ||
-          review.compatibilityDiagnostics.length > 0 ? (
+          {uiMode === "developer" && (review.diagnostics.length > 0 ||
+          review.compatibilityDiagnostics.length > 0) ? (
             <ConsentTechnicalDetails
               className="app-update-review-diagnostics"
               summary="Compiler diagnostics"

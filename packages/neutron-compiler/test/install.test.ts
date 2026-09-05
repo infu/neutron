@@ -1,5 +1,6 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { gzipSync, gunzipSync } from "fflate";
+import * as fflate from "fflate";
 import msgpack from "tiny-msgpack";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -1850,6 +1851,68 @@ test("kernel package state rejects corrupt content-addressed installed modules",
       },
     }),
   ).rejects.toThrow(/Motoko module .* content SHA-256/);
+});
+
+test("kernel package state overlaps metadata and manifest reads with modules", async () => {
+  const kernel = {
+    format: 3 as const,
+    id: "kernel",
+    name: "Kernel",
+    version: 100,
+    entry: "kernel",
+  };
+  const moduleContent = "module {}";
+  const modulePath = `/mo/${hashContent(moduleContent)}.mo`;
+  let releaseModule!: () => void;
+  const moduleGate = new Promise<void>((resolve) => {
+    releaseModule = resolve;
+  });
+  const reads: string[] = [];
+  const reading = readKernelPackageState({
+    listStatic: async () => [modulePath],
+    fetchText: async (path) => {
+      reads.push(path);
+      if (path === modulePath) {
+        await moduleGate;
+        return moduleContent;
+      }
+      if (path === "/pkg/neutron.most") return "type Stable = {}";
+      throw new Error(`Unexpected text asset ${path}`);
+    },
+    fetchJson: async (path, fallback) => {
+      reads.push(path);
+      if (path === "/system/apps.json") {
+        return { kernel: appRegistryEntry(kernel) } as typeof fallback;
+      }
+      if (path === "/pkg/neutron.json") return kernel as typeof fallback;
+      if (path === KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH) {
+        return connectionProviderSupportFixture as typeof fallback;
+      }
+      return fallback;
+    },
+  });
+
+  try {
+    // Drain the immediately runnable reads while the module stays pending.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reads).toEqual(
+      expect.arrayContaining([
+        modulePath,
+        "/system/apps.json",
+        "/pkg/neutron.json",
+        BROWSER_SURFACE_ORIGINS_PATH,
+        KERNEL_CONNECTION_PROVIDER_SUPPORT_PATH,
+        "/pkg/neutron.most",
+      ]),
+    );
+  } finally {
+    releaseModule();
+  }
+  const state = await reading;
+  expect(state.existingModules).toEqual([
+    { path: modulePath.slice("/mo/".length), content: moduleContent },
+  ]);
+  expect(state.existingConfigs.kernel).toEqual(kernel);
 });
 
 function strictStateReaderFixture({
@@ -5517,122 +5580,142 @@ test.each([
 ] as const)(
   "complete build record and exact %s Wasm transport commit in one v0.3.6 bridge journal",
   async (dispatchKind, wasm) => {
-  const previous = preparePackageInstall(kernelPackageFilesAtVersion(306));
-  const candidate = preparePackageInstall(
-    packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(307))),
-  );
-  const expectedDeploymentId = "c".repeat(32);
-  const compiled = { ...completeKernelCompiledFixture(candidate), wasm };
-  const previousApps = {
-    kernel: appRegistryEntry(previous.manifest),
-  };
-  const state: KernelPackageState = {
-    registry: previousApps,
-    apps: previousApps,
-    browserSurfaceOriginAppIds: [],
-    browserSurfaceOriginsSidecarPresent: false,
-    existingConfigs: { kernel: previous.manifest },
-    existingModules: [],
-    previousStable: "previous stable signature\n",
-    connectionProviderSupport: connectionProviderSupportFixture,
-  };
-  const preparedBuild = prepareCompleteDeploymentBuildRecord({
-    targetCanisterId: TEST_TARGET_CANISTER_ID,
-    packages: [candidate],
-    state,
-    compiled,
-    expectedDeploymentId,
-  });
-  if (!candidate.archiveIdentity) {
-    throw new Error("Expected retained raw candidate archive identity");
-  }
-  expect(preparedBuild.record.packages[0]?.archive).toEqual({
-    state: "verified",
-    sha256: candidate.archiveIdentity.sha256,
-    bytes: candidate.archiveIdentity.size,
-  });
-  expect(preparedBuild.record.packages[0]?.package_information.state).toBe(
-    "verified",
-  );
-
-  const calls: string[] = [];
-  const actor = journalActor({
-    calls,
-    deploymentId: compiled.deploymentId,
-    compiled,
-  });
-  const stored = new Map<
-    string,
-    { encoding: "gzip" | "identity"; chunks: Uint8Array[] }
-  >();
-  let journal: InstallJournal | undefined;
-  let dispatchedWasm: Uint8Array | undefined;
-  const uploadedWasmChunks: Uint8Array[] = [];
-  const kernelStatic = actor.kernel_static.bind(actor);
-  const begin = actor.kernel_install_begin_checked.bind(actor);
-  const installCode = actor.kernel_install_code.bind(actor);
-  const uploadWasmChunk = actor.kernel_install_wasm_chunk.bind(actor);
-  actor.kernel_static = async (request) => {
-    if ("store" in request) {
-      stored.set(request.store.key, {
-        encoding: request.store.val.content_encoding,
-        chunks: [request.store.val.content],
+    const previous = preparePackageInstall(kernelPackageFilesAtVersion(306));
+    const candidate = preparePackageInstall(
+      packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(307))),
+    );
+    const expectedDeploymentId = "c".repeat(32);
+    const compiled = { ...completeKernelCompiledFixture(candidate), wasm };
+    const previousApps = {
+      kernel: appRegistryEntry(previous.manifest),
+    };
+    const state: KernelPackageState = {
+      registry: previousApps,
+      apps: previousApps,
+      browserSurfaceOriginAppIds: [],
+      browserSurfaceOriginsSidecarPresent: false,
+      existingConfigs: { kernel: previous.manifest },
+      existingModules: [],
+      previousStable: "previous stable signature\n",
+      connectionProviderSupport: connectionProviderSupportFixture,
+    };
+    const compress = spyOn(fflate, "gzipSync");
+    try {
+      const preparedBuild = prepareCompleteDeploymentBuildRecord({
+        targetCanisterId: TEST_TARGET_CANISTER_ID,
+        packages: [candidate],
+        state,
+        compiled,
+        expectedDeploymentId,
       });
-    } else if ("store_chunk" in request) {
-      stored.get(request.store_chunk.key)?.chunks.push(
-        request.store_chunk.content,
+      // The browser revalidates its final baseline immediately before deployment.
+      const revalidatedBuild = prepareCompleteDeploymentBuildRecord({
+        targetCanisterId: TEST_TARGET_CANISTER_ID,
+        packages: [candidate],
+        state,
+        compiled,
+        expectedDeploymentId,
+      });
+      expect(revalidatedBuild.recordBytes).toEqual(preparedBuild.recordBytes);
+      expect(revalidatedBuild.transportWasm).toEqual(preparedBuild.transportWasm);
+      if (!candidate.archiveIdentity) {
+        throw new Error("Expected retained raw candidate archive identity");
+      }
+      expect(preparedBuild.record.packages[0]?.archive).toEqual({
+        state: "verified",
+        sha256: candidate.archiveIdentity.sha256,
+        bytes: candidate.archiveIdentity.size,
+      });
+      expect(preparedBuild.record.packages[0]?.package_information.state).toBe(
+        "verified",
       );
+
+      const calls: string[] = [];
+      const actor = journalActor({
+        calls,
+        deploymentId: compiled.deploymentId,
+        compiled,
+      });
+      const stored = new Map<
+        string,
+        { encoding: "gzip" | "identity"; chunks: Uint8Array[] }
+      >();
+      let journal: InstallJournal | undefined;
+      let dispatchedWasm: Uint8Array | undefined;
+      const uploadedWasmChunks: Uint8Array[] = [];
+      const kernelStatic = actor.kernel_static.bind(actor);
+      const begin = actor.kernel_install_begin_checked.bind(actor);
+      const installCode = actor.kernel_install_code.bind(actor);
+      const uploadWasmChunk = actor.kernel_install_wasm_chunk.bind(actor);
+      actor.kernel_static = async (request) => {
+        if ("store" in request) {
+          stored.set(request.store.key, {
+            encoding: request.store.val.content_encoding,
+            chunks: [request.store.val.content],
+          });
+        } else if ("store_chunk" in request) {
+          stored.get(request.store_chunk.key)?.chunks.push(
+            request.store_chunk.content,
+          );
+        }
+        return kernelStatic(request);
+      };
+      actor.kernel_install_begin_checked = async (request) => {
+        journal = request.journal;
+        return begin(request);
+      };
+      actor.kernel_install_code = async (request) => {
+        dispatchedWasm = request.wasm;
+        return installCode(request);
+      };
+      actor.kernel_install_wasm_chunk = async (request) => {
+        uploadedWasmChunks.push(request.chunk);
+        return uploadWasmChunk(request);
+      };
+
+      await deployPreparedPackages({
+        actor,
+        targetCanisterId: TEST_TARGET_CANISTER_ID,
+        packages: [candidate],
+        compiled,
+        existingApps: previousApps,
+        existingBrowserSurfaceOriginAppIds: [],
+        expectedDeploymentId,
+        deploymentBuildRecord: preparedBuild.record,
+      });
+
+      expect(journal?.clear_prefixes).toEqual([]);
+      const source = journal?.copies.find(
+        ({ target }) => target === DEPLOYMENT_BUILD_RECORD_PATH,
+      )?.source;
+      expect(source).toBeDefined();
+      const storedRecord = stored.get(source!);
+      expect(storedRecord).toBeDefined();
+      const encodedRecord = concatChunks(storedRecord!.chunks);
+      const recordBytes =
+        storedRecord!.encoding === "gzip"
+          ? gunzipSync(encodedRecord)
+          : encodedRecord;
+      expect(recordBytes).toEqual(preparedBuild.recordBytes);
+      expect(parseDeploymentBuildRecordJson(recordBytes)).toEqual(
+        preparedBuild.record,
+      );
+      const exactDispatchedWasm =
+        dispatchKind === "inline"
+          ? dispatchedWasm
+          : concatChunks(uploadedWasmChunks);
+      expect(exactDispatchedWasm).toEqual(preparedBuild.transportWasm);
+      expect(hashContent(exactDispatchedWasm!)).toBe(
+        preparedBuild.record.wasm.transport.sha256,
+      );
+      const wasmCompressions = compress.mock.calls.filter(([raw]) =>
+        raw.byteLength === wasm.byteLength &&
+        raw.every((value, index) => value === wasm[index]),
+      );
+      expect(wasmCompressions).toHaveLength(1);
+    } finally {
+      compress.mockRestore();
     }
-    return kernelStatic(request);
-  };
-  actor.kernel_install_begin_checked = async (request) => {
-    journal = request.journal;
-    return begin(request);
-  };
-  actor.kernel_install_code = async (request) => {
-    dispatchedWasm = request.wasm;
-    return installCode(request);
-  };
-  actor.kernel_install_wasm_chunk = async (request) => {
-    uploadedWasmChunks.push(request.chunk);
-    return uploadWasmChunk(request);
-  };
-
-  await deployPreparedPackages({
-    actor,
-    targetCanisterId: TEST_TARGET_CANISTER_ID,
-    packages: [candidate],
-    compiled,
-    existingApps: previousApps,
-    existingBrowserSurfaceOriginAppIds: [],
-    expectedDeploymentId,
-    deploymentBuildRecord: preparedBuild.record,
-  });
-
-  expect(journal?.clear_prefixes).toEqual([]);
-  const source = journal?.copies.find(
-    ({ target }) => target === DEPLOYMENT_BUILD_RECORD_PATH,
-  )?.source;
-  expect(source).toBeDefined();
-  const storedRecord = stored.get(source!);
-  expect(storedRecord).toBeDefined();
-  const encodedRecord = concatChunks(storedRecord!.chunks);
-  const recordBytes =
-    storedRecord!.encoding === "gzip"
-      ? gunzipSync(encodedRecord)
-      : encodedRecord;
-  expect(recordBytes).toEqual(preparedBuild.recordBytes);
-  expect(parseDeploymentBuildRecordJson(recordBytes)).toEqual(
-    preparedBuild.record,
-  );
-  const exactDispatchedWasm =
-    dispatchKind === "inline"
-      ? dispatchedWasm
-      : concatChunks(uploadedWasmChunks);
-  expect(exactDispatchedWasm).toEqual(preparedBuild.transportWasm);
-  expect(hashContent(exactDispatchedWasm!)).toBe(
-    preparedBuild.record.wasm.transport.sha256,
-  );
   },
 );
 
@@ -5886,6 +5969,57 @@ test("deploy rejects stable-signature drift from sealed review before I/O", asyn
   expect(calls).toEqual([]);
 });
 
+test("deploy rejects changed Wasm after warming reviewed compression cache before I/O", async () => {
+  const previous = preparePackageInstall(kernelPackageFilesAtVersion(307));
+  const candidate = preparePackageInstall(
+    packageBytes(withValidPackageRecord(kernelPackageFilesAtVersion(308))),
+  );
+  const compiled = {
+    ...completeKernelCompiledFixture(candidate),
+    // Valid minimal module with a custom section whose name can change.
+    wasm: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 0, 2, 1, 97),
+  };
+  const existingApps = { kernel: appRegistryEntry(previous.manifest) };
+  const preparedBuild = prepareCompleteDeploymentBuildRecord({
+    targetCanisterId: TEST_TARGET_CANISTER_ID,
+    packages: [candidate],
+    state: {
+      registry: existingApps,
+      apps: existingApps,
+      browserSurfaceOriginAppIds: [],
+      browserSurfaceOriginsSidecarPresent: false,
+      existingConfigs: { kernel: previous.manifest },
+      existingModules: [],
+      previousStable: "previous stable signature\n",
+      connectionProviderSupport: connectionProviderSupportFixture,
+    },
+    compiled,
+    expectedDeploymentId: "c".repeat(32),
+  });
+  // Mutate through another view without changing array identity or length.
+  new Uint8Array(compiled.wasm.buffer)[compiled.wasm.length - 1] = 98;
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+
+  await expect(
+    deployPreparedPackages({
+      actor,
+      targetCanisterId: TEST_TARGET_CANISTER_ID,
+      packages: [candidate],
+      compiled,
+      existingApps,
+      existingBrowserSurfaceOriginAppIds: [],
+      expectedDeploymentId: "c".repeat(32),
+      deploymentBuildRecord: preparedBuild.record,
+    }),
+  ).rejects.toThrow(/Wasm record does not match its exact bytes/);
+  expect(calls).toEqual([]);
+});
+
 test("retained package evidence is bound to runtime context and package version", () => {
   const previous = preparePackageInstall(kernelPackageFilesAtVersion(306));
   const candidate = preparePackageInstall(
@@ -6061,6 +6195,102 @@ test("deploy does not globally delete modules after releasing its journal", asyn
   expect(calls).not.toContain("abort");
 });
 
+test("deploy reuses checked baseline modules and uploads only new modules", async () => {
+  const files = helloPackageFiles();
+  const newModule = bytes("module { public let value = 1 }");
+  const newModulePath = `mo/${hashContent(newModule)}.mo`;
+  files[newModulePath] = newModule;
+  const prepared = preparePackageInstall(files);
+  const compiled = compiledFixture(prepared);
+  const retained = compiled.modulePaths[0]!;
+  compiled.modulePaths.push(newModulePath.slice("mo/".length));
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+
+  await deployPreparedPackages({
+    actor,
+    packages: [prepared],
+    compiled,
+    existingApps: {},
+    existingBrowserSurfaceOriginAppIds: [],
+    expectedDeploymentId: "old-deployment",
+    previousModulePaths: [retained, retained],
+  });
+
+  expect(calls.filter((call) => call.startsWith("store:/mo/"))).toEqual([
+    `store:/${newModulePath}`,
+  ]);
+  expect(
+    calls.some((call) => call.startsWith("store:/system/staging/")),
+  ).toBe(true);
+  expect(calls).toContain("begin");
+  expect(calls).toContain("install");
+  expect(calls).toContain("commit");
+});
+
+test("deploy still verifies incoming modules when their paths are installed", async () => {
+  const prepared = preparePackageInstall(helloPackageFiles());
+  const compiled = compiledFixture(prepared);
+  const retained = compiled.modulePaths[0]!;
+  prepared.files.find(({ path }) => path === `mo/${retained}`)!.content =
+    bytes("module { public let changed = true }");
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+
+  await expect(
+    deployPreparedPackages({
+      actor,
+      packages: [prepared],
+      compiled,
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      expectedDeploymentId: "old-deployment",
+      previousModulePaths: [retained],
+    }),
+  ).rejects.toThrow(/Motoko module .* content SHA-256/);
+  expect(calls).toEqual([]);
+});
+
+test("reused modules do not bypass a changed deployment baseline", async () => {
+  const prepared = preparePackageInstall(helloPackageFiles());
+  const compiled = compiledFixture(prepared);
+  const calls: string[] = [];
+  const actor = journalActor({
+    calls,
+    deploymentId: compiled.deploymentId,
+    compiled,
+  });
+  actor.kernel_install_begin_checked = async (request) => {
+    expect(request.expected_deployment_id).toBe("old-deployment");
+    calls.push("begin-rejected");
+    throw new Error("Installed deployment changed");
+  };
+
+  await expect(
+    deployPreparedPackages({
+      actor,
+      packages: [prepared],
+      compiled,
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      expectedDeploymentId: "old-deployment",
+      previousModulePaths: compiled.modulePaths,
+    }),
+  ).rejects.toThrow(/Installed deployment changed/);
+  expect(calls.filter((call) => call === "begin-rejected")).toHaveLength(2);
+  expect(calls.some((call) => call.startsWith("store:/mo/"))).toBe(false);
+  expect(calls).not.toContain("install");
+  expect(calls).not.toContain("commit");
+});
+
 test("deploy stages only obsolete baseline modules for atomic commit cleanup", async () => {
   const prepared = preparePackageInstall(helloPackageFiles());
   const calls: string[] = [];
@@ -6106,6 +6336,7 @@ test("deploy stages only obsolete baseline modules for atomic commit cleanup", a
     false,
   );
   expect(calls).not.toContain(`delete:/mo/${retired}`);
+  expect(calls).not.toContain(`store:/mo/${retained}`);
   expect(calls.filter((call) => call === "commit")).toHaveLength(1);
 });
 

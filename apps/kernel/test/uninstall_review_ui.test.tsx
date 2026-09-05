@@ -28,8 +28,9 @@ test("final uninstall confirmation renders the exact deployment review", () => {
   const normalHtml = renderToStaticMarkup(
     <AppUninstallRequestDialog request={request} />,
   );
-  expect(normalHtml).toContain("Deployment ready");
-  expect(normalHtml).toContain("review items need attention");
+  expect(normalHtml).toContain("Ready to continue.");
+  expect(normalHtml).toContain("Permanently deletes saved data from files.");
+  expect(normalHtml).toContain("Removes files.");
   expect(normalHtml).not.toContain("Download exact build-record JSON");
   expect(normalHtml).not.toContain(record.deployment_id);
   expect(normalHtml).not.toContain(record.wasm.raw.sha256);

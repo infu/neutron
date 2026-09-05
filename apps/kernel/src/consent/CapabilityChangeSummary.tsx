@@ -1,22 +1,33 @@
 import { CAPABILITY_CATALOG } from "neutron-tools/src/capabilities/catalog.js";
 import type { CapabilityPlanDiffV1 } from "neutron-tools/src/capabilities/wire.js";
-import { ConsentNotice } from "./ConsentPresentation.tsx";
+import { ConsentNotice, useConsentUiMode } from "./ConsentPresentation.tsx";
+import type { KernelUiMode } from "../ui_mode.ts";
 
 export function CapabilityChangeSummary({
   diff,
+  mode,
 }: {
   diff: CapabilityPlanDiffV1 | undefined;
+  mode?: KernelUiMode;
 }) {
+  const uiMode = useConsentUiMode(mode);
   if (!diff) {
     return (
       <ConsentNotice tone="danger">
+        {uiMode === "normal" ? (
+          <>Previous permissions are unavailable. Review this app&apos;s access below.</>
+        ) : <>
         <strong>Access changes cannot be compared.</strong>{" "}
         The installed capability plan is unavailable. Treat this update like a
         new permission decision.
+        </>}
       </ConsentNotice>
     );
   }
   if (diff.entries.length === 0) {
+    if (uiMode === "normal") {
+      return <p className="consent-change-summary">Permissions unchanged.</p>;
+    }
     return (
       <ConsentNotice tone="success">
         <strong>No capability authority changes.</strong>{" "}
@@ -33,6 +44,18 @@ export function CapabilityChangeSummary({
   const labels = [
     ...new Set(diff.entries.map(({ id }) => CAPABILITY_CATALOG[id].title)),
   ];
+  if (uiMode === "normal") {
+    return (
+      <p className="consent-change-summary">
+        <strong>Permissions:</strong>{" "}
+        {[
+          counts.added ? `${counts.added} added` : "",
+          counts.changed ? `${counts.changed} changed` : "",
+          counts.removed ? `${counts.removed} removed` : "",
+        ].filter(Boolean).join(", ")}.
+      </p>
+    );
+  }
   return (
     <ConsentNotice tone="warning">
       <strong>

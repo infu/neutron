@@ -41,7 +41,10 @@ import {
   focusConsentControl,
   useConsentUiMode,
 } from "./consent/ConsentPresentation.tsx";
-import { PermissionConsequences } from "./consent/PermissionConsequences.tsx";
+import {
+  getPermissionChangesForReview,
+  PermissionConsequences,
+} from "./consent/PermissionConsequences.tsx";
 import { CapabilityChangeSummary } from "./consent/CapabilityChangeSummary.tsx";
 import type { KernelUiMode } from "./ui_mode.ts";
 import { DeploymentBuildReview } from "./install_review/DeploymentBuildReview.tsx";
@@ -370,6 +373,9 @@ export function AppRequestDialog({
       permission.kind !== "preapproved_self_call" &&
       permission.kind !== "public_method",
   );
+  const reviewPermissions = uiMode === "normal" && rq.operation === "update"
+    ? getPermissionChangesForReview(rq.permissions, rq.capabilityPlanDiff)
+    : rq.permissions;
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -414,16 +420,25 @@ export function AppRequestDialog({
         </h2>
 
         <div className="call">
-          <InstallDecisionSummary request={rq} />
+          <InstallDecisionSummary mode={uiMode} request={rq} />
           {rq.operation === "update" ? (
-            <CapabilityChangeSummary diff={rq.capabilityPlanDiff} />
+            <CapabilityChangeSummary diff={rq.capabilityPlanDiff} mode={uiMode} />
           ) : null}
-          <PermissionConsequences permissions={rq.permissions} />
+          {rq.operation !== "update" || reviewPermissions.length > 0 ? (
+            <PermissionConsequences mode={uiMode} permissions={reviewPermissions} />
+          ) : null}
           <ConsentTechnicalDetails
             summary={
               uiMode === "developer" ? "Developer details" : "Technical details"
             }
           >
+            {uiMode === "normal" ? (
+              <p className="permission-copy">
+                The app name comes from the package. Neutron checked the package
+                structure, integrity, and executable rules, but has not verified
+                who published it or endorsed its code.
+              </p>
+            ) : null}
             <div className="a-infogrid install-summary">
             <div className="label">Application</div>
             <div className="val">{rq.packageName}</div>
@@ -599,23 +614,25 @@ export function AppRequestDialog({
           ) : null}
           </ConsentTechnicalDetails>
           {compiled ? (
-            <>
-            <div className="compile-done" data-tid="install-compiled">
-              {uiMode === "developer"
-                ? `Successfully compiled. Wasm size: ${compiled.size} kb`
-                  : "Package checks and compilation completed. Review the exact deployment before deciding."}
-            </div>
+            <div data-tid="install-compiled">
+              {uiMode === "developer" || !compiled.deploymentReview ? (
+                <div className="compile-done">
+                  {uiMode === "developer"
+                    ? `Successfully compiled. Wasm size: ${compiled.size} kb`
+                    : "Preparing installation review…"}
+                </div>
+              ) : null}
               {compiled.deploymentReview ? (
                 <DeploymentBuildReview
                   {...compiled.deploymentReview}
                   uiMode={uiMode}
                 />
               ) : null}
-            </>
+            </div>
           ) : (
             <div className="compile-loading" data-tid="install-compiling">
               <div className="loader" />
-              <div>Compiling...</div>
+              <div>{uiMode === "developer" ? "Compiling..." : "Preparing app…"}</div>
             </div>
           )}
           <div className="btn-actions">
@@ -637,7 +654,7 @@ export function AppRequestDialog({
               onClick={() => appReject()}
               ref={rejectRef}
             >
-              Reject
+              {uiMode === "developer" ? "Reject" : "Cancel"}
             </button>
           </div>
         </div>
@@ -646,18 +663,26 @@ export function AppRequestDialog({
   );
 }
 
-function InstallDecisionSummary({ request }: { request: AppInstallRequest }) {
+function InstallDecisionSummary({
+  mode,
+  request,
+}: {
+  mode: KernelUiMode;
+  request: AppInstallRequest;
+}) {
   return (
     <div className="consent-install-summary" id="install-permission-summary">
       <div>
         <strong>{request.packageName}</strong>
         <span>{formatAppVersionLabel(request.packageVersion)}</span>
       </div>
-      <p>
-        The app name comes from the package. Neutron checked the package
-        structure, integrity, and executable rules, but has not verified who
-        published it or endorsed its code.
-      </p>
+      {mode === "developer" ? (
+        <p>
+          The app name comes from the package. Neutron checked the package
+          structure, integrity, and executable rules, but has not verified who
+          published it or endorsed its code.
+        </p>
+      ) : null}
       {request.offer ? (
         <p>
           Offered by{" "}
@@ -672,10 +697,11 @@ function InstallDecisionSummary({ request }: { request: AppInstallRequest }) {
       ) : (
         <p>
           {request.acquisition === "url"
-            ? "Downloaded from an address entered in this browser."
-            : "Selected from a local package file in this browser."}
+            ? "From the download link you entered."
+            : "From a package file on this device."}
         </p>
       )}
+      {mode === "normal" ? <p>Only install apps from a source you trust.</p> : null}
     </div>
   );
 }

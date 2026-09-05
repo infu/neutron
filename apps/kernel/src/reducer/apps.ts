@@ -2161,7 +2161,6 @@ export async function beginPackageInstallSession({
             }
           }
           await resetNeutronCanBinding();
-          await delay(500);
           useAppsStore.getState().setInstalled();
           return apps;
         } catch (error) {
@@ -2768,7 +2767,6 @@ async function installAppInternal(
       removeAppRuntimeState(id, false);
     }
     await resetNeutronCanBinding();
-    await delay(500);
     useAppsStore.getState().setInstalled();
     return { appId: id, apps: appconfig };
   } catch (error) {

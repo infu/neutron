@@ -20,9 +20,9 @@ test.beforeAll(async () => {
       global: "window",
     },
     entryPoints: [fixtureEntry],
-    format: "iife",
+    format: "esm",
     jsx: "automatic",
-    loader: { ".js": "jsx", ".ts": "ts", ".tsx": "tsx" },
+    loader: { ".bin": "dataurl", ".js": "jsx", ".ts": "ts", ".tsx": "tsx" },
     logLevel: "silent",
     outdir: path.join(repoRoot, ".permission-dialog-e2e-build"),
     platform: "browser",
@@ -82,7 +82,7 @@ test("permission dialog stays contained and has one reachable scroll area", asyn
     expect(layout.scrollable).toEqual(["install-dialog"]);
     expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0);
 
-    const reject = page.getByRole("button", { name: "Reject" });
+    const reject = page.getByRole("button", { name: "Cancel" });
     await reject.scrollIntoViewIfNeeded();
     await expect(reject).toBeInViewport();
     expect(await dialog.evaluate((element) => element.scrollTop)).toBeGreaterThan(
@@ -105,7 +105,7 @@ test("permission dialog traps keyboard focus and restores it after Escape", asyn
   const dialog = page.getByRole("alertdialog", {
     name: "Install application",
   });
-  const reject = page.getByRole("button", { name: "Reject" });
+  const reject = page.getByRole("button", { name: "Cancel" });
   const technicalDetails = dialog
     .locator('[data-tid="consent-technical-details"] > summary')
     .first();
@@ -159,25 +159,24 @@ test("permission dialog labels kernel facts separately from unverified app prose
   expect(ariaReferences.title.trim()).toBe("Install application");
   expect(ariaReferences.description).toContain("Permission Fixture");
   expect(ariaReferences.description).toContain(
-    "has not verified who published it",
+    "Only install apps from a source you trust.",
   );
 
   const consequences = dialog.getByRole("region", {
-    name: "What this app will be able to do",
+    name: "App permissions",
   });
   await expect(consequences).toBeVisible();
-  await expect(consequences).toContainText(
-    "Reach other canisters or services",
-  );
-  await expect(consequences).toContainText(
-    "Work with its own or other installed apps",
-  );
+  await expect(consequences).not.toContainText("create_remote_game");
+  await expect(consequences).not.toContainText("Approve silently");
 
   const technicalDetails = dialog
     .locator('[data-tid="consent-technical-details"]')
     .first();
   await expect(technicalDetails).not.toHaveAttribute("open", "");
   await technicalDetails.locator(":scope > summary").click();
+  await expect(technicalDetails).toContainText(
+    "has not verified who published it",
+  );
   const verified = dialog.getByRole("region", {
     name: "Kernel-verified requested access",
   });
@@ -199,7 +198,7 @@ test("permission dialog labels kernel facts separately from unverified app prose
   );
 });
 
-test("developer mode opens exact consent facts without changing the decision", async ({
+test("developer mode keeps exact install facts expandable without changing the decision", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 720, height: 600 });
@@ -216,7 +215,8 @@ test("developer mode opens exact consent facts without changing the decision", a
   const technicalDetails = dialog
     .locator('[data-tid="consent-technical-details"]')
     .first();
-  await expect(technicalDetails).toHaveAttribute("open", "");
+  await expect(technicalDetails).not.toHaveAttribute("open", "");
+  await technicalDetails.locator(":scope > summary").click();
   await expect(
     dialog.getByRole("region", {
       name: "Kernel-verified requested access",
@@ -293,11 +293,14 @@ test("runtime backend consent is exact, lossless, and keyboard contained", async
 });
 
 async function mountFixture(page: Page): Promise<void> {
-  await page.setContent(
-    '<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div></body></html>',
-  );
+  const fixtureUrl = "https://permission-fixture.example/";
+  await page.route(fixtureUrl, (route) => route.fulfill({
+    contentType: "text/html",
+    body: '<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div></body></html>',
+  }));
+  await page.goto(fixtureUrl);
   await page.addStyleTag({ content: fixtureCss });
-  await page.addScriptTag({ content: fixtureJavaScript });
+  await page.addScriptTag({ content: fixtureJavaScript, type: "module" });
   await expect(page.locator('[data-fixture-ready="true"]')).toBeVisible();
 }
 

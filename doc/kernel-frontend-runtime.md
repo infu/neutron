@@ -235,6 +235,13 @@ Developer mode opens that same section by default; it does not maintain a
 second approval flow or a separate permission interpretation. Installation and
 update reviews are the exception: their large technical sections start
 collapsed in either mode and remain expandable.
+Normal install reviews use short, grouped permission rows instead of risk
+cards and repeated check summaries. Update reviews focus those rows on added
+or changed access; unchanged permissions remain in the exact details. Full
+system control and permanent deletion stay visible even without a capability
+change. Routine storage checks are omitted, while app removals, saved-data
+migrations, and build warnings remain available in the installation summary.
+Package integrity checks are not presented as publisher or app-safety review.
 The expandable Interface section beside Runtime provides an `Enable developer
 mode` switch and writes the validated preference to
 `neutron-kernel-ui-mode-v1`; unavailable or malformed storage falls back to

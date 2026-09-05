@@ -138,34 +138,46 @@ export function RepositorySetupDialog() {
         <h2 className="title" id="repository-setup-title">
           {dialogTitle(state.phase)}
         </h2>
-        {state.phase === "pending" ? <PendingContact /> : null}
+        {state.phase === "pending" ? <PendingContact uiMode={uiMode} /> : null}
         {state.phase === "loading" || state.phase === "compiling" ? (
           <RepositoryProgress />
         ) : null}
         {state.phase === "selecting" || state.phase === "review" ? (
           <RepositoryReview final={state.phase === "review"} uiMode={uiMode} />
         ) : null}
-        {state.phase === "error" ? <RepositoryError /> : null}
+        {state.phase === "error" ? <RepositoryError uiMode={uiMode} /> : null}
         {state.phase === "success" ? <RepositorySuccess /> : null}
       </div>
     </>
   );
 }
 
-function PendingContact() {
+function PendingContact({ uiMode }: { uiMode: KernelUiMode }) {
   const reference = useRepositorySetupStore((state) => state.reference)!;
   return (
     <div className="call repository-setup-content">
-      <ConsentNotice tone="warning">
-        <strong>Loading does not install anything.</strong> Neutron will
-        anonymously contact a third-party repository, verify its certified
-        response, and then let you choose applications for a separate final
-        review.
-      </ConsentNotice>
-      <ConsentNotice tone="neutral">
-        Gateways and the repository can observe request metadata. Neutron has
-        not verified the repository provider or software publisher.
-      </ConsentNotice>
+      {uiMode === "developer" ? (
+        <>
+          <ConsentNotice tone="warning">
+            <strong>Loading does not install anything.</strong> Neutron will
+            anonymously contact a third-party repository, verify its certified
+            response, and then let you choose applications for a separate final
+            review.
+          </ConsentNotice>
+          <ConsentNotice tone="neutral">
+            Gateways and the repository can observe request metadata. Neutron has
+            not verified the repository provider or software publisher.
+          </ConsentNotice>
+        </>
+      ) : (
+        <>
+          <p>Load the app list from this repository. You choose what to install.</p>
+          <ConsentNotice tone="neutral">
+            The repository can see your request. Its provider and app safety have
+            not been verified.
+          </ConsentNotice>
+        </>
+      )}
       <ConsentTechnicalDetails>
       <dl className="repository-facts">
         <Fact label="Repository canister" value={reference.repo} mono />
@@ -181,10 +193,12 @@ function PendingContact() {
           tracking; providers must not encode personal, affiliate, or hidden tracking identifiers in it.
       </div>
       </ConsentTechnicalDetails>
-      <div className="repository-third-party">
-        Third-party software — not reviewed, hosted, sold, or endorsed by
-        Neutron.
-      </div>
+      {uiMode === "developer" ? (
+        <div className="repository-third-party">
+          Third-party software — not reviewed, hosted, sold, or endorsed by
+          Neutron.
+        </div>
+      ) : null}
       <div className="btn-actions">
         <button
           className="btn"
@@ -248,14 +262,19 @@ function RepositoryReview({
   ).length;
   const allAvailableSelected =
     availableCount > 0 && state.rootIds.length === availableCount;
+  const displayedPackages = final && uiMode === "normal"
+    ? loaded.packages.filter(({ id }) => selection.selected.has(id))
+    : loaded.packages;
 
   return (
     <div className="call repository-setup-content">
-      <RepositoryHeader />
-      <div className="repository-third-party">
-        Third-party software — not reviewed, hosted, sold, or endorsed by
-        Neutron.
-      </div>
+      <RepositoryHeader uiMode={uiMode} />
+      {uiMode === "developer" ? (
+        <div className="repository-third-party">
+          Third-party software — not reviewed, hosted, sold, or endorsed by
+          Neutron.
+        </div>
+      ) : null}
       {availableCount > 0 && !final ? (
         <label className="repository-select-all">
           <input
@@ -270,7 +289,7 @@ function RepositoryReview({
         </label>
       ) : null}
       <div className="repository-package-list">
-        {loaded.packages.map((pkg) => {
+        {displayedPackages.map((pkg) => {
           const installed = loaded.reconciliation[pkg.id];
           const selected = selection.selected.has(pkg.id);
           const automatic = selection.automatic.has(pkg.id);
@@ -303,15 +322,17 @@ function RepositoryReview({
                     {formatAppVersionLabel(pkg.version)}
                   </span>
                 </div>
-                <span className="repository-package-status">
+                {uiMode === "developer" || !final || automatic ? (
+                  <span className="repository-package-status">
                   {installed?.installed
                     ? `Installed${installed.version ? ` ${formatAppVersionLabel(installed.version)}` : ""} — skipped`
                     : automatic
-                      ? "Required dependency"
+                      ? uiMode === "developer" ? "Required dependency" : "Required app"
                       : selected
                         ? "Selected"
                         : "Not selected"}
-                </span>
+                  </span>
+                ) : null}
               </div>
               {installed?.issues.length ? (
                 <div className="settings-warning" role="alert">
@@ -320,12 +341,16 @@ function RepositoryReview({
               ) : null}
               {requiredBy.length ? (
                 <div className="repository-required-by">
-                  Required by {requiredBy.join(", ")}
+                  Required by {requiredBy.map((appId) => uiMode === "developer"
+                    ? appId
+                    : loaded.packages.find(({ id }) => id === appId)
+                        ?.preparedPackage.manifest.name ?? appId).join(", ")}
                 </div>
               ) : null}
               <PackageDetails
                 pkg={pkg}
                 showPermissions={selected}
+                uiMode={uiMode}
               />
             </article>
           );
@@ -409,7 +434,7 @@ function RepositoryReview({
   );
 }
 
-function RepositoryHeader() {
+function RepositoryHeader({ uiMode }: { uiMode: KernelUiMode }) {
   const { loaded, offeredBy, reference } = useRepositorySetupStore();
   if (!loaded || !reference) return null;
   const links = (["website", "terms", "privacy", "support"] as const)
@@ -422,15 +447,19 @@ function RepositoryHeader() {
     <>
       <section className="repository-normal-summary" data-source="repository">
         <strong>{loaded.info.name}</strong>
-        <span>Provider claim: {loaded.info.provider.name} · unverified</span>
+        <span>
+          {uiMode === "developer"
+            ? `Provider claim: ${loaded.info.provider.name} · unverified`
+            : `From ${loaded.info.provider.name} · provider not verified`}
+        </span>
         <p>
-          Neutron verified the repository&apos;s certified response and pinned
-          manifest integrity. That does not verify who published or reviewed the
-          software.
+          {uiMode === "developer"
+            ? "Neutron verified the repository's certified response and pinned manifest integrity. That does not verify who published or reviewed the software."
+            : "Package checks do not verify app safety."}
         </p>
       </section>
       <ConsentTechnicalDetails
-        summary="Repository technical details"
+        summary={uiMode === "developer" ? "Repository technical details" : "About this source"}
       >
       <section className="repository-unverified" data-source="repository">
       <h3>Repository-provided — unverified</h3>
@@ -513,11 +542,13 @@ function RepositoryHeader() {
 function PackageDetails({
   pkg,
   showPermissions,
+  uiMode,
 }: {
   pkg: NonNullable<
     ReturnType<typeof useRepositorySetupStore.getState>["loaded"]
   >["packages"][number];
   showPermissions: boolean;
+  uiMode: KernelUiMode;
 }) {
   const dependencies = Object.values(
     pkg.preparedPackage.manifest.dependencies ?? {},
@@ -525,11 +556,11 @@ function PackageDetails({
   return (
     <div className="repository-package-review">
       {showPermissions ? (
-        <PermissionConsequences permissions={pkg.permissions} />
+        <PermissionConsequences permissions={pkg.permissions} mode={uiMode} />
       ) : null}
       <ConsentTechnicalDetails
         className="repository-package-details"
-        summary="Package technical details"
+        summary={uiMode === "developer" ? "Package technical details" : "Details"}
       >
       <dl className="repository-facts">
           <Fact
@@ -690,7 +721,7 @@ function repositoryCapabilityAuthorityConfig(
   }
 }
 
-function RepositoryError() {
+function RepositoryError({ uiMode }: { uiMode: KernelUiMode }) {
   const { error, errorStage } = useRepositorySetupStore();
   return (
     <div className="call">
@@ -702,9 +733,9 @@ function RepositoryError() {
         {error ?? "Repository setup failed"}
       </div>
       <p>
-        No further repository request will be made unless you reload this setup.
-        Neutron will reconcile any interrupted install journal before the next
-        attempt.
+        {uiMode === "developer"
+          ? "No further repository request will be made unless you reload this setup. Neutron will reconcile any interrupted install journal before the next attempt."
+          : "You can try again. Neutron will check any interrupted installation first."}
       </p>
       <div className="btn-actions">
         <button

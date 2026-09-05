@@ -339,11 +339,26 @@ export async function reviewRepositorySelection(): Promise<void> {
     return;
   }
   const ids = packages.map(({ manifest }) => manifest.id).sort();
-  activeCompiled = null;
-  activeDeployment = null;
-  compiledPackageIds = [];
-  repositorySetupState.compiling();
   try {
+    if (
+      activeCompiled &&
+      activeDeployment &&
+      matchesCompiledSelection(state.selection.selected)
+    ) {
+      // Going back without changing the selected package set keeps the exact
+      // reviewed build. The session still verifies its sealed package bytes,
+      // and deployment still rechecks the live installed baseline.
+      const deployment = activeSession.getPreparedDeployment(
+        packages,
+        activeCompiled,
+      );
+      repositorySetupState.review(deployment.review);
+      return;
+    }
+    activeCompiled = null;
+    activeDeployment = null;
+    compiledPackageIds = [];
+    repositorySetupState.compiling();
     const compiled = await activeSession.compile(packages);
     if (attempt !== generation) return;
     const deployment = activeSession.getPreparedDeployment(packages, compiled);
@@ -353,6 +368,9 @@ export async function reviewRepositorySelection(): Promise<void> {
     repositorySetupState.review(deployment.review);
   } catch (error) {
     if (attempt !== generation) return;
+    activeCompiled = null;
+    activeDeployment = null;
+    compiledPackageIds = [];
     repositorySetupState.error("compile", error);
   }
 }
@@ -360,9 +378,6 @@ export async function reviewRepositorySelection(): Promise<void> {
 export function backToRepositorySelection(): void {
   const state = useRepositorySetupStore.getState();
   if (!state.loaded || !state.selection) return;
-  activeCompiled = null;
-  activeDeployment = null;
-  compiledPackageIds = [];
   repositorySetupState.selection(state.rootIds, state.selection);
 }
 
@@ -481,15 +496,24 @@ export function clearRepositorySetupForOwnerChange(): void {
 function setRoots(roots: Set<string>): void {
   const state = useRepositorySetupStore.getState();
   if (!state.loaded) return;
-  activeCompiled = null;
-  activeDeployment = null;
-  compiledPackageIds = [];
   const selection = resolveRepositorySelection({
     packages: state.loaded.packages,
     reconciliation: state.loaded.reconciliation,
     roots,
   });
+  if (!matchesCompiledSelection(selection.selected)) {
+    activeCompiled = null;
+    activeDeployment = null;
+    compiledPackageIds = [];
+  }
   repositorySetupState.selection([...roots], selection);
+}
+
+function matchesCompiledSelection(selected: ReadonlySet<string>): boolean {
+  return (
+    selected.size === compiledPackageIds.length &&
+    compiledPackageIds.every((appId) => selected.has(appId))
+  );
 }
 
 function selectedPackages(
