@@ -151,6 +151,34 @@ const RECEIPT_PATH = path.join(
   "apps/kernel/certified-assets-qualification-receipt.json",
 );
 const BEHAVIOR_APP_ID = "ca_qualification_aux_1" as const;
+const qualificationStartedAt = performance.now();
+
+async function qualificationStage<T>(
+  stage: string,
+  execute: () => Promise<T>,
+): Promise<T> {
+  const startedAt = performance.now();
+  const report = (status: "started" | "passed" | "failed") =>
+    console.log(JSON.stringify({
+      schema: "neutron.kernel.certified-assets-qualification-progress.v1",
+      stage,
+      status,
+      elapsed_ms: Math.round(performance.now() - qualificationStartedAt),
+      stage_ms: Math.round(performance.now() - startedAt),
+    }));
+  report("started");
+  try {
+    const result = await execute();
+    report("passed");
+    return result;
+  } catch (error) {
+    report("failed");
+    // The workset still settles every case. Preserve a failure immediately in
+    // case the command deadline is reached before the aggregate can be thrown.
+    console.error(formatQualificationFailure(error));
+    throw error;
+  }
+}
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
   if (args.length !== 1 || args[0] !== "--release") {
@@ -173,13 +201,15 @@ async function executeReleaseQualification(): Promise<void> {
   let receiptToPublish: CertifiedAssetsQualificationReceipt | undefined;
   let qualificationFailure: Readonly<{ error: unknown }> | undefined;
   try {
-    const environmentPromise = launchIsolatedQualificationPocketIc({
-      repositoryRoot: REPOSITORY_ROOT,
-    }).then((launched) => {
+    const environmentPromise = qualificationStage("environment", () =>
+      launchIsolatedQualificationPocketIc({ repositoryRoot: REPOSITORY_ROOT }),
+    ).then((launched) => {
       environment = launched;
       return launched;
     });
-    const archivesPromise = buildReleaseQualificationArchives(temporaryRoot);
+    const archivesPromise = qualificationStage("packages", () =>
+      buildReleaseQualificationArchives(temporaryRoot),
+    );
     const deploymentPromise = awaitQualificationPrerequisites([
       environmentPromise,
       archivesPromise,
@@ -193,16 +223,19 @@ async function executeReleaseQualification(): Promise<void> {
       return {
         environment: launched,
         replicaTimeStart,
-        deployment: await prepareReleaseQualificationDeployment(
-          archives,
-          launched.rootKeyBase64,
+        deployment: await qualificationStage("compile", () =>
+          prepareReleaseQualificationDeployment(archives, launched.rootKeyBase64),
         ),
       };
     });
     const [focusedMotoko, physicalOneOver, prepared] =
       await awaitQualificationPrerequisites([
-        runFocusedMotokoGates(REPOSITORY_ROOT),
-        runPhysicalOneOverManifestGate(REPOSITORY_ROOT),
+        qualificationStage("motoko", () =>
+          runFocusedMotokoGates(REPOSITORY_ROOT),
+        ),
+        qualificationStage("manifest-one-over", () =>
+          runPhysicalOneOverManifestGate(REPOSITORY_ROOT),
+        ),
         deploymentPromise,
       ] as const);
     const {
@@ -225,18 +258,18 @@ async function executeReleaseQualification(): Promise<void> {
     const {
       boundedPhysicalSample,
       wallNormalization,
-    } = await runBoundedPhysicalSample({
+    } = await qualificationStage("physical", () => runBoundedPhysicalSample({
       environment: qualificationEnvironment,
       deployment,
-    });
-    const { samples, browserCors } = await debugRunOperationalSamples({
+    }));
+    const { samples, browserCors } = await qualificationStage("operational", () => debugRunOperationalSamples({
       environment: qualificationEnvironment,
       deployment,
-    });
-    const { upgrade, hostile } = await runUpgradeAndHostileGates({
+    }));
+    const { upgrade, hostile } = await qualificationStage("upgrade-and-hostile", () => runUpgradeAndHostileGates({
       environment: qualificationEnvironment,
       deployment,
-    });
+    }));
     const gatewayPhaseEnd =
       await qualificationEnvironment.readReplicaTimeNs();
     const replicaTimeEnd =
@@ -302,7 +335,9 @@ async function executeReleaseQualification(): Promise<void> {
       ...unsigned,
       receipt_sha256: qualificationReceiptSha256(unsigned),
     };
-    await assertCertifiedAssetsQualificationReceipt(receipt);
+    await qualificationStage("validate-receipt", () =>
+      assertCertifiedAssetsQualificationReceipt(receipt),
+    );
     receiptToPublish = receipt;
   } catch (error) {
     qualificationFailure = { error };
@@ -310,13 +345,15 @@ async function executeReleaseQualification(): Promise<void> {
     const cleanupFailures: unknown[] = [];
     if (environment !== undefined) {
       try {
-        await environment.stop();
+        await qualificationStage("stop-environment", () => environment!.stop());
       } catch (error) {
         cleanupFailures.push(error);
       }
     }
     try {
-      await rm(temporaryRoot, { recursive: true, force: true });
+      await qualificationStage("remove-packages", () =>
+        rm(temporaryRoot, { recursive: true, force: true }),
+      );
     } catch (error) {
       cleanupFailures.push(error);
     }
@@ -343,9 +380,10 @@ async function executeReleaseQualification(): Promise<void> {
   }
   // Close the source/check race across environment cleanup. This revalidates
   // the complete candidate and runner closure immediately before publication.
-  await writeReceiptAtomically(
-    await qualificationReceiptBytes(receiptToPublish),
-  );
+  const completedReceipt = receiptToPublish;
+  await qualificationStage("publish-receipt", async () => writeReceiptAtomically(
+    await qualificationReceiptBytes(completedReceipt),
+  ));
 }
 
 // The source-owned execution helpers below deliberately expose no driver,
@@ -594,7 +632,10 @@ export async function debugRunOperationalSamples(input: {
     work,
     CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE
       .operational_sample_concurrency,
-    (item) => runOperationalQualificationSample(input, item),
+    (item) => qualificationStage(
+      `sample/${item.definition.id}/${item.sampleIndex}`,
+      () => runOperationalQualificationSample(input, item),
+    ),
   );
   const browserSources = results.flatMap(({ browserSource }) =>
     browserSource === undefined ? [] : [browserSource]
@@ -606,7 +647,7 @@ export async function debugRunOperationalSamples(input: {
   }
   const browserSource = browserSources[0]!;
   const responseHeaders = new Map(browserSource.response_headers);
-  const browserCors = await verifyPortableCorsInChromium({
+  const browserCors = await qualificationStage("browser-cors", () => verifyPortableCorsInChromium({
     url: browserSource.url,
     status: 200,
     body_bytes: browserSource.body.bytes,
@@ -626,7 +667,7 @@ export async function debugRunOperationalSamples(input: {
       "ic-certificateexpression",
       "portable sample zero",
     ),
-  });
+  }));
   return {
     samples: results.map(({ sample }) => sample),
     browserCors,
@@ -655,7 +696,9 @@ async function runOperationalQualificationSample(
   work: OperationalQualificationWork,
 ): Promise<OperationalQualificationResult> {
   const { definition, sampleIndex, canisterId } = work;
-  const installed = await installQualificationCanister(input, canisterId);
+  const installed = await qualificationStage(`install/${definition.id}/${sampleIndex}`, () =>
+    installQualificationCanister(input, canisterId),
+  );
   const verifyGateway =
     definition.id === "publication_lifecycle" ||
     definition.metrics.some((metric) => metric === "proof_bytes");

@@ -45,6 +45,7 @@ import {
 import { MarkdownMessage } from "./markdown_message.tsx";
 import { ModelPicker } from "./model_picker.tsx";
 import { ToolbarMenu } from "./toolbar_menu.tsx";
+import { parseAgentCommand } from "./agent_work.ts";
 import "./style.scss";
 
 const TARGET = "app:agent:background" as MsgBusEndpointId;
@@ -216,15 +217,28 @@ function App() {
     }
   };
 
-  const send = async () => {
-    const text = draft.trim();
+  const send = async (override?: string, enqueue = false) => {
+    const text = (override ?? draft).trim();
     if (
       !text ||
       !snapshot?.connected ||
-      !snapshot.selectedModelId ||
-      snapshot.generatingHere ||
-      chatPending
+      !snapshot.selectedModelId || busy
     ) {
+      return;
+    }
+    const command = parseAgentCommand(text);
+    if (command.kind === "status") {
+      setDraft("");
+      void refreshStatus();
+      return;
+    }
+    if (command.kind === "pause" || command.kind === "clear") {
+      if (await run(command.kind === "pause" ? "agent_stop" : "agent_clear_goal")) setDraft("");
+      return;
+    }
+    if (snapshot.generatingHere || chatPending || enqueue || command.kind === "queue") {
+      const queued = command.kind === "queue" ? command.text : text;
+      if (await run("agent_enqueue", { text: queued, mode: enqueue || command.kind === "queue" ? "queue" : "steer" })) setDraft("");
       return;
     }
     setDraft("");
@@ -251,10 +265,11 @@ function App() {
           },
         },
         {
-          timeout: 15 * 60,
+          timeout: 0,
           onProgress: (value) => {
             const progress = asProgress(value);
             if (!progress) return;
+            if (progress.type === "refresh") { void refreshStatus(); return; }
             if (progress.type === "turn_start") {
               turnStarted = true;
               statusGenerationRef.current += 1;
@@ -381,21 +396,49 @@ function App() {
 
         {snapshot.error && <ErrorNotice text={snapshot.error} />}
 
-        <form className="ora-composer">
+        {snapshot.work?.goal && (
+          <section className="ora-goal" aria-label="Current goal">
+            <div className="ora-goal-heading">
+              <strong>Goal · {snapshot.work.goal.status.replace("_", " ")}</strong>
+              {generationActive ? (
+                <button type="button" onClick={() => void run("agent_stop")} disabled={busy}>Pause</button>
+              ) : (
+                <button type="button" onClick={() => void send("/goal resume")} disabled={busy || snapshot.generating}>Resume</button>
+              )}
+              <button type="button" onClick={() => void run("agent_clear_goal")} disabled={busy}>Clear</button>
+            </div>
+            <p>{snapshot.work.goal.objective}</p>
+            {snapshot.work.goal.checkpoint && <details><summary>Progress checkpoint</summary><p>{snapshot.work.goal.checkpoint}</p></details>}
+          </section>
+        )}
+        {snapshot.work && (snapshot.work.steps > 0 || snapshot.work.queued > 0) && (
+          <div className="ora-work-status" role="status">
+            {snapshot.work.steps} steps · {(snapshot.work.inputTokens + snapshot.work.outputTokens).toLocaleString()} tokens
+            {snapshot.work.wakeAt !== null && ` · Sleeping until ${new Date(snapshot.work.wakeAt).toLocaleTimeString()}`}
+            {snapshot.work.queued > 0 && <span title={snapshot.work.nextMessage ?? ""}> · {snapshot.work.queued} queued</span>}
+            {!anyGenerationActive && snapshot.work.queued > 0 && (
+              <button type="button" disabled={busy} onClick={() => void send("Continue with the queued requests.")}>Run queued</button>
+            )}
+          </div>
+        )}
+        <form className="ora-composer" onSubmit={(event) => event.preventDefault()}>
           <textarea
             ref={textareaRef}
             value={draft}
             rows={1}
             aria-label="Message"
-            placeholder={snapshot.selectedModelId ? "Message" : "Select a model"}
+            placeholder={snapshot.selectedModelId ? generationActive ? "Steer the agent…" : "Message or /goal…" : "Select a model"}
             disabled={
-              !snapshot.selectedModelId || generationActive || busy
+              !snapshot.selectedModelId || busy
             }
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                if (!generationActive) void send();
+                void send();
+              } else if (event.key === "Tab" && generationActive && draft.trim()) {
+                event.preventDefault();
+                void send(undefined, true);
               }
             }}
           />
@@ -455,6 +498,9 @@ function App() {
                 <IoSparklesOutline aria-hidden="true" />
               </IconButton>
               {generationActive ? (
+                <>
+                <button type="button" className="ora-queue-button" disabled={!draft.trim() || busy} onClick={() => void send(undefined, true)} title="Queue for the next work cycle (Tab)">Queue</button>
+                <IconButton label="Steer now" disabled={!draft.trim() || busy} onClick={() => void send()}><IoArrowUp aria-hidden="true" /></IconButton>
                 <IconButton
                   label="Stop"
                   type="button"
@@ -463,13 +509,14 @@ function App() {
                 >
                   <IoStop aria-hidden="true" />
                 </IconButton>
+                </>
               ) : (
                 <IconButton
                   label="Send"
                   type="button"
                   className="ora-send ora-send--active"
                   disabled={
-                    !draft.trim() || !snapshot.selectedModelId || busy
+                    !draft.trim() || !snapshot.selectedModelId || busy || snapshot.generating
                   }
                   onClick={() => void send()}
                 >
@@ -602,7 +649,7 @@ function asSnapshot(value: JsonValue): AgentSnapshot {
 
 function asProgress(value: JsonValue): AgentProgress | null {
   if (!isJsonObject(value) || typeof value.type !== "string") return null;
-  if (value.type !== "turn_start" && value.type !== "tool") {
+  if (!["turn_start", "tool", "work", "message", "refresh"].includes(value.type)) {
     return null;
   }
   return value as AgentProgress;

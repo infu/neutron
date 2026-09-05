@@ -25,11 +25,23 @@ runner completes in a fresh isolated PocketIC instance. It owns
 evidence-import override.
 
 The public qualification command runs the evidence worker in a private process
-group and private temporary directory. It allows 170 seconds of work and has
-an absolute 180-second command ceiling. The ordinary timeout terminates the
+group and private temporary directory. It allows 290 seconds of work and has
+an absolute 300-second command ceiling. This includes fixture packaging,
+uncached compilation, fresh installs, and the complete runtime/gateway workload
+on a shared build host; it does not change a Kernel runtime or qualification
+metric. The ordinary timeout terminates the
 complete PocketIC process tree and removes that directory. The emergency
-180-second watchdog guarantees process-tree termination but may leave its
+300-second watchdog guarantees process-tree termination but may leave its
 isolated temporary directory for later operating-system cleanup.
+
+The worker prints stage names, elapsed milliseconds, and immediate failure
+diagnostics while still settling the complete workset. These diagnostic lines
+are not qualification evidence; only the validated pass-only receipt qualifies
+the candidate. Workload generation reuses its SHA-256 input and digest buffers
+while retaining the contract's exact seed, step, block derivation, and fixture
+sizes. Case runtimes share one control client per isolated environment so the
+client's operation queue coordinates concurrent cases without busy retries
+between their sample transports.
 
 From the repository root, freeze and check the candidate input before running:
 

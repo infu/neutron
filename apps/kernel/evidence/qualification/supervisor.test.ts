@@ -4,11 +4,13 @@ import path from "node:path";
 import { expect, test } from "bun:test";
 import {
   QUALIFICATION_COMMAND_LIMIT_MS,
+  QUALIFICATION_WORK_LIMIT_MS,
   superviseQualificationProcess,
 } from "./supervisor.ts";
 
 test("qualification timeout kills its process tree and removes private state", async () => {
-  expect(QUALIFICATION_COMMAND_LIMIT_MS).toBe(180_000);
+  expect(QUALIFICATION_COMMAND_LIMIT_MS).toBe(300_000);
+  expect(QUALIFICATION_COMMAND_LIMIT_MS - QUALIFICATION_WORK_LIMIT_MS).toBe(10_000);
   const parent = await mkdtemp(path.join(tmpdir(), "ca-supervisor-test-"));
   const pidFile = path.join(parent, "pids.json");
   let privateRoot = "";

@@ -1,7 +1,7 @@
 import { IDL } from "@dfinity/candid";
 import type { HttpAgent } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
-import { createHash } from "node:crypto";
+import { CryptoHasher } from "bun";
 import {
   PocketIcRestClient,
   type PocketIcCanisterCall,
@@ -99,6 +99,11 @@ export type QualificationSampleRuntimeInput = Readonly<{
   verifyGateway: boolean;
 }>;
 
+const environmentClients = new WeakMap<
+  QualificationSampleRuntimeEnvironment,
+  PocketIcRestClient
+>();
+
 /**
  * Construct the release runtime from the source-owned isolated environment.
  * There is intentionally no caller-supplied client or verifier on this path.
@@ -106,10 +111,15 @@ export type QualificationSampleRuntimeInput = Readonly<{
 export function createQualificationSampleRuntime(
   input: QualificationSampleRuntimeInput,
 ): QualificationSampleRuntime {
-  return createRuntime(
-    input,
-    new PocketIcRestClient(input.environment.controlUrl),
-  );
+  // PocketIC admits one control operation at a time. Keep its client queue
+  // shared across scopes and cases, rather than repeatedly sending busy
+  // requests (including large upload bodies) from independent clients.
+  let client = environmentClients.get(input.environment);
+  if (client === undefined) {
+    client = new PocketIcRestClient(input.environment.controlUrl);
+    environmentClients.set(input.environment, client);
+  }
+  return createRuntime(input, client);
 }
 
 /**
@@ -269,13 +279,20 @@ class QualificationSampleRuntimeImpl
       throw new Error("Deterministic workload length is outside its bound");
     }
     const output = new Uint8Array(length);
+    // The contract hashes seed || step_u32be || nul || block_u32be. Build that
+    // exact input once: a 64 MiB fixture needs over two million block hashes,
+    // so allocating its constant prefix and making four updates per block
+    // needlessly dominates the release runner's wall-clock budget.
+    const input = new Uint8Array(this.#sampleSeed.length + 9);
+    const digest = new Uint8Array(32);
+    input.set(this.#sampleSeed);
+    const fields = new DataView(input.buffer);
+    fields.setUint32(this.#sampleSeed.length, step, false);
     for (let block = 0, offset = 0; offset < length; block += 1) {
-      const digest = createHash("sha256")
-        .update(this.#sampleSeed)
-        .update(uint32Bytes(step))
-        .update(new Uint8Array([0]))
-        .update(uint32Bytes(block))
-        .digest();
+      fields.setUint32(input.length - 4, block, false);
+      // This runner already requires Bun. Its native one-shot API also writes
+      // into a retained digest buffer, avoiding millions of hash allocations.
+      CryptoHasher.hash("sha256", input, digest);
       const take = Math.min(digest.byteLength, length - offset);
       output.set(digest.subarray(0, take), offset);
       offset += take;

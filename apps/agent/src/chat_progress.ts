@@ -8,7 +8,11 @@ export function applyTranscriptProgress(
   current: AgentSnapshot | null,
   progress: AgentProgress,
 ): AgentSnapshot | null {
-  if (!current || progress.type === "tool") return current;
+  if (!current || progress.type === "tool" || progress.type === "refresh") return current;
+  if (progress.type === "work") return { ...current, work: progress.work };
+  if (progress.type === "message") {
+    return { ...current, messages: [...current.messages.filter((entry) => entry.id !== progress.message.id), progress.message] };
+  }
   if (current.messages.some((message) => message.id === progress.user.id)) {
     return {
       ...current,
@@ -30,6 +34,6 @@ export function applyToolProgress(
   _current: AgentToolActivity | null,
   progress: AgentProgress,
 ): AgentToolActivity | null {
-  if (progress.type === "turn_start") return null;
-  return progress.activity;
+  if (progress.type === "tool") return progress.activity;
+  return progress.type === "turn_start" ? null : _current;
 }

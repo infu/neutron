@@ -1148,6 +1148,37 @@
     }
   }
 
+  .ora-goal {
+    border: 1px solid var(--nt-line-strong);
+    border-radius: 3px;
+    padding: 10px 12px;
+    font-size: 12px;
+    max-height: 28vh;
+    overflow: auto;
+    p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    summary { cursor: pointer; }
+  }
+
+  .ora-goal-heading, .ora-work-status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    strong { margin-right: auto; }
+  }
+
+  .ora-work-status { font-size: 11px; padding: 6px 2px; }
+
+  .ora-goal button, .ora-work-status button, .ora-queue-button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    padding: 4px;
+    font-size: 12px;
+    &:disabled { opacity: 0.45; cursor: default; }
+  }
+
   @keyframes ora-spin {
     to { transform: rotate(360deg); }
   }

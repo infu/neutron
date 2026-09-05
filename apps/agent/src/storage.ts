@@ -1,6 +1,8 @@
 import type { ModelMessage } from "ai";
+import { normalizeAgentWork } from "./agent_work.ts";
 import type {
   AgentChatTileEndpointId,
+  AgentWorkState,
   OpenRouterModel,
   PendingStateChangeAttempt,
   PendingStateChangeJournal,
@@ -23,6 +25,9 @@ const CONVERSATION_PREFIX = "conversation:";
 // v307 rewrites conversation records, so keep the v308 tile model outside
 // that record while old frames finish closing during an upgrade.
 const CONVERSATION_MODEL_PREFIX = "conversation-model:";
+// Released residents rewrite conversation records. Keep goal and inbox state
+// in a separate key, so their last history write cannot erase ongoing work.
+const WORK_PREFIX = "conversation-work:";
 const MAX_MESSAGES = 160;
 const MAX_MODELS = 600;
 const MAX_TEXT = 64_000;
@@ -61,6 +66,34 @@ export class AgentStorage {
       }
     });
     return new AgentStorage(await requestResult(request));
+  }
+
+  async loadWork(historyId: AgentChatTileEndpointId): Promise<AgentWorkState> {
+    const transaction = this.database.transaction(STORE, "readonly");
+    return normalizeAgentWork(await requestResult(transaction.objectStore(STORE)
+      .get(`${WORK_PREFIX}${requireAgentChatTileEndpoint(historyId)}`)));
+  }
+
+  async updateWork(
+    historyId: AgentChatTileEndpointId,
+    update: (work: AgentWorkState) => void,
+    conversation?: PersistedConversationState,
+  ): Promise<AgentWorkState> {
+    const id = requireAgentChatTileEndpoint(historyId);
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const key = `${WORK_PREFIX}${id}`;
+    const work = normalizeAgentWork(await requestResult(store.get(key)));
+    try {
+      update(work);
+      store.put(work, key);
+      if (conversation) store.put(conversationRecord(conversation), conversationKey(id));
+    } catch (error) {
+      transaction.abort();
+      throw error;
+    }
+    await transactionDone(transaction);
+    return work;
   }
 
   async loadShared(): Promise<PersistedAgentSharedState> {
@@ -244,6 +277,7 @@ export class AgentStorage {
     const store = transaction.objectStore(STORE);
     store.delete(conversationKey(id));
     store.delete(conversationModelKey(id));
+    store.delete(`${WORK_PREFIX}${id}`);
     await transactionDone(transaction);
   }
 
@@ -259,6 +293,7 @@ export class AgentStorage {
         : normalizePersistedSharedState(storedShared).selectedModelId;
     const keys = await requestResult(store.getAllKeys());
     for (const key of keys) {
+      if (typeof key === "string" && key.startsWith(WORK_PREFIX)) store.delete(key);
       if (typeof key === "string" && key.startsWith(CONVERSATION_PREFIX)) {
         const id = requireAgentChatTileEndpoint(
           key.slice(CONVERSATION_PREFIX.length),
@@ -445,7 +480,9 @@ function normalizeMessages(value: unknown): TranscriptMessage[] {
 
 export function boundTranscriptMessages(
   messages: readonly TranscriptMessage[],
+  reservedBytes = 0,
 ): TranscriptMessage[] {
+  const budget = Math.max(0, MAX_VISIBLE_TRANSCRIPT_BYTES - reservedBytes);
   const units: TranscriptMessage[][] = [];
   for (const message of messages.slice(-MAX_MESSAGES)) {
     if (message.role === "user" || units.length === 0) {
@@ -459,7 +496,7 @@ export function boundTranscriptMessages(
   for (let index = units.length - 1; index >= 0; index -= 1) {
     const unit = units[index]!;
     const bytes = jsonBytes(unit);
-    if (used + bytes <= MAX_VISIBLE_TRANSCRIPT_BYTES) {
+    if (used + bytes <= budget) {
       selected.unshift(unit);
       used += bytes;
       continue;
@@ -469,7 +506,7 @@ export function boundTranscriptMessages(
       for (let messageIndex = unit.length - 1; messageIndex >= 0; messageIndex -= 1) {
         const message = unit[messageIndex]!;
         const messageBytes = jsonBytes(message);
-        if (used + messageBytes <= MAX_VISIBLE_TRANSCRIPT_BYTES) {
+        if (used + messageBytes <= budget) {
           newest.unshift(message);
           used += messageBytes;
         }
@@ -561,7 +598,7 @@ function normalizeModelTurn(value: unknown): ModelMessage[] | null {
     ) ||
     cloned[0]?.role !== "user" ||
     typeof cloned[0]?.content !== "string" ||
-    cloned.slice(1).some((message) => message.role === "user")
+    !cloned.some((message) => message.role !== "user")
   ) {
     return null;
   }

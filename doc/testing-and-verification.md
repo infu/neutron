@@ -400,8 +400,11 @@ cycle cost, proof size, allocator behavior, or upgrade safety at the
 100,000-entry production ceiling. The separate 100,001 declaration rejection
 proves only the schema/admission ceiling.
 
-The `certified-assets:qualify` command has an absolute three-minute wall-clock
-ceiling and owns a private process group and temporary directory. Its normal
+The `certified-assets:qualify` command has an absolute five-minute wall-clock
+ceiling covering packaging, uncached compilation, fresh installs, and all
+runtime/gateway checks. This local process watchdog does not change a Kernel
+runtime or qualification metric. The command owns a private process group and
+temporary directory. Its normal
 timeout stops PocketIC descendants and removes that state; the emergency
 hard-stop still guarantees descendant termination but may leave the isolated
 temporary directory for later operating-system cleanup.

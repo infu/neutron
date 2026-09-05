@@ -163,6 +163,21 @@ test("agent tool routing rejects non-canonical app ids", async () => {
   ).rejects.toThrow("Invalid endpoint target");
 });
 
+test("discovery includes apps after 128 and exposes undisplayed endpoint representatives", async () => {
+  const { bus } = fakeBus();
+  bus.listApps = async () => ({ apps: Array.from({ length: 129 }, (_, index) => ({ id: `app${index}` })) });
+  bus.listEndpoints = async () => ({ endpoints: Array.from({ length: 17 }, (_, index) => ({
+    appId: "files", role: "tile", tileId: `view${index}`, connected: true,
+    endpoint: `app:files:tile:view${index}:instance:one`,
+  })) });
+  const tools = createNeutronAgentTools({ bus, onEvent: () => undefined });
+  expect(await execute(tools.list_apps, {})).toMatchObject({ apps: expect.arrayContaining([{ id: "app128" }]) });
+  const listed = await execute(tools.list_app_tools, { appId: "files" });
+  expect(listed).toMatchObject({ additionalInstances: ["app:files:tile:view16:instance:one"] });
+  const exact = await execute(tools.list_app_tools, { appId: "files", target: "app:files:tile:view16:instance:one" });
+  expect(JSON.stringify(exact)).toContain('"target":"app:files:tile:view16:instance:one"');
+});
+
 test("agent reads one current schema and re-reads before a call", async () => {
   const { bus, calls, timeouts } = fakeBus();
   const events: string[] = [];

@@ -99,7 +99,7 @@ export function createNeutronAgentTools({
           if (!isJsonObject(value) || !Array.isArray(value.apps)) {
             throw new Error("Invalid installed app list");
           }
-          return boundResult({ apps: value.apps.slice(0, 128) });
+          return boundResult({ apps: value.apps });
         }),
     }),
 
@@ -324,13 +324,12 @@ async function listAppTools(
     );
   }
 
-  const selectedIds = new Set(selected.map((item) => String(item.endpoint)));
+  const selectedIds = new Set(selected.slice(0, 16).map((item) => String(item.endpoint)));
   return {
     appId,
     tools,
     additionalInstances: endpoints
       .filter((endpoint) => !selectedIds.has(String(endpoint.endpoint)))
-      .slice(0, 64)
       .map((endpoint) => String(endpoint.endpoint)),
   };
 }

@@ -11,9 +11,9 @@ another tile's conversation. A tile keeps its history across reloads and
 workspace moves because its instance id is durable, while a newly opened tile
 starts empty. The OpenRouter connection and model catalog stay shared in the
 resident process. Model selection belongs to each tile; changing it also sets
-the initial model for future tiles without changing any existing tile. Turns
-from different tiles can run in parallel, while the same tile remains limited
-to one turn across all of its open browser tabs. Shared connection changes and
+the initial model for future tiles without changing any existing tile. Kernel Agent Mode permits one active root across tiles. Each tile remains
+limited to one turn across all of its open browser tabs; ordinary chat outside
+Agent Mode can run in different tiles concurrently. Shared connection changes and
 the explicit clear-all action are blocked while any turn is active.
 The legacy shared conversation stored before tile-scoped histories had no tile
 identity, so it is moved once to the first authenticated Agent tile that loads
@@ -40,8 +40,8 @@ challenges exclude raw tool arguments. A v2 external signed-call challenge is
 the deliberate exception: it includes the complete canonical prepared argument
 array shown for approval. The runtime makes one separate `generateText` request
 with the selected OpenRouter model and one forced `permission_decision` tool.
-It receives the current owner goal and those permission facts, not the
-transcript, tool output, credentials, private keys, or transport ids.
+It receives the original owner goal, applied steering instructions, and those
+permission facts, not the transcript, tool output, credentials, private keys, or transport ids.
 
 Tools that opt into both `"neutron:visibility":"same_app"` and
 `"neutron:audience":"agent_root"` are a separate automation surface. Kernel
@@ -76,12 +76,13 @@ delegated child. They require no owner dialog and have no navigation cooldown.
 The older `workspace.open_tile` tool remains the generic active-workspace
 compatibility route for other app endpoints.
 
-`move` deliberately leaves the current workspace active. `open`, `switch`,
-`focus`, or `expand` brings its target workspace into view. Making the Agent tile's workspace
-inactive disconnects its Kernel endpoint and can end the endpoint-bound turn
-before the tile receives the response. Agent should arrange destination tiles
-first and activate them only when it is ready to hand the visible workspace to
-the owner.
+`move` leaves the current workspace active. `open`, `switch`, `focus`, or
+`expand` brings its target workspace into view. During an Agent Mode root,
+Kernel keeps the originating tile's exact endpoint connected while its
+workspace is hidden. Closing that tile, replacing its endpoint, disabling Agent
+Mode, logging out, or updating the app still cancels the invocation. Work does
+not run after the browser closes; the saved goal is available to resume from a
+live tile.
 
 Agent discovery intentionally omits transient tray endpoints, and delegated
 agent calls cannot target them. Apps that want to support agents should expose
@@ -102,12 +103,14 @@ reports `retrySafe: false`. The model must inspect a read or status method to
 reconcile the outcome before attempting it again; it must not assume that a
 transport failure means the app made no change.
 
-If the whole model turn is interrupted after a state-changing call starts,
+If a model step is interrupted after a state-changing call starts,
 Agent atomically replaces the journal with a small warning turn. Startup does
 the same for a journal left by a browser or process failure, pairing it with
 the exact bounded owner prompt saved by the journal commit before Agent can
-accept another turn. A successfully persisted terminal turn clears the
-journal. If that turn's detailed tool transcript exceeds the durable history
+accept another turn. A successfully persisted complete step records its tool outcomes and clears
+the journal atomically, so later steps do not exhaust the journal with already
+recorded mutations. Structured stream errors, aborts, and output exhaustion
+never count as successful completion. If that turn's detailed tool transcript exceeds the durable history
 bound, Agent first retains a compact turn containing the owner prompt, final
 summary, and attempted endpoint/method pairs. The bounded journal records every
 distinct endpoint and method it can admit; once full, it records that condition
@@ -134,12 +137,40 @@ in them and treats every result as untrusted input, but this is a model
 instruction rather than a browser-enforced separation. Enable Web only when
 the prompt and retained conversation context are suitable to share.
 
-The OpenRouter runtime uses a bounded tool-step budget. Its final allowed step
-disables tools so the model must synthesize a response instead of ending on an
-unreported tool result. The owner can still press Stop, and model-step,
-invocation-lifetime, and delegated-call budgets apply independently. The model
-is explicitly required to summarize the result before ending instead of
-stopping directly after its last tool call.
+Use `/goal <objective>` to start durable goal work. `/goal` shows its state;
+`/goal pause`, `/goal resume`, and `/goal clear` control it. Stop also pauses an
+active goal and retains queued messages. The goal panel displays its objective,
+status, and latest checkpoint. A fresh reviewer context checks actual tool
+results against the objective and later owner instructions whenever the worker
+proposes completion or reaches a 32-step checkpoint. It returns complete,
+continue with concrete next work, or needs-input with an actual missing owner
+decision. It is separate from the permission judge and grants no additional
+authority. Review failure pauses the saved goal rather than accepting completion.
+
+Enter applies a new owner message at the next safe model step, after an
+in-flight tool call settles. Tab or **Queue** saves it for the next work cycle;
+`/queue <message>` also queues a request. Queued messages run in order. **Run
+queued** starts retained requests after an interruption. Steering wakes sleep,
+and applied messages are retained as user messages in model history. Goal and
+inbox records use separate IndexedDB keys so released residents cannot erase
+them when saving their older conversation shape.
+
+The `current_time` tool returns UTC time. `sleep` waits for a finite non-negative
+number of seconds without model requests, returning elapsed seconds and either
+`elapsed` or `steering`. Stop cancels sleep. Browser timer delays are chunked to
+avoid timer overflow; they do not cap the requested wait. Sleep runs between
+SDK requests, outside the model-step deadline. Individual app-tool and model
+request deadlines remain; Kernel roots have no total duration, call-count,
+permission-count, or start-rate cap. One root remains active at a time.
+
+Each complete model step is saved, and context compaction retains the owner
+request and recent quoted tool evidence when a single turn exceeds the model
+window. Omitted details are marked, with reconciliation required for uncertain
+mutations. The composer shows worker steps and reported token usage. Completed model
+messages appear while work continues; oversized progress falls back to a fresh
+bounded status response. The periodic status refresh also covers the message
+bus's existing progress-event limit.
+
 Models shown in the searchable picker must advertise both `tools` and
 `tool_choice`. The picker searches friendly names, exact model ids, and
 publisher names; it can filter for reasoning-capable or free models and shows

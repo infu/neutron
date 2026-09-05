@@ -606,11 +606,10 @@ app endpoints and keeps its active-workspace, exact-reuse behavior. Its optional
 view token and the `open` operation's optional view token share the one
 `neutron:tile:view` delivery path.
 
-Inactive tile frames stay mounted but disconnect from the Kernel message bus.
-Consequently, activating a different workspace through `open`, `switch`,
-`focus`, or `expand` can retire the source tile endpoint and end an endpoint-bound turn
-before its response reaches the tile. Agents can arrange a destination with
-`move` first and activate it only when that lifecycle effect is intended.
+Inactive tile frames stay mounted. The exact originating tile of a live Agent
+root keeps its Kernel connection across workspace switches. Closing the tile,
+replacing its endpoint, or losing runtime authority still retires the private
+port and cancels work. Other inactive tiles disconnect from the message bus.
 
 ## Tray Boundary
 
@@ -628,8 +627,11 @@ installation, targets that app's connected resident background, and names the
 exact granted entrypoint. Starting a granted root does not depend on browser
 focus or transient user activation. Each root or child invocation binds its
 node, parent, and root IDs; unguessable capability; target endpoint and session;
-installed app scope, role, and tool; expiry and cancellation state; and bounded
-depth, calls, parallel children, consent challenges, and progress.
+installed app scope, role, and tool; cancellation state; bounded depth,
+parallel children, per-call consent challenges, and progress envelopes. The
+single active root has no total runtime, call, consent-count, or start-rate
+limit. Root message-bus dispatch uses no deadline; individual delegated calls
+and permission decisions retain their deadlines.
 
 Every delegated endpoint call creates a child invocation for that exact target
 and tool; tray popouts cannot receive one. The Kernel resolves the invocation
@@ -669,7 +671,7 @@ Agent Mode remains a live invocation model. Enabling one exact agent version
 does not let the resident originate a root by itself: each root still begins
 through a live tile in that Agent installation and the exact granted entrypoint.
 A provider's separate root-audience tool can execute without UI only while that
-bounded depth-zero invocation remains live.
+depth-zero invocation remains live.
 
 ## Private Broker Actions
 
