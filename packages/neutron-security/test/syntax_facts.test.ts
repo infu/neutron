@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
   checkForDangerousSyntaxFacts,
+  checkForDangerousASTCode,
+  DANGER_RULE_ORDER,
   inspectMotokoSource,
   needsDangerousASTFallback,
 } from "../src/lib.ts";
@@ -91,6 +93,64 @@ test("compact inspection defers exact local and record names to the full AST", (
 
   expect(checkForDangerousSyntaxFacts(inspection, source)).toEqual([]);
   expect(needsDangerousASTFallback(inspection, source)).toBe(true);
+  const completeInspection = { ...inspection, patternFields: [] };
+  expect(checkForDangerousSyntaxFacts(completeInspection, source)).toEqual([]);
+  expect(needsDangerousASTFallback(completeInspection, source)).toBe(false);
+});
+
+test("complete compact facts retain named acquisitions and their finding order", () => {
+  const inspection = {
+    hasActorUrl: false,
+    dotMembers: ["cyclesAdd", "call_raw"],
+    patternFields: ["setTimer", "cyclesAdd", "regionNew"],
+  };
+  expect(needsDangerousASTFallback(inspection, "")).toBe(false);
+  expect(checkForDangerousSyntaxFacts(inspection)).toEqual([
+    "call_raw",
+    "cyclesAdd",
+    "regionMemory",
+    "systemTimer",
+  ]);
+});
+
+test("source syntax facts can be reused for compact and legacy AST checks", () => {
+  const source = "module { func use<system>() { ignore (with cycles = 1) async {}; ignore cyclesAdd } }";
+  const sourceFacts = inspectMotokoSource(source);
+  const inspection = { hasActorUrl: false, dotMembers: [] };
+  const ast = { name: "ValPF", args: ["cyclesAdd", { name: "VarP", args: [] }] };
+  expect(needsDangerousASTFallback(inspection, sourceFacts)).toBe(true);
+  expect(needsDangerousASTFallback(inspection, sourceFacts)).toBe(
+    needsDangerousASTFallback(inspection, source),
+  );
+  expect(checkForDangerousSyntaxFacts(inspection, sourceFacts)).toEqual(
+    checkForDangerousSyntaxFacts(inspection, source),
+  );
+  expect(checkForDangerousASTCode(ast, sourceFacts)).toEqual(
+    checkForDangerousASTCode(ast, source),
+  );
+});
+
+test("complete syntax facts cover every existing rule without changing the policy", () => {
+  const patternFields = [
+    "actorOfPrincipal", "call_raw", "createActor", "cyclesAdd", "cyclesBurn",
+    "getCertificate", "regionNew", "setCertifiedData", "stableMemoryGrow",
+    "stableMemoryLoadNat64", "stableMemorySize", "stableMemoryStoreBlob",
+    "rts_stable_memory_size", "stableVarQuery", "getCandidLimits", "callerInfoData",
+    "envVar", "setTimer", "toActor",
+  ];
+  const source = "module { func use<system>() { ignore (with cycles = 1) async {} } }";
+  const inspection = { hasActorUrl: true, dotMembers: [], patternFields };
+  const ast = {
+    name: "Prog",
+    args: [
+      { name: "ActorUrlE", args: [] },
+      ...patternFields.map((name) => ({ name: "ValPF", args: [name] })),
+    ],
+  };
+  expect(checkForDangerousSyntaxFacts(inspection, source)).toEqual([...DANGER_RULE_ORDER]);
+  expect(checkForDangerousSyntaxFacts(inspection, source)).toEqual(
+    checkForDangerousASTCode(ast, source),
+  );
 });
 
 test("source inspection excludes comments, strings, chars, and record extensions", () => {

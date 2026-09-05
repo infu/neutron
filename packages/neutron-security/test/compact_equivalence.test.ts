@@ -7,11 +7,13 @@ import {
   checkForDangerousASTCode,
   checkForDangerousSyntaxFacts,
   needsDangerousASTFallback,
+  DANGER_RULE_ORDER,
+  type DangerRule,
 } from "../src/lib.ts";
 
 const packageRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
-test("compact inspection plus precise fallback preserves all AST reports", async () => {
+test("complete compact inspection preserves all AST reports without fallback", async () => {
   const mo = await loadMotoko();
   for (const directory of ["allowed", "disallowed"]) {
     const fixtureDirectory = path.join(packageRoot, directory);
@@ -40,14 +42,14 @@ test("compact inspection plus precise fallback preserves all AST reports", async
       const ast = astResult.value;
       const inspection = inspectionResult.value;
       const fullFindings = checkForDangerousASTCode(ast, source);
-      const compilerFindings = needsDangerousASTFallback(inspection, source)
-        ? fullFindings
-        : checkForDangerousSyntaxFacts(inspection, source);
+      expect(needsDangerousASTFallback(inspection, source)).toBe(false);
+      const compilerFindings = checkForDangerousSyntaxFacts(inspection, source);
       expect(compilerFindings).toEqual(fullFindings);
       expect(inspection).toEqual({
         immediateImports: expect.any(Array),
         hasActorUrl: expect.any(Boolean),
         dotMembers: expect.any(Array),
+        patternFields: expect.any(Array),
       });
     }
   }
@@ -79,4 +81,53 @@ test("compact and full AST reports retain legacy order for combined findings", a
   expect(checkForDangerousSyntaxFacts(inspection, source)).toEqual(
     checkForDangerousASTCode(ast, source),
   );
+});
+
+test("compact and full AST acquisition truth tables agree for every danger rule", async () => {
+  const members: Array<[string, DangerRule]> = [
+    ["actorOfPrincipal", "actorOfPrincipal"],
+    ["call_raw", "call_raw"],
+    ["createActor", "createActor"],
+    ["cyclesAdd", "cyclesAdd"],
+    ["cyclesBurn", "cyclesSystem"],
+    ["getCertificate", "getCertificate"],
+    ["regionNew", "regionMemory"],
+    ["setCertifiedData", "setCertifiedData"],
+    ["stableMemoryGrow", "stableMemoryGrow"],
+    ["stableMemoryLoadNat64", "stableMemoryLoad"],
+    ["stableMemorySize", "stableMemorySize"],
+    ["stableMemoryStoreBlob", "stableMemoryStore"],
+    ["rts_stable_memory_size", "stableRuntimeMemory"],
+    ["stableVarQuery", "stableVarQuery"],
+    ["getCandidLimits", "systemCandidLimits"],
+    ["callerInfoData", "systemCallerInfo"],
+    ["envVar", "systemEnvironment"],
+    ["setTimer", "systemTimer"],
+    ["toActor", "toActor"],
+  ];
+  const cases: Array<[string, DangerRule[]]> = [
+    ['module { let remote = actor "aaaaa-aa" }', ["actor"]],
+    ["module { func f() { ignore (with cycles = 1) async {} } }", ["cyclesTransfer"]],
+    ["module { func f<system>() {} }", ["systemCapability"]],
+  ];
+  for (const [member, rule] of members) {
+    cases.push(
+      [`import Prim "mo:prim"; module { let use = Prim.${member} }`, [rule]],
+      [`import { ${member} = use } "mo:prim"; module {}`, [rule]],
+      [`module { let { ${member} = use } = value }`, [rule]],
+      [`module { func f({ ${member} = use }) {} }`, [rule]],
+      [`module { let ${member} = 1; let record = { ${member} = 2 }; type Fields = { ${member} : Nat } }`, []],
+    );
+  }
+  const covered = new Set<DangerRule>();
+  const mo = await loadMotoko();
+  for (const [source, expected] of cases) {
+    const inspection = await mo.inspectMotoko("truth-table.mo", source);
+    const ast = await mo.parseMotoko(source);
+    expect(needsDangerousASTFallback(inspection, source), source).toBe(false);
+    expect(checkForDangerousASTCode(ast, source), source).toEqual(expected);
+    expect(checkForDangerousSyntaxFacts(inspection, source), source).toEqual(expected);
+    for (const rule of expected) covered.add(rule);
+  }
+  expect(DANGER_RULE_ORDER.filter((rule) => covered.has(rule))).toEqual([...DANGER_RULE_ORDER]);
 });

@@ -76,7 +76,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     };
 
 
-    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 332; capability_plan_fingerprint = "aca4c65ce08c9234e002fa99933cb6a9c882365fbb26876dbeae4e23f0f3977e"; resident_frame_security = #credentialless_opaque_v1 }];
+    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 333; capability_plan_fingerprint = "b2c9c7a3d1d2805e20720c1562186bfde03c176f48ea2a17248075593f617d32"; resident_frame_security = #credentialless_opaque_v1 }];
 
 
 

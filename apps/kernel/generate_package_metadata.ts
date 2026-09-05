@@ -48,7 +48,7 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 332;
+export const KERNEL_NPL_RELEASE_VERSION = 333;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
@@ -194,6 +194,7 @@ const KERNEL_KNOWN_DETACHED_GENERATED_PATHS = new Set([
   "apps/kernel/kernel.v0.3.29.neutron",
   "apps/kernel/kernel.v0.3.30.neutron",
   "apps/kernel/kernel.v0.3.31.neutron",
+  "apps/kernel/kernel.v0.3.32.neutron",
 ]);
 const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
   string,
@@ -460,7 +461,7 @@ export function buildKernelPackageMetadata(
     !textDecoder
       .decode(compilerLicenseIndex.content)
       .includes(
-        "https://github.com/infu/neutron_motoko/tree/d7ed0a92b6219d784b7143e0851ed64b55dfc25a",
+        "https://github.com/infu/neutron_motoko/tree/b93f048c8b261e374daab0bb0d4e7f9f2d4b725a",
       )
   ) {
     throw new Error(
@@ -1280,7 +1281,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.32 (packed version 332)",
+    "Package release: v0.3.33 (packed version 333)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",
@@ -1356,7 +1357,7 @@ function assertThirdPartyNoticeEnvelope(bundle: ThirdPartyNoticeBundle): void {
     "didc_wasm_pkg/didc_rust_bg.bin",
     "third_party/licenses/rust/map.json",
     "Rust standard-library dependency inventory",
-    "https://github.com/infu/neutron_motoko/tree/d7ed0a92b6219d784b7143e0851ed64b55dfc25a",
+    "https://github.com/infu/neutron_motoko/tree/b93f048c8b261e374daab0bb0d4e7f9f2d4b725a",
     "https://github.com/ocsigen/js_of_ocaml/tree/e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581",
   ]) {
     if (!materialText.includes(required)) {

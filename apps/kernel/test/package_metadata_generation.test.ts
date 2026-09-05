@@ -47,7 +47,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v332 NPL package metadata", () => {
+describe("Kernel v333 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -108,7 +108,7 @@ describe("Kernel v332 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(332);
+    expect(packagedManifest.version).toBe(333);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -129,7 +129,7 @@ describe("Kernel v332 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 332");
+    ).toThrow("restricted to Kernel version 333");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -271,7 +271,7 @@ describe("Kernel v332 NPL package metadata", () => {
       }),
     );
 
-    await installKernelInstalledArtifactInventory(root, 332);
+    await installKernelInstalledArtifactInventory(root, 333);
     const inventoryPath = path.join(
       root,
       KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
@@ -284,7 +284,7 @@ describe("Kernel v332 NPL package metadata", () => {
       parsed.artifacts.map((file) => [file.package_path, file] as const),
     );
 
-    expect(parsed.package).toEqual({ id: "kernel", version: 332 });
+    expect(parsed.package).toEqual({ id: "kernel", version: 333 });
     expect(byPackagePath.has("neutron.did")).toBe(false);
     expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
     expect(
@@ -309,7 +309,7 @@ describe("Kernel v332 NPL package metadata", () => {
     }
 
     await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
-    await installKernelInstalledArtifactInventory(root, 332);
+    await installKernelInstalledArtifactInventory(root, 333);
     expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
       firstBytes,
     );
@@ -397,7 +397,7 @@ async function metadataFixture(): Promise<MetadataFixture> {
     "packages/neutron-motoko-wasm/LICENSES.md",
     textEncoder.encode(
       "https://github.com/infu/neutron_motoko/tree/" +
-        "d7ed0a92b6219d784b7143e0851ed64b55dfc25a\n",
+        "b93f048c8b261e374daab0bb0d4e7f9f2d4b725a\n",
     ),
   );
 
@@ -433,7 +433,7 @@ function thirdPartyFixture(): ThirdPartyNoticeBundle {
           "third_party/licenses/rust/map.json\n" +
           "Rust standard-library dependency inventory\n" +
           "https://github.com/infu/neutron_motoko/tree/" +
-          "d7ed0a92b6219d784b7143e0851ed64b55dfc25a\n" +
+          "b93f048c8b261e374daab0bb0d4e7f9f2d4b725a\n" +
           "https://github.com/ocsigen/js_of_ocaml/tree/" +
           "e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581\n",
       ),

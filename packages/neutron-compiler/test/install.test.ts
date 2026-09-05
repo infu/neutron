@@ -6,6 +6,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hashContent } from "neutron-tools/src/hash.js";
+import * as hashTools from "neutron-tools/src/hash.js";
 import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import { physicalAppMethodName } from "neutron-tools/src/physical_names.js";
 import type { NeutronBackendCallReservation } from "neutron-tools/src/capabilities/catalog.js";
@@ -1429,6 +1430,27 @@ test("builds compile input from multiple prepared packages", () => {
   expect(localInput.vetKeysEnvironment).toBe("local");
   expect(localInput.deploymentNonce).toBe("01".repeat(16));
   expect(localInput.freshInstallationContext).toBe(freshInstallationContext);
+});
+
+test("batch module merging does not rehash the installed prefix for each package", () => {
+  const kernel = preparePackageInstall(kernelPackageFiles());
+  const hello = preparePackageInstall(helloPackageFiles());
+  const content = "module { public let existing = 1 }";
+  const existing = { path: `${hashContent(content)}.mo`, content };
+  const hash = spyOn(hashTools, "hashContent");
+  try {
+    const input = buildPackagesCompileInput({
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      existingModules: [existing],
+      packages: [kernel, hello],
+    });
+    expect(input.mofiles[0]).toEqual(existing);
+    expect(input.mofiles).toHaveLength(2);
+    expect(hash.mock.calls.filter(([value]) => value === content)).toHaveLength(1);
+  } finally {
+    hash.mockRestore();
+  }
 });
 
 test("final compiler environment binds one certified Kernel runtime config", () => {

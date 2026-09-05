@@ -39,6 +39,8 @@ export type MotokoInspection = {
   immediateImports: string[];
   hasActorUrl: boolean;
   dotMembers: string[];
+  /** Exact object-pattern value fields; absent in older compiler assets. */
+  patternFields?: string[];
 };
 
 type CompilerResult<T> = {

@@ -316,6 +316,18 @@ Within one compile:
 The browser page remains responsive while the Worker runs, and unrelated app
 UI work does not share the compiler's Wasm stack.
 
+Security inspection uses compact parser facts, including dotted members and
+object-pattern acquisitions, plus one source scan per module. It does not
+export a full syntax tree with current compiler assets; the full-tree fallback
+is retained only for older assets that lack the pattern facts.
+
+Neutron retains classical persistence with compacting GC as its default.
+Compiler throughput and stack-safety improvements do not switch existing
+canisters to enhanced persistence or change their managed-memory schemas.
+The browser scale fixture selects classical mode explicitly and can compare
+15, 30, or 50 substantial synthetic apps against a pinned compiler baseline;
+app counts alone are not a capacity guarantee for arbitrary source code.
+
 The compiler artifact must expose:
 
 ```js

@@ -6,6 +6,12 @@ import {
   findingsFromPolicyFacts,
 } from "./policy.ts";
 import { inspectMotokoSource } from "./source.ts";
+import type { MotokoSourceSyntaxFacts } from "./source.ts";
+
+type SourceFactsInput = string | MotokoSourceSyntaxFacts;
+
+const sourceFactsOf = (source: SourceFactsInput): MotokoSourceSyntaxFacts =>
+  typeof source === "string" ? inspectMotokoSource(source) : source;
 
 type AstNode = {
   args: unknown[];
@@ -29,7 +35,7 @@ export function matchTraverseTree(tree: unknown, pattern: AstPattern): boolean {
 
 export function checkForDangerousASTCode(
   contents: unknown,
-  source = "",
+  source: SourceFactsInput = "",
 ): DangerRule[] {
   const findings = new Set<DangerRule>();
   for (const [name, pattern] of Object.entries(disallowed) as [
@@ -39,7 +45,7 @@ export function checkForDangerousASTCode(
     if (matchTraverseTree(contents, pattern)) findings.add(name);
   }
 
-  const sourceFacts = inspectMotokoSource(source);
+  const sourceFacts = sourceFactsOf(source);
   for (const finding of
     findingsFromPolicyFacts({
       hasActorReference: sourceFacts.hasActorReference,
@@ -61,34 +67,39 @@ export function checkForDangerousASTCode(
 export type DangerousSyntaxFacts = {
   hasActorUrl: boolean;
   dotMembers: readonly string[];
+  /** Present when the compiler reports all ValPF/object-pattern acquisitions. */
+  patternFields?: readonly string[];
 };
 
 export function checkForDangerousSyntaxFacts(
-  { hasActorUrl, dotMembers }: DangerousSyntaxFacts,
-  source = "",
+  { hasActorUrl, dotMembers, patternFields }: DangerousSyntaxFacts,
+  source: SourceFactsInput = "",
 ): DangerRule[] {
-  const sourceFacts = inspectMotokoSource(source);
+  const sourceFacts = sourceFactsOf(source);
+  const identifiers = new Set(dotMembers);
+  for (const field of patternFields ?? []) identifiers.add(field);
   return findingsFromPolicyFacts({
     hasActorReference: sourceFacts.hasActorReference,
     hasActorUrl,
     hasCallContextTransfer: sourceFacts.hasCallContextTransfer,
     hasSystemCapability: sourceFacts.hasSystemCapability,
     hasWithCycles: sourceFacts.hasWithCycles,
-    identifiers: new Set(dotMembers),
+    identifiers,
   });
 }
 
 /**
- * The compact browser inspection omits ValPF/object-pattern acquisitions.
- * Parse a full AST only when a privileged spelling exists that its dotted
- * member facts do not already explain. This keeps the common path compact
- * while making named imports and destructuring precise.
+ * Older compiler assets omit ValPF/object-pattern acquisitions. Keep their
+ * precise full-AST fallback when a privileged spelling is not already explained
+ * by dotted members. New assets report patternFields, even when empty, so no
+ * full AST needs to cross the compiler/worker boundary for security inspection.
  */
 export function needsDangerousASTFallback(
-  { dotMembers }: DangerousSyntaxFacts,
-  source: string,
+  { dotMembers, patternFields }: DangerousSyntaxFacts,
+  source: SourceFactsInput,
 ): boolean {
-  const sourceFacts = inspectMotokoSource(source);
+  if (patternFields !== undefined) return false;
+  const sourceFacts = sourceFactsOf(source);
   const acquisitionFacts = (identifiers: ReadonlySet<string>): DangerRule[] =>
     findingsFromPolicyFacts({
       hasActorReference: false,
@@ -107,4 +118,5 @@ export function needsDangerousASTFallback(
 export { DANGER_RULE_ORDER } from "./policy.ts";
 export type { DangerRule } from "./policy.ts";
 export { inspectMotokoSource } from "./source.ts";
+export type { MotokoSourceSyntaxFacts } from "./source.ts";
 export { checkForDangerousTextCode } from "./text.ts";

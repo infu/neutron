@@ -10,6 +10,7 @@ import {
   PRODUCTION_KERNEL_V329_RELEASE,
   PRODUCTION_KERNEL_V330_RELEASE,
   PRODUCTION_KERNEL_V331_RELEASE,
+  PRODUCTION_KERNEL_V332_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   TEST_CANDIDATE_KERNEL_VERSION,
   compileFinalCandidateLegacyKernelUpgradeFixture,
@@ -22,6 +23,7 @@ import {
   compileFinalCandidateProductionKernelV329UpgradeFixture,
   compileFinalCandidateProductionKernelV330UpgradeFixture,
   compileFinalCandidateProductionKernelV331UpgradeFixture,
+  compileFinalCandidateProductionKernelV332UpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   loadLegacyKernelIdentityFixture,
@@ -33,6 +35,7 @@ import {
   loadProductionKernelV329Fixture,
   loadProductionKernelV330Fixture,
   loadProductionKernelV331Fixture,
+  loadProductionKernelV332Fixture,
 } from "./legacy_kernel_upgrade_fixture.ts";
 
 for (const release of LEGACY_KERNEL_RELEASES) {
@@ -271,6 +274,29 @@ test("the exact production v0.3.31 predecessor is identity-bound", async () => {
   });
   await expect(
     compileFinalCandidateProductionKernelV331UpgradeFixture({
+      expectedSha256: "",
+    }),
+  ).rejects.toThrow(
+    "NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 must be a reviewed lowercase SHA-256",
+  );
+});
+
+test("the exact production v0.3.32 predecessor is identity-bound", async () => {
+  expect(PRODUCTION_KERNEL_V332_RELEASE).toMatchObject({
+    version: 332,
+    bytes: 2_467_394,
+    sha256: "1f6ddff197b9562a20da9e63d0daf2f3d169f3ec4f70736cf8b68445386c069f",
+    persistenceMode: "classical",
+  });
+  const fixture = await loadProductionKernelV332Fixture();
+  expect(fixture.archive.byteLength).toBe(PRODUCTION_KERNEL_V332_RELEASE.bytes);
+  expect(fixture.identity).toMatchObject({
+    bytes: PRODUCTION_KERNEL_V332_RELEASE.bytes,
+    sha256: PRODUCTION_KERNEL_V332_RELEASE.sha256,
+    package: { version: PRODUCTION_KERNEL_V332_RELEASE.version },
+  });
+  await expect(
+    compileFinalCandidateProductionKernelV332UpgradeFixture({
       expectedSha256: "",
     }),
   ).rejects.toThrow(

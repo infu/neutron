@@ -3,7 +3,7 @@ Copyright 2026 3V Interactive for the Neutron wrapper and modifications.
 
 This package includes a modified Motoko compiler derived from
 https://github.com/infu/neutron_motoko at revision
-d7ed0a92b6219d784b7143e0851ed64b55dfc25a, itself derived from DFINITY's
+b93f048c8b261e374daab0bb0d4e7f9f2d4b725a, itself derived from DFINITY's
 Motoko compiler. The compiler is licensed under Apache-2.0 WITH LLVM-exception.
 The exact license and exception are in LICENSE.
 
@@ -14,7 +14,7 @@ e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581 under LGPL-2.1-or-later with
 the OCaml linking exception. See LICENSES.md and LICENSE.js_of_ocaml.
 
 Preferred compiler source, build scripts, and dependency declarations:
-https://github.com/infu/neutron_motoko/tree/d7ed0a92b6219d784b7143e0851ed64b55dfc25a
+https://github.com/infu/neutron_motoko/tree/b93f048c8b261e374daab0bb0d4e7f9f2d4b725a
 
 Corresponding js_of_ocaml/wasm_of_ocaml runtime source:
 https://github.com/ocsigen/js_of_ocaml/tree/e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581
