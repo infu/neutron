@@ -3,6 +3,7 @@ import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
+import { serve, sleep } from "bun";
 import type {
   PocketIcCanisterCall,
   PocketIcIngressMessage,
@@ -24,6 +25,7 @@ import {
   type CertifiedAssetsQualificationFixtureId,
 } from "./fixture_manifests.ts";
 import {
+  createQualificationSampleRuntime,
   createQualificationSampleRuntimeForTest,
   type QualificationSampleRuntimeInput,
 } from "./sample_runtime.ts";
@@ -277,6 +279,74 @@ describe("Certified Assets qualification SampleRuntime", () => {
     expect(runtime.deterministicBytes(19, 32)).toEqual(
       new Uint8Array(expected),
     );
+  });
+
+  test("preserves the block formula across counter carries and partial final blocks", () => {
+    const runtime = runtimeFor("ca_qualification_aux_1", new FakePocketIcClient(() => {
+      throw new Error("No transport expected");
+    }), { caseId: "mutable_key_cas", sample: 0 });
+    for (const step of [0, 19, 0xffff_ffff]) {
+      // The 257th block crosses the first byte of the big-endian counter.
+      const reference = Buffer.concat(Array.from({ length: 257 }, (_, block) =>
+        createHash("sha256")
+          .update("neutron.kernel.certified-assets-workload.v1\0mutable_key_cas\0")
+          .update(u32(0))
+          .update(new Uint8Array([0]))
+          .update(u32(step))
+          .update(new Uint8Array([0]))
+          .update(u32(block))
+          .digest(),
+      ));
+      for (const length of [0, 1, 31, 32, 33, 65, 8_193]) {
+        expect(runtime.deterministicBytes(step, length)).toEqual(
+          new Uint8Array(reference.subarray(0, length)),
+        );
+      }
+    }
+  });
+
+  test("case runtimes share the isolated environment's control-operation queue", async () => {
+    let active = 0;
+    let maximumActive = 0;
+    let requests = 0;
+    const server = serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch() {
+        requests += 1;
+        maximumActive = Math.max(maximumActive, ++active);
+        await sleep(20);
+        active -= 1;
+        return Response.json({
+          Ok: Buffer.from(encodeScopeInfo("ca_qualification_aux_1")).toString("base64"),
+        });
+      },
+    });
+    try {
+      const environment: QualificationSampleRuntimeInput["environment"] = {
+        controlUrl: `http://127.0.0.1:${server.port}/`,
+        gatewayTransportOrigin: "http://127.0.0.2:8000",
+        instanceId: 3,
+        rootKeyBase64: "AQ==",
+        controllerPrincipal: CONTROLLER,
+        provision: { agent: {} as HttpAgent },
+        canonicalCertifiedOrigin: (id) => `http://${id}.localhost:8000`,
+      };
+      const runtimes = Array.from({ length: 3 }, () => createQualificationSampleRuntime({
+        environment,
+        canisterId: CANISTER_ID,
+        appId: "ca_qualification_aux_1",
+        caseId: "mutable_key_cas",
+        sample: 0,
+        verifyGateway: false,
+      }));
+      await Promise.all(runtimes.map((runtime) => runtime.call("qualification_scope_info", [null])));
+      expect(requests).toBe(3);
+      expect(maximumActive).toBe(1);
+      expect(active).toBe(0);
+    } finally {
+      server.stop(true);
+    }
   });
 });
 

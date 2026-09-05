@@ -5,6 +5,7 @@ import {
   approveAgentGrant,
   beginAgentRoot,
   clearAgentModeForAuth,
+  cancelAgentRoot,
   completeInvocation,
   createChildInvocation,
   invocationMetadata,
@@ -310,28 +311,37 @@ test("a denial closes the descendant permission path", async () => {
   completeInvocation(root);
 });
 
-test("agent root starts are bounded", async () => {
+test("agent roots can continue beyond the old duration and call budgets, one at a time", async () => {
   await grantAgent();
   const resident = background("agent");
-  for (let index = 0; index < 6; index += 1) {
-    const root = beginAgentRoot({
-      caller: tile("agent"),
-      target: resident,
-      tool: "agent_chat",
-      ownerPrincipal: owner,
-      installedVersion: 100,
-    })!;
+  const start = () => beginAgentRoot({ caller: tile("agent"), target: resident,
+    tool: "agent_chat", ownerPrincipal: owner, installedVersion: 100 })!;
+  for (let index = 0; index < 25; index += 1) {
+    const root = start();
+    expect(() => start()).toThrow("Another agent turn is already running");
+    for (let call = 0; call < 80; call += 1) {
+      completeInvocation(createChildInvocation(root, background("records"), "read"));
+    }
+    expect(resolveInvocation(resident, invocationMetadata(root))).toBe(root);
     completeInvocation(root);
   }
-  expect(() =>
-    beginAgentRoot({
-      caller: tile("agent"),
-      target: resident,
-      tool: "agent_chat",
-      ownerPrincipal: owner,
-      installedVersion: 100,
-    }),
-  ).toThrow("Agent turn start limit reached");
+});
+
+test("a long root retains caller identity and cancellation revokes late capabilities", async () => {
+  await grantAgent();
+  const resident = background("agent");
+  const caller = tile("agent");
+  const root = beginAgentRoot({ caller, target: resident, tool: "agent_chat", ownerPrincipal: owner, installedVersion: 100 })!;
+  expect(useAgentModeStore.getState().activeRoot?.callerEndpointId).toBe(caller.endpointId);
+  const originalNow = Date.now;
+  const later = Date.now() + 86_400_000;
+  try {
+    Date.now = () => later;
+    expect(resolveInvocation(resident, invocationMetadata(root))).toBe(root);
+  } finally { Date.now = originalNow; }
+  cancelAgentRoot(root.id, "Stopped by owner");
+  expect(() => resolveInvocation(resident, invocationMetadata(root))).toThrow();
+  expect(useAgentModeStore.getState().activeRoot).toBeNull();
 });
 
 test("active descendants are tracked app-wide", async () => {

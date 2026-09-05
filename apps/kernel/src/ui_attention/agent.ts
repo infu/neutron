@@ -23,17 +23,10 @@ import {
   throwIfRequestCancelled,
 } from "../request_cancel.ts";
 
-const ROOT_TTL_MS = 5 * 60_000;
 const DECISION_TTL_MS = 30_000;
 const MAX_DEPTH = 8;
-const MAX_CALLS = 64;
 const MAX_PARALLEL_CHILDREN = 4;
-const MAX_CHALLENGES = 6;
 const MAX_NODE_CHALLENGES = 2;
-const ROOT_START_SHORT_WINDOW_MS = 60_000;
-const ROOT_START_LONG_WINDOW_MS = 10 * 60_000;
-const MAX_ROOT_STARTS_SHORT_WINDOW = 6;
-const MAX_ROOT_STARTS_LONG_WINDOW = 20;
 
 export type AgentGrant = {
   id: string;
@@ -53,12 +46,10 @@ export type AgentRootSummary = {
   appId: string;
   installationUid: string;
   entrypoint: string;
+  callerEndpointId: string;
   startedAt: number;
-  expiresAt: number;
   calls: number;
   challenges: number;
-  remainingCalls: number;
-  remainingChallenges: number;
 };
 
 export type AgentDecisionAudit = {
@@ -100,7 +91,6 @@ export type InvocationNode = {
   depth: number;
   status: "active" | "permission_denied" | "complete" | "cancelled";
   startedAt: number;
-  expiresAt: number;
   activeChildren: number;
   challengeCount: number;
 };
@@ -113,13 +103,13 @@ export type AgentPermissionSummary = {
 };
 
 type RootRuntime = {
+  callerEndpointId: string;
   nodeId: string;
   grantId: string;
   endpointId: string;
   endpointSessionId: string;
   calls: number;
   challenges: number;
-  timeout: ReturnType<typeof setTimeout>;
 };
 
 type GrantCallbacks = {
@@ -134,7 +124,6 @@ let grantAttentionToken: string | null = null;
 const nodesById = new Map<string, InvocationNode>();
 const nodesByCapability = new Map<string, InvocationNode>();
 const roots = new Map<string, RootRuntime>();
-const rootStartAdmissions = new Map<string, number[]>();
 const pendingDecisionRejects = new Map<string, (error: Error) => void>();
 let rootCancelDispatcher:
   | ((root: { id: string; endpointId: string; endpointSessionId: string }) => void)
@@ -244,9 +233,6 @@ export function disableAgentMode(reason = "Agent mode disabled"): void {
 }
 
 export function removeAgentAppState(appId: string): void {
-  for (const key of rootStartAdmissions.keys()) {
-    if (key.startsWith(`${appId}:`)) rootStartAdmissions.delete(key);
-  }
   const state = useAgentModeStore.getState();
   if (
     state.grant?.appId === appId ||
@@ -334,8 +320,6 @@ export function beginAgentRoot(input: {
     throw policyError("AGENT_MODE_LIMIT", "Another agent turn is already running");
   }
 
-  const now = Date.now();
-  admitRootStart(`${grant.appId}:${grant.installationUid}`, now);
   const rootId = randomId();
   const node = createNode({
     id: rootId,
@@ -344,19 +328,15 @@ export function beginAgentRoot(input: {
     endpoint: input.target,
     tool: input.tool,
     depth: 0,
-    expiresAt: now + ROOT_TTL_MS,
   });
   const runtime: RootRuntime = {
+    callerEndpointId: input.caller.endpointId,
     nodeId: node.id,
     grantId: grant.id,
     endpointId: node.endpointId,
     endpointSessionId: node.endpointSessionId,
     calls: 0,
     challenges: 0,
-    timeout: setTimeout(
-      () => cancelAgentRoot(rootId, "Agent turn expired"),
-      ROOT_TTL_MS,
-    ),
   };
   roots.set(rootId, runtime);
   useAgentModeStore.setState({ activeRoot: rootSummary(node, runtime) });
@@ -382,8 +362,8 @@ export function resolveInvocation(
   }
   const root = roots.get(node.rootId);
   const grant = useAgentModeStore.getState().grant;
-  if (!root || !grant || root.grantId !== grant.id || node.expiresAt <= Date.now()) {
-    cancelAgentRoot(node.rootId, "Agent invocation expired");
+  if (!root || !grant || root.grantId !== grant.id) {
+    cancelAgentRoot(node.rootId, "Agent invocation revoked");
     throw policyError("AGENT_MODE_REVOKED", "Agent invocation is no longer active");
   }
   return node;
@@ -420,9 +400,6 @@ export function createChildInvocation(
   if (parent.depth + 1 > MAX_DEPTH) {
     throw policyError("AGENT_MODE_LIMIT", "Agent invocation depth exceeded");
   }
-  if (root.calls >= MAX_CALLS) {
-    throw policyError("AGENT_MODE_LIMIT", "Agent call budget exceeded");
-  }
   if (parent.activeChildren >= MAX_PARALLEL_CHILDREN) {
     throw policyError("AGENT_MODE_LIMIT", "Too many parallel agent calls");
   }
@@ -435,7 +412,6 @@ export function createChildInvocation(
     endpoint: target,
     tool,
     depth: parent.depth + 1,
-    expiresAt: parent.expiresAt,
   });
   updateRootSummary(parent.rootId);
   return node;
@@ -493,7 +469,6 @@ export async function requestAgentConsent(
     );
   }
   if (
-    root.challenges >= MAX_CHALLENGES ||
     node.challengeCount >= MAX_NODE_CHALLENGES
   ) {
     throw policyError(
@@ -649,7 +624,6 @@ export function cancelAgentRoot(rootId: string, reason: string): void {
 
 export function clearAgentModeForAuth(): void {
   disableAgentMode("Authorization changed");
-  rootStartAdmissions.clear();
   useAgentModeStore.setState({ decisions: [] });
 }
 
@@ -660,7 +634,6 @@ function createNode(input: {
   endpoint: RegisteredEndpoint;
   tool: string;
   depth: number;
-  expiresAt: number;
 }): InvocationNode {
   if (!input.endpoint.sessionId || !input.endpoint.appScope) {
     throw policyError(
@@ -682,7 +655,6 @@ function createNode(input: {
     depth: input.depth,
     status: "active",
     startedAt: Date.now(),
-    expiresAt: input.expiresAt,
     activeChildren: 0,
     challengeCount: 0,
   };
@@ -715,8 +687,6 @@ function removeNode(node: InvocationNode): void {
 }
 
 function finishRoot(rootId: string): void {
-  const root = roots.get(rootId);
-  if (root) clearTimeout(root.timeout);
   roots.delete(rootId);
   for (const node of [...nodesById.values()]) {
     if (node.rootId !== rootId) continue;
@@ -737,46 +707,11 @@ function rootSummary(
     appId: node.appId,
     installationUid: node.installationUid,
     entrypoint: node.tool,
+    callerEndpointId: root.callerEndpointId,
     startedAt: node.startedAt,
-    expiresAt: node.expiresAt,
     calls: root.calls,
     challenges: root.challenges,
-    remainingCalls: Math.max(0, MAX_CALLS - root.calls),
-    remainingChallenges: Math.max(0, MAX_CHALLENGES - root.challenges),
   };
-}
-
-function admitRootStart(appId: string, now: number): void {
-  const admissions = rootStartAdmissions.get(appId) ?? [];
-  pruneAdmissions(admissions, now - ROOT_START_LONG_WINDOW_MS);
-  const recent = admissions.filter(
-    (value) => value > now - ROOT_START_SHORT_WINDOW_MS,
-  );
-  if (recent.length >= MAX_ROOT_STARTS_SHORT_WINDOW) {
-    throw policyError(
-      "AGENT_MODE_LIMIT",
-      "Agent turn start limit reached",
-      Math.max(1, (recent[0] ?? now) + ROOT_START_SHORT_WINDOW_MS - now),
-    );
-  }
-  if (admissions.length >= MAX_ROOT_STARTS_LONG_WINDOW) {
-    throw policyError(
-      "AGENT_MODE_LIMIT",
-      "Agent turn start limit reached",
-      Math.max(
-        1,
-        (admissions[0] ?? now) + ROOT_START_LONG_WINDOW_MS - now,
-      ),
-    );
-  }
-  admissions.push(now);
-  rootStartAdmissions.set(appId, admissions);
-}
-
-function pruneAdmissions(values: number[], minimum: number): void {
-  const first = values.findIndex((value) => value > minimum);
-  if (first === -1) values.length = 0;
-  else if (first > 0) values.splice(0, first);
 }
 
 function updateRootSummary(rootId: string): void {

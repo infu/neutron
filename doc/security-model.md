@@ -474,7 +474,7 @@ Agent Mode is a generic, owner-controlled delegation role. It does not bypass
 app manifests or Kernel brokers.
 
 An agent invocation has a root identity, an exact registered capability path,
-bounded progress and tool calls, cancellation, and a live source-bound
+bounded progress envelopes and individual tool calls, cancellation, and a live source-bound
 endpoint. The Kernel revalidates the invocation and its app authority around
 every protected operation. Outside Agent Mode, interactive calls use owner UI.
 During Agent Mode, eligible external signed calls follow the nested-agent
@@ -509,9 +509,11 @@ owner interaction and have no separate cooldown or focus model.
 
 Moving a tile to another workspace does not select it. Selecting another
 workspace directly, or focusing or expanding one of its tiles, applies the
-existing inactive-workspace lifecycle: tile frames remain mounted but their
-Kernel endpoints disconnect. Making the source Agent tile's workspace inactive
-can therefore end a turn bound to that endpoint.
+inactive-workspace lifecycle: tile frames remain mounted. Kernel keeps the
+exact originating tile of a live Agent root connected while hidden; other
+inactive tile endpoints disconnect. Closing or replacing the source tile still
+retires its port and cancels the root. Roots have no total runtime or call
+quota; one root, per-operation deadlines, and authority revocation remain.
 
 Exact installed-artifact inspection is narrower than general Agent delegation.
 Only the current direct root invocation may call `source.files`,

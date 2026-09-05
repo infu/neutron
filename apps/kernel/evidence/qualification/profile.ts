@@ -9,7 +9,10 @@ export const QUALIFICATION_RESET_SETUP_FIXED_AWAITED_INGRESSES = 11;
 export const QUALIFICATION_ACTIVE_BOUNDARY_AWAITED_INGRESSES = 10;
 
 export const CERTIFIED_ASSETS_RELEASE_QUALIFICATION_PROFILE = {
-  maximum_wall_seconds: 180,
+  // This covers fixture packaging, uncached compilation, fresh installs, and
+  // the complete runtime/gateway workload on a shared build host. It is a
+  // local process watchdog, not a Kernel runtime or qualification metric.
+  maximum_wall_seconds: 300,
   operational_sample_concurrency: 3,
   // Two transport installations may each upload the compiler's maximum 100
   // Wasm chunks. Fresh setup adds 13 fixed awaited ingresses and the probe /

@@ -776,7 +776,8 @@ frontend registry generation, and background path. The resident container is
 ordered after the visible workspace content so a restored visible tile gets
 the first opportunity to start its asset requests. Switching workspaces hides
 visited tile layers without unmounting their iframe DOM, but disconnects the
-inactive tiles' Kernel endpoints; resident frames remain connected.
+inactive tiles' Kernel endpoints, except for the exact originating tile of a
+live Agent root. That tile and resident frames remain connected.
 Logout, authorization loss, registry removal, or package replacement unmounts
 or reloads the corresponding background process. Resident frames are also
 unmounted while an activated install is pending and are not mounted at all
@@ -981,11 +982,15 @@ instead.
 ### Agent Mode Runtime
 
 The Kernel's Agent Mode runtime owns session-only grants, root turns, invocation
-nodes, one-shot agent decisions, hard budgets, cancellation, and a bounded
+nodes, one-shot agent decisions, cancellation, and a bounded
 redacted audit. A grant is bound to the current owner principal, app id,
 installed version, and exact declared resident entrypoint. One grant and one
 root may be active. Reload, logout, authorization loss, update, uninstall,
-endpoint replacement, expiry, stop, or disable invalidates the affected tree.
+endpoint replacement, stop, or disable invalidates the affected tree. Roots
+have no total runtime, call-count, permission-count, or start-rate cap. Existing
+depth, simultaneous-child, per-call consent, payload, and individual-operation
+bounds remain. Root dispatch has no message-bus deadline; child tools retain
+their operation deadlines.
 
 Invocation capabilities are random private transport metadata bound to one
 endpoint session and dynamic call lifetime. The Kernel resolves this metadata
@@ -1011,8 +1016,8 @@ Agent-scoped signed calls before discovery. See
 
 The topbar indicator remains kernel-owned while a grant is active. It shows
 idle or running state, elapsed turn time, stop, and disable controls. Settings
-shows every eligible entrypoint, the exact active grant, remaining root
-budgets, and recent allow or deny summaries. These surfaces never display
+shows every eligible entrypoint, the exact active grant, completed call and
+permission-decision counts, and recent allow or deny summaries. These surfaces never display
 capabilities, challenge ids, credentials, or raw arguments.
 
 Generic app-driven `workspace.open_tile` navigation remains in the current
@@ -1030,13 +1035,12 @@ cooldown. `move` preserves the active workspace, while `open`, `switch`,
 `focus`, and `expand` bring their target workspace into view. Tray endpoints cannot start Agent Mode or receive delegated agent
 calls.
 
-Making the source tile's workspace inactive through `open`, `switch`, `focus`,
-or `expand` disconnects that tile's message-bus endpoint even though its iframe
-stays mounted and the resident background continues running. A root or normal
-turn bound to that tile may therefore end before the tile receives the tool
-response. This is the existing inactive-workspace lifecycle, not a second focus
-or navigation policy; an agent can prepare another workspace with `move` and
-defer activation until it intends to show it.
+During a live Agent root, the originating tile keeps its exact endpoint and
+private port when its workspace is hidden through `open`, `switch`, `focus`,
+or `expand`. The root summary binds that caller endpoint for the tile lifecycle.
+The tile must still exist with current installation and runtime authority;
+closing it or replacing its runtime retires the port and cancels the work.
+Other inactive tile endpoints retain their ordinary disconnection behavior.
 
 A provider presentation uses the same exact open-or-focus primitive but cannot
 choose another app: Kernel derives the provider app from the suspended public
@@ -1047,7 +1051,7 @@ Agent Mode remains live-turn authority. Enabling one exact entrypoint does not
 let the resident originate a root by itself; each root begins through a live
 tile in the granted Agent installation and the exact entrypoint without a
 per-turn browser-focus or transient-activation gate. The provider's `agent_root`
-audience ends with that bounded invocation.
+audience ends with that invocation.
 
 ### Exact Installed Artifact Inspection
 

@@ -3377,7 +3377,7 @@ async function invokeEndpointTool(
       },
       control
         ? CONTROL_CALL_TIMEOUT_SECONDS
-        : MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+        : targetInvocation?.depth === 0 ? 0 : MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
       reportProgress,
       targetInvocation
         ? invocationMetadata(targetInvocation, targetInvocation.depth === 0)
@@ -4302,7 +4302,7 @@ async function execEndpoint(
     assertEndpointDispatchCurrent(dispatch);
     return execPort(dispatch.port, action, payload, options);
   }
-  const port = await waitForFrameEndpointPort(endpoint, timeout, signal);
+  const port = await waitForFrameEndpointPort(endpoint, timeout || MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS, signal);
   const dispatch = bindEndpointDispatch(endpoint);
   if (dispatch.port !== port) {
     throw new KernelPolicyError(

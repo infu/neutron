@@ -37,9 +37,48 @@ export type AgentSnapshot = JsonObject & {
   hiddenMessageCount: number;
   messages: TranscriptMessage[];
   error: string | null;
+  work?: AgentWorkSnapshot;
+};
+
+export type AgentGoal = {
+  objective: string;
+  instructions: string[];
+  status: "running" | "waiting" | "paused" | "needs_input" | "complete";
+  checkpoint: string;
+  updatedAt: number;
+};
+
+export type AgentQueuedInput = {
+  id: string;
+  text: string;
+  mode: "steer" | "queue";
+};
+
+export type AgentWorkState = {
+  goal: AgentGoal | null;
+  queue: AgentQueuedInput[];
+  steps: number;
+  inputTokens: number;
+  outputTokens: number;
+  startedAt: number | null;
+  wakeAt: number | null;
+};
+
+export type AgentWorkSnapshot = JsonObject & {
+  goal: (JsonObject & Omit<AgentGoal, "instructions">) | null;
+  queued: number;
+  nextMessage: string | null;
+  steps: number;
+  inputTokens: number;
+  outputTokens: number;
+  startedAt: number | null;
+  wakeAt: number | null;
 };
 
 export type AgentProgress =
+  | (JsonObject & { type: "refresh" })
+  | (JsonObject & { type: "work"; work: AgentWorkSnapshot })
+  | (JsonObject & { type: "message"; message: TranscriptMessage })
   | (JsonObject & {
       type: "turn_start";
       user: TranscriptMessage;

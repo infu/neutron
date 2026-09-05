@@ -130,9 +130,8 @@ The examples use the last matching tile deliberately. Each tile instance has
 its own conversation history, so preparing one tile and inspecting another is
 not a valid observation of the same turn. The provider connection is shared,
 but each tile keeps its own model selection. Changing a tile's model establishes
-the default for newly opened tiles without changing existing ones. Different
-tiles may run turns in parallel; only another view of the same durable tile is
-serialized with its active turn.
+the default for newly opened tiles without changing existing ones. Kernel Agent Mode permits only one root across tiles. Another view of the
+same durable tile is serialized with its active turn.
 The Web control is intentionally local to one tile document and defaults off
 again after reload. Enable it visibly on the same tile used for the test when a
 scenario needs public web search or page extraction.
@@ -206,7 +205,7 @@ model catalog and makes iterative logs unnecessarily large.
 The important trace event types are:
 
 - `submitted`: the normal Send handler accepted the prompt;
-- `progress`: the resident reported `turn_start` or one tool transition;
+- `progress`: a user message, completed assistant message, tool transition, or goal/work update;
 - `final`: the authoritative call returned and the final assistant message is
   stable;
 - `error`: the normal call path rejected.
@@ -265,3 +264,19 @@ instruction.
 This loop observes the real installed Agent without adding production
 credentials, privileged chat endpoints, app-specific Agent code, or a second
 execution path.
+
+## Long-running regression checks
+
+Run `bun test ./test/long_running.test.ts` from this workspace. It uses the
+installed AI SDK with synthetic models and isolated IndexedDB databases. It
+covers reviewer-driven continuation, work beyond 32 tool steps, stream aborts
+and errors after writes, output exhaustion, steering during sleep and tool
+execution, queue ordering, and oversized context. No provider key or live app
+mutation is used.
+
+For an installed browser check, start `/goal <objective>`, switch workspaces
+while it works, return and steer with Enter, queue a follow-up with Tab, then
+pause during sleep. Reload and use Resume to check recovery. Closing the
+originating tile and disabling Agent Mode must cancel the live invocation.
+Production upgrades follow `doc/package-updates.md`; the destructive local
+reinstall above is only for disposable PocketIC development fixtures.

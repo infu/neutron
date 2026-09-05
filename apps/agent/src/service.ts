@@ -46,6 +46,7 @@ const snapshotSchema: JsonObject = {
     hiddenMessageCount: { type: "integer", minimum: 0 },
     messages: { type: "array" },
     error: { type: ["string", "null"] },
+    work: { type: "object" },
   },
   additionalProperties: false,
 };
@@ -54,6 +55,13 @@ const runtimePromise = AgentRuntime.create();
 let crossTabRelay = Promise.resolve();
 
 CROSS_TAB_CHANNEL?.addEventListener("message", (event) => {
+  if (event.data?.type === "input" && typeof event.data.historyId === "string") {
+    try {
+      const historyId = requireAgentChatTileEndpoint(event.data.historyId);
+      void runtimePromise.then((runtime) => runtime.wakeForInput(historyId));
+    } catch { /* Ignore malformed relay messages. */ }
+    return;
+  }
   if (
     typeof event.data === "object" &&
     event.data !== null &&
@@ -237,6 +245,43 @@ exposeTool(
       ),
     );
   }
+);
+
+exposeTool(
+  "agent_enqueue",
+  {
+    title: "Steer or Queue Agent",
+    description: "Save an owner message for this tile. Steering applies after the current tool call and wakes sleep; queued requests run after the current work cycle.",
+    inputSchema: {
+      type: "object", required: ["text", "mode"], additionalProperties: false,
+      properties: {
+        text: { type: "string", minLength: 1, maxLength: 16_000 },
+        mode: { type: "string", enum: ["steer", "queue"] },
+      },
+    },
+    outputSchema: snapshotSchema,
+    annotations: { "neutron:effects": ["write"] },
+  },
+  async (args, context) => asJson(await mutate(context, async (runtime, historyId) => {
+    const result = await runtime.enqueue(historyId, requiredString(args.text), args.mode === "queue" ? "queue" : "steer");
+    if (args.mode !== "queue") CROSS_TAB_CHANNEL?.postMessage({ type: "input", historyId });
+    return result;
+  })),
+);
+
+exposeTool(
+  "agent_clear_goal",
+  {
+    title: "Clear Agent Goal",
+    description: "Stop this tile's work and clear its goal, keeping chat history and queued messages.",
+    inputSchema: emptyInput,
+    outputSchema: snapshotSchema,
+    annotations: { "neutron:effects": ["write"] },
+  },
+  async (_args, context) => asJson(await mutate(context, async (runtime, historyId) => {
+    await runtime.stop(historyId, broadcastStopRequested);
+    return runtime.clearGoal(historyId);
+  })),
 );
 
 exposeTool(

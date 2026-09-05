@@ -277,7 +277,7 @@ export function AgentModeSettings() {
               <dt>State</dt>
               <dd>
                 {root
-                  ? `Running, ${root.remainingCalls} calls and ${root.remainingChallenges} decisions left`
+                  ? `Running, ${root.calls} calls and ${root.challenges} permission decisions`
                   : "Idle"}
               </dd>
             </div>

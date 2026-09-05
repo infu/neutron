@@ -1,16 +1,15 @@
 import { expect, test } from "bun:test";
+import { emptyAgentWork } from "../src/agent_work.ts";
 import type { ModelMessage } from "ai";
 import { MSG_BUS_MAX_PAYLOAD_BYTES } from "neutron-tools/protocol";
 import {
   AGENT_COMPACTED_STATE_CHANGE_RECORD_PREFIX,
-  AGENT_LOOP_STOP_WHEN,
-  AGENT_MAX_STEPS,
+  AGENT_CHECKPOINT_STEPS,
   AGENT_WEB_TOOL_STEPS,
   AGENT_INTERRUPTED_STATE_CHANGE_WARNING_PREFIX,
   AGENT_STREAM_TIMEOUT,
   AGENT_SYSTEM_PROMPT,
   AgentRuntime,
-  agentActiveToolsForStep,
   agentToolChoiceForStep,
   agentModelOptions,
   appendWebSources,
@@ -38,37 +37,11 @@ import type { AgentChatTileEndpointId } from "../src/chat_types.ts";
 const tileHistory = (id: string): AgentChatTileEndpointId =>
   `app:agent:tile:chat:instance:${id}`;
 
-test("agent loop has a finite tool-step ceiling", async () => {
-  const belowLimit = Array.from({ length: AGENT_MAX_STEPS - 1 }, () => ({}));
-  expect(
-    await AGENT_LOOP_STOP_WHEN({
-      steps: belowLimit as Parameters<typeof AGENT_LOOP_STOP_WHEN>[0]["steps"],
-    }),
-  ).toBe(false);
-  const atLimit = [...belowLimit, {}];
-  expect(
-    await AGENT_LOOP_STOP_WHEN({
-      steps: atLimit as Parameters<typeof AGENT_LOOP_STOP_WHEN>[0]["steps"],
-    }),
-  ).toBe(true);
-});
-
-test("agent loop reserves its final step for synthesis", () => {
+test("agent work continues through checkpoint boundaries", () => {
   expect(agentToolChoiceForStep(0)).toBe("required");
   expect(agentToolChoiceForStep(1)).toBe("auto");
-  expect(agentToolChoiceForStep(AGENT_MAX_STEPS - 2)).toBe("auto");
-  expect(agentToolChoiceForStep(AGENT_MAX_STEPS - 1)).toBe("none");
-});
-
-test("web tools are available only during the initial model step", () => {
-  const neutronTools = ["list_apps", "call_app_tool"] as const;
-  expect(AGENT_WEB_TOOL_STEPS).toBe(1);
-  expect(agentActiveToolsForStep(0, true, neutronTools)).toBeUndefined();
-  expect(
-    agentActiveToolsForStep(AGENT_WEB_TOOL_STEPS, true, neutronTools),
-  ).toEqual(neutronTools);
-  expect(agentActiveToolsForStep(AGENT_MAX_STEPS, false, neutronTools))
-    .toBeUndefined();
+  expect(agentToolChoiceForStep(AGENT_CHECKPOINT_STEPS - 2)).toBe("auto");
+  expect(agentToolChoiceForStep(AGENT_CHECKPOINT_STEPS - 1)).toBe("auto");
 });
 
 test("agent stream timeout permits bounded long-running tools", () => {
@@ -153,7 +126,7 @@ test("uncached tiles activate independently and status reports only model turns"
     value: { locks },
   });
 
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("busy-tab");
   const conversations = new Map();
   let conversationLoads = 0;
@@ -228,7 +201,7 @@ test("uncached tiles activate independently and status reports only model turns"
 });
 
 test("two uncached tile mutations can activate concurrently", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const first = tileHistory("uncached-first");
   const second = tileHistory("uncached-second");
   let activeLoads = 0;
@@ -270,7 +243,7 @@ test("two uncached tile mutations can activate concurrently", async () => {
 });
 
 test("mutation preactivation cannot replace newer tile state after a slow load", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("active-preload");
   const live = {
     selectedModelId: null,
@@ -427,7 +400,7 @@ test("startup recovery rejects an invalid durable owner prompt", () => {
 });
 
 test("conversation reset cannot erase a journaled active turn prompt", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("active");
   Object.assign(runtime, {
     activeTurns: new Map([[historyId, {
@@ -443,7 +416,7 @@ test("conversation reset cannot erase a journaled active turn prompt", async () 
 });
 
 test("a cancelled reset cannot delete history after its reload finishes", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("cancelled-reset");
   const conversation = {
     selectedModelId: null,
@@ -514,7 +487,7 @@ test("a reset cancelled while queued for mutation keeps its history", async () =
     value: { locks },
   });
 
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("cancelled-queued-reset");
   const conversation = {
     selectedModelId: null,
@@ -558,7 +531,7 @@ test("a reset cancelled while queued for mutation keeps its history", async () =
 });
 
 test("a stale tile cannot clear a conversation it has not reviewed", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("stale-reset");
   const conversation = {
     selectedModelId: null,
@@ -591,7 +564,7 @@ test("a stale tile cannot clear a conversation it has not reviewed", async () =>
 });
 
 test("stop affects only the requesting tile's turn", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const owner = tileHistory("owner");
   const other = tileHistory("other");
   const abortController = new AbortController();
@@ -616,7 +589,7 @@ test("stop affects only the requesting tile's turn", async () => {
 });
 
 test("a delayed cross-tab stop cannot abort the next turn", () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("stale-stop");
   const abortController = new AbortController();
   Object.assign(runtime, {
@@ -633,7 +606,7 @@ test("a delayed cross-tab stop cannot abort the next turn", () => {
 });
 
 test("stop cancels a turn while its durable conversation is still loading", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("loading");
   const shared = {
     selectedModelId: "provider/model",
@@ -772,7 +745,7 @@ test("distinct tiles run concurrently and stop remains isolated", async () => {
   streams.get("second prompt")?.release();
   await Promise.all([firstChat, secondChat]);
 
-  expect(stored.get(first)?.messages.at(-1)?.text).toBe("first prompt");
+  expect(stored.get(first)?.messages.at(-1)?.text).toContain("Stopped.");
   expect(stored.get(second)?.messages.at(-1)?.text).toBe(
     "done second prompt",
   );
@@ -1033,7 +1006,7 @@ test("model selection is tile-scoped and updates only the new-tile default", asy
 });
 
 test("a removed Kernel connection is rejected before model work", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("stale-credential");
   const emptyConversation = {
     selectedModelId: null,
@@ -1075,7 +1048,7 @@ test("a removed Kernel connection is rejected before model work", async () => {
 });
 
 test("disconnect is idempotent when another device removed the connection", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("already-disconnected");
   const emptyConversation = {
     selectedModelId: null,
@@ -1112,7 +1085,7 @@ test("disconnect is idempotent when another device removed the connection", asyn
 });
 
 test("a connection relay preserves the matching live Kernel connection", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("connection-relay");
   const connection = {
     appId: "agent",
@@ -1145,7 +1118,7 @@ test("a connection relay preserves the matching live Kernel connection", async (
 });
 
 test("snapshots stay below the message-bus limit without deleting history", () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("large-snapshot");
   const largeText = "😀".repeat(64_000);
   const messages = Array.from({ length: 160 }, (_, index) => ({
@@ -1189,10 +1162,19 @@ test("snapshots stay below the message-bus limit without deleting history", () =
   expect(snapshot.hiddenMessageCount).toBeGreaterThan(0);
   expect(snapshot.models.some((model) => model.id === selectedModelId)).toBe(true);
   expect(conversation.messages).toHaveLength(160);
+
+  const work = emptyAgentWork();
+  work.goal = { objective: "文".repeat(16_000), instructions: [], status: "paused", checkpoint: "文".repeat(64_000), updatedAt: 1 };
+  conversation.messages = Array.from({ length: 160 }, (_, index) => ({ id: `large-${index}`, role: "assistant", text: "文".repeat(3_500) }));
+  Object.assign(runtime, { workStates: new Map([[historyId, work]]) });
+  const withGoal = runtime.snapshot(historyId);
+  expect(new TextEncoder().encode(JSON.stringify(withGoal)).byteLength).toBeLessThan(MSG_BUS_MAX_PAYLOAD_BYTES);
+  expect(withGoal.work?.goal?.checkpoint).toHaveLength(64_000);
+  expect(conversation.messages).toHaveLength(160);
 });
 
 test("a model changed in this tile fails before sending the prompt", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("changed-model");
   const connection = {
     appId: "agent",
@@ -1262,7 +1244,7 @@ test("a model changed in this tile fails before sending the prompt", async () =>
 });
 
 test("a conversation changed in another tab fails before model work", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("changed-conversation");
   const connection = {
     appId: "agent",
@@ -1339,7 +1321,7 @@ test("a conversation changed in another tab fails before model work", async () =
 });
 
 test("external state refresh leaves an unrelated local turn in place", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const first = tileHistory("cached-first");
   const second = tileHistory("cached-second");
   const staleConversation = {
@@ -1541,7 +1523,7 @@ test("browser fetch keeps its required global receiver", async () => {
 });
 
 test("cancelling model refresh aborts its fetch and releases the mutation", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const historyId = tileHistory("cancelled-catalog");
   const shared = { selectedModelId: null, models: [], modelsFetchedAt: 0 };
   let fetchStarted!: () => void;
@@ -1595,7 +1577,7 @@ test("cancelling model refresh aborts its fetch and releases the mutation", asyn
 });
 
 test("model loading remains visible until every concurrent refresh finishes", async () => {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const first = tileHistory("models-first");
   const second = tileHistory("models-second");
   const shared = { selectedModelId: null, models: [], modelsFetchedAt: 0 };
@@ -1974,7 +1956,7 @@ function testRuntime(
     sources?: PromiseLike<Array<Record<string, unknown>>>;
   },
 ): AgentRuntime {
-  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const runtime = runtimeFixture();
   const connection = {
     appId: "agent",
     installationUid: "installation",
@@ -2041,7 +2023,16 @@ function testRuntime(
     mutationActive: false,
     activeTurns: new Map(),
     startupError: null,
-    stream,
+    stream: (options: unknown) => {
+      const result = stream(options);
+      return {
+        ...result,
+        fullStream: (async function* () {
+          for await (const text of result.textStream) yield { type: "text-delta", text };
+          yield { type: "finish", finishReason: "stop", totalUsage: {} };
+        })(),
+      };
+    },
   });
   return runtime;
 }
@@ -2076,4 +2067,30 @@ async function eventually(condition: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   throw new Error("Timed out waiting for test condition");
+}
+
+function runtimeFixture(): AgentRuntime {
+  const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
+  const workStates = new Map();
+  const persistedWork = new Map();
+  let storage: any;
+  Object.assign(runtime, { workStates });
+  Object.defineProperty(runtime, "storage", {
+    get: () => storage,
+    set: (value) => {
+      storage = {
+        loadWork: async (id: string) => structuredClone(persistedWork.get(id) ?? emptyAgentWork()),
+        updateWork: async (id: string, update: (state: any) => void, conversation?: any) => {
+          const state = structuredClone(persistedWork.get(id) ?? emptyAgentWork());
+          update(state);
+          persistedWork.set(id, structuredClone(state));
+          if (conversation) await storage.saveConversation(id, conversation);
+          return state;
+        },
+        ...value,
+      };
+    },
+  });
+  (runtime as unknown as { storage: object }).storage = {};
+  return runtime;
 }

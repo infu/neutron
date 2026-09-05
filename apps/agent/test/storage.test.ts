@@ -47,6 +47,32 @@ const model = (id: string): OpenRouterModel => ({
 });
 
 describe("Agent tile history storage", () => {
+  test("goal and queue state survive old history writes, reopen, and concurrent arrivals", async () => {
+    const name = uniqueDatabaseName("goals");
+    const storage = await AgentStorage.open(name);
+    const id = tile("goal");
+    await storage.updateWork(id, (work) => {
+      work.goal = { objective: "Keep the records current", instructions: [], status: "running", checkpoint: "Record 42 verified", updatedAt: 1 };
+    });
+    await Promise.all(Array.from({ length: 20 }, (_, index) => storage.updateWork(id, (work) => {
+      work.queue.push({ id: String(index), mode: "queue", text: `Message ${index}` });
+    })));
+    await storage.saveConversation(id, conversation("older-resident"));
+    const reopened = await AgentStorage.open(name);
+    expect((await reopened.loadWork(id)).goal?.checkpoint).toBe("Record 42 verified");
+    expect((await reopened.loadWork(id)).queue).toHaveLength(20);
+    expect((await reopened.loadWork(tile("different"))).goal).toBeNull();
+    const history = await reopened.loadConversation(id);
+    await reopened.updateWork(id, (work) => {
+      const input = work.queue.shift()!;
+      history.messages.push({ id: input.id, role: "user", text: input.text });
+    }, history);
+    expect((await reopened.loadWork(id)).queue).toHaveLength(19);
+    expect((await reopened.loadConversation(id)).messages.at(-1)?.text).toBe("Message 0");
+    await reopened.deleteAllConversations();
+    expect((await reopened.loadWork(id)).goal).toBeNull();
+    expect((await reopened.loadWork(id)).queue).toHaveLength(0);
+  });
   test("accepts only authenticated Agent chat tile endpoint identities", () => {
     const valid = tile("A_b-9");
     expect(requireAgentChatTileEndpoint(valid)).toBe(valid);
