@@ -48,20 +48,24 @@ export function insertTile(
   root: LayoutNode,
   targetTileId: string,
   newTileId: string,
-  side: InsertSide
+  side: InsertSide,
+  newTileRatio = 0.5,
 ): LayoutNode {
   const target = findNodeByTileId(root, targetTileId);
   if (!target) return root;
 
-  const orientation = side === "left" || side === "right" ? "vertical" : "horizontal";
+  const orientation =
+    side === "left" || side === "right" ? "vertical" : "horizontal";
   const newTile = tileNode(newTileId);
+  const selectedRatio = clampRatio(newTileRatio);
+  const newTileFirst = side === "left" || side === "top";
   const split: SplitNode = {
     id: nextNodeId("split"),
     type: "split",
     orientation,
-    ratio: 0.5,
-    first: side === "left" || side === "top" ? newTile : target,
-    second: side === "left" || side === "top" ? target : newTile,
+    ratio: newTileFirst ? selectedRatio : 1 - selectedRatio,
+    first: newTileFirst ? newTile : target,
+    second: newTileFirst ? target : newTile,
   };
   return replaceNode(root, target.id, split);
 }

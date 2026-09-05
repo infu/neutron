@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,7 +25,6 @@ import {
   workspaceStateById,
 } from "./store.ts";
 import { Launcher } from "./Launcher.tsx";
-import { updateRatio } from "./tree.ts";
 import type {
   InsertSide,
   Rect,
@@ -33,10 +33,11 @@ import type {
   WorkspaceId,
 } from "./types.ts";
 import { isWorkspaceId } from "./types.ts";
+import { useAppearanceStore } from "../appearance.ts";
 
-const GAP = 8;
 const CORNER_HIT_SIZE = 54;
 const IFRAME_FOCUS_POLL_MS = 100;
+const MOBILE_TILE_GAP = 8;
 const MOBILE_WORKSPACE_QUERY = "(max-width: 900px)";
 const MOVE_DRAG_THRESHOLD = 6;
 
@@ -102,13 +103,18 @@ export function WorkspaceView({
   const [dropPreview, setDropPreview] = useState<DropPreview | null>(null);
   const [cursor, setCursor] = useState("default");
   const layoutModifierActive = useLayoutModifierActive(interactive);
+  const configuredTileGap = useAppearanceStore((state) => state.tileGap);
+  const tileOpacity = useAppearanceStore((state) => state.tileOpacity);
+  const tileGap = mobileLayout ? MOBILE_TILE_GAP : configuredTileGap;
 
   const workspace = useWorkspaceStore(
     (state) => workspaceStateById(state.workspaces, workspaceId),
   );
-  const setLayout = useWorkspaceStore((state) => state.setLayout);
+  const expandedTile = useWorkspaceStore((state) => state.expandedTile);
+  const setExpandedTile = useWorkspaceStore((state) => state.setExpandedTile);
   const focusTile = useWorkspaceStore((state) => state.focusTile);
   const closeTile = useWorkspaceStore((state) => state.closeTile);
+  const resizeSplits = useWorkspaceStore((state) => state.resizeSplits);
   const moveTile = useWorkspaceStore((state) => state.moveTile);
   const moveTileToWorkspace = useWorkspaceStore(
     (state) => state.moveTileToWorkspace,
@@ -116,6 +122,10 @@ export function WorkspaceView({
   const setWorkspaceDropTarget = useWorkspaceStore(
     (state) => state.setWorkspaceDropTarget,
   );
+  const spotlightTileId =
+    expandedTile?.workspaceId === workspaceId
+      ? expandedTile.instanceId
+      : null;
   const focusedTileIdRef = useRef(workspace.focusedTileId);
   focusedTileIdRef.current = workspace.focusedTileId;
 
@@ -189,7 +199,10 @@ export function WorkspaceView({
     setDropPreview(null);
     setWorkspaceDropTarget(null);
     setCursor("default");
-  }, [mobileLayout, setWorkspaceDropTarget]);
+  }, [
+    mobileLayout,
+    setWorkspaceDropTarget,
+  ]);
 
   useEffect(() => {
     const pointerId =
@@ -213,7 +226,10 @@ export function WorkspaceView({
     return () => {
       if (interactive) setWorkspaceDropTarget(null);
     };
-  }, [interactive, setWorkspaceDropTarget]);
+  }, [
+    interactive,
+    setWorkspaceDropTarget,
+  ]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -232,21 +248,21 @@ export function WorkspaceView({
 
   const layoutRect = useMemo<Rect>(
     () => ({
-      x: GAP,
-      y: GAP,
-      width: Math.max(0, container.width - GAP * 2),
-      height: Math.max(0, container.height - GAP * 2),
+      x: tileGap,
+      y: tileGap,
+      width: Math.max(0, container.width - tileGap * 2),
+      height: Math.max(0, container.height - tileGap * 2),
     }),
-    [container.height, container.width]
+    [container.height, container.width, tileGap]
   );
 
   const tileRects = useMemo<TileRects>(() => {
     const rects: TileRects = {};
     if (workspace.layout && layoutRect.width > 20 && layoutRect.height > 20) {
-      layoutTiles(workspace.layout, layoutRect, rects, GAP);
+      layoutTiles(workspace.layout, layoutRect, rects, tileGap);
     }
     return rects;
-  }, [workspace.layout, layoutRect]);
+  }, [workspace.layout, layoutRect, tileGap]);
 
   const visibleTileIds = useMemo(
     () => new Set(tileIdsInLayout(workspace.layout)),
@@ -254,6 +270,37 @@ export function WorkspaceView({
   );
   const visibleTiles = workspace.tiles.filter((tile) => visibleTileIds.has(tile.id));
   const canClose = visibleTiles.length > 0;
+
+  useLayoutEffect(() => {
+    if (mobileLayout && spotlightTileId && containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [mobileLayout, spotlightTileId]);
+
+  useEffect(() => {
+    if (
+      spotlightTileId !== null &&
+      !visibleTileIds.has(spotlightTileId)
+    ) {
+      setExpandedTile(null);
+    }
+  }, [setExpandedTile, spotlightTileId, visibleTileIds]);
+
+  useEffect(() => {
+    if (spotlightTileId === null) return;
+    const restoreFromOutside = (event: globalThis.PointerEvent) => {
+      const target = event.target;
+      const spotlight = containerRef.current?.querySelector(
+        ".tile-rect--spotlight",
+      );
+      if (target instanceof Node && spotlight?.contains(target)) return;
+      setExpandedTile(null);
+    };
+    document.addEventListener("pointerdown", restoreFromOutside, true);
+    return () => {
+      document.removeEventListener("pointerdown", restoreFromOutside, true);
+    };
+  }, [setExpandedTile, spotlightTileId]);
 
   const beginMove = (
     tileId: string,
@@ -314,7 +361,12 @@ export function WorkspaceView({
         event.stopPropagation();
         containerRef.current.setPointerCapture(event.pointerId);
         interactionPointerIdRef.current = event.pointerId;
-        const splits = findControllingSplits(workspace.layout, layoutRect, tileId, GAP);
+        const splits = findControllingSplits(
+          workspace.layout,
+          layoutRect,
+          tileId,
+          tileGap,
+        );
         const verticalSplit = corner.includes("right")
           ? splits.right ?? splits.left
           : splits.left ?? splits.right;
@@ -336,7 +388,7 @@ export function WorkspaceView({
       return;
     }
 
-    const target = findResizeTarget(workspace.layout, layoutRect, x, y, GAP);
+    const target = findResizeTarget(workspace.layout, layoutRect, x, y, tileGap);
     if (!target) return;
 
     event.preventDefault();
@@ -425,7 +477,7 @@ export function WorkspaceView({
           return;
         }
       }
-      const resize = findResizeTarget(workspace.layout, layoutRect, x, y, GAP);
+      const resize = findResizeTarget(workspace.layout, layoutRect, x, y, tileGap);
       setCursor(
         resize
           ? resize.split.orientation === "vertical"
@@ -449,29 +501,38 @@ export function WorkspaceView({
           ? dragState.splitRect.width
           : dragState.splitRect.height;
       const nextRatio = dragState.initialRatio + delta / Math.max(1, total);
-      setLayout(updateRatio(workspace.layout, dragState.splitId, nextRatio));
+      resizeSplits(
+        [{ splitId: dragState.splitId, ratio: nextRatio }],
+        workspaceId,
+      );
       return;
     }
 
     if (dragState.type === "corner-resize") {
       setDropPreview(null);
       setWorkspaceDropTarget(null);
-      let nextLayout = workspace.layout;
+      const updates: { splitId: string; ratio: number }[] = [];
       if (dragState.verticalSplit && dragState.initialVRatio !== undefined) {
         const deltaX = event.clientX - dragState.start.x;
         const nextRatio =
           dragState.initialVRatio +
           deltaX / Math.max(1, dragState.verticalSplit.rect.width);
-        nextLayout = updateRatio(nextLayout, dragState.verticalSplit.node.id, nextRatio);
+        updates.push({
+          splitId: dragState.verticalSplit.node.id,
+          ratio: nextRatio,
+        });
       }
       if (dragState.horizontalSplit && dragState.initialHRatio !== undefined) {
         const deltaY = event.clientY - dragState.start.y;
         const nextRatio =
           dragState.initialHRatio +
           deltaY / Math.max(1, dragState.horizontalSplit.rect.height);
-        nextLayout = updateRatio(nextLayout, dragState.horizontalSplit.node.id, nextRatio);
+        updates.push({
+          splitId: dragState.horizontalSplit.node.id,
+          ratio: nextRatio,
+        });
       }
-      setLayout(nextLayout);
+      if (updates.length > 0) resizeSplits(updates, workspaceId);
       return;
     }
 
@@ -585,17 +646,29 @@ export function WorkspaceView({
       ref={containerRef}
       style={mobileLayout ? undefined : { cursor }}
       onPointerDown={
-        interactive && !mobileLayout ? beginWorkspaceDrag : undefined
+        interactive && !mobileLayout && spotlightTileId === null
+          ? beginWorkspaceDrag
+          : undefined
       }
       onPointerMove={
-        interactive && !mobileLayout ? handlePointerMove : undefined
+        interactive && !mobileLayout && spotlightTileId === null
+          ? handlePointerMove
+          : undefined
       }
-      onPointerUp={interactive && !mobileLayout ? handlePointerUp : undefined}
+      onPointerUp={
+        interactive && !mobileLayout && spotlightTileId === null
+          ? handlePointerUp
+          : undefined
+      }
       onPointerCancel={
-        interactive && !mobileLayout ? handlePointerCancel : undefined
+        interactive && !mobileLayout && spotlightTileId === null
+          ? handlePointerCancel
+          : undefined
       }
       onLostPointerCapture={
-        interactive && !mobileLayout ? handleLostPointerCapture : undefined
+        interactive && !mobileLayout && spotlightTileId === null
+          ? handleLostPointerCapture
+          : undefined
       }
       data-tid="workspace"
       data-workspace-id={workspaceId}
@@ -607,13 +680,27 @@ export function WorkspaceView({
           ) : null}
         </div>
       ) : null}
+      {spotlightTileId ? (
+        <div
+          aria-hidden="true"
+          className="tile-spotlight-backdrop"
+          data-tid="tile-spotlight-backdrop"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        />
+      ) : null}
       {visibleTiles.map((tile) => {
+        const spotlighted = spotlightTileId === tile.id;
         const tileDragState =
           dragState?.type === "move" && dragState.tileId === tile.id
             ? dragState
             : null;
         const dragging = Boolean(tileDragState);
-        const rect = tileDragState
+        const rect = spotlighted
+          ? layoutRect
+          : tileDragState
           ? {
               ...tileDragState.originalRect,
               x: tileDragState.preview.x,
@@ -625,25 +712,42 @@ export function WorkspaceView({
           tile,
           rect: mobileLayout ? undefined : rect,
           mobile: mobileLayout,
-          focused: dragging || workspace.focusedTileId === tile.id,
+          focused:
+            spotlighted || dragging || workspace.focusedTileId === tile.id,
           canClose,
+          canSpotlight: spotlighted || !mobileLayout,
           endpointActive: active,
           workspaceId,
+          opacity: tileOpacity,
           dragging,
+          spotlighted,
           onFocus: dragging
             ? () => undefined
             : () => focusTileFromKernelInteraction(tile.id),
           onClose: dragging
             ? () => undefined
             : () => {
-                if (ownsActiveWorkspace()) closeTile(tile.id);
+                if (!ownsActiveWorkspace()) return;
+                closeTile(tile.id);
               },
           onMoveStart: dragging
             ? () => undefined
             : (event) => beginMove(tile.id, event),
+          onToggleSpotlight: () => {
+            if (!ownsActiveWorkspace()) return;
+            if (spotlighted) {
+              setExpandedTile(null);
+              return;
+            }
+            if (mobileLayout) return;
+            focusTileFromKernelInteraction(tile.id);
+            setCursor("default");
+            setExpandedTile({ workspaceId, instanceId: tile.id });
+          },
           hitLayer:
-            dragging ||
-            (!mobileLayout && (layoutModifierActive || Boolean(dragState))),
+            spotlightTileId === null &&
+            (dragging ||
+              (!mobileLayout && (layoutModifierActive || Boolean(dragState)))),
         });
       })}
       {dragState?.type === "move" && dropPreview
@@ -699,26 +803,34 @@ function renderTile({
   mobile = false,
   focused,
   canClose,
+  canSpotlight,
   endpointActive,
   workspaceId,
+  opacity,
   dragging = false,
+  spotlighted,
   hitLayer,
   onFocus,
   onClose,
   onMoveStart,
+  onToggleSpotlight,
 }: {
   tile: TileInstance;
   rect: Rect | undefined;
   mobile?: boolean;
   focused: boolean;
   canClose: boolean;
+  canSpotlight: boolean;
   endpointActive: boolean;
   workspaceId: WorkspaceId;
+  opacity: number;
   dragging?: boolean;
+  spotlighted: boolean;
   hitLayer: boolean;
   onFocus: () => void;
   onClose: () => void;
   onMoveStart: (event: PointerEvent<HTMLElement>) => void;
+  onToggleSpotlight: () => void;
 }) {
   return (
     <div
@@ -727,6 +839,7 @@ function renderTile({
         "tile-rect",
         dragging ? "tile-rect--preview" : "",
         mobile ? "tile-rect--mobile" : "",
+        spotlighted ? "tile-rect--spotlight" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -745,11 +858,15 @@ function renderTile({
         icon={tile.icon}
         focused={focused}
         canClose={canClose}
+        canSpotlight={canSpotlight}
+        opacity={opacity}
+        spotlighted={spotlighted}
         dragging={dragging}
-        movable={!mobile}
+        movable={!mobile && !spotlighted}
         onFocus={onFocus}
         onClose={onClose}
         onMoveStart={onMoveStart}
+        onToggleSpotlight={onToggleSpotlight}
       >
         <div className="tile-frame-wrap">
           <AppTileFrame

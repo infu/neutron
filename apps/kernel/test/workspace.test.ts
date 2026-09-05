@@ -58,6 +58,7 @@ beforeEach(() => {
   useWorkspaceStore.setState({
     activeWorkspaceId: 1,
     workspaceDropTargetId: null,
+    expandedTile: null,
     workspaces: emptyWorkspaces(),
   });
   useAppsStore.setState({
@@ -175,6 +176,65 @@ test("opening the same app tile creates multiple instances", () => {
   expect(workspace.layout?.type).toBe("split");
 });
 
+test("opening with placement uses the canonical split tree", () => {
+  const first = useWorkspaceStore.getState().openTile(helloTile);
+  const second = useWorkspaceStore.getState().openTile(
+    {
+      ...helloTile,
+      tileId: "tools",
+      title: "Hello: Tools",
+    },
+    { relativeTo: first.id, side: "top", size: 0.3 },
+  );
+
+  expect(useWorkspaceStore.getState().workspaces[1].layout).toMatchObject({
+    type: "split",
+    orientation: "horizontal",
+    ratio: 0.3,
+    first: { type: "tile", tileId: second.id },
+    second: { type: "tile", tileId: first.id },
+  });
+});
+
+test("expanded tile state is transient and follows canonical close and switch actions", () => {
+  const tile = useWorkspaceStore.getState().openTile(helloTile);
+  useWorkspaceStore.getState().setExpandedTile({
+    workspaceId: 1,
+    instanceId: tile.id,
+  });
+  expect(useWorkspaceStore.getState().expandedTile?.instanceId).toBe(tile.id);
+
+  useWorkspaceStore.getState().switchWorkspace(1);
+  expect(useWorkspaceStore.getState().expandedTile?.instanceId).toBe(tile.id);
+
+  useWorkspaceStore.getState().switchWorkspace(2);
+  expect(useWorkspaceStore.getState().expandedTile).toBeNull();
+
+  useWorkspaceStore.getState().switchWorkspace(1);
+  useWorkspaceStore.getState().setExpandedTile({
+    workspaceId: 1,
+    instanceId: tile.id,
+  });
+  useWorkspaceStore.getState().closeTile(tile.id);
+  expect(useWorkspaceStore.getState().expandedTile).toBeNull();
+});
+
+test("moving the expanded focused tile to its current workspace is a no-op", () => {
+  const tile = useWorkspaceStore.getState().openTile(helloTile);
+  useWorkspaceStore.getState().setExpandedTile({
+    workspaceId: 1,
+    instanceId: tile.id,
+  });
+  const before = useWorkspaceStore.getState();
+
+  useWorkspaceStore.getState().moveFocusedTileToWorkspace(1);
+
+  const after = useWorkspaceStore.getState();
+  expect(after.activeWorkspaceId).toBe(1);
+  expect(after.expandedTile).toEqual(before.expandedTile);
+  expect(after.workspaces[1]).toEqual(before.workspaces[1]);
+});
+
 test("closing the last tile leaves the workspace empty", () => {
   const tile = useWorkspaceStore.getState().openTile(helloTile);
 
@@ -273,6 +333,56 @@ test("moving a tile between workspaces atomically moves the exact requested tile
   expect(tileIdsInLayout(state.workspaces[2].layout).sort()).toEqual(
     [targetTile.id, requested.id].sort(),
   );
+});
+
+test("background placement can move a tile without activating its target workspace", () => {
+  const moved = useWorkspaceStore.getState().openTile(helloTile);
+  useWorkspaceStore.getState().switchWorkspace(2);
+  const relative = useWorkspaceStore.getState().openTile({
+    ...helloTile,
+    appId: "notes",
+    title: "Notes: Main",
+  });
+  useWorkspaceStore.getState().switchWorkspace(1);
+
+  useWorkspaceStore.getState().moveTileToWorkspace(
+    1,
+    moved.id,
+    2,
+    { relativeTo: relative.id, side: "left", size: 0.4 },
+    false,
+  );
+
+  const state = useWorkspaceStore.getState();
+  expect(state.activeWorkspaceId).toBe(1);
+  expect(state.workspaces[2].focusedTileId).toBe(relative.id);
+  expect(state.workspaces[2].layout).toMatchObject({
+    type: "split",
+    orientation: "vertical",
+    ratio: 0.4,
+    first: { type: "tile", tileId: moved.id },
+    second: { type: "tile", tileId: relative.id },
+  });
+});
+
+test("layout placement preserves the explicitly focused and expanded tile", () => {
+  const first = useWorkspaceStore.getState().openTile(helloTile);
+  const second = useWorkspaceStore.getState().openTile({
+    ...helloTile,
+    appId: "notes",
+    title: "Notes: Main",
+  });
+  useWorkspaceStore.getState().focusTile(first.id);
+  useWorkspaceStore.getState().setExpandedTile({
+    workspaceId: 1,
+    instanceId: first.id,
+  });
+
+  useWorkspaceStore.getState().moveTile(second.id, first.id, "top", 0.35);
+
+  const state = useWorkspaceStore.getState();
+  expect(state.workspaces[1].focusedTileId).toBe(first.id);
+  expect(state.expandedTile?.instanceId).toBe(first.id);
 });
 
 test("stale tile moves cannot insert phantom layout nodes", () => {

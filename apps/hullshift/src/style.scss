@@ -1027,20 +1027,6 @@
     font-size: 0.75rem;
   }
 
-  .hullshift-spinner {
-    inline-size: 30px;
-    block-size: 30px;
-    display: inline-block;
-    border: 2px solid #28434b;
-    border-block-start-color: var(--hs-cyan);
-    border-radius: 50%;
-    animation: hs-spin 900ms linear infinite;
-  }
-
-  @keyframes hs-spin {
-    to { transform: rotate(1turn); }
-  }
-
   .hullshift--reduced-motion * {
     scroll-behavior: auto !important;
     animation-duration: 1ms !important;

@@ -10,7 +10,7 @@ The normative product, protocol, security, storage, economics, and release
 contract is [spec.md](spec.md). Code and tests must follow that document rather
 than treating this README as a second protocol definition.
 
-> **Release status:** v0.3.5 is the current limited-release candidate. Its
+> **Release status:** v0.3.6 is the current limited-release candidate. Its
 > app-level audit stop-ships are remediated, but it is not eligible for a public
 > production launch until the shared Kernel certified-asset implementation has
 > measured, release-bound production and browser/gateway evidence. See
@@ -218,7 +218,7 @@ be checked from the repository root:
 ```sh
 bun packages/neutron-cli/src/index.ts compile \
   --package apps/kernel/kernel.v0.3.12.neutron \
-  --package apps/wagyu/wagyu.v0.3.5.neutron \
+  --package apps/wagyu/wagyu.v0.3.6.neutron \
   --wasm-out /tmp/neutron-wagyu.wasm \
   --candid-out /tmp/neutron-wagyu.did
 ```

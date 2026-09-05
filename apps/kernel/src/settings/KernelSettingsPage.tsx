@@ -15,6 +15,7 @@ import {
   type AppDependencyImpact,
   type KernelRuntimeInfo,
 } from "neutron-compiler/src/install.js";
+import { appearanceOpacityStyle, useAppearanceStore } from "../appearance.ts";
 import { getNeutronId } from "../config.ts";
 import {
   getApps,
@@ -83,6 +84,7 @@ import {
   type InstallProvenance,
 } from "../repository/provenance.ts";
 import { KernelUiModeSettings } from "./KernelUiModeSettings.tsx";
+import { ThemeSettings } from "./ThemeSettings.tsx";
 import { useKernelUiModeStore } from "../ui_mode.ts";
 import { checkAppUpdates } from "../updates/service.ts";
 import { useUpdateCheckStore } from "../updates/store.ts";
@@ -143,6 +145,7 @@ const LOADING_PACKAGE_RECORD = Object.freeze({
 
 export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
   const principal = useAuthStore((state) => state.principal);
+  const tileOpacity = useAppearanceStore((state) => state.tileOpacity);
   const uiMode = useKernelUiModeStore((state) => state.mode);
   const updateCheckPhase = useUpdateCheckStore((state) => state.phase);
   const apps = useAppsStore((state) => state.list);
@@ -744,6 +747,7 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
       aria-labelledby="settings-title"
       className="kernel-settings"
       data-tid="kernel-settings"
+      style={appearanceOpacityStyle(tileOpacity)}
     >
       <div className="kernel-settings-inner">
         <header className="settings-header">
@@ -1053,6 +1057,8 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
         </SettingsSection>
 
         <KernelUiModeSettings />
+
+        <ThemeSettings />
 
         <SettingsDisclosure
           description="Compiler, deployment, and memory details"

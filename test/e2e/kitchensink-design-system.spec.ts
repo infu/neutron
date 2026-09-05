@@ -47,6 +47,7 @@ test("installed Kitchen Sink serves the design-system stylesheet", async ({
   expect(css).toContain(".nt-app");
   expect(css).toContain(".nt-button");
   expect(css).toContain(".nt-dialog");
+  expect(css).toContain(".nt-spinner");
   expect(css).not.toMatch(/gradient\s*\(/i);
   expect(css).not.toMatch(/https?:\/\/|\/\/[^/\s]/i);
 });
@@ -82,6 +83,31 @@ test("installed Kitchen Sink workbench works in narrow browser tiles", async ({
 
     await assertNoDocumentOverflow(page);
     await assertControlsHaveNamesAndTargets(page);
+
+    await page.getByRole("tab", { name: "States" }).click();
+    const loadingState = page.locator('[data-tid="kitchen-loading-state"]');
+    const spinner = loadingState.locator(".nt-spinner");
+    await expect(loadingState).toHaveCSS("background-color", "rgb(8, 11, 15)");
+    await expect(loadingState).toHaveCSS("border-left-width", "0px");
+    await expect(loadingState).toHaveCSS("box-shadow", "none");
+    await expect(spinner).toHaveCSS("width", "14px");
+    await expect(spinner).toHaveCSS("height", "14px");
+    const loadingBox = await loadingState.boundingBox();
+    const spinnerBox = await spinner.boundingBox();
+    if (!loadingBox || !spinnerBox) throw new Error("Loading fixture has no bounds");
+    expect(loadingBox.height).toBeLessThanOrEqual(40);
+    expect(
+      Math.abs(
+        loadingBox.x + loadingBox.width / 2 -
+          (spinnerBox.x + spinnerBox.width / 2),
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(
+        loadingBox.y + loadingBox.height / 2 -
+          (spinnerBox.y + spinnerBox.height / 2),
+      ),
+    ).toBeLessThanOrEqual(1);
 
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { name: "Example settings row" })).toBeVisible();

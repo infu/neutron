@@ -2,10 +2,12 @@
 
 [Back to the documentation index](./index.md)
 
-An app tray is one kernel-rendered button in the top-right toolbar containing
-an app-provided, untrusted manifest icon. Clicking it opens a kernel-owned
-popover containing a transient app page. The app's ordinary resident background
-process owns long-lived state and may update the kernel-rendered numeric badge.
+An app tray is one kernel-rendered navigation button containing an app-provided,
+untrusted manifest icon. It appears at the right of the default horizontal bar
+or near the bottom of the optional vertical-left rail. Clicking it opens a
+kernel-owned popover containing a transient app page. The app's ordinary
+resident background process owns long-lived state and may update the
+kernel-rendered numeric badge.
 
 The authorized shell also has one pinned, trusted Kernel tray item that reuses
 the kernel's popover chrome and positioning. It shows system metrics and the
@@ -94,18 +96,20 @@ therefore publish its initial badge whenever it starts.
 
 ## Popover And Endpoint Lifecycle
 
-The kernel owns the toolbar button, badge, popover chrome, close control,
+The kernel owns the navigation button, badge, popover chrome, close control,
 placement, and native popover behavior. It anchors the panel 6 px below the
-button with an 8 px layout-viewport inset. Its current preferred maximum is
-380 px wide by 520 px tall: width is also capped at half the layout viewport,
-and height is computed from the button to the visible viewport bottom. The
-kernel repositions it on window resize and visual-viewport resize or scroll.
+button in horizontal navigation. In vertical navigation it opens 6 px to the
+right and aligns with the lower tray controls rather than extending below the
+screen. Both placements retain an 8 px visible-viewport inset and are
+recomputed when the window or visual viewport changes. The preferred maximum
+is 380 px wide by 520 px tall; available viewport space may make it smaller.
 Tray pages must handle narrow or vertically constrained frames and provide
 their own internal scrolling.
 
 The button identifies the app and exact unread count to assistive technology,
-advertises a dialog, and reflects expanded state. The popover header repeats the
-tray title and app identity. Its close button receives initial focus; native
+advertises a dialog, and reflects expanded state. The popover header shows the
+tray title once, then any app id or installed app name that is meaningfully
+different from that title. Its close button receives initial focus; native
 popover behavior supplies light-dismiss and returns focus to the invoking
 control.
 
@@ -233,7 +237,7 @@ display context only.
 | Same-app tools and revision events | May expose, list, call, publish, and subscribe while open. Same-app routing needs no consent. |
 | Cross-app tools | Uses the normal one-call or session approval policy. A `provider_once` target may open its provider-owned decision UI from a live tray without a preliminary Kernel grant; the source gains no effect authority, and the exact provider tile owns the decision. |
 | Preapproved or confirmed self calls | Available under the same manifest and owner-consent rules as other app endpoints. |
-| Open a tile | A live direct tray may open or reuse any installed app tile without a Kernel dialog. Navigation stays in the active workspace and always reuses an exact existing app/tile before opening one; callers cannot force a duplicate or switch workspace. Delegated Agent calls retain their separate bounded decision policy. |
+| Open a tile | A live direct tray may open or reuse any installed app tile without a Kernel dialog. Navigation stays in the active workspace and always reuses an exact existing app/tile before opening one; callers cannot force a duplicate or switch workspace. The broader `workspace.inspect` / `workspace.control` surface is resident-agent-only and does not expand tray authority. |
 | Backend reservations | May read its app's reservation list when `backend_calls` is declared, but cannot request, add, or remove reservations. |
 | Connections and raw resident credentials | Unavailable; these actions are exact-background-only. |
 | Clipboard and browser Ethereum provider | Unavailable; these are focused, transiently activated tile operations. |

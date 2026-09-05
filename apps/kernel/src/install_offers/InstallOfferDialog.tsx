@@ -12,23 +12,16 @@ import {
   ConsentNotice,
   ConsentTechnicalDetails,
   focusConsentControl,
-  useConsentUiMode,
 } from "../consent/ConsentPresentation.tsx";
-import type { KernelUiMode } from "../ui_mode.ts";
 
 export function InstallOfferDialog() {
   const pending = useInstallOfferStore((state) => state.pending);
   return <InstallOfferDialogView pending={pending} />;
 }
 
-export function InstallOfferDialogView({
-  pending,
-  uiMode: uiModeOverride,
-}: {
+export function InstallOfferDialogView({ pending }: {
   pending: PendingInstallOffer | null;
-  uiMode?: KernelUiMode;
 }) {
-  const uiMode = useConsentUiMode(uiModeOverride);
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -94,7 +87,7 @@ export function InstallOfferDialogView({
             Third-party software — Neutron has not reviewed, hosted, sold, or
             endorsed it, and has not verified its publisher.
           </div>
-          <ConsentTechnicalDetails mode={uiMode}>
+          <ConsentTechnicalDetails>
           <div className="a-infogrid">
             <RequesterFacts requester={pending.requester} />
             <div className="label">Offer</div>

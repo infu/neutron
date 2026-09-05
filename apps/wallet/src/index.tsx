@@ -2127,36 +2127,30 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       <div className="wallet-shell">
         <header className="wallet-toolbar">
           <div className="wallet-view-switch" role="group" aria-label="Wallet view">
-            <button
-              aria-label="Assets"
+            <IconButton
               aria-pressed={view === "assets"}
-              className={view === "assets" ? "is-active" : undefined}
+              className="wallet-view-button"
+              label="Assets"
               onClick={() => chooseView("assets")}
-              type="button"
             >
               <IoWalletOutline aria-hidden="true" />
-              <span>Assets</span>
-            </button>
-            <button
-              aria-label="Activity"
+            </IconButton>
+            <IconButton
               aria-pressed={view === "activity"}
-              className={view === "activity" ? "is-active" : undefined}
+              className="wallet-view-button"
+              label="Activity"
               onClick={() => chooseView("activity")}
-              type="button"
             >
               <IoReceiptOutline aria-hidden="true" />
-              <span>Activity</span>
-            </button>
-            <button
-              aria-label="Approvals"
+            </IconButton>
+            <IconButton
               aria-pressed={view === "approvals"}
-              className={view === "approvals" ? "is-active" : undefined}
+              className="wallet-view-button"
+              label="Approvals"
               onClick={() => chooseView("approvals")}
-              type="button"
             >
               <IoShieldCheckmarkOutline aria-hidden="true" />
-              <span>Approvals</span>
-            </button>
+            </IconButton>
           </div>
           <span className="wallet-toolbar-spacer" />
           {view === "assets" && portfolio.eligible > 0 ? (

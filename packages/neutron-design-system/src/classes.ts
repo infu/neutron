@@ -166,6 +166,7 @@ export const nt = {
   stateError: "nt-state nt-state--error",
   statePartial: "nt-state nt-state--partial",
   stateSuccess: "nt-state nt-state--success",
+  spinner: "nt-spinner",
   progress: "nt-progress",
   statusDot: "nt-status-dot",
   copyField: "nt-copy-field",

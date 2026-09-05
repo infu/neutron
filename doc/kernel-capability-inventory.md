@@ -46,7 +46,7 @@ and finite bounds.
 | `vetkeys` | Use app-isolated encrypted-key slots | Exact slots, browser derivation, attenuated backend public-key access, generation lifecycle |
 | `scheduled_tasks` | Run exact backend methods on bounded schedules | At most two per app, actor-wide task admission, per-run backend-call ceiling |
 | `preapproved_self_calls` | Let app UI call exact owner-authorized self methods without another prompt | Exact method/mode, live Candid, source and scope binding |
-| `agent_entrypoints` | Expose exact resident-background tools to owner-authorized agents | At most four entrypoints, invocation and endpoint binding |
+| `agent_entrypoints` | Expose exact resident-background tools and admit that resident to Kernel visual workspace tools | At most four entrypoints; exact resident role and endpoint binding; workspace control is invocation-free resident or direct-root only |
 | `background_ui_requests` | Let a resident request exact Kernel dialog categories | Four closed categories; Kernel retains user interaction |
 | `ethereum_provider` | Use exact EIP-1193 methods on exact chains | Focused owner activation, EIP-6963 provider selection, bounded session |
 | `connections` | Connect a resident background to exact trusted providers/scopes | Provider catalog/adapter, PKCE, one credential per `(AppScope, provider)` |

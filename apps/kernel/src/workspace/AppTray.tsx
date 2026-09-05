@@ -136,7 +136,7 @@ function AppTrayItem({
       popoverId={popoverId}
       popoverRef={popoverRef}
       popoverTestId={`app-tray-popover-${appId}`}
-      subtitle={<>{appId} · {app.name}</>}
+      subtitle={trayIdentitySubtitle(tray.title, appId, app.name)}
       title={tray.title}
       trigger={
         <>
@@ -317,6 +317,22 @@ export function formatTrayBadge(badge: number): string {
 export function trayButtonLabel(title: string, badge: number | null): string {
   if (!badge) return title;
   return `${title}, ${badge} new item${badge === 1 ? "" : "s"}`;
+}
+
+export function trayIdentitySubtitle(
+  title: string,
+  appId: string,
+  appName: string,
+): string | null {
+  const seen = new Set([title.trim().toLowerCase()]);
+  const distinct = [appId, appName].flatMap((value) => {
+    const trimmed = value.trim();
+    const normalized = trimmed.toLowerCase();
+    if (!trimmed || seen.has(normalized)) return [];
+    seen.add(normalized);
+    return [trimmed];
+  });
+  return distinct.length > 0 ? distinct.join(" · ") : null;
 }
 
 export { positionTrayPopover } from "./TrayPopover.tsx";

@@ -112,7 +112,7 @@ test("safe URL display contains only origin and path", () => {
   expect(safeInstallOfferUrl("not a url")).toBe("Invalid source URL");
 });
 
-test("install offers keep exact provenance optional normally and open it for developers", () => {
+test("install offers keep exact provenance collapsed", () => {
   requestInstallOffer({
     offer: {
       kind: "package_url",
@@ -128,18 +128,12 @@ test("install offers keep exact provenance optional normally and open it for dev
     onApprove: () => undefined,
   });
   const pending = useInstallOfferStore.getState().pending;
-  const normal = renderToStaticMarkup(
-    <InstallOfferDialogView pending={pending} uiMode="normal" />,
-  );
-  const developer = renderToStaticMarkup(
-    <InstallOfferDialogView pending={pending} uiMode="developer" />,
-  );
+  const html = renderToStaticMarkup(<InstallOfferDialogView pending={pending} />);
 
-  expect(consentDetailsTag(normal)).not.toContain(" open");
-  expect(consentDetailsTag(developer)).toContain('open=""');
-  expect(normal).toContain("Review does not install anything");
-  expect(normal).toContain("separate final review");
-  expect(normal).toContain("has not verified its publisher");
+  expect(consentDetailsTag(html)).not.toContain(" open");
+  expect(html).toContain("Review does not install anything");
+  expect(html).toContain("separate final review");
+  expect(html).toContain("has not verified its publisher");
 });
 
 function consentDetailsTag(html: string): string {

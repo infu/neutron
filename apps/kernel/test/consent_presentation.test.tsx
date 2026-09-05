@@ -11,9 +11,9 @@ import type { Permission } from "../src/lib/perm.ts";
 import { IDL } from "@dfinity/candid";
 import { verifiedCallMode } from "../src/trusted_call_mode.ts";
 
-test("developer mode expands the same technical details normal mode keeps optional", () => {
-  const normal = renderToStaticMarkup(
-    <ConsentTechnicalDetails mode="normal">
+test("developer mode expands technical details while omission starts collapsed", () => {
+  const collapsed = renderToStaticMarkup(
+    <ConsentTechnicalDetails>
       <code>exact-app-id</code>
     </ConsentTechnicalDetails>,
   );
@@ -23,10 +23,10 @@ test("developer mode expands the same technical details normal mode keeps option
     </ConsentTechnicalDetails>,
   );
 
-  expect(detailsTag(normal)).not.toContain(" open");
+  expect(detailsTag(collapsed)).not.toContain(" open");
   expect(detailsTag(developer)).toContain('open=""');
-  expect(normal).toContain("Technical details");
-  expect(normal).toContain("exact-app-id");
+  expect(collapsed).toContain("Technical details");
+  expect(collapsed).toContain("exact-app-id");
   expect(developer).toContain("exact-app-id");
 });
 

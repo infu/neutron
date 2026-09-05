@@ -180,8 +180,34 @@
 }
 
 .nt-app :where(.nt-state--loading) {
-  --nt-state-line: var(--nt-info);
-  background: var(--nt-info-muted);
+  align-items: center;
+  background: var(--nt-bg-soft);
+  box-shadow: none;
+  box-sizing: border-box;
+  color: var(--nt-text-faint);
+  display: flex;
+  justify-content: center;
+  min-height: var(--nt-control-md);
+  padding: var(--nt-pad-2);
+  text-align: center;
+}
+
+.nt-app :where(.nt-spinner) {
+  animation: nt-spinner-rotate 800ms linear infinite;
+  border: 2px solid var(--nt-line-subtle);
+  border-block-start-color: var(--nt-text-faint);
+  border-radius: var(--nt-radius-3);
+  box-sizing: border-box;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: var(--nt-icon-sm);
+  width: var(--nt-icon-sm);
+}
+
+@keyframes nt-spinner-rotate {
+  to {
+    transform: rotate(1turn);
+  }
 }
 
 .nt-app :where(.nt-state--success) {

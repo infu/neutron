@@ -72,6 +72,7 @@ plugins: [sassPlugin()];
 | `nt-settings-row` | Row inside a named section | Visible title and description | Native state on row actions | Row actions remain separate controls |
 | `nt-table` | Native table | Caption or nearby heading | `aria-sort` only when sorting | Native table semantics |
 | `nt-alert` | Section or `div` | Visible title/text | `role="alert"` only for urgent inserted errors | Not focusable by default |
+| `nt-state--loading` + `nt-spinner` | Status `div` + decorative `span` | `aria-label` on status | `role="status"`; `aria-busy` on updated region | Not focusable; reduced motion stops rotation |
 | `nt-tag` | Non-interactive span | Visible text | Tone/selected classes | Decorative metadata unless wrapped in a control |
 | `nt-dialog` | Native `dialog` or named grouped panel | `aria-labelledby` | App-owned modal attributes | App code owns Escape/focus restore |
 
@@ -93,7 +94,11 @@ trusted approval, install, authorization, or signature dialogs.
   `nt-pre nt-pre--wrap`.
 - Tags: use `nt-tag-list` and `nt-tag` for compact metadata; use buttons or
   checkboxes when the tag is interactive.
-- Empty/loading/error: use `nt-state` variants and `nt-alert` with visible
-  recovery controls.
+- Empty/error: use `nt-state` variants and `nt-alert` with visible recovery
+  controls.
+- Loading: use a compact `nt-state nt-state--loading` status containing only a
+  centered `nt-spinner`; name the status with `aria-label` and mark the updated
+  region `aria-busy="true"`. For a pending button or row, use only `nt-spinner`
+  in that existing surface—never add a loading card.
 - Destructive flows: use warning, danger, or critical severity with explicit
   consequence text; kernel approval remains kernel-owned.

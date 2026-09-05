@@ -3,7 +3,6 @@ import { MSG_BUS_MAX_PAYLOAD_BYTES } from "neutron-tools/protocol";
 import type { RegisteredEndpoint } from "../src/frame_context.ts";
 import {
   approveAgentGrant,
-  admitAgentWorkspaceMutation,
   beginAgentRoot,
   clearAgentModeForAuth,
   completeInvocation,
@@ -311,7 +310,7 @@ test("a denial closes the descendant permission path", async () => {
   completeInvocation(root);
 });
 
-test("agent root starts and workspace mutations are bounded", async () => {
+test("agent root starts are bounded", async () => {
   await grantAgent();
   const resident = background("agent");
   for (let index = 0; index < 6; index += 1) {
@@ -335,7 +334,7 @@ test("agent root starts and workspace mutations are bounded", async () => {
   ).toThrow("Agent turn start limit reached");
 });
 
-test("workspace limits are root-bound and active descendants are app-wide", async () => {
+test("active descendants are tracked app-wide", async () => {
   await grantAgent();
   const root = beginAgentRoot({
     caller: tile("agent"),
@@ -346,15 +345,6 @@ test("workspace limits are root-bound and active descendants are app-wide", asyn
   })!;
   const child = createChildInvocation(root, background("wallet"), "send");
   expect(hasActiveInvocationForApp("wallet")).toBe(true);
-  const now = Date.now();
-  admitAgentWorkspaceMutation(child, true, now);
-  expect(() => admitAgentWorkspaceMutation(child, false, now + 1_000)).toThrow(
-    "Agent tile focus limit reached",
-  );
-  expect(() => admitAgentWorkspaceMutation(child, true, now + 2_000)).toThrow(
-    "Agent tile opening limit reached",
-  );
-  admitAgentWorkspaceMutation(child, true, now + 20_000);
   completeInvocation(child);
   completeInvocation(root);
   expect(hasActiveInvocationForApp("wallet")).toBe(false);

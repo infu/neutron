@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { IoApps } from "react-icons/io5";
 import { useAuthStore } from "../reducer/auth.ts";
 import { startRuntimeAuthorityMonitor } from "../runtime_authority_monitor.ts";
@@ -10,6 +16,7 @@ import {
 } from "./modifier.ts";
 import { AppBackgroundFrames } from "./AppBackgroundFrames.tsx";
 import { AppTray } from "./AppTray.tsx";
+import { DesktopBackground } from "./DesktopBackground.tsx";
 import { FullscreenToggle } from "./FullscreenToggle.tsx";
 import { KernelTrayItem } from "./KernelTrayItem.tsx";
 import {
@@ -18,8 +25,10 @@ import {
   workspaceStateById,
 } from "./store.ts";
 import { WorkspaceView } from "./WorkspaceView.tsx";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher.tsx";
 import type { WorkspaceId } from "./types.ts";
 import { AgentModeIndicator } from "../AgentModeUI.tsx";
+import { useAppearanceStore } from "../appearance.ts";
 
 export function WorkspaceShell() {
   const { logged, authorized, loading, principal, sessionGeneration } =
@@ -28,6 +37,10 @@ export function WorkspaceShell() {
   const [kernelView, setKernelView] = useState<"workspace" | "settings">(
     "workspace",
   );
+  const navigationLayout = useAppearanceStore(
+    (state) => state.navigationLayout,
+  );
+  const tileGap = useAppearanceStore((state) => state.tileGap);
   const kernelTrayTriggerRef = useRef<HTMLButtonElement>(null);
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const workspaceSession =
@@ -54,6 +67,7 @@ export function WorkspaceShell() {
     workspaces,
   });
   const switchWorkspace = useWorkspaceStore((state) => state.switchWorkspace);
+  const setExpandedTile = useWorkspaceStore((state) => state.setExpandedTile);
   const moveFocusedTileToWorkspace = useWorkspaceStore(
     (state) => state.moveFocusedTileToWorkspace
   );
@@ -96,6 +110,10 @@ export function WorkspaceShell() {
       };
     });
   }, [activeWorkspaceId, workspaceSession]);
+
+  useEffect(() => {
+    setExpandedTile(null);
+  }, [setExpandedTile, workspaceSession]);
 
   useEffect(() => {
     if (!logged || !authorized || loading) return;
@@ -198,12 +216,22 @@ export function WorkspaceShell() {
   if (!logged || !authorized || loading) return null;
 
   return (
-    <main className="desktop-shell">
+    <main
+      className={`desktop-shell desktop-shell--nav-${navigationLayout}`}
+      data-navigation-layout={navigationLayout}
+      style={{ "--desktop-tile-gap": `${tileGap}px` } as CSSProperties}
+    >
+      <DesktopBackground />
       <div
         aria-hidden={launcherOpen ? true : undefined}
         className="desktop-topbar"
         data-tid="desktop-topbar"
         inert={launcherOpen ? true : undefined}
+        onClickCapture={
+          kernelView === "settings"
+            ? () => setKernelView("workspace")
+            : undefined
+        }
       >
         <button
           type="button"
@@ -215,49 +243,13 @@ export function WorkspaceShell() {
         >
           <IoApps aria-hidden="true" />
         </button>
-        <div className="workspace-switcher" data-tid="workspace-switcher">
-          {shownWorkspaceIds.map((id) => {
-            const workspace = workspaceStateById(workspaces, id);
-            const active = id === activeWorkspaceId;
-            const dropTarget = id === workspaceDropTargetId;
-            const tileCount = workspace.tiles.length;
-            const occupied = tileCount > 0;
-            const indicatorCount = Math.min(tileCount, 4);
-            const occupancyLabel =
-              tileCount === 0
-                ? "empty"
-                : `${tileCount} open tile${tileCount === 1 ? "" : "s"}`;
-            return (
-              <button
-                type="button"
-                key={id}
-                className={[
-                  active ? "active" : "",
-                  occupied ? "occupied" : "empty",
-                  dropTarget ? "workspace-drop-target" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                aria-current={active ? "page" : undefined}
-                aria-label={`Workspace ${id}, ${occupancyLabel}`}
-                data-tile-count={indicatorCount}
-                data-tid={`workspace-switch-${id}`}
-                data-workspace-drop-target={id}
-                title={`Workspace ${id}, ${occupancyLabel}`}
-                onClick={() => selectWorkspace(id)}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`workspace-glyph workspace-glyph--${indicatorCount}`}
-                >
-                  {Array.from({ length: indicatorCount }, (_, index) => (
-                    <span className="workspace-glyph-cell" key={index} />
-                  ))}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <WorkspaceSwitcher
+          activeWorkspaceId={activeWorkspaceId}
+          onSelectWorkspace={selectWorkspace}
+          shownWorkspaceIds={shownWorkspaceIds}
+          workspaceDropTargetId={workspaceDropTargetId}
+          workspaces={workspaces}
+        />
         <div className="desktop-topbar-actions">
           <AgentModeIndicator />
           <FullscreenToggle />

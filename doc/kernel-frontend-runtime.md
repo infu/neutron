@@ -67,11 +67,13 @@ window.install_app = async (): Promise<void> => {
 `apps/kernel/src/workspace/WorkspaceShell.tsx` is mounted only after the user is
 logged in and the auth reducer is no longer loading. It loads
 `/system/apps.json` through `getApps()` and certified HTTP, renders
-`WorkspaceView`, renders a
-top toolbar with a launcher icon button, sequential workspace switcher,
+`WorkspaceView`, renders the launcher button, sequential workspace switcher,
 installed app tray icons, and a pinned trusted Kernel tray item, and controls
-the launcher. The previous standalone Settings and account-menu buttons are not
-rendered in the authorized workspace shell.
+the launcher. Navigation is horizontal across the top by default. The Theme
+setting may instead place the same controls in a vertical rail on the left,
+with workspaces at the top and tray controls at the bottom. The previous
+standalone Settings and account-menu buttons are not rendered in the authorized
+workspace shell.
 
 The Kernel tray item uses the same kernel-owned popover chrome and placement as
 app tray items, but its body is trusted React rather than an app iframe. It
@@ -82,19 +84,24 @@ Wasm allocation or stable memory for the displayed usage. Stable and logical
 stable memory are not shown in the tray. It does not repeat the signed-in
 principal; that identity is marked in Settings' authorized-principals list. App
 tray icons may scroll when space is constrained; the Kernel item remains pinned
-at the right edge of the tray.
+at the end of the tray: the right edge in horizontal navigation and the bottom
+in vertical navigation.
 
 The shell owns a transient `workspace | settings` view state. Opening Settings
-does not unmount the workspace: its surface becomes hidden, `aria-hidden`, and
-`inert`, while every mounted tile iframe remains mounted. Resident background
-frames remain outside the view switch and continue running. Back, Escape, a
-workspace button, or opening the launcher returns to the workspace; closing
-Settings restores focus to the Kernel tray button.
+does not unmount the workspace: its surface and layers become visibility-hidden,
+`aria-hidden`, and `inert`, while every mounted tile iframe remains mounted.
+Resident background frames remain outside the view switch and continue
+running. Back, Escape, a workspace button, opening the launcher, or clicking
+the navigation outside Settings returns to the workspace. Back and Escape
+restore focus to the Kernel tray button; a navigation click retains that
+clicked control's normal behavior.
 
 The shell starts with three empty workspaces. When every exposed workspace is
 occupied, it appends one sequential empty workspace, up to 20 workspaces. It
 does not append another while any exposed workspace is empty. Workspace state
 is stored in versioned localStorage by `apps/kernel/src/workspace/store.ts`.
+Temporary expanded-tile state lives in that same runtime store but is not part
+of the persisted workspace root.
 
 The active workspace is mounted first. Another workspace is mounted lazily the
 first time it is visited and remains in a hidden, `aria-hidden`, inert layer for
@@ -131,8 +138,9 @@ delete already-open windows.
 ### Layout And Gestures
 
 `apps/kernel/src/workspace/layout.ts` and `tree.ts` provide pure split-tree
-helpers. Split ratios clamp to `0.15..0.85`, the workspace gap is `8px`, and
-the React view computes tile rectangles from the active layout.
+helpers. Split ratios clamp to `0.15..0.85`. The React view computes tile
+rectangles from the active layout using the browser-local desktop gap, which
+defaults to `8px`.
 
 The workspace implements Hyprland-style pointer behavior:
 
@@ -149,6 +157,23 @@ Alt. Because iframe content consumes pointer events, the workspace renders a
 parent-owned hit layer over iframe content while a layout modifier is held or a
 drag is active.
 
+On desktop, the gray control beside a focused tile's close button temporarily
+spotlights that live tile across the normal tiled area, retaining the current
+outer tile gap. This does not change the split tree, sibling rectangles, or
+iframe instances; sibling tiles are visibility-hidden until the spotlight is
+restored. Pressing the control again or clicking outside the tile restores its
+normal rectangle. The mobile layout does not offer the control for starting an
+expansion, but an Agent-expanded tile fills the mobile workspace and exposes
+the same control for restoring it.
+
+The discoverable Kernel tools `workspace.inspect` and `workspace.control` use
+this same store and these same split-tree helpers. Inspection projects exact
+tile and split ids from the canonical state. Control applies one `open`,
+`focus`, `close`, `place`, `resize`, `move`, `switch`, `expand`, or `restore`
+operation; it does not mirror layout state in an Agent-specific controller.
+The retained `workspace.open_tile` compatibility tool also reaches the same
+open-or-focus implementation.
+
 Keyboard workspace commands use only browser-delivered Meta/Super/OS/Hyper
 states, not plain Alt:
 
@@ -159,9 +184,10 @@ states, not plain Alt:
 
 ### Launcher
 
-The launcher opens from the top-left launcher icon button. The button is the
-reliable path after focus has moved into an app iframe, because the parent page
-does not receive keyboard events while a cross-origin iframe owns focus.
+The launcher opens from the icon at the start of the navigation bar. The button
+is the reliable path after focus has moved into an app iframe, because the
+parent page does not receive keyboard events while a cross-origin iframe owns
+focus.
 
 The launcher also opens with the global shortcuts implemented in
 `WorkspaceShell` when focus is in the parent page:
@@ -206,7 +232,9 @@ intended to add exact permissions, identifiers, hashes, and runtime details.
 Consent prompts use one shared consequence projection in normal mode and keep
 the complete exact disclosure in a collapsed technical-details section.
 Developer mode opens that same section by default; it does not maintain a
-second approval flow or a separate permission interpretation.
+second approval flow or a separate permission interpretation. Installation and
+update reviews are the exception: their large technical sections start
+collapsed in either mode and remain expandable.
 The expandable Interface section beside Runtime provides an `Enable developer
 mode` switch and writes the validated preference to
 `neutron-kernel-ui-mode-v1`; unavailable or malformed storage falls back to
@@ -214,6 +242,15 @@ mode` switch and writes the validated preference to
 is not exposed to app frames. This mode is presentation-only: it must never
 change authorization, permission enforcement, risk classification, or the
 material consequences required for informed consent.
+
+The adjacent, collapsed Theme section keeps the horizontal-or-vertical
+navigation layout, browser-local surface opacity, desktop gap, and workspace
+color preferences in
+`neutron-kernel-appearance-v1`. A custom background is stored separately as a
+browser cache blob and rendered by one cover-mode image behind the workspace;
+it is not copied into local storage. The 70–100% opacity preference applies to
+each app tile, the launcher, and Settings. At full opacity those existing root
+elements have no CSS opacity declaration.
 
 Settings refreshes the app registry, `kernel_runtime_info`,
 `kernel_settings_snapshot`, and `kernel_app_usage_snapshot`
@@ -971,12 +1008,28 @@ shows every eligible entrypoint, the exact active grant, remaining root
 budgets, and recent allow or deny summaries. These surfaces never display
 capabilities, challenge ids, credentials, or raw arguments.
 
-App-driven tile navigation remains in the current workspace, always reuses an
-exact existing app/tile instance first, and observes capacity limits. Agent
-navigation additionally observes timing limits: roots may navigate without a
-fresh click, while descendants require a one-shot agent decision. Neither path
-can switch, close, move, resize, or reset another app's workspace UI. Tray
-endpoints cannot start Agent Mode or receive delegated agent calls.
+Generic app-driven `workspace.open_tile` navigation remains in the current
+workspace, always reuses an exact existing app/tile instance first, and
+observes capacity limits. It remains available to live direct tile, tray, and
+background endpoints for compatibility.
+
+The broader `workspace.inspect` and `workspace.control` surface is admitted
+only from a live resident background whose installed app declares
+`agent_entrypoints`. An invocation-free resident call can use it without Agent
+Mode. With invocation provenance, only the live depth-zero root is admitted;
+delegated descendants are rejected. The check is capability- and role-based,
+not tied to an Agent app id. Workspace actions have no owner prompt or timing
+cooldown. `move` preserves the active workspace, while `open`, `switch`,
+`focus`, and `expand` bring their target workspace into view. Tray endpoints cannot start Agent Mode or receive delegated agent
+calls.
+
+Making the source tile's workspace inactive through `open`, `switch`, `focus`,
+or `expand` disconnects that tile's message-bus endpoint even though its iframe
+stays mounted and the resident background continues running. A root or normal
+turn bound to that tile may therefore end before the tile receives the tool
+response. This is the existing inactive-workspace lifecycle, not a second focus
+or navigation policy; an agent can prepare another workspace with `move` and
+defer activation until it intends to show it.
 
 A provider presentation uses the same exact open-or-focus primitive but cannot
 choose another app: Kernel derives the provider app from the suspended public

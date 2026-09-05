@@ -37,21 +37,50 @@ export type WorkspaceRootState = {
 
 type PersistedWorkspaceRoot = WorkspaceRootState;
 
+export type ExpandedWorkspaceTile = {
+  workspaceId: WorkspaceId;
+  instanceId: string;
+};
+
+export type TilePlacement = {
+  workspaceId?: WorkspaceId;
+  relativeTo?: string;
+  side?: InsertSide;
+  size?: number;
+};
+
+export type SplitResize = {
+  splitId: string;
+  ratio: number;
+};
+
 type KernelWorkspaceStore = PersistedWorkspaceRoot & {
   workspaceDropTargetId: WorkspaceId | null;
-  openTile: (tile: TileLaunchRequest) => TileInstance;
+  expandedTile: ExpandedWorkspaceTile | null;
+  openTile: (tile: TileLaunchRequest, placement?: TilePlacement) => TileInstance;
   closeTile: (tileId: string) => void;
   focusTile: (tileId: string) => void;
-  setLayout: (layout: LayoutNode) => void;
-  resizeSplit: (splitId: string, ratio: number) => void;
-  moveTile: (tileId: string, targetTileId: string, side: InsertSide) => void;
+  resizeSplits: (
+    updates: readonly SplitResize[],
+    workspaceId?: WorkspaceId,
+  ) => void;
+  moveTile: (
+    tileId: string,
+    targetTileId: string,
+    side: InsertSide,
+    size?: number,
+    workspaceId?: WorkspaceId,
+  ) => void;
   switchWorkspace: (workspaceId: WorkspaceId) => void;
   moveTileToWorkspace: (
     sourceWorkspaceId: WorkspaceId,
     tileId: string,
     targetWorkspaceId: WorkspaceId,
+    placement?: Omit<TilePlacement, "workspaceId">,
+    activateTarget?: boolean,
   ) => void;
   moveFocusedTileToWorkspace: (workspaceId: WorkspaceId) => void;
+  setExpandedTile: (tile: ExpandedWorkspaceTile | null) => void;
   setWorkspaceDropTarget: (workspaceId: WorkspaceId | null) => void;
   resetCurrentWorkspace: () => void;
   removeAppTiles: (appId: string) => void;
@@ -79,19 +108,39 @@ export function workspaceStateById(
 export const useWorkspaceStore = create<KernelWorkspaceStore>((set, get) => ({
   ...loadInitialState(),
   workspaceDropTargetId: null,
+  expandedTile: null,
 
-  openTile(tile) {
+  openTile(tile, placement = {}) {
     const instance: TileInstance = {
       ...tile,
       id: nextTileId(tile.appId, tile.tileId),
     };
-    set((state) =>
-      normalizeWorkspaceRoot(withActiveWorkspace(state, (workspace) => {
-        const target =
-          workspace.focusedTileId ?? workspace.tiles[0]?.id ?? null;
+    set((state) => {
+      const workspaceId = placement.workspaceId ?? state.activeWorkspaceId;
+      const workspace = workspaceStateById(state.workspaces, workspaceId);
+      const target =
+        placement.relativeTo ??
+        workspace.focusedTileId ??
+        workspace.tiles[0]?.id ??
+        null;
+      if (
+        placement.relativeTo !== undefined &&
+        !workspace.tiles.some(
+          (candidate) => candidate.id === placement.relativeTo,
+        )
+      ) {
+        throw new Error("Relative tile is not in the target workspace");
+      }
+      const nextWorkspace = (() => {
         const layout =
           workspace.layout && target
-            ? insertTile(workspace.layout, target, instance.id, "right")
+            ? insertTile(
+                workspace.layout,
+                target,
+                instance.id,
+                placement.side ?? "right",
+                placement.size,
+              )
             : tileNode(instance.id);
         return {
           ...workspace,
@@ -99,18 +148,44 @@ export const useWorkspaceStore = create<KernelWorkspaceStore>((set, get) => ({
           layout,
           focusedTileId: instance.id,
         };
-      })),
-    );
+      })();
+      return {
+        ...normalizeWorkspaceRoot({
+          ...state,
+          workspaces: {
+            ...state.workspaces,
+            [workspaceId]: nextWorkspace,
+          },
+        }),
+        expandedTile:
+          workspaceId === state.activeWorkspaceId
+            ? null
+            : state.expandedTile,
+      };
+    });
     persistWorkspaceState(get());
     return instance;
   },
 
   closeTile(tileId) {
-    set((state) =>
-      normalizeWorkspaceRoot(withActiveWorkspace(state, (workspace) =>
-        closeTileInWorkspace(workspace, tileId),
-      )),
-    );
+    set((state) => {
+      const workspaceId = workspaceIdForTile(state, tileId);
+      if (!workspaceId) return state;
+      return {
+        ...normalizeWorkspaceRoot({
+          ...state,
+          workspaces: {
+            ...state.workspaces,
+            [workspaceId]: closeTileInWorkspace(
+              workspaceStateById(state.workspaces, workspaceId),
+              tileId,
+            ),
+          },
+        }),
+        expandedTile:
+          state.expandedTile?.instanceId === tileId ? null : state.expandedTile,
+      };
+    });
     persistWorkspaceState(get());
   },
 
@@ -126,78 +201,101 @@ export const useWorkspaceStore = create<KernelWorkspaceStore>((set, get) => ({
     persistWorkspaceState(get());
   },
 
-  setLayout(layout) {
+  resizeSplits(updates, workspaceId) {
     set((state) =>
-      withActiveWorkspace(state, (workspace) => ({
-        ...workspace,
-        layout,
-        focusedTileId: keepValidFocus(
-          workspace.tiles,
-          layout,
-          workspace.focusedTileId,
-        ),
-      })),
-    );
-    persistWorkspaceState(get());
-  },
-
-  resizeSplit(splitId, ratio) {
-    set((state) =>
-      withActiveWorkspace(state, (workspace) =>
-        workspace.layout
-          ? {
-              ...workspace,
-              layout: updateRatio(workspace.layout, splitId, ratio),
-            }
-          : workspace,
+      updateWorkspace(
+        state,
+        workspaceId ?? state.activeWorkspaceId,
+        (workspace) =>
+          workspace.layout && updates.length > 0
+            ? {
+                ...workspace,
+                layout: updates.reduce(
+                  (layout, update) =>
+                    updateRatio(layout, update.splitId, update.ratio),
+                  workspace.layout,
+                ),
+              }
+            : workspace,
       ),
     );
     persistWorkspaceState(get());
   },
 
-  moveTile(tileId, targetTileId, side) {
+  moveTile(tileId, targetTileId, side, size, workspaceId) {
     set((state) =>
-      withActiveWorkspace(state, (workspace) => {
-        if (!workspace.layout || tileId === targetTileId) return workspace;
-        if (
-          !workspace.tiles.some((tile) => tile.id === tileId) ||
-          !workspace.tiles.some((tile) => tile.id === targetTileId) ||
-          !findNodeByTileId(workspace.layout, tileId) ||
-          !findNodeByTileId(workspace.layout, targetTileId)
-        ) {
-          return workspace;
-        }
-        const removed = removeTile(workspace.layout, tileId);
-        if (!removed) return workspace;
-        return {
-          ...workspace,
-          layout: insertTile(removed, targetTileId, tileId, side),
-          focusedTileId: tileId,
-        };
-      }),
+      updateWorkspace(
+        state,
+        workspaceId ?? state.activeWorkspaceId,
+        (workspace) => {
+          if (!workspace.layout || tileId === targetTileId) return workspace;
+          if (
+            !workspace.tiles.some((tile) => tile.id === tileId) ||
+            !workspace.tiles.some((tile) => tile.id === targetTileId) ||
+            !findNodeByTileId(workspace.layout, tileId) ||
+            !findNodeByTileId(workspace.layout, targetTileId)
+          ) {
+            return workspace;
+          }
+          const removed = removeTile(workspace.layout, tileId);
+          if (!removed) return workspace;
+          return {
+            ...workspace,
+            layout: insertTile(removed, targetTileId, tileId, side, size),
+          };
+        },
+      ),
     );
     persistWorkspaceState(get());
   },
 
   switchWorkspace(workspaceId) {
-    set((state) =>
-      visibleWorkspaceIds(state).includes(workspaceId)
-        ? normalizeWorkspaceRoot({ ...state, activeWorkspaceId: workspaceId })
-        : state,
-    );
+    set((state) => {
+      if (
+        workspaceId === state.activeWorkspaceId ||
+        !visibleWorkspaceIds(state).includes(workspaceId)
+      ) {
+        return state;
+      }
+      return {
+        ...normalizeWorkspaceRoot({
+          ...state,
+          activeWorkspaceId: workspaceId,
+        }),
+        expandedTile: null,
+      };
+    });
     persistWorkspaceState(get());
   },
 
-  moveTileToWorkspace(sourceWorkspaceId, tileId, targetWorkspaceId) {
-    set((state) => ({
-      ...moveTileBetweenWorkspaces(
+  moveTileToWorkspace(
+    sourceWorkspaceId,
+    tileId,
+    targetWorkspaceId,
+    placement,
+    activateTarget = true,
+  ) {
+    set((state) => {
+      const next = moveTileBetweenWorkspaces(
         state,
         sourceWorkspaceId,
         tileId,
         targetWorkspaceId,
-      ),
-      workspaceDropTargetId: null,
-    }));
+        placement,
+        activateTarget,
+      );
+      const moved =
+        workspaceTile(state, tileId)?.workspaceId !==
+        workspaceTile(next, tileId)?.workspaceId;
+      return {
+        ...next,
+        workspaceDropTargetId: null,
+        expandedTile:
+          moved && state.expandedTile?.instanceId === tileId
+            ? null
+            : state.expandedTile,
+      };
+    });
     persistWorkspaceState(get());
   },
 
@@ -209,6 +307,11 @@ export const useWorkspaceStore = create<KernelWorkspaceStore>((set, get) => ({
       );
       const tileId = source.focusedTileId;
       if (!visibleWorkspaceIds(state).includes(workspaceId)) return state;
+      if (workspaceId === source.id) {
+        return state.workspaceDropTargetId === null
+          ? state
+          : { ...state, workspaceDropTargetId: null };
+      }
       if (!tileId) {
         return {
           ...normalizeWorkspaceRoot({
@@ -224,11 +327,31 @@ export const useWorkspaceStore = create<KernelWorkspaceStore>((set, get) => ({
           source.id,
           tileId,
           workspaceId,
+          undefined,
+          true,
         ),
         workspaceDropTargetId: null,
+        expandedTile:
+          state.expandedTile?.instanceId === tileId ? null : state.expandedTile,
       };
     });
     persistWorkspaceState(get());
+  },
+
+  setExpandedTile(tile) {
+    set((state) => {
+      if (tile === null) {
+        return state.expandedTile === null ? state : { expandedTile: null };
+      }
+      const workspace = state.workspaces[tile.workspaceId];
+      if (
+        state.activeWorkspaceId !== tile.workspaceId ||
+        !workspace?.tiles.some((candidate) => candidate.id === tile.instanceId)
+      ) {
+        return state;
+      }
+      return { expandedTile: tile };
+    });
   },
 
   setWorkspaceDropTarget(workspaceId) {
@@ -246,21 +369,22 @@ export const useWorkspaceStore = create<KernelWorkspaceStore>((set, get) => ({
   },
 
   resetCurrentWorkspace() {
-    set((state) =>
-      normalizeWorkspaceRoot({
+    set((state) => ({
+      ...normalizeWorkspaceRoot({
         ...state,
         workspaces: {
           ...state.workspaces,
           [state.activeWorkspaceId]: emptyWorkspace(state.activeWorkspaceId),
         },
       }),
-    );
+      expandedTile: null,
+    }));
     persistWorkspaceState(get());
   },
 
   removeAppTiles(appId) {
-    set((state) =>
-      normalizeWorkspaceRoot({
+    set((state) => ({
+      ...normalizeWorkspaceRoot({
         ...state,
         workspaces: Object.fromEntries(
           visibleWorkspaceIds(state).map((id) => [
@@ -272,7 +396,12 @@ export const useWorkspaceStore = create<KernelWorkspaceStore>((set, get) => ({
           ]),
         ) as WorkspaceMap,
       }),
-    );
+      expandedTile:
+        state.expandedTile &&
+        workspaceTile(state, state.expandedTile.instanceId)?.tile.appId === appId
+          ? null
+          : state.expandedTile,
+    }));
     persistWorkspaceState(get());
   },
 }));
@@ -307,10 +436,17 @@ function moveTileBetweenWorkspaces(
   sourceWorkspaceId: WorkspaceId,
   tileId: string,
   targetWorkspaceId: WorkspaceId,
+  placement: Omit<TilePlacement, "workspaceId"> = {},
+  activateTarget = true,
 ): PersistedWorkspaceRoot {
   if (!visibleWorkspaceIds(state).includes(targetWorkspaceId)) return state;
   if (sourceWorkspaceId === targetWorkspaceId) {
-    return { ...state, activeWorkspaceId: targetWorkspaceId };
+    return {
+      ...state,
+      activeWorkspaceId: activateTarget
+        ? targetWorkspaceId
+        : state.activeWorkspaceId,
+    };
   }
 
   const source = state.workspaces[sourceWorkspaceId];
@@ -319,26 +455,63 @@ function moveTileBetweenWorkspaces(
   if (!tile) return state;
 
   const target = workspaceStateById(state.workspaces, targetWorkspaceId);
-  const targetFocus = target.focusedTileId ?? target.tiles[0]?.id ?? null;
+  const targetFocus =
+    placement.relativeTo ?? target.focusedTileId ?? target.tiles[0]?.id ?? null;
+  if (
+    placement.relativeTo !== undefined &&
+    !target.tiles.some((item) => item.id === placement.relativeTo)
+  ) {
+    return state;
+  }
   const nextTarget: WorkspaceState = {
     ...target,
     tiles: [...target.tiles, tile],
     layout:
       target.layout && targetFocus
-        ? insertTile(target.layout, targetFocus, tile.id, "right")
+        ? insertTile(
+            target.layout,
+            targetFocus,
+            tile.id,
+            placement.side ?? "right",
+            placement.size,
+          )
         : tileNode(tile.id),
-    focusedTileId: tile.id,
+    focusedTileId: activateTarget
+      ? tile.id
+      : target.focusedTileId ?? tile.id,
   };
 
   return normalizeWorkspaceRoot({
     ...state,
-    activeWorkspaceId: targetWorkspaceId,
+    activeWorkspaceId: activateTarget
+      ? targetWorkspaceId
+      : state.activeWorkspaceId,
     workspaces: {
       ...state.workspaces,
       [sourceWorkspaceId]: closeTileInWorkspace(source, tile.id),
       [targetWorkspaceId]: nextTarget,
     },
   });
+}
+
+export function workspaceTile(
+  state: WorkspaceRootState,
+  instanceId: string,
+): { workspaceId: WorkspaceId; tile: TileInstance } | null {
+  for (const workspaceId of visibleWorkspaceIds(state)) {
+    const tile = state.workspaces[workspaceId]?.tiles.find(
+      (candidate) => candidate.id === instanceId,
+    );
+    if (tile) return { workspaceId, tile };
+  }
+  return null;
+}
+
+function workspaceIdForTile(
+  state: WorkspaceRootState,
+  instanceId: string,
+): WorkspaceId | null {
+  return workspaceTile(state, instanceId)?.workspaceId ?? null;
 }
 
 function normalizeWorkspaceRoot(
@@ -367,7 +540,9 @@ function normalizeWorkspaceRoot(
   ) {
     count += 1;
     const nextId = WORKSPACE_IDS[count - 1];
-    if (nextId) workspaces[nextId] = state.workspaces[nextId] ?? emptyWorkspace(nextId);
+    if (nextId) {
+      workspaces[nextId] = state.workspaces[nextId] ?? emptyWorkspace(nextId);
+    }
   }
 
   return {
@@ -399,6 +574,20 @@ function withActiveWorkspace(
     workspaces: {
       ...state.workspaces,
       [state.activeWorkspaceId]: update(workspace),
+    },
+  };
+}
+
+function updateWorkspace(
+  state: PersistedWorkspaceRoot,
+  workspaceId: WorkspaceId,
+  update: (workspace: WorkspaceState) => WorkspaceState,
+): PersistedWorkspaceRoot {
+  return {
+    ...state,
+    workspaces: {
+      ...state.workspaces,
+      [workspaceId]: update(workspaceStateById(state.workspaces, workspaceId)),
     },
   };
 }

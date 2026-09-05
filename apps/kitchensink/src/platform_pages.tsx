@@ -583,14 +583,22 @@ function TrayPage() {
         <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy) || !snapshot?.unread} onClick={() => void mutate("clear badge", () => client.markAllRead())} type="button">Clear badge</button>
         <button className="nt-button nt-button--ghost" disabled={Boolean(operation.busy)} onClick={() => void operation.run("refresh", refresh)} type="button">Refresh</button>
       </div>
-      <div className="ks-notification-list">
+      <div aria-busy={!snapshot && !error} className="ks-notification-list">
         {snapshot?.notifications.map((notification) => (
           <article key={notification.id} className={notification.read ? "is-read" : ""}>
             <span className={`nt-status-dot ${notification.read ? "nt-status-dot--info" : "nt-status-dot--success"}`} />
             <div><span className="nt-sr-only">{notification.read ? "Cleared" : "Active"}: </span><strong>{notification.title}</strong><small>{notification.detail}</small></div><code>{notification.time}</code>
           </article>
         ))}
-        {!snapshot && !error ? <div className="nt-state nt-state--loading" aria-live="polite"><strong>Loading tray demo</strong><span>Waiting for the private background port.</span></div> : null}
+        {!snapshot && !error ? (
+          <div
+            aria-label="Loading tray demo"
+            className="nt-state nt-state--loading"
+            role="status"
+          >
+            <span aria-hidden="true" className="nt-spinner" />
+          </div>
+        ) : null}
         {snapshot?.notifications.length === 0 ? <div className="nt-state nt-state--empty"><strong>No demo items yet</strong><span>The tray starts quiet. Add one to demonstrate its live badge.</span></div> : null}
       </div>
       {error ? <div className="nt-alert nt-alert--danger" role="alert"><strong>Resident unavailable</strong><span>{error}</span><button className="nt-button nt-button--secondary nt-button--sm" disabled={Boolean(operation.busy)} onClick={() => void operation.run("retry", refresh)} type="button">Retry</button></div> : null}
@@ -669,7 +677,28 @@ function DesignPage() {
           <div className="nt-dialog" role="group" aria-label="Replace durable profile cache"><div className="nt-dialog-body"><h2>Replace durable profile cache</h2><p className="nt-text">Critical app actions explain consequences before opening kernel review.</p></div><div className="nt-dialog-actions"><button className="nt-button nt-button--secondary" type="button">Cancel</button><button className="nt-button nt-button--critical" type="button">Replace cache</button></div></div>
         </section>
         <section id="design-panel-inputs" role="tabpanel" aria-labelledby="design-tab-inputs" className="nt-form ks-design-panel" hidden={active !== "Inputs"} tabIndex={0}><label className="nt-field"><span className="nt-label">Search</span><input className="nt-input" defaultValue="capability" type="search" /></label><label className="nt-field"><span className="nt-label">Mode</span><select className="nt-select" defaultValue="safe"><option value="safe">Safe</option><option value="audit">Audit</option></select></label><label className="nt-field"><span className="nt-label">Description</span><textarea className="nt-textarea" defaultValue="Bounded app-owned value" rows={3} /></label></section>
-        <section id="design-panel-states" role="tabpanel" aria-labelledby="design-tab-states" className="ks-design-panel nt-grid" hidden={active !== "States"} tabIndex={0}><div className="nt-alert">Informational state</div><div className="nt-alert nt-alert--success">Successful operation</div><div className="nt-alert nt-alert--warning">Owner attention needed</div><div className="nt-alert nt-alert--danger">Operation failed</div></section>
+        <section
+          aria-labelledby="design-tab-states"
+          className="ks-design-panel nt-grid"
+          hidden={active !== "States"}
+          id="design-panel-states"
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <div
+            aria-busy="true"
+            aria-label="Loading example"
+            className="nt-state nt-state--loading"
+            data-tid="kitchen-loading-state"
+            role="status"
+          >
+            <span aria-hidden="true" className="nt-spinner" />
+          </div>
+          <div className="nt-alert">Informational state</div>
+          <div className="nt-alert nt-alert--success">Successful operation</div>
+          <div className="nt-alert nt-alert--warning">Owner attention needed</div>
+          <div className="nt-alert nt-alert--danger">Operation failed</div>
+        </section>
         <section id="design-panel-settings" role="tabpanel" aria-labelledby="design-tab-settings" className="ks-design-panel" hidden={active !== "Settings"} tabIndex={0}>
           <section className="nt-section"><header className="nt-section-header"><h2 className="nt-section-heading">Example settings row</h2><span className="nt-section-count">1</span></header><div className="nt-settings-list"><div className="nt-settings-row"><span className="nt-settings-icon"><IoCubeOutline /></span><span className="nt-settings-main"><strong className="nt-settings-title">Kitchen Sink</strong><span className="nt-settings-description">Capability development lab</span></span><span className="nt-settings-meta"><span>0.1.0</span><span>resident</span></span></div></div></section>
           <section className="nt-disclosure"><button aria-controls="design-runtime-content" aria-expanded={runtimeOpen} className="nt-disclosure-trigger" data-tid="kitchen-disclosure-toggle" onClick={() => setRuntimeOpen((value) => !value)} type="button"><span className="nt-disclosure-copy"><strong className="nt-disclosure-title">Runtime</strong><span className="nt-disclosure-description">Compiler, memory, and capability details</span></span></button><div className="nt-disclosure-content" hidden={!runtimeOpen} id="design-runtime-content"><p className="nt-text">16 declared capabilities · one managed memory root · two tiles</p></div></section>

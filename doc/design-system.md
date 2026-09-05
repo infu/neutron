@@ -114,8 +114,9 @@ DFINITY packages, identity libraries, or kernel source.
 - Type does not scale with viewport units.
 - Components keep stable dimensions across hover, focus, loading, and disabled
   states.
-- Warning, danger, success, invalid, loading, and disabled states pair tonal
-  fills with visible labels, messages, or state text.
+- Warning, danger, success, invalid, and disabled states pair tonal fills with
+  visible labels, messages, or state text. Loading uses the compact shared
+  spinner with an accessible status name instead of a highlighted state card.
 
 The package tests compile the public SCSS entrypoint and scan source SCSS for
 these policy rules.
@@ -208,7 +209,7 @@ Feedback and data:
 - `nt-tag-list`, `nt-tag`
 - `nt-state--empty`, `nt-state--loading`, `nt-state--error`,
   `nt-state--partial`, `nt-state--success`
-- `nt-progress`, `nt-status-dot`
+- `nt-spinner`, `nt-progress`, `nt-status-dot`
 - `nt-table`, `nt-kv`, `nt-copy-field`, `nt-list`, `nt-json`
 
 ## Accessibility Matrix
@@ -225,6 +226,7 @@ Feedback and data:
 | `nt-copy-field`              | Readonly input + copy button           | Visible label and button text       | `readonly`, polite status text                             | Input remains focusable/selectable; button uses native activation | `data`                      |
 | `nt-table`                   | Native table                           | Caption or surrounding heading      | `aria-sort` only when app code sorts                       | Native table navigation; sortable headers use buttons             | `data`, `design`            |
 | `nt-alert`                   | Section or `div`                       | Visible title/text                  | `role="alert"` only for newly inserted urgent errors       | Not focusable by default                                          | `design`, runtime error     |
+| `nt-state--loading` + `nt-spinner` | Status `div` + decorative `span` | `aria-label` on the status region | `role="status"`; `aria-busy` on the region being updated | Not focusable; animation stops with reduced motion | `design`, tray |
 | `nt-result`                  | `output` or status region              | Surrounding heading or context      | `aria-live`, `aria-busy`                                   | Result text remains selectable                                    | `overview`, `form`, `calls` |
 | `nt-dialog`                  | Native `dialog` or named grouped panel | `aria-labelledby`                   | `aria-modal` only for real modal behavior                  | App code owns Escape, trapping, and focus restore                 | `design`                    |
 | `nt-progress`                | Native `progress`                      | Visible label or adjacent text      | `value`, `max`                                             | Native progress semantics                                         | `design`                    |
@@ -375,10 +377,21 @@ clipboard writes and their success toast.
 
 ### Empty, Loading, Error, Recovery
 
-Use `nt-state nt-state--empty` for empty data, `nt-state--loading` with
-`aria-busy="true"` on the updating region, `nt-alert nt-alert--danger` for
-recoverable errors, and a visible retry button. Do not hide recovery controls
-behind hover-only affordances.
+Use `nt-state nt-state--empty` for empty data. Loading is not a skeleton or a
+message card: use one compact, borderless `nt-state nt-state--loading` status
+with a centered `nt-spinner`, an accessible name, and `aria-busy="true"` on the
+region being updated:
+
+```html
+<div class="nt-state nt-state--loading" role="status" aria-label="Loading items">
+  <span class="nt-spinner" aria-hidden="true"></span>
+</div>
+```
+
+For a pending button or row action, put only `nt-spinner` inside that existing
+control or row; do not add a state box. Use `nt-alert nt-alert--danger` for
+recoverable errors and keep a visible retry button. Do not hide recovery
+controls behind hover-only affordances.
 
 ### Destructive Confirmation
 

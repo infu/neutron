@@ -117,6 +117,7 @@ import {
   PRODUCTION_KERNEL_V326_RELEASE,
   PRODUCTION_KERNEL_V327_RELEASE,
   PRODUCTION_KERNEL_V328_RELEASE,
+  PRODUCTION_KERNEL_V329_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   assertLegacyUpgradeCompileInvariants,
   compileFinalCandidateLegacyKernelUpgradeFixture,
@@ -126,6 +127,7 @@ import {
   compileFinalCandidateProductionKernelV326UpgradeFixture,
   compileFinalCandidateProductionKernelV327UpgradeFixture,
   compileFinalCandidateProductionKernelV328UpgradeFixture,
+  compileFinalCandidateProductionKernelV329UpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   type LegacyUpgradeCompileFixture,
@@ -496,6 +498,17 @@ finalCandidateTest(
   300_000,
 );
 
+finalCandidateTest(
+  `the reviewed current Kernel archive preserves durable state through the exact production ${PRODUCTION_KERNEL_V329_RELEASE.label} checked self-upgrade`,
+  () =>
+    runLegacyUpgradeQualification(() =>
+      compileFinalCandidateProductionKernelV329UpgradeFixture({
+        expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
+      }),
+    ),
+  300_000,
+);
+
 finalWalletCandidateTest(
   "the reviewed Wallet v0.3.11 archive preserves exact v0.3.10 state through a checked upgrade",
   runWalletUpgradeQualification,
@@ -517,6 +530,12 @@ finalKitchenSinkCandidateTest(
 finalKitchenSinkCandidateTest(
   "the reviewed Kitchen Sink v0.3.10 archive preserves exact v0.3.9 state through a checked upgrade",
   () => runProductionAppUpgradeQualification(kitchenSinkV310UpgradeCase()),
+  600_000,
+);
+
+finalKitchenSinkCandidateTest(
+  "the reviewed Kitchen Sink v0.3.11 archive preserves exact v0.3.10 state through a checked upgrade",
+  () => runProductionAppUpgradeQualification(kitchenSinkV311UpgradeCase()),
   600_000,
 );
 
@@ -1642,6 +1661,15 @@ const PRODUCTION_KITCHENSINK_V309_ARCHIVE: PinnedProductionArchive = {
   sha256: "d4810fa66040bd8b7a9f6973bfa427e8a17f0367cf5a463595417833d96c7c7b",
 };
 
+const PRODUCTION_KITCHENSINK_V310_ARCHIVE: PinnedProductionArchive = {
+  label: "Kitchen Sink v0.3.10",
+  relativePath: "../../../apps/kitchensink/kitchensink.v0.3.10.neutron",
+  id: "kitchensink",
+  version: 310,
+  bytes: 430_618,
+  sha256: "a9998e28ace0f3525bad787aa0f21ccaaf8389252d6f9bf7d063d36bd284d795",
+};
+
 const PRODUCTION_WALLET_V306_ARCHIVE: PinnedProductionArchive = {
   label: "Wallet v0.3.6",
   relativePath: "../../../apps/wallet/wallet.v0.3.6.neutron",
@@ -1666,6 +1694,16 @@ function kitchenSinkV310UpgradeCase(): ProductionAppUpgradeCase {
     predecessor: PRODUCTION_KITCHENSINK_V309_ARCHIVE,
     candidatePath: "../../../apps/kitchensink/kitchensink.v0.3.10.neutron",
     candidateVersion: 310,
+    candidateSha256:
+      "a9998e28ace0f3525bad787aa0f21ccaaf8389252d6f9bf7d063d36bd284d795",
+  });
+}
+
+function kitchenSinkV311UpgradeCase(): ProductionAppUpgradeCase {
+  return kitchenSinkUpgradeCase({
+    predecessor: PRODUCTION_KITCHENSINK_V310_ARCHIVE,
+    candidatePath: "../../../apps/kitchensink/kitchensink.v0.3.11.neutron",
+    candidateVersion: 311,
     candidateSha256Environment:
       "NEUTRON_FINAL_KITCHENSINK_CANDIDATE_SHA256",
   });
@@ -1689,8 +1727,15 @@ function kitchenSinkUpgradeCase(candidate: Readonly<{
     ],
     candidatePath: candidate.candidatePath,
     candidateVersion: candidate.candidateVersion,
-    candidateSha256: candidate.candidateSha256,
-    candidateSha256Environment: candidate.candidateSha256Environment,
+    ...(candidate.candidateSha256 === undefined
+      ? {}
+      : { candidateSha256: candidate.candidateSha256 }),
+    ...(candidate.candidateSha256Environment === undefined
+      ? {}
+      : {
+          candidateSha256Environment:
+            candidate.candidateSha256Environment,
+        }),
     async seedAndCapture({ callApp }) {
       expect(
         await callApp("save_profile", methods.saveProfile, [

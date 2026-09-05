@@ -2,3 +2,4 @@ node_modules
 dist
 *.neutron
 !hullshift.v0.2.1.neutron
+!hullshift.v0.2.4.neutron

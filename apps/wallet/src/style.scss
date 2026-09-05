@@ -100,42 +100,22 @@ body {
     background: rgb(255 255 255 / 2.5%);
     border-radius: 4px;
     display: inline-flex;
-    height: 26px;
+    height: 32px;
     padding: 2px;
 
-    button {
-      align-items: center;
-      background: transparent;
-      border: 0;
-      border-radius: 3px;
+    .wallet-view-button {
       color: var(--nt-text-faint);
-      cursor: pointer;
-      display: inline-flex;
-      font: 600 0.6rem/1 var(--nt-font-sans);
-      height: 22px;
-      letter-spacing: 0;
-      outline: 1px solid transparent;
-      gap: 4px;
-      padding: 0 8px;
 
-      &:hover {
-        color: var(--nt-text-muted);
-      }
-
-      &:focus-visible {
-        outline-color: var(--nt-line-focus);
-      }
-
-      &.is-active {
+      &[aria-pressed="true"] {
         background: #172023;
         box-shadow: 0 1px 3px rgb(0 0 0 / 24%);
         color: var(--nt-text);
       }
 
       > svg {
-        display: none;
-        height: 12px;
-        width: 12px;
+        display: block;
+        height: 14px;
+        width: 14px;
       }
     }
   }
@@ -1940,10 +1920,6 @@ body {
       padding-left: 7px;
     }
 
-    .wallet-view-switch button {
-      padding-inline: 6px;
-    }
-
     .wallet-portfolio {
       grid-template-columns: minmax(0, auto) 10px;
       margin-right: 0;
@@ -2071,10 +2047,6 @@ body {
       .wallet-portfolio,
       .wallet-metadata-trigger {
         display: none;
-      }
-
-      .wallet-view-switch button {
-        padding-inline: 5px;
       }
 
       &.wallet-app--subview .wallet-toolbar {
@@ -2215,18 +2187,6 @@ body {
 
   @media (max-width: 220px) {
     .wallet-app--tray {
-      .wallet-view-switch button {
-        padding-inline: 5px;
-
-        > svg {
-          display: block;
-        }
-
-        > span {
-          display: none;
-        }
-      }
-
       .wallet-error-count,
       .wallet-selection-count,
       .wallet-destination-title,

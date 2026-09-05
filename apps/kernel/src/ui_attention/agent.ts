@@ -34,8 +34,6 @@ const ROOT_START_SHORT_WINDOW_MS = 60_000;
 const ROOT_START_LONG_WINDOW_MS = 10 * 60_000;
 const MAX_ROOT_STARTS_SHORT_WINDOW = 6;
 const MAX_ROOT_STARTS_LONG_WINDOW = 20;
-const NEW_TILE_INTERVAL_MS = 20_000;
-const TILE_FOCUS_INTERVAL_MS = 2_000;
 
 export type AgentGrant = {
   id: string;
@@ -121,8 +119,6 @@ type RootRuntime = {
   endpointSessionId: string;
   calls: number;
   challenges: number;
-  lastNewTileAt: number | null;
-  lastTileFocusAt: number | null;
   timeout: ReturnType<typeof setTimeout>;
 };
 
@@ -357,8 +353,6 @@ export function beginAgentRoot(input: {
     endpointSessionId: node.endpointSessionId,
     calls: 0,
     challenges: 0,
-    lastNewTileAt: null,
-    lastTileFocusAt: null,
     timeout: setTimeout(
       () => cancelAgentRoot(rootId, "Agent turn expired"),
       ROOT_TTL_MS,
@@ -469,30 +463,6 @@ export function invocationMetadata(
     capability: node.capability,
     ...(agentConsent ? { agentConsent: true } : {}),
   };
-}
-
-export function admitAgentWorkspaceMutation(
-  node: InvocationNode,
-  createsTile: boolean,
-  now = Date.now(),
-): void {
-  const root = requireRoot(node);
-  const focusRetry = retryAfter(root.lastTileFocusAt, TILE_FOCUS_INTERVAL_MS, now);
-  const openRetry = createsTile
-    ? retryAfter(root.lastNewTileAt, NEW_TILE_INTERVAL_MS, now)
-    : 0;
-  const retryAfterMs = Math.max(focusRetry, openRetry);
-  if (retryAfterMs > 0) {
-    throw policyError(
-      "AGENT_MODE_LIMIT",
-      createsTile
-        ? "Agent tile opening limit reached"
-        : "Agent tile focus limit reached",
-      retryAfterMs,
-    );
-  }
-  root.lastTileFocusAt = now;
-  if (createsTile) root.lastNewTileAt = now;
 }
 
 export async function requestAgentConsent(
@@ -807,14 +777,6 @@ function pruneAdmissions(values: number[], minimum: number): void {
   const first = values.findIndex((value) => value > minimum);
   if (first === -1) values.length = 0;
   else if (first > 0) values.splice(0, first);
-}
-
-function retryAfter(
-  previous: number | null,
-  interval: number,
-  now: number,
-): number {
-  return previous === null ? 0 : Math.max(0, previous + interval - now);
 }
 
 function updateRootSummary(rootId: string): void {
