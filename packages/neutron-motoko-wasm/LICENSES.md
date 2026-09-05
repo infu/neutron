@@ -13,7 +13,7 @@ exception are in `LICENSE`.
 The pinned Motoko source is:
 
 - repository: `https://github.com/infu/neutron_motoko`
-- revision: `d7ed0a92b6219d784b7143e0851ed64b55dfc25a`
+- revision: `b93f048c8b261e374daab0bb0d4e7f9f2d4b725a`
 
 ## js_of_ocaml and wasm_of_ocaml runtime
 
@@ -35,7 +35,7 @@ conditions that apply to the incorporated component.
 The preferred compiler source, build scripts, and dependency declarations are
 maintained in the compiler's own repository at the exact immutable revision:
 
-- https://github.com/infu/neutron_motoko/tree/d7ed0a92b6219d784b7143e0851ed64b55dfc25a
+- https://github.com/infu/neutron_motoko/tree/b93f048c8b261e374daab0bb0d4e7f9f2d4b725a
 
 The corresponding js_of_ocaml/wasm_of_ocaml runtime source is available at:
 

@@ -120,6 +120,7 @@ import {
   PRODUCTION_KERNEL_V329_RELEASE,
   PRODUCTION_KERNEL_V330_RELEASE,
   PRODUCTION_KERNEL_V331_RELEASE,
+  PRODUCTION_KERNEL_V332_RELEASE,
   RETAINED_KERNEL_V321_RELEASE,
   assertLegacyUpgradeCompileInvariants,
   compileFinalCandidateLegacyKernelUpgradeFixture,
@@ -132,6 +133,7 @@ import {
   compileFinalCandidateProductionKernelV329UpgradeFixture,
   compileFinalCandidateProductionKernelV330UpgradeFixture,
   compileFinalCandidateProductionKernelV331UpgradeFixture,
+  compileFinalCandidateProductionKernelV332UpgradeFixture,
   compileFinalCandidateRetainedKernelUpgradeFixture,
   compileLegacyKernelUpgradeFixture,
   type LegacyUpgradeCompileFixture,
@@ -529,6 +531,17 @@ finalCandidateTest(
   () =>
     runLegacyUpgradeQualification(() =>
       compileFinalCandidateProductionKernelV331UpgradeFixture({
+        expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
+      }),
+    ),
+  300_000,
+);
+
+finalCandidateTest(
+  `the reviewed current Kernel archive preserves durable state through the exact production ${PRODUCTION_KERNEL_V332_RELEASE.label} checked self-upgrade`,
+  () =>
+    runLegacyUpgradeQualification(() =>
+      compileFinalCandidateProductionKernelV332UpgradeFixture({
         expectedSha256: process.env.NEUTRON_FINAL_KERNEL_CANDIDATE_SHA256 ?? "",
       }),
     ),

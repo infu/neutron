@@ -1590,14 +1590,17 @@ export function buildPackagesCompileInput({
 }: CompilePackagesInput): CompileInput {
   assertPreparedPackageBatch([...packages]);
   assertAppVersionTransitions(existingConfigs, packages, versionPolicy);
-  let mofiles = mergeMotokoFiles(existingModules);
+  // Validate each supplied module occurrence once, preserving first-seen order
+  // and duplicate/conflict checks without rehashing every accumulated prefix.
+  const mofiles = mergeMotokoFiles(
+    existingModules,
+    ...packages.map((preparedPackage) =>
+      motokoFilesFromPreparedFiles(preparedPackage.files),
+    ),
+  );
   const configs: CompileConfig = { ...existingConfigs };
 
   for (const preparedPackage of packages) {
-    mofiles = mergeMotokoFiles(
-      mofiles,
-      motokoFilesFromPreparedFiles(preparedPackage.files),
-    );
     configs[preparedPackage.manifest.id] = preparedPackage.manifest;
   }
   const connectionProviderSupport = selectedConnectionProviderSupport(

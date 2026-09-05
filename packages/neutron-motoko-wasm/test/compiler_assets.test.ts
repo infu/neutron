@@ -23,7 +23,7 @@ const manifest = JSON.parse(
 test("pins the custom Motoko compiler source build", () => {
   expect(manifest.source).toMatchObject({
     repository: "https://github.com/infu/neutron_motoko",
-    revision: "d7ed0a92b6219d784b7143e0851ed64b55dfc25a",
+    revision: "b93f048c8b261e374daab0bb0d4e7f9f2d4b725a",
     build_command: "scripts/build-neutron-moc-wasm <output-directory>",
   });
   expect(manifest.source.nix_store_output).toMatch(
@@ -62,12 +62,12 @@ test("ships the exact composite compiler license materials", async () => {
   );
   const notice = await fs.readFile(path.join(packageRoot, "NOTICE"), "utf8");
   for (const text of [index, notice]) {
-    expect(text).toContain("d7ed0a92b6219d784b7143e0851ed64b55dfc25a");
+    expect(text).toContain("b93f048c8b261e374daab0bb0d4e7f9f2d4b725a");
     expect(text).toContain("e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581");
     expect(text).toContain("LICENSE.js_of_ocaml");
   }
   expect(index).toContain(
-    "https://github.com/infu/neutron_motoko/tree/d7ed0a92b6219d784b7143e0851ed64b55dfc25a",
+    "https://github.com/infu/neutron_motoko/tree/b93f048c8b261e374daab0bb0d4e7f9f2d4b725a",
   );
   expect(index).toContain(
     "https://github.com/ocsigen/js_of_ocaml/tree/e4d950bc1cbcb0f8fc61cce06b0c6a2c55f94581",

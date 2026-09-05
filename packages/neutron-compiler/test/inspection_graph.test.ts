@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Motoko } from "neutron-motoko-wasm";
+import { loadMotoko, type Motoko } from "neutron-motoko-wasm";
 import { compile, reachableMotokoFiles } from "../src/compile.ts";
 import { whitelist } from "../whitelist.ts";
 
@@ -64,6 +64,55 @@ test("reachability handles cycles without reinspecting modules", async () => {
 
   expect(files.map(({ path }) => path)).toEqual(["a.mo", "b.mo"]);
   expect(calls).toEqual(["a.mo", "b.mo"]);
+});
+
+test("deep sources with harmless privileged local names do not request a full AST", async () => {
+  const compiler = await loadMotoko();
+  const source = `module { public let cyclesAdd = ${Array(10_000).fill("1").join(" + ")} }`;
+  let inspectionCalls = 0;
+  const mo = {
+    async inspectMotoko(path: string, content: string) {
+      inspectionCalls += 1;
+      return compiler.inspectMotoko(path, content);
+    },
+    async parseMotoko() {
+      throw new Error("Full AST export is unnecessary for complete compact facts");
+    },
+  } as unknown as Motoko;
+
+  const files = await reachableMotokoFiles({
+    configs: {
+      ordinary: { format: 3, id: "ordinary", name: "Ordinary", version: 100, entry: "ordinary" },
+    },
+    mofilesByPath: new Map([["ordinary.mo", source]]),
+    mo,
+  });
+  expect(files).toEqual([{ path: "ordinary.mo", content: source }]);
+  expect(inspectionCalls).toBe(1);
+});
+
+test("older compiler inspection retains the precise AST fallback", async () => {
+  let fallbackCalls = 0;
+  const source = "module { public let cyclesAdd = 1 }";
+  const mo = {
+    async inspectMotoko() {
+      return { immediateImports: [], hasActorUrl: false, dotMembers: [] };
+    },
+    async parseMotoko(content: string) {
+      expect(content).toBe(source);
+      fallbackCalls += 1;
+      return { name: "Prog", args: [] };
+    },
+  } as unknown as Motoko;
+  const files = await reachableMotokoFiles({
+    configs: {
+      ordinary: { format: 3, id: "ordinary", name: "Ordinary", version: 100, entry: "ordinary" },
+    },
+    mofilesByPath: new Map([["ordinary.mo", source]]),
+    mo,
+  });
+  expect(files).toEqual([{ path: "ordinary.mo", content: source }]);
+  expect(fallbackCalls).toBe(1);
 });
 
 const manifest = (id: string, entry: string) => ({

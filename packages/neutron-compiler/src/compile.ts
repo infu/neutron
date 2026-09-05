@@ -9,6 +9,7 @@ import {
 import {
   checkForDangerousASTCode,
   checkForDangerousSyntaxFacts,
+  inspectMotokoSource,
   needsDangerousASTFallback,
 } from "neutron-security";
 import { hashContent } from "neutron-tools/src/hash.js";
@@ -1136,9 +1137,10 @@ async function inspectModule(
     content,
   );
   const imports = filterCompilerImports(inspection.immediateImports);
-  const findings = needsDangerousASTFallback(inspection, content)
-    ? checkForDangerousASTCode(await mo.parseMotoko(content), content)
-    : checkForDangerousSyntaxFacts(inspection, content);
+  const sourceFacts = inspectMotokoSource(content);
+  const findings = needsDangerousASTFallback(inspection, sourceFacts)
+    ? checkForDangerousASTCode(await mo.parseMotoko(content), sourceFacts)
+    : checkForDangerousSyntaxFacts(inspection, sourceFacts);
   return {
     imports,
     findings,
