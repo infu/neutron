@@ -400,6 +400,7 @@ function resolveWorkspacePackagePath(
 }
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left === right) return true;
   if (left.byteLength !== right.byteLength) return false;
   for (let index = 0; index < left.byteLength; index += 1) {
     if (left[index] !== right[index]) return false;
@@ -415,10 +416,13 @@ function hexBytes(value: string): Uint8Array {
   return bytes;
 }
 
+const MOTOKO_BYTE_ESCAPES = Array.from(
+  { length: 256 },
+  (_, byte) => `\\${byte.toString(16).padStart(2, "0")}`,
+);
+
 function motokoBlobLiteral(bytes: Uint8Array): string {
-  return `"${[...bytes]
-    .map((byte) => `\\${byte.toString(16).padStart(2, "0")}`)
-    .join("")}"`;
+  return `"${Array.from(bytes, (byte) => MOTOKO_BYTE_ESCAPES[byte]).join("")}"`;
 }
 
 function checkedAdd(left: number, right: number, label: string): number {

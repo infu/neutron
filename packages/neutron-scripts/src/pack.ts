@@ -2,7 +2,6 @@ import msgpack5 from "msgpack5";
 import { constants } from "node:fs";
 import fs from "fs/promises";
 import path from "path";
-// import ignore from "ignore";
 import zlib from "zlib";
 import { assertAppVersion } from "neutron-tools/src/version.js";
 import { packageArchiveFilename } from "neutron-tools/src/package_archive.js";
@@ -13,11 +12,6 @@ import {
 
 const msgpack = msgpack5();
 const REMOVED_PACKAGE_BUILD_METADATA_PATH = ".neutron-build.json";
-// const defaultIgnore = `
-// /*
-// !dist
-// !dist/*
-// `.split("\n");
 
 export async function readFile(filePath: string): Promise<Uint8Array> {
   const handle = await fs.open(
@@ -49,26 +43,6 @@ export function compressFileToUint8Array(fileBuffer: Uint8Array): Uint8Array {
   return uint8Array;
 }
 
-// async function readIgnoreFile(dirPath) {
-//   const ignoreFilePath = path.join(dirPath, ".neutronignore");
-//   console.log("default ignore", defaultIgnore);
-//   console.log("add .neutronignore if you want to add files\n");
-//   let ig = ignore().add(defaultIgnore);
-
-//   try {
-//     const data = await fs.readFile(ignoreFilePath, "utf8");
-//     console.log([...defaultIgnore, ...data]);
-//     ig = ignore().add([...defaultIgnore, ...data]);
-//   } catch (err) {
-//     if (err.code !== "ENOENT") {
-//       throw err; // Rethrow if it's not "file not found"
-//     }
-//   }
-
-//   return ig;
-// }
-
-// let ig;
 export type FlatPackage = Record<string, Uint8Array>;
 
 function comparePathNames(left: string, right: string): number {
@@ -116,8 +90,6 @@ export async function walkDir(
     if (stats.isDirectory()) {
       await walkDir(res, rootPath, flatStructure);
     } else if (stats.isFile()) {
-      // if (!ig.ignores(rel)) {
-      //   console.log(rel);
       const contents = await readFile(res);
       const relativePath = archivePath(rootPath, res);
       Object.defineProperty(flatStructure, relativePath, {
@@ -126,7 +98,6 @@ export async function walkDir(
         value: contents,
         writable: true,
       });
-      // }
     } else {
       throw new Error(`Package input is not a regular file: ${res}`);
     }
@@ -145,7 +116,6 @@ export async function packDirectory(
     throw new Error("neutron.json must include string id and numeric version");
   }
   assertAppVersion(version, "neutron.json version");
-  // ig = await readIgnoreFile(rootDir);
 
   const distDir = path.join(rootDir, "dist");
   const flatStructure = await walkDir(distDir, distDir);
