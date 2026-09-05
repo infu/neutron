@@ -327,7 +327,9 @@ Current Kernel tools include:
 - `attachments.delegate`;
 - `permissions.request`;
 - `audit.list`; and
-- `workspace.open_tile`.
+- `workspace.open_tile`;
+- `workspace.inspect`; and
+- `workspace.control`.
 
 The raw action aliases `schema` and `call_dialog` do not exist.
 
@@ -569,10 +571,46 @@ app tile without a Kernel dialog. The operation is confined to the active
 workspace, always reuses an exact existing app/tile pair, and remains subject to
 workspace capacity. This grants visible navigation only; it does not grant the
 caller another app's tools, backend methods, identity, or decision authority.
-Delegated Agent calls retain the separate bounded Agent decision policy.
+The compatibility route has no navigation cooldown.
 
 Apps use this for routes such as a selected post or thread. The view does not
 grant backend authority.
+
+## Agent Workspace Inspection And Control
+
+`workspace.inspect` and `workspace.control` are the Kernel-owned visual
+workspace surface for resident agents. Both route through the same workspace
+store and split-tree operations used by the launcher, tile controls, drag and
+drop, and keyboard navigation; the tools do not maintain a second layout or
+focus model.
+
+Inspection returns the active and exposed workspaces, exact tile instance ids,
+app and tile identities, focus, transient expansion, and the complete split
+tree. Control accepts one operation per call: `open`, `focus`, `close`,
+`place`, `resize`, `move`, `switch`, `expand`, or `restore`. `move` does not
+implicitly activate its destination. `open`, `switch`, `focus`, and `expand`
+bring their target workspace into view.
+`expand` and `restore` use the same transient state as the owner-facing tile
+control.
+
+The source must be a live resident background whose installed app declares
+`agent_entrypoints`. Any invocation-free call from that resident is admitted without
+Agent Mode. If invocation provenance is present, the call must come from the
+live depth-zero root; a delegated descendant is rejected. Admission is based on
+the manifest declaration and endpoint role, not a special app id. The tools
+open no Kernel dialog and impose no navigation cooldown. Normal validation of
+exposed workspaces, installed tiles, split ratios, and capacity still applies.
+
+The generic `workspace.open_tile` route remains compatible for ordinary live
+app endpoints and keeps its active-workspace, exact-reuse behavior. Its optional
+view token and the `open` operation's optional view token share the one
+`neutron:tile:view` delivery path.
+
+Inactive tile frames stay mounted but disconnect from the Kernel message bus.
+Consequently, activating a different workspace through `open`, `switch`,
+`focus`, or `expand` can retire the source tile endpoint and end an endpoint-bound turn
+before its response reaches the tile. Agents can arrange a destination with
+`move` first and activate it only when that lifecycle effect is intended.
 
 ## Tray Boundary
 

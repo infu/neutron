@@ -11,6 +11,7 @@ import {
   IoRefresh,
   IoSearch,
 } from "react-icons/io5";
+import { appearanceOpacityStyle, useAppearanceStore } from "../appearance.ts";
 import {
   install_app,
   isAuthorityPendingState,
@@ -63,6 +64,7 @@ export function Launcher(props: LauncherProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const apps = useAppsStore((state) => state.list);
+  const tileOpacity = useAppearanceStore((state) => state.tileOpacity);
   const operationBusy = useAppsStore((state) => state.operationBusy);
   const authorityPending = useAppsStore(isAuthorityPendingState);
   const appMutationBlocked = operationBusy || authorityPending;
@@ -227,6 +229,7 @@ export function Launcher(props: LauncherProps) {
         }
         ref={dialogRef}
         role={placement === "modal" ? "dialog" : "region"}
+        style={appearanceOpacityStyle(tileOpacity)}
         tabIndex={placement === "modal" ? -1 : undefined}
       >
         <div className="launcher-search">
@@ -351,6 +354,7 @@ export function Launcher(props: LauncherProps) {
               <span aria-hidden="true" className="launcher-install-icon">
                 <IoAdd />
               </span>
+              <span className="launcher-install-title">Install App</span>
               <div
                 aria-label="Install app from"
                 className="launcher-install-buttons"

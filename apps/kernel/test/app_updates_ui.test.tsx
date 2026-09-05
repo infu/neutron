@@ -14,6 +14,7 @@ import {
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
 import type { DeploymentBuildReviewInput } from "../src/install_review/deployment_build_review.ts";
+import { useKernelUiModeStore } from "../src/ui_mode.ts";
 
 mock.module("icblast", () => ({
   default: Object.assign(() => async () => ({}), {
@@ -69,7 +70,10 @@ const idleState: UpdateState = {
   errorStage: null,
 };
 
-afterEach(() => clearUpdateResults());
+afterEach(() => {
+  clearUpdateResults();
+  useKernelUiModeStore.setState({ mode: "normal" });
+});
 
 afterAll(() => {
   if (originalWindow === undefined) {
@@ -336,6 +340,13 @@ test("verified review and apply stay in the consolidated per-app update flow", (
   expect(html).not.toContain("Raw compiler Wasm");
   expect(html).not.toContain("Transport Wasm");
   expect(html).toContain("Review app update");
+  useKernelUiModeStore.setState({ mode: "developer" });
+  const developerHtml = renderSurface(state);
+  const technicalDetails = developerHtml.match(
+    /<details(?=[^>]*data-tid="consent-technical-details")[^>]*>/gu,
+  ) ?? [];
+  expect(technicalDetails).not.toHaveLength(0);
+  expect(technicalDetails.every((tag) => !tag.includes(" open"))).toBe(true);
   expect(html).toContain("verified certified transport");
   expect(html).toContain("not publisher identity or code endorsement");
   expect(html).toContain(`Copy source ${SOURCE}`);

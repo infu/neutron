@@ -637,6 +637,7 @@ button:focus-visible,
 }
 
 .desktop-shell {
+    --desktop-effective-tile-gap: var(--desktop-tile-gap, 8px);
     background: var(--k-bg-canvas);
     bottom: 0;
     display: grid;
@@ -647,6 +648,17 @@ button:focus-visible,
     position: fixed;
     right: 0;
     top: 0;
+    z-index: 0;
+}
+
+.desktop-background-image {
+    height: 100%;
+    inset: 0;
+    object-fit: cover;
+    pointer-events: none;
+    position: absolute;
+    user-select: none;
+    width: 100%;
     z-index: 0;
 }
 
@@ -667,6 +679,11 @@ button:focus-visible,
     min-height: 0;
     min-width: 0;
     position: relative;
+    z-index: 1;
+}
+
+.desktop-content:has(.kernel-settings .backdrop) {
+    z-index: 20;
 }
 
 .kernel-workspace-surface {
@@ -679,6 +696,11 @@ button:focus-visible,
 .kernel-workspace-surface--hidden {
     pointer-events: none;
     visibility: hidden;
+
+    .kernel-workspace-layer {
+        pointer-events: none;
+        visibility: hidden;
+    }
 }
 
 .kernel-workspace-layer {
@@ -1282,6 +1304,107 @@ button:focus-visible,
     }
 }
 
+.desktop-shell--nav-vertical {
+    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+
+    .desktop-topbar {
+        align-items: center;
+        flex-direction: column;
+        gap: 4px;
+        grid-column: 1;
+        grid-row: 1;
+        padding: 7px;
+    }
+
+    .desktop-start-button,
+    .workspace-switcher,
+    .desktop-topbar-actions {
+        transform: translateX(calc(var(--desktop-effective-tile-gap) / 2));
+    }
+
+    .desktop-content {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .workspace-switcher {
+        align-items: center;
+        flex: 1 1 auto;
+        flex-direction: column;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior-block: contain;
+        width: 30px;
+
+        button {
+            width: 26px;
+        }
+    }
+
+    .desktop-topbar-actions {
+        align-items: center;
+        flex: 0 1 auto;
+        flex-direction: column;
+        margin-left: 0;
+        margin-top: auto;
+        max-height: calc(100% - 44px);
+        min-height: 0;
+        width: 30px;
+    }
+
+    .app-tray {
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        width: 30px;
+    }
+
+    .app-tray-apps {
+        flex: 1 1 auto;
+        flex-direction: column;
+        max-height: none;
+        max-width: none;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        width: 30px;
+    }
+
+    .agent-mode-indicator {
+        flex-direction: column;
+        gap: 2px;
+        height: auto;
+        padding: 2px 0;
+        width: 30px;
+    }
+
+    .agent-mode-name,
+    .agent-mode-elapsed {
+        display: none;
+    }
+
+    .app-tray-popover {
+        height: min(520px, var(--app-tray-available-height, calc(100dvh - 16px)));
+        inset: auto auto var(--app-tray-bottom, 8px)
+          var(--app-tray-left, 50px);
+        max-height: var(--app-tray-available-height, calc(100dvh - 16px));
+        max-width: var(--app-tray-available-width, calc(100dvw - 58px));
+        width: min(380px, var(--app-tray-available-width, calc(100dvw - 58px)));
+    }
+
+    .app-tray-popover--kernel {
+        height: auto;
+        width: min(340px, var(--app-tray-available-width, calc(100dvw - 58px)));
+    }
+}
+
+@media (max-width: 900px) {
+    .desktop-shell {
+        --desktop-effective-tile-gap: 8px;
+    }
+}
+
 .app-background-frames {
     height: 1px;
     left: -10000px;
@@ -1301,7 +1424,7 @@ button:focus-visible,
 }
 
 .hyper-workspace {
-    background: var(--k-bg-canvas);
+    background: transparent;
     height: 100%;
     min-height: 0;
     min-width: 0;
@@ -1339,11 +1462,26 @@ button:focus-visible,
 }
 
 .tile-rect--preview {
-    opacity: 0.76;
     pointer-events: none;
     transition: none;
     will-change: transform;
     z-index: 20;
+}
+
+.tile-rect--spotlight {
+    transition: none;
+    z-index: 10;
+}
+
+.hyper-workspace:has(> .tile-rect--spotlight)
+  > .tile-rect:not(.tile-rect--spotlight) {
+    visibility: hidden;
+}
+
+.tile-spotlight-backdrop {
+    inset: 0;
+    position: absolute;
+    z-index: 8;
 }
 
 .drop-preview {
@@ -1396,7 +1534,7 @@ button:focus-visible,
     cursor: grab;
     display: grid;
     gap: 7px;
-    grid-template-columns: 18px minmax(0, 1fr) 18px;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
     min-width: 0;
     padding: 2px 7px 2px 8px;
     touch-action: none;
@@ -1455,18 +1593,24 @@ button:focus-visible,
     white-space: nowrap;
 }
 
-.tile-close {
+.tile-header-actions {
+    align-items: center;
+    display: flex;
+    gap: 5px;
+    justify-self: end;
+}
+
+.tile-header-action {
     background: var(--k-bg-elevated);
     border-radius: 4px;
     color: var(--k-text-faint);
     height: 14px;
-    justify-self: end;
     opacity: 0.62;
     touch-action: auto;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease,
-    opacity 120ms ease;
+    transition:
+        background-color 120ms ease,
+        color 120ms ease,
+        opacity 120ms ease;
     width: 14px;
     svg {
         height: 10px;
@@ -1498,6 +1642,22 @@ button:focus-visible,
         background: #ff756f;
         color: #44100e;
     }
+}
+
+.workspace-tile--focused .tile-spotlight-toggle {
+    background: #303437;
+    color: #b8bec2;
+    opacity: 1;
+
+    &:hover,
+    &:focus-visible {
+        background: #3a3f43;
+        color: #e0e4e6;
+    }
+}
+
+.workspace-tile--spotlighted .tile-spotlight-toggle svg {
+    opacity: 0.88;
 }
 
 .tile-content {
@@ -1546,11 +1706,22 @@ button:focus-visible,
     touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
 
+    &:has(> .tile-rect--spotlight) {
+        overflow: hidden;
+    }
+
     .tile-rect--mobile {
         height: 100%;
         position: relative;
         width: 100%;
         transition: none;
+    }
+
+    .tile-rect--spotlight {
+        height: auto;
+        inset: 8px;
+        position: absolute;
+        width: auto;
     }
 
     .empty-workspace {
@@ -1654,6 +1825,141 @@ button:focus-visible,
 
 .workspace-glyph--3 .workspace-glyph-cell:first-child {
     grid-row: 1 / -1;
+}
+
+.workspace-preview {
+    background: transparent;
+    border: 0;
+    color: var(--k-text-strong);
+    inset:
+      var(--workspace-preview-top, 46px) auto auto
+      var(--workspace-preview-left, 8px);
+    margin: 0;
+    max-height: var(--workspace-preview-available-height, calc(100dvh - 54px));
+    max-width: min(
+      320px,
+      var(--workspace-preview-available-width, calc(100dvw - 16px))
+    );
+    overflow: hidden;
+    padding: 0;
+    position: fixed;
+    z-index: 20;
+}
+
+.workspace-preview-content {
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: inherit;
+    max-width: inherit;
+    overflow: auto;
+    padding: 0;
+}
+
+.workspace-preview-color {
+    appearance: none;
+    align-items: center;
+    background: #000;
+    border: 0;
+    border-radius: 2px;
+    cursor: pointer;
+    display: flex;
+    height: 18px;
+    padding: 0 6px;
+    width: 30px;
+
+    &:focus-visible {
+        outline: 2px solid var(--k-focus);
+        outline-offset: 2px;
+    }
+}
+
+.workspace-preview-color-swatch,
+.workspace-color-option {
+    appearance: none;
+    background: var(--workspace-color, var(--k-bg-elevated));
+    border: 1px solid rgb(255 255 255 / 32%);
+    border-radius: 3px;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 48%);
+    box-sizing: border-box;
+    cursor: pointer;
+    height: 18px;
+    padding: 0;
+    width: 18px;
+}
+
+.workspace-preview-color-swatch {
+    align-items: center;
+    color: var(--k-text-muted);
+    display: flex;
+    flex: 0 0 18px;
+    justify-content: center;
+
+    svg {
+        height: 12px;
+        width: 12px;
+    }
+}
+
+.workspace-color-option {
+    &:focus-visible {
+        outline: 2px solid var(--k-focus);
+        outline-offset: 2px;
+    }
+}
+
+.workspace-preview-apps {
+    align-items: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-width: 100%;
+    min-width: 0;
+    width: max-content;
+}
+
+.workspace-preview-app {
+    align-items: center;
+    background: #000;
+    border-radius: 2px;
+    box-sizing: border-box;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 18px minmax(0, 1fr);
+    min-height: 18px;
+    min-width: 0;
+    padding: 0 6px;
+
+    img {
+        border-radius: 3px;
+        height: 18px;
+        object-fit: cover;
+        width: 18px;
+    }
+
+    span {
+        font-size: 11px;
+        font-weight: 620;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+.workspace-color-picker {
+    background: #000;
+    border-radius: 2px;
+    display: grid;
+    gap: 3px;
+    grid-template-columns: repeat(4, 18px);
+    padding: 3px 6px;
+}
+
+.workspace-color-option[aria-pressed="true"] {
+    box-shadow:
+      0 0 0 2px var(--k-bg-canvas),
+      0 0 0 3px var(--k-text-strong);
 }
 
 .launcher-backdrop,
@@ -1906,9 +2212,9 @@ button:focus-visible,
     overflow-x: hidden;
     overflow-y: auto;
     padding-right: 4px;
-    scrollbar-color: var(--k-line-strong) transparent;
+    scrollbar-color: var(--k-text-faint) var(--k-bg);
     scrollbar-gutter: stable;
-    scrollbar-width: thin;
+    scrollbar-width: auto;
 }
 
 .launcher-results::-webkit-scrollbar {
@@ -1916,12 +2222,12 @@ button:focus-visible,
 }
 
 .launcher-results::-webkit-scrollbar-track {
-    background: transparent;
+    background: var(--k-bg);
     border-radius: 999px;
 }
 
 .launcher-results::-webkit-scrollbar-thumb {
-    background: var(--k-line-strong);
+    background: var(--k-text-faint);
     border: 2px solid var(--k-bg-canvas);
     border-radius: 999px;
 }
@@ -1941,7 +2247,8 @@ button:focus-visible,
     align-items: center;
     border: 1px solid transparent;
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 6px;
+    grid-template-columns: 28px max-content minmax(0, 1fr);
     min-height: 48px;
     min-width: 0;
     padding: 6px 8px;
@@ -1961,6 +2268,13 @@ button:focus-visible,
         height: 16px;
         width: 16px;
     }
+}
+
+.launcher-install-title {
+    color: var(--k-text);
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
 }
 
 .launcher-tile {
@@ -3257,7 +3571,8 @@ button:focus-visible,
     }
 }
 
-.settings-ui-mode-switch {
+.settings-ui-mode-switch,
+.settings-theme-nav-switch {
     appearance: none;
     background: rgb(255 255 255 / 4%);
     border: 0;
@@ -4983,6 +5298,84 @@ button:focus-visible,
     padding: 14px 4px 18px;
 }
 
+.settings-theme-controls {
+    display: grid;
+    min-width: 0;
+}
+
+.settings-theme-control {
+    align-items: center;
+    display: grid;
+    gap: 18px;
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 320px);
+    min-width: 0;
+    padding: 10px 4px;
+
+    & + & {
+        box-shadow: inset 0 1px var(--k-line-subtle);
+    }
+}
+
+.settings-theme-control-copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+
+    strong {
+        color: var(--k-text-strong);
+        font-size: 10px;
+        font-weight: 650;
+    }
+
+    small {
+        color: var(--k-text-muted);
+        font-size: 10px;
+        line-height: 1.35;
+    }
+}
+
+.settings-theme-slider {
+    align-items: center;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) 42px;
+
+    input {
+        accent-color: var(--k-focus);
+        margin: 0;
+        width: 100%;
+    }
+
+    output {
+        color: var(--k-text-muted);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+}
+
+.settings-theme-toggle {
+    align-items: center;
+    color: var(--k-text-muted);
+    display: flex;
+    font-size: 10px;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.settings-theme-background-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    justify-content: flex-end;
+}
+
+.settings-theme-status {
+    color: var(--k-text-muted);
+    font-size: 10px;
+    padding: 4px;
+}
+
 .settings-vetkeys-toolbar,
 .settings-vetkeys-notice {
     align-items: center;
@@ -6157,6 +6550,16 @@ button:focus-visible,
     .settings-disclosure-content {
         padding-left: 0;
         padding-right: 0;
+    }
+
+    .settings-theme-control {
+        align-items: stretch;
+        gap: 9px;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .settings-theme-background-actions {
+        justify-content: flex-start;
     }
 
     .settings-access-toolbar {

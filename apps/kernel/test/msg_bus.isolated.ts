@@ -363,7 +363,14 @@ type TestTileFrameConfig = Readonly<{
   tileId: string;
   instanceId: string;
   source: Window;
+  workspaceLayer?: TestWorkspaceLayer;
 }>;
+
+type TestWorkspaceLayer = {
+  dataset: { active?: string };
+  inert: boolean;
+  hasAttribute(name: string): boolean;
+};
 
 type TestFocusDocument = {
   activeElement: TestTileFrame | object | null;
@@ -377,6 +384,7 @@ class TestTileFrame {
   focusCalls = 0;
   blurCalls = 0;
   scrollIntoViewCalls = 0;
+  private readonly workspaceLayer: TestWorkspaceLayer | null;
 
   constructor(
     private readonly ownerDocument: TestFocusDocument,
@@ -388,6 +396,7 @@ class TestTileFrame {
       instanceId: config.instanceId,
     };
     this.contentWindow = config.source;
+    this.workspaceLayer = config.workspaceLayer ?? null;
   }
 
   focus(): void {
@@ -404,6 +413,12 @@ class TestTileFrame {
 
   scrollIntoView(): void {
     this.scrollIntoViewCalls += 1;
+  }
+
+  closest(selector: string): TestWorkspaceLayer | null {
+    return selector === ".kernel-workspace-layer"
+      ? this.workspaceLayer
+      : null;
   }
 }
 
@@ -824,6 +839,49 @@ function installWorkspaceOpenTarget() {
   });
 }
 
+function installWorkspaceControlTargets(): void {
+  useAppsStore.setState((state) => ({
+    list: {
+      ...state.list,
+      hello: registryApp({
+        id: "hello",
+        name: "Hello",
+        tiles: [
+          {
+            id: "main",
+            title: "Hello",
+            path: "index.html",
+            icon: "static/hello.png",
+          },
+        ],
+      }),
+      notes: registryApp({
+        id: "notes",
+        name: "Notes",
+        tiles: [
+          {
+            id: "main",
+            title: "Notes",
+            path: "index.html",
+            icon: "static/notes.png",
+          },
+        ],
+      }),
+    },
+  }));
+}
+
+function workspaceControlInstanceId(value: JsonValue): string {
+  if (!isJsonObject(value) || !isJsonObject(value.result)) {
+    throw new Error("Invalid workspace control result");
+  }
+  const instanceId = value.result.instanceId;
+  if (typeof instanceId !== "string") {
+    throw new Error("Workspace control result did not include an instance id");
+  }
+  return instanceId;
+}
+
 function openWorkspaceTarget(caller: RegisteredEndpoint): Promise<JsonValue> {
   return routeToolCall(
     {
@@ -840,12 +898,23 @@ function registerScopedBackgroundEndpoint(
   appId: string,
   installationUid: string,
   tileId?: string,
+  options: { agentEntrypoints?: string[] } = {},
 ) {
   const app = registryApp({
     id: appId,
     name: appId,
     version: 100,
     background: { path: "service.html" },
+    ...(options.agentEntrypoints
+      ? {
+          capabilities: {
+            agent_entrypoints: {
+              api: 1,
+              entrypoints: options.agentEntrypoints,
+            },
+          },
+        }
+      : {}),
     ...(tileId
       ? {
           tiles: [
@@ -1286,6 +1355,7 @@ afterEach(() => {
   useWorkspaceStore.setState((state) => ({
     activeWorkspaceId: 1,
     workspaceDropTargetId: null,
+    expandedTile: null,
     workspaces: Object.fromEntries(
       workspaceIds
         .slice(0, 3)
@@ -6704,6 +6774,441 @@ test("kernel discovery fails closed on non-canonical installed app metadata", as
       caller,
     ),
   ).rejects.toThrow("Invalid installed app metadata");
+});
+
+test("a normal agent background inspects the workspace without Agent Mode or a dialog", async () => {
+  installFakeWindow();
+  const caller = registerScopedBackgroundEndpoint(
+    {} as Window,
+    "workspace_agent",
+    "901",
+    undefined,
+    { agentEntrypoints: ["run"] },
+  );
+  installWorkspaceControlTargets();
+  const tile = useWorkspaceStore.getState().openTile({
+    appId: "hello",
+    tileId: "main",
+    title: "Hello",
+    path: "index.html",
+    icon: "static/hello.png",
+  });
+
+  expect(useAgentModeStore.getState().grant).toBeNull();
+  expect(useAgentModeStore.getState().activeRoot).toBeNull();
+  const snapshot = await routeToolCall(
+    { target: "kernel", name: "workspace.inspect", arguments: {} },
+    caller,
+  );
+  expect(snapshot).toMatchObject({
+    activeWorkspace: 1,
+    expandedInstanceId: null,
+  });
+  if (!isJsonObject(snapshot) || !Array.isArray(snapshot.workspaces)) {
+    throw new Error("Invalid workspace snapshot");
+  }
+  expect(snapshot.workspaces).toHaveLength(3);
+  expect(snapshot.workspaces[0]).toMatchObject({
+    id: 1,
+    focusedInstanceId: tile.id,
+    tiles: [
+      {
+        instanceId: tile.id,
+        appId: "hello",
+        tileId: "main",
+        title: "Hello",
+      },
+    ],
+    layout: { type: "tile", instanceId: tile.id },
+  });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  expect(useRequestStore.getState().calls).toEqual({});
+});
+
+test("workspace tools stay unavailable to a background without agent entrypoints", async () => {
+  installFakeWindow();
+  const caller = registerScopedBackgroundEndpoint(
+    {} as Window,
+    "ordinary_background",
+    "904",
+  );
+
+  await expect(
+    routeToolCall(
+      { target: "kernel", name: "workspace.inspect", arguments: {} },
+      caller,
+    ),
+  ).rejects.toMatchObject({ code: "OWNER_REQUIRED" });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("a delegated nested agent cannot control the workspace", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const { resident, root } = await beginSignedCallAgentInvocation();
+  const child = createChildInvocation(root, resident, "nested_workspace");
+
+  await expect(
+    routeToolCall(
+      { target: "kernel", name: "workspace.inspect", arguments: {} },
+      resident,
+      undefined,
+      invocationMetadata(child),
+    ),
+  ).rejects.toMatchObject({ code: "INVOCATION_INVALID" });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  completeInvocation(child);
+  completeInvocation(root);
+});
+
+test("a direct Agent Mode root controls the workspace without navigation cooldowns", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const { resident, root } = await beginSignedCallAgentInvocation();
+  installWorkspaceControlTargets();
+  const metadata = invocationMetadata(root);
+
+  const hello = workspaceControlInstanceId(
+    await routeToolCall(
+      {
+        target: "kernel",
+        name: "workspace.control",
+        arguments: { op: "open", appId: "hello", tileId: "main" },
+      },
+      resident,
+      undefined,
+      metadata,
+    ),
+  );
+  const notesResult = await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "open", appId: "notes", tileId: "main" },
+    },
+    resident,
+    undefined,
+    metadata,
+  );
+  const notes = workspaceControlInstanceId(notesResult);
+  const layout = useWorkspaceStore.getState().workspaces[1].layout;
+  if (!layout || layout.type !== "split") {
+    throw new Error("Expected two directly opened tiles");
+  }
+
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "resize", splitId: layout.id, ratio: 0.65 },
+    },
+    resident,
+    undefined,
+    metadata,
+  );
+  expect(useWorkspaceStore.getState().workspaces[1]).toMatchObject({
+    focusedTileId: notes,
+    layout: { type: "split", id: layout.id, ratio: 0.65 },
+  });
+  expect(hello).not.toBe(notes);
+  expect(notesResult).toMatchObject({
+    result: { op: "open", instanceId: notes, opened: true },
+    snapshot: { activeWorkspace: 1 },
+  });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  completeInvocation(root);
+});
+
+test("a normal agent opens and stacks tiles, then focuses and closes exact instances", async () => {
+  installFakeWindow();
+  const caller = registerScopedBackgroundEndpoint(
+    {} as Window,
+    "workspace_agent",
+    "902",
+    undefined,
+    { agentEntrypoints: ["run"] },
+  );
+  installWorkspaceControlTargets();
+
+  const hello = workspaceControlInstanceId(
+    await routeToolCall(
+      {
+        target: "kernel",
+        name: "workspace.control",
+        arguments: { op: "open", appId: "hello", tileId: "main" },
+      },
+      caller,
+    ),
+  );
+  const notes = workspaceControlInstanceId(
+    await routeToolCall(
+      {
+        target: "kernel",
+        name: "workspace.control",
+        arguments: { op: "open", appId: "notes", tileId: "main" },
+      },
+      caller,
+    ),
+  );
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: {
+        op: "place",
+        instanceId: notes,
+        relativeTo: hello,
+        side: "top",
+        size: 0.35,
+      },
+    },
+    caller,
+  );
+
+  expect(useWorkspaceStore.getState().workspaces[1]).toMatchObject({
+    focusedTileId: notes,
+    layout: {
+      type: "split",
+      orientation: "horizontal",
+      ratio: 0.35,
+      first: { type: "tile", tileId: notes },
+      second: { type: "tile", tileId: hello },
+    },
+  });
+
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "focus", instanceId: hello },
+    },
+    caller,
+  );
+  expect(useWorkspaceStore.getState().workspaces[1].focusedTileId).toBe(hello);
+
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "close", instanceId: notes },
+    },
+    caller,
+  );
+  expect(useWorkspaceStore.getState().workspaces[1]).toMatchObject({
+    focusedTileId: hello,
+    tiles: [{ id: hello, appId: "hello", tileId: "main" }],
+    layout: { type: "tile", tileId: hello },
+  });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("a normal agent expands, restores, and moves a tile without switching workspaces", async () => {
+  installFakeWindow();
+  const caller = registerScopedBackgroundEndpoint(
+    {} as Window,
+    "workspace_agent",
+    "903",
+    undefined,
+    { agentEntrypoints: ["run"] },
+  );
+  installWorkspaceControlTargets();
+  const instanceId = workspaceControlInstanceId(
+    await routeToolCall(
+      {
+        target: "kernel",
+        name: "workspace.control",
+        arguments: { op: "open", appId: "hello", tileId: "main" },
+      },
+      caller,
+    ),
+  );
+
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "expand", instanceId },
+    },
+    caller,
+  );
+  expect(useWorkspaceStore.getState().expandedTile).toEqual({
+    workspaceId: 1,
+    instanceId,
+  });
+
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "restore" },
+    },
+    caller,
+  );
+  expect(useWorkspaceStore.getState().expandedTile).toBeNull();
+
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "move", instanceId, workspace: 2 },
+    },
+    caller,
+  );
+  const state = useWorkspaceStore.getState();
+  expect(state.activeWorkspaceId).toBe(1);
+  expect(state.workspaces[1].tiles).toEqual([]);
+  expect(state.workspaces[2].tiles).toMatchObject([
+    { id: instanceId, appId: "hello", tileId: "main" },
+  ]);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("agent moves retain the existing per-workspace tile capacity", async () => {
+  installFakeWindow();
+  const caller = registerScopedBackgroundEndpoint(
+    {} as Window,
+    "workspace_agent",
+    "907",
+    undefined,
+    { agentEntrypoints: ["run"] },
+  );
+  installWorkspaceControlTargets();
+  const source = useWorkspaceStore.getState().openTile({
+    appId: "hello",
+    tileId: "main",
+    title: "Hello",
+    path: "index.html",
+    icon: "static/hello.png",
+  });
+  for (let index = 0; index < 24; index += 1) {
+    useWorkspaceStore.getState().openTile(
+      {
+        appId: "notes",
+        tileId: "main",
+        title: `Notes ${index + 1}`,
+        path: "index.html",
+        icon: "static/notes.png",
+      },
+      { workspaceId: 2 },
+    );
+  }
+
+  await expect(
+    routeToolCall(
+      {
+        target: "kernel",
+        name: "workspace.control",
+        arguments: { op: "move", instanceId: source.id, workspace: 2 },
+      },
+      caller,
+    ),
+  ).rejects.toMatchObject({
+    code: "UI_BUSY",
+    message: "Current workspace tile capacity reached",
+  });
+  expect(useWorkspaceStore.getState().workspaces[1].tiles).toContainEqual(
+    source,
+  );
+  expect(useWorkspaceStore.getState().workspaces[2].tiles).toHaveLength(24);
+});
+
+test("agent open and focus bring an explicit target workspace into view", async () => {
+  installFakeWindow();
+  const caller = registerScopedBackgroundEndpoint(
+    {} as Window,
+    "workspace_agent",
+    "905",
+    undefined,
+    { agentEntrypoints: ["run"] },
+  );
+  installWorkspaceControlTargets();
+
+  const opened = await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: {
+        op: "open",
+        appId: "hello",
+        tileId: "main",
+        workspace: 2,
+        view: "details",
+      },
+    },
+    caller,
+  );
+  const instanceId = workspaceControlInstanceId(opened);
+  expect(opened).toMatchObject({
+    result: { op: "open", instanceId, workspace: 2, opened: true },
+    snapshot: { activeWorkspace: 2 },
+  });
+
+  useWorkspaceStore.getState().switchWorkspace(1);
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "focus", instanceId },
+    },
+    caller,
+  );
+  expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(2);
+  expect(useWorkspaceStore.getState().workspaces[2].focusedTileId).toBe(
+    instanceId,
+  );
+});
+
+test("cross-workspace focus waits for an already-mounted iframe to leave its inert layer", async () => {
+  installFakeWindow();
+  const caller = registerScopedBackgroundEndpoint(
+    {} as Window,
+    "workspace_agent",
+    "906",
+    undefined,
+    { agentEntrypoints: ["run"] },
+  );
+  installWorkspaceControlTargets();
+  useWorkspaceStore.getState().switchWorkspace(2);
+  const tile = useWorkspaceStore.getState().openTile({
+    appId: "hello",
+    tileId: "main",
+    title: "Hello",
+    path: "index.html",
+    icon: "static/hello.png",
+  });
+  useWorkspaceStore.getState().switchWorkspace(1);
+
+  const layer: TestWorkspaceLayer = {
+    dataset: {},
+    inert: true,
+    hasAttribute(name) {
+      return name === "inert" && this.inert;
+    },
+  };
+  const focusDocument = installTestFocusDocument();
+  const frame = focusDocument.addFrame({
+    appId: "hello",
+    tileId: "main",
+    instanceId: tile.id,
+    source: {} as Window,
+    workspaceLayer: layer,
+  });
+
+  await routeToolCall(
+    {
+      target: "kernel",
+      name: "workspace.control",
+      arguments: { op: "focus", instanceId: tile.id },
+    },
+    caller,
+  );
+  expect(frame.focusCalls).toBe(0);
+
+  layer.dataset.active = "true";
+  layer.inert = false;
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  expect(frame.focusCalls).toBe(1);
+  expect(focusDocument.activeElement).toBe(frame);
 });
 
 test("direct app calls open tiles only in the current workspace", async () => {

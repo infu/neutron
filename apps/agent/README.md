@@ -61,6 +61,28 @@ Its installed-app list, live endpoints, tool descriptions, schemas, and
 visibility all come from the kernel's current catalog. Apps own that contract;
 adding or changing an app does not require an Agent code change.
 
+That same discovery path exposes the Kernel's visual workspace tools. Agent
+uses `list_app_tools` with `appId: "kernel"`, inspects the schema, then calls
+`workspace.inspect` or `workspace.control` through the generic app-tool bridge.
+Inspection reports exact workspace, tile-instance, focus, expansion, and split
+state. Control applies one `open`, `focus`, `close`, `place`, `resize`, `move`,
+`switch`, `expand`, or `restore` operation through the Kernel's canonical
+workspace store. There is no Agent-side layout implementation.
+
+Because Agent is a live resident background with declared `agent_entrypoints`,
+these visual tools work on invocation-free calls without enabling Agent Mode.
+During Agent Mode they are available only to the direct depth-zero root, not a
+delegated child. They require no owner dialog and have no navigation cooldown.
+The older `workspace.open_tile` tool remains the generic active-workspace
+compatibility route for other app endpoints.
+
+`move` deliberately leaves the current workspace active. `open`, `switch`,
+`focus`, or `expand` brings its target workspace into view. Making the Agent tile's workspace
+inactive disconnects its Kernel endpoint and can end the endpoint-bound turn
+before the tile receives the response. Agent should arrange destination tiles
+first and activate them only when it is ready to hand the visible workspace to
+the owner.
+
 Agent discovery intentionally omits transient tray endpoints, and delegated
 agent calls cannot target them. Apps that want to support agents should expose
 their durable operations as tools on the resident background (or a normal tile).

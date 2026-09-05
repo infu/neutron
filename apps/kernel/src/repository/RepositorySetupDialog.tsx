@@ -138,7 +138,7 @@ export function RepositorySetupDialog() {
         <h2 className="title" id="repository-setup-title">
           {dialogTitle(state.phase)}
         </h2>
-        {state.phase === "pending" ? <PendingContact uiMode={uiMode} /> : null}
+        {state.phase === "pending" ? <PendingContact /> : null}
         {state.phase === "loading" || state.phase === "compiling" ? (
           <RepositoryProgress />
         ) : null}
@@ -152,7 +152,7 @@ export function RepositorySetupDialog() {
   );
 }
 
-function PendingContact({ uiMode }: { uiMode: KernelUiMode }) {
+function PendingContact() {
   const reference = useRepositorySetupStore((state) => state.reference)!;
   return (
     <div className="call repository-setup-content">
@@ -166,7 +166,7 @@ function PendingContact({ uiMode }: { uiMode: KernelUiMode }) {
         Gateways and the repository can observe request metadata. Neutron has
         not verified the repository provider or software publisher.
       </ConsentNotice>
-      <ConsentTechnicalDetails mode={uiMode}>
+      <ConsentTechnicalDetails>
       <dl className="repository-facts">
         <Fact label="Repository canister" value={reference.repo} mono />
         <Fact label="Manifest" value={reference.manifest} mono />
@@ -251,7 +251,7 @@ function RepositoryReview({
 
   return (
     <div className="call repository-setup-content">
-      <RepositoryHeader uiMode={uiMode} />
+      <RepositoryHeader />
       <div className="repository-third-party">
         Third-party software — not reviewed, hosted, sold, or endorsed by
         Neutron.
@@ -326,7 +326,6 @@ function RepositoryReview({
               <PackageDetails
                 pkg={pkg}
                 showPermissions={selected}
-                uiMode={uiMode}
               />
             </article>
           );
@@ -410,7 +409,7 @@ function RepositoryReview({
   );
 }
 
-function RepositoryHeader({ uiMode }: { uiMode: KernelUiMode }) {
+function RepositoryHeader() {
   const { loaded, offeredBy, reference } = useRepositorySetupStore();
   if (!loaded || !reference) return null;
   const links = (["website", "terms", "privacy", "support"] as const)
@@ -431,7 +430,6 @@ function RepositoryHeader({ uiMode }: { uiMode: KernelUiMode }) {
         </p>
       </section>
       <ConsentTechnicalDetails
-        mode={uiMode}
         summary="Repository technical details"
       >
       <section className="repository-unverified" data-source="repository">
@@ -515,13 +513,11 @@ function RepositoryHeader({ uiMode }: { uiMode: KernelUiMode }) {
 function PackageDetails({
   pkg,
   showPermissions,
-  uiMode,
 }: {
   pkg: NonNullable<
     ReturnType<typeof useRepositorySetupStore.getState>["loaded"]
   >["packages"][number];
   showPermissions: boolean;
-  uiMode: KernelUiMode;
 }) {
   const dependencies = Object.values(
     pkg.preparedPackage.manifest.dependencies ?? {},
@@ -533,7 +529,6 @@ function PackageDetails({
       ) : null}
       <ConsentTechnicalDetails
         className="repository-package-details"
-        mode={uiMode}
         summary="Package technical details"
       >
       <dl className="repository-facts">

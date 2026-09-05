@@ -7,6 +7,7 @@ dist
 !kernel.v0.3.26.neutron
 !kernel.v0.3.27.neutron
 !kernel.v0.3.28.neutron
+!kernel.v0.3.29.neutron
 .mops
 .dfx
 meta.json

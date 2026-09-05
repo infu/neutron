@@ -151,11 +151,17 @@ export function TrayApp() {
           </button>
         </header>
 
-        <div className="nt-pane-body ks-tray-body">
+        <div
+          aria-busy={busy === "initial"}
+          className="nt-pane-body ks-tray-body"
+        >
           {busy === "initial" ? (
-            <div className="nt-state nt-state--loading" aria-live="polite">
-              <strong>Connecting to resident service</strong>
-              <span>The popout will appear as soon as its private port is ready.</span>
+            <div
+              aria-label="Connecting to resident service"
+              className="nt-state nt-state--loading"
+              role="status"
+            >
+              <span aria-hidden="true" className="nt-spinner" />
             </div>
           ) : snapshot ? (
             snapshot.notifications.length > 0 ? (

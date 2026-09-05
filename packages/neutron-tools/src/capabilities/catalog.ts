@@ -537,7 +537,8 @@ export const CAPABILITY_CATALOG = Object.freeze({
   agent_entrypoints: declared("agent_entrypoints", {
     delivery: ["compiler_registration"],
     title: "Agent entrypoints",
-    summary: "Expose exact resident-background tools to authorized agents.",
+    summary:
+      "Expose exact resident-background tools and let that resident arrange workspace tiles.",
     grant: "declaration",
     escalation: "owner_approval",
     disable: "registration_enforced",

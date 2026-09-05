@@ -96,10 +96,21 @@ import { verifiedCallMode } from "./trusted_call_mode.ts";
 import {
   useWorkspaceStore,
   visibleWorkspaceIds,
+  workspaceTile,
   workspaceIds,
   workspaceStateById,
 } from "./workspace/store.ts";
-import { MAX_WORKSPACES, type WorkspaceId } from "./workspace/types.ts";
+import {
+  MAX_WORKSPACES,
+  type InsertSide,
+  type LayoutNode,
+  type WorkspaceId,
+} from "./workspace/types.ts";
+import {
+  inspectWorkspace,
+  WORKSPACE_CONTROL_TOOL_OPTIONS,
+  WORKSPACE_INSPECT_TOOL_OPTIONS,
+} from "./workspace/tool_contract.ts";
 import {
   acquireConnectionForEndpoint,
   disconnectConnectionForEndpoint,
@@ -170,7 +181,6 @@ import {
 import { useAuthStore } from "./reducer/auth.ts";
 import { sameAppScope } from "./app_scope.ts";
 import {
-  admitAgentWorkspaceMutation,
   beginAgentRoot,
   clearAgentModeForAuth,
   completeInvocation,
@@ -1752,6 +1762,25 @@ defineKernelTool(
 );
 
 defineKernelTool(
+  "workspace.inspect",
+  WORKSPACE_INSPECT_TOOL_OPTIONS,
+  (_args, caller, invocation) => {
+    assertWorkspaceController(caller, invocation);
+    return inspectWorkspace();
+  },
+);
+
+defineKernelTool(
+  "workspace.control",
+  WORKSPACE_CONTROL_TOOL_OPTIONS,
+  (args, caller, invocation) => {
+    assertWorkspaceController(caller, invocation);
+    const result = controlWorkspace(args, invocation);
+    return { result, snapshot: inspectWorkspace() };
+  },
+);
+
+defineKernelTool(
   "workspace.open_tile",
   {
     title: "Open App Tile",
@@ -1872,11 +1901,57 @@ function openOrFocusAppTile(
   view: string | null,
   invocation: InvocationNode | null,
 ): OpenAppTileResult {
+  return openWorkspaceAppTile({
+    appId,
+    tileId,
+    workspace,
+    view,
+    reuseExisting: true,
+    invocation,
+  });
+}
+
+type WorkspaceOpenRequest = {
+  appId: string;
+  tileId: string;
+  workspace: WorkspaceId;
+  view: string | null;
+  reuseExisting: boolean;
+  invocation: InvocationNode | null;
+  relativeTo?: string;
+  side?: InsertSide;
+  size?: number;
+};
+
+function openWorkspaceAppTile({
+  appId,
+  tileId,
+  workspace,
+  view,
+  reuseExisting,
+  invocation,
+  relativeTo,
+  side,
+  size,
+}: WorkspaceOpenRequest): OpenAppTileResult {
   const tile = requireInstalledAppTile(appId, tileId);
-  const existing = findOpenAppTile(appId, tileId, workspace);
+  const existing = reuseExisting
+    ? findOpenAppTile(appId, tileId, workspace)
+    : null;
   assertAppTileCapacity(workspace, Boolean(existing), invocation);
-  if (invocation) admitAgentWorkspaceMutation(invocation, !existing);
   if (existing) {
+    if (relativeTo && relativeTo !== existing.instanceId) {
+      requireTileInWorkspace(relativeTo, workspace);
+      useWorkspaceStore
+        .getState()
+        .moveTile(
+          existing.instanceId,
+          relativeTo,
+          side ?? "right",
+          size,
+          workspace,
+        );
+    }
     focusOpenAppTile(existing.workspace, existing.instanceId);
     if (view) queueTileView(appId, tileId, existing.instanceId, view);
     return {
@@ -1885,14 +1960,27 @@ function openOrFocusAppTile(
       opened: false,
     };
   }
-  const instance = useWorkspaceStore.getState().openTile({
-    appId,
-    tileId,
-    title: tile.title,
-    path: tile.path,
-    icon: tile.icon,
-  });
-  focusTileElement(instance.id);
+  if (relativeTo) requireTileInWorkspace(relativeTo, workspace);
+  const instance = useWorkspaceStore.getState().openTile(
+    {
+      appId,
+      tileId,
+      title: tile.title,
+      path: tile.path,
+      icon: tile.icon,
+    },
+    {
+      workspaceId: workspace,
+      ...(relativeTo ? { relativeTo } : {}),
+      ...(side ? { side } : {}),
+      ...(size !== undefined ? { size } : {}),
+    },
+  );
+  if (useWorkspaceStore.getState().activeWorkspaceId === workspace) {
+    focusTileElement(instance.id);
+  } else {
+    focusOpenAppTile(workspace, instance.id);
+  }
   if (view) queueTileView(appId, tileId, instance.id, view);
   return { instanceId: instance.id, workspace, opened: true };
 }
@@ -1918,6 +2006,238 @@ function findOpenAppTile(
     if (instance) return { instanceId: instance.id, workspace };
   }
   return null;
+}
+
+function assertWorkspaceController(
+  caller: RegisteredEndpoint,
+  invocation: InvocationNode | null,
+): void {
+  const app = useAppsStore.getState().list[caller.context.appId];
+  const entrypoints =
+    declaredCapability(app, "agent_entrypoints")?.entrypoints ?? [];
+  if (
+    caller.context.role !== "background" ||
+    !app?.background ||
+    entrypoints.length === 0
+  ) {
+    throw new KernelPolicyError(
+      "OWNER_REQUIRED",
+      "Workspace control is available only to a declared resident agent",
+    );
+  }
+  if (invocation && !isDirectAgentInvocation(invocation)) {
+    throw new KernelPolicyError(
+      "INVOCATION_INVALID",
+      "Delegated agents cannot control the workspace",
+    );
+  }
+  assertScopedContextForActiveAppInvocation(caller, invocation);
+}
+
+function controlWorkspace(
+  args: JsonObject,
+  invocation: InvocationNode | null,
+): JsonObject {
+  const op = String(args.op);
+  if (op === "open") {
+    const workspace =
+      args.workspace === undefined
+        ? useWorkspaceStore.getState().activeWorkspaceId
+        : requireVisibleWorkspace(Number(args.workspace));
+    const result = openWorkspaceAppTile({
+      appId: String(args.appId),
+      tileId: String(args.tileId),
+      workspace,
+      view: typeof args.view === "string" ? args.view : null,
+      reuseExisting: args.reuseExisting !== false,
+      invocation,
+      ...(typeof args.relativeTo === "string"
+        ? { relativeTo: args.relativeTo }
+        : {}),
+      ...(typeof args.side === "string"
+        ? { side: args.side as InsertSide }
+        : {}),
+      ...(typeof args.size === "number" ? { size: args.size } : {}),
+    });
+    return { op, ...result };
+  }
+
+  if (op === "focus") {
+    const target = requireWorkspaceTile(String(args.instanceId));
+    focusOpenAppTile(target.workspaceId, target.tile.id);
+    return {
+      op,
+      instanceId: target.tile.id,
+      workspace: target.workspaceId,
+    };
+  }
+
+  if (op === "close") {
+    const target = requireWorkspaceTile(String(args.instanceId));
+    useWorkspaceStore.getState().closeTile(target.tile.id);
+    return {
+      op,
+      instanceId: target.tile.id,
+      workspace: target.workspaceId,
+    };
+  }
+
+  if (op === "place") {
+    const target = requireWorkspaceTile(String(args.instanceId));
+    const relative = requireWorkspaceTile(String(args.relativeTo));
+    if (target.workspaceId !== relative.workspaceId) {
+      throw new Error("Tiles must be in the same workspace; use move instead");
+    }
+    if (target.tile.id === relative.tile.id) {
+      throw new Error("A tile cannot be placed relative to itself");
+    }
+    useWorkspaceStore
+      .getState()
+      .moveTile(
+        target.tile.id,
+        relative.tile.id,
+        args.side as InsertSide,
+        typeof args.size === "number" ? args.size : undefined,
+        target.workspaceId,
+      );
+    return {
+      op,
+      instanceId: target.tile.id,
+      workspace: target.workspaceId,
+    };
+  }
+
+  if (op === "resize") {
+    const splitId = String(args.splitId);
+    const workspace = requireWorkspaceForSplit(splitId);
+    useWorkspaceStore
+      .getState()
+      .resizeSplits([{ splitId, ratio: Number(args.ratio) }], workspace);
+    return { op, workspace };
+  }
+
+  if (op === "move") {
+    const target = requireWorkspaceTile(String(args.instanceId));
+    const workspace = requireVisibleWorkspace(Number(args.workspace));
+    const relativeTo =
+      typeof args.relativeTo === "string" ? args.relativeTo : undefined;
+    if (relativeTo) {
+      const relative = requireWorkspaceTile(relativeTo);
+      if (relative.workspaceId !== workspace) {
+        throw new Error("Relative tile is not in the target workspace");
+      }
+      if (relative.tile.id === target.tile.id) {
+        throw new Error("A tile cannot be moved relative to itself");
+      }
+    }
+    if (target.workspaceId === workspace) {
+      if (relativeTo) {
+        useWorkspaceStore
+          .getState()
+          .moveTile(
+            target.tile.id,
+            relativeTo,
+            (args.side as InsertSide | undefined) ?? "right",
+            typeof args.size === "number" ? args.size : undefined,
+            workspace,
+          );
+      }
+    } else {
+      assertAppTileCapacity(workspace, false, invocation, false);
+      useWorkspaceStore.getState().moveTileToWorkspace(
+        target.workspaceId,
+        target.tile.id,
+        workspace,
+        {
+          ...(relativeTo ? { relativeTo } : {}),
+          ...(typeof args.side === "string"
+            ? { side: args.side as InsertSide }
+            : {}),
+          ...(typeof args.size === "number" ? { size: args.size } : {}),
+        },
+        false,
+      );
+    }
+    return { op, instanceId: target.tile.id, workspace };
+  }
+
+  if (op === "switch") {
+    const workspace = requireVisibleWorkspace(Number(args.workspace));
+    useWorkspaceStore.getState().switchWorkspace(workspace);
+    const focused = workspaceStateById(
+      useWorkspaceStore.getState().workspaces,
+      workspace,
+    ).focusedTileId;
+    if (focused) focusTileElement(focused);
+    return { op, workspace };
+  }
+
+  if (op === "expand") {
+    const target = requireWorkspaceTile(String(args.instanceId));
+    focusOpenAppTile(target.workspaceId, target.tile.id);
+    useWorkspaceStore.getState().setExpandedTile({
+      workspaceId: target.workspaceId,
+      instanceId: target.tile.id,
+    });
+    return {
+      op,
+      instanceId: target.tile.id,
+      workspace: target.workspaceId,
+    };
+  }
+
+  if (op === "restore") {
+    useWorkspaceStore.getState().setExpandedTile(null);
+    return { op };
+  }
+
+  throw new Error(`Unknown workspace operation '${op}'`);
+}
+
+function requireVisibleWorkspace(value: number): WorkspaceId {
+  if (
+    !workspaceIds.includes(value as WorkspaceId) ||
+    !visibleWorkspaceIds(useWorkspaceStore.getState()).includes(
+      value as WorkspaceId,
+    )
+  ) {
+    throw new Error("Workspace is not available");
+  }
+  return value as WorkspaceId;
+}
+
+function requireWorkspaceTile(instanceId: string) {
+  const target = workspaceTile(useWorkspaceStore.getState(), instanceId);
+  if (!target) throw new Error(`Unknown tile instance '${instanceId}'`);
+  return target;
+}
+
+function requireTileInWorkspace(
+  instanceId: string,
+  workspaceId: WorkspaceId,
+): void {
+  const target = requireWorkspaceTile(instanceId);
+  if (target.workspaceId !== workspaceId) {
+    throw new Error("Relative tile is not in the target workspace");
+  }
+}
+
+function requireWorkspaceForSplit(splitId: string): WorkspaceId {
+  const state = useWorkspaceStore.getState();
+  for (const workspaceId of visibleWorkspaceIds(state)) {
+    const layout = workspaceStateById(state.workspaces, workspaceId).layout;
+    if (layout && layoutContainsSplit(layout, splitId)) return workspaceId;
+  }
+  throw new Error(`Unknown workspace split '${splitId}'`);
+}
+
+function layoutContainsSplit(layout: LayoutNode, splitId: string): boolean {
+  if (layout.type === "tile") return false;
+  return (
+    layout.id === splitId ||
+    layoutContainsSplit(layout.first, splitId) ||
+    layoutContainsSplit(layout.second, splitId)
+  );
 }
 
 function normalizeInstallOffer(
@@ -2008,7 +2328,14 @@ function focusOpenAppTile(
   workspace: WorkspaceId,
   instanceId: string,
 ): void {
-  useWorkspaceStore.getState().switchWorkspace(workspace);
+  const store = useWorkspaceStore.getState();
+  if (
+    store.expandedTile?.workspaceId !== workspace ||
+    store.expandedTile.instanceId !== instanceId
+  ) {
+    store.setExpandedTile(null);
+  }
+  if (store.activeWorkspaceId !== workspace) store.switchWorkspace(workspace);
   useWorkspaceStore.getState().focusTile(instanceId);
   focusTileElement(instanceId);
 }
@@ -2029,10 +2356,19 @@ function focusTileElement(instanceId: string, attempt = 0): void {
   const frame = [
     ...document.querySelectorAll<HTMLIFrameElement>("iframe.tile-iframe"),
   ].find((candidate) => candidate.dataset.instanceId === instanceId);
-  if (frame) {
+  const workspaceLayer = frame?.closest?.<HTMLElement>(
+    ".kernel-workspace-layer",
+  );
+  const workspaceReady =
+    !workspaceLayer ||
+    (workspaceLayer.dataset.active === "true" &&
+      !workspaceLayer.hasAttribute("inert"));
+  if (frame && workspaceReady) {
     frame.focus();
-    frame.scrollIntoView({ block: "nearest", inline: "nearest" });
-    return;
+    if (document.activeElement === frame) {
+      frame.scrollIntoView({ block: "nearest", inline: "nearest" });
+      return;
+    }
   }
   if (attempt < 30) {
     globalThis.setTimeout(
@@ -3876,6 +4212,7 @@ function assertAppTileCapacity(
   workspace: WorkspaceId,
   reusesExisting: boolean,
   invocation: InvocationNode | null,
+  increasesGlobalCount = true,
 ): void {
   if (reusesExisting) return;
   const state = useWorkspaceStore.getState();
@@ -3888,7 +4225,7 @@ function assertAppTileCapacity(
   );
   if (
     workspaceCount < MAX_APP_TILES_PER_WORKSPACE &&
-    globalCount < MAX_APP_TILES_GLOBAL
+    (!increasesGlobalCount || globalCount < MAX_APP_TILES_GLOBAL)
   ) {
     return;
   }

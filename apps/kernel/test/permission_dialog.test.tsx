@@ -51,6 +51,20 @@ afterEach(() => {
   useMsgBusPermissionStore.setState({ requests: {} });
 });
 
+function launcherRootTag(html: string): string {
+  const match = html.match(
+    /<div[^>]*class="launcher launcher--(?:modal|workspace)"[^>]*>/u,
+  );
+  if (!match) throw new Error("Missing launcher root");
+  return match[0];
+}
+
+function consentDetailsTags(html: string): string[] {
+  return html.match(
+    /<details(?=[^>]*data-tid="consent-technical-details")[^>]*>/gu,
+  ) ?? [];
+}
+
 type FixtureInstallRequest = Omit<
   AppInstallRequestInput,
   "packageName" | "packageVersion" | "packageDigest"
@@ -132,6 +146,11 @@ test("manual install exposes the exact build review before enabling its final ac
   );
   expect(developerHtml).toContain("Raw compiler Wasm");
   expect(developerHtml).toContain("Transport Wasm");
+  const developerConsentDetails = consentDetailsTags(developerHtml);
+  expect(developerConsentDetails).not.toHaveLength(0);
+  expect(developerConsentDetails.every((tag) => !tag.includes(" open"))).toBe(
+    true,
+  );
   expect(developerHtml).not.toContain(
     '<details open=""><summary>Build and installation details</summary>',
   );
@@ -142,6 +161,7 @@ test("launcher exposes a real modal dialog boundary", () => {
   expect(html).toContain('role="dialog"');
   expect(html).toContain('aria-modal="true"');
   expect(html).toContain('aria-label="App launcher"');
+  expect(launcherRootTag(html)).not.toContain("style=");
   expect(html).toContain('tabindex="-1"');
   expect(html).toContain('role="group"');
   expect(html).toContain('aria-label="Install app from"');
@@ -153,6 +173,9 @@ test("launcher exposes a real modal dialog boundary", () => {
     'class="launcher-tile-row launcher-install-entry"',
   );
   expect(html).toContain('class="launcher-install-icon"');
+  expect(html).toContain('class="launcher-install-title">Install App</span>');
+  expect(html.indexOf("Install App")).toBeLessThan(html.indexOf(">File</span>"));
+  expect(html.indexOf(">File</span>")).toBeLessThan(html.indexOf(">URL</span>"));
   expect(
     html.indexOf('class="launcher-tile-row launcher-install-entry"'),
   ).toBeGreaterThan(html.indexOf('class="launcher-results"'));

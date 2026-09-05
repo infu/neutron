@@ -238,8 +238,8 @@ Wallet backend and managed-memory tests must cover:
 
 - clean initialization of the unchanged `wallet` v1 and `wallet_commands` v1
   roots, with no schema or migration change for the successor release;
-- state-preserving upgrades from exact Wallet 0.3.10 to 0.3.11 and the supported
-  0.3.6 skip path, plus Kitchen Sink 0.3.8 to 0.3.9, with representative
+- state-preserving upgrades from exact Wallet 0.3.11 to 0.3.12 and the supported
+  0.3.6 skip path, plus Kitchen Sink 0.3.10 to 0.3.11, with representative
   selected ledgers, metadata, history,
   native-deposit state, settings, and prepared, pending, and terminal
   command-journal rows;

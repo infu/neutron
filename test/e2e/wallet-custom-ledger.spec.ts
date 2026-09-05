@@ -5,7 +5,7 @@ import { resolveLocalNeutronRuntime } from "../../packages/neutron-provision/src
 const FIRST_CUSTOM_LEDGER = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 const SECOND_CUSTOM_LEDGER = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 
-test("Wallet custom-ledger entry never submits a sandboxed native form", async ({
+test("Wallet uses icon views and custom-ledger entry stays sandbox-safe", async ({
   page,
 }) => {
   const runtime = resolveLocalNeutronRuntime();
@@ -36,11 +36,24 @@ test("Wallet custom-ledger entry never submits a sandboxed native form", async (
   const walletFrame = page.locator(
     'iframe[data-app-id="wallet"][data-tile-id="wallet"]',
   );
-  await expect(walletFrame).toHaveAttribute("sandbox", "allow-scripts");
+  await expect(walletFrame).toHaveAttribute(
+    "sandbox",
+    "allow-scripts allow-same-origin",
+  );
+  await expect(walletFrame).toHaveAttribute("credentialless", "true");
   const wallet = page.frameLocator(
     'iframe[data-app-id="wallet"][data-tile-id="wallet"]',
   );
   await expect(wallet.locator(".wallet-shell")).toBeVisible();
+  const viewSwitch = wallet.locator(".wallet-view-switch");
+  const viewButtons = viewSwitch.locator(".wallet-view-button");
+  await expect(viewButtons).toHaveCount(3);
+  expect(await viewButtons.allTextContents()).toEqual(["", "", ""]);
+  for (const label of ["Assets", "Activity", "Approvals"]) {
+    const button = viewSwitch.getByRole("button", { name: label, exact: true });
+    await expect(button).toBeVisible();
+    await expect(button.locator("svg")).toBeVisible();
+  }
 
   const setupSearch = wallet.getByRole("searchbox", {
     name: "Find token ledger",

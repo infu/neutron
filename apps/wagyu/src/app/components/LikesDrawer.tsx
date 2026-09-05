@@ -144,11 +144,14 @@ export function LikesDrawer({
             This post no longer accepts likes.
           </div>
         ) : null}
-        <div className="wg-drawer__body">
+        <div aria-busy={loading} className="wg-drawer__body">
           {loading ? (
-            <div className="nt-state nt-state--loading">
-              <strong>Loading likes…</strong>
-              <span>This may take a moment.</span>
+            <div
+              aria-label="Loading likes"
+              className="nt-state nt-state--loading"
+              role="status"
+            >
+              <span aria-hidden="true" className="nt-spinner" />
             </div>
           ) : error ? (
             <div className="nt-state nt-state--error">

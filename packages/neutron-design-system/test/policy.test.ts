@@ -111,6 +111,7 @@ const REQUIRED_PUBLIC_CLASSES = [
   "nt-state--error",
   "nt-state--partial",
   "nt-state--success",
+  "nt-spinner",
   "nt-progress",
   "nt-status-dot",
   "nt-kv",
@@ -288,6 +289,24 @@ test("compiled CSS keeps responsive and interaction contracts visible", async ()
   expect(css).toContain(".nt-disclosure-trigger[aria-expanded=true]");
   expect(css).not.toMatch(/width:\s*100vw/i);
   expect(css).not.toMatch(/min-width:\s*(?:26[1-9]|[3-9]\d{2,}|\d{4,})px/i);
+});
+
+test("loading feedback is compact, quiet, borderless, and centered", async () => {
+  const css = await compileStyles();
+  const loading = css.match(
+    /\.nt-app :where\(\.nt-state--loading\) \{(?<rules>[^}]*)\}/,
+  )?.groups?.rules;
+  const spinner = css.match(
+    /\.nt-app :where\(\.nt-spinner\) \{(?<rules>[^}]*)\}/,
+  )?.groups?.rules;
+
+  expect(loading).toContain("background: var(--nt-bg-soft)");
+  expect(loading).toContain("box-shadow: none");
+  expect(loading).toContain("justify-content: center");
+  expect(loading).toContain("min-height: var(--nt-control-md)");
+  expect(loading).toContain("padding: var(--nt-pad-2)");
+  expect(spinner).toContain("height: var(--nt-icon-sm)");
+  expect(spinner).toContain("width: var(--nt-icon-sm)");
 });
 
 test("documented token pairs meet contrast policy", async () => {

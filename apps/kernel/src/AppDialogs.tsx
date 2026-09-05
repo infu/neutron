@@ -420,7 +420,6 @@ export function AppRequestDialog({
           ) : null}
           <PermissionConsequences permissions={rq.permissions} />
           <ConsentTechnicalDetails
-            mode={uiMode}
             summary={
               uiMode === "developer" ? "Developer details" : "Technical details"
             }

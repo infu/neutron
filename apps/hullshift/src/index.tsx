@@ -381,7 +381,20 @@ export function App() {
   if (snapshot === null) {
     return (
       <main aria-busy="true" className={cx(nt.appFill, "hullshift hullshift--centered")}>
-        <SystemState title="Connecting to ship computer" detail={connectionError ?? "Loading local mission state…"} />
+        {connectionError ? (
+          <div className={nt.stateError} role="alert">
+            <h2>Ship computer unavailable</h2>
+            <p>{connectionError}</p>
+          </div>
+        ) : (
+          <div
+            aria-label="Connecting to ship computer"
+            className={nt.stateLoading}
+            role="status"
+          >
+            <span aria-hidden="true" className={nt.spinner} />
+          </div>
+        )}
         {connectionError ? <button className={nt.button} onClick={() => void refresh()}>Retry connection</button> : null}
       </main>
     );
@@ -1005,10 +1018,6 @@ function VictoryPanel(props: { run: RunView; busy: boolean; primaryLabel: string
       </section>
     </div>
   );
-}
-
-function SystemState(props: { title: string; detail: string }) {
-  return <div className={nt.stateLoading}><span className="hullshift-spinner" aria-hidden="true" /><h2>{props.title}</h2><p>{props.detail}</p></div>;
 }
 
 function useModalFocus(onEscape?: () => void) {

@@ -114,4 +114,8 @@
   .nt-app :where(.nt-button, .nt-icon-button, .nt-card) {
     transform: none;
   }
+
+  .nt-app :where(.nt-spinner) {
+    animation: none;
+  }
 }

@@ -19,22 +19,52 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-test("Wagyu 0.3.5 keeps the exact production v3 memory root", async () => {
+test("Wagyu 0.3.6 keeps the oldest production v3 memory root", async () => {
+  await assertWagyuCodeOnlyRelease({
+    productionArchive: new URL("../wagyu.v0.3.2.neutron", import.meta.url),
+    productionVersion: 302,
+    productionBytes: 1_155_566,
+    productionSha256:
+      "f75975ea9bcaa9165ae812f84a6914d260bf3fcb8965659da0ec22ecbdd58423",
+  });
+});
+
+test("Wagyu 0.3.6 keeps its exact 0.3.5 predecessor's v3 memory root", async () => {
+  await assertWagyuCodeOnlyRelease({
+    productionArchive: new URL("../wagyu.v0.3.5.neutron", import.meta.url),
+    productionVersion: 305,
+    productionBytes: 1_199_577,
+    productionSha256:
+      "76208c6b1a296169a9bff115f16c2d73ce43f22969711f467387368aead57bef",
+  });
+});
+
+async function assertWagyuCodeOnlyRelease({
+  productionArchive,
+  productionVersion,
+  productionBytes: expectedProductionBytes,
+  productionSha256,
+}: {
+  productionArchive: URL;
+  productionVersion: number;
+  productionBytes: number;
+  productionSha256: string;
+}): Promise<void> {
   const [productionBytes, sourceText, lockText] = await Promise.all([
-    readFile(new URL("../wagyu.v0.3.2.neutron", import.meta.url)),
+    readFile(productionArchive),
     readFile(new URL("../neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../neutron.lock.json", import.meta.url), "utf8"),
   ]);
-  expect(productionBytes.byteLength).toBe(1_155_566);
+  expect(productionBytes.byteLength).toBe(expectedProductionBytes);
   expect(createHash("sha256").update(productionBytes).digest("hex")).toBe(
-    "f75975ea9bcaa9165ae812f84a6914d260bf3fcb8965659da0ec22ecbdd58423",
+    productionSha256,
   );
 
   const production = packageManifest(productionBytes);
   const source = JSON.parse(sourceText) as NeutronManifest;
   const lock = JSON.parse(lockText) as ReturnType<typeof createMemoryLock>;
-  expect(production).toMatchObject({ id: "wagyu", version: 302 });
-  expect(source).toMatchObject({ id: "wagyu", version: 305 });
+  expect(production).toMatchObject({ id: "wagyu", version: productionVersion });
+  expect(source).toMatchObject({ id: "wagyu", version: 306 });
 
   const productionMemory = requiredMemory(production);
   const sourceMemory = requiredMemory(source);
@@ -68,7 +98,7 @@ test("Wagyu 0.3.5 keeps the exact production v3 memory root", async () => {
     removedApps: [],
     destructiveMemoryRoots: [],
   });
-});
+}
 
 function packageManifest(bytes: Uint8Array): PackagedNeutronManifest {
   const manifest = unpackNeutronPackage(bytes)["neutron.json"];

@@ -743,7 +743,10 @@ await publishAppStateChange(TRAY_DEMO_TOPIC, revision);`,
 <button className="nt-button nt-button--danger">
   Danger
 </button>
-<input className="nt-input" aria-invalid={hasError} />`,
+<input className="nt-input" aria-invalid={hasError} />
+<div className="nt-state nt-state--loading" role="status" aria-label="Loading">
+  <span className="nt-spinner" aria-hidden="true" />
+</div>`,
     },
   },
 } as const satisfies Record<KitchenGuideId, PageGuideContent>;

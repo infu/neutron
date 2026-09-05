@@ -35,6 +35,7 @@ const {
   formatTrayBadge,
   positionTrayPopover,
   trayButtonLabel,
+  trayIdentitySubtitle,
 } = await import("../src/workspace/AppTray.tsx");
 if (!moduleWindow) Reflect.deleteProperty(globalThis, "window");
 
@@ -291,7 +292,20 @@ test("tray badge text and accessible labels stay compact and exact", () => {
   expect(trayButtonLabel("Mailbox", 4)).toBe("Mailbox, 4 new items");
 });
 
-test("tray popover geometry follows the visible viewport and clamps edges", () => {
+test("tray identity removes repeated names but keeps distinct provenance", () => {
+  expect(trayIdentitySubtitle("Wallet", "wallet", "Wallet")).toBeNull();
+  expect(trayIdentitySubtitle("Mail", "mail", "Mail")).toBeNull();
+  expect(
+    trayIdentitySubtitle(
+      "Kitchen Sink Tray Demo",
+      "kitchensink",
+      "Kitchen Sink",
+    ),
+  ).toBe("kitchensink · Kitchen Sink");
+  expect(trayIdentitySubtitle("Kernel", "notes", "Kernel")).toBe("notes");
+});
+
+test("horizontal tray popover follows the visible viewport and clamps edges", () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   const properties = new Map<string, string>();
   const popover = {
@@ -330,9 +344,53 @@ test("tray popover geometry follows the visible viewport and clamps edges", () =
       getBoundingClientRect: () => ({ bottom: 150, right: 130 }),
     } as unknown as HTMLElement);
     expect(Object.fromEntries(properties)).toEqual({
-      "--app-tray-top": "156px",
+      "--app-tray-top": "92px",
       "--app-tray-right": "8px",
       "--app-tray-available-height": "0px",
+    });
+  } finally {
+    if (originalWindow) {
+      Object.defineProperty(globalThis, "window", originalWindow);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
+    }
+  }
+});
+
+test("vertical tray popover opens right and stays aligned to its trigger", () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const properties = new Map<string, string>();
+  const popover = {
+    style: {
+      setProperty(name: string, value: string) {
+        properties.set(name, value);
+      },
+    },
+  } as unknown as HTMLElement;
+  const button = {
+    getBoundingClientRect: () => ({ bottom: 570, right: 47 }),
+  } as unknown as HTMLElement;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      innerHeight: 700,
+      innerWidth: 900,
+      visualViewport: {
+        height: 600,
+        offsetLeft: 20,
+        offsetTop: 10,
+        width: 500,
+      },
+    },
+  });
+  try {
+    positionTrayPopover(popover, button, "vertical");
+    expect(Object.fromEntries(properties)).toEqual({
+      "--app-tray-left": "53px",
+      "--app-tray-available-width": "459px",
+      "--app-tray-available-height": "552px",
+      "--app-tray-bottom": "130px",
     });
   } finally {
     if (originalWindow) {

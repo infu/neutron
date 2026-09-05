@@ -485,7 +485,6 @@ function UpdateReviewDialog({
                   </span>
                 </div>
                 <ConsentTechnicalDetails
-                  mode={uiMode}
                   summary="Package and capability technical details"
                 >
                 <dl>
@@ -651,7 +650,6 @@ function UpdateReviewDialog({
           review.compatibilityDiagnostics.length > 0 ? (
             <ConsentTechnicalDetails
               className="app-update-review-diagnostics"
-              mode={uiMode}
               summary="Compiler diagnostics"
             >
               <ul>

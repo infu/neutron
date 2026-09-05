@@ -496,6 +496,23 @@ The unversioned compatibility route rejects Agent-scoped signed calls before
 discovery. See
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
+Visual workspace control is separate from effect authority. A live resident
+background whose installed app declares `agent_entrypoints` may inspect and
+arrange the Kernel workspace on an invocation-free call without enabling Agent Mode.
+If the request carries invocation provenance, only the active depth-zero root
+is admitted; delegated descendants are rejected. The Kernel binds this to the
+declared capability and endpoint role rather than a special app id. Opening,
+focusing, closing, placing, resizing, moving, switching, expanding, or restoring
+tiles grants no target-app tool, canister, identity, or decision authority and
+opens no owner dialog. These actions use the same workspace store as direct
+owner interaction and have no separate cooldown or focus model.
+
+Moving a tile to another workspace does not select it. Selecting another
+workspace directly, or focusing or expanding one of its tiles, applies the
+existing inactive-workspace lifecycle: tile frames remain mounted but their
+Kernel endpoints disconnect. Making the source Agent tile's workspace inactive
+can therefore end a turn bound to that endpoint.
+
 Exact installed-artifact inspection is narrower than general Agent delegation.
 Only the current direct root invocation may call `source.files`,
 `source.search`, or `source.read`; ordinary app calls and delegated children are

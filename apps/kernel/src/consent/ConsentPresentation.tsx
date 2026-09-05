@@ -19,7 +19,7 @@ export function ConsentTechnicalDetails({
 }: {
   children: ReactNode;
   className?: string;
-  mode: KernelUiMode;
+  mode?: KernelUiMode;
   summary?: string;
 }) {
   return (

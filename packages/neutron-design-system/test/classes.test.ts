@@ -21,6 +21,7 @@ test("class helper constants expose stable nt-prefixed names", () => {
   expect(nt.settingsRow).toBe("nt-settings-row");
   expect(nt.disclosureTrigger).toBe("nt-disclosure-trigger");
   expect(nt.tagSelected).toBe("nt-tag nt-tag--selected");
+  expect(nt.spinner).toBe("nt-spinner");
   expect(nt.json).toBe("nt-json");
   expect(nt.preWrap).toBe("nt-pre nt-pre--wrap");
 });

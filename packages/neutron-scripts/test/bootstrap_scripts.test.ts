@@ -79,13 +79,13 @@ test("one PocketIC config describes the complete local app set", () => {
   });
   expect(localConfig.artifacts.kind).toBe("inline");
   expect(localConfig.artifacts.kernel).toEqual({
-    path: "apps/kernel/kernel.v0.3.29.neutron",
+    path: "apps/kernel/kernel.v0.3.30.neutron",
   });
   const paths = localConfig.artifacts.packages.map(({ path }) => path);
   expect(new Set(paths).size).toBe(paths.length);
   expect(paths).toContain("apps/vfs/files.v0.4.6.neutron");
   expect(paths).toContain("apps/spreadsheet/spreadsheet.v0.3.4.neutron");
-  expect(paths).toContain("apps/hullshift/hullshift.v0.2.4.neutron");
+  expect(paths).toContain("apps/hullshift/hullshift.v0.2.5.neutron");
   expect(paths).toContain("apps/mysubnet/mysubnet.v0.3.4.neutron");
 });
 

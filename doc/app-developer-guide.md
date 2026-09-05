@@ -1373,10 +1373,8 @@ opening or focusing tiles.
 No preliminary permission request or session grant is needed. Omit `workspace`
 to use the active workspace. A supplied workspace must be the active workspace;
 apps cannot switch workspaces, and `reuseExisting: false` cannot force a
-duplicate. Delegated Agent navigation retains its separate bounded decision
-policy and is throttled to one new tile per 20 seconds
-and one focus change per two seconds. Kernel workspace capacities still apply
-to every caller.
+duplicate. This compatibility route has no navigation cooldown. Kernel
+workspace capacities still apply to every caller.
 
 `view` is an optional navigation token matching
 `^[a-z][a-z0-9_/-]{0,63}$`. It carries no payload and no authority. A target
@@ -1389,6 +1387,47 @@ const stop = onTileViewRequest((view) => {
   if (view === "create") showBlankEditor();
 });
 ```
+
+### Let A Resident Agent Arrange The Workspace
+
+The Kernel also exposes two discoverable tools for agents that need to present
+and arrange app UI:
+
+- `workspace.inspect` returns the active and exposed workspaces, their exact
+  tile instance ids and app/tile identities, focus, the expanded instance, and
+  the split tree with split ids, orientations, and ratios.
+- `workspace.control` performs exactly one `open`, `focus`, `close`, `place`,
+  `resize`, `move`, `switch`, `expand`, or `restore` operation and returns the
+  resulting workspace snapshot.
+
+`open` may select an exposed workspace and place a new or reused tile relative
+to an exact tile instance. `place` rearranges an instance within one workspace,
+`resize` changes one reported split, and `move` transfers an instance to an
+exposed workspace without activating that workspace. `open`, `switch`,
+`focus`, and `expand` bring their target workspace into view.
+`expand` uses the same transient expanded-tile state as the tile-header
+control; `restore` returns to the unchanged split layout. The optional `view`
+token on `open` uses the same
+`neutron:tile:view` delivery as `workspace.open_tile`.
+
+These tools are admitted from a live resident background whose installed app
+declares a non-empty `agent_entrypoints` capability. This is bound to the
+declaration, not to a hard-coded Agent app id. An invocation-free resident call
+may use them without enabling Agent Mode. When the call carries Agent Mode
+invocation provenance, only the live depth-zero root is admitted; delegated
+descendants are not. There is no owner dialog or navigation cooldown. Existing
+workspace exposure, tile validity, and capacity checks still apply.
+
+The older `workspace.open_tile` tool and `openAppTile()` helper remain the
+generic compatibility surface for tiles, trays, and backgrounds. They keep
+their active-workspace and exact-reuse behavior; apps should not copy workspace
+mutation logic or create a second layout model around them.
+
+Activating a different workspace—by `open`, `switch`, `focus`, or `expand`—disconnects the initiating tile's Kernel endpoint when its
+workspace becomes inactive. If the current Agent turn is bound to that
+endpoint, it can end before the initiating tile receives the tool response.
+Prefer `move` without activation while preparing UI, and change the visible
+workspace only when the owner should be taken there immediately.
 
 ### Copy From A Tile
 
