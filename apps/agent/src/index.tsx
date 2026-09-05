@@ -396,6 +396,23 @@ function App() {
 
         {snapshot.error && <ErrorNotice text={snapshot.error} />}
 
+        {snapshot.workers && snapshot.workers.total > 0 && (
+          <details className="ora-workers">
+            <summary>Workers · {snapshot.workers.active} running · {snapshot.workers.total} total</summary>
+            <div className="ora-worker-list">
+              {snapshot.workers.items.map((worker) => (
+                <details key={worker.id} className="ora-worker">
+                  <summary><span>{worker.task}</span><strong>{worker.status}</strong></summary>
+                  <p>{worker.task}</p>
+                  <p className="ora-worker-meta">{worker.modelId}</p>
+                  {worker.result && <p>{worker.result}</p>}
+                  {worker.error && <p role="status">{worker.error}</p>}
+                </details>
+              ))}
+              {snapshot.workers.omitted > 0 && <p>{snapshot.workers.omitted} more workers retained. Ask the agent to list them.</p>}
+            </div>
+          </details>
+        )}
         {snapshot.work?.goal && (
           <section className="ora-goal" aria-label="Current goal">
             <div className="ora-goal-heading">
@@ -411,11 +428,10 @@ function App() {
             {snapshot.work.goal.checkpoint && <details><summary>Progress checkpoint</summary><p>{snapshot.work.goal.checkpoint}</p></details>}
           </section>
         )}
-        {snapshot.work && (snapshot.work.steps > 0 || snapshot.work.queued > 0) && (
+        {snapshot.work && (snapshot.work.wakeAt !== null || snapshot.work.queued > 0) && (
           <div className="ora-work-status" role="status">
-            {snapshot.work.steps} steps · {(snapshot.work.inputTokens + snapshot.work.outputTokens).toLocaleString()} tokens
-            {snapshot.work.wakeAt !== null && ` · Sleeping until ${new Date(snapshot.work.wakeAt).toLocaleTimeString()}`}
-            {snapshot.work.queued > 0 && <span title={snapshot.work.nextMessage ?? ""}> · {snapshot.work.queued} queued</span>}
+            {snapshot.work.wakeAt !== null && <span>Sleeping until {new Date(snapshot.work.wakeAt).toLocaleTimeString()}</span>}
+            {snapshot.work.queued > 0 && <span title={snapshot.work.nextMessage ?? ""}>{snapshot.work.queued} queued</span>}
             {!anyGenerationActive && snapshot.work.queued > 0 && (
               <button type="button" disabled={busy} onClick={() => void send("Continue with the queued requests.")}>Run queued</button>
             )}
@@ -649,7 +665,7 @@ function asSnapshot(value: JsonValue): AgentSnapshot {
 
 function asProgress(value: JsonValue): AgentProgress | null {
   if (!isJsonObject(value) || typeof value.type !== "string") return null;
-  if (!["turn_start", "tool", "work", "message", "refresh"].includes(value.type)) {
+  if (!["turn_start", "tool", "work", "workers", "message", "refresh"].includes(value.type)) {
     return null;
   }
   return value as AgentProgress;

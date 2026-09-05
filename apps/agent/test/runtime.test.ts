@@ -2073,12 +2073,18 @@ function runtimeFixture(): AgentRuntime {
   const runtime = Object.create(AgentRuntime.prototype) as AgentRuntime;
   const workStates = new Map();
   const persistedWork = new Map();
+  const persistedWorkers = new Map();
   let storage: any;
   Object.assign(runtime, { workStates });
   Object.defineProperty(runtime, "storage", {
     get: () => storage,
     set: (value) => {
       storage = {
+        loadWorkers: async (id: string) => structuredClone(persistedWorkers.get(id) ?? []),
+        saveWorkers: async (id: string, workers: unknown, conversation?: any) => {
+          persistedWorkers.set(id, structuredClone(workers));
+          if (conversation) await storage.saveConversation(id, conversation);
+        },
         loadWork: async (id: string) => structuredClone(persistedWork.get(id) ?? emptyAgentWork()),
         updateWork: async (id: string, update: (state: any) => void, conversation?: any) => {
           const state = structuredClone(persistedWork.get(id) ?? emptyAgentWork());

@@ -3,6 +3,7 @@ import { normalizeAgentWork } from "./agent_work.ts";
 import type {
   AgentChatTileEndpointId,
   AgentWorkState,
+  AgentWorkerRecord,
   OpenRouterModel,
   PendingStateChangeAttempt,
   PendingStateChangeJournal,
@@ -28,6 +29,9 @@ const CONVERSATION_MODEL_PREFIX = "conversation-model:";
 // Released residents rewrite conversation records. Keep goal and inbox state
 // in a separate key, so their last history write cannot erase ongoing work.
 const WORK_PREFIX = "conversation-work:";
+// Earlier residents rewrite work and conversation keys. Worker histories have
+// their own key so an old frame's final save cannot erase them during upgrade.
+const WORKERS_PREFIX = "conversation-workers:";
 const MAX_MESSAGES = 160;
 const MAX_MODELS = 600;
 const MAX_TEXT = 64_000;
@@ -74,10 +78,47 @@ export class AgentStorage {
       .get(`${WORK_PREFIX}${requireAgentChatTileEndpoint(historyId)}`)));
   }
 
+  async loadWorkers(historyId: AgentChatTileEndpointId): Promise<AgentWorkerRecord[]> {
+    const transaction = this.database.transaction(STORE, "readonly");
+    const value = await requestResult(transaction.objectStore(STORE)
+      .get(`${WORKERS_PREFIX}${requireAgentChatTileEndpoint(historyId)}`));
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry): entry is AgentWorkerRecord =>
+      isRecord(entry) && typeof entry.id === "string" && typeof entry.task === "string" &&
+      typeof entry.modelId === "string" &&
+      ["running", "waiting", "completed", "stopped", "paused", "error"].includes(String(entry.status)),
+    ).map((entry) => ({
+      id: entry.id, task: entry.task, modelId: entry.modelId, status: entry.status,
+      result: typeof entry.result === "string" ? entry.result : "",
+      error: typeof entry.error === "string" ? entry.error : null,
+      messages: Array.isArray(entry.messages) ? entry.messages.filter((text) => typeof text === "string") : [],
+      conversation: normalizePersistedConversationState(entry.conversation, entry.modelId),
+      steps: finiteCount(entry.steps), inputTokens: finiteCount(entry.inputTokens), outputTokens: finiteCount(entry.outputTokens),
+      reported: entry.reported === true,
+    }));
+  }
+
+  /** Result acknowledgement and its parent checkpoint commit together. */
+  async saveWorkers(
+    historyId: AgentChatTileEndpointId,
+    workers: readonly AgentWorkerRecord[],
+    conversation?: PersistedConversationState,
+  ): Promise<void> {
+    const id = requireAgentChatTileEndpoint(historyId);
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    store.put(workers.map((worker) => ({
+      ...worker, conversation: normalizePersistedConversationState(worker.conversation),
+    })), `${WORKERS_PREFIX}${id}`);
+    if (conversation) store.put(conversationRecord(conversation), conversationKey(id));
+    await transactionDone(transaction);
+  }
+
   async updateWork(
     historyId: AgentChatTileEndpointId,
     update: (work: AgentWorkState) => void,
     conversation?: PersistedConversationState,
+    clearWorkers = false,
   ): Promise<AgentWorkState> {
     const id = requireAgentChatTileEndpoint(historyId);
     const transaction = this.database.transaction(STORE, "readwrite");
@@ -88,6 +129,7 @@ export class AgentStorage {
       update(work);
       store.put(work, key);
       if (conversation) store.put(conversationRecord(conversation), conversationKey(id));
+      if (clearWorkers) store.delete(`${WORKERS_PREFIX}${id}`);
     } catch (error) {
       transaction.abort();
       throw error;
@@ -278,6 +320,7 @@ export class AgentStorage {
     store.delete(conversationKey(id));
     store.delete(conversationModelKey(id));
     store.delete(`${WORK_PREFIX}${id}`);
+    store.delete(`${WORKERS_PREFIX}${id}`);
     await transactionDone(transaction);
   }
 
@@ -294,6 +337,7 @@ export class AgentStorage {
     const keys = await requestResult(store.getAllKeys());
     for (const key of keys) {
       if (typeof key === "string" && key.startsWith(WORK_PREFIX)) store.delete(key);
+      if (typeof key === "string" && key.startsWith(WORKERS_PREFIX)) store.delete(key);
       if (typeof key === "string" && key.startsWith(CONVERSATION_PREFIX)) {
         const id = requireAgentChatTileEndpoint(
           key.slice(CONVERSATION_PREFIX.length),
@@ -323,6 +367,10 @@ export function requireAgentChatTileEndpoint(
     throw new Error("Agent controls require an authenticated Agent chat tile");
   }
   return value as AgentChatTileEndpointId;
+}
+
+function finiteCount(value: number): number {
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 export function normalizePersistedSharedState(

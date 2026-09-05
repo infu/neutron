@@ -15,10 +15,26 @@ import {
   isValidAppId,
 } from "neutron-tools/src/app_ids.js";
 
-const MAX_TOOL_RESULT_BYTES = 192 * 1024;
+export const MAX_TOOL_RESULT_BYTES = 192 * 1024;
 export const AGENT_TOOL_TIMEOUT_SECONDS = 60;
 export const AGENT_LONG_RUNNING_TOOL_TIMEOUT_SECONDS = 300;
 const READ_ONLY_TOOL_EFFECTS = new Set(["read", "network", "gpu"]);
+
+export type AgentCallScheduler = <T>(operation: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
+
+/** One queue per root, shared by its model contexts. App calls already run
+ * serially; sharing that queue also avoids overlapping root consent requests. */
+export function createAgentCallScheduler(): AgentCallScheduler {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> => {
+    const pending = tail.then(() => {
+      signal?.throwIfAborted();
+      return operation();
+    });
+    tail = pending.catch(() => undefined);
+    return pending;
+  };
+}
 
 export type AgentToolEvent = {
   id: string;
@@ -31,6 +47,7 @@ export function createNeutronAgentTools({
   bus,
   onEvent,
   beforeStateChangingDispatch,
+  scheduleCall = createAgentCallScheduler(),
 }: {
   bus: MsgBusClient;
   onEvent: (event: AgentToolEvent) => void;
@@ -38,8 +55,8 @@ export function createNeutronAgentTools({
     target: MsgBusEndpointId;
     name: string;
   }>) => Promise<void> | void;
+  scheduleCall?: AgentCallScheduler;
 }) {
-  let callQueue: Promise<void> = Promise.resolve();
 
   const run = async <T>(
     name: string,
@@ -75,15 +92,6 @@ export function createNeutronAgentTools({
       });
       throw error;
     }
-  };
-
-  const serializeCall = <T>(operation: () => Promise<T>): Promise<T> => {
-    const pending = callQueue.then(operation, operation);
-    callQueue = pending.then(
-      () => undefined,
-      () => undefined
-    );
-    return pending;
   };
 
   return {
@@ -176,9 +184,10 @@ export function createNeutronAgentTools({
         { abortSignal },
       ) =>
         run("call_app_tool", `Call ${name}`, async (report) =>
-          serializeCall(async () => {
+          scheduleCall(async () => {
             const endpoint = endpointId(target);
             const descriptor = await readDescriptor(bus, endpoint, name);
+            abortSignal?.throwIfAborted();
             const args = jsonObject(arguments_);
             const mayChangeState = toolMayChangeState(descriptor);
             if (mayChangeState) {
@@ -187,6 +196,7 @@ export function createNeutronAgentTools({
                   throw new Error("State-change recovery journal is unavailable");
                 }
                 await beforeStateChangingDispatch({ target: endpoint, name });
+                abortSignal?.throwIfAborted();
               } catch (error) {
                 return {
                   ok: false,
@@ -219,7 +229,7 @@ export function createNeutronAgentTools({
                 ...(mayChangeState ? { retrySafe: false } : {}),
               };
             }
-          }),
+          }, abortSignal),
           failedToolSummary,
         ),
     }),
