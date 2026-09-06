@@ -10,6 +10,7 @@ import { resolveLocalNeutronRuntime } from "../../../packages/neutron-provision/
 import { verifyPocketIcRuntime, type PocketIcRuntimeDescriptor } from "../../../packages/neutron-provision/src/pocketic_supervisor.ts";
 import { readSession } from "../../../packages/neutron-provision/src/session.ts";
 import { configureFreshErc20Protocol } from "./ic-wallet-erc20-provision.ts";
+import { ensureErc20MinterFeeReadiness } from "./ic-wallet-erc20-fee-readiness.ts";
 
 // Bun-only explicit setup command. Importing performs no runtime or financial
 // action. Run only after the lifecycle owner grants the fresh Ethereum window.
@@ -62,6 +63,10 @@ export async function configureErc20Qualification(configPath: string): Promise<s
     sourceEvidence: [readyPath, deploymentPath].map((filename, index) => ({ path: path.relative(root, filename), sha256: sha256([readyBytes, deploymentBytes][index]!) })),
     limitations: ["Official pinned helper and released minter/ledger protocols use disclosed local six-decimal ERC20 stand-ins; no production Circle/Tether contract execution is claimed."],
   }, null, 2) + "\n", { flag: "wx" });
+  // This released minter fills its quote cache only while processing a real
+  // withdrawal. Complete that separately checkpointed donor prerequisite
+  // before presenting this fresh fixture as ready for ERC20 redemption.
+  await ensureErc20MinterFeeReadiness(configPath);
   return evidencePath;
 }
 

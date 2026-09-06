@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type FrameLocator, type Locator, type Page } from "@playwright/test";
 import { getAddress, Interface, parseUnits, Transaction } from "ethers";
@@ -206,6 +207,181 @@ for (const chainId of ["1", "42161"] as const) {
   }
 }
 
+test("chain 1: saved token intent adopts a confirmed approval speed-up before its separate swap", async ({ page }, testInfo) => {
+  test.skip(!process.env.NEUTRON_UNISWAP_SAVED_INTENT, "Explicit coordinator-owned saved-intent continuation only");
+  test.setTimeout(900_000);
+  const saved = JSON.parse(await readFile(process.env.NEUTRON_UNISWAP_SAVED_INTENT!, "utf8"));
+  const intent = JSON.parse(saved.quote_json);
+  const quote = intent.quote;
+  expect(saved.phase).toBe("queued"); expect(saved.revision).toBe("0");
+  expect(saved.chain_id).toBe("1");
+  const network = await createEvmNetworkFixture("1");
+  expect(network.nodeKind).toBe("anvil");
+  const { chain } = network;
+  const owner = getAddress(quote.accountAddress), recipient = getAddress(quote.recipient);
+  const tokenIn = getAddress(quote.tokenIn.address), tokenOut = getAddress(quote.tokenOut.address);
+  const router = getAddress(quote.router);
+  const tokenAbi = new Interface(["function balanceOf(address) view returns(uint256)", "function allowance(address,address) view returns(uint256)"]);
+  const readToken = async (token: string, method: string, args: string[]) => BigInt(tokenAbi.decodeFunctionResult(method, await chain.rpc<string>("eth_call", [{ to: token, data: tokenAbi.encodeFunctionData(method, args) }, "latest"]))[0]);
+  const modes = async () => ({ automine: await chain.rpc<boolean>("anvil_getAutomine"), interval: await chain.rpc<number | null>("anvil_getIntervalMining") });
+  const originalMining = await modes(); expect(originalMining).toEqual({ automine: false, interval: 1 });
+  const progress: Record<string, unknown> = { savedId: saved.id, originalMining, stages: [] };
+  const checkpoint = async (stage: string, fields: Record<string, unknown> = {}) => {
+    Object.assign(progress, fields); (progress.stages as unknown[]).push({ stage, observedAt: new Date().toISOString() });
+    const file = testInfo.outputPath("effect-checkpoints.json"); await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(progress, null, 2) + "\n");
+  };
+  await installEvmWalletBrowserFaults(page, ["evm_wallet", "uniswap"]);
+  let uniswap = await openUniswap(page);
+  let card = savedCard(uniswap, saved.id);
+  await expect(card).toHaveCount(1, { timeout: 120_000 });
+  const originalRequests: SavedRequests = { id: saved.id, approvalRequest: JSON.parse(saved.approval_request_json), swapRequest: JSON.parse(saved.swap_request_json) };
+  expect(await savedRequests(card)).toEqual(originalRequests);
+  const before = { nonce: await chain.nonce(owner), input: await readToken(tokenIn, "balanceOf", [owner]), output: await readToken(tokenOut, "balanceOf", [recipient]), accountOutput: await readToken(tokenOut, "balanceOf", [owner]) };
+  expect(await chain.rpc<string>("eth_getTransactionCount", [owner, "pending"]).then(BigInt)).toBe(before.nonce);
+  expect(await readToken(tokenIn, "allowance", [owner, router])).toBe(0n);
+  await checkpoint("saved-intent-restored-before-effects", { originalRequests, deadline: quote.deadline, before: Object.fromEntries(Object.entries(before).map(([key, value]) => [key, value.toString()])) });
+  let requests = originalRequests;
+  let minimumOut = BigInt(quote.minimumOut), priceImpactPercent = `${Number(quote.priceImpactBps) / 100}%`;
+  const wallet = page.frameLocator(WALLET_FRAME);
+  // This continuation has explicit coordinator authorization to preserve the
+  // nearly expired request, then make one fresh intent after actual expiry.
+  const remainingMs = Number(quote.deadline) * 1000 - Date.now();
+  if (remainingMs > 0 && remainingMs < 300_000 && process.env.NEUTRON_UNISWAP_ALLOW_FRESH_AFTER_EXPIRY === "1") {
+    await card.getByRole("button", { name: "Check wallet status", exact: true }).click();
+    await allowEvmInspectionGrantsUntil(page, () => card.getByRole("button", { name: "Check wallet status", exact: true }).isEnabled());
+    await expect(card).toContainText("queued"); await expect(card.getByRole("link")).toHaveCount(0);
+    expect(await savedRequests(card)).toEqual(originalRequests);
+    expect(await chain.nonce(owner)).toBe(before.nonce);
+    await checkpoint("nearly-expired-original-preserved-without-wallet-operation", { originalCard: await card.textContent() });
+    while (Date.now() <= Number(quote.deadline) * 1000) await page.waitForTimeout(Math.min(10_000, Number(quote.deadline) * 1000 - Date.now() + 1_000));
+  }
+  if (BigInt(quote.deadline) <= BigInt(Math.floor(Date.now() / 1000))) {
+    await expect(card).toContainText("deadline expired");
+    await expect(card.getByRole("button", { name: "Review exact approval", exact: true })).toHaveCount(0);
+    await card.getByRole("button", { name: "Check wallet status", exact: true }).click();
+    await allowEvmInspectionGrantsUntil(page, () => card.getByRole("button", { name: "Check wallet status", exact: true }).isEnabled());
+    await expect(card).toContainText("queued");
+    await expect(card.getByRole("link")).toHaveCount(0);
+    expect(await savedRequests(card)).toEqual(originalRequests);
+    expect(await chain.nonce(owner)).toBe(before.nonce); expect(await chain.rpc<string>("eth_getTransactionCount", [owner, "pending"]).then(BigInt)).toBe(before.nonce);
+    await checkpoint("original-expired-without-wallet-operation-or-effect", { originalCard: await card.textContent() });
+    expect(process.env.NEUTRON_UNISWAP_ALLOW_FRESH_AFTER_EXPIRY).toBe("1");
+    await uniswap.getByRole("button", { name: "Connect EVM Wallet", exact: true }).click();
+    const connected = uniswap.getByRole("button", { name: "Refresh wallet", exact: true });
+    await allowEvmInspectionGrantsUntil(page, async () => await connected.isVisible() && await connected.isEnabled());
+    await uniswap.getByLabel(/^Network/u).selectOption("1");
+    await uniswap.getByText("Swap settings and custom token", { exact: true }).click();
+    expect(getAddress(await uniswap.getByLabel("Recipient", { exact: true }).inputValue())).toBe(owner);
+    for (const token of [tokenIn, tokenOut]) {
+      await uniswap.getByLabel("Custom token contract", { exact: true }).fill(token);
+      await uniswap.getByRole("button", { name: "Read and add token", exact: true }).click();
+      await allowEvmInspectionGrantsUntil(page, async () => await uniswap.getByLabel("Input token", { exact: true }).locator(`option[value="${token.toLowerCase()}"]`).count() === 1);
+    }
+    await uniswap.getByLabel("Input token", { exact: true }).selectOption(tokenIn.toLowerCase());
+    await uniswap.getByLabel("Output token", { exact: true }).selectOption(tokenOut.toLowerCase());
+    await uniswap.getByLabel("Input amount", { exact: true }).fill(AMOUNT);
+    await uniswap.getByLabel("Recipient", { exact: true }).fill(recipient);
+    ({ minimumOut, priceImpactPercent } = await requestQuote(page, uniswap, false, network, async evidence => { await checkpoint("fresh-quote-mining-restored", { quoteMining: evidence }); }));
+    await uniswap.getByRole("button", { name: "Save swap and review approval", exact: true }).click();
+    await allowEvmInspectionGrantsUntil(page, () => wallet.getByTestId("evm-review").isVisible());
+    card = uniswap.locator(".uni-saved").first(); requests = await savedRequests(card);
+    expect(requests.id).not.toBe(originalRequests.id);
+    expect(requests.approvalRequest!.requestId).not.toBe(originalRequests.approvalRequest!.requestId);
+    expect(requests.swapRequest.requestId).not.toBe(originalRequests.swapRequest.requestId);
+    await checkpoint("fresh-intent-created-after-original-expiry", { requests });
+  } else {
+    await card.getByRole("button", { name: "Review exact approval", exact: true }).click();
+    await allowEvmInspectionGrantsUntil(page, () => wallet.getByTestId("evm-review").isVisible());
+    await checkpoint("original-intent-approval-review", { requests });
+  }
+  const approval = requests.approvalRequest!;
+  expect(approval.to.toLowerCase()).toBe(tokenIn.toLowerCase()); expect(approval.valueWei).toBe("0");
+  const decodedApproval = approveAbi.decodeFunctionData("approve", approval.data!);
+  expect(getAddress(decodedApproval.spender)).toBe(router); expect(decodedApproval.amount).toBe(ATOMS);
+  const multicall = routerAbi.decodeFunctionData("multicall", requests.swapRequest.data!);
+  expect(multicall.deadline).toBeGreaterThan(BigInt(Math.floor(Date.now() / 1000)));
+  expect(multicall.data).toHaveLength(1);
+  const swapParams = routerAbi.decodeFunctionData("exactInputSingle", multicall.data[0]).params;
+  expect(getAddress(swapParams.tokenIn)).toBe(tokenIn); expect(getAddress(swapParams.tokenOut)).toBe(tokenOut);
+  expect(getAddress(swapParams.recipient)).toBe(recipient); expect(swapParams.amountIn).toBe(ATOMS); expect(swapParams.amountOutMinimum).toBe(minimumOut);
+  await expectWalletRequest(wallet, approval, owner, "1");
+  const operationRow = (requestId: string) => wallet.locator('.evm-activity [data-testid^="evm-operation-"]').filter({ hasText: `Request ${requestId}` });
+  const operationHash = async (row: Locator) => { const link = row.locator('a[href*="/tx/"]').first(); await expect(link).toBeVisible({ timeout: 120_000 }); const hash = (await link.getAttribute("href"))?.match(/0x[0-9a-f]{64}/iu)?.[0]; if (!hash) throw new Error("Wallet operation hash missing"); return hash; };
+  const checkOperation = async (row: Locator, status: string) => { const button = row.getByRole("button", { name: "Check status", exact: true }); await expect(button).toBeEnabled({ timeout: 120_000 }); await button.click(); await expect(row.locator(`[data-status="${status}"]`)).toBeVisible({ timeout: 120_000 }); };
+  let originalHash = "", replacementHash = "", replacementRequest = "";
+  try {
+    await chain.rpc("evm_setIntervalMining", [0]); await chain.rpc("evm_setAutomine", [false]);
+    expect(await modes()).toEqual({ automine: false, interval: null });
+    await checkpoint("approval-mining-paused");
+    await wallet.getByTestId("evm-review-approve").click();
+    await expect(wallet.getByTestId("evm-review")).toHaveCount(0, { timeout: 120_000 });
+    await wallet.getByRole("navigation", { name: "Wallet pages" }).getByRole("button", { name: "Activity", exact: true }).click();
+    const originalRow = operationRow(approval.requestId); originalHash = await operationHash(originalRow);
+    await checkpoint("original-approval-signed", { originalHash });
+    await checkOperation(originalRow, "submitted");
+    const originalTx = await chain.rpc<{ from: string; to: string; input: string; value: string; nonce: string; blockNumber: string | null; maxFeePerGas: string; maxPriorityFeePerGas: string }>("eth_getTransactionByHash", [originalHash]);
+    expect(BigInt(originalTx.nonce)).toBe(before.nonce); expect(originalTx.blockNumber).toBeNull();
+    expect(originalTx.from.toLowerCase()).toBe(owner.toLowerCase()); expect(originalTx.to.toLowerCase()).toBe(tokenIn.toLowerCase()); expect(originalTx.input).toBe(approval.data);
+    expect(await readToken(tokenIn, "allowance", [owner, router])).toBe(0n);
+    await originalRow.getByText("Speed up or cancel", { exact: true }).click();
+    await originalRow.getByRole("combobox", { name: "Action", exact: true }).selectOption("speed");
+    await originalRow.getByLabel("Maximum fee per gas", { exact: true }).fill((BigInt(originalTx.maxFeePerGas) * 2n + 1n).toString());
+    await originalRow.getByLabel("Priority fee per gas", { exact: true }).fill((BigInt(originalTx.maxPriorityFeePerGas) * 2n + 1n).toString());
+    await originalRow.getByRole("button", { name: "Review replacement", exact: true }).click();
+    await allowEvmInspectionGrantsUntil(page, () => wallet.getByTestId("evm-review").isVisible());
+    replacementRequest = (await wallet.getByTestId("evm-review-request-id").textContent())!.trim();
+    expect(replacementRequest).not.toBe(approval.requestId);
+    await expect(wallet.getByTestId("evm-review")).toContainText("Speed up operation");
+    await checkpoint("replacement-awaiting-separate-wallet-decision", { originalTx, replacementRequest });
+    await wallet.getByTestId("evm-review-approve").click();
+    await expect(wallet.getByTestId("evm-review")).toHaveCount(0, { timeout: 120_000 });
+    const replacementRow = operationRow(replacementRequest); replacementHash = await operationHash(replacementRow);
+    await checkpoint("replacement-signed", { replacementHash });
+    await checkOperation(replacementRow, "submitted");
+    const pendingReplacement = await chain.rpc<typeof originalTx>("eth_getTransactionByHash", [replacementHash]);
+    expect(replacementHash).not.toBe(originalHash); expect(BigInt(pendingReplacement.nonce)).toBe(before.nonce); expect(pendingReplacement.blockNumber).toBeNull();
+    expect(pendingReplacement.input).toBe(approval.data); expect(pendingReplacement.to.toLowerCase()).toBe(tokenIn.toLowerCase()); expect(BigInt(pendingReplacement.value)).toBe(0n);
+    expect(BigInt(pendingReplacement.maxFeePerGas)).toBe(BigInt(originalTx.maxFeePerGas) * 2n + 1n); expect(BigInt(pendingReplacement.maxPriorityFeePerGas)).toBe(BigInt(originalTx.maxPriorityFeePerGas) * 2n + 1n);
+    await checkpoint("replacement-pending-same-nonce", { pendingReplacement });
+  } finally {
+    await chain.rpc("evm_setIntervalMining", [0]); await chain.rpc("evm_setAutomine", [originalMining.automine]);
+    if (originalMining.interval !== null) await chain.rpc("evm_setIntervalMining", [originalMining.interval]);
+    const restored = await modes(); expect(restored).toEqual(originalMining); await checkpoint("approval-mining-restored", { restored });
+  }
+  const replacementEvidence = await chain.evidence(replacementHash);
+  expect(replacementEvidence.nonce).toBe(Number(before.nonce)); expect(Transaction.from(replacementEvidence.raw).data).toBe(approval.data);
+  expect(await chain.rpc("eth_getTransactionReceipt", [originalHash])).toBeNull();
+  expect(await readToken(tokenIn, "allowance", [owner, router])).toBe(ATOMS);
+  await checkOperation(operationRow(replacementRequest), "confirmed"); await checkOperation(operationRow(approval.requestId), "replaced");
+  await reconcile(page, card, "Review swap");
+  await expect(card).toContainText("Replacement approval: confirmed");
+  expect(await transactionHash(card, "Approval")).toBe(originalHash);
+  await expect(card.getByRole("link", { name: /^Replacement approval /u })).toHaveAttribute("href", new RegExp(replacementHash));
+  await checkpoint("uniswap-adopted-matching-confirmed-replacement", { replacementEvidence, card: await card.textContent() });
+  await page.reload(); uniswap = await openUniswap(page, false); card = savedCard(uniswap, requests.id);
+  expect(await savedRequests(card)).toEqual(requests); await expect(card).toContainText("Replacement approval: confirmed");
+  expect(multicall.deadline).toBeGreaterThan(BigInt(Math.floor(Date.now() / 1000)));
+  await card.getByRole("button", { name: "Review swap", exact: true }).click();
+  await allowEvmInspectionGrantsUntil(page, () => wallet.getByTestId("evm-review").isVisible());
+  await expectWalletRequest(wallet, requests.swapRequest, owner, "1");
+  await checkpoint("swap-awaiting-separate-wallet-decision");
+  await wallet.getByTestId("evm-review-approve").click();
+  await expect(wallet.getByTestId("evm-review")).toHaveCount(0, { timeout: 120_000 });
+  await reconcile(page, card, "Receipt: success");
+  const swapHash = await transactionHash(card, "Swap"), swapEvidence = await chain.evidence(swapHash);
+  expect(swapEvidence.nonce).toBe(Number(before.nonce + 1n)); expect(Transaction.from(swapEvidence.raw).data).toBe(requests.swapRequest.data);
+  const actualOutput = await readToken(tokenOut, "balanceOf", [recipient]) - before.output;
+  expect(actualOutput).toBeGreaterThanOrEqual(minimumOut); expect(before.input - await readToken(tokenIn, "balanceOf", [owner])).toBe(ATOMS);
+  expect(await readToken(tokenOut, "balanceOf", [owner])).toBe(before.accountOutput); expect(await readToken(tokenIn, "allowance", [owner, router])).toBe(0n);
+  await page.reload(); uniswap = await openUniswap(page, false); card = savedCard(uniswap, requests.id);
+  expect(await savedRequests(card)).toEqual(requests); await expect(card).toContainText("Receipt: success");
+  await reconcile(page, card, "Receipt: success");
+  expect(await transactionHash(card, "Swap")).toBe(swapHash); expect(await chain.nonce(owner)).toBe(before.nonce + 2n); expect(await chain.rpc<string>("eth_getTransactionCount", [owner, "pending"]).then(BigInt)).toBe(before.nonce + 2n);
+  await checkpoint("completed-without-repeating-saved-requests", { requests, minimumOut: minimumOut.toString(), actualOutput: actualOutput.toString(), priceImpactPercent, replacementEvidence, swapEvidence, finalMining: await modes(), txpool: await chain.rpc("txpool_status") });
+  await testInfo.attach("approval-replacement-swap-evidence", { body: JSON.stringify(progress, null, 2), contentType: "application/json" });
+});
+
 async function openUniswap(page: Page, navigate = true): Promise<FrameLocator> {
   const runtime = resolveLocalNeutronRuntime();
   if (navigate) await page.goto(localCanisterOrigin(runtime.canisterId, runtime.gatewayUrl));
@@ -233,7 +409,10 @@ async function requestQuote(page: Page, uniswap: FrameLocator, native: boolean, 
 async function readQuote(page: Page, uniswap: FrameLocator, native: boolean, chainId: "1" | "42161"): Promise<{ minimumOut: bigint; priceImpactPercent: string }> {
   await uniswap.getByRole("button", { name: "Get quote", exact: true }).click();
   const save = uniswap.getByRole("button", { name: native ? "Review swap in EVM Wallet" : "Save swap and review approval", exact: true });
-  await allowEvmInspectionGrantsUntil(page, async () => await save.isVisible() && await save.isEnabled());
+  // Successful Quoter, factory and pool reads each include code evidence.
+  // The retained final106 trace reached fee/allowance reads at the old 120s
+  // cumulative deadline, so only this deterministic read-only phase gets 300s.
+  await allowEvmInspectionGrantsUntil(page, async () => await save.isVisible() && await save.isEnabled(), chainId === "1" ? 300_000 : undefined);
   const minimum = await uniswap.locator(".uni-review").getByText("Minimum received", { exact: true }).locator("xpath=following-sibling::dd[1]").textContent();
   if (!minimum) throw new Error("Uniswap quote omitted its minimum output");
   const atoms = parseUnits(minimum.trim().split(/\s+/u)[0]!, 18);

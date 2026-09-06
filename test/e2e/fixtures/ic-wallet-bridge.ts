@@ -92,7 +92,7 @@ export type IcWalletTransferEvidence = {
  * No balance injection, canister reinstall, chain reset, or clock adjustment.
  * The donor's ckETH comes from an ordinary Ethereum helper deposit and mint.
  */
-export async function createIcWalletBridgeFixture(runtime: LocalNeutronRuntime): Promise<IcWalletBridgeFixture> {
+export async function createIcWalletBridgeFixture(runtime: LocalNeutronRuntime, options: { fundDonor?: boolean } = {}): Promise<IcWalletBridgeFixture> {
   await assertIsolatedRuntime(runtime);
   const chain = await createLocalEvmChain();
   const node = await chain.rpc<{ forkConfig?: { forkUrl?: unknown; forkBlockNumber?: unknown } }>("anvil_nodeInfo");
@@ -250,7 +250,7 @@ export async function createIcWalletBridgeFixture(runtime: LocalNeutronRuntime):
 
   let donorDepositHash: string | null = null;
   const donorBalance = await ckethBalance(donor.getPrincipal());
-  if (donorBalance < DONOR_TARGET) {
+  if (options.fundDonor !== false && donorBalance < DONOR_TARGET) {
     const accounts = await chain.rpc<string[]>("eth_accounts");
     if (!accounts[0]) throw new Error("Local Anvil has no unlocked fixture donor");
     donorDepositHash = checkedHash(await chain.rpc<string>("eth_sendTransaction", [{ from: getAddress(accounts[0]), to: helperAddress, value: `0x${(DONOR_TARGET - donorBalance).toString(16)}`, data: helperAbi.encodeFunctionData("deposit", [principalWord(donor.getPrincipal())]), gas: "0x30d40" }]));

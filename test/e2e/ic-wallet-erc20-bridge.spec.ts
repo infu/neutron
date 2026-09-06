@@ -42,7 +42,8 @@ test("ckUSDC resets an existing allowance, recovers a lost approval reply, mints
     const bytes = await readFile(artifact.path);
     return { path: artifact.path, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
   }));
-  await saveEvidence(testInfo, "ckusdc-selected-local-archives", { body: json({ canisterId: runtime.canisterId, sessionPath: runtime.sessionPath, archives }), contentType: "application/json" });
+  const installed = await installedErc20Evidence(runtime, archives);
+  await saveEvidence(testInfo, "ckusdc-selected-local-archives", { body: json({ canisterId: runtime.canisterId, sessionPath: runtime.sessionPath, archives, installed }), contentType: "application/json" });
   const chain = await createLocalEvmChain();
   const protocol = await createIcWalletErc20Fixture(runtime);
   const token = protocol.token;
@@ -193,6 +194,64 @@ test("ckUSDC resets an existing allowance, recovers a lost approval reply, mints
   // Gas is real ckETH obtained through the released helper and ledger. Its
   // balance and allowance are independent from the asset ledger's balance.
   const gasFunding = await protocol.unrelatedTransfer(runtime.canisterId, parseEther("0.0008"));
+  await qualifyTokenRedemption(page, testInfo, wallet, runtime, protocol, chain, address, prepared.quote.minterAddress, gasFunding);
+});
+
+test("complete ckUSDC redemption from the recorded completed deposit after minter fee readiness", async ({ page }, testInfo) => {
+  test.setTimeout(1_200_000);
+  const depositEvidencePath = process.env.NEUTRON_IC_ERC20_COMPLETED_DEPOSIT_EVIDENCE;
+  const existingContact = process.env.NEUTRON_IC_ERC20_REDEMPTION_CONTACT;
+  test.skip(!depositEvidencePath || !existingContact, "Requires the saved completed-deposit proof and its existing redemption contact");
+  const depositEvidenceBytes = await readFile(depositEvidencePath!);
+  const depositEvidence = JSON.parse(depositEvidenceBytes.toString()) as { completed: BridgeIntent; depositTransaction: LocalEvmTransactionEvidence; mint: { ledgerBlock: { index: string } } };
+  const runtime = resolveLocalNeutronRuntime();
+  const config = JSON.parse(await readFile(process.env.NEUTRON_NDEPLOY_CONFIG!, "utf8"));
+  const archives = await Promise.all([config.artifacts.kernel, ...config.artifacts.packages].map(async (artifact: { path: string }) => {
+    const bytes = await readFile(artifact.path);
+    return { path: artifact.path, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+  }));
+  const installed = await installedErc20Evidence(runtime, archives);
+  const protocol = await createIcWalletErc20Fixture(runtime, { fundDonor: false });
+  const chain = await createLocalEvmChain();
+  const completed = await protocol.walletBridge(depositEvidence.completed.id);
+  expect(completed).toEqual(depositEvidence.completed);
+  expect(completed.mint?.verifiedLedger).toBe(true);
+  expect(completed.amount).toBe(DEPOSIT_ATOMS.toString());
+  expect(completed.quote.recipient).toBe(runtime.canisterId);
+  expect(completed.quote.ledger).toBe(protocol.token.ledger);
+  const hash = step(completed, "deposit").transactionHash!;
+  const transaction = await minedTransactionEvidence(chain, hash);
+  expect(transaction).toEqual(depositEvidence.depositTransaction);
+  assertTransaction(transaction, completed.account, protocol.token.helperAddress, expectedDepositData(completed));
+  // The interrupted run never submitted Withdraw. These exact balances and
+  // nonce reject replaying this continuation after any withdrawal effect.
+  expect(await protocol.tokenBalance(runtime.canisterId)).toBe(DEPOSIT_ATOMS);
+  expect(await protocol.tokenAllowance(runtime.canisterId)).toBe(0n);
+  expect(await protocol.ckethAllowance(runtime.canisterId)).toBe(0n);
+  expect(await chain.nonce(completed.account)).toBe(BigInt(transaction.nonce) + 1n);
+  await installEvmWalletBrowserFaults(page, ["evm_wallet", "kitchensink", "wallet"]);
+  await page.addInitScript(() => {
+    if (!/^\/app\/wallet\//u.test(location.pathname)) return;
+    for (const key of ["localStorage", "sessionStorage"]) Object.defineProperty(window, key, { configurable: true, get() { throw new DOMException("Storage blocked for ckUSDC qualification", "SecurityError"); } });
+  });
+  await openNeutron(page, runtime);
+  const wallet = await openApp(page, "wallet", "wallet");
+  await openApp(page, "evm_wallet", "evm_wallet");
+  await openDeposit(wallet, protocol.token.ledger);
+  await wallet.getByRole("combobox", { name: "Saved deposits", exact: true }).selectOption(completed.id);
+  await expect(wallet.locator(".wallet-bridge-status")).toContainText(`Mint verified at IC ledger block ${completed.mint!.ledgerBlockIndex}`);
+  await saveEvidence(testInfo, "ckusdc-redemption-continuation-input", { body: json({ installed, source: { path: depositEvidencePath, sha256: createHash("sha256").update(depositEvidenceBytes).digest("hex") }, completed, transaction, existingContact, noNewDeposit: true, noDonorFunding: true }), contentType: "application/json" });
+  await qualifyTokenRedemption(page, testInfo, wallet, runtime, protocol, chain, completed.account, completed.quote.minterAddress, null, existingContact);
+});
+
+async function qualifyTokenRedemption(
+  page: Page, testInfo: TestInfo, wallet: FrameLocator, runtime: LocalNeutronRuntime,
+  protocol: Awaited<ReturnType<typeof createIcWalletErc20Fixture>>, chain: LocalEvmChain,
+  address: string, minterAddress: string,
+  gasFunding: { blockIndex: bigint; balanceDelta: bigint } | null,
+  existingContact?: string,
+): Promise<void> {
+  const token = protocol.token;
   const beforeRedemption = {
     nonce: await chain.nonce(address), evmTokenBalance: await protocol.evmTokenBalance(address),
     assetBalance: await protocol.tokenBalance(runtime.canisterId), assetFee: await protocol.tokenFee(),
@@ -200,7 +259,7 @@ test("ckUSDC resets an existing allowance, recovers a lost approval reply, mints
     gasBalance: await protocol.ckethBalance(runtime.canisterId), gasFee: await protocol.ckethFee(),
     gasAllowance: await protocol.ckethAllowance(runtime.canisterId),
   };
-  const requested = await requestTokenRedemption(page, wallet, token.ledger, address, beforeRedemption);
+  const requested = await requestTokenRedemption(page, wallet, token.ledger, address, beforeRedemption, existingContact, testInfo);
   const queued = await protocol.walletTransferForBurn(requested.assetBurnIndex);
   expect(queued).toMatchObject({ ledger: token.ledger, amount: REDEEM_ATOMS.toString(), native: true, status: "succeeded", blockIndex: requested.assetBurnIndex });
   expect(queued.destination.toLowerCase()).toBe(address.toLowerCase());
@@ -223,6 +282,7 @@ test("ckUSDC resets an existing allowance, recovers a lost approval reply, mints
   expect(beforeRedemption.gasBalance - afterBurn.gasBalance).toBeLessThanOrEqual(requested.gasMaximumDebit);
   expect(afterBurn.assetAllowance).toBe(0n);
   expect(afterBurn.gasAllowance).toBe(requested.gasBudget - observedGasBurn);
+  await saveEvidence(testInfo, "ckusdc-requested-redemption-and-debits", { body: json({ gasFunding, beforeRedemption, requested, queued, afterBurn, observedGasBurn }), contentType: "application/json" });
   await saveEvidence(testInfo, "ckusdc-native-asset-and-gas-burns", { body: await page.screenshot(), contentType: "image/png" });
   await page.reload();
   await openNeutron(page, runtime, false);
@@ -242,7 +302,7 @@ test("ckUSDC resets an existing allowance, recovers a lost approval reply, mints
   expect(afterBurn.gasBalance).toBe(beforeRedemption.gasBalance - actualGasBurn - beforeRedemption.gasFee);
   expect(afterBurn.gasAllowance).toBe(requested.gasBudget - actualGasBurn);
   expect(payout.minterStatus).toBe("TxFinalized.Success");
-  expect(payout.transaction.from.toLowerCase()).toBe(prepared.quote.minterAddress.toLowerCase());
+  expect(payout.transaction.from.toLowerCase()).toBe(minterAddress.toLowerCase());
   expect(payout.transaction.to.toLowerCase()).toBe(token.address.toLowerCase());
   expect(payout.transaction.valueWei).toBe("0");
   expect(await protocol.evmTokenBalance(address)).toBe(beforeRedemption.evmTokenBalance + REDEEM_ATOMS);
@@ -254,7 +314,7 @@ test("ckUSDC resets an existing allowance, recovers a lost approval reply, mints
   await expect(recovery).toHaveCount(0);
   await expect(page.frameLocator(EVM_FRAME).getByTestId("evm-review")).toHaveCount(0);
   await saveEvidence(testInfo, "ckusdc-native-redemption-quote-debits-and-reload", { body: json({ gasFunding, beforeRedemption, requested, queued, afterBurn, restoredWithdrawal, payout, settled, finalAssetBalance: await protocol.tokenBalance(runtime.canisterId), finalGasBalance: await protocol.ckethBalance(runtime.canisterId) }), contentType: "application/json" });
-});
+}
 
 function step(intent: BridgeIntent, kind: BridgeStep["kind"]): BridgeStep {
   const result = intent.steps.find((candidate) => candidate.kind === kind);
@@ -427,16 +487,18 @@ async function seedAllowance(page: Page, evmWallet: FrameLocator, token: string,
   return savedRecord(card);
 }
 
-async function requestTokenRedemption(page: Page, wallet: FrameLocator, ledger: string, address: string, before: { assetFee: bigint; gasFee: bigint; gasAllowance: bigint; gasBalance: bigint }): Promise<{ assetBurnIndex: string; gasBurnIndex: string; gasBudget: bigint; gasMaximumDebit: bigint; review: string }> {
+async function requestTokenRedemption(page: Page, wallet: FrameLocator, ledger: string, address: string, before: { assetFee: bigint; gasFee: bigint; gasAllowance: bigint; gasBalance: bigint }, existingContact?: string, testInfo?: TestInfo): Promise<{ assetBurnIndex: string; gasBurnIndex: string; gasBudget: bigint; gasMaximumDebit: bigint; review: string }> {
   const contacts = await openApp(page, "contacts", "contacts");
-  const name = `ckUSDC redemption ${Date.now()}`;
-  await contacts.getByRole("button", { name: "Add contact", exact: true }).click();
-  await contacts.getByRole("textbox", { name: "Name", exact: true }).fill(name);
-  await contacts.getByLabel("New destination network", { exact: true }).selectOption("ethereum_mainnet");
-  await contacts.getByRole("button", { name: "Add destination", exact: true }).click();
-  await contacts.getByRole("textbox", { name: "Destination 1 address", exact: true }).fill(address);
-  await contacts.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(contacts.getByRole("heading", { name, exact: true })).toBeVisible();
+  const name = existingContact ?? `ckUSDC redemption ${Date.now()}`;
+  if (!existingContact) {
+    await contacts.getByRole("button", { name: "Add contact", exact: true }).click();
+    await contacts.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+    await contacts.getByLabel("New destination network", { exact: true }).selectOption("ethereum_mainnet");
+    await contacts.getByRole("button", { name: "Add destination", exact: true }).click();
+    await contacts.getByRole("textbox", { name: "Destination 1 address", exact: true }).fill(address);
+    await contacts.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(contacts.getByRole("heading", { name, exact: true })).toBeVisible();
+  }
   await wallet.getByRole("button", { name: "Back to tokens", exact: true }).click();
   await wallet.getByRole("button", { name: "Refresh balances", exact: true }).click();
   await wallet.locator(`article.wallet-token[data-ledger="${ledger}"]`).getByRole("button", { name: "Send ckUSDC", exact: true }).click();
@@ -462,6 +524,10 @@ async function requestTokenRedemption(page: Page, wallet: FrameLocator, ledger: 
   await expect(wallet.getByText("Paid in ckETH", { exact: true })).toBeVisible();
   const review = (await wallet.locator("body").textContent())!;
   await expect(wallet.getByRole("button", { name: "Withdraw", exact: true })).toBeEnabled();
+  if (testInfo) {
+    await saveEvidence(testInfo, "ckusdc-prewithdrawal-gas-review", { body: json({ address, ledger, amount: REDEEM_AMOUNT, amountAtoms: REDEEM_ATOMS, before, gasBudget, gasMaximumDebit, review }), contentType: "application/json" });
+    await saveEvidence(testInfo, "ckusdc-prewithdrawal-gas-review", { body: await page.screenshot(), contentType: "image/png" });
+  }
   await wallet.getByRole("button", { name: "Withdraw", exact: true }).click();
   const receipt = wallet.locator(".wallet-transfer-receipt");
   await expect(receipt).toContainText("Withdrawal queued", { timeout: 180_000 });
@@ -474,4 +540,50 @@ function atoms(value: string): bigint {
   const amount = /\(([0-9]+) atoms\)/u.exec(value)?.[1];
   if (!amount) throw new Error(`The numeric withdrawal review omitted atomic units: ${value}`);
   return BigInt(amount);
+}
+
+async function installedErc20Evidence(runtime: LocalNeutronRuntime, archives: { path: string; size: number; sha256: string }[]) {
+  const setupPath = process.env.NEUTRON_IC_ERC20_SETUP_EVIDENCE;
+  if (!setupPath) throw new Error("Set NEUTRON_IC_ERC20_SETUP_EVIDENCE to the configure command's actual protocol receipt");
+  const directory = path.resolve(".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime");
+  expect(path.dirname(path.resolve(setupPath))).toBe(directory);
+  const filenames = [path.join(directory, "ready.json"), path.join(directory, "first-deployment.json"), path.resolve(setupPath), runtime.sessionPath];
+  const bytes = await Promise.all(filenames.map((filename) => readFile(filename)));
+  const [ready, deployment, setup, journal] = bytes.map((value) => JSON.parse(value.toString()));
+  const normalize = (pins: { path: string; size: number; sha256: string }[]) => pins.map((pin) => ({ path: path.resolve(pin.path), size: pin.size, sha256: pin.sha256 }));
+  expect(normalize(archives)).toEqual(normalize(deployment.packagePins));
+  expect(ready.packagePins).toEqual(deployment.packagePins);
+  expect(setup.packagePins).toEqual(deployment.packagePins);
+  for (const receipt of [ready, deployment, setup]) expect(receipt.configSha256).toBe(journal.configSha256);
+  expect(path.resolve(ready.sessionPath)).toBe(runtime.sessionPath);
+  expect(path.resolve(deployment.sessionPath)).toBe(runtime.sessionPath);
+  expect(deployment.node.canisterId).toBe(runtime.canisterId);
+  expect(setup.canisterId).toBe(runtime.canisterId);
+  expect(deployment.deploymentId).toBe(journal.current.deploymentId);
+  expect(setup.deploymentId).toBe(journal.current.deploymentId);
+  expect(deployment.firstCreatedCanisterOnly).toBe(true);
+  expect(deployment.reinstallPermitted).toBe(false);
+  expect(journal.active).toBeUndefined();
+  expect(createHash("sha256").update(bytes[3]!).digest("hex")).toBe(deployment.sessionSha256);
+  for (const field of ["pid", "processIdentity", "controlUrl", "instanceId", "rootKeyBase64", "stateDirectory"] as const) {
+    expect(ready.descriptor[field]).toBe(journal.runtime[field]);
+    expect(setup.descriptor[field]).toBe(journal.runtime[field]);
+  }
+  expect(ready.descriptor.controlUrl).toBe(runtime.controlUrl);
+  expect(ready.descriptor.instanceId).toBe(runtime.instanceId);
+  expect(ready.descriptor.gateway.url).toBe(runtime.gatewayUrl);
+  for (const [index, filename] of filenames.slice(0, 2).entries()) {
+    expect(setup.sourceEvidence[index]).toEqual({ path: path.relative(process.cwd(), filename), sha256: createHash("sha256").update(bytes[index]!).digest("hex") });
+  }
+  const feeReadinessPath = path.join(directory, "fee-readiness.json");
+  const feeReadinessBytes = await readFile(feeReadinessPath);
+  const feeReadiness = JSON.parse(feeReadinessBytes.toString());
+  expect(feeReadiness.deploymentId).toBe(deployment.deploymentId);
+  expect(feeReadiness.packagePins).toEqual(deployment.packagePins);
+  expect(["existing_normal_fee_cache", "normal_donor_withdrawal_finalized"]).toContain(feeReadiness.status);
+  expect(BigInt((feeReadiness.quoted ?? feeReadiness.fee).max_transaction_fee)).toBeGreaterThan(0n);
+  return { ready, deployment, setup, feeReadiness, receipts: [
+    ...filenames.map((filename, index) => ({ path: path.relative(process.cwd(), filename), sha256: createHash("sha256").update(bytes[index]!).digest("hex") })),
+    { path: path.relative(process.cwd(), feeReadinessPath), sha256: createHash("sha256").update(feeReadinessBytes).digest("hex") },
+  ] };
 }

@@ -83,14 +83,14 @@ test("all durable history pages survive reload and the existing mined operation 
   await page.addInitScript(() => {
     if (!location.pathname.startsWith("/app/evm_wallet/")) return;
     const original = MessagePort.prototype.postMessage;
-    MessagePort.prototype.postMessage = function (...args: Parameters<typeof original>) {
+    MessagePort.prototype.postMessage = (function (this: MessagePort, ...args: Parameters<typeof original>) {
       const payload = args[0];
       if (payload?.type === "neutron:self-call:exec") {
         const capture = (window as typeof window & { __EVM_HISTORY_CAPTURE__?: (value: unknown) => Promise<void> }).__EVM_HISTORY_CAPTURE__;
         if (capture) void capture(structuredClone(payload));
       }
       return Reflect.apply(original, this, args);
-    };
+    }) as typeof original;
   });
   const expectedIds = before.operations.map((entry) => entry.operation_id.toString());
   try {

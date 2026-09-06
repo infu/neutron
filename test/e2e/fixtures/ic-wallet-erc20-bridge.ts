@@ -35,9 +35,9 @@ type Minter = {
 type Status = { NotFound: null } | { Pending: null } | { TxCreated: null } | { TxSent: { transaction_hash: string } } | { TxFinalized: { Success: { transaction_hash: string; effective_transaction_fee: Opt<bigint> } } | { Reimbursed: unknown } | { PendingReimbursement: unknown } };
 
 /** Real ERC20 helper/minter/ledger evidence on the separate fresh IC runtime. */
-export async function createIcWalletErc20Fixture(runtime: LocalNeutronRuntime) {
+export async function createIcWalletErc20Fixture(runtime: LocalNeutronRuntime, options: { fundDonor?: boolean } = {}) {
   if (!runtime.sessionPath.endsWith("evm-wallet-erc20-local.ndeploy.session.json")) throw new Error("ckUSDC qualification requires its separate isolated runtime");
-  const base = await createIcWalletBridgeFixture(runtime);
+  const base = await createIcWalletBridgeFixture(runtime, options);
   const chain = await createLocalEvmChain();
   const agent = await HttpAgent.create({ host: runtime.gatewayUrl, identity: localIdentityFromSeed(runtime.developerIdentitySeed), verifyQuerySignatures: false });
   await agent.fetchRootKey();

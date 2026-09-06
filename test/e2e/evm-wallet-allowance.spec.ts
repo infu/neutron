@@ -119,9 +119,15 @@ test("a confirmed approval speed-up remains discoverable and Wallet revocation c
 
     await walletTab(wallet, "Activity").click();
     let originalRow = operationRow(wallet, originalRequest);
-    await expect(originalRow.locator('[data-status="submitted"]')).toBeVisible({ timeout: 120_000 });
     const originalHash = await transactionHash(originalRow);
-    await checkpoint("original-signed-and-submitted", { originalHash });
+    await checkpoint("original-signed-hash-saved", { originalHash });
+    // The three provider routes share this isolated node. A repeated broadcast
+    // can return "transaction already imported" and honestly leave the Wallet
+    // outcome unknown. Reconcile that exact saved hash before requiring the
+    // pending state; never wait for a fresh request or signature.
+    await checkOperation(originalRow, "submitted");
+    expect(await transactionHash(originalRow)).toBe(originalHash);
+    await checkpoint("original-reconciled-pending", { originalHash });
     const originalTx = await chain.rpc<RpcTransaction>("eth_getTransactionByHash", [originalHash]);
     expect(originalTx.from.toLowerCase()).toBe(owner.toLowerCase());
     expect(originalTx.to.toLowerCase()).toBe(token.toLowerCase());
@@ -151,9 +157,11 @@ test("a confirmed approval speed-up remains discoverable and Wallet revocation c
     await wallet.getByTestId("evm-review-approve").click();
     await expect(wallet.getByTestId("evm-review")).toHaveCount(0, { timeout: 120_000 });
     const replacementRow = operationRow(wallet, replacementRequest);
-    await expect(replacementRow.locator('[data-status="submitted"]')).toBeVisible({ timeout: 120_000 });
     const replacementHash = await transactionHash(replacementRow);
-    await checkpoint("replacement-signed-and-submitted", { replacementHash });
+    await checkpoint("replacement-signed-hash-saved", { replacementHash });
+    await checkOperation(replacementRow, "submitted");
+    expect(await transactionHash(replacementRow)).toBe(replacementHash);
+    await checkpoint("replacement-reconciled-pending", { replacementHash });
     expect(replacementHash).not.toBe(originalHash);
     const pendingReplacement = await chain.rpc<RpcTransaction>("eth_getTransactionByHash", [replacementHash]);
     expect(BigInt(pendingReplacement.nonce)).toBe(nonceBefore);
@@ -231,7 +239,7 @@ test("a confirmed approval speed-up remains discoverable and Wallet revocation c
     await expect(known).toHaveCount(1);
     await known.getByRole("button", { name: "Check allowance", exact: true }).click();
     await expect(known).toContainText("Observed allowance: 0 atomic units", { timeout: 120_000 });
-    const observedBlock = (await known.textContent())?.match(/\bBlock ([0-9]+)\b/u)?.[1];
+    const observedBlock = (await known.locator("p").filter({ hasText: /^Block [0-9]+/u }).innerText()).match(/^Block ([0-9]+)\b/u)?.[1];
     if (!observedBlock) throw new Error("Wallet allowance observation has no block number");
     expect(BigInt(observedBlock)).toBeGreaterThanOrEqual(BigInt(revocationReceipt.blockNumber));
     const observedBlockTag = `0x${BigInt(observedBlock).toString(16)}`;

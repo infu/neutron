@@ -162,6 +162,7 @@ export async function expectNoEvmKernelDialogs(page: Page): Promise<void> {
 export async function allowEvmInspectionGrantsUntil(
   page: Page,
   ready: () => Promise<boolean>,
+  timeoutMs = 120_000,
 ): Promise<void> {
   await expect.poll(async () => {
     const dialog = page.locator('[data-tid="frontend-tool-dialog"]');
@@ -173,5 +174,5 @@ export async function allowEvmInspectionGrantsUntil(
     }
     await expect(page.locator('[data-tid="call-dialog"], [data-tid="backend-call-dialog"]')).toHaveCount(0);
     return ready();
-  }, { timeout: 120_000, intervals: [100, 250, 500] }).toBe(true);
+  }, { timeout: timeoutMs, intervals: [100, 250, 500] }).toBe(true);
 }
