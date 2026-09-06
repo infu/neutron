@@ -1,0 +1,142 @@
+{
+  "startedAt": "2026-09-06T14:51:47.748Z",
+  "deploymentId": "b0a9b3927b38c4ec802595205e34eed3",
+  "packagePins": [
+    {
+      "path": "/srv/shared/code/neutron/apps/kernel/kernel.v0.3.42.neutron",
+      "id": "kernel",
+      "version": 342,
+      "size": 2448936,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/contacts/contacts.v0.3.6.neutron",
+      "id": "contacts",
+      "version": 306,
+      "size": 298018,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/wallet/wallet.v0.3.16.neutron",
+      "id": "wallet",
+      "version": 316,
+      "size": 768823,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/kitchensink/kitchensink.v0.3.15.neutron",
+      "id": "kitchensink",
+      "version": 315,
+      "size": 472282,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+      "id": "evm_wallet",
+      "version": 107,
+      "size": 391816,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/uniswap/uniswap.v0.1.4.neutron",
+      "id": "uniswap",
+      "version": 104,
+      "size": 288989,
+      "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/agent/agent.v0.3.17.neutron",
+      "id": "agent",
+      "version": 317,
+      "size": 511078,
+      "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+    }
+  ],
+  "donor": "r5bvv-v5on6-qglk2-bzmt4-hupkd-kc3mq-nuddx-tcf2d-3k7dq-zyslh-fqe",
+  "purpose": "Distinct ordinary donor withdrawal to initialize the released minter fee cache; no user bridge or redemption is repeated.",
+  "source": "https://github.com/dfinity/ic/blob/a47e5434753752c1d2972fbc4407d14f88964285/rs/ethereum/cketh/minter/src/withdraw.rs#L150",
+  "amount": "5000000000000000",
+  "ledgerFee": "2000000000000",
+  "balanceBefore": "198000000000000",
+  "allowanceBefore": "0",
+  "recipient": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "funding": "6002000000000000",
+  "stage": "donor_withdrawal_finalized_fee_ready",
+  "updatedAt": "2026-09-06T15:03:57.337Z",
+  "depositHash": "0x1f47a75016c3de53a6496ca9c758379cc5bd58a1c112b47d40863784bb6f156f",
+  "mint": {
+    "accepted": {
+      "transactionHash": "0x1f47a75016c3de53a6496ca9c758379cc5bd58a1c112b47d40863784bb6f156f",
+      "logIndex": "0",
+      "blockNumber": "336742",
+      "fromAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "amount": "6002000000000000",
+      "recipient": "r5bvv-v5on6-qglk2-bzmt4-hupkd-kc3mq-nuddx-tcf2d-3k7dq-zyslh-fqe",
+      "subaccount": null,
+      "eventIndex": "25",
+      "timestampNs": "1788706485468020396"
+    },
+    "minted": {
+      "transactionHash": "0x1f47a75016c3de53a6496ca9c758379cc5bd58a1c112b47d40863784bb6f156f",
+      "logIndex": "0",
+      "ledgerBlockIndex": "3",
+      "eventIndex": "26",
+      "timestampNs": "1788706485633651397"
+    },
+    "ledgerBlock": {
+      "index": "3",
+      "kind": "mint",
+      "amount": "6002000000000000",
+      "recipient": "r5bvv-v5on6-qglk2-bzmt4-hupkd-kc3mq-nuddx-tcf2d-3k7dq-zyslh-fqe",
+      "subaccount": null
+    }
+  },
+  "createdAtTime": "1788706485952000000",
+  "approval": {
+    "Ok": "4"
+  },
+  "withdrawal": {
+    "Ok": {
+      "block_index": "5"
+    }
+  },
+  "payout": {
+    "burn": {
+      "index": "5",
+      "kind": "burn",
+      "amount": "5000000000000000",
+      "owner": "r5bvv-v5on6-qglk2-bzmt4-hupkd-kc3mq-nuddx-tcf2d-3k7dq-zyslh-fqe",
+      "subaccount": null
+    },
+    "transaction": {
+      "hash": "0x414ba56d96a965acb162bac2d17bf71d44c435b223e642351904472869ae4ac4",
+      "from": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "to": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "valueWei": "4968499999706000",
+      "nonce": 2,
+      "chainId": "1",
+      "raw": "0x02f87101028459682f008459682f0e82520894f39fd6e51aad88f6f4ce6ab8827279cfffb922668711a6d30d8c8b9080c080a06942be0d17c6864fd975d367c2898f64e68cac796c4d40006c78733531c096faa0042e4147111e6dc62580d51b02e602a8afc963572235d325e718c0e3a19079f9",
+      "blockNumber": "337259",
+      "blockHash": "0x4a32e87cb95b28c5eabbfd7b25d578cbbccc9cad0f8fa000d16c08c9f8caa68b",
+      "gasUsed": "21000",
+      "effectiveGasPriceWei": "1500000007"
+    },
+    "minterStatus": "TxFinalized.Success",
+    "effectiveTransactionFeeWei": "31500000147000",
+    "recipientBalanceWei": "9981995811534993049245"
+  },
+  "quoted": {
+    "max_priority_fee_per_gas": "1500000000",
+    "max_fee_per_gas": "1500000014",
+    "max_transaction_fee": "97500000910000",
+    "timestamp": [
+      "1788707028472861276"
+    ],
+    "gas_limit": "65000"
+  },
+  "balanceAfter": "1198000000000000",
+  "completedAt": "2026-09-06T15:03:57.337Z",
+  "status": "normal_donor_withdrawal_finalized",
+  "noUserBridgeOrRedemptionRepeated": true,
+  "noClockOrMinterStateInjection": true
+}

@@ -1,0 +1,3495 @@
+{
+  "schema": "neutron-evm-release-evidence-proposal-v1",
+  "generatedAt": "2026-09-06T15:34:11.107145+00:00",
+  "purpose": "Final explicit concise PR evidence allowlist for production342/316/315/107/104 batch52, verified same-byte no-op and all64 completed requirements; preserves immutable historical version proof and exact local runtime scopes.",
+  "scope": "Only evidence inspection and authorized new portable projections; no source/manifest edits, runtime operations, tests, staging or git mutations.",
+  "candidateSetAtIndexTime": {
+    "kernel": 342,
+    "wallet": 316,
+    "kitchensink": 315,
+    "evm_wallet": 107,
+    "uniswap": 104
+  },
+  "counts": {
+    "selectedExistingFiles": 155,
+    "selectedExistingBytes": 1465701,
+    "selectedNewFiles": 84,
+    "selectedNewBytes": 852425,
+    "alreadyTrackedSelectedFiles": 71,
+    "finalOfferedSourceFiles": 1511,
+    "privateEvidenceRoots": [
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06",
+        "files": 1145,
+        "bytes": 337038732
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-next",
+        "files": 96,
+        "bytes": 35149765
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06",
+        "files": 158,
+        "bytes": 17869882
+      }
+    ],
+    "privateEvidenceRootSizesNote": "Root totals are preserved from the original broad directory census; this refresh intentionally inspected only new bounded evidence paths, not all newest logs/traces."
+  },
+  "selectedExistingFiles": [
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/production-publish.json",
+      "bytes": 16629,
+      "sha256": "e5ded74e6a4f04bd7c1d0a80266633bd25ed40094f8ac46295a16d36be38d9be",
+      "reason": "Already tracked batch51 published baseline; preserve exact old package/source receipt and no-op evidence.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/production-publish-noop.json",
+      "bytes": 16629,
+      "sha256": "574f627294bcdf3968443243ab4227c01a002f7e9d5ade9408eae45bce98470c",
+      "reason": "Already tracked batch51 published baseline; preserve exact old package/source receipt and no-op evidence.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/receipt-verification.json",
+      "bytes": 295,
+      "sha256": "9c426f7c7096291c636b938709a409c827e67335e28c694194954ce04eef9bf5",
+      "reason": "Already tracked batch51 published baseline; preserve exact old package/source receipt and no-op evidence.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/release-summary.json",
+      "bytes": 7172,
+      "sha256": "ba8ed28e965e3f529cb40acc6d194ab426b8a00fcd2c2e0a9416cc4e9ce9c6a8",
+      "reason": "Already tracked batch51 published baseline; preserve exact old package/source receipt and no-op evidence.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/validation.md",
+      "bytes": 3826,
+      "sha256": "76c93d9bd8dc7a076f6f3845da9bc39a09113709ea54baac069b921f62e925ae",
+      "reason": "Already tracked batch51 published baseline; preserve exact old package/source receipt and no-op evidence.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/requirements.json",
+      "bytes": 65872,
+      "sha256": "0028b3b56529c9d33e64461fd886b52430da7c723f7d631801808379f1aa127d",
+      "reason": "All64 original TODO clauses complete with pendingGates empty, final evidence links, explicit local qualification scope and optional integration boundaries.",
+      "role": "release_index",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/candidate-pins.json",
+      "bytes": 1304,
+      "sha256": "9a341f16313f010d551cff709365eafe14bb7e6e1e318e6783a19873a3c4279b",
+      "reason": "Exact published342/316/315/107/104 archive paths, versions, sizes and hashes.",
+      "role": "release_index",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/candidate-sha256.json",
+      "bytes": 413,
+      "sha256": "788d18cae299024925d414b4c32a174bbbb32f517b20bf95f1349be4b91f295b",
+      "reason": "Small current342/316/315/107/104 archive hash map.",
+      "role": "release_index",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/preflight.json",
+      "bytes": 18613,
+      "sha256": "77b5f986e45e692afac7727b4a35e843857be4e04f7342d6e8484eb6433b6118",
+      "reason": "Successful current342/316/315/107/104 plus unchanged catalog:18 exact package/source pairs for atomic publication and no-op.",
+      "role": "release_index",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+      "bytes": 9259,
+      "sha256": "11aab5b4c27412819477feeb2fd3ee70a3d8bca1865d4d7c588f2fadb48b4b1a",
+      "reason": "Actual checked installed342/316/315/107/104 package/provenance/memory identities; supplementary fixtures retain their own version-bound snapshots.",
+      "role": "release_index",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+      "bytes": 31367,
+      "sha256": "b0ad1caec65205b66a4ad7f7d524425cca2d53eb20bda969fa616b8f16396664",
+      "reason": "Final case-by-case runtime outcomes, exact installed version boundaries, fixture limitations and restoration status.",
+      "role": "release_index",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/known-findings.json",
+      "bytes": 7474,
+      "sha256": "2fcf8116546bab60dc411fe3b9653d99666cfb502a3f007ba8edbdc938a855c6",
+      "reason": "Demonstrated issues and fixes, including the pre-existing launcher timing finding; preserve distinction from pending work.",
+      "role": "release_index",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/memory-history.json",
+      "bytes": 1992,
+      "sha256": "4ac49c5a5f5b1802fb2a78de1a141aee92695be87a370339819eabbc2b1c3196",
+      "reason": "Nine production memory roots and immutable schema/lock lineage preserved; two new independent roots documented.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/final-source-workspace-check.json",
+      "bytes": 1774,
+      "sha256": "169759ca4d18937d5e301ebcd9b1e9955299e13fe3fe657c3f3f342e93d72d78",
+      "reason": "Latest combined offered-source match across342/316/315/107/104:1511files(750/234/169/210/148),zero mismatches.",
+      "role": "final_candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/evm_wallet103.json",
+      "bytes": 3946,
+      "sha256": "4cf6e8e07fde7ae118a4eac772c9a42224adb094719fd93b2c703ab32d7497b4",
+      "reason": "Version103 package/release/sandbox provenance for actor and protocol results run on103.",
+      "role": "candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json",
+      "bytes": 1420,
+      "sha256": "b8199d5088870b11e322129cb5c83a582e5369432fa58a05909378d31bb8a16f",
+      "reason": "Canonical Kitchen315 package/source and full release-test evidence; replaces duplicate baseline-folder reference.",
+      "role": "candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103.json",
+      "bytes": 1351,
+      "sha256": "18bee477b9bd2723b5d2877b81198b29e0a9960e8eee1f8a93d6688943ccee49",
+      "reason": "Uniswap103 package/source, exact lock and preserved memory evidence.",
+      "role": "candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+      "bytes": 35567,
+      "sha256": "b1b46392b4982c840cac509f52a2adb4b0fd31a83879e6991d7b0b563d279f6c",
+      "reason": "Updated Uni104 mapping: all10 supported-route clauses complete, prior103 qualification explicitly retained, and every complementary runtime pass bound to its actual versions.",
+      "role": "candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+      "bytes": 32216,
+      "sha256": "2b55a132b6cea36e64eae08032e311542b2562e9dc313c1b6e0e81c58bd3e332",
+      "reason": "Final clause-level IC Wallet implementation and protocol mapping, including completed fresh ERC20 same-deposit redemption continuation.",
+      "role": "candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/validation.json",
+      "bytes": 2737,
+      "sha256": "019620bc0e145c32c103856760837c5a0777f22948cfc0dcb28eb8b4f57e4734",
+      "reason": "Most complete Wallet316 release-test, migration and ckETH protocol summary; /tmp raw logs remain local.",
+      "role": "candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/candidate-pins.json",
+      "bytes": 1212,
+      "sha256": "1af8fa068a1c297f26fe43760e2615ef385b94d4d58c32c6a5320eb94e420db3",
+      "reason": "Frozen historical installed/package evidence for EVM103 results; prevents retargeting old proofs to the final package set.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json",
+      "bytes": 9238,
+      "sha256": "c21870673b78124d41e8c5b501d8711910b261a0e8dee4d663530041f04f0c34",
+      "reason": "Frozen historical installed/package evidence for EVM103 results; prevents retargeting old proofs to the final package set.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/candidate-pins.json",
+      "bytes": 1286,
+      "sha256": "a1c8053ab539a45b035318548d08ce98ee0b36ec32680b1cee3e95be5b53d535",
+      "reason": "Frozen historical installed/package evidence for EVM105 results; prevents retargeting old proofs to the final package set.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+      "bytes": 9188,
+      "sha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287",
+      "reason": "Frozen historical installed/package evidence for EVM105 results; prevents retargeting old proofs to the final package set.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+      "bytes": 1883,
+      "sha256": "f1ea23f51457d4cc9bc40cd33094d6ed4997fab06784d56f9661f142ce4b2744",
+      "reason": "Four archive-pinned checked actor migration/clean-init scenarios,739 recorded assertions; scope remains341/103 where recorded.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json",
+      "bytes": 1428,
+      "sha256": "38d4488c4dce0b52693ba5b3728817c0227871627ed8f3f92d771b2fdea21686",
+      "reason": "EVM-specific561-assertion subset already referenced by requirements; exact historical version scope.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/candidate-sha256.json",
+      "bytes": 401,
+      "sha256": "c59d679c4aa7b3e173b2f4ef7659b6ec2bd10d3bdb11cd311e453ff6be2cacf5",
+      "reason": "The actor suite exact historical archive set.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm101-signed-successor.json",
+      "bytes": 9302,
+      "sha256": "59c3ea711a938dd1ca4d3ad9c445483fe0ee00ed8e36c5a255c74bd1be279f84",
+      "reason": "Concise original259-assertion signed/pending EVM101 upgrade receipt.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet312-kernel336-evm-release.json",
+      "bytes": 10720,
+      "sha256": "9ef4e3159448fa3731456f5b5b2e3d5e1a8a4f2657f1cb521609ac3c2ff7aaa9",
+      "reason": "Concise original214-assertion current-production Wallet312 upgrade receipt.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet306-kernel336-evm-release.json",
+      "bytes": 4155,
+      "sha256": "b81371e2bb1882c77a8d9417e861b63a280aa64fb035a3a61cef73fdf3e19499",
+      "reason": "Concise original88-assertion skipped-release Wallet306 upgrade receipt.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet315-to341-316-pins.json",
+      "bytes": 401,
+      "sha256": "c59d679c4aa7b3e173b2f4ef7659b6ec2bd10d3bdb11cd311e453ff6be2cacf5",
+      "reason": "Exact package pins for178-assertion nonempty Wallet315 journal preservation case; large raw journal receipt remains local.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json",
+      "bytes": 3368,
+      "sha256": "d3a1420abd7fafacaa30e33c9d93e8e0ba4b0e086fd814813d235b2fb0aa545b",
+      "reason": "Demonstrated full-sized RPC text-comparison failure, exact one-line fix and inference limits.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/browser-requests.json",
+      "bytes": 1401,
+      "sha256": "62ffec430e9cabec75b1b5669bc0a0f5a489ccde26e4e67c12aff9710ea12e27",
+      "reason": "Small actual failing caller/contract/request evidence supporting the isolated full-sized reproduction.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/history-size-diagnosis/results.json",
+      "bytes": 6975,
+      "sha256": "9b791f2556ce375e9fbb774b0c3932ca87dfd5686169cf07079d63bbb0dc198d",
+      "reason": "Measured real25-row history response and exact existing metadata-limit failure; captured fixture is separately committed as test input.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-large-read-evm105/qualification-summary.json",
+      "bytes": 1078,
+      "sha256": "104cffd4ad667da36c7ee5b8ba075bf24735afd32a86d2af2fbf49e758b2fee7",
+      "reason": "Actual full factory/pool code/read regression result with raw complete-code evidence hash and honest read-only scope.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-financial-evm105/same-hash-reconciliation.json",
+      "bytes": 2473,
+      "sha256": "679d1b1b973d43f7b91c3138fb258f68f395a5d9e7d5c4786ed84880411323f4",
+      "reason": "Existing signed chain1 contract hash/receipt/calldata/balance reconciliation; explicitly does not claim the interrupted final UI follow-up.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-evm105/inputs.json",
+      "bytes": 2045,
+      "sha256": "d8d74ad026e4c545fc0396c134de3a014aa4ed6a4f18140a8b3d1c0ef03b0d22",
+      "reason": "Run-specific installed105 hashes and exact fixture source hashes for six-signature/failed-first-financial case split.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-42161-evm105/inputs.json",
+      "bytes": 2076,
+      "sha256": "90041b11a58545c7ebd10733d4d5fbdd4354024bc9e15302b7c8b2f550876ca8",
+      "reason": "Run-specific installed105/fixture source hashes for42161 execution and signatures.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-financial-evm105/inputs.json",
+      "bytes": 2076,
+      "sha256": "90041b11a58545c7ebd10733d4d5fbdd4354024bc9e15302b7c8b2f550876ca8",
+      "reason": "Run-specific installed105/fixture source hashes for interrupted receipt-null financial case.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+      "bytes": 3017,
+      "sha256": "68069d70f6d35a6fece96833391b4f40eeb591ec284b2d222f496b4430871fa8",
+      "reason": "Actual Kernel341/Wallet316/EVM103 root and human ckETH bridge/native-redemption outcomes, including same-intent recovery distinction.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-first-attempt-classification.json",
+      "bytes": 3602,
+      "sha256": "d9385d3b560e10c1f948a54a61ee66ba6d4e147d06f48d96910cc04e0e0c514c",
+      "reason": "Honest classification of interrupted human bridge before later same-intent recovery.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json",
+      "bytes": 13201,
+      "sha256": "627192ed898d140f438cb51c7a6aa70e5ef7446f1538dab9339c27121e09eed7",
+      "reason": "Exact direct-root bridge evidence: identities, hash, official minter event and ledger correlation.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-recovery-2/ic-wallet-bridge-reconcile-a049d-t-without-another-signature-chromium/interrupted-qualification-reconciled.json",
+      "bytes": 4947,
+      "sha256": "cdcd310677cdce8c99b1906f0fb1a06f62b8151f7e9bf6e806ddb0c6299edfee",
+      "reason": "Exact original interrupted deposit recovered without another signature/nonce; attachment duplication excluded.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-native-continuation/ic-wallet-bridge-complete--714ff-upted-qualification-deposit-chromium/ic-wallet-native-redemption-and-reload.json",
+      "bytes": 2536,
+      "sha256": "6f7b4eed000fb401404cac592348cf5e7a6ba9b91c41c093ff25e7c67f7f14dc",
+      "reason": "Exact native withdrawal burn/payout/reload evidence; attachment duplication excluded.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+      "bytes": 3116,
+      "sha256": "47a02262cab010f70773bf3baa9aae2bcd97460497f9993dbb8f2f712369e61b",
+      "reason": "Two actual42161 external swaps with Wallet approvals, reply-loss recovery and explicit Anvil/Nitro limitations.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/1-network-swap-evidence.json",
+      "bytes": 6271,
+      "sha256": "174e0bac35750eef4adaea5351d345fdc7c3145f8898b6378bf067c89ccfa942",
+      "reason": "Exact native-to-token transaction/receipt/approval/calldata evidence.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/2-network-swap-evidence.json",
+      "bytes": 4644,
+      "sha256": "cb4180d919351863a737e4f95fcedb9fe5df9ea88bb4f237e845dcf37d98e7b8",
+      "reason": "Exact token-to-token transaction/receipt/approval/calldata evidence.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/contract-artifact-inputs.json",
+      "bytes": 1396,
+      "sha256": "f545806495b04e6f70720445f4decb96de65c2e61b6326a00e65b9551b87283f",
+      "reason": "Pinned officialV3 contract artifact inputs enabling reproduction of the protocol fixture.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/chain42161-release-state.json",
+      "bytes": 321,
+      "sha256": "bb92fd567505a996851e135caff72c99a7c697807ca1bbfcd3de6473025db57b",
+      "reason": "Recorded no-pending-nonce/mining-mode financial-lane handoff after the two42161 cases.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/qualification-summary.json",
+      "bytes": 1088,
+      "sha256": "7e2d469a9bc5f2a1bb202961eb16d842b46bfcbe879fcdab2eee299776dfa4dc",
+      "reason": "Concrete pre-effect third-consent failure underKernel341 that motivates342; no approval/swap was signed.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-evm106.json",
+      "bytes": 12833,
+      "sha256": "3ad620ea5dfd38e283e243129cada21c84ba04d47661b0979e6ab8598bd05f6e",
+      "reason": "Portable straight extraction of actual checked-update receipts, recorded preservation assertions and reconciliation distinctions; raw state/receipts remain local.",
+      "role": "portable_projection",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json",
+      "bytes": 57280,
+      "sha256": "e384870d75a1721f52172be2d0ff2298e982eb46bc868282cca9a89aaa3d6321",
+      "reason": "Portable straight extraction of actual checked-update receipts, recorded preservation assertions and reconciliation distinctions; raw state/receipts remain local.",
+      "role": "portable_projection",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-case-outcomes.json",
+      "bytes": 14398,
+      "sha256": "902e43e7fbdbf7b43889f2b7d23990c7a60b948c44a694cb1877960118d2cedc",
+      "reason": "Portable exact decoded crypto attachment or compact exact case outcome projection, retaining original report hashes and failed cases without raw runner config.",
+      "role": "portable_projection",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-chain-1-signatures.json",
+      "bytes": 2835,
+      "sha256": "6d751ffcf7a8f6137753f563a040d1a759ec7eb04a1bceb58816d3bdd93c8eb1",
+      "reason": "Portable exact decoded crypto attachment or compact exact case outcome projection, retaining original report hashes and failed cases without raw runner config.",
+      "role": "portable_projection",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-chain-42161-execution.json",
+      "bytes": 4368,
+      "sha256": "5739ab44d03236c0839c6f4df59e1214762420558009eb12a50252fa36e8c86a",
+      "reason": "Portable exact decoded crypto attachment or compact exact case outcome projection, retaining original report hashes and failed cases without raw runner config.",
+      "role": "portable_projection",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-chain-42161-signatures.json",
+      "bytes": 2831,
+      "sha256": "9c20be690a59fbaf6bd067c9e35969fda35563daaaa16669d7d29db73c4aa60e",
+      "reason": "Portable exact decoded crypto attachment or compact exact case outcome projection, retaining original report hashes and failed cases without raw runner config.",
+      "role": "portable_projection",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+      "bytes": 4798,
+      "sha256": "05d05ab901b2858b06dbc53be7f14a730978ad90869bc9143a8971390305fedf",
+      "reason": "Full historical Kernel341 package,752TS+33Motoko release tests, source, CA and actor/browser qualification summary.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/kernel341-final-compiler-summary.json",
+      "bytes": 3131,
+      "sha256": "4f97ad117b4653c03fd4e1f9e7226461857881b62848f04a1ce7153b7d260b63",
+      "reason": "Exact historical336\u2194341 archived browser compiler/parser/assembler qualification and package hashes;144 assertions, no live-install claim.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/exact336-to341-current-incumbents.json",
+      "bytes": 4214,
+      "sha256": "ce984f5e763eb302a0f40cc295e7d13a1690a6de809e54cfcc8c6202a23425f3",
+      "reason": "Exact historical336\u2194341 archived browser compiler/parser/assembler qualification and package hashes;144 assertions, no live-install claim.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/exact341-to336-current-incumbents.json",
+      "bytes": 4214,
+      "sha256": "870aec2c7883ce30583410a5bd555d4d4e6933fcbeaa5bb6b63132ef70e9bedb",
+      "reason": "Exact historical336\u2194341 archived browser compiler/parser/assembler qualification and package hashes;144 assertions, no live-install claim.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/backend-lineage-equality.json",
+      "bytes": 14180,
+      "sha256": "12399a6e045a1ae2b85242b09d1851ec272f181d7445243aadad7e01beead73f",
+      "reason": "Exact75-file backend/schema/lock lineage equality341\u2192342 and expected inventory metadata distinction; supports correctly scoped reuse of739 historical actor scenarios.",
+      "role": "final_candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/certified-assets-candidate-binding.json",
+      "bytes": 28169,
+      "sha256": "acc42f00ec724fd531247290d52e38ed40222298c2c4657bef57883ec8a06d57",
+      "reason": "Final342 CA implementation/test-runner/package-lock/Motoko dependency fingerprint binding; records fingerprints rather than copying executable caches.",
+      "role": "final_candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-102/validation.json",
+      "bytes": 2362,
+      "sha256": "37f692ea42c0f400504d05c3e56bc784976cf8dde862d39167871491e6cce655",
+      "reason": "Immutable EVM102 candidate status/bytes and original release qualification; unpublished/interrupted candidates remain identified.",
+      "role": "candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-103/validation.json",
+      "bytes": 3946,
+      "sha256": "4cf6e8e07fde7ae118a4eac772c9a42224adb094719fd93b2c703ab32d7497b4",
+      "reason": "Immutable EVM103 candidate status/bytes and original release qualification; unpublished/interrupted candidates remain identified.",
+      "role": "candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-104/validation.json",
+      "bytes": 861,
+      "sha256": "f4e9c4f6f705b833f7994717846e41d803dea0c4a7d0138226923143c00c88b3",
+      "reason": "Immutable EVM104 candidate status/bytes and original release qualification; unpublished/interrupted candidates remain identified.",
+      "role": "candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+      "bytes": 2896,
+      "sha256": "6a1567c81ce9626e7a64378e810c1bd13f2bbf5b9e13f09a6abb0193e59e86e4",
+      "reason": "Immutable EVM105 candidate status/bytes and original release qualification; unpublished/interrupted candidates remain identified.",
+      "role": "candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+      "bytes": 2993,
+      "sha256": "4ed4cefb0cdca0734fdb0cdf81a2d338c317f2d9330882c23e7230a4fbe492a7",
+      "reason": "Immutable EVM106 candidate status/bytes and original release qualification; unpublished/interrupted candidates remain identified.",
+      "role": "candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/archive-source-comparison.json",
+      "bytes": 54239,
+      "sha256": "d50deefe1ad9c5bd510f5474f010662236d9b5eda37e89d66c68a056b4678809",
+      "reason": "Exact source/backend/API/memory comparison forEVM105; preserves intermediate103/105 qualification applicability without pretending final bytes ran earlier cases.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/archive-source-comparison.json",
+      "bytes": 29381,
+      "sha256": "c83ff5912c50e0aee4075bbfc6e2c3833445f16f2f0aeb779ff11e816fc3e012",
+      "reason": "Exact source/backend/API/memory comparison forEVM106; preserves intermediate103/105 qualification applicability without pretending final bytes ran earlier cases.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/source-workspace-check.json",
+      "bytes": 74556,
+      "sha256": "7042312e1aae0087091da741309bfdca8035a789425c6ee8f2b697745fd16b7b",
+      "reason": "Complete historical106209-file offered-source bytes/modes equality inventory; concise enough to retain and linked by its validation.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-103/sandbox-browser/results.json",
+      "bytes": 8460,
+      "sha256": "ac61f758bc821cc3a38dcaef1b7ead0fc4c5cd03fa624c3a1a8082ff74a35d48",
+      "reason": "Version-bound sandbox forms/history result dependency; explicit mocked Kernel/no financial-effect scope. Final history summary includes actual25/50row pagination and baseline failure.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/sandbox-browser/results.json",
+      "bytes": 9696,
+      "sha256": "207b11aaff1904d9ba6f35c34178d419ea2f5bed70f67db81e956a19ca2fb879",
+      "reason": "Version-bound sandbox forms/history result dependency; explicit mocked Kernel/no financial-effect scope. Final history summary includes actual25/50row pagination and baseline failure.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/sandbox-browser/results.json",
+      "bytes": 20752,
+      "sha256": "9316b8c74d97016b702110077cafaf0f8a062ab65374e123468e82b94d234b4f",
+      "reason": "Version-bound sandbox forms/history result dependency; explicit mocked Kernel/no financial-effect scope. Final history summary includes actual25/50row pagination and baseline failure.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/browser-history/summary.json",
+      "bytes": 12456,
+      "sha256": "1b87d51b09b70af3cd03569f8fbc34aa0f2881782b70f14e1adcea9934160efd",
+      "reason": "Version-bound sandbox forms/history result dependency; explicit mocked Kernel/no financial-effect scope. Final history summary includes actual25/50row pagination and baseline failure.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/browser-history/105-baseline/results.json",
+      "bytes": 1966,
+      "sha256": "2ed5daeea99c16639f84b88b1255ade06c0190596cf9b9ffbb275c9aeafb174e",
+      "reason": "Version-bound sandbox forms/history result dependency; explicit mocked Kernel/no financial-effect scope. Final history summary includes actual25/50row pagination and baseline failure.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/browser-history/106-fixed/results.json",
+      "bytes": 20752,
+      "sha256": "93af4ae69455831ba33925b81c72ca67b9a349547dde4be029c72c8837b544fb",
+      "reason": "Version-bound sandbox forms/history result dependency; explicit mocked Kernel/no financial-effect scope. Final history summary includes actual25/50row pagination and baseline failure.",
+      "role": "historical_snapshot",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/kernel342-final-compiler-summary.json",
+      "bytes": 3405,
+      "sha256": "6bc15538be4c18359ac8c1bb2826d9a445d7c0e2e393d96097fd0ec34ee91f08",
+      "reason": "Exact final342 archived compiler/parser/assembler proof and input pins; separate from earlier341 and live-install qualification.",
+      "role": "final_candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/exact336-to342-current-incumbents.json",
+      "bytes": 4214,
+      "sha256": "0e5c2cc4a36776ed451e70d201761c1554e462f52bfb577daa6b4e415f517068",
+      "reason": "Exact final342 archived compiler/parser/assembler proof and input pins; separate from earlier341 and live-install qualification.",
+      "role": "final_candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/exact342-to336-current-incumbents.json",
+      "bytes": 4214,
+      "sha256": "50d6e66f6aa6dc874c9bb34755a3d310c9102b87ee77cb730905ab6e6495e48b",
+      "reason": "Exact final342 archived compiler/parser/assembler proof and input pins; separate from earlier341 and live-install qualification.",
+      "role": "final_candidate_proof",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json",
+      "bytes": 7963,
+      "sha256": "28344e77a2138550b5c2c07b156c0a64f9d7efda743a502baf75cfae974edf60",
+      "reason": "Final342 canonical package/fullrelease/CA/compiler/checked-update evidence, including post-ab0e540 normal source-collector and binding success.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/final342-archive-compiler-inputs.json",
+      "bytes": 4659,
+      "sha256": "3e694d7156992a72dc96ae812d98bbf59dbc7b6b359c963e1bb9a2fa5606631d",
+      "reason": "Exact final342 archived compiler/parser/assembler proof and input pins; separate from earlier341 and live-install qualification.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json",
+      "bytes": 3194,
+      "sha256": "5bdb977d8207854336e9de7ba53b7ebb7cba2c3b0811d0c54a52e64daf86dc29",
+      "reason": "EVM107 final package/fullrelease/source equality and pinned-block estimate compatibility proof; source/UI/backend distinctions remain explicit.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/archive-source-comparison.json",
+      "bytes": 36363,
+      "sha256": "0c97bcdf643329af6cf1eb8a24cdec9c1afefcf3f3004f60a1213070ced16d3f",
+      "reason": "EVM107 final package/fullrelease/source equality and pinned-block estimate compatibility proof; source/UI/backend distinctions remain explicit.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/source-workspace-check.json",
+      "bytes": 74920,
+      "sha256": "77203cf9b20bab45dbc694dd9acb10c1959cf6a8c836b3a2aeb72c4e2e0095e0",
+      "reason": "EVM107 final package/fullrelease/source equality and pinned-block estimate compatibility proof; source/UI/backend distinctions remain explicit.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/artifact-index.json",
+      "bytes": 5097,
+      "sha256": "74e45237bb30d07359e8315d2e2feaa27bb6e8e155722cd02d4f87c052d5c612",
+      "reason": "EVM107 final package/fullrelease/source equality and pinned-block estimate compatibility proof; source/UI/backend distinctions remain explicit.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/sandbox/results.json",
+      "bytes": 20752,
+      "sha256": "3c1c540941eb2ec8f6960d0cf1a6db03566dc2e537b776f3d8734a98cf984e3f",
+      "reason": "EVM107 final package/fullrelease/source equality and pinned-block estimate compatibility proof; source/UI/backend distinctions remain explicit.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/candidate-pins.json",
+      "bytes": 1315,
+      "sha256": "b86738fa228a9ee4ee8a7c93d10273433d3649d7182358bb13f87e5f030ff8c4",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/candidate-sha256.json",
+      "bytes": 413,
+      "sha256": "2b8d09485fe1e3cabdbbd84030e1e84c40a5c0bef7b9ef999e8868a258235e75",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/final-source-workspace-check.json",
+      "bytes": 1774,
+      "sha256": "a7fd34edeec5fdf624b9d83adc84ff6f7120a180f7bd7cb7f84b10e914faed8e",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/installed-final-candidates.json",
+      "bytes": 9226,
+      "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/preflight.json",
+      "bytes": 18613,
+      "sha256": "cc76f07ac41226ae431e5ea2cab403c4b188ef3c9f7695d973548df90358f09f",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm107/candidate-pins.json",
+      "bytes": 1317,
+      "sha256": "401e3fcab90302e2f0b54e727cfb7d0f256d655c8cb9788a4e2cb223b9e4f373",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm107/candidate-sha256.json",
+      "bytes": 413,
+      "sha256": "af568067d6cb97c70f271917e1d6e6c0c975307932723b97dba53f788eba72b0",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm107/final-source-workspace-check.json",
+      "bytes": 1774,
+      "sha256": "83081381d6329ad1a45e13211b6eafe6798bbd034fb5d1a11e0fc522a390ab9f",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm107/preflight.json",
+      "bytes": 18613,
+      "sha256": "f36771cfd9b9c7d1021e920f8ee30da460378dea333fc5aa4e466e58a3a742cc",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm107-uniswap103/installed-final-candidates.json",
+      "bytes": 9267,
+      "sha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d",
+      "reason": "Frozen intermediate candidate/source/preflight or installed snapshot; retain original106/103 or107/103 version identity as final set advances.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/estimate-block-diagnosis/summary.json",
+      "bytes": 5028,
+      "sha256": "7f42145f81563317ef3f50cfc4a6563d636281ed78b4556f63beb015aa9f642d",
+      "reason": "Recorded OutOfGas failure and exact state-pinned estimate fix; targeted compiled proofs and primary-source semantics retained without new testing.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-reconciled-final-342-106/replacement-estimate-exact-call-state-mismatch.json",
+      "bytes": 1202,
+      "sha256": "56a789e2fb79eb27f5b880779a3341631e1f31afd6f79febb28b6ad785dfa1ff",
+      "reason": "Exact complete transaction field comparison:44322 pre-inclusion gas versus24437 after inclusion/default and successful/failed simulations.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-reconciled-final-342-106/replacement-estimate-state-mismatch.json",
+      "bytes": 1152,
+      "sha256": "4dcd71f596b156dcded9fef90149ff60b6c30304e26ec996958d4243f150b55f",
+      "reason": "Small complementary actual gas/state observation for the demonstrated106 replacement failure.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-reconciled-final-342-106/original-same-hash-reconciliation.json",
+      "bytes": 4992,
+      "sha256": "53bbbaf3825e8978389061a69c235b3c47137c6620215ddb451d62c72a528017",
+      "reason": "The original approval effect remained reconciled by its exact hash; do not relabel the failed106 replacement attempt as a passing scenario.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-reconciled-final-342-106/validation.md",
+      "bytes": 4996,
+      "sha256": "6b3c46cf4f7c4882b3103686f3bf87468afb7d44200e44deb242fa9e82d123b7",
+      "reason": "Historical failed106 replacement classification and original same-hash reconciliation before the107 fix.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md",
+      "bytes": 6776,
+      "sha256": "980dfd5e0d0c133e1507bb07af0f1a9e8117d18c9a63f9391ba27372f57f5e5b",
+      "reason": "Passing actual approval\u2192pending same-nonce replacement\u2192known approval after reload\u2192reviewed revocation on342/107 with exact effects and scopes.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json",
+      "bytes": 14024,
+      "sha256": "da75597f727672006d9677f18f46fa019d590f71084e7b5bd54565429f137992",
+      "reason": "Concise exact executed-spec/package/input/report/attachment hash index and recorded case outcome; linked large raw reports remain local.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/installed-final-candidates.json",
+      "bytes": 9267,
+      "sha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d",
+      "reason": "Frozen actual342/107/103 runtime identity for allowance case, not retargeted to later Uni104.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/lane-postflight.json",
+      "bytes": 823,
+      "sha256": "ed04156e86c89789efdc88c86cdb0e695f2c0f0bd216159b838c6dbd58b71b56",
+      "reason": "Recorded final nonce12/12, allowance0 and exact restored mining mode.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/offline-evidence-check.json",
+      "bytes": 5514,
+      "sha256": "6731b85deaf518fcecd331e7b3290929323bc306520d66ec0667877c77710a85",
+      "reason": "Existing offline exact signed raw/nonce/fee/calldata/allowance checks; explicitly distinct from new RPC or runtime verification.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/replacement-and-revocation-chain-evidence.json",
+      "bytes": 8756,
+      "sha256": "e86c3d1814a89fbeaf6eab3c165f575e95d1c3118f5eedb133dd33021e91b4bf",
+      "reason": "Exact accepted replacement and revocation transaction/receipt/block evidence.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/preflight.json",
+      "bytes": 4051,
+      "sha256": "bab7d34454ee70ffb726467059e1108efdb1d8d34816f341217dada152e5ce2e",
+      "reason": "Run-specific package, source and fixture input bindings for the passing107 allowance case.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json",
+      "bytes": 2786,
+      "sha256": "3ced55de9396209681dad05f42edf50c7bfd04a030d2317ed6445b40ce09c794",
+      "reason": "Actual direct-root and provider-response loss completion on342/106/103; preserves same-request continuation after the test-helper interruption.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/root-uniswap-real-chain-protocol.json",
+      "bytes": 32158,
+      "sha256": "51fbc4856db052cea44aabd05973877419d6f33c178208fbb76e8f8761c633e8",
+      "reason": "Exact root approval/swap identities, signed effects, caller binding and accepted raw response-loss recovery; replacement proof remains explicitlyfalse.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/installed-candidates-at-start.json",
+      "bytes": 9226,
+      "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723",
+      "reason": "Frozen installed342/106/103 start identity for completed root protocol.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/chain1-release-state.json",
+      "bytes": 2800,
+      "sha256": "3bbb37e48ca11b2fc3e3b238a0a6d5bd2ecea14d8a8db5c7b33160061ec8b4b3",
+      "reason": "Completed root scenario nonce11\u219213 and zero pending transactions; fault release and lane restoration evidence.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json",
+      "bytes": 4094,
+      "sha256": "f4335bab9bbe93144e20b8070dad857f7ce562e5dbdf6410d556c26f0a4cdb3f",
+      "reason": "Actual all25-row history paging/reload and op22 same-hash status recovery on342/106 with unchanged nonce and no new signing.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json",
+      "bytes": 12911,
+      "sha256": "4a39eed7a2ecbe84a4b25c7191dc038ef89251e632040e7d4b09ecdb3ca9743b",
+      "reason": "Version-bound partial Ethereum external suite: nativepass and token history-overflow failure before Wallet effects; original requests and scope stay explicit.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/native-network-swap-evidence.json",
+      "bytes": 6276,
+      "sha256": "95ac871c395d4103b947911b402e056b8f6562981ac28b631c28a6dd24f375be",
+      "reason": "Exact passed Ethereum native swap on342/106/103, numeric impact and saved consumer-reply-loss recovery.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/token-metadata-limit-diagnosis.json",
+      "bytes": 14721,
+      "sha256": "82e30562dbfc330c3768cc86d484c9bda30ae3d25dc8efe93d20894f5f388153",
+      "reason": "Concrete nine-record66960-byte saved-history overflow motivating Uni104; no new Kernel limit or policy introduced.",
+      "role": "historical_snapshot",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104.json",
+      "bytes": 1059,
+      "sha256": "e8abd6a1de9595e8661b2d7e9d2a435611d285b4b238c8eaafb197cb8f76ab51",
+      "reason": "Exact final Uni104 package/source and immutable memory proof.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+      "bytes": 4899,
+      "sha256": "abe2ef27cd8b96dcb6b8d8f5c025defc76e50363e5759b9ffc2562ce7cd17b3b",
+      "reason": "Concise92tests880assertions,22browserchecks and memory73-record restoration/paging qualification, with original hashed report/log pointers.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-kernel342.json",
+      "bytes": 12925,
+      "sha256": "f94b7dbe478b0ed33018462ae03b0b7f6e525b3839531723e822a88b775e9b77",
+      "reason": "New concise straight projection or reviewer navigation snapshot; exact versions and recorded results only, no reruns, raw state or traces.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-evm107.json",
+      "bytes": 12913,
+      "sha256": "806d1c89c03aa297048c5645f2fdfa95ab191d6211c65747fc0b898df9cd8cfc",
+      "reason": "New concise straight projection or reviewer navigation snapshot; exact versions and recorded results only, no reruns, raw state or traces.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-uniswap104.json",
+      "bytes": 12938,
+      "sha256": "a5b8d94b5bdd9bbd51de8bff7c3913fe2dbfb6f584e733934e54fbd4e1af5923",
+      "reason": "New concise straight projection or reviewer navigation snapshot; exact versions and recorded results only, no reruns, raw state or traces.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/uniswap104-browser-outcomes.json",
+      "bytes": 4124,
+      "sha256": "b83595ad2438f045a93f3fe4392ccfae3c98c42c25a93abe4ecfec171541b297",
+      "reason": "New concise straight projection or reviewer navigation snapshot; exact versions and recorded results only, no reruns, raw state or traces.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/review-342-316-315-107-104.md",
+      "bytes": 8943,
+      "sha256": "2709cb7e4fc2655434b0f58fdd27fbc5271de3814fe06298e2d053b0cfeef871",
+      "reason": "New concise straight projection or reviewer navigation snapshot; exact versions and recorded results only, no reruns, raw state or traces.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/implementation-commit-342-107-104.json",
+      "bytes": 2052,
+      "sha256": "a4a7574b180a8e7b2e18b5b7f74f693cc63199c9924935af3899c45d1aa6d02e",
+      "reason": "1511 exact offered-source files and modes bound to immutable implementation commit b58a33d; package/source publication closure remains separate.",
+      "role": "final_candidate_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json",
+      "bytes": 19112,
+      "sha256": "de0f262c965e2205abc6819968726b340d44ab75be1732c4bcd31ab455f33d02",
+      "reason": "Complete passed final342/107/104 Ethereum token case; original expired intent remains unsigned, exactly one fresh quote, separately reviewed approval speed-up and swap, caller-bound adoption/reload and nonce14\u219216. Existing summary is sufficient; no duplicate projection created.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/approval-replacement-swap-evidence.json",
+      "bytes": 15424,
+      "sha256": "0e0714eeeb2c8e2e4a133933e533c49fcea73c22986a16192fd642a80c8bdbf0",
+      "reason": "Exact pending approval/speed-up and canonical replacement/swap effects, request IDs, calldata and receipt/recipient outcomes.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/effect-checkpoints.json",
+      "bytes": 15425,
+      "sha256": "38466d6132be267d04b35be9c2f79a046aa6d412441a2c4056562dce88f9b508",
+      "reason": "Concise recorded lifecycle checkpoints including separate Wallet decisions, Uniswap replacement adoption and terminal same-request reload.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/chain1-release-state.json",
+      "bytes": 373,
+      "sha256": "bed823900120537afdf204244f58e147c8b53e417d7219a8a0417900a00a3c22",
+      "reason": "Final nonce16/16, empty txpool and original mining mode after the completed token case.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/original-expired-wallet-status-proof.json",
+      "bytes": 13787,
+      "sha256": "37cabcb0c45050d966941fddfb39b438cdfb6a679a6f2e85a54c86a0ef514bb6",
+      "reason": "Four exact before/after-expiry Wallet not_found observations for the preserved original approval/swap requests; independently distinguishes expired original from the fresh executed quote.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/original-saved-intent.json",
+      "bytes": 6000,
+      "sha256": "02a32c7b4648373d5e9f17a6a423663f131a055398f69551f60d8cfb661b0aaa",
+      "reason": "Preserved original intent and unchanged request IDs across checked103\u2192104 update; this expired intent was not executed.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/installed-candidates.json",
+      "bytes": 9259,
+      "sha256": "11aab5b4c27412819477feeb2fd3ee70a3d8bca1865d4d7c588f2fadb48b4b1a",
+      "reason": "Exact final342/316/315/107/104 installed snapshot for the completed token scenario.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/inputs.json",
+      "bytes": 2919,
+      "sha256": "625f16e8d700d55d6d1b2e51a00d66163bfdf3ad3e9abf6709f6cde5981b610f",
+      "reason": "Exact executed-spec and fixture source hashes plus package bindings for the recorded final token case.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-setup.json",
+      "bytes": 8389,
+      "sha256": "82dc6cd199543290f6716f1c2f4ba07b1815c31ee8edb63784f5f08fc42d835a",
+      "reason": "Straight selective projection of exact final-package fresh first deployment, protocol configuration and retained prior runtime restoration; omits process/control/session/state supervisor data and states the local six-decimal token stand-in scope.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-deposit-proof-index.json",
+      "bytes": 16199,
+      "sha256": "d39033bc9e47305c25cb1fe564e175c511022ff5b79b2eacbbf09b8945c5f67c",
+      "reason": "Binds exact initial deposit/recovery, original failed combined-case outcome and successful same-deposit redemption-only continuation, with portable originals and final owner qualification; explicitly scopes the local ERC20 stand-in.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-lost-approval-reply.json",
+      "bytes": 11745,
+      "sha256": "da169c0361e9c925108245d5b4e4655c34d6d37151a6e8ef467fcf5927ad092b",
+      "reason": "Byte-for-byte saved initial allowance, zero-reset, exact approval, dropped consumer response and interrupted bridge stage artifact.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-exact-deposit-mint-and-recovery.json",
+      "bytes": 8019,
+      "sha256": "1fe06c8df45303fa56669a03846cb60aefdc4ccf3ccda8f292d5f581991880cc",
+      "reason": "Byte-for-byte same bridge approval recovery and exact20-USDC-equivalent deposit\u2192helper log2\u2192released minter events23/24\u2192ledger mint block0 artifact.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-initial-case-outcome.json",
+      "bytes": 1739,
+      "sha256": "c564c3feec805d102478a5e78be184d0a102466a8169c4dcc40291a2cf7cf082",
+      "reason": "Frozen failed initial combined browser status, successful deposit-stage distinction and coordinator-reported minter gas-quote readiness boundary; final owner summary must bind actual continuation.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json",
+      "bytes": 2145,
+      "sha256": "9085d4cbda94b8e6b724b9124f65daa0045b63dd1946b1dc3e106fa6203fffe5",
+      "reason": "IC-owner classification binds exact successful deposit/mint stages and initial full-case failure before redemption approvals/burns; minter fee cache readiness is a fixture step, not an inferred appchange.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-prewithdrawal-gas-review.json",
+      "bytes": 1155,
+      "sha256": "f8657ab2ae48e24dae1f0e646471e5d77155ea5a92220070cccc1d92431931bd",
+      "reason": "Exact unchanged pre-withdrawal review: 5-million-atom asset request, quoted gas budget and maximum debit before approvals.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-requested-redemption-and-debits.json",
+      "bytes": 1664,
+      "sha256": "3f52ca05d1fbe70ac2197bf6db117203778073ca39b1a7e3551437274dd03d67",
+      "reason": "Exact unchanged single redemption submission, asset/gas burns, matching quoted gas debit and zero remaining allowances; settlement remains pending in this stage artifact.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-redemption-continuation-input.json",
+      "bytes": 8866,
+      "sha256": "ee9e48ec3925577f908e3e7ec54f455a638f221facbb74366805057584de4bef",
+      "reason": "Selective original continuation input binds the same completed deposit bridge and transaction, exact final package deployment, noNewDeposit/noDonorFunding and prior normal donor fee readiness; no final payout claim.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/fee-readiness.json",
+      "bytes": 5221,
+      "sha256": "88a64d10bc970454f5ce03a3d0fe29f81590774a13ca7c9e363d44d162ab1372",
+      "reason": "Exact ordinary donor helper funding, ckETH mint/approval/native withdrawal and canonical finalized payout initialized released minter fee cache without repeating user bridge/redemption or injecting state/time.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-native-redemption-quote-debits-and-reload.json",
+      "bytes": 4115,
+      "sha256": "41f90f088c4fd45d3b159bdc5796f4ce33bc300a307d74f72814b7b8a8d05c46",
+      "reason": "Exact unchanged final redemption artifact: request restored identically after reload, canonical minter finalized payout, recipient token balance 80-to-85 million atoms, separate asset/gas burns and confirmed saved request.",
+      "role": "portable_projection",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+      "bytes": 14787,
+      "sha256": "68132eaa5c3b75f2e6eff645a2f1f52dcfe8eaab2491c1e94dee961bf098386d",
+      "reason": "IC-owner final qualification preserves the initial combined-case failure, successful exact deposit/recovery, separate normal donor fee prerequisite and passing redemption-only continuation on the final package set.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/retained-restored.json",
+      "bytes": 671,
+      "sha256": "55b703c8603693f52825cc8a12aae573c6ac4ff7db06f04f408dce2747e978af",
+      "reason": "Exact retained-runtime gateway restoration response, original public root key and healthy auto-progress status after ERC20 fixture completion.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/final-runtime-restoration.json",
+      "bytes": 1868,
+      "sha256": "e6d68ce06f4765f72865935b95a24d41a5bd770dbeac2e3ec7934d0dcee2d311",
+      "reason": "Runtime-owner final verification: original retained runtime/root key/gateway healthy, auto-progress verified, owned fixture processes stopped and original Ethereum node/state preserved; no production financial calls.",
+      "role": "version_bound_runtime_proof",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish.json",
+      "bytes": 16629,
+      "sha256": "8ef08c78d0cfbb178c3261f6c4ab01d87c1f2ff888de27ec3b0b60c4fcc4ed01",
+      "reason": "Production receipt-v2 atomic batch52: exact five changed final packages plus the remaining unchanged catalog selection, with source artifact identities.",
+      "role": "publication_receipt",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish-noop.json",
+      "bytes": 16629,
+      "sha256": "4d5c7eab8a612c29fd74a998bf6e834fd4c9052c3ba4ee32103e3c2fe6226e14",
+      "reason": "Same-byte successful receipt-v2 postflight: batch_id null; all18 selected packages and offered sources unchanged.",
+      "role": "publication_receipt",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/receipt-verification.json",
+      "bytes": 295,
+      "sha256": "3ba61351dbed58cea70120143e3d309b92d510959dfd5a42cca1b2db15d6c23f",
+      "reason": "Recorded passing verifier outcome for batch52/no-op, exact current preflight/local bytes and all18 selected packages.",
+      "role": "publication_verification",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/verify-receipts.ts",
+      "bytes": 2746,
+      "sha256": "4ca8b9f1c4c07b2591a9c463e746a9da9ffd6f22d750d8275668665e03686fb6",
+      "reason": "Preserved executed receipt verifier source: asserts package/source identity, status, URL/path/version/size/hash and exact local archive/source bytes. No verifier rerun performed by evidence collection.",
+      "role": "verification_source",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/publication-verification-attempts.json",
+      "bytes": 771,
+      "sha256": "ce9584122f7c57a940d1512cc5e97fdde8ed3ee678ea909c41419feca2b2d707",
+      "reason": "Preserves initial no-op certified-asset fetch timeout and explicit successful same-byte verified retry, with raw failed-attempt log retained locally.",
+      "role": "publication_verification",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/validation.md",
+      "bytes": 8254,
+      "sha256": "aa5e114f7d81dc159f79b1cfcce647408f4c1f8de6f255d3a79729acf18d60cf",
+      "reason": "Final human-readable qualification, memory/upgrade scope, exact published versions, completed protocol cases and preserved initial failures; links concise selected proof.",
+      "role": "release_narrative",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/release-summary.json",
+      "bytes": 6318,
+      "sha256": "85c1b4331ba9e8d08354b5daec7b7d452f5f34cc8c2add6b38d4a5aa3f1ed2fe",
+      "reason": "Final complete release summary: batch52/all18 no-op, all64 clauses, immutable1511-file source commit, runtime restoration and unchanged known issue; no production-wallet installation or Dispenser change.",
+      "role": "release_index",
+      "prAction": "add_explicitly",
+      "finalizationRequired": false
+    },
+    {
+      "path": "doc/evm-wallet.md",
+      "bytes": 13774,
+      "sha256": "f60b02ec2c1a81ce72b6b75b28a9d9701fff0ded11faf9e30416910d81c4c00d",
+      "reason": "Final user/developer documentation for the separate EVM Wallet, supported integration protocols and release scope.",
+      "role": "final_documentation",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    },
+    {
+      "path": "doc/todo.evm-wallet.md",
+      "bytes": 19223,
+      "sha256": "e6513e066cf45c3c79c8758343df2ba2e6a36fe14bec926bd5484fefa827b36c",
+      "reason": "Original64-clause implementation checklist retained and completed with final version-bound release evidence.",
+      "role": "final_documentation",
+      "prAction": "already_tracked_preserve",
+      "finalizationRequired": false
+    }
+  ],
+  "expectedBeforeFinalPR": [],
+  "optionalReproductionHelpers": [
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/preflight.ts",
+      "bytes": 1889,
+      "reason": "Small existing canonical catalog/receipt verification helper; include if PR promises reproducing the receipt checks from these exact evidence files."
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/extract-receipt.py",
+      "bytes": 832,
+      "reason": "Small existing canonical catalog/receipt verification helper; include if PR promises reproducing the receipt checks from these exact evidence files."
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/verify-receipts.ts",
+      "bytes": 2746,
+      "reason": "Small existing canonical catalog/receipt verification helper; include if PR promises reproducing the receipt checks from these exact evidence files."
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/check-sources.ts",
+      "bytes": 1089,
+      "reason": "Small existing canonical catalog/receipt verification helper; include if PR promises reproducing the receipt checks from these exact evidence files."
+    }
+  ],
+  "immutableArchiveAndTestInputs": [
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.1.neutron",
+      "bytes": 377833,
+      "sha256": "1f7e9fb0ab82b60543ed38d81f215e7655ef4ca9fb1afab0f6ea6eb4cf456048",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Direct readFile dependency in apps/evm_wallet/test/package.test.ts; immutable archive bytes are required for portable release tests."
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.2.neutron",
+      "bytes": 390962,
+      "sha256": "57d8b1c69af50e70d865d2f01dd6b8c1484af8fd5907b21aaa483116ecd92641",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Direct readFile dependency in apps/evm_wallet/test/package.test.ts; immutable archive bytes are required for portable release tests."
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.3.neutron",
+      "bytes": 391234,
+      "sha256": "80cb4d5a55d52ce1e27114e9bb36686af3d60dd668b7c85e694fb16ed4eb1d92",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Direct readFile dependency in apps/evm_wallet/test/package.test.ts; immutable archive bytes are required for portable release tests."
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.4.neutron",
+      "bytes": 391585,
+      "sha256": "002759fbb401bfcf9e399fa0a9a654bbdd7833dba1c30c4cecd888a8a0a3c820",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Direct readFile dependency in apps/evm_wallet/test/package.test.ts; immutable archive bytes are required for portable release tests."
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.5.neutron",
+      "bytes": 391603,
+      "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Direct readFile dependency in apps/evm_wallet/test/package.test.ts; immutable archive bytes are required for portable release tests."
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.6.neutron",
+      "bytes": 391788,
+      "sha256": "eba89d8ab27c8f93faa59b82026e9e6393773156532761f6ebfadeaacb2856cf",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Direct readFile dependency in apps/evm_wallet/test/package.test.ts; immutable archive bytes are required for portable release tests."
+    },
+    {
+      "path": "apps/kernel/kernel.v0.3.33.neutron",
+      "bytes": 2468220,
+      "sha256": "390b1db9af417226487e11d3798a51e5ef38b080ee32cf7575ff80dd3bf7cbb5",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Historical release/memory/compiler compatibility or final package input;340/341 are immutable prepared Kernel candidates and must not be overwritten."
+    },
+    {
+      "path": "apps/kernel/kernel.v0.3.36.neutron",
+      "bytes": 2433352,
+      "sha256": "97222bc4c956932ff21b96773cc5a438f92ae5ac7660c0c3f408be7eb25a7eeb",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Historical release/memory/compiler compatibility or final package input;340/341 are immutable prepared Kernel candidates and must not be overwritten."
+    },
+    {
+      "path": "apps/kernel/kernel.v0.3.39.neutron",
+      "bytes": 2448952,
+      "sha256": "8391f8508cf1f3929cf3b7e3e02612de29beb0bc387a4e89d8bc12b1d3677462",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Historical release/memory/compiler compatibility or final package input;340/341 are immutable prepared Kernel candidates and must not be overwritten."
+    },
+    {
+      "path": "apps/kernel/kernel.v0.3.40.neutron",
+      "bytes": 2448962,
+      "sha256": "39cd4d50c8a6171a8c0c2049c149b72e3c3e1eb88811a0bdd7ea0e7b1e723f3f",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Historical release/memory/compiler compatibility or final package input;340/341 are immutable prepared Kernel candidates and must not be overwritten."
+    },
+    {
+      "path": "apps/kernel/kernel.v0.3.41.neutron",
+      "bytes": 2448966,
+      "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Historical release/memory/compiler compatibility or final package input;340/341 are immutable prepared Kernel candidates and must not be overwritten."
+    },
+    {
+      "path": "apps/kernel/kernel.v0.3.42.neutron",
+      "bytes": 2448936,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Historical release/memory/compiler compatibility or final package input;340/341 are immutable prepared Kernel candidates and must not be overwritten."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.2.neutron",
+      "bytes": 575530,
+      "sha256": "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.6.neutron",
+      "bytes": 666413,
+      "sha256": "bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.7.neutron",
+      "bytes": 677271,
+      "sha256": "20ba3b00349e9386713a789622ce6a570fc7123e7daf89cda38daedcfc74fac1",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.8.neutron",
+      "bytes": 677493,
+      "sha256": "2f3626d2800ddf3e6c0734268c66627931c934811722d39de41c8d1505873858",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.9.neutron",
+      "bytes": 677558,
+      "sha256": "6deaf1dc0a05582dfc7cd9db56f7e2bb9705df14e825bd817689d31a1e9e0398",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.10.neutron",
+      "bytes": 677819,
+      "sha256": "a2077b5da0f5623b61e8f8a88f465bcac89ceb43908eed8fa9a5da5aa1aa7442",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.11.neutron",
+      "bytes": 678740,
+      "sha256": "0a8395f04e6fbb83b2d579d72a77c9f3288261611c3a4b0bd369a6854e19eb46",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.12.neutron",
+      "bytes": 678721,
+      "sha256": "6875f1f98ae7309fe84885ed77df9847c1c1ad03f5baa8d6aed4b00fb4f48129",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.15.neutron",
+      "bytes": 753979,
+      "sha256": "1d1156e18ee3116dbda8c8c410f6c4987ba062db345ddf169a822f3d3c20ffcd",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.16.neutron",
+      "bytes": 768823,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/kitchensink/kitchensink.v0.3.10.neutron",
+      "bytes": 430618,
+      "sha256": "a9998e28ace0f3525bad787aa0f21ccaaf8389252d6f9bf7d063d36bd284d795",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/kitchensink/kitchensink.v0.3.11.neutron",
+      "bytes": 430950,
+      "sha256": "4fb7f6fc74c29b05a95f4ce2f706d2f6cd8db4cd2dd9e840233b65e16acaa921",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/kitchensink/kitchensink.v0.3.14.neutron",
+      "bytes": 471268,
+      "sha256": "e25c5230a91f2c99f72119e92c62204da5c13604785d018a358e57ea0a1bf18b",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/kitchensink/kitchensink.v0.3.15.neutron",
+      "bytes": 472282,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/uniswap/uniswap.v0.1.2.neutron",
+      "bytes": 273807,
+      "sha256": "720781594416ac568d10de0c6594afadf8ba09fbab7dff50976ef9db82f7f10d",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/uniswap/uniswap.v0.1.3.neutron",
+      "bytes": 278707,
+      "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Published memory/compatibility baseline or final package input; preserve existing tracked artifacts."
+    },
+    {
+      "path": "apps/evm_wallet/test/fixtures/history-25-operations.json",
+      "bytes": 159464,
+      "sha256": "c77a5b32361a9f54f30d7ca77dacf38394261acfd6ad85c9ec4d1381bf6c6f02",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Real captured25-operation regression input used by history tests and actual Kernel metadata encoder; this belongs with test source, not duplicated private history capture."
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+      "bytes": 391816,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Current107 package-test input.101\u2013106 immutable readFile baselines remain required and already committed."
+    },
+    {
+      "path": "apps/uniswap/uniswap.v0.1.4.neutron",
+      "bytes": 288989,
+      "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685",
+      "tracked": true,
+      "prAction": "retain_already_tracked",
+      "reason": "Final104 package-test and production archive;103 retained unchanged as previous release and checked-update source."
+    }
+  ],
+  "offeredSourcePreservation": [
+    {
+      "path": "apps/kernel/.neutron/sources/59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692.source.v1.msgpack.gz",
+      "bytes": 3198894,
+      "sha256": "59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692",
+      "role": "final_offered_source",
+      "tracked": true,
+      "preservation": "Retain exact frozen source bytes bound to b58a33d and production batch52/no-op. Their receipt URL/path/hash provide the published identity; historical bundles remain immutable."
+    },
+    {
+      "path": "apps/wallet/.neutron/sources/e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5.source.v1.msgpack.gz",
+      "bytes": 624669,
+      "sha256": "e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5",
+      "role": "final_offered_source",
+      "tracked": true,
+      "preservation": "Retain exact frozen source bytes bound to b58a33d and production batch52/no-op. Their receipt URL/path/hash provide the published identity; historical bundles remain immutable."
+    },
+    {
+      "path": "apps/kitchensink/.neutron/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+      "bytes": 462990,
+      "sha256": "9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe",
+      "role": "final_offered_source",
+      "tracked": true,
+      "preservation": "Retain exact frozen source bytes bound to b58a33d and production batch52/no-op. Their receipt URL/path/hash provide the published identity; historical bundles remain immutable."
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/20ccb7adc5bd5be9d86849523a23ff306b290867692c1f41cc21d809c4aa4fdb.source.v1.msgpack.gz",
+      "bytes": 522778,
+      "sha256": "20ccb7adc5bd5be9d86849523a23ff306b290867692c1f41cc21d809c4aa4fdb",
+      "role": "historical_offered_source",
+      "preservation": "Retain exact tracked historical source bytes without treating their version as the final release. Historical private source URLs are not assumed published; final offered sources are identified separately.",
+      "tracked": true
+    },
+    {
+      "path": "apps/uniswap/.neutron/sources/7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd.source.v1.msgpack.gz",
+      "bytes": 455134,
+      "sha256": "7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd",
+      "role": "historical_offered_source",
+      "preservation": "Retain exact tracked historical source bytes without treating their version as the final release. Historical private source URLs are not assumed published; final offered sources are identified separately.",
+      "tracked": true
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/e7bc1a914462747f4075bd9b2a15fa9600b4f65cb4c382f5227effc1ab32cadb.source.v1.msgpack.gz",
+      "bytes": 478220,
+      "sha256": "e7bc1a914462747f4075bd9b2a15fa9600b4f65cb4c382f5227effc1ab32cadb",
+      "role": "private_historical_offered_source",
+      "preservation": "Keep locally unchanged. Never assume the encoded production source URL is available: this private version was not published. Full historical source rerun requires this retained bundle; archive-only package tests do not.",
+      "tracked": true
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/9b77656b1e59d6b02778c4810f7a982f4b3c73515e520b4f8ba28e95514c17cf.source.v1.msgpack.gz",
+      "bytes": 485726,
+      "sha256": "9b77656b1e59d6b02778c4810f7a982f4b3c73515e520b4f8ba28e95514c17cf",
+      "role": "private_historical_offered_source",
+      "preservation": "Keep locally unchanged. Never assume the encoded production source URL is available: this private version was not published. Full historical source rerun requires this retained bundle; archive-only package tests do not.",
+      "tracked": true
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/8ae9900d2bb6dc9c6915c303a6d78158898f58b0e4b5dabbce7cab5216c8719a.source.v1.msgpack.gz",
+      "bytes": 489047,
+      "sha256": "8ae9900d2bb6dc9c6915c303a6d78158898f58b0e4b5dabbce7cab5216c8719a",
+      "role": "private_historical_offered_source",
+      "preservation": "Keep locally unchanged. Never assume the encoded production source URL is available: this private version was not published. Full historical source rerun requires this retained bundle; archive-only package tests do not.",
+      "tracked": true
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574.source.v1.msgpack.gz",
+      "bytes": 524845,
+      "sha256": "533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574",
+      "role": "final_offered_source",
+      "tracked": true,
+      "preservation": "Retain exact frozen source bytes bound to b58a33d and production batch52/no-op. Their receipt URL/path/hash provide the published identity; historical bundles remain immutable."
+    },
+    {
+      "path": "apps/uniswap/.neutron/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz",
+      "bytes": 462898,
+      "sha256": "3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd",
+      "role": "final_offered_source",
+      "tracked": true,
+      "preservation": "Retain exact frozen source bytes bound to b58a33d and production batch52/no-op. Their receipt URL/path/hash provide the published identity; historical bundles remain immutable."
+    }
+  ],
+  "linkCorrectionsAndLimitations": [
+    {
+      "issue": "Historical proofs are version-bound, including105crypto,106rootUniswap/103consumer,106history and107allowance with103consumer.",
+      "action": "Keep their archived installed snapshots and exactpins. Current104 checked-update success does not relabel earlier live protocol tests as104."
+    },
+    {
+      "issue": "Kernel342 source inventory staging observation is resolved in its candidate proof.",
+      "action": "Use existing post-ab0e540 normal collector/binding pass, final1511-file combined source summary and final18-pair preflight. Do not repeat obsolete staging or103-only source-summary caveats."
+    },
+    {
+      "issue": "Final owner indexes and release narratives close all64 clauses, runtime qualification/restoration and production batch52/no-op.",
+      "action": "Preserve these final selected hashes. The completed token case is exact342/107/104; its original expired intent and fresh executed quote remain distinct. PR creation and link rewriting are delivery operations outside this immutable evidence selection."
+    },
+    {
+      "issue": "Included summaries/indices link large raw receipts, reports, trace files or /tmp logs deliberately omitted fromPR.",
+      "action": "Those are retained-local dependencies with originalpath/size/hash. Use included portable projections for review and avoid claiming omitted raw evidence is downloadable."
+    },
+    {
+      "issue": "Read-trap diagnosis cites a sibling sr9 compiler checkout; historicalcrypto inputs once named the moving root installed file.",
+      "action": "Use version-bound preservedinstalled snapshots and portable projections as the review entry points. The supplementary local checkout/log links are not portable source links."
+    },
+    {
+      "issue": "Original EVM101\u2013106 archives retain test-required immutable baselines;107 is the final published archive.",
+      "action": "Retain the already committed archived package/source bytes, including the EVM102 package-test baseline. Never rebuild or relabel old versions."
+    },
+    {
+      "issue": "Final token-case runtime duration and test-case duration differ in the report.",
+      "action": "Use exact recorded values: overall runner582825.353ms and case579384ms. No duplicate token projection needed because the owner summary already includes outcomes, timeline, scopes and originalsource hashes."
+    },
+    {
+      "issue": "Fresh ERC20 fixture uses local six-decimal stand-in token code and released helper/minter/ledger protocols in a separately initialized runtime.",
+      "action": "Do not call the local token production USDC bytecode or relabel retained runtime state as reinstalled. Fresh setup, exact deposit/mint, successful separate redemption-only continuation and original-runtime restoration are selected; production publication receipts are separate from local financial execution proof."
+    },
+    {
+      "issue": "Initial combined ERC20 browser status is failed even though saved deposit/mint stage evidence completed.",
+      "action": "Retain its failed outcome and unavailable fee quote. A separate ordinary donor withdrawal initialized the released minter cache; the successful redemption-only continuation reused the completed bridge with no second deposit. Initial pending submission evidence remains distinct from the final confirmed payout; the initial case is never converted to a pass."
+    }
+  ],
+  "linkedEvidenceNotSelected": [
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/browser/evidence/uniswap-official-contract-evidence.json",
+      "exists": true,
+      "bytes": 4058,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/browser/final-uniswap-test.log",
+      "exists": true,
+      "bytes": 390,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/arbitrum-fixture-stopped.json",
+      "exists": true,
+      "bytes": 721,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107",
+      "exists": true,
+      "bytes": null,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifacts/.last-run.json",
+      "exists": true,
+      "bytes": 45,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifacts/evm-wallet-allowance-a-con-c95c5-n-clears-the-live-allowance-chromium/effect-checkpoints.json",
+      "exists": true,
+      "bytes": 8077,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifacts/evm-wallet-allowance-a-con-c95c5-n-clears-the-live-allowance-chromium/trace.zip",
+      "exists": true,
+      "bytes": 8309450,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/executed-spec.ts",
+      "exists": true,
+      "bytes": 24719,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/offline-validator.cjs",
+      "exists": true,
+      "bytes": 24216,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/playwright-report.json",
+      "exists": true,
+      "bytes": 415340,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/replacement-approval-discovered.png",
+      "exists": true,
+      "bytes": 78415,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/wallet-revocation-review.png",
+      "exists": true,
+      "bytes": 132002,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/wallet-zero-allowance.png",
+      "exists": true,
+      "bytes": 89008,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-reconciled-final-342-106/replacement-preparation-diagnosis.json",
+      "exists": true,
+      "bytes": 23961,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-42161-evm105/results.json",
+      "exists": true,
+      "bytes": 14355,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-case-outcomes.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-42161/own-sign-no-backend-effect.json",
+      "exists": true,
+      "bytes": 31238,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/known-findings.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-evm105/results.json",
+      "exists": true,
+      "bytes": 12093,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-case-outcomes.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-financial-evm105/results.json",
+      "exists": true,
+      "bytes": 6455,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-case-outcomes.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/.last-run.json",
+      "exists": true,
+      "bytes": 96,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-initial-case-outcome.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json",
+      "exists": true,
+      "bytes": 8019,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-deposit-proof-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-lost-approval-reply.json",
+      "exists": true,
+      "bytes": 11745,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-deposit-proof-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-recovered-approval-deposit-review.png",
+      "exists": true,
+      "bytes": 155057,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "raw_original_retained_local_owner_summary_and_portable_stages_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-reset-approval-review.png",
+      "exists": true,
+      "bytes": 150673,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "raw_original_retained_local_owner_summary_and_portable_stages_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-selected-local-archives.json",
+      "exists": true,
+      "bytes": 18025,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-deposit-proof-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/error-context.md",
+      "exists": true,
+      "bytes": 16795,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/trace.zip",
+      "exists": true,
+      "bytes": 871671130,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-full-case.log",
+      "exists": true,
+      "bytes": 7120,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation-test.log",
+      "exists": true,
+      "bytes": 569,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "raw_original_retained_local_owner_summary_and_portable_stages_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/.last-run.json",
+      "exists": true,
+      "bytes": 45,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "raw_original_retained_local_owner_summary_and_portable_stages_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-native-asset-and-gas-burns.png",
+      "exists": true,
+      "bytes": 120154,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "raw_original_retained_local_owner_summary_and_portable_stages_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-native-redemption-quote-debits-and-reload.json",
+      "exists": true,
+      "bytes": 4115,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "raw_original_retained_local_owner_summary_and_portable_stages_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-prewithdrawal-gas-review.json",
+      "exists": true,
+      "bytes": 1155,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-deposit-proof-index.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-prewithdrawal-gas-review.json"
+      ],
+      "classification": "raw_original_retained_local_portable_copy_or_projection_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-prewithdrawal-gas-review.png",
+      "exists": true,
+      "bytes": 118013,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "raw_original_retained_local_owner_summary_and_portable_stages_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-redemption-continuation-input.json",
+      "exists": true,
+      "bytes": 25926,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-deposit-proof-index.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-redemption-continuation-input.json"
+      ],
+      "classification": "raw_original_retained_local_portable_copy_or_projection_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-requested-redemption-and-debits.json",
+      "exists": true,
+      "bytes": 1664,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-deposit-proof-index.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-requested-redemption-and-debits.json"
+      ],
+      "classification": "raw_original_retained_local_portable_copy_or_projection_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-selection-no-tests.log",
+      "exists": true,
+      "bytes": 166,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+      ],
+      "classification": "raw_original_retained_local_owner_summary_and_portable_stages_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-first-attempt.log",
+      "exists": true,
+      "bytes": 3920,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-first-recovery.log",
+      "exists": true,
+      "bytes": 2610,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-native-test.log",
+      "exists": true,
+      "bytes": 362,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-recovery-test.log",
+      "exists": true,
+      "bytes": 367,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root-test.log",
+      "exists": true,
+      "bytes": 391,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-large-read-evm105/complete-large-contract-read-evidence.json",
+      "exists": true,
+      "bytes": 190543,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-large-read-evm105/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-large-read-evm105/installed-candidates-at-start.json",
+      "exists": true,
+      "bytes": 9188,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-large-read-evm105/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/chain1-release-state.json",
+      "exists": true,
+      "bytes": 349,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/inputs.json",
+      "exists": true,
+      "bytes": 3402,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/installed-candidates-at-start.json",
+      "exists": true,
+      "bytes": 9188,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/report.json",
+      "exists": true,
+      "bytes": 7222,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/run.log",
+      "exists": true,
+      "bytes": 2643,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/continuation/inputs.json",
+      "exists": true,
+      "bytes": 4538,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/continuation/report.json",
+      "exists": true,
+      "bytes": 47567,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/continuation/test-results/evm-wallet-root-protocol-d-69eb3-and-descendants-cannot-sign-chromium/root-protocol-checkpoints.json",
+      "exists": true,
+      "bytes": 25041,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/report.json",
+      "exists": true,
+      "bytes": 13091,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/1-swap-wallet-review.png",
+      "exists": true,
+      "bytes": 107435,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/2-swap-wallet-review.png",
+      "exists": true,
+      "bytes": 105078,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/report.json",
+      "exists": true,
+      "bytes": 303032,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/run.log",
+      "exists": true,
+      "bytes": 716,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-evm105/qualification-summary.json",
+      "exists": true,
+      "bytes": 1234,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/chain1-release-state.json",
+      "exists": true,
+      "bytes": 444,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/inputs.json",
+      "exists": true,
+      "bytes": 2639,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/installed-candidates.json",
+      "exists": true,
+      "bytes": 9226,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/native-quote-mining-1.json",
+      "exists": true,
+      "bytes": 260,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/native-quote-mining-2.json",
+      "exists": true,
+      "bytes": 260,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/report.json",
+      "exists": true,
+      "bytes": 164189,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/token-quote-mining-1.json",
+      "exists": true,
+      "bytes": 260,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/token-saved-intent.json",
+      "exists": true,
+      "bytes": 6000,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106/native-quote-mining-1.json",
+      "exists": true,
+      "bytes": 256,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106/native-request-sequence.json",
+      "exists": true,
+      "bytes": 26404,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106/token-quote-mining-1.json",
+      "exists": true,
+      "bytes": 256,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106/token-request-sequence.json",
+      "exists": true,
+      "bytes": 25580,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/executed-spec.ts",
+      "exists": true,
+      "bytes": 38028,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/report.json",
+      "exists": true,
+      "bytes": 24083,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-app-upgrade-results.json",
+      "exists": true,
+      "bytes": 11806,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-app-upgrade/1-evm_wallet-reconciled.json",
+      "exists": true,
+      "bytes": 616832,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm105-upgrade-results.json",
+      "exists": true,
+      "bytes": 3936,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm105-upgrade/checked-upgrade-receipt.json",
+      "exists": true,
+      "bytes": 814650,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm106-upgrade-test-results/.last-run.json",
+      "exists": true,
+      "bytes": 45,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-evm106.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm106-upgrade/checked-upgrade-receipt.json",
+      "exists": true,
+      "bytes": 859489,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-evm106.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm107-upgrade-test-results/.last-run.json",
+      "exists": true,
+      "bytes": 45,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-evm107.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm107-upgrade/checked-upgrade-receipt.json",
+      "exists": true,
+      "bytes": 985346,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm107-uniswap103/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-evm107.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade-results.json",
+      "exists": true,
+      "bytes": 37718,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade/1-wallet-committed.json",
+      "exists": true,
+      "bytes": 627688,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade/2-kitchensink-reconciled.json",
+      "exists": true,
+      "bytes": 1047236,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade/wallet-snapshot-cache-refresh-evidence.json",
+      "exists": true,
+      "bytes": 928,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel-upgrade-results.json",
+      "exists": true,
+      "bytes": 3932,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel-upgrade/checked-upgrade-receipt.json",
+      "exists": true,
+      "bytes": 699598,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel342-upgrade-test-results/.last-run.json",
+      "exists": true,
+      "bytes": 45,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-kernel342.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel342-upgrade/checked-upgrade-receipt.json",
+      "exists": true,
+      "bytes": 859480,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/installed-candidates-at-start.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-kernel342.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-remaining-app-upgrade-results.json",
+      "exists": true,
+      "bytes": 9797,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-remaining-app-upgrade/1-uniswap-reconciled.json",
+      "exists": true,
+      "bytes": 723173,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-through-evm105.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-uniswap104-upgrade-test-results/.last-run.json",
+      "exists": true,
+      "bytes": 45,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-uniswap104.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-uniswap104-upgrade/checked-upgrade-receipt.json",
+      "exists": true,
+      "bytes": 999086,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/checked-upgrades-uniswap104.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/installed-candidates.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime",
+      "exists": true,
+      "bytes": null,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/first-deployment.json",
+      "exists": true,
+      "bytes": 2544,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-setup.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/protocol-configured-1788704682935.json",
+      "exists": true,
+      "bytes": 6446,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-setup.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/ready.json",
+      "exists": true,
+      "bytes": 5376,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-setup.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/extended-runtime-restored-before-erc20.json",
+      "exists": true,
+      "bytes": 1023,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-setup.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/browser-report.json",
+      "exists": true,
+      "bytes": 256911,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/uniswap104-browser-outcomes.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/memory.log",
+      "exists": true,
+      "bytes": 8315,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/release-tests.log",
+      "exists": true,
+      "bytes": 28622,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/source-tests.log",
+      "exists": true,
+      "bytes": 10375,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish-noop.log",
+      "exists": true,
+      "bytes": 1111,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/publication-verification-attempts.json"
+      ],
+      "classification": "raw_failed_attempt_log_retained_local_compact_hash_summary_selected"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/full-sized-before.log",
+      "exists": true,
+      "bytes": 19519,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/rpc-targeted-after.log",
+      "exists": true,
+      "bytes": 36384,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/rpc-routing/restored.json",
+      "exists": true,
+      "bytes": 3953,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final",
+      "exists": true,
+      "bytes": null,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm101-signed-successor.log",
+      "exists": true,
+      "bytes": 19105,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet306.log",
+      "exists": true,
+      "bytes": 3571,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet312.log",
+      "exists": true,
+      "bytes": 3912,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet315-nonempty-journals-to-wallet316.json",
+      "exists": true,
+      "bytes": 242043,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet315-to-kernel341-wallet316-journals.log",
+      "exists": true,
+      "bytes": 10119,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/bun.log",
+      "exists": true,
+      "bytes": 15701,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/memory.log",
+      "exists": true,
+      "bytes": 15629,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/motoko.log",
+      "exists": true,
+      "bytes": 221436,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/package.log",
+      "exists": true,
+      "bytes": 29061,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/prior315-browser/validation.md",
+      "exists": true,
+      "bytes": 2659,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/source-check.log",
+      "exists": true,
+      "bytes": 133,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/exact336-to341-current-incumbents.log",
+      "exists": true,
+      "bytes": 357,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/compatibility/kernel341-final-compiler-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/exact341-to336-current-incumbents.log",
+      "exists": true,
+      "bytes": 443,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/compatibility/kernel341-final-compiler-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/exact342-browser-compatibility.log",
+      "exists": true,
+      "bytes": 375,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/compatibility/kernel342-final-compiler-summary.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/compatibility/final342-archive-compiler.test.ts",
+      "exists": true,
+      "bytes": 15047,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/compatibility/final342-archive-compiler-inputs.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel341/neutron-kernel341-ca-final.log",
+      "exists": true,
+      "bytes": 199,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel341/neutron-kernel341-ca-postpackage.log",
+      "exists": true,
+      "bytes": 199,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel341/neutron-kernel341-ca-qualify.log",
+      "exists": true,
+      "bytes": 106352,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel341/neutron-kernel341-package.log",
+      "exists": true,
+      "bytes": 161725,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel341/neutron-kernel341-tests.log",
+      "exists": true,
+      "bytes": 732868,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-agent-after.log",
+      "exists": true,
+      "bytes": 1058,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-agent-before.log",
+      "exists": true,
+      "bytes": 4394,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-ca-final.log",
+      "exists": true,
+      "bytes": 199,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-ca-postcommit.log",
+      "exists": true,
+      "bytes": 199,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-ca-postpackage.log",
+      "exists": true,
+      "bytes": 199,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-ca-qualify.log",
+      "exists": true,
+      "bytes": 106346,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-package.log",
+      "exists": true,
+      "bytes": 161725,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-postcommit-source-match.log",
+      "exists": true,
+      "bytes": 302,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-routing-tests.log",
+      "exists": true,
+      "bytes": 1176,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-tests.log",
+      "exists": true,
+      "bytes": 732862,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-next/kernel342/neutron-kernel342-typecheck.log",
+      "exists": true,
+      "bytes": 0,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-sandbox-2026-09-06/103-owner-routing-baseline/results.json",
+      "exists": true,
+      "bytes": 2104,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/browser-ui/summary.json",
+      "exists": true,
+      "bytes": 6646,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-102/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-102/evm-wallet-102-release-tests.log",
+      "exists": true,
+      "bytes": 163696,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-102/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-103/evm-wallet-103-release-tests.log",
+      "exists": true,
+      "bytes": 163961,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/evm_wallet103.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-103/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-103/source-workspace-check.json",
+      "exists": true,
+      "bytes": 73127,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/evm_wallet103.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-103/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/evm-wallet-105-release-tests.log",
+      "exists": true,
+      "bytes": 182377,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/source-workspace-check.json",
+      "exists": true,
+      "bytes": 73489,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/evm-wallet-106-release-tests.log",
+      "exists": true,
+      "bytes": 182973,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/app-typescript.log",
+      "exists": true,
+      "bytes": 0,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/check-candidate.ts",
+      "exists": true,
+      "bytes": 15483,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/release-tests.log",
+      "exists": true,
+      "bytes": 212839,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/scripts-typescript.log",
+      "exists": true,
+      "bytes": 0,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/source-check.log",
+      "exists": true,
+      "bytes": 2268,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/artifact-index.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/sandbox-103/baseline-102/results.json",
+      "exists": true,
+      "bytes": 2674,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/evm_wallet103.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-103/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/source-workspace-check.json",
+      "exists": true,
+      "bytes": 72069,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-102/validation.json"
+      ],
+      "classification": "retained_local_dependency"
+    },
+    {
+      "path": "/srv/shared/code/sr9/compiler/rts/motoko-rts/src/text.rs",
+      "exists": true,
+      "bytes": 14430,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json"
+      ],
+      "classification": "outside_repository_local_only"
+    },
+    {
+      "path": "/srv/shared/code/sr9/compiler/src/codegen/compile_classical.ml",
+      "exists": true,
+      "bytes": 513221,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json"
+      ],
+      "classification": "outside_repository_local_only"
+    },
+    {
+      "path": "/tmp/neutron-evm-wallet-history-105-baseline/src",
+      "exists": true,
+      "bytes": null,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/browser-history/105-baseline/results.json"
+      ],
+      "classification": "outside_repository_local_only"
+    },
+    {
+      "path": "/tmp/neutron-uniswap-networks-final-deps-825nf8uj/package-lock.json",
+      "exists": true,
+      "bytes": 270773,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/preflight.json"
+      ],
+      "classification": "outside_repository_local_only"
+    },
+    {
+      "path": "/tmp/neutron-wallet-316-bun.log",
+      "exists": true,
+      "bytes": 15701,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/validation.json"
+      ],
+      "classification": "outside_repository_local_only"
+    },
+    {
+      "path": "/tmp/neutron-wallet-316-memory.log",
+      "exists": true,
+      "bytes": 15629,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/validation.json"
+      ],
+      "classification": "outside_repository_local_only"
+    },
+    {
+      "path": "/tmp/neutron-wallet-316-motoko.log",
+      "exists": true,
+      "bytes": 221436,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/validation.json"
+      ],
+      "classification": "outside_repository_local_only"
+    },
+    {
+      "path": "/tmp/neutron-wallet-316-package.log",
+      "exists": true,
+      "bytes": 29061,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/validation.json"
+      ],
+      "classification": "outside_repository_local_only"
+    },
+    {
+      "path": "/tmp/neutron-wallet-316-source-check.log",
+      "exists": true,
+      "bytes": 133,
+      "referencedBy": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/validation.json"
+      ],
+      "classification": "outside_repository_local_only"
+    }
+  ],
+  "exclusions": [
+    {
+      "paths": [
+        "**/trace.zip",
+        "**/trace/**",
+        "**/*-traces/**",
+        "**/artifacts/**",
+        "**/test-results/**",
+        "**/error-context.md",
+        "**/.last-run.json"
+      ],
+      "reason": "Raw browser traces, repeated attachments, environment/executable-cache configuration and screenshots are bulky/redundant; selected portable projections preserve outcomes and source hashes. Existing raw files remain local."
+    },
+    {
+      "paths": [
+        "completion/checked-browser-*/before.json",
+        "completion/checked-browser-*/*-committed.json",
+        "completion/checked-browser-*/*-observed-after.json",
+        "completion/checked-browser-*/*-reconciled.json",
+        "completion/checked-browser-*/checked-upgrade-receipt.json"
+      ],
+      "reason": "Large raw checked-update state/Candid receipts; selected portable projections retain recorded assertions, versions, query digests/counts and source SHA/size without copying full state."
+    },
+    {
+      "paths": [
+        "completion/upgrades/final/wallet315-nonempty-journals-to-wallet316.json"
+      ],
+      "reason": "242043-byte raw synthetic journal receipt stays local; exact178-assertion/version outcome and raw hash are already in selected739-assertion qualification summary."
+    },
+    {
+      "paths": [
+        "completion/browser-crypto-*/results.json",
+        "completion/browser-uniswap-*/report.json",
+        "completion/browser-large-read-evm105/report.json",
+        "completion/browser-large-read-evm105/complete-large-contract-read-evidence.json"
+      ],
+      "reason": "Raw Playwright reports and repeated full contract code omitted; included compact case summaries, exact JSON transaction/signature attachments and raw hashes retain reviewable proof."
+    },
+    {
+      "paths": [
+        "completion/history-size-diagnosis/captured-history.json",
+        "completion/history-size-diagnosis/original-results.json",
+        "candidate-*/neutron.json",
+        "candidate-*/neutron.lock.json",
+        "candidate-*/source-workspace-check.json except explicitly selected candidate106/107"
+      ],
+      "reason": "Duplicate captured fixtures, manifests/locks already inside immutable archives, and repeated source inventories. Include canonical test fixture, final source checks and necessary105\u2192106 comparisons instead."
+    },
+    {
+      "paths": [
+        "completion/runtime-published/*.session.json",
+        "completion/rpc-routing/**",
+        "**/PocketIC state/**",
+        "**/browser-profile/**",
+        "**/credentials/**",
+        "**/node_modules/**",
+        "**/.mops/**",
+        "**/.neutron/vendor/**",
+        "/nix/store/**"
+      ],
+      "reason": "Local runtime/session/state/profile/credential/executable/dependency caches are not PR evidence. Final runtime restoration is represented by its concise outcome, not copied runtime state."
+    },
+    {
+      "paths": [
+        "completion/pr-body-draft.md",
+        "completion/validation-draft.md",
+        "completion/pr-state.json",
+        "completion/candidate-set-status.json",
+        "completion/intermediate-kernel340/**",
+        "completion/upgrades/intermediate-kernel340/**"
+      ],
+      "reason": "Working drafts, branch plumbing and superseded intermediate run duplication; preserve locally and use final current indexes plus immutable artifact pins."
+    },
+    {
+      "paths": [
+        "completion/browser-allowance-final-342-107/playwright-report.json",
+        "completion/packages/uniswap104-validation/browser-report.json",
+        "completion/checked-browser-evm107-upgrade/checked-upgrade-receipt.json",
+        "completion/checked-browser-uniswap104-upgrade/checked-upgrade-receipt.json"
+      ],
+      "reason": "Full retained records, browser payload/config and raw checked state remain local. New concise exact effects,22-check projection and checked-update projections cover their reviewable recorded outcomes."
+    },
+    {
+      "paths": [
+        "completion/browser-uniswap-token-replacement-final107-uni104/report.json",
+        "completion/browser-uniswap-token-replacement-final107-uni104/executed-spec.ts",
+        "completion/browser-uniswap-token-replacement-final107-uni104/test-results/**"
+      ],
+      "reason": "Retained local original report, captured test-source copy and raw browser artifacts. Selected summary records exact source hash/outcome; concise exact effects, checkpoints, installed inputs and original-expiry status proof are included. No trace expansion or duplicate projection."
+    },
+    {
+      "paths": [
+        "completion/erc20-runtime/ready.json",
+        "completion/erc20-runtime/protocol-configured-1788704682935.json",
+        "completion/erc20-runtime/serve-owner.json",
+        "completion/erc20-runtime/retained-before.json",
+        "completion/browser-ic-erc20-final/**/ckusdc-selected-local-archives.json",
+        "completion/browser-ic-erc20-final/**/attachments/**",
+        "completion/browser-ic-erc20-final/**/ckusdc-redemption-continuation-input.json"
+      ],
+      "reason": "Process/control/session/state supervision and duplicate browser attachments staylocal. Selectedsetup projection and depositindex retain exact package/config/source identities; two selected stage artifacts are unchanged portable copies."
+    },
+    {
+      "paths": [
+        "completion/pr-body-final.md"
+      ],
+      "reason": "Private PR submission body; root will replace documentation links with permanent GitHub blob URLs after the evidence commit. The PR description itself is not duplicated as committed release evidence."
+    }
+  ],
+  "copyPolicy": "Stage only the explicit selected paths. This private allowlist can remain private; it is an evidence index, not a replacement for the recorded qualifications. Do not add whole evidence directories, raw logs/traces/state, or the private PR body.",
+  "committedEvidenceBaseline": "ab0e5402c7adfdec88637f28b9d2c459918b215f",
+  "reviewEntryPoint": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/review-342-316-315-107-104.md",
+  "implementationCommit": "b58a33dd95ae25b35a97f0e73b9ac9243b8a4737",
+  "implementationCommitEvidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/implementation-commit-342-107-104.json",
+  "requirementStatusAtIndexTime": {
+    "source": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/requirements.json",
+    "counts": {
+      "complete": 64
+    },
+    "uniswapDocumentedSupportedRouteClausesComplete": 10,
+    "uniswapMapping": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+    "pendingGates": [],
+    "status": "complete"
+  },
+  "publicationAtIndexTime": {
+    "batchId": "52",
+    "postflightBatchId": null,
+    "packages": 18,
+    "changed": [
+      "kernel",
+      "wallet",
+      "kitchensink",
+      "evm_wallet",
+      "uniswap"
+    ],
+    "receipt": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish.json",
+    "postflight": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish-noop.json",
+    "verification": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/receipt-verification.json",
+    "verifier": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/verify-receipts.ts",
+    "attempts": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/publication-verification-attempts.json",
+    "sourceCommitEvidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/implementation-commit-342-107-104.json",
+    "noNewExecutionByEvidenceCollector": true
+  },
+  "portableConsistencyCheck": {
+    "performedAt": "2026-09-06T15:30:55.095217+00:00",
+    "scope": "Read-only small-source hash/size and local guide-link consistency; no runtime, test, verifier or archive re-execution. Full checked receipts, archives, traces and large browser report excluded.",
+    "smallSourceReferencesChecked": 59,
+    "sourceDigestSizeMismatches": [],
+    "missingSourceReferences": [],
+    "note": "Historic ERC20 initial-case projection retains its capture-time continuation-pending statement; current owner qualification and guide preserve later success separately.",
+    "finalGuideLocalLinksChecked": 48,
+    "finalGuideMissingLinks": [],
+    "finalGuideCheckedAt": "2026-09-06T15:34:11.109600+00:00",
+    "cryptoAttachmentsMatched": 3,
+    "erc20ContinuationTopLevelFieldsMatched": 7
+  },
+  "finalization": {
+    "status": "ready_for_explicit_staging",
+    "ownerFinalReadyReceived": true,
+    "allPrior146SelectionsPreserved": true,
+    "expectedEvidenceFilesRemaining": 0,
+    "prBodyRemainsPrivate": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/pr-body-final.md",
+    "noGitMutationOrRuntimeExecutionByCollector": true
+  }
+}

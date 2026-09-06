@@ -1,0 +1,106 @@
+{
+  "status": "complete",
+  "batchId": "52",
+  "postflightBatchId": null,
+  "sourceCanister": "233tv-xiaaa-aaaay-aacta-cai",
+  "changedPackages": [
+    {
+      "file": "/srv/shared/code/neutron/apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+      "protocol": "neutron-repo-v1",
+      "id": "evm_wallet",
+      "version": 107,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91",
+      "size": 391816,
+      "packagePath": "/repo/v1/packages/ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91.neutron",
+      "releasePath": "/repo/v1/releases/evm_wallet.json",
+      "source": {
+        "file": "/srv/shared/code/neutron/apps/evm_wallet/.neutron/sources/533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574.source.v1.msgpack.gz",
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574.source.v1.msgpack.gz",
+        "sha256": "533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574",
+        "size": 524845
+      }
+    },
+    {
+      "file": "/srv/shared/code/neutron/apps/kernel/kernel.v0.3.42.neutron",
+      "protocol": "neutron-repo-v1",
+      "id": "kernel",
+      "version": 342,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4",
+      "size": 2448936,
+      "packagePath": "/repo/v1/packages/ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4.neutron",
+      "releasePath": "/repo/v1/releases/kernel.json",
+      "source": {
+        "file": "/srv/shared/code/neutron/apps/kernel/.neutron/sources/59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692.source.v1.msgpack.gz",
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692.source.v1.msgpack.gz",
+        "sha256": "59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692",
+        "size": 3198894
+      }
+    },
+    {
+      "file": "/srv/shared/code/neutron/apps/kitchensink/kitchensink.v0.3.15.neutron",
+      "protocol": "neutron-repo-v1",
+      "id": "kitchensink",
+      "version": 315,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6",
+      "size": 472282,
+      "packagePath": "/repo/v1/packages/50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6.neutron",
+      "releasePath": "/repo/v1/releases/kitchensink.json",
+      "source": {
+        "file": "/srv/shared/code/neutron/apps/kitchensink/.neutron/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+        "sha256": "9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe",
+        "size": 462990
+      }
+    },
+    {
+      "file": "/srv/shared/code/neutron/apps/uniswap/uniswap.v0.1.4.neutron",
+      "protocol": "neutron-repo-v1",
+      "id": "uniswap",
+      "version": 104,
+      "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685",
+      "size": 288989,
+      "packagePath": "/repo/v1/packages/63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685.neutron",
+      "releasePath": "/repo/v1/releases/uniswap.json",
+      "source": {
+        "file": "/srv/shared/code/neutron/apps/uniswap/.neutron/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz",
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz",
+        "sha256": "3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd",
+        "size": 462898
+      }
+    },
+    {
+      "file": "/srv/shared/code/neutron/apps/wallet/wallet.v0.3.16.neutron",
+      "protocol": "neutron-repo-v1",
+      "id": "wallet",
+      "version": 316,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76",
+      "size": 768823,
+      "packagePath": "/repo/v1/packages/fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76.neutron",
+      "releasePath": "/repo/v1/releases/wallet.json",
+      "source": {
+        "file": "/srv/shared/code/neutron/apps/wallet/.neutron/sources/e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5.source.v1.msgpack.gz",
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5.source.v1.msgpack.gz",
+        "sha256": "e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5",
+        "size": 624669
+      }
+    }
+  ],
+  "catalogPackages": 18,
+  "requirementsCompleted": 64,
+  "implementationCommit": "b58a33dd95ae25b35a97f0e73b9ac9243b8a4737",
+  "offeredSourceFilesMatched": 1511,
+  "validation": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/validation.md",
+  "runtimeSummary": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/runtime-summary.json",
+  "runtimeRestoration": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/final-runtime-restoration.json",
+  "receiptVerification": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/receipt-verification.json",
+  "noProductionFinancialCalls": true,
+  "installedIntoProductionNeutrons": false,
+  "dispenserChanged": false,
+  "knownUnchangedIssue": "Manual package chooser can classify an existing app before the installed registry is ready; observed attempt stopped before approval and correct Update followed registry readiness. See known-findings.json.",
+  "recordedAt": "2026-09-06T15:29:53.553646+00:00"
+}

@@ -1,0 +1,43 @@
+{
+  "status": "deposit_and_mint_passed_redemption_not_submitted",
+  "classification": "fresh_official_minter_gas_estimate_uninitialized",
+  "error": "ERROR: last transaction price estimate is not available",
+  "ui": "Gas quote unavailable; Withdraw disabled",
+  "bridgeId": "dd60750fcf816c6a8159f6e25ea81e2c",
+  "depositHash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+  "acceptedEventIndex": "23",
+  "mintEventIndex": "24",
+  "mintLedgerBlock": "0",
+  "mintAtoms": "20000000",
+  "redemptionAtoms": "5000000",
+  "redemptionSubmitted": false,
+  "productSourceChangeRequired": false,
+  "continuation": "same completed deposit, existing contact, redemption only after supported fixture fee readiness",
+  "evidence": [
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-full-case.log",
+      "size": 7120,
+      "sha256": "f0cdbe5922b4c45b7138a7e1f15b51d52a84eb20e7163d4881ff205a31945b08"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/.last-run.json",
+      "size": 96,
+      "sha256": "073afb1434f2968cc0932327f164a5c699d4d337fcdcf47a2cfdd4915afe2f93"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/error-context.md",
+      "size": 16795,
+      "sha256": "fce62c415139aa5011274dc224fd4ea15613b981d297630588c9aca0e1750711"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/trace.zip",
+      "size": 871671130,
+      "sha256": "541dabeccdd854b4debe205f95d5322133197fd9866fdfb8374b3e7b690611ee"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json",
+      "size": 8019,
+      "sha256": "1fe06c8df45303fa56669a03846cb60aefdc4ccf3ccda8f292d5f581991880cc"
+    }
+  ]
+}

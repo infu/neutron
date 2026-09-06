@@ -233,3 +233,11 @@ command. Publish the compatible set atomically with its offered sources, then
 require the exact-byte receipt-v2 no-op, following
 [package updates](./package-updates.md). Publishing does not install the updates
 or change the Dispenser starter.
+
+
+The completed release is Kernel 342, IC Wallet 316, Kitchen Sink 315, EVM Wallet 107
+and Uniswap 104. [Release qualification](../.neutron/release-receipts/evm-wallet-completion-2026-09-06/validation.md)
+records the state-preserving upgrades, version-bound local protocol runs and
+batch 52 publication with its exact-byte receipt-v2 no-op. All wallet transaction
+tests used local Anvil/PocketIC balances, with a disclosed ERC20 stand-in;
+no production-wallet funds were used. The original local runtime was restored.

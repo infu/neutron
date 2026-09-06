@@ -1,0 +1,100 @@
+{
+  "schema": "neutron-evm-wallet-candidate-validation-v1",
+  "observedAt": "2026-09-06T13:40:27.372921+00:00",
+  "version": 107,
+  "status": "passed",
+  "releaseCommand": "npm --workspace neutron-evm-wallet test",
+  "archive": {
+    "path": "apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+    "bytes": 391816,
+    "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+  },
+  "offeredSource": {
+    "path": "apps/evm_wallet/.neutron/sources/533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574.source.v1.msgpack.gz",
+    "bytes": 524845,
+    "sha256": "533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574"
+  },
+  "tests": {
+    "bun": {
+      "passed": 60,
+      "failed": 0,
+      "assertions": 592,
+      "durationSeconds": 103.71
+    },
+    "memory": "clean initialization and restoration passed",
+    "sandboxBrowser": {
+      "passed": 20,
+      "failed": 0
+    },
+    "typescript": [
+      "tsconfig.app.json passed",
+      "tsconfig.scripts.json passed"
+    ]
+  },
+  "postSuiteSource": {
+    "files": 210,
+    "mismatches": 0
+  },
+  "compatibility": {
+    "baseline": 106,
+    "memoryRootsUnchanged": [
+      "evm_wallet:v1",
+      "evm_evidence:v1"
+    ],
+    "lockLineageUnchanged": true,
+    "methodSchemasUnchanged": true,
+    "frontendAssetsUnchanged": 6,
+    "unchangedCompiledModules": 78,
+    "changedBackendSources": [
+      "backend/main.mo",
+      "backend/fees/Estimate.mo"
+    ],
+    "sourceChanges": [
+      {
+        "path": "apps/evm_wallet/backend/fees/Estimate.mo",
+        "change": "changed"
+      },
+      {
+        "path": "apps/evm_wallet/backend/main.mo",
+        "change": "changed"
+      },
+      {
+        "path": "apps/evm_wallet/neutron.json",
+        "change": "changed"
+      },
+      {
+        "path": "apps/evm_wallet/test/backend.test.ts",
+        "change": "changed"
+      },
+      {
+        "path": "apps/evm_wallet/test/estimate_block_actor_test.mo",
+        "change": "added"
+      },
+      {
+        "path": "apps/evm_wallet/test/fee_estimate_test.mo",
+        "change": "changed"
+      },
+      {
+        "path": "apps/evm_wallet/test/package.test.ts",
+        "change": "changed"
+      }
+    ]
+  },
+  "scope": "Candidate packaging, full release qualification and actual isolated local runtime replacement regression passed. No production publication.",
+  "runtimeQualification": {
+    "status": "passed",
+    "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107",
+    "deploymentId": "4646e9e9048f3cbc6034fa079ff263a3",
+    "kernelVersion": 342,
+    "evmWalletVersion": 107,
+    "installedProofSha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d",
+    "scope": "Checked state-preserving106\u2192107 upgrade followed by actual local42161 approval, pending same-nonce speed-up, canonical replacement, discovery after reload, reviewed revocation and zero allowance. Unforked fixture does not qualify Nitro sequencing, posting costs or L1 finality.",
+    "finalLatestNonce": "12",
+    "finalPendingNonce": "12",
+    "finalAllowance": "0",
+    "miningModeRestored": {
+      "intervalSeconds": 1,
+      "automine": false
+    }
+  }
+}

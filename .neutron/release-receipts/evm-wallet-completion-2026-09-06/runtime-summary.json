@@ -1,0 +1,570 @@
+{
+  "schema": "neutron-evm-runtime-qualification-summary-v1",
+  "status": "passed",
+  "updatedAt": "2026-09-06T15:20:06.639317+00:00",
+  "installed": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+    "bytes": 9259,
+    "sha256": "11aab5b4c27412819477feeb2fd3ee70a3d8bca1865d4d7c588f2fadb48b4b1a"
+  },
+  "qualification": [
+    {
+      "case": "Checked updates through final Kernel342/EVM107/Uniswap104",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade/2-kitchensink-reconciled.json",
+          "bytes": 1047236,
+          "sha256": "f6f715e798c47323c3e8e6f87f343be347f0ed1594088b181b1ba4a7cc80cd69"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel-upgrade/checked-upgrade-receipt.json",
+          "bytes": 699598,
+          "sha256": "31ea9dd9ae4d8f71bfc238de992e11c4ec5d173966b4209b6d7beeba173fe25d"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm105-upgrade/checked-upgrade-receipt.json",
+          "bytes": 814650,
+          "sha256": "32e2fd403fb39803a3f02b7ae033a070832a13ec6035e2ac461891e7443c2322"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm106-upgrade/checked-upgrade-receipt.json",
+          "bytes": 859489,
+          "sha256": "a2348c23ecf82cecdc36baadc57778f647d5ec7c7418e4e78244bb759cd27433"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel342-upgrade/checked-upgrade-receipt.json",
+          "bytes": 859480,
+          "sha256": "38616fb7603fb9b0c2e2b98699732ede654107b72195fea895d7f151ec44266d"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm107-upgrade/checked-upgrade-receipt.json",
+          "bytes": 985346,
+          "sha256": "7b499c7f9703434a3977f40829ad5ac6d85a4f810a9ea606c32638598ee8201d"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-uniswap104-upgrade/checked-upgrade-receipt.json",
+          "bytes": 999086,
+          "sha256": "e0a1bb5199edf06390a2b540e82dff58818a8ff83f4899d075477a7f14bb8760"
+        }
+      ],
+      "scope": "All original managed roots/declarations/UIDs and semantic query state preserved. Expected scheduled-counter deltas and strictly enumerated monotonic Wallet refresh timestamps are recorded."
+    },
+    {
+      "case": "Actual full factory/pool read regression",
+      "status": "passed",
+      "installedEvm": 105,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-large-read-evm105/qualification-summary.json",
+          "bytes": 1078,
+          "sha256": "104cffd4ad667da36c7ee5b8ba075bf24735afd32a86d2af2fbf49e758b2fee7"
+        }
+      ],
+      "scope": "Exact formerly trapped42161 getPool plus full24535-byte factory/22142-byte pool code, slot0/liquidity and repeated reads matched independent Anvil; nonce unchanged.",
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+        "bytes": 9188,
+        "sha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287"
+      }
+    },
+    {
+      "case": "Six personal/EIP712/permit signatures across1/42161",
+      "status": "passed",
+      "installedEvm": 105,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-evm105/results.json",
+          "bytes": 12093,
+          "sha256": "c46d663a9f6bf12ecaf53e7606254db63ae8acdaae654c77cd2bb5fdfd098f05"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-42161-evm105/results.json",
+          "bytes": 14355,
+          "sha256": "e0f09f84c3cf781c5f433852699fee264535766573c33c7739f085c303773b53"
+        }
+      ],
+      "scope": "The signature case passed in each report. Independent Ethers/Viem recovery, exact full-width values and unchanged nonce/balance. Initial chain1 report also retains a separate financial selector failure.",
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+        "bytes": 9188,
+        "sha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287"
+      },
+      "portableEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-case-outcomes.json",
+        "bytes": 14398,
+        "sha256": "902e43e7fbdbf7b43889f2b7d23990c7a60b948c44a694cb1877960118d2cedc"
+      }
+    },
+    {
+      "case": "Native and own contract execution42161",
+      "status": "passed",
+      "installedEvm": 105,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-42161-evm105/results.json",
+          "bytes": 14355,
+          "sha256": "e0f09f84c3cf781c5f433852699fee264535766573c33c7739f085c303773b53"
+        }
+      ],
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+        "bytes": 9188,
+        "sha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287"
+      },
+      "portableEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-case-outcomes.json",
+        "bytes": 14398,
+        "sha256": "902e43e7fbdbf7b43889f2b7d23990c7a60b948c44a694cb1877960118d2cedc"
+      }
+    },
+    {
+      "case": "Native and own contract execution1",
+      "status": "passed_with_same_hash_recovery_after_fixture_interruption",
+      "installedEvm": 105,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-financial-evm105/results.json",
+          "bytes": 6455,
+          "sha256": "cf2437dfecb32c270ec26c613f02ec94077047216a09907653b29a2b8889552e"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-financial-evm105/same-hash-reconciliation.json",
+          "bytes": 2473,
+          "sha256": "679d1b1b973d43f7b91c3138fb258f68f395a5d9e7d5c4786ed84880411323f4"
+        }
+      ],
+      "scope": "Same existing contract hash is canonically included with exact raw/calldata/storage/sequential nonce and gas debits. Immediate receipt-null interrupted the final UI read/status; no repeat signature or contract call. Final actual342/106 history recovery confirmed the same op22/hash with no new signature or nonce; this is an explicit continuation, not an uninterrupted original scenario pass.",
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+        "bytes": 9188,
+        "sha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287"
+      },
+      "portableEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-case-outcomes.json",
+        "bytes": 14398,
+        "sha256": "902e43e7fbdbf7b43889f2b7d23990c7a60b948c44a694cb1877960118d2cedc"
+      },
+      "recoveryEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json",
+        "bytes": 4094,
+        "sha256": "f4335bab9bbe93144e20b8070dad857f7ce562e5dbdf6410d556c26f0a4cdb3f"
+      }
+    },
+    {
+      "case": "Uniswap native/token42161 external flows",
+      "status": "passed",
+      "installedEvm": 103,
+      "installedUniswap": 103,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/report.json",
+          "bytes": 303032,
+          "sha256": "50e72c9faeffc7a7feb5d00b2cf1c70b7a2d4632ea3b90e88987cb77256d6d6a"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/chain42161-release-state.json",
+          "bytes": 321,
+          "sha256": "bb92fd567505a996851e135caff72c99a7c697807ca1bbfcd3de6473025db57b"
+        }
+      ],
+      "scope": "Two actual swaps, exact approval, distinct wallet decisions, decline and consumer-message reply loss/reload. Optional large-read failure recorded separately and repaired/tested under105.",
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json",
+        "bytes": 9238,
+        "sha256": "c21870673b78124d41e8c5b501d8711910b261a0e8dee4d663530041f04f0c34"
+      }
+    },
+    {
+      "case": "Direct root IC bridge and human lost-reply bridge/native redemption",
+      "status": "passed",
+      "installedEvm": 103,
+      "installedWallet": 316,
+      "scope": "IC owner verified exact official helper/minter/ledger mint and finalized native payout using same original interrupted deposit; no second deposit.",
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+          "bytes": 3017,
+          "sha256": "68069d70f6d35a6fece96833391b4f40eeb591ec284b2d222f496b4430871fa8"
+        }
+      ],
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json",
+        "bytes": 9238,
+        "sha256": "c21870673b78124d41e8c5b501d8711910b261a0e8dee4d663530041f04f0c34"
+      }
+    },
+    {
+      "case": "Fresh minter-owned ckERC20 full protocol",
+      "status": "passed_with_same_deposit_redemption_continuation",
+      "installedKernel": 342,
+      "installedEvm": 107,
+      "installedWallet": 316,
+      "installedUniswap": 104,
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/first-deployment.json",
+        "bytes": 2544,
+        "sha256": "efbd9da9b28102c21325e5f212d956844f3e675c0055c2419d518039866e7e0a"
+      },
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+          "bytes": 14787,
+          "sha256": "68132eaa5c3b75f2e6eff645a2f1f52dcfe8eaab2491c1e94dee961bf098386d"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/ready.json",
+          "bytes": 5376,
+          "sha256": "1e2910dbc082b6b7352453740e851fc3efdd69dd3cc7c7e6bb7812d9addb6b57"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/protocol-configured-1788704682935.json",
+          "bytes": 6446,
+          "sha256": "876e682ac297bcb36602185ae17ed42fd041bf5a1d1bf1c66eaac70e82c24636"
+        }
+      ],
+      "scope": "Exact final first-install: existing allowance reset, exact20-USDC approval, actual approval reply loss, reload without duplicate approval, official helper deposit/minter events/exact20-ckUSDC ledger mint passed. Cold minter gas quote correctly blocked withdrawal; separate normal donor prerequisite filled fees. Only the existing5-USDC redemption continued, passing exact asset/gas burns, finalized payout, recipient balance and durable reload settlement. Initial interrupted run is retained, not relabeled as an uninterrupted pass."
+    },
+    {
+      "case": "Adaptive history pagination/reload and original op22 recovery",
+      "status": "passed",
+      "installedKernel": 342,
+      "installedEvm": 106,
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/installed-final-candidates.json",
+        "bytes": 9226,
+        "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723"
+      },
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json",
+          "bytes": 4094,
+          "sha256": "f4335bab9bbe93144e20b8070dad857f7ce562e5dbdf6410d556c26f0a4cdb3f"
+        }
+      ],
+      "scope": "All actual history IDs matched backend through Load more and reload. Existing op22/request/hash recovered unknown to confirmed; exactly one status call, no new financial request/signature/funding/mining; latest and pending nonce stayed11."
+    },
+    {
+      "case": "Direct root Uniswap and accepted provider broadcast-response loss",
+      "status": "passed_with_same_id_reload_continuation",
+      "installedKernel": 342,
+      "installedEvm": 106,
+      "installedUniswap": 103,
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/installed-final-candidates.json",
+        "bytes": 9226,
+        "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723"
+      },
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json",
+          "bytes": 2786,
+          "sha256": "3ced55de9396209681dad05f42edf50c7bfd04a030d2317ed6445b40ce09c794"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/root-uniswap-real-chain-protocol.json",
+          "bytes": 32158,
+          "sha256": "51fbc4856db052cea44aabd05973877419d6f33c178208fbb76e8f8761c633e8"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/chain1-release-state.json",
+          "bytes": 2800,
+          "sha256": "3bbb37e48ca11b2fc3e3b238a0a6d5bd2ecea14d8a8db5c7b33160061ec8b4b3"
+        }
+      ],
+      "scope": "Actual Kernel-attested direct-root prepare\u2192Wallet approval\u2192independent Uni record, human/descendant denial and misbinding rejection. Same durable IDs after a test-only restored-tile helper interruption. Actual swap accepted then3 provider responses suppressed for1 raw; same saved operation/hash/raw confirmed afterrelease with0 additional broadcasts. Nonce11\u219213, no pending transaction. This is distinct from consumer MessagePort loss."
+    },
+    {
+      "case": "Actual approval replacement, reload discovery and zero revocation",
+      "status": "passed",
+      "installedKernel": 342,
+      "installedEvm": 107,
+      "installedUniswap": 103,
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm107-uniswap103/installed-final-candidates.json",
+        "bytes": 9267,
+        "sha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d"
+      },
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/playwright-report.json",
+          "bytes": 415340,
+          "sha256": "ea57e69c4005597bd218312a59a68724e3a1fb4e0d9de66580de25e15073bb3d"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/lane-postflight.json",
+          "bytes": 823,
+          "sha256": "ed04156e86c89789efdc88c86cdb0e695f2c0f0bd216159b838c6dbd58b71b56"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/preflight.json",
+          "bytes": 4051,
+          "sha256": "bab7d34454ee70ffb726467059e1108efdb1d8d34816f341217dada152e5ce2e"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md",
+          "bytes": 6776,
+          "sha256": "980dfd5e0d0c133e1507bb07af0f1a9e8117d18c9a63f9391ba27372f57f5e5b"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifact-index.json",
+          "bytes": 14024,
+          "sha256": "da75597f727672006d9677f18f46fa019d590f71084e7b5bd54565429f137992"
+        }
+      ],
+      "scope": "Actual EVM107 approval replacement consumed original nonce10 once; original receipt remained absent. After reload, a separately reviewed zero approval at nonce11 cleared the live allowance at observed block41014. Raw signatures, fees, hashes, token balance and restored mining were independently checked. Consumer replacement adoption passed separately in the Uniswap104 case."
+    },
+    {
+      "case": "Final Uniswap token swap with actual approval replacement adoption",
+      "status": "passed",
+      "installedKernel": 342,
+      "installedEvm": 107,
+      "installedUniswap": 104,
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+        "bytes": 9259,
+        "sha256": "11aab5b4c27412819477feeb2fd3ee70a3d8bca1865d4d7c588f2fadb48b4b1a"
+      },
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json",
+          "bytes": 19112,
+          "sha256": "de0f262c965e2205abc6819968726b340d44ab75be1732c4bcd31ab455f33d02"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/report.json",
+          "bytes": 24083,
+          "sha256": "ffdd969675db1bb8c29a410ee9da82d0a6456a7cc0c3f427fbcaa70bac3c8a84"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/approval-replacement-swap-evidence.json",
+          "bytes": 15424,
+          "sha256": "0e0714eeeb2c8e2e4a133933e533c49fcea73c22986a16192fd642a80c8bdbf0"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/chain1-release-state.json",
+          "bytes": 373,
+          "sha256": "bed823900120537afdf204244f58e147c8b53e417d7219a8a0417900a00a3c22"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/original-expired-wallet-status-proof.json",
+          "bytes": 13787,
+          "sha256": "37cabcb0c45050d966941fddfb39b438cdfb6a679a6f2e85a54c86a0ef514bb6"
+        }
+      ],
+      "scope": "Original queued token intent restored through cursor pagination and proved expired with no Wallet operation/nonce. One explicitly separate fresh quote produced numeric0% impact; exact approval replaced at nonce14, canonical replacement adopted through original request linkage, separate swap nonce15 met minimum recipient output. Reload retained terminal result without repeating; finalallowance0, latest/pending16, exact miningrestoration."
+    },
+    {
+      "case": "Ethereum native-to-token swap, decline and saved-request recovery",
+      "status": "passed",
+      "installedKernel": 342,
+      "installedEvm": 106,
+      "installedUniswap": 103,
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/installed-final-candidates.json",
+        "bytes": 9226,
+        "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723"
+      },
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json",
+          "bytes": 12911,
+          "sha256": "4a39eed7a2ecbe84a4b25c7191dc038ef89251e632040e7d4b09ecdb3ca9743b"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/native-network-swap-evidence.json",
+          "bytes": 6276,
+          "sha256": "95ac871c395d4103b947911b402e056b8f6562981ac28b631c28a6dd24f375be"
+        }
+      ],
+      "scope": "Native case passed7.0min: numeric price impact, restored quote-only mining, decline/no effect, external Wallet swap, consumer reply loss and same saved hash recovery. The report also preserves the separate token history overflow; that saved record and replacement/adoption flow are qualified under Uniswap104 above."
+    }
+  ],
+  "pendingFixes": [],
+  "fixtureScope": [
+    "All financial effects occur on dedicated unforked local Anvil nodes and isolated full-protocol PocketIC canisters; no production transactions.",
+    "Chain42161 proves EVM network/signature/calldata execution; it does not prove Nitro posting fees, sequencing or parent-chain finality.",
+    "ckERC20 uses the pinned official helper and released minter/ledger protocols with disclosed local six-decimal ERC20 stand-ins; production Circle/Tether contract execution is not claimed.",
+    "Consumer MessagePort reply loss and actual provider broadcast-response loss are independently qualified scenarios.",
+    "Original user PocketIC runtime and Ethereum node were retained throughout. Both isolated PocketIC fixtures, temporary RPC proxy and owned42161 node are now stopped with state preserved; original gateway/root identity/healthy status/auto-progress restored."
+  ],
+  "restoration": {
+    "status": "passed",
+    "retainedPid": 1276378,
+    "currentIsolatedPid": null,
+    "originalState": ".neutron/pocketic",
+    "isolatedState": ".neutron/evm-wallet-pocketic",
+    "extendedRpcRestored": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/rpc-routing/restored.json",
+      "bytes": 3953,
+      "sha256": "297fb578dcc3db28608b5d8c1495cc5f6b3d6c858da03f356efac21fa7054d7a"
+    },
+    "extendedRuntimeRestored": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/extended-runtime-restored-before-erc20.json",
+      "bytes": 1023,
+      "sha256": "d187203555b23fb5f63f08690999443909da64d1d184469f4a6a0adc54bcb4b0"
+    },
+    "freshErc20EvidenceDirectory": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime",
+    "freshIsolatedState": ".neutron/evm-wallet-erc20-pocketic",
+    "owned42161Stopped": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/arbitrum-fixture-stopped.json",
+      "bytes": 721,
+      "sha256": "807982f8d65f3e16ac067cfb7261fc5da7a3ac92f772fd6e7d4c04776364f60c"
+    },
+    "finalEvidence": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/final-runtime-restoration.json",
+      "bytes": 1868,
+      "sha256": "e6d68ce06f4765f72865935b95a24d41a5bd770dbeac2e3ec7934d0dcee2d311"
+    },
+    "freshGatewayRestored": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/retained-restored.json",
+      "bytes": 671,
+      "sha256": "55b703c8603693f52825cc8a12aae573c6ac4ff7db06f04f408dce2747e978af"
+    }
+  },
+  "freshErc20Preparation": {
+    "status": "first_deployment_and_actual_protocol_passed",
+    "evidence": {
+      "path": ".neutron/evm-wallet-qualification/erc20-prewarm-final-uni104-20260906T135803Z/completed-prewarm.json",
+      "bytes": 8351,
+      "sha256": "516b13bbf0a1bd49d955c10685fdf04c1d3e4cb727c3114cd757ac49f24e909c"
+    },
+    "runtimeCreated": true,
+    "scope": "Compile-only receipt retained as preparation evidence. Separate actual ready and first-deployment receipts now bind the fresh verified runtime identity and final installed archive set.",
+    "prior106Evidence": {
+      "path": ".neutron/evm-wallet-qualification/erc20-prewarm-20260906T130601Z/completed-prewarm.json",
+      "bytes": 8351,
+      "sha256": "afe4d0638630a7a60d9697e8d24137938a5d7ac7109ba82cd49c2a2a09597361"
+    },
+    "candidateEvm": 107,
+    "prior107Uni103Evidence": {
+      "path": ".neutron/evm-wallet-qualification/erc20-prewarm-evm107-20260906T134042Z/completed-prewarm.json",
+      "bytes": 8351,
+      "sha256": "07f7f405d68106b64ecd87681fdb03e6d810ce81bcd57e039ae2fed2262e77e6"
+    },
+    "candidateUniswap": 104,
+    "firstDeployment": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/first-deployment.json",
+      "bytes": 2544,
+      "sha256": "efbd9da9b28102c21325e5f212d956844f3e675c0055c2419d518039866e7e0a"
+    }
+  },
+  "historicalAttempts": [
+    {
+      "case": "Historical direct-root attempt blocked by the old Kernel consent count",
+      "status": "blocked_before_effect",
+      "installedEvm": 105,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/qualification-summary.json",
+          "bytes": 1088,
+          "sha256": "7e2d469a9bc5f2a1bb202961eb16d842b46bfcbe879fcdab2eee299776dfa4dc"
+        }
+      ],
+      "scope": "Kernel341 rejected the third legitimate nested read before signing; the provider fault remained unarmed. Kernel342 removed this demonstrated lifetime count defect. The actual root/provider-loss case below subsequently passed.",
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+        "bytes": 9188,
+        "sha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287"
+      }
+    },
+    {
+      "case": "Ethereum Uniswap first numeric-impact fixture attempt",
+      "status": "failed_before_wallet_effect",
+      "installedEvm": 105,
+      "installedKernel": 341,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-evm105/qualification-summary.json",
+          "bytes": 1234,
+          "sha256": "b917596278e894075f79898ab9f5479ce4badb4e9deb7f29de55d6f32c08b523"
+        }
+      ],
+      "scope": "Historical fixture attempt: both cases correctly reported differing quote/pool blocks under interval mining, before Wallet effects. The subsequent quote-only mining pause restored both modes and produced numeric impact in the completed native and token cases.",
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+        "bytes": 9188,
+        "sha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287"
+      }
+    },
+    {
+      "case": "Ethereum deterministic quote first final-package timing attempt",
+      "status": "failed_before_wallet_effect",
+      "installedEvm": 106,
+      "installedKernel": 342,
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/installed-final-candidates.json",
+        "bytes": 9226,
+        "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723"
+      },
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106/native-request-sequence.json",
+          "bytes": 26404,
+          "sha256": "c1883f10c82f56365c329f8a699f1066a0c5023416f049717952f0bad1ef4f83"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106/token-request-sequence.json",
+          "bytes": 25580,
+          "sha256": "23a374a6f053b124c2255416763fbc934390ec7700de5cf13bc95d25e377093a"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106/native-quote-mining-1.json",
+          "bytes": 256,
+          "sha256": "6b1d2499cca74e41f44f98223ef558364f7732bd9f9009f0a39f0878ec139949"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106/token-quote-mining-1.json",
+          "bytes": 256,
+          "sha256": "1b759917d90a3ecf6c037055b9b8f36f2acf42f0606477f9be2c68373cb9ca97"
+        }
+      ],
+      "scope": "Historical fixture deadline: full contract reads succeeded, but the cumulative120s helper expired during a late ingress. No Wallet effects; mining restored exactly. The bounded300s quote-only wait subsequently passed. No host-CPU or unseen RPC-stage cause is asserted."
+    },
+    {
+      "case": "Pending approval replacement estimate-state regression",
+      "status": "demonstrated_bug_fixed_and_actual_regression_passed107",
+      "installedEvm": 106,
+      "installedKernel": 342,
+      "installedEvidence": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm106/installed-final-candidates.json",
+        "bytes": 9226,
+        "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723"
+      },
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-reconciled-final-342-106/replacement-preparation-diagnosis.json",
+          "bytes": 23961,
+          "sha256": "05c52fd0888ecd535a4e7e1a7f44a089d81e1d65a7c409dbe67bcc684da357d6"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-reconciled-final-342-106/replacement-estimate-exact-call-state-mismatch.json",
+          "bytes": 1202,
+          "sha256": "56a789e2fb79eb27f5b880779a3341631e1f31afd6f79febb28b6ad785dfa1ff"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-reconciled-final-342-106/original-same-hash-reconciliation.json",
+          "bytes": 4992,
+          "sha256": "53bbbaf3825e8978389061a69c235b3c47137c6620215ddb451d62c72a528017"
+        }
+      ],
+      "scope": "Historical EVM106 defect: default-pending gas estimation disagreed with pinned mined-state simulation. Replacement op29 failed unsigned; original op28 mined once. Both temporary allowances were explicitly revoked through Wallet review. EVM107 pins the estimate to the simulation block; the actual replacement and revoke case below passed."
+    }
+  ],
+  "freshErc20FeePrerequisite": {
+    "status": "passed",
+    "scope": "Separate donor ordinary helper funding and exact ckETH mint, exact approval, minimum native withdrawal, canonical finalized payout and real token gas quote. No user bridge replay, user balance transfer, minter state injection or clock change. Reusable fresh configuration now invokes this prerequisite before browser testing.",
+    "evidence": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/fee-readiness.json",
+      "bytes": 5221,
+      "sha256": "88a64d10bc970454f5ce03a3d0fe29f81590774a13ca7c9e363d44d162ab1372"
+    },
+    "executedSource": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/fee-readiness-executed.ts",
+      "bytes": 10154,
+      "sha256": "e431176924fc14ec20d6df1c0cd4bf084c384a9ecfedc956aa93688d466e958d"
+    }
+  },
+  "completedAt": "2026-09-06T15:20:06.639317+00:00",
+  "pendingRuntimeWork": []
+}

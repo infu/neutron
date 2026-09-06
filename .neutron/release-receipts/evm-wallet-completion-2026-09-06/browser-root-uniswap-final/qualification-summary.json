@@ -1,0 +1,54 @@
+{
+  "completedAt": "2026-09-06T13:33:05.497564+00:00",
+  "status": "passed_with_same_request_continuation",
+  "versions": {
+    "kernel": 342,
+    "evm_wallet": 106,
+    "uniswap": 103
+  },
+  "installedEvidence": "installed-candidates-at-start.json",
+  "continuationResults": [
+    {
+      "title": "direct Kernel root Agent completes Uniswap and descendants cannot sign",
+      "status": "passed",
+      "durationMs": 59723,
+      "errors": []
+    }
+  ],
+  "initialAttempt": "report.json",
+  "initialAttemptFinding": "Test-only reload opener launched a second restored Kitchen tile. Confirmed approval, direct-root quote/prepare, human/descendant denial and misbinding rejection were retained. Corrected helper reused restored tile; continuation verified the same immutable requests and resumed only the previously unsubmitted swap.",
+  "continuationInputs": "continuation/inputs.json",
+  "continuationReport": "continuation/report.json",
+  "attachments": [
+    {
+      "name": "root-protocol-checkpoints",
+      "path": "/srv/shared/code/neutron/.neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/continuation/test-results/evm-wallet-root-protocol-d-69eb3-and-descendants-cannot-sign-chromium/root-protocol-checkpoints.json",
+      "size": 25041,
+      "sha256": "83173f2f0b8913f7bb69a6b744d9fba912d5e12d9f8b7e2cef83b7e3cacaf2f2"
+    },
+    {
+      "name": "root-uniswap-real-chain-protocol",
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/root-uniswap-real-chain-protocol.json",
+      "size": 32158,
+      "sha256": "51fbc4856db052cea44aabd05973877419d6f33c178208fbb76e8f8761c633e8"
+    }
+  ],
+  "swapId": "fc9f61f697374955a10f7849a81fead0",
+  "approvalRequestId": "1a87c5ce617bc4f77a56a2269b9a7cea",
+  "swapRequestId": "15ae503f21c9c3e588ba0bd0f976db9d",
+  "approvalHash": "0x7dcad0f5df4fdf078241a7c4b1cfc56e1aaac595f5da1f16af80ba587640993f",
+  "swapHash": "0xb38eb5bd2fb6f42090493aaef16f5de08b4e73db9228952576fc21a6f1562813",
+  "nonceBefore": "11",
+  "nonceAfter": "13",
+  "actualInput": "1000000000000000",
+  "actualOutput": "996987409330905",
+  "providerResponseLoss": {
+    "matchingRequests": 3,
+    "suppressedResponses": 3,
+    "observedRawTransactions": 1,
+    "recoveryAdditionalBroadcasts": 0,
+    "releasedAt": "2026-09-06T13:31:58.684Z"
+  },
+  "replacementProof": false,
+  "scope": "Actual installed Kernel root attestation; deterministic caller fixture; Uniswap quote/prepare, real approval and separate swap, exact caller/request binding and relabel rejection, human/descendant root denial, durable reload checkpoint, actual accepted provider-response loss and same operation/hash/raw recovery. No model reasoning, replacement proof, production funds or Nitro behavior claim."
+}

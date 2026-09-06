@@ -1,0 +1,734 @@
+{
+  "format": 1,
+  "requirements_document": "doc/todo.evm-wallet.md",
+  "package": {
+    "id": "wallet",
+    "version": 316,
+    "archive_path": "apps/wallet/wallet.v0.3.16.neutron",
+    "archive_sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76",
+    "archive_bytes": 768823,
+    "source_path": "apps/wallet/.neutron/sources/e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5.source.v1.msgpack.gz",
+    "source_sha256": "e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5",
+    "source_bytes": 624669
+  },
+  "evidence_scope": "Frozen Wallet316 implementation, release tests and checked upgrades plus actual ckETH and fresh final-package ckUSDC protocol qualification. Initial harness/fixture interruptions remain explicit and preserved.",
+  "managed_memory": {
+    "published_315_roots_unchanged": [
+      "wallet/v1",
+      "wallet_commands/v1",
+      "wallet_bridge/v1",
+      "wallet_transfers/v1"
+    ],
+    "new_roots": [
+      "wallet_bridge_replacements/v1"
+    ],
+    "published_315_preserved": true
+  },
+  "completed_validation": {
+    "release_tests": {
+      "tests_passed": 171,
+      "assertions": 1184,
+      "compiled_motoko_programs_passed": 12,
+      "memory_initialization_and_restoration_passed": true
+    },
+    "typescript_passed": true,
+    "canonical_package_passed": true,
+    "current_offered_source_matches": true,
+    "nonempty_315_checked_upgrade": {
+      "kernel_from": 339,
+      "kernel_to": 341,
+      "wallet_from": 315,
+      "wallet_to": 316,
+      "assertions": 178
+    },
+    "evidence": [
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/validation.json"
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/bun.log"
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/motoko.log"
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/memory.log"
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/package.log"
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/source-check.log"
+      }
+    ],
+    "final_installed_root_bridge": {
+      "status": "passed",
+      "tests": 1,
+      "duration": "2.5min",
+      "kernel": 341,
+      "wallet": 316,
+      "evm_wallet": 103,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root-test.log"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json"
+        }
+      ]
+    },
+    "final_installed_human_cketh_bridge": {
+      "status": "passed_across_interrupted_run_and_same_intent_continuation",
+      "kernel": 341,
+      "wallet": 316,
+      "evm_wallet": 103,
+      "initial_harness_failure": "Immediate evidence read preceded transaction receipt inclusion, after the unrelated-transfer rejection and successful real send-reply loss assertions had passed.",
+      "recovery_harness_failure": "The first continuation omitted the existing inspection-only permission handler; request expired without signing. The corrected continuation passed.",
+      "request_id": "a0f80a051dd133b25b87d5606091572d",
+      "bridge_id": "a3f80a051dd133b25b87d5606091572d",
+      "transaction_hash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+      "ledger_mint_block": "9",
+      "another_signature_or_nonce": false,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-recovery-2/ic-wallet-bridge-reconcile-a049d-t-without-another-signature-chromium/interrupted-qualification-reconciled.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-recovery-test.log"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-first-attempt-classification.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-first-attempt.log"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json"
+        }
+      ]
+    },
+    "final_installed_human_cketh_redemption": {
+      "status": "passed",
+      "tests": 1,
+      "duration": "4.4min",
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-native-continuation/ic-wallet-bridge-complete--714ff-upted-qualification-deposit-chromium/ic-wallet-native-redemption-and-reload.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-native-test.log"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+        }
+      ]
+    },
+    "fresh_final_ckusdc_deposit": {
+      "status": "passed_before_redemption_fixture_prerequisite_failure",
+      "kernel": 342,
+      "wallet": 316,
+      "evm_wallet": 107,
+      "bridge_id": "dd60750fcf816c6a8159f6e25ea81e2c",
+      "transaction_hash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+      "mint_ledger_block": "0",
+      "amount_atoms": "20000000",
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-lost-approval-reply.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json"
+        }
+      ]
+    },
+    "fresh_final_ckusdc_redemption": {
+      "status": "passed",
+      "tests": 1,
+      "duration": "9.6min",
+      "kernel": 342,
+      "wallet": 316,
+      "evm_wallet": 107,
+      "request_id": "1a35d176c447545c9d8e6695bc381b94",
+      "asset_burn_index": "2",
+      "gas_burn_index": "7",
+      "payout_hash": "0x455267e77819404cb2a95c42a03f98aa8b345909b62c0a07f5f803bb032f258c",
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-native-redemption-quote-debits-and-reload.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+        }
+      ]
+    }
+  },
+  "clauses": [
+    {
+      "requirement": "5.1",
+      "summary": "Exact deposit/event/minter/ledger correlation excludes unrelated incoming transfers",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/backend/bridge/Journal.mo"
+        },
+        {
+          "path": "apps/wallet/backend/bridge/Ledger.mo"
+        },
+        {
+          "path": "apps/wallet/backend/bridge/Minter.mo"
+        },
+        {
+          "path": "apps/wallet/src/bridge.ts"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/motoko/bridge_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/bridge_replacements_test.mo"
+        },
+        {
+          "path": "test/e2e/ic-wallet-bridge.spec.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/prior315-browser/validation.md"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-recovery-2/ic-wallet-bridge-reconcile-a049d-t-without-another-signature-chromium/interrupted-qualification-reconciled.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-lost-approval-reply.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Published315 real-protocol browser run passed an unrelated incoming ckETH transfer while the own deposit remained pending, then verified its exact helper event, minter event and ICRC3 mint.",
+        "Final installed316 human deposit completed across the real interrupted run and same-intent recovery; no second deposit/signature/nonce. Original test-harness failures and independent successful receipt remain recorded.",
+        "Fresh final Kernel342/Wallet316/EVM107 real helper/released minter/ledger flow passed seeded allowance reset, exact approval, actual approval reply loss/full reload with original request and no duplicate nonce, and exact20-USDC deposit AcceptedErc20Deposit23/MintedCkErc2024/ledger mint0. The same run stopped before Withdraw because the fresh minter fee cache was unavailable; redemption remains separate and open."
+      ]
+    },
+    {
+      "requirement": "5.2",
+      "summary": "Complete durable bridge intent and progress survive reload and checked actor upgrade",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/backend/memory/wallet_bridge/v1.mo"
+        },
+        {
+          "path": "apps/wallet/src/bridge_control.tsx"
+        },
+        {
+          "path": "apps/wallet/backend/bridge/Replacement.mo"
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_bridge_replacements/v1.mo"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/motoko/bridge_test.mo"
+        },
+        {
+          "path": "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts"
+        },
+        {
+          "path": "test/e2e/ic-wallet-bridge.spec.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet315-nonempty-journals-to-wallet316.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/prior315-browser/validation.md"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-recovery-2/ic-wallet-bridge-reconcile-a049d-t-without-another-signature-chromium/interrupted-qualification-reconciled.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-lost-approval-reply.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Checked published315 nonempty bridge/transfers roots survived Wallet316 and Kernel341 with 178 assertions. Original and effective replacement transaction identities remain separate.",
+        "Final installed316 human deposit completed across the real interrupted run and same-intent recovery; no second deposit/signature/nonce. Original test-harness failures and independent successful receipt remain recorded.",
+        "Fresh final Kernel342/Wallet316/EVM107 real helper/released minter/ledger flow passed seeded allowance reset, exact approval, actual approval reply loss/full reload with original request and no duplicate nonce, and exact20-USDC deposit AcceptedErc20Deposit23/MintedCkErc2024/ledger mint0. The same run stopped before Withdraw because the fresh minter fee cache was unavailable; redemption remains separate and open."
+      ]
+    },
+    {
+      "requirement": "5.3",
+      "summary": "Unknown receipt outcomes reconcile existing operation identity without repeating successful approval/deposit",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/src/bridge.ts"
+        },
+        {
+          "path": "apps/wallet/src/evm_bridge.ts"
+        },
+        {
+          "path": "apps/wallet/src/bridge_tools.ts"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/bridge.test.ts"
+        },
+        {
+          "path": "apps/wallet/test/bridge_tools.test.ts"
+        },
+        {
+          "path": "test/e2e/ic-wallet-bridge.spec.ts"
+        },
+        {
+          "path": "test/e2e/ic-wallet-erc20-bridge.spec.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/prior315-browser/validation.md"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-recovery-2/ic-wallet-bridge-reconcile-a049d-t-without-another-signature-chromium/interrupted-qualification-reconciled.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-lost-approval-reply.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Actual published315 consumer MessagePort reply loss and full reload passed with the same EVM request/hash and no second account nonce. This is not a provider broadcast-response-loss claim.",
+        "Final installed316 human deposit completed across the real interrupted run and same-intent recovery; no second deposit/signature/nonce. Original test-harness failures and independent successful receipt remain recorded.",
+        "Fresh final Kernel342/Wallet316/EVM107 real helper/released minter/ledger flow passed seeded allowance reset, exact approval, actual approval reply loss/full reload with original request and no duplicate nonce, and exact20-USDC deposit AcceptedErc20Deposit23/MintedCkErc2024/ledger mint0. The same run stopped before Withdraw because the fresh minter fee cache was unavailable; redemption remains separate and open."
+      ]
+    },
+    {
+      "requirement": "5.4",
+      "summary": "Versioned durable Send/Withdraw commands freeze arguments before value-moving awaits and preserve released APIs",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/backend/transfers/Journal.mo"
+        },
+        {
+          "path": "apps/wallet/backend/main.mo"
+        },
+        {
+          "path": "apps/wallet/src/transfers.ts"
+        },
+        {
+          "path": "apps/wallet/src/index.tsx"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/motoko/transfer_main_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/funding_main_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/transfer_recovery_controller.test.ts"
+        },
+        {
+          "path": "apps/wallet/test/provider_release_compat.test.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet315-nonempty-journals-to-wallet316.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Authoritative pending/status/resume remains usable with malformed optional browser cache; corrupt cache bytes are preserved."
+      ]
+    },
+    {
+      "requirement": "5.5",
+      "summary": "Ledger duplicate/expired-window handling and actual minter statuses retain unresolved ambiguity",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/backend/chainkey/Withdrawals.mo"
+        },
+        {
+          "path": "apps/wallet/backend/chainkey/Client.mo"
+        },
+        {
+          "path": "apps/wallet/backend/transfers/Journal.mo"
+        },
+        {
+          "path": "apps/wallet/backend/transfers/Settlement.mo"
+        },
+        {
+          "path": "apps/wallet/backend/transfers/Refund.mo"
+        },
+        {
+          "path": "apps/wallet/backend/main.mo"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/motoko/transfer_main_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/native_settlement_main_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/erc20_refund_main_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/settlement_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/refund_test.mo"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-native-redemption-quote-debits-and-reload.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Five supported minter protocol status contracts are exercised by compiled tests. BTC/DOGE/SOL live external-chain payouts are not claimed. AlreadyProcessing is a definite pre-burn refusal; TemporarilyUnavailable may conceal an accepted burn. Exact gas refund does not manufacture certainty about ambiguous asset burn.",
+        "Final342/Wallet316/EVM107 ckUSDC redemption-only continuation passed1/1 after legitimate donor fee-cache initialization: prewithdrawal numeric quote, separate approvals and exact asset/gas burns, unchanged saved command after full reload, official finalized ERC20 transfer, recipient80\u219285USDC and durable confirmed settlement. The original20-USDC bridge was never repeated; initial gas-cache failure remains preserved."
+      ]
+    },
+    {
+      "requirement": "5.6",
+      "summary": "Actual replay, delayed/concurrent send, partial approval/withdrawal and existing checks remain tested",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/backend/main.mo"
+        },
+        {
+          "path": "apps/wallet/backend/funding/Journal.mo"
+        },
+        {
+          "path": "apps/wallet/backend/transfers/Journal.mo"
+        },
+        {
+          "path": "apps/wallet/src/destinations.ts"
+        },
+        {
+          "path": "apps/wallet/src/withdrawal_quote.ts"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/motoko/funding_main_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/transfer_main_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/transfer_journal_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/destinations.test.ts"
+        },
+        {
+          "path": "apps/wallet/test/funding.test.ts"
+        },
+        {
+          "path": "apps/wallet/test/history.test.ts"
+        },
+        {
+          "path": "apps/wallet/test/withdrawal_quote.test.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet315-nonempty-journals-to-wallet316.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Funding regression uses actual Main/FundingJournal and IC actor awaits: distinct fresh IDs preserve caller memo but allocate distinct timestamps, and accepted lost replies replay byte-identical frozen Candid."
+      ]
+    },
+    {
+      "requirement": "5.7",
+      "summary": "EVM Wallet source uses shared client and live helper/token mapping while external browser source remains",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/src/bridge_control.tsx"
+        },
+        {
+          "path": "apps/wallet/src/evm_bridge.ts"
+        },
+        {
+          "path": "apps/wallet/src/ethereum.ts"
+        },
+        {
+          "path": "apps/wallet/backend/bridge/Journal.mo"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/bridge.test.ts"
+        },
+        {
+          "path": "apps/wallet/test/bridge_tools.test.ts"
+        },
+        {
+          "path": "test/e2e/ic-wallet-bridge.spec.ts"
+        },
+        {
+          "path": "test/e2e/ic-wallet-erc20-bridge.spec.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/prior315-browser/validation.md"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-recovery-2/ic-wallet-bridge-reconcile-a049d-t-without-another-signature-chromium/interrupted-qualification-reconciled.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-lost-approval-reply.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Final installed316 human deposit completed across the real interrupted run and same-intent recovery; no second deposit/signature/nonce. Original test-harness failures and independent successful receipt remain recorded.",
+        "Fresh final Kernel342/Wallet316/EVM107 real helper/released minter/ledger flow passed seeded allowance reset, exact approval, actual approval reply loss/full reload with original request and no duplicate nonce, and exact20-USDC deposit AcceptedErc20Deposit23/MintedCkErc2024/ledger mint0. The same run stopped before Withdraw because the fresh minter fee cache was unavailable; redemption remains separate and open."
+      ]
+    },
+    {
+      "requirement": "5.8",
+      "summary": "IC Wallet binds helper/minter/token/recipient/amount and supports ck-token deposits on Ethereum mainnet only",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/backend/bridge/Journal.mo"
+        },
+        {
+          "path": "apps/wallet/src/bridge.ts"
+        },
+        {
+          "path": "apps/wallet/src/bridge_tools.ts"
+        },
+        {
+          "path": "apps/wallet/src/bridge_control.tsx"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/motoko/bridge_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/bridge_tools.test.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/prior315-browser/validation.md"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-lost-approval-reply.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Retired helper is revalidated before any fresh dispatch, including unknown/no-hash recovery; known effects remain reconcilable. Arbitrum is not offered as a direct ck-token deposit route.",
+        "Fresh final Kernel342/Wallet316/EVM107 real helper/released minter/ledger flow passed seeded allowance reset, exact approval, actual approval reply loss/full reload with original request and no duplicate nonce, and exact20-USDC deposit AcceptedErc20Deposit23/MintedCkErc2024/ledger mint0. The same run stopped before Withdraw because the fresh minter fee cache was unavailable; redemption remains separate and open."
+      ]
+    },
+    {
+      "requirement": "5.9",
+      "summary": "Existing Contacts-based EVM address redemption displays numeric ckETH gas requirement/separate allowance and durable settlement",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/src/index.tsx"
+        },
+        {
+          "path": "apps/wallet/src/withdrawal_quote.ts"
+        },
+        {
+          "path": "apps/wallet/backend/main.mo"
+        },
+        {
+          "path": "apps/wallet/backend/transfers/Settlement.mo"
+        },
+        {
+          "path": "apps/wallet/backend/transfers/Refund.mo"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/withdrawal_quote.test.ts"
+        },
+        {
+          "path": "apps/wallet/test/motoko/native_settlement_main_test.mo"
+        },
+        {
+          "path": "apps/wallet/test/motoko/erc20_refund_main_test.mo"
+        },
+        {
+          "path": "test/e2e/ic-wallet-bridge.spec.ts"
+        },
+        {
+          "path": "test/e2e/ic-wallet-erc20-bridge.spec.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/wallet316/prior315-browser/validation.md"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-native-continuation/ic-wallet-bridge-complete--714ff-upted-qualification-deposit-chromium/ic-wallet-native-redemption-and-reload.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-native-redemption-quote-debits-and-reload.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Actual published315 ckETH redemption passed exact IC debit/residual allowance, saved withdrawal reload, signed minter payout and exact EVM recipient balance delta. Fresh ckUSDC will additionally prove numeric gas/asset review, both burn IDs and allowances, and ERC20 payout.",
+        "Final installed316 native continuation passed exact debit/allowance, saved withdrawal reload, finalized payout and exact recipient balance; it followed the same recovered human deposit.",
+        "Final342/Wallet316/EVM107 ckUSDC redemption-only continuation passed1/1 after legitimate donor fee-cache initialization: prewithdrawal numeric quote, separate approvals and exact asset/gas burns, unchanged saved command after full reload, official finalized ERC20 transfer, recipient80\u219285USDC and durable confirmed settlement. The original20-USDC bridge was never repeated; initial gas-cache failure remains preserved."
+      ]
+    },
+    {
+      "requirement": "5.10",
+      "summary": "Versioned bridge quote/status/root tools bind authenticated caller and require direct root EVM execution",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/src/bridge_tools.ts"
+        },
+        {
+          "path": "apps/wallet/src/service.ts"
+        },
+        {
+          "path": "apps/wallet/src/withdrawal_quote.ts"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/bridge_tools.test.ts"
+        },
+        {
+          "path": "apps/wallet/test/resident_registration.test.ts"
+        },
+        {
+          "path": "test/e2e/ic-wallet-root-bridge.spec.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Real exposeTool/SDK schema validation and actual Candid/Kernel projection tests pass. Final installed root flow passed human/nested rejection, authenticated direct signing/attach, reload without another nonce, and exact official minter/ledger mint."
+      ]
+    },
+    {
+      "requirement": "5.11",
+      "summary": "Released roots and lineage remain immutable; additive root initializes while pending records survive skipped checked upgrades",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/wallet/backend/memory/wallet/v1.mo"
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_commands/v1.mo"
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_bridge/v1.mo"
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_transfers/v1.mo"
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_bridge_replacements/v1.mo"
+        },
+        {
+          "path": "apps/wallet/neutron.json"
+        },
+        {
+          "path": "apps/wallet/neutron.lock.json"
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/wallet/test/memory_release.test.mo"
+        },
+        {
+          "path": "apps/wallet/test/memory_release.test.ts"
+        },
+        {
+          "path": "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts"
+        },
+        {
+          "path": "packages/neutron-compiler/test/evm_wallet_upgrade.pocketic.test.ts"
+        }
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet315-nonempty-journals-to-wallet316.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet306-kernel336-evm-release.json"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/wallet312-kernel336-evm-release.json"
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "All four published315 v1 roots retain exact schemas/lock entries. Replacement sidecar is a new independent v1 root; no fake migration or reinstall. Final checked306/312\u2192316 paths and nonempty315\u2192316 with Kernel341 passed."
+      ]
+    }
+  ],
+  "runtime_owners": {
+    "ic_wallet_bridge": "/root/ic_wallet_recovery",
+    "serialized_window_coordinator": "/root/evm_provenance"
+  },
+  "limitations": [
+    "Consumer MessagePort reply-loss evidence is distinct from provider broadcast-response-loss evidence.",
+    "Compiled exact-protocol BTC/DOGE/SOL tests do not establish live BTC/DOGE/SOL payouts.",
+    "Fresh ERC20 qualification uses official pinned helper/released minter/managed ledgers with a clearly disclosed local six-decimal token stand-in, not production Circle/Tether contracts.",
+    "No retained user or isolated fixture state is reset for these upgrade/bridge tests."
+  ]
+}

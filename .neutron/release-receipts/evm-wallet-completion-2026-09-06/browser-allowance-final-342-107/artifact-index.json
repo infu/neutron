@@ -1,0 +1,318 @@
+{
+  "schema": "neutron-evm-allowance-replacement-artifact-index-v1",
+  "scope": "Passing full approval/replacement/discovery/revocation run on Kernel342/EVM107; generated offline after explicit PASS confirmation",
+  "sourceBindings": {
+    "preflight": {
+      "path": "test/e2e/evm-wallet-allowance.spec.ts",
+      "bytes": 24719,
+      "sha256": "dedacaf17446cb364448f4bd024ad1fe10452870fde1a9d5bb2e72bec9dd80be"
+    },
+    "executed": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/executed-spec.ts",
+      "role": "exact executed E2E test source",
+      "bytes": 24719,
+      "sha256": "dedacaf17446cb364448f4bd024ad1fe10452870fde1a9d5bb2e72bec9dd80be"
+    },
+    "current": {
+      "path": "test/e2e/evm-wallet-allowance.spec.ts",
+      "role": "current E2E test source at offline evidence assembly",
+      "bytes": 24719,
+      "sha256": "dedacaf17446cb364448f4bd024ad1fe10452870fde1a9d5bb2e72bec9dd80be"
+    },
+    "allMatch": true,
+    "fixtureInputs": [
+      {
+        "preflight": {
+          "path": "test/e2e/fixtures/evm-wallet-network.ts",
+          "bytes": 2491,
+          "sha256": "77902209fd50d4fb7de62266178c4b38250b99de378dc7b71a7d063462ff0b5c"
+        },
+        "current": {
+          "path": "test/e2e/fixtures/evm-wallet-network.ts",
+          "role": "current pinned fixture/build input at offline assembly",
+          "bytes": 2491,
+          "sha256": "77902209fd50d4fb7de62266178c4b38250b99de378dc7b71a7d063462ff0b5c"
+        },
+        "matches": true
+      },
+      {
+        "preflight": {
+          "path": "test/e2e/fixtures/evm-wallet-chain.ts",
+          "bytes": 12455,
+          "sha256": "b45686c32cc065fcaf26186eb0f1abddf43f8cf189721d7e4fb22a3e7e40da78"
+        },
+        "current": {
+          "path": "test/e2e/fixtures/evm-wallet-chain.ts",
+          "role": "current pinned fixture/build input at offline assembly",
+          "bytes": 12455,
+          "sha256": "b45686c32cc065fcaf26186eb0f1abddf43f8cf189721d7e4fb22a3e7e40da78"
+        },
+        "matches": true
+      },
+      {
+        "preflight": {
+          "path": "test/e2e/fixtures/evm-wallet-browser.ts",
+          "bytes": 7616,
+          "sha256": "bb017b2936a09b0899c60bf82f3000c16a02139b481bbc753c9614c94a7b3d0d"
+        },
+        "current": {
+          "path": "test/e2e/fixtures/evm-wallet-browser.ts",
+          "role": "current pinned fixture/build input at offline assembly",
+          "bytes": 7616,
+          "sha256": "bb017b2936a09b0899c60bf82f3000c16a02139b481bbc753c9614c94a7b3d0d"
+        },
+        "matches": true
+      },
+      {
+        "preflight": {
+          "path": "test/e2e/fixtures/evm-wallet-anvil.ts",
+          "bytes": 17400,
+          "sha256": "3a3b7a71d38e44dc3900dbd01090d3ebdee762c2dea48c7789d04e3660f90123"
+        },
+        "current": {
+          "path": "test/e2e/fixtures/evm-wallet-anvil.ts",
+          "role": "current pinned fixture/build input at offline assembly",
+          "bytes": 17400,
+          "sha256": "3a3b7a71d38e44dc3900dbd01090d3ebdee762c2dea48c7789d04e3660f90123"
+        },
+        "matches": true
+      },
+      {
+        "preflight": {
+          "path": "apps/uniswap/test/fixtures/Tokens.sol",
+          "bytes": 1815,
+          "sha256": "988bb4ea34b9a6cc2cf61ff8ff36f3277e6058290bbcce488a272a50acbd4320"
+        },
+        "current": {
+          "path": "apps/uniswap/test/fixtures/Tokens.sol",
+          "role": "current pinned fixture/build input at offline assembly",
+          "bytes": 1815,
+          "sha256": "988bb4ea34b9a6cc2cf61ff8ff36f3277e6058290bbcce488a272a50acbd4320"
+        },
+        "matches": true
+      },
+      {
+        "preflight": {
+          "path": "/tmp/neutron-uniswap-networks-final-deps-825nf8uj/package-lock.json",
+          "bytes": 270773,
+          "sha256": "d9b3f9257711ecab48eba5fb302d826e1b4f6829ce84f97d50e845a528eca335"
+        },
+        "current": {
+          "path": "/tmp/neutron-uniswap-networks-final-deps-825nf8uj/package-lock.json",
+          "role": "current pinned fixture/build input at offline assembly",
+          "bytes": 270773,
+          "sha256": "d9b3f9257711ecab48eba5fb302d826e1b4f6829ce84f97d50e845a528eca335"
+        },
+        "matches": true
+      },
+      {
+        "preflight": {
+          "path": "playwright.config.ts",
+          "bytes": 1063,
+          "sha256": "f4007799a517b5268f1d293e21e883ea30a9deb0fe2bf9480a850cb178d409b8"
+        },
+        "current": {
+          "path": "playwright.config.ts",
+          "role": "current pinned fixture/build input at offline assembly",
+          "bytes": 1063,
+          "sha256": "f4007799a517b5268f1d293e21e883ea30a9deb0fe2bf9480a850cb178d409b8"
+        },
+        "matches": true
+      }
+    ]
+  },
+  "packageBindings": {
+    "deploymentId": "4646e9e9048f3cbc6034fa079ff263a3",
+    "installedEvidence": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+      "bytes": 9267,
+      "sha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d"
+    },
+    "preservedInstalledEvidence": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/installed-final-candidates.json",
+      "role": "verbatim locally preserved installed proof",
+      "bytes": 9267,
+      "sha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d"
+    },
+    "walletArchive": {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+      "role": "EVM Wallet107 production package archive",
+      "bytes": 391816,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+    },
+    "walletOfferedSource": {
+      "path": "apps/evm_wallet/.neutron/sources/533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574.source.v1.msgpack.gz",
+      "role": "EVM Wallet107 offered-source package; distinct from E2E source",
+      "bytes": 524845,
+      "sha256": "533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574"
+    },
+    "kernel": {
+      "id": "kernel",
+      "version": 342,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    }
+  },
+  "runSummary": {
+    "status": "passed",
+    "testDurationMs": 114216,
+    "runnerStats": {
+      "startTime": "2026-09-06T13:51:06.738Z",
+      "duration": 116616.15999999999,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "originalRequest": "ec66d879f33a6952fc7576c87c65f961",
+    "originalHash": "0xbb469fed05bcbc91f8e350bd6b494feeebc3a0c8959e8cd629d254e2a3294623",
+    "replacementRequest": "58d8bc9320bed7c3b2b22778832ab7ac",
+    "replacementHash": "0x83bb17c9cfd641b7550d60172ff084daf2030cc1a70e4adbf85ce16a3a2d7917",
+    "revocationRequest": "62e3a49c9b1df79133e4fb6e463291d8",
+    "revocationHash": "0xe3de3db7c31f3bcda61d2cacd7efb7516e00071095bf47704e105503a203f068",
+    "nonce": {
+      "beforeLatestPending": 10,
+      "originalSigned": 10,
+      "replacementSigned": 10,
+      "revocationSigned": 11,
+      "finalLatest": 12,
+      "finalPending": 12,
+      "finalNonceEvidence": "Saved lane-postflight.json latest and pending0xc, plus passing executed latest-nonce assertion"
+    },
+    "allowance": {
+      "beforePending": "0",
+      "afterReplacement": "7000000000000000000",
+      "afterRevocation": "0",
+      "evidence": "Passing executed RPC assertions plus saved final exact-UI-block observation"
+    },
+    "finalUiObservation": {
+      "blockNumber": "41014",
+      "blockHash": "0x9a1e66be84357f0207e9ba4a1165e6035ab0bea41f3c4f26a044c36c0aefae16",
+      "allowance": "0"
+    },
+    "originalMining": {
+      "automine": false,
+      "interval": 1
+    },
+    "lanePostflight": {
+      "observedAt": "2026-09-06T13:53:30.600481+00:00",
+      "nonce": {
+        "latest": "0xc",
+        "pending": "0xc"
+      },
+      "mining": {
+        "automine": false,
+        "interval": 1
+      },
+      "originalRequest": "ec66d879f33a6952fc7576c87c65f961",
+      "originalHash": "0xbb469fed05bcbc91f8e350bd6b494feeebc3a0c8959e8cd629d254e2a3294623",
+      "originalReceipt": null,
+      "replacementRequest": "58d8bc9320bed7c3b2b22778832ab7ac",
+      "replacementHash": "0x83bb17c9cfd641b7550d60172ff084daf2030cc1a70e4adbf85ce16a3a2d7917",
+      "revocationRequest": "62e3a49c9b1df79133e4fb6e463291d8",
+      "revocationHash": "0xe3de3db7c31f3bcda61d2cacd7efb7516e00071095bf47704e105503a203f068",
+      "allowance": "0",
+      "tokenBalance": "10000000000000000000",
+      "uiObservedBlock": "41014",
+      "specSha256": "dedacaf17446cb364448f4bd024ad1fe10452870fde1a9d5bb2e72bec9dd80be"
+    },
+    "pendingApprovalExcluded": true,
+    "confirmedReplacementDiscoveredAfterReload": true,
+    "successfulReplacementQualified": true,
+    "scopeLimits": [
+      "Owned unforked Anvil chain42161; no Nitro sequencing, parent posting fees or L1 finality qualification",
+      "UI exclusion/discovery/reload and canonical receipt membership are recorded passing assertions; saved lane postflight separately confirms original receipt absence and latest/pending12"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifacts/.last-run.json",
+      "role": "preserved run attachment or supplemental evidence",
+      "bytes": 45,
+      "sha256": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifacts/evm-wallet-allowance-a-con-c95c5-n-clears-the-live-allowance-chromium/effect-checkpoints.json",
+      "role": "request/hash/effect checkpoints",
+      "bytes": 8077,
+      "sha256": "0c9419aa1e6995473c765daa03c70bf04e9bb36b99d9297aa32cdeee29540191"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/artifacts/evm-wallet-allowance-a-con-c95c5-n-clears-the-live-allowance-chromium/trace.zip",
+      "role": "actual browser trace",
+      "bytes": 8309450,
+      "sha256": "f4f283808a6b0558cbb942205b0d085891f45f2e2239007a1833f00fccd0dcab"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/executed-spec.ts",
+      "role": "exact executed E2E source",
+      "bytes": 24719,
+      "sha256": "dedacaf17446cb364448f4bd024ad1fe10452870fde1a9d5bb2e72bec9dd80be"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/installed-final-candidates.json",
+      "role": "verbatim hash-bound actual installed proof",
+      "bytes": 9267,
+      "sha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/lane-postflight.json",
+      "role": "saved final latest/pending nonce, original receipt absence and mining mode before lane release",
+      "bytes": 823,
+      "sha256": "ed04156e86c89789efdc88c86cdb0e695f2c0f0bd216159b838c6dbd58b71b56"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/offline-evidence-check.json",
+      "role": "independent offline raw/signer/nonce/fee/calldata verification",
+      "bytes": 5514,
+      "sha256": "6731b85deaf518fcecd331e7b3290929323bc306520d66ec0667877c77710a85"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/offline-validator.cjs",
+      "role": "offline evidence assembler used for reproducibility",
+      "bytes": 24216,
+      "sha256": "e34b7b9df2e8ae155f913da46fe0060f711fe20cfb4fce853236224cdf12a117"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/playwright-report.json",
+      "role": "original passing Playwright report",
+      "bytes": 415340,
+      "sha256": "ea57e69c4005597bd218312a59a68724e3a1fb4e0d9de66580de25e15073bb3d"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/preflight.json",
+      "role": "pinned run inputs and deployment",
+      "bytes": 4051,
+      "sha256": "bab7d34454ee70ffb726467059e1108efdb1d8d34816f341217dada152e5ce2e"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/replacement-and-revocation-chain-evidence.json",
+      "role": "verbatim final report attachment with RPC transactions and signed raw evidence",
+      "bytes": 8756,
+      "sha256": "e86c3d1814a89fbeaf6eab3c165f575e95d1c3118f5eedb133dd33021e91b4bf"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/replacement-approval-discovered.png",
+      "role": "preserved run attachment or supplemental evidence",
+      "bytes": 78415,
+      "sha256": "8f767b3886ce496dc0e6ef53d889044b3382715044a1e8cc3ce36a9dea924e6e"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md",
+      "role": "recorded outcome and qualification scope",
+      "bytes": 6776,
+      "sha256": "980dfd5e0d0c133e1507bb07af0f1a9e8117d18c9a63f9391ba27372f57f5e5b"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/wallet-revocation-review.png",
+      "role": "preserved run attachment or supplemental evidence",
+      "bytes": 132002,
+      "sha256": "bf5e3b2f34434f1e7924942bd45beb137b548af63c80809d084c0eec8f412ed4"
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/wallet-zero-allowance.png",
+      "role": "preserved run attachment or supplemental evidence",
+      "bytes": 89008,
+      "sha256": "b13386a26ec605dc7048217d85df0a69aef2c280dd74a858663ffdd46aa50713"
+    }
+  ]
+}

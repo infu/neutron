@@ -1,0 +1,107 @@
+{
+  "gasFunding": null,
+  "beforeRedemption": {
+    "nonce": "4",
+    "evmTokenBalance": "80000000",
+    "assetBalance": "20000000",
+    "assetFee": "10000",
+    "assetAllowance": "0",
+    "gasBalance": "9000800000000000000",
+    "gasFee": "2000000000000",
+    "gasAllowance": "0"
+  },
+  "requested": {
+    "assetBurnIndex": "2",
+    "gasBurnIndex": "7",
+    "gasBudget": "97500000910000",
+    "gasMaximumDebit": "99500000910000",
+    "review": "\n    $737,999.57USDWithdraw ckUSDCEthereumTockUSDC redemption 1788705408648Ethereum0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41AmountMaxckUSDCAvailable20 ckUSDCApproval fee0.01 ckUSDCNetwork feePaid in ckETHEthereum gas budget0.00009750000091 ckETH (97500000910000 atoms)ckETH approval fee0.000002 ckETH (2000000000000 atoms)ckETH allowance97500000910000 atomsMaximum ckETH debit0.00009950000091 ckETH (99500000910000 atoms)Available ckETH9.0008 ckETHQuoted 3:06:40 PM. Costs are checked again before approvals. A changed quote requires another review.Refresh gas quoteWithdrawAlpha - not battle tested, don't put more tokens than you can afford to lose\n    \n  \n\n"
+  },
+  "queued": {
+    "requestId": "1a35d176c447545c9d8e6695bc381b94",
+    "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+    "amount": "5000000",
+    "destination": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "native": true,
+    "status": "succeeded",
+    "blockIndex": "2",
+    "settlement": {
+      "status": "pending",
+      "transactionHash": null
+    }
+  },
+  "afterBurn": {
+    "assetBalance": "14990000",
+    "gasBalance": "9000700499999090000",
+    "assetAllowance": "0",
+    "gasAllowance": "0"
+  },
+  "restoredWithdrawal": {
+    "requestId": "1a35d176c447545c9d8e6695bc381b94",
+    "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+    "amount": "5000000",
+    "destination": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "native": true,
+    "status": "succeeded",
+    "blockIndex": "2",
+    "settlement": {
+      "status": "pending",
+      "transactionHash": null
+    }
+  },
+  "payout": {
+    "assetBurn": {
+      "index": "2",
+      "kind": "burn",
+      "amount": "5000000",
+      "owner": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null
+    },
+    "gasBurn": {
+      "index": "7",
+      "kind": "burn",
+      "amount": "97500000910000",
+      "owner": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null
+    },
+    "accepted": {
+      "amount": "5000000",
+      "assetLedger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "assetBurnIndex": "2",
+      "gasBurnIndex": "7",
+      "maxGasFeeWei": "97500000910000",
+      "recipient": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41"
+    },
+    "transaction": {
+      "hash": "0x455267e77819404cb2a95c42a03f98aa8b345909b62c0a07f5f803bb032f258c",
+      "from": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "valueWei": "0",
+      "nonce": 3,
+      "chainId": "1",
+      "raw": "0x02f8af01038459682f008459682f0e82fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb00000000000000000000000075e6722465bc0579cf08cabbee0a05e64fb5db4100000000000000000000000000000000000000000000000000000000004c4b40c080a0e0be3d66996d03f905878fda86c6b59b723205836067ef34cb40a0ee6144f91ea01df78cef8715c6ff8e077178bc5e561bab279ffd6fa357441dfe5ba46383fd4d",
+      "blockNumber": "337905",
+      "blockHash": "0x55ea8e5005dbe8c1efe49123496a346616bd0dcf5905a4ac3061b81b744a8b88",
+      "gasUsed": "34652",
+      "effectiveGasPriceWei": "1500000007"
+    },
+    "minterStatus": "TxFinalized.Success",
+    "recipientTokenBalance": "85000000",
+    "effectiveTransactionFeeWei": "51978000242564"
+  },
+  "settled": {
+    "requestId": "1a35d176c447545c9d8e6695bc381b94",
+    "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+    "amount": "5000000",
+    "destination": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "native": true,
+    "status": "succeeded",
+    "blockIndex": "2",
+    "settlement": {
+      "status": "confirmed",
+      "transactionHash": "0x455267e77819404cb2a95c42a03f98aa8b345909b62c0a07f5f803bb032f258c"
+    }
+  },
+  "finalAssetBalance": "14990000",
+  "finalGasBalance": "9000700499999090000"
+}

@@ -1,0 +1,957 @@
+{
+  "objective": "complete the doc/todo.evm-wallet.md",
+  "source": "doc/todo.evm-wallet.md",
+  "requirements": [
+    {
+      "id": "1.1",
+      "requirement": "Record the new explicit wallet-custody signing grant: scoped public-key retrieval and signing an exact 32-byte digest. Keep existing assertion grants, API behavior, and keys unchanged. Update the signing/trust documentation to distinguish this authority from the current assertion-only contract.",
+      "status": "complete",
+      "evidence": [
+        "doc/app-isolated-chain-key-signing.md",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/wallet_custody_signing.test.ts",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "1.2",
+      "requirement": "Define immutable account/slot identifiers and their derivation. Use a separate key-derivation domain for custody; never add a Neutron message prefix to an EVM digest. Make the same account usable across networks while keeping network balances and nonces separate.",
+      "status": "complete",
+      "evidence": [
+        "doc/app-isolated-chain-key-signing.md",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/wallet_custody_signing.test.ts",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "1.3",
+      "requirement": "Decide and document uninstall behavior before funding the release: existing installation-scoped keys rotate on reinstall. If same-address recovery is wanted, specify durable Kernel key descriptors and explicit owner reassignment to an exact replacement installation. Do not silently implement that extra registry or claim recovery already works.",
+      "status": "complete",
+      "evidence": [
+        "doc/app-isolated-chain-key-signing.md",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/wallet_custody_signing.test.ts",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "1.4",
+      "requirement": "Specify the account lifecycle for compatible upgrades, disabled signing, removed slots, app replacement, and whole-canister recovery. No seed/private-key export should be implied by the UI.",
+      "status": "complete",
+      "evidence": [
+        "doc/app-isolated-chain-key-signing.md",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/wallet_custody_signing.test.ts",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "1.5",
+      "requirement": "Follow `AGENTS.md` for any newly required resource bounds or policy behavior: explain and agree actual thresholds instead of introducing ad hoc quotas, cooldowns, or spending restrictions.",
+      "status": "complete",
+      "evidence": [
+        "doc/app-isolated-chain-key-signing.md",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/wallet_custody_signing.test.ts",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "2.1",
+      "requirement": "Add the closed custody declaration, normalization, capability-plan fingerprint, shared Motoko leaf, compiler projection, and install/Settings disclosure. Any ordinary app can request the reviewed primitive; do not special-case the EVM Wallet app ID.",
+      "status": "complete",
+      "evidence": [
+        "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+        ".neutron/release-receipts/evm-wallet-2026-09-06/validation.md",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "2.2",
+      "requirement": "Reuse the existing app/installation namespace, trusted key selection, management transport, cycle accounting, and runtime enablement/revocation mechanisms. Apps must not supply another AppScope or management derivation path to access a foreign key.",
+      "status": "complete",
+      "evidence": [
+        "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+        ".neutron/release-receipts/evm-wallet-2026-09-06/validation.md",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "2.3",
+      "requirement": "Validate key/signature shapes and closed error outcomes; preserve unknown signing outcomes and authority changes during awaits without fabricating success or automatically repeating signing.",
+      "status": "complete",
+      "evidence": [
+        "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+        ".neutron/release-receipts/evm-wallet-2026-09-06/validation.md",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "2.4",
+      "requirement": "Add Kernel-derived installation UID to SDK caller provenance for new wallet command identities. The additive field extends the existing app/endpoint/session context. Forward and validate the new field in human provider and root-Agent paths, retaining compatibility for existing tools.",
+      "status": "complete",
+      "evidence": [
+        "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+        ".neutron/release-receipts/evm-wallet-2026-09-06/validation.md",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "2.5",
+      "requirement": "Reuse `provider_once`, private foreground presentation, scoped self calls, and separate direct-root tools. Keep effect invocation and cancellation provenance intact.",
+      "status": "complete",
+      "evidence": [
+        "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+        ".neutron/release-receipts/evm-wallet-2026-09-06/validation.md",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "2.6",
+      "requirement": "Test cross-app slot-name collisions, stale handles, disable/re-enable, revocation during signing, unchanged upgrades, and the chosen removal policy. Confirm existing assertion vectors and old provider/Agent flows still work.",
+      "status": "complete",
+      "evidence": [
+        "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+        ".neutron/release-receipts/evm-wallet-2026-09-06/validation.md",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "2.7",
+      "requirement": "Audit every affected Kernel memory root; introduce immutable successor schemas and explicit forward migrations only where persistent layout changes.",
+      "status": "complete",
+      "evidence": [
+        "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+        "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+        "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+        ".neutron/release-receipts/evm-wallet-2026-09-06/validation.md",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/memory-history.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "3.1",
+      "requirement": "Scaffold `apps/evm_wallet` with its own tile, resident tools, managed memory, manifest, tests, documentation, and release metadata. Enroll it in workspace/build/test catalogs and use the standard `LICENSE.APP.USE` and offered-source workflow.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/neutron.json",
+        "apps/evm_wallet/README.md",
+        "support/update-source/release-catalog.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ]
+    },
+    {
+      "id": "3.2",
+      "requirement": "Define durable roots for accounts, configured networks/assets, commands, nonce allocation, signatures, submitted transactions, and history. Distinguish wallet settings from disposable frontend state.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/backend/memory/evm_wallet/v1.mo",
+        "apps/evm_wallet/backend/memory/evm_evidence/v1.mo",
+        "apps/evm_wallet/test/memory_release.test.mo",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/memory-history.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ]
+    },
+    {
+      "id": "3.3",
+      "requirement": "Implement public-key/address derivation, Ethereum signature recovery parity, and low-S normalization. Cross-check Motoko cryptography/serialization against independent vectors and viem; frontend libraries do not replace the authoritative backend implementation.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/test/evm_crypto_protocol_test.mo",
+        "apps/evm_wallet/test/evm_crypto_secp_test.mo",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ]
+    },
+    {
+      "id": "3.4",
+      "requirement": "Implement EIP-1559 and chain-protected legacy transaction encoding, with access lists as needed; personal-message and EIP-712 signing; and explicit handling of transaction versus permit nonce domains.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/test/evm_crypto_protocol_test.mo",
+        "apps/evm_wallet/test/evm_crypto_eip712_test.mo",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ]
+    },
+    {
+      "id": "3.5",
+      "requirement": "Add Ethereum and Arbitrum network configurations plus test infrastructure. Require an explicit chain in operation records; identify tokens by chain and contract, never symbol alone. Keep additional networks adapter-driven.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/backend/Config.mo",
+        "test/e2e/fixtures/evm-wallet-network.ts",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ]
+    },
+    {
+      "id": "3.6",
+      "requirement": "Implement the EVM RPC canister adapter through existing backend-call reservations. Pin/verify the deployed interface, use supported typed and multi-provider methods, estimate attached cycles, and expose inconsistent, unavailable, and stale responses honestly.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/backend/rpc/README.md",
+        "apps/evm_wallet/test/rpc_test.mo",
+        "apps/evm_wallet/test/live_rpc_probe.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ]
+    },
+    {
+      "id": "3.7",
+      "requirement": "Add account/network selection, receive address, native/ERC20 balances, selected/custom tokens, sends, contract calls, pending activity, receipts, known approvals, and revocation. Report discovery/history completeness rather than claiming selected tokens or locally known spenders are exhaustive.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/src/main.tsx",
+        "apps/evm_wallet/test/known_approvals.test.ts",
+        "test/e2e/evm-wallet-allowance.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/history-size-diagnosis/results.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md"
+      ]
+    },
+    {
+      "id": "3.8",
+      "requirement": "Prepare transactions with live balance, allowance, nonce, fee, and simulation evidence. Present exact network/account, recipient or contract, value, decoded effects where known, calldata, and expected/authorized fees. Treat caller-supplied labels/ABIs as untrusted descriptions.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/backend/token/Evidence.mo",
+        "apps/evm_wallet/test/token_evidence_actor_test.mo",
+        "apps/evm_wallet/test/token_review.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md"
+      ]
+    },
+    {
+      "id": "3.9",
+      "requirement": "Build the durable command journal: authenticated caller installation plus request ID; identical replay returns the same operation; changed intent conflicts. Allocate nonces in the backend per account/chain, save exact fields before signing, and save signed bytes/hash before broadcasting.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/backend/Journal.mo",
+        "apps/evm_wallet/test/backend_actor_test.mo",
+        "apps/evm_wallet/test/concurrency_await.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md"
+      ]
+    },
+    {
+      "id": "3.10",
+      "requirement": "Implement pending/unknown recovery, receipt status and finality, and explicit same-nonce speed-up/cancel. Reconcile lost responses and rebroadcast exact bytes where appropriate; do not turn an ambiguous result into a fresh transfer. Track released signatures even without wallet broadcast.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/test/backend_actor_test.mo",
+        "apps/evm_wallet/test/replacement_proof_test.mo",
+        "packages/neutron-compiler/test/evm_signed_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json"
+      ]
+    },
+    {
+      "id": "3.11",
+      "requirement": "Handle Arbitrum fee estimation and finality separately from Ethereum; avoid double-counting posting fees. Distinguish native gas balance from IC cycles and sequencer inclusion from final settlement.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/backend/fees/Estimate.mo",
+        "apps/evm_wallet/test/fee_estimate_test.mo",
+        "apps/evm_wallet/backend/main.mo",
+        "doc/evm-wallet.md",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ]
+    },
+    {
+      "id": "3.12",
+      "requirement": "Expose versioned closed-schema accounts, networks, balances, contract reads, transaction requests, message signatures, typed signatures, and operation-status tools. Human effects use wallet-owned UI; direct-root tools reuse the checked backend without granting authority to descendants.",
+      "status": "complete",
+      "evidence": [
+        "packages/neutron-tools/test/evm_wallet.test.ts",
+        "apps/evm_wallet/test/provider.test.ts",
+        "apps/evm_wallet/test/read_adapters.test.ts",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json"
+      ]
+    },
+    {
+      "id": "3.13",
+      "requirement": "Test concurrent callers/tiles, separate chains, nonce collisions, changed intent, partial sequences, unknown signing/broadcast, replacement, reverts, reorgs, reload, and upgrades with pending operations.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/test/concurrency_await.test.ts",
+        "test/e2e/evm-wallet-networks.spec.ts",
+        "packages/neutron-compiler/test/evm_signed_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/history-size-diagnosis/results.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-107/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json"
+      ]
+    },
+    {
+      "id": "4.1",
+      "requirement": "Add a typed consumer client for EVM Wallet discovery, closed input/output validation, explicit-chain requests, operation IDs, status, and errors. Share it between Kitchen Sink, IC Wallet, and Uniswap to avoid divergent adapters.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.2",
+      "requirement": "Evaluate an EIP-1193 adapter for existing EVM libraries. The implemented consumers use the explicit-chain client directly, so no global selected-chain adapter is needed for this release; an external-library adapter remains optional.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.3",
+      "requirement": "Add a sibling **EVM Wallet** page in Kitchen Sink's hash-addressable navigation, alongside the current IC Wallet funding example. Keep the existing external-browser-wallet demo and IC examples working.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.4",
+      "requirement": "Demonstrate real account/network/balance reads and contract reads through EVM Wallet, showing returned network, address, amounts, and freshness.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.5",
+      "requirement": "Add user-initiated native/ERC20 transfer and approval-plus-contract-call examples with explicit network, amount, and destination. Use reproducible fixture/testnet contracts for automated effect tests; never auto-send when the example page mounts.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.6",
+      "requirement": "Demonstrate harmless personal-message and EIP-712 signing requests and independently verify returned signatures against the selected wallet account.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.7",
+      "requirement": "Persist each complete consumer intent before requesting an effect, using the existing IC example's durable retry pattern. Reload, endpoint replacement, timeout, and navigation must reuse the same request; reconcile status before offering a fresh effect after an ambiguous response.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.8",
+      "requirement": "Show the EVM Wallet confirmation and real operation/transaction evidence. Cover absent/incompatible wallet, rejected request, wrong network, pending, reverted, and unavailable-provider states without simulated success.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.9",
+      "requirement": "Demonstrate/test direct-root automation separately: an ordinary Kitchen Sink callback must not gain root authority merely by being called by Agent.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "4.10",
+      "requirement": "Add browser/integration tests for decline, identical replay, changed intent, lost reply, concurrent callers/chains, and successful approval followed by a failed next step. Preserve existing IC Wallet example tests and saved records; update Kitchen Sink README and SDK usage documentation.",
+      "status": "complete",
+      "evidence": [
+        "apps/kitchensink/test/evm_wallet_demo.test.ts",
+        "apps/kitchensink/test/evm_wallet_resident_integration.test.ts",
+        "apps/kitchensink/test/evm_wallet_signatures.test.ts",
+        "test/e2e/evm-wallet.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/kitchensink315.json"
+      ]
+    },
+    {
+      "id": "5.1",
+      "requirement": "Fix false mint completion: replace the current \u201cbalance increased\u201d check with correlation between the deposit transaction/event, minter outcome, and associated IC mint. Test an unrelated incoming transfer during a pending deposit; it must not complete that deposit.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json"
+      ],
+      "scope": "Actual final342/316/315/107/104 fresh ckUSDC deposit and lost-approval-reply/reload passed with exact helper/minter/IC ledger correlation. The initial attempt stopped before withdrawal because the fresh minter fee cache was unavailable; the same-deposit redemption continuation subsequently passed with exact quoted gas, both ledger burns and finalized payout. Its separate evidence is recorded in browser-ic-erc20-final/qualification-summary.json."
+    },
+    {
+      "id": "5.2",
+      "requirement": "Persist deposit intent, source network/account, helper/token, IC recipient, amount, approval/deposit operation IDs, transaction hashes, and mint progress. Resume on reload/upgrade and show confirmed deposit/awaiting mint accurately.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json"
+      ],
+      "scope": "Actual final342/316/315/107/104 fresh ckUSDC deposit and lost-approval-reply/reload passed with exact helper/minter/IC ledger correlation. The initial attempt stopped before withdrawal because the fresh minter fee cache was unavailable; the same-deposit redemption continuation subsequently passed with exact quoted gas, both ledger burns and finalized payout. Its separate evidence is recorded in browser-ic-erc20-final/qualification-summary.json."
+    },
+    {
+      "id": "5.3",
+      "requirement": "Fix receipt-timeout retry behavior: retain pending/unknown operations, reconcile their status, and never silently make a new deposit when the first may already have succeeded. Preserve already completed approval steps.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json"
+      ],
+      "scope": "Actual final342/316/315/107/104 fresh ckUSDC deposit and lost-approval-reply/reload passed with exact helper/minter/IC ledger correlation. The initial attempt stopped before withdrawal because the fresh minter fee cache was unavailable; the same-deposit redemption continuation subsequently passed with exact quoted gas, both ledger burns and finalized payout. Its separate evidence is recorded in browser-ic-erc20-final/qualification-summary.json."
+    },
+    {
+      "id": "5.4",
+      "requirement": "Repair older IC Send/Withdraw recovery gaps with durable commands and frozen ledger/minter arguments before value-moving awaits. Preserve released public contracts; add versioned methods where necessary and route new UI execution through the shared journal.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ]
+    },
+    {
+      "id": "5.5",
+      "requirement": "Handle each ledger/minter's actual reconciliation semantics, including duplicate-transfer responses, expired deduplication windows, unknown approval, and ambiguous withdrawal replies. Where success/failure cannot be established, retain an explicit unresolved outcome rather than retrying a fresh operation.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/final-runtime-restoration.json"
+      ]
+    },
+    {
+      "id": "5.6",
+      "requirement": "Add regression tests for an accepted transfer with a lost reply, delayed retries, concurrent sends, and partial approval/withdrawal completion. Verify existing contact checks, fee checks, funding, approvals, and history.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ]
+    },
+    {
+      "id": "5.7",
+      "requirement": "Add EVM Wallet as a deposit source while retaining existing external browser-wallet behavior. IC Wallet discovers the current supported helper and token mapping, then uses the shared client for approval/deposit transactions.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json"
+      ],
+      "scope": "Actual final342/316/315/107/104 fresh ckUSDC deposit and lost-approval-reply/reload passed with exact helper/minter/IC ledger correlation. The initial attempt stopped before withdrawal because the fresh minter fee cache was unavailable; the same-deposit redemption continuation subsequently passed with exact quoted gas, both ledger burns and finalized payout. Its separate evidence is recorded in browser-ic-erc20-final/qualification-summary.json."
+    },
+    {
+      "id": "5.8",
+      "requirement": "Keep bridge orchestration in IC Wallet: validate helper/minter identity, supported token, principal/subaccount, and exact amounts. Ethereum mainnet ck-token deposits must not be offered as direct Arbitrum deposits.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json"
+      ],
+      "scope": "Actual final342/316/315/107/104 fresh ckUSDC deposit and lost-approval-reply/reload passed with exact helper/minter/IC ledger correlation. The initial attempt stopped before withdrawal because the fresh minter fee cache was unavailable; the same-deposit redemption continuation subsequently passed with exact quoted gas, both ledger burns and finalized payout. Its separate evidence is recorded in browser-ic-erc20-final/qualification-summary.json."
+    },
+    {
+      "id": "5.9",
+      "requirement": "Support redemption to an EVM Wallet address through the existing minter protocols. Explain/quote the ckETH gas requirement and separate allowance for ckERC20 redemption; track withdrawal completion durably.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/final-runtime-restoration.json"
+      ]
+    },
+    {
+      "id": "5.10",
+      "requirement": "Add versioned bridge/quote/status tools as needed for the workflow. Agent obtains bridge intent from IC Wallet and calls EVM Wallet's root tool directly; a nested IC-Wallet call must not impersonate the root.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ]
+    },
+    {
+      "id": "5.11",
+      "requirement": "Preserve released `wallet` v1 and `wallet_commands` v1 schema sources and lineage. Add bridge/command roots or explicit successor migrations as needed; test existing configured wallets and pending records across skipped upgrades.",
+      "status": "complete",
+      "evidence": [
+        "apps/wallet/test/motoko/transfer_journal_test.mo",
+        "apps/wallet/test/motoko/bridge_test.mo",
+        "apps/wallet/test/motoko/bridge_replacements_test.mo",
+        "test/e2e/ic-wallet-bridge.spec.ts",
+        "test/e2e/ic-wallet-root-bridge.spec.ts",
+        "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/memory-history.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/wallet316-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json"
+      ]
+    },
+    {
+      "id": "6.1",
+      "requirement": "Scaffold `apps/uniswap` as a separate app with its own swap UI, resident tools, saved operation state, tests, license/source packaging, and catalogs. Consume the shared EVM Wallet client; do not add an independent signer.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.2",
+      "requirement": "Choose and document the first supported router/protocol and quote source for Ethereum and Arbitrum. Verify current official chain deployments and supported SDK/API versions during implementation. If a quote API needs a key, specify its credential path instead of embedding it in the package.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.3",
+      "requirement": "Implement account/network selection, token pair and amount, balances, route/quote refresh, price impact, estimated fees, minimum received, slippage, recipient, and deadline. Make stale or unavailable quotes explicit.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.4",
+      "requirement": "Build exact approval/permit and swap requests from the selected quote. Validate chain, deployed router, input/output tokens, recipient, amount, and minimum output. Support native ETH versus wrapped ETH correctly.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.5",
+      "requirement": "Implement the approval model required by supported routes: ordinary ERC20 approvals and EIP-2612/Permit2 where used. Show spender, amount, nonce/domain, and expiry accurately; never silently substitute an unlimited approval.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.6",
+      "requirement": "Request signatures and transactions only through EVM Wallet. Uniswap owns swap review; EVM Wallet owns the effect/signature decision and actual signed bytes. A swap quote or connected account is not standing signing authority.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.7",
+      "requirement": "Persist quote-derived intent, approval/permit progress, wallet request IDs, swap transaction, and final receipt. Recover partial sequences and stale quotes without repeating completed steps or claiming a multi-transaction EOA sequence is atomic.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.8",
+      "requirement": "Expose versioned read/quote/prepare/status tools for Agent. In Agent Mode, root obtains the prepared intent from Uniswap and calls EVM Wallet's root tools directly. Bind any returned execution result to the saved swap request.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.9",
+      "requirement": "Handle declined review, insufficient token/gas, fee/quote changes, slippage revert, expired permits, pending/replaced transactions, provider disagreement, and missing/incompatible EVM Wallet.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "6.10",
+      "requirement": "Test Ethereum and Arbitrum swaps using reproducible fork/test fixtures: native-to-token and token-to-token, supported approval/permit paths, rejection, partial completion, reload, and a lost broadcast reply. Verify recipient and actual receipt effects against the requested swap.",
+      "status": "complete",
+      "evidence": [
+        "apps/uniswap/test/swap.test.ts",
+        "apps/uniswap/test/controller.test.ts",
+        "apps/uniswap/test/service.test.ts",
+        "apps/uniswap/test/fees.test.ts",
+        "test/e2e/uniswap-networks.spec.ts",
+        "test/e2e/evm-wallet-root-protocol.spec.ts",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103-requirements.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/qualification-summary.json"
+      ],
+      "scope": "Selected direct V3 route; actual chain1 and42161 effects, consumer replacement adoption and root broadcast-response-loss are verified at the versions recorded in the per-app map. Permit2 and permit-based swap routing are not used."
+    },
+    {
+      "id": "7.1",
+      "requirement": "Add optional token discovery/history and enhanced simulation only behind replaceable adapters. Make coverage/partial failures explicit, resolve any provider-credential needs, and verify current APIs before choosing them.",
+      "status": "complete",
+      "evidence": [
+        "apps/evm_wallet/README.md",
+        "apps/evm_wallet/backend/rpc/README.md",
+        "doc/evm-wallet.md",
+        "doc/todo.evm-wallet.md"
+      ],
+      "scope": "No optional indexer/enhanced simulation provider selected; baseline selected/requested balances, local history and eth_call use replaceable app RPC transport with explicit coverage and failures. No credentials required."
+    },
+    {
+      "id": "7.2",
+      "requirement": "Document network setup, funding/gas, signatures and approvals, pending recovery, namespace lifecycle, the SDK, and all three consumer examples. Update capability/consent docs to match implemented authority.",
+      "status": "complete",
+      "evidence": [
+        "doc/evm-wallet.md",
+        "doc/app-isolated-chain-key-signing.md",
+        "doc/app-method-access-and-call-consent.md",
+        "apps/evm_wallet/README.md",
+        "apps/wallet/README.md",
+        "apps/kitchensink/README.md",
+        "apps/uniswap/README.md"
+      ]
+    },
+    {
+      "id": "7.3",
+      "requirement": "Test old/new Kernel and app combinations: existing IC Wallet remains usable, and new EVM features report missing support before an effect. Do not let version skew silently weaken the required caller/signing contract.",
+      "status": "complete",
+      "evidence": [
+        ".neutron/release-receipts/evm-wallet-next/compatibility/kernel341-final-compiler-summary.json",
+        "apps/evm_wallet/test/provider.test.ts",
+        "apps/wallet/test/provider_release_compat.test.ts",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "7.4",
+      "requirement": "Audit every changed app's managed roots. Prove clean initialization, retained same-schema data, and every supported production migration path, including pending transactions and skipped releases.",
+      "status": "complete",
+      "evidence": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/memory-history.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "7.5",
+      "requirement": "Increase each changed production app's release version only after its compatible change is ready. Run complete workspace packaging plus app-specific release, integration, and browser tests; retain archive/source evidence.",
+      "status": "complete",
+      "evidence": [
+        ".neutron/release-receipts/evm-wallet-next/kernel341/candidate.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/history-size-diagnosis/results.json",
+        ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+      ]
+    },
+    {
+      "id": "7.6",
+      "requirement": "Publish the compatible Kernel and app set in one catalog transaction through the production source `233tv-xiaaa-aaaay-aacta-cai`. Run only one publisher and review prepared archives and matching offered source first.",
+      "status": "complete",
+      "evidence": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish.json"
+      ]
+    },
+    {
+      "id": "7.7",
+      "requirement": "Repeat `npm run updates:publish` with identical bytes and require receipt v2, `batch_id: null`, every selected package/source `unchanged`, and matching version/URL, path, size, and SHA-256. Reconcile lost replies before rebuilding.",
+      "status": "complete",
+      "evidence": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish-noop.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/receipt-verification.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/publication-verification-attempts.json"
+      ]
+    },
+    {
+      "id": "7.8",
+      "requirement": "Verify state-preserving in-product upgrades. Leave Dispenser starter changes separate unless requested. Follow [package updates](./package-updates.md) and [memory migrations](./memory-migrations-and-uninstall.md).",
+      "status": "complete",
+      "evidence": [
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/evm-paths-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+        ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+        ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/validation.json"
+      ]
+    }
+  ],
+  "qualification_scope": "Disposable protocol fixtures and current/published exact-package checks; no funded production-network transactions. Optional integrations remain explicit choices.",
+  "statusMeaning": {
+    "implementation_verified": "Source and targeted tests reviewed; final package integration/release closure remains separate.",
+    "pending_final_evidence": "Required final test, runtime, or publication evidence remains pending.",
+    "complete": "The original clause is satisfied by its recorded implementation, version-bound qualification and final publication evidence. Optional integrations remain explicitly scoped choices; no production-network asset execution is claimed."
+  },
+  "finalCandidatePins": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/candidate-pins.json",
+  "pendingGates": [],
+  "status": "complete",
+  "completedAt": "2026-09-06T15:29:53.553646+00:00"
+}

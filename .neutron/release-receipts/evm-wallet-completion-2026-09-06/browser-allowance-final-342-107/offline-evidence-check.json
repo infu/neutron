@@ -1,0 +1,105 @@
+{
+  "schema": "neutron-offline-allowance-replacement-evidence-check-v1",
+  "source": "Stored passing E2E report, signed transaction bytes, pending RPC transaction fields and checkpoints only; no browser or RPC execution",
+  "original": {
+    "requestId": "ec66d879f33a6952fc7576c87c65f961",
+    "hash": "0xbb469fed05bcbc91f8e350bd6b494feeebc3a0c8959e8cd629d254e2a3294623",
+    "raw": "0x02f8b182a4b10a843b9aca00843b9aca0e82ad2294f56aa3aceddf88ab12e494d0b96da3c09a5d264e80b844095ea7b3000000000000000000000000e931aea27eb107afa909152f8ee854538030d2290000000000000000000000000000000000000000000000006124fee993bc0000c080a0c76122ded558e1d0af1a0735711c8903d21a70e73dde4f7c4c4c45e13317b6d4a015bcac4ec1f01b236dba8d53b8cb520724c2ee5d5851239652245665c45a66ef",
+    "signer": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "chainId": "42161",
+    "nonce": 10,
+    "to": "0xf56AA3aCedDf88Ab12E494d0B96DA3C09a5d264e",
+    "valueWei": "0",
+    "data": "0x095ea7b3000000000000000000000000e931aea27eb107afa909152f8ee854538030d2290000000000000000000000000000000000000000000000006124fee993bc0000",
+    "maxFeePerGas": "1000000014",
+    "maxPriorityFeePerGas": "1000000000",
+    "gasLimit": "44322",
+    "accessList": [],
+    "lowS": true,
+    "rawSource": "Reconstructed offline from saved complete pending RPC transaction fields; recomputed hash matches saved original hash",
+    "pendingBlockNumber": null
+  },
+  "replacement": {
+    "requestId": "58d8bc9320bed7c3b2b22778832ab7ac",
+    "hash": "0x83bb17c9cfd641b7550d60172ff084daf2030cc1a70e4adbf85ce16a3a2d7917",
+    "raw": "0x02f8b182a4b10a8477359401847735941d82ad2294f56aa3aceddf88ab12e494d0b96da3c09a5d264e80b844095ea7b3000000000000000000000000e931aea27eb107afa909152f8ee854538030d2290000000000000000000000000000000000000000000000006124fee993bc0000c001a0c6ac86dcc81f26f84e7bf948058a2c37ffee4fdb1e42a0079f0a3eefabf9fb86a078a10ab8bc834d27b17d7a4976c88a3574b707c0b7ccc02e26cad87ed4bc2db5",
+    "signer": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "chainId": "42161",
+    "nonce": 10,
+    "to": "0xf56AA3aCedDf88Ab12E494d0B96DA3C09a5d264e",
+    "valueWei": "0",
+    "data": "0x095ea7b3000000000000000000000000e931aea27eb107afa909152f8ee854538030d2290000000000000000000000000000000000000000000000006124fee993bc0000",
+    "maxFeePerGas": "2000000029",
+    "maxPriorityFeePerGas": "2000000001",
+    "gasLimit": "44322",
+    "accessList": [],
+    "lowS": true,
+    "receipt": {
+      "status": "success",
+      "blockNumber": "40984",
+      "blockHash": "0x47616bdca8a564b55a295f32fd72230d81c73d9d1940bc4e065f7f5b14c19f36",
+      "canonicalCheck": "Verified during passing execution against node block hash and membership by chain.evidence(); no new RPC"
+    },
+    "pendingRawMatchesMinedRaw": true,
+    "feeBumpMatchesReviewedTwiceOriginalPlusOne": true
+  },
+  "revocation": {
+    "requestId": "62e3a49c9b1df79133e4fb6e463291d8",
+    "hash": "0xe3de3db7c31f3bcda61d2cacd7efb7516e00071095bf47704e105503a203f068",
+    "raw": "0x02f8b182a4b10b843b9aca00843b9aca0e826a0e94f56aa3aceddf88ab12e494d0b96da3c09a5d264e80b844095ea7b3000000000000000000000000e931aea27eb107afa909152f8ee854538030d2290000000000000000000000000000000000000000000000000000000000000000c080a00c03041044ec97319f1215be2a36ca6eb3b3f2156344e4b72fb6cddbb961a226a047e372156369d5ab369289e6c2da175a150abad6b3c6ad55d177c00f8569e160",
+    "signer": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "chainId": "42161",
+    "nonce": 11,
+    "to": "0xf56AA3aCedDf88Ab12E494d0B96DA3C09a5d264e",
+    "valueWei": "0",
+    "data": "0x095ea7b3000000000000000000000000e931aea27eb107afa909152f8ee854538030d2290000000000000000000000000000000000000000000000000000000000000000",
+    "maxFeePerGas": "1000000014",
+    "maxPriorityFeePerGas": "1000000000",
+    "gasLimit": "27150",
+    "accessList": [],
+    "lowS": true,
+    "receipt": {
+      "status": "success",
+      "blockNumber": "41006",
+      "blockHash": "0xe77c894fd2a72c13bc5ec4507755f59f5382e660a7a3317e90ac17963363ffe0",
+      "canonicalCheck": "Verified during passing execution against node block hash and membership by chain.evidence(); no new RPC"
+    }
+  },
+  "nonce": {
+    "beforeLatestPending": 10,
+    "originalSigned": 10,
+    "replacementSigned": 10,
+    "revocationSigned": 11,
+    "finalLatest": 12,
+    "finalPending": 12,
+    "finalNonceEvidence": "Saved lane-postflight.json latest and pending0xc, plus passing executed latest-nonce assertion"
+  },
+  "allowance": {
+    "beforePending": "0",
+    "afterReplacement": "7000000000000000000",
+    "afterRevocation": "0",
+    "evidence": "Passing executed RPC assertions plus saved final exact-UI-block observation"
+  },
+  "finalUiObservation": {
+    "blockNumber": "41014",
+    "blockHash": "0x9a1e66be84357f0207e9ba4a1165e6035ab0bea41f3c4f26a044c36c0aefae16",
+    "allowance": "0"
+  },
+  "tokenBalance": "10000000000000000000",
+  "mining": {
+    "original": {
+      "automine": false,
+      "interval": 1
+    },
+    "restoredBeforeRevocation": true,
+    "postflight": {
+      "automine": false,
+      "interval": 1
+    },
+    "evidence": "Passing restoreMining getters assertion and automining-restored checkpoint; saved lane-postflight.json verifies the final mode"
+  },
+  "qualificationLimits": [
+    "Owned unforked Anvil chain42161; no Nitro sequencing, parent posting fees or L1 finality qualification",
+    "UI exclusion/discovery/reload and canonical receipt membership are recorded passing assertions; saved lane postflight separately confirms original receipt absence and latest/pending12"
+  ]
+}

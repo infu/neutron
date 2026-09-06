@@ -1,0 +1,950 @@
+{
+  "format": 1,
+  "requirements_document": "doc/todo.evm-wallet.md",
+  "package": {
+    "id": "uniswap",
+    "version": 104,
+    "archive_path": "apps/uniswap/uniswap.v0.1.4.neutron",
+    "archive_sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685",
+    "archive_bytes": 288989,
+    "source_path": "apps/uniswap/.neutron/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz",
+    "source_sha256": "3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd",
+    "source_bytes": 462898
+  },
+  "evidence_scope": "Final Uniswap104 package qualification with named prior103 qualification and explicit actual versions for each complementary runtime pass. Historicalfailedattempts remainintheirsourceevidencedirectories; nonearepromotedtoapass.",
+  "managed_memory": {
+    "root": "uniswap",
+    "version": 1,
+    "lock_matches_published_102": true,
+    "published_102_preserved": true,
+    "lock_matches_103": true,
+    "published_103_preserved": true,
+    "migration_added": false
+  },
+  "completed_validation": {
+    "release_tests": {
+      "tests_passed": 92,
+      "assertions": 880,
+      "motoko_initialization_and_restoration_passed": true,
+      "qualification": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        "sha256": "abe2ef27cd8b96dcb6b8d8f5c025defc76e50363e5759b9ffc2562ce7cd17b3b"
+      }
+    },
+    "app_browser_fixture": {
+      "checks_passed": 22,
+      "viewports_px": [
+        1440,
+        375,
+        320
+      ],
+      "transport": "Mock Kernel transport; actualUI/SDK/schema validation",
+      "retained_history_records": 25,
+      "retained_history_bytes": 119515,
+      "complete_paging_and_same_request_recovery": true,
+      "qualification": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+        "sha256": "abe2ef27cd8b96dcb6b8d8f5c025defc76e50363e5759b9ffc2562ce7cd17b3b"
+      }
+    },
+    "official_contract_fixture": {
+      "swaps_passed": 6,
+      "chain_ids": [
+        "1",
+        "42161"
+      ],
+      "routes": [
+        "native_to_token",
+        "token_to_token",
+        "token_to_native"
+      ],
+      "provider": "Disposable Ganache with official Uniswap contract artifacts",
+      "receipt_effects_verified": true,
+      "slippage_and_deadline_reverts_verified": true
+    },
+    "typescript_passed": true
+  },
+  "clauses": [
+    {
+      "requirement": "6.1",
+      "summary": "Separate app, resident tools, durable state, license/catalog and shared Wallet client",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/neutron.json",
+          "line": 3
+        },
+        {
+          "path": "apps/uniswap/neutron.json",
+          "line": 9
+        },
+        {
+          "path": "apps/uniswap/neutron.json",
+          "line": 21
+        },
+        {
+          "path": "apps/uniswap/neutron.json",
+          "line": 50
+        },
+        {
+          "path": "support/update-source/release-catalog.json",
+          "line": 54
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/package.test.ts",
+          "line": 12
+        },
+        {
+          "path": "apps/uniswap/test/package.test.ts",
+          "line": 24
+        }
+      ],
+      "remaining_runtime": [],
+      "runtime_evidence_ids": [
+        "uniswap_42161_evm103_kernel341",
+        "root_uniswap_evm106_kernel342",
+        "token_replacement_uniswap104_evm107_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes",
+      "additional_qualification": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+          "sha256": "abe2ef27cd8b96dcb6b8d8f5c025defc76e50363e5759b9ffc2562ce7cd17b3b"
+        }
+      ]
+    },
+    {
+      "requirement": "6.2",
+      "summary": "Documented first route and official chain deployments/interfaces; keyless quote source",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/README.md",
+          "line": 11
+        },
+        {
+          "path": "apps/uniswap/README.md",
+          "line": 21
+        },
+        {
+          "path": "apps/uniswap/src/swap.ts",
+          "line": 4
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/swap.test.ts",
+          "line": 84
+        },
+        {
+          "path": "apps/uniswap/test/fixtures/contracts.ts",
+          "line": 13
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Selected supported route is direct V3 single-pool SwapRouter02 using QuoterV2; no quote API credential."
+      ],
+      "completion_status": "complete_for_documented_supported_routes",
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "runtime_evidence_ids": []
+    },
+    {
+      "requirement": "6.3",
+      "summary": "Account/network/token/balance controls, quote refresh, impact, numeric network fees, minimum, slippage, recipient, deadline and explicit unavailable/expired states",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/src/main.tsx",
+          "line": 85
+        },
+        {
+          "path": "apps/uniswap/src/fee_review.tsx",
+          "line": 15
+        },
+        {
+          "path": "apps/uniswap/src/fees.ts",
+          "line": 52
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/swap.test.ts",
+          "line": 198
+        },
+        {
+          "path": "apps/uniswap/test/fees.test.ts",
+          "line": 45
+        },
+        {
+          "path": "apps/uniswap/test/fees.test.ts",
+          "line": 59
+        },
+        {
+          "path": "apps/uniswap/test/fees.test.ts",
+          "line": 84
+        },
+        {
+          "path": "apps/uniswap/test/browser/check.mjs",
+          "line": 127
+        },
+        {
+          "path": "apps/uniswap/test/browser/check.mjs",
+          "line": 287
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Approval and swap estimates are separate; missing estimates are not replaced by Quoter execution gas. Arbitrum posting component is counted once only with complete provider evidence.",
+        "Numeric price impact qualified by the native342/106/103 and finaltoken342/107/104 cases; unavailable preapproval networkfee states remain explicit."
+      ],
+      "runtime_evidence_ids": [
+        "root_uniswap_evm106_kernel342",
+        "token_replacement_uniswap104_evm107_kernel342",
+        "native_uniswap_evm106_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes"
+    },
+    {
+      "requirement": "6.4",
+      "summary": "Exact quote-bound approval and swap requests with native wrapping, refund and output unwrapping",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/src/swap.ts",
+          "line": 55
+        },
+        {
+          "path": "apps/uniswap/src/swap.ts",
+          "line": 114
+        },
+        {
+          "path": "apps/uniswap/src/swap.ts",
+          "line": 127
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/swap.test.ts",
+          "line": 84
+        },
+        {
+          "path": "apps/uniswap/test/swap.test.ts",
+          "line": 229
+        },
+        {
+          "path": "apps/uniswap/test/fixtures/contracts.ts",
+          "line": 103
+        }
+      ],
+      "remaining_runtime": [],
+      "runtime_evidence_ids": [
+        "uniswap_42161_evm103_kernel341",
+        "token_replacement_uniswap104_evm107_kernel342",
+        "native_uniswap_evm106_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes"
+    },
+    {
+      "requirement": "6.5",
+      "summary": "Exact ordinary ERC20 approval and accurate spender, amount and non-expiring allowance presentation",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/src/swap.ts",
+          "line": 127
+        },
+        {
+          "path": "apps/uniswap/src/main.tsx",
+          "line": 91
+        },
+        {
+          "path": "apps/uniswap/README.md",
+          "line": 30
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/swap.test.ts",
+          "line": 123
+        },
+        {
+          "path": "test/e2e/evm-wallet.spec.ts",
+          "line": 220
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "EIP-2612 and Permit2 are not used by selected routes; permit nonce/domain/expiry behavior is not implemented or claimed. Ordinary approval has no automatic expiry."
+      ],
+      "runtime_evidence_ids": [
+        "uniswap_42161_evm103_kernel341",
+        "root_uniswap_evm106_kernel342",
+        "token_replacement_uniswap104_evm107_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes"
+    },
+    {
+      "requirement": "6.6",
+      "summary": "Only EVM Wallet decides, signs and broadcasts; root Agent directly consumes prepared requests",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/src/controller.ts",
+          "line": 174
+        },
+        {
+          "path": "apps/uniswap/src/service.ts",
+          "line": 35
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 441
+        },
+        {
+          "path": "apps/uniswap/test/service.test.ts",
+          "line": 174
+        },
+        {
+          "path": "apps/uniswap/test/service.test.ts",
+          "line": 192
+        },
+        {
+          "path": "test/e2e/evm-wallet.spec.ts",
+          "line": 206
+        },
+        {
+          "path": "test/e2e/evm-wallet.spec.ts",
+          "line": 240
+        }
+      ],
+      "remaining_runtime": [],
+      "runtime_evidence_ids": [
+        "uniswap_42161_evm103_kernel341",
+        "root_uniswap_evm106_kernel342",
+        "token_replacement_uniswap104_evm107_kernel342",
+        "native_uniswap_evm106_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes"
+    },
+    {
+      "requirement": "6.7",
+      "summary": "Durable quote-derived intent, frozen request IDs, CAS, approval/swap progress and separate receipts with partial/reload recovery",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/src/controller.ts",
+          "line": 40
+        },
+        {
+          "path": "apps/uniswap/backend/Journal.mo",
+          "line": 35
+        },
+        {
+          "path": "apps/uniswap/backend/Journal.mo",
+          "line": 81
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/memory_release.test.mo",
+          "line": 58
+        },
+        {
+          "path": "apps/uniswap/test/memory_release.test.mo",
+          "line": 108
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 240
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 258
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 294
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 430
+        },
+        {
+          "path": "apps/uniswap/test/browser/check.mjs",
+          "line": 172
+        }
+      ],
+      "remaining_runtime": [],
+      "runtime_evidence_ids": [
+        "uniswap_42161_evm103_kernel341",
+        "root_uniswap_evm106_kernel342",
+        "token_replacement_uniswap104_evm107_kernel342",
+        "native_uniswap_evm106_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes",
+      "additional_qualification": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+          "sha256": "abe2ef27cd8b96dcb6b8d8f5c025defc76e50363e5759b9ffc2562ce7cd17b3b"
+        }
+      ]
+    },
+    {
+      "requirement": "6.8",
+      "summary": "Versioned Agent resident tools and independently verified original/replacement request-result binding",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/src/service.ts",
+          "line": 19
+        },
+        {
+          "path": "apps/uniswap/src/controller.ts",
+          "line": 226
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/service.test.ts",
+          "line": 169
+        },
+        {
+          "path": "apps/uniswap/test/service.test.ts",
+          "line": 241
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 488
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 511
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 617
+        }
+      ],
+      "remaining_runtime": [],
+      "runtime_evidence_ids": [
+        "root_uniswap_evm106_kernel342",
+        "token_replacement_uniswap104_evm107_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes"
+    },
+    {
+      "requirement": "6.9",
+      "summary": "Decline, insufficient balance/gas, fee changes, unavailable providers, expiry, pending/replaced/cancelled/reverted transaction handling",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/src/controller.ts",
+          "line": 115
+        },
+        {
+          "path": "apps/uniswap/src/controller.ts",
+          "line": 174
+        },
+        {
+          "path": "apps/uniswap/src/fees.ts",
+          "line": 52
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 269
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 307
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 328
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 354
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 370
+        },
+        {
+          "path": "apps/uniswap/test/controller.test.ts",
+          "line": 420
+        },
+        {
+          "path": "apps/uniswap/test/fees.test.ts",
+          "line": 104
+        },
+        {
+          "path": "apps/uniswap/test/browser/check.mjs",
+          "line": 254
+        },
+        {
+          "path": "apps/uniswap/test/fixtures/contracts.ts",
+          "line": 115
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Expired-permit behavior is not claimed because the supported route does not use permits."
+      ],
+      "runtime_evidence_ids": [
+        "uniswap_42161_evm103_kernel341",
+        "root_uniswap_evm106_kernel342",
+        "token_replacement_uniswap104_evm107_kernel342",
+        "native_uniswap_evm106_kernel342",
+        "wallet_allowance_replacement_evm107_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes"
+    },
+    {
+      "requirement": "6.10",
+      "summary": "Both-chain reproducible route fixtures verify recipient/calldata and actual receipt/balance effects",
+      "implementation_status": "verified",
+      "implementation": [
+        {
+          "path": "apps/uniswap/src/swap.ts",
+          "line": 9
+        }
+      ],
+      "tests": [
+        {
+          "path": "apps/uniswap/test/fixtures/contracts.ts",
+          "line": 27
+        },
+        {
+          "path": "apps/uniswap/test/fixtures/contracts.ts",
+          "line": 97
+        },
+        {
+          "path": "apps/uniswap/test/fixtures/contracts.ts",
+          "line": 113
+        },
+        {
+          "path": "test/e2e/evm-wallet.spec.ts",
+          "line": 157
+        },
+        {
+          "path": "test/e2e/uniswap-networks.spec.ts",
+          "line": 33
+        }
+      ],
+      "remaining_runtime": [],
+      "notes": [
+        "Bothchains andselectedroutes qualified through complementary version-bound runs: Arbitrum341/103/103 native+token, Ethereum342/106/103 native, finalEthereum342/107/104 tokenwithconsumerreplacementadoption. ActualRPCproviderresponse-loss recovery separatelyqualified inroot342/106/103. Existingofficialcontractfixtures additionallycover token-native, minimum/deadline reverts. Unusedpermitpaths/Nitrofees/L1finality arenotclaimed."
+      ],
+      "runtime_evidence_ids": [
+        "uniswap_42161_evm103_kernel341",
+        "root_uniswap_evm106_kernel342",
+        "token_replacement_uniswap104_evm107_kernel342",
+        "native_uniswap_evm106_kernel342"
+      ],
+      "runtime_status": "verified_by_explicitly_version_bound_evidence",
+      "completion_status": "complete_for_documented_supported_routes"
+    }
+  ],
+  "runtime_owners": {
+    "network_matrix": "/root/uniswap_app/network_swaps",
+    "serialized_window_coordinator": "/root/evm_provenance",
+    "root_agent_workflow": "/root/evm_provenance/root_uniswap_protocol"
+  },
+  "limitations": [
+    "A dropped consumer MessagePort response is distinct from an eth_sendRawTransaction provider-response loss.",
+    "Mock/controller evidence does not establish final installed-runtime execution.",
+    "Local Anvil/Ganache chain ID 42161 does not establish Arbitrum Nitro posting cost or L1 finality behavior."
+  ],
+  "prior_real_route_evidence": [
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/browser/final-uniswap-test.log",
+      "line": 6
+    },
+    {
+      "path": ".neutron/release-receipts/evm-wallet-2026-09-06/browser/evidence/uniswap-official-contract-evidence.json",
+      "line": 6
+    }
+  ],
+  "runtime_runs": [
+    {
+      "id": "uniswap_42161_evm103_kernel341",
+      "status": "passed",
+      "installed_versions": {
+        "kernel": 341,
+        "evm_wallet": 103,
+        "uniswap": 103
+      },
+      "chain_ids": [
+        "42161"
+      ],
+      "cases_passed": 2,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/qualification-summary.json",
+          "sha256": "47a02262cab010f70773bf3baa9aae2bcd97460497f9993dbb8f2f712369e61b"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/report.json",
+          "sha256": "50e72c9faeffc7a7feb5d00b2cf1c70b7a2d4632ea3b90e88987cb77256d6d6a"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/1-network-swap-evidence.json",
+          "sha256": "174e0bac35750eef4adaea5351d345fdc7c3145f8898b6378bf067c89ccfa942"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/2-network-swap-evidence.json",
+          "sha256": "cb4180d919351863a737e4f95fcedb9fe5df9ea88bb4f237e845dcf37d98e7b8"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json",
+          "sha256": "c21870673b78124d41e8c5b501d8711910b261a0e8dee4d663530041f04f0c34"
+        }
+      ],
+      "proves": [
+        "native_to_token",
+        "token_to_token",
+        "exact_approval",
+        "separate_wallet_decisions",
+        "partial_approval_reload",
+        "decline_without_effect",
+        "consumer_reply_loss_reload_same_request",
+        "signed_calldata_and_recipient_balance_effects"
+      ],
+      "limitations": [
+        "Chain42161 is unforked Anvil: Nitro posting costs, sequencer behavior and L1 finality not exercised",
+        "Native reply-loss fault drops successful consumer MessagePort reply, not the provider eth_sendRawTransaction RPC response",
+        "Optional factory.getPool price-impact reads trapped IC0502 text_compare_range stack overflow; UI reported unavailable and both actual swap workflows completed. Root diagnosis owns fix."
+      ],
+      "does_not_claim_final_successor_versions": true
+    },
+    {
+      "id": "root_uniswap_evm106_kernel342",
+      "status": "passed_with_same_request_continuation",
+      "installed_versions": {
+        "kernel": 342,
+        "evm_wallet": 106,
+        "uniswap": 103
+      },
+      "chain_ids": [
+        "1"
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/qualification-summary.json",
+          "sha256": "3ced55de9396209681dad05f42edf50c7bfd04a030d2317ed6445b40ce09c794"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/root-uniswap-real-chain-protocol.json",
+          "sha256": "51fbc4856db052cea44aabd05973877419d6f33c178208fbb76e8f8761c633e8"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/chain1-release-state.json",
+          "sha256": "3bbb37e48ca11b2fc3e3b238a0a6d5bd2ecea14d8a8db5c7b33160061ec8b4b3"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/installed-candidates-at-start.json",
+          "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/report.json",
+          "sha256": "e3e86db86192e3ac9d3a6d2ed7847d7804e08e84b56b2b7681e083055c521da2"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-final/continuation/report.json",
+          "sha256": "a33bb67a8740df27b65ebb0b703ff34786ccc3ded63aa7ecb4e1af9abccfadc4"
+        }
+      ],
+      "proves": [
+        "real_resident_quote_prepare",
+        "human_and_descendant_root_denial",
+        "exact_original_caller_request_binding",
+        "relabeled_approval_as_swap_rejected",
+        "confirmed_exact_approval",
+        "durable_reload_with_same_ids",
+        "separately_signed_swap",
+        "independently_recorded_receipt_and_actual_token_effects",
+        "accepted_provider_broadcast_response_loss_same_operation_hash_raw_recovery"
+      ],
+      "provider_response_loss": {
+        "matchingRequests": 3,
+        "suppressedResponses": 3,
+        "observedRawTransactions": 1,
+        "recoveryAdditionalBroadcasts": 0,
+        "releasedAt": "2026-09-06T13:31:58.684Z"
+      },
+      "nonce_before": "11",
+      "nonce_after": "13",
+      "actual_input": "1000000000000000",
+      "actual_output": "996987409330905",
+      "swap_id": "fc9f61f697374955a10f7849a81fead0",
+      "approval_request_id": "1a87c5ce617bc4f77a56a2269b9a7cea",
+      "swap_request_id": "15ae503f21c9c3e588ba0bd0f976db9d",
+      "approval_hash": "0x7dcad0f5df4fdf078241a7c4b1cfc56e1aaac595f5da1f16af80ba587640993f",
+      "swap_hash": "0xb38eb5bd2fb6f42090493aaef16f5de08b4e73db9228952576fc21a6f1562813",
+      "continuation_note": "Test-only reload opener launched a second restored Kitchen tile. Confirmed approval, direct-root quote/prepare, human/descendant denial and misbinding rejection were retained. Corrected helper reused restored tile; continuation verified the same immutable requests and resumed only the previously unsubmitted swap.",
+      "limitations": [
+        "This run is tied to Kernel342/EVMWallet106/Uniswap103; it does not claim EVMWallet107 execution.",
+        "Replacement proof was not exercised.",
+        "Root quote price impact was unavailable because quote and pool observations differed; ordinary deterministic numeric-impact cases remain separate.",
+        "Deterministic root caller fixture proves installed Kernel authority and protocol, not model reasoning."
+      ]
+    },
+    {
+      "id": "native_uniswap_evm106_kernel342",
+      "status": "passed_native_case_only",
+      "installed_versions": {
+        "kernel": 342,
+        "evm_wallet": 106,
+        "uniswap": 103
+      },
+      "chain_ids": [
+        "1"
+      ],
+      "cases_passed": 1,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/qualification-summary.json",
+          "sha256": "4a39eed7a2ecbe84a4b25c7191dc038ef89251e632040e7d4b09ecdb3ca9743b"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/native-network-swap-evidence.json",
+          "sha256": "95ac871c395d4103b947911b402e056b8f6562981ac28b631c28a6dd24f375be"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/installed-candidates.json",
+          "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/report.json",
+          "sha256": "d18ef7fe756e9f4c1a674bd8b7b0707cd3875d3d18b5d143549e44393dc2f740"
+        }
+      ],
+      "proves": [
+        "native_to_token",
+        "numeric_price_impact",
+        "decline_without_effect",
+        "signed_calldata_and_recipient_effects",
+        "consumer_reply_loss_same_request_recovery",
+        "terminal_reload_no_repeat"
+      ],
+      "limitations": [
+        "The same run token case failed after durable begin on103 history metadata size; preserved as failure, fixed and separately qualified on104.",
+        "No claim of execution on EVM107/Uniswap104."
+      ],
+      "transaction_hash": "0x4006f0ec5f255fde1a39276a10160317b013725ac14e213dbf4befc80ca26494",
+      "price_impact_percent": "0%"
+    },
+    {
+      "id": "token_replacement_uniswap104_evm107_kernel342",
+      "status": "passed",
+      "installed_versions": {
+        "kernel": 342,
+        "evm_wallet": 107,
+        "uniswap": 104
+      },
+      "chain_ids": [
+        "1"
+      ],
+      "cases_passed": 1,
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/report.json",
+          "sha256": "ffdd969675db1bb8c29a410ee9da82d0a6456a7cc0c3f427fbcaa70bac3c8a84"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/installed-candidates.json",
+          "sha256": "11aab5b4c27412819477feeb2fd3ee70a3d8bca1865d4d7c588f2fadb48b4b1a"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/approval-replacement-swap-evidence.json",
+          "sha256": "0e0714eeeb2c8e2e4a133933e533c49fcea73c22986a16192fd642a80c8bdbf0"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/effect-checkpoints.json",
+          "sha256": "38466d6132be267d04b35be9c2f79a046aa6d412441a2c4056562dce88f9b508"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/chain1-release-state.json",
+          "sha256": "bed823900120537afdf204244f58e147c8b53e417d7219a8a0417900a00a3c22"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/original-expired-wallet-status-proof.json",
+          "sha256": "37cabcb0c45050d966941fddfb39b438cdfb6a679a6f2e85a54c86a0ef514bb6"
+        }
+      ],
+      "proves": [
+        "104_history_restores_exact_prior_queued_intent_after_checked_upgrade",
+        "expired_prior_intent_remains_unsubmitted_with_same_ids",
+        "separately_authorized_fresh_quote_after_expiry",
+        "numeric_price_impact",
+        "exact_approval_pending",
+        "same_nonce_approval_speedup_separate_wallet_decision",
+        "actual_matching_replacement_adopted_by_uniswap",
+        "separate_swap_after_replacement_receipt",
+        "actual_signed_calldata_minimum_recipient_token_balance_effects",
+        "reload_keeps_replacement_receipt_and_does_not_repeat"
+      ],
+      "original_expired_swap_id": "77774efdb57b9491d94e3a68cb524065",
+      "fresh_swap_id": "60d2fd86fc352ec8a5722ee59c55974c",
+      "approval_request_id": "c84493d2aad0dc4d064737044b779bde",
+      "swap_request_id": "075008922c23673fc8cd0281c78a8060",
+      "original_approval_hash": "0x787941965b6828414bb25790af77e290598f0b1508036fdcd97331b4ba7f0578",
+      "replacement_hash": "0x524754fde08832782fe905c7756cfc117db9a2eda6601b44b0a3391f3bc25c78",
+      "replacement_nonce": 14,
+      "swap_hash": "0x74303bc263e3432aec07b09777682264843e4d5141fdee869844a09d73cb1e0d",
+      "swap_nonce": 15,
+      "minimum_out": "992000584149931",
+      "actual_output": "996985511708474",
+      "price_impact_percent": "0%",
+      "nonce_before": "14",
+      "nonce_after": "16",
+      "final_txpool": {
+        "pending": "0x0",
+        "queued": "0x0"
+      },
+      "limitations": [
+        "Human Uniswap consumer replacement adoption; does not claim a live Agent replacement workflow.",
+        "LocalEthereum fixture funds, no productionfunds or Nitrofinality claim."
+      ]
+    },
+    {
+      "id": "wallet_allowance_replacement_evm107_kernel342",
+      "status": "passed_wallet_primitive_only",
+      "installed_versions": {
+        "kernel": 342,
+        "evm_wallet": 107,
+        "uniswap": 103
+      },
+      "chain_ids": [
+        "42161"
+      ],
+      "evidence": [
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/installed-final-candidates.json",
+          "sha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/playwright-report.json",
+          "sha256": "ea57e69c4005597bd218312a59a68724e3a1fb4e0d9de66580de25e15073bb3d"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/replacement-and-revocation-chain-evidence.json",
+          "sha256": "e86c3d1814a89fbeaf6eab3c165f575e95d1c3118f5eedb133dd33021e91b4bf"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/offline-evidence-check.json",
+          "sha256": "6731b85deaf518fcecd331e7b3290929323bc306520d66ec0667877c77710a85"
+        },
+        {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/lane-postflight.json",
+          "sha256": "ed04156e86c89789efdc88c86cdb0e695f2c0f0bd216159b838c6dbd58b71b56"
+        }
+      ],
+      "proves": [
+        "wallet_same_nonce_speedup",
+        "canonical_replacement_receipt",
+        "known_allowance_reload",
+        "explicit_revocation_to_zero"
+      ],
+      "limitations": [
+        "This Wallet-only case does not prove Uniswap consumer adoption; use token_replacement_uniswap104_evm107_kernel342 for that.",
+        "Localchain42161 doesnotestablishNitrofees/L1finality."
+      ]
+    }
+  ],
+  "remaining_evidence": [],
+  "prior_qualifications": [
+    {
+      "name": "uniswap103_before_history_paging_successor",
+      "package": {
+        "id": "uniswap",
+        "version": 103,
+        "archive_path": "apps/uniswap/uniswap.v0.1.3.neutron",
+        "archive_sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4",
+        "archive_bytes": 278707,
+        "source_path": "apps/uniswap/.neutron/sources/7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd.source.v1.msgpack.gz",
+        "source_sha256": "7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd",
+        "source_bytes": 455134
+      },
+      "package_proof": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap103.json",
+        "sha256": "18bee477b9bd2723b5d2877b81198b29e0a9960e8eee1f8a93d6688943ccee49"
+      },
+      "completed_validation": {
+        "release_tests": {
+          "tests_passed": 85,
+          "assertions": 735,
+          "motoko_initialization_and_restoration_passed": true
+        },
+        "app_browser_fixture": {
+          "checks_passed": 21,
+          "viewports_px": [
+            1440,
+            375,
+            320
+          ],
+          "transport": "Mock Kernel transport; actual UI, SDK validators and generated managed-journal schemas"
+        },
+        "official_contract_fixture": {
+          "swaps_passed": 6,
+          "chain_ids": [
+            "1",
+            "42161"
+          ],
+          "routes": [
+            "native_to_token",
+            "token_to_token",
+            "token_to_native"
+          ],
+          "provider": "Disposable Ganache with official Uniswap contract artifacts",
+          "receipt_effects_verified": true,
+          "slippage_and_deadline_reverts_verified": true
+        },
+        "typescript_passed": true
+      },
+      "note": "Historical103 build and runtime evidence preserved. Later104 does not relabel earlier executions."
+    }
+  ],
+  "current_qualification": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+    "sha256": "abe2ef27cd8b96dcb6b8d8f5c025defc76e50363e5759b9ffc2562ce7cd17b3b"
+  },
+  "current_package_proof": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104.json",
+    "sha256": "e8abd6a1de9595e8661b2d7e9d2a435611d285b4b238c8eaafb197cb8f76ab51"
+  },
+  "completion": {
+    "status": "complete_for_documented_supported_routes",
+    "final_package": 104,
+    "final_installed_evidence": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+      "sha256": "11aab5b4c27412819477feeb2fd3ee70a3d8bca1865d4d7c588f2fadb48b4b1a"
+    },
+    "final_installed_versions": {
+      "kernel": 342,
+      "evm_wallet": 107,
+      "uniswap": 104
+    },
+    "qualification_method": "Complementary exact-version runs plus unchanged-memory/package and focused104history tests; earliernative/Arbitrum/root passesare notrelabeledas107/104.",
+    "scope_exclusions": [
+      "EIP2612/Permit2 unusedbysupportedSwapRouter02route",
+      "realNitropostingfees/L1finality notmodeledbylocal42161",
+      "liveAgentreplacementnotclaimed; Agentoriginalrequestflow and humanconsumerreplacementseparatelyqualified"
+    ]
+  }
+}

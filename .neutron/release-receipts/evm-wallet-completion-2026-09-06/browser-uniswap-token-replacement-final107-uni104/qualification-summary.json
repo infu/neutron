@@ -1,0 +1,474 @@
+{
+  "schema": "neutron-uniswap-approval-replacement-swap-qualification-v1",
+  "summarizedAt": "2026-09-06T14:14:25.259839+00:00",
+  "evidenceKind": "Offline summary of the completed retained browser run; no runtime or network calls were made to create this summary.",
+  "scope": "One chain 1 token-to-token continuation/replacement case passed on exact Kernel342 / EVM Wallet107 / Uniswap104 packages. This is local unforked Anvil execution. Other network cases and later package versions are not retested by this run.",
+  "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+  "deploymentId": "0f0da55fdebc5b9eb20f68cc3415dda7",
+  "installedEvidenceObservedAt": "2026-09-06T13:57:50.936Z",
+  "installedPackages": [
+    {
+      "id": "kernel",
+      "version": 342,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 107,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+    },
+    {
+      "id": "uniswap",
+      "version": 104,
+      "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+    }
+  ],
+  "run": {
+    "command": [
+      "npx",
+      "playwright",
+      "test",
+      "test/e2e/uniswap-networks.spec.ts",
+      "--workers=1",
+      "--grep",
+      "saved token intent",
+      "--reporter=list,json",
+      "--output=/srv/shared/code/neutron/.neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/test-results"
+    ],
+    "stats": {
+      "startTime": "2026-09-06T13:59:57.837Z",
+      "duration": 582825.353,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "results": [
+      {
+        "title": "chain 1: saved token intent adopts a confirmed approval speed-up before its separate swap",
+        "status": "passed",
+        "startTime": "2026-09-06T13:59:59.420Z",
+        "durationMs": 579384
+      }
+    ],
+    "overallResult": "passed",
+    "executedSourceMatchesCapturedInputSha256": true,
+    "executedSpecSha256": "6002a2e1fff3f9566c6197eb0cae262efa64844388e073806fcb44ba69875392"
+  },
+  "originalSavedIntent": {
+    "id": "77774efdb57b9491d94e3a68cb524065",
+    "approvalRequestId": "3d3456803cb12a982a4e259a3a9acfea",
+    "swapRequestId": "c0ce8612b5363313d897bf99caa05f6c",
+    "phaseAtRestore": "queued",
+    "revisionAtRestore": "0",
+    "deadline": "1788703310",
+    "deadlineUtc": "2026-09-06T14:01:50+00:00",
+    "restoredAfterCheckedUpgrade": true,
+    "outcome": "Restored with its unchanged request IDs, allowed to expire, and retained as queued with deadline expired. Neither original request was used for approval or swapping in this run.",
+    "statusProof": "original-expired-wallet-status-proof.json",
+    "statusObservations": [
+      {
+        "operationRole": "approval",
+        "walletRequestId": "3d3456803cb12a982a4e259a3a9acfea",
+        "ingressRequestId": "6fe3fd45cd9c6ae074f69cbe7e5907d199a3a58b6bdd2ca37228157d9b98ddec",
+        "deadlineRelation": "before_expiry",
+        "status": "not_found",
+        "replyObservedAt": "2026-09-06T14:00:12.761Z"
+      },
+      {
+        "operationRole": "swap",
+        "walletRequestId": "c0ce8612b5363313d897bf99caa05f6c",
+        "ingressRequestId": "e1ba0da8e72c2fa89b3dc5b2eb4c307fafe1789e56a2c82cee0dc83cbf60dc9a",
+        "deadlineRelation": "before_expiry",
+        "status": "not_found",
+        "replyObservedAt": "2026-09-06T14:00:17.057Z"
+      },
+      {
+        "operationRole": "approval",
+        "walletRequestId": "3d3456803cb12a982a4e259a3a9acfea",
+        "ingressRequestId": "f8233d0ee1d60d0962f0f9abdf7e983b92713ec2679b77c5e5e3b2b6dc8f3190",
+        "deadlineRelation": "after_expiry",
+        "status": "not_found",
+        "replyObservedAt": "2026-09-06T14:01:55.320Z"
+      },
+      {
+        "operationRole": "swap",
+        "walletRequestId": "c0ce8612b5363313d897bf99caa05f6c",
+        "ingressRequestId": "e188e5a3f9e555d1cfbffa3d374b66d801ac68cd32dc3b640054511ce05efbdb",
+        "deadlineRelation": "after_expiry",
+        "status": "not_found",
+        "replyObservedAt": "2026-09-06T14:01:59.639Z"
+      }
+    ],
+    "statusIdentity": {
+      "appId": "uniswap",
+      "installationUid": "6",
+      "endpoint": "app:uniswap:tile:uniswap:instance:uniswap-uniswap-624304f1-cb89-49a1-92f6-5f804e66a4b7"
+    },
+    "effectEvidence": "The four decoded Wallet backend replies were err not_found, mapped to frontend status not_found. Passing executed-spec.ts also checked unchanged latest/pending nonce 14 and unchanged original request IDs across expiry. This does not rely solely on queued UI text."
+  },
+  "freshIntent": {
+    "id": "60d2fd86fc352ec8a5722ee59c55974c",
+    "approvalRequestId": "c84493d2aad0dc4d064737044b779bde",
+    "swapRequestId": "075008922c23673fc8cd0281c78a8060",
+    "createdQuotes": 1,
+    "creationBasis": "The executed expired-intent branch calls requestQuote once, saves one fresh intent, and asserts that its intent, approval and swap IDs differ from the original saved request. The checkpoints contain one fresh quote and one fresh-intent creation.",
+    "creationObservedAt": "2026-09-06T14:05:36.715Z",
+    "accountId": "main",
+    "chainId": "1",
+    "owner": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "recipient": "0xda586fBCbe8b5F4Aa7767165c518BFeaf6A1867f",
+    "tokenIn": "0x1000000000000000000000000000000000000011",
+    "tokenOut": "0x1000000000000000000000000000000000000012",
+    "router": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+    "amountInAtoms": "1000000000000000",
+    "minimumOut": "992000584149931",
+    "actualOutput": "996985511708474",
+    "priceImpactPercent": "0%",
+    "deadline": "1788704574",
+    "deadlineUtc": "2026-09-06T14:22:54+00:00",
+    "numericPriceImpactGuard": "executed-spec.ts:426 requires a numeric percent and line 427 requires a finite number. The serialized observed value was 0%."
+  },
+  "approvalAndSpeedUp": {
+    "approvalAmountAtoms": "1000000000000000",
+    "spender": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+    "tokenContract": "0x1000000000000000000000000000000000000011",
+    "valueWei": "0",
+    "originalApprovalRequestId": "c84493d2aad0dc4d064737044b779bde",
+    "originalApprovalHash": "0x787941965b6828414bb25790af77e290598f0b1508036fdcd97331b4ba7f0578",
+    "nonce": 14,
+    "originalPendingTransaction": {
+      "type": "0x2",
+      "chainId": "0x1",
+      "nonce": "0xe",
+      "gas": "0xad22",
+      "maxFeePerGas": "0x3b9aca0e",
+      "maxPriorityFeePerGas": "0x3b9aca00",
+      "to": "0x1000000000000000000000000000000000000011",
+      "value": "0x0",
+      "accessList": [],
+      "input": "0x095ea7b300000000000000000000000068b3465833fb72a70ecdf485e0e4c7bd8665fc4500000000000000000000000000000000000000000000000000038d7ea4c68000",
+      "r": "0xabb277f6165291e76c760e6bee7f34323e532241c18a692cff72799d29f5a2d5",
+      "s": "0x22dbbcb8670f859aad1a1b2e720252eba4a584849e9894b4393211e12707c955",
+      "yParity": "0x0",
+      "v": "0x0",
+      "hash": "0x787941965b6828414bb25790af77e290598f0b1508036fdcd97331b4ba7f0578",
+      "blockHash": null,
+      "blockNumber": null,
+      "transactionIndex": null,
+      "from": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+      "gasPrice": "0x3b9aca07"
+    },
+    "speedUpRequestId": "2fe2c530fed11150ca66791bad6e32a1",
+    "speedUpHash": "0x524754fde08832782fe905c7756cfc117db9a2eda6601b44b0a3391f3bc25c78",
+    "speedUpPendingTransaction": {
+      "type": "0x2",
+      "chainId": "0x1",
+      "nonce": "0xe",
+      "gas": "0xad22",
+      "maxFeePerGas": "0x7735941d",
+      "maxPriorityFeePerGas": "0x77359401",
+      "to": "0x1000000000000000000000000000000000000011",
+      "value": "0x0",
+      "accessList": [],
+      "input": "0x095ea7b300000000000000000000000068b3465833fb72a70ecdf485e0e4c7bd8665fc4500000000000000000000000000000000000000000000000000038d7ea4c68000",
+      "r": "0x4920b1a888ae2bbac82fcec712a418a03cacad09a01a4ddedb64f2ff85bfafa0",
+      "s": "0x39c5e7213a9a4d885bd95d10d4c3da5ab0d4e1e30a78adc184b70f64be1e836a",
+      "yParity": "0x0",
+      "v": "0x0",
+      "hash": "0x524754fde08832782fe905c7756cfc117db9a2eda6601b44b0a3391f3bc25c78",
+      "blockHash": null,
+      "blockNumber": null,
+      "transactionIndex": null,
+      "from": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+      "gasPrice": "0x77359408"
+    },
+    "separateWalletDecision": {
+      "checkpoint": {
+        "stage": "replacement-awaiting-separate-wallet-decision",
+        "observedAt": "2026-09-06T14:06:16.473Z"
+      },
+      "basis": "The executed test selects Speed up, enters higher fees, opens a separate Wallet review with a distinct request ID, verifies Speed up operation, and separately clicks approve."
+    },
+    "sameNonceAndIntent": {
+      "nonce": "14",
+      "sameSender": true,
+      "sameTokenContract": true,
+      "sameCalldata": true,
+      "sameValue": true,
+      "sameGasLimit": true,
+      "sameAccessList": true,
+      "feeChange": "Both EIP-1559 fee fields are exactly twice the original plus one wei; the signed hash differs."
+    },
+    "confirmedReplacementTransaction": {
+      "hash": "0x524754fde08832782fe905c7756cfc117db9a2eda6601b44b0a3391f3bc25c78",
+      "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "to": "0x1000000000000000000000000000000000000011",
+      "valueWei": "0",
+      "nonce": 14,
+      "chainId": "1",
+      "blockNumber": "334178",
+      "blockHash": "0x58d72254e8a005bc2afba314ac4363fbc577cf623302dea9dffbe3cf45d5299c",
+      "gasUsed": "44322",
+      "effectiveGasPriceWei": "2000000008"
+    },
+    "originalReceipt": {
+      "value": null,
+      "evidenceKind": "assertion in passing executed source",
+      "source": "executed-spec.ts:354",
+      "qualification": "The original receipt result is asserted null after the replacement is mined; it is not separately serialized in the transaction evidence JSON."
+    },
+    "allowanceAfterReplacement": {
+      "valueAtoms": "1000000000000000",
+      "evidenceKind": "assertion in passing executed source",
+      "source": "executed-spec.ts:355"
+    },
+    "walletStatuses": {
+      "original": "replaced",
+      "replacement": "confirmed",
+      "evidenceKind": "assertions in passing executed source",
+      "source": "executed-spec.ts:356"
+    },
+    "uniswapAdoption": {
+      "observedAt": "2026-09-06T14:07:21.436Z",
+      "result": "Uniswap reconciled its caller-bound original approval request and adopted the confirmed matching replacement while retaining the original approval hash separately.",
+      "serializedCardEvidence": "Replacement approval: confirmed. The linked replacement matches the saved approval sender, destination, calldata and value. Its receipt is tracked separately from the original transaction.",
+      "evidenceKind": "Serialized Uniswap card text plus passing browser assertions of the original approval link, replacement hash link and restored state after reload. This summary does not independently decode the replacement-link backend response.",
+      "sources": [
+        "effect-checkpoints.json:card",
+        "executed-spec.ts:357",
+        "executed-spec.ts:358",
+        "executed-spec.ts:359",
+        "executed-spec.ts:360",
+        "executed-spec.ts:363"
+      ]
+    }
+  },
+  "swap": {
+    "requestId": "075008922c23673fc8cd0281c78a8060",
+    "transaction": {
+      "hash": "0x74303bc263e3432aec07b09777682264843e4d5141fdee869844a09d73cb1e0d",
+      "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "to": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+      "valueWei": "0",
+      "nonce": 15,
+      "chainId": "1",
+      "blockNumber": "334231",
+      "blockHash": "0x91191830a3827331879a02d2dd6f4d3e77e777830786c44348000900730fd8eb",
+      "gasUsed": "115234",
+      "effectiveGasPriceWei": "1000000007"
+    },
+    "separateWalletDecision": {
+      "observedAt": "2026-09-06T14:07:49.077Z",
+      "basis": "After replacement adoption and page reload, the test restores the same saved request, selects Review swap, verifies the Wallet review caller/address/destination/request/chain fields, and separately approves the swap."
+    },
+    "recipientOutput": {
+      "recipient": "0xda586fBCbe8b5F4Aa7767165c518BFeaf6A1867f",
+      "beforeAtoms": "0",
+      "deltaAtoms": "996985511708474",
+      "minimumOutAtoms": "992000584149931",
+      "atLeastMinimum": true,
+      "evidenceKind": "Direct serialized balance delta plus passing comparison in executed-spec.ts:375"
+    },
+    "ownerInputDebitAtoms": {
+      "value": "1000000000000000",
+      "evidenceKind": "assertion in passing executed source",
+      "source": "executed-spec.ts:375"
+    },
+    "ownerOutputBalanceUnchanged": {
+      "value": true,
+      "evidenceKind": "assertion in passing executed source",
+      "source": "executed-spec.ts:376"
+    },
+    "finalAllowanceAtoms": {
+      "value": "0",
+      "evidenceKind": "assertion in passing executed source",
+      "source": "executed-spec.ts:376"
+    },
+    "terminalReload": {
+      "sameSavedRequestIds": true,
+      "receiptSuccessRestored": true,
+      "sameSwapHashAfterStatusReconciliation": true,
+      "latestAndPendingNonce": "16",
+      "repeatedTransaction": false,
+      "evidenceKind": "Assertions in passing executed source, corroborated by the terminal checkpoint and final nonce postflight",
+      "sources": [
+        "executed-spec.ts:377",
+        "executed-spec.ts:378",
+        "executed-spec.ts:379",
+        "executed-spec.ts:380",
+        "effect-checkpoints.json:stages",
+        "chain1-release-state.json"
+      ]
+    }
+  },
+  "mining": {
+    "quote": {
+      "chainId": "1",
+      "original": {
+        "automine": false,
+        "interval": 1
+      },
+      "paused": {
+        "automine": false,
+        "interval": null
+      },
+      "restored": {
+        "automine": false,
+        "interval": 1
+      },
+      "blockBefore": "334157",
+      "blockAfter": "334157"
+    },
+    "approvalReplacementWindow": {
+      "original": {
+        "automine": false,
+        "interval": 1
+      },
+      "paused": {
+        "automine": false,
+        "interval": null
+      },
+      "restored": {
+        "automine": false,
+        "interval": 1
+      },
+      "pausedEvidenceKind": "assertion in passing executed-spec.ts:314 with approval-mining-paused checkpoint; restored settings are serialized",
+      "scope": "Coordinator-authorized temporary pause allowed the original approval and separately approved speed-up to remain pending at the same nonce, followed by restoration before replacement settlement and the separate swap."
+    },
+    "final": {
+      "automine": false,
+      "interval": 1
+    }
+  },
+  "timeline": [
+    {
+      "stage": "saved-intent-restored-before-effects",
+      "observedAt": "2026-09-06T14:00:07.807Z"
+    },
+    {
+      "stage": "nearly-expired-original-preserved-without-wallet-operation",
+      "observedAt": "2026-09-06T14:00:17.742Z"
+    },
+    {
+      "stage": "original-expired-without-wallet-operation-or-effect",
+      "observedAt": "2026-09-06T14:01:59.898Z"
+    },
+    {
+      "stage": "fresh-quote-mining-restored",
+      "observedAt": "2026-09-06T14:05:06.771Z"
+    },
+    {
+      "stage": "fresh-intent-created-after-original-expiry",
+      "observedAt": "2026-09-06T14:05:36.715Z"
+    },
+    {
+      "stage": "approval-mining-paused",
+      "observedAt": "2026-09-06T14:05:36.811Z"
+    },
+    {
+      "stage": "original-approval-signed",
+      "observedAt": "2026-09-06T14:05:40.809Z"
+    },
+    {
+      "stage": "replacement-awaiting-separate-wallet-decision",
+      "observedAt": "2026-09-06T14:06:16.473Z"
+    },
+    {
+      "stage": "replacement-signed",
+      "observedAt": "2026-09-06T14:06:19.066Z"
+    },
+    {
+      "stage": "replacement-pending-same-nonce",
+      "observedAt": "2026-09-06T14:06:34.749Z"
+    },
+    {
+      "stage": "approval-mining-restored",
+      "observedAt": "2026-09-06T14:06:34.821Z"
+    },
+    {
+      "stage": "uniswap-adopted-matching-confirmed-replacement",
+      "observedAt": "2026-09-06T14:07:21.436Z"
+    },
+    {
+      "stage": "swap-awaiting-separate-wallet-decision",
+      "observedAt": "2026-09-06T14:07:49.077Z"
+    },
+    {
+      "stage": "completed-without-repeating-saved-requests",
+      "observedAt": "2026-09-06T14:09:39.192Z"
+    }
+  ],
+  "postflight": {
+    "observedAt": "2026-09-06T14:11:04.443713+00:00",
+    "chainId": "1",
+    "owner": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "latestNonce": "16",
+    "pendingNonce": "16",
+    "txpool": {
+      "pending": "0x0",
+      "queued": "0x0"
+    },
+    "automine": false,
+    "intervalMining": 1,
+    "qualification": "Read-only final postflight; no routing, mining, or runtime mutations",
+    "initialNonce": "14",
+    "finalNonce": "16",
+    "canonicalWalletTransactions": 2,
+    "explanation": "The mined approval replacement consumed nonce 14; the separately approved swap consumed nonce 15. The original superseded approval did not have a receipt. Final pending and latest nonce were 16 and the txpool was empty."
+  },
+  "limitations": [
+    "This is chain 1 local unforked Anvil execution, not production Ethereum execution.",
+    "No chain 42161 run, Nitro posting-cost behavior, sequencer behavior or L1 finality is qualified by this case.",
+    "This case did not inject eth_sendRawTransaction provider-response loss and makes no such recovery claim.",
+    "The old expired request was preserved; successful financial execution belongs to the separately identified fresh intent.",
+    "Only the named test ran on these exact package hashes. Earlier native/Arbitrum results retain their own historical package pins, and later candidates are not implicitly retested."
+  ],
+  "sources": [
+    {
+      "path": "report.json",
+      "size": 24083,
+      "sha256": "ffdd969675db1bb8c29a410ee9da82d0a6456a7cc0c3f427fbcaa70bac3c8a84"
+    },
+    {
+      "path": "inputs.json",
+      "size": 2919,
+      "sha256": "625f16e8d700d55d6d1b2e51a00d66163bfdf3ad3e9abf6709f6cde5981b610f"
+    },
+    {
+      "path": "installed-candidates.json",
+      "size": 9259,
+      "sha256": "11aab5b4c27412819477feeb2fd3ee70a3d8bca1865d4d7c588f2fadb48b4b1a"
+    },
+    {
+      "path": "executed-spec.ts",
+      "size": 38028,
+      "sha256": "6002a2e1fff3f9566c6197eb0cae262efa64844388e073806fcb44ba69875392"
+    },
+    {
+      "path": "original-saved-intent.json",
+      "size": 6000,
+      "sha256": "02a32c7b4648373d5e9f17a6a423663f131a055398f69551f60d8cfb661b0aaa"
+    },
+    {
+      "path": "original-expired-wallet-status-proof.json",
+      "size": 13787,
+      "sha256": "37cabcb0c45050d966941fddfb39b438cdfb6a679a6f2e85a54c86a0ef514bb6"
+    },
+    {
+      "path": "effect-checkpoints.json",
+      "size": 15425,
+      "sha256": "38466d6132be267d04b35be9c2f79a046aa6d412441a2c4056562dce88f9b508"
+    },
+    {
+      "path": "approval-replacement-swap-evidence.json",
+      "size": 15424,
+      "sha256": "0e0714eeeb2c8e2e4a133933e533c49fcea73c22986a16192fd642a80c8bdbf0"
+    },
+    {
+      "path": "chain1-release-state.json",
+      "size": 373,
+      "sha256": "bed823900120537afdf204244f58e147c8b53e417d7219a8a0417900a00a3c22"
+    }
+  ]
+}

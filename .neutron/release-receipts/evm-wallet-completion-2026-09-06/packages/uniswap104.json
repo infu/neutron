@@ -1,0 +1,31 @@
+{
+  "version": 104,
+  "archive": {
+    "path": "apps/uniswap/uniswap.v0.1.4.neutron",
+    "bytes": 288989,
+    "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+  },
+  "source": {
+    "path": "apps/uniswap/.neutron/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz",
+    "bytes": 462898,
+    "sha256": "3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd",
+    "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz"
+  },
+  "packedRootLock": {
+    "path": "package-lock.json",
+    "sha256": "10cdb573add8360fcbe6b37c420e3efc094efd2087e882dc06e4d6d65f6d9323",
+    "bytes": 354438
+  },
+  "offeredRootLockMatches": true,
+  "managedRoot": {
+    "name": "uniswap",
+    "version": 1,
+    "lockMatches103": true
+  },
+  "previous103Preserved": true,
+  "history": {
+    "method": "uniswap_history_v1",
+    "persistentSchemaChange": false,
+    "allRetainedRecordsAvailable": true
+  }
+}

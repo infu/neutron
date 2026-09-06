@@ -1,0 +1,303 @@
+{
+  "schema": "neutron-original-expired-wallet-status-proof-v1",
+  "summarizedAt": "2026-09-06T14:10:01.834Z",
+  "scope": "Offline decode of the fixed expired-original-and-fresh-quote-trace snapshot and original-saved-intent.json. No network or runtime calls performed for this proof.",
+  "originalSavedIntent": {
+    "id": "77774efdb57b9491d94e3a68cb524065",
+    "accountId": "main",
+    "chainId": "1",
+    "approvalRequestId": "3d3456803cb12a982a4e259a3a9acfea",
+    "swapRequestId": "c0ce8612b5363313d897bf99caa05f6c",
+    "deadline": "1788703310",
+    "deadlineUtc": "2026-09-06T14:01:50.000Z"
+  },
+  "result": "Both original request IDs returned the Candid backend variant {err: not_found} before the saved deadline and again after it. These are missing Wallet operations, not null responses. The frontend status service maps this specific backend result to status: not_found.",
+  "authenticatedCallerBinding": {
+    "appId": "uniswap",
+    "installationUid": "6",
+    "endpoint": "app:uniswap:tile:uniswap:instance:uniswap-uniswap-624304f1-cb89-49a1-92f6-5f804e66a4b7",
+    "icIngressSender": "ugnk3-oybq3-qsesh-kfxvo-pl2rt-y2h2x-bbtku-g6n4j-7xkvx-7l2u3-kae",
+    "allFourCallsHaveSameIdentity": true,
+    "allFourIngressEnvelopesSigned": true,
+    "durableLookupKey": "caller app_id + caller installation_uid + request_id",
+    "endpointRole": "Captured authenticated invoking tile endpoint; it is deliberately excluded from the durable journal lookup key so a new tile instance can recover an existing request.",
+    "sourceBasis": [
+      "apps/evm_wallet/src/service.ts:332 constructs identity through invocationIdentity before updateSelf status and maps not_found to frontend status not_found.",
+      "apps/evm_wallet/src/provider.ts:117 requires caller context and an authenticated caller endpoint.",
+      "apps/evm_wallet/backend/Journal.mo:11 keys by app_id, installation_uid and request_id.",
+      "apps/evm_wallet/backend/main.mo:398 returns err not_found when journal.find(identity) is absent."
+    ]
+  },
+  "observations": [
+    {
+      "networkSource": "657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+      "networkLine": 62,
+      "method": "app_evm_wallet__evm_wallet_status_v1",
+      "ingressRequestId": "6fe3fd45cd9c6ae074f69cbe7e5907d199a3a58b6bdd2ca37228157d9b98ddec",
+      "requestAt": "2026-09-06T14:00:10.690Z",
+      "requestType": "call",
+      "httpStatus": 202,
+      "input": {
+        "identity": {
+          "request_id": "3d3456803cb12a982a4e259a3a9acfea",
+          "caller": {
+            "installation_uid": "6",
+            "endpoint": "app:uniswap:tile:uniswap:instance:uniswap-uniswap-624304f1-cb89-49a1-92f6-5f804e66a4b7",
+            "app_id": "uniswap"
+          }
+        },
+        "refresh": true
+      },
+      "sender": "ugnk3-oybq3-qsesh-kfxvo-pl2rt-y2h2x-bbtku-g6n4j-7xkvx-7l2u3-kae",
+      "authenticatedEnvelope": {
+        "hasSenderPublicKey": true,
+        "hasSenderSignature": true,
+        "hasSenderDelegation": false
+      },
+      "requestBodyResource": "dfe98ab62ce58767c73a928d90c60801224897c2.dat",
+      "observations": [
+        {
+          "readStateRequestAt": "2026-09-06T14:00:12.758Z",
+          "readStateResponseCompletedAt": "2026-09-06T14:00:12.761Z",
+          "status": "replied",
+          "candidResult": {
+            "err": "not_found"
+          },
+          "candidReplyBytes": 447,
+          "readStateIngressRequestId": "17935468c50b6186474a18e4eb1843e296a773a2ea37749ac42b8c36755d24b8",
+          "networkSource": "657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+          "networkLine": 64,
+          "requestBodyResource": "cbd9b23456480358bece6a67e61c30d8923c8312.dat",
+          "responseBodyResource": "aa5b9ce9da19a46b77ee27884535572116882eb4.dat"
+        }
+      ],
+      "walletRequestId": "3d3456803cb12a982a4e259a3a9acfea",
+      "operationRole": "approval",
+      "status": "not_found",
+      "deadlineRelation": "before_expiry"
+    },
+    {
+      "networkSource": "657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+      "networkLine": 68,
+      "method": "app_evm_wallet__evm_wallet_status_v1",
+      "ingressRequestId": "e1ba0da8e72c2fa89b3dc5b2eb4c307fafe1789e56a2c82cee0dc83cbf60dc9a",
+      "requestAt": "2026-09-06T14:00:14.984Z",
+      "requestType": "call",
+      "httpStatus": 202,
+      "input": {
+        "identity": {
+          "request_id": "c0ce8612b5363313d897bf99caa05f6c",
+          "caller": {
+            "installation_uid": "6",
+            "endpoint": "app:uniswap:tile:uniswap:instance:uniswap-uniswap-624304f1-cb89-49a1-92f6-5f804e66a4b7",
+            "app_id": "uniswap"
+          }
+        },
+        "refresh": true
+      },
+      "sender": "ugnk3-oybq3-qsesh-kfxvo-pl2rt-y2h2x-bbtku-g6n4j-7xkvx-7l2u3-kae",
+      "authenticatedEnvelope": {
+        "hasSenderPublicKey": true,
+        "hasSenderSignature": true,
+        "hasSenderDelegation": false
+      },
+      "requestBodyResource": "a4aeb9b64089128d359ac398a20d176b7bd488e4.dat",
+      "observations": [
+        {
+          "readStateRequestAt": "2026-09-06T14:00:17.054Z",
+          "readStateResponseCompletedAt": "2026-09-06T14:00:17.057Z",
+          "status": "replied",
+          "candidResult": {
+            "err": "not_found"
+          },
+          "candidReplyBytes": 447,
+          "readStateIngressRequestId": "b9a9e79468c7e9a48252ee3475947d9d3617b80c2a41a7d60f3c2c0bdff13af0",
+          "networkSource": "657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+          "networkLine": 70,
+          "requestBodyResource": "7856519ae12316f94263dc9522f96300adaf2a66.dat",
+          "responseBodyResource": "e72189baee3c564d8545c164c58037f02e11a08d.dat"
+        }
+      ],
+      "walletRequestId": "c0ce8612b5363313d897bf99caa05f6c",
+      "operationRole": "swap",
+      "status": "not_found",
+      "deadlineRelation": "before_expiry"
+    },
+    {
+      "networkSource": "657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+      "networkLine": 87,
+      "method": "app_evm_wallet__evm_wallet_status_v1",
+      "ingressRequestId": "f8233d0ee1d60d0962f0f9abdf7e983b92713ec2679b77c5e5e3b2b6dc8f3190",
+      "requestAt": "2026-09-06T14:01:53.248Z",
+      "requestType": "call",
+      "httpStatus": 202,
+      "input": {
+        "identity": {
+          "request_id": "3d3456803cb12a982a4e259a3a9acfea",
+          "caller": {
+            "installation_uid": "6",
+            "endpoint": "app:uniswap:tile:uniswap:instance:uniswap-uniswap-624304f1-cb89-49a1-92f6-5f804e66a4b7",
+            "app_id": "uniswap"
+          }
+        },
+        "refresh": true
+      },
+      "sender": "ugnk3-oybq3-qsesh-kfxvo-pl2rt-y2h2x-bbtku-g6n4j-7xkvx-7l2u3-kae",
+      "authenticatedEnvelope": {
+        "hasSenderPublicKey": true,
+        "hasSenderSignature": true,
+        "hasSenderDelegation": false
+      },
+      "requestBodyResource": "ecf0246b51b27015bdcce04c39e0cff2a73b12c6.dat",
+      "observations": [
+        {
+          "readStateRequestAt": "2026-09-06T14:01:55.317Z",
+          "readStateResponseCompletedAt": "2026-09-06T14:01:55.320Z",
+          "status": "replied",
+          "candidResult": {
+            "err": "not_found"
+          },
+          "candidReplyBytes": 447,
+          "readStateIngressRequestId": "1e42d9cd899c7d150317e9f7c7324cd0b79a3cc11184a81d73df1bb3d6cbdeac",
+          "networkSource": "657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+          "networkLine": 89,
+          "requestBodyResource": "653e5918a80e30efe41f2187e6d0bff8003fb94a.dat",
+          "responseBodyResource": "f3a744ec5e07e7583133a075eff01d07a616c4ca.dat"
+        }
+      ],
+      "walletRequestId": "3d3456803cb12a982a4e259a3a9acfea",
+      "operationRole": "approval",
+      "status": "not_found",
+      "deadlineRelation": "after_expiry"
+    },
+    {
+      "networkSource": "657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+      "networkLine": 93,
+      "method": "app_evm_wallet__evm_wallet_status_v1",
+      "ingressRequestId": "e188e5a3f9e555d1cfbffa3d374b66d801ac68cd32dc3b640054511ce05efbdb",
+      "requestAt": "2026-09-06T14:01:57.551Z",
+      "requestType": "call",
+      "httpStatus": 202,
+      "input": {
+        "identity": {
+          "request_id": "c0ce8612b5363313d897bf99caa05f6c",
+          "caller": {
+            "installation_uid": "6",
+            "endpoint": "app:uniswap:tile:uniswap:instance:uniswap-uniswap-624304f1-cb89-49a1-92f6-5f804e66a4b7",
+            "app_id": "uniswap"
+          }
+        },
+        "refresh": true
+      },
+      "sender": "ugnk3-oybq3-qsesh-kfxvo-pl2rt-y2h2x-bbtku-g6n4j-7xkvx-7l2u3-kae",
+      "authenticatedEnvelope": {
+        "hasSenderPublicKey": true,
+        "hasSenderSignature": true,
+        "hasSenderDelegation": false
+      },
+      "requestBodyResource": "3772907111881299897d6768b467aec820b361b4.dat",
+      "observations": [
+        {
+          "readStateRequestAt": "2026-09-06T14:01:59.623Z",
+          "readStateResponseCompletedAt": "2026-09-06T14:01:59.639Z",
+          "status": "replied",
+          "candidResult": {
+            "err": "not_found"
+          },
+          "candidReplyBytes": 447,
+          "readStateIngressRequestId": "1b0b912dca6a502ab4d9f6cfe04741749814cacb24bb17cdd145152d28c15f70",
+          "networkSource": "657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+          "networkLine": 95,
+          "requestBodyResource": "86b27c9ffc0b846d52b7c564aa963a0cd7c35ce4.dat",
+          "responseBodyResource": "769b8bbb222bdacb30c488cea3251fd8b85f852a.dat"
+        }
+      ],
+      "walletRequestId": "c0ce8612b5363313d897bf99caa05f6c",
+      "operationRole": "swap",
+      "status": "not_found",
+      "deadlineRelation": "after_expiry"
+    }
+  ],
+  "interpretation": {
+    "approvalBeforeExpiry": "not_found",
+    "swapBeforeExpiry": "not_found",
+    "approvalAfterExpiry": "not_found",
+    "swapAfterExpiry": "not_found",
+    "basis": "Decoded accepted update ingress inputs and matching read_state request_status reply leaves; not inferred from the queued UI.",
+    "effectScope": "These status results establish no journal entry existed for either original request at these observations. They do not establish a continuous absence outside the observed times and do not make claims about later fresh requests."
+  },
+  "timing": "Reply times are the browser-observed read_state response completion times (HAR startedDateTime plus duration); the exact backend execution instant is not exposed by this trace.",
+  "verificationScope": "Candid and certificate hash-tree contents were decoded offline. The recorded ingress envelopes contain public keys and signatures. This task did not independently reverify the IC certificate or ingress signatures.",
+  "sources": [
+    {
+      "path": "expired-original-and-fresh-quote-trace/657884123b40ab4bad9d-ce0a9bf464364b0ea461.network",
+      "bytes": 1056683,
+      "sha256": "d4d1486985a89a6cb1bc321a1c34bff71e059387be19d765664101b9a5764ee1"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/3772907111881299897d6768b467aec820b361b4.dat",
+      "bytes": 522,
+      "sha256": "614924e625d3d4cb290904ff0dc5fa2b50c4e8f64d81ce42e0d8c3d6275f3605"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/653e5918a80e30efe41f2187e6d0bff8003fb94a.dat",
+      "bytes": 293,
+      "sha256": "7a336b8f615f79357e55d6bc191e30c73b5edd333b46e3cbc1c4ce65fa4adbca"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/769b8bbb222bdacb30c488cea3251fd8b85f852a.dat",
+      "bytes": 1599,
+      "sha256": "cf7f2e5a692c230400f0e03a2657b0620f6ffc7625acd0ac57a0b73029b23e36"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/7856519ae12316f94263dc9522f96300adaf2a66.dat",
+      "bytes": 293,
+      "sha256": "7ba54270ca4e764059e8d382a67b43421ac13d40efca401203dcb9868fa41567"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/86b27c9ffc0b846d52b7c564aa963a0cd7c35ce4.dat",
+      "bytes": 293,
+      "sha256": "8c1ca4838f1cd1255f16e8bf52f7112b5f5ef8c02fed89099646a0aedb3bbab8"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/a4aeb9b64089128d359ac398a20d176b7bd488e4.dat",
+      "bytes": 522,
+      "sha256": "17ad1a44d7347c966e6fc6d917c36a722398c302702a4f619c0b0c81b7272178"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/aa5b9ce9da19a46b77ee27884535572116882eb4.dat",
+      "bytes": 1561,
+      "sha256": "d591eab9d52fa1dd20a968ef7f3c0d6609d2ef83d9550496bbd20c3fe47ebd81"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/cbd9b23456480358bece6a67e61c30d8923c8312.dat",
+      "bytes": 293,
+      "sha256": "e288ddf8c06c0460f08de6fcd01e204c1923627e24f59315100b9c693f55edf8"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/dfe98ab62ce58767c73a928d90c60801224897c2.dat",
+      "bytes": 522,
+      "sha256": "ec68ba7b76815464ffaf7e83d6a5accafd0d7c0e82832c4bbe843eb067e0ee98"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/e72189baee3c564d8545c164c58037f02e11a08d.dat",
+      "bytes": 1561,
+      "sha256": "5f5c0d1f1adf7047f53b211e1bb83264ab7033f5ef088ada0ed4b874701fca8a"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/ecf0246b51b27015bdcce04c39e0cff2a73b12c6.dat",
+      "bytes": 522,
+      "sha256": "4db1b77024b5008043afd684ec3716fffdf21d522063dbd2c9dca8931e4dace9"
+    },
+    {
+      "path": "expired-original-and-fresh-quote-trace/resources/f3a744ec5e07e7583133a075eff01d07a616c4ca.dat",
+      "bytes": 1447,
+      "sha256": "5d79f0aee8546601cc23c714d552690d2e9138cd76eef71f94e1dbe5b9851a42"
+    },
+    {
+      "path": "original-saved-intent.json",
+      "bytes": 6000,
+      "sha256": "02a32c7b4648373d5e9f17a6a423663f131a055398f69551f60d8cfb661b0aaa"
+    }
+  ]
+}

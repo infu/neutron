@@ -1,0 +1,66 @@
+{
+  "utc": "20260906T135956Z",
+  "command": [
+    "npx",
+    "playwright",
+    "test",
+    "test/e2e/uniswap-networks.spec.ts",
+    "--workers=1",
+    "--grep",
+    "saved token intent",
+    "--reporter=list,json",
+    "--output=/srv/shared/code/neutron/.neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-token-replacement-final107-uni104/test-results"
+  ],
+  "cwd": "/srv/shared/code/neutron",
+  "files": [
+    {
+      "path": "test/e2e/uniswap-networks.spec.ts",
+      "sha256": "6002a2e1fff3f9566c6197eb0cae262efa64844388e073806fcb44ba69875392",
+      "size": 38028
+    },
+    {
+      "path": "test/e2e/fixtures/uniswap-network.ts",
+      "sha256": "743c31f7711bfe7945915943671990e952a1d423a1533eb4eb215a511cc47afe",
+      "size": 12858
+    },
+    {
+      "path": "test/e2e/fixtures/evm-wallet-browser.ts",
+      "sha256": "bb017b2936a09b0899c60bf82f3000c16a02139b481bbc753c9614c94a7b3d0d",
+      "size": 7616
+    },
+    {
+      "path": "test/e2e/fixtures/evm-wallet-network.ts",
+      "sha256": "77902209fd50d4fb7de62266178c4b38250b99de378dc7b71a7d063462ff0b5c",
+      "size": 2491
+    },
+    {
+      "path": "test/e2e/fixtures/evm-wallet-chain.ts",
+      "sha256": "b45686c32cc065fcaf26186eb0f1abddf43f8cf189721d7e4fb22a3e7e40da78",
+      "size": 12455
+    },
+    {
+      "path": "apps/uniswap/uniswap.v0.1.4.neutron",
+      "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685",
+      "size": 288989
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91",
+      "size": 391816
+    },
+    {
+      "path": "apps/kernel/kernel.v0.3.42.neutron",
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4",
+      "size": 2448936
+    },
+    {
+      "path": "apps/uniswap/test/fixtures/package-lock.json",
+      "sha256": "d9b3f9257711ecab48eba5fb302d826e1b4f6829ce84f97d50e845a528eca335",
+      "size": 270773
+    }
+  ],
+  "installedEvidence": "/srv/shared/code/neutron/.neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+  "installedEvidenceSha256": "11aab5b4c27412819477feeb2fd3ee70a3d8bca1865d4d7c588f2fadb48b4b1a",
+  "deploymentId": "0f0da55fdebc5b9eb20f68cc3415dda7",
+  "scope": "Remaining chain1 token case on Kernel342/EVM107/Uni104. Restore saved intent77774efdb57b9491d94e3a68cb524065; if truly expired preserve no-effect proof then create exactly one separately identified fresh quote under coordinator authorization. Exact approval, user-approved same-nonce speedup, Uniswap authenticated original-operation linkage and matching replacement adoption, separate swap decision, actual recipient token effect, durable reload. No fixture deployment/funding or chain42161 calls. Both Anvil mining modes paused/restored only for quote reads and explicitly authorized pending approval/speedup window."
+}

@@ -1,0 +1,72 @@
+{
+  "app": "wallet",
+  "version": 316,
+  "package": {
+    "path": "/srv/shared/code/neutron/apps/wallet/wallet.v0.3.16.neutron",
+    "bytes": 768823,
+    "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+  },
+  "offeredSource": {
+    "kind": "https",
+    "revision": "source-sha256:e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5",
+    "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5.source.v1.msgpack.gz",
+    "sha256": "e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5",
+    "bytes": 624669
+  },
+  "published315Sha256": "1d1156e18ee3116dbda8c8c410f6c4987ba062db345ddf169a822f3d3c20ffcd",
+  "checks": {
+    "canonicalPackage": "passed",
+    "bun": {
+      "passed": 171,
+      "assertions": 1184
+    },
+    "motokoPrograms": [
+      "Motoko test passed: allowances_test.mo",
+      "Motoko test passed: funding_test.mo",
+      "Motoko test passed: history_test.mo",
+      "Motoko test passed: transfer_journal_test.mo",
+      "Motoko test passed: bridge_test.mo",
+      "Motoko test passed: bridge_replacements_test.mo",
+      "Motoko test passed: transfer_main_test.mo",
+      "Motoko test passed: funding_main_test.mo",
+      "Motoko test passed: settlement_test.mo",
+      "Motoko test passed: native_settlement_main_test.mo",
+      "Motoko test passed: refund_test.mo",
+      "Motoko test passed: erc20_refund_main_test.mo"
+    ],
+    "memoryRelease": "passed",
+    "tsApp": "passed",
+    "tsScripts": "passed",
+    "currentOfferedSource": "matched",
+    "gitDiffCheck": "passed",
+    "checkedNonempty315Upgrade": {
+      "kernel": 341,
+      "wallet": 316,
+      "assertions": 178,
+      "status": "passed",
+      "evidenceDirectory": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final"
+    },
+    "finalInstalledCkethRootAndHuman": {
+      "status": "passed",
+      "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/qualification-summary.json",
+      "kernel": 341,
+      "wallet": 316,
+      "evmWallet": 103
+    },
+    "finalInstalledCkusdcProtocol": {
+      "status": "passed_across_preserved_interruption_and_same_deposit_redemption_continuation",
+      "kernel": 342,
+      "wallet": 316,
+      "evmWallet": 107,
+      "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json"
+    }
+  },
+  "logs": [
+    "/tmp/neutron-wallet-316-package.log",
+    "/tmp/neutron-wallet-316-bun.log",
+    "/tmp/neutron-wallet-316-motoko.log",
+    "/tmp/neutron-wallet-316-memory.log",
+    "/tmp/neutron-wallet-316-source-check.log"
+  ],
+  "qualificationOutstanding": []
+}

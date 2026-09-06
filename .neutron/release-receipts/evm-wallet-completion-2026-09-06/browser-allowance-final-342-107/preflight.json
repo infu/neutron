@@ -1,0 +1,120 @@
+{
+  "observedAt": "2026-09-06T13:51:06.019147+00:00",
+  "scope": "Actual Wallet approval/replacement/revocation using its chain-key account on verified unforked local Anvil42161. No Nitro sequencing or posting-cost claim.",
+  "installedEvidence": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+    "bytes": 9267,
+    "sha256": "b744288e175ffc012596fbf22c2c3390644359eed9d0628e321b517451e59a0d"
+  },
+  "installedCandidates": [
+    {
+      "id": "kernel",
+      "version": 342,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "id": "contacts",
+      "version": 306,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    },
+    {
+      "id": "wallet",
+      "version": 316,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 107,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+    },
+    {
+      "id": "uniswap",
+      "version": 103,
+      "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+    },
+    {
+      "id": "agent",
+      "version": 317,
+      "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+    }
+  ],
+  "walletArchive": {
+    "path": "apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+    "bytes": 391816,
+    "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+  },
+  "inputs": [
+    {
+      "path": "test/e2e/evm-wallet-allowance.spec.ts",
+      "bytes": 24719,
+      "sha256": "dedacaf17446cb364448f4bd024ad1fe10452870fde1a9d5bb2e72bec9dd80be"
+    },
+    {
+      "path": "test/e2e/fixtures/evm-wallet-network.ts",
+      "bytes": 2491,
+      "sha256": "77902209fd50d4fb7de62266178c4b38250b99de378dc7b71a7d063462ff0b5c"
+    },
+    {
+      "path": "test/e2e/fixtures/evm-wallet-chain.ts",
+      "bytes": 12455,
+      "sha256": "b45686c32cc065fcaf26186eb0f1abddf43f8cf189721d7e4fb22a3e7e40da78"
+    },
+    {
+      "path": "test/e2e/fixtures/evm-wallet-browser.ts",
+      "bytes": 7616,
+      "sha256": "bb017b2936a09b0899c60bf82f3000c16a02139b481bbc753c9614c94a7b3d0d"
+    },
+    {
+      "path": "test/e2e/fixtures/evm-wallet-anvil.ts",
+      "bytes": 17400,
+      "sha256": "3a3b7a71d38e44dc3900dbd01090d3ebdee762c2dea48c7789d04e3660f90123"
+    },
+    {
+      "path": "apps/uniswap/test/fixtures/Tokens.sol",
+      "bytes": 1815,
+      "sha256": "988bb4ea34b9a6cc2cf61ff8ff36f3277e6058290bbcce488a272a50acbd4320"
+    },
+    {
+      "path": "/tmp/neutron-uniswap-networks-final-deps-825nf8uj/package-lock.json",
+      "bytes": 270773,
+      "sha256": "d9b3f9257711ecab48eba5fb302d826e1b4f6829ce84f97d50e845a528eca335"
+    },
+    {
+      "path": "playwright.config.ts",
+      "bytes": 1063,
+      "sha256": "f4007799a517b5268f1d293e21e883ea30a9deb0fe2bf9480a850cb178d409b8"
+    }
+  ],
+  "runtime": {
+    "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+    "deploymentId": "4646e9e9048f3cbc6034fa079ff263a3",
+    "config": "evm-wallet-local.ndeploy.json",
+    "rpcUrl": "http://127.0.0.1:8546"
+  },
+  "grant": "Coordinator explicit final42161financialwindow after checked106\u2192107. No otherfinancialowner, no runtime/routing/update untilrelease.",
+  "state": "Actual342/107 checkeddeployment; nonce10 latest/pending, interval1/autominefalse; both priorallowanceszero.",
+  "chainPreflight": {
+    "chainId": "0xa4b1",
+    "latest": "0xa",
+    "pending": "0xa",
+    "automine": false,
+    "interval": 1
+  },
+  "priorAllowances": [
+    {
+      "token": "0x19A1c09fE3399C4Daaa2C98b936a8E460fC5Eaa4",
+      "spender": "0x32c44758dc42A185b9aEFBE3d546a815e67b9E77",
+      "allowance": "0"
+    },
+    {
+      "token": "0x067c804bb006836469379D4A2A69a81803bd1F45",
+      "spender": "0xEb4F9946985F6D0b1d28481b8f5B1543d85011fE",
+      "allowance": "0"
+    }
+  ]
+}

@@ -1,0 +1,152 @@
+{
+  "schema": "neutron-evm-history-status-recovery-v1",
+  "observedAt": "2026-09-06T13:13:26.874Z",
+  "deploymentId": "c4b89b6fe632613a6dccab85444e5240",
+  "installedProofSha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723",
+  "installed": [
+    {
+      "id": "kernel",
+      "version": 342,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "id": "contacts",
+      "version": 306,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    },
+    {
+      "id": "wallet",
+      "version": 316,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 106,
+      "sha256": "eba89d8ab27c8f93faa59b82026e9e6393773156532761f6ebfadeaacb2856cf"
+    },
+    {
+      "id": "uniswap",
+      "version": 103,
+      "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+    },
+    {
+      "id": "agent",
+      "version": 317,
+      "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+    }
+  ],
+  "total": "25",
+  "beforeStatus": "unknown",
+  "afterStatus": "confirmed",
+  "operationId": "22",
+  "requestId": "3d5d22f4832cf63640b997c62bf8b5b7",
+  "transactionHash": "0xeb9fe0a37a31404751663b65f0af3f79016b3354e2f274b58792fe1ee4f70b20",
+  "first": {
+    "ids": [
+      "25",
+      "24",
+      "23",
+      "22",
+      "21",
+      "20",
+      "19",
+      "18",
+      "17",
+      "16",
+      "15",
+      "14",
+      "13",
+      "12",
+      "11",
+      "10",
+      "9",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1"
+    ],
+    "pageSizes": [
+      20,
+      25
+    ]
+  },
+  "reloaded": {
+    "ids": [
+      "25",
+      "24",
+      "23",
+      "22",
+      "21",
+      "20",
+      "19",
+      "18",
+      "17",
+      "16",
+      "15",
+      "14",
+      "13",
+      "12",
+      "11",
+      "10",
+      "9",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1"
+    ],
+    "pageSizes": [
+      20,
+      25
+    ]
+  },
+  "nonceBefore": {
+    "latest": "0xb",
+    "pending": "0xb"
+  },
+  "nonceAfter": {
+    "latest": "0xb",
+    "pending": "0xb"
+  },
+  "canonicalBefore": {
+    "hash": "0xeb9fe0a37a31404751663b65f0af3f79016b3354e2f274b58792fe1ee4f70b20",
+    "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "to": "0xf6B6cB54bc22904860B54B3A651F8506792A2e85",
+    "valueWei": "0",
+    "nonce": 10,
+    "chainId": "1",
+    "raw": "0x02f88a010a843b9aca00843b9aca0e82a99294f6b6cb54bc22904860b54b3a651f8506792a2e8580a00000000000000100000000000000000000000000000000000020000000000001c080a0bf9c1476784c62f8f064a131dcae28d3617142de7f3a4fdcebb68fd7574f1b78a026de20c53d773a0223fd9ca6f5f4213cd038dc791bb6c6399cc4a4fdf407eeb5",
+    "blockNumber": "330934",
+    "blockHash": "0xfe92fb02dbb88859d763039893df03dbb4f4db9de04f6470b34783109c39f099",
+    "gasUsed": "43410",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "canonicalAfter": {
+    "hash": "0xeb9fe0a37a31404751663b65f0af3f79016b3354e2f274b58792fe1ee4f70b20",
+    "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "to": "0xf6B6cB54bc22904860B54B3A651F8506792A2e85",
+    "valueWei": "0",
+    "nonce": 10,
+    "chainId": "1",
+    "raw": "0x02f88a010a843b9aca00843b9aca0e82a99294f6b6cb54bc22904860b54b3a651f8506792a2e8580a00000000000000100000000000000000000000000000000000020000000000001c080a0bf9c1476784c62f8f064a131dcae28d3617142de7f3a4fdcebb68fd7574f1b78a026de20c53d773a0223fd9ca6f5f4213cd038dc791bb6c6399cc4a4fdf407eeb5",
+    "blockNumber": "330934",
+    "blockHash": "0xfe92fb02dbb88859d763039893df03dbb4f4db9de04f6470b34783109c39f099",
+    "gasUsed": "43410",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "statusCallCount": 1,
+  "effects": "Only existing operation status reconciliation; no prepare, execute, signing, new request, fund or mining calls",
+  "provisioningJournalUnchanged": true
+}
