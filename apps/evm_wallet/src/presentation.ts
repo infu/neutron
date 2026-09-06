@@ -1,5 +1,7 @@
 import { amount, decodeKnownCall, type Asset, type Network, type Operation } from "./data";
 import { presentUniswapSwap } from "./swap_presentation.ts";
+import { presentUniswapV4Swap } from "./v4_swap_presentation.ts";
+import { presentPermit2Approval, presentUniswapLiquidity } from "./liquidity_presentation.ts";
 
 export type PresentationField = { label: string; value: string };
 export type OperationPresentation = {
@@ -13,7 +15,11 @@ export type OperationPresentation = {
   unlimitedApproval: boolean;
   tokenSymbol: string | null;
   tokenAddress?: string | null;
+  advancedDetails?: PresentationField[];
+  liquidity?: LiquidityPresentation;
+  permit2Approval?: { token: string; spender: string; amount: string; expiration: string };
   swap?: {
+    protocol?: "v3" | "v4";
     tokenIn: string;
     tokenOut: string;
     amountIn: string;
@@ -23,7 +29,37 @@ export type OperationPresentation = {
     poolFee: string;
     inputNative: boolean;
     outputNative: boolean;
+    poolKey?: { currency0: string; currency1: string; fee: string; tickSpacing: string; hooks: string };
+    hookData?: string;
+    minHopPriceX36?: string;
+    refundRecipient?: string;
   };
+};
+
+export type LiquidityPresentation = {
+  protocol: "v3" | "v4";
+  action: "mint" | "increase" | "decrease" | "collect" | "close";
+  tokenId?: string;
+  token0?: string;
+  token1?: string;
+  liquidity?: string;
+  amount0Max?: string;
+  amount1Max?: string;
+  amount0Min?: string;
+  amount1Min?: string;
+  collect0Max?: string;
+  collect1Max?: string;
+  recipient?: string;
+  deadline?: string;
+  tickLower?: string;
+  tickUpper?: string;
+  fee?: string;
+  tickSpacing?: string;
+  hooks?: string;
+  hookData?: string;
+  settlementCurrencies?: string[];
+  refundRecipient?: string;
+  nativeValue?: string;
 };
 
 const MAX_UINT256 = (2n ** 256n - 1n).toString();
@@ -64,8 +100,10 @@ export function presentOperation(
     };
   }
 
-  const swap = presentUniswapSwap(operation, assets);
+  const swap = presentUniswapSwap(operation, assets) ?? presentUniswapV4Swap(operation, assets);
   if (swap) return swap;
+  const liquidity = presentUniswapLiquidity(operation, assets) ?? presentPermit2Approval(operation, assets);
+  if (liquidity) return liquidity;
   const decoded = decodeKnownCall(tx.data);
   const token = assets.find((asset) => asset.chainId === operation.chainId && asset.address.toLowerCase() === tx.to.toLowerCase());
   if (decoded) {
@@ -94,8 +132,8 @@ export function presentOperation(
         ? revoke
           ? "Remove this spender's token allowance."
           : unlimitedApproval
-            ? "Allow this spender to use any amount of this token, including tokens you receive later. This approval does not perform a swap."
-            : "Allow this spender to use up to this amount. This approval does not perform a swap."
+            ? "Allow this spender to use any amount of this token, including tokens you receive later. This approval does not perform a swap or deposit liquidity."
+            : "Allow this spender to use up to this amount. This approval does not perform a swap or deposit liquidity."
         : details.has("Token owner")
           ? "Transfer tokens from the listed owner to the recipient."
           : "Transfer tokens to the recipient.",

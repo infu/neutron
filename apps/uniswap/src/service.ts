@@ -7,6 +7,8 @@ import { estimateSwapFees } from "./fees.ts";
 import { createServiceWallet } from "./agent_wallet.ts";
 import { nextAgentSwapAction } from "./agent_workflow.ts";
 import { parseProviderSwapInput, providerSwapResult, runProviderSwap, type ProviderSwapInput, type ProviderSwapResult } from "./provider_flow.ts";
+import { registerLiquidityTools } from "./liquidity_tools.ts";
+import { registerV4Tools } from "./v4_tools.ts";
 
 const text = { type: "string" };
 const address = { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" };
@@ -20,8 +22,11 @@ const recordSchema = schema({ swapId: text, phase: text, recordJson: text, appro
 const quoteSchema = schema({ chainId: { enum: ["1", "42161"] }, accountId: { const: "main" }, tokenIn: { oneOf: [address, { type: "null" }] }, tokenOut: { oneOf: [address, { type: "null" }] }, amountIn: nat, slippageBps: { type: "integer", minimum: 0, maximum: 9999 }, recipient: address, deadline: nat });
 const flowCalls = new Map<string, Promise<ProviderSwapResult>>();
 
+registerLiquidityTools();
+registerV4Tools();
+
 exposeTool("uniswap_swap_v1", {
-  title: "Swap tokens on Uniswap through approval and confirmation",
+  title: "Continue a Uniswap V3 swap through approval and confirmation",
   description: "Complete a swap: quote, check allowance, approve if needed, wait, swap, and record its receipt. Wallet's public provider tool shows a human modal or sends exact review to the active Agent judge. Null token means ETH; amountIn is atomic units. Keep one 32-hex swapId. After pending, review or a lost reply, retry this tool with identical original arguments; never create another flow or stop at approval. Expired unsigned quotes renew with the same inputs and live allowance; ambiguous submitted requests retain their IDs. Defaults: main account, own recipient, 50 slippage basis points, 1200 seconds per quote. Every effect needs exact Wallet review within current owner instructions. Legacy root-owned intents use uniswap_next_action_v1.",
   inputSchema: {
     type: "object", properties: {

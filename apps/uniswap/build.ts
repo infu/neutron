@@ -2,6 +2,7 @@ import esbuild from "esbuild";
 import copyStaticFiles from "esbuild-copy-static-files";
 import { sassPlugin } from "esbuild-sass-plugin";
 import type { BuildOptions } from "esbuild";
+import { writeNpmBuildEvidence } from "neutron-scripts/src/npm_build_evidence.js";
 
 const config: BuildOptions = {
   entryPoints: {
@@ -16,6 +17,7 @@ const config: BuildOptions = {
   jsx: "automatic",
   loader: { ".ts": "ts", ".tsx": "tsx" },
   platform: "browser",
+  metafile: true,
   plugins: [
     sassPlugin(),
     copyStaticFiles({
@@ -34,7 +36,8 @@ if (process.argv.slice(2)[0] === "watch") {
   await context.watch();
 } else {
   try {
-    await esbuild.build(config);
+    const result = await esbuild.build(config);
+    await writeNpmBuildEvidence(process.cwd(), result.metafile!);
   } catch {
     process.exit(1);
   }

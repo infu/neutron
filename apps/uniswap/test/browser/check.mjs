@@ -11,7 +11,7 @@ import icblast from 'icblast';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
-import { decodeFunctionData, encodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionResult, parseAbi } from 'viem';
+import { decodeFunctionData, encodeFunctionData, encodeAbiParameters, encodeFunctionResult, keccak256, stringToHex, parseAbi } from 'viem';
 
 const app = fileURLToPath(new URL('../../', import.meta.url));
 const schema = JSON.parse(await readFile(resolve(app,'dist/schema.json'),'utf8'));
@@ -30,7 +30,35 @@ const quoteAbi=parseAbi(['function quoteExactInputSingle((address tokenIn,addres
 const factoryAbi=parseAbi(['function getPool(address tokenA,address tokenB,uint24 fee) view returns (address pool)']);
 const poolAbi=parseAbi(['function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)']);
 const tokenAbi=parseAbi(['function allowance(address owner,address spender) view returns (uint256)','function approve(address spender,uint256 amount) returns (bool)']);
-const records=new Map(), operations=new Map(), transactionEvidence=new Map(), calls=[], toolOverrides=new Map(), metadataRejections=[];
+const V4_QUOTER='0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203', V4_STATE='0x7ffe42c4a5deea5b0fec41c94c136cf115597227', V4_MANAGER='0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e';
+const V3_MANAGER='0xc36442b4a4522e871399cd717abdd847ab11fe88', PERMIT2='0x000000000022d473030f116ddee9f6b43ac78ba3';
+const ZERO='0x'+'00'.repeat(20), USDC='0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+const v4QuoteAbi=parseAbi(['function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)']);
+const v4Pools=new Map([[100,1],[500,10],[3000,60],[10000,200]].map(([fee,tickSpacing])=>[
+ keccak256(encodeAbiParameters([{type:'tuple',components:[{name:'currency0',type:'address'},{name:'currency1',type:'address'},{name:'fee',type:'uint24'},{name:'tickSpacing',type:'int24'},{name:'hooks',type:'address'}]}],[{currency0:ZERO,currency1:USDC,fee,tickSpacing,hooks:ZERO}])),{fee,tickSpacing},
+]));
+const v4StateAbi=parseAbi([
+ 'function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)',
+ 'function getLiquidity(bytes32 poolId) view returns (uint128)',
+ 'function getPositionInfo(bytes32 poolId,address owner,int24 tickLower,int24 tickUpper,bytes32 salt) view returns (uint128 liquidity,uint256 feeGrowthInside0LastX128,uint256 feeGrowthInside1LastX128)',
+ 'function getFeeGrowthInside(bytes32 poolId,int24 tickLower,int24 tickUpper) view returns (uint256,uint256)',
+]);
+const managerAbi=parseAbi([
+ 'function ownerOf(uint256 tokenId) view returns (address)', 'function balanceOf(address owner) view returns (uint256)',
+ 'function getPoolAndPositionInfo(uint256 tokenId) view returns ((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,uint256 info)',
+ 'function getPositionLiquidity(uint256 tokenId) view returns (uint128)',
+]);
+const permitAbi=parseAbi(['function allowance(address owner,address token,address spender) view returns (uint160 amount,uint48 expiration,uint48 nonce)', 'function approve(address token,address spender,uint160 amount,uint48 expiration)']);
+const records=new Map(), actions=new Map(), trackedPositions=new Map(), operations=new Map(), transactionEvidence=new Map(), calls=[], toolOverrides=new Map(), metadataRejections=[], indexRequests=[];
+let indexedPositionCount=1n;
+const actionSummary=({input_json,state_json,...row})=>row;
+function pageOf(source,input,summary=(row)=>row){
+ const sorted=[...source.values()].sort((a,b)=>BigInt(a.created_at)===BigInt(b.created_at)?b.id.localeCompare(a.id):BigInt(a.created_at)>BigInt(b.created_at)?-1:1);
+ const offset=input.cursor===undefined?0:sorted.findIndex(row=>row.id===input.cursor)+1;
+ assert(input.cursor===undefined||offset>0,'History cursor must name a retained record');
+ const rows=sorted.slice(offset,offset+Number(input.limit));
+ return {rows:rows.map(summary),...(offset+rows.length<sorted.length?{next_cursor:rows.at(-1).id}:{})};
+}
 const selfQueryMetadataLimit=65_536;
 let nextApproval='confirm', nextSwap='confirm', blockedStatusRequest=null, allowanceAtoms=0n, delayedReads=null, releaseReads=null;
 let feeMultiplier=1n, swapFeeUnavailable=false, delayedFees=null, releaseFees=null;
@@ -48,6 +76,9 @@ async function transport(kind,args){
 async function fixtureTransport(kind,args){
   calls.push({kind,args:structuredClone(args)});
   if(kind==='querySelf'){
+    if(args[0]==='uniswap_action_page_v1')return pageOf(actions,args[1][0],actionSummary);
+    if(args[0]==='uniswap_action_get_v1')return actions.get(args[1][0])??null;
+    if(args[0]==='uniswap_position_refs_v1')return [...trackedPositions.values()].filter(item=>item.chain_id===args[1][0]);
     if(args[0]==='uniswap_list_v1')return [...records.values()];
     if(args[0]==='uniswap_history_v1'){
       const input=args[1][0];
@@ -61,6 +92,18 @@ async function fixtureTransport(kind,args){
   }
   if(kind==='updateSelf'){
     const input=args[1][0];
+    if(args[0]==='uniswap_action_begin_v1'){
+      const old=actions.get(input.id);
+      if(old){assert.equal(old.input_json,input.input_json);assert.equal(old.summary,input.summary);return old;}
+      const value={...input,revision:'0',created_at:ns(),updated_at:ns()};actions.set(value.id,value);return value;
+    }
+    if(args[0]==='uniswap_action_update_v1'){
+      const old=actions.get(input.id);assert(old);assert.equal(input.expected_revision,old.revision);
+      const value={...old,state_json:input.state_json,phase:input.phase,revision:String(BigInt(old.revision)+1n),updated_at:ns()};actions.set(value.id,value);return value;
+    }
+    if(args[0]==='uniswap_position_track_v1'){
+      const value={chain_id:input.chain_id,protocol:input.protocol,token_id:input.token_id};trackedPositions.set([input.chain_id,input.protocol,input.token_id].join(':'),value);return value;
+    }
     if(args[0]==='uniswap_begin_v1'){
       assert(!records.has(input.id));
       const value={...input,phase:'queued',revision:'0',created_at:ns(),updated_at:ns()};
@@ -86,6 +129,28 @@ async function fixtureTransport(kind,args){
       if(delayedReads)await delayedReads;
       let result;
       if(request.to.toLowerCase()===QUOTER){const decoded=decodeFunctionData({abi:quoteAbi,data:request.data});assert.equal(decoded.functionName,'quoteExactInputSingle');const q=decoded.args[0];const isUsdc=q.tokenOut.toLowerCase().startsWith('0xa0b')||q.tokenOut.toLowerCase().startsWith('0xaf88');const output=(q.fee===500?4_990_000n:4_900_000n)*(isUsdc?1n:1_000_000_000n);result=encodeFunctionResult({abi:quoteAbi,functionName:'quoteExactInputSingle',result:[output,2n**96n,1,90000n]});}
+      else if(request.to.toLowerCase()===V4_QUOTER){
+        const {args:[q]}=decodeFunctionData({abi:v4QuoteAbi,data:request.data});
+        const isUsdc=(q.zeroForOne?q.poolKey.currency1:q.poolKey.currency0).toLowerCase()===USDC;
+        const output=(q.poolKey.fee===500?4_980_000n:4_880_000n)*(isUsdc?1n:1_000_000_000n);
+        result=encodeFunctionResult({abi:v4QuoteAbi,functionName:'quoteExactInputSingle',result:[output,80000n]});
+      }
+      else if(request.to.toLowerCase()===V4_STATE){
+        const {functionName,args:[poolId]}=decodeFunctionData({abi:v4StateAbi,data:request.data});
+        assert(v4Pools.has(poolId),'Pool read must preserve the currency, fee and tick-spacing key');
+        const values={getSlot0:[2n**96n,0,0,v4Pools.get(poolId).fee],getLiquidity:10n**18n,getPositionInfo:[10n**12n,0n,0n],getFeeGrowthInside:[(2n**128n)/1_000_000n,(2n**128n)/1_000_000n]};
+        result=encodeFunctionResult({abi:v4StateAbi,functionName,result:values[functionName]});
+      }
+      else if([V3_MANAGER,V4_MANAGER].includes(request.to.toLowerCase())){
+        const {functionName,args:params}=decodeFunctionData({abi:managerAbi,data:request.data});
+        if(functionName==='ownerOf'&&params[0]===77n)indexedPositionCount=2n;
+        const values={ownerOf:account.address,balanceOf:request.to.toLowerCase()===V3_MANAGER?0n:indexedPositionCount,getPoolAndPositionInfo:[{currency0:ZERO,currency1:USDC,fee:3000,tickSpacing:60,hooks:ZERO},((0x1000000n-600n)<<8n)|(600n<<32n)],getPositionLiquidity:10n**12n};
+        result=encodeFunctionResult({abi:managerAbi,functionName,result:values[functionName]});
+      }
+      else if(request.to.toLowerCase()===PERMIT2){
+        const {functionName}=decodeFunctionData({abi:permitAbi,data:request.data});assert.equal(functionName,'allowance');
+        result=encodeFunctionResult({abi:permitAbi,functionName,result:[0n,0,0]});
+      }
       else if(request.to.toLowerCase()===FACTORY)result=encodeFunctionResult({abi:factoryAbi,functionName:'getPool',result:POOL});
       else if(request.to.toLowerCase()===POOL)result=encodeFunctionResult({abi:poolAbi,functionName:'slot0',result:[(2n**96n*22_360_679_774_997_896n)/1_000_000_000_000n,0,0,1,1,0,true]});
       else {assert.equal(decodeFunctionData({abi:tokenAbi,data:request.data}).functionName,'allowance');result=encodeFunctionResult({abi:tokenAbi,functionName:'allowance',result:allowanceAtoms});}
@@ -102,15 +167,27 @@ async function fixtureTransport(kind,args){
     if(call.name==='evm_transaction_v1')return transactionEvidence.get(request.transactionHash)??{...request,walletRequestMatches:null,transaction:null,receipt:null,observedAtNs:ns(),source:'evm_rpc'};
     if(call.name==='evm_operation_status_v1'){if(blockedStatusRequest===request.requestId)throw Error('Simulated temporary status read failure');return operations.get(request.requestId)??{...request,status:'not_found'};}
     if(call.name==='evm_send_transaction_v1'){
+      const action=[...actions.values()].find(r=>JSON.parse(r.state_json).steps.some(step=>step.request.requestId===request.requestId));
       const record=[...records.values()].find(r=>r.approval_request_id===request.requestId||r.swap_request_id===request.requestId);
-      assert(record,'Wallet prompted before durable swap intent was saved');
-      const approval=record.approval_request_id===request.requestId;
-      assert.equal(record.phase,approval?'approval_requested':'swap_requested');
-      assert.deepEqual(request,JSON.parse(approval?record.approval_request_json:record.swap_request_json));
+      assert(action||record,'Wallet prompted before durable intent was saved');
+      let approval;
+      if(action){
+        const state=JSON.parse(action.state_json), index=state.steps.findIndex(step=>step.request.requestId===request.requestId), step=state.steps[index];
+        assert.equal(action.phase,'step_'+index+'_requested');assert.equal(step.dispatched,true);assert.equal(step.unresolvedDispatch,true);
+        assert.deepEqual(request,step.request);approval=state.plan.steps[index].kind==='approval';
+        assert(state.steps.slice(0,index).every(step=>step.operation?.status==='confirmed'&&step.evidence?.receipt?.status==='success'),'Next action ran before the previous receipt was verified');
+      }else{
+        approval=record.approval_request_id===request.requestId;
+        assert.equal(record.phase,approval?'approval_requested':'swap_requested');
+        assert.deepEqual(request,JSON.parse(approval?record.approval_request_json:record.swap_request_json));
+      }
       assert(!operations.has(request.requestId)||operations.get(request.requestId).status==='prepared','Operation submitted more than once');
       const rejected=approval&&nextApproval==='reject';
       const operation={requestId:request.requestId,accountId:request.accountId,chainId:request.chainId,operationId:String(operations.size+1),kind:'transaction',status:rejected?'rejected':!approval&&['submitted','prepared'].includes(nextSwap)?nextSwap:'confirmed',address:account.address,transactionHash:rejected||!approval&&nextSwap==='prepared'?null:'0x'+BigInt(operations.size+1).toString(16).padStart(64,'0'),signature:null,message:rejected?'Owner declined approval.':null,reviewRevision:'1',receipt:rejected||!approval&&['submitted','prepared'].includes(nextSwap)?null:receipt()};
       operations.set(request.requestId,operation);
+      if(operation.transactionHash)transactionEvidence.set(operation.transactionHash,{chainId:request.chainId,transactionHash:operation.transactionHash,walletRequestMatches:null,
+        transaction:{from:account.address,to:request.to,data:request.data,valueWei:request.valueWei,nonce:'0',blockNumber:operation.receipt?.blockNumber??null,blockHash:operation.receipt?.blockHash??null},
+        receipt:operation.receipt,observedAtNs:ns(),source:'evm_rpc'});
       if(!approval&&nextSwap==='lost-reply'){blockedStatusRequest=request.requestId;throw Error('Simulated lost wallet reply');}
       return operation;
     }
@@ -119,23 +196,45 @@ async function fixtureTransport(kind,args){
 }
 const report=[];
 function pass(name){report.push(name);console.log('PASS '+name);}
-let page; const errors=[];
+const sends=()=>calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1');
+const callCount=(name)=>calls.filter(c=>c.kind==='callTool'&&c.args[0].name===name).length;
+const completedCount=()=>[...actions.values()].filter(row=>row.phase==='complete').length;
+let page;const errors=[], externalRequests=[];
+async function readySwap(){await page.locator('button.uni-primary').filter({hasText:/^Swap$/}).waitFor();await page.waitForFunction(()=>!document.querySelector('button.uni-primary')?.disabled);}
+async function compact(width,label){
+ await page.setViewportSize({width,height:900});
+ const bounds=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,elements:[...document.querySelectorAll('input, select, button, .uni-shell, .uni-form, .uni-token-menu')].filter(e=>e.getClientRects().length).map(e=>{const r=e.getBoundingClientRect();return {name:e.getAttribute('aria-label')||e.tagName,left:r.left,right:r.right};})}));
+ assert(bounds.scroll<=width,JSON.stringify(bounds));assert(bounds.elements.every(e=>e.left>=0&&e.right<=width+1),JSON.stringify(bounds));
+ await page.screenshot({path:resolve(artifacts,label+'-'+width+'.png'),fullPage:true});
+}
 try{
  page=await browser.newPage({viewport:{width:1440,height:1000}});
+ page.setDefaultTimeout(15_000);
  page.on('pageerror',e=>errors.push(e.message));
+ // Browser-only position index requests are mocked at the network boundary. No
+ // external RPC, indexer or transaction request is allowed out of this fixture.
+ await page.route('**/*',async route=>{
+  const target=new URL(route.request().url());
+  if(target.origin===url)return route.continue();
+  if(target.hostname==='eth.blockscout.com'){
+    indexRequests.push(target.href);
+    assert.equal(target.pathname.toLowerCase(),'/api/v2/tokens/'+V4_MANAGER+'/instances');
+    assert.equal(target.searchParams.get('holder_address_hash').toLowerCase(),account.address);
+    return route.fulfill({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':'*'},body:JSON.stringify({items:[{id:'42',owner:{hash:account.address},token:{address_hash:V4_MANAGER},token_type:'ERC-721'}],next_page_params:null})});
+  }
+  externalRequests.push(target.href);return route.abort();
+ });
  await page.exposeFunction('fixtureCall',transport);
  toolOverrides.set('evm_accounts_v1',()=>{throw Error('Wallet is starting');});
  await page.goto(url);
  await page.getByText('Wallet unavailable · retrying automatically',{exact:true}).waitFor();
- assert(await page.getByRole('button',{name:'Wallet unavailable',exact:true}).isDisabled());
+ assert(await page.locator('button.uni-primary').isDisabled());
  assert.equal(await page.getByRole('button',{name:/Connect|Reconnect/i}).count(),0);
- assert(!calls.some(c=>c.kind==='callTool'&&c.args[0].target==='kernel'));
  toolOverrides.delete('evm_accounts_v1');
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await page.getByText('Balance: 5 ETH',{exact:true}).waitFor();
  pass('Temporary Wallet startup failure recovers automatically on focus without a permission request');
  assert.equal(await page.getByRole('button',{name:/Connect|Reconnect|Refresh wallet|Refresh history|Get quote/i}).count(),0);
- pass('Wallet accounts and balances load automatically without connection, refresh, or quote buttons');
  await page.getByRole('button',{name:'Input token',exact:true}).click();
  await page.getByRole('textbox',{name:'Input token search',exact:true}).fill('usd');
  await page.getByRole('button',{name:'Select USDC',exact:true}).click();
@@ -143,102 +242,159 @@ try{
  assert((await page.locator('.uni-token-trigger img').first().getAttribute('src')).startsWith('data:'));
  await page.getByRole('textbox',{name:'Input amount',exact:true}).fill('1');
  await page.getByRole('textbox',{name:'Input amount',exact:true}).fill('10');
- await page.getByRole('button',{name:'Swap',exact:true}).waitFor();
- await page.waitForFunction(()=>!document.querySelector('button.uni-primary')?.disabled);
+ await readySwap();
  assert.equal(await page.locator('output').innerText(),'0.00499');
  assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_call_contract_v1'&&c.args[0].arguments.to.toLowerCase()===QUOTER).length,4);
- assert.equal(records.size,0);assert.equal(operations.size,0);
+ assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_call_contract_v1'&&c.args[0].arguments.to.toLowerCase()===V4_QUOTER).length,4);
+ assert.equal(actions.size,0);assert.equal(operations.size,0);
  assert.equal(await page.locator('.uni-form > details[open]').count(),0);
- pass('Searchable local token icons and debounced quote render with technical details collapsed');
- const balanceCallsBeforeSwap=calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_balances_v1').length;
- await page.getByRole('button',{name:'Swap',exact:true}).click();
+ pass('Debounced Auto quote compares actual V3 and V4 calldata, with local token icons and details collapsed');
+ const balanceCallsBeforeSwap=callCount('evm_balances_v1');
+ await page.locator('button.uni-primary').click();
  await page.locator('.uni-saved-complete').waitFor();
- const first=[...records.values()][0];
- const firstSends=calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1');
- assert.deepEqual(firstSends.map(c=>c.args[0].arguments.requestId),[first.approval_request_id,first.swap_request_id]);
+ const first=[...actions.values()][0], firstState=JSON.parse(first.state_json);
+ assert.equal(firstState.plan.details.protocol,'v3');
+ assert.deepEqual(sends().map(c=>c.args[0].arguments.requestId),firstState.steps.map(step=>step.request.requestId));
+ assert.equal(firstState.steps.length,2);assert.equal(completedCount(),1);
  await page.waitForFunction(()=>!document.querySelector('button.uni-primary')?.disabled || document.querySelector('button.uni-primary')?.textContent==='Enter an amount');
- assert(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_balances_v1').length>balanceCallsBeforeSwap);
- pass('One Swap action automatically completes approval then swap and refreshes balances');
+ assert(callCount('evm_balances_v1')>balanceCallsBeforeSwap);
+ pass('One Swap action persists intent then automatically verifies approval and final swap receipts before refreshing balances');
  nextSwap='lost-reply';
- await page.getByRole('textbox',{name:'Input amount',exact:true}).fill('5');
- await page.getByRole('button',{name:'Swap',exact:true}).waitFor();
- await page.getByRole('button',{name:'Swap',exact:true}).click();
- await page.getByRole('alert').waitFor();
- const lost=[...records.values()].find(r=>r.id!==first.id);
- const sendsBeforeResume=calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1').length;
- await page.getByRole('button',{name:'Continue swap',exact:true}).waitFor();
- await page.getByText('Updates delayed · retrying automatically',{exact:true}).waitFor();
- blockedStatusRequest=null;
- await page.getByRole('button',{name:'Continue swap',exact:true}).click();
+ await page.getByRole('textbox',{name:'Input amount',exact:true}).fill('5');await readySwap();
+ await page.locator('button.uni-primary').click();
+ await page.getByRole('button',{name:'Continue',exact:true}).waitFor();
+ const lost=[...actions.values()].find(r=>r.id!==first.id), lostState=JSON.parse(lost.state_json);
+ assert.equal(lostState.steps.at(-1).unresolvedDispatch,true);
+ const sendsBeforeResume=sends().length;
+ blockedStatusRequest=null;nextSwap='confirm';
+ await page.reload();
+ await page.getByRole('button',{name:'Continue',exact:true}).waitFor();
+ assert.equal(sends().length,sendsBeforeResume);
+ await page.getByRole('button',{name:'Continue',exact:true}).click();
  await page.waitForFunction(()=>document.querySelectorAll('.uni-saved-complete').length===2);
- assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1').length,sendsBeforeResume);
- assert.equal(records.get(lost.id).swap_request_id,lost.swap_request_id);
- pass('Lost swap reply retains a visible Continue action and recovers without another signature');
+ assert.equal(sends().length,sendsBeforeResume);assert.equal(actions.get(lost.id).phase,'complete');
+ pass('Lost final reply survives reload and Continue reconciles the original transaction without another signature');
  const beforeFocus=calls.length;
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await page.waitForFunction(()=>!document.querySelector('button.uni-primary')?.textContent.includes('progress'));
- await new Promise(resolve=>setTimeout(resolve,200));
+ await new Promise(resolve=>setTimeout(resolve,250));
  assert(calls.slice(beforeFocus).some(c=>c.kind==='callTool'&&c.args[0].name==='evm_balances_v1'));
+ assert(calls.slice(beforeFocus).some(c=>c.kind==='querySelf'&&c.args[0]==='uniswap_action_page_v1'));
  assert(calls.slice(beforeFocus).some(c=>c.kind==='querySelf'&&c.args[0]==='uniswap_history_v1'));
- assert(!calls.slice(beforeFocus).some(c=>c.kind==='callTool'&&c.args[0].target==='kernel'));
- pass('Focus automatically refreshes accounts, balances, and history without requesting permission');
+ pass('Focus refreshes accounts, balances and both current and legacy history automatically');
+ // A current Agent-owned intent must never be resumed by the human tile.
+ const externalId='cc'.repeat(16), externalIntent=JSON.parse(first.input_json), externalState=JSON.parse(first.state_json);
+ externalIntent.envelope.operationId=externalId;externalIntent.agentMode=true;externalIntent.caller={appId:'agent',installationUid:'17'};
+ externalState.steps=externalState.steps.map((step,index)=>({...step,request:{...step.request,requestId:keccak256(stringToHex(`neutron:uniswap-action-step:v1:${externalId}:${index}`)).slice(2,34)},dispatched:false,unresolvedDispatch:false,operation:null,evidence:null}));
+ // Current history reads only summaries; it must not resume another caller's intent.
+ const externalSummary={...JSON.parse(first.summary),humanOwned:false,operationId:externalId,title:'Agent requested swap'};
+ const external={...first,id:externalId,input_json:JSON.stringify(externalIntent),state_json:JSON.stringify(externalState),summary:JSON.stringify(externalSummary),phase:'step_0_requested',created_at:ns(),updated_at:ns()};
+ actions.set(external.id,external);
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await page.getByText('Managed by your agent or the requesting app.',{exact:true}).waitFor();
+ assert.equal(await page.locator('article').filter({hasText:'Agent requested swap'}).getByRole('button',{name:/Continue|Refresh|Try/i}).count(),0);
+ const beforeExternalRefresh=calls.length;
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await new Promise(resolve=>setTimeout(resolve,250));
+ assert(!calls.slice(beforeExternalRefresh).some(c=>c.kind==='querySelf'&&c.args[0]==='uniswap_action_get_v1'&&c.args[1][0]===externalId));
+ pass('Agent-owned current activity is visible but human auto-refresh neither opens nor resumes its intent');
+ // An explicit V4 preference must select its quote even when V3 output is larger.
+ await page.getByRole('button',{name:'Input token',exact:true}).click();
+ await page.getByRole('textbox',{name:'Input token search',exact:true}).fill('usd');
+ await page.getByRole('button',{name:'Select USDC',exact:true}).click();
+ await page.getByRole('textbox',{name:'Input amount',exact:true}).fill('3');
+ await page.locator('.uni-form > details').getByText('Details & settings',{exact:true}).click();
+ await page.getByLabel(/^Pool version/).selectOption('v4');await readySwap();
+ assert.equal(await page.locator('output').innerText(),'0.00498');
+ await page.locator('.uni-form > details').getByText('Details & settings',{exact:true}).click();
+ const beforeV4=sends().length;
+ await page.locator('button.uni-primary').click();
+ await page.waitForFunction(()=>document.querySelectorAll('.uni-saved-complete').length===3);
+ const v4=[...actions.values()].find(row=>row.id!==externalId&&JSON.parse(row.state_json).plan.details.protocol==='v4');
+ assert(v4);assert.equal(JSON.parse(v4.state_json).steps.length,3);
+ assert.deepEqual(sends().slice(beforeV4).map(c=>c.args[0].arguments.to.toLowerCase()),[USDC,PERMIT2,'0x4c82d1fbfe28c977cbb58d8c7ff8fcf9f70a2cca']);
+ pass('Explicit V4 runs exact token approval, Permit2 authorization and the router transaction from one Swap click');
+ for(const width of [375,320]){
+  await page.getByRole('button',{name:'Input token',exact:true}).click();await compact(width,'swap');
+  await page.getByRole('button',{name:'Close token list',exact:true}).click();pass('Compact swap and token picker fit '+width+'px');
+ }
+ await page.getByRole('button',{name:'Liquidity',exact:true}).click();
+ await page.locator('.uni-position-card').filter({hasText:'#42'}).waitFor();
+ assert(indexRequests.length>0);assert.equal(await page.locator('.uni-position-card details[open]').count(),0);
+ assert(calls.some(c=>c.kind==='callTool'&&c.args[0].name==='evm_call_contract_v1'&&c.args[0].arguments.to.toLowerCase()===V4_MANAGER&&c.args[0].arguments.data.startsWith('0x6352211e')));
+ pass('Liquidity tab discovers V4 NFT IDs in the browser and verifies ownership and pool state through Wallet reads');
+ await page.getByText('Import an existing position',{exact:true}).click();
+ await page.getByLabel('Position ID',{exact:true}).fill('77');
+ await page.getByRole('button',{name:'Import position',exact:true}).click();
+ await page.locator('.uni-position-card').filter({hasText:'#77'}).waitFor();
+ assert(trackedPositions.has('1:v4:77'));
+ await page.getByText('Import an existing position',{exact:true}).click();
+ pass('Manual position import verifies ownership and retains a durable discovery reference');
+ for(const width of [375,320]){await compact(width,'liquidity');pass('Liquidity position cards fit '+width+'px');}
+ await page.getByRole('button',{name:'+ New position',exact:true}).click();
+ await page.getByRole('textbox',{name:'Token A amount',exact:true}).fill('0.001');
+ await page.getByRole('textbox',{name:'Token B amount',exact:true}).fill('2');
+ await page.locator('.uni-liquidity-preview').waitFor();
+ assert(!(await page.getByRole('button',{name:'Create position',exact:true}).isDisabled()));
+ assert.equal(await page.locator('.uni-liquidity-editor > details[open]').count(),0);
+ await compact(320,'liquidity-new');
+ await page.getByRole('button',{name:'Back to positions',exact:true}).click();
+ pass('New V4 position prepares full-range liquidity at the selected fee and tick spacing without exposing advanced settings');
+ const card=()=>page.locator('.uni-position-card').filter({hasText:'#42'});
+ await card().getByRole('button',{name:'Add',exact:true}).click();
+ await page.getByRole('textbox',{name:'Token A amount',exact:true}).fill('0.001');
+ await page.getByRole('textbox',{name:'Token B amount',exact:true}).fill('2');
+ await page.locator('.uni-liquidity-preview').waitFor();
+ assert(!(await page.getByRole('button',{name:'Add liquidity',exact:true}).isDisabled()));
+ assert.equal(await page.locator('.uni-liquidity-editor > details[open]').count(),0);
+ await compact(320,'liquidity-add');
+ await page.getByRole('button',{name:'Back to positions',exact:true}).click();
+ await card().getByRole('button',{name:'Remove',exact:true}).click();
+ await page.getByRole('button',{name:'25%',exact:true}).click();
+ await page.locator('.uni-liquidity-preview').waitFor();
+ assert.equal(await page.getByRole('textbox',{name:'Liquidity removal percentage',exact:true}).inputValue(),'25');
+ assert(!(await page.getByRole('button',{name:'Remove liquidity',exact:true}).isDisabled()));
+ await compact(320,'liquidity-remove');
+ await page.getByRole('button',{name:'Back to positions',exact:true}).click();
+ await card().getByRole('button',{name:'Collect',exact:true}).click();
+ await page.locator('.uni-liquidity-preview').waitFor();
+ assert(!(await page.getByRole('button',{name:'Collect tokens',exact:true}).isDisabled()));
+ pass('Add, percentage removal and fee collection each prepare ABI-backed previews with compact collapsed details');
+ const beforeCollect=sends().length;
+ await page.getByRole('button',{name:'Collect tokens',exact:true}).click();
+ await page.locator('.uni-position-card').filter({hasText:'#42'}).waitFor();
+ await page.locator('.uni-saved-complete').waitFor();
+ assert.equal(sends().length,beforeCollect+1);assert.equal(sends().at(-1).args[0].arguments.to.toLowerCase(),V4_MANAGER);
+ assert([...actions.values()].some(row=>JSON.parse(row.summary).kind==='liquidity'&&row.phase==='complete'));
+ pass('Collect runs the final position-manager transaction and refreshes portfolio and durable activity automatically');
+ // Preserve the released two-step journal path: an old approved quote can be
+ // refreshed into the current action flow without replaying its old swap.
  const routerAbi=parseAbi(['function multicall(uint256 deadline,bytes[] data) payable returns(bytes[] results)']);
- const saved=JSON.parse(first.quote_json), oldDeadline=String(Math.floor(Date.now()/1000)-60);
- saved.quote.deadline=oldDeadline;
- const decoded=decodeFunctionData({abi:routerAbi,data:saved.swap.data});
- saved.swap.data=encodeFunctionData({abi:routerAbi,functionName:'multicall',args:[BigInt(oldDeadline),decoded.args[1]]});
- const approvalRequest={...JSON.parse(first.approval_request_json),requestId:'aa'.repeat(16)};
- const swapRequest={...JSON.parse(first.swap_request_json),requestId:'bb'.repeat(16),data:saved.swap.data};
- const oldApproval={...JSON.parse(first.approval_operation_json),requestId:approvalRequest.requestId};
- const old={...first,id:'expired-approved-swap',quote_json:JSON.stringify(saved),approval_request_id:approvalRequest.requestId,approval_request_json:JSON.stringify(approvalRequest),swap_request_id:swapRequest.requestId,swap_request_json:JSON.stringify(swapRequest),approval_operation_json:JSON.stringify(oldApproval),phase:'approval_confirmed',created_at:ns(),updated_at:ns()};
- delete old.swap_operation_json;
- records.set(old.id,old);operations.set(approvalRequest.requestId,oldApproval);allowanceAtoms=100_000_000n;nextSwap='confirm';
- const beforeReload=calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1').length;
+ const oldDeadline=String(Math.floor(Date.now()/1000)-60), oldQuote={...firstState.plan.details.quote,deadline:oldDeadline};
+ const oldSwap={...firstState.plan.steps.at(-1).transaction}, oldApprovalTx=firstState.plan.steps[0].transaction;
+ const decoded=decodeFunctionData({abi:routerAbi,data:oldSwap.data});
+ oldSwap.data=encodeFunctionData({abi:routerAbi,functionName:'multicall',args:[BigInt(oldDeadline),decoded.args[1]]});
+ const approvalRequest={...firstState.steps[0].request,requestId:'aa'.repeat(16)}, swapRequest={...firstState.steps.at(-1).request,requestId:'bb'.repeat(16),data:oldSwap.data};
+ const approvalOperation={...firstState.steps[0].operation,requestId:approvalRequest.requestId};
+ const oldIntent={quote:oldQuote,approval:oldApprovalTx,swap:oldSwap,allowance:'0',account,executionMode:'human',walletCaller:null};
+ const old={id:'expired-approved-swap',account_id:'main',chain_id:'1',recipient:account.address,quote_json:JSON.stringify(oldIntent),approval_request_id:approvalRequest.requestId,approval_request_json:JSON.stringify(approvalRequest),swap_request_id:swapRequest.requestId,swap_request_json:JSON.stringify(swapRequest),approval_operation_json:JSON.stringify(approvalOperation),phase:'approval_confirmed',revision:'0',created_at:ns(),updated_at:ns()};
+ records.set(old.id,old);operations.set(approvalRequest.requestId,approvalOperation);allowanceAtoms=100_000_000n;
+ const beforeLegacy=sends().length;
+ await page.getByRole('button',{name:'Swap',exact:true}).click();
  await page.reload();
  await page.getByRole('button',{name:'Refresh swap',exact:true}).waitFor();
- assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1').length,beforeReload);
- await page.getByRole('button',{name:'Refresh swap',exact:true}).click();
- await page.getByRole('button',{name:'Swap',exact:true}).waitFor();
- await page.getByRole('button',{name:'Swap',exact:true}).click();
- await page.waitForFunction(()=>document.querySelectorAll('.uni-saved-complete').length===3);
- const fresh=[...records.values()].find(r=>![first.id,lost.id,old.id].includes(r.id));
- assert(fresh);assert.equal(fresh.approval_request_id,undefined);
- assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1').length,beforeReload+1);
- assert.equal(records.get(old.id).swap_request_id,swapRequest.requestId);
- pass('Expired approved swap survives reload, requotes after one click, and uses existing allowance for a newly reviewed swap');
- const externalRequestIds=[];
- for(const [mode,seed] of [['agent','cc'],['provider','dd']]){
-  const externalIntent={...JSON.parse(first.quote_json),executionMode:mode};
-  const externalApproval={...JSON.parse(first.approval_request_json),requestId:seed.repeat(16)};
-  const externalSwap={...JSON.parse(first.swap_request_json),requestId:seed.repeat(15)+'ee'};
-  externalRequestIds.push(externalApproval.requestId,externalSwap.requestId);
-  const external={...first,id:mode+'-managed-swap',quote_json:JSON.stringify(externalIntent),approval_request_id:externalApproval.requestId,approval_request_json:JSON.stringify(externalApproval),swap_request_id:externalSwap.requestId,swap_request_json:JSON.stringify(externalSwap),phase:'approval_requested',created_at:ns(),updated_at:ns()};
-  delete external.approval_operation_json;delete external.swap_operation_json;
-  records.set(external.id,external);
- }
- await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
- await page.getByText('Managed by your agent.',{exact:true}).waitFor();
- await page.getByText('Managed by the requesting app.',{exact:true}).waitFor();
- for(const text of ['Managed by your agent.','Managed by the requesting app.'])assert.equal(await page.locator('article').filter({hasText:text}).getByRole('button',{name:/Continue|Refresh swap|Try swap again/i}).count(),0);
- const beforeExternalRefresh=calls.length;
- await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
- await new Promise(resolve=>setTimeout(resolve,250));
- assert(!calls.slice(beforeExternalRefresh).some(c=>c.kind==='callTool'&&externalRequestIds.includes(c.args[0].arguments?.requestId)));
- pass('Automatic refresh and UI actions leave Agent and provider-owned swaps with their original owner');
- for(const width of [375,320]){
-  await page.setViewportSize({width,height:900});
-  await page.getByRole('button',{name:'Input token',exact:true}).click();
-  const bounds=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,elements:[...document.querySelectorAll('input, select, button, .uni-shell, .uni-form, .uni-token-menu')].filter(e=>e.getClientRects().length).map(e=>{const r=e.getBoundingClientRect();return {name:e.getAttribute('aria-label')||e.tagName,left:r.left,right:r.right};})}));
-  assert(bounds.scroll<=width,JSON.stringify(bounds));assert(bounds.elements.every(e=>e.left>=0&&e.right<=width+1),JSON.stringify(bounds));
-  await page.screenshot({path:resolve(artifacts,'compact-'+width+'.png'),fullPage:true});
-  await page.getByRole('button',{name:'Close token list',exact:true}).click();
-  pass('Compact swap and token picker fit '+width+'px');
- }
+ assert.equal(sends().length,beforeLegacy);
+ await page.getByRole('button',{name:'Refresh swap',exact:true}).click();await readySwap();
+ await page.locator('button.uni-primary').click();
+ await page.waitForFunction(()=>document.querySelectorAll('.uni-saved-complete').length===4);
+ assert.equal(sends().length,beforeLegacy+1);assert.equal(records.get(old.id).swap_request_id,swapRequest.requestId);
+ assert.notEqual(sends().at(-1).args[0].arguments.requestId,swapRequest.requestId);
+ assert.equal(sends().at(-1).args[0].arguments.to.toLowerCase(),firstState.steps.at(-1).request.to.toLowerCase());
+ pass('Released legacy approved swap survives reload and refreshes into a newly reviewed swap using its existing allowance');
  assert(!calls.some(c=>c.kind==='callTool'&&c.args[0].target==='kernel'));
- assert.deepEqual(errors,[]);
- await writeFile(resolve(artifacts,'report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],metadataRejections,errors},null,2));
+ assert.deepEqual(externalRequests,[]);assert.deepEqual(metadataRejections,[]);assert.deepEqual(errors,[]);
+ await writeFile(resolve(artifacts,'report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],actions:[...actions.values()],trackedPositions:[...trackedPositions.values()],indexRequests,metadataRejections,errors},null,2));
 } catch (error) {
  if(page) { await writeFile(resolve(artifacts,'failure.txt'), String(error)+'\n'+await page.locator('body').innerText()); await page.screenshot({path:resolve(artifacts,'failure.png'),fullPage:true}); }
- await writeFile(resolve(artifacts,'failure-report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],metadataRejections,errors},null,2));
+ await writeFile(resolve(artifacts,'failure-report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],actions:[...actions.values()],indexRequests,metadataRejections,errors},null,2));
  throw error;
 } finally { await browser.close();await new Promise(resolve=>server.close(resolve)); }

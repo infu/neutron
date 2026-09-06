@@ -10,6 +10,15 @@
         }
       },
       "migrations": {}
+    },
+    "uniswap_actions": {
+      "schemas": {
+        "1": {
+          "hash": "4e2d0ca4b581c88a8e44ead994ba9ffcf1b8098372d08925952e0fd3d5134c25",
+          "entry": "5594e482e673ad2a95d764cb817d4ef89bab1cbfd71702e4d4e6e7c67abcbbab"
+        }
+      },
+      "migrations": {}
     }
   }
 }

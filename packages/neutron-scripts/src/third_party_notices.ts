@@ -5,6 +5,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { NEUTRON_PACKAGE_ARCHIVE_ONLY_LEGAL_PREFIX } from "neutron-tools/package_record.js";
+import auditedNpmLicenseMaterials from "../assets/legal/audited-npm-license-materials.json";
+import { loadAuditedUnbundledNpmPackages } from "./npm_build_evidence.ts";
 
 const execFile = promisify(callbackExecFile);
 const fatalUtf8Decoder = new TextDecoder("utf-8", { fatal: true });
@@ -548,6 +550,11 @@ async function collectNpmComponents(
     "application package.json",
   );
   const components = new Map<string, DraftComponent>();
+  const buildEvidence = await loadAuditedUnbundledNpmPackages(
+    appRoot,
+    repositoryRoot,
+  );
+  const noticedPackageKeys = new Set<string>();
   const reactIconsPackageRoot =
     reactIconFamilies.length === 0
       ? undefined
@@ -595,6 +602,10 @@ async function collectNpmComponents(
         `Unsupported npm alias: dependency ${dependencyName} resolved to ${actualName}`,
       );
     }
+    const exactPackageKey = `${actualName}@${version}\u0000${hashBytes(manifestBytes)}`;
+    if (buildEvidence.omittedPackages.has(exactPackageKey)) {
+      return;
+    }
     const componentKey = `${packageRoot}\u0000${actualName}\u0000${version}`;
     if (components.has(componentKey)) return;
 
@@ -626,6 +637,7 @@ async function collectNpmComponents(
         declaredLicense,
         apacheLicense,
         allowApacheFallback: true,
+        npmIdentity: { version, manifestBytes },
       });
     }
     if (packageRoot === reactIconsPackageRoot) {
@@ -657,6 +669,7 @@ async function collectNpmComponents(
       legalInputs: Object.freeze(legalInputs),
     });
     components.set(componentKey, draft);
+    noticedPackageKeys.add(exactPackageKey);
     if (components.size > MAX_COMPONENTS) {
       throw new Error(
         `Third-party dependency closure exceeds ${MAX_COMPONENTS} components`,
@@ -670,6 +683,11 @@ async function collectNpmComponents(
 
   for (const dependency of dependencyDeclarations(appManifest)) {
     await visit(appRoot, dependency.name, dependency.optional);
+  }
+  for (const emittedKey of buildEvidence.emittedPackageKeys) {
+    if (!noticedPackageKeys.has(emittedKey)) {
+      throw new Error(`Emitted npm package is missing from the notice inventory: ${emittedKey.split("\u0000")[0]}`);
+    }
   }
   if (reactIconFamilies.length > 0 && !collectedReactIcons) {
     throw new Error(
@@ -820,6 +838,7 @@ async function collectPackageLegalInputs(options: Readonly<{
   declaredLicense: string;
   apacheLicense: Uint8Array;
   allowApacheFallback: boolean;
+  npmIdentity?: Readonly<{ version: string; manifestBytes: Uint8Array }>;
 }>): Promise<LegalInput[]> {
   const discoveredPaths = await discoverLegalFiles(
     options.packageRoot,
@@ -879,7 +898,17 @@ async function collectPackageLegalInputs(options: Readonly<{
   validateBoundLegalMaps(inputs, options.packageName);
 
   if (!hasPrimaryLicense) {
-    if (
+    const auditedMaterial = options.npmIdentity === undefined
+      ? undefined
+      : await loadAuditedNpmLicenseMaterial(
+          options.packageName,
+          options.packageRoot,
+          options.npmIdentity.version,
+          options.npmIdentity.manifestBytes,
+        );
+    if (auditedMaterial !== undefined) {
+      inputs.push(auditedMaterial);
+    } else if (
       options.allowApacheFallback &&
       options.declaredLicense.trim() === "Apache-2.0"
     ) {
@@ -899,6 +928,39 @@ async function collectPackageLegalInputs(options: Readonly<{
   return inputs.sort((left, right) =>
     compareCanonical(left.sourcePath, right.sourcePath),
   );
+}
+
+// These packages omitted a standalone license file. Their exact upstream text
+// or complete installed README is audited by version, manifest and material
+// hashes; an MIT declaration alone never enables a generic replacement text.
+async function loadAuditedNpmLicenseMaterial(
+  name: string,
+  packageRoot: string,
+  version: string,
+  manifestBytes: Uint8Array,
+): Promise<LegalInput | undefined> {
+  const rule = auditedNpmLicenseMaterials.find(
+    (entry) => entry.name === name && entry.version === version,
+  );
+  if (rule === undefined) return undefined;
+  if (hashBytes(manifestBytes) !== rule.packageJsonSha256) {
+    throw new Error(`${name}@${version} needs a fresh missing-license audit: package.json changed`);
+  }
+  const material = rule.material;
+  const relativePath = normalizeSafeRelativePath(
+    material.asset ?? material.installedPath!,
+    `${name} audited legal material`,
+  );
+  const materialRoot = material.asset === undefined
+    ? packageRoot
+    : path.resolve(import.meta.dir, "../assets/legal");
+  const materialPath = await fs.realpath(path.resolve(materialRoot, relativePath));
+  assertWithin(materialRoot, materialPath, `${name} audited legal material`);
+  const bytes = await readBoundedRegularFile(materialPath, `${name} audited legal material`);
+  if (hashBytes(bytes) !== material.sha256) {
+    throw new Error(`${name}@${version} audited legal material hash changed`);
+  }
+  return Object.freeze({ sourcePath: material.sourcePath, bytes });
 }
 
 function validateBoundLegalMaps(

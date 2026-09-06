@@ -1,0 +1,32 @@
+{
+  "existingRoots": [
+    {
+      "file": "apps/uniswap/backend/memory/uniswap/v1.mo",
+      "sha256": "87783d919c6f6922c548ecd0b657ec3501b568d7a89b1825e77171477a3c7832",
+      "unchanged": true,
+      "schemaVersion": 1
+    },
+    {
+      "file": "apps/evm_wallet/backend/memory/evm_wallet/v1.mo",
+      "sha256": "5a8971fa005d0a2e62e1e1f7a692334036b7b7e0ba58fe713f4c4cd579e387a3",
+      "unchanged": true,
+      "schemaVersion": 1
+    },
+    {
+      "file": "apps/evm_wallet/backend/memory/evm_evidence/v1.mo",
+      "sha256": "a371d6a74ffa69c6a4347410c3825ed3c702d4c47c7960c60b9282f915613e69",
+      "unchanged": true,
+      "schemaVersion": 1
+    }
+  ],
+  "uniswapLineageUnchanged": true,
+  "newRoot": {
+    "name": "uniswap_actions",
+    "version": 1,
+    "behavior": "init beside retained uniswap root; no migration replaces existing state"
+  },
+  "tests": [
+    "evm-memory.log",
+    "uniswap-memory.log"
+  ]
+}

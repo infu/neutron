@@ -1,0 +1,31 @@
+bun test v1.2.13 (64ed68c9)
+
+packages/neutron-scripts/test/npm_build_evidence.test.ts:
+(pass) only current zero-contribution artifact evidence enables audited omission [34.00ms]
+(pass) copied executable assets cannot bypass the evidenced build inventory [2.00ms]
+(pass) missing ethers license uses exact upstream text and refuses changed identity [12.00ms]
+(pass) audited README license remains exact and changed material is rejected [4.00ms]
+
+packages/neutron-scripts/test/npm_build_evidence_symlink.test.ts:
+(pass) real esbuild symlink inputs cannot omit emitted audited artifact bytes [37.00ms]
+(pass) zero-byte symlink omission requires artifact paths and exact package identity [74.00ms]
+(pass) emitted workspace dependencies retain notice identity while own app is excluded [23.00ms]
+
+packages/neutron-scripts/test/third_party_notices.test.ts:
+(pass) notice bundle is deterministic, deduplicated, and preserves exact inputs [16.00ms]
+(pass) notice bundle generically retains declared legal trees and bound materials [13.00ms]
+(pass) notice bundle retains unrelated legal map schemas without interpreting them [2.00ms]
+(pass) notice bundle fails closed when a non-Apache package omits its license [2.00ms]
+(pass) notice bundle rejects an unaudited or copyleft dependency expression [2.00ms]
+(pass) notice bundle records the permissive branch selected from a dual license [2.00ms]
+(pass) notice bundle rejects a Mops package without an exact installed license [2.00ms]
+(pass) notice bundle rejects Font Awesome icons without complete CC-BY material [1.00ms]
+(pass) notice bundle rejects malformed Mops source output [1.00ms]
+(pass) notice bundle traverses required npm peers and skips optional peers [6.00ms]
+(pass) notice bundle captures exact Ionicons 5.5.4 MIT and copyright material [7.00ms]
+(pass) notice bundle rejects bidirectional package metadata with component identity [3.00ms]
+
+ 19 pass
+ 0 fail
+ 86 expect() calls
+Ran 19 tests across 3 files. [295.00ms]

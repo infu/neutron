@@ -7,6 +7,12 @@
     "@uniswap/v3-core": "1.0.1",
     "@uniswap/v3-periphery": "1.4.4",
     "ganache": "7.9.2",
-    "solc": "0.8.24"
+    "solc": "0.8.24",
+    "@foundry-rs/anvil": "1.7.1",
+    "@uniswap/v4-periphery": "1.0.3",
+    "@openzeppelin/contracts": "5.0.2",
+    "@uniswap/v2-core": "1.0.1",
+    "solc-permit2": "npm:solc@0.8.17",
+    "solc-v4": "npm:solc@0.8.26"
   }
 }
