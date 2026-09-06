@@ -1,0 +1,61 @@
+{
+  "format": 3,
+  "id": "uniswap",
+  "name": "Uniswap",
+  "version": 102,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Uniswap V3 swaps using EVM Wallet",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Uniswap quote, preparation and saved swap tools"
+  },
+  "tiles": [
+    {
+      "id": "uniswap",
+      "title": "Uniswap",
+      "path": "index.html",
+      "icon": "static/icon.svg"
+    }
+  ],
+  "capabilities": {
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "uniswap_begin_v1",
+        "uniswap_get_v1",
+        "uniswap_list_v1",
+        "uniswap_update_v1"
+      ]
+    }
+  },
+  "func": {
+    "uniswap_begin_v1": {
+      "type": "update",
+      "async": false
+    },
+    "uniswap_get_v1": {
+      "type": "query",
+      "async": false
+    },
+    "uniswap_list_v1": {
+      "type": "query",
+      "async": false
+    },
+    "uniswap_update_v1": {
+      "type": "update",
+      "async": false
+    }
+  },
+  "memory": {
+    "uniswap": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/uniswap/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

@@ -13,6 +13,7 @@ import {
   type NeutronBrowserPermissionTileConfig,
   type NeutronCertifiedAssetsCapabilityConfig,
   type NeutronChainKeySigningSlotV1,
+  type NeutronWalletCustodySigningSlotV1,
   type NeutronHttpsOutcallEndpointV1,
   type NeutronPublicIngressRouteV1,
   type NeutronStableStoreV1,
@@ -33,6 +34,8 @@ import {
   BROWSER_PERMISSION_FEATURE_DISCLOSURES,
   BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
   DEDICATED_RESIDENT_ORIGIN_DISCLOSURE,
+  WALLET_CUSTODY_SIGNING_DISCLOSURE,
+  WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
   browserPermissionFeaturesTitle,
   browserPermissionRequestDisclosure,
   certifiedAssetsCollectionDisclosure,
@@ -129,6 +132,7 @@ export function AppSettingsEntry({
   const backendCalls = declaredCapability(entry, "backend_calls");
   const vetkeys = declaredCapability(entry, "vetkeys");
   const chainKeySigning = declaredCapability(entry, "chain_key_signing");
+  const walletCustodySigning = declaredCapability(entry, "wallet_custody_signing");
   const stableStore = declaredCapability(entry, "stable_store");
   const certifiedAssets = declaredCapability(entry, "certified_assets");
   const dedicatedResidentOrigin = declaredCapability(
@@ -454,6 +458,11 @@ export function AppSettingsEntry({
                     {capability.id === "chain_key_signing" && chainKeySigning ? (
                       <ChainKeySigningSettingsDetails
                         slots={chainKeySigning.slots}
+                      />
+                    ) : null}
+                    {capability.id === "wallet_custody_signing" && walletCustodySigning ? (
+                      <WalletCustodySigningSettingsDetails
+                        slots={walletCustodySigning.slots}
                       />
                     ) : null}
                     {capability.id === "stable_store" && stableStore ? (
@@ -941,6 +950,7 @@ function NormalAppDetails({
   const permissions = capabilityPlanPermissions(entry.capability_plan);
   const backendCalls = permissionsOf(permissions, "backend_calls")[0];
   const chainKeySigning = permissionsOf(permissions, "chain_key_signing")[0];
+  const walletCustodySigning = permissionsOf(permissions, "wallet_custody_signing")[0];
   const stableStore = permissionsOf(permissions, "stable_store")[0];
   const httpsOutcalls = permissionsOf(permissions, "https_outcalls")[0];
   const vetkeys = permissionsOf(permissions, "vetkeys")[0];
@@ -1102,6 +1112,27 @@ function NormalAppDetails({
               onSetEnabled={onSetCapabilityEnabled}
               operation={capabilityOperation}
               summaries={controlsFor("chain_key_signing")}
+            />
+          </NormalPermissionCard>
+        ) : null}
+
+        {walletCustodySigning ? (
+          <NormalPermissionCard
+            description={WALLET_CUSTODY_SIGNING_DISCLOSURE}
+            kind="wallet_custody_signing"
+            title="Wallet custody signing"
+          >
+            <NormalPermissionLine
+              description={WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE}
+              title="Signing key lifecycle"
+            />
+            <NormalCapabilityControls
+              actionsDisabled={capabilityActionsDisabled}
+              appName={appName}
+              label={(summary) => `Wallet signing slot ${summary.resourceId}`}
+              onSetEnabled={onSetCapabilityEnabled}
+              operation={capabilityOperation}
+              summaries={controlsFor("wallet_custody_signing")}
             />
           </NormalPermissionCard>
         ) : null}
@@ -2031,6 +2062,44 @@ function ChainKeySigningSettingsDetails({ slots }: {
             `assertion ≤ ${slot.max_assertion_bytes} bytes`,
           ]}
           title="Assertion-signing authority"
+        />,
+        <AppDetailItem
+          description={slot.purpose}
+          fullDescription
+          key={`purpose:${slot.id}`}
+          meta={[`slot ${slot.id}`, "not authority"]}
+          title="App-provided purpose — unverified"
+          unverified
+        />,
+      ])}
+    </>
+  );
+}
+
+function WalletCustodySigningSettingsDetails({ slots }: {
+  slots: readonly NeutronWalletCustodySigningSlotV1[];
+}) {
+  return (
+    <>
+      <AppDetailItem
+        description={WALLET_CUSTODY_SIGNING_DISCLOSURE}
+        fullDescription
+        meta={[]}
+        title="Wallet custody signing"
+      />
+      <AppDetailItem
+        description={WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE}
+        fullDescription
+        meta={[]}
+        title="Signing key lifecycle"
+      />
+      {slots.flatMap((slot) => [
+        <AppDetailItem
+          description="This slot signs the exact digest supplied by the installed app without adding Neutron assertion hashing. The key namespace is bound to this app installation and slot."
+          fullDescription
+          key={`authority:${slot.id}`}
+          meta={[`slot ${slot.id}`, slot.algorithm, "exact 32-byte digest"]}
+          title="Wallet-signing authority"
         />,
         <AppDetailItem
           description={slot.purpose}

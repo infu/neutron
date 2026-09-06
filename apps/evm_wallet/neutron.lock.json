@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "evm_wallet",
+  "memory": {
+    "evm_wallet": {
+      "schemas": {
+        "1": {
+          "hash": "5cf1711e7f72a296ea8dbf320145d7b3d260398f871a3c832f7482388d983590",
+          "entry": "5f59b07b82a1ee1e57f285bc160ae758d10f5944b7e7e152a509691d686fadf4"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

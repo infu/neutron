@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { unpackNeutronPackage } from "neutron-compiler/src/install.ts";
 import { planMemoryMigrations } from "neutron-compiler/src/memory_migrations.ts";
 import { createMemoryLock } from "neutron-tools/src/memory.js";
+import { packageArchiveFilename } from "neutron-tools/src/package_archive.js";
 import type {
   NeutronManifest,
   NeutronMemoryConfig,
@@ -54,86 +55,113 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-test("Wallet candidate keeps production wallet v1 and initializes wallet_commands v1", async () => {
+const allMemoryRoots = ["wallet", "wallet_bridge", "wallet_commands", "wallet_transfers"] as const;
+const addedMemoryRoots = ["wallet_bridge", "wallet_transfers"] as const;
+
+test("Wallet candidate keeps the original root and initializes independent journals", async () => {
   const [productionBytes, sourceText, lockText] = await Promise.all([
     readFile(new URL("../wallet.v0.3.2.neutron", import.meta.url)),
     readFile(new URL("../neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../neutron.lock.json", import.meta.url), "utf8"),
   ]);
-
-  // v0.3.2 is the immutable production Wallet baseline deliberately tracked in
-  // this repository. Later code-only releases retained this same wallet v1 root.
   expect(productionBytes.byteLength).toBe(575_530);
   expect(createHash("sha256").update(productionBytes).digest("hex")).toBe(
     "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43",
   );
-
   const production = packageManifest(productionBytes);
   const source = JSON.parse(sourceText) as NeutronManifest;
   const lock = JSON.parse(lockText) as ReturnType<typeof createMemoryLock>;
   expect(production).toMatchObject({ id: "wallet", version: 302 });
-  expect(source).toMatchObject({ id: "wallet" });
-
+  expect(Object.keys(source.memory ?? {}).sort()).toEqual([...allMemoryRoots]);
   const productionWallet = requiredMemory(production, "wallet");
-  const sourceWallet = requiredMemory(source, "wallet");
-  const sourceCommands = requiredMemory(source, "wallet_commands");
-  expect(sourceShape(productionWallet)).toEqual(sourceWallet);
+  expect(sourceShape(productionWallet)).toEqual(requiredMemory(source, "wallet"));
+  expect(lock.memory.wallet).toEqual(createMemoryLock(production).memory.wallet);
 
-  const productionLock = createMemoryLock(production);
-  expect(lock.memory.wallet).toEqual(productionLock.memory.wallet);
-  expect(sourceCommands).toEqual({
-    version: 1,
-    schemas: { "1": { src: "memory/wallet_commands/v1.mo" } },
-    migrations: [],
-  });
-  const commandsLock = lock.memory.wallet_commands;
-  if (commandsLock === undefined) {
-    throw new Error("Missing Wallet wallet_commands memory lock");
+  for (const memoryId of ["wallet_commands", ...addedMemoryRoots]) {
+    expect(requiredMemory(source, memoryId)).toEqual({
+      version: 1,
+      schemas: { "1": { src: `memory/${memoryId}/v1.mo` } },
+      migrations: [],
+    });
+    expect(lock.memory[memoryId]?.schemas["1"]?.hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(lock.memory[memoryId]?.schemas["1"]?.entry).toMatch(/^[a-f0-9]{64}$/);
+    expect(lock.memory[memoryId]?.migrations).toEqual({});
   }
-  expect(commandsLock.schemas["1"]?.hash).toMatch(/^[a-f0-9]{64}$/);
-  expect(commandsLock.schemas["1"]?.entry).toMatch(/^[a-f0-9]{64}$/);
-  expect(commandsLock.migrations).toEqual({});
-
   const candidate: PackagedNeutronManifest = {
     ...production,
     ...source,
     entry: production.entry,
-    memory: {
-      wallet: productionWallet,
-      wallet_commands: packageMemory(sourceCommands, commandsLock),
-    },
+    memory: Object.fromEntries(allMemoryRoots.map((memoryId) => [
+      memoryId,
+      packageMemory(requiredMemory(source, memoryId), lock.memory[memoryId]),
+    ])),
   };
-
-  expect(
-    planMemoryMigrations({ kernel }, { kernel, wallet: candidate }),
-  ).toEqual({
-    upgrades: [
-      { kind: "initialize", owner: "wallet", memoryId: "wallet", to: 1 },
-      {
-        kind: "initialize",
-        owner: "wallet",
-        memoryId: "wallet_commands",
-        to: 1,
-      },
-    ],
+  expect(planMemoryMigrations({ kernel }, { kernel, wallet: candidate })).toEqual({
+    upgrades: allMemoryRoots.map((memoryId) => ({ kind: "initialize", owner: "wallet", memoryId, to: 1 })),
     removedApps: [],
     destructiveMemoryRoots: [],
   });
-  expect(
-    planMemoryMigrations(
-      { kernel, wallet: production },
-      { kernel, wallet: candidate },
-    ),
-  ).toEqual({
-    upgrades: [
-      { kind: "keep", owner: "wallet", memoryId: "wallet", version: 1 },
-      {
-        kind: "initialize",
-        owner: "wallet",
-        memoryId: "wallet_commands",
-        to: 1,
-      },
-    ],
+  expect(planMemoryMigrations({ kernel, wallet: production }, { kernel, wallet: candidate })).toEqual({
+    upgrades: allMemoryRoots.map((memoryId) => memoryId === "wallet"
+      ? { kind: "keep", owner: "wallet", memoryId, version: 1 }
+      : { kind: "initialize", owner: "wallet", memoryId, to: 1 }),
+    removedApps: [],
+    destructiveMemoryRoots: [],
+  });
+});
+
+// These immutable archives cover the production schema baseline and later
+// releases carrying wallet_commands. Skipping app versions keeps the same v1
+// roots and initializes only the two new journals; no reset or fake migration.
+test("Current Wallet archive keeps every predecessor root and adds bridge and transfer journals", async () => {
+  const source = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
+  expect(source.version).toBeGreaterThan(312);
+  const candidate = packageManifest(await readFile(new URL(`../${packageArchiveFilename("wallet", source.version)}`, import.meta.url)));
+  expect(candidate.version).toBe(source.version);
+  expect(Object.keys(candidate.memory ?? {}).sort()).toEqual([...allMemoryRoots]);
+  const lock = JSON.parse(await readFile(new URL("../neutron.lock.json", import.meta.url), "utf8")) as ReturnType<typeof createMemoryLock>;
+  expect(createMemoryLock(candidate)).toEqual(lock);
+  for (const memoryId of allMemoryRoots) {
+    expect(sourceShape(requiredMemory(candidate, memoryId))).toEqual(requiredMemory(source, memoryId));
+  }
+  const predecessors = [
+    { version: 302, bytes: 575_530, sha256: "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43" },
+    { version: 303, bytes: 634_054, sha256: "df4d3689c30a119a91dbf97d4dcdb67bc0226cc0149ebdf24db6cbd78b9c74e9" },
+    { version: 304, bytes: 634_055, sha256: "0b32d7afaad101955d94887833f499d7e76d92c413bb28ddd457b3712bd69ea9" },
+    { version: 305, bytes: 609_359, sha256: "046983c724641e3043b8056bc1999c593ede7b381b258e56aeb4d4ccede63886" },
+    { version: 306, bytes: 666_413, sha256: "bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae" },
+    { version: 307, bytes: releasedWallet307Bytes, sha256: releasedWallet307Sha256 },
+    { version: 308, bytes: releasedWallet308Bytes, sha256: releasedWallet308Sha256 },
+    { version: 309, bytes: releasedWallet309Bytes, sha256: releasedWallet309Sha256 },
+    { version: 310, bytes: releasedWallet310Bytes, sha256: releasedWallet310Sha256 },
+    { version: 311, bytes: releasedWallet311Bytes, sha256: releasedWallet311Sha256 },
+    { version: 312, bytes: 678_721, sha256: "6875f1f98ae7309fe84885ed77df9847c1c1ad03f5baa8d6aed4b00fb4f48129" },
+  ];
+  for (const predecessor of predecessors) {
+    const bytes = await readFile(new URL(`../${packageArchiveFilename("wallet", predecessor.version)}`, import.meta.url));
+    expect(bytes.byteLength).toBe(predecessor.bytes);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(predecessor.sha256);
+    const production = packageManifest(bytes);
+    expect(production.version).toBe(predecessor.version);
+    for (const [memoryId, memory] of Object.entries(production.memory ?? {})) {
+      expect(requiredMemory(candidate, memoryId)).toEqual(memory);
+      expect(lock.memory[memoryId]).toEqual(createMemoryLock(production).memory[memoryId]);
+    }
+    expect(planMemoryMigrations({ kernel, wallet: production }, { kernel, wallet: candidate })).toEqual({
+      upgrades: allMemoryRoots.map((memoryId) => production.memory?.[memoryId]
+        ? { kind: "keep", owner: "wallet", memoryId, version: 1 }
+        : { kind: "initialize", owner: "wallet", memoryId, to: 1 }),
+      removedApps: [],
+      destructiveMemoryRoots: [],
+    });
+  }
+  expect(planMemoryMigrations({ kernel }, { kernel, wallet: candidate })).toEqual({
+    upgrades: allMemoryRoots.map((memoryId) => ({ kind: "initialize", owner: "wallet", memoryId, to: 1 })),
+    removedApps: [],
+    destructiveMemoryRoots: [],
+  });
+  expect(planMemoryMigrations({ kernel, wallet: candidate }, { kernel, wallet: candidate })).toEqual({
+    upgrades: allMemoryRoots.map((memoryId) => ({ kind: "keep", owner: "wallet", memoryId, version: 1 })),
     removedApps: [],
     destructiveMemoryRoots: [],
   });

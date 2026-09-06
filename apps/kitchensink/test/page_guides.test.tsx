@@ -6,7 +6,7 @@ import {
 } from "../src/page_guides.tsx";
 
 test("every Kitchen Sink workbench route has a complete implementation guide", () => {
-  expect(KITCHEN_GUIDE_IDS).toHaveLength(25);
+  expect(KITCHEN_GUIDE_IDS).toHaveLength(26);
   expect(new Set(KITCHEN_GUIDE_IDS).size).toBe(KITCHEN_GUIDE_IDS.length);
 
   for (const id of KITCHEN_GUIDE_IDS) {

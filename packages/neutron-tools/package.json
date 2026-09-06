@@ -28,7 +28,9 @@
     "./wasm_metadata": "./src/wasm_metadata.ts",
     "./wasm_metadata.js": "./src/wasm_metadata.ts",
     "./src/*.js": "./src/*.ts",
-    "./src/*.ts": "./src/*.ts"
+    "./src/*.ts": "./src/*.ts",
+    "./evm_wallet": "./src/evm_wallet.ts",
+    "./evm_wallet.js": "./src/evm_wallet.ts"
   },
   "scripts": {
     "test": "bun test"

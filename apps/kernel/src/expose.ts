@@ -972,6 +972,11 @@ function callerContext(endpoint: RegisteredEndpoint): MsgBusCaller {
   return {
     endpoint: endpoint.endpointId,
     appId: endpoint.context.appId,
+    // Route and presentation dispatch already validate this registered scope.
+    // Never accept an installation identity supplied in tool arguments.
+    ...(endpoint.appScope
+      ? { installationUid: endpoint.appScope.installationUid }
+      : {}),
     role: endpoint.context.role,
     ...(endpoint.sessionId ? { sessionId: endpoint.sessionId } : {}),
   };

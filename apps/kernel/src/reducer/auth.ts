@@ -877,6 +877,7 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
     backend_calls: IDL.Null,
     randomness: IDL.Null,
     chain_key_signing: IDL.Null,
+    wallet_custody_signing: IDL.Null,
     stable_store: IDL.Null,
     https_outcalls: IDL.Null,
     vetkeys: IDL.Null,

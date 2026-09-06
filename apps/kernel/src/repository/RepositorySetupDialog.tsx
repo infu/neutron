@@ -646,6 +646,7 @@ function PackageDetails({
           {pkg.appExplanations.map((explanation, index) => (
             <p key={`${explanation.kind}:${index}`}>
               {explanation.kind === "chain_key_signing_slot_purpose" ||
+              explanation.kind === "wallet_custody_signing_slot_purpose" ||
               explanation.kind === "stable_store_purpose" ? (
                 <>
                   <strong>App-provided purpose — unverified:</strong>{" "}
@@ -684,6 +685,14 @@ function repositoryCapabilityAuthorityConfig(
           id: slot.id,
           algorithm: slot.algorithm,
           max_assertion_bytes: slot.max_assertion_bytes,
+        })),
+      };
+    case "wallet_custody_signing":
+      return {
+        api: entry.config.api,
+        slots: entry.config.slots.map((slot) => ({
+          id: slot.id,
+          algorithm: slot.algorithm,
         })),
       };
     case "https_outcalls":

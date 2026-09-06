@@ -53,6 +53,12 @@ export const BACKEND_RESERVATION_SCOPE_DISCLOSURES = {
 export const BACKEND_CALL_PERSISTENCE_DISCLOSURE =
   "A grant remains until explicit revocation, incompatible capability removal, or app uninstall.";
 
+export const WALLET_CUSTODY_SIGNING_DISCLOSURE =
+  "Trust this installed app to sign arbitrary exact 32-byte digests that can authorize asset transfers, messages, or other actions. The app decides what to sign; the Kernel does not validate transaction meaning or ask for each signature. Keys are isolated by app installation and slot, so other apps cannot use them. Each signature spends Neutron cycles.";
+
+export const WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE =
+  "Compatible app upgrades preserve these keys. Disabling a slot retains its key. Removing a slot deletes its cached public key; adding the same slot back within the same installation derives the same key. Uninstalling and reinstalling creates new keys and does not restore access to assets at the old addresses.";
+
 export const DEDICATED_RESIDENT_ORIGIN_DISCLOSURE =
   "isolated resident origin with ephemeral credential partition";
 
@@ -128,6 +134,14 @@ export type Permission =
         readonly id: string;
         readonly algorithm: NeutronChainKeySigningAlgorithmV1;
         readonly maxAssertionBytes: number;
+      }[];
+    }
+  | {
+      readonly source: "kernel";
+      readonly kind: "wallet_custody_signing";
+      readonly slots: readonly {
+        readonly id: string;
+        readonly algorithm: "ecdsa_secp256k1";
       }[];
     }
   | {
@@ -319,6 +333,7 @@ export type AppPermissionExplanation = {
   readonly kind:
     | "backend_calls_explanation"
     | "chain_key_signing_slot_purpose"
+    | "wallet_custody_signing_slot_purpose"
     | "stable_store_purpose"
     | "vetkeys_explanation"
     | "vetkeys_slot_purpose";
@@ -382,6 +397,7 @@ export function permissionLevel(permission: Permission): PermissionLevel {
     case "randomness":
       return 2;
     case "chain_key_signing":
+    case "wallet_custody_signing":
       return 4;
     case "stable_store":
       return 3;
@@ -427,6 +443,10 @@ export function permissionKey(permission: Permission): string {
           slot.algorithm,
           slot.maxAssertionBytes,
         ]),
+      )}`;
+    case "wallet_custody_signing":
+      return `${permission.kind}:${JSON.stringify(
+        permission.slots.map((slot) => [slot.id, slot.algorithm]),
       )}`;
     case "stable_store":
       return `${permission.kind}:${JSON.stringify(
@@ -679,6 +699,23 @@ export function capabilityPlanPermissionDisclosures(
           appExplanations.push({
             source: "app",
             kind: "chain_key_signing_slot_purpose",
+            text: `${slot.id} — ${slot.purpose}`,
+          });
+        }
+        break;
+      case "wallet_custody_signing":
+        add({
+          source: "kernel",
+          kind: "wallet_custody_signing",
+          slots: entry.config.slots.map((slot) => ({
+            id: slot.id,
+            algorithm: slot.algorithm,
+          })),
+        });
+        for (const slot of entry.config.slots) {
+          appExplanations.push({
+            source: "app",
+            kind: "wallet_custody_signing_slot_purpose",
             text: `${slot.id} — ${slot.purpose}`,
           });
         }

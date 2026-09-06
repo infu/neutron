@@ -86,7 +86,7 @@ export async function queryPublicNativeDeposit({
       (route.kind === "ckerc20"
         ? first(info.erc20_helper_contract_address)
         : first(info.eth_helper_contract_address)) ??
-      first(info.smart_contract_address);
+      (route.kind === "cketh" ? first(info.smart_contract_address) : null);
     const address = modern ?? legacy;
     if (!address) throw new Error("The ckETH minter has no deposit contract");
 

@@ -1,0 +1,149 @@
+{
+  "format": 3,
+  "id": "evm_wallet",
+  "name": "EVM Wallet",
+  "version": 101,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Chain-key accounts, transactions and signatures across EVM networks",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      },
+      "wallet_custody_signing": {
+        "api": 1
+      }
+    }
+  },
+  "background": {
+    "path": "service.html",
+    "description": "EVM Wallet account reads and transaction and signature review tools"
+  },
+  "capabilities": {
+    "wallet_custody_signing": {
+      "api": 1,
+      "slots": [
+        {
+          "id": "main",
+          "algorithm": "ecdsa_secp256k1",
+          "purpose": "Custody of the main EVM account: sign exact transaction and message digests after Wallet review"
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "evm_wallet_snapshot_v1",
+        "evm_wallet_history_v1",
+        "evm_wallet_asset_set_v1",
+        "evm_wallet_reject_v1",
+        "evm_wallet_accounts_v1",
+        "evm_wallet_balances_v1",
+        "evm_wallet_read_contract_v1",
+        "evm_wallet_transaction_v1",
+        "evm_wallet_prepare_v1",
+        "evm_wallet_execute_v1",
+        "evm_wallet_status_v1"
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Read EVM networks and submit signed transactions through the EVM RPC canister",
+      "reservation_scopes": [
+        "exact"
+      ],
+      "install_reservations": [
+        {
+          "kind": "exact",
+          "principal": "7hfb6-caaaa-aaaar-qadga-cai",
+          "method": "request"
+        },
+        {
+          "kind": "exact",
+          "principal": "7hfb6-caaaa-aaaar-qadga-cai",
+          "method": "requestCost"
+        },
+        {
+          "kind": "exact",
+          "principal": "7hfb6-caaaa-aaaar-qadga-cai",
+          "method": "eth_sendRawTransaction"
+        },
+        {
+          "kind": "exact",
+          "principal": "7hfb6-caaaa-aaaar-qadga-cai",
+          "method": "eth_sendRawTransactionCyclesCost"
+        }
+      ],
+      "max_concurrency": 20,
+      "max_cycles_per_call": 100000000000000,
+      "max_cycles_per_day": 1000000000000000
+    }
+  },
+  "tiles": [
+    {
+      "id": "evm_wallet",
+      "title": "EVM Wallet",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Manage EVM accounts, balances, transactions and signatures"
+    }
+  ],
+  "func": {
+    "evm_wallet_snapshot_v1": {
+      "type": "query",
+      "async": false
+    },
+    "evm_wallet_accounts_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "evm_wallet_history_v1": {
+      "type": "query",
+      "async": false
+    },
+    "evm_wallet_asset_set_v1": {
+      "type": "update",
+      "async": false
+    },
+    "evm_wallet_balances_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "evm_wallet_read_contract_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "evm_wallet_transaction_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "evm_wallet_prepare_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "evm_wallet_execute_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "evm_wallet_reject_v1": {
+      "type": "update",
+      "async": false
+    },
+    "evm_wallet_status_v1": {
+      "type": "update",
+      "async": "async*"
+    }
+  },
+  "memory": {
+    "evm_wallet": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/evm_wallet/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

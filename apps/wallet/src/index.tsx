@@ -27,8 +27,8 @@ import {
   IoWalletOutline,
 } from "react-icons/io5";
 import {
-  connectEthereumProvider,
   copyToClipboard,
+  createMsgBusClient,
   dismissTray,
   exposeTool,
   isJsonObject,
@@ -56,6 +56,17 @@ import {
   type ButtonHTMLAttributes,
 } from "react";
 import "./style.scss";
+import { readWalletWithdrawalQuote, quoteAuthorizationWire, type WalletWithdrawalQuote } from "./withdrawal_quote.ts";
+import {
+  finishSavedWalletTransfer,
+  loadSavedWalletTransfers,
+  localTransferOperation,
+  parseTransferOperation,
+  saveWalletTransfer,
+  savedTransferArgs,
+  transferIdBytes,
+  type WalletTransferOperation,
+} from "./transfers.ts";
 import {
   filterCatalog,
   parseCustomLedgerPrincipal,
@@ -105,10 +116,8 @@ import {
   depositOutpoint,
   type WalletDepositIssueKind,
 } from "./deposit_progress.ts";
-import {
-  submitEthereumDeposit,
-  type EthereumDepositPhase,
-} from "./ethereum.ts";
+import { createEvmWalletClient } from "neutron-tools/evm_wallet";
+import { WalletBridgeDeposit } from "./bridge_control.tsx";
 import {
   destinationLabels,
   parseWalletContactDestinations,
@@ -897,6 +906,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     useState<WalletContactDestination | null>(null);
   const [transferAmount, setTransferAmount] = useState("");
   const [transferBusy, setTransferBusy] = useState(false);
+  const [pendingTransfers, setPendingTransfers] = useState<WalletTransferOperation[]>([]);
   const [transferReceipt, setTransferReceipt] =
     useState<WalletTransferReceipt | null>(null);
   const [depositLedgerId, setDepositLedgerId] = useState<string | null>(null);
@@ -1821,46 +1831,96 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setError(null);
   };
 
-  const submitTransfer = async () => {
+  const refreshPendingTransfers = async () => {
+    if (!snapshot) return;
+    const local = loadSavedWalletTransfers(snapshot.owner).map(localTransferOperation);
+    setPendingTransfers(local);
+    const result = await querySelf("wallet_transfers_pending_v2", [null]);
+    if (!Array.isArray(result)) throw new Error("Invalid Wallet pending transfers");
+    const pending = result.map(parseTransferOperation);
+    const byId = new Map(local.map((operation) => [operation.requestId, operation]));
+    for (const operation of pending) byId.set(operation.requestId, operation);
+    setPendingTransfers([...byId.values()]);
+  };
+
+  useEffect(() => {
+    if (!snapshot?.owner) return;
+    void refreshPendingTransfers().catch((reason) => setError(errorMessage(reason)));
+  }, [snapshot?.owner]);
+
+  const recordTransferOperation = async (operation: WalletTransferOperation) => {
+    if (!snapshot) return;
+    if (operation.status === "pending") {
+      setError(operation.message ?? "Transfer outcome is pending. Resume the saved request to reconcile it.");
+      await refreshPendingTransfers();
+      return;
+    }
+    finishSavedWalletTransfer(snapshot.owner, operation.requestId);
+    if (operation.status === "rejected") {
+      setError(operation.message ?? "Transfer was rejected");
+    } else {
+      setTransferReceipt(asTransferReceipt(operation.receipt!));
+      if (operation.native && (operation.settlement?.status === "failed" || operation.settlement?.status === "unknown")) {
+        setError(operation.settlement.message);
+      }
+      const refreshed = await updateSelf("wallet_refresh_balances", [null]);
+      setSnapshot(parseWalletSnapshotResult(refreshed));
+    }
+    // A final receipt stays in the backend recovery list until the UI has
+    // received it, including when this tile cannot use localStorage.
+    await updateSelf("wallet_transfer_acknowledge_v2", [transferIdBytes(operation.requestId)]);
+    await refreshPendingTransfers();
+    publishWalletInvalidation();
+  };
+
+  const resumeSavedTransfer = async (id: string) => {
+    if (!snapshot) return;
+    setTransferBusy(true);
+    setError(null);
+    try {
+      const operation = pendingTransfers.find((entry) => entry.requestId === id);
+      const saved = loadSavedWalletTransfers(snapshot.owner).find((entry) => entry.requestId === id);
+      if (saved) await updateSelf("wallet_transfer_prepare_v2", [savedTransferArgs(saved)], 30);
+      const value = operation?.status === "succeeded" && operation.native
+        ? await updateSelf("wallet_transfer_refresh_v2", [transferIdBytes(id)], 120)
+        : await updateSelf("wallet_transfer_resume_v2", [transferIdBytes(id)], 120);
+      await recordTransferOperation(parseTransferOperation(value));
+    } catch (reason) {
+      setError(`The saved transfer remains available for recovery: ${errorMessage(reason)}`);
+    } finally {
+      setTransferBusy(false);
+    }
+  };
+
+  const submitTransfer = async (withdrawalQuote?: WalletWithdrawalQuote) => {
     if (!snapshot || !destinationLedger || !transferCandidate) return;
     let amount: string;
     try {
-      amount = parseTransferAmount(transferAmount, destinationLedger);
+      amount = parseTransferAmount(transferAmount, withdrawalQuote === undefined ? destinationLedger : { ...destinationLedger, balance: withdrawalQuote.assetBalance, fee: withdrawalQuote.assetFee });
     } catch (reason) {
       setError(errorMessage(reason));
       return;
     }
-
     setTransferBusy(true);
     setError(null);
     try {
-      const value = await updateSelf(
-        "wallet_transfer",
-        [
-          {
-            ledger: destinationLedger.principal,
-            network: networkVariant(destinationNetwork),
-            contact_id: transferCandidate.contactId,
-            contact_revision: transferCandidate.contactRevision,
-            address_id: transferCandidate.addressId,
-            expected_destination: walletDestinationVariant(
-              transferCandidate.destination,
-            ),
-            amount,
-          },
-        ],
-        60,
-      );
-      setTransferReceipt(asTransferReceipt(value));
-      try {
-        const refreshed = await updateSelf("wallet_refresh_balances", [null]);
-        setSnapshot(parseWalletSnapshotResult(refreshed));
-      } catch (reason) {
-        setError(`Transfer recorded; balance refresh failed: ${errorMessage(reason)}`);
-      }
-      publishWalletInvalidation();
+      // The optional page cache reuses an ID if preparation loses its reply.
+      // Backend preparation then persists the complete intent before execution.
+      const saved = saveWalletTransfer(snapshot.owner, {
+        ledger: destinationLedger.principal,
+        network: networkVariant(destinationNetwork),
+        contact_id: transferCandidate.contactId,
+        contact_revision: transferCandidate.contactRevision,
+        address_id: transferCandidate.addressId,
+        expected_destination: walletDestinationVariant(transferCandidate.destination),
+        amount,
+      }, withdrawalQuote === undefined ? undefined : quoteAuthorizationWire(withdrawalQuote));
+      setPendingTransfers((current) => [...current.filter((entry) => entry.requestId !== saved.requestId), localTransferOperation(saved)]);
+      await updateSelf("wallet_transfer_prepare_v2", [savedTransferArgs(saved)], 30);
+      const value = await updateSelf("wallet_transfer_resume_v2", [transferIdBytes(saved.requestId)], 120);
+      await recordTransferOperation(parseTransferOperation(value));
     } catch (reason) {
-      setError(errorMessage(reason));
+      setError(`The saved transfer remains available for recovery: ${errorMessage(reason)}`);
     } finally {
       setTransferBusy(false);
     }
@@ -2233,6 +2293,26 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
 
         {error ? <WalletNotice message={error} /> : null}
 
+        {pendingTransfers.length > 0 ? (
+          <section className="wallet-empty" aria-label="Saved transfers awaiting recovery">
+            <strong>Saved transfers</strong>
+            {pendingTransfers.map((operation) => {
+              const ledger = snapshot.ledgers.find((item) => item.principal === operation.ledger);
+              const amount = ledger?.decimals == null ? `${operation.amount} atoms` : `${formatTokenAmount(operation.amount, ledger.decimals)} ${ledger.symbol ?? ""}`;
+              return (
+                <div key={operation.requestId}>
+                  <p>{amount} · {operation.destination}</p>
+                  <small>{operation.settlement?.message ?? operation.message ?? (operation.status === "succeeded" ? "Transfer recorded; receipt ready" : "Outcome pending")}</small>
+                  {operation.settlement?.transactionHash ? <code>{operation.settlement.transactionHash}</code> : null}
+                  <button className="nt-button" disabled={transferBusy} onClick={() => void resumeSavedTransfer(operation.requestId)} type="button">
+                    {operation.status === "succeeded" && operation.native ? "Check native settlement" : operation.status !== "pending" ? "View saved receipt" : "Resume saved transfer"}
+                  </button>
+                </div>
+              );
+            })}
+          </section>
+        ) : null}
+
         {view === "activity" ? (
           <WalletActivity
             catalog={catalog}
@@ -2284,7 +2364,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             onQuery={setDestinationQuery}
             onRefresh={() => void loadDestinations()}
             onSelect={chooseTransferDestination}
-            onSubmit={() => void submitTransfer()}
+            onSubmit={(quote) => void submitTransfer(quote)}
             page={destinationPage}
             query={destinationQuery}
             transferAmount={transferAmount}
@@ -3696,237 +3776,13 @@ function formatDepositTime(value: string): string {
   }
 }
 
-type WalletEthereumDepositPhase =
-  | EthereumDepositPhase
-  | "waiting-mint"
-  | "minted";
-
-function EthereumDepositControl({
-  deposit,
-  erc20,
-  ledger,
-  onRefresh,
-  owner,
-}: {
-  deposit: PublicNativeDeposit;
-  erc20: boolean;
-  ledger: WalletLedger;
-  onRefresh: () => void;
-  owner: string;
+function EthereumDepositControl({ ledger, onRefresh }: {
+  deposit: PublicNativeDeposit; erc20: boolean; ledger: WalletLedger;
+  onRefresh: () => void; owner: string;
 }) {
   const { openInTile, surface } = useWalletSurface();
   const fallbackView = useContext(WalletFallbackViewContext);
-  const [amount, setAmount] = useState("");
-  const [phase, setPhase] = useState<WalletEthereumDepositPhase | null>(null);
-  const [transactionHash, setTransactionHash] = useState<string | null>(null);
-  const [balanceBefore, setBalanceBefore] = useState<bigint | null>(null);
-  const [depositError, setDepositError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const symbol = ledger.symbol ?? "token";
-  const decimals = ledger.decimals;
-  let amountUnits: bigint | null = null;
-  let amountError: string | null = null;
-
-  if (amount.trim() && decimals === null) {
-    amountError = "Token decimals are not available";
-  } else if (amount.trim() && decimals !== null) {
-    try {
-      amountUnits = BigInt(parseTokenAmount(amount, decimals));
-    } catch (reason) {
-      amountError = errorMessage(reason);
-    }
-  }
-
-  useEffect(() => {
-    if (phase !== "waiting-mint" || balanceBefore === null) return;
-    if (ledger.balance !== null && BigInt(ledger.balance) > balanceBefore) {
-      setPhase("minted");
-      return;
-    }
-    const timer = window.setInterval(onRefresh, 60_000);
-    return () => window.clearInterval(timer);
-  }, [balanceBefore, ledger.balance, onRefresh, phase]);
-
-  const submit = async () => {
-    if (
-      amountUnits === null ||
-      decimals === null ||
-      !deposit.helperMode ||
-      !deposit.minterAddress ||
-      (erc20 && !deposit.tokenContract)
-    ) {
-      return;
-    }
-    if (surface === "tray") {
-      setBusy(true);
-      setDepositError(null);
-      try {
-        await openInTile(fallbackView);
-      } catch (reason) {
-        setDepositError(errorMessage(reason));
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-    const startingBalance = BigInt(ledger.balance ?? "0");
-    setBusy(true);
-    setBalanceBefore(startingBalance);
-    setDepositError(null);
-    setTransactionHash(null);
-    setPhase("connecting");
-    let connection: Awaited<ReturnType<typeof connectEthereumProvider>> | null =
-      null;
-    try {
-      connection = await connectEthereumProvider();
-      const result = await submitEthereumDeposit({
-        amount: amountUnits,
-        helperMode: deposit.helperMode,
-        helperAddress: deposit.address,
-        minterAddress: deposit.minterAddress,
-        provider: connection.provider,
-        onProgress: (progress) => {
-          setPhase(progress.phase);
-          if (progress.transactionHash) {
-            setTransactionHash(progress.transactionHash);
-          }
-        },
-        principal: ethereumPrincipalWord(owner),
-        subaccount: defaultSubaccountWord(),
-        tokenAddress: erc20 ? deposit.tokenContract : null,
-      });
-      setTransactionHash(result.transactionHash);
-      setPhase("waiting-mint");
-      onRefresh();
-    } catch (reason) {
-      setDepositError(errorMessage(reason));
-      setPhase(null);
-    } finally {
-      await connection?.close().catch(() => undefined);
-      setBusy(false);
-    }
-  };
-
-  const waiting = phase === "waiting-mint";
-  const inputDisabled = busy || waiting;
-
-  return (
-    <div className="wallet-ethereum-deposit">
-      {surface === "tray" ? (
-        <button
-          className="nt-button nt-button--secondary nt-button--sm wallet-metamask-button"
-          onClick={() => void openInTile(fallbackView)}
-          type="button"
-        >
-          <IoOpenOutline aria-hidden="true" />
-          Continue deposit in Wallet
-        </button>
-      ) : (
-        <>
-          <div className="wallet-ethereum-form">
-            <label className="wallet-ethereum-amount">
-              <input
-                aria-label={`Amount of ${symbol} to deposit`}
-                aria-invalid={amountError ? "true" : undefined}
-                autoComplete="off"
-                disabled={inputDisabled}
-                inputMode="decimal"
-                onChange={(event) => {
-                  setAmount(event.target.value);
-                  if (phase === "minted") setPhase(null);
-                  setDepositError(null);
-                }}
-                placeholder="0"
-                spellCheck={false}
-                value={amount}
-              />
-              <strong>{symbol}</strong>
-            </label>
-            <button
-              className="nt-button nt-button--sm wallet-metamask-button"
-              disabled={
-                inputDisabled ||
-                amountUnits === null ||
-                amountError !== null ||
-                !deposit.minterAddress ||
-                (erc20 && !deposit.tokenContract)
-              }
-              onClick={() => void submit()}
-              type="button"
-            >
-              {busy ? (
-                <span className="wallet-spinner" />
-              ) : (
-                <IoWalletOutline aria-hidden="true" />
-              )}
-              Deposit with MetaMask
-            </button>
-          </div>
-          {amountError ? (
-            <span className="wallet-ethereum-error">{amountError}</span>
-          ) : null}
-        </>
-      )}
-      {phase || depositError ? (
-        <div
-          className={`wallet-ethereum-status${
-            depositError ? " is-error" : phase === "minted" ? " is-complete" : ""
-          }`}
-          role={depositError ? "alert" : "status"}
-        >
-          {depositError ? (
-            <IoAlertCircleOutline aria-hidden="true" />
-          ) : phase === "minted" ? (
-            <IoCheckmark aria-hidden="true" />
-          ) : (
-            <span className="wallet-spinner" />
-          )}
-          <span>
-            <strong>
-              {depositError ?? ethereumDepositPhaseLabel(phase, symbol)}
-            </strong>
-            {transactionHash ? (
-              <code title={transactionHash}>{compactAddress(transactionHash)}</code>
-            ) : null}
-          </span>
-          {transactionHash ? (
-            <CopyButton
-              label="Copy Ethereum transaction hash"
-              value={transactionHash}
-            />
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ethereumDepositPhaseLabel(
-  phase: WalletEthereumDepositPhase | null,
-  symbol: string,
-): string {
-  switch (phase) {
-    case "connecting":
-      return "Connecting MetaMask";
-    case "switching-network":
-      return "Switching to Ethereum Mainnet";
-    case "checking-allowance":
-      return "Checking token allowance";
-    case "clearing-allowance":
-      return "Confirming allowance reset";
-    case "approving":
-      return `Confirming ${symbol} approval`;
-    case "submitting":
-      return "Confirm deposit in MetaMask";
-    case "confirming":
-      return "Confirming on Ethereum";
-    case "waiting-mint":
-      return `Waiting for ${symbol} mint`;
-    case "minted":
-      return `${symbol} credited`;
-    default:
-      return "Preparing deposit";
-  }
+  return <WalletBridgeDeposit ledger={ledger.principal} symbol={ledger.symbol ?? "token"} decimals={ledger.decimals} onRefresh={onRefresh} tray={surface === "tray"} openInTile={() => openInTile(fallbackView)} />;
 }
 
 function CopyValue({ label, value }: { label: string; value: string }) {
@@ -4002,7 +3858,7 @@ function WalletDestinations({
   onQuery: (value: string) => void;
   onRefresh: () => void;
   onSelect: (candidate: WalletContactDestination) => void;
-  onSubmit: () => void;
+  onSubmit: (quote?: WalletWithdrawalQuote) => void;
   onTransferAmount: (value: string) => void;
   page: WalletContactDestinationsPage | null;
   query: string;
@@ -4081,6 +3937,7 @@ function WalletDestinations({
           <IoRefresh />
         </IconButton>
       </header>
+      {network === "ethereum_mainnet" ? <EvmWithdrawalDestination onFind={onQuery} onContacts={onContacts} /> : null}
       <label className="wallet-destination-search">
         <IoSearchOutline aria-hidden="true" />
         <input
@@ -4107,6 +3964,27 @@ function WalletDestinations({
       </section>
     </WalletFallbackViewContext.Provider>
   );
+}
+
+function EvmWithdrawalDestination({ onFind, onContacts }: { onFind: (address: string) => void; onContacts: () => void }) {
+  const [address, setAddress] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = async () => {
+    setBusy(true); setError(null);
+    try {
+      const accounts = await createEvmWalletClient(createMsgBusClient()).accounts();
+      const account = accounts.accounts.find((entry) => entry.accountId === "main");
+      if (!account) throw new Error("EVM Wallet has no available account");
+      setAddress(account.address); onFind(account.address);
+    } catch (reason) { setError(errorMessage(reason)); }
+    finally { setBusy(false); }
+  };
+  return <div className="wallet-evm-redemption">
+    <button className="nt-button nt-button--secondary nt-button--sm" disabled={busy} type="button" onClick={() => void load()}>{busy ? <span className="wallet-spinner" /> : <IoWalletOutline />} Use EVM Wallet address</button>
+    {address ? <><CopyValue label="Copy EVM Wallet redemption address" value={address} /><small>Withdrawals arrive on Ethereum Mainnet. Select the matching contact below. If it is missing, save this address in Contacts as an Ethereum destination first.</small><button className="nt-button nt-button--secondary nt-button--sm" type="button" onClick={onContacts}>Open Contacts</button></> : null}
+    {error ? <small role="alert">{error}</small> : null}
+  </div>;
 }
 
 function DestinationGroup({
@@ -4177,33 +4055,53 @@ function WalletTransfer({
   ledger: WalletLedger;
   onAmount: (value: string) => void;
   onBack: () => void;
-  onSubmit: () => void;
+  onSubmit: (quote?: WalletWithdrawalQuote) => void;
   receipt: WalletTransferReceipt | null;
 }) {
   const destination = walletDestinationText(candidate.destination);
   const native = candidate.destination.network !== "internet_computer";
   const custom = catalog === null;
   const erc20 = catalog?.nativeRoute?.kind === "ckerc20";
+  const [quote, setQuote] = useState<WalletWithdrawalQuote | null>(null);
+  const [quoteBusy, setQuoteBusy] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteRevision, setQuoteRevision] = useState(0);
+  useEffect(() => {
+    if (!native || !erc20 || receipt) return;
+    let current = true;
+    setQuote(null); setQuoteError(null); setQuoteBusy(true);
+    // Gas depends on the token route, not the input amount. Read once for this
+    // review and on explicit refresh; never create an approval from this read.
+    void readWalletWithdrawalQuote({ ledger: ledger.principal }, (method, args, timeout) => updateSelf(method, args, timeout))
+      .then((value) => {
+        if (value.gas === null) throw new Error("The withdrawal quote has no ckETH gas budget");
+        if (current) setQuote(value);
+      })
+      .catch((reason) => { if (current) setQuoteError(errorMessage(reason)); })
+      .finally(() => { if (current) setQuoteBusy(false); });
+    return () => { current = false; };
+  }, [native, erc20, ledger.principal, quoteRevision, receipt]);
   const action = native ? "Withdraw" : "Send";
   const decimals = ledger.decimals;
   const symbol = ledger.symbol ?? "units";
-  const available =
-    ledger.balance === null || decimals === null
-      ? null
-      : formatTokenAmount(ledger.balance, decimals);
-  const ledgerFee =
-    ledger.fee === null || decimals === null
-      ? null
-      : formatTokenAmount(ledger.fee, decimals);
-  const maximum = maxTransferAmount(ledger);
+  const reviewedLedger = native && erc20 && quote ? { ...ledger, balance: quote.assetBalance, fee: quote.assetFee } : ledger;
+  const available = reviewedLedger.balance === null || decimals === null ? null : formatTokenAmount(reviewedLedger.balance, decimals);
+  const feeAtoms = native && erc20 && quote ? quote.assetFee : ledger.fee;
+  const ledgerFee = feeAtoms === null || decimals === null ? null : formatTokenAmount(feeAtoms, decimals);
+  const maximum = maxTransferAmount(reviewedLedger);
   let amountError: string | null = null;
+  let amountAtoms: string | null = null;
   if (amount.trim()) {
     try {
-      parseTransferAmount(amount, ledger);
+      amountAtoms = parseTransferAmount(amount, reviewedLedger);
     } catch (reason) {
       amountError = errorMessage(reason);
     }
   }
+
+  const quoteAssetSufficient = quote === null || amountAtoms === null ? true : BigInt(amountAtoms) + BigInt(quote.assetFee) <= BigInt(quote.assetBalance);
+  const requiresGasReview = native && erc20;
+  const gasReviewReady = !requiresGasReview || (quote !== null && quote.gas !== null && quote.gas.sufficient && quoteAssetSufficient && !quoteBusy && quoteError === null);
 
   return (
     <section className="wallet-transfer" aria-label={`${action} token`}>
@@ -4290,7 +4188,22 @@ function WalletTransfer({
                 <dd>{erc20 ? "Paid in ckETH" : "From amount"}</dd>
               </div>
             ) : null}
+            {requiresGasReview && quote?.gas ? <>
+              <div className="wallet-withdrawal-cost"><dt>Ethereum gas budget</dt><dd>{formatTokenAmount(quote.gas.budget, 18)} ckETH <small>({quote.gas.budget} atoms)</small></dd></div>
+              <div className="wallet-withdrawal-cost"><dt>ckETH approval fee</dt><dd>{formatTokenAmount(quote.gas.ledgerFee, 18)} ckETH <small>({quote.gas.ledgerFee} atoms)</small></dd></div>
+              <div className="wallet-withdrawal-cost"><dt>ckETH allowance</dt><dd>{quote.gas.allowance} atoms</dd></div>
+              <div className="wallet-withdrawal-cost"><dt>Maximum ckETH debit</dt><dd>{formatTokenAmount(quote.gas.totalDebit, 18)} ckETH <small>({quote.gas.totalDebit} atoms)</small></dd></div>
+              <div className="wallet-withdrawal-cost"><dt>Available ckETH</dt><dd>{formatTokenAmount(quote.gas.balance, 18)} ckETH</dd></div>
+            </> : null}
           </dl>
+          {requiresGasReview ? <div aria-live="polite">
+            {quoteBusy ? <p>Checking the current ckETH gas budget and balance…</p> : null}
+            {quoteError ? <p role="alert">Gas quote unavailable: {quoteError}</p> : null}
+            {quote?.gas && !quote.gas.sufficient ? <p role="alert">Add ckETH to cover the quoted gas budget and approval fee.</p> : null}
+            {!quoteAssetSufficient ? <p role="alert">The withdrawal and approval fee exceed the quoted token balance.</p> : null}
+            {quote ? <small>Quoted {new Date(Number(BigInt(quote.observedAtNs) / 1_000_000n)).toLocaleTimeString()}. Costs are checked again before approvals. A changed quote requires another review.</small> : null}
+            <button className="nt-button nt-button--secondary nt-button--sm" disabled={quoteBusy || busy || receipt !== null} type="button" onClick={() => setQuoteRevision((value) => value + 1)}>Refresh gas quote</button>
+          </div> : null}
         </div>
 
         {receipt ? (
@@ -4328,9 +4241,9 @@ function WalletTransfer({
             <button
               className="nt-button nt-button--sm"
               disabled={
-                busy || amount.trim().length === 0 || amountError !== null
+                busy || amount.trim().length === 0 || amountError !== null || !gasReviewReady
               }
-              onClick={onSubmit}
+              onClick={() => onSubmit(requiresGasReview ? quote ?? undefined : undefined)}
               type="button"
             >
               {busy ? (

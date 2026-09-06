@@ -1018,6 +1018,19 @@ exposeTool(
 );
 ```
 
+`context.caller` is supplied by Kernel from the registered calling endpoint.
+It includes `endpoint`, `appId`, `role`, `sessionId` when connected, and
+`installationUid`: a canonical positive Nat64 decimal string. The installation
+UID stays the same across tile reloads and compatible upgrades, but changes on
+uninstall/reinstall. Providers can key durable commands by
+`(caller.appId, caller.installationUid, requestId)` without tying replay to a
+temporary endpoint or session. The field is optional in the SDK for older
+Kernels; providers that require installation-scoped command identity must reject
+new effects when it is absent. Never obtain this identity from tool arguments.
+Provider presentation preserves the original caller's installation identity;
+direct-root Agent calls identify the calling root resident. Attachment tools
+receive the same validated installation field.
+
 Call your own background from a tile:
 
 ```ts
@@ -1593,7 +1606,8 @@ interfaces the backend consumes under `backend.capabilities`. The resulting
 `backend_calls` lets an app call only owner-approved canisters and methods;
 `randomness` provides bounded consensus entropy without management-canister
 access; `chain_key_signing` signs bounded app assertions under an
-installation-isolated threshold key; `https_outcalls` makes paid requests beneath exact external HTTPS
+installation-isolated threshold key; `wallet_custody_signing` separately grants
+exact-digest secp256k1 signing to an owner-trusted wallet; `https_outcalls` makes paid requests beneath exact external HTTPS
 prefixes; `certified_assets` publishes bounded certified route bodies; and
 `vetkeys_public` optionally gives an app backend public information for its own
 declared key slots. Frontend-only declarations such as
@@ -1869,6 +1883,29 @@ An external verifier can still assign high-impact authority to a signed
 assertion, so constrain assertion semantics and verifier policy. See
 [App-Isolated Chain-Key Assertion Signing
 V1](./app-isolated-chain-key-signing.md) for exact bounds and byte encoding.
+
+### Use Wallet Custody Signing V1
+
+A wallet backend can explicitly select `wallet_custody_signing : { api: 1 }`
+and declare custody slots with `id`, `algorithm: "ecdsa_secp256k1"`, and
+`purpose`. It receives `Caps.WalletCustodySigningV1`, whose methods are
+`public_key(slot)` and `sign_digest({slot; digest})`. The digest must be exactly
+32 bytes and is signed unchanged. The custody key namespace is separate from
+assertion signing, including when both capabilities declare the same slot ID.
+
+This is an explicit custody grant: the owner trusts the installed wallet to
+validate transactions, messages, and permits and to present the intended
+operation. Kernel does not inspect EVM semantics. Do not expose the raw leaf
+as an unreviewed public frontend tool. Use wallet-owned provider presentation,
+closed protocol requests, and durable caller-bound commands. Direct-root Agent
+requests use their separate attested tool family. An ambiguous signing outcome
+is not permission to repeat signing.
+
+Compatible upgrades and disable/re-enable retain the key. Uninstall/reinstall
+changes the installation UID and address; no key export or reassignment registry
+exists. Document this before funding the account. See the [custody contract and
+lifecycle](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1) for the
+manifest, exact namespace encoding, trust model, and shared resource accounting.
 
 ### Use Stable Store (Development V1)
 

@@ -3,6 +3,8 @@ import type { CapabilityPlanDiffV1 } from "neutron-tools/src/capabilities/wire.j
 import type { CapabilityId } from "neutron-tools/src/capabilities/catalog.js";
 import {
   BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
+  WALLET_CUSTODY_SIGNING_DISCLOSURE,
+  WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
   browserPermissionFeaturesTitle,
   browserPermissionRequestDisclosure,
   permissionLevel,
@@ -112,6 +114,7 @@ const permissionCapabilityIds = {
   backend_calls: "backend_calls",
   randomness: "randomness",
   chain_key_signing: "chain_key_signing",
+  wallet_custody_signing: "wallet_custody_signing",
   stable_store: "stable_store",
   https_outcalls: "https_outcalls",
   public_ingress_route: "public_ingress",
@@ -168,6 +171,7 @@ export function permissionConsequences(
 ): PermissionConsequence[] {
   const consequences = [
     systemConsequences(permissions),
+    walletCustodyConsequences(permissions),
     delegatedConsequences(permissions),
     browserDeviceConsequences(permissions),
     networkConsequences(permissions),
@@ -253,6 +257,27 @@ function systemConsequences(
     description:
       "This is system-level authority. A malicious or broken version could bypass ordinary app isolation.",
     facts,
+  };
+}
+
+function walletCustodyConsequences(
+  permissions: readonly Permission[],
+): PermissionConsequence | null {
+  const signing = permissions.filter(
+    (permission): permission is Extract<Permission, { kind: "wallet_custody_signing" }> =>
+      permission.kind === "wallet_custody_signing",
+  );
+  const slots = signing.flatMap((permission) => permission.slots);
+  if (slots.length === 0) return null;
+  return {
+    id: "wallet-custody-signing",
+    level: maxLevel(signing),
+    title: "Wallet custody signing",
+    description: WALLET_CUSTODY_SIGNING_DISCLOSURE,
+    facts: [
+      `Custody signing slots: ${slots.map(({ id, algorithm }) => `${id} (${algorithm})`).join(", ")}.`,
+      WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
+    ],
   };
 }
 

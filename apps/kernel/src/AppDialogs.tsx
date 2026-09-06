@@ -26,6 +26,8 @@ import {
   BROWSER_PERMISSION_FEATURE_DISCLOSURES,
   BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
   DEDICATED_RESIDENT_ORIGIN_DISCLOSURE,
+  WALLET_CUSTODY_SIGNING_DISCLOSURE,
+  WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
   browserPermissionFeaturesTitle,
   browserPermissionRequestDisclosure,
   certifiedAssetsCollectionDisclosure,
@@ -598,6 +600,7 @@ export function AppRequestDialog({
                     key={`${explanation.kind}:${index}`}
                   >
                     {explanation.kind === "chain_key_signing_slot_purpose" ||
+                    explanation.kind === "wallet_custody_signing_slot_purpose" ||
                     explanation.kind === "stable_store_purpose" ? (
                       <>
                         <strong>App-provided purpose — unverified</strong>
@@ -853,6 +856,14 @@ function capabilityAuthorityConfig(
           max_request_bytes: endpoint.max_request_bytes,
           max_response_bytes: endpoint.max_response_bytes,
           transform: endpoint.transform,
+        })),
+      };
+    case "wallet_custody_signing":
+      return {
+        api: entry.config.api,
+        slots: entry.config.slots.map((slot) => ({
+          id: slot.id,
+          algorithm: slot.algorithm,
         })),
       };
     case "stable_store":
@@ -1202,6 +1213,35 @@ export function PermissionDisclosure({
             Every accepted signature spends shared Neutron cycles. If the
             outcome is unknown, the threshold service may still have produced a
             valid signature. Each slot has a live on/off control in Settings.
+          </p>
+        </PermissionFrame>
+      );
+    case "wallet_custody_signing":
+      return (
+        <PermissionFrame kind={permission.kind} level={level}>
+          <h4 className="permission-group-title">Wallet custody signing</h4>
+          <p className="permission-copy">
+            {WALLET_CUSTODY_SIGNING_DISCLOSURE}
+          </p>
+          <ul className="permission-inventory">
+            {permission.slots.map((slot) => (
+              <li key={slot.id}>
+                <strong>
+                  <code>{slot.id}</code>
+                </strong>
+                <span>
+                  <code>{slot.algorithm}</code>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="permission-copy permission-persistence">
+            {WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE}
+          </p>
+          <p className="permission-copy permission-persistence">
+            Each slot has a live on/off control in Settings. If the outcome is
+            unknown, the threshold service may still have produced a valid
+            signature.
           </p>
         </PermissionFrame>
       );

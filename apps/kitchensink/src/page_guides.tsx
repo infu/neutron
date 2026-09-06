@@ -41,6 +41,7 @@ export const KITCHEN_GUIDE_IDS = [
   "memory",
   "bus",
   "wallet_funding",
+  "evm_wallet",
   "tray",
   "schemas",
   "data",
@@ -639,6 +640,32 @@ await bus.callTool({
     },
   },
 }, 180);`,
+    },
+  },
+  evm_wallet: {
+    benefit:
+      "An app can read EVM networks and accounts, prepare a transfer or contract call, and ask the separate EVM Wallet to review and execute it without receiving a signing key.",
+    flow: [
+      "Read the installed wallet's accounts and networks, then select the exact chain and account for this request. Each read returns its own network and freshness evidence.",
+      "Kitchen Sink saves the complete intent in its resident before requesting an effect. EVM Wallet renders its own decision and journals signing and transaction submission.",
+      "Resume uses the saved request and operation status. Approval and the following contract call are separate transactions; a successful approval remains visible when the next step fails.",
+    ],
+    security: {
+      enforced:
+        "Kernel authenticates the caller installation, checks closed tool schemas, and routes human requests to the wallet-owned provider UI. A nested Kitchen Sink call cannot become a direct-root Agent call.",
+      authority:
+        "EVM Wallet alone holds its custody signing capability. Kitchen Sink supplies explicit transaction intent and independently verifies harmless message signatures; it cannot read private keys or silently select another chain.",
+      visibility:
+        "Transactions are public chain data. Saved consumer intents live in the isolated resident browser origin; wallet operations live in managed backend memory. Clearing browser data removes the consumer journal, not wallet transaction history.",
+    },
+    example: {
+      title: "Resume the saved intent through the shared consumer client",
+      source: "src/evm_wallet_demo.ts",
+      language: "TypeScript",
+      code: `// Persist the full request before any wallet effect.
+const intent = await journal.prepare(draft);
+// Status is queried first; the same request ID is retained.
+await advanceEvmWalletDemo(wallet, journal, intent.id);`,
     },
   },
   tray: {

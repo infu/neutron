@@ -242,6 +242,7 @@ export const DECLARED_CAPABILITY_IDS = [
   "backend_calls",
   "randomness",
   "chain_key_signing",
+  "wallet_custody_signing",
   "stable_store",
   "https_outcalls",
   "vetkeys",
@@ -303,6 +304,10 @@ export const BACKEND_CAPABILITY_INTERFACES = Object.freeze({
   chain_key_signing: Object.freeze({
     api: CAPABILITY_API_VERSION,
     declaration: "chain_key_signing",
+  }),
+  wallet_custody_signing: Object.freeze({
+    api: CAPABILITY_API_VERSION,
+    declaration: "wallet_custody_signing",
   }),
   stable_store: Object.freeze({
     api: CAPABILITY_API_VERSION,
@@ -472,6 +477,20 @@ export const CAPABILITY_CATALOG = Object.freeze({
       "At most four isolated slots, 4 KiB per assertion, bounded concurrency, a per-call cost ceiling, and a kernel low-cycle reserve.",
     audit:
       "Bounded generic public-key, signature, denial, busy, revocation, cost, and failure totals; assertions, digests, keys, and signatures are not logged.",
+  }),
+  wallet_custody_signing: declared("wallet_custody_signing", {
+    delivery: ["backend_environment"],
+    title: "Wallet custody signing",
+    summary:
+      "Control isolated wallet keys and sign exact transaction or message digests. Trust this app to review and authorize every signature.",
+    grant: "declaration",
+    escalation: "owner_approval",
+    disable: "broker_enforced",
+    revocation: "live_recheck",
+    quota:
+      "Uses the existing chain-key slot inventory, signing concurrency, per-call cost ceiling, and kernel low-cycle reserve.",
+    audit:
+      "Generic public-key, signature, denial, and failure totals; digests, keys, and signatures are not logged.",
   }),
   stable_store: declared("stable_store", {
     delivery: ["backend_environment"],
@@ -953,6 +972,18 @@ export type NeutronChainKeySigningCapabilityV1 = {
 };
 export type NeutronChainKeySigningCapabilityConfig =
   NeutronChainKeySigningCapabilityV1;
+/** Separate custody authority: exact 32-byte digests, never assertion hashing. */
+export type NeutronWalletCustodySigningSlotV1 = {
+  id: string;
+  algorithm: "ecdsa_secp256k1";
+  purpose: string;
+};
+export type NeutronWalletCustodySigningCapabilityV1 = {
+  api: 1;
+  slots: NeutronWalletCustodySigningSlotV1[];
+};
+export type NeutronWalletCustodySigningCapabilityConfig =
+  NeutronWalletCustodySigningCapabilityV1;
 export type NeutronStableStoreV1 = {
   id: string;
   purpose: string;
@@ -1357,6 +1388,7 @@ export type NeutronCapabilitiesConfig = {
   backend_calls?: NeutronBackendCallsCapabilityConfig;
   randomness?: NeutronRandomnessCapabilityConfig;
   chain_key_signing?: NeutronChainKeySigningCapabilityConfig;
+  wallet_custody_signing?: NeutronWalletCustodySigningCapabilityConfig;
   stable_store?: NeutronStableStoreCapabilityConfig;
   https_outcalls?: NeutronHttpsOutcallsCapabilityConfig;
   vetkeys?: NeutronVetKeysCapabilityConfig;
@@ -1781,6 +1813,50 @@ function normalizeCapabilityDeclarationFields(
       api: 1,
       slots,
     };
+  }
+
+  const walletCustodySigning = declaration.wallet_custody_signing;
+  if (walletCustodySigning !== undefined) {
+    assertClosed(walletCustodySigning, "wallet_custody_signing capability", [
+      "api",
+      "slots",
+    ]);
+    assertApi(walletCustodySigning, "wallet_custody_signing");
+    if (
+      !Array.isArray(walletCustodySigning.slots) ||
+      walletCustodySigning.slots.length < 1 ||
+      walletCustodySigning.slots.length > CHAIN_KEY_SIGNING_MAX_SLOTS_PER_APP
+    ) {
+      throw new Error("Invalid wallet_custody_signing capability");
+    }
+    const ids = new Set<string>();
+    const slots = walletCustodySigning.slots.map((slot) => {
+      assertClosed(slot, "wallet_custody_signing slot", [
+        "id",
+        "algorithm",
+        "purpose",
+      ]);
+      if (
+        typeof slot.id !== "string" ||
+        !CHAIN_KEY_SIGNING_SLOT_ID_PATTERN.test(slot.id) ||
+        ids.has(slot.id) ||
+        slot.algorithm !== "ecdsa_secp256k1"
+      ) {
+        throw new Error("Invalid wallet_custody_signing slot");
+      }
+      ids.add(slot.id);
+      return {
+        id: slot.id,
+        algorithm: "ecdsa_secp256k1" as const,
+        purpose: context.normalizeText(
+          slot.purpose,
+          `wallet_custody_signing purpose for ${slot.id}`,
+          { minimumLength: 1, maximumLength: 160 },
+        ),
+      };
+    });
+    slots.sort((left, right) => compareCanonicalText(left.id, right.id));
+    normalized.wallet_custody_signing = { api: 1, slots };
   }
 
   const stableStore = declaration.stable_store;
@@ -3036,6 +3112,42 @@ function createCapabilityDeclarationFieldsSchema(
         required: ["api", "slots"],
         additionalProperties: false,
       },
+      wallet_custody_signing: {
+        type: "object",
+        properties: {
+          api,
+          slots: {
+            type: "array",
+            minItems: 1,
+            maxItems: CHAIN_KEY_SIGNING_MAX_SLOTS_PER_APP,
+            items: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 40,
+                  pattern: "^[a-z][a-z0-9_]{0,39}$",
+                },
+                algorithm: {
+                  type: "string",
+                  enum: ["ecdsa_secp256k1"],
+                },
+                purpose: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 160,
+                  pattern: untrustedTextPattern,
+                },
+              },
+              required: ["id", "algorithm", "purpose"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["api", "slots"],
+        additionalProperties: false,
+      },
       stable_store: {
         type: "object",
         properties: {
@@ -3950,6 +4062,14 @@ export function assertCapabilityComposition(
   normalized: NormalizedNeutronCapabilitiesConfig,
   context: Pick<CapabilityNormalizationContext, "tileIds"> = {},
 ): void {
+  const signingSlots =
+    (normalized.chain_key_signing?.slots.length ?? 0) +
+    (normalized.wallet_custody_signing?.slots.length ?? 0);
+  if (signingSlots > CHAIN_KEY_SIGNING_MAX_SLOTS_PER_APP) {
+    throw new Error(
+      "Combined chain_key_signing and wallet_custody_signing slot limit exceeded",
+    );
+  }
   if (
     normalized.persistent_browser_storage &&
     normalized.dedicated_resident_origin

@@ -54,6 +54,14 @@ function fixture() {
           },
         ],
       },
+      wallet_custody_signing: {
+        api: 1,
+        slots: [{
+          id: "login_assertion",
+          algorithm: "ecdsa_secp256k1",
+          purpose: "Sign wallet transactions with a separate key",
+        }],
+      },
       stable_store: {
         api: 1,
         stores: [{
@@ -326,6 +334,45 @@ test("capability summaries strictly parse closed Candid records and variants", (
   ).toThrow("last outcome is invalid");
 });
 
+test("custody runtime controls bind the installed custody slot separately from assertion signing", async () => {
+  const { wire } = fixture();
+  const custodyWire = wire.find(({ kind }) => "wallet_custody_signing" in kind)!;
+  const assertionWire = wire.find(({ kind, resource_id }) =>
+    "chain_key_signing" in kind && resource_id === custodyWire.resource_id,
+  )!;
+  const custody = parseCapabilitySummary(custodyWire);
+  const assertion = parseCapabilitySummary(assertionWire);
+  expect(custody.kind).toBe("wallet_custody_signing");
+  expect(custody.resourceId).toBe("login_assertion");
+  expect(custody.toggleable).toBe(true);
+  expect(capabilitySummaryKey(custody)).not.toBe(capabilitySummaryKey(assertion));
+  expect(() => parseCapabilitySummary({
+    ...custodyWire, resource_id: "Other-App:Slot",
+  })).toThrow("resource id does not match its kind");
+  let calls = 0;
+  const disabled = await setCapabilityRegistryEnabled({
+    async kernel_capability_set_enabled(input) {
+      calls += 1;
+      expect(input).toEqual({
+        app_id: "runtime_app",
+        installation_uid: 7n,
+        kind: { wallet_custody_signing: null },
+        resource_id: "login_assertion",
+        enabled: false,
+      });
+      return { ...custodyWire, enabled: false };
+    },
+  }, custody, false);
+  expect(calls).toBe(1);
+  expect(disabled.enabled).toBe(false);
+  expect(replaceCapabilitySummary([assertion, custody], disabled)).toContain(assertion);
+  await expect(setCapabilityRegistryEnabled({
+    async kernel_capability_set_enabled() {
+      return { ...assertionWire, enabled: false };
+    },
+  }, custody, false)).rejects.toThrow("different resource");
+});
+
 test("capability page parser rejects oversized pages and malformed cursors", () => {
   const { wire } = fixture();
   expect(parseCapabilityPage({ entries: wire, next: [] }).entries).toHaveLength(
@@ -386,8 +433,8 @@ test("capability inventory reconciles exact active app scopes and verified plans
   const { appInstances, apps, wire } = fixture();
   const parsed = wire.map(parseCapabilitySummary);
   const reconciled = reconcileCapabilityRegistry(apps, appInstances, parsed);
-  expect(reconciled.entries).toHaveLength(10);
-  expect(reconciled.byApp.runtime_app).toHaveLength(10);
+  expect(reconciled.entries).toHaveLength(11);
+  expect(reconciled.byApp.runtime_app).toHaveLength(11);
 
   expect(() =>
     reconcileCapabilityRegistry(apps, appInstances, parsed.slice(1)),

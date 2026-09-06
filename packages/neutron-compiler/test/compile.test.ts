@@ -485,6 +485,7 @@ const kernelCapabilityConfigurationMethod = `
     #backend_calls;
     #randomness;
     #chain_key_signing;
+    #wallet_custody_signing;
     #stable_store;
     #https_outcalls;
     #vetkeys;
@@ -632,6 +633,43 @@ const kernelCapabilityConfigurationMethod = `
       } { #err(#source_gone) };
       sign_assertion = func(_request : { slot : Text; assertion : Blob }) : async* {
         #ok : ChainKeySignature;
+        #err : ChainKeyError;
+      } { #err(#source_gone) };
+    }
+  };
+  public type WalletCustodyPublicKey = {
+    slot : Text;
+    algorithm : { #ecdsa_secp256k1 };
+    public_key : Blob;
+    key_fingerprint : Blob;
+    namespace_version : Nat;
+  };
+  public type WalletCustodySignature = {
+    slot : Text;
+    algorithm : { #ecdsa_secp256k1 };
+    digest : Blob;
+    signature : Blob;
+  };
+  public type WalletCustodySigningCapability = {
+    public_key : Text -> async* {
+      #ok : WalletCustodyPublicKey;
+      #err : ChainKeyError;
+    };
+    sign_digest : { slot : Text; digest : Blob } -> async* {
+      #ok : WalletCustodySignature;
+      #err : ChainKeyError;
+    };
+  };
+  public func wallet_custody_signing_capability(
+    _scope : AppScope,
+  ) : WalletCustodySigningCapability {
+    {
+      public_key = func(_slot : Text) : async* {
+        #ok : WalletCustodyPublicKey;
+        #err : ChainKeyError;
+      } { #err(#source_gone) };
+      sign_digest = func(_request : { slot : Text; digest : Blob }) : async* {
+        #ok : WalletCustodySignature;
         #err : ChainKeyError;
       } { #err(#source_gone) };
     }
@@ -1286,9 +1324,14 @@ test("compiler typechecks equal app-local managed-memory ids", async () => {
   ]);
 });
 
-test("compiler typechecks a structurally narrowed randomness capability", async () => {
+test("compiler typechecks a randomness app against a Kernel without custody configuration", async () => {
   const kernelEntry = moduleHash("a");
   const appEntry = moduleHash("b");
+  // Existing-only compositions must remain usable with previously released
+  // Kernels, which have no wallet custody configuration hook.
+  expect(kernelCapabilityConfigurationMethod).not.toContain(
+    "configure_wallet_custody_signing",
+  );
   const result = await compile({
     configs: {
       kernel: {
@@ -1489,6 +1532,119 @@ test("compiler typechecks the closed assertion-signing backend handle", async ()
         id: "backend_environment",
         config: { interfaces: [{ id: "chain_key_signing", api: 1 }] },
       }),
+    ]),
+  );
+});
+
+test("compiler typechecks the wallet custody SDK handle without assertion authority", async () => {
+  const kernelEntry = moduleHash("c");
+  const appEntry = moduleHash("d");
+  const capabilitiesEntry = moduleHash("e");
+  const result = await compile({
+    configs: {
+      kernel: {
+        format: 3,
+        id: "kernel",
+        name: "Kernel",
+        version: 100,
+        entry: kernelEntry,
+      },
+      evm_wallet: {
+        format: 3,
+        id: "evm_wallet",
+        name: "EVM Wallet",
+        version: 100,
+        entry: appEntry,
+        backend: {
+          capabilities: { wallet_custody_signing: { api: 1 } },
+        },
+        capabilities: {
+          wallet_custody_signing: {
+            api: 1,
+            slots: [{
+              id: "account",
+              algorithm: "ecdsa_secp256k1",
+              purpose: "Sign EVM transactions and messages",
+            }],
+          },
+        },
+      },
+    },
+    mofiles: [
+      {
+        path: `${kernelEntry}.mo`,
+        content: `module {
+          public class Init() {
+            ${kernelCapabilityConfigurationMethod}
+            public func configure_wallet_custody_signing(
+              _declarations : [{
+                app_scope : AppScope;
+                wallet_custody_signing : ?{
+                  slots : [{
+                    id : Text;
+                    algorithm : { #ecdsa_secp256k1 };
+                    purpose : Text;
+                  }];
+                };
+              }],
+            ) {};
+            public func kernel_authorized_add(_caller : Principal) {};
+            public func is_authorized(_caller : Principal) : Bool { true };
+          };
+        }`,
+      },
+      {
+        path: `${appEntry}.mo`,
+        content: `import Capabilities "${capabilitiesEntry}";
+        module {
+          public type Environment = {
+            capabilities : {
+              wallet_custody_signing : Capabilities.WalletCustodySigningV1;
+            };
+          };
+          public class Init(environment : Environment) {
+            public func exercise() : async* Nat {
+              let keySize = switch (
+                await* environment.capabilities.wallet_custody_signing.public_key(
+                  "account"
+                )
+              ) {
+                case (#ok(key)) key.public_key.size();
+                case (#err(_)) 0;
+              };
+              switch (
+                await* environment.capabilities.wallet_custody_signing.sign_digest({
+                  slot = "account";
+                  digest = "01234567890123456789012345678901";
+                })
+              ) {
+                case (#ok(signed)) keySize + signed.signature.size() + signed.digest.size();
+                case (#err(_)) keySize;
+              }
+            };
+          };
+        }`,
+      },
+      {
+        path: `${capabilitiesEntry}.mo`,
+        content: motokoCapabilitiesSource,
+      },
+    ],
+  });
+
+  expect(result.wasm.byteLength).toBeGreaterThan(0);
+  expect(result.capabilityPlans.evm_wallet?.plan.entries).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: "wallet_custody_signing", api: 1 }),
+      expect.objectContaining({
+        id: "backend_environment",
+        config: { interfaces: [{ id: "wallet_custody_signing", api: 1 }] },
+      }),
+    ]),
+  );
+  expect(result.capabilityPlans.evm_wallet?.plan.entries).not.toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: "chain_key_signing" }),
     ]),
   );
 });

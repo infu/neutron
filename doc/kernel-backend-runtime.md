@@ -537,6 +537,14 @@ endpoint/method outcome totals. There is no separate persistent rate state.
 Neither audit nor app-usage telemetry stores HTTP status,
 byte totals, raw rejects, or request/response content.
 
+`backend/wallet_custody_signing/` adds an explicit owner-trusted wallet leaf
+for exact 32-byte secp256k1 digests. It reuses the checked signing engine and
+management adapter below, sharing existing slot/in-flight accounting, with a
+distinct custody namespace and runtime capability kind. The digest is not
+re-hashed. Kernel memory v4 adds a separate empty custody cache and widens
+runtime capability entries through a v3-to-v4 migration; all existing service
+roots and assertion keys are retained. See the [custody contract](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1).
+
 `backend/chain_key_signing/` owns app-isolated threshold assertion signing.
 The compiler supplies exact slot declarations and a trusted environment key map;
 app code receives only a source-bound `public_key(slot)` /

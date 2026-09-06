@@ -1,0 +1,51 @@
+import Map "mo:core/Map";
+import Nat "mo:core/Nat";
+import Text "mo:core/Text";
+import Journal "../backend/Journal";
+import Memory "../backend/memory/evm_wallet/v1";
+import Types "../backend/Types";
+
+func ok<T>(result : Types.Result<T>) : T { switch (result) { case (#ok(v)) v; case (#err(e)) { assert false; loop {} } } };
+let mem = Memory.init();
+let store = Journal.Store(mem);
+let identity : Memory.Identity = { caller = { app_id = "consumer"; installation_uid = 10; endpoint = "old" }; request_id = "00000000000000000000000000000001" };
+let intent : Memory.Intent = { account_id = "main"; chain_id = 1; operation = #personal_message({ message = "0x01" }) };
+let command = ok(store.start({ identity; intent }, 1));
+assert command.id == 1;
+assert ok(store.start({ identity; intent }, 2)).id == 1;
+let reconnected = { identity with caller = { identity.caller with endpoint = "new" } };
+assert ok(store.start({ identity = reconnected; intent }, 3)).id == 1;
+switch (store.start({ identity; intent = { intent with chain_id = 42161 } }, 4)) { case (#err(_)) {}; case (_) assert false };
+let reinstalled : Memory.Identity = { identity with caller = { identity.caller with installation_uid = 11 } };
+assert ok(store.start({ identity = reinstalled; intent }, 5)).id == 2;
+let otherApp = { identity with caller = { identity.caller with app_id = "other" } };
+assert ok(store.start({ identity = otherApp; intent }, 6)).id == 3;
+switch (store.start({ identity = { identity with caller = { identity.caller with installation_uid = 0 } }; intent }, 7)) { case (#err(_)) {}; case (_) assert false };
+assert Map.size(mem.commands) == 3;
+let tx : Memory.Transaction = { chainId = 1; nonce = 7; gasLimit = 21000; to = ?"0x0000000000000000000000000000000000000001"; value = 1; data = ""; accessList = []; fee = #eip1559({ maxFeePerGas = 10; maxPriorityFeePerGas = 1 }) };
+command.transaction := ?tx; command.status := "prepared";
+assert ok(store.reserve(command));
+assert store.nextNonce("main", 1, 0) == 8;
+assert store.nextNonce("main", 42161, 0) == 0;
+let competing = ok(store.start({ identity = { identity with request_id = "00000000000000000000000000000002" }; intent }, 8));
+competing.transaction := ?tx; competing.status := "prepared";
+assert not ok(store.reserve(competing));
+assert not competing.reserved_nonce;
+assert competing.review_revision == 1;
+assert ok(store.reserve(competing));
+assert competing.reserved_nonce;
+assert store.nextNonce("main", 1, 0) == 9;
+command.status := "unknown"; command.signed_raw := ?"exact bytes"; command.transaction_hash := ?"exact hash";
+// A #keep upgrade preserves outstanding commands, reserved nonces, and bytes.
+let restored : Memory.Mem = mem;
+let after = Journal.Store(restored);
+let saved = switch (after.find(identity)) { case (?v) v; case null { assert false; loop {} } };
+assert saved.status == "unknown" and saved.signed_raw == ?"exact bytes";
+assert after.nextNonce("main", 1, 0) == 9;
+assert after.history({ offset = 0; limit = 2 }).operations.size() == 2;
+assert after.history({ offset = 4; limit = 2 }).operations.size() == 0;
+// Releasing a definitely unsigned reservation below a higher one does not
+// strand an EOA nonce gap. Ambiguous/signed reservations remain occupied.
+command.signed_raw := null; command.signature := null; command.reserved_nonce := false;
+assert after.nextNonce("main", 1, 0) == 7;
+assert competing.reserved_nonce;

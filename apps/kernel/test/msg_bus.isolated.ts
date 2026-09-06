@@ -568,6 +568,7 @@ function createProviderToolEndpoint(
   source: Window;
   state: {
     calls: number;
+    payloads: JsonValue[];
     capability: string | null;
     providerUi: boolean;
     approvalRequests: number;
@@ -581,6 +582,7 @@ function createProviderToolEndpoint(
 } {
   const state = {
     calls: 0,
+    payloads: [] as JsonValue[],
     capability: null as string | null,
     providerUi: false,
     approvalRequests: 0,
@@ -707,6 +709,7 @@ function createProviderToolEndpoint(
         if (incoming.payload.action !== msgBusLocalActions.toolsCall) return;
         state.calls += 1;
         const callPayload = incoming.payload.payload;
+        state.payloads.push(callPayload ?? null);
         state.providerUi =
           isJsonObject(callPayload) && callPayload.providerUi === true;
         const providerApproval =
@@ -4341,6 +4344,13 @@ test("one-use delegation preserves scoped provenance for a nested attachment cal
       return;
     }
     expect(message.delegationToken).toBeUndefined();
+    expect(message.payload.payload).toMatchObject({
+      caller: {
+        appId: "delegating_agent",
+        installationUid: "101",
+        endpoint: rootResident.endpoint.endpointId,
+      },
+    });
     const metadata = message.payload.context?.invocation;
     if (!metadata) throw new Error("nested invocation metadata missing");
     const child = resolveInvocation(target.endpoint, metadata);
@@ -4715,6 +4725,49 @@ test("cross-app calls require and honor an explicit session grant", async () => 
   ).resolves.toEqual({ value: "allowed" });
 });
 
+test("tool caller installation identity comes from scope, survives endpoint replacement, and changes on reinstall", async () => {
+  installFakeWindow();
+  const target = createCapturingToolEndpoint(echoDescriptor, { value: "ok" });
+  registerScopedBackgroundEndpoint(target.source, "provider", "811");
+  const call = {
+    target: "app:provider:background" as const,
+    name: echoDescriptor.name,
+    arguments: { value: "requested" },
+    // Caller-authored routing metadata has no authority.
+    installationUid: "999",
+    caller: { appId: "forged", installationUid: "999" },
+  };
+  let previous: RegisteredEndpoint | undefined;
+  for (const installationUid of [
+    "9007199254740993",
+    "9007199254740993",
+    "9007199254740994",
+  ]) {
+    const caller = registerScopedBackgroundEndpoint(
+      {} as Window,
+      "requester",
+      installationUid,
+    );
+    grantFrontendToolSession("requester", call.target, call.name);
+    if (previous) {
+      const before = target.state.calls;
+      await expect(routeToolCall(call, previous)).rejects.toThrow();
+      expect(target.state.calls).toBe(before);
+    }
+    await expect(routeToolCall(call, caller)).resolves.toEqual({ value: "ok" });
+    expect(target.state.payloads.at(-1)).toMatchObject({
+      caller: {
+        appId: "requester",
+        endpoint: "app:requester:background",
+        installationUid,
+        role: "background",
+      },
+    });
+    previous = caller;
+  }
+  expect(target.state.calls).toBe(3);
+});
+
 test("a nested Agent call cannot reuse an ordinary frontend session grant", async () => {
   const fakeWindow = installFakeWindow();
   authorizeTestOwner("owner-principal");
@@ -4881,7 +4934,19 @@ test("a target session change during Agent consent cancels before dispatch", asy
 test("provider presentation opens then reuses the exact provider tile with caller and audience attestation", async () => {
   installFakeWindow();
   authorizeTestOwner();
-  const caller = registerTile({} as Window, "requester", "caller");
+  const callerScope = registerScopedBackgroundEndpoint(
+    {} as Window,
+    "requester",
+    "802",
+    "main",
+  ).appScope;
+  const caller = registerScopedTileEndpoint(
+    {} as Window,
+    "requester",
+    "main",
+    "caller",
+    callerScope,
+  );
   setTransientUserActivation(false);
   const provider = createPresentationProvider({ receipt: "ui-77" });
   const { appScope } = registerScopedBackgroundEndpoint(
@@ -4928,6 +4993,9 @@ test("provider presentation opens then reuses the exact provider tile with calle
     `app:provider:tile:review:instance:${opened.id}`,
   );
   expect(provider.state.providerUi).toBe(true);
+  expect(provider.state.payloads[0]).toMatchObject({
+    caller: { appId: "requester", installationUid: "802" },
+  });
   expect(presentation.state.calls).toBe(1);
   expect(presentation.state.payloads[0]).toMatchObject({
     name: providerPresentationDescriptor.name,
@@ -4935,6 +5003,7 @@ test("provider presentation opens then reuses the exact provider tile with calle
     caller: {
       endpoint: "app:requester:tile:main:instance:caller",
       appId: "requester",
+      installationUid: "802",
       role: "tile",
     },
     audience: NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
@@ -5652,6 +5721,7 @@ test("agent-root tools reject nested invocations but attest and dispatch a direc
     caller: {
       endpoint: "app:signed_call_agent:background",
       appId: "signed_call_agent",
+      installationUid: "401",
       role: "background",
     },
     audience: NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,

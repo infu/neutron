@@ -211,6 +211,11 @@ const representativePermissions = {
       },
     ],
   },
+  wallet_custody_signing: {
+    source: "kernel",
+    kind: "wallet_custody_signing",
+    slots: [{ id: "account", algorithm: "ecdsa_secp256k1" }],
+  },
   stable_store: {
     source: "kernel",
     kind: "stable_store",

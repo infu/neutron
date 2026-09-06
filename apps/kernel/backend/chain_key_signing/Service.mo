@@ -42,7 +42,48 @@ module {
         };
     };
 
-    public class Service(
+    public type Authority = { #assertion; #custody };
+
+    // Both signing authorities consume the existing shared signing inventory
+    // and in-flight bounds. Adding custody does not duplicate the budget.
+    public class Resources() {
+        let inventory = Map.empty<Text, Nat>();
+        var totalSlots = 0;
+        let slotInFlight = Set.empty<Text>();
+        let scopeInFlight = Map.empty<Text, Nat>();
+        var globalInFlight = 0;
+
+        public func register(scope : CapabilityTypes.AppScope, amount : Nat) : () {
+            let key = CapabilityScope.key(scope);
+            addCount(inventory, key, amount);
+            totalSlots += amount;
+            assert (count(inventory, key) <= MAX_SLOTS_PER_APP);
+            assert (totalSlots <= MAX_SLOTS_GLOBAL);
+        };
+
+        public func busy(key : Text, scope : CapabilityTypes.AppScope) : Bool {
+            Set.contains(slotInFlight, Text.compare, key) or
+            count(scopeInFlight, CapabilityScope.key(scope)) >= MAX_IN_FLIGHT_PER_APP or
+            globalInFlight >= MAX_IN_FLIGHT_GLOBAL;
+        };
+
+        public func enter(key : Text, scope : CapabilityTypes.AppScope) : () {
+            assert (Set.insert(slotInFlight, Text.compare, key));
+            addCount(scopeInFlight, CapabilityScope.key(scope), 1);
+            globalInFlight += 1;
+        };
+
+        public func leave(key : Text, scope : CapabilityTypes.AppScope) : () {
+            Set.remove(slotInFlight, Text.compare, key);
+            subtractCount(scopeInFlight, CapabilityScope.key(scope), 1);
+            assert (globalInFlight > 0);
+            globalInFlight -= 1;
+        };
+    };
+
+    public type Service = Engine;
+    // Retained constructor for existing assertion clients and tests.
+    public func Service(
         mem : Types.Memory,
         adapter : Types.Adapter,
         canisterPrincipal : Principal,
@@ -51,12 +92,28 @@ module {
         deploymentCommitted : () -> Bool,
         registry : CapabilityTypes.RuntimeRegistry,
         outgoingCycles : AppUsageTypes.OutgoingCycleAccounting,
+    ) : Service {
+        Engine(mem, adapter, canisterPrincipal, installEpoch, scopeActive, deploymentCommitted, registry, outgoingCycles, #assertion, Resources());
+    };
+
+    public class Engine(
+        mem : Types.Memory,
+        adapter : Types.Adapter,
+        canisterPrincipal : Principal,
+        installEpoch : Nat64,
+        scopeActive : CapabilityTypes.AppScope -> Bool,
+        deploymentCommitted : () -> Bool,
+        registry : CapabilityTypes.RuntimeRegistry,
+        outgoingCycles : AppUsageTypes.OutgoingCycleAccounting,
+        authority : Authority,
+        resources : Resources,
     ) {
         let declarations = Map.empty<Text, Types.Declaration>();
         let slots = Map.empty<Text, PreparedSlot>();
-        let slotInFlight = Set.empty<Text>();
-        let scopeInFlight = Map.empty<Text, Nat>();
-        var globalInFlight = 0;
+        let kind : CapabilityTypes.CapabilityKind = switch (authority) {
+            case (#assertion) #chain_key_signing;
+            case (#custody) #wallet_custody_signing;
+        };
         var configured = false;
 
         do { assert (validateMemory(mem)) };
@@ -89,6 +146,7 @@ module {
                     scopeKey,
                 ));
                 Map.add(declarations, Text.compare, scopeKey, declaration);
+                resources.register(app.app_scope, declaration.slots.size());
                 var previousSlot : ?Text = null;
                 for (slot in declaration.slots.vals()) {
                     validateSlot(slot);
@@ -104,21 +162,29 @@ module {
                     let keyName = keyFor(keys, slot.algorithm);
                     let material = switch (keyName) {
                         case (?name) {
-                            let #ok(value) = Namespace.build({
+                            let input : Namespace.Input = {
                                 install_epoch = installEpoch;
                                 canister = canisterPrincipal;
                                 app_scope = app.app_scope;
                                 slot_id = slot.id;
                                 algorithm = slot.algorithm;
                                 key_name = name;
-                            }) else Runtime.trap(
+                            };
+                            let built = switch (authority) {
+                                case (#assertion) Namespace.build(input);
+                                case (#custody) Namespace.buildCustody(input);
+                            };
+                            let #ok(value) = built else Runtime.trap(
                                 "Invalid chain-key namespace configuration"
                             );
                             ?value;
                         };
                         case null null;
                     };
-                    let declarationFingerprint = Namespace.authorityFingerprint(slot);
+                    let declarationFingerprint = switch (authority) {
+                        case (#assertion) Namespace.authorityFingerprint(slot);
+                        case (#custody) Namespace.custodyAuthorityFingerprint(slot);
+                    };
                     let identityFingerprint = switch (material) {
                         case (?value) value.identity_fingerprint;
                         case null Namespace.hex(Namespace.hashParts([
@@ -189,7 +255,7 @@ module {
             let result = await* publicKeyInner(appScope, slotId);
             ignore registry.record(
                 appScope,
-                #chain_key_signing,
+                kind,
                 slotId,
                 "public_key",
                 publicKeyOutcome(result),
@@ -204,9 +270,9 @@ module {
             let result = await* signInner(appScope, request);
             ignore registry.record(
                 appScope,
-                #chain_key_signing,
+                kind,
                 request.slot,
-                "sign_assertion",
+                switch (authority) { case (#assertion) "sign_assertion"; case (#custody) "sign_digest" },
                 signOutcome(result),
             );
             result;
@@ -229,7 +295,7 @@ module {
             };
             let ?lease = registry.lease(
                 appScope,
-                #chain_key_signing,
+                kind,
                 slotId,
             ) else return #err(#disabled);
             let ?keyName = slot.key_name else return #err(#key_unavailable);
@@ -301,19 +367,20 @@ module {
             };
             if (
                 request.assertion.size() >
-                    slot.declaration.max_assertion_bytes
+                    slot.declaration.max_assertion_bytes or
+                (authority == #custody and request.assertion.size() != 32)
             ) return #err(#invalid_request);
             let ?lease = registry.lease(
                 appScope,
-                #chain_key_signing,
+                kind,
                 request.slot,
             ) else return #err(#disabled);
             let ?keyName = slot.key_name else return #err(#key_unavailable);
             let ?material = slot.material else return #err(#key_unavailable);
-            let ?digest = Namespace.assertionDigest(
-                material.signing_domain,
-                request.assertion,
-            ) else return #err(#invalid_request);
+            let ?digest = switch (authority) {
+                case (#assertion) Namespace.assertionDigest(material.signing_domain, request.assertion);
+                case (#custody) ?request.assertion;
+            } else return #err(#invalid_request);
             let quote = switch (adapter.quote(
                 slot.declaration.algorithm,
                 keyName,
@@ -496,29 +563,19 @@ module {
             stateKey : Text,
             scope : CapabilityTypes.AppScope,
         ) : Bool {
-            Set.contains(slotInFlight, Text.compare, stateKey) or
-            count(scopeInFlight, CapabilityScope.key(scope)) >=
-                MAX_IN_FLIGHT_PER_APP or
-            globalInFlight >= MAX_IN_FLIGHT_GLOBAL;
+            resources.busy(resourceKey(stateKey), scope);
         };
 
-        func enter(
-            stateKey : Text,
-            scope : CapabilityTypes.AppScope,
-        ) : () {
-            assert (Set.insert(slotInFlight, Text.compare, stateKey));
-            addCount(scopeInFlight, CapabilityScope.key(scope), 1);
-            globalInFlight += 1;
+        func resourceKey(stateKey : Text) : Text {
+            (switch (authority) { case (#assertion) "assertion"; case (#custody) "custody" }) # "\00" # stateKey;
         };
 
-        func leave(
-            stateKey : Text,
-            scope : CapabilityTypes.AppScope,
-        ) : () {
-            Set.remove(slotInFlight, Text.compare, stateKey);
-            subtractCount(scopeInFlight, CapabilityScope.key(scope), 1);
-            assert (globalInFlight > 0);
-            globalInFlight -= 1;
+        func enter(stateKey : Text, scope : CapabilityTypes.AppScope) : () {
+            resources.enter(resourceKey(stateKey), scope);
+        };
+
+        func leave(stateKey : Text, scope : CapabilityTypes.AppScope) : () {
+            resources.leave(resourceKey(stateKey), scope);
         };
 
     };

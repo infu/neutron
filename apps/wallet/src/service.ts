@@ -1,4 +1,11 @@
 import {
+  WALLET_WITHDRAWAL_QUOTE_TOOL,
+  handleWalletWithdrawalQuote,
+  walletWithdrawalQuoteInputSchema,
+  walletWithdrawalQuoteOutputSchema,
+} from "./withdrawal_quote.ts";
+import { registerBridgeTools } from "./bridge_tools.ts";
+import {
   exposeTool,
   publishAppStateChange,
   querySelf,
@@ -40,6 +47,19 @@ import {
   walletTokenInfoOutputSchema,
   walletTokenInfoRequest,
 } from "./token_info.ts";
+
+registerBridgeTools();
+exposeTool(
+  WALLET_WITHDRAWAL_QUOTE_TOOL,
+  {
+    title: "Quote a native withdrawal and ckETH gas",
+    description: "Read the exact minter approval amounts, asset fee, separate ckETH gas budget and fee, and current balances for a native withdrawal. No allowance or withdrawal is dispatched. The reviewed quote is checked again before execution.",
+    inputSchema: walletWithdrawalQuoteInputSchema,
+    outputSchema: walletWithdrawalQuoteOutputSchema,
+    annotations: { "neutron:effects": ["read", "network"] },
+  },
+  handleWalletWithdrawalQuote,
+);
 
 let revision = 0;
 let readInFlight: Promise<WalletProjection> | null = null;

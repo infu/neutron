@@ -1850,6 +1850,21 @@ body {
         text-align: right;
       }
 
+      &.wallet-withdrawal-cost {
+        align-items: baseline;
+        grid-column: 1 / -1;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr);
+        justify-items: stretch;
+        text-align: left;
+
+        dd {
+          overflow: visible;
+          overflow-wrap: anywhere;
+          text-align: right;
+          white-space: normal;
+        }
+      }
+
       &.wallet-transfer-ledger {
         grid-column: 1 / -1;
         justify-items: start;
@@ -2380,3 +2395,14 @@ body {
     to { transform: rotate(360deg); }
   }
 }
+
+.wallet-bridge-selector { display: grid; gap: 0.4rem; font-size: 0.8rem; min-width: 0; }
+.wallet-bridge-selector select { max-width: 100%; width: 100%; }
+.wallet-bridge-description { font-size: 0.8rem; margin: 0; overflow-wrap: anywhere; }
+.wallet-ethereum-status code { overflow-wrap: anywhere; white-space: normal; }
+
+.wallet-evm-redemption { display: grid; gap: 0.6rem; margin: 0.75rem 1rem; padding: 0.75rem; border: 1px solid var(--nt-border); border-radius: 0.75rem; overflow-wrap: anywhere; }
+.wallet-evm-redemption > button { justify-self: start; }
+
+.wallet-bridge-status { grid-template-columns: minmax(0, 1fr); }
+.wallet-bridge-status > span { display: grid; min-width: 0; gap: 0.25rem; }

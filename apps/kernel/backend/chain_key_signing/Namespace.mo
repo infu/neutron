@@ -87,6 +87,45 @@ module {
         });
     };
 
+    // Wallet custody is a distinct authority and key identity. Nothing in the
+    // released assertion build() path above changes, including its byte format.
+    public func buildCustody(input : Input) : BuildResult {
+        if (
+            input.algorithm != #ecdsa_secp256k1 or
+            input.app_scope.installation_uid == 0 or
+            not validAppId(input.app_scope.app_id) or
+            not validSlotId(input.slot_id) or
+            not validKeyName(input.key_name)
+        ) return #err(#invalid_input);
+        let namespace = hashParts([
+            "neutron.wallet-custody-signing.key.v1",
+            u64(input.install_epoch),
+            Principal.toBlob(input.canister),
+            Text.encodeUtf8(input.app_scope.app_id),
+            u64(input.app_scope.installation_uid),
+            Text.encodeUtf8(input.slot_id),
+            Text.encodeUtf8(algorithmText(input.algorithm)),
+            Text.encodeUtf8(input.key_name),
+            "neutron_wallet_custody_digest_v1",
+        ]);
+        #ok({
+            namespace_version = VERSION;
+            derivation_path = [namespace];
+            // Private engine compatibility only; never applied to the digest
+            // or exposed as a custody message-domain promise.
+            signing_domain = namespace;
+            identity_fingerprint = hex(namespace);
+        });
+    };
+
+    public func custodyAuthorityFingerprint(slot : Types.SlotDeclaration) : Text {
+        hex(hashParts([
+            "neutron.wallet-custody-signing.slot-authority.v1",
+            Text.encodeUtf8(slot.id),
+            Text.encodeUtf8(algorithmText(slot.algorithm)),
+        ]));
+    };
+
     public func assertionDigest(
         signingDomain : Blob,
         assertion : Blob,

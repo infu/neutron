@@ -47,7 +47,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v336 NPL package metadata", () => {
+describe("Kernel v339 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -108,7 +108,7 @@ describe("Kernel v336 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(336);
+    expect(packagedManifest.version).toBe(339);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -129,7 +129,7 @@ describe("Kernel v336 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 336");
+    ).toThrow("restricted to Kernel version 339");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -153,7 +153,7 @@ describe("Kernel v336 NPL package metadata", () => {
         ...fixture,
         memoryLock: new Uint8Array([...fixture.memoryLock, 0x20]),
       }),
-    ).toThrow("preserve the released managed-memory lock");
+    ).toThrow("match the reviewed managed-memory lock");
 
     const changedMemoryManifest = structuredClone(manifest);
     const memory = changedMemoryManifest.memory as Record<string, unknown>;
@@ -166,6 +166,79 @@ describe("Kernel v336 NPL package metadata", () => {
         packagedManifest: jsonBytes(changedMemoryManifest),
       }),
     ).toThrow("changed the schema binding");
+  });
+
+  test("requires schema 3 history, the custody schema 4, and its exact forward migration", async () => {
+    const fixture = await metadataFixture();
+    const original = JSON.parse(textDecoder.decode(fixture.packagedManifest));
+    expect(original.memory.kernel.version).toBe(4);
+    expect(Object.keys(original.memory.kernel.schemas)).toEqual(["3", "4"]);
+    expect(original.memory.kernel.migrations).toEqual([{
+      from: 3,
+      to: 4,
+      src: "memory/kernel/v3_to_v4.mo",
+      entry: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    }]);
+    expect(original.memory.kernel_activation.version).toBe(1);
+    expect(original.memory.kernel_activation.migrations).toEqual([]);
+
+    const mutations = [
+      {
+        mutate: (manifest: typeof original) => { delete manifest.memory.kernel.schemas["3"]; },
+        message: "schema history for kernel",
+      },
+      {
+        mutate: (manifest: typeof original) => { delete manifest.memory.kernel.schemas["4"]; },
+        message: "schema history for kernel",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel.schemas["4"].hash = "0".repeat(64); },
+        message: "changed the schema binding for kernel v4",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel.migrations = []; },
+        message: "migration history for kernel",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel.migrations.push(manifest.memory.kernel.migrations[0]); },
+        message: "migration history for kernel",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel.migrations[0].entry = "0".repeat(64); },
+        message: "changed the migration binding for kernel 3->4",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel.migrations[0].consume = ["kernel_activation"]; },
+        message: "changed the migration binding for kernel 3->4",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel_activation.version = 2; },
+        message: "memory kernel_activation v1",
+      },
+    ];
+    for (const { mutate, message } of mutations) {
+      const changed = structuredClone(original);
+      mutate(changed);
+      expect(() => buildKernelPackageMetadata({
+        ...fixture,
+        packagedManifest: jsonBytes(changed),
+      })).toThrow(message);
+    }
+  });
+
+  test("retains the exact released schema source bytes in the offered source", async () => {
+    const fixture = await metadataFixture();
+    for (const schemaPath of [
+      "apps/kernel/backend/memory/activation/v1.mo",
+      "apps/kernel/backend/memory/kernel/v3.mo",
+    ]) {
+      expect(() => buildKernelPackageMetadata({
+        ...fixture,
+        sourceFiles: fixture.sourceFiles.map((file) => file.path === schemaPath
+          ? { ...file, content: textEncoder.encode("module {}\n") }
+          : file),
+      })).toThrow(`preserve immutable released schema source ${schemaPath}`);
+    }
   });
 
   test("rejects symbolic, sensitive, and arbitrary unreviewed source inputs", async () => {
@@ -271,7 +344,7 @@ describe("Kernel v336 NPL package metadata", () => {
       }),
     );
 
-    await installKernelInstalledArtifactInventory(root, 336);
+    await installKernelInstalledArtifactInventory(root, 339);
     const inventoryPath = path.join(
       root,
       KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
@@ -284,7 +357,7 @@ describe("Kernel v336 NPL package metadata", () => {
       parsed.artifacts.map((file) => [file.package_path, file] as const),
     );
 
-    expect(parsed.package).toEqual({ id: "kernel", version: 336 });
+    expect(parsed.package).toEqual({ id: "kernel", version: 339 });
     expect(byPackagePath.has("neutron.did")).toBe(false);
     expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
     expect(
@@ -309,7 +382,7 @@ describe("Kernel v336 NPL package metadata", () => {
     }
 
     await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
-    await installKernelInstalledArtifactInventory(root, 336);
+    await installKernelInstalledArtifactInventory(root, 339);
     expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
       firstBytes,
     );
@@ -326,6 +399,26 @@ describe("Kernel v336 NPL package metadata", () => {
     expect(sourcePaths).toEqual([...sourcePaths].sort());
     expect(new Set(sourcePaths).size).toBe(sourcePaths.length);
     for (const required of KERNEL_PACKAGE_BUILD_INPUT_PATHS) {
+      expect(sourcePaths).toContain(required);
+    }
+    for (const required of [
+      "apps/kernel/backend/main.mo",
+      "apps/kernel/backend/memory/kernel/v3.mo",
+      "apps/kernel/backend/memory/kernel/v4.mo",
+      "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+      "apps/kernel/backend/wallet_custody_signing/Service.mo",
+      "apps/kernel/backend/wallet_custody_signing/Types.mo",
+      "packages/neutron-tools/src/evm_wallet.ts",
+      "packages/neutron-tools/test/evm_wallet.test.ts",
+      "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade.pocketic.test.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/archives.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/existing_apps.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/new_apps.ts",
+      "doc/evm-wallet.md",
+      "doc/evm-wallet-research.md",
+      "doc/todo.evm-wallet.md",
+    ]) {
       expect(sourcePaths).toContain(required);
     }
     expect(sourcePaths.some((sourcePath) => sourcePath.includes("node_modules"))).toBe(
@@ -353,25 +446,25 @@ async function metadataFixture(): Promise<MetadataFixture> {
   ) as Record<string, unknown>;
   const packagedManifestValue = structuredClone(sourceManifestValue);
   packagedManifestValue.entry = "kernelentry";
-  const packagedMemory = packagedManifestValue.memory as Record<string, unknown>;
-  const packagedKernel = packagedMemory.kernel as Record<string, unknown>;
-  const packagedKernelSchemas = packagedKernel.schemas as Record<string, unknown>;
-  Object.assign(packagedKernelSchemas["3"] as Record<string, unknown>, {
-    hash: "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
-    entry: "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b",
-  });
-  const packagedActivation = packagedMemory.kernel_activation as Record<
-    string,
-    unknown
-  >;
-  const packagedActivationSchemas = packagedActivation.schemas as Record<
-    string,
-    unknown
-  >;
-  Object.assign(packagedActivationSchemas["1"] as Record<string, unknown>, {
-    hash: "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
-    entry: "f2380721e6147d0f0af208a70183e3d8ce6ac19ad533e1367b3f5780305e7ad3",
-  });
+  const memoryLockValue = JSON.parse(textDecoder.decode(memoryLock)) as {
+    memory: Record<string, {
+      schemas: Record<string, { hash: string; entry: string }>;
+      migrations: Record<string, string>;
+    }>;
+  };
+  const packagedMemory = packagedManifestValue.memory as Record<string, {
+    schemas: Record<string, Record<string, unknown>>;
+    migrations: Array<{ from: number; to: number; entry?: string }>;
+  }>;
+  for (const [memoryId, memory] of Object.entries(packagedMemory)) {
+    const locked = memoryLockValue.memory[memoryId];
+    for (const [version, schema] of Object.entries(memory.schemas)) {
+      Object.assign(schema, locked.schemas[version]);
+    }
+    for (const migration of memory.migrations) {
+      migration.entry = locked.migrations[`${migration.from}->${migration.to}`];
+    }
+  }
   const sourceManifest = jsonBytes(sourceManifestValue);
   const packagedManifest = jsonBytes(packagedManifestValue);
   const contentByPath = new Map<string, Uint8Array>();

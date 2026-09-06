@@ -9,6 +9,7 @@ import {
   type NeutronBackgroundUiRequestsCapabilityConfig,
   type NeutronBrowserPermissionsCapabilityConfig,
   type NeutronChainKeySigningCapabilityConfig,
+  type NeutronWalletCustodySigningCapabilityConfig,
   type NeutronEthereumProviderCapabilityConfig,
   type NeutronHttpRoutesCapabilityConfig,
   type NeutronHttpsOutcallsCapabilityConfig,
@@ -47,6 +48,10 @@ export type DeclaredCapabilityPlanEntry =
   | DeclaredEntry<"backend_calls", NeutronBackendCallsCapabilityConfig>
   | DeclaredEntry<"randomness", NeutronRandomnessCapabilityConfig>
   | DeclaredEntry<"chain_key_signing", NeutronChainKeySigningCapabilityConfig>
+  | DeclaredEntry<
+      "wallet_custody_signing",
+      NeutronWalletCustodySigningCapabilityConfig
+    >
   | DeclaredEntry<"stable_store", NeutronStableStoreCapabilityConfig>
   | DeclaredEntry<"https_outcalls", NeutronHttpsOutcallsCapabilityConfig>
   | DeclaredEntry<"vetkeys", NeutronVetKeysCapabilityConfig>
@@ -406,6 +411,11 @@ export function buildCapabilityPlan(manifest: NeutronManifest): CapabilityPlan {
   if (capabilities.chain_key_signing) {
     entries.push(
       declaredEntry("chain_key_signing", capabilities.chain_key_signing),
+    );
+  }
+  if (capabilities.wallet_custody_signing) {
+    entries.push(
+      declaredEntry("wallet_custody_signing", capabilities.wallet_custody_signing),
     );
   }
   if (capabilities.stable_store) {

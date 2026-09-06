@@ -47,6 +47,14 @@
       "directory": "../../apps/wallet"
     },
     {
+      "id": "evm_wallet",
+      "directory": "../../apps/evm_wallet"
+    },
+    {
+      "id": "uniswap",
+      "directory": "../../apps/uniswap"
+    },
+    {
       "id": "spreadsheet",
       "directory": "../../apps/spreadsheet"
     },

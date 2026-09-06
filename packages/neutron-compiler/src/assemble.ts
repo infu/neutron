@@ -789,6 +789,10 @@ function createCapabilityConfiguration(
           buildCapabilityPlan(manifest),
           "chain_key_signing",
         ) ||
+        getCapabilityPlanEntry(
+          buildCapabilityPlan(manifest),
+          "wallet_custody_signing",
+        ) ||
         getCapabilityPlanEntry(buildCapabilityPlan(manifest), "stable_store") ||
         getCapabilityPlanEntry(buildCapabilityPlan(manifest), "https_outcalls") ||
         getCapabilityPlanEntry(buildCapabilityPlan(manifest), "vetkeys") ||
@@ -1008,7 +1012,33 @@ function createCapabilityConfiguration(
       schnorr_bip340secp256k1 = null;
       schnorr_ed25519 = null;
     }`;
-  return `    ${KERNEL_INIT}.configure_app_capabilities([${declarations.join(",\n")}], {
+  // Preserve the predecessor initializer's record type. Emit the new hook
+  // only when used, so existing app sets still target released Kernels that
+  // do not expose custody signing at all.
+  const custodyDeclarations = manifests
+    .map((manifest) => ({
+      manifest,
+      custody: getCapabilityPlanEntry(
+        buildCapabilityPlan(manifest),
+        "wallet_custody_signing",
+      )?.config,
+    }))
+    .filter(({ custody }) => custody !== undefined)
+    .sort((left, right) => compareCanonicalText(left.manifest.id, right.manifest.id))
+    .map(({ manifest, custody }) => `{
+      app_scope = ${appScopeName(manifest.id)};
+      wallet_custody_signing = ?{
+        slots = [${custody!.slots.map((slot) => `{
+          id = ${motokoTextLiteral(slot.id)};
+          algorithm = #${slot.algorithm};
+          purpose = ${motokoTextLiteral(slot.purpose)};
+        }`).join(", ")}];
+      };
+    }`);
+  const custodyConfiguration = custodyDeclarations.length === 0
+    ? ""
+    : `    ${KERNEL_INIT}.configure_wallet_custody_signing([${custodyDeclarations.join(",\n")}]);\n`;
+  return `${custodyConfiguration}    ${KERNEL_INIT}.configure_app_capabilities([${declarations.join(",\n")}], {
       vetkeys_environment = ${environmentVariant};
       chain_key_signing_keys = ${chainKeyNames};
     });`;
@@ -1210,6 +1240,9 @@ function createBackendCapabilitiesEnvironmentGroup(
     }
     if (id === "chain_key_signing") {
       return `        chain_key_signing = ${KERNEL_INIT}.chain_key_signing_capability(${appScopeName(conf.id)});`;
+    }
+    if (id === "wallet_custody_signing") {
+      return `        wallet_custody_signing = ${KERNEL_INIT}.wallet_custody_signing_capability(${appScopeName(conf.id)});`;
     }
     if (id === "stable_store") {
       return `        stable_store = ${KERNEL_INIT}.stable_store_capability(${appScopeName(conf.id)});`;
@@ -1962,6 +1995,9 @@ function validate_config(confs: AssemblyConfig): AppDependencyPlan {
     if (chainKeySigning) {
       chainKeySigningSlotCount += chainKeySigning.slots.length;
     }
+    chainKeySigningSlotCount +=
+      getCapabilityPlanEntry(capabilityPlan, "wallet_custody_signing")?.config
+        .slots.length ?? 0;
     vetKeysSlotCount +=
       getCapabilityPlanEntry(capabilityPlan, "vetkeys")?.config.slots.length ??
       0;

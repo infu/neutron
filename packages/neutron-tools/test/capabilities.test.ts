@@ -485,7 +485,9 @@ test("buildCapabilityPlan produces one exact declared and derived inventory", ()
   expect(plan.version).toBe(1);
   expect(plan.app).toEqual({ id: "capability_test", version: 106 });
   expect(plan.entries.map(({ id }) => id)).toEqual(
-    CAPABILITY_IDS.filter((id) => id !== "dedicated_resident_origin"),
+    CAPABILITY_IDS.filter(
+      (id) => id !== "dedicated_resident_origin" && id !== "wallet_custody_signing",
+    ),
   );
 
   expect(getCapabilityPlanEntry(plan, "backend_calls")?.config).toEqual({

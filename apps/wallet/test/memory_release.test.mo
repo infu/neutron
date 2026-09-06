@@ -8,6 +8,11 @@ import Text "mo:core/Text";
 import HistoryStore "../backend/history/Store";
 import Memory "../backend/memory/wallet/v1";
 import CommandMemory "../backend/memory/wallet_commands/v1";
+import BridgeMemory "../backend/memory/wallet_bridge/v1";
+import TransferMemory "../backend/memory/wallet_transfers/v1";
+import BridgeJournal "../backend/bridge/Journal";
+import TransferJournal "../backend/transfers/Journal";
+import BridgeCapabilities "../backend/capabilities/Types";
 
 // Fresh installs use the released v1 defaults.
 let fresh = Memory.init();
@@ -205,3 +210,167 @@ switch (Map.get(restored.ledgers, Principal.compare, ledgerPrincipal)) {
     };
     case null assert false;
 };
+
+// The EVM integration adds independent roots. Neither initializer mutates the
+// previously released wallet or wallet_commands data above.
+let freshBridges = BridgeMemory.init();
+let freshTransfers = TransferMemory.init();
+assert (Map.size(freshBridges.intents) == 0);
+assert (Map.size(freshTransfers.commands) == 0);
+assert (restored.next_id == 8 and restored.configured);
+assert (Map.size(freshCommands.commands) == 1);
+
+let bridgeId = Blob.fromArray(Array.repeat<Nat8>(0x31, 16));
+let evmBridgeId = Blob.fromArray(Array.repeat<Nat8>(0x32, 16));
+let ckUsdcLedger = Principal.fromText("xevnm-gaaaa-aaaar-qafnq-cai");
+let ckEthLedger = Principal.fromText("ss2fx-dyaaa-aaaar-qacoq-cai");
+let ckEthMinter = Principal.fromText("sv3dd-oaaaa-aaaar-qacoa-cai");
+let ethereumHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+let resetHash = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+let approvalHash = "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+let evmApprovalHash = "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+let bridgeIntent : BridgeMemory.Intent = {
+    id = bridgeId;
+    quote = {
+        chain_id = 1;
+        ledger = ckUsdcLedger;
+        minter = ckEthMinter;
+        helper_address = "0x1111111111111111111111111111111111111111";
+        helper_mode = #subaccount;
+        minter_address = "0x2222222222222222222222222222222222222222";
+        token_address = ?"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+        recipient = Principal.fromText("aaaaa-aa");
+        principal_word = "0x0000000000000000000000000000000000000000000000000000000000000000";
+        subaccount_word = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    };
+    source = #external;
+    account = "0x3333333333333333333333333333333333333333";
+    amount = 123_456;
+    subaccount = null;
+    steps = [
+        { kind = #reset_approval; state = #confirmed; operation_id = null; transaction_hash = ?resetHash; error = null },
+        { kind = #approval; state = #confirmed; operation_id = null; transaction_hash = ?approvalHash; error = null },
+        { kind = #deposit; state = #unknown; operation_id = null; transaction_hash = null; error = ?"Browser disconnected before returning the deposit hash" },
+    ];
+    revision = 7;
+    created_at = 10_000;
+    updated_at = 10_100;
+    event_cursor = 1_234;
+    accepted_deposit = null;
+    mint = null;
+    error = null;
+};
+Map.add(freshBridges.intents, Blob.compare, bridgeId, bridgeIntent);
+let evmIntent : BridgeMemory.Intent = {
+    bridgeIntent with
+    id = evmBridgeId;
+    source = #evm_agent({ app_id = "agent"; installation_uid = "original-agent-installation" });
+    steps = [
+        { kind = #reset_approval; state = #ready; operation_id = null; transaction_hash = null; error = null },
+        { kind = #approval; state = #confirmed; operation_id = ?"retained-approval-id"; transaction_hash = ?evmApprovalHash; error = null },
+        { kind = #deposit; state = #confirmed; operation_id = ?"retained-deposit-id"; transaction_hash = ?ethereumHash; error = null },
+    ];
+    revision = 11;
+    event_cursor = 1_240;
+    accepted_deposit = ?{ log_index = 4; block_number = 19_000_000; event_index = 1_236 };
+    mint = ?{ ledger_block_index = 8_765; event_index = 1_239; verified_ledger = false };
+    error = ?"Index has not yet returned the exact mint block";
+};
+Map.add(freshBridges.intents, Blob.compare, evmBridgeId, evmIntent);
+
+let noCalls : BridgeCapabilities.BackendCalls = {
+    canister_principal = Principal.fromText("aaaaa-aa");
+    can_call = func(_ : Principal, _ : Text) : Bool { false };
+    call = func(_ : BridgeCapabilities.CallRequest) : async* BridgeCapabilities.CallResult { Runtime.trap("Restoring a memory root must not make a backend call") };
+    call_batch = func(_ : [BridgeCapabilities.CallRequest]) : async* [BridgeCapabilities.CallResult] { Runtime.trap("Restoring a memory root must not make a backend batch call") };
+};
+let retainedBridges : BridgeMemory.Mem = freshBridges;
+let restoredBridgeService = BridgeJournal.Service(retainedBridges, noCalls);
+switch (restoredBridgeService.status(bridgeId)) {
+    case (#ok(intent)) {
+        assert (intent == bridgeIntent);
+        assert (intent.steps[0].state == #confirmed and intent.steps[1].state == #confirmed);
+        assert (intent.steps[2].state == #unknown and intent.steps[2].transaction_hash == null);
+        assert (intent.event_cursor == 1_234 and intent.revision == 7);
+    };
+    case (#err(_)) assert false;
+};
+switch (restoredBridgeService.status(evmBridgeId)) {
+    case (#ok(intent)) {
+        assert (intent == evmIntent);
+        assert (intent.steps[2].operation_id == ?"retained-deposit-id");
+        assert (intent.source == #evm_agent({ app_id = "agent"; installation_uid = "original-agent-installation" }));
+        assert (intent.mint == ?{ ledger_block_index = 8_765; event_index = 1_239; verified_ledger = false });
+    };
+    case (#err(_)) assert false;
+};
+assert (restoredBridgeService.list({ ledger = null; after = null; limit = 10 }).records.size() == 2);
+// The service keeps the restored root, not an initialized replacement or copy.
+Map.add(retainedBridges.intents, Blob.compare, bridgeId, { bridgeIntent with revision = 8 });
+switch (restoredBridgeService.status(bridgeId)) {
+    case (#ok(intent)) assert (intent.revision == 8);
+    case (#err(_)) assert false;
+};
+assert (Map.size(freshBridges.intents) == 2);
+
+// Preserve each completed approval and the exact arguments of an ambiguous
+// minter call, including a separately tracked origin-network settlement state.
+let withdrawalId = Blob.fromArray(Array.repeat<Nat8>(0x41, 16));
+let exactApprovalArgs = Blob.fromArray([0x44, 0x49, 0x44, 0x4c, 0x01, 0x2a]);
+let exactWithdrawalArgs = Blob.fromArray([0x44, 0x49, 0x44, 0x4c, 0x02, 0x2b]);
+let approvalReply = Blob.fromArray([0x44, 0x49, 0x44, 0x4c, 0x03, 0x2c]);
+let withdrawal : TransferMemory.Command = {
+    request_id = withdrawalId;
+    intent = Blob.fromArray([0x10, 0x20, 0x30]);
+    resolved = Blob.fromArray([0x40, 0x50, 0x60]);
+    created_at = 10_000;
+    ledger = ckUsdcLedger;
+    native = true;
+    minter = ?ckEthMinter;
+    allowance_ledgers = [ckUsdcLedger, ckEthLedger];
+    var updated_at = 10_300;
+    var status = #pending;
+    var acknowledged = false;
+    var last_error = ?"Minter reply lost after approval completed";
+    var settlement = ?{ checked_at = 10_300; status = #unknown("Origin-network payment is unresolved") };
+    var calls = [
+        { canister = ckUsdcLedger; method = "icrc2_approve"; args = exactApprovalArgs; cycles = 0; var outcome = #reply(approvalReply) },
+        { canister = ckEthMinter; method = "withdraw_erc20"; args = exactWithdrawalArgs; cycles = 0; var outcome = #unknown("Reply lost") },
+    ];
+};
+Map.add(freshTransfers.commands, Blob.compare, withdrawalId, withdrawal);
+let retainedTransfers : TransferMemory.Mem = freshTransfers;
+let retainedWithdrawal = switch (Map.get(retainedTransfers.commands, Blob.compare, withdrawalId)) {
+    case (?command) command;
+    case null Runtime.trap("Pending withdrawal was lost during restoration");
+};
+assert (retainedWithdrawal.request_id == withdrawalId and retainedWithdrawal.created_at == 10_000);
+assert (retainedWithdrawal.intent == Blob.fromArray([0x10, 0x20, 0x30]));
+assert (retainedWithdrawal.resolved == Blob.fromArray([0x40, 0x50, 0x60]));
+assert (retainedWithdrawal.status == #pending);
+assert not retainedWithdrawal.acknowledged;
+assert (retainedWithdrawal.allowance_ledgers == [ckUsdcLedger, ckEthLedger]);
+assert (retainedWithdrawal.calls[0].args == exactApprovalArgs and retainedWithdrawal.calls[0].outcome == #reply(approvalReply));
+assert (retainedWithdrawal.calls[1].args == exactWithdrawalArgs and retainedWithdrawal.calls[1].outcome == #unknown("Reply lost"));
+assert (retainedWithdrawal.settlement == ?{ checked_at = 10_300; status = #unknown("Origin-network payment is unresolved") });
+assert TransferJournal.hasUnresolved(retainedWithdrawal);
+assert TransferJournal.minterDispatched(retainedWithdrawal);
+let restoredReplay = TransferJournal.Replay(retainedWithdrawal, noCalls);
+assert restoredReplay.dispatched();
+// Changes through the restored reference still update the original root.
+retainedWithdrawal.settlement := ?{ checked_at = 10_400; status = #submitted({ transaction_hash = ethereumHash; message = "Awaiting Ethereum confirmation" }) };
+assert (withdrawal.settlement == retainedWithdrawal.settlement);
+retainedWithdrawal.acknowledged := true;
+assert withdrawal.acknowledged;
+assert (Map.size(freshTransfers.commands) == 1);
+assert (restored.next_id == 8 and Map.size(freshCommands.commands) == 1);
+
+// Fresh funding timestamps remain unique across app reinitialization without
+// changing released command schemas or business memos.
+let allocatorMemory = TransferMemory.init();
+assert allocatorMemory.last_funding_created_at == 0;
+allocatorMemory.last_funding_created_at := 1_800_000_000_000_000_012;
+let restoredAllocator : TransferMemory.Mem = allocatorMemory;
+assert restoredAllocator.last_funding_created_at == 1_800_000_000_000_000_012;
+restoredAllocator.last_funding_created_at += 1;
+assert allocatorMemory.last_funding_created_at == 1_800_000_000_000_000_013;
