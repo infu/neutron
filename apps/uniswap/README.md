@@ -41,19 +41,21 @@ state and quote cannot be observed at the same block.
 
 1. Install EVM Wallet and Uniswap through the compatible Kernel update set.
    Connect EVM Wallet in the Uniswap tile and select Ethereum or Arbitrum. One
-   connection prompt grants this session's exact wallet read tools. Quotes,
-   balances and fee observations then reuse that grant; signatures and sends
-   retain their separate review. Reconnecting a wallet provider renews read
-   access before another quote.
+   connection prompt grants this session's exact wallet reads and saved-request
+   tracking. Tracking can reconcile or resend only already-approved signed
+   bytes. New transactions retain their separate Wallet confirmation.
 2. Fund the EVM address on that network, including ETH for gas. IC cycles used
    by signing/state updates and EVM gas are separate balances. Quote and balance
    reads use direct browser RPC and do not spend IC outcall cycles.
-3. Select ETH, USDC, WETH, or read a custom token contract. Token identity is its
-   chain and full address; token-provided symbols are descriptive only.
-4. Enter the input amount, recipient, slippage and deadline, then request a
-   quote. Review the minimum output, fee tier, observation age, recipient and
-   allowance, and separate approval and swap network-fee estimates. These
-   read-only estimates use EVM Wallet's `evm_estimate_transaction_v1` with the
+3. Select a preloaded token or search/add a custom token contract. The shared
+   catalog includes Ethereum counterparts of the supported ckERC20 assets;
+   [token addresses and artwork](../evm_wallet/TOKENS.md) remain network-specific.
+4. Enter the input amount. Quotes update automatically after a short typing
+   debounce and whenever tokens, network or other quote inputs change. Stale
+   responses cannot overwrite the current draft. The normal view shows amounts
+   and a fee summary; recipient, slippage, deadline and technical observations
+   are in collapsed settings/details. Separate approval and swap fee estimates
+   use EVM Wallet's read-only `evm_estimate_transaction_v1` with the
    exact sender, destination, value and calldata. The Quoter gas-unit estimate
    describes pool execution and is never substituted for a full network fee.
    Missing fees are shown as unavailable, with the provider's reason; a swap
@@ -67,15 +69,19 @@ state and quote cannot be observed at the same block.
    path without repeatedly downloading deployed bytecode. Price-impact reads
    request the selected quote's exact block. Getting a quote does not repeat
    unrelated balance reads.
-5. Save and review the exact approval when needed, then wait for its successful
-   receipt before reviewing the swap. Approval and swap are separate EOA
+5. Click **Swap**. Confirm token approval in EVM Wallet if needed; Uniswap waits
+   for its successful receipt and opens the swap confirmation automatically.
+   It follows the submitted swap through confirmation and refreshes balances.
+   Approval and swap are separate EOA
    transactions and are not atomic. No approval is silently unlimited. Ordinary
    ERC20 allowance has no automatic expiry: it remains until spent or revoked;
    the swap deadline does not expire that approval.
-6. Use **Check wallet status** after a pending or lost reply. A reload retains
-   the saved intent and exact request IDs. An expired deadline requires a fresh
-   quote for a new swap; the earlier approval remains visible and can be managed
-   in EVM Wallet.
+6. Balances and history refresh while the connected app is visible and on focus.
+   A reload retains the saved intent and exact request IDs; pending requests are
+   reconciled before another dispatch. **Continue** resumes an interrupted
+   owner-started flow. Expired quotes offer a fresh draft that checks the existing
+   allowance and requires a new Swap action; old signed requests are never
+   silently replaced. Raw request and transaction details remain collapsed.
 
 Fee arithmetic uses exact integer wei throughout. Ethereum estimates use the
 observed base fee plus priority fee, with a separately displayed suggested
@@ -84,9 +90,8 @@ includes the L1 posting component in L2 gas units. The app uses that total once
 and never adds another posting charge. An incomplete RPC estimate is explicitly
 unavailable; a plain Anvil chain configured as `42161` only proves the arithmetic
 and request path, not Nitro posting costs or finality. Quote refresh obtains new
-fee observations. Before a saved swap is submitted, **Refresh network fees**
-estimates its remaining transactions without changing the frozen requests or
-signing anything. Original quote observations remain in the durable intent.
+fee observations. EVM Wallet prepares current fees before each transaction
+confirmation. Original quote observations remain in the durable intent.
 
 Native ETH input is sent as the transaction value; the router wraps it and
 refunds any remainder in the same multicall. Native output goes to the router,

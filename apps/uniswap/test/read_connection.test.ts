@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import type { callTool } from "neutron-tools/app";
 import { connectWalletReads } from "../src/read_connection.ts";
 
-test("wallet connection requests one exact read grant without signing or status effects", async () => {
+test("wallet connection grants reads and saved-transaction tracking without new signing", async () => {
   const calls: Parameters<typeof callTool>[0][] = [];
-  await connectWalletReads({ callTool: async (call) => { calls.push(call); return { granted: true }; } });
+  await connectWalletReads({ callTool: async (call) => { calls.push(call); return undefined as never; } });
   expect(calls).toEqual([{
     target: "kernel", name: "permissions.request", arguments: {
       target: "app:evm_wallet:background",
-      tools: ["evm_accounts_v1", "evm_balances_v1", "evm_call_contract_v1", "evm_estimate_transaction_v1", "evm_transaction_v1", "evm_replacement_transaction_v1"],
+      tools: ["evm_accounts_v1", "evm_balances_v1", "evm_call_contract_v1", "evm_estimate_transaction_v1", "evm_transaction_v1", "evm_replacement_transaction_v1", "evm_operation_status_v1"],
     },
   }]);
 });

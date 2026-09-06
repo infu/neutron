@@ -18,12 +18,15 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
 
 ## Using the wallet
 
-- **Assets** shows native ETH and selected ERC-20 balances at the returned block.
+- **Assets** shows native ETH and preloaded/selected ERC-20 balances at the returned block.
   This view is not exhaustive token discovery. A selected token's label is a
   display hint; its identity is the network and contract address.
 - **Send** prepares an exact native transfer, selected ERC-20 transfer or contract
-  call. Review shows the account, network, recipient, value, calldata, nonce,
-  simulation result and maximum gas fee before approval. Known ERC-20 selectors
+  call. Review shows the amount, network, recipient or spender, requesting app,
+  and maximum network fee before confirmation. Calldata, nonce, simulation and
+  other technical fields start collapsed. Supported Uniswap V3 router calls
+  show the exact input amount and enforced minimum output from their calldata.
+  Known ERC-20 selectors
   are decoded as hints, not proof of the called contract's behavior. Recognized
   `approve`, `transfer` and `transferFrom` calls show the observed token balance
   and applicable allowance, exact approval change, and observation block/time.
@@ -32,15 +35,20 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
 - **Activity** includes requests from other apps, message signatures, pending
   outcomes and receipts. It is the Wallet's own journal, not a complete external
   transaction index. Load older pages when checking older requests.
-- **Approvals** lists spender/token pairs from successful confirmed Wallet
+- **Settings → Token approvals** lists spender/token pairs from successful confirmed Wallet
   transactions, including canonical speed-up replacements. Pending or reverted
   replacements do not establish an approval. Read the allowance at the returned
   block and request an exact zero approval to revoke it. External approvals and
   signed permits are not exhaustively indexed.
-- **Sign** supports EIP-191 personal messages and EIP-712 typed data. The review
+- **Settings → Sign message or data** supports EIP-191 personal messages and EIP-712 typed data. The review
   shows the complete original JSON, including integer lexemes beyond JavaScript's
   safe-number range. Signatures can authorize actions outside this Wallet.
-- **Settings** selects custom tokens and explains the account lifecycle.
+- **Settings** includes custom tokens, advanced tools and account details.
+
+Balances and history update while the tile is visible and when it regains focus.
+Secondary actions use compact icon buttons with accessible labels and tooltips.
+The shared [token catalog](./TOKENS.md) supplies verified network-specific
+defaults and bundled artwork without modifying existing saved tokens.
 
 Tile actions use explicit buttons and validated keyboard handlers because the
 Kernel sandbox does not permit native form submission. Enter in a single-line

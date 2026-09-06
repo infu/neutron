@@ -14,6 +14,8 @@ const decimal = (value: unknown): string => {
 const quantity = (value: string) => `0x${BigInt(value).toString(16)}`;
 const identityOf = (operation: Operation) => identityArgs(operation.caller, operation.requestId);
 const rpc = <T = unknown>(chain: string, method: string, params: unknown[], options: OperationOptions): Promise<T> => browserEvmRpc.request<T>(chain, method, params, options);
+const observationJson = (value: Record<string, unknown> | null, fields: readonly string[]): string =>
+  JSON.stringify(value === null ? null : Object.fromEntries(fields.filter(field => Object.hasOwn(value, field)).map(field => [field, value[field]])));
 
 export async function readBrowserOperation(kernel: OperationKernel, identity: SelfCallObject): Promise<Operation | null> {
   try { return parseOperation(await kernel.querySelf("evm_wallet_operation_v1", [{ identity }])); }
@@ -109,12 +111,17 @@ async function observeOperation(kernel: OperationKernel, operation: Operation, o
     if (observations[2].status === "fulfilled") finalized = observations[2].value;
   }
   options.signal?.throwIfAborted();
+  // Even getBlockByNumber(..., false) includes every transaction hash in the
+  // block. Three busy blocks can exceed the self-call metadata boundary. Keep
+  // the headers used for canonicality/finality and the transaction fields the
+  // backend validates. The receipt keeps every log, including its full data.
   return parseOperation(await kernel.updateSelf("evm_wallet_observe_browser_v1", [{
-    identity: identityOf(operation), transaction_hash: hash, transaction_json: JSON.stringify(transaction),
-    ...(receipt ? { receipt_json: JSON.stringify(receipt) } : {}),
-    ...(canonical ? { canonical_block_json: JSON.stringify(canonical) } : {}),
-    ...(safe ? { safe_block_json: JSON.stringify(safe) } : {}),
-    ...(finalized ? { finalized_block_json: JSON.stringify(finalized) } : {}),
+    identity: identityOf(operation), transaction_hash: hash,
+    transaction_json: observationJson(transaction, ["hash", "chainId", "nonce", "value", "gas", "from", "to", "input", "data"]),
+    ...(receipt ? { receipt_json: observationJson(receipt, ["transactionHash", "blockNumber", "blockHash", "status", "gasUsed", "effectiveGasPrice", "logs"]) } : {}),
+    ...(canonical ? { canonical_block_json: observationJson(canonical, ["number", "hash"]) } : {}),
+    ...(safe ? { safe_block_json: observationJson(safe, ["number", "hash"]) } : {}),
+    ...(finalized ? { finalized_block_json: observationJson(finalized, ["number", "hash"]) } : {}),
     ...(broadcastError ? { broadcast_error: broadcastError } : {}),
   }], 120));
 }

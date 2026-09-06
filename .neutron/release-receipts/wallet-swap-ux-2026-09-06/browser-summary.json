@@ -1,0 +1,22 @@
+{
+  "uniswap": {
+    "checks": [
+      "Connected balances load automatically without refresh or quote buttons",
+      "Searchable local token icons and debounced quote render with technical details collapsed",
+      "One Swap action automatically completes approval then swap and refreshes balances",
+      "Lost swap reply retains a visible Continue action and recovers without another signature",
+      "Focus automatically refreshes balances and history using the established connection",
+      "Expired approved swap survives reload, requotes after one click, and uses existing allowance for a newly reviewed swap",
+      "Compact swap and token picker fit 375px",
+      "Compact swap and token picker fit 320px"
+    ],
+    "errors": []
+  },
+  "wallet": {
+    "passed": true,
+    "checks": 22,
+    "failure": null,
+    "browserErrors": []
+  },
+  "transport": "Both browser harnesses use mocked wallet/backend/RPC calls. Token contract verification is read-only public RPC. No real-token transactions."
+}

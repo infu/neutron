@@ -78,6 +78,10 @@ import { TokenReview } from "./token_review.tsx";
 import { onFormActionKeyDown, runFormAction } from "./form_actions.ts";
 import { queryHistoryPage } from "./history.ts";
 import { executeBrowserOperation, reconcileBrowserOperation, refreshBrowserEvidence } from "./browser_operations.ts";
+import { presentOperation, operationStatusLabel, operationStatusMessage, presentTypedData } from "./presentation.ts";
+import { useWalletRefresh } from "./use_wallet_refresh.ts";
+import { evmTokenIcon, evmTokenInitials } from "neutron-tools/src/evm_token_icons.js";
+import { curatedEvmTokens } from "neutron-tools/src/evm_assets.js";
 import "./style.scss";
 
 function tileRuntime(): boolean {
@@ -147,65 +151,89 @@ export function EvmWalletApp() {
     [tab, setTab] = useState<Tab>("Assets"),
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
-    [balanceError, setBalanceError] = useState<string | null>(null);
+    [balanceError, setBalanceError] = useState<string | null>(null),
+    [backgroundError, setBackgroundError] = useState<string | null>(null);
   const [manualReview, setManualReview] = useState<Operation | null>(null),
     [reviewError, setReviewError] = useState<string | null>(null),
     [reviewBusy, setReviewBusy] = useState(false);
   const prompts = useSyncExternalStore(subscribePrompts, getPrompts),
     prompt = prompts[0];
   const preparations = useSyncExternalStore(subscribePrompts, getPreparations);
+  const reviewActive = !!prompt || !!manualReview || preparations.length > 0;
+  const reviewActiveRef = useRef(reviewActive);
+  reviewActiveRef.current = reviewActive;
   const account = snapshot?.accounts[0],
     network = snapshot?.networks.find((n) => n.chainId === chainId);
-  const load = useCallback(async () => {
-    let current = parseSnapshot(await querySelf(METHODS.snapshot, [null]));
-    if (current.accounts.length === 0) {
-      await updateSelf(METHODS.accounts, [null], 120);
-      current = parseSnapshot(await querySelf(METHODS.snapshot, [null]));
-    }
-    setSnapshot(current);
-    const activity = await queryHistoryPage("0");
-    setHistory(activity.operations);
-    setTotal(activity.total);
+  const loadInFlight = useRef<Promise<void> | null>(null);
+  const load = useCallback(() => {
+    if (loadInFlight.current) return loadInFlight.current;
+    const work = (async () => {
+      let current = parseSnapshot(await querySelf(METHODS.snapshot, [null]));
+      if (current.accounts.length === 0) {
+        await updateSelf(METHODS.accounts, [null], 120);
+        current = parseSnapshot(await querySelf(METHODS.snapshot, [null]));
+      }
+      setSnapshot(current);
+      const activity = await queryHistoryPage("0");
+      setHistory((previous) => [...activity.operations, ...previous.filter((saved) => !activity.operations.some((fresh) => fresh.operationId === saved.operationId))]);
+      setTotal(activity.total);
+    })().finally(() => { if (loadInFlight.current === work) loadInFlight.current = null; });
+    loadInFlight.current = work;
+    return work;
   }, []);
+  const balanceTokenKey = JSON.stringify((snapshot?.assets ?? []).filter((asset) => asset.chainId === chainId).map((asset) => asset.address));
+  const balanceKey = `${account?.address ?? ""}:${chainId}:${balanceTokenKey}`;
+  const activeBalanceKey = useRef(balanceKey);
+  activeBalanceKey.current = balanceKey;
+  const balanceInFlight = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const refreshBalance = useCallback((): Promise<void> => {
+    if (!account) return Promise.resolve();
+    if (balanceInFlight.current?.key === balanceKey) return balanceInFlight.current.promise;
+    const work = createEvmWalletClient({ callTool }).balances({ accountId: "main", chainId, tokens: JSON.parse(balanceTokenKey) as string[] })
+      .then((result) => {
+        if (activeBalanceKey.current !== balanceKey) return;
+        setBalanceError(null);
+        setBalance({
+          accountId: result.accountId, chainId: result.chainId, address: result.address,
+          nativeBalance: result.nativeBalanceWei, blockNumber: result.blockNumber,
+          observedAtNs: result.observedAtNs, completeness: result.completeness,
+          tokens: result.tokens.map((token) => ({ address: token.address, balance: token.balanceAtoms,
+            decimals: token.decimals === null ? null : Number(token.decimals), symbol: token.symbol, error: token.error })),
+        });
+      }, (reason) => { if (activeBalanceKey.current === balanceKey) setBalanceError(errorMessage(reason)); })
+      .finally(() => { if (balanceInFlight.current?.promise === work) balanceInFlight.current = null; });
+    balanceInFlight.current = { key: balanceKey, promise: work };
+    return work;
+  }, [account?.address, balanceKey, chainId, balanceTokenKey]);
   useEffect(() => {
     void load().catch((e) => setError(errorMessage(e)));
     return onAppStateChange("evm_wallet", (event) => {
-      if (event.topic === "evm_wallet")
+      if (event.topic === "evm_wallet") {
         void load().catch((e) => setError(errorMessage(e)));
+        if (document.visibilityState !== "hidden" && !reviewActiveRef.current) void refreshBalance();
+      }
     });
-  }, [load]);
+  }, [load, refreshBalance]);
   useEffect(() => {
-    let active = true;
     setBalance(null);
     setBalanceError(null);
-    if (!account) return;
-    const tokens = (snapshot?.assets ?? [])
-      .filter((t) => t.chainId === chainId)
-      .map((t) => t.address);
-    void createEvmWalletClient({ callTool }).balances({ accountId: "main", chainId, tokens })
-      .then(
-        (result) => {
-          if (active) setBalance({
-            accountId: result.accountId, chainId: result.chainId, address: result.address,
-            nativeBalance: result.nativeBalanceWei, blockNumber: result.blockNumber,
-            observedAtNs: result.observedAtNs, completeness: result.completeness,
-            tokens: result.tokens.map((token) => ({ address: token.address, balance: token.balanceAtoms,
-              decimals: token.decimals === null ? null : Number(token.decimals), symbol: token.symbol, error: token.error })),
-          });
-        },
-        (e) => {
-          if (active) setBalanceError(errorMessage(e));
-        },
-      );
-    return () => {
-      active = false;
-    };
-  }, [account?.address, chainId, snapshot]);
+    void refreshBalance();
+  }, [balanceKey, refreshBalance]);
+  useWalletRefresh({
+    enabled: !!account,
+    load,
+    refreshBalance,
+    reconcile: (operation) => reconcileBrowserOperation({ querySelf, updateSelf }, operation),
+    pending: history.filter((operation) => operation.kind === "transaction" && operation.chainId === chainId && ["signing", "signed", "submitted", "unknown"].includes(operation.status)),
+    paused: reviewActive,
+    onError: (reason) => setBackgroundError(errorMessage(reason)),
+  });
   async function refresh() {
     setBusy(true);
     setError(null);
+    setBackgroundError(null);
     try {
-      await load();
+      await Promise.all([load(), refreshBalance()]);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -283,9 +311,7 @@ export function EvmWalletApp() {
           <img className="evm-brand-icon" src="static/icon.svg" alt="" />
           <div>
             <h1 className="evm-title">EVM Wallet</h1>
-            <p className="evm-subtitle">
-              Your chain-key account, across networks
-            </p>
+
           </div>
         </div>
         <div className="evm-actions">
@@ -304,13 +330,7 @@ export function EvmWalletApp() {
               ),
             )}
           </select>
-          <button
-            className="nt-button nt-button--secondary"
-            disabled={busy}
-            onClick={() => void refresh()}
-          >
-            {busy ? "Refreshing…" : "Refresh"}
-          </button>
+          <IconButton icon="refresh" label={busy ? "Refreshing wallet…" : backgroundError ? `Some activity could not be refreshed: ${backgroundError}. Refresh wallet` : "Refresh wallet"} disabled={busy} onClick={() => void refresh()} />
         </div>
       </header>
       {error && (
@@ -341,60 +361,46 @@ export function EvmWalletApp() {
           >
             Send
           </button>
-          <button
-            className="nt-button nt-button--secondary"
-            disabled={!account}
-            onClick={() => {
-              if (account)
-                void copyToClipboard(account.address).catch((e) =>
-                  setError(errorMessage(e)),
-                );
-            }}
-          >
-            Copy receive address
-          </button>
+          <IconButton icon="copy" label="Copy receive address" disabled={!account} onClick={() => { if (account) void copyToClipboard(account.address).catch((e) => setError(errorMessage(e))); }} />
         </div>
-        {balance && (
-          <p className="evm-muted">
-            Block {balance.blockNumber} · {when(balance.observedAtNs)}
-          </p>
-        )}
+
         {balanceError && (
           <p className="evm-error">Balance unavailable: {balanceError}</p>
         )}
       </section>
       <nav className="evm-tabs" aria-label="Wallet pages">
-        {tabs.map((t) => (
+        {tabs.filter((t) => !["Approvals", "Sign"].includes(t)).map((t) => (
           <button
             key={t}
             className={`evm-tab ${t === tab ? "is-active" : ""}`}
             aria-current={t === tab ? "page" : undefined}
+            aria-label={t}
+            title={t}
             onClick={() => setTab(t)}
           >
-            {t}
+            {t === "Settings" ? <WalletIcon name="settings" /> : t}
           </button>
         ))}
       </nav>
       {tab === "Assets" && (
         <section className="evm-card">
-          <h2 className="evm-card-title">
-            Assets on {network?.name ?? "this network"}
-          </h2>
-          <p className="evm-muted">
-            Native currency and selected tokens. This is not an exhaustive
-            portfolio.
-          </p>
+          <div className="evm-row evm-section-heading"><h2 className="evm-card-title">Tokens</h2><IconButton icon="plus" label="Add a token" onClick={() => setTab("Settings")} /></div>
+
           <div className="evm-asset-list">
             <AssetRow
+              chainId={chainId}
+              tokenAddress={null}
               symbol={network?.nativeSymbol ?? "ETH"}
-              name="Native currency"
+              name={network?.name ?? "Ethereum"}
               value={balance ? amount(balance.nativeBalance) : "Unavailable"}
             />
             {balance?.tokens.map((token) => (
               <AssetRow
                 key={token.address}
+                chainId={chainId}
+                tokenAddress={token.address}
                 symbol={token.symbol ?? "Token"}
-                name={token.address}
+                name={curatedEvmTokens(chainId).find((entry) => entry.address?.toLowerCase() === token.address.toLowerCase())?.name ?? shortAddress(token.address)}
                 value={
                   token.balance === null || token.decimals === null
                     ? "Unavailable"
@@ -404,12 +410,7 @@ export function EvmWalletApp() {
               />
             ))}
           </div>
-          <button
-            className="nt-button nt-button--secondary"
-            onClick={() => setTab("Settings")}
-          >
-            Add a token
-          </button>
+
         </section>
       )}
       {tab === "Send" && account && (
@@ -417,16 +418,14 @@ export function EvmWalletApp() {
           accountAddress={account.address}
           chainId={chainId}
           snapshot={snapshot!}
+          history={history}
           onResult={() => void refresh()}
         />
       )}
       {tab === "Activity" && (
         <section className="evm-card">
           <h2 className="evm-card-title">Wallet activity</h2>
-          <p className="evm-muted">
-            Requests saved by this Wallet, including signatures and unresolved
-            operations. External history is not indexed.
-          </p>
+          <p className="evm-muted">Your recent sends, approvals and app requests.</p>
           <div className="evm-activity">
             {history.length === 0 ? (
               <p className="evm-empty">No saved requests yet.</p>
@@ -436,6 +435,7 @@ export function EvmWalletApp() {
                   key={operation.operationId}
                   operation={operation}
                   networks={snapshot?.networks ?? []}
+                  assets={snapshot?.assets ?? []}
                   busy={busy}
                   onRefresh={() => void refreshOperation(operation)}
                   onReview={() => {
@@ -455,7 +455,7 @@ export function EvmWalletApp() {
                 void queryHistoryPage(String(history.length))
                   .then(
                     (page) => {
-                      setHistory([...history, ...page.operations]);
+                      setHistory((previous) => [...previous, ...page.operations.filter((operation) => !previous.some((saved) => saved.operationId === operation.operationId))]);
                       setTotal(page.total);
                     },
                     (e) => setError(errorMessage(e)),
@@ -485,7 +485,14 @@ export function EvmWalletApp() {
       {tab === "Settings" && (
         <section className="evm-grid">
           <section className="evm-card">
-            <h2 className="evm-card-title">Add selected token</h2>
+            <h2 className="evm-card-title">Wallet tools</h2>
+            <div className="evm-actions">
+              <button className="nt-button nt-button--secondary" onClick={() => setTab("Approvals")}>Manage token approvals</button>
+              <button className="nt-button nt-button--secondary" onClick={() => setTab("Sign")}>Sign a message</button>
+            </div>
+          </section>
+          <section className="evm-card">
+            <h2 className="evm-card-title">Add a token</h2>
             <TokenForm chainId={chainId} onSaved={() => void refresh()} />
           </section>
           <section className="evm-card">
@@ -517,7 +524,7 @@ export function EvmWalletApp() {
           error={prompt.error}
           queued={prompts.length - 1}
           busy={prompt.phase === "executing" || prompt.phase === "checking" || prompt.phase === "loading_evidence"}
-          progress={prompt.phase === "loading_evidence" ? "Loading saved token observations…" : prompt.phase === "checking" ? "Checking current request…" : prompt.phase === "executing" ? "Saving your decision and resolving the request…" : null}
+          progress={prompt.phase === "loading_evidence" ? "Checking token balance and allowance…" : prompt.phase === "checking" ? "Checking transaction status…" : prompt.phase === "executing" ? "Confirming your request. Keep this window open…" : null}
           uncertain={prompt.phase === "uncertain"}
           onApprove={() => void acceptPrompt(prompt)}
           onDecline={() => void declinePrompt(prompt)}
@@ -551,12 +558,29 @@ export function EvmWalletApp() {
     </main>
   );
 }
+type WalletIconName = "refresh" | "copy" | "external" | "plus" | "settings";
+function WalletIcon({ name }: { name: WalletIconName }) {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {name === "refresh" ? <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 7a7 7 0 0 1 12-1l2 3M18 17a7 7 0 0 1-12 1l-2-3" /></> : name === "copy" ? <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3" /></> : name === "external" ? <><path d="M14 3h7v7M21 3l-11 11" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /></> : name === "settings" ? <><path d="m9 3-.7 2.2-2 .9L4 5.6 2 9l1.6 1.8v2.4L2 15l2 3.4 2.3-.5 2 .9L9 21h6l.7-2.2 2-.9 2.3.5 2-3.4-1.6-1.8v-2.4L22 9l-2-3.4-2.3.5-2-.9L15 3Z" /><circle cx="12" cy="12" r="3" /></> : <path d="M12 5v14M5 12h14" />}
+  </svg>;
+}
+function IconButton({ icon, label, disabled, onClick }: { icon: WalletIconName; label: string; disabled?: boolean; onClick: () => void }) {
+  return <button type="button" className="nt-button nt-button--secondary evm-icon-button" title={label} aria-label={label} disabled={disabled} onClick={onClick}><WalletIcon name={icon} /></button>;
+}
+function TokenIcon({ chainId, address, symbol }: { chainId: string; address: string | null; symbol: string }) {
+  const src = evmTokenIcon(chainId, address);
+  return <span className="evm-asset-icon" aria-hidden="true">{src ? <img src={src} alt="" /> : evmTokenInitials(symbol)}</span>;
+}
 function AssetRow({
+  chainId,
+  tokenAddress,
   symbol,
   name,
   value,
   error,
 }: {
+  chainId: string;
+  tokenAddress: string | null;
   symbol: string;
   name: string;
   value: string;
@@ -564,7 +588,7 @@ function AssetRow({
 }) {
   return (
     <div className="evm-asset">
-      <span className="evm-asset-icon">{symbol.slice(0, 2)}</span>
+      <TokenIcon chainId={chainId} address={tokenAddress} symbol={symbol} />
       <div>
         <strong>{symbol}</strong>
         <p className="evm-muted evm-address">{name}</p>
@@ -585,7 +609,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function Status({ status }: { status: string }) {
   return (
     <span className="evm-status" data-status={status}>
-      {status}
+      {operationStatusLabel(status)}
     </span>
   );
 }
@@ -593,11 +617,13 @@ function SendForm({
   accountAddress,
   chainId,
   snapshot,
+  history,
   onResult,
 }: {
   accountAddress: string;
   chainId: string;
   snapshot: Snapshot;
+  history: Operation[];
   onResult: () => void;
 }) {
   const [to, setTo] = useState(""),
@@ -608,7 +634,8 @@ function SendForm({
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState<string | null>(null),
-    [saved, setSaved] = useState<LocalIntent | null>(null);
+    [saved, setSaved] = useState<LocalIntent | null>(null),
+    [lastOperationId, setLastOperationId] = useState<string | null>(null);
   const tokens = snapshot.assets.filter((t) => t.chainId === chainId);
   const sending = useRef(false);
   useEffect(() => {
@@ -655,9 +682,8 @@ function SendForm({
         intent.request,
         "transaction",
       );
-      setNotice(
-        `Operation ${result.operationId}: ${result.status}${result.transactionHash ? ` · ${result.transactionHash}` : ""}`,
-      );
+      setLastOperationId(result.operationId);
+      setNotice(operationStatusMessage(result.status));
       if (
         [
           "signed",
@@ -670,6 +696,7 @@ function SendForm({
         ].includes(result.status)
       ) {
         setSaved(null);
+        if (["signed", "submitted", "confirmed"].includes(result.status)) { setValue(""); setTo(""); }
       }
       onResult();
     } catch (e) {
@@ -699,8 +726,8 @@ function SendForm({
       );
       setNotice(
         r.status === "not_found"
-          ? "Request not yet found. Review the same current request to continue."
-          : `Operation ${r.operationId}: ${r.status}`,
+          ? "This transfer is saved. Continue to review it."
+          : operationStatusMessage(r.status),
       );
       if (
         [
@@ -724,29 +751,26 @@ function SendForm({
   }
   return (
     <section className="evm-card">
-      <h2 className="evm-card-title">Send or call a contract</h2>
+      <h2 className="evm-card-title">Send</h2>
       {saved && (
         <div className="evm-notice" aria-live="polite">
-          <strong>{busy ? "Opening transaction review…" : "Saved request awaiting resolution"}</strong>
-          <p className="evm-address">
-            {saved.request.requestId} · Chain {saved.request.chainId}
-          </p>
+          <strong>{busy ? "Preparing your transfer…" : "Continue your transfer"}</strong>
           <TransactionIntentDetails request={saved.request} snapshot={snapshot} />
-          {busy && <p>Loading the saved request and its review. Any new signing requires your approval.</p>}
+          {busy && <p>Your confirmation will appear here shortly.</p>}
           <div className="evm-actions">
             <button
               className="nt-button nt-button--secondary"
               disabled={busy}
               onClick={() => void check()}
             >
-              Check current request
+              Check status
             </button>
             <button
               className="nt-button"
               disabled={busy}
               onClick={() => void send(true)}
             >
-              Review saved request
+              Continue
             </button>
           </div>
         </div>
@@ -757,6 +781,7 @@ function SendForm({
         onKeyDown={(e) => onFormActionKeyDown(e, busy || saved !== null, () => void send())}
       >
         <Field label="Asset">
+          <div className="evm-token-select"><TokenIcon chainId={chainId} address={token === "native" ? null : token} symbol={token === "native" ? "ETH" : tokens.find((entry) => entry.address === token)?.symbol ?? "Token"} />
           <select
             className="nt-select"
             data-testid="evm-send-asset"
@@ -766,12 +791,12 @@ function SendForm({
             <option value="native">ETH</option>
             {tokens.map((t) => (
               <option key={t.address} value={t.address}>
-                {t.symbol} · {shortAddress(t.address)}
+                {t.symbol}
               </option>
             ))}
-          </select>
+          </select></div>
         </Field>
-        <Field label="Recipient or contract">
+        <Field label={advanced ? "Recipient or contract" : "Recipient"}>
           <input
             className="nt-input"
             data-testid="evm-send-to"
@@ -794,7 +819,8 @@ function SendForm({
           />
         </Field>
         {token === "native" && (
-          <>
+          <details className="evm-pro-details">
+            <summary>Advanced</summary>
             <label>
               <input
                 type="checkbox"
@@ -813,7 +839,7 @@ function SendForm({
                 />
               </Field>
             )}
-          </>
+          </details>
         )}
         {error && (
           <p role="alert" className="evm-error">
@@ -822,7 +848,7 @@ function SendForm({
         )}
         {notice && (
           <p role="status" className="evm-notice evm-address">
-            {notice}
+            {history.find((operation) => operation.operationId === lastOperationId) ? operationStatusMessage(history.find((operation) => operation.operationId === lastOperationId)!.status) : notice}
           </p>
         )}
         <button
@@ -832,121 +858,56 @@ function SendForm({
           disabled={busy || saved !== null}
           onClick={(e) => runFormAction(e.currentTarget.form, busy || saved !== null, () => void send())}
         >
-          {busy ? "Working…" : "Review transaction"}
+          {busy ? "Preparing…" : "Continue"}
         </button>
-        <p className="evm-muted">
-          The backend saves this request and prepares gas, nonce and fee
-          evidence before your final approval. After a reload, resume saved
-          requests in Activity.
-        </p>
+        <p className="evm-muted">Review the amount and network fee before you confirm.</p>
       </form>
     </section>
   );
 }
-function OperationRow({
-  operation,
-  networks,
-  busy,
-  onRefresh,
-  onReview,
-}: {
+function OperationRow({ operation, networks, assets, busy, onRefresh, onReview }: {
   operation: Operation;
   networks: Network[];
+  assets: Snapshot["assets"];
   busy: boolean;
   onRefresh: () => void;
   onReview: () => void;
 }) {
-  const network = networks.find((n) => n.chainId === operation.chainId),
-    tx = operation.preparedTransaction ?? operation.intent.transaction,
-    decoded = tx ? decodeKnownCall(tx.data) : null;
+  const network = networks.find((n) => n.chainId === operation.chainId);
+  const presentation = presentOperation(operation, assets, network);
+  const pending = ["preparing", "prepared", "signing", "signed", "submitted", "unknown"].includes(operation.status);
   return (
-    <article
-      className="evm-operation"
-      data-testid={`evm-operation-${operation.operationId}`}
-    >
+    <article className="evm-operation" data-testid={`evm-operation-${operation.operationId}`}>
       <div className="evm-row">
-        <strong>
-          {decoded?.name ??
-            (operation.kind === "transaction"
-              ? "Transaction"
-              : operation.kind === "message"
-                ? "Personal message"
-                : "Typed data")}
-        </strong>
+        <strong>{presentation.title}</strong>
         <Status status={operation.status} />
       </div>
+      {presentation.amount && <p className="evm-operation-amount">{presentation.amount}</p>}
       <p className="evm-muted">
-        {network?.name ?? `Chain ${operation.chainId}`} ·{" "}
-        {operation.caller.appId} · {when(operation.createdAtNs)}
+        {network?.name ?? `Chain ${operation.chainId}`} · {operation.caller.appId === "evm_wallet" ? "You" : operation.caller.appId} · {when(operation.createdAtNs)}
       </p>
-      <p className="evm-address">
-        {tx
-          ? `${amount(tx.value)} ETH → ${tx.to}`
-          : `Account ${operation.address}`}
-      </p>
-      <p className="evm-muted">
-        Operation {operation.operationId} · Request {operation.requestId}
-      </p>
-      {operation.message && <p className="evm-notice">{operation.message}</p>}
-      {operation.finality && (
-        <p className="evm-muted">Finality: {operation.finality}</p>
-      )}
-      {operation.transactionHash && (
-        <p className="evm-address">
-          {network ? (
-            <a
-              href={`${network.explorerUrl}/tx/${operation.transactionHash}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {operation.transactionHash}
-            </a>
-          ) : (
-            operation.transactionHash
-          )}
-        </p>
-      )}
-      {operation.replacementTransactionHash && (
-        <p className="evm-notice evm-address">
-          Replaced by{" "}
-          {network ? (
-            <a
-              href={`${network.explorerUrl}/tx/${operation.replacementTransactionHash}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {operation.replacementTransactionHash}
-            </a>
-          ) : (
-            operation.replacementTransactionHash
-          )}
-          . The original requested transaction did not complete.
-        </p>
-      )}
-      {operation.signature && (
-        <details>
-          <summary>Returned signature</summary>
-          <pre className="evm-code">{operation.signature}</pre>
-        </details>
-      )}
+      {presentation.parties.map((party) => <p className="evm-muted" key={party.label}>{party.label}: <span className="evm-address" title={party.value}>{shortAddress(party.value)}</span></p>)}
+      {operation.status !== "confirmed" && <p className={operation.status === "failed" || operation.status === "reverted" ? "evm-error" : "evm-muted"}>{operationStatusMessage(operation.status, operation.kind)}</p>}
       <div className="evm-actions">
-        <button
-          className="nt-button nt-button--secondary"
-          disabled={busy}
-          onClick={onRefresh}
-        >
-          Check status
-        </button>
-        {operation.status === "prepared" && (
-          <button className="nt-button" onClick={onReview}>
-            Review saved request
-          </button>
-        )}
+        {operation.status === "prepared" && <button className="nt-button" disabled={busy} onClick={onReview}>Continue</button>}
+        {pending && <IconButton icon="refresh" label={busy ? "Checking transaction…" : "Refresh transaction status"} disabled={busy} onClick={onRefresh} />}
+        {operation.transactionHash && network && <a className="evm-icon-button evm-text-link" title="View on explorer" aria-label="View on explorer" href={`${network.explorerUrl}/tx/${operation.transactionHash}`} target="_blank" rel="noreferrer"><WalletIcon name="external" /></a>}
       </div>
-      {operation.kind === "transaction" &&
-        ["signed", "submitted", "unknown"].includes(operation.status) && (
-          <ReplacementForm operation={operation} onResult={onRefresh} />
-        )}
+      <details className="evm-pro-details">
+        <summary>Details</summary>
+        <dl className="evm-review-details">
+          <dt>Account</dt><dd>{operation.address}</dd>
+          <dt>Operation</dt><dd>{operation.operationId}</dd>
+          <dt>Request</dt><dd>{operation.requestId}</dd>
+          {presentation.contract && <><dt>Contract</dt><dd>{presentation.contract}</dd></>}
+          {operation.transactionHash && <><dt>Transaction</dt><dd>{operation.transactionHash}</dd></>}
+          {operation.finality && <><dt>Finality</dt><dd>{operation.finality}</dd></>}
+          {operation.replacementTransactionHash && <><dt>Replacement</dt><dd>{operation.replacementTransactionHash}</dd></>}
+        </dl>
+        {operation.message && <p className="evm-notice">{operation.message}</p>}
+        {operation.signature && <pre className="evm-code">{operation.signature}</pre>}
+      </details>
+      {operation.kind === "transaction" && ["signed", "submitted", "unknown"].includes(operation.status) && <ReplacementForm operation={operation} onResult={onRefresh} />}
     </article>
   );
 }
@@ -957,14 +918,19 @@ function TransactionIntentDetails({ request, snapshot }: {
   const decoded = decodeKnownCall(request.data);
   const asset = snapshot?.assets.find((entry) => entry.chainId === request.chainId && entry.address.toLowerCase() === request.to.toLowerCase());
   const transferred = decoded?.details.find(([label]) => label === "Amount (atomic units)")?.[1];
+  const allowance = decoded?.details.find(([label]) => label === "Allowance (atomic units)")?.[1];
   const recipient = decoded?.details.find(([label]) => label === "Recipient")?.[1];
+  const spender = decoded?.details.find(([label]) => label === "Spender")?.[1];
   return (
     <div className="evm-address" data-testid="evm-intent-details">
       {transferred && recipient ? <>
         <p>{asset ? `${amount(transferred, asset.decimals)} ${asset.symbol}` : `${transferred} token atomic units`} to {recipient}</p>
-        <p className="evm-muted">Token contract: {request.to}</p>
+
         {request.valueWei !== "0" && <p>Native value: {amount(request.valueWei)} ETH</p>}
-      </> : <p>{amount(request.valueWei)} ETH · {request.to}{decoded ? ` · ${decoded.name}` : request.data === "0x" ? "" : " · Contract call"}</p>}
+      </> : allowance && spender ? <>
+        <p>{allowance === "0" ? "Revoke" : "Approve"} {asset ? `${amount(allowance, asset.decimals)} ${asset.symbol}` : `${allowance} token atomic units`}</p>
+        <p className="evm-muted">Spender: {spender}</p>
+      </> : <p>{request.data === "0x" || request.valueWei !== "0" ? `${amount(request.valueWei)} ETH · ` : "Contract interaction · "}{request.to}</p>}
     </div>
   );
 }
@@ -983,8 +949,8 @@ function PreparationStatus({ preparation, snapshot }: { preparation: PreparingRe
         <h2>Preparing your {preparation.kind === "transaction" || preparation.kind === "replacement" ? "transaction" : "signature"}</h2>
         <p>{network?.name ?? `Chain ${preparation.request.chainId}`} · {elapsed}s elapsed</p>
         {preparation.kind === "transaction" && <TransactionIntentDetails request={preparation.request as EvmSendTransactionRequest} snapshot={snapshot} />}
-        <p>{preparation.kind === "transaction" || preparation.kind === "replacement" ? "Checking current balances, network fees and transaction simulation. Your approval buttons appear when the exact transaction is ready." : "Loading the exact saved request for your review."}</p>
-        <p className="evm-muted">Your approval is required before signing. Keep this review open to continue.</p>
+        <p>{preparation.kind === "transaction" || preparation.kind === "replacement" ? "Checking your balance and network fee…" : "Loading the message for your review…"}</p>
+        <p className="evm-muted">Your approval is required before signing.</p>
       </section>
     </div>
   );
@@ -1021,8 +987,8 @@ function ReviewDialog({
   const network = networks.find((n) => n.chainId === operation.chainId),
     tx = operation.preparedTransaction ?? operation.intent.transaction,
     decoded = tx ? decodeKnownCall(tx.data) : null;
-  const token = tx ? assets.find((asset) => asset.chainId === operation.chainId && asset.address.toLowerCase() === tx.to.toLowerCase()) : undefined;
-  const tokenAmount = decoded?.details.find(([label]) => label === "Amount (atomic units)")?.[1];
+  const presentation = presentOperation(operation, assets, network);
+  const typedData = operation.intent.typedDataJson ? presentTypedData(operation.intent.typedDataJson) : null;
   let messageText: string | null = null;
   if (operation.intent.messageHex)
     try {
@@ -1044,19 +1010,37 @@ function ReviewDialog({
             <span className="evm-muted">{queued} more awaiting review</span>
           )}
         </div>
-        <h2 id="evm-review-title">
-          {decoded?.name ??
-            (operation.kind === "transaction"
-              ? "Review transaction"
-              : operation.kind === "message"
-                ? "Sign personal message"
-                : "Sign typed data")}
-        </h2>
-        <p className="evm-muted">
-          Requested by {operation.caller.appId} · Installation{" "}
-          {operation.caller.installationUid}
-        </p>
-        {token && tokenAmount && <p className="evm-notice">Token amount: {amount(tokenAmount, token.decimals)} {token.symbol}</p>}
+        <div className="evm-review-heading">
+          <h2 id="evm-review-title">{presentation.title}</h2>
+          <p className="evm-muted">{operation.caller.appId === "evm_wallet" ? "Your wallet" : `Requested by ${operation.caller.appId}`}</p>
+        </div>
+        {presentation.amount && <div className="evm-review-amount"><span>{presentation.amountLabel}</span><div>{presentation.tokenAddress !== undefined && <TokenIcon chainId={operation.chainId} address={presentation.tokenAddress} symbol={presentation.tokenSymbol ?? network?.nativeSymbol ?? "ETH"} />}<strong>{presentation.amount}</strong></div></div>}
+        {presentation.description && <p className={presentation.unlimitedApproval ? "evm-notice" : "evm-muted"}>{presentation.description}</p>}
+        <dl className="evm-review-details evm-review-overview">
+          {presentation.parties.map((party) => <div className="evm-review-detail-pair" key={party.label}><dt>{party.label}</dt><dd title={party.value}>{/^0x[0-9a-f]{40}$/i.test(party.value) ? shortAddress(party.value) : party.value}</dd></div>)}
+          <dt>Network</dt><dd>{network?.name ?? `Chain ${operation.chainId}`}</dd>
+          {fee && <><dt>Maximum network fee</dt><dd>{amount(maxFee(fee))} {network?.nativeSymbol ?? "ETH"}</dd></>}
+          {presentation.nativeValue && <><dt>Also sending</dt><dd>{presentation.nativeValue}</dd></>}
+        </dl>
+        {operation.intent.messageHex !== undefined && <>
+          <p className="evm-notice">Only sign if you recognize this app and understand the message.</p>
+          <pre className="evm-code">{messageText ?? operation.intent.messageHex}</pre>
+        </>}
+        {operation.intent.typedDataJson !== undefined && <>
+          <p className="evm-notice">This signature can authorize actions, including spending tokens. Review what the app is asking you to sign.</p>
+          {typedData && <dl className="evm-review-details">
+            {typedData.domainName && <><dt>App</dt><dd>{typedData.domainName}</dd></>}
+            {typedData.verifyingContract && <><dt>Verifying contract</dt><dd>{typedData.verifyingContract}</dd></>}
+            {typedData.chainId && <><dt>Signing chain</dt><dd>{typedData.chainId}</dd></>}
+            {typedData.fields.map((field) => <div className="evm-review-detail-pair" key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}
+          </dl>}
+          {!typedData && <pre className="evm-code">{operation.intent.typedDataJson}</pre>}
+        </>}
+        {operation.intent.replacement && <p className="evm-notice">{operation.intent.replacement.cancel ? "This will try to cancel your pending transaction." : "This will try to speed up your pending transaction."} The original can still confirm first.</p>}
+        {fee?.simulation && /revert|failed|error/i.test(fee.simulation) && <p className="evm-notice">Simulation result: {fee.simulation}</p>}
+        {decoded && operation.status === "prepared" && operation.tokenEvidence && [operation.tokenEvidence.balance, operation.tokenEvidence.allowance].some((entry) => entry?.error) && <p className="evm-notice">Some token information is unavailable. Open details to review what could be checked.</p>}
+        <details className="evm-pro-details" data-testid="evm-review-pro-details">
+          <summary>Advanced details</summary>
         <dl className="evm-review-details">
           <dt>Network</dt>
           <dd>
@@ -1134,7 +1118,7 @@ function ReviewDialog({
           />
         )}
         {tx && tx.data !== "0x" && (
-          <details open={!decoded}>
+          <details>
             <summary>Exact calldata</summary>
             <pre className="evm-code">{tx.data}</pre>
           </details>
@@ -1147,43 +1131,15 @@ function ReviewDialog({
             </pre>
           </details>
         )}
-        {operation.intent.messageHex !== undefined && (
-          <>
-            <p className="evm-notice">
-              A message signature can authorize actions outside this Wallet.
-              Review the complete message and requesting app.
-            </p>
-            {messageText !== null && (
-              <pre className="evm-code">{messageText}</pre>
-            )}
-            <details>
-              <summary>Exact message bytes</summary>
-              <pre className="evm-code">{operation.intent.messageHex}</pre>
-            </details>
-          </>
-        )}
-        {operation.intent.typedDataJson !== undefined && (
-          <>
-            <p className="evm-notice">
-              Typed signatures may grant token spending rights. Review the
-              verifying contract, spender, amount, nonce and expiry below. These
-              exact JSON bytes are used by the backend.
-            </p>
-            <pre className="evm-code">{operation.intent.typedDataJson}</pre>
-          </>
-        )}
-        {operation.intent.replacement && (
-          <p className="evm-notice">
-            {operation.intent.replacement.cancel ? "Cancel" : "Speed up"}{" "}
-            operation {operation.intent.replacement.operationId} using the same
-            nonce. The original can still win the race.
-          </p>
-        )}
+        {operation.intent.messageHex !== undefined && <details><summary>Exact message bytes</summary><pre className="evm-code">{operation.intent.messageHex}</pre></details>}
+        {operation.intent.typedDataJson !== undefined && typedData && <details><summary>Exact signed data</summary><pre className="evm-code">{operation.intent.typedDataJson}</pre></details>}
+        <dl className="evm-review-details"><dt>Requesting app installation</dt><dd>{operation.caller.installationUid}</dd><dt>Review revision</dt><dd>{operation.reviewRevision}</dd></dl>
         {operation.message && (
           <p className="evm-notice" role="note">
             {operation.message}
           </p>
         )}
+        </details>
         {error && (
           <p className="evm-error" role="alert">
             {error}
@@ -1198,7 +1154,7 @@ function ReviewDialog({
                 disabled={busy}
                 onClick={onClose}
               >
-                Close and keep saved
+                Close
               </button>
               <button
                 className="nt-button"
@@ -1217,7 +1173,7 @@ function ReviewDialog({
                 disabled={busy}
                 onClick={onDecline}
               >
-                Decline
+                Cancel
               </button>
               <button
                 className="nt-button"
@@ -1228,8 +1184,8 @@ function ReviewDialog({
                 {busy
                   ? "Working…"
                   : operation.kind === "transaction"
-                    ? "Approve and send"
-                    : "Approve signature"}
+                    ? "Confirm"
+                    : "Sign"}
               </button>
             </>
           )}

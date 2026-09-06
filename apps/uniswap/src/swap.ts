@@ -1,10 +1,11 @@
 import { decodeFunctionResult, encodeFunctionData, getAddress, isAddress, parseAbi, parseUnits, type Address, type Hex } from "viem";
+import { curatedEvmTokens } from "neutron-tools/src/evm_assets.js";
 
 export const ROUTER = getAddress("0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45");
 export const QUOTER = getAddress("0x61ffe014ba17989e743c5f6cb21bf9697530b21e");
 export const FACTORY = getAddress("0x1f98431c8ad98523631ae4a59f267346ea31f984");
 export const FEE_TIERS = [100, 500, 3000, 10000] as const;
-export type Token = { chainId: string; address: Address | null; symbol: string; decimals: number };
+export type Token = { chainId: string; address: Address | null; symbol: string; decimals: number; name?: string };
 export const NETWORKS = {
   "1": { name: "Ethereum", wrapped: getAddress("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"), usdc: getAddress("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), explorer: "https://etherscan.io/tx/" },
   "42161": { name: "Arbitrum", wrapped: getAddress("0x82af49447d8a07e3bd95bd0d56f35241523fbab1"), usdc: getAddress("0xaf88d065e77c8cc2239327c5edb3a432268e5831"), explorer: "https://arbiscan.io/tx/" },
@@ -38,8 +39,8 @@ export function network(chainId: string) {
   return NETWORKS[chainId as Chain];
 }
 export function defaultTokens(chainId: string): Token[] {
-  const n = network(chainId);
-  return [{ chainId, address: null, symbol: "ETH", decimals: 18 }, { chainId, address: n.usdc, symbol: "USDC", decimals: 6 }, { chainId, address: n.wrapped, symbol: "WETH", decimals: 18 }];
+  network(chainId);
+  return curatedEvmTokens(chainId).map(({ address, ...token }) => ({ ...token, address: address === null ? null : getAddress(address) }));
 }
 export function tokenAddress(token: Token): Address { return token.address ?? network(token.chainId).wrapped; }
 export function amountAtoms(amount: string, token: Token): string {

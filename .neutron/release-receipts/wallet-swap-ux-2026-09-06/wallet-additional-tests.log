@@ -1,0 +1,66 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/evm_wallet/test/browser_rpc.test.ts:
+(pass) browser RPC uses one direct provider, verifies its chain once and preserves exact hex quantities [3.00ms]
+(pass) browser RPC endpoints can be configured without extensions or API keys [1.00ms]
+(pass) a wrong-chain endpoint cannot read or broadcast under the requested chain [1.00ms]
+(pass) concurrent chain sessions cannot reuse validation from another endpoint
+(pass) JSON-RPC errors preserve the code and revert data [1.00ms]
+(pass) RPC envelopes reject response ID mismatch, wrong versions, batches and ambiguous results [1.00ms]
+(pass) a null receipt remains null, rather than an error or an invented zero
+(pass) non-JSON, HTTP and network failures produce readable errors and never retry [1.00ms]
+(pass) a broadcast with a lost reply is attempted exactly once, including through viem [3.00ms]
+(pass) already cancelled requests do not contact a provider [1.00ms]
+(pass) cancelling a pending read aborts its fetch immediately
+(pass) cancelling one reader does not cancel another reader's shared chain validation [1.00ms]
+(pass) the configured deadline ends a hanging read without scheduling any retry [13.00ms]
+(pass) viem client converts large RPC quantities exactly without browser wallet injection [2.00ms]
+
+apps/evm_wallet/test/read_adapters.test.ts:
+(pass) lightweight contract read pins its block without backend update or code download [8.00ms]
+(pass) compatibility contract read retains code at the exact call block [1.00ms]
+(pass) balances keep one block, selected metadata and independent token failures [2.00ms]
+(pass) browser fee estimates preserve exact totals and pin simulation [2.00ms]
+(pass) failed simulation retains fee observations without invented zero gas [1.00ms]
+(pass) missing block and pricing retain partials without claiming a pinned observation [1.00ms]
+(pass) explicit cancellation is not returned as an unavailable fee estimate
+(pass) Arbitrum uses total gas once and does not request a priority tip [1.00ms]
+(pass) public chain evidence gets request binding independently from the Wallet journal [3.00ms]
+(pass) absent transactions need no backend query without a request proof
+(pass) reorganized receipt blocks and wrong transaction chain/hash are rejected [1.00ms]
+(pass) missing accounts and unsupported Wallet networks stop before browser RPC [1.00ms]
+(pass) replacement proof is a read-only journal lookup bound to the exact original request [1.00ms]
+
+apps/evm_wallet/test/resident_registration.test.ts:
+(pass) EVM Wallet resident registers its complete consumer protocol through the real SDK validator [209.00ms]
+
+apps/evm_wallet/test/token_review.test.ts:
+(pass) ERC20 review preserves exact large balances, allowance change and observed block [26.00ms]
+(pass) revocation and unchanged approval compare against the observed allowance exactly [4.00ms]
+(pass) failed reads and missing old-release observations are not shown as zero or fresh evidence [1.00ms]
+(pass) transfer evidence omits inapplicable allowance and malformed observations cannot pretend to be balance readings [1.00ms]
+
+apps/evm_wallet/test/sign_form.test.ts:
+(pass) signature request preserves UTF-8 bytes and exact EIP-712 JSON without rounding integers [1.00ms]
+(pass) explicit review checks the account and status then uses the public provider with the complete request [2.00ms]
+(pass) a lost effect response recovers the backend signature with the live request ID and no second signature [1.00ms]
+(pass) status-only recovery never opens a signature review when the request is missing
+(pass) preparing, signing and unknown outcomes remain unresolved without replaying signatures [1.00ms]
+(pass) prepared requests reopen public review with the same ID and exact typed-data JSON [1.00ms]
+(pass) rejected and failed requests are returned without silently creating another request [1.00ms]
+(pass) account replacement, mismatched operation identity and status failures do not submit an effect [2.00ms]
+(pass) an invalid effect response is not accepted as a completed signature
+
+apps/evm_wallet/test/known_approvals.test.ts:
+(pass) known approvals include a confirmed replacement's resolved transaction when the original is replaced [5.00ms]
+(pass) submitted, prepared and unresolved replacements do not imply that their approvals were mined [3.00ms]
+(pass) successful cancellation replacements are self transfers, not token approvals [1.00ms]
+(pass) replacement discovery requires its own resolved calldata and never copies the replaced intent [2.00ms]
+(pass) only successful receipts for the operation's signed hash establish a known approval [3.00ms]
+(pass) ordinary approvals and revocations retain one known pair without claiming the current allowance [3.00ms]
+(pass) selected-chain discovery and result keys keep the same addresses on different networks distinct [2.00ms]
+
+ 48 pass
+ 0 fail
+ 236 expect() calls
+Ran 48 tests across 6 files. [689.00ms]

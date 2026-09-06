@@ -815,10 +815,12 @@ again; no grant is saved to managed memory. Repeating the request while every
 grant is still valid returns without another owner dialog. Cancellation,
 rejection, or endpoint replacement while consent is pending creates no new grants.
 
-Uniswap uses this explicit group for its six pure wallet reads once per live
-connection, before quote and account reads run concurrently. Transactions,
-signatures, and recovery operations that may rebroadcast are excluded from
-that group. Kernel introduces no global read bypass: `neutron:effects` remains
+Uniswap uses this explicit group for its six pure wallet reads and for tracking
+its saved wallet requests once per live connection. Tracking updates the journal
+and may rebroadcast only bytes already approved and signed; the initial connection
+grant explicitly includes that tool so waiting for a receipt needs no repeated
+prompt. New transaction and signature tools are excluded. Kernel introduces no
+global read bypass: `neutron:effects` remains
 descriptive metadata, and a tool claiming `read` does not acquire permission
 automatically. The same generic grouped API can request other exact tools, but
 `provider_once` actions still require their own fresh provider decision.

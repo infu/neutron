@@ -7,6 +7,7 @@ import {
   erc20Abi,
 } from "viem";
 import type { SelfCallObject } from "neutron-tools/app";
+import { mergeEvmAssets } from "neutron-tools/src/evm_assets.js";
 
 export type Account = {
   id: string;
@@ -208,7 +209,7 @@ export function parseSnapshot(value: unknown): Snapshot {
         finalityDescription: text(n.finality_description, "finality"),
       };
     }),
-    assets: list(r.assets, "assets").map((v) => {
+    assets: mergeEvmAssets(list(r.assets, "assets").map((v) => {
       const a = record(v, "asset");
       return {
         chainId: natural(a.chain_id, "asset chain"),
@@ -216,7 +217,7 @@ export function parseSnapshot(value: unknown): Snapshot {
         symbol: text(a.symbol, "asset symbol"),
         decimals: decimals(a.decimals),
       };
-    }),
+    })),
     lifecycle: text(r.lifecycle, "lifecycle"),
   };
 }

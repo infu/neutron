@@ -2,7 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { keccak256, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { isJsonValue, type SelfCallObject } from "neutron-tools/app";
+import { encodeSelfCallValues, isJsonValue, type SelfCallObject } from "neutron-tools/app";
 import { generateAppMethodSchemaArtifact, validateAppMethodArgs } from "neutron-scripts/src/method_schema.js";
 import { browserEvmRpc, createBrowserEvmRpc } from "../src/browser_rpc.ts";
 import {
@@ -33,6 +33,7 @@ const methodSchemas = generateAppMethodSchemaArtifact(
 );
 function checkArguments(method: string, args: unknown[]) {
   if (!isJsonValue(args)) throw new Error("Fixture expected JSON method arguments");
+  encodeSelfCallValues(args);
   expect(validateAppMethodArgs(methodSchemas, method, args).errors).toEqual([]);
 }
 
@@ -61,7 +62,7 @@ type BackendCall = { kind: "query" | "update"; method: string; args: unknown[] }
 const restore: Array<() => void> = [];
 afterEach(() => { for (const reset of restore.splice(0)) reset(); });
 
-function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolean } = {}) {
+function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolean; busyBlocks?: boolean; receiptLogs?: unknown[] } = {}) {
   const http: RpcCall[] = [], backend: BackendCall[] = [];
   let saved: Wire | null = null;
   let raw: Hex | null = null;
@@ -80,7 +81,7 @@ function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolea
     let result: unknown;
     switch (method) {
       case "eth_chainId": result = "0x1"; break;
-      case "eth_getBlockByNumber": result = { number: "0x100", hash: BLOCK_HASH, baseFeePerGas: "0x1", transactions: saved?.transaction_hash && accepted ? [saved.transaction_hash] : [] }; break;
+      case "eth_getBlockByNumber": result = { number: "0x100", hash: BLOCK_HASH, baseFeePerGas: "0x1", transactions: options.busyBlocks ? Array.from({ length: 1600 }, (_, index) => `0x${index.toString(16).padStart(64, "0")}`) : saved?.transaction_hash && accepted ? [saved.transaction_hash] : [] }; break;
       case "eth_getTransactionCount": result = "0x0"; break;
       case "eth_getBalance": result = balance; break;
       case "eth_gasPrice": result = "0x2"; break;
@@ -103,7 +104,7 @@ function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolea
         break;
       case "eth_getTransactionReceipt":
         expect(params).toEqual([saved?.transaction_hash]);
-        result = accepted && mined ? { transactionHash: saved?.transaction_hash, blockNumber: "0x100", blockHash: BLOCK_HASH, status: "0x1", gasUsed: "0x5208", effectiveGasPrice: "0x2", logs: [] } : null;
+        result = accepted && mined ? { transactionHash: saved?.transaction_hash, blockNumber: "0x100", blockHash: BLOCK_HASH, status: "0x1", gasUsed: "0x5208", effectiveGasPrice: "0x2", logs: options.receiptLogs ?? [] } : null;
         break;
       default: throw new Error(`Unexpected browser RPC ${method}`);
     }
@@ -287,6 +288,26 @@ test("canonical receipt reconciliation observes finality without another broadca
   expect(app.http.filter(call => call.method === "eth_sendRawTransaction")).toHaveLength(1);
   expect(app.http.filter(call => call.method === "eth_getBlockByNumber").slice(-3).map(call => call.params[0])).toEqual(["0x100", "safe", "finalized"]);
   expect(app.state().signatures).toBe(1);
+});
+
+test("busy-block recovery fits the real self-call metadata boundary and preserves the original receipt logs", async () => {
+  const logs = [{ address: TO, topics: [BLOCK_HASH], data: `0x${"07".repeat(32)}`, logIndex: "0x0" }];
+  const app = fixture({ busyBlocks: true, receiptLogs: logs });
+  const submitted = await executeBrowserOperation(app.kernel, await prepareBrowserOperation(app.kernel, identity, intent));
+  app.mine();
+  const recovered = await reconcileBrowserOperation(app.kernel, submitted);
+  expect(recovered.status).toBe("confirmed");
+  expect(recovered.requestId).toBe(submitted.requestId);
+  expect(recovered.transactionHash).toBe(submitted.transactionHash);
+  const observation = app.backend.filter(call => call.method === "evm_wallet_observe_browser_v1").at(-1)!;
+  const input = observation.args[0] as Record<string, string>;
+  for (const key of ["canonical_block_json", "safe_block_json", "finalized_block_json"]) {
+    expect(JSON.parse(input[key]!)).toEqual({ number: "0x100", hash: BLOCK_HASH });
+  }
+  expect(JSON.parse(recovered.receiptJson!).logs).toEqual(logs);
+  expect(() => encodeSelfCallValues(observation.args as SelfCallObject[])).not.toThrow();
+  expect(app.state().signatures).toBe(1);
+  expect(app.http.filter(call => call.method === "eth_sendRawTransaction")).toHaveLength(1);
 });
 
 test("a nonce changed during preparation is estimated and simulated again before review", async () => {

@@ -24,9 +24,9 @@ body {
     --nt-accent-muted: #242e48;
     box-sizing: border-box;
     margin: 0 auto;
-    max-width: 1040px;
+    max-width: 640px;
     min-height: 100dvh;
-    padding: 24px;
+    padding: 20px;
     width: 100%;
   }
 
@@ -52,18 +52,18 @@ body {
   .evm-header {
     flex-wrap: wrap;
     justify-content: space-between;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
 
   .evm-brand-icon {
     flex: 0 0 auto;
-    height: 38px;
-    width: 38px;
+    height: 28px;
+    width: 28px;
   }
 
   .evm-title {
     color: var(--nt-text-strong);
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 650;
     letter-spacing: -0.025em;
     line-height: 1.25;
@@ -87,21 +87,21 @@ body {
   }
 
   .evm-network-select {
-    max-width: 220px;
-    min-width: 150px;
-    width: auto;
+    max-width: 160px;
+    min-width: 0;
+    width: 130px;
   }
 
   .evm-account {
     background: var(--nt-bg-panel);
     border: 1px solid var(--nt-line);
-    border-radius: 8px;
+    border-radius: 18px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    margin-bottom: 24px;
+    gap: 12px;
+    margin-bottom: 16px;
     min-width: 0;
-    padding: 24px;
+    padding: 20px;
   }
 
   .evm-account-address,
@@ -133,7 +133,8 @@ body {
   .evm-tabs {
     border-bottom: 1px solid var(--nt-line-subtle);
     display: flex;
-    gap: 20px;
+    gap: 0;
+    justify-content: space-between;
     margin-bottom: 20px;
     overflow-x: auto;
   }
@@ -146,7 +147,7 @@ body {
     cursor: pointer;
     flex: 0 0 auto;
     font-weight: 550;
-    padding: 10px 0 12px;
+    padding: 12px 8px;
     transition: color var(--nt-duration-fast) var(--nt-ease-standard);
 
     &:hover {
@@ -170,7 +171,7 @@ body {
   .evm-card {
     background: var(--nt-bg-panel);
     border: 1px solid var(--nt-line-subtle);
-    border-radius: 6px;
+    border-radius: 16px;
     min-width: 0;
     padding: 20px;
   }
@@ -284,8 +285,8 @@ body {
 
     img,
     svg {
-      height: 20px;
-      width: 20px;
+      height: 100%;
+      width: 100%;
     }
   }
 
@@ -325,8 +326,7 @@ body {
 
   .evm-status {
     &[data-status="confirmed"],
-    &[data-status="completed"],
-    &[data-status="signed"] {
+    &[data-status="completed"] {
       background: var(--nt-success-muted);
       color: var(--nt-success);
     }
@@ -338,6 +338,9 @@ body {
     }
 
     &[data-status="pending"],
+    &[data-status="signed"],
+    &[data-status="unknown"],
+    &[data-status="prepared"],
     &[data-status="submitted"],
     &[data-status="broadcast"],
     &[data-status="broadcasting"],
@@ -372,14 +375,14 @@ body {
   .evm-review {
     background: var(--nt-bg-panel);
     border: 1px solid var(--nt-line-strong);
-    border-radius: 8px;
+    border-radius: 18px;
     box-shadow: var(--nt-shadow-raised);
     box-sizing: border-box;
     display: grid;
     gap: 20px;
     margin: auto;
     max-height: calc(100dvh - 48px);
-    max-width: 580px;
+    max-width: 500px;
     min-width: 0;
     overflow-y: auto;
     padding: 24px;
@@ -419,6 +422,74 @@ body {
   }
 
   .evm-review-detail-pair { display: contents; }
+
+  .evm-review-heading {
+    display: grid;
+    gap: 6px;
+  }
+
+  .evm-review-amount {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    padding: 6px 0;
+
+    > span { color: var(--nt-text-faint); font-size: 12px; }
+    > div { align-items: center; display: flex; gap: 10px; min-width: 0; }
+    strong {
+      color: var(--nt-text-strong);
+      font-size: clamp(24px, 7vw, 34px);
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .evm-review-overview {
+    border-radius: 12px;
+    line-height: 1.5;
+    dd { font-variant-numeric: tabular-nums; }
+  }
+
+  .evm-pro-details {
+    border-top: 1px solid var(--nt-line-subtle);
+    min-width: 0;
+    padding-top: 12px;
+
+    > summary { color: var(--nt-text-faint); cursor: pointer; font-size: 12px; padding: 4px 0; }
+    &[open] > :not(summary) { margin-top: 12px; }
+  }
+
+  .evm-text-link { color: var(--nt-accent); font-size: 12px; text-decoration: none; }
+  .evm-text-link:hover { text-decoration: underline; }
+  .evm-operation-amount { color: var(--nt-text-strong); font-size: 18px; font-weight: 550; }
+
+  .evm-app .nt-button { border-radius: 10px; min-height: 40px; }
+  .evm-form > .nt-button { min-height: 46px; }
+  .evm-review-footer > .nt-button { flex: 1; min-height: 44px; }
+  .evm-account > .evm-row { justify-content: space-between; }
+  .evm-account-actions > button { flex: 1; }
+  .evm-account-actions > .evm-icon-button { flex: 0 0 40px; }
+  .evm-app .evm-icon-button {
+    align-items: center;
+    display: inline-flex;
+    flex: 0 0 36px;
+    height: 36px;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0;
+    width: 36px;
+  }
+  .evm-section-heading { justify-content: space-between; margin-bottom: 8px; }
+  .evm-section-heading > .evm-card-title { margin: 0; }
+  .evm-token-select { align-items: center; display: flex; gap: 10px; }
+  .evm-token-select > .nt-select { flex: 1; min-width: 0; }
+  .evm-asset-icon { overflow: hidden; }
+  .evm-asset-icon > img { object-fit: contain; }
+
+  .evm-form .nt-input, .evm-form .nt-select { border-radius: 10px; min-height: 42px; }
+
 
   .evm-token-review {
     display: grid;
@@ -491,10 +562,6 @@ body {
       padding: 12px;
     }
 
-    .evm-header > .evm-actions {
-      width: 100%;
-    }
-
     .evm-network-select {
       flex: 1;
       max-width: none;
@@ -545,6 +612,12 @@ body {
         margin-bottom: 8px;
         text-align: left;
       }
+    }
+
+    .evm-review-overview {
+      grid-template-columns: minmax(85px, 1fr) minmax(0, 1.4fr);
+      gap: 12px;
+      dd { margin-bottom: 0; text-align: right; }
     }
 
     .evm-review-footer > button {

@@ -118,7 +118,8 @@ async function runCase(width, form, action) {
     return { opaqueOrigin: self.origin === "null", parentDenied: denied(() => parent.document), localStorageDenied: denied(() => localStorage), indexedDBDenied: denied(() => indexedDB.open("qualification")) };
   });
   assert.deepEqual(restrictions, { opaqueOrigin: true, parentDenied: true, localStorageDenied: true, indexedDBDenied: true });
-  await frame.locator("nav").getByRole("button", { name: form === "send" ? "Send" : form === "sign" ? "Sign" : form === "replacement" ? "Activity" : "Settings", exact: true }).click();
+  await frame.locator("nav").getByRole("button", { name: form === "send" ? "Send" : form === "sign" ? "Settings" : form === "replacement" ? "Activity" : "Settings", exact: true }).click();
+  if (form === "sign") await frame.getByRole("button", { name: "Sign a message", exact: true }).click();
   let button, input;
   if (form === "send") {
     button = frame.getByTestId("evm-send-review"); input = frame.getByTestId("evm-send-amount");
@@ -253,10 +254,12 @@ async function runDelayedTokenSend(width) {
   const dialog = frame.getByRole("dialog");
   await dialog.waitFor();
   assert.equal(await preparation.count(), 0);
-  assert((await dialog.textContent()).includes("Token amount: 1.25 USDC"));
-  assert((await dialog.textContent()).includes("Loading saved token observations"));
+  assert((await dialog.textContent()).includes("1.25 USDC"));
+  assert((await dialog.textContent()).includes("Checking token balance and allowance"));
   const approve = frame.getByTestId("evm-review-approve");
   assert.equal(await approve.isVisible(), true);
+  assert.equal(await frame.getByTestId("evm-review-pro-details").getAttribute("open"), null, "Technical details start collapsed");
+  assert.equal(await frame.getByTestId("evm-review-request-id").isVisible(), false, "Request metadata is hidden from the main confirmation");
   assert.equal(await approve.isDisabled(), true, "Do not approve while the review is loading");
   assert.equal((await calls(frame, methods.execute)).length, 0);
   await frame.evaluate(() => window.__evmSandbox.release("evm_wallet_review_evidence_v1"));
@@ -276,7 +279,7 @@ async function runDelayedTokenSend(width) {
   assert.equal(executed.args[0].review_revision, "1");
   await frame.evaluate(() => window.__evmSandbox.release("evm_wallet_execute_v1"));
   await dialog.waitFor({ state: "hidden" });
-  assert((await frame.locator("main").textContent()).includes("submitted"));
+  assert((await frame.locator("main").textContent()).includes("Waiting for the network to confirm"));
   const rpcCalls = await frame.evaluate(() => window.__evmRpcFixture.calls);
   assert.equal(rpcCalls.filter((call) => call.method === "eth_sendRawTransaction").length, 1);
   assert(rpcCalls.some((call) => call.method === "eth_estimateGas"));
@@ -330,7 +333,9 @@ async function runHistoryCase(width, rowCount) {
     assert.equal(next.limit, Math.max(1, Math.floor(attempt.limit / 2)), `${label}: rejected page did not shrink`);
   }
   if (rowCount > 25) assert(attempts.some((attempt) => attempt.offset > 0 && !attempt.accepted), `${label}: Load more retry path was not exercised`);
-  assert.deepEqual(attempts.filter((attempt) => attempt.accepted).flatMap((attempt) => attempt.operationIds), expectedIds);
+  // Focus and pending-transaction polling may refresh an already loaded page.
+  // Rendered rows above must still contain each operation exactly once.
+  assert.deepEqual([...new Set(attempts.filter((attempt) => attempt.accepted).flatMap((attempt) => attempt.operationIds))], expectedIds);
   assert.equal(await frame.getByTestId("evm-account-address").textContent(), "0x2222222222222222222222222222222222222222");
   assert((await frame.locator(".evm-account-balance").textContent()).includes("1.234567890123456789"));
   assert.equal((await calls(frame, methods.execute)).length, 0);
