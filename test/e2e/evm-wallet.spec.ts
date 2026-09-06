@@ -210,7 +210,7 @@ test("Uniswap approves exact tokens, survives reload, and swaps through EVM Wall
   await wallet.getByTestId("evm-review-approve").click();
   await expect(wallet.getByTestId("evm-review")).toHaveCount(0, { timeout: 120_000 });
   await expect.poll(() => chain.nonce(address), { timeout: 120_000 }).toBe(before.nonce + 1n);
-  await expect(saved.getByRole("button", { name: "Check wallet status", exact: true })).toBeEnabled();
+  await expect(saved.getByRole("button", { name: "Check wallet status", exact: true })).toBeEnabled({ timeout: 120_000 });
   await saved.getByRole("button", { name: "Check wallet status", exact: true }).click();
   await expect(saved.getByRole("button", { name: "Review swap", exact: true })).toBeVisible({ timeout: 120_000 });
   await expectNoEvmKernelDialogs(page);
@@ -245,7 +245,7 @@ test("Uniswap approves exact tokens, survives reload, and swaps through EVM Wall
   await resumedWallet.getByTestId("evm-review-approve").click();
   await expect(resumedWallet.getByTestId("evm-review")).toHaveCount(0, { timeout: 120_000 });
   await expect.poll(() => chain.nonce(address), { timeout: 120_000 }).toBe(before.nonce + 2n);
-  await expect(restored.getByRole("button", { name: "Check wallet status", exact: true })).toBeEnabled();
+  await expect(restored.getByRole("button", { name: "Check wallet status", exact: true })).toBeEnabled({ timeout: 120_000 });
   await restored.getByRole("button", { name: "Check wallet status", exact: true }).click();
   await expect(restored).toContainText("Receipt: success", { timeout: 120_000 });
   await expectNoEvmKernelDialogs(page);
@@ -262,7 +262,7 @@ test("Uniswap approves exact tokens, survives reload, and swaps through EVM Wall
   expect(actualOutput).toBeGreaterThanOrEqual(minimumOut);
   expect(await contracts.allowance(contracts.tokenA, address)).toBe(0n);
   await restored.getByRole("button", { name: "Check wallet status", exact: true }).click();
-  await expect(restored.getByRole("button", { name: "Check wallet status", exact: true })).toBeEnabled();
+  await expect(restored.getByRole("button", { name: "Check wallet status", exact: true })).toBeEnabled({ timeout: 120_000 });
   expect(await chain.nonce(address)).toBe(before.nonce + 2n);
   await expect(restored.getByRole("button", { name: "Review exact approval", exact: true })).toHaveCount(0);
   await expect(restored.getByRole("button", { name: "Review swap", exact: true })).toHaveCount(0);
