@@ -1,0 +1,158 @@
+{
+  "status": "implemented, qualified, published and verified",
+  "source_canister": "233tv-xiaaa-aaaay-aacta-cai",
+  "atomic_batch_id": "51",
+  "postflight_batch_id": null,
+  "catalog_packages_verified": 18,
+  "all_packages_and_sources_unchanged_on_postflight": true,
+  "packages": [
+    {
+      "id": "evm_wallet",
+      "version": 101,
+      "sha256": "1f7e9fb0ab82b60543ed38d81f215e7655ef4ca9fb1afab0f6ea6eb4cf456048",
+      "size": 377833,
+      "package_path": "/repo/v1/packages/1f7e9fb0ab82b60543ed38d81f215e7655ef4ca9fb1afab0f6ea6eb4cf456048.neutron",
+      "release_path": "/repo/v1/releases/evm_wallet.json",
+      "release_digest": "4e4ebd09a61087556d90e9952ffa828d26e6efd4dcb0d897fe7c1dad482ed5cb",
+      "status": "published",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/4f86e2c3b0733e3f5857fc4ffb15b2288277bbed4281987c5c238b50f34d8cd2.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/4f86e2c3b0733e3f5857fc4ffb15b2288277bbed4281987c5c238b50f34d8cd2.source.v1.msgpack.gz",
+        "sha256": "4f86e2c3b0733e3f5857fc4ffb15b2288277bbed4281987c5c238b50f34d8cd2",
+        "size": 442851,
+        "status": "published"
+      }
+    },
+    {
+      "id": "kernel",
+      "version": 339,
+      "sha256": "8391f8508cf1f3929cf3b7e3e02612de29beb0bc387a4e89d8bc12b1d3677462",
+      "size": 2448952,
+      "package_path": "/repo/v1/packages/8391f8508cf1f3929cf3b7e3e02612de29beb0bc387a4e89d8bc12b1d3677462.neutron",
+      "release_path": "/repo/v1/releases/kernel.json",
+      "release_digest": "d8cfeece6b6507fc9f0dff07de780d97daadee35f70d4851e9008e3b7f346ff0",
+      "status": "published",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/4e293ad81cd52e5a8c1fc284ede1633ebf28134f8a1fb96bf2be4d3684a7c154.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/4e293ad81cd52e5a8c1fc284ede1633ebf28134f8a1fb96bf2be4d3684a7c154.source.v1.msgpack.gz",
+        "sha256": "4e293ad81cd52e5a8c1fc284ede1633ebf28134f8a1fb96bf2be4d3684a7c154",
+        "size": 3171917,
+        "status": "published"
+      }
+    },
+    {
+      "id": "kitchensink",
+      "version": 314,
+      "sha256": "e25c5230a91f2c99f72119e92c62204da5c13604785d018a358e57ea0a1bf18b",
+      "size": 471268,
+      "package_path": "/repo/v1/packages/e25c5230a91f2c99f72119e92c62204da5c13604785d018a358e57ea0a1bf18b.neutron",
+      "release_path": "/repo/v1/releases/kitchensink.json",
+      "release_digest": "9f67f148f023230b40c6ff23ecb77856fe14157b2533a697714192a9af5e1eb6",
+      "status": "published",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/4dd491251be9d63f1c6ecc32b1cbc9bcf9ac9e35f82f12336c96e7e950817902.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/4dd491251be9d63f1c6ecc32b1cbc9bcf9ac9e35f82f12336c96e7e950817902.source.v1.msgpack.gz",
+        "sha256": "4dd491251be9d63f1c6ecc32b1cbc9bcf9ac9e35f82f12336c96e7e950817902",
+        "size": 454523,
+        "status": "published"
+      }
+    },
+    {
+      "id": "uniswap",
+      "version": 102,
+      "sha256": "720781594416ac568d10de0c6594afadf8ba09fbab7dff50976ef9db82f7f10d",
+      "size": 273807,
+      "package_path": "/repo/v1/packages/720781594416ac568d10de0c6594afadf8ba09fbab7dff50976ef9db82f7f10d.neutron",
+      "release_path": "/repo/v1/releases/uniswap.json",
+      "release_digest": "e0aefb25b4ba2a2295e28cb6d07bd7fdc028f3c2d9fb5f4a75adb1b001b9ef16",
+      "status": "published",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/5cb52e767cc2e703b8160c19397964ad75a7074c9eb3119597d359cd8f83eb76.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/5cb52e767cc2e703b8160c19397964ad75a7074c9eb3119597d359cd8f83eb76.source.v1.msgpack.gz",
+        "sha256": "5cb52e767cc2e703b8160c19397964ad75a7074c9eb3119597d359cd8f83eb76",
+        "size": 435141,
+        "status": "published"
+      }
+    },
+    {
+      "id": "wallet",
+      "version": 315,
+      "sha256": "1d1156e18ee3116dbda8c8c410f6c4987ba062db345ddf169a822f3d3c20ffcd",
+      "size": 753979,
+      "package_path": "/repo/v1/packages/1d1156e18ee3116dbda8c8c410f6c4987ba062db345ddf169a822f3d3c20ffcd.neutron",
+      "release_path": "/repo/v1/releases/wallet.json",
+      "release_digest": "f7b03809e0a66f01d58690b5ba836a178981005c3d1f6fd2bd1426cc0eb01af2",
+      "status": "published",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/b9da789b77738e2278be3bf7fb3169111a25e7090b773ec92f731c165388381e.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/b9da789b77738e2278be3bf7fb3169111a25e7090b773ec92f731c165388381e.source.v1.msgpack.gz",
+        "sha256": "b9da789b77738e2278be3bf7fb3169111a25e7090b773ec92f731c165388381e",
+        "size": 590475,
+        "status": "published"
+      }
+    }
+  ],
+  "release_tests": {
+    "kernel": {
+      "typescript": 752,
+      "motoko_suites": 33
+    },
+    "wallet": {
+      "typescript": 157,
+      "motoko_suites": 7
+    },
+    "evm_wallet": {
+      "typescript": 29,
+      "compiled_backend_crypto_rpc": "passed",
+      "memory": "passed"
+    },
+    "kitchensink": {
+      "typescript": 59,
+      "memory": "passed"
+    },
+    "uniswap": {
+      "typescript": 58,
+      "official_contract_swaps": 6,
+      "memory": "passed"
+    },
+    "shared_sdk": {
+      "tests": 326
+    }
+  },
+  "checked_upgrades": {
+    "assertions": 300,
+    "current_wallet_predecessor": 312,
+    "skipped_wallet_predecessor": 306,
+    "subsequent_new_app_journal_restoration": true
+  },
+  "real_browser_scenarios": [
+    {
+      "title": "one Wallet decision signs a real transaction; a lost reply and reload reconcile the same operation",
+      "status": "passed",
+      "duration_ms": 56354
+    },
+    {
+      "title": "an older Kernel caller payload without installation identity cannot create a financial effect",
+      "status": "passed",
+      "duration_ms": 15069
+    },
+    {
+      "title": "Uniswap approves exact tokens, survives reload, and swaps through EVM Wallet against official contracts",
+      "status": "passed",
+      "duration_ms": 240533
+    }
+  ],
+  "browser_timing_correction": "Only Uniswap was rerun after three status waits were aligned with the existing 120-second recovery window; app archives did not change.",
+  "certified_assets": "qualified and exact package binding verified",
+  "legacy_compiler": "exact production Kernel336 browser compiler builds compatible successor and 15 incumbent apps; reverse direction also passed",
+  "local_runtime_restored": true,
+  "production_neutron_installation_performed": false,
+  "dispenser_starter_changed": false,
+  "limitations": [
+    "One installation-scoped main EVM account; compatible upgrades preserve the address and uninstall/reinstall rotates it.",
+    "Ethereum, Arbitrum One and Sepolia initially; Uniswap direct V3 exact-input routes on Ethereum and Arbitrum.",
+    "ck-token deposits use Ethereum mainnet.",
+    "Ambiguous minter results without reliable reconciliation evidence remain unresolved.",
+    "Local fixtures do not emulate Arbitrum sequencer settlement or prove a funded production-network transfer."
+  ]
+}
