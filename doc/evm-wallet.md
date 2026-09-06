@@ -14,9 +14,13 @@ archive evidence belong in the release record, not in these general instructions
 ## Installation And Account Identity
 
 EVM Wallet requires a Kernel with `wallet_custody_signing` API 1 and
-installation-aware tool provenance. Apply a compatible Kernel successor and
-updates to already installed apps together through the ordinary checked
-**Upgrade all** transaction. First-time installation of an absent EVM Wallet
+installation-aware tool provenance. Consumer releases declaring `frontend_tools`
+also require a Kernel whose installer recognizes that capability. Kernel 343
+does not: update Kernel first and reload, then use **Upgrade all** for the app
+updates. Packages are published atomically together; this is an installation
+parser dependency, not a separate publication phase. Once the installed Kernel
+recognizes every selected capability, compatible app updates use the ordinary
+checked **Upgrade all** transaction. First-time installation of an absent EVM Wallet
 uses the setup flow after that support is available; **Upgrade all** updates
 installed apps and does not add absent ones. The compatible packages are
 published together, without separate production publication phases.
@@ -50,18 +54,29 @@ nonces and operation records always carry the explicit chain ID. UI selection
 never changes the chain of another app's saved request.
 
 Fund the selected network's address with ETH for gas. The Neutron also needs IC
-cycles for chain-key signing and EVM RPC calls. These are separate resources.
+cycles for chain-key signing and durable wallet updates. Browser RPC requests do
+not consume this Neutron's outcall cycles. These are separate resources.
 Token identity is the chain plus full contract address; symbols and manually
 configured display decimals are not proof of identity. Balances cover requested
 or selected tokens, history covers recorded wallet activity, and known approvals
 cover locally observed spenders. None is an exhaustive portfolio index.
 
-The backend uses the released EVM RPC canister interface through existing
-`backend_calls` reservations. Read requests use multiple providers and expose
-unavailable or inconsistent outcomes. Cycle attachment comes from the RPC cost
-methods, within the platform's existing declared bounds. No provider API key is
-embedded in the app. Optional indexers, credentialed RPC providers and enhanced
-simulation services can be added as app adapters later.
+All Ethereum JSON-RPC requests go directly from Wallet's browser client to one
+PublicNode endpoint for the selected chain. This includes balances, contract
+reads, Uniswap quotes, fees, simulation, submission and receipt checks. The
+client validates the endpoint's chain ID and uses CORS without browser-wallet
+extensions or embedded API keys. It does not use the EVM RPC canister, replicated
+HTTP outcalls, or a Kernel HTTP proxy. A single provider supplies observations;
+these are not multi-provider consensus or Ethereum light-client proofs.
+
+The backend retains account identity, immutable request intent, nonce
+reservations, review revisions, chain-key signatures and signed transaction
+bytes. Browser observations prepare a candidate, then gas estimation and
+simulation use that exact candidate before the backend marks it ready for
+review. A concurrent nonce change requires another simulation and approval.
+Signing saves the raw transaction and hash before the browser submits it once.
+An ambiguous submission is recovered by looking up that hash and, on an
+explicit status check, resubmitting only the retained bytes when absent.
 
 Gas preparation uses exact integer fields and live RPC evidence. Arbitrum gas
 estimation already accounts for posting costs; the app does not add that cost a
@@ -153,6 +168,7 @@ retain completed approvals and failed/pending later steps.
 | Account and network discovery | `evm_accounts_v1`, `evm_networks_v1` |
 | Native/requested ERC20 balances | `evm_balances_v1` |
 | Contract result and code at an observed block | `evm_read_contract_v1` |
+| Lightweight contract result at latest or an explicit block | `evm_call_contract_v1` |
 | Read-only transaction gas and fee observations | `evm_estimate_transaction_v1` |
 | Transaction review and execution | `evm_send_transaction_v1` |
 | Personal and typed-data signatures | `evm_sign_message_v1`, `evm_sign_typed_data_v1` |
@@ -165,12 +181,38 @@ The SDK validates closed request and response shapes and matching identities.
 The explicit-chain client is the integration interface used by these apps;
 a wallet-global EIP-1193 selected-chain adapter is not required.
 
-Human effects use `provider_once`: EVM Wallet's foreground tile owns the final
-review. Direct root Agent effects use the separate `*_root_v1` tools and the
-Kernel's attested root audience. Calling an ordinary app from Agent does not
-give that app or its nested calls root signing authority.
+Consumer apps declare exact cross-app tools in their install-reviewed manifest:
 
-For multi-app Agent flows, the consumer saves and returns the exact next intent;
+```json
+{
+  "capabilities": {
+    "frontend_tools": {
+      "api": 1,
+      "targets": [{
+        "app": "evm_wallet",
+        "tools": ["evm_accounts_v1", "evm_call_contract_v1", "evm_send_transaction_v1"]
+      }]
+    }
+  }
+}
+```
+
+These declarations remove repeated connection prompts. They do not replace
+provider confirmation or expose private or root-only tools. Uniswap and IC
+Wallet declare the exact tools their integrations use.
+
+Effects use `provider_once`. For ordinary users, EVM Wallet's foreground tile
+owns the final transaction review. During an authenticated Agent invocation,
+EVM Wallet prepares the exact same operation and asks the Kernel to send its
+review to the root Agent's permission reviewer. Execution starts only after that
+fresh decision. The operation remains owned by the calling app installation;
+that app receives neither the custody capability nor root audience. The Agent
+reviewer receives the owner's original request and later steering, so a retry
+retains the original swap context and later changes or cancellation still apply.
+Direct root effects remain available through the separate `*_root_v1` tools
+and the Kernel's attested root audience.
+
+Existing direct-root orchestration remains compatible: the consumer saves and returns the exact next intent;
 root calls EVM Wallet directly, then supplies chain evidence to the consumer.
 Consumers validate actual sender, destination, value, calldata and receipt
 against the saved intent. For root execution they also supply the saved
@@ -207,7 +249,9 @@ unresolved rather than generating a fresh withdrawal. See
 [IC Wallet](../apps/wallet/README.md).
 
 Uniswap compares direct V3 pools on Ethereum and Arbitrum, using QuoterV2 and
-SwapRouter02. It saves the quoted minimum output, recipient and deadline,
+SwapRouter02. Its install-reviewed tool declaration connects it to EVM Wallet
+automatically; quoting compares pools over browser RPC and shows
+the result while separate fee estimates finish. It saves the quoted minimum output, recipient and deadline,
 requests an exact ERC20 approval when needed, then requests the swap through
 EVM Wallet. Native ETH wrapping, output unwrapping and refunds are part of the
 router calldata. Numeric network-fee observations are refreshed separately from
@@ -216,6 +260,11 @@ Quoter's execution-gas number. Approval and swap are separate transactions.
 Ordinary ERC20 allowances have no permit nonce, signature domain or expiry;
 they last until spent or changed, independently of the swap deadline. V4, Permit2,
 multi-hop/split routing and liquidity provision are outside this initial route.
+`uniswap_swap_v1` drives a complete tool-requested swap through quote, approval,
+submission and receipt tracking. The caller retains one swap ID for retries;
+expired unsigned quotes refresh with the same inputs and existing allowance.
+Pending or uncertain submissions retain their original Wallet request IDs.
+Legacy root-owned intents still use `uniswap_next_action_v1`.
 See [Uniswap](../apps/uniswap/README.md).
 
 ## Verification And Release
@@ -235,7 +284,7 @@ require the exact-byte receipt-v2 no-op, following
 or change the Dispenser starter.
 
 
-The completed release is Kernel 342, IC Wallet 316, Kitchen Sink 315, EVM Wallet 107
+The initial completed release was Kernel 342, IC Wallet 316, Kitchen Sink 315, EVM Wallet 107
 and Uniswap 104. [Release qualification](../.neutron/release-receipts/evm-wallet-completion-2026-09-06/validation.md)
 records the state-preserving upgrades, version-bound local protocol runs and
 batch 52 publication with its exact-byte receipt-v2 no-op. All wallet transaction

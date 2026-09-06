@@ -125,6 +125,42 @@ test("browser permissions disclose exact canonical tile grants", () => {
   });
 });
 
+test("frontend tool permissions disclose only the exact canonical provider tools", () => {
+  const disclosure = configInstallDisclosures({
+    format: 3,
+    id: "swap_app",
+    name: "Swap App",
+    version: 100,
+    capabilities: {
+      frontend_tools: {
+        api: 1,
+        targets: [{
+          app: "evm_wallet",
+          tools: ["evm_wallet.sendTransaction", "evm_wallet.accounts"],
+        }],
+      },
+    },
+  });
+  const targets = [{
+    app: "evm_wallet",
+    tools: ["evm_wallet.accounts", "evm_wallet.sendTransaction"],
+  }];
+  const permissions = factsOfKind(disclosure.permissions, "frontend_tools");
+
+  expect(permissions).toEqual([{
+    source: "kernel",
+    kind: "frontend_tools",
+    targets,
+  }]);
+  expect(permissionLevel(permissions[0]!)).toBe(3);
+  expect(permissionKey(permissions[0]!)).toBe(
+    'frontend_tools:[["evm_wallet",["evm_wallet.accounts","evm_wallet.sendTransaction"]]]',
+  );
+  expect(disclosure.capabilityDisclosures.find(({ id }) => id === "frontend_tools")?.entry.config)
+    .toEqual({ api: 1, targets });
+  expect(disclosure.appExplanations).toEqual([]);
+});
+
 test("bounded deferred timers add no install permission", () => {
   const baseline: NeutronManifest = {
     format: 3,

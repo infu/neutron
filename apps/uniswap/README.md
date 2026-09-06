@@ -10,7 +10,7 @@ or independent transaction sender.
 
 The first release compares **direct, single-pool V3 routes** across the 0.01%,
 0.05%, 0.3%, and 1% fee tiers. It uses `QuoterV2.quoteExactInputSingle` through
-EVM Wallet's keyless `eth_call` RPC path and builds a deadline-protected
+EVM Wallet's direct browser-to-RPC `eth_call` path and builds a deadline-protected
 `SwapRouter02.multicall` containing `exactInputSingle`.
 
 | Chain | QuoterV2 | SwapRouter02 | Wrapped native token |
@@ -40,30 +40,49 @@ state and quote cannot be observed at the same block.
 ## Use
 
 1. Install EVM Wallet and Uniswap through the compatible Kernel update set.
-   Connect EVM Wallet in the Uniswap tile and select Ethereum or Arbitrum.
+   Open the Uniswap tile and select Ethereum or Arbitrum. Account, balance and
+   history reads start automatically using the exact Wallet tools declared in
+   installation consent. There is no separate Connect or Refresh permission
+   prompt. Tracking can reconcile or resend only already-approved signed bytes.
+   New transactions retain their separate exact Wallet confirmation.
 2. Fund the EVM address on that network, including ETH for gas. IC cycles used
-   by signing/RPC and EVM gas are separate balances.
-3. Select ETH, USDC, WETH, or read a custom token contract. Token identity is its
-   chain and full address; token-provided symbols are descriptive only.
-4. Enter the input amount, recipient, slippage and deadline, then request a
-   quote. Review the minimum output, fee tier, observation age, recipient and
-   allowance, and separate approval and swap network-fee estimates. These
-   read-only estimates use EVM Wallet's `evm_estimate_transaction_v1` with the
+   by signing/state updates and EVM gas are separate balances. Quote and balance
+   reads use direct browser RPC and do not spend IC outcall cycles.
+3. Select a preloaded token or search/add a custom token contract. The shared
+   catalog includes Ethereum counterparts of the supported ckERC20 assets;
+   [token addresses and artwork](../evm_wallet/TOKENS.md) remain network-specific.
+4. Enter the input amount. Quotes update automatically after a short typing
+   debounce and whenever tokens, network or other quote inputs change. Stale
+   responses cannot overwrite the current draft. The normal view shows amounts
+   and a fee summary; recipient, slippage, deadline and technical observations
+   are in collapsed settings/details. Separate approval and swap fee estimates
+   use EVM Wallet's read-only `evm_estimate_transaction_v1` with the
    exact sender, destination, value and calldata. The Quoter gas-unit estimate
    describes pool execution and is never substituted for a full network fee.
    Missing fees are shown as unavailable, with the provider's reason; a swap
    requiring approval may not simulate until that approval confirms. The total
    is unavailable until every required transaction has a complete estimate.
    EVM Wallet separately reviews live fees before each signature.
-5. Save and review the exact approval when needed, then wait for its successful
-   receipt before reviewing the swap. Approval and swap are separate EOA
+
+   Pool tiers are read concurrently. The quote appears as soon as its route
+   and allowance are ready, while separate fee estimates load with visible
+   progress and elapsed time. Contract calls use the Wallet's lightweight read
+   path without repeatedly downloading deployed bytecode. Price-impact reads
+   request the selected quote's exact block. Getting a quote does not repeat
+   unrelated balance reads.
+5. Click **Swap**. Confirm token approval in EVM Wallet if needed; Uniswap waits
+   for its successful receipt and opens the swap confirmation automatically.
+   It follows the submitted swap through confirmation and refreshes balances.
+   Approval and swap are separate EOA
    transactions and are not atomic. No approval is silently unlimited. Ordinary
    ERC20 allowance has no automatic expiry: it remains until spent or revoked;
    the swap deadline does not expire that approval.
-6. Use **Check wallet status** after a pending or lost reply. A reload retains
-   the saved intent and exact request IDs. An expired deadline requires a fresh
-   quote for a new swap; the earlier approval remains visible and can be managed
-   in EVM Wallet.
+6. Balances and history refresh while the app is visible and on focus.
+   A reload retains the saved intent and exact request IDs; pending requests are
+   reconciled before another dispatch. **Continue** resumes an interrupted
+   owner-started flow. Expired quotes offer a fresh draft that checks the existing
+   allowance and requires a new Swap action; old signed requests are never
+   silently replaced. Raw request and transaction details remain collapsed.
 
 Fee arithmetic uses exact integer wei throughout. Ethereum estimates use the
 observed base fee plus priority fee, with a separately displayed suggested
@@ -72,9 +91,8 @@ includes the L1 posting component in L2 gas units. The app uses that total once
 and never adds another posting charge. An incomplete RPC estimate is explicitly
 unavailable; a plain Anvil chain configured as `42161` only proves the arithmetic
 and request path, not Nitro posting costs or finality. Quote refresh obtains new
-fee observations. Before a saved swap is submitted, **Refresh network fees**
-estimates its remaining transactions without changing the frozen requests or
-signing anything. Original quote observations remain in the durable intent.
+fee observations. EVM Wallet prepares current fees before each transaction
+confirmation. Original quote observations remain in the durable intent.
 
 Native ETH input is sent as the transaction value; the router wraps it and
 refunds any remainder in the same multicall. Native output goes to the router,
@@ -138,17 +156,74 @@ exact-request binding remain unchanged.
 
 | Tool | Behavior |
 | --- | --- |
+| `uniswap_swap_v1` | Complete a provider-reviewed swap, including allowance, approval, safe quote renewal, swap and receipt; retry the same original inputs and `swapId` |
 | `uniswap_quote_v1` | Live direct-pool quote with read-only fee observations; native token is `null`; amounts are atomic decimal strings |
 | `uniswap_prepare_v1` | Validate the quote and save immutable approval/swap requests under the supplied 32-hex swap ID |
 | `uniswap_status_v1` | Read one saved intent and progress |
 | `uniswap_list_v1` | Read saved swaps |
 | `uniswap_list_page_v1` | Read a complete-record history page; start with null cursor and follow `nextCursor` until null |
 | `uniswap_record_result_v1` | Bind a supplied wallet result to the saved request, then independently verify public transaction fields and receipt |
+| `uniswap_next_action_v1` | Reconcile supplied root Wallet observations and return the next exact tool call for a saved Agent swap |
 
-The root Agent obtains a quote and prepared requests, calls EVM Wallet's
-`evm_send_transaction_root_v1` directly for the approval, reconciles that request
-until confirmed, records it, then calls the swap request directly. Uniswap never
-forwards a nested call as root or grants its consumer a signer.
+For a new tool-driven swap, call `uniswap_swap_v1` once with one 32-hex `swapId`,
+chain, input/output token addresses (`null` for ETH), and atomic input amount.
+Optional defaults are the main account, the Wallet's own receiving address,
+50 slippage basis points, and a 1200-second quote validity window. The tool
+quotes, checks allowance, obtains an exact Wallet approval when needed, waits
+for confirmation, and obtains the exact swap review before following its receipt.
+An approval receipt alone is never reported as a completed swap.
+
+Every effect uses the ordinary public EVM Wallet provider tool. A normal caller
+receives the Wallet modal; an active root Agent receives the same exact prepared
+transaction through its permission judge and retained owner instructions.
+Uniswap does not call a root-only signing tool on this path, impersonate the
+Agent, or receive a standing signing grant. Changed prepared transaction details
+return `review` and need a new call with the same original inputs and `swapId`.
+
+New tool flows add `executionMode: "provider"` and a versioned `providerFlow`
+record inside the existing immutable quote JSON. It binds the original caller
+installation, human/Agent mode, exact inputs, root flow ID and renewal attempt.
+The existing `uniswap` memory schema stays at v1. If an unsigned quote expires
+after approval resolves, the tool reads allowance again and creates a distinct
+immutable successor with a deterministic ID; it does not repeat an already
+sufficient approval. A retry finds that successor even when its creation reply
+was lost. Signed, submitted, signing, and unknown operations remain attached to
+their original request IDs. An expired dispatch with no visible Wallet result
+cannot justify a fresh intent. Both the legacy Agent records and new provider
+records remain visible in history, and the tile cannot resume their effects.
+
+Long calls yield `pending` before the Agent's existing transport deadline.
+Cancellation and lost replies preserve the flow ID and saved request IDs. Retry
+`uniswap_swap_v1` with the identical original arguments to reconcile and continue;
+never create another swap merely because tracking paused. There is no attempt
+limit or transaction expiry introduced by this tracking window. Every fresh
+Wallet review still checks the owner's current instructions.
+
+The earlier root-owned workflow remains available for installed 0.1.7 and older
+intents and approvals. The root Agent obtains a quote and prepared requests, then uses
+`uniswap_next_action_v1` to determine which saved Wallet request to check or
+execute. The Agent calls EVM Wallet's root tools directly and supplies their
+status results to the continuation tool. Hash-bearing results are verified
+through the existing public transaction and journal-binding checks before they
+count as progress. Uniswap never forwards a nested call as root or grants its
+consumer a signer.
+
+Agent tool invocations serialize their nested Wallet calls so independent pool,
+token-metadata and fee reads cannot compete for the same Kernel permission
+decision. The queue is scoped to that tool invocation and honors cancellation;
+the tile still performs independent reads concurrently. Install-declared tool
+access removes repeated read prompts while preserving exact provider review.
+Quote and continuation tools report progress and use the Agent's existing
+long-running-tool annotation.
+
+Continuation preserves ambiguous signed/submitted request IDs and asks for
+their status even after the quote deadline. It checks the swap before initiating
+another effect. Once the previous swap is known to be unsubmitted and the
+approval is resolved, an expired quote can be refreshed with the original
+amount, assets, recipient and slippage. The refreshed quote checks live
+allowance so a successful approval is reused; the Agent reviews the fresh quote
+against the owner's instructions before preparing a distinct intent. Quote
+expiry does not by itself require another owner prompt or another approval.
 
 Root-owned EVM Wallet commands are scoped to the Agent installation, so Uniswap
 does not impersonate that installation to query its journal. The root supplies a

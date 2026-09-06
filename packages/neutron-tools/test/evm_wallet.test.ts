@@ -113,6 +113,18 @@ function readResult(patch: Partial<EvmReadContractResult> = {}): EvmReadContract
   return { ...SCOPE, address: ADDRESS, to: TOKEN, data: "0xaabb", result: "0x1234", code: "0x6000", blockNumber: "100", observedAtNs: "1000000000", ...patch };
 }
 
+test("lightweight contract calls forward the exact requested block and reject mismatched observations", async () => {
+  const { code: _, ...result } = readResult();
+  const mock = transport(() => result);
+  const request = { ...SCOPE, to: TOKEN, data: "0xaabb", blockTag: "0x64" };
+  expect(await mock.client.callContract(request)).toEqual(result);
+  expect(mock.calls[0]?.call).toEqual({ target: EVM_WALLET_TARGET, name: EVM_WALLET_TOOLS.callContract, arguments: { ...request, blockTag: "100" } });
+  await expect(mock.client.callContract({ ...request, blockTag: "99" })).rejects.toThrow("block does not match");
+  expect(() => evm.parseEvmCallContractRequest({ ...request, blockTag: "pending" })).toThrow();
+  expect(() => evm.parseEvmCallContractResult(readResult(), request)).toThrow();
+  expect(() => evm.parseEvmCallContractResult({ ...result, data: "0xbb" }, request)).toThrow("does not match");
+});
+
 function estimateRequest(patch: Partial<EvmEstimateTransactionRequest> = {}): EvmEstimateTransactionRequest {
   return { ...SCOPE, to: TOKEN, valueWei: "7", data: "0xaabb", ...patch };
 }

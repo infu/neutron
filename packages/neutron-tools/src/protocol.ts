@@ -380,7 +380,10 @@ export type MsgBusToolContext = {
   caller?: MsgBusCallerContext;
   reportProgress: (value: JsonValue) => void;
   kernel: ScopedKernelClient;
-  /** @deprecated Compatibility for already-published provider_once apps. */
+  /** One-shot provider review, decided by the active root Agent or the owner.
+   * Agent providers use this callback before executing the reviewed operation.
+   * Human flows may instead present their own UI with presentUserInterface.
+   */
   requestApproval?: (review: JsonObject) => Promise<void>;
   presentUserInterface?: <T extends JsonValue = JsonValue>(
     request: ProviderPresentationRequest,

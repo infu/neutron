@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { validate, type Schema } from "jsonschema";
 import { generateAppMethodSchemaArtifact, validateAppMethodArgs } from "neutron-scripts/src/method_schema.js";
+import { encodeSelfCallValues, type SelfCallValue } from "neutron-tools/app";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, getAddress, parseAbi, type Hex } from "viem";
 import {
@@ -40,6 +41,7 @@ const methodSchemas = generateAppMethodSchemaArtifact(
 );
 
 function checkMethodInput(method: string, args: unknown[]) {
+  encodeSelfCallValues(args as SelfCallValue[]);
   expect(validateAppMethodArgs(methodSchemas, method, args as Parameters<typeof validateAppMethodArgs>[2])).toEqual({ valid: true, errors: [] });
 }
 function checkMethodOutput<T>(method: string, value: T): T {
@@ -215,6 +217,31 @@ test("the backend adapter sends typed journal identity without absent operation 
   expect(completed.approval_operation_json).toBe(JSON.stringify(observed));
   expect(completed.revision).toBe("2"); expect(approvalConfirmed(completed)).toBe(true);
   expect(calls).toHaveLength(2);
+});
+
+test("approval and swap receipts fit the real journal transport while preserving every output-token log", async () => {
+  let current = record(intent({ approval: true }));
+  const kernel = {
+    async querySelf() { return wireRecord(current); },
+    async updateSelf(method: string, args: unknown[]) {
+      checkMethodInput(method, args);
+      const input = args[0] as { stage: "approval" | "swap"; operation_json: string; phase: string };
+      current = { ...current, [`${input.stage}_operation_json`]: input.operation_json, phase: input.phase, revision: String(BigInt(current.revision) + 1n) };
+      const output = wireRecord(current);
+      encodeSelfCallValues(output as SelfCallValue);
+      return checkMethodOutput(method, output);
+    },
+  };
+  const store = createSwapStore(kernel as unknown as Parameters<typeof createSwapStore>[0]);
+  const approval = confirmed("approval", { logs: [transfer(USDC, ROUTER, 1_000_000n, 0)] });
+  current = await store.update(current, "approval", "approval_confirmed", approval);
+  const swap = confirmed("swap", { logs: [transfer(USDC, ROUTER, 1_000_000n, 0), transfer(WETH, RECIPIENT, 2_000_000n, 1)] });
+  current = await store.update(current, "swap", "swap_confirmed", swap);
+  expect(JSON.parse(current.approval_operation_json!).receipt.logs).toEqual(approval.receipt!.logs);
+  expect(JSON.parse(current.swap_operation_json!).receipt.logs).toEqual(swap.receipt!.logs);
+  expect(receivedTokenAtoms(current)).toBe("2000000");
+  expect(current.approval_request_id).toBe(APPROVAL_ID);
+  expect(current.swap_request_id).toBe(SWAP_ID);
 });
 
 test("list and get use generated method schemas and normalize omitted output options", async () => {
@@ -669,8 +696,10 @@ test("received output counts only output-token Transfer logs to the requested re
 });
 
 test("the wallet reader surfaces a different observation block instead of calculating a misleading price impact", async () => {
-  const wallet = { async readContract() { return { result: "0x1234", blockNumber: "100", observedAtNs: "1234567000000" }; } } as unknown as EvmWalletClient;
+  const requests: unknown[] = [];
+  const wallet = { async callContract(request: unknown) { requests.push(request); return { result: "0x1234", blockNumber: "100", observedAtNs: "1234567000000" }; } } as unknown as EvmWalletClient;
   const read = walletReader(wallet, "main");
   expect(await read("1", ROUTER, "0x", "0x64")).toEqual({ data: "0x1234", blockNumber: "100", observedAtMs: 1234567 });
+  expect(requests).toEqual([{ accountId: "main", chainId: "1", to: ROUTER, data: "0x", blockTag: "0x64" }]);
   await expect(read("1", ROUTER, "0x", "0x63")).rejects.toThrow("different blocks");
 });

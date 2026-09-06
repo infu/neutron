@@ -908,7 +908,15 @@ export function exposeTool(
     throw new Error("Tool handler must be a function");
   }
 
-  const descriptor = normalizeToolDescriptor({ name, ...options });
+  let descriptor: MsgBusToolDescriptor;
+  try {
+    descriptor = normalizeToolDescriptor({ name, ...options });
+  } catch (cause) {
+    // Residents can share the same service.js filename. Keep the validator's
+    // explanation and cause, but identify which registration failed at startup.
+    const message = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`${message} (tool ${JSON.stringify(name)})`, { cause });
+  }
   localTools.set(name, {
     descriptor,
     handler,

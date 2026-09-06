@@ -1,0 +1,71 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/evm_wallet/test/package.test.ts:
+(pass) separate EVM Wallet declares custody and browser observation methods without a canister RPC capability [25.00ms]
+(pass) browser preparation and recovery arguments round trip through the generated closed Candid schemas [960.00ms]
+(pass) actual generated schemas accept provider self-call arguments and reject wrong chains [154.00ms]
+(pass) real Candid self-call projection unwraps Results, keeps bytes and omits absent optionals [131.00ms]
+(pass) published 101 self-call inputs and closed outputs stay unchanged when review evidence is added [211.00ms]
+(pass) released estimate output and active replacement proof retain Candid optional-field compatibility [72.00ms]
+(pass) release 110 initializes cleanly and preserves published 101 and 107 roots with additive browser methods [1209.00ms]
+
+apps/evm_wallet/test/history.test.ts:
+(pass) the captured 25-row Candid history reproduces the real Kernel metadata failure [8.00ms]
+(pass) smaller history pages retain the offset and expose every saved operation exactly once [12.00ms]
+(pass) an unrelated history error propagates without retrying or skipping rows [1.00ms]
+(pass) valid aggregate Candid response limits also recover through smaller pages [656.00ms]
+(pass) a single oversized operation remains an explicit error at the same offset [2.00ms]
+
+apps/evm_wallet/test/provider.test.ts:
+(pass) preparation is visible while backend work waits and clears before exact review [11.00ms]
+(pass) fresh preparation stays visible until browser estimation and simulation finish [4.00ms]
+(pass) failed preparation clears its progress without opening an approval [1.00ms]
+(pass) exact typed JSON and explicit transaction fields reach backend unchanged [1.00ms]
+(pass) missing installation provenance and nested root callers fail before backend work
+(pass) public provider delegates privately without preparing or signing [1.00ms]
+(pass) own requests route to their exact tile without provider presentation or backend effects
+(pass) own route rejects missing provenance, non-tile endpoints and Agent invocation before dispatch [1.00ms]
+(pass) owner review only accepts the authenticated resident without Agent invocation
+(pass) own two-leg review preserves request identity, explicit approval and saved-result replay [6.00ms]
+(pass) decline durably rejects without executing [1.00ms]
+(pass) concurrent nonce allocation requires approving the changed review [2.00ms]
+(pass) lost response checks saved status and browser observations without automatically executing again [3.00ms]
+(pass) cancellation removes review and prevents a late click signing [2.00ms]
+(pass) changed recipient or explicit gas limits fail review matching [2.00ms]
+(pass) block quantities remain exact and missing balances stay unavailable [1.00ms]
+(pass) missing receipt remains pending and finality is not invented
+(pass) live request account checking needs no browser storage [1.00ms]
+(pass) a stale network token never falls back to a native transfer [2.00ms]
+(pass) replacement review requires the exact resolved transaction and preserves backend warnings [3.00ms]
+(pass) refreshing token observations uses the revised review without signing or changing the request [8.00ms]
+(pass) failed token refresh keeps the saved review available and never executes an effect [3.00ms]
+
+apps/evm_wallet/test/swap_presentation.test.ts:
+(pass) wallet shows exact native input and token minimum for the router's swap/refund flow [6.00ms]
+(pass) wallet shows ERC20 input and the actual native-output recipient after unwrap [2.00ms]
+(pass) unknown extra calls or a mismatched native payment never receive a misleading swap-only summary [10.00ms]
+
+apps/evm_wallet/test/browser_operations.test.ts:
+(pass) preparation performs individual direct RPC reads and persists the exact simulated candidate before approval [170.00ms]
+(pass) a lost broadcast reply retains the accepted hash without retrying or signing twice [388.00ms]
+(pass) an explicit reconciliation may rebroadcast only the retained bytes, without executing or signing again [410.00ms]
+(pass) canonical receipt reconciliation observes finality without another broadcast [441.00ms]
+(pass) busy-block recovery fits the real self-call metadata boundary and preserves the original receipt logs [361.00ms]
+(pass) a nonce changed during preparation is estimated and simulated again before review [224.00ms]
+(pass) a nonce changed at approval returns a freshly simulated review and requires another explicit execute [349.00ms]
+(pass) a changed intent for an existing preparing request fails before any RPC [81.00ms]
+(pass) a changed intent for an existing prepared request fails before any RPC [96.00ms]
+(pass) a saved signing signature without a transaction hash is never re-executed during reconciliation [84.00ms]
+(pass) a saved unknown signature without a transaction hash is never re-executed during reconciliation [80.00ms]
+(pass) checking an original request first reconciles its retained replacement after a lost replacement broadcast reply [202.00ms]
+(pass) a failed replacement lookup still allows the original request to reconcile its own mined receipt [168.00ms]
+
+packages/neutron-tools/test/evm_assets.test.ts:
+(pass) catalog separates native ETH, Ethereum ckERC20 counterparts, and Arbitrum assets
+(pass) catalog display overlay preserves installed custom metadata without writing or duplicating it [1.00ms]
+(pass) explicit hidden-asset preferences survive the display overlay [1.00ms]
+
+ 53 pass
+ 0 fail
+ 885 expect() calls
+Ran 53 tests across 6 files. [7.61s]

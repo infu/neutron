@@ -127,8 +127,6 @@ import {
   type WalletContactDestinationsPage,
 } from "./destinations.ts";
 import {
-  defaultSubaccountWord,
-  ethereumPrincipalWord,
   icrcDepositAddress,
   queryPublicNativeDeposit,
   type PublicNativeDeposit,
@@ -3384,12 +3382,7 @@ function WalletDeposit({
     route?.kind === "ckbtc" || route?.kind === "ckdoge"
       ? refreshBusy && !nativeAddress
       : publicNativeBusy;
-  const contractMethod =
-    route?.kind === "ckerc20"
-      ? "depositErc20"
-      : publicNative?.helperMode === "legacy"
-        ? "deposit"
-        : "depositEth";
+  const ethereumRoute = route?.kind === "cketh" || route?.kind === "ckerc20";
 
   return (
     <WalletFallbackViewContext.Provider
@@ -3414,18 +3407,22 @@ function WalletDeposit({
           />
         ) : null}
         <button
-          className="nt-button nt-button--secondary nt-button--sm wallet-deposit-refresh-button"
+          className="nt-icon-button wallet-deposit-refresh-button"
           disabled={refreshBusy}
           aria-label="Refresh deposits and balance"
+          title="Refresh deposits and balance"
           onClick={onRefresh}
           type="button"
         >
           {refreshBusy ? <span className="wallet-spinner" /> : <IoRefresh />}
-          <span>Refresh</span>
         </button>
       </header>
 
-      <div className="wallet-deposit-routes">
+      <div className={`wallet-deposit-routes${ethereumRoute ? " wallet-deposit-routes--ethereum" : ""}`}>
+        {ethereumRoute ? <>
+          <article className="wallet-deposit-route wallet-deposit-route--wrap"><EthereumDepositControl ledger={ledger} onRefresh={onRefresh} /></article>
+          <details className="wallet-deposit-route wallet-deposit-existing"><summary>Receive existing {ledger.symbol ?? "tokens"}<IoChevronForward aria-hidden="true" /></summary><div><p>Already have {ledger.symbol ?? "tokens"} on the Internet Computer? Send them to this account.</p><CopyValue label={`Copy ${ledger.symbol ?? "token"} ICRC account`} value={icAddress} /></div></details>
+        </> : <>
         <article className="wallet-deposit-route">
           <div className="wallet-deposit-route-heading">
             <IoGlobeOutline aria-hidden="true" />
@@ -3459,50 +3456,6 @@ function WalletDeposit({
                 <span className="wallet-spinner" />
               </div>
             ) : nativeAddress ? (
-              publicNative?.kind === "contract" ? (
-                <div className="wallet-deposit-contract">
-                  {publicNative.helperMode ? (
-                    <EthereumDepositControl
-                      deposit={publicNative}
-                      erc20={route.kind === "ckerc20"}
-                      ledger={ledger}
-                      onRefresh={onRefresh}
-                      owner={owner}
-                    />
-                  ) : null}
-                  <details
-                    className="wallet-contract-details"
-                  >
-                    <summary>
-                      <span>Contract details</span>
-                      <IoChevronForward aria-hidden="true" />
-                    </summary>
-                    <div className="wallet-contract-detail-body">
-                      <CopyDatum label="Deposit helper" value={nativeAddress} />
-                      {publicNative.tokenContract ? (
-                        <CopyDatum
-                          label="Token contract"
-                          value={publicNative.tokenContract}
-                        />
-                      ) : null}
-                      <CopyDatum
-                        label="Recipient"
-                        value={ethereumPrincipalWord(owner)}
-                      />
-                      {publicNative.helperMode === "subaccount" ? (
-                        <CopyDatum
-                          label="Subaccount"
-                          value={defaultSubaccountWord()}
-                        />
-                      ) : null}
-                      <p className="wallet-deposit-warning">
-                        Call <code>{contractMethod}</code> on this contract. A
-                        direct token transfer cannot be credited.
-                      </p>
-                    </div>
-                  </details>
-                </div>
-              ) : (
                 <>
                   <CopyValue
                     label={`Copy ${destinationLabels[route.originNetwork]} address`}
@@ -3517,7 +3470,6 @@ function WalletDeposit({
                     />
                   ) : null}
                 </>
-              )
             ) : (
               <div className="wallet-deposit-unavailable" role="status">
                 <IoAlertCircleOutline aria-hidden="true" />
@@ -3526,6 +3478,7 @@ function WalletDeposit({
             )}
           </article>
         ) : null}
+        </>}
       </div>
       </section>
     </WalletFallbackViewContext.Provider>
@@ -3785,13 +3738,10 @@ function formatDepositTime(value: string): string {
   }
 }
 
-function EthereumDepositControl({ ledger, onRefresh }: {
-  deposit: PublicNativeDeposit; erc20: boolean; ledger: WalletLedger;
-  onRefresh: () => void; owner: string;
-}) {
+function EthereumDepositControl({ ledger, onRefresh }: { ledger: WalletLedger; onRefresh: () => void }) {
   const { openInTile, surface } = useWalletSurface();
   const fallbackView = useContext(WalletFallbackViewContext);
-  return <WalletBridgeDeposit ledger={ledger.principal} symbol={ledger.symbol ?? "token"} decimals={ledger.decimals} onRefresh={onRefresh} tray={surface === "tray"} openInTile={() => openInTile(fallbackView)} />;
+  return <WalletBridgeDeposit ledger={ledger.principal} symbol={ledger.symbol ?? "token"} decimals={ledger.decimals} logo={ledger.logo} onRefresh={onRefresh} tray={surface === "tray"} openInTile={() => openInTile(fallbackView)} />;
 }
 
 function CopyValue({ label, value }: { label: string; value: string }) {
@@ -3821,15 +3771,6 @@ function CopyButton({ label, value }: { label: string; value: string }) {
     >
       {surface === "tray" ? <IoOpenOutline /> : <IoCopyOutline />}
     </IconButton>
-  );
-}
-
-function CopyDatum({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="wallet-copy-datum">
-      <span>{label}</span>
-      <CopyValue label={`Copy ${label.toLowerCase()}`} value={value} />
-    </div>
   );
 }
 

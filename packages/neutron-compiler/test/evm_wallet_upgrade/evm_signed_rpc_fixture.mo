@@ -4,7 +4,7 @@
 // uncertain outcome. It does not hold a signing key or fabricate a signature.
 import Array "mo:core/Array";
 import Text "mo:core/Text";
-import Rpc "../../../../apps/evm_wallet/backend/rpc/Types";
+import Rpc "./evm_rpc_fixture_types";
 import Json "../../../../apps/evm_wallet/backend/rpc/Json";
 
 persistent actor {

@@ -16,6 +16,7 @@ export const EVM_WALLET_TOOLS = {
   networks: "evm_networks_v1",
   balances: "evm_balances_v1",
   readContract: "evm_read_contract_v1",
+  callContract: "evm_call_contract_v1",
   estimateTransaction: "evm_estimate_transaction_v1",
   sendTransaction: "evm_send_transaction_v1",
   sendTransactionRoot: "evm_send_transaction_root_v1",
@@ -55,6 +56,8 @@ export type EvmSignMessageRequest = EvmEffectIdentity & { messageHex: string };
 export type EvmSignTypedDataRequest = EvmEffectIdentity & { typedDataJson: string };
 export type EvmBalancesRequest = EvmScope & { tokens: string[] };
 export type EvmReadContractRequest = EvmScope & { to: string; data: string };
+/** Read return bytes without downloading code; an explicit block pins dependent reads. */
+export type EvmCallContractRequest = EvmReadContractRequest & { blockTag?: string };
 /** A read-only estimate for this exact call; it grants no transaction authority. */
 export type EvmEstimateTransactionRequest = EvmScope & { to: string; valueWei: string; data: string };
 export type EvmOperationStatusRequest = EvmEffectIdentity;
@@ -97,6 +100,7 @@ export type EvmReadContractResult = EvmScope & {
   blockNumber: string;
   observedAtNs: string;
 };
+export type EvmCallContractResult = Omit<EvmReadContractResult, "code">;
 export type EvmEstimateTransactionResult = EvmEstimateTransactionRequest & {
   address: string;
   status: "available" | "unavailable";
@@ -169,6 +173,10 @@ export const evmAccountsInputSchema = evmEmptyInputSchema;
 export const evmNetworksInputSchema = evmEmptyInputSchema;
 export const evmBalancesInputSchema = closedSchema({ ...scopeProperties, tokens: array(ADDRESS) });
 export const evmReadContractInputSchema = closedSchema({ ...scopeProperties, to: ADDRESS, data: HEX });
+export const evmCallContractInputSchema = closedSchema({
+  ...scopeProperties, to: ADDRESS, data: HEX,
+  blockTag: { oneOf: [{ const: "latest" }, UINT, { type: "string", pattern: "^0x[0-9a-fA-F]+$" }] },
+}, ["blockTag"]);
 export const evmEstimateTransactionInputSchema = closedSchema({ ...scopeProperties, to: ADDRESS, valueWei: UINT, data: HEX });
 export const evmSendTransactionInputSchema = closedSchema({
   ...identityProperties, to: ADDRESS, valueWei: UINT, data: HEX,
@@ -200,6 +208,9 @@ export const evmBalancesOutputSchema = closedSchema({
 });
 export const evmReadContractOutputSchema = closedSchema({
   ...scopeProperties, address: ADDRESS, to: ADDRESS, data: HEX, result: HEX, code: HEX, blockNumber: UINT, observedAtNs: UINT,
+});
+export const evmCallContractOutputSchema = closedSchema({
+  ...scopeProperties, address: ADDRESS, to: ADDRESS, data: HEX, result: HEX, blockNumber: UINT, observedAtNs: UINT,
 });
 export const evmEstimateTransactionOutputSchema = closedSchema({
   ...scopeProperties, address: ADDRESS, to: ADDRESS, valueWei: UINT, data: HEX,
@@ -311,6 +322,12 @@ export function parseEvmReadContractRequest(value: unknown): EvmReadContractRequ
   scope(request); request.to = hex(request.to); request.data = hex(request.data);
   return request;
 }
+export function parseEvmCallContractRequest(value: unknown): EvmCallContractRequest {
+  const request = parseShape<EvmCallContractRequest>(value, evmCallContractInputSchema, "contract call request");
+  scope(request); request.to = hex(request.to); request.data = hex(request.data);
+  if (request.blockTag !== undefined && request.blockTag !== "latest") request.blockTag = BigInt(request.blockTag).toString();
+  return request;
+}
 export function parseEvmEstimateTransactionRequest(value: unknown): EvmEstimateTransactionRequest {
   const request = parseShape<EvmEstimateTransactionRequest>(value, evmEstimateTransactionInputSchema, "transaction estimate request");
   scope(request); uint256(request.valueWei, "estimated transaction value");
@@ -413,6 +430,16 @@ export function parseEvmReadContractResult(value: unknown, expected?: EvmReadCon
   if (expected) {
     const request = parseEvmReadContractRequest(expected); assertSameScope(request, result);
     if (request.to !== result.to || request.data !== result.data) invalid("contract read response does not match the request");
+  }
+  return result;
+}
+export function parseEvmCallContractResult(value: unknown, expected?: EvmCallContractRequest): EvmCallContractResult {
+  const result = parseShape<EvmCallContractResult>(value, evmCallContractOutputSchema, "contract call result");
+  scope(result); result.address = hex(result.address); result.to = hex(result.to); result.data = hex(result.data); result.result = hex(result.result);
+  if (expected) {
+    const request = parseEvmCallContractRequest(expected); assertSameScope(request, result);
+    if (request.to !== result.to || request.data !== result.data) invalid("contract call response does not match the request");
+    if (request.blockTag !== undefined && request.blockTag !== "latest" && request.blockTag !== result.blockNumber) invalid("contract call response block does not match the request");
   }
   return result;
 }
@@ -554,6 +581,10 @@ export class EvmWalletClient {
   async readContract(value: EvmReadContractRequest, options?: EvmWalletCallOptions): Promise<EvmReadContractResult> {
     const request = parseEvmReadContractRequest(value);
     return parseEvmReadContractResult(await this.invoke(EVM_WALLET_TOOLS.readContract, request, options), request);
+  }
+  async callContract(value: EvmCallContractRequest, options?: EvmWalletCallOptions): Promise<EvmCallContractResult> {
+    const request = parseEvmCallContractRequest(value);
+    return parseEvmCallContractResult(await this.invoke(EVM_WALLET_TOOLS.callContract, request, options), request);
   }
   async estimateTransaction(value: EvmEstimateTransactionRequest, options?: EvmWalletCallOptions): Promise<EvmEstimateTransactionResult> {
     const request = parseEvmEstimateTransactionRequest(value);

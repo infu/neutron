@@ -1,9 +1,10 @@
 import { querySelf, updateSelf, type JsonValue } from "neutron-tools/app";
 import { createEvmRequestId, parseEvmOperationResult, parseEvmReplacementTransactionResult, parseEvmSendTransactionRequest, parseEvmTransactionResult, type EvmAccount, type EvmAccountId, type EvmOperationResult, type EvmReplacementTransactionResult, type EvmSendTransactionRequest, type EvmTransactionResult, type EvmWalletClient, type EvmWalletCaller } from "neutron-tools/evm_wallet";
 import { decodeEventLog, getAddress, parseAbi, type Hex } from "viem";
-import { prepareSwap, quoteSwap, swapTransaction, type PreparedSwap, type QuoteInput, type Reader, type Transaction } from "./swap.ts";
+import { prepareSwap, quoteSwap, swapTransaction, type PreparedSwap, type QuoteInput, type QuoteProgress, type Reader, type Transaction } from "./swap.ts";
+import type { ProviderFlow } from "./provider_flow.ts";
 
-export type SavedIntent = PreparedSwap & { account: EvmAccount; executionMode: "human" | "agent"; walletCaller: EvmWalletCaller | null };
+export type SavedIntent = PreparedSwap & { account: EvmAccount; executionMode: "human" | "agent" | "provider"; walletCaller: EvmWalletCaller | null; providerFlow?: ProviderFlow };
 export type SwapRecord = {
   id: string; account_id: string; chain_id: string; recipient: string; quote_json: string;
   approval_request_id: string | null; approval_request_json: string | null;
@@ -105,16 +106,18 @@ export function createSwapStore(kernel: SelfKernel = { querySelf, updateSelf }):
 }
 export function walletReader(wallet: EvmWalletClient, accountId: EvmAccountId): Reader {
   return async (chainId, to, data, blockTag) => {
-    const response = await wallet.readContract({ accountId, chainId, to, data });
+    const response = await wallet.callContract({ accountId, chainId, to, data, ...(blockTag ? { blockTag } : {}) });
     if (blockTag && BigInt(blockTag).toString() !== response.blockNumber) throw new Error("Pool state and quote were observed in different blocks; price impact is unavailable.");
     return { data: response.result as Hex, blockNumber: response.blockNumber, observedAtMs: Number(BigInt(response.observedAtNs) / 1_000_000n) };
   };
 }
-export async function createIntent(wallet: EvmWalletClient, input: QuoteInput): Promise<SavedIntent> {
+export async function createIntent(wallet: EvmWalletClient, input: QuoteInput, onProgress?: QuoteProgress): Promise<SavedIntent> {
+  onProgress?.("Checking EVM Wallet account…");
   const account = (await wallet.accounts()).accounts.find((entry) => entry.accountId === input.accountId);
   if (!account || account.address.toLowerCase() !== input.accountAddress.toLowerCase()) throw new Error("The selected EVM Wallet account changed. Reconnect and quote again.");
   const read = walletReader(wallet, account.accountId);
-  const quote = await quoteSwap(read, input);
+  const quote = await quoteSwap(read, input, Date.now(), onProgress);
+  if (quote.tokenIn.address !== null) onProgress?.("Reading token allowance…");
   return { ...await prepareSwap(read, quote), account, executionMode: "human", walletCaller: null };
 }
 export function savedIntent(record: SwapRecord): SavedIntent {
@@ -133,7 +136,7 @@ export function validateOperation(record: SwapRecord, stage: "approval" | "swap"
   if (operation.requestId !== requestId || operation.accountId !== record.account_id || operation.chainId !== record.chain_id || operation.address.toLowerCase() !== intent.account.address.toLowerCase() || operation.kind !== "transaction") throw new Error("Wallet operation does not match the saved swap request.");
   return operation;
 }
-function stageRequest(record: SwapRecord, stage: "approval" | "swap"): EvmSendTransactionRequest {
+export function stageRequest(record: SwapRecord, stage: "approval" | "swap"): EvmSendTransactionRequest {
   const intent = savedIntent(record);
   const json = stage === "approval" ? record.approval_request_json : record.swap_request_json;
   if (!json) throw new Error("This swap has no approval step.");
@@ -213,8 +216,14 @@ export async function reconcileStep(wallet: EvmWalletClient, store: Store, recor
   return store.update(record, stage, `${stage}_${operationView(record, stage, operation).status}`, operation);
 }
 export async function executeStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap"): Promise<SwapRecord> {
+  return executeOwnedStep(wallet, store, record, stage, "human");
+}
+export async function executeProviderStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap"): Promise<SwapRecord> {
+  return executeOwnedStep(wallet, store, record, stage, "provider");
+}
+async function executeOwnedStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap", mode: "human" | "provider"): Promise<SwapRecord> {
   const intent = savedIntent(record);
-  if (intent.executionMode !== "human") throw new Error("This swap belongs to an Agent workflow. The root agent must call EVM Wallet directly.");
+  if (intent.executionMode !== mode) throw new Error(mode === "human" && intent.executionMode === "agent" ? "This swap belongs to an Agent workflow. The root agent must call EVM Wallet directly." : "This swap belongs to a different workflow; continue its original saved requests.");
   await checkAccount(wallet, intent);
   record = await reconcileStep(wallet, store, record, stage);
   const recorded = stage === "approval" ? record.approval_operation_json : record.swap_operation_json;

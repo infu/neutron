@@ -26,6 +26,7 @@ import {
   BROWSER_PERMISSION_FEATURE_DISCLOSURES,
   BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
   DEDICATED_RESIDENT_ORIGIN_DISCLOSURE,
+  FRONTEND_TOOLS_DISCLOSURE,
   WALLET_CUSTODY_SIGNING_DISCLOSURE,
   WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
   browserPermissionFeaturesTitle,
@@ -1853,6 +1854,21 @@ export function PermissionDisclosure({
               </li>
             ))}
           </ul>
+        </PermissionFrame>
+      );
+    case "frontend_tools":
+      return (
+        <PermissionFrame kind={permission.kind} level={level}>
+          <h4 className="permission-group-title">Connected app tools</h4>
+          <p className="permission-copy">{FRONTEND_TOOLS_DISCLOSURE}</p>
+          {permission.targets.map(({ app, tools }) => (
+            <div key={app}>
+              <div className="permission-fact-label">Target app: <code>{app}</code></div>
+              <div className="permission-code-list">
+                {tools.map((tool) => <code key={tool}>{tool}</code>)}
+              </div>
+            </div>
+          ))}
         </PermissionFrame>
       );
     case "app_dependency":

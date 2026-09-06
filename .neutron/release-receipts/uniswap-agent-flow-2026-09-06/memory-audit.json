@@ -1,0 +1,40 @@
+{
+  "baselineCommit": "8e1fe6c",
+  "baselineVersion": 106,
+  "targetVersion": 107,
+  "memory": {
+    "uniswap": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/uniswap/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  },
+  "files": [
+    {
+      "path": "apps/uniswap/backend/Journal.mo",
+      "sha256": "7e6ede16b60a12431a1a07c83705a70c29683e5e4a12a749354610288bc350e1",
+      "identicalToReleased106": true
+    },
+    {
+      "path": "apps/uniswap/backend/main.mo",
+      "sha256": "756ee9984afb5028c29545c4c99803d0a62066b857317f9b9a27888d533a8e02",
+      "identicalToReleased106": true
+    },
+    {
+      "path": "apps/uniswap/backend/memory/uniswap/v1.mo",
+      "sha256": "87783d919c6f6922c548ecd0b657ec3501b568d7a89b1825e77171477a3c7832",
+      "identicalToReleased106": true
+    },
+    {
+      "path": "apps/uniswap/neutron.lock.json",
+      "sha256": "9d7a2d6749c7d273b92ed565cb943a306f9ed15d5f0c63401cef547641f9ae41",
+      "identicalToReleased106": true
+    }
+  ],
+  "memoryTest": "passed",
+  "migrationRequired": false
+}

@@ -15,7 +15,12 @@
     "types/**/*.d.ts",
     "src/swap.ts",
     "src/fees.ts",
-    "src/controller.ts"
+    "src/controller.ts",
+    "src/read_connection.ts",
+    "src/workflow.ts",
+    "src/agent_wallet.ts",
+    "src/agent_workflow.ts",
+    "src/provider_flow.ts"
   ],
   "exclude": [
     "test/fixtures/**"

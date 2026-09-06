@@ -1,6 +1,12 @@
 import type { Schema } from "jsonschema";
 import { Principal } from "@dfinity/principal";
 import { compareCanonicalText } from "../canonical.ts";
+import {
+  APP_ID_MAX_LENGTH,
+  APP_ID_MIN_LENGTH,
+  APP_ID_SCHEMA_PATTERN,
+  isValidAppId,
+} from "../app_ids.ts";
 import { CANISTER_METHOD_MAX_LENGTH } from "../physical_names.ts";
 import {
   isValidTileId,
@@ -138,7 +144,8 @@ export const BACKEND_CALLS_MAX_INSTALL_RESERVATIONS_GLOBAL = 2_048;
 const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_]{1,31}$/;
 const SCOPE_PATTERN = /^[a-zA-Z0-9._:/-]+$/;
 const METHOD_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]{0,127}$/;
-const AGENT_ENTRYPOINT_PATTERN = /^[a-zA-Z0-9_.-]{1,128}$/;
+// The same exact frontend tool-name grammar enforced by protocol.assertToolName.
+const FRONTEND_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_.-]{1,128}$/;
 const TASK_ID_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
 const HTTPS_OUTCALL_ENDPOINT_ID_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
 const HTTPS_OUTCALL_HEADER_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -248,6 +255,7 @@ export const DECLARED_CAPABILITY_IDS = [
   "vetkeys",
   "scheduled_tasks",
   "preapproved_self_calls",
+  "frontend_tools",
   "agent_entrypoints",
   "background_ui_requests",
   "ethereum_provider",
@@ -552,6 +560,19 @@ export const CAPABILITY_CATALOG = Object.freeze({
     quota: "At most 32 exact owner-authorized query or update methods.",
     audit:
       "Metadata-only bounded call and rejection totals; arguments, results, and progress are not retained.",
+  }),
+  frontend_tools: declared("frontend_tools", {
+    delivery: ["frontend_endpoint"],
+    title: "App tool access",
+    summary:
+      "Call exact tools in the declared apps without another connection prompt. Providers retain their own authorization checks.",
+    grant: "declaration",
+    escalation: "owner_approval",
+    disable: "broker_enforced",
+    revocation: "live_recheck",
+    quota: "Existing manifest and message-bus transport bounds apply.",
+    audit:
+      "Exact target apps and tools are included in the reviewed installation plan.",
   }),
   agent_entrypoints: declared("agent_entrypoints", {
     delivery: ["compiler_registration"],
@@ -1039,6 +1060,14 @@ export type NeutronPreapprovedSelfCallsCapabilityConfig =
   NeutronPreapprovedSelfCallsCapabilityV1;
 export type NormalizedNeutronPreapprovedSelfCallsCapabilityConfig =
   NeutronPreapprovedSelfCallsCapabilityV1;
+export type NeutronFrontendToolTargetConfig = {
+  app: string;
+  tools: string[];
+};
+export type NeutronFrontendToolsCapabilityConfig = {
+  api: 1;
+  targets: NeutronFrontendToolTargetConfig[];
+};
 export type NeutronAgentEntrypointsCapabilityConfig = {
   api: 1;
   entrypoints: string[];
@@ -1394,6 +1423,7 @@ export type NeutronCapabilitiesConfig = {
   vetkeys?: NeutronVetKeysCapabilityConfig;
   scheduled_tasks?: NeutronScheduledTasksCapabilityConfig;
   preapproved_self_calls?: NeutronPreapprovedSelfCallsCapabilityConfig;
+  frontend_tools?: NeutronFrontendToolsCapabilityConfig;
   agent_entrypoints?: NeutronAgentEntrypointsCapabilityConfig;
   background_ui_requests?: NeutronBackgroundUiRequestsCapabilityConfig;
   ethereum_provider?: NeutronEthereumProviderCapabilityConfig;
@@ -2141,6 +2171,50 @@ function normalizeCapabilityDeclarationFields(
     };
   }
 
+  const frontendTools = declaration.frontend_tools;
+  if (frontendTools !== undefined) {
+    assertClosed(frontendTools, "frontend_tools capability", ["api", "targets"]);
+    assertApi(frontendTools, "frontend_tools");
+    if (
+      !Array.isArray(frontendTools.targets) ||
+      frontendTools.targets.length === 0
+    ) {
+      throw new Error("Invalid frontend_tools targets");
+    }
+    const apps = new Set<string>();
+    const targets = frontendTools.targets.map((target) => {
+      assertClosed(target, "frontend_tools target", ["app", "tools"]);
+      if (!isValidAppId(target.app)) {
+        throw new Error("Invalid frontend_tools target app");
+      }
+      if (apps.has(target.app)) {
+        throw new Error(`Duplicate frontend_tools target app ${target.app}`);
+      }
+      apps.add(target.app);
+      if (!Array.isArray(target.tools) || target.tools.length === 0) {
+        throw new Error("Invalid frontend_tools target tools");
+      }
+      const tools = new Set<string>();
+      for (const tool of target.tools) {
+        if (
+          typeof tool !== "string" ||
+          tool.length < 1 ||
+          tool.length > 128 ||
+          !FRONTEND_TOOL_NAME_PATTERN.test(tool)
+        ) {
+          throw new Error("Invalid frontend_tools target tool");
+        }
+        if (tools.has(tool)) {
+          throw new Error(`Duplicate frontend_tools target tool ${tool}`);
+        }
+        tools.add(tool);
+      }
+      return { app: target.app, tools: [...tools].sort(compareCanonicalText) };
+    });
+    targets.sort((left, right) => compareCanonicalText(left.app, right.app));
+    normalized.frontend_tools = { api: 1, targets };
+  }
+
   const agentEntrypoints = declaration.agent_entrypoints;
   if (agentEntrypoints !== undefined) {
     assertClosed(agentEntrypoints, "agent_entrypoints capability", [
@@ -2157,7 +2231,7 @@ function normalizeCapabilityDeclarationFields(
         "agent entrypoint",
         1,
         4,
-        (entrypoint) => AGENT_ENTRYPOINT_PATTERN.test(entrypoint),
+        (entrypoint) => FRONTEND_TOOL_NAME_PATTERN.test(entrypoint),
       ),
     };
   }
@@ -3383,6 +3457,43 @@ function createCapabilityDeclarationFieldsSchema(
           },
         },
         required: ["api", "methods"],
+        additionalProperties: false,
+      },
+      frontend_tools: {
+        type: "object",
+        properties: {
+          api,
+          targets: {
+            type: "array",
+            minItems: 1,
+            uniqueItems: true,
+            items: {
+              type: "object",
+              properties: {
+                app: {
+                  type: "string",
+                  minLength: APP_ID_MIN_LENGTH,
+                  maxLength: APP_ID_MAX_LENGTH,
+                  pattern: APP_ID_SCHEMA_PATTERN,
+                },
+                tools: {
+                  type: "array",
+                  minItems: 1,
+                  uniqueItems: true,
+                  items: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 128,
+                    pattern: "^[a-zA-Z0-9_.-]+$",
+                  },
+                },
+              },
+              required: ["app", "tools"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["api", "targets"],
         additionalProperties: false,
       },
       agent_entrypoints: {

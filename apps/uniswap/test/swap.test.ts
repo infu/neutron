@@ -149,50 +149,34 @@ test("quotes choose the greatest output, break ties by fee, and retain failed-po
   expect(calls.find((call) => call.to === POOL)?.blockTag).toBe(factory.blockTag);
 });
 
-test.each(["session", "once"] as const)("quote reads wait for owner attention with %s permission", async (permission) => {
+test("independent fee tiers share one read round and retain each failure", async () => {
   const fixture = reader({ outputs: { 100: new Error("No liquidity in 100-fee pool"), 500: 2_000n, 3000: 1_500n, 10000: 1_000n } });
-  let granted = false;
-  let attentionPending = false;
-  let prompts = 0;
-  let collisions = 0;
-  let activeReads = 0;
-  let maximumActiveReads = 0;
+  let release!: () => void;
+  const providerRound = new Promise<void>((resolve) => { release = resolve; });
+  const started: number[] = [];
+  const progress: string[] = [];
   const read: Reader = async (...args) => {
-    activeReads += 1;
-    maximumActiveReads = Math.max(maximumActiveReads, activeReads);
-    try {
-      if (permission === "once" || !granted) {
-        // Match Kernel owner attention: another prompt is rejected while one
-        // is unresolved. A tool failure does not undo a granted session.
-        if (attentionPending) {
-          collisions += 1;
-          throw Object.assign(new Error("UI_BUSY: owner attention is already in use"), { code: "UI_BUSY" });
-        }
-        attentionPending = true;
-        try {
-          prompts += 1;
-          await Promise.resolve();
-          granted = permission === "session";
-        } finally {
-          attentionPending = false;
-        }
-      }
-      return await fixture.read(...args);
-    } finally {
-      activeReads -= 1;
+    if (args[1] === QUOTER) {
+      started.push(decodeFunctionData({ abi: quoteAbi, data: args[2] }).args[0].fee);
+      await providerRound;
     }
+    return fixture.read(...args);
   };
-
-  const quote = await quoteSwap(read, input(), NOW);
+  const pending = quoteSwap(read, input(), NOW, (message) => progress.push(message));
+  await Promise.resolve();
+  // This barrier fails the former serialized implementation without relying on
+  // timing thresholds: all four requests must start before any one completes.
+  expect(started).toEqual([100, 500, 3000, 10000]);
+  expect(progress).toEqual(["Comparing pools · 0/4"]);
+  release();
+  const quote = await pending;
   expect(quote).toMatchObject({ fee: 500, amountOut: "2000", minimumOut: "1990", pool: POOL });
   expect(quote.routeWarnings).toEqual(["0.01% pool unavailable: Error: No liquidity in 100-fee pool"]);
-  expect(fixture.calls.filter((call) => call.to === QUOTER).map((call) => decodeFunctionData({ abi: quoteAbi, data: call.data }).args[0].fee)).toEqual([100, 500, 3000, 10000]);
   expect(fixture.calls).toHaveLength(6);
-  expect(prompts).toBe(permission === "session" ? 1 : 6);
-  expect(collisions).toBe(0);
-  expect(maximumActiveReads).toBe(1);
-  expect(activeReads).toBe(0);
-  expect(attentionPending).toBe(false);
+  expect(progress).toEqual([
+    "Comparing pools · 0/4", "Comparing pools · 1/4", "Comparing pools · 2/4",
+    "Comparing pools · 3/4", "Comparing pools · 4/4", "Reading pool price impact…",
+  ]);
 });
 
 test("price impact uses token ordering and the pool fee in integer arithmetic", async () => {
@@ -251,7 +235,7 @@ test("a failed allowance read cannot be treated as zero or enough allowance", as
 
 test("only own supported network IDs and their matching token addresses are accepted", () => {
   for (const chainId of ["10", "01", "0x1", "toString", "constructor", "__proto__"]) expect(() => network(chainId)).toThrow("Select Ethereum or Arbitrum");
-  expect(defaultTokens("42161").map((token) => token.address)).toEqual([null, DEPLOYMENTS["42161"].usdc, DEPLOYMENTS["42161"].wrapped]);
+  expect(defaultTokens("42161").slice(0, 3).map((token) => token.address)).toEqual([null, DEPLOYMENTS["42161"].usdc, DEPLOYMENTS["42161"].wrapped]);
   expect(() => validateInput({ ...input(), tokenOut: { ...input().tokenOut, chainId: "42161" } }, NOW)).toThrow("selected network");
   expect(() => validateInput({ ...input(), tokenOut: { ...input().tokenOut, address: DEPLOYMENTS["1"].wrapped } }, NOW)).toThrow("ETH/WETH wrapping");
 });

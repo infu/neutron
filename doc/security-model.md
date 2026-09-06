@@ -365,8 +365,8 @@ materialized-sidecar statistics.
 An exact endpoint tool may declare the closed
 `{"neutron:consent":"provider_once"}` annotation. This is a narrow generic
 exception to the ordinary pre-dispatch cross-app grant: the target provider
-must own the specialized UI and inspect authoritative state before a meaningful
-decision exists.
+must inspect authoritative state before the owner or active root Agent can make
+a meaningful decision.
 
 On the current provider-UI lane, Kernel validates the original tool input and
 binds a one-use capability to the originating validated public tool handler,
@@ -417,19 +417,28 @@ source review inform the owner's trust choice, while runtime AppScope, source
 binding, backend reservations, bounded routing, durable command identity, and
 reconciliation still constrain execution.
 
-Agent automation is a separate exact tool, not an automatic answer to the human
-UI callback. The descriptor must combine `same_app` visibility with the
-`agent_root` audience. Kernel hides and rejects it for ordinary app calls and
+During an active Agent invocation, a public `provider_once` tool receives
+`requestApproval(review)` instead of the human presentation callback. Initial
+routing skips the preliminary generic tool-access decision. The provider must
+submit a bounded exact operation review and await approval before execution.
+Kernel passes the complete opaque review to the active root Agent's permission
+judge as a fresh high-risk decision with no persistence, bound to the exact
+provider invocation, original caller, and provider endpoint. A standing tool
+grant cannot satisfy it. The callback retains the one-use, liveness, authority,
+and cancellation checks; `agentMode` alone is not execution approval. Kernel
+adds no app-specific interpretation of the review.
+
+A separate tool combining `same_app` visibility with the `agent_root` audience
+remains compatible. Kernel hides and rejects it for ordinary app calls and
 delegated descendants, admits only the active depth-zero root, and injects the
 attested audience. The provider verifies it and may use its own preapproved
-authority without provider or Kernel UI. An Agent invocation of the public
-tool which attempts `presentUserInterface` fails closed.
+authority without provider or Kernel UI. An Agent invocation which attempts
+`presentUserInterface` still fails closed.
 
-The deprecated `requestApproval(review)` callback remains a generic
-compatibility surface. Published providers including Wallet 0.3.6 depend on
-its bounded raw-JSON Kernel review, but current provider code must use
-provider-owned UI. Both callbacks share one use, preventing stacked consent
-flows.
+Outside Agent Mode, `requestApproval(review)` retains the bounded raw-JSON
+Kernel owner review used by published providers including Wallet 0.3.6.
+Current human flows use provider-owned UI. Both callbacks share one use,
+preventing stacked consent flows.
 
 Wallet uses the path without adding token logic to Kernel. Inside its private
 tile after presentation routing, it uses exact preapproved methods to prepare
@@ -481,11 +490,14 @@ During Agent Mode, eligible external signed calls follow the nested-agent
 policy, while interactive same-Neutron self calls are rejected.
 
 Provider-owned presentation is the human path and is rejected inside an Agent
-invocation. A provider's separate `same_app` + `agent_root` tool is admitted
-only for the active depth-zero root, receives Kernel-attested audience and
-caller context, and opens no UI. A descendant is rejected before target
-dispatch. The provider uses its invocation-scoped client for the exact
-preapproved self update, and that authority ends with the invocation. Each root
+invocation. Public `provider_once` tools can instead submit their exact operation
+review to the active root Agent through the one-shot `requestApproval(review)`
+callback. Approval is fresh and authorizes only that invocation. A provider's
+separate `same_app` + `agent_root` tool remains restricted to the active
+depth-zero root, receives Kernel-attested audience and caller context, and opens
+no UI. A descendant is rejected before dispatch to that restricted tool. The
+provider uses its invocation-scoped client for the exact preapproved self
+update, and that authority ends with the invocation. Each root
 still begins through a live tile in the enabled Agent installation and the exact
 granted entrypoint without a per-turn browser-focus or transient-activation
 gate; the resident cannot originate a root by itself.
@@ -613,7 +625,8 @@ Changes must preserve all of the following:
   messages;
 - one-use provider presentation bound to exact source, target, tool, sessions,
   versions, and cancellation, with no session-grant bypass or provider-domain
-  interpretation by Kernel; plus a separate exact direct-root audience tool;
+  interpretation by Kernel; Agent providers submit an exact one-shot review to
+  the active root, while separate direct-root tools retain their exact audience;
 - random publication salt, never-reused generations, and positive semantic
   tombstones before destructive remote cleanup; and
 - bounded previous-generation vetKey rotation safety.

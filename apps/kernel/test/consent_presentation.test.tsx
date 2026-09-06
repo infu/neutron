@@ -12,7 +12,12 @@ import { compactPermissionConsequences } from "../src/consent/compact_permission
 import { CapabilityChangeSummary } from "../src/consent/CapabilityChangeSummary.tsx";
 import { buildCapabilityPlan } from "neutron-tools/src/capabilities/plan.js";
 import { diffCapabilityPlans } from "neutron-tools/src/capabilities/wire.js";
-import type { Permission } from "../src/lib/perm.ts";
+import type { NeutronManifest } from "neutron-tools/src/schema.js";
+import {
+  FRONTEND_TOOLS_DISCLOSURE,
+  configPermissions,
+  type Permission,
+} from "../src/lib/perm.ts";
 import { IDL } from "@dfinity/candid";
 import { verifiedCallMode } from "../src/trusted_call_mode.ts";
 
@@ -95,6 +100,57 @@ test("browser-device consequences disclose requestable access without claiming u
   />);
   expect(developerHtml).toContain("Allow tile `call` to request access to cameras");
   expect(developerHtml).toContain("browser&#x27;s device indicator remains authoritative");
+});
+
+test("frontend tool consent preserves provider confirmation and the exact approved inventory", () => {
+  for (const mode of ["normal", "developer"] as const) {
+    const html = renderToStaticMarkup(
+      <PermissionConsequences
+        mode={mode}
+        permissions={[representativePermissions.frontend_tools]}
+      />,
+    );
+    expect(html).toContain(renderToStaticMarkup(<>{FRONTEND_TOOLS_DISCLOSURE}</>));
+    expect(html).toContain("evm_wallet");
+    expect(html).toContain("evm_wallet.accounts");
+    expect(html).toContain("evm_wallet.sendTransaction");
+  }
+});
+
+test("adding a frontend tool is spotlighted during an app upgrade", () => {
+  const previousManifest: NeutronManifest = {
+    format: 3,
+    id: "swap_app",
+    name: "Swap App",
+    version: 100,
+    capabilities: {
+      frontend_tools: {
+        api: 1,
+        targets: [{ app: "evm_wallet", tools: ["evm_wallet.accounts"] }],
+      },
+    },
+  };
+  const targetManifest: NeutronManifest = {
+    ...previousManifest,
+    version: 101,
+    capabilities: {
+      frontend_tools: {
+        api: 1,
+        targets: [{
+          app: "evm_wallet",
+          tools: ["evm_wallet.accounts", "evm_wallet.sendTransaction"],
+        }],
+      },
+    },
+  };
+  const previous = buildCapabilityPlan(previousManifest);
+  const target = buildCapabilityPlan(targetManifest);
+  const permissions = configPermissions(targetManifest);
+
+  expect(getPermissionChangesForReview(permissions, diffCapabilityPlans(previous, target)))
+    .toEqual([representativePermissions.frontend_tools]);
+  expect(getPermissionChangesForReview(permissions, diffCapabilityPlans(target, target)))
+    .toEqual([]);
 });
 
 test("normal permission rows are shorter while retaining meaningful consequences", () => {
@@ -187,6 +243,14 @@ const representativePermissions = {
     source: "kernel",
     kind: "browser_permissions",
     tiles: [{ id: "call", features: ["camera", "microphone"] }],
+  },
+  frontend_tools: {
+    source: "kernel",
+    kind: "frontend_tools",
+    targets: [{
+      app: "evm_wallet",
+      tools: ["evm_wallet.accounts", "evm_wallet.sendTransaction"],
+    }],
   },
   backend_calls: {
     source: "kernel",

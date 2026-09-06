@@ -199,6 +199,12 @@ function kitchenSinkManifest(): NeutronManifest {
         api: 1,
         methods: ["self_update"],
       },
+      frontend_tools: {
+        api: 1,
+        targets: [
+          { app: "wallet", tools: ["wallet.accounts", "wallet.balance"] },
+        ],
+      },
       agent_entrypoints: {
         api: 1,
         entrypoints: ["tools.search", "tools.read"],

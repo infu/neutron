@@ -1774,6 +1774,44 @@ test("provider-owned tool consent renders the provider review canonically", () =
   expect(html).not.toContain("Allow session");
 });
 
+test("grouped tool consent lists each exact tool and its session scope", () => {
+  const html = renderToStaticMarkup(
+    <FrontendToolRequest
+      uiMode="normal"
+      request={{
+        cid: 73,
+        caller: {
+          endpoint: "app:requester:tile:main:instance:requester-one",
+          appId: "requester",
+          role: "tile",
+        },
+        target: "app:provider:background",
+        tool: "accounts",
+        tools: [
+          { name: "accounts", title: "Read accounts", description: "Return connected addresses." },
+          { name: "balances", title: "Read balances", description: "Return account balances." },
+        ],
+        arguments: {},
+        sessionOnly: true,
+        onceOnly: false,
+        callerSessionId: "requester-session",
+        targetSessionId: "provider-session",
+        attentionToken: "attention-token",
+      }}
+    />,
+  );
+  expect(html).toContain('data-tid="frontend-tool-list"');
+  expect(html).toContain("Read accounts");
+  expect(html).toContain("Return connected addresses.");
+  expect(html).toContain("Read balances");
+  expect(html).toContain("Return account balances.");
+  expect(html).toContain("repeat the listed tools");
+  expect(html).toContain("until either app reconnects or this browser session ends");
+  expect(html).toContain("Allow session");
+  expect(html).not.toContain("Allow once");
+  expect(html).not.toContain("use any tool");
+});
+
 test("an app-defined workspace tool name stays in the generic consent dialog", () => {
   useMsgBusPermissionStore.setState({
     requests: {

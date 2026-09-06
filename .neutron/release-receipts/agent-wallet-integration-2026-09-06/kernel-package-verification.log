@@ -1,0 +1,59 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/kernel/test/certified_assets_candidate_binding.test.ts:
+(pass) generic Certified Assets qualification binding > binds only the synthetic actor and generic implementation [148.00ms]
+(pass) generic Certified Assets qualification binding > binds the exact deterministic five-manifest set and runner source set [135.00ms]
+(pass) generic Certified Assets qualification binding > binds a fixed repository-confined Motoko package source set without mops resolution [104.00ms]
+(pass) generic Certified Assets qualification binding > returns detached manifests that cannot mutate the bound fixture set [50.00ms]
+(pass) generic Certified Assets qualification binding > rejects a stale source binding [284.00ms]
+(pass) generic Certified Assets qualification binding > uses one canonical candidate-binding input [56.00ms]
+(pass) generic Certified Assets qualification binding > keeps the checked candidate binding exact and current [113.00ms]
+(pass) generic Certified Assets qualification binding > binds the exact raw and transport Wasm and inspects the raw Wasm [207.00ms]
+(pass) generic Certified Assets qualification binding > normal frontend builds do not consume qualification results
+
+apps/kernel/test/package_metadata_generation.test.ts:
+(pass) Kernel v343 NPL package metadata > binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs [121.00ms]
+
+Size: 19347
+Writing: kernel.v0.3.44.neutron
+(pass) Kernel v343 NPL package metadata > packs the NPL legal envelope without changing the closed format-3 manifest [122.00ms]
+(pass) Kernel v343 NPL package metadata > fails closed on wrong release identity, license, notice, or memory [10.00ms]
+(pass) Kernel v343 NPL package metadata > requires schema 3 history, the custody schema 4, and its exact forward migration [9.00ms]
+(pass) Kernel v343 NPL package metadata > retains the exact released schema source bytes in the offered source [18.00ms]
+(pass) Kernel v343 NPL package metadata > rejects symbolic, sensitive, and arbitrary unreviewed source inputs [169.00ms]
+(pass) Kernel v343 NPL package metadata > rejects stale files before pack traverses Kernel dist [19.00ms]
+(pass) Kernel v343 NPL package metadata > generates a deterministic inventory of exact installed Kernel artifacts [135.00ms]
+(pass) Kernel v343 NPL package metadata > current workspace review includes every required changed source [301.00ms]
+
+apps/kernel/test/install.test.ts:
+(pass) kernel generated artifacts migrate V3 to V4 and retain activation V1 [1706.00ms]
+(pass) certified-assets capability toggles rotate stable write authority [27.00ms]
+(pass) pending install journals freeze public static mutations [2.00ms]
+(pass) resident-origin toggles reconcile only the affected app subtree [2.00ms]
+(pass) capability toggles publish runtime authority only after reconciliation [1.00ms]
+(pass) installation CSP is exact to the certified gateway environment [1.00ms]
+(pass) selected app package proofs are retired into a passive MIME profile [2.00ms]
+(pass) Kernel activation retires every retained Kernel-profile response [2.00ms]
+(pass) certified reads and POST handlers have independent runtime toggles [1.00ms]
+(pass) prepare_files rewrites valid package paths [1.00ms]
+(pass) prepare_files rejects malformed Motoko package paths [1.00ms]
+(pass) prepare_files rejects Motoko hash mismatches
+(pass) prepare_files rejects unsafe package paths
+(pass) kernel self-upgrade keeps the management install call one-way [6.00ms]
+(pass) large self-upgrades use bounded journal-scoped management chunks [4.00ms]
+(pass) upgrade and install work never scales with existing certified records [2.00ms]
+(pass) checked install APIs are hard-cutover and fail closed [4.00ms]
+(pass) frontend app state is cleared only after the atomic install commit [3.00ms]
+(pass) frontend deployments signal sibling tabs at activation and commit [1.00ms]
+(pass) observed runtime replacement retires cached actors before registry reconciliation [1.00ms]
+(pass) frontend authority commits reject stale continuations and legacy postflight [1.00ms]
+(pass) manual install and uninstall use a consistent checked deployment baseline [2.00ms]
+(pass) an interrupted install keeps recovery in Settings without blocking the shell [2.00ms]
+(pass) kernel local async chains suspend only at external calls [2.00ms]
+(pass) kernel settings snapshot is authenticated and reports bounded memory [2.00ms]
+(pass) kernel access management preserves owner and self-controller recovery [1.00ms]
+
+ 44 pass
+ 0 fail
+ 580 expect() calls
+Ran 44 tests across 3 files. [4.24s]

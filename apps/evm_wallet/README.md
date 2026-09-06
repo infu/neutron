@@ -11,14 +11,22 @@ journal in Activity, including pending signatures and replacements. Ordinary
 tiles need no persistent browser storage grant. Neither the tile nor consumer apps receive a private
 key or a Kernel signing capability.
 
+All EVM JSON-RPC calls use the browser's direct CORS connection to one PublicNode
+endpoint per network. No MetaMask or API key is required. Balances, contract
+reads, fees, simulation, broadcast and receipt checks do not pass through an IC
+HTTP outcall. The backend preserves wallet state and performs chain-key signing.
+
 ## Using the wallet
 
-- **Assets** shows native ETH and selected ERC-20 balances at the returned block.
+- **Assets** shows native ETH and preloaded/selected ERC-20 balances at the returned block.
   This view is not exhaustive token discovery. A selected token's label is a
   display hint; its identity is the network and contract address.
 - **Send** prepares an exact native transfer, selected ERC-20 transfer or contract
-  call. Review shows the account, network, recipient, value, calldata, nonce,
-  simulation result and maximum gas fee before approval. Known ERC-20 selectors
+  call. Review shows the amount, network, recipient or spender, requesting app,
+  and maximum network fee before confirmation. Calldata, nonce, simulation and
+  other technical fields start collapsed. Supported Uniswap V3 router calls
+  show the exact input amount and enforced minimum output from their calldata.
+  Known ERC-20 selectors
   are decoded as hints, not proof of the called contract's behavior. Recognized
   `approve`, `transfer` and `transferFrom` calls show the observed token balance
   and applicable allowance, exact approval change, and observation block/time.
@@ -27,15 +35,20 @@ key or a Kernel signing capability.
 - **Activity** includes requests from other apps, message signatures, pending
   outcomes and receipts. It is the Wallet's own journal, not a complete external
   transaction index. Load older pages when checking older requests.
-- **Approvals** lists spender/token pairs from successful confirmed Wallet
+- **Settings → Token approvals** lists spender/token pairs from successful confirmed Wallet
   transactions, including canonical speed-up replacements. Pending or reverted
   replacements do not establish an approval. Read the allowance at the returned
   block and request an exact zero approval to revoke it. External approvals and
   signed permits are not exhaustively indexed.
-- **Sign** supports EIP-191 personal messages and EIP-712 typed data. The review
+- **Settings → Sign message or data** supports EIP-191 personal messages and EIP-712 typed data. The review
   shows the complete original JSON, including integer lexemes beyond JavaScript's
   safe-number range. Signatures can authorize actions outside this Wallet.
-- **Settings** selects custom tokens and explains the account lifecycle.
+- **Settings** includes custom tokens, advanced tools and account details.
+
+Balances and history update while the tile is visible and when it regains focus.
+Secondary actions use compact icon buttons with accessible labels and tooltips.
+The shared [token catalog](./TOKENS.md) supplies verified network-specific
+defaults and bundled artwork without modifying existing saved tokens.
 
 Tile actions use explicit buttons and validated keyboard handlers because the
 Kernel sandbox does not permit native form submission. Enter in a single-line
@@ -46,15 +59,29 @@ Arbitrum gas estimates include its posting-cost component; the Wallet does not
 add a second arbitrary posting fee. A receipt records canonical inclusion and
 observed safe/finalized evidence. Arbitrum inclusion alone does not imply final
 Ethereum settlement. EVM transactions need native gas on their EVM network;
-chain-key signing and RPC calls separately consume this Neutron's IC cycles.
+chain-key signing and durable wallet updates consume this Neutron's IC cycles.
+Direct browser RPC calls do not incur IC outcall cycles.
 
 ## Review, recovery and replacements
 
 Other apps call the resident service. Effects marked `provider_once` open this
-Wallet's private foreground review tool. The Kernel supplies the authenticated
-caller app and installation UID. A separate root-agent tool family uses the
-same backend preparation and execution path and requires Kernel root-agent
-attestation. A nested app invocation does not acquire root authority.
+Wallet's private foreground review tool for ordinary users. In Agent mode, the
+same public tools prepare the exact transaction or signature and request a fresh
+Kernel permission decision from the active root Agent. Its review includes the
+signing account, network, complete transaction or signature payload, nonce, fees,
+simulation and available token observations. The amount and parties use the same
+calldata-derived presentation as the owner dialog. The Kernel binds this one-use
+approval callback to the authenticated provider invocation; an Agent-mode flag
+alone never authorizes execution. Installation tool grants connect consumer apps
+without replacing this fresh effect review.
+
+The Kernel supplies the authenticated caller app and installation UID. Nested
+requests stay owned by that consumer installation. A separate root-agent tool
+family retains the same backend preparation and execution path and requires
+Kernel root-agent attestation. A nested app invocation does not acquire root
+authority. Denial or cancellation before execution leaves an unsigned request
+available for the same-ID retry; already submitted requests return their saved
+outcome without another approval.
 
 Requests are identified by caller app, caller installation and a 16-byte request
 ID written as 32 lowercase hexadecimal characters. Identical replay resolves the
@@ -63,7 +90,13 @@ same request within the same installation.
 
 Prepared operations require their current review revision. If another request
 reserves their proposed nonce first, the Wallet returns a revised review and
-asks for approval again. It does not silently sign the changed transaction.
+asks for approval again after estimating and simulating the new candidate.
+It does not silently sign the changed transaction. Send shows preparation
+progress immediately, including the token amount and recipient, then displays
+the exact transaction and an explicit approval button.
+An Agent provider call returns `prepared` when its reviewed candidate changes;
+the consumer must call again with the same request ID to obtain a fresh decision.
+The previous approval cannot be reused for the changed candidate.
 Explicit token-observation refresh also advances the review revision so an
 approval for an older view cannot race the refreshed view. Its observations are
 saved separately from the transaction and can become stale as the chain changes.
@@ -109,7 +142,10 @@ draft is not account recovery.
 
 Use the shared `neutron-tools/evm_wallet` client and closed schemas. Read-only
 methods cover accounts, networks, requested balances, contract calls and public
-transaction evidence. `evm_estimate_transaction_v1` estimates fees for exact
+transaction evidence. `evm_call_contract_v1` reads return bytes at latest or an
+explicit block without downloading contract bytecode; the existing
+`evm_read_contract_v1` retains its code-inclusive result for consumers that need
+it. `evm_estimate_transaction_v1` estimates fees for exact
 transaction fields without creating a command, reserving a nonce or signing.
 It returns its pricing basis, partial facts and unavailable reasons; its estimate
 is not spending authorization. Arbitrum total gas already includes posting cost.
@@ -125,8 +161,9 @@ approved signed bytes. Transaction evidence can verify that a
 public hash belongs to an exact saved Wallet request without revealing private
 messages or signatures.
 
-Human effect tools are `evm_send_transaction_v1`, `evm_sign_message_v1`,
-`evm_sign_typed_data_v1` and `evm_replace_transaction_v1`. Their `_root_v1`
+Public effect tools are `evm_send_transaction_v1`, `evm_sign_message_v1`,
+`evm_sign_typed_data_v1` and `evm_replace_transaction_v1`. They support both owner
+dialogs and nested Agent review. Their `_root_v1`
 counterparts are available only to the active root Agent. Consumer apps persist
 complete intent and the expected Wallet identity before invoking them. Do not
 replace a saved request ID after a timeout.
@@ -158,13 +195,13 @@ editing actions, field validation, keyboard behavior and duplicate prevention.
 Own Wallet requests travel through the resident service back to their originating
 tile's private review handler. This same-app route checks the Kernel-authenticated
 tile and resident identities and does not accept Agent invocations. Cross-app
-requests retain the Kernel's foreground provider presentation. Both paths use the
+requests use the Kernel's foreground provider presentation for ordinary users
+and its one-use Agent approval callback for Agent invocations. These paths use the
 same durable prepare, review and execution flow; repeating a request ID returns
 its saved outcome.
-RPC consensus compares the complete canonical response bytes, including large
-contract-code responses, without recursive text comparison or truncation. A
-compiled actor regression covers full-size code, disagreement at its final byte
-and equivalent nested JSON with Unicode.
+The former EVM RPC canister adapter remains historical test material. Current
+app paths use the direct browser RPC client and no backend outcall capability.
+Direct observations are provided by one server, not replica/provider consensus.
 History reads retry existing aggregate response-size failures with smaller pages
 at the same offset. Initial loading and Load more share this path; no operations
 are discarded or capped. Unrelated errors and a single operation that cannot fit

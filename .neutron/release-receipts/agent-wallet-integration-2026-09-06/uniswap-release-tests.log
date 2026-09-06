@@ -1,0 +1,142 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/uniswap/test/package.test.ts:
+(pass) Uniswap owns its managed journal and declares exact public Wallet access [13.00ms]
+(pass) the packaged tile, resident service and managed-memory root are installable [247.00ms]
+(pass) journal methods emit schemas that preserve typed identity and optional operation evidence [163.00ms]
+
+apps/uniswap/test/service.test.ts:
+(pass) Uniswap resident registers every tool through the real SDK validator [207.00ms]
+(pass) resident Uniswap handlers satisfy wallet and managed-journal contracts in an isolated process [2806.00ms]
+
+apps/uniswap/test/history.test.ts:
+(pass) large valid history retries smaller pages at the same cursor and preserves every record byte [582.00ms]
+(pass) the page cursor remains anchored when newer swaps arrive between pages [131.00ms]
+(pass) store page reads one page while list follows the same lossless cursor contract [109.00ms]
+(pass) single oversized records fail explicitly without skipping their cursor [223.00ms]
+(pass) known aggregate response-size errors halve only the current page request [1.00ms]
+(pass) unrelated failures and lookalike size messages are not retried
+(pass) invalid page sizes and malformed or nonprogressing responses cannot loop or truncate history [1.00ms]
+
+apps/uniswap/test/workflow.test.ts:
+(pass) one continuation approves, waits, requests the swap and reports its receipt [17.00ms]
+(pass) a lost swap reply is reconciled before any approval or swap is requested [2.00ms]
+(pass) expired approved swaps return to fresh quote review without another transaction [3.00ms]
+(pass) an expired but submitted swap is tracked without replacing its intent [3.00ms]
+(pass) pausing after approval prevents automatic swap dispatch [2.00ms]
+(pass) a declined approval stops and retains the saved swap for an explicit retry [4.00ms]
+
+apps/uniswap/test/fees.test.ts:
+(pass) both chains estimate exact approval and swap separately and sum wei beyond Number precision [8.00ms]
+(pass) unavailable swap simulation retains numeric approval and does not manufacture total from Quoter gas [1.00ms]
+(pass) native swaps and confirmed approvals estimate only the remaining swap [2.00ms]
+(pass) Arbitrum execution-only prices do not become a posting-inclusive total [1.00ms]
+(pass) approval and swap fee observations start together without waiting for an unrelated read [10.00ms]
+(pass) provider absence, incompatible results and mismatched scope remain unavailable without effect calls [6.00ms]
+(pass) refresh observes changed fees without altering the quoted minimum, deadline or calldata [1.00ms]
+(pass) old or malformed saved fee annotations render unavailable instead of being treated as zero [1.00ms]
+
+apps/uniswap/test/swap.test.ts:
+(pass) Uniswap deployment on chain 1 > native input funds exactly one swap and returns unused ETH [10.00ms]
+(pass) Uniswap deployment on chain 1 > native output is received by router then unwrapped to the requested recipient [4.00ms]
+(pass) Uniswap deployment on chain 1 > token input allowance %s only requests an exact approval when needed [3.00ms]
+(pass) Uniswap deployment on chain 1 > token input allowance %s only requests an exact approval when needed [2.00ms]
+(pass) Uniswap deployment on chain 1 > token input allowance %s only requests an exact approval when needed [2.00ms]
+(pass) Uniswap deployment on chain 1 > token input allowance %s only requests an exact approval when needed [2.00ms]
+(pass) Uniswap deployment on chain 42161 > native input funds exactly one swap and returns unused ETH [2.00ms]
+(pass) Uniswap deployment on chain 42161 > native output is received by router then unwrapped to the requested recipient [2.00ms]
+(pass) Uniswap deployment on chain 42161 > token input allowance %s only requests an exact approval when needed [2.00ms]
+(pass) Uniswap deployment on chain 42161 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) Uniswap deployment on chain 42161 > token input allowance %s only requests an exact approval when needed [3.00ms]
+(pass) Uniswap deployment on chain 42161 > token input allowance %s only requests an exact approval when needed [2.00ms]
+(pass) quotes choose the greatest output, break ties by fee, and retain failed-pool warnings [2.00ms]
+(pass) independent fee tiers share one read round and retain each failure [3.00ms]
+(pass) price impact uses token ordering and the pool fee in integer arithmetic [2.00ms]
+(pass) a missing impact read is visible and does not discard a successful quote [1.00ms]
+(pass) all failed pools or zero-output pools fail before any wallet transaction is prepared [2.00ms]
+(pass) slippage floors the minimum atom count and rejects a zero minimum [2.00ms]
+(pass) expired quotes, changed routes, and changed slippage fail before allowance reads [2.00ms]
+(pass) a failed allowance read cannot be treated as zero or enough allowance [2.00ms]
+(pass) only own supported network IDs and their matching token addresses are accepted
+(pass) input validation rejects malformed and overflowing amounts, expired deadlines, and invalid slippage
+(pass) display amounts become exact atomic units without floating point or excess precision [1.00ms]
+(pass) numeric strings reject trailing line terminators instead of accepting a regex prefix
+(pass) slippage percentages become exact basis points and reject invalid precision or trailing characters [1.00ms]
+(pass) custom metadata is read on the selected chain; address remains authoritative if symbol fails [2.00ms]
+
+apps/uniswap/test/provider_flow.test.ts:
+(pass) one provider call persists exact public Wallet approvals and waits for both receipts before completing [22.00ms]
+(pass) an expired approved 3 USDC quote creates one immutable successor and resumes that successor without approving again [23.00ms]
+(pass) a lost swap reply returns a recoverable same-ID flow and retry reconciles its receipt without resending [9.00ms]
+(pass) cancellation while a swap is unknown or preparing preserves its original request through quote expiry [17.00ms]
+(pass) a changed exact Wallet review returns review and requires a new invocation using the same request [12.00ms]
+(pass) a lost retry after prepared review cannot renew an expired flow using stale prepared evidence [14.00ms]
+(pass) flow ownership and changed arguments reject before any Wallet read, new preparation or effect [10.00ms]
+
+apps/uniswap/test/read_connection.test.ts:
+(pass) opening Wallet reads available accounts without a runtime permission request [1.00ms]
+(pass) an empty Wallet and a temporary read error remain distinguishable for automatic recovery
+
+apps/uniswap/test/controller.test.ts:
+(pass) independent Agent result verification > a Wallet-proven approval replacement is verified even when the original transaction is no longer visible [9.00ms]
+(pass) independent Agent result verification > a Wallet-proven swap replacement is verified even when the original transaction is no longer visible [5.00ms]
+(pass) independent Agent result verification > Agent replacement claims require both exact original binding and a separately proven replacement relationship [5.00ms]
+(pass) independent Agent result verification > replacement proofs for a different caller, request, chain or hash cannot be recorded [8.00ms]
+(pass) independent Agent result verification > a proven Agent replacement still needs the exact saved execution and a successful receipt [22.00ms]
+(pass) independent Agent result verification > the original canonical receipt wins over an unproved Agent replacement claim [2.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose from differs despite a claimed successful receipt [3.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose to differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose data differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose valueWei differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > the SDK binds independent evidence to the requested chain and transaction hash [3.00ms]
+(pass) independent Agent result verification > the independently read receipt replaces a fake claimed receipt and status [2.00ms]
+(pass) independent Agent result verification > a visible pending transaction clears a fake claimed receipt without declaring completion [1.00ms]
+(pass) independent Agent result verification > missing public transactions and claims without a hash stay unresolved [2.00ms]
+(pass) independent Agent result verification > a wallet request match of %s cannot complete an otherwise identical confirmed transaction [1.00ms]
+(pass) independent Agent result verification > a wallet request match of %s cannot complete an otherwise identical confirmed transaction [1.00ms]
+(pass) independent Agent result verification > an earlier identical transaction relabeled as the current request remains unresolved [2.00ms]
+(pass) independent Agent result verification > an approval binding comes from its saved caller and approval ID rather than the swap ID or claimed operation number [1.00ms]
+(pass) independent Agent result verification > saved Agent intents without a caller identity do not invent an origin [4.00ms]
+(pass) the backend adapter omits absent Candid input fields and recovers a lost begin reply using the same wallet request [128.00ms]
+(pass) the backend adapter sends typed journal identity without absent operation evidence and accepts direct Kernel results [66.00ms]
+(pass) approval and swap receipts fit the real journal transport while preserving every output-token log [62.00ms]
+(pass) list and get use generated method schemas and normalize omitted output options [89.00ms]
+(pass) lost wallet replies retain the requested phase, then reload reconciles without resending [6.00ms]
+(pass) a missing status after a lost reply retries exactly the saved wallet request ID and calldata [3.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: Insufficient native balance for maximum gas fee [3.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: Token transfer simulation reverted: insufficient token balance [2.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: RPC providers disagree; transaction fee estimate is unavailable [3.00ms]
+(pass) confirmed approvals are skipped while swap submission waits for their successful receipt [4.00ms]
+(pass) a successful exact replacement approval unlocks the saved swap without repeating approval [7.00ms]
+(pass) a pending approval replacement is observed through inclusion without repeating either transaction [11.00ms]
+(pass) a pending swap replacement is observed through inclusion without repeating either transaction [14.00ms]
+(pass) a reverted exact approval replacement remains reverted after reload and cannot complete the step [8.00ms]
+(pass) a reverted exact swap replacement remains reverted after reload and cannot complete the step [9.00ms]
+(pass) cancelled or changed approval replacements never satisfy the frozen request [29.00ms]
+(pass) cancelled or changed swap replacements never satisfy the frozen request [38.00ms]
+(pass) missing replacement evidence stays unresolved and mismatched hashes or networks are never saved [6.00ms]
+(pass) saved replacement proof is bound to the original linkage and untrusted claims cannot inject it [2.00ms]
+(pass) rejected or reverted wallet operations remain terminal for that saved request [4.00ms]
+(pass) expired saved swaps reconcile existing chain work but cannot dispatch a fresh transaction [3.00ms]
+(pass) human execution does not forward an Agent workflow into the wallet [1.00ms]
+(pass) replacement signing fingerprints, namespaces, addresses, or missing accounts stop before status or dispatch [3.00ms]
+(pass) wallet operations are bound to saved request, account, network, address, and transaction kind [2.00ms]
+(pass) a mismatched status is never persisted, even if it claims success [1.00ms]
+(pass) modified saved swap calldata and exact approval amounts fail before dispatch [2.00ms]
+(pass) received output counts only output-token Transfer logs to the requested recipient [3.00ms]
+(pass) the wallet reader surfaces a different observation block instead of calculating a misleading price impact [1.00ms]
+
+apps/uniswap/test/agent_workflow.test.ts:
+(pass) Agent continuation checks the original swap before any approval and does not call root tools itself [4.00ms]
+(pass) Agent receives exact approval then swap requests and only chain evidence can complete the swap [9.00ms]
+(pass) an expired 3 USDC approval is verified and reused by a fresh quote without another approval [5.00ms]
+(pass) an expired lost swap reply remains tied to the original pending request [5.00ms]
+(pass) a transaction not yet visible is a same-request wait, not a failed workflow or fresh quote [3.00ms]
+(pass) in-flight preparation remains pending even after expiry [3.00ms]
+(pass) caller mismatch, wrong request identity and false Wallet binding cannot advance a swap [4.00ms]
+(pass) a declined request stays stopped and an unneeded approval is never invented [4.00ms]
+
+ 116 pass
+ 0 fail
+ 1057 expect() calls
+Ran 116 tests across 10 files. [6.17s]

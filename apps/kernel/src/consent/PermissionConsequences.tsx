@@ -3,6 +3,7 @@ import type { CapabilityPlanDiffV1 } from "neutron-tools/src/capabilities/wire.j
 import type { CapabilityId } from "neutron-tools/src/capabilities/catalog.js";
 import {
   BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
+  FRONTEND_TOOLS_DISCLOSURE,
   WALLET_CUSTODY_SIGNING_DISCLOSURE,
   WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
   browserPermissionFeaturesTitle,
@@ -58,6 +59,23 @@ export function PermissionConsequences({
             >
               <strong>{row.title}</strong>{" "}
               <span>{row.description}</span>
+              {row.id === "frontend-tools" ? (
+                <details>
+                  <summary>Allowed tools</summary>
+                  <ul className="permission-inventory">
+                    {permissionsOf(permissions, "frontend_tools").flatMap(({ targets }) =>
+                      targets.map(({ app, tools }) => (
+                        <li key={app}>
+                          <strong>{app}</strong>
+                          <div className="permission-code-list">
+                            {tools.map((tool) => <code key={tool}>{tool}</code>)}
+                          </div>
+                        </li>
+                      )),
+                    )}
+                  </ul>
+                </details>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -126,6 +144,7 @@ const permissionCapabilityIds = {
   background_ui_request: "background_ui_requests",
   ethereum_provider: "ethereum_provider",
   app_dependency: "app_calls",
+  frontend_tools: "frontend_tools",
   connection: "connections",
   internal_app_function: "app_exports",
   function_resources: "function_resources",
@@ -582,7 +601,8 @@ function appInteractionConsequences(
   const preapproved = permissionsOf(permissions, "preapproved_self_call");
   const dependencies = permissionsOf(permissions, "app_dependency");
   const exports = permissionsOf(permissions, "internal_app_function");
-  const relevant: Permission[] = [...preapproved, ...dependencies, ...exports];
+  const frontendTools = permissionsOf(permissions, "frontend_tools");
+  const relevant: Permission[] = [...preapproved, ...dependencies, ...exports, ...frontendTools];
   if (relevant.length === 0) return null;
   const facts: string[] = [];
   if (preapproved.length > 0) {
@@ -602,6 +622,14 @@ function appInteractionConsequences(
     facts.push(
       `Exposes ${countLabel(exports.length, "internal backend function")} to declared installed-app consumers.`,
     );
+  }
+  if (frontendTools.length > 0) {
+    facts.push(FRONTEND_TOOLS_DISCLOSURE);
+    for (const { targets } of frontendTools) {
+      for (const { app, tools } of targets) {
+        facts.push(`${app}: ${tools.join(", ")}.`);
+      }
+    }
   }
   return {
     id: "app-interactions",

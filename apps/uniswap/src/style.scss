@@ -1,35 +1,85 @@
 @use "neutron-design-system/styles.scss";
 @layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
 @layer app {
-  html, body { margin: 0; background: #07090c; }
-  .uni-app { --nt-accent: #ff80c3; --nt-accent-muted: #301a29; min-height: 100dvh; padding: 24px 16px; }
-  .uni-shell { max-width: 700px; margin: 0 auto; display: grid; gap: 24px; min-width: 0; }
-  .uni-header, .uni-activity > header, .uni-saved-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  .uni-header h1 { font-size: 32px; }
+  html, body { margin: 0; background: #0c0c10; }
+  .uni-app { --nt-accent: #ff80c3; --nt-accent-muted: #301a29; min-height: 100dvh; padding: 28px 16px 40px; }
+  .uni-shell { max-width: 480px; margin: 0 auto; display: grid; gap: 18px; min-width: 0; }
+  .uni-header, .uni-activity > header, .uni-saved-title, .uni-form-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .uni-header h1 { font-size: 27px; letter-spacing: -.6px; margin-top: 5px; }
+  .uni-header .nt-eyebrow { color: var(--nt-accent); letter-spacing: .04em; }
   .uni-muted { color: var(--nt-text-muted); font-size: 12px; line-height: 1.6; margin: 0; }
-  .uni-alert { padding: 14px; background: #311d20; color: #ffb8c1; overflow-wrap: anywhere; }
-  .uni-form, .uni-review, .uni-settings, .uni-activity, .uni-saved { display: grid; gap: 16px; min-width: 0; }
-  .uni-form { padding: 24px; }
-  .uni-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-  .uni-app label { display: grid; gap: 8px; font-size: 12px; color: var(--nt-text-muted); min-width: 0; }
-  .uni-app input, .uni-app select { background: var(--nt-bg-control); color: var(--nt-text); border: 0; outline: 1px solid var(--nt-line); border-radius: 3px; padding: 10px; font: inherit; width: 100%; min-width: 0; box-sizing: border-box; }
-  .uni-app input:focus, .uni-app select:focus { outline-color: var(--nt-accent); }
-  .uni-token-panel { display: grid; grid-template-columns: minmax(0, 1fr) 120px; align-items: center; gap: 12px; padding: 18px; background: var(--nt-bg-page); }
-  .uni-token-panel input, .uni-token-panel output { font-size: 26px; font-weight: 500; background: none; outline: none; padding: 0; min-width: 0; color: var(--nt-text); overflow-wrap: anywhere; }
-  .uni-token-panel code { grid-column: 1 / -1; }
-  .uni-direction { text-align: center; color: var(--nt-accent); font-size: 20px; height: 10px; line-height: 10px; }
-  .uni-primary { width: 100%; min-height: 44px; background: var(--nt-accent); color: #251222; font-weight: 600; }
+  .uni-connected { display: flex; align-items: center; gap: 7px; padding: 9px 11px; background: #1a1c22; border-radius: 20px; font-size: 12px; white-space: nowrap; }
+  .uni-connected > span { width: 6px; height: 6px; border-radius: 50%; background: #82d6b2; }
+  .uni-form, .uni-settings, .uni-activity, .uni-saved { display: grid; gap: 14px; min-width: 0; }
+  .uni-form { padding: 14px; border: 1px solid #303039; border-radius: 24px; background: #15151b; }
+  .uni-form-top { padding: 2px 4px 5px; }
+  .uni-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .uni-app label { display: grid; gap: 10px; font-size: 13px; color: var(--nt-text-muted); min-width: 0; }
+  .uni-app input, .uni-app select { background: #272730; color: var(--nt-text); border: 1px solid transparent; outline: none; border-radius: 10px; padding: 11px; font: inherit; width: 100%; min-width: 0; box-sizing: border-box; }
+  .uni-app input:focus-visible, .uni-app select:focus-visible, .uni-app button:focus-visible { outline: 2px solid var(--nt-accent); outline-offset: 2px; }
+  .uni-app .uni-network select { background: transparent; padding: 8px 3px; font-size: 13px; }
+  .uni-token-panel { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 140px; align-items: center; gap: 14px 10px; padding: 18px 16px; border: 1px solid #30303a; border-radius: 18px; background: #202027; }
+  .uni-token-panel input, .uni-token-panel output { font-size: 36px; font-weight: 450; letter-spacing: -.8px; background: none; border: 0; outline: none; padding: 0; min-width: 0; color: var(--nt-text); overflow-wrap: anywhere; line-height: 1.25; }
+  .uni-token-panel select { border-radius: 20px; font-size: 15px; font-weight: 600; padding: 10px 9px; background: #36323e; }
+  .uni-token-panel > p { grid-column: 1 / -1; }
+  .uni-token-picker { min-width: 0; }
+  .uni-token-trigger { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; padding: 8px 9px; border: 0; border-radius: 24px; background: #36323e; color: var(--nt-text); font-size: 15px; font-weight: 600; cursor: pointer; }
+  .uni-token-trigger > span:not(.uni-token-icon) { overflow: hidden; text-overflow: ellipsis; }
+  .uni-token-icon { display: inline-flex; flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; object-fit: contain; }
+  .uni-token-initials { align-items: center; justify-content: center; background: #504253; color: #eddbe7; font-size: 9px; }
+  .uni-chevron { font-size: 13px; opacity: .7; }
+  .uni-token-menu { position: absolute; z-index: 10; right: 8px; top: 75px; width: min(340px, calc(100% - 16px)); box-sizing: border-box; border: 1px solid #4c4050; border-radius: 18px; padding: 14px; background: #212027; box-shadow: 0 12px 40px #0009; }
+  .uni-picker-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
+  .uni-icon-button { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--nt-text-muted); font-size: 22px; cursor: pointer; }
+  .uni-token-panel .uni-token-menu > input { font-size: 12px; padding: 11px; border-radius: 10px; border: 1px solid #49404b; background: #17161c; letter-spacing: 0; }
+  .uni-token-options { max-height: 270px; overflow-y: auto; margin: 10px -4px -4px; }
+  .uni-token-option { display: flex; align-items: center; gap: 11px; width: 100%; border: 0; border-radius: 10px; padding: 10px; background: transparent; color: var(--nt-text); text-align: left; cursor: pointer; }
+  .uni-token-option:hover, .uni-token-option[aria-pressed="true"] { background: #38303d; }
+  .uni-token-option > span:not(.uni-token-icon) { display: grid; gap: 4px; min-width: 0; }
+  .uni-token-option strong { font-size: 13px; }
+  .uni-token-option small { color: var(--nt-text-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .uni-token-check { margin-left: auto; color: var(--nt-accent); }
+  .uni-picker-empty { padding: 16px 8px; }
+  .uni-receive { background: #1b1b22; }
+  .uni-direction { position: relative; justify-self: center; width: 38px; height: 38px; margin: -28px 0; z-index: 1; border: 5px solid #15151b; border-radius: 12px; background: #33323c; color: #e5d8e5; font-size: 20px; line-height: 22px; cursor: pointer; }
+  .uni-primary { width: 100%; min-height: 56px; border-radius: 16px; border: 0; background: var(--nt-accent); color: #351729; font-size: 17px; font-weight: 650; }
+  .uni-primary:disabled { opacity: 1; background: #302432; color: #aa7f9f; cursor: default; }
+  .uni-quote-summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 3px 7px; font-size: 12px; color: var(--nt-text-muted); }
+  .uni-quote-summary > :last-child { text-align: right; color: #dfd8e3; }
+  .uni-help { color: var(--nt-text-muted); text-align: center; font-size: 12px; line-height: 1.5; margin: 0; padding: 0 10px; }
   .uni-app summary { cursor: pointer; font-size: 12px; color: var(--nt-text-muted); }
+  .uni-details { border-top: 1px solid #303039; padding: 14px 6px 3px; }
   .uni-settings { padding-top: 16px; }
-  .uni-review { padding-top: 16px; border-top: 1px solid var(--nt-line); }
-  .uni-review dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 12px; font-size: 12px; margin: 0; }
-  .uni-review dt { color: var(--nt-text-muted); }
-  .uni-review dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+  .uni-app dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 12px; font-size: 12px; margin: 0; }
+  .uni-app dt { color: var(--nt-text-muted); }
+  .uni-app dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
   .uni-app code { overflow-wrap: anywhere; font-size: 11px; color: var(--nt-text-muted); }
   .uni-app pre { overflow: auto; max-width: 100%; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .uni-saved { padding: 20px; }
-  .uni-saved p { margin: 0; font-size: 12px; }
-  .uni-saved a { color: var(--nt-accent); font-size: 12px; }
-  .uni-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-  @media (max-width: 450px) { .uni-app { padding: 16px 8px; } .uni-form, .uni-saved { padding: 16px; } .uni-row { grid-template-columns: 1fr; } .uni-token-panel { padding: 12px; grid-template-columns: minmax(0, 1fr) 100px; } .uni-review dl { grid-template-columns: 1fr; gap: 6px; } .uni-review dd { text-align: left; margin-bottom: 10px; } }
+  .uni-contracts p { font-size: 11px; line-height: 1.7; margin: 0; color: var(--nt-text-muted); }
+  .uni-progress { display: flex; align-items: center; gap: 12px; padding: 13px 10px; border-radius: 12px; background: #29202d; font-size: 13px; line-height: 1.6; }
+  .uni-spinner { flex: 0 0 17px; width: 17px; height: 17px; border: 2px solid #75566c; border-top-color: var(--nt-accent); border-radius: 50%; animation: uni-spin 1s linear infinite; }
+  @keyframes uni-spin { to { transform: rotate(360deg); } }
+  .uni-text-button { border: 0; background: transparent; color: var(--nt-accent); cursor: pointer; font: inherit; font-size: 12px; padding: 5px; }
+  .uni-quote-error { padding: 10px; font-size: 12px; line-height: 1.6; }
+  .uni-quote-error p { margin: 0 0 6px; overflow-wrap: anywhere; }
+  .uni-alert { padding: 16px; border: 1px solid #60404c; border-radius: 14px; background: #302127; color: #ffbbc8; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+  .uni-alert p { margin: 6px 0; }
+  .uni-notice { padding: 14px; margin: 0; border-radius: 14px; background: #202b29; color: #b7dfd0; font-size: 13px; line-height: 1.6; }
+  .uni-activity > header { padding: 0 4px; }
+  .uni-activity h2 { font-size: 16px; }
+  .uni-empty { margin: 0; text-align: center; padding: 15px; color: var(--nt-text-muted); font-size: 13px; }
+  .uni-saved { padding: 18px; border: 1px solid #303039; border-radius: 18px; background: #17171e; }
+  .uni-saved-title { align-items: flex-start; }
+  .uni-saved-title strong { font-size: 15px; overflow-wrap: anywhere; line-height: 1.5; }
+  .uni-arrow { color: var(--nt-text-muted); }
+  .uni-status { color: var(--nt-text-muted); font-size: 11px; white-space: nowrap; padding-top: 3px; }
+  .uni-saved-complete .uni-status { color: #9edac0; }
+  .uni-saved p { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+  .uni-saved-state { color: #e4c3da; }
+  .uni-saved a { color: var(--nt-accent); font-size: 12px; text-decoration: none; }
+  .uni-continue { width: 100%; border: 0; border-radius: 12px; background: #382735; color: #ffc4e6; padding: 12px; font-size: 13px; }
+  .uni-shell > footer { text-align: center; font-size: 11px; }
+  .uni-app .nt-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  @media (max-width: 420px) { .uni-app { padding: 20px 10px 30px; } .uni-header h1 { font-size: 23px; } .uni-header { gap: 8px; } .uni-form { padding: 10px; border-radius: 20px; } .uni-form-top > span { font-size: 10px; } .uni-token-panel { padding: 16px 12px; grid-template-columns: minmax(0, 1fr) 126px; } .uni-token-panel input, .uni-token-panel output { font-size: 30px; } .uni-token-trigger { font-size: 13px; gap: 5px; } .uni-token-trigger .uni-token-icon { width: 21px; height: 21px; flex-basis: 21px; } .uni-saved { padding: 16px; } }
+  @media (prefers-reduced-motion: reduce) { .uni-spinner { animation: none; } }
 }

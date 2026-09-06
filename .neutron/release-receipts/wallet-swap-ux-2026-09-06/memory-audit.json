@@ -1,0 +1,69 @@
+{
+  "status": "passed",
+  "scope": "Bounded memory compatibility audit on fix/wallet-swap-ux against immutable EVM109 and Uniswap105; this report records the already completed checks without rerunning them.",
+  "apps": [
+    {
+      "id": "evm_wallet",
+      "baseline_version": 109,
+      "archive": {
+        "path": "apps/evm_wallet/evm_wallet.v0.1.9.neutron",
+        "bytes": 569396,
+        "sha256": "dbcf92bcfef04f21ee92f2d95bd612bfd359310bfcbb5906d5c7e3f9d4c54de4"
+      },
+      "offered_source_sha256": "29ade4c8b390bedde241920846bcb49f44bac6f3c62ad4f9f83327f6d62af0c4",
+      "backend_files_compared": 20,
+      "backend_files_identical": true,
+      "extra_backend_mo_files": [],
+      "lock_sha256": "385132eb6e6fe0d0af37c4c684fcb2f8c3582773b358d891ca6a99705eb062c4",
+      "managed_roots": {
+        "evm_wallet": 1,
+        "evm_evidence": 1
+      },
+      "full_memory_declaration_identical": true,
+      "test": {
+        "command": "npm --workspace neutron-evm-wallet run test:memory",
+        "runs": 1,
+        "exit_code": 0,
+        "completion_output": "Browser Motoko test passed: test/memory_release.test.mo",
+        "tool_session_id": 36723,
+        "completion_chunk_id": "947001",
+        "log_path": null
+      }
+    },
+    {
+      "id": "uniswap",
+      "baseline_version": 105,
+      "archive": {
+        "path": "apps/uniswap/uniswap.v0.1.5.neutron",
+        "bytes": 289769,
+        "sha256": "3dde37a5c76c76cd6618b13cb030c46fffa41a61ed9f0477037439bef8749730"
+      },
+      "offered_source_sha256": "b4c467175edebf365f549f84118211c16e023bee8b738918a67219d81c03a547",
+      "backend_files_compared": 3,
+      "backend_files_identical": true,
+      "extra_backend_mo_files": [],
+      "lock_sha256": "9d7a2d6749c7d273b92ed565cb943a306f9ed15d5f0c63401cef547641f9ae41",
+      "managed_roots": {
+        "uniswap": 1
+      },
+      "full_memory_declaration_identical": true,
+      "test": {
+        "command": "npm --workspace neutron-uniswap run test:memory",
+        "runs": 1,
+        "exit_code": 0,
+        "completion_output": "Browser Motoko test passed: test/memory_release.test.mo",
+        "tool_session_id": 24139,
+        "completion_chunk_id": "163c53",
+        "log_path": null
+      }
+    }
+  ],
+  "method": "Verified each retained archive SHA256/size and its offered-source SHA256/size; compared every backend file and neutron.lock.json byte-for-byte with the decoded source snapshot; compared complete source-manifest memory declarations and checked for additional local Motoko files.",
+  "audit_tool_chunk_id": "bcc1ee",
+  "log_provenance": "Commands returned output directly to the agent tool transcript. No standalone complete log files were saved. Completion output and exit codes above are recorded from those results, not reconstructed test logs.",
+  "migrations_required": false,
+  "canister_runtime_created": false,
+  "financial_transactions": false,
+  "source_or_package_changes": false,
+  "reruns_performed_for_report": false
+}

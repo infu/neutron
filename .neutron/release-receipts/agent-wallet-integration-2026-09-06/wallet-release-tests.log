@@ -1,0 +1,227 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/wallet/test/package.test.ts:
+(pass) Wallet declares managed memory and generic backend calls [24.00ms]
+(pass) Wallet method schemas preserve structured snapshots [31.00ms]
+(pass) generated API-1 ICRC Account inputs use the canonical string shorthand [24.00ms]
+(pass) Wallet token information is selected-ledger and default-account only [6.00ms]
+(pass) Wallet setup replaces one v1 ledger selection through one permission batch [3.00ms]
+(pass) Wallet rechecks current ledger authority before funding persistence and dispatch [2.00ms]
+(pass) Wallet durable funding identity replaces only the caller endpoint [1.00ms]
+(pass) Wallet tile and tray mount the same app and gate only focused capabilities [2.00ms]
+(pass) Wallet resident tool schemas are closed and hardened [10.00ms]
+(pass) Wallet formats arbitrary Nat balances without Number conversion
+(pass) Wallet parses decimal amounts to exact Nat units [1.00ms]
+(pass) Wallet catalog search matches names, symbols, and canister ids [1.00ms]
+(pass) Wallet catalog accepts omitted optional price assets
+(pass) Wallet package contains the tile, schema, and Motoko roots [431.00ms]
+
+apps/wallet/test/provider_release_compat.test.ts:
+(pass) released Wallet 0.3.2 cannot expose successor provider funding [172.00ms]
+(pass) released Wallet 0.3.6 keeps the legacy provider contract accepted by the successor [216.00ms]
+(pass) successor preserves the exact released Wallet 0.3.7 public funding descriptor [230.00ms]
+(pass) successor Wallet fails closed on an older Kernel without provider UI [1.00ms]
+
+apps/wallet/test/service.test.ts:
+(pass) token information uses one exact Wallet self-call [10.00ms]
+(pass) root funding invalidates the Wallet projection after a failed attempt [2.00ms]
+(pass) root funding refreshes once and preserves its receipt when refresh fails [2.00ms]
+
+apps/wallet/test/history.test.ts:
+(pass) Wallet history preserves exact amounts and structured cursors [4.00ms]
+(pass) Wallet history rejects legacy and malformed blob projections [1.00ms]
+(pass) Wallet history decodes adjustment and sync status variants [1.00ms]
+
+apps/wallet/test/bridge.test.ts:
+(pass) deposit connection groups reads and saved-request tracking without granting fresh sends [4.00ms]
+(pass) accepted browser send with lost reply remains unknown and never resends after reload [12.00ms]
+(pass) receipt timeout resumes the saved hash and cannot make a fresh deposit [9.00ms]
+(pass) malformed receipt stays unresolved; an explicit revert is terminal [2.00ms]
+(pass) two Wallet tiles cannot claim and submit the same browser deposit [2.00ms]
+(pass) unresolved EVM approval resumes the same request before deposit and preserves reset [3.00ms]
+(pass) a contract read failure after approval resumes only the saved deposit request [4.00ms]
+(pass) minter acceptance or an unverified mint is not mint completion
+(pass) root Agent bridge cannot replay with IC Wallet's different caller identity [1.00ms]
+(pass) owner can recover a lost browser reply only by attaching an exact independently read transaction [5.00ms]
+
+apps/wallet/test/funding.test.ts:
+(pass) wallet_fund_v1 accepts closed canonical direct and allowance requests [12.00ms]
+(pass) funding replies accept only exact Candid ICRC account records [2.00ms]
+(pass) funding self-call arguments expose every binary Candid sidecar [5.00ms]
+(pass) funding fails before preparation when provider UI is unavailable
+(pass) public funding forwards the canonical request to Wallet UI without preparing [2.00ms]
+(pass) accepting a prepared foreground request executes and refreshes exactly once [4.00ms]
+(pass) foreground funding reconciliation refreshes and updates its tile exactly once [3.00ms]
+(pass) foreground funding preserves the terminal receipt when its one refresh fails [1.00ms]
+(pass) cancelling a foreground review does not start a self-call on an aborted context [2.00ms]
+(pass) tile preparation returns authoritative allowance facts and shared execution [1.00ms]
+(pass) funding cannot be approved with incomplete or route-mixed review facts [5.00ms]
+(pass) funding rejects an execution receipt for another command [2.00ms]
+(pass) root funding requires agent_root and uses only its scoped self-call client [2.00ms]
+(pass) root funding preserves invocation cancellation across execution [1.00ms]
+(pass) pending direct replay re-enters reconciliation without another UI decision [1.00ms]
+(pass) prepared funding can be rejected without executing it [1.00ms]
+(pass) pending allowance replay re-enters reconciliation [1.00ms]
+(pass) pending revoke replay re-enters reconciliation
+(pass) abort during preparation never reaches execution [1.00ms]
+(pass) allowance pages preserve exact ICRC and ICP cursors and states [3.00ms]
+(pass) empty approval pages keep their continuation action visible [20.00ms]
+(pass) revoke execution is gated by every displayed review-sensitive fact [2.00ms]
+
+apps/wallet/test/token_info.test.ts:
+(pass) Wallet token information has a closed versioned tool contract [10.00ms]
+(pass) Wallet token information accepts only an exact canonical ledger request [1.00ms]
+(pass) Wallet token information preserves large atomic values and default accounts
+(pass) Wallet token information rejects mismatched and malformed backend replies [1.00ms]
+
+apps/wallet/test/catalog.test.ts:
+(pass) custom ledger input accepts and canonicalizes an IC principal [6.00ms]
+(pass) custom ledger input rejects empty and invalid principals [1.00ms]
+(pass) custom ledger input rejects special non-ledger principals [1.00ms]
+(pass) Wallet exposes its selected ledger limit
+
+apps/wallet/test/format.test.ts:
+(pass) transfer amounts require ledger decimals before consent [1.00ms]
+(pass) transfer amounts account for the ledger fee
+
+apps/wallet/test/deposit_progress.test.ts:
+(pass) Wallet keeps concurrent deposits at independent confirmation counts [4.00ms]
+(pass) Wallet derives bounded confirmation progress without floating point
+
+apps/wallet/test/destinations.test.ts:
+(pass) parses typed IC and native Contact destinations [2.00ms]
+(pass) preserves an ICRC subaccount in canonical textual form [1.00ms]
+(pass) accepts omitted and null Candid subaccounts as the default account [1.00ms]
+(pass) rejects string-shaped, inherited, accessor, and malformed projections [1.00ms]
+
+apps/wallet/test/native.test.ts:
+(pass) Wallet derives canonical default-account deposit values [6.00ms]
+(pass) Wallet resolves isolated local app origins to the local API gateway
+
+apps/wallet/test/transfer_recovery_controller.test.ts:
+(pass) actual send recovery ignores a corrupt optional cache without replacing its intent [16.00ms]
+(pass) actual native settlement recovery ignores a corrupt optional cache without replacing its intent
+
+apps/wallet/test/prices.test.ts:
+(pass) Wallet treats browser storage as optional in sandboxed tiles [9.00ms]
+(pass) Wallet fetches native-asset USD prices in one CoinGecko request [5.00ms]
+(pass) Wallet fills missing quotes through Kraken then Coinbase [3.00ms]
+(pass) Wallet values arbitrary Nat balances without Number conversion
+(pass) Wallet price cache accepts only bounded validated quotes [1.00ms]
+
+apps/wallet/test/ethereum.test.ts:
+(pass) Wallet encodes the verified ckETH helper ABI [8.00ms]
+(pass) ckETH deposits switch to mainnet and send value to the helper [3.00ms]
+(pass) ckERC20 deposits replace old allowance with an exact allowance [4.00ms]
+(pass) Wallet rejects a helper that belongs to a different minter [1.00ms]
+
+apps/wallet/test/reservations.test.ts:
+(pass) Wallet reserves ledgers broadly and minter mutations exactly [6.00ms]
+(pass) Wallet computes one reservation batch for selection changes [1.00ms]
+(pass) Wallet gives a custom ledger only the required ICRC reservations
+(pass) Wallet reserves both token and ckETH gas access for ckERC20 [1.00ms]
+(pass) Wallet parses exact reservation snapshots [1.00ms]
+(pass) selected Bitcoin, Dogecoin and Solana routes include only their exact settlement endpoint [1.00ms]
+
+apps/wallet/test/withdrawal_quote.test.ts:
+(pass) withdrawal quotes expose closed versioned read-only tool schemas [5.00ms]
+(pass) withdrawal requests accept canonical ledgers and optional exact unsigned amounts [2.00ms]
+(pass) withdrawal quotes preserve exact asset and gas balances with one approval fee each [2.00ms]
+(pass) withdrawal quote option fields support both omitted and null self-call projections [1.00ms]
+(pass) withdrawal quotes reject malformed amounts, non-boolean sufficiency, and wrong request identity [3.00ms]
+(pass) withdrawal quotes cannot present different arithmetic or authorization than the backend will execute [5.00ms]
+(pass) reading a quote uses the resident wallet method and preserves its exact requested amount [1.00ms]
+(pass) quote reads surface backend errors and never fabricate success or reuse another amount [1.00ms]
+(pass) withdrawal quote requests bind to the actual private Candid method with an absent or present amount [5.00ms]
+(pass) the actual private Candid quote unwraps ok and projects optional records without losing precision [22.00ms]
+(pass) reviewed quote authorization binds unchanged to the actual durable transfer preparation [5.00ms]
+
+apps/wallet/test/resident_registration.test.ts:
+(pass) Wallet resident registers every bridge, quote, and released tool through the real SDK validator [476.00ms]
+(pass) real exposeTool rejects the unsupported grouped pattern before registering it [145.00ms]
+
+apps/wallet/test/memory_release.test.ts:
+(pass) Wallet candidate keeps the original root and initializes independent journals [242.00ms]
+(pass) Current Wallet archive keeps every predecessor root and initializes only missing journals [2865.00ms]
+(pass) Wallet 0.3.8 keeps both exact Wallet 0.3.7 memory roots [443.00ms]
+(pass) Wallet 0.3.9 keeps both exact production 0.3.8 memory roots [398.00ms]
+(pass) Wallet 0.3.10 keeps both exact production 0.3.9 memory roots [411.00ms]
+(pass) Wallet 0.3.11 keeps both exact production 0.3.10 memory roots [347.00ms]
+(pass) Wallet 0.3.12 keeps both exact production 0.3.11 memory roots [359.00ms]
+
+apps/wallet/test/wallet_data.test.ts:
+(pass) shared Wallet snapshot parsing preserves exact balances and freshness
+(pass) shared Wallet parser accepts update wrappers and reports ledger issues
+(pass) ledger selections resolve the latest snapshot by principal [1.00ms]
+(pass) shared Wallet catalog parsing retains price and native route metadata
+(pass) shared Wallet parsing rejects unsafe numeric shapes
+
+apps/wallet/test/bridge_tools.test.ts:
+(pass) root bridge preparation binds the authenticated installation and returns the direct-root request without nested signing [9.00ms]
+(pass) a different app or reinstalled root cannot resume or attach the original root bridge [2.00ms]
+(pass) root bridge tools reject a nested or foreground caller before touching either wallet [1.00ms]
+(pass) root bridge attach rejects public transaction evidence with the wrong from [1.00ms]
+(pass) root bridge attach rejects public transaction evidence with the wrong to
+(pass) root bridge attach rejects public transaction evidence with the wrong data [1.00ms]
+(pass) root bridge attach rejects public transaction evidence with the wrong valueWei [1.00ms]
+(pass) root bridge attach rejects public transaction evidence with the wrong chainId [1.00ms]
+(pass) root bridge attach rejects public transaction evidence with the wrong transactionHash
+(pass) root bridge attaches exact public transaction evidence as success without signing [2.00ms]
+(pass) root bridge attaches exact public transaction evidence as reverted without signing [1.00ms]
+(pass) root bridge attaches exact public transaction evidence as pending without signing [1.00ms]
+(pass) root bridge attach rejects an otherwise identical transaction belonging to a different EVM Wallet request [1.00ms]
+(pass) a known root transaction hash remains reconcilable after its helper retires and never yields another executable request [1.00ms]
+(pass) an unknown root claim without a hash cannot yield a fresh request for a retired route [1.00ms]
+(pass) an unknown root claim rechecks the saved helper's contract identity before yielding a fresh request [1.00ms]
+(pass) EVM bridge validates a fresh send after not_found, then uses the same saved request [4.00ms]
+(pass) EVM bridge validates a fresh send after prepared, then uses the same saved request [1.00ms]
+(pass) EVM bridge validates a fresh send after preparing, then uses the same saved request [1.00ms]
+(pass) EVM bridge recovers the existing signed hash without requiring its retired helper to pass fresh-send validation [1.00ms]
+(pass) EVM bridge recovers the existing submitted hash without requiring its retired helper to pass fresh-send validation [1.00ms]
+(pass) EVM bridge recovers the existing confirmed hash without requiring its retired helper to pass fresh-send validation [1.00ms]
+(pass) EVM bridge recovers the existing unknown hash without requiring its retired helper to pass fresh-send validation
+(pass) EVM bridge cannot submit after fresh-send validation rejects a retired helper [2.00ms]
+(pass) an unresolved EVM signing operation without a hash is reconciled without validating or starting a replacement
+(pass) an EVM rejected operation cannot invoke fresh-send validation or submit a replacement [1.00ms]
+(pass) an EVM reverted operation cannot invoke fresh-send validation or submit a replacement [1.00ms]
+(pass) an EVM failed operation cannot invoke fresh-send validation or submit a replacement [1.00ms]
+(pass) durable bridge execution recovers a lost EVM reply from the same operation after the helper retires [3.00ms]
+(pass) durable bridge execution cannot resume an undispatched EVM claim through a retired helper [1.00ms]
+(pass) actual Wallet Candid Result projection restores bridge records and quote options without a second ok wrapper [30.00ms]
+(pass) every actual bridge client input matches generated method schemas and Kernel's live Candid binary binding [515.00ms]
+(pass) human speed-up preserves original durable identity while confirming exact replacement effect [3.00ms]
+(pass) human replacement with changed to cannot advance the bridge [1.00ms]
+(pass) human replacement with changed from cannot advance the bridge [1.00ms]
+(pass) human replacement with changed data cannot advance the bridge [1.00ms]
+(pass) human replacement with changed valueWei cannot advance the bridge
+(pass) root replacement requires exact journal ancestry and retains original hash after reload [3.00ms]
+(pass) root can recover replacement after original attach was lost and original RPC transaction evicted [1.00ms]
+(pass) root cancellation and different-nonce evidence remain unresolved [2.00ms]
+(pass) a lost replacement journal reply resumes its existing edge without another signature [2.00ms]
+(pass) a reverted exact replacement preserves original identity after lost first reply [1.00ms]
+(pass) a reverted exact replacement preserves original identity after saved hash [1.00ms]
+
+apps/wallet/test/transfers.test.ts:
+(pass) a saved send reuses its ID after reload and retains exact binary subaccount [2.00ms]
+(pass) distinct transfer intents retain distinct recovery records and completion removes only its own [1.00ms]
+(pass) unreadable persisted transfer never silently creates a fresh request
+(pass) opaque-origin storage denial still permits a stable prepared request ID [1.00ms]
+(pass) backend unresolved outcome stays pending and malformed success is not accepted
+(pass) an accepted minter burn remains separate from native settlement
+(pass) actual private self-call Candid binding preserves default and binary ICRC subaccounts [3.00ms]
+(pass) actual Candid operation projection unwraps the result and preserves accepted native settlement [1.00ms]
+
+apps/wallet/test/wallet_projection.test.ts:
+(pass) Wallet projection is bounded, exact, and round-trips its strict parser [2.00ms]
+(pass) Wallet projection schemas pass shared tool hardening [2.00ms]
+(pass) Wallet tile views are bounded navigation, not financial commands
+
+apps/wallet/test/logo.test.ts:
+(pass) safeTokenLogo > accepts supported base64 image metadata [1.00ms]
+(pass) safeTokenLogo > rejects active, remote, malformed, and oversized sources
+(pass) tokenInitials normalizes symbols and has a fallback
+
+ 173 pass
+ 0 fail
+ 1208 expect() calls
+Ran 173 tests across 24 files. [8.94s]

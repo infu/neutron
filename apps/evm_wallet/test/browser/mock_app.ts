@@ -1,6 +1,8 @@
 /** Browser fixture: only the Kernel bridge and projected backend replies are mocked. */
 import { Validator } from "jsonschema";
 import { EVM_WALLET_TOOLS } from "neutron-tools/evm_wallet";
+import { normalizeToolDescriptor } from "neutron-tools/protocol";
+import { keccak256, serializeTransaction, type Hex } from "viem";
 import { handleHumanEffect, type ProviderKind } from "../../src/provider.ts";
 
 const validator = new Validator();
@@ -11,7 +13,7 @@ const account = { id: "main", slot: "main", address, public_key: new Uint8Array(
 const snapshot = {
   accounts: [account],
   networks: [{ chain_id: "1", name: "Ethereum", native_symbol: "ETH", explorer_url: "https://etherscan.io", testnet: false, finality_description: "Ethereum finality" }],
-  assets: [], lifecycle: "active",
+  assets: [{ chain_id: "1", address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", symbol: "USDC", decimals: "6", custom: true }], lifecycle: "active",
 };
 const originalTransaction = {
   transaction_type: "eip1559", to: recipient, value: "1000000000000000", data: "0x", access_list: [],
@@ -31,6 +33,7 @@ const routing: any[] = [];
 const tileEndpoint = "app:evm_wallet:tile:evm_wallet:instance:browser-qualification";
 const residentEndpoint = "app:evm_wallet:background";
 const operations = new Map<string, any>([[original.request_id, original]]);
+const signedBytes = new Map<string, Hex>();
 const registrations = new Map<string, any>();
 const gates = new Map<string, { wait: Promise<void>; release: () => void }>();
 let sequence = 100;
@@ -58,12 +61,25 @@ export const loadTileContext = () => ({ app: "evm_wallet", tile: "evm_wallet" })
 export const copyToClipboard = async () => undefined;
 export const onAppStateChange = () => () => undefined;
 export function exposeTool(name: string, definition: any, handler: any) {
-  registrations.set(name, { definition, handler });
+  // Registration must cross the real SDK descriptor validator. Plain JSON
+  // validation alone missed the unsafe-regex startup failure in production.
+  registrations.set(name, { definition: normalizeToolDescriptor({ name, ...definition }), handler });
   return () => registrations.delete(name);
 }
 export async function querySelf(method: string, args: any[]) {
   calls.push({ method, args: copy(args) });
   if (method === "evm_wallet_snapshot_v1") return { ok: copy(snapshot) };
+  if (method === "evm_wallet_operation_v1") {
+    const operation = operations.get(args[0].identity.request_id);
+    return operation ? { ok: copy(operation) } : { err: "not_found" };
+  }
+  if (method === "evm_wallet_superseding_v1") return { ok: null };
+  if (method === "evm_wallet_submission_v1") {
+    const operation = operations.get(args[0].identity.request_id);
+    const raw = signedBytes.get(args[0].identity.request_id);
+    if (!operation || !raw) throw new Error("No signed transaction");
+    return { ok: { chain_id: operation.chain_id, transaction_hash: operation.transaction_hash, raw_transaction: raw } };
+  }
   if (method === "evm_wallet_history_v1") {
     if (!historyRows) return { ok: { operations: copy([...operations.values()]), total: String(operations.size) } };
     const offset = Number(args[0].offset), limit = Number(args[0].limit);
@@ -81,14 +97,17 @@ export async function querySelf(method: string, args: any[]) {
 export async function updateSelf(method: string, args: any[]) {
   calls.push({ method, args: copy(args) });
   await gates.get(method)?.wait;
-  const arg = args[0];
+  const outerArg = args[0];
+  const arg = method === "evm_wallet_prepare_browser_v1" ? outerArg.request : outerArg;
   if (method === "evm_wallet_accounts_v1") return { ok: [copy(account)] };
   if (method === "evm_wallet_balances_v1") return { ok: {
     account_id: "main", chain_id: arg.chain_id, address, native_balance: "1234567890123456789",
     block_number: "23901234", observed_at: stamp, completeness: "selected_assets", tokens: [],
   } };
   if (method === "evm_wallet_asset_set_v1") return { ok: null };
-  if (method === "evm_wallet_prepare_v1") {
+  if (method === "evm_wallet_prepare_browser_v1") {
+    const saved = operations.get(arg.identity.request_id);
+    if (saved) return { ok: copy(saved) };
     const intent = copy(arg.intent), variant = intent.operation;
     const transaction = variant.transaction ?? (variant.replacement ? {
       ...originalTransaction,
@@ -102,7 +121,7 @@ export async function updateSelf(method: string, args: any[]) {
     const kind = transaction ? "transaction" : variant.personal_message ? "message" : "typed_data";
     const operation = {
       ...copy(original), caller: copy(arg.identity.caller), operation_id: String(++sequence), request_id: arg.identity.request_id,
-      account_id: intent.account_id, chain_id: intent.chain_id, kind, status: "prepared", transaction_hash: null,
+      account_id: intent.account_id, chain_id: intent.chain_id, kind, status: transaction ? "preparing" : "prepared", transaction_hash: null,
       prepared_transaction: preparedTransaction,
       review: preparedTransaction ? {
         ...original.review, max_fee_per_gas: preparedTransaction.max_fee_per_gas,
@@ -115,13 +134,37 @@ export async function updateSelf(method: string, args: any[]) {
   }
   const operation = operations.get(arg.identity?.request_id);
   if (!operation) throw new Error(`Unknown operation for ${method}`);
+  if (method === "evm_wallet_finish_prepare_browser_v1") {
+    operation.status = "prepared";
+    operation.prepared_transaction.gas_limit = arg.gas_limit;
+    operation.review.gas_limit = arg.gas_limit;
+    operation.review.simulation = arg.simulation;
+    return { ok: copy(operation) };
+  }
   if (method === "evm_wallet_review_evidence_v1") return { operation: copy(operation), token_evidence: null };
+  if (method === "evm_wallet_observe_evidence_browser_v1") return { operation: copy(operation), token_evidence: null };
   if (method === "evm_wallet_status_v1") return { ok: copy(operation) };
   if (method === "evm_wallet_reject_v1") {
     operation.status = "rejected";
     return { ok: copy(operation) };
   }
-  if (method === "evm_wallet_execute_v1") throw new Error("Unexpected execution: sandbox qualification only declines requests");
+  if (method === "evm_wallet_execute_v1") {
+    if (operation.status !== "prepared" || operation.review_revision !== arg.review_revision) throw new Error("Execution requires the exact prepared review");
+    const tx = operation.prepared_transaction;
+    if (!tx) throw new Error("This fixture explicitly executes transactions only");
+    const raw = serializeTransaction({ type: "eip1559", chainId: Number(tx.chain_id), nonce: Number(tx.nonce), gas: BigInt(tx.gas_limit), to: tx.to, value: BigInt(tx.value), data: tx.data,
+      maxFeePerGas: BigInt(tx.max_fee_per_gas), maxPriorityFeePerGas: BigInt(tx.max_priority_fee_per_gas) },
+      { r: `0x${"11".repeat(32)}`, s: `0x${"22".repeat(32)}`, yParity: 0 });
+    signedBytes.set(operation.request_id, raw);
+    operation.status = "signed";
+    operation.transaction_hash = keccak256(raw);
+    return { ok: copy(operation) };
+  }
+  if (method === "evm_wallet_observe_browser_v1") {
+    if (operation.transaction_hash !== arg.transaction_hash) throw new Error("Observation hash does not match the signed request");
+    operation.status = JSON.parse(arg.transaction_json) ? "submitted" : "unknown";
+    return { ok: copy(operation) };
+  }
   throw new Error(`Unexpected update ${method}`);
 }
 const publicTools: Record<string, ProviderKind> = {
@@ -139,6 +182,11 @@ function describeContext(context: any) {
 }
 export async function callTool(request: any) {
   toolCalls.push(copy(request));
+  if (request.name === EVM_WALLET_TOOLS.balances) return {
+    accountId: "main", chainId: request.arguments.chainId, address, nativeBalanceWei: "1234567890123456789",
+    blockNumber: "23901234", observedAtNs: stamp, completeness: "requested_only",
+    tokens: request.arguments.tokens.map((token: string) => ({ address: token, symbol: "USDC", decimals: "6", balanceAtoms: "100000000", error: null })),
+  };
   if (request.name === EVM_WALLET_TOOLS.accounts) return { accounts: [{
     accountId: "main", address, publicKey: "0x02" + "22".repeat(32), keyFingerprint: "0x" + "11".repeat(32), namespaceVersion: "1",
   }] };

@@ -5,6 +5,7 @@ import { AppSettingsEntry } from "../src/settings/AppSettingsEntry.tsx";
 import type { CapabilitySummary } from "../src/settings/capability_registry.ts";
 import type { KernelUiMode } from "../src/ui_mode.ts";
 import { registryApp } from "./app_registry_fixture.ts";
+import { FRONTEND_TOOLS_DISCLOSURE } from "../src/lib/perm.ts";
 
 const entry = registryApp({
   id: "networked_app",
@@ -202,6 +203,31 @@ test("browser permissions are read-only exact declarations in Settings", () => {
     expect(html).not.toContain('data-capability-kind="browser_permissions"');
     expect(html).not.toContain("Turn off Camera");
     expect(html).not.toContain("currently active");
+  }
+});
+
+test("Settings retain exact install-approved frontend tools and provider confirmation disclosure", () => {
+  const swapEntry = registryApp({
+    id: "swap_app",
+    name: "Swap App",
+    capabilities: {
+      frontend_tools: {
+        api: 1,
+        targets: [{
+          app: "evm_wallet",
+          tools: ["evm_wallet.accounts", "evm_wallet.sendTransaction"],
+        }],
+      },
+    },
+  });
+
+  for (const mode of ["normal", "developer"] as const) {
+    const html = renderStaticEntry(mode, "swap_app", swapEntry);
+    expect(html).toContain(renderToStaticMarkup(<>{FRONTEND_TOOLS_DISCLOSURE}</>));
+    expect(html).toContain("evm_wallet");
+    expect(html).toContain("evm_wallet.accounts");
+    expect(html).toContain("evm_wallet.sendTransaction");
+    expect(html).not.toContain('data-capability-kind="frontend_tools"');
   }
 });
 

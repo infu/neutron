@@ -17,7 +17,7 @@ import { planMemoryMigrations } from "neutron-compiler/src/memory_migrations.ts"
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 import { effectIntent } from "../src/provider.ts";
-import { estimateTransaction, replacementTransaction } from "../src/read_adapters.ts";
+import { replacementTransaction } from "../src/read_adapters.ts";
 import type { MsgBusToolContext } from "neutron-tools/app";
 import {
   identityArgs,
@@ -34,6 +34,16 @@ const manifest = async () =>
   ) as NeutronManifest;
 const source = () =>
   readFile(new URL("../backend/main.mo", import.meta.url), "utf8");
+const browserBackendMethods = [
+  "evm_wallet_prepare_browser_v1",
+  "evm_wallet_finish_prepare_browser_v1",
+  "evm_wallet_operation_v1",
+  "evm_wallet_submission_v1",
+  "evm_wallet_superseding_v1",
+  "evm_wallet_observe_browser_v1",
+  "evm_wallet_observe_evidence_browser_v1",
+  "evm_wallet_transaction_request_matches_v1",
+] as const;
 const account = {
   id: "main",
   slot: "main",
@@ -86,12 +96,12 @@ async function project(method: string, value: unknown): Promise<unknown> {
     type,
   );
 }
-test("separate EVM Wallet declares custody, exact RPC reservations and all generated methods", async () => {
+test("separate EVM Wallet declares custody and browser observation methods without a canister RPC capability", async () => {
   const m = await manifest();
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 107,
+    version: 111,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -105,15 +115,44 @@ test("separate EVM Wallet declares custody, exact RPC reservations and all gener
       evm_evidence: { version: 1, migrations: [] },
     },
   });
-  expect(Object.keys(m.func ?? {})).toHaveLength(14);
+  expect(Object.keys(m.func ?? {})).toHaveLength(14 + browserBackendMethods.length);
+  expect(Object.keys(m.func ?? {})).toEqual(expect.arrayContaining([...browserBackendMethods]));
   expect(m.capabilities).not.toHaveProperty("chain_key_signing");
   expect(m.capabilities).not.toHaveProperty("ethereum_provider");
+  expect(m.capabilities).not.toHaveProperty("backend_calls");
+  expect(m.backend?.capabilities).not.toHaveProperty("backend_calls");
   const pkg = JSON.parse(
     await readFile(new URL("../package.json", import.meta.url), "utf8"),
   );
   expect(pkg.license).toBe(
     "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",
   );
+});
+test("browser preparation and recovery arguments round trip through the generated closed Candid schemas", async () => {
+  const artifact = generateAppMethodSchemaArtifact(await manifest(), await source());
+  const identity = identityArgs(caller, request.requestId);
+  const observation = { block_number: "0x64", balance: "1000000000000000000", pending_nonce: "0", mined_nonce: "0", gas_price: "10", max_priority_fee_per_gas: "2", base_fee_per_gas: "8" };
+  const preparation = { request: { identity, intent: effectIntent("transaction", request) }, observation };
+  const finish = { identity, review_revision: "1", balance: observation.balance, pending_nonce: "0", mined_nonce: "0", gas_estimate: "21000", gas_limit: "21000", simulation: "0x" };
+  const hash = `0x${"ab".repeat(32)}`;
+  const cases: Array<[string, unknown]> = [
+    ["evm_wallet_prepare_browser_v1", preparation],
+    ["evm_wallet_finish_prepare_browser_v1", finish],
+    ["evm_wallet_operation_v1", { identity }],
+    ["evm_wallet_submission_v1", { identity }],
+    ["evm_wallet_superseding_v1", { identity }],
+    ["evm_wallet_observe_browser_v1", { identity, transaction_hash: hash, transaction_json: "null" }],
+    ["evm_wallet_observe_evidence_browser_v1", { identity, review_revision: "1", observation: { block_number: "0x64", balance: { value: "5" } } }],
+    ["evm_wallet_transaction_request_matches_v1", { chain_id: "1", transaction_hash: hash, wallet_request: { caller_app_id: caller.appId, caller_installation_uid: caller.installationUid, request_id: request.requestId } }],
+  ];
+  for (const [method, value] of cases) {
+    expect(validateAppMethodArgs(artifact, method, [value] as never).valid).toBe(true);
+    expect(validateAppMethodArgs(artifact, method, [] as never).valid).toBe(false);
+    expect(validateAppMethodArgs(artifact, method, [value, null] as never).valid).toBe(false);
+  }
+  const { pending_nonce: _, ...missingNonce } = finish;
+  expect(validateAppMethodArgs(artifact, "evm_wallet_finish_prepare_browser_v1", [missingNonce] as never).valid).toBe(false);
+  expect(await project("evm_wallet_submission_v1", { chain_id: "1", transaction_hash: hash, raw_transaction: "0x02" })).toEqual({ chain_id: "1", transaction_hash: hash, raw_transaction: "0x02" });
 });
 test("actual generated schemas accept provider self-call arguments and reject wrong chains", async () => {
   const artifact = generateAppMethodSchemaArtifact(
@@ -255,7 +294,7 @@ test("published 101 self-call inputs and closed outputs stay unchanged when revi
     identity: identityArgs(caller, request.requestId), review_revision: "1", refresh: false,
   }] as never).valid).toBe(true);
 });
-test("new estimate and replacement-proof adapters accept actual Candid-projected optional fields", async () => {
+test("released estimate output and active replacement proof retain Candid optional-field compatibility", async () => {
   const estimate = await project("evm_wallet_estimate_transaction_v1", {
     chain_id: "1", from: account.address, to: request.to, value: "7", data: "0x",
     status: "unavailable", base_fee_per_gas: "10", observed_at: "999",
@@ -264,10 +303,7 @@ test("new estimate and replacement-proof adapters accept actual Candid-projected
   const artifact = generateAppMethodSchemaArtifact(await manifest(), await source());
   const ctx = {
     kernel: {
-      async updateSelf(method: string, args: unknown[]) {
-        expect(validateAppMethodArgs(artifact, method, args as never).valid).toBe(true);
-        return estimate;
-      },
+      async updateSelf() { throw new Error("Journal proof must not invoke backend RPC"); },
       async querySelf(method: string, args: unknown[]) {
         expect(validateAppMethodArgs(artifact, method, args as never).valid).toBe(true);
         return project("evm_wallet_replacement_transaction_v1", {
@@ -278,21 +314,24 @@ test("new estimate and replacement-proof adapters accept actual Candid-projected
       },
     },
   } as unknown as MsgBusToolContext;
-  expect(await estimateTransaction({ accountId: "main", chainId: "1", to: request.to, valueWei: "7", data: "0x" }, ctx)).toMatchObject({
-    gasLimit: null, baseFeePerGasWei: "10", estimatedFeeWei: null, blockNumber: null,
+  expect(estimate).toMatchObject({
+    base_fee_per_gas: "10", status: "unavailable",
   });
+  expect(estimate).not.toHaveProperty("gas_limit");
+  expect(estimate).not.toHaveProperty("estimated_fee");
+  expect(estimate).not.toHaveProperty("block_number");
   expect(await replacementTransaction({
     chainId: "1", transactionHash: `0x${"33".repeat(32)}`,
     originalWalletRequest: { callerAppId: "wallet", callerInstallationUid: "9007199254740993", requestId: request.requestId },
   }, ctx)).toMatchObject({ walletReplacementMatches: false, originalWalletRequest: { callerInstallationUid: "9007199254740993" } });
 });
-test("release 107 initializes cleanly and preserves the published 101 root while adding token evidence", async () => {
+test("release 111 initializes cleanly and preserves published 101 and 107 roots with additive browser methods", async () => {
   const files = unpackNeutronPackage(
-    await readFile(new URL("../evm_wallet.v0.1.7.neutron", import.meta.url)),
+    await readFile(new URL("../evm_wallet.v0.1.11.neutron", import.meta.url)),
   );
   const prepared = preparePackageInstall(files);
   expect(prepared.manifest.id).toBe("evm_wallet");
-  expect(prepared.manifest.version).toBe(107);
+  expect(prepared.manifest.version).toBe(111);
   expect(Object.keys(files)).toEqual(
     expect.arrayContaining([
       "web/index.html",
@@ -377,8 +416,17 @@ test("release 107 initializes cleanly and preserves the published 101 root while
   expect(files["neutron.lock.json"]).toEqual(candidate103Files["neutron.lock.json"]);
   const currentSchema = JSON.parse(new TextDecoder().decode(files["schema.json"]!));
   const priorSchema = JSON.parse(new TextDecoder().decode(candidate103Files["schema.json"]!));
-  // The artifact records its app release version beside the method schemas.
-  expect(currentSchema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 107 } });
+  // Released inputs and closed outputs remain identical; this release adds
+  // explicit browser observation methods alongside that retained wire history.
+  expect(currentSchema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
+  function assertRetainedMethods(previous: typeof priorSchema) {
+    expect(currentSchema.$schema).toBe(previous.$schema);
+    expect(currentSchema.version).toBe(previous.version);
+    expect(currentSchema.app).toEqual({ ...previous.app, version: 111 });
+    for (const [name, method] of Object.entries(previous.methods)) expect(currentSchema.methods[name]).toEqual(method);
+    expect(Object.keys(currentSchema.methods).filter(name => !Object.hasOwn(previous.methods, name)).sort()).toEqual([...browserBackendMethods].sort());
+  }
+  assertRetainedMethods(priorSchema);
   // Private candidate 104 isolates the owner-review UI fix: all 80 backend
   // modules are identical to 103. The successor additionally fixes the proven
   // RPC text-comparison overflow; its unchanged source closure is checked with
@@ -428,7 +476,7 @@ test("release 107 initializes cleanly and preserves the published 101 root while
   expect(compiled.memory).toEqual(candidate106.memory);
   expect(files["neutron.lock.json"]).toEqual(candidate106Files["neutron.lock.json"]);
   const candidate106Schema = JSON.parse(new TextDecoder().decode(candidate106Files["schema.json"]!));
-  expect(currentSchema).toEqual({ ...candidate106Schema, app: { ...candidate106Schema.app, version: 107 } });
+  assertRetainedMethods(candidate106Schema);
   const kept106 = planMemoryMigrations(
     { kernel, evm_wallet: candidate106 }, { kernel, evm_wallet: compiled },
   );
@@ -438,4 +486,35 @@ test("release 107 initializes cleanly and preserves the published 101 root while
   ]));
   expect(kept106.upgrades).toHaveLength(2);
   expect(kept106.destructiveMemoryRoots).toEqual([]);
+
+  // Batch 52 published these exact 107 bytes. A transport/frontend successor
+  // must preserve both schema roots, their source modules and their lock lineage.
+  const published107Bytes = await readFile(new URL("../evm_wallet.v0.1.7.neutron", import.meta.url));
+  expect(createHash("sha256").update(published107Bytes).digest("hex")).toBe(
+    "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91",
+  );
+  const published107Files = unpackNeutronPackage(published107Bytes);
+  const published107 = JSON.parse(new TextDecoder().decode(published107Files["neutron.json"]!));
+  expect(published107.version).toBe(107);
+  expect(compiled.memory).toEqual(published107.memory);
+  expect(files["neutron.lock.json"]).toEqual(published107Files["neutron.lock.json"]);
+  const releasedRoots = {
+    evm_wallet: { hash: "5cf1711e7f72a296ea8dbf320145d7b3d260398f871a3c832f7482388d983590", entry: "5f59b07b82a1ee1e57f285bc160ae758d10f5944b7e7e152a509691d686fadf4" },
+    evm_evidence: { hash: "2141ab91b6bbd3a60212644870fc1a581922c9aeef6f728bf3ccfd0770a03dec", entry: "18f54fa7e9064356471adb450971d8d1ccc803f0dda6545ce8ab4ce8910c6bf6" },
+  };
+  for (const [root, expected] of Object.entries(releasedRoots)) {
+    expect(published107.memory[root].schemas["1"]).toMatchObject(expected);
+    expect(currentLock.memory[root].schemas["1"]).toEqual(expected);
+    expect(files[`mo/${expected.entry}.mo`]).toEqual(published107Files[`mo/${expected.entry}.mo`]);
+  }
+  assertRetainedMethods(JSON.parse(new TextDecoder().decode(published107Files["schema.json"]!)));
+  const kept107 = planMemoryMigrations(
+    { kernel, evm_wallet: published107 }, { kernel, evm_wallet: compiled },
+  );
+  expect(kept107.upgrades).toHaveLength(2);
+  expect(kept107.upgrades).toEqual(expect.arrayContaining([
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_wallet", version: 1 },
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_evidence", version: 1 },
+  ]));
+  expect(kept107.destructiveMemoryRoots).toEqual([]);
 });

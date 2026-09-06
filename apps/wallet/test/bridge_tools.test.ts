@@ -199,6 +199,11 @@ function fixture(initial = intent()) {
         result: encodeFunctionResult({ abi: helperAbi, functionName: "getMinterAddress", result: state.actualMinter }),
         blockNumber: "100", observedAtNs: "1000000000",
       };
+      if (call.name === EVM_WALLET_TOOLS.callContract) return {
+        ...call.arguments, address: account,
+        result: encodeFunctionResult({ abi: helperAbi, functionName: "getMinterAddress", result: state.actualMinter }),
+        blockNumber: "100", observedAtNs: "1000000000",
+      };
       throw new Error(`Unexpected EVM tool ${call.name}; bridge handlers must not forward root signing authority`);
     },
   } as unknown as MsgBusToolContext["kernel"];

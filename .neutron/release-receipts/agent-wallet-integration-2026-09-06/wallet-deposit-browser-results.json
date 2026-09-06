@@ -1,0 +1,17 @@
+{
+  "checks": [
+    "375: fresh form does not auto-select saved deposit and fits viewport",
+    "375: Activity is initially collapsed",
+    "375: selected record shows steps, saved approval and Continue; technical error collapsed; no execution",
+    "375: Continue reconciles same deposit ID with no new prepare and reaches completion",
+    "375: new Wrap shows approval phase and completes with one action",
+    "375: confirmed deposit waits clearly for mint and Check progress performs only bridge refresh",
+    "700: fresh form does not auto-select saved deposit and fits viewport",
+    "700: Activity is initially collapsed",
+    "700: selected record shows steps, saved approval and Continue; technical error collapsed; no execution",
+    "700: Continue reconciles same deposit ID with no new prepare and reaches completion",
+    "700: new Wrap shows approval phase and completes with one action",
+    "700: confirmed deposit waits clearly for mint and Check progress performs only bridge refresh"
+  ],
+  "errors": []
+}

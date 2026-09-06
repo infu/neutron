@@ -25,7 +25,7 @@ export function NetworkFees({ fees, approvalRequired, chainId, remaining = false
   {chainId === "42161" && <p className="uni-muted">{postingIncluded
     ? "Arbitrum estimates include L1 posting costs in the RPC gas estimate once; no separate posting fee is added."
     : "An Arbitrum total including L1 posting costs is unavailable for any step without a complete RPC estimate."}</p>}
-  {approvalRequired && parsed?.swap.estimatedFeeWei === null && <p className="uni-muted">The swap may require the approval to confirm before it can be simulated. Refresh network fees after approval.</p>}
-  <p className="uni-muted">EVM Wallet reviews current fees separately before each signature. These estimates authorize no transaction.</p>
+  {approvalRequired && parsed?.swap.estimatedFeeWei === null && <p className="uni-muted">The swap fee becomes available after token approval. Your wallet will show the current fee before you confirm.</p>}
+  <p className="uni-muted">Network fees can change. Review the final fee in your wallet.</p>
   </div>;
 }

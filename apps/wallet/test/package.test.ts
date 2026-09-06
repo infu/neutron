@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.16.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.17.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 316,
+    version: 317,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -513,7 +513,7 @@ test("Wallet tile and tray mount the same app and gate only focused capabilities
   expect(frontend).toContain("<WalletBridgeDeposit");
   expect(bridgeFrontend).toContain("connectEthereumProvider()");
   expect(bridgeFrontend).toContain("if (tray) { await openInTile(); return; }");
-  expect(bridgeFrontend).toContain("Continue deposit in Wallet");
+  expect(bridgeFrontend).toContain("Continue in Wallet");
   expect(frontend).toContain("setProjectionRevision");
   expect(frontend).toContain("publishWalletInvalidation");
   expect(frontend).toContain('className="wallet-custom-ledger-entry"');

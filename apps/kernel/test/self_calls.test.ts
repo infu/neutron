@@ -181,6 +181,29 @@ test("live Candid is authoritative for self-call existence, mode, and shape", ()
   );
 });
 
+test("self-call arity errors identify the installed app and method without exposing argument values", () => {
+  const context = { appId: "evm_wallet", appVersion: 107, method: "evm_wallet_accounts_v1" };
+  const method = requireSelfCallCandidMethod(IDL.Service({
+    app_evm_wallet__evm_wallet_accounts_v1: IDL.Func([IDL.Null], [IDL.Vec(IDL.Text)], []),
+  }), "app_evm_wallet__evm_wallet_accounts_v1", "update");
+  expect(materializeSelfCallArguments([null], [], method.argTypes, context).args).toEqual([null]);
+  expect(() => materializeSelfCallArguments([], [], method.argTypes, context)).toThrow(
+    "Self-call argument count does not match live Candid (evm_wallet.evm_wallet_accounts_v1, app version 107; expected 1, received 0)",
+  );
+  expect(() => materializeSelfCallArguments([null, "private argument value"], [], method.argTypes, context)).toThrow(
+    "Self-call argument count does not match live Candid (evm_wallet.evm_wallet_accounts_v1, app version 107; expected 1, received 2)",
+  );
+  expect(() => materializeSelfCallArguments({ secret: "private argument value" }, [], method.argTypes, context)).toThrow(
+    "Self-call argument count does not match live Candid (evm_wallet.evm_wallet_accounts_v1, app version 107; expected 1, received non-array; arguments must be a dense plain array)",
+  );
+  expect(() => materializeSelfCallArguments(new Array(1), [], method.argTypes, context)).toThrow(
+    "expected 1, received 1; arguments must be a dense plain array",
+  );
+  expect(() => materializeSelfCallArguments([], [], method.argTypes)).toThrow(
+    /^Self-call argument count does not match live Candid$/,
+  );
+});
+
 test("nested and repeated binary fields bind only at live Candid blob leaves", () => {
   const requestType = IDL.Record({
     title: IDL.Text,

@@ -1,0 +1,130 @@
+{
+  "status": "passed",
+  "test": "published K342 EVM107 Uniswap104 preserve signed journals in one checked browser-RPC upgrade",
+  "passedTests": 1,
+  "skippedOptInHistoricalTests": 26,
+  "assertions": 288,
+  "durationMs": 89573.87,
+  "receipt": {
+    "path": ".neutron/release-receipts/uniswap-read-repair-2026-09-06/checked-upgrade-109/batch52-browser-rpc-combined-upgrade.json",
+    "bytes": 13355,
+    "sha256": "e0151ff5606c7d15039a0ef7fbf818738232043a19a36d99497c64467d961151"
+  },
+  "log": {
+    "path": ".neutron/release-receipts/uniswap-read-repair-2026-09-06/checked-upgrade-109/run.log",
+    "bytes": 19220,
+    "sha256": "88e83d8cead450e976f2fcbc0f34fba737d4fe71bd5e439ac665e1bd62a03c5d"
+  },
+  "candidates": [
+    {
+      "id": "kernel",
+      "version": 343,
+      "bytes": 2449439,
+      "sha256": "8051a00b4784e6e4a28f1e208677ef94647c36c83af66e2e2a37195924a0db27",
+      "path": "apps/kernel/kernel.v0.3.43.neutron",
+      "unchangedAfterTest": true
+    },
+    {
+      "id": "evm_wallet",
+      "version": 109,
+      "bytes": 569396,
+      "sha256": "dbcf92bcfef04f21ee92f2d95bd612bfd359310bfcbb5906d5c7e3f9d4c54de4",
+      "path": "apps/evm_wallet/evm_wallet.v0.1.9.neutron",
+      "unchangedAfterTest": true
+    },
+    {
+      "id": "uniswap",
+      "version": 105,
+      "bytes": 289769,
+      "sha256": "3dde37a5c76c76cd6618b13cb030c46fffa41a61ed9f0477037439bef8749730",
+      "path": "apps/uniswap/uniswap.v0.1.5.neutron",
+      "unchangedAfterTest": true
+    }
+  ],
+  "memoryRootActions": [
+    {
+      "owner": "contacts",
+      "memoryId": "contacts",
+      "kind": "keep",
+      "version": 2
+    },
+    {
+      "owner": "evm_wallet",
+      "memoryId": "evm_evidence",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "evm_wallet",
+      "memoryId": "evm_wallet",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "kernel",
+      "memoryId": "kernel",
+      "kind": "keep",
+      "version": 4
+    },
+    {
+      "owner": "kernel",
+      "memoryId": "kernel_activation",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "kitchensink",
+      "memoryId": "kitchensink",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "uniswap",
+      "memoryId": "uniswap",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "wallet",
+      "memoryId": "wallet",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "wallet",
+      "memoryId": "wallet_bridge",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "wallet",
+      "memoryId": "wallet_bridge_replacements",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "wallet",
+      "memoryId": "wallet_commands",
+      "kind": "keep",
+      "version": 1
+    },
+    {
+      "owner": "wallet",
+      "memoryId": "wallet_transfers",
+      "kind": "keep",
+      "version": 1
+    }
+  ],
+  "browserRecovery": {
+    "additionalSignatures": 0,
+    "additionalReplicatedRpcCalls": 0,
+    "nonce": "10",
+    "status": "confirmed"
+  },
+  "gatewayCreated": false,
+  "externalInstallModes": [
+    "install",
+    "install"
+  ],
+  "scope": "Exact batch52 predecessor and one combined checked actor upgrade, clean successor initialization, actual released custody signature, scripted browser-observation API recovery. No browser UI, external-chain acceptance or production financial calls."
+}

@@ -1,0 +1,95 @@
+{
+  "source": {
+    "app": "kernel",
+    "version": 343,
+    "file": "/srv/shared/code/neutron/apps/kernel/.neutron/sources/b95766b962fabb891e3febac663578505a85d85c50ea51ee0d867f56909ee3a6.source.v1.msgpack.gz",
+    "sha256": "b95766b962fabb891e3febac663578505a85d85c50ea51ee0d867f56909ee3a6",
+    "size": 3209964
+  },
+  "results": [
+    {
+      "app": "kernel",
+      "version": 344,
+      "manifestSha256": "783a1455ae4cdc6e57e1a29bfd6475e3fbce2adff7f52a264872109d812c2c00",
+      "predecessor": {
+        "valid": true,
+        "errors": [],
+        "planError": null
+      },
+      "successor": {
+        "valid": true,
+        "frontendTools": null
+      }
+    },
+    {
+      "app": "uniswap",
+      "version": 108,
+      "manifestSha256": "57b81371d2eae3322decf8b73fbeff2e9a2b72461062438be148a77549614d24",
+      "predecessor": {
+        "valid": false,
+        "errors": [
+          "instance.capabilities is not allowed to have the additional property \"frontend_tools\""
+        ],
+        "planError": "Error: Unknown capabilities declaration field frontend_tools"
+      },
+      "successor": {
+        "valid": true,
+        "frontendTools": {
+          "api": 1,
+          "targets": [
+            {
+              "app": "evm_wallet",
+              "tools": [
+                "evm_accounts_v1",
+                "evm_balances_v1",
+                "evm_call_contract_v1",
+                "evm_estimate_transaction_v1",
+                "evm_operation_status_v1",
+                "evm_replacement_transaction_v1",
+                "evm_send_transaction_v1",
+                "evm_transaction_v1"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "app": "wallet",
+      "version": 317,
+      "manifestSha256": "7d49c691a94986051ebfa3a804a310f24c403fcaf2ef87245ea358ab1777511d",
+      "predecessor": {
+        "valid": false,
+        "errors": [
+          "instance.capabilities is not allowed to have the additional property \"frontend_tools\""
+        ],
+        "planError": "Error: Unknown capabilities declaration field frontend_tools"
+      },
+      "successor": {
+        "valid": true,
+        "frontendTools": {
+          "api": 1,
+          "targets": [
+            {
+              "app": "evm_wallet",
+              "tools": [
+                "evm_accounts_v1",
+                "evm_call_contract_v1",
+                "evm_operation_status_v1",
+                "evm_read_contract_v1",
+                "evm_send_transaction_v1",
+                "evm_transaction_v1"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "requiredInstallationOrder": [
+    "kernel",
+    "reload",
+    "app upgrades"
+  ],
+  "publication": "one atomic catalog transaction"
+}

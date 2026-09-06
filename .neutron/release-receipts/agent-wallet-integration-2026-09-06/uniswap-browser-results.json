@@ -1,0 +1,19 @@
+{
+  "checks": [
+    "Temporary Wallet startup failure recovers automatically on focus without a permission request",
+    "Wallet accounts and balances load automatically without connection, refresh, or quote buttons",
+    "Searchable local token icons and debounced quote render with technical details collapsed",
+    "One Swap action automatically completes approval then swap and refreshes balances",
+    "Lost swap reply retains a visible Continue action and recovers without another signature",
+    "Focus automatically refreshes accounts, balances, and history without requesting permission",
+    "Expired approved swap survives reload, requotes after one click, and uses existing allowance for a newly reviewed swap",
+    "Automatic refresh and UI actions leave Agent and provider-owned swaps with their original owner",
+    "Compact swap and token picker fit 375px",
+    "Compact swap and token picker fit 320px"
+  ],
+  "errors": [],
+  "metadataRejections": [],
+  "mockTransportCalls": 135,
+  "fixture": "apps/uniswap/test/browser/check.mjs",
+  "fullLocalReport": "/tmp/neutron-uniswap-autoconnect-browser/report.json"
+}

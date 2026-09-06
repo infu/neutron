@@ -53,6 +53,9 @@ export const BACKEND_RESERVATION_SCOPE_DISCLOSURES = {
 export const BACKEND_CALL_PERSISTENCE_DISCLOSURE =
   "A grant remains until explicit revocation, incompatible capability removal, or app uninstall.";
 
+export const FRONTEND_TOOLS_DISCLOSURE =
+  "Installation approves calling these exact tools in the named installed apps without another connection prompt. Private and root-agent-only tools remain restricted. Each provider still controls transaction confirmation and other action approvals, including any approval delegated to an authorized root agent.";
+
 export const WALLET_CUSTODY_SIGNING_DISCLOSURE =
   "Trust this installed app to sign arbitrary exact 32-byte digests that can authorize asset transfers, messages, or other actions. The app decides what to sign; the Kernel does not validate transaction meaning or ask for each signature. Keys are isolated by app installation and slot, so other apps cannot use them. Each signature spends Neutron cycles.";
 
@@ -293,6 +296,14 @@ export type Permission =
     }
   | {
       readonly source: "kernel";
+      readonly kind: "frontend_tools";
+      readonly targets: readonly {
+        readonly app: string;
+        readonly tools: readonly string[];
+      }[];
+    }
+  | {
+      readonly source: "kernel";
       readonly kind: "connection";
       readonly provider: string;
       readonly scopes: readonly string[];
@@ -414,6 +425,7 @@ export function permissionLevel(permission: Permission): PermissionLevel {
     case "vetkeys":
     case "scheduled_task":
     case "browser_permissions":
+    case "frontend_tools":
       return 3;
     case "ethereum_provider":
       return permission.methods.includes("eth_sendTransaction") ? 3 : 2;
@@ -428,6 +440,10 @@ export function permissionLevel(permission: Permission): PermissionLevel {
 
 export function permissionKey(permission: Permission): string {
   switch (permission.kind) {
+    case "frontend_tools":
+      return `${permission.kind}:${JSON.stringify(
+        permission.targets.map(({ app, tools }) => [app, tools]),
+      )}`;
    case "backend_calls":
      return `${permission.kind}:${permission.reservationScopes.join(",")}:${
        permission.maxConcurrency
@@ -890,6 +906,16 @@ export function capabilityPlanPermissionDisclosures(
             functions: [...dependency.methods],
           });
         }
+        break;
+      case "frontend_tools":
+        add({
+          source: "kernel",
+          kind: "frontend_tools",
+          targets: entry.config.targets.map(({ app, tools }) => ({
+            app,
+            tools: [...tools],
+          })),
+        });
         break;
       case "app_exports":
         for (const { method } of entry.config.methods) {

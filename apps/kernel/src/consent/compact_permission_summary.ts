@@ -1,4 +1,5 @@
 import {
+  FRONTEND_TOOLS_DISCLOSURE,
   WALLET_CUSTODY_SIGNING_DISCLOSURE,
   WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
   browserPermissionFeaturesTitle,
@@ -152,6 +153,9 @@ export function compactPermissionConsequences(
         break;
       case "app_dependency":
         add(permission, "other-apps", "Other apps", `Uses functions provided by ${dependencies}.`);
+        break;
+      case "frontend_tools":
+        add(permission, "frontend-tools", "Connected apps", `Can use declared tools in ${permission.targets.map(({ app }) => app).join(", ")}. ${FRONTEND_TOOLS_DISCLOSURE}`);
         break;
       case "internal_app_function":
         add(permission, "other-apps", "Other apps", "Makes some app functions available to other installed apps.");

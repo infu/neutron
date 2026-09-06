@@ -211,9 +211,15 @@ either a direct ICRC-1 transfer or an exact short-lived ICRC-2 allowance; a
 pull-based Swap then executes `icrc2_transfer_from` through its own reviewed
 authority without another owner prompt. Wallet, not Kernel, owns token
 metadata, formatting, fee and spender meaning, durable idempotency, approval
-enumeration, and revocation. Kernel retains the old raw-review callback only as
-a deprecated generic compatibility surface; published Wallet 0.3.6 depends on
-it, while current providers must use provider-owned UI.
+enumeration, and revocation. Published Wallet 0.3.6 retains the generic raw-JSON
+owner review for compatibility, while current human flows use provider-owned UI.
+
+During Agent Mode, a public provider tool can instead prepare the exact
+operation and call `requestApproval(review)`. Kernel sends the complete bounded
+review to the active root Agent's permission judge and resumes that call only
+after approval. It skips the preliminary tool-access prompt, opens no provider
+tile, and creates no standing grant. The review remains bound to the original
+caller, provider, and live invocation; cancellation ends that authority.
 
 ### 5. Connect External Authority
 
@@ -227,13 +233,16 @@ Some capabilities require an owner action after installation:
 
 A provider-mediated operation is different from a generic app backend call.
 The owner has already chosen to trust the exact provider package and receives
-one provider-owned per-operation decision in that app's tile. For autonomous
-work, Wallet exposes a separate direct-root tool which shares its checked
-prepare/execute core but opens no Wallet or Kernel UI. Kernel makes that tool
-visible only to the active live depth-zero root and rejects human or nested
-agent calls before provider dispatch. Agent Mode still requires the owner to
-enable an exact agent version. Each root starts through a live tile in that app
-installation and the exact granted entrypoint without a per-turn browser-focus
+one provider-owned per-operation decision in that app's tile. During autonomous
+work, providers can send that operation's exact review to the active root Agent
+through their public one-shot tool. The Agent decides within the owner's
+instructions before the provider executes; a connection or tool grant does not
+replace this decision. Existing direct-root tools remain compatible and share
+their checked prepare/execute core without opening UI. Kernel makes those
+restricted tools visible only to the active live depth-zero root and rejects
+human or nested agent calls before dispatch to them. Agent Mode still requires
+the owner to enable an exact agent version. Each root starts through a live tile
+in that app installation and the exact granted entrypoint without a per-turn browser-focus
 or transient-activation gate. The resident cannot originate a root by itself,
 and all authority ends when the grant or invocation is revoked.
 

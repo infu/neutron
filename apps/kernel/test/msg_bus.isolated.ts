@@ -465,7 +465,7 @@ function authenticateLoadedTestFrame(
 
 function createToolEndpoint(
   _fakeWindow: FakeWindow,
-  descriptor: MsgBusToolDescriptor,
+  descriptor: MsgBusToolDescriptor | MsgBusToolDescriptor[],
   result: unknown,
 ): Window {
   const source = {
@@ -483,7 +483,9 @@ function createToolEndpoint(
         const request = event.data as ExecEnvelope;
         const action = request.payload.action;
         const ok =
-          action === msgBusLocalActions.toolsList ? [descriptor] : result;
+          action === msgBusLocalActions.toolsList
+            ? Array.isArray(descriptor) ? descriptor : [descriptor]
+            : result;
         port.postMessage({ type: "response", id: request.id, ok });
       });
       port.start();
@@ -563,6 +565,9 @@ function createProviderToolEndpoint(
     presentation?: (capability: string) => JsonObject;
     startGate?: Promise<void>;
     secondCallback?: "approval" | "presentation";
+    interactionContext?: (
+      context: ExecEnvelope["payload"]["context"],
+    ) => ExecEnvelope["payload"]["context"];
   } = {},
 ): {
   source: Window;
@@ -606,6 +611,9 @@ function createProviderToolEndpoint(
   const sendInteraction = (request: ProviderRequest): void => {
     const id = ++nextRequestId;
     pending.set(id, request);
+    const context = options.interactionContext
+      ? options.interactionContext(request.context)
+      : request.context;
     if (request.action === "approval") state.approvalRequests += 1;
     else state.presentationRequests += 1;
     request.port.postMessage({
@@ -624,7 +632,7 @@ function createProviderToolEndpoint(
                 review,
               }
             : options.presentation!(request.capability),
-        ...(request.context ? { context: request.context } : {}),
+        ...(context ? { context } : {}),
       },
     } satisfies ExecEnvelope);
   };
@@ -901,20 +909,25 @@ function registerScopedBackgroundEndpoint(
   appId: string,
   installationUid: string,
   tileId?: string,
-  options: { agentEntrypoints?: string[] } = {},
+  options: {
+    agentEntrypoints?: string[];
+    frontendTools?: { app: string; tools: string[] }[];
+  } = {},
 ) {
   const app = registryApp({
     id: appId,
     name: appId,
     version: 100,
     background: { path: "service.html" },
-    ...(options.agentEntrypoints
+    ...(options.agentEntrypoints || options.frontendTools
       ? {
           capabilities: {
-            agent_entrypoints: {
-              api: 1,
-              entrypoints: options.agentEntrypoints,
-            },
+            ...(options.agentEntrypoints
+              ? { agent_entrypoints: { api: 1 as const, entrypoints: options.agentEntrypoints } }
+              : {}),
+            ...(options.frontendTools
+              ? { frontend_tools: { api: 1 as const, targets: options.frontendTools } }
+              : {}),
           },
         }
       : {}),
@@ -2944,6 +2957,54 @@ test("generic backend access tool rejects attached calls", async () => {
       caller,
     ),
   ).rejects.toThrow(/Invalid arguments/);
+});
+
+test("self-call argument mismatch replies immediately with the installed app and method", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const appId = "evm_wallet";
+  const logicalMethod = "evm_wallet_accounts_v1";
+  const installed = registryApp({
+    id: appId,
+    name: "EVM Wallet",
+    version: 107,
+    capabilities: {
+      preapproved_self_calls: { api: 1, methods: [logicalMethod] },
+    },
+    func: { [logicalMethod]: { type: "update", async: "async*" } },
+  });
+  useAppsStore.setState({ list: { [appId]: installed } });
+  const physicalMethod = installed.functions[0]!.candid_name!;
+  let encoded = 0;
+  selfCallTarget = {
+    $idlFactory: ({ IDL: FactoryIDL }: { IDL: typeof IDL }) =>
+      FactoryIDL.Service({
+        [physicalMethod]: FactoryIDL.Func([FactoryIDL.Null], [FactoryIDL.Null], []),
+      }),
+    [`${physicalMethod}$`]: async () => {
+      encoded += 1;
+      return [...IDL.encode([IDL.Null], [null])];
+    },
+  };
+  const port = registerDirectTilePort(appId, "owner");
+  const response = new Promise<Record<string, any>>((resolve) => {
+    const listener = (event: MessageEvent) => {
+      if (event.data.id !== 176) return;
+      port.removeEventListener("message", listener);
+      resolve(event.data);
+    };
+    port.addEventListener("message", listener);
+  });
+  port.postMessage({
+    type: "neutron:self-call:exec", version: 1, id: 176,
+    tool: "canister.update_self", method: logicalMethod, args: [], blobs: [],
+  });
+  expect(await response).toMatchObject({
+    type: "neutron:self-call:response", id: 176,
+    error: { message: "Self-call argument count does not match live Candid (evm_wallet.evm_wallet_accounts_v1, app version 107; expected 1, received 0)" },
+  });
+  expect(encoded).toBe(0);
+  expect(Object.values(useRequestStore.getState().calls)).toHaveLength(0);
 });
 
 test("self-call cancellation dismisses its pending backend consent", async () => {
@@ -5594,7 +5655,7 @@ test("provider presentation capability is shared and consumed by exactly one cal
   expect(useMsgBusPermissionStore.getState().requests).toEqual({});
 });
 
-test("provider presentation rejects Agent invocations before opening a tile or dispatching", async () => {
+test("provider presentation rejects Agent invocations before opening a tile or dispatching its foreground handler", async () => {
   installFakeWindow();
   authorizeTestOwner("owner-principal");
   const { resident, root } = await beginSignedCallAgentInvocation();
@@ -5618,11 +5679,12 @@ test("provider presentation rejects Agent invocations before opening a tile or d
       .getState()
       .workspaces[1].tiles.some((tile) => tile.appId === "provider"),
   ).toBe(false);
-  expect(provider.state.calls).toBe(0);
+  expect(provider.state.calls).toBe(1);
+  expect(provider.state.providerUi).toBe(false);
   expect(provider.state.approvalRequests).toBe(0);
-  expect(provider.state.presentationRequests).toBe(0);
+  expect(provider.state.presentationRequests).toBe(1);
   expect(provider.state.interactionResults).toEqual([]);
-  expect(provider.state.interactionErrors).toEqual([]);
+  expect(provider.state.interactionErrors).toHaveLength(1);
   expect(presentation.state.calls).toBe(0);
   expect(useMsgBusPermissionStore.getState().requests).toEqual({});
   expect(useRequestStore.getState().calls).toEqual({});
@@ -6088,78 +6150,443 @@ test("provider-owned consent rechecks owner authority after the approved handler
   await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
 });
 
-test("a direct Agent root cannot use a public legacy provider tool", async () => {
+test("a direct Agent provider call requires a fresh exact review for each operation", async () => {
   installFakeWindow();
   authorizeTestOwner("owner-principal");
-  const { resident, root } = await beginSignedCallAgentInvocation();
+  const agent = createAgentConsentEndpoint();
+  const { resident, root } = await beginSignedCallAgentInvocation(agent.source);
+  const review = { detail: "one action", cost: "one credit" };
   const provider = createProviderToolEndpoint(
-    providerActionDescriptor,
-    { detail: "one action", cost: "one credit" },
-    { receipt: "must-not-return" },
+    providerActionDescriptor, review, { receipt: "approved" },
+    { secondCallback: "approval" },
   );
   registerScopedBackgroundEndpoint(provider.source, "provider", "501");
 
-  await expect(
-    routeToolCall(
-      providerActionCall(),
-      resident,
-      undefined,
-      invocationMetadata(root, true),
-    ),
-  ).rejects.toMatchObject({ code: "INVOCATION_INVALID" });
-  expect(provider.state.calls).toBe(0);
-  expect(provider.state.approvalRequests).toBe(0);
-  expect(provider.state.presentationRequests).toBe(0);
-  expect(provider.state.interactionResults).toEqual([]);
-  expect(provider.state.interactionErrors).toEqual([]);
+  for (let operation = 0; operation < 2; operation += 1) {
+    await expect(routeToolCall(
+      providerActionCall(), resident, undefined, invocationMetadata(root, true),
+    )).resolves.toEqual({ receipt: "approved" });
+  }
+  expect(agent.challenges).toHaveLength(2);
+  expect(agent.challenges[0]).toMatchObject({
+    requester: { appId: "provider", role: "background" },
+    chain: [
+      { appId: "signed_call_agent", tool: "run" },
+      { appId: "provider", tool: providerActionDescriptor.name },
+    ],
+    kind: "frontend_tool", persistence: "none", risk: "high",
+    action: {
+      caller: { appId: "signed_call_agent" },
+      targetAppId: "provider", tool: providerActionDescriptor.name,
+      providerReview: review, onceOnly: true, requireFreshDecision: true,
+    },
+  });
+  expect(provider.state.calls).toBe(2);
+  expect(provider.state.providerUi).toBe(false);
+  expect(provider.state.approvalRequests).toBe(4);
+  expect(provider.state.interactionResults).toEqual([{ approved: true }, { approved: true }]);
+  expect(provider.state.interactionErrors).toHaveLength(2);
+  expect(JSON.stringify(provider.state.interactionErrors)).toContain("already consumed");
   expect(useMsgBusPermissionStore.getState().requests).toEqual({});
   expect(useRequestStore.getState().calls).toEqual({});
   completeInvocation(root);
 });
 
-test("a nested Agent call cannot dispatch a public legacy provider tool", async () => {
+test("a nested Agent provider call sends the bounded review to its root judge", async () => {
   const fakeWindow = installFakeWindow();
   authorizeTestOwner("owner-principal");
   const agent = createAgentConsentEndpoint();
   const { root } = await beginSignedCallAgentInvocation(agent.source);
-  const requesterSource = createToolEndpoint(fakeWindow, echoDescriptor, {
-    value: "unused",
-  });
-  const requesterEndpoint = registerScopedBackgroundEndpoint(
-    requesterSource,
-    "requester",
-    "601",
+  const requester = registerScopedBackgroundEndpoint(
+    createToolEndpoint(fakeWindow, echoDescriptor, { value: "unused" }),
+    "requester", "601",
   );
   const provider = createProviderToolEndpoint(
     providerActionDescriptor,
     { detail: "one action", cost: "one credit" },
-    { receipt: "must-not-return" },
+    { receipt: "approved" },
   );
   registerScopedBackgroundEndpoint(provider.source, "provider", "602");
-  const requesterInvocation = createChildInvocation(
-    root,
-    requesterEndpoint,
-    "requester_execute",
-  );
+  const child = createChildInvocation(root, requester, "requester_execute");
 
-  await expect(
-    routeToolCall(
-      providerActionCall(),
-      requesterEndpoint,
-      undefined,
-      invocationMetadata(requesterInvocation),
-    ),
-  ).rejects.toMatchObject({ code: "INVOCATION_INVALID" });
-  expect(agent.challenges).toEqual([]);
-  expect(provider.state.calls).toBe(0);
-  expect(provider.state.approvalRequests).toBe(0);
+  await expect(routeToolCall(
+    providerActionCall(), requester, undefined, invocationMetadata(child),
+  )).resolves.toEqual({ receipt: "approved" });
+  expect(agent.challenges).toHaveLength(1);
+  expect(agent.challenges[0]).toMatchObject({
+    chain: [
+      { appId: "signed_call_agent", tool: "run" },
+      { appId: "requester", tool: "requester_execute" },
+      { appId: "provider", tool: providerActionDescriptor.name },
+    ],
+    action: { caller: { appId: "requester" }, providerReview: { cost: "one credit" } },
+  });
+  expect(provider.state.approvalSucceeded).toBe(true);
   expect(provider.state.presentationRequests).toBe(0);
-  expect(provider.state.interactionResults).toEqual([]);
-  expect(provider.state.interactionErrors).toEqual([]);
   expect(useMsgBusPermissionStore.getState().requests).toEqual({});
-  expect(useRequestStore.getState().calls).toEqual({});
-  completeInvocation(requesterInvocation);
+  completeInvocation(child);
   completeInvocation(root);
+});
+
+test("an Agent denial aborts the provider even when its handler catches the denial", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const agent = createAgentConsentEndpoint("deny");
+  const { resident, root } = await beginSignedCallAgentInvocation(agent.source);
+  const provider = createProviderToolEndpoint(
+    providerActionDescriptor, { detail: "unrelated operation" }, { receipt: "never" },
+    { catchApprovalError: true },
+  );
+  registerScopedBackgroundEndpoint(provider.source, "provider", "603");
+  await expect(routeToolCall(
+    providerActionCall(), resident, undefined, invocationMetadata(root, true),
+  )).rejects.toMatchObject({ code: "AGENT_CONSENT_DENIED" });
+  expect(agent.challenges).toHaveLength(1);
+  expect(provider.state.approvalSucceeded).toBe(false);
+  expect(provider.state.cancelled).toBe(true);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  completeInvocation(root);
+});
+
+for (const detached of [true, false]) {
+  test(`Agent provider capabilities reject ${detached ? "detached" : "sibling invocation"} callbacks`, async () => {
+    installFakeWindow();
+    authorizeTestOwner("owner-principal");
+    const agent = createAgentConsentEndpoint();
+    const { resident, root } = await beginSignedCallAgentInvocation(agent.source);
+    let sibling: ReturnType<typeof createChildInvocation>;
+    const provider = createProviderToolEndpoint(
+      providerActionDescriptor, { detail: "one action" }, { receipt: "never" },
+      { interactionContext: () => detached ? undefined : { invocation: invocationMetadata(sibling) } },
+    );
+    const endpoint = registerScopedBackgroundEndpoint(provider.source, "provider", "604");
+    sibling = createChildInvocation(root, endpoint, "unrelated_handler");
+    await expect(routeToolCall(
+      providerActionCall(), resident, undefined, invocationMetadata(root, true),
+    )).rejects.toMatchObject({ code: "INVOCATION_INVALID" });
+    expect(agent.challenges).toEqual([]);
+    expect(provider.state.approvalSucceeded).toBe(false);
+    expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+    completeInvocation(sibling);
+    completeInvocation(root);
+  });
+}
+
+test("cancelling an Agent root cancels its pending provider review", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  let releaseDecision!: () => void;
+  const decisionGate = new Promise<void>((resolve) => { releaseDecision = resolve; });
+  const agent = createAgentConsentEndpoint("allow", { decisionGate });
+  const { resident, root } = await beginSignedCallAgentInvocation(agent.source);
+  const provider = createProviderToolEndpoint(
+    providerActionDescriptor, { detail: "one action" }, { receipt: "never" },
+  );
+  registerScopedBackgroundEndpoint(provider.source, "provider", "605");
+  const pending = routeToolCall(
+    providerActionCall(), resident, undefined, invocationMetadata(root, true),
+  );
+  for (let turn = 0; turn < 50 && agent.challenges.length === 0; turn += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  expect(agent.challenges).toHaveLength(1);
+  cancelAgentRoot(root.id, "Owner cancelled the swap");
+  await expect(pending).rejects.toMatchObject({ code: "AGENT_MODE_REVOKED" });
+  releaseDecision();
+  expect(provider.state.approvalSucceeded).toBe(false);
+  expect(provider.state.cancelled).toBe(true);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+async function nextFrontendToolRequest() {
+  for (let turn = 0; turn < 50; turn += 1) {
+    const requests = Object.values(useMsgBusPermissionStore.getState().requests);
+    if (requests.length > 0) {
+      expect(requests).toHaveLength(1);
+      return requests[0]!;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error("Missing frontend tool permission request");
+}
+
+const readToolDescriptors = [
+  "accounts", "balances", "callContract", "estimateTransaction",
+  "transaction", "replacementTransaction",
+].map((name): MsgBusToolDescriptor => ({
+  ...echoDescriptor,
+  name,
+  title: `Read ${name}`,
+  description: `Inspect ${name}.`,
+  annotations: { "neutron:effects": ["read"] },
+}));
+
+test("one exact-tools permission approves six concurrent reads without granting a send tool", async () => {
+  const fakeWindow = installFakeWindow();
+  const caller = registerTile({} as Window, "requester", "caller");
+  const target = "app:provider:background" as const;
+  const targetSource = createToolEndpoint(fakeWindow, [
+    ...readToolDescriptors,
+    { ...echoDescriptor, name: "sendTransaction" },
+  ], { value: "read result" });
+  unregisters.push(registerBackground(targetSource, "provider"));
+  const targetEndpoint = getRegisteredEndpoint(target)!;
+  const requestCall = {
+    target: "kernel" as const,
+    name: "permissions.request",
+    arguments: { target, tools: readToolDescriptors.map((tool) => tool.name) },
+  };
+  const pending = routeToolCall(requestCall, caller);
+  const request = await nextFrontendToolRequest();
+  expect(request.tools).toEqual(readToolDescriptors.map(({ name, title, description }) => ({ name, title: title!, description: description! })));
+  expect(request.sessionOnly).toBe(true);
+  approveFrontendToolRequest(request.cid, "session");
+  await expect(pending).resolves.toEqual({ granted: true });
+
+  const reads = await Promise.all(readToolDescriptors.map(({ name }) =>
+    routeToolCall({ target, name, arguments: { value: "read" } }, caller),
+  ));
+  expect(reads).toEqual(readToolDescriptors.map(() => ({ value: "read result" })));
+  await expect(routeToolCall(requestCall, caller)).resolves.toEqual({ granted: true });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  const grantCaller = { endpoint: caller.endpointId, appId: "requester", role: "tile" as const };
+  for (const { name } of readToolDescriptors) {
+    expect(hasFrontendToolGrant(grantCaller, caller.sessionId, target, targetEndpoint.sessionId, name)).toBe(true);
+    expect(hasFrontendToolGrant({ ...grantCaller, endpoint: "app:requester:tile:main:instance:other" }, caller.sessionId, target, targetEndpoint.sessionId, name)).toBe(false);
+    expect(hasFrontendToolGrant(grantCaller, "reconnected-caller", target, targetEndpoint.sessionId, name)).toBe(false);
+    expect(hasFrontendToolGrant(grantCaller, caller.sessionId, target, "reconnected-provider", name)).toBe(false);
+  }
+  expect(hasFrontendToolGrant(grantCaller, caller.sessionId, target, targetEndpoint.sessionId, "*")).toBe(false);
+  const send = routeToolCall({ target, name: "sendTransaction", arguments: { value: "send" } }, caller);
+  const sendRequest = await nextFrontendToolRequest();
+  expect(sendRequest.tool).toBe("sendTransaction");
+  expect(sendRequest.tools).toBeUndefined();
+  rejectFrontendToolRequest(sendRequest.cid);
+  await expect(send).rejects.toThrow("User rejected frontend tool access");
+});
+
+test("exact-tools permission reviews only missing grants and deduplicates requested names", async () => {
+  const fakeWindow = installFakeWindow();
+  const caller = registerTile({} as Window, "requester", "caller");
+  const target = "app:provider:background" as const;
+  unregisters.push(registerBackground(createToolEndpoint(fakeWindow, readToolDescriptors, { value: "unused" }), "provider"));
+  const targetEndpoint = getRegisteredEndpoint(target)!;
+  grantFrontendToolSession("requester", target, "accounts", {
+    callerEndpoint: caller.endpointId,
+    callerSessionId: caller.sessionId!,
+    targetSessionId: targetEndpoint.sessionId!,
+  });
+  const pending = routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target, tools: ["accounts", "balances", "balances"] } }, caller);
+  const request = await nextFrontendToolRequest();
+  expect(request.tools?.map((tool) => tool.name)).toEqual(["balances"]);
+  approveFrontendToolRequest(request.cid, "session");
+  await expect(pending).resolves.toEqual({ granted: true });
+});
+
+test("exact-tools permissions reject unknown, private, wildcard, and ambiguous selections before consent", async () => {
+  const fakeWindow = installFakeWindow();
+  const caller = registerTile({} as Window, "requester", "caller");
+  const target = "app:provider:background" as const;
+  const privateDescriptor = { ...echoDescriptor, name: "private", annotations: { "neutron:visibility": NEUTRON_TOOL_VISIBILITY_SAME_APP } };
+  const rootDescriptor = { ...echoDescriptor, name: "root", annotations: { "neutron:audience": NEUTRON_TOOL_AUDIENCE_AGENT_ROOT } };
+  unregisters.push(registerBackground(createToolEndpoint(fakeWindow, [echoDescriptor, privateDescriptor, rootDescriptor], { value: "unused" }), "provider"));
+  for (const args of [
+    { target, tools: ["missing"] },
+    { target, tools: ["private"] },
+    { target, tools: ["root"] },
+    { target, tools: ["*"] },
+    { target, tools: [] },
+    { target, tools: ["echo"], tool: "echo" },
+    { target },
+  ]) {
+    await expect(routeToolCall({ target: "kernel", name: "permissions.request", arguments: args }, caller)).rejects.toBeInstanceOf(Error);
+    expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  }
+});
+
+test("exact-tools permission cancellation and endpoint reconnection leave no grants", async () => {
+  const fakeWindow = installFakeWindow();
+  const callerSource = {} as Window;
+  const caller = registerTile(callerSource, "requester", "caller");
+  const target = "app:provider:background" as const;
+  const targetSource = createToolEndpoint(fakeWindow, readToolDescriptors, { value: "unused" });
+  unregisters.push(registerBackground(targetSource, "provider"));
+  for (const cancel of ["abort", "caller", "target"] as const) {
+    const controller = new AbortController();
+    const pending = routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target, tools: ["accounts", "balances"] } }, caller, undefined, undefined, undefined, controller.signal);
+    const request = await nextFrontendToolRequest();
+    if (cancel === "abort") controller.abort();
+    else expect(connectFrameEndpoint(cancel === "caller" ? callerSource : targetSource, cancel === "target")).toBe(true);
+    await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+    approveFrontendToolRequest(request.cid, "session");
+    expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+    for (const name of ["accounts", "balances"]) {
+      expect(hasFrontendToolGrant(request.caller, request.callerSessionId, target, request.targetSessionId, name)).toBe(false);
+    }
+  }
+});
+
+test("exact-tools permission rechecks the endpoint after live descriptor discovery", async () => {
+  installFakeWindow();
+  let releaseDescriptor!: () => void;
+  const descriptorGate = new Promise<void>((resolve) => { releaseDescriptor = resolve; });
+  const callerSource = {} as Window;
+  const caller = registerTile(callerSource, "requester", "caller");
+  const provider = createCapturingToolEndpoint(echoDescriptor, { value: "unused" }, { descriptorGate });
+  unregisters.push(registerBackground(provider.source, "provider"));
+  const pending = routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target: "app:provider:background", tools: ["echo"] } }, caller);
+  void pending.catch(() => undefined);
+  for (let turn = 0; turn < 50 && provider.state.descriptorRequests === 0; turn += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(provider.state.descriptorRequests).toBe(1);
+  expect(connectFrameEndpoint(callerSource)).toBe(true);
+  releaseDescriptor();
+  await expect(pending).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("provider-owned actions still require fresh review after exact-tools session approval", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const caller = registerTile({} as Window, "requester", "caller");
+  const provider = createProviderToolEndpoint(providerActionDescriptor, { detail: "exact action" }, { receipt: "done" });
+  unregisters.push(registerBackground(provider.source, "provider"));
+  const pending = routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target: "app:provider:background", tools: ["provider_action"] } }, caller);
+  approveFrontendToolRequest((await nextFrontendToolRequest()).cid, "session");
+  await expect(pending).resolves.toEqual({ granted: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const action = routeToolCall(providerActionCall(), caller);
+    const review = await nextFrontendToolRequest();
+    expect(review.onceOnly).toBe(true);
+    expect(review.providerReview).toEqual({ detail: "exact action" });
+    approveFrontendToolRequest(review.cid, "once");
+    await expect(action).resolves.toEqual({ receipt: "done" });
+  }
+  expect(provider.state.approvalRequests).toBe(2);
+});
+
+test("Agent exact-tools permission decisions do not create standing session grants", async () => {
+  const fakeWindow = installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const agent = createAgentConsentEndpoint();
+  const { resident, root } = await beginSignedCallAgentInvocation(agent.source);
+  const target = "app:provider:background" as const;
+  const provider = registerScopedBackgroundEndpoint(createToolEndpoint(fakeWindow, echoDescriptor, { value: "unused" }), "provider", "901");
+  const requester = registerScopedBackgroundEndpoint(createToolEndpoint(fakeWindow, echoDescriptor, { value: "unused" }), "requester", "902");
+  const child = createChildInvocation(root, requester, "requester_execute");
+  const call = { target: "kernel" as const, name: "permissions.request", arguments: { target, tools: ["echo"] } };
+  await expect(routeToolCall(call, resident, undefined, invocationMetadata(root, true))).resolves.toEqual({ granted: true });
+  expect(agent.challenges).toEqual([]);
+  await expect(routeToolCall(call, requester, undefined, invocationMetadata(child))).resolves.toEqual({ granted: true });
+  expect(agent.challenges).toHaveLength(1);
+  expect(agent.challenges[0]).toMatchObject({ action: { targetAppId: "provider", tools: ["echo"] } });
+  for (const endpoint of [resident, requester]) {
+    expect(hasFrontendToolGrant({ endpoint: endpoint.endpointId, appId: endpoint.context.appId, role: "background" }, endpoint.sessionId, target, provider.sessionId, "echo")).toBe(false);
+  }
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  completeInvocation(child);
+  completeInvocation(root);
+});
+
+test("install-declared frontend tools connect immediately and leave undeclared tools for consent", async () => {
+  const fakeWindow = installFakeWindow();
+  const source = createToolEndpoint(fakeWindow, echoDescriptor, { value: "unused" });
+  const resident = registerScopedBackgroundEndpoint(source, "requester", "941", "main", {
+    frontendTools: [{ app: "provider", tools: ["accounts"] }],
+  });
+  const caller = registerScopedTileEndpoint({} as Window, "requester", "main", "caller", resident.appScope);
+  const providerSource = createToolEndpoint(fakeWindow, readToolDescriptors, { value: "ready" });
+  registerScopedBackgroundEndpoint(providerSource, "provider", "942");
+  const target = "app:provider:background" as const;
+  await expect(routeToolCall({ target, name: "accounts", arguments: { value: "read" } }, caller)).resolves.toEqual({ value: "ready" });
+  expect(connectFrameEndpoint(providerSource, true)).toBe(true);
+  await expect(routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target, tools: ["accounts"] } }, caller)).resolves.toEqual({ granted: true });
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  const request = routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target, tools: ["accounts", "balances"] } }, caller);
+  const review = await nextFrontendToolRequest();
+  expect(review.tools?.map(({ name }) => name)).toEqual(["balances"]);
+  rejectFrontendToolRequest(review.cid);
+  await expect(request).rejects.toThrow("User rejected frontend tool access");
+
+  // A replacement caller installation does not inherit the predecessor's plan.
+  const replacement = registerScopedBackgroundEndpoint({} as Window, "requester", "943", "main");
+  const replacementTile = registerScopedTileEndpoint({} as Window, "requester", "main", "replacement", replacement.appScope);
+  await expect(routeToolCall({ target, name: "accounts", arguments: { value: "read" } }, caller)).rejects.toBeInstanceOf(Error);
+  const replacementRead = routeToolCall({ target, name: "accounts", arguments: { value: "read" } }, replacementTile);
+  const replacementReview = await nextFrontendToolRequest();
+  expect(replacementReview.tool).toBe("accounts");
+  rejectFrontendToolRequest(replacementReview.cid);
+  await expect(replacementRead).rejects.toThrow("User rejected frontend tool access");
+});
+
+test("install-declared nested Agent tools avoid parallel permission decisions without losing invocation scope", async () => {
+  const fakeWindow = installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const agent = createAgentConsentEndpoint();
+  const { root } = await beginSignedCallAgentInvocation(agent.source);
+  const target = "app:provider:background" as const;
+  registerScopedBackgroundEndpoint(createToolEndpoint(fakeWindow, readToolDescriptors, { value: "ready" }), "provider", "944");
+  const requester = registerScopedBackgroundEndpoint(createToolEndpoint(fakeWindow, echoDescriptor, { value: "unused" }), "requester", "945", undefined, {
+    frontendTools: [{ app: "provider", tools: ["accounts", "balances"] }],
+  });
+  const child = createChildInvocation(root, requester, "requester_execute");
+  const scoped = invocationMetadata(child);
+  const calls = ["accounts", "balances"].map((name) => ({ target, name, arguments: { value: "read" } }));
+  await expect(Promise.all(calls.map((call) => routeToolCall(call, requester, undefined, scoped)))).resolves.toEqual([{ value: "ready" }, { value: "ready" }]);
+  await expect(routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target, tools: ["accounts", "balances"] } }, requester, undefined, scoped)).resolves.toEqual({ granted: true });
+  expect(agent.challenges).toEqual([]);
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  await expect(routeToolCall(calls[0]!, requester)).rejects.toMatchObject({ code: "SCOPED_CONTEXT_REQUIRED" });
+  await expect(routeToolCall({ target, name: "callContract", arguments: { value: "review" } }, requester, undefined, scoped)).resolves.toEqual({ value: "ready" });
+  expect(agent.challenges).toHaveLength(1);
+  expect(agent.challenges[0]).toMatchObject({ action: { tool: "callContract" } });
+  completeInvocation(child);
+  completeInvocation(root);
+});
+
+test("install-declared frontend tools preserve private audiences and fresh provider confirmation", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const resident = registerScopedBackgroundEndpoint({} as Window, "requester", "946", "main", {
+    frontendTools: [{ app: "provider", tools: ["provider_action", "private", "root", "foreground"] }],
+  });
+  const caller = registerScopedTileEndpoint({} as Window, "requester", "main", "caller", resident.appScope);
+  const privateTools: MsgBusToolDescriptor[] = [
+    { ...echoDescriptor, name: "private", annotations: { "neutron:visibility": NEUTRON_TOOL_VISIBILITY_SAME_APP } },
+    { ...echoDescriptor, name: "root", annotations: { "neutron:visibility": NEUTRON_TOOL_VISIBILITY_SAME_APP, "neutron:audience": NEUTRON_TOOL_AUDIENCE_AGENT_ROOT } },
+    { ...echoDescriptor, name: "foreground", annotations: { "neutron:visibility": NEUTRON_TOOL_VISIBILITY_SAME_APP, "neutron:audience": NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE } },
+  ];
+  const provider = createProviderToolEndpoint(providerActionDescriptor, { detail: "exact action" }, { receipt: "done" });
+  registerScopedBackgroundEndpoint(provider.source, "provider", "947");
+  // Check provider_once after an install grant just as after a session grant.
+  await expect(routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target: "app:provider:background", tools: ["provider_action"] } }, caller)).resolves.toEqual({ granted: true });
+  const action = routeToolCall(providerActionCall(), caller);
+  const review = await nextFrontendToolRequest();
+  expect(review.onceOnly).toBe(true);
+  expect(review.providerReview).toEqual({ detail: "exact action" });
+  approveFrontendToolRequest(review.cid, "once");
+  await expect(action).resolves.toEqual({ receipt: "done" });
+  expect(provider.state.approvalRequests).toBe(1);
+  const fakeWindow = activeFakeWindow!;
+  registerScopedBackgroundEndpoint(createToolEndpoint(fakeWindow, privateTools, { value: "hidden" }), "provider", "948");
+  for (const descriptor of privateTools) {
+    await expect(routeToolCall({ target: "app:provider:background", name: descriptor.name, arguments: { value: "read" } }, caller)).rejects.toThrow("Unknown tool");
+  }
+  expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+});
+
+test("legacy single-tool and wildcard session permission APIs remain compatible", async () => {
+  installFakeWindow();
+  const caller = registerTile({} as Window, "requester", "caller");
+  unregisters.push(registerBackground({} as Window, "provider"));
+  for (const tool of ["echo", "*"]) {
+    const pending = routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target: "app:provider:background", tool, arguments: { value: "legacy" } } }, caller);
+    const request = await nextFrontendToolRequest();
+    expect(request.tool).toBe(tool);
+    expect(request.tools).toBeUndefined();
+    expect(request.arguments).toEqual({ value: "legacy" });
+    approveFrontendToolRequest(request.cid, "session");
+    await expect(pending).resolves.toEqual({ granted: true });
+  }
 });
 
 test("permission requests cancel through tool and direct action routes", async () => {
