@@ -1,5 +1,9 @@
 import Map "mo:core/Map";
+import Array "mo:core/Array";
+import Int "mo:core/Int";
 import Iter "mo:core/Iter";
+import List "mo:core/List";
+import Order "mo:core/Order";
 import Text "mo:core/Text";
 import Memory "./memory/uniswap/v1";
 
@@ -28,6 +32,9 @@ module {
     };
 
     public type Result = { #ok : Memory.Swap; #err : Text };
+    public type HistoryInput = { cursor : ?Text; limit : Nat };
+    public type HistoryPage = { rows : [Memory.Swap]; next_cursor : ?Text };
+    public type HistoryResult = { #ok : HistoryPage; #err : Text };
 
     // The UI stores a validated quote and the exact EVM Wallet requests before
     // asking that wallet to execute them. This journal never performs an effect.
@@ -128,6 +135,49 @@ module {
 
     public func list(mem : Memory.Mem) : [Memory.Swap] {
         Iter.toArray(Map.values(mem.swaps));
+    };
+
+    // Cursor identity refers to a retained record's immutable creation time and
+    // id. Unlike an array offset, it cannot shift when a newer swap is inserted
+    // while the user loads later pages. This only controls the response size;
+    // records and their complete request/receipt contents are never discarded.
+    public func history(mem : Memory.Mem, input : HistoryInput) : HistoryResult {
+        if (input.limit == 0) return #err("History page size must be positive");
+        let anchor = switch (input.cursor) {
+            case null null;
+            case (?id) switch (Map.get(mem.swaps, Text.compare, id)) {
+                case null return #err("History cursor was not found; reload history from its first page");
+                case (?record) ?record;
+            };
+        };
+        // Sorting copies record references, not their potentially large JSON
+        // strings. Only the selected page is included in the query response.
+        let sorted = Array.sort<Memory.Swap>(Iter.toArray(Map.values(mem.swaps)), newestFirst);
+        let rows = List.empty<Memory.Swap>();
+        var lastId : ?Text = null;
+        var more = false;
+        label scan for (record in sorted.vals()) {
+            let followsCursor = switch (anchor) {
+                case null true;
+                case (?prior) newestFirst(record, prior) == #greater;
+            };
+            if (followsCursor) {
+                if (List.size(rows) == input.limit) {
+                    more := true;
+                    break scan;
+                };
+                List.add(rows, record);
+                lastId := ?record.id;
+            };
+        };
+        #ok({ rows = List.toArray(rows); next_cursor = if (more) lastId else null });
+    };
+
+    func newestFirst(left : Memory.Swap, right : Memory.Swap) : Order.Order {
+        switch (Int.compare(right.created_at, left.created_at)) {
+            case (#equal) Text.compare(right.id, left.id);
+            case (order) order;
+        };
     };
 
     func sameIntent(existing : Memory.Swap, input : BeginInput) : Bool {

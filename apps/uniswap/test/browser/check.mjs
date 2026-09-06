@@ -30,15 +30,18 @@ const quoteAbi=parseAbi(['function quoteExactInputSingle((address tokenIn,addres
 const factoryAbi=parseAbi(['function getPool(address tokenA,address tokenB,uint24 fee) view returns (address pool)']);
 const poolAbi=parseAbi(['function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)']);
 const tokenAbi=parseAbi(['function allowance(address owner,address spender) view returns (uint256)','function approve(address spender,uint256 amount) returns (bool)']);
-const records=new Map(), operations=new Map(), transactionEvidence=new Map(), calls=[], toolOverrides=new Map();
+const records=new Map(), operations=new Map(), transactionEvidence=new Map(), calls=[], toolOverrides=new Map(), metadataRejections=[];
+const selfQueryMetadataLimit=65_536;
 let nextApproval='confirm', nextSwap='lost-reply', delayedReads=null, releaseReads=null;
 let feeMultiplier=1n, swapFeeUnavailable=false;
 const ns=()=>String(BigInt(Date.now())*1_000_000n);
 function receipt(){return {blockNumber:'21000000',blockHash:'0x'+'44'.repeat(32),status:'success',gasUsed:'90000',effectiveGasPriceWei:'1000000000',logs:[],finality:'included',observedAtNs:ns()};}
 async function transport(kind,args){
   const method=kind==='querySelf'||kind==='updateSelf'?schema.methods[args[0]]:null;
+  if(kind==='querySelf'||kind==='updateSelf')assert(method,'Generated backend schema must contain '+args[0]);
   if(method){const validation=icblast.validateMethodInputSchema(method,args[1]);assert(validation.ok,'Generated input schema rejected '+args[0]+': '+JSON.stringify(validation.errors));}
   const value=await fixtureTransport(kind,args);
+  if(kind==='querySelf'){const bytes=Buffer.byteLength(JSON.stringify(value));if(bytes>selfQueryMetadataLimit){metadataRejections.push({method:args[0],arguments:structuredClone(args[1]),bytes});throw Error('Self-call result exceeds the metadata byte limit');}}
   if(method){const validation=icblast.validateMethodInputSchema({input:method.output},value);assert(validation.ok,'Generated output schema rejected '+args[0]+': '+JSON.stringify(validation.errors));}
   return value;
 }
@@ -46,6 +49,14 @@ async function fixtureTransport(kind,args){
   calls.push({kind,args:structuredClone(args)});
   if(kind==='querySelf'){
     if(args[0]==='uniswap_list_v1')return [...records.values()];
+    if(args[0]==='uniswap_history_v1'){
+      const input=args[1][0];
+      const sorted=[...records.values()].sort((a,b)=>BigInt(a.created_at)===BigInt(b.created_at)?b.id.localeCompare(a.id):BigInt(a.created_at)>BigInt(b.created_at)?-1:1);
+      const offset=input.cursor===undefined?0:sorted.findIndex(row=>row.id===input.cursor)+1;
+      assert(input.cursor===undefined||offset>0,'History cursor must name a retained record');
+      const rows=sorted.slice(offset,offset+Number(input.limit));
+      return {rows,...(offset+rows.length<sorted.length?{next_cursor:rows.at(-1).id}:{})};
+    }
     if(args[0]==='uniswap_get_v1')return records.get(args[1][0])??null;
   }
   if(kind==='updateSelf'){
@@ -91,9 +102,9 @@ async function fixtureTransport(kind,args){
       const approval=record.approval_request_id===request.requestId;
       assert.equal(record.phase,approval?'approval_requested':'swap_requested');
       assert.deepEqual(request,JSON.parse(approval?record.approval_request_json:record.swap_request_json));
-      assert(!operations.has(request.requestId),'Operation submitted more than once');
+      assert(!operations.has(request.requestId)||operations.get(request.requestId).status==='prepared','Operation submitted more than once');
       const rejected=approval&&nextApproval==='reject';
-      const operation={requestId:request.requestId,accountId:request.accountId,chainId:request.chainId,operationId:String(operations.size+1),kind:'transaction',status:rejected?'rejected':!approval&&nextSwap==='submitted'?'submitted':'confirmed',address:account.address,transactionHash:rejected?null:'0x'+BigInt(operations.size+1).toString(16).padStart(64,'0'),signature:null,message:rejected?'Owner declined approval.':null,reviewRevision:'1',receipt:rejected||!approval&&nextSwap==='submitted'?null:receipt()};
+      const operation={requestId:request.requestId,accountId:request.accountId,chainId:request.chainId,operationId:String(operations.size+1),kind:'transaction',status:rejected?'rejected':!approval&&['submitted','prepared'].includes(nextSwap)?nextSwap:'confirmed',address:account.address,transactionHash:rejected||!approval&&nextSwap==='prepared'?null:'0x'+BigInt(operations.size+1).toString(16).padStart(64,'0'),signature:null,message:rejected?'Owner declined approval.':null,reviewRevision:'1',receipt:rejected||!approval&&['submitted','prepared'].includes(nextSwap)?null:receipt()};
       operations.set(request.requestId,operation);
       if(!approval&&nextSwap==='lost-reply')throw Error('Simulated lost wallet reply');
       return operation;
@@ -285,11 +296,60 @@ try{
  assert(await quoteReview.getByRole('button',{name:'Review swap in EVM Wallet',exact:true}).isDisabled());
  assert.equal(operations.size,operationsBeforeExpiry);
  pass('Expired quote is visibly identified and cannot be submitted');
+ // Retain enough complete, valid saved intents to exceed the real self-call
+ // metadata envelope. No fixture record is truncated or removed for paging.
+ const historySeed=structuredClone(nativeRecord), oldestCreated=BigInt(ns())-1_000_000_000_000n;
+ for(let i=0;i<20;i++){
+  const id=(0xf000n+BigInt(i)).toString(16).padStart(32,'0'), requestId=(0xe000n+BigInt(i)).toString(16).padStart(32,'0');
+  const record={...structuredClone(historySeed),id,swap_request_id:requestId,swap_request_json:JSON.stringify({...JSON.parse(historySeed.swap_request_json),requestId}),phase:'queued',revision:'0',created_at:String(oldestCreated-BigInt(i)),updated_at:String(oldestCreated-BigInt(i))};
+  delete record.swap_operation_json;delete record.approval_operation_json;
+  assert(Buffer.byteLength(JSON.stringify(record))<selfQueryMetadataLimit,'A seeded saved intent must fit individually');
+  records.set(id,record);
+ }
+ const retainedBytes=Buffer.byteLength(JSON.stringify([...records.values()]));
+ assert(retainedBytes>selfQueryMetadataLimit,'The retained history must require multiple pages');
+ const retainedIdsBeforeSave=new Set(records.keys()), historyStart=calls.length;
+ nextSwap='prepared';
+ await page.getByLabel('Input amount',{exact:true}).fill('0.003');
+ await page.getByRole('button',{name:'Get quote',exact:true}).click();
+ await page.getByRole('button',{name:'Review swap in EVM Wallet',exact:true}).click();
+ let newestCard=page.locator('.uni-saved').filter({hasText:'0.003 ETH'});
+ await newestCard.getByText('swap prepared',{exact:true}).waitFor();
+ const newest=[...records.values()].find(r=>!retainedIdsBeforeSave.has(r.id));assert(newest);
+ const preparedId=newest.swap_request_id, preparedJson=newest.swap_request_json;
+ assert.equal(operations.get(preparedId).status,'prepared');
+ await page.reload();newestCard=page.locator('.uni-saved').filter({hasText:'0.003 ETH'});
+ await newestCard.getByText('swap prepared',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('alert').count(),0,'Known history overflow should be handled by smaller pages');
+ assert(metadataRejections.some(r=>r.method==='uniswap_history_v1'&&r.arguments[0].limit==='32'),'Oversized initial history page must exercise actual byte-limit backoff');
+ const pageCalls=calls.slice(historyStart).filter(c=>c.kind==='querySelf'&&c.args[0]==='uniswap_history_v1');
+ assert(pageCalls.some(c=>BigInt(c.args[1][0].limit)<32n),'History must retry the same page with a smaller size');
+ assert(pageCalls.every(c=>c.args[1][0].cursor!==null),'Absent optional history cursor must be omitted on the wire');
+ nextSwap='confirm';
+ await newestCard.getByRole('button',{name:'Review swap',exact:true}).click();
+ await newestCard.getByText('swap confirmed',{exact:true}).waitFor();
+ assert.equal(records.get(newest.id).swap_request_id,preparedId);assert.equal(records.get(newest.id).swap_request_json,preparedJson);
+ const preparedRequests=calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1'&&c.args[0].arguments.requestId===preparedId);
+ assert.equal(preparedRequests.length,2,'Prepare and explicit resume must use the same Wallet request');
+ assert.deepEqual(preparedRequests[0].args[0].arguments,preparedRequests[1].args[0].arguments);
+ for(let pages=0;await page.getByRole('button',{name:'Load older swaps',exact:true}).isVisible();pages++){
+  assert(pages<records.size,'History pagination did not advance');
+  const before=await page.locator('.uni-saved').count();
+  await page.getByRole('button',{name:'Load older swaps',exact:true}).click();
+  await page.waitForFunction(previous=>document.querySelectorAll('.uni-saved').length>previous,before);
+ }
+ const visibleIds=await page.locator('.uni-saved pre').evaluateAll(nodes=>nodes.map(node=>JSON.parse(node.textContent).id));
+ assert.equal(visibleIds.length,records.size);assert.equal(new Set(visibleIds).size,records.size);
+ assert.deepEqual([...visibleIds].sort(),[...records.keys()].sort());
+ assert(retainedIdsBeforeSave.size+1===records.size,'The entire old history and new swap must remain durable');
+ assert(!calls.slice(historyStart).some(c=>c.kind==='querySelf'&&c.args[0]==='uniswap_list_v1'),'UI must never fetch aggregate history');
+ pass('Oversized retained history backs off by actual byte limits, preserves every older record and resumes the newest prepared request with its exact ID');
+ await page.screenshot({path:resolve(artifacts,'history-paged-320.png'),fullPage:true});
  assert.deepEqual(errors,[]);
  await page.screenshot({path:resolve(artifacts,'recovered-320.png'),fullPage:true});
- await writeFile(resolve(artifacts,'report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],errors},null,2));
+ await writeFile(resolve(artifacts,'report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],metadataRejections,errors},null,2));
 } catch (error) {
  if(page) { await writeFile(resolve(artifacts,'failure.txt'), String(error)+'\n'+await page.locator('body').innerText()); await page.screenshot({path:resolve(artifacts,'failure.png'),fullPage:true}); }
- await writeFile(resolve(artifacts,'failure-report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],errors},null,2));
+ await writeFile(resolve(artifacts,'failure-report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],metadataRejections,errors},null,2));
  throw error;
 } finally { await browser.close();await new Promise(resolve=>server.close(resolve)); }

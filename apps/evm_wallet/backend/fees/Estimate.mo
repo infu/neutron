@@ -112,7 +112,11 @@ module {
             ("from", #string(from)), ("to", #string(to)),
             ("value", #string(Json.hexQuantity(value))), ("data", #string(data)),
         ]));
-        let gas = switch (await* read("eth_estimateGas", "[" # tx # "]")) {
+        // Anchor gas to the observed block instead of a provider's default
+        // pending state. If the block read failed, retain partial facts with
+        // an explicit latest estimate and no claimed observation block.
+        let estimateBlock = switch (blockNumber) { case (?number) Json.hexQuantity(number); case (null) "latest" };
+        let gas = switch (await* read("eth_estimateGas", "[" # tx # "," # Json.quote(estimateBlock) # "]")) {
             case (null) null;
             case (?result) switch (quantity(result)) {
                 case (#ok(value)) {

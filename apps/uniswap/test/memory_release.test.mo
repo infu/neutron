@@ -1,4 +1,6 @@
 import Map "mo:core/Map";
+import Nat "mo:core/Nat";
+import Text "mo:core/Text";
 import Uniswap "../backend/main";
 import Journal "../backend/Journal";
 import Memory "../backend/memory/uniswap/v1";
@@ -132,3 +134,118 @@ assert (nativeSwap.approval_request_id == null and nativeSwap.approval_operation
 rejects(Journal.update(fresh, { requestApproval with id = "native-swap" }, 1_000));
 rejects(Journal.update(fresh, { requestSwap with id = "missing" }, 1_000));
 assert (Map.size(restored.swaps) == 2);
+
+func page(result : Journal.HistoryResult) : Journal.HistoryPage {
+    switch (result) {
+        case (#ok(value)) value;
+        case (#err(_)) { assert false; loop {} };
+    };
+};
+
+func historyRejects(result : Journal.HistoryResult) {
+    switch (result) {
+        case (#err(message)) assert (message != "");
+        case (#ok(_)) assert false;
+    };
+};
+
+// A durable history can outgrow the existing self-call metadata transport.
+// Retain more than 64 KiB of real quote bodies and fetch all records by cursor
+// instead of truncating the root or returning the entire collection at once.
+let historyMemory = Memory.init();
+let emptyPage = page(Journal.history(historyMemory, { cursor = null; limit = 7 }));
+assert (emptyPage.rows == [] and emptyPage.next_cursor == null);
+historyRejects(Journal.history(historyMemory, { cursor = null; limit = 0 }));
+historyRejects(Journal.history(historyMemory, { cursor = ?"missing"; limit = 7 }));
+var payload = "0123456789abcdef";
+var repeat = 0;
+while (repeat < 7) {
+    payload #= payload;
+    repeat += 1;
+};
+func historyId(index : Nat) : Text {
+    "history-" # (if (index < 10) "0" else "") # Nat.toText(index);
+};
+var inserted = 0;
+var aggregateQuoteBytes = 0;
+while (inserted < 73) {
+    let id = historyId(inserted);
+    let quoteJson = "{\"retainedQuote\":\"" # payload # "\",\"index\":\"" # id # "\"}";
+    ignore ok(Journal.begin(historyMemory, {
+        input with
+        id;
+        quote_json = quoteJson;
+        approval_request_id = ?("approval-" # id);
+        approval_request_json = ?("{\"requestId\":\"approval-" # id # "\"}");
+        swap_request_id = "swap-" # id;
+        swap_request_json = "{\"requestId\":\"swap-" # id # "\"}";
+    }, 1_000 + inserted / 2));
+    aggregateQuoteBytes += Text.encodeUtf8(quoteJson).size();
+    inserted += 1;
+};
+assert (aggregateQuoteBytes > 65_536);
+assert (Map.size(historyMemory.swaps) == 73);
+let snapshot = Journal.list(historyMemory);
+let firstPage = page(Journal.history(historyMemory, { cursor = null; limit = 7 }));
+assert (firstPage.rows.size() == 7 and firstPage.next_cursor == ?historyId(66));
+var firstIndex = 0;
+for (record in firstPage.rows.vals()) {
+    assert (record.id == historyId(Nat.sub(72, firstIndex)));
+    firstIndex += 1;
+};
+assert (Journal.list(historyMemory) == snapshot);
+
+// New records appear before the saved cursor. A progress update changes only
+// updated_at and revision, so it cannot move the anchor's creation ordering.
+let insertedDuringPaging = ok(Journal.begin(historyMemory, {
+    input with
+    id = "new-during-paging";
+    swap_request_id = "new-durable-request";
+    swap_request_json = "{\"requestId\":\"new-durable-request\"}";
+}, 3_000));
+let anchorId = historyId(66);
+let updatedAnchor = ok(Journal.update(historyMemory, {
+    requestApproval with
+    id = anchorId;
+    request_id = "approval-" # anchorId;
+}, 4_000));
+assert (updatedAnchor.created_at == 1_033 and updatedAnchor.updated_at == 4_000);
+let historyRestored : Memory.Mem = historyMemory;
+let historyApp = Uniswap.Init({ stable_memory = { uniswap = historyRestored } });
+let snapshotAfterInsert = Journal.list(historyRestored);
+let visited = Map.empty<Text, Bool>();
+for (record in firstPage.rows.vals()) Map.add(visited, Text.compare, record.id, true);
+var cursor = firstPage.next_cursor;
+var seen = 7;
+label remaining loop {
+    let current = page(historyApp.uniswap_history_v1({ cursor; limit = 7 }));
+    assert (current.rows.size() > 0 and current.rows.size() <= 7);
+    for (record in current.rows.vals()) {
+        assert (Map.get(visited, Text.compare, record.id) == null);
+        assert (record.id == historyId(Nat.sub(72, seen)));
+        assert (record.swap_request_id == "swap-" # record.id);
+        assert (record.swap_request_json == "{\"requestId\":\"swap-" # record.id # "\"}");
+        assert (record.approval_request_id == ?("approval-" # record.id));
+        assert (record.phase == "queued" and record.revision == 0);
+        Map.add(visited, Text.compare, record.id, true);
+        seen += 1;
+    };
+    cursor := current.next_cursor;
+    if (cursor == null) break remaining;
+};
+assert (seen == 73 and Map.size(visited) == 73);
+assert (Map.get(visited, Text.compare, insertedDuringPaging.id) == null);
+assert (Journal.list(historyRestored) == snapshotAfterInsert);
+assert (Map.size(historyRestored.swaps) == 74);
+assert (historyApp.uniswap_get_v1(anchorId) == ?updatedAnchor);
+assert (historyApp.uniswap_get_v1("new-during-paging") == ?insertedDuringPaging);
+let refreshed = page(historyApp.uniswap_history_v1({ cursor = null; limit = 7 }));
+assert (refreshed.rows[0].id == "new-during-paging");
+let beyondLast = page(historyApp.uniswap_history_v1({ cursor = ?historyId(0); limit = 7 }));
+assert (beyondLast.rows == [] and beyondLast.next_cursor == null);
+historyRejects(historyApp.uniswap_history_v1({ cursor = ?"invalid-cursor"; limit = 7 }));
+// The caller may request a larger page; paging introduces no history quota or
+// fixed page cap. If transport rejects its size, the client can request fewer.
+let completeHistory = page(historyApp.uniswap_history_v1({ cursor = null; limit = 1_000 }));
+assert (completeHistory.rows.size() == 74 and completeHistory.next_cursor == null);
+assert (Journal.list(historyRestored) == snapshotAfterInsert);

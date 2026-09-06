@@ -97,6 +97,7 @@ function memoryStore(initial: SwapRecord, events: string[] = []) {
   let current = structuredClone(initial);
   const updates: { stage: string; phase: string; operation: EvmOperationResult | null }[] = [];
   const store: Store = {
+    async page() { return { rows: [structuredClone(current)], nextCursor: null }; },
     async list() { return [structuredClone(current)]; },
     async get(id) { return id === current.id ? structuredClone(current) : null; },
     async begin() { throw new Error("Unexpected begin in a saved-intent workflow"); },
@@ -224,7 +225,7 @@ test("list and get use generated method schemas and normalize omitted output opt
   const kernel = {
     async querySelf(method: string, args: unknown[]) {
       checkMethodInput(method, args); calls.push([method, args]);
-      if (method === "uniswap_list_v1") return checkMethodOutput(method, [projected]);
+      if (method === "uniswap_history_v1") return checkMethodOutput(method, { rows: [projected] });
       if (method === "uniswap_get_v1") return checkMethodOutput(method, args[0] === initial.id ? projected : null);
       throw new Error(`Unexpected query ${method}`);
     },
@@ -234,7 +235,7 @@ test("list and get use generated method schemas and normalize omitted output opt
   const listed = await store.list();
   expect(listed).toEqual([initial]); expect(approvalConfirmed(listed[0]!)).toBe(true);
   expect(await store.get(initial.id)).toEqual(initial); expect(await store.get("missing")).toBeNull();
-  expect(calls).toEqual([["uniswap_list_v1", [null]], ["uniswap_get_v1", [initial.id]], ["uniswap_get_v1", ["missing"]]]);
+  expect(calls).toEqual([["uniswap_history_v1", [{ limit: "32" }]], ["uniswap_get_v1", [initial.id]], ["uniswap_get_v1", ["missing"]]]);
 });
 
 test("lost wallet replies retain the requested phase, then reload reconciles without resending", async () => {

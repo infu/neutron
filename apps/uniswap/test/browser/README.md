@@ -19,6 +19,9 @@ intent and requested phase were already saved. Every backend request and respons
 is validated against the packaged `dist/schema.json` using the same icblast
 schema validator as the release tooling. Mock optional record fields are omitted
 on the wire, and successful Candid results are unwrapped like Kernel self calls.
+The fixture rejects self-query JSON exceeding 65,536 bytes with the real metadata
+limit error; pagination must adapt without weakening the transport or dropping
+retained records.
 
 Checks cover:
 
@@ -42,6 +45,9 @@ Checks cover:
 - Pending replacements: authenticated Wallet linkage, independent matching
   transaction/receipt evidence, both explorer links, output-token accounting,
   and reload recovery without submitting the saved request again.
+- History exceeding the 64 KiB self-query metadata budget: real complete saved
+  intents, byte-triggered page-size backoff, every older record accessible, and a
+  new prepared request saved/reloaded/resumed with its original ID and calldata.
 - Clearing Ethereum balances when selecting Arbitrum and requesting scoped data.
 
 Artifacts default to `/tmp/neutron-uniswap-browser`; override using

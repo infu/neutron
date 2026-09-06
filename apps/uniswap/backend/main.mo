@@ -45,6 +45,9 @@ module {
         phase : Text;
     };
     public type ResultV1 = { #ok : SwapV1; #err : Text };
+    public type HistoryInputV1 = { cursor : ?Text; limit : Nat };
+    public type HistoryPageV1 = { rows : [SwapV1]; next_cursor : ?Text };
+    public type HistoryResultV1 = { #ok : HistoryPageV1; #err : Text };
 
     public type AppBackendEnvironment = {
         stable_memory : { uniswap : Memory.Mem };
@@ -65,6 +68,10 @@ module {
             Journal.list(memory);
         };
 
+        public func /*query*/uniswap_history_v1(input : HistoryInputV1) : HistoryResultV1 {
+            Journal.history(memory, input);
+        };
+
         public func /*update*/uniswap_update_v1(input : UpdateInputV1) : ResultV1 {
             Journal.update(memory, input, Time.now());
         };
@@ -79,6 +86,9 @@ public type uniswap_get_v1_Output = ?SwapV1;
 
 public type uniswap_list_v1_Input = ();
 public type uniswap_list_v1_Output = [SwapV1];
+
+public type uniswap_history_v1_Input = (input : HistoryInputV1);
+public type uniswap_history_v1_Output = HistoryResultV1;
 
 public type uniswap_update_v1_Input = (input : UpdateInputV1);
 public type uniswap_update_v1_Output = ResultV1;

@@ -532,7 +532,9 @@ module {
       };
       switch (Transaction.validate(fee)) { case (#err(e)) return #err(e); case (_) {} };
       let callObject = txObject(fee, a.address, false);
-      let estimate = switch (await* rpcNat(chain, "eth_estimateGas", "[" # callObject # "]")) { case (#err(e)) return #err("Gas estimation failed: " # e); case (#ok(v)) v };
+      // Estimate the same state used by balance reads and simulation. A
+      // pending original can otherwise make its replacement look cheaper.
+      let estimate = switch (await* rpcNat(chain, "eth_estimateGas", "[" # callObject # "," # q(block) # "]")) { case (#err(e)) return #err("Gas estimation failed: " # e); case (#ok(v)) v };
       let gasLimit = switch (request.gas_limit) {
         case null estimate; case (?g) switch (uint(g)) { case (#err(e)) return #err(e); case (#ok(v)) { if (v < estimate) return #err("Requested gas limit is below the live estimate"); v } };
       };

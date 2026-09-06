@@ -91,7 +91,7 @@ test("separate EVM Wallet declares custody, exact RPC reservations and all gener
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 106,
+    version: 107,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -286,13 +286,13 @@ test("new estimate and replacement-proof adapters accept actual Candid-projected
     originalWalletRequest: { callerAppId: "wallet", callerInstallationUid: "9007199254740993", requestId: request.requestId },
   }, ctx)).toMatchObject({ walletReplacementMatches: false, originalWalletRequest: { callerInstallationUid: "9007199254740993" } });
 });
-test("release 106 initializes cleanly and preserves the published 101 root while adding token evidence", async () => {
+test("release 107 initializes cleanly and preserves the published 101 root while adding token evidence", async () => {
   const files = unpackNeutronPackage(
-    await readFile(new URL("../evm_wallet.v0.1.6.neutron", import.meta.url)),
+    await readFile(new URL("../evm_wallet.v0.1.7.neutron", import.meta.url)),
   );
   const prepared = preparePackageInstall(files);
   expect(prepared.manifest.id).toBe("evm_wallet");
-  expect(prepared.manifest.version).toBe(106);
+  expect(prepared.manifest.version).toBe(107);
   expect(Object.keys(files)).toEqual(
     expect.arrayContaining([
       "web/index.html",
@@ -356,7 +356,7 @@ test("release 106 initializes cleanly and preserves the published 101 root while
   ]));
   expect(upgraded.destructiveMemoryRoots).toEqual([]);
   // Prepared candidate 102 was not published. Preserve its bytes and confirm
-  // this frontend-only successor does not alter either candidate memory root.
+  // this successor does not alter either candidate memory root.
   const candidate102Bytes = await readFile(new URL("../evm_wallet.v0.1.2.neutron", import.meta.url));
   expect(createHash("sha256").update(candidate102Bytes).digest("hex")).toBe(
     "57d8b1c69af50e70d865d2f01dd6b8c1484af8fd5907b21aaa483116ecd92641",
@@ -378,7 +378,7 @@ test("release 106 initializes cleanly and preserves the published 101 root while
   const currentSchema = JSON.parse(new TextDecoder().decode(files["schema.json"]!));
   const priorSchema = JSON.parse(new TextDecoder().decode(candidate103Files["schema.json"]!));
   // The artifact records its app release version beside the method schemas.
-  expect(currentSchema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 106 } });
+  expect(currentSchema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 107 } });
   // Private candidate 104 isolates the owner-review UI fix: all 80 backend
   // modules are identical to 103. The successor additionally fixes the proven
   // RPC text-comparison overflow; its unchanged source closure is checked with
@@ -404,8 +404,9 @@ test("release 106 initializes cleanly and preserves the published 101 root while
   ]));
   expect(kept103.upgrades).toHaveLength(2);
   expect(kept103.destructiveMemoryRoots).toEqual([]);
-  // The adaptive history reader changes only frontend behavior. Preserve the
-  // complete backend and managed-memory bytes of installed private candidate105.
+  // Private candidate 106 added the adaptive history reader without changing
+  // candidate 105's backend. Preserve both and verify the gas-estimation
+  // successor keeps their managed state and method contracts intact.
   const candidate105Bytes = await readFile(new URL("../evm_wallet.v0.1.5.neutron", import.meta.url));
   expect(createHash("sha256").update(candidate105Bytes).digest("hex")).toBe(
     "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2",
@@ -413,9 +414,28 @@ test("release 106 initializes cleanly and preserves the published 101 root while
   const candidate105Files = unpackNeutronPackage(candidate105Bytes);
   const candidate105 = JSON.parse(new TextDecoder().decode(candidate105Files["neutron.json"]!));
   expect(compiled.memory).toEqual(candidate105.memory);
-  expect(compiled.entry).toEqual(candidate105.entry);
   expect(files["neutron.lock.json"]).toEqual(candidate105Files["neutron.lock.json"]);
-  const currentModules = Object.keys(files).filter(path => path.startsWith("mo/")).sort();
-  expect(currentModules).toEqual(Object.keys(candidate105Files).filter(path => path.startsWith("mo/")).sort());
-  for (const path of currentModules) expect(files[path]).toEqual(candidate105Files[path]);
+  const candidate106Bytes = await readFile(new URL("../evm_wallet.v0.1.6.neutron", import.meta.url));
+  expect(createHash("sha256").update(candidate106Bytes).digest("hex")).toBe(
+    "eba89d8ab27c8f93faa59b82026e9e6393773156532761f6ebfadeaacb2856cf",
+  );
+  const candidate106Files = unpackNeutronPackage(candidate106Bytes);
+  const candidate106 = JSON.parse(new TextDecoder().decode(candidate106Files["neutron.json"]!));
+  expect(candidate106.entry).toEqual(candidate105.entry);
+  const unchangedModules = Object.keys(candidate106Files).filter(path => path.startsWith("mo/")).sort();
+  expect(unchangedModules).toEqual(Object.keys(candidate105Files).filter(path => path.startsWith("mo/")).sort());
+  for (const path of unchangedModules) expect(candidate106Files[path]).toEqual(candidate105Files[path]);
+  expect(compiled.memory).toEqual(candidate106.memory);
+  expect(files["neutron.lock.json"]).toEqual(candidate106Files["neutron.lock.json"]);
+  const candidate106Schema = JSON.parse(new TextDecoder().decode(candidate106Files["schema.json"]!));
+  expect(currentSchema).toEqual({ ...candidate106Schema, app: { ...candidate106Schema.app, version: 107 } });
+  const kept106 = planMemoryMigrations(
+    { kernel, evm_wallet: candidate106 }, { kernel, evm_wallet: compiled },
+  );
+  expect(kept106.upgrades).toEqual(expect.arrayContaining([
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_wallet", version: 1 },
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_evidence", version: 1 },
+  ]));
+  expect(kept106.upgrades).toHaveLength(2);
+  expect(kept106.destructiveMemoryRoots).toEqual([]);
 });

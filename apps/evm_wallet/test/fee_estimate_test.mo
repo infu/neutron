@@ -10,6 +10,7 @@ persistent actor {
         let input : Estimate.Input = { chain_id = 1; from = "0x0000000000000000000000000000000000000001"; to = "0x00000000000000000000000000000000000000AB"; value = "0x10"; data = "0xAAbb" };
         var scenario = 0;
         var methods : [Text] = [];
+        var estimateBlocks : [?Text] = [];
         let rpc : Estimate.Rpc = {
             request = func(chain : Nat, method : Text, params : Text) : async* Estimate.Result<Text> {
                 assert chain == 1 or chain == 42161;
@@ -17,7 +18,7 @@ persistent actor {
                 switch (method) {
                     case ("eth_getBlockByNumber") {
                         assert params == "[\"latest\",false]";
-                        if (scenario == 2 or scenario == 4) return #err("providers disagree");
+                        if (scenario == 2 or scenario == 4 or scenario == 10) return #err("providers disagree");
                         let base = if (scenario == 5) 2 ** 200 else 100;
                         #ok("{\"number\":\"0x7b\",\"baseFeePerGas\":" # Json.quote(Json.hexQuantity(base)) # "}");
                     };
@@ -33,14 +34,30 @@ persistent actor {
                     };
                     case ("eth_estimateGas") {
                         let #ok(#array(args)) = Json.parse(params) else { assert false; loop {} };
-                        assert args.size() == 1;
+                        assert args.size() >= 1 and args.size() <= 2;
                         assert Json.field(args[0], "from") == ?#string(input.from);
                         assert Json.field(args[0], "to") == ?#string(Text.toLower(input.to));
                         assert Json.field(args[0], "value") == ?#string("0x10");
                         assert Json.field(args[0], "data") == ?#string("0xaabb");
                         assert Json.field(args[0], "nonce") == null;
                         assert Json.field(args[0], "gas") == null;
+                        let block : ?Text = if (args.size() == 2) {
+                            let #string(tag) = args[1] else { assert false; loop {} };
+                            ?tag;
+                        } else null;
+                        estimateBlocks := Array.concat(estimateBlocks, [block]);
+                        // The same state-changing call costs more against the
+                        // observed mined state than its pending/default state.
+                        // Accept omitted tags here so the regression fails on
+                        // the incorrectly reported gas, not just RPC shape.
+                        if (scenario == 8 or scenario == 10) {
+                            let gas = if (block == ?"0x7b" or block == ?"latest") 44322 else 24437;
+                            return #ok(Json.quote(Json.hexQuantity(gas)));
+                        };
+                        assert args.size() == 2;
+                        assert block == ?(if (scenario == 2 or scenario == 4) "latest" else "0x7b");
                         if (scenario == 1) return #err("execution reverted: transfer allowance");
+                        if (scenario == 9) return #err("observed block state unavailable");
                         if (scenario == 7) return #ok("\"0x00\"");
                         #ok(Json.quote(Json.hexQuantity(if (chain == 42161) 1234 else 21000)));
                     };
@@ -52,7 +69,36 @@ persistent actor {
         func perform(next : Nat, request : Estimate.Input) : async* Estimate.Output {
             scenario := next;
             methods := [];
+            estimateBlocks := [];
             switch (await* Estimate.estimate(request, rpc)) { case (#ok(value)) value; case (#err(_)) { assert false; loop {} } };
+        };
+        for (chain in [1, 42161].vals()) {
+            let minedState = await* perform(8, { input with chain_id = chain });
+            assert minedState.block_number == ?"123" and minedState.gas_limit == ?"44322";
+            assert minedState.status == "available" and minedState.reasons.size() == 0;
+            assert minedState.estimated_fee == ?Nat.toText(44322 * (if (chain == 42161) 100 else 102));
+            assert minedState.max_fee == ?Nat.toText(44322 * (if (chain == 42161) 200 else 202));
+            assert estimateBlocks == [?"0x7b"];
+
+            // Without an observed block, retain the independent price facts
+            // and explicitly estimate latest rather than provider-default pending.
+            let latestState = await* perform(10, { input with chain_id = chain });
+            assert latestState.block_number == null and latestState.base_fee_per_gas == null;
+            assert latestState.gas_limit == ?"44322" and latestState.status == "available";
+            assert latestState.estimated_fee == ?Nat.toText(44322 * (if (chain == 42161) 100 else 103));
+            assert latestState.max_fee == null and latestState.max_fee_per_gas == null;
+            assert latestState.reasons == ["eth_getBlockByNumber: providers disagree"];
+            assert estimateBlocks == [?"latest"];
+
+            // A provider that cannot estimate the pinned block must not silently
+            // supply the cheaper pending-state result or retry against latest.
+            let unavailableState = await* perform(9, { input with chain_id = chain });
+            assert unavailableState.block_number == ?"123" and unavailableState.base_fee_per_gas == ?"100";
+            assert unavailableState.gas_price == ?(if (chain == 42161) "100" else "103");
+            assert unavailableState.gas_limit == null and unavailableState.estimated_fee == null and unavailableState.max_fee == null;
+            assert unavailableState.status == "unavailable";
+            assert unavailableState.reasons == ["eth_estimateGas: observed block state unavailable"];
+            assert estimateBlocks == [?"0x7b"];
         };
         let ordinary = await* perform(0, input);
         assert methods == ["eth_getBlockByNumber", "eth_gasPrice", "eth_maxPriorityFeePerGas", "eth_estimateGas"];
@@ -109,6 +155,6 @@ persistent actor {
             switch (await* Estimate.estimate(invalid, rpc)) { case (#err(_)) {}; case (_) assert false };
             assert methods.size() == 0;
         };
-        "Readonly fee estimates preserve partial facts, exact arithmetic, and Arbitrum fee semantics";
+        "Readonly fee estimates bind gas to observed state, preserve partial facts, exact arithmetic, and Arbitrum fee semantics";
     };
 };

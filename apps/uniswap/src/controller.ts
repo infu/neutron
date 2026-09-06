@@ -16,7 +16,8 @@ export type ReplacementEvidence = EvmTransactionResult & { walletReplacementProo
 export type StoredOperation = EvmOperationResult & { replacementEvidence?: ReplacementEvidence };
 /** A presentation of observed effects, not a replacement Wallet operation or request. */
 export type EffectiveOperationView = Pick<EvmOperationResult, "status" | "transactionHash" | "receipt" | "message"> & { source: "original" | "replacement" };
-export type Store = { list(): Promise<SwapRecord[]>; get(id: string): Promise<SwapRecord | null>; begin(intent: SavedIntent, id?: string): Promise<SwapRecord>; update(record: SwapRecord, stage: "approval" | "swap", phase: string, operation?: StoredOperation | null): Promise<SwapRecord> };
+export type SwapHistoryPage = { rows: SwapRecord[]; nextCursor: string | null };
+export type Store = { page(cursor?: string | null, limit?: number): Promise<SwapHistoryPage>; list(): Promise<SwapRecord[]>; get(id: string): Promise<SwapRecord | null>; begin(intent: SavedIntent, id?: string): Promise<SwapRecord>; update(record: SwapRecord, stage: "approval" | "swap", phase: string, operation?: StoredOperation | null): Promise<SwapRecord> };
 type SelfKernel = { querySelf: typeof querySelf; updateSelf: typeof updateSelf };
 export function parseSwapRecord(value: unknown): SwapRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid saved swap record.");
@@ -39,12 +40,45 @@ function unwrap(value: JsonValue): SwapRecord {
 export function walletRequest(transaction: Transaction, requestId = createEvmRequestId()): EvmSendTransactionRequest {
   return parseEvmSendTransactionRequest({ requestId, accountId: transaction.accountId, chainId: transaction.chainId, to: transaction.to, valueWei: transaction.value, data: transaction.data });
 }
+const historySizeErrors = new Set([
+  "Self-call result exceeds the metadata byte limit",
+  "Self-call Candid reply exceeds the raw metadata limit",
+  "Self-call Candid reply exceeds the raw byte limit",
+  "Candid reply exceeds the container element limit",
+  "Candid reply exceeds the decoder allocation limit",
+  "Self-call value exceeds the Candid container element limit",
+]);
+export async function querySwapHistoryPage(kernel: Pick<SelfKernel, "querySelf">, cursor: string | null = null, limit = 32): Promise<SwapHistoryPage> {
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("History page size must be a positive integer.");
+  let pageSize = limit;
+  for (;;) {
+    try {
+      const raw = await kernel.querySelf("uniswap_history_v1", [{ ...(cursor === null ? {} : { cursor }), limit: String(pageSize) }]);
+      if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.rows)) throw new Error("Invalid saved swap history page.");
+      const rows = raw.rows.map(parseSwapRecord), nextCursor = raw.next_cursor ?? null;
+      if (nextCursor !== null && (typeof nextCursor !== "string" || nextCursor === cursor || rows.length === 0 || nextCursor !== rows.at(-1)!.id)) throw new Error("Saved swap history cursor did not advance.");
+      if (new Set(rows.map((row) => row.id)).size !== rows.length || rows.some((row) => row.id === cursor)) throw new Error("Saved swap history repeated a record.");
+      return { rows, nextCursor };
+    } catch (error) {
+      // Adapt only this read to the existing transport boundary. No record is
+      // omitted, expired or deleted; a single oversized record stays an error.
+      if (!(error instanceof Error) || !historySizeErrors.has(error.message) || pageSize <= 1) throw error;
+      pageSize = Math.max(1, Math.floor(pageSize / 2));
+    }
+  }
+}
 export function createSwapStore(kernel: SelfKernel = { querySelf, updateSelf }): Store {
   return {
+    page(cursor = null, limit = 32) { return querySwapHistoryPage(kernel, cursor, limit); },
     async list() {
-      const records = await kernel.querySelf("uniswap_list_v1", [null]);
-      if (!Array.isArray(records)) throw new Error("Invalid saved swap list.");
-      return records.map(parseSwapRecord);
+      const records = new Map<string, SwapRecord>();
+      let cursor: string | null = null;
+      do {
+        const page = await querySwapHistoryPage(kernel, cursor);
+        for (const row of page.rows) records.set(row.id, row);
+        cursor = page.nextCursor;
+      } while (cursor !== null);
+      return [...records.values()];
     },
     async get(id) {
       const record = await kernel.querySelf("uniswap_get_v1", [id]);

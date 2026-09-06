@@ -61,8 +61,19 @@ exposeTool("uniswap_status_v1", {
 }, async (args, context) => { const record = await createSwapStore(context.kernel).get(String(args.swapId)); return { recordJson: record ? JSON.stringify(record) : null }; });
 
 exposeTool("uniswap_list_v1", {
-  title: "List saved Uniswap swaps", description: "Read saved swap intents and approval/swap progress.", inputSchema: schema({}), outputSchema: schema({ recordsJson: text }), annotations: { "neutron:effects": ["read"] },
+  title: "List saved Uniswap swaps", description: "Read saved swap intents and approval/swap progress. For large histories use uniswap_list_page_v1 and follow nextCursor; this compatibility tool returns the complete list in one tool response.", inputSchema: schema({}), outputSchema: schema({ recordsJson: text }), annotations: { "neutron:effects": ["read"] },
 }, async (_args, context) => ({ recordsJson: JSON.stringify(await createSwapStore(context.kernel).list()) }));
+
+exposeTool("uniswap_list_page_v1", {
+  title: "Read a page of saved Uniswap swaps",
+  description: "Read newest saved swaps first without fitting the entire history into one response. Start with cursor null, then pass nextCursor until null. Records and request IDs remain intact; no wallet effect is requested.",
+  inputSchema: schema({ cursor: { oneOf: [text, { type: "null" }] }, limit: { type: "integer", minimum: 1 } }),
+  outputSchema: schema({ recordsJson: text, nextCursor: { oneOf: [text, { type: "null" }] } }),
+  annotations: { "neutron:effects": ["read"] },
+}, async (args, context) => {
+  const page = await createSwapStore(context.kernel).page(args.cursor as string | null, Number(args.limit));
+  return { recordsJson: JSON.stringify(page.rows), nextCursor: page.nextCursor };
+});
 
 exposeTool("uniswap_record_result_v1", {
   title: "Verify and record a root-agent swap transaction",

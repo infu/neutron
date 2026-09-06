@@ -2,7 +2,7 @@
   "format": 3,
   "id": "uniswap",
   "name": "Uniswap",
-  "version": 103,
+  "version": 104,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Uniswap V3 swaps using EVM Wallet",
   "src": "main.mo",
@@ -25,7 +25,8 @@
         "uniswap_begin_v1",
         "uniswap_get_v1",
         "uniswap_list_v1",
-        "uniswap_update_v1"
+        "uniswap_update_v1",
+        "uniswap_history_v1"
       ]
     }
   },
@@ -39,6 +40,10 @@
       "async": false
     },
     "uniswap_list_v1": {
+      "type": "query",
+      "async": false
+    },
+    "uniswap_history_v1": {
       "type": "query",
       "async": false
     },

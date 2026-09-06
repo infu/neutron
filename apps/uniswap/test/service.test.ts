@@ -82,6 +82,13 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
         validateInput(method, args); queries.push({ method, args: structuredClone(args) });
         if (method === "uniswap_get_v1") return validateOutput(method, rows.get(String(args[0])) ?? null);
         if (method === "uniswap_list_v1") return validateOutput(method, [...rows.values()]);
+        if (method === "uniswap_history_v1") {
+          const input = args[0] as { cursor?: string; limit: string };
+          const ordered = [...rows.values()].sort((a, b) => BigInt(String(a.created_at)) === BigInt(String(b.created_at)) ? String(b.id).localeCompare(String(a.id)) : BigInt(String(a.created_at)) > BigInt(String(b.created_at)) ? -1 : 1);
+          const start = input.cursor === undefined ? 0 : ordered.findIndex((row) => row.id === input.cursor) + 1;
+          const page = ordered.slice(start, start + Number(input.limit));
+          return validateOutput(method, { rows: page, ...(start + page.length < ordered.length ? { next_cursor: page.at(-1)!.id! } : {}) });
+        }
         throw new Error(`Unexpected journal query ${method}`);
       },
       async updateSelf(method: string, args: JsonValue[]) {
@@ -167,7 +174,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
 
   describe("resident service", () => {
     test("exposes quote, prepare, status, list and independently verified result handlers", () => {
-      expect([...handlers.keys()]).toEqual(["uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_record_result_v1"]);
+      expect([...handlers.keys()]).toEqual(["uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_list_page_v1", "uniswap_record_result_v1"]);
       expect(handlers.get("uniswap_quote_v1")!.descriptor.annotations?.["neutron:effects"]).toEqual(["read", "network"]);
     });
 
@@ -234,8 +241,23 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       const list = await app.invoke("uniswap_list_v1", {});
       expect(JSON.parse(String(list.recordsJson))).toEqual([saved]);
       expect(await app.invoke("uniswap_status_v1", { swapId: "missing" })).toEqual({ recordJson: null });
-      expect(app.queries.find(({ method }) => method === "uniswap_list_v1")?.args).toEqual([null]);
+      expect(app.queries.find(({ method }) => method === "uniswap_history_v1")?.args).toEqual([{ limit: "32" }]);
       expect(app.walletCalls).toHaveLength(calls); expect(app.mutations).toHaveLength(writes);
+    });
+
+    test("paged history returns complete immutable records with an explicit continuation and no wallet calls", async () => {
+      const app = fixture();
+      await app.prepared();
+      const first = [...app.rows.values()][0]!;
+      app.rows.set("older", { ...first, id: "older", created_at: "1" });
+      const writes = app.mutations.length, walletCalls = app.walletCalls.length;
+      const head = await app.invoke("uniswap_list_page_v1", { cursor: null, limit: 1 });
+      expect(JSON.parse(String(head.recordsJson))).toHaveLength(1);
+      expect(head.nextCursor).toBe(SWAP_ID);
+      const tail = await app.invoke("uniswap_list_page_v1", { cursor: head.nextCursor!, limit: 1 });
+      expect(JSON.parse(String(tail.recordsJson))[0].id).toBe("older");
+      expect(tail.nextCursor).toBeNull();
+      expect(app.walletCalls).toHaveLength(walletCalls); expect(app.mutations).toHaveLength(writes);
     });
 
     test("recording a root result verifies the saved caller/request and stores the actual chain receipt", async () => {

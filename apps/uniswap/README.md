@@ -112,6 +112,13 @@ remain readable and retain their original request IDs. There is no fake schema
 migration. A replacement EVM Wallet signing namespace is not treated as the
 same account.
 
+Saved history is read in pages, newest first. If a page exceeds the existing
+Kernel response boundary, the app retries that same cursor with fewer records.
+**Load older swaps** keeps every retained intent reachable; paging never removes
+records or shortens request/receipt evidence. A single oversized record remains
+an explicit error instead of being skipped. Newly saved swaps use the durable
+begin result to open Wallet review without requiring a full-history reload.
+
 Receipt inclusion is shown separately from finality. An included Ethereum or
 Arbitrum receipt can still be reorganized. The interface preserves the wallet's
 reported finality instead of claiming immediate final settlement.
@@ -135,6 +142,7 @@ exact-request binding remain unchanged.
 | `uniswap_prepare_v1` | Validate the quote and save immutable approval/swap requests under the supplied 32-hex swap ID |
 | `uniswap_status_v1` | Read one saved intent and progress |
 | `uniswap_list_v1` | Read saved swaps |
+| `uniswap_list_page_v1` | Read a complete-record history page; start with null cursor and follow `nextCursor` until null |
 | `uniswap_record_result_v1` | Bind a supplied wallet result to the saved request, then independently verify public transaction fields and receipt |
 
 The root Agent obtains a quote and prepared requests, calls EVM Wallet's
