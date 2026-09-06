@@ -1,0 +1,199 @@
+{
+  "schema": "neutron-erc20-setup-portable-projection-v1",
+  "kind": "selective_extraction_from_existing_setup_records_without_new_tests_or_runtime_calls",
+  "scope": "Recorded fresh ERC20 qualification-runtime first installation and protocol configuration. Financial deposit, mint, redemption and migration-path outcomes are outside this setup projection.",
+  "sources": {
+    "erc20-runtime/first-deployment.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/first-deployment.json",
+      "size": 2544,
+      "sha256": "efbd9da9b28102c21325e5f212d956844f3e675c0055c2419d518039866e7e0a",
+      "rawRetainedLocally": true
+    },
+    "erc20-runtime/ready.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/ready.json",
+      "size": 5376,
+      "sha256": "1e2910dbc082b6b7352453740e851fc3efdd69dd3cc7c7e6bb7812d9addb6b57",
+      "rawRetainedLocally": true
+    },
+    "erc20-runtime/protocol-configured-1788704682935.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/protocol-configured-1788704682935.json",
+      "size": 6446,
+      "sha256": "876e682ac297bcb36602185ae17ed42fd041bf5a1d1bf1c66eaac70e82c24636",
+      "rawRetainedLocally": true
+    },
+    "extended-runtime-restored-before-erc20.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/extended-runtime-restored-before-erc20.json",
+      "size": 1023,
+      "sha256": "d187203555b23fb5f63f08690999443909da64d1d184469f4a6a0adc54bcb4b0",
+      "rawRetainedLocally": true
+    }
+  },
+  "firstDeployment": {
+    "source": "erc20-runtime/first-deployment.json",
+    "sourceFields": [
+      "/completedAt",
+      "/configSha256",
+      "/node/canisterId",
+      "/deploymentId",
+      "/firstCreatedCanisterOnly",
+      "/reinstallPermitted",
+      "/packagePins"
+    ],
+    "completedAt": "2026-09-06T14:20:15.071Z",
+    "configSha256": "7040259f7cd0ef743da7ff639072ec49201050bff85a6c8cf07cd613c92d3990",
+    "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+    "deploymentId": "b0a9b3927b38c4ec802595205e34eed3",
+    "firstCreatedCanisterOnly": true,
+    "reinstallPermitted": false,
+    "packagePins": [
+      {
+        "id": "kernel",
+        "version": 342,
+        "size": 2448936,
+        "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+      },
+      {
+        "id": "contacts",
+        "version": 306,
+        "size": 298018,
+        "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+      },
+      {
+        "id": "wallet",
+        "version": 316,
+        "size": 768823,
+        "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+      },
+      {
+        "id": "kitchensink",
+        "version": 315,
+        "size": 472282,
+        "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+      },
+      {
+        "id": "evm_wallet",
+        "version": 107,
+        "size": 391816,
+        "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+      },
+      {
+        "id": "uniswap",
+        "version": 104,
+        "size": 288989,
+        "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+      },
+      {
+        "id": "agent",
+        "version": 317,
+        "size": 511078,
+        "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+      }
+    ],
+    "packagePathProjection": "Original absolute package paths remain in the source receipt; package IDs, versions, sizes and hashes are copied here."
+  },
+  "readiness": {
+    "source": "erc20-runtime/ready.json",
+    "sourceFields": [
+      "/schema",
+      "/readyAt",
+      "/configSha256",
+      "/descriptor/profile",
+      "/descriptor/serverVersion",
+      "/descriptor/binarySha256",
+      "/descriptor/fixtures"
+    ],
+    "schema": "neutron-erc20-fixture-serve-v1",
+    "readyAt": "2026-09-06T14:15:55.150Z",
+    "configSha256": "7040259f7cd0ef743da7ff639072ec49201050bff85a6c8cf07cd613c92d3990",
+    "runtimeBuild": {
+      "profile": "full_protocol_fixtures",
+      "serverVersion": "14.0.0",
+      "binarySha256": "f5009e61bcbff297435a67a8ef9fc02178ebb9ab3ee1ec3ac81f4fc3d49319c4"
+    },
+    "namedProtocolFixtures": {
+      "cketh_minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "cketh_ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+      "ckusdc_ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "ckusdt_ledger": "cngnf-vqaaa-aaaar-qag4q-cai",
+      "evm_rpc": "7hfb6-caaaa-aaaar-qadga-cai"
+    }
+  },
+  "protocolConfiguration": {
+    "source": "erc20-runtime/protocol-configured-1788704682935.json",
+    "sourceFields": [
+      "/format",
+      "/configuredAt",
+      "/canisterId",
+      "/deploymentId",
+      "/protocol",
+      "/limitations",
+      "/sourceEvidence"
+    ],
+    "format": 1,
+    "configuredAt": "2026-09-06T14:24:42.935Z",
+    "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+    "deploymentId": "b0a9b3927b38c4ec802595205e34eed3",
+    "protocol": {
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "helperAddress": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "tokens": [
+        {
+          "key": "ckusdc",
+          "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+          "symbol": "ckUSDC",
+          "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        },
+        {
+          "key": "ckusdt",
+          "ledger": "cngnf-vqaaa-aaaar-qag4q-cai",
+          "symbol": "ckUSDT",
+          "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        }
+      ],
+      "helperSourceSha256": "2b6fbb45f42f3758cb6fb8ee1a7310a050f33546ba27b17e5cf2889f98ffcc57"
+    },
+    "recordedLimitations": [
+      "Official pinned helper and released minter/ledger protocols use disclosed local six-decimal ERC20 stand-ins; no production Circle/Tether contract execution is claimed."
+    ],
+    "recordedSourceEvidence": [
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/ready.json",
+        "sha256": "1e2910dbc082b6b7352453740e851fc3efdd69dd3cc7c7e6bb7812d9addb6b57"
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/first-deployment.json",
+        "sha256": "efbd9da9b28102c21325e5f212d956844f3e675c0055c2419d518039866e7e0a"
+      }
+    ]
+  },
+  "priorRuntimeRestoration": {
+    "source": "extended-runtime-restored-before-erc20.json",
+    "sourceFields": [
+      "/verifiedAt",
+      "/originalGatewayRestored/restoredAt",
+      "/originalGatewayRestored/status/replicaHealthStatus"
+    ],
+    "verifiedAt": "2026-09-06T14:13:08.355395+00:00",
+    "recordedRestoredAt": "2026-09-06T14:12:22.810Z",
+    "recordedHealth": "healthy",
+    "retainedStateMetadata": "The original receipt retains its /retainedState and /isolatedStatePreserved path fields. Their path values and process supervision fields are omitted here."
+  },
+  "interpretationLimits": [
+    "This projection copies recorded setup fields. It does not compare runtime state, validate contracts, verify configuration ownership, or establish new behavioral claims.",
+    "The first-deployment record explicitly reports firstCreatedCanisterOnly true and reinstallPermitted false. It is fresh initialization evidence rather than an upgrade or production installation receipt.",
+    "The original-runtime restoration record is a separate prior observation; this projection does not establish the eventual post-qualification restoration outcome.",
+    "Fixture names, minter/helper addresses and token-ledger mappings are recorded configuration roles; they do not independently prove ledger minting-account ownership.",
+    "The copied protocol limitation discloses local six-decimal stand-ins and excludes production Circle/Tether contract execution. The four source records do not explicitly record the token zero-reset behavior.",
+    "Raw setup records remain local at the listed exact paths, sizes and SHA-256 values. This projection omits their runtime supervision and private-session metadata."
+  ],
+  "omitted": [
+    "process IDs and identities",
+    "runtime control URLs and gateway supervision",
+    "session paths and session contents",
+    "private state paths and contents",
+    "root-key blobs",
+    "raw application state",
+    "runner caches",
+    "gateway borrow or serve-owner metadata"
+  ]
+}

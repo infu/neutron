@@ -1,0 +1,39 @@
+{
+  "schema": "neutron-evm-chain1-contract-inclusion-reconciliation-v1",
+  "observedAt": "2026-09-06T12:38:46.428Z",
+  "requestId": "3d5d22f4832cf63640b997c62bf8b5b7",
+  "native": {
+    "hash": "0x168db51666164ea9f8da89e1be2ef468a7685a5809670319175e3fc436b16cc4",
+    "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "to": "0xF633008c815bE8cbDA1d80d149FCb41925fBcEBf",
+    "valueWei": "1000000000000",
+    "nonce": 9,
+    "chainId": "1",
+    "raw": "0x02f86f0109843b9aca00843b9aca0e82520994f633008c815be8cbda1d80d149fcb41925fbcebf85e8d4a5100080c001a082e6761a1345c5982b17612029113d326ff4f221da650e1c196db98435570abda02e811409bd52c171eb49e64693a855689e8a86e085e8895ac568fa23e78a1cbe",
+    "blockNumber": "330910",
+    "blockHash": "0x511ceefa3df38f1a5e61190c650cc21a4129cda5b7c8e5421425513516885358",
+    "gasUsed": "21000",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "contract": {
+    "hash": "0xeb9fe0a37a31404751663b65f0af3f79016b3354e2f274b58792fe1ee4f70b20",
+    "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "to": "0xf6B6cB54bc22904860B54B3A651F8506792A2e85",
+    "valueWei": "0",
+    "nonce": 10,
+    "chainId": "1",
+    "raw": "0x02f88a010a843b9aca00843b9aca0e82a99294f6b6cb54bc22904860b54b3a651f8506792a2e8580a00000000000000100000000000000000000000000000000000020000000000001c080a0bf9c1476784c62f8f064a131dcae28d3617142de7f3a4fdcebb68fd7574f1b78a026de20c53d773a0223fd9ca6f5f4213cd038dc791bb6c6399cc4a4fdf407eeb5",
+    "blockNumber": "330934",
+    "blockHash": "0xfe92fb02dbb88859d763039893df03dbb4f4db9de04f6470b34783109c39f099",
+    "gasUsed": "43410",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "storage": "0xf6b6cb54bc22904860b54b3a651f8506792a2e85",
+  "calldata": "0x0000000000000100000000000000000000000000000000000020000000000001",
+  "storedValue": "1606938044258990275541962092341162602522203002789992090042369",
+  "finalBalance": "9999934589999549130",
+  "expectedBalance": "9999934589999549130",
+  "latestNonce": "11",
+  "pendingNonce": "11",
+  "scope": "The exact existing Wallet-approved contract hash is canonically mined and signed on chain1. Independent raw-byte/signature/receipt checks, sequential nonce, target calldata/storage and both gas debits all pass. This read-only reconciliation sends no transaction/signature. The initial fixture failure was receipt-null before interval-mined inclusion. It does not claim the final Kitchen UI read or Wallet journal refresh which did not execute after that interruption."
+}

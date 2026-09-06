@@ -1,0 +1,272 @@
+{
+  "schema": "neutron-evm-final-installed-candidates-v1",
+  "observedAt": "2026-09-06T13:57:50.936Z",
+  "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+  "deploymentId": "0f0da55fdebc5b9eb20f68cc3415dda7",
+  "installed": [
+    {
+      "id": "kernel",
+      "version": 342,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "id": "contacts",
+      "version": 306,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    },
+    {
+      "id": "wallet",
+      "version": 316,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 107,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+    },
+    {
+      "id": "uniswap",
+      "version": 104,
+      "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+    },
+    {
+      "id": "agent",
+      "version": 317,
+      "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+    }
+  ],
+  "runtime": {
+    "apps": [
+      {
+        "resident_frame_security": {
+          "persistent_dedicated_v1": null
+        },
+        "scope": {
+          "installation_uid": "1",
+          "app_id": "agent"
+        },
+        "version": "317",
+        "browser_origin_nonce": "4b16609cf5d43c321033e4f223f9b270",
+        "capability_plan_fingerprint": "f04c43b9594bf461f87047da1ec7b07922964c53a092b1354f5a89addfa67e8a",
+        "browser_origin_authority_epoch": "1",
+        "deployment_id": "0f0da55fdebc5b9eb20f68cc3415dda7"
+      },
+      {
+        "resident_frame_security": {
+          "credentialless_opaque_v1": null
+        },
+        "scope": {
+          "installation_uid": "2",
+          "app_id": "contacts"
+        },
+        "version": "306",
+        "browser_origin_nonce": "69e2891eee614425e3c5f0f03b395df2",
+        "capability_plan_fingerprint": "562c35e05c5cacaf4e00128aed42801f9ee0527d370070dbe6c45024308e7d2a",
+        "browser_origin_authority_epoch": "1",
+        "deployment_id": "0f0da55fdebc5b9eb20f68cc3415dda7"
+      },
+      {
+        "resident_frame_security": {
+          "credentialless_opaque_v1": null
+        },
+        "scope": {
+          "installation_uid": "3",
+          "app_id": "evm_wallet"
+        },
+        "version": "107",
+        "browser_origin_nonce": "f122fe1fb6b615b82a64125695424981",
+        "capability_plan_fingerprint": "03fcee31006a14ae92b91f85fff1612d42e5039391ecd4f8728119df835133e2",
+        "browser_origin_authority_epoch": "1",
+        "deployment_id": "0f0da55fdebc5b9eb20f68cc3415dda7"
+      },
+      {
+        "resident_frame_security": {
+          "credentialless_opaque_v1": null
+        },
+        "scope": {
+          "installation_uid": "4",
+          "app_id": "kernel"
+        },
+        "version": "342",
+        "browser_origin_nonce": "426a2cfc27574892c4e33a8146edd090",
+        "capability_plan_fingerprint": "a663a27c706f42c87b4e600dd95fab0d26bc6231ea2576bb2e08650d1f7e3b06",
+        "browser_origin_authority_epoch": "1",
+        "deployment_id": "0f0da55fdebc5b9eb20f68cc3415dda7"
+      },
+      {
+        "resident_frame_security": {
+          "persistent_dedicated_v1": null
+        },
+        "scope": {
+          "installation_uid": "5",
+          "app_id": "kitchensink"
+        },
+        "version": "315",
+        "browser_origin_nonce": "d45810b523d37df91e1c3a9e1cf7f505",
+        "capability_plan_fingerprint": "5b3d2f7b24da77a414e54328173562f7465a7e7aea2bd27b2721a3132ff14117",
+        "browser_origin_authority_epoch": "1",
+        "deployment_id": "0f0da55fdebc5b9eb20f68cc3415dda7"
+      },
+      {
+        "resident_frame_security": {
+          "credentialless_opaque_v1": null
+        },
+        "scope": {
+          "installation_uid": "6",
+          "app_id": "uniswap"
+        },
+        "version": "104",
+        "browser_origin_nonce": "22496abeff1f50fded7cafb9d2829986",
+        "capability_plan_fingerprint": "69f6eea476a6384f5b70c3fd73ceb275bc7af47d0456557b4d144f7cf30e7e2c",
+        "browser_origin_authority_epoch": "1",
+        "deployment_id": "0f0da55fdebc5b9eb20f68cc3415dda7"
+      },
+      {
+        "resident_frame_security": {
+          "credentialless_opaque_v1": null
+        },
+        "scope": {
+          "installation_uid": "7",
+          "app_id": "wallet"
+        },
+        "version": "316",
+        "browser_origin_nonce": "4ae91c3d264ef2c42a7b0747649c7e61",
+        "capability_plan_fingerprint": "072a3650f21b0cb238457e77e7d34c86912977e27cfd6ae7efe0668922277144",
+        "browser_origin_authority_epoch": "1",
+        "deployment_id": "0f0da55fdebc5b9eb20f68cc3415dda7"
+      }
+    ],
+    "assembler_id": "neutron_actor_v26",
+    "capability_authority_revision": [
+      "0"
+    ],
+    "memories": [
+      {
+        "id": "agent",
+        "owner": "agent",
+        "schema": "cae3096c6238e7217c0cdd242e1c1094faecf1c85ee92c0b2d13a88b3bf0f134",
+        "version": "1"
+      },
+      {
+        "id": "contacts",
+        "owner": "contacts",
+        "schema": "f2810f832c457a20feea6648ed4bacf30507156ef145ab68bfd4e6805bb8d5a2",
+        "version": "2"
+      },
+      {
+        "id": "evm_evidence",
+        "owner": "evm_wallet",
+        "schema": "2141ab91b6bbd3a60212644870fc1a581922c9aeef6f728bf3ccfd0770a03dec",
+        "version": "1"
+      },
+      {
+        "id": "evm_wallet",
+        "owner": "evm_wallet",
+        "schema": "5cf1711e7f72a296ea8dbf320145d7b3d260398f871a3c832f7482388d983590",
+        "version": "1"
+      },
+      {
+        "id": "kernel",
+        "owner": "kernel",
+        "schema": "19801dd4c0544a8213201cbc92786c3a7bd98e88bb9af63b015eed5f15c12699",
+        "version": "4"
+      },
+      {
+        "id": "kernel_activation",
+        "owner": "kernel",
+        "schema": "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
+        "version": "1"
+      },
+      {
+        "id": "kitchensink",
+        "owner": "kitchensink",
+        "schema": "e7f5385c39e9e3c6806ce810ed03ca76fdee67641923ff7ea8c7a4b7f0176cdf",
+        "version": "1"
+      },
+      {
+        "id": "uniswap",
+        "owner": "uniswap",
+        "schema": "f117d98b9278d075acff8b1f62ffa85b42afab9ca4aaa78a84ad9a48b9d25228",
+        "version": "1"
+      },
+      {
+        "id": "wallet",
+        "owner": "wallet",
+        "schema": "3046a3189737219f2556a491c9599bd18fcbe8034244e332e5d9e834d1773bc4",
+        "version": "1"
+      },
+      {
+        "id": "wallet_bridge",
+        "owner": "wallet",
+        "schema": "8c76f4e2cae04be024b499f14a62df135ce602fec65ede9277e26fa22fc1bafd",
+        "version": "1"
+      },
+      {
+        "id": "wallet_bridge_replacements",
+        "owner": "wallet",
+        "schema": "92b240166e7c7707d35a71e7988b261ed177fe1f130813c9cebfb8ba0495291c",
+        "version": "1"
+      },
+      {
+        "id": "wallet_commands",
+        "owner": "wallet",
+        "schema": "3221a53d8d9a2967e024db95fbaa138cb552501cda4aed4546176e2302a3c7b0",
+        "version": "1"
+      },
+      {
+        "id": "wallet_transfers",
+        "owner": "wallet",
+        "schema": "407c76657485fdf8a9aa02e4afdfc93e6e6fdf9bbc462cf62376d7338f476106",
+        "version": "1"
+      }
+    ],
+    "compiler_id": "moc_classical_4b5d3d220e609216",
+    "deployment_id": "0f0da55fdebc5b9eb20f68cc3415dda7"
+  },
+  "provenance": {
+    "format": 1,
+    "apps": {
+      "agent": {
+        "kind": "provisioned",
+        "package_digest": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+      },
+      "contacts": {
+        "kind": "provisioned",
+        "package_digest": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+      },
+      "evm_wallet": {
+        "kind": "manual",
+        "acquisition": "file",
+        "package_digest": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+      },
+      "kernel": {
+        "kind": "manual",
+        "acquisition": "file",
+        "package_digest": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+      },
+      "kitchensink": {
+        "kind": "manual",
+        "acquisition": "file",
+        "package_digest": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+      },
+      "uniswap": {
+        "kind": "manual",
+        "acquisition": "file",
+        "package_digest": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+      },
+      "wallet": {
+        "kind": "manual",
+        "acquisition": "file",
+        "package_digest": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+      }
+    }
+  },
+  "checkedUpgradeReceipt": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-uniswap104-upgrade/checked-upgrade-receipt.json",
+  "checkedUpgradeReceiptSha256": "e0a1bb5199edf06390a2b540e82dff58818a8ff83f4899d075477a7f14bb8760",
+  "scope": "Actual checked browser updates through Kernel342/Wallet316/Kitchen315/EVM107/Uniswap104; retained roots, installation identities and saved semantic queries preserved. Original provisioning journal unchanged. Local unforked Anvil1/42161 only; no Nitro parent-fee/finality claim."
+}

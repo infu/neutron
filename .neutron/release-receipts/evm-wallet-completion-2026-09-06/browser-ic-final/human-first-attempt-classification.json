@@ -1,0 +1,67 @@
+{
+  "classification": "test_harness_immediate_receipt_read_before_inclusion",
+  "initial_test_result": "failed at chain.evidence after actual reply was dropped; transaction existed but receipt was null",
+  "transactionHash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+  "transaction": {
+    "type": "0x2",
+    "chainId": "0x1",
+    "nonce": "0x7",
+    "gas": "0x88ab",
+    "maxFeePerGas": "0x3b9aca0e",
+    "maxPriorityFeePerGas": "0x3b9aca00",
+    "to": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+    "value": "0xb1a2bc2ec50000",
+    "accessList": [],
+    "input": "0xb214faa50affffffffff8000010101000000000000000000000000000000000000000000",
+    "r": "0x87d3b444822e811965e630d3705e667be46f67b83178c14cea2fbe470d72b022",
+    "s": "0x5911b56f18c4577702b8aafb2a2e6daf2af6e3dbcbe3fc4a0d8fae31bb1112c8",
+    "yParity": "0x1",
+    "v": "0x1",
+    "hash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+    "blockHash": "0x181533f81c3705403a5d9eb59ccb556e9cffe1f3446a1a59f48332d77da750e2",
+    "blockNumber": "0x5057a",
+    "transactionIndex": "0x0",
+    "from": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "gasPrice": "0x3b9aca07",
+    "blockTimestamp": "0x6a9d557b"
+  },
+  "receipt": {
+    "type": "0x2",
+    "status": "0x1",
+    "cumulativeGasUsed": "0x7fde",
+    "logs": [
+      {
+        "address": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "topics": [
+          "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+          "0x000000000000000000000000d646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+          "0x0affffffffff8000010101000000000000000000000000000000000000000000"
+        ],
+        "data": "0x00000000000000000000000000000000000000000000000000b1a2bc2ec50000",
+        "blockHash": "0x181533f81c3705403a5d9eb59ccb556e9cffe1f3446a1a59f48332d77da750e2",
+        "blockNumber": "0x5057a",
+        "blockTimestamp": "0x6a9d557b",
+        "transactionHash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+        "transactionIndex": "0x0",
+        "logIndex": "0x0",
+        "removed": false
+      }
+    ],
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000200000000000004000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000200000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000002000000000000000000000000000001000000002008000000400000000000000000000000000000000000000000000000000",
+    "transactionHash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+    "transactionIndex": "0x0",
+    "blockHash": "0x181533f81c3705403a5d9eb59ccb556e9cffe1f3446a1a59f48332d77da750e2",
+    "blockNumber": "0x5057a",
+    "gasUsed": "0x7fde",
+    "effectiveGasPrice": "0x3b9aca07",
+    "blobGasPrice": "0x1",
+    "from": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "to": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+    "contractAddress": null,
+    "blockTimestamp": 1788695931
+  },
+  "recovery": "Same saved intent is being reconciled through actual Wallet UI before native-only continuation. No new deposit is issued.",
+  "fixture_fix": "Bounded read-only same-hash receipt polling before independent raw transaction/receipt verification.",
+  "product_changes": false,
+  "installed_candidates": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json"
+}

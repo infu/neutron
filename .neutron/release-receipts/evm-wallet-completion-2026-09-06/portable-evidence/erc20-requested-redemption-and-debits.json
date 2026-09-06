@@ -1,0 +1,40 @@
+{
+  "gasFunding": null,
+  "beforeRedemption": {
+    "nonce": "4",
+    "evmTokenBalance": "80000000",
+    "assetBalance": "20000000",
+    "assetFee": "10000",
+    "assetAllowance": "0",
+    "gasBalance": "9000800000000000000",
+    "gasFee": "2000000000000",
+    "gasAllowance": "0"
+  },
+  "requested": {
+    "assetBurnIndex": "2",
+    "gasBurnIndex": "7",
+    "gasBudget": "97500000910000",
+    "gasMaximumDebit": "99500000910000",
+    "review": "\n    $737,999.57USDWithdraw ckUSDCEthereumTockUSDC redemption 1788705408648Ethereum0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41AmountMaxckUSDCAvailable20 ckUSDCApproval fee0.01 ckUSDCNetwork feePaid in ckETHEthereum gas budget0.00009750000091 ckETH (97500000910000 atoms)ckETH approval fee0.000002 ckETH (2000000000000 atoms)ckETH allowance97500000910000 atomsMaximum ckETH debit0.00009950000091 ckETH (99500000910000 atoms)Available ckETH9.0008 ckETHQuoted 3:06:40 PM. Costs are checked again before approvals. A changed quote requires another review.Refresh gas quoteWithdrawAlpha - not battle tested, don't put more tokens than you can afford to lose\n    \n  \n\n"
+  },
+  "queued": {
+    "requestId": "1a35d176c447545c9d8e6695bc381b94",
+    "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+    "amount": "5000000",
+    "destination": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "native": true,
+    "status": "succeeded",
+    "blockIndex": "2",
+    "settlement": {
+      "status": "pending",
+      "transactionHash": null
+    }
+  },
+  "afterBurn": {
+    "assetBalance": "14990000",
+    "gasBalance": "9000700499999090000",
+    "assetAllowance": "0",
+    "gasAllowance": "0"
+  },
+  "observedGasBurn": "97500000910000"
+}

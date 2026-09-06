@@ -10,7 +10,7 @@ function bytes(text: string): Uint8Array {
   return encoder.encode(text);
 }
 
-test("kernel generated artifacts keep V3 and add isolated activation V1", async () => {
+test("kernel generated artifacts migrate V3 to V4 and retain activation V1", async () => {
   const [
     manifestText,
     lockText,
@@ -26,7 +26,7 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.36.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.42.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -35,17 +35,21 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(336);
+  expect(manifest.version).toBe(342);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
-  expect(manifest.memory.kernel.version).toBe(3);
-  expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3"]);
-  expect(manifest.memory.kernel.migrations).toBeUndefined();
+  expect(manifest.memory.kernel.version).toBe(4);
+  expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3", "4"]);
+  expect(manifest.memory.kernel.migrations).toEqual([{ from: 3, to: 4, src: "memory/kernel/v3_to_v4.mo" }]);
   expect(manifest.memory.kernel_activation.version).toBe(1);
   expect(Object.keys(manifest.memory.kernel_activation.schemas)).toEqual(["1"]);
   expect(manifest.memory.kernel_activation.migrations).toEqual([]);
-  expect(Object.keys(lock.memory.kernel.schemas)).toEqual(["3"]);
-  expect(lock.memory.kernel.migrations).toEqual({});
-  expect(lock.memory.kernel.schemas["3"].hash).toMatch(/^[0-9a-f]{64}$/);
+  expect(Object.keys(lock.memory.kernel.schemas)).toEqual(["3", "4"]);
+  expect(Object.keys(lock.memory.kernel.migrations)).toEqual(["3->4"]);
+  expect(lock.memory.kernel.schemas["3"]).toEqual({
+    hash: "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
+    entry: "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b",
+  });
+  expect(lock.memory.kernel.schemas["4"].hash).toMatch(/^[0-9a-f]{64}$/);
   expect(lock.memory.kernel.schemas["3"].entry).toMatch(/^[0-9a-f]{64}$/);
   expect(Object.keys(lock.memory.kernel_activation.schemas)).toEqual(["1"]);
   expect(lock.memory.kernel_activation.migrations).toEqual({});
@@ -55,21 +59,21 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(336);
+  expect(packagedManifest.version).toBe(342);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
-  expect(packagedManifest.memory.kernel.version).toBe(3);
-  expect(Object.keys(packagedManifest.memory.kernel.schemas)).toEqual(["3"]);
-  expect(packagedManifest.memory.kernel.migrations).toBeUndefined();
+  expect(packagedManifest.memory.kernel.version).toBe(4);
+  expect(Object.keys(packagedManifest.memory.kernel.schemas)).toEqual(["3", "4"]);
+  expect(packagedManifest.memory.kernel.migrations).toMatchObject([{ from: 3, to: 4 }]);
   expect(packagedManifest.memory.kernel_activation.version).toBe(1);
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
-  expect(packagedArchive.manifest.memory?.kernel?.version).toBe(3);
-  expect(packagedArchive.manifest.version).toBe(336);
+  expect(packagedArchive.manifest.memory?.kernel?.version).toBe(4);
+  expect(packagedArchive.manifest.version).toBe(342);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 336 },
+    package: { id: "kernel", version: 342 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });
@@ -78,21 +82,21 @@ test("kernel generated artifacts keep V3 and add isolated activation V1", async 
   );
   expect(
     Object.keys(packagedArchive.manifest.memory?.kernel?.schemas ?? {}),
-  ).toEqual(["3"]);
-  expect(packagedArchive.manifest.memory?.kernel?.migrations).toBeUndefined();
+  ).toEqual(["3", "4"]);
+  expect(packagedArchive.manifest.memory?.kernel?.migrations).toMatchObject([{ from: 3, to: 4 }]);
   expect(
     packagedArchive.manifest.memory?.kernel_activation?.version,
   ).toBe(1);
 
   // `r6_kernel` encodes the six-character memory id, not schema version 6.
   expect(wrapper).toContain(
-    'import NeutronMemorySchema_a6_kernel_r6_kernel_v3 "memory/kernel/v3"',
+    'import NeutronMemorySchema_a6_kernel_r6_kernel_v4 "memory/kernel/v4"',
   );
   expect(wrapper).toContain(
-    "#v3 : NeutronMemorySchema_a6_kernel_r6_kernel_v3.Mem",
+    "#v4 : NeutronMemorySchema_a6_kernel_r6_kernel_v4.Mem",
   );
   expect(wrapper).toContain(
-    "let #v3(NeutronMemory_a6_kernel_r6_kernel) = NeutronMemoryStore_a6_kernel_r6_kernel",
+    "let #v4(NeutronMemory_a6_kernel_r6_kernel) = NeutronMemoryStore_a6_kernel_r6_kernel",
   );
   expect(wrapper).toContain(
     'import NeutronMemorySchema_a6_kernel_r17_kernel_activation_v1 "memory/activation/v1"',
@@ -1231,8 +1235,8 @@ test("kernel settings snapshot is authenticated and reports bounded memory", asy
     "kernel",
     "kernel_activation",
   ]);
-  expect(manifest.memory.kernel.version).toBe(3);
-  expect(manifest.memory.kernel.migrations).toBeUndefined();
+  expect(manifest.memory.kernel.version).toBe(4);
+  expect(manifest.memory.kernel.migrations).toEqual([{ from: 3, to: 4, src: "memory/kernel/v3_to_v4.mo" }]);
   expect(manifest.memory.kernel_activation.version).toBe(1);
   expect(manifest.memory.kernel_activation.migrations).toEqual([]);
 });

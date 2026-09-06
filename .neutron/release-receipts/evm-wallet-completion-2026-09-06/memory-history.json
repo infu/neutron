@@ -1,0 +1,74 @@
+{
+  "publishedBaselineCommit": "64d758df72b8eff62792bebbb9e2f667ab1b0379",
+  "apps": [
+    {
+      "app": "kernel",
+      "preservedRoots": [
+        "kernel",
+        "kernel_activation"
+      ],
+      "newIndependentRoots": [],
+      "preservedSchemaAndMigrationFiles": [
+        "apps/kernel/backend/memory/activation/v1.mo",
+        "apps/kernel/backend/memory/kernel/v3.mo",
+        "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+        "apps/kernel/backend/memory/kernel/v4.mo"
+      ],
+      "releasedLockLineageUnchanged": true
+    },
+    {
+      "app": "wallet",
+      "preservedRoots": [
+        "wallet",
+        "wallet_commands",
+        "wallet_bridge",
+        "wallet_transfers"
+      ],
+      "newIndependentRoots": [
+        "wallet_bridge_replacements"
+      ],
+      "preservedSchemaAndMigrationFiles": [
+        "apps/wallet/backend/memory/wallet/v1.mo",
+        "apps/wallet/backend/memory/wallet_bridge/v1.mo",
+        "apps/wallet/backend/memory/wallet_commands/v1.mo",
+        "apps/wallet/backend/memory/wallet_transfers/v1.mo"
+      ],
+      "releasedLockLineageUnchanged": true
+    },
+    {
+      "app": "kitchensink",
+      "preservedRoots": [
+        "kitchensink"
+      ],
+      "newIndependentRoots": [],
+      "preservedSchemaAndMigrationFiles": [
+        "apps/kitchensink/backend/memory/kitchensink/v1.mo"
+      ],
+      "releasedLockLineageUnchanged": true
+    },
+    {
+      "app": "evm_wallet",
+      "preservedRoots": [
+        "evm_wallet"
+      ],
+      "newIndependentRoots": [
+        "evm_evidence"
+      ],
+      "preservedSchemaAndMigrationFiles": [
+        "apps/evm_wallet/backend/memory/evm_wallet/v1.mo"
+      ],
+      "releasedLockLineageUnchanged": true
+    },
+    {
+      "app": "uniswap",
+      "preservedRoots": [
+        "uniswap"
+      ],
+      "newIndependentRoots": [],
+      "preservedSchemaAndMigrationFiles": [
+        "apps/uniswap/backend/memory/uniswap/v1.mo"
+      ],
+      "releasedLockLineageUnchanged": true
+    }
+  ]
+}

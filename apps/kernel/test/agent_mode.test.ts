@@ -180,7 +180,49 @@ test("downstream permission requires one exact agent decision", async () => {
   completeInvocation(root);
 });
 
-test("request cancellation settles and removes a nested agent decision", async () => {
+test("sequential nested quote reads each require a separate agent decision", async () => {
+  await grantAgent();
+  const root = beginAgentRoot({
+    caller: tile("agent"),
+    target: background("agent"),
+    tool: "agent_chat",
+    ownerPrincipal: owner,
+    installedVersion: 100,
+  })!;
+  const endpoint = background("uniswap");
+  const child = createChildInvocation(root, endpoint, "uniswap_quote_v1");
+  const challengeIds = new Set<string>();
+  const tools = ["evm_accounts_v1", "evm_networks_v1", "evm_balances_v1", "evm_read_contract_v1"];
+
+  for (const tool of tools) {
+    await requestAgentConsent(child, {
+      kind: "frontend_tool",
+      persistence: "none",
+      risk: "low",
+      action: { provider: "evm_wallet", tool },
+    }, async (challenge) => {
+      challengeIds.add(challenge.id);
+      expect(challenge.action).toEqual({ provider: "evm_wallet", tool });
+      expect(challenge.chain).toEqual([
+        { appId: "agent", tool: "agent_chat" },
+        { appId: "uniswap", tool: "uniswap_quote_v1" },
+      ]);
+      return { decision: "allow", reason: "Read needed for this quote" };
+    });
+    expect(resolveInvocation(endpoint, invocationMetadata(child))).toBe(child);
+    expect(isDirectAgentInvocation(child)).toBe(false);
+  }
+
+  expect(challengeIds.size).toBe(tools.length);
+  expect(useAgentModeStore.getState().activeRoot?.challenges).toBe(tools.length);
+  expect(useAgentModeStore.getState().decisions.map(({ decision }) => decision)).toEqual(
+    tools.map(() => "allow"),
+  );
+  completeInvocation(child);
+  completeInvocation(root);
+});
+
+test("request cancellation settles a later nested decision and permits a fresh decision", async () => {
   await grantAgent();
   const root = beginAgentRoot({
     caller: tile("agent"),
@@ -190,6 +232,12 @@ test("request cancellation settles and removes a nested agent decision", async (
     installedVersion: 100,
   })!;
   const child = createChildInvocation(root, background("wallet"), "send");
+  for (let index = 0; index < 2; index += 1) {
+    await requestAgentConsent(child, {
+      kind: "frontend_tool", persistence: "none", risk: "low",
+      action: { tool: "read", step: index },
+    }, async () => ({ decision: "allow", reason: "Needed read" }));
+  }
   const controller = new AbortController();
   let dispatchSignal: AbortSignal | undefined;
   const pending = requestAgentConsent(
@@ -212,7 +260,7 @@ test("request cancellation settles and removes a nested agent decision", async (
   expect(dispatchSignal).toBe(controller.signal);
   expect(dispatchSignal?.aborted).toBe(true);
   expect(child.status).toBe("active");
-  expect(useAgentModeStore.getState().decisions).toHaveLength(0);
+  expect(useAgentModeStore.getState().decisions).toHaveLength(2);
 
   await expect(
     requestAgentConsent(child, {
@@ -222,7 +270,7 @@ test("request cancellation settles and removes a nested agent decision", async (
       action: { tool: "read" },
     }, async () => ({ decision: "allow", reason: "Safe read" })),
   ).resolves.toBeUndefined();
-  expect(useAgentModeStore.getState().decisions).toHaveLength(1);
+  expect(useAgentModeStore.getState().decisions).toHaveLength(3);
   completeInvocation(child);
   completeInvocation(root);
 });
@@ -291,6 +339,12 @@ test("a denial closes the descendant permission path", async () => {
     risk: "high" as const,
     action: { canister: "aaaaa-aa", method: "install_code" },
   };
+  for (let index = 0; index < 2; index += 1) {
+    await requestAgentConsent(child, {
+      kind: "frontend_tool", persistence: "none", risk: "low",
+      action: { tool: "read", step: index },
+    }, async () => ({ decision: "allow", reason: "Needed read" }));
+  }
 
   await expect(
     requestAgentConsent(child, summary, async () => ({

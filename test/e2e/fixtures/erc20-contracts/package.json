@@ -1,0 +1,9 @@
+{
+  "name": "neutron-ic-wallet-erc20-contract-fixtures",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned compiler for local ckERC20 protocol qualification contracts",
+  "dependencies": {
+    "solc": "0.8.20"
+  }
+}

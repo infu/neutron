@@ -1,0 +1,1430 @@
+{
+  "schema": "neutron-checked-upgrade-portable-projection-v1",
+  "kind": "extraction_from_existing_receipts_without_new_tests_or_state_comparison",
+  "scope": "Recorded checked browser updates through Kernel 341 and EVM Wallet 105 only.",
+  "interpretationLimits": [
+    "This file extracts existing fields and statements. It does not rerun checks, decode query replies, compare state, or establish new behavioral claims.",
+    "Failed harness runs remain failed here. Saved-commit reconciliation records are separate evidence and do not turn those runs into uninterrupted passes.",
+    "Query reply hashes and recorded counts are captured metadata; differences involving scheduled counters or Wallet refresh timestamps must be read with the original recorded scope statements.",
+    "The original receipts and test reports are retained locally at the exact paths and SHA-256 values listed in sources; this compact projection does not contain the full raw evidence.",
+    "No claim is made for a Kernel 342 or EVM Wallet 106 checked upgrade. Their final upgrade proof is outside this projection."
+  ],
+  "omitted": [
+    "raw Candid arguments and replies",
+    "raw managed state",
+    "browser traces and screenshots",
+    "browser configuration and executable/cache paths",
+    "local provisioning journal contents"
+  ],
+  "sources": {
+    "checked-browser-app-upgrade-results.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-app-upgrade-results.json",
+      "size": 11806,
+      "sha256": "407dbcff8bb03df527c57cf1987d050a8fe1fd4f4710d2c7d2fbe812b7b377bd",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-remaining-app-upgrade-results.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-remaining-app-upgrade-results.json",
+      "size": 9797,
+      "sha256": "6cb58905239d4a39cec85af7aca4da332a65016bbba0c6ef88af158506c4e4f7",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-final-two-app-upgrade-results.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade-results.json",
+      "size": 37718,
+      "sha256": "b230f0d24b1839a2307686f8b7b5355a8cd0d39efd41795da610150d37daed42",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-kernel-upgrade-results.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel-upgrade-results.json",
+      "size": 3932,
+      "sha256": "deef0b2fdc3e94f9cd7e8af70ab0dd2f669bc0dc33c7a94648a686513771ee0a",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-evm105-upgrade-results.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm105-upgrade-results.json",
+      "size": 3936,
+      "sha256": "64416178f5a0d295754e9185d0a2ee24755eaf3364f7d70830d24aceadb7e894",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-app-upgrade/1-evm_wallet-reconciled.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-app-upgrade/1-evm_wallet-reconciled.json",
+      "size": 616832,
+      "sha256": "36cf80444b9094eba171ae8e277c7a467a335108989bf4cde566fbab1c5c1b6f",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-remaining-app-upgrade/1-uniswap-reconciled.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-remaining-app-upgrade/1-uniswap-reconciled.json",
+      "size": 723173,
+      "sha256": "da0300fc2c6f45773a2511485754e299f3220b0ebcd24db7300495f953edf3a4",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-final-two-app-upgrade/1-wallet-committed.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade/1-wallet-committed.json",
+      "size": 627688,
+      "sha256": "2bb2ee1efb7121af0e987d10499dca35d7ba79fb30a0ec782892b72d98a7a2e5",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-final-two-app-upgrade/2-kitchensink-reconciled.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade/2-kitchensink-reconciled.json",
+      "size": 1047236,
+      "sha256": "f6f715e798c47323c3e8e6f87f343be347f0ed1594088b181b1ba4a7cc80cd69",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-kernel-upgrade/checked-upgrade-receipt.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel-upgrade/checked-upgrade-receipt.json",
+      "size": 699598,
+      "sha256": "31ea9dd9ae4d8f71bfc238de992e11c4ec5d173966b4209b6d7beeba173fe25d",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-evm105-upgrade/checked-upgrade-receipt.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-evm105-upgrade/checked-upgrade-receipt.json",
+      "size": 814650,
+      "sha256": "32e2fd403fb39803a3f02b7ae033a070832a13ec6035e2ac461891e7443c2322",
+      "rawRetainedLocally": true
+    },
+    "checked-browser-final-two-app-upgrade/wallet-snapshot-cache-refresh-evidence.json": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-final-two-app-upgrade/wallet-snapshot-cache-refresh-evidence.json",
+      "size": 928,
+      "sha256": "c2f87f9146ae605038a068346484ddb0a338509f1b4bbf61274aa04642ade36a",
+      "rawRetainedLocally": true
+    }
+  },
+  "steps": [
+    {
+      "source": "checked-browser-app-upgrade/1-evm_wallet-reconciled.json",
+      "recordType": "saved_commit_reconciled_after_failed_harness",
+      "candidate": {
+        "id": "evm_wallet",
+        "version": 103,
+        "path": "apps/evm_wallet/evm_wallet.v0.1.3.neutron",
+        "size": 391234,
+        "sha256": "80cb4d5a55d52ce1e27114e9bb36686af3d60dd668b7c85e694fb16ed4eb1d92"
+      },
+      "harnessReport": "checked-browser-app-upgrade-results.json",
+      "observations": {
+        "before": {
+          "sourceField": "/before",
+          "observedAt": "2026-09-06T11:25:31.600Z",
+          "deploymentId": "ee18bc53661dc1ec3da4065de3bc50f0",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "3",
+              "app_id": "evm_wallet"
+            },
+            "version": "101"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "d48a44933a77a2fce86689b129d0fc51f593d687910ec7d492b7243587ba1934"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "8622e36f11326b2436a63c3bf452553364a0ff9a43f2207d9500c6a03e3c9e5f"
+            }
+          ]
+        },
+        "after": {
+          "sourceField": "/after",
+          "observedAt": "2026-09-06T11:31:03.329Z",
+          "deploymentId": "b8051716adea5517681a8d63fe55c8ba",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "3",
+              "app_id": "evm_wallet"
+            },
+            "version": "103"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "d48a44933a77a2fce86689b129d0fc51f593d687910ec7d492b7243587ba1934"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "8965387fd68d041aa9849cd949807708ea77ca71487af637d70bc487d8a4e480"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "97e3617b05273fdccf01c7e2e589058ec75b79b8d6eeae056c0808248c548b03"
+            }
+          ]
+        }
+      },
+      "recordedAssertions": [
+        {
+          "sourceField": "/scope",
+          "value": "Actual EVM101\u2192103 checked browser update committed. Exact original wallet/IC/Uniswap/profile query replies, old memory declarations and installation UIDs retained; only new declared evidence root initialized. Kitchen counter advanced exactly once in its run_on_start daily_tick. Prior scheduled_status was not captured, so its before/after run-count equality is not claimed for this first step; subsequent upgrades capture both and require counter delta to equal run delta."
+        }
+      ],
+      "schema": "neutron-evm-first-checked-update-reconciliation-v1",
+      "reconciledAt": "2026-09-06T11:31:03.442Z",
+      "reviewedBuildState": {
+        "sourceField": "/reviewed/state",
+        "value": "complete"
+      }
+    },
+    {
+      "source": "checked-browser-remaining-app-upgrade/1-uniswap-reconciled.json",
+      "recordType": "saved_commit_reconciled_after_failed_harness",
+      "candidate": {
+        "id": "uniswap",
+        "version": 103,
+        "path": "apps/uniswap/uniswap.v0.1.3.neutron",
+        "size": 278707,
+        "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+      },
+      "harnessReport": "checked-browser-remaining-app-upgrade-results.json",
+      "observations": {
+        "before": {
+          "sourceField": "/before",
+          "observedAt": "2026-09-06T11:34:48.879Z",
+          "deploymentId": "b8051716adea5517681a8d63fe55c8ba",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "6",
+              "app_id": "uniswap"
+            },
+            "version": "102"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "d48a44933a77a2fce86689b129d0fc51f593d687910ec7d492b7243587ba1934"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "8965387fd68d041aa9849cd949807708ea77ca71487af637d70bc487d8a4e480"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "97e3617b05273fdccf01c7e2e589058ec75b79b8d6eeae056c0808248c548b03"
+            }
+          ]
+        },
+        "after": {
+          "sourceField": "/after",
+          "observedAt": "2026-09-06T11:36:26.404Z",
+          "deploymentId": "f34dc5e4ccc2a4973f15edf00a8998b7",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "6",
+              "app_id": "uniswap"
+            },
+            "version": "103"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "d48a44933a77a2fce86689b129d0fc51f593d687910ec7d492b7243587ba1934"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "c0df81a3e131a4e874d22e855cd355e89a991fd7413b4cdc4cc0de9ad8445329"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "502f9b9653aed7ed750a3eb81345ddf43c91b954e579326298d4a58bbd92cd8b"
+            }
+          ]
+        }
+      },
+      "recordedAssertions": [
+        {
+          "sourceField": "/checks",
+          "value": "All exact archive, reviewed/committed build, managed roots, installation UID, wallet/IC/Uni/profile data and counter delta = scheduled tick delta checks passed. Initial post-commit assertion had a fixture-only Node Buffer slab offset decode bug; exact saved bytes reconcile with typed-array copy."
+        }
+      ],
+      "schema": "neutron-checked-upgrade-reconciliation-v1",
+      "reconciledAt": "2026-09-06T11:37:27.852Z",
+      "reviewedBuildState": {
+        "sourceField": "/reviewed/state",
+        "value": "complete"
+      }
+    },
+    {
+      "source": "checked-browser-final-two-app-upgrade/1-wallet-committed.json",
+      "recordType": "committed_step_recorded_in_multi_app_run_that_later_failed",
+      "candidate": {
+        "id": "wallet",
+        "version": 316,
+        "path": "apps/wallet/wallet.v0.3.16.neutron",
+        "size": 768823,
+        "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+      },
+      "harnessReport": "checked-browser-final-two-app-upgrade-results.json",
+      "observations": {
+        "before": {
+          "sourceField": "/before",
+          "observedAt": "2026-09-06T11:38:17.930Z",
+          "deploymentId": "f34dc5e4ccc2a4973f15edf00a8998b7",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "7",
+              "app_id": "wallet"
+            },
+            "version": "315"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "d48a44933a77a2fce86689b129d0fc51f593d687910ec7d492b7243587ba1934"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "c0df81a3e131a4e874d22e855cd355e89a991fd7413b4cdc4cc0de9ad8445329"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "502f9b9653aed7ed750a3eb81345ddf43c91b954e579326298d4a58bbd92cd8b"
+            }
+          ]
+        },
+        "after": {
+          "sourceField": "/after",
+          "observedAt": "2026-09-06T11:39:38.364Z",
+          "deploymentId": "2cd3d32b07f3d38462d2c0f9442da1ac",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "7",
+              "app_id": "wallet"
+            },
+            "version": "316"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "d48a44933a77a2fce86689b129d0fc51f593d687910ec7d492b7243587ba1934"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "b9c1c475dea3264e6ba0f9d4bfc7c679bd16ea52dcda2fe5ba7b14db762f2c76"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "03628a41b5259b19586cf92738c5586e163cca3663b979453864e94f80258b6e"
+            }
+          ]
+        }
+      },
+      "recordedAssertions": [],
+      "reviewedBuildSha256": "b557ee9cef4ba21770e92c44a65c0146d816e175aebef9c35039c28874918cc5",
+      "interpretationLimit": "This committed-step record has no separate scope/checks assertion field. Its captured query hashes and package metadata are reproduced without adding a fresh preservation assertion. The enclosing two-app harness later failed during Kitchen validation; the separate Kitchen reconciliation records its resolution."
+    },
+    {
+      "source": "checked-browser-final-two-app-upgrade/2-kitchensink-reconciled.json",
+      "recordType": "saved_commit_reconciled_after_failed_harness",
+      "candidate": {
+        "id": "kitchensink",
+        "version": 315,
+        "path": "apps/kitchensink/kitchensink.v0.3.15.neutron",
+        "size": 472282,
+        "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+      },
+      "harnessReport": "checked-browser-final-two-app-upgrade-results.json",
+      "observations": {
+        "before": {
+          "sourceField": "/before",
+          "observedAt": "2026-09-06T11:39:38.364Z",
+          "deploymentId": "2cd3d32b07f3d38462d2c0f9442da1ac",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "5",
+              "app_id": "kitchensink"
+            },
+            "version": "314"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "d48a44933a77a2fce86689b129d0fc51f593d687910ec7d492b7243587ba1934"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "b9c1c475dea3264e6ba0f9d4bfc7c679bd16ea52dcda2fe5ba7b14db762f2c76"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "03628a41b5259b19586cf92738c5586e163cca3663b979453864e94f80258b6e"
+            }
+          ]
+        },
+        "savedAfter": {
+          "sourceField": "/savedAfter",
+          "observedAt": "2026-09-06T11:40:34.035Z",
+          "deploymentId": "63fba62b312419a4da47dc730a792a83",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "5",
+              "app_id": "kitchensink"
+            },
+            "version": "315"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "c00ac2a953c4ba0053270e3e6e334eb624d9a868e61e59ef421d4bd3ee0f313d"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "7504d21c6b03bc3ed630eddf6e2bf56f7c733769599e6ce1c604e02217d2e0d1"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "1bcc729a0069ee890129d0d961e4667188b00b0106540f486ea88632cad657d5"
+            }
+          ]
+        },
+        "current": {
+          "sourceField": "/current",
+          "observedAt": "2026-09-06T11:51:14.423Z",
+          "deploymentId": "63fba62b312419a4da47dc730a792a83",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "5",
+              "app_id": "kitchensink"
+            },
+            "version": "315"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "c00ac2a953c4ba0053270e3e6e334eb624d9a868e61e59ef421d4bd3ee0f313d"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "7504d21c6b03bc3ed630eddf6e2bf56f7c733769599e6ce1c604e02217d2e0d1"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "1bcc729a0069ee890129d0d961e4667188b00b0106540f486ea88632cad657d5"
+            }
+          ]
+        }
+      },
+      "recordedAssertions": [
+        {
+          "sourceField": "/scope",
+          "value": "Saved actual Kitchen314\u2192315 checked browser update committed; no reupload or reinstall. Exact reviewed build, all installation UIDs, all original memory schemas and declarations retained. All other EVM/bridge/Uniswap/profile queries exact. Kitchen counter delta equals scheduled-run delta. Wallet semantic snapshot unchanged: only the six explicitly enumerated resident refresh timestamps advanced monotonically. Fresh read confirms the same committed installed state. Provisioning journal remains untouched."
+        }
+      ],
+      "schema": "neutron-evm-kitchen-checked-update-reconciliation-v1",
+      "reconciledAt": "2026-09-06T11:51:14.511Z",
+      "reviewedBuildState": {
+        "sourceField": "/reviewed/state",
+        "value": "complete"
+      },
+      "cacheRefresh": {
+        "sourceField": "/cacheRefresh",
+        "value": [
+          {
+            "path": "/ledgers/0/balance_updated_at/0",
+            "before": "1788660901831618310",
+            "after": "1788694789372350051"
+          },
+          {
+            "path": "/ledgers/1/balance_updated_at/0",
+            "before": "1788660901831618310",
+            "after": "1788694789372350051"
+          },
+          {
+            "path": "/ledgers/1/native_refresh_updated_at/0",
+            "before": "1788660556229921005",
+            "after": "1788694789165309380"
+          },
+          {
+            "path": "/ledgers/1/native_deposit_progress/0/checked_at",
+            "before": "1788660556229921005",
+            "after": "1788694789165309380"
+          },
+          {
+            "path": "/ledgers/2/balance_updated_at/0",
+            "before": "1788660901831618310",
+            "after": "1788694789372350051"
+          },
+          {
+            "path": "/ledgers/3/balance_updated_at/0",
+            "before": "1788660901831618310",
+            "after": "1788694789372350051"
+          }
+        ]
+      }
+    },
+    {
+      "source": "checked-browser-kernel-upgrade/checked-upgrade-receipt.json",
+      "recordType": "complete_receipt_and_passing_harness",
+      "candidate": {
+        "id": "kernel",
+        "version": 341,
+        "path": "apps/kernel/kernel.v0.3.41.neutron",
+        "size": 2448966,
+        "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830"
+      },
+      "harnessReport": "checked-browser-kernel-upgrade-results.json",
+      "observations": {
+        "before": {
+          "sourceField": "/steps/0/before",
+          "observedAt": "2026-09-06T11:51:42.798Z",
+          "deploymentId": "63fba62b312419a4da47dc730a792a83",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "4",
+              "app_id": "kernel"
+            },
+            "version": "339"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "c00ac2a953c4ba0053270e3e6e334eb624d9a868e61e59ef421d4bd3ee0f313d"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "7504d21c6b03bc3ed630eddf6e2bf56f7c733769599e6ce1c604e02217d2e0d1"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "1bcc729a0069ee890129d0d961e4667188b00b0106540f486ea88632cad657d5"
+            }
+          ]
+        },
+        "after": {
+          "sourceField": "/steps/0/after",
+          "observedAt": "2026-09-06T11:53:02.349Z",
+          "deploymentId": "09c70cafd410f7ab02d7db81ea8fddbf",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "4",
+              "app_id": "kernel"
+            },
+            "version": "341"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "346b23fbfe49da169684751439b22d5923a5f567b61031a48f39de0d2274180a",
+              "count": 7
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "74ee251374e84182f0bf26babe548e6ea42cd009df21692eff04e369b7df14a3",
+              "count": 2
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "c00ac2a953c4ba0053270e3e6e334eb624d9a868e61e59ef421d4bd3ee0f313d"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "eab9f4f68f5bc16b91dbc649090db8f2610c2b7830d3226f3ba87d37818380c4",
+              "count": 1
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "268dfd202f6ca831b039778b358fbbf4fdad7a194513fcdbdd6bcc349b0a8bd9"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "43a3965e3feabd6cdaed6a9eaff769f5f1a694a6145b34f306494914d641301e"
+            }
+          ]
+        }
+      },
+      "recordedAssertions": [
+        {
+          "sourceField": "/evidenceScope",
+          "value": "Actual per-archive browser Update, pre-acceptance exact build records, retained installation UIDs, unchanged existing memory schemas and declaration history, initialization only of new roots declared in the sealed candidate archive, and identical EVM wallet, IC bridge, Uniswap and profile query replies. IC Wallet snapshots permit only monotonic existing balance/native-refresh timestamps; all other decoded fields must remain identical. Kitchen counter changes must equal its scheduled-run count changes. Linear-memory persistence follows the existing compiler mode: classical replaces the heap and restores managed state from stable memory; enhanced keeps the heap. Runtime memory metadata does not expose physical root pointers. Canonical non-raw HTTP assets are verified by the pinned PocketIC14 gateway with response verification enabled; this harness does not independently repeat HTTP-v2 body verification."
+        }
+      ],
+      "schema": "neutron-evm-checked-browser-upgrade-v1",
+      "completedAt": "2026-09-06T11:53:05.194Z",
+      "descriptorSha256": "27ac54399461979e2672b3041c22f06370c51bf6bab24a1fc153c982dbfa5045",
+      "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+      "initialDeploymentId": "63fba62b312419a4da47dc730a792a83",
+      "finalDeploymentId": "09c70cafd410f7ab02d7db81ea8fddbf",
+      "reviewedBuildSha256": "02cdd040b3a64f0516120e83461d32bbab7e7854ee4a07a569e2c64f44317e9c",
+      "provisioningJournal": {
+        "sourceField": "/provisioningJournal",
+        "sha256": "4bf5b300baa699d9a80e5076f526e35dd3db3892b45a70c0d6d300ae12390c75",
+        "unchanged": true,
+        "pathOmitted": "The raw receipt retains the original local provisioning journal path."
+      }
+    },
+    {
+      "source": "checked-browser-evm105-upgrade/checked-upgrade-receipt.json",
+      "recordType": "complete_receipt_and_passing_harness",
+      "candidate": {
+        "id": "evm_wallet",
+        "version": 105,
+        "path": "apps/evm_wallet/evm_wallet.v0.1.5.neutron",
+        "size": 391603,
+        "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2"
+      },
+      "harnessReport": "checked-browser-evm105-upgrade-results.json",
+      "observations": {
+        "before": {
+          "sourceField": "/steps/0/before",
+          "observedAt": "2026-09-06T12:25:34.082Z",
+          "deploymentId": "09c70cafd410f7ab02d7db81ea8fddbf",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "3",
+              "app_id": "evm_wallet"
+            },
+            "version": "103"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "8a47a544f34fcb163dcf3e8257064bf5bc6644c5c0bf482cdd9f9d790af7556d",
+              "count": 14
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "9a2d3d161b90a6643c1a9d2d3caef1ce4f1d4ed424944a74313372d552341a10",
+              "count": 5
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "5a5e47480bbd0955b6241b14b21bc6293b93af2660d0f9cd01b28b554f77f73e"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "da3a0c45ecf28d9f2fec3812bddf31cdfc4edae26c1d7d4ed9d1b25f2db68c7e",
+              "count": 3
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "268dfd202f6ca831b039778b358fbbf4fdad7a194513fcdbdd6bcc349b0a8bd9"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "43a3965e3feabd6cdaed6a9eaff769f5f1a694a6145b34f306494914d641301e"
+            }
+          ]
+        },
+        "after": {
+          "sourceField": "/steps/0/after",
+          "observedAt": "2026-09-06T12:26:18.364Z",
+          "deploymentId": "30e3378f35cc621d56be127fd4222c1c",
+          "candidateApp": {
+            "scope": {
+              "installation_uid": "3",
+              "app_id": "evm_wallet"
+            },
+            "version": "105"
+          },
+          "queryReplyMetadata": [
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_snapshot_v1",
+              "replySha256": "6b44908718b655bc05bd68900f1e5bde66a42d74318655fbc1895f4017998105",
+              "count": 1
+            },
+            {
+              "appId": "evm_wallet",
+              "functionName": "evm_wallet_history_v1",
+              "replySha256": "8a47a544f34fcb163dcf3e8257064bf5bc6644c5c0bf482cdd9f9d790af7556d",
+              "count": 14
+            },
+            {
+              "appId": "uniswap",
+              "functionName": "uniswap_list_v1",
+              "replySha256": "9a2d3d161b90a6643c1a9d2d3caef1ce4f1d4ed424944a74313372d552341a10",
+              "count": 5
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_snapshot",
+              "replySha256": "5a5e47480bbd0955b6241b14b21bc6293b93af2660d0f9cd01b28b554f77f73e"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_transfers_pending_v2",
+              "replySha256": "5bb72ee25be3510efc1a6080a2bd768643b180fd6c96091e9def4bb8fa88fd72"
+            },
+            {
+              "appId": "wallet",
+              "functionName": "wallet_bridge_list_v1",
+              "replySha256": "da3a0c45ecf28d9f2fec3812bddf31cdfc4edae26c1d7d4ed9d1b25f2db68c7e",
+              "count": 3
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_profile",
+              "replySha256": "ee34956bfcb88ffbaab706354502ffe0d7d2668589818e7a35be64cac816d310"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "read_counter",
+              "replySha256": "e5720619ce4eb276295fed6a86b84744f3453f23be36e1413d3dce1c6f47eaa4"
+            },
+            {
+              "appId": "kitchensink",
+              "functionName": "scheduled_status",
+              "replySha256": "b5faf19aa4bb6cf07d03147795af630617bb9d82c21c018aa1cf79c404df1c84"
+            }
+          ]
+        }
+      },
+      "recordedAssertions": [
+        {
+          "sourceField": "/evidenceScope",
+          "value": "Actual per-archive browser Update, pre-acceptance exact build records, retained installation UIDs, unchanged existing memory schemas and declaration history, initialization only of new roots declared in the sealed candidate archive, and identical EVM wallet, IC bridge, Uniswap and profile query replies. IC Wallet snapshots permit only monotonic existing balance/native-refresh timestamps; all other decoded fields must remain identical. Kitchen counter changes must equal its scheduled-run count changes. Linear-memory persistence follows the existing compiler mode: classical replaces the heap and restores managed state from stable memory; enhanced keeps the heap. Runtime memory metadata does not expose physical root pointers. Canonical non-raw HTTP assets are verified by the pinned PocketIC14 gateway with response verification enabled; this harness does not independently repeat HTTP-v2 body verification."
+        }
+      ],
+      "schema": "neutron-evm-checked-browser-upgrade-v1",
+      "completedAt": "2026-09-06T12:26:21.565Z",
+      "descriptorSha256": "0eaf949d83eec132fead6bc3a33cf8115440f3afb54d3d5b02d5ec5389a70724",
+      "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+      "initialDeploymentId": "09c70cafd410f7ab02d7db81ea8fddbf",
+      "finalDeploymentId": "30e3378f35cc621d56be127fd4222c1c",
+      "reviewedBuildSha256": "b1a9a584fbd553993d6f7159f81f29eb586486223ca803e159555eb9ce0dc65e",
+      "provisioningJournal": {
+        "sourceField": "/provisioningJournal",
+        "sha256": "4bf5b300baa699d9a80e5076f526e35dd3db3892b45a70c0d6d300ae12390c75",
+        "unchanged": true,
+        "pathOmitted": "The raw receipt retains the original local provisioning journal path."
+      }
+    }
+  ],
+  "harnessReports": {
+    "checked-browser-app-upgrade-results.json": {
+      "source": "checked-browser-app-upgrade-results.json",
+      "sourceFields": [
+        "/stats",
+        "/suites/**/specs/*/tests/*/status",
+        "/suites/**/specs/*/tests/*/results"
+      ],
+      "stats": {
+        "startTime": "2026-09-06T11:25:26.184Z",
+        "duration": 88041.494,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "runs": [
+        {
+          "title": "candidate archives update through checked browser reviews while preserving installed identities and app records",
+          "status": "unexpected",
+          "results": [
+            {
+              "status": "failed",
+              "durationMs": 84350,
+              "errorFirstLines": [
+                "AssertionError: Persisted app query results changed across the idle upgrade window"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "checked-browser-remaining-app-upgrade-results.json": {
+      "source": "checked-browser-remaining-app-upgrade-results.json",
+      "sourceFields": [
+        "/stats",
+        "/suites/**/specs/*/tests/*/status",
+        "/suites/**/specs/*/tests/*/results"
+      ],
+      "stats": {
+        "startTime": "2026-09-06T11:34:42.000Z",
+        "duration": 109275.977,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "runs": [
+        {
+          "title": "candidate archives update through checked browser reviews while preserving installed identities and app records",
+          "status": "unexpected",
+          "results": [
+            {
+              "status": "failed",
+              "durationMs": 103768,
+              "errorFirstLines": [
+                "Error: Wrong magic number: \"{\\\"me\""
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "checked-browser-final-two-app-upgrade-results.json": {
+      "source": "checked-browser-final-two-app-upgrade-results.json",
+      "sourceFields": [
+        "/stats",
+        "/suites/**/specs/*/tests/*/status",
+        "/suites/**/specs/*/tests/*/results"
+      ],
+      "stats": {
+        "startTime": "2026-09-06T11:38:12.550Z",
+        "duration": 145398.945,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "runs": [
+        {
+          "title": "candidate archives update through checked browser reviews while preserving installed identities and app records",
+          "status": "unexpected",
+          "results": [
+            {
+              "status": "failed",
+              "durationMs": 140962,
+              "errorFirstLines": [
+                "AssertionError: Persisted app query results changed across the idle upgrade window"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "checked-browser-kernel-upgrade-results.json": {
+      "source": "checked-browser-kernel-upgrade-results.json",
+      "sourceFields": [
+        "/stats",
+        "/suites/**/specs/*/tests/*/status",
+        "/suites/**/specs/*/tests/*/results"
+      ],
+      "stats": {
+        "startTime": "2026-09-06T11:51:37.932Z",
+        "duration": 87586.903,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "runs": [
+        {
+          "title": "candidate archives update through checked browser reviews while preserving installed identities and app records",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "durationMs": 84892,
+              "errorFirstLines": []
+            }
+          ]
+        }
+      ]
+    },
+    "checked-browser-evm105-upgrade-results.json": {
+      "source": "checked-browser-evm105-upgrade-results.json",
+      "sourceFields": [
+        "/stats",
+        "/suites/**/specs/*/tests/*/status",
+        "/suites/**/specs/*/tests/*/results"
+      ],
+      "stats": {
+        "startTime": "2026-09-06T12:25:31.374Z",
+        "duration": 51366.841,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "runs": [
+        {
+          "title": "candidate archives update through checked browser reviews while preserving installed identities and app records",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "durationMs": 48806,
+              "errorFirstLines": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "walletCacheRefreshEvidence": {
+    "source": "checked-browser-final-two-app-upgrade/wallet-snapshot-cache-refresh-evidence.json",
+    "sourceFields": [
+      "/changes",
+      "/allOtherFieldsEqual",
+      "/negativeControls"
+    ],
+    "changes": [
+      {
+        "path": "/ledgers/0/balance_updated_at/0",
+        "before": "1788660901831618310",
+        "after": "1788694789372350051"
+      },
+      {
+        "path": "/ledgers/1/balance_updated_at/0",
+        "before": "1788660901831618310",
+        "after": "1788694789372350051"
+      },
+      {
+        "path": "/ledgers/1/native_refresh_updated_at/0",
+        "before": "1788660556229921005",
+        "after": "1788694789165309380"
+      },
+      {
+        "path": "/ledgers/1/native_deposit_progress/0/checked_at",
+        "before": "1788660556229921005",
+        "after": "1788694789165309380"
+      },
+      {
+        "path": "/ledgers/2/balance_updated_at/0",
+        "before": "1788660901831618310",
+        "after": "1788694789372350051"
+      },
+      {
+        "path": "/ledgers/3/balance_updated_at/0",
+        "before": "1788660901831618310",
+        "after": "1788694789372350051"
+      }
+    ],
+    "allOtherFieldsEqual": true,
+    "negativeControls": 4
+  },
+  "lastCapturedInstalledPackages": {
+    "source": "checked-browser-evm105-upgrade/checked-upgrade-receipt.json",
+    "sourceField": "/installed",
+    "value": [
+      {
+        "id": "kernel",
+        "version": 341,
+        "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830"
+      },
+      {
+        "id": "contacts",
+        "version": 306,
+        "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+      },
+      {
+        "id": "wallet",
+        "version": 316,
+        "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+      },
+      {
+        "id": "kitchensink",
+        "version": 315,
+        "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+      },
+      {
+        "id": "evm_wallet",
+        "version": 105,
+        "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2"
+      },
+      {
+        "id": "uniswap",
+        "version": 103,
+        "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+      },
+      {
+        "id": "agent",
+        "version": 317,
+        "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+      }
+    ]
+  },
+  "lastCapturedManagedMemoryMetadata": {
+    "source": "checked-browser-evm105-upgrade/checked-upgrade-receipt.json",
+    "sourceField": "/steps/0/after/runtime/memories",
+    "value": [
+      {
+        "id": "agent",
+        "owner": "agent",
+        "schema": "cae3096c6238e7217c0cdd242e1c1094faecf1c85ee92c0b2d13a88b3bf0f134",
+        "version": "1"
+      },
+      {
+        "id": "contacts",
+        "owner": "contacts",
+        "schema": "f2810f832c457a20feea6648ed4bacf30507156ef145ab68bfd4e6805bb8d5a2",
+        "version": "2"
+      },
+      {
+        "id": "evm_evidence",
+        "owner": "evm_wallet",
+        "schema": "2141ab91b6bbd3a60212644870fc1a581922c9aeef6f728bf3ccfd0770a03dec",
+        "version": "1"
+      },
+      {
+        "id": "evm_wallet",
+        "owner": "evm_wallet",
+        "schema": "5cf1711e7f72a296ea8dbf320145d7b3d260398f871a3c832f7482388d983590",
+        "version": "1"
+      },
+      {
+        "id": "kernel",
+        "owner": "kernel",
+        "schema": "19801dd4c0544a8213201cbc92786c3a7bd98e88bb9af63b015eed5f15c12699",
+        "version": "4"
+      },
+      {
+        "id": "kernel_activation",
+        "owner": "kernel",
+        "schema": "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
+        "version": "1"
+      },
+      {
+        "id": "kitchensink",
+        "owner": "kitchensink",
+        "schema": "e7f5385c39e9e3c6806ce810ed03ca76fdee67641923ff7ea8c7a4b7f0176cdf",
+        "version": "1"
+      },
+      {
+        "id": "uniswap",
+        "owner": "uniswap",
+        "schema": "f117d98b9278d075acff8b1f62ffa85b42afab9ca4aaa78a84ad9a48b9d25228",
+        "version": "1"
+      },
+      {
+        "id": "wallet",
+        "owner": "wallet",
+        "schema": "3046a3189737219f2556a491c9599bd18fcbe8034244e332e5d9e834d1773bc4",
+        "version": "1"
+      },
+      {
+        "id": "wallet_bridge",
+        "owner": "wallet",
+        "schema": "8c76f4e2cae04be024b499f14a62df135ce602fec65ede9277e26fa22fc1bafd",
+        "version": "1"
+      },
+      {
+        "id": "wallet_bridge_replacements",
+        "owner": "wallet",
+        "schema": "92b240166e7c7707d35a71e7988b261ed177fe1f130813c9cebfb8ba0495291c",
+        "version": "1"
+      },
+      {
+        "id": "wallet_commands",
+        "owner": "wallet",
+        "schema": "3221a53d8d9a2967e024db95fbaa138cb552501cda4aed4546176e2302a3c7b0",
+        "version": "1"
+      },
+      {
+        "id": "wallet_transfers",
+        "owner": "wallet",
+        "schema": "407c76657485fdf8a9aa02e4afdfc93e6e6fdf9bbc462cf62376d7338f476106",
+        "version": "1"
+      }
+    ]
+  },
+  "lastCapturedCompilerId": {
+    "source": "checked-browser-evm105-upgrade/checked-upgrade-receipt.json",
+    "sourceField": "/steps/0/after/runtime/compiler_id",
+    "value": "moc_classical_4b5d3d220e609216"
+  }
+}

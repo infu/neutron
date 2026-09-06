@@ -1,0 +1,353 @@
+{
+  "schema": "neutron-evm-crypto-report-projection-v1",
+  "scope": "Straight extraction of existing EVM105 Playwright case outcomes and exact decoded JSON attachments. No tests, signature checks, or on-chain operations were rerun. Failed financial cases remain failed; same-hash reconciliation is a separate observation.",
+  "installedEvidence": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm105/installed-final-candidates.json",
+    "bytes": 9188,
+    "sha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287"
+  },
+  "reports": [
+    {
+      "sourceReport": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-evm105/results.json",
+        "bytes": 12093,
+        "sha256": "c46d663a9f6bf12ecaf53e7606254db63ae8acdaae654c77cd2bb5fdfd098f05",
+        "retention": "local_only"
+      },
+      "sourceInputs": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-evm105/inputs.json",
+        "bytes": 2045,
+        "sha256": "d8d74ad026e4c545fc0396c134de3a014aa4ed6a4f18140a8b3d1c0ef03b0d22"
+      },
+      "installed": [
+        {
+          "id": "kernel",
+          "version": 341,
+          "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830"
+        },
+        {
+          "id": "contacts",
+          "version": 306,
+          "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+        },
+        {
+          "id": "wallet",
+          "version": 316,
+          "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+        },
+        {
+          "id": "kitchensink",
+          "version": 315,
+          "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+        },
+        {
+          "id": "evm_wallet",
+          "version": 105,
+          "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2"
+        },
+        {
+          "id": "uniswap",
+          "version": 103,
+          "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+        },
+        {
+          "id": "agent",
+          "version": 317,
+          "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+        }
+      ],
+      "fixtureSourceHashes": {
+        "test/e2e/evm-wallet-networks.spec.ts": "d7b7f645af8b95b9f857b098f2aa74d27da9a837e03610cd0ddf6129917c29e5",
+        "test/e2e/fixtures/evm-wallet-network.ts": "77902209fd50d4fb7de62266178c4b38250b99de378dc7b71a7d063462ff0b5c",
+        "test/e2e/fixtures/evm-wallet-chain.ts": "6b220d867b06933ac2eba8b1612125a480482b621cceeba499a78156de6c67ad",
+        "test/e2e/fixtures/evm-wallet-signatures.ts": "5ace380938186df6dde56a767d5482b7544f6b2cf87b6f872ff2a5e21f535904",
+        "test/e2e/fixtures/evm-wallet-browser.ts": "58240c2b87e49ab0fe433fcc1457742050086745b93e726366988606af1b23c9"
+      },
+      "rawStats": {
+        "startTime": "2026-09-06T12:28:54.791Z",
+        "duration": 122697.832,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "cases": [
+        {
+          "title": "chain 1: live balances, native transfer and state-changing contract call through EVM Wallet",
+          "recordedOk": false,
+          "sourcePointer": "/suites/0/specs/0",
+          "results": [
+            {
+              "status": "failed",
+              "duration": 73074,
+              "startTime": "2026-09-06T12:28:56.330Z",
+              "retry": 0,
+              "errors": [
+                "TimeoutError: locator.fill: Timeout 20000ms exceeded."
+              ],
+              "jsonAttachments": [],
+              "omittedAttachmentKinds": [
+                {
+                  "name": "error-context",
+                  "contentType": "text/markdown",
+                  "retention": "local_only"
+                },
+                {
+                  "name": "trace",
+                  "contentType": "application/zip",
+                  "retention": "local_only"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "chain 1: personal, exact EIP-712 and permit signatures recover the actual chain-key account",
+          "recordedOk": true,
+          "sourcePointer": "/suites/0/specs/1",
+          "results": [
+            {
+              "status": "passed",
+              "duration": 44223,
+              "startTime": "2026-09-06T12:30:12.563Z",
+              "retry": 0,
+              "errors": [],
+              "jsonAttachments": [
+                {
+                  "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-chain-1-signatures.json",
+                  "bytes": 2835,
+                  "sha256": "6d751ffcf7a8f6137753f563a040d1a759ec7eb04a1bceb58816d3bdd93c8eb1",
+                  "sourcePointer": "/suites/0/specs/1/tests/0/results/0/attachments/0/body",
+                  "encoding": "Exact base64-decoded attachment bytes; no reserialization or edits"
+                }
+              ],
+              "omittedAttachmentKinds": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sourceReport": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-42161-evm105/results.json",
+        "bytes": 14355,
+        "sha256": "e0f09f84c3cf781c5f433852699fee264535766573c33c7739f085c303773b53",
+        "retention": "local_only"
+      },
+      "sourceInputs": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-42161-evm105/inputs.json",
+        "bytes": 2076,
+        "sha256": "90041b11a58545c7ebd10733d4d5fbdd4354024bc9e15302b7c8b2f550876ca8"
+      },
+      "installed": [
+        {
+          "id": "kernel",
+          "version": 341,
+          "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830"
+        },
+        {
+          "id": "contacts",
+          "version": 306,
+          "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+        },
+        {
+          "id": "wallet",
+          "version": 316,
+          "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+        },
+        {
+          "id": "kitchensink",
+          "version": 315,
+          "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+        },
+        {
+          "id": "evm_wallet",
+          "version": 105,
+          "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2"
+        },
+        {
+          "id": "uniswap",
+          "version": 103,
+          "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+        },
+        {
+          "id": "agent",
+          "version": 317,
+          "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+        }
+      ],
+      "fixtureSourceHashes": {
+        "test/e2e/evm-wallet-networks.spec.ts": "b639ac3312b4078a8bdac2c64dda5907510104bd43ed75324c69ae781835db92",
+        "test/e2e/fixtures/evm-wallet-network.ts": "77902209fd50d4fb7de62266178c4b38250b99de378dc7b71a7d063462ff0b5c",
+        "test/e2e/fixtures/evm-wallet-chain.ts": "6b220d867b06933ac2eba8b1612125a480482b621cceeba499a78156de6c67ad",
+        "test/e2e/fixtures/evm-wallet-signatures.ts": "5ace380938186df6dde56a767d5482b7544f6b2cf87b6f872ff2a5e21f535904",
+        "test/e2e/fixtures/evm-wallet-browser.ts": "58240c2b87e49ab0fe433fcc1457742050086745b93e726366988606af1b23c9"
+      },
+      "rawStats": {
+        "startTime": "2026-09-06T12:32:58.210Z",
+        "duration": 91791.232,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "cases": [
+        {
+          "title": "chain 42161: live balances, native transfer and state-changing contract call through EVM Wallet",
+          "recordedOk": true,
+          "sourcePointer": "/suites/0/specs/0",
+          "results": [
+            {
+              "status": "passed",
+              "duration": 56547,
+              "startTime": "2026-09-06T12:32:59.690Z",
+              "retry": 0,
+              "errors": [],
+              "jsonAttachments": [
+                {
+                  "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-chain-42161-execution.json",
+                  "bytes": 4368,
+                  "sha256": "5739ab44d03236c0839c6f4df59e1214762420558009eb12a50252fa36e8c86a",
+                  "sourcePointer": "/suites/0/specs/0/tests/0/results/0/attachments/0/body",
+                  "encoding": "Exact base64-decoded attachment bytes; no reserialization or edits"
+                }
+              ],
+              "omittedAttachmentKinds": []
+            }
+          ]
+        },
+        {
+          "title": "chain 42161: personal, exact EIP-712 and permit signatures recover the actual chain-key account",
+          "recordedOk": true,
+          "sourcePointer": "/suites/0/specs/1",
+          "results": [
+            {
+              "status": "passed",
+              "duration": 31900,
+              "startTime": "2026-09-06T12:33:56.502Z",
+              "retry": 0,
+              "errors": [],
+              "jsonAttachments": [
+                {
+                  "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/crypto105-chain-42161-signatures.json",
+                  "bytes": 2831,
+                  "sha256": "9c20be690a59fbaf6bd067c9e35969fda35563daaaa16669d7d29db73c4aa60e",
+                  "sourcePointer": "/suites/0/specs/1/tests/0/results/0/attachments/0/body",
+                  "encoding": "Exact base64-decoded attachment bytes; no reserialization or edits"
+                }
+              ],
+              "omittedAttachmentKinds": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sourceReport": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-financial-evm105/results.json",
+        "bytes": 6455,
+        "sha256": "cf2437dfecb32c270ec26c613f02ec94077047216a09907653b29a2b8889552e",
+        "retention": "local_only"
+      },
+      "sourceInputs": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-financial-evm105/inputs.json",
+        "bytes": 2076,
+        "sha256": "90041b11a58545c7ebd10733d4d5fbdd4354024bc9e15302b7c8b2f550876ca8"
+      },
+      "installed": [
+        {
+          "id": "kernel",
+          "version": 341,
+          "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830"
+        },
+        {
+          "id": "contacts",
+          "version": 306,
+          "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+        },
+        {
+          "id": "wallet",
+          "version": 316,
+          "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+        },
+        {
+          "id": "kitchensink",
+          "version": 315,
+          "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+        },
+        {
+          "id": "evm_wallet",
+          "version": 105,
+          "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2"
+        },
+        {
+          "id": "uniswap",
+          "version": 103,
+          "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+        },
+        {
+          "id": "agent",
+          "version": 317,
+          "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+        }
+      ],
+      "fixtureSourceHashes": {
+        "test/e2e/evm-wallet-networks.spec.ts": "b639ac3312b4078a8bdac2c64dda5907510104bd43ed75324c69ae781835db92",
+        "test/e2e/fixtures/evm-wallet-network.ts": "77902209fd50d4fb7de62266178c4b38250b99de378dc7b71a7d063462ff0b5c",
+        "test/e2e/fixtures/evm-wallet-chain.ts": "6b220d867b06933ac2eba8b1612125a480482b621cceeba499a78156de6c67ad",
+        "test/e2e/fixtures/evm-wallet-signatures.ts": "5ace380938186df6dde56a767d5482b7544f6b2cf87b6f872ff2a5e21f535904",
+        "test/e2e/fixtures/evm-wallet-browser.ts": "58240c2b87e49ab0fe433fcc1457742050086745b93e726366988606af1b23c9"
+      },
+      "rawStats": {
+        "startTime": "2026-09-06T12:32:56.956Z",
+        "duration": 69437.539,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "cases": [
+        {
+          "title": "chain 1: live balances, native transfer and state-changing contract call through EVM Wallet",
+          "recordedOk": false,
+          "sourcePointer": "/suites/0/specs/0",
+          "results": [
+            {
+              "status": "failed",
+              "duration": 65709,
+              "startTime": "2026-09-06T12:32:58.514Z",
+              "retry": 0,
+              "errors": [
+                "Error: Local Anvil returned no valid transaction receipt"
+              ],
+              "jsonAttachments": [],
+              "omittedAttachmentKinds": [
+                {
+                  "name": "error-context",
+                  "contentType": "text/markdown",
+                  "retention": "local_only"
+                },
+                {
+                  "name": "trace",
+                  "contentType": "application/zip",
+                  "retention": "local_only"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Raw Playwright report files are retained locally and identified by size/SHA-256; executable-cache config, screenshots, traces and error-context attachments are omitted from this portable projection.",
+    "The chain42161 fixture is unforked Anvil; this does not establish Nitro posting fees, sequencing or parent-chain finality.",
+    "A later EVM106/Kernel342 release or checked update does not change the exact EVM105/Kernel341 versions exercised here.",
+    "The final Kitchen UI read and Wallet journal refresh after the interrupted chain1 financial case require their separately recorded follow-up."
+  ],
+  "separateChain1SameHashReconciliation": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-chain1-financial-evm105/same-hash-reconciliation.json",
+    "bytes": 2473,
+    "sha256": "679d1b1b973d43f7b91c3138fb258f68f395a5d9e7d5c4786ed84880411323f4"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "initialNoopAttempt": {
+    "status": "failed_during_certified_asset_verification",
+    "error": "Certified asset request timed out",
+    "log": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish-noop.log",
+    "bytes": 1111,
+    "sha256": "5081df951e6991e6542719359387c098f8187367acd5606b314bca9c9c7ee57a"
+  },
+  "recovery": "Rerun npm run updates:publish with the exact same immutable package and source bytes; no rebuild or version change.",
+  "successfulRetry": {
+    "status": "verified_noop",
+    "receipt": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/production-publish-noop.json",
+    "batchId": null,
+    "verification": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/receipt-verification.json"
+  }
+}

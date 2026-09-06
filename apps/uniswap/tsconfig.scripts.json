@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.bun.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "build.ts",
+    "test/**/*.ts",
+    "types/**/*.d.ts",
+    "src/swap.ts",
+    "src/fees.ts",
+    "src/controller.ts"
+  ],
+  "exclude": [
+    "test/fixtures/**"
+  ]
+}

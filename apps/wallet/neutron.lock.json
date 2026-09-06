@@ -19,6 +19,33 @@
         }
       },
       "migrations": {}
+    },
+    "wallet_bridge": {
+      "schemas": {
+        "1": {
+          "hash": "8c76f4e2cae04be024b499f14a62df135ce602fec65ede9277e26fa22fc1bafd",
+          "entry": "f1eb230c92edf81f008049838104db8e5fe2901e7eb08ed826b7e1de2a48bd11"
+        }
+      },
+      "migrations": {}
+    },
+    "wallet_transfers": {
+      "schemas": {
+        "1": {
+          "hash": "407c76657485fdf8a9aa02e4afdfc93e6e6fdf9bbc462cf62376d7338f476106",
+          "entry": "0789f55ce62438e22d4c1e434fb93688e6f2b574e926051152b9421a1837b736"
+        }
+      },
+      "migrations": {}
+    },
+    "wallet_bridge_replacements": {
+      "schemas": {
+        "1": {
+          "hash": "92b240166e7c7707d35a71e7988b261ed177fe1f130813c9cebfb8ba0495291c",
+          "entry": "eb2640563690222ee84e1396ae267c5a3dfe78284b7473e5c46b5d8f555dd7e5"
+        }
+      },
+      "migrations": {}
     }
   }
 }

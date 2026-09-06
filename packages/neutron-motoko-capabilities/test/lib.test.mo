@@ -133,3 +133,13 @@ switch (_environment) {
     case (null) {};
     case (?_) assert false;
 };
+
+let _custodyPublic : Caps.WalletCustodyPublicKeyV1 = {
+    slot = "main"; algorithm = #ecdsa_secp256k1; public_key = "";
+    key_fingerprint = ""; namespace_version = 1;
+};
+let _custodyRequest : Caps.WalletCustodySignDigestRequestV1 = { slot = "main"; digest = "" };
+let _custodySignature : Caps.WalletCustodySignatureResultV1 = #ok({
+    slot = "main"; algorithm = #ecdsa_secp256k1; digest = ""; signature = "";
+});
+let _custodyUnknown : Caps.WalletCustodySignatureResultV1 = #err(#outcome_unknown);

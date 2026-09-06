@@ -1,0 +1,318 @@
+{
+  "schema": "neutron-uniswap-network-qualification-v1",
+  "summarizedAt": "2026-09-06T13:56:30.250932+00:00",
+  "evidenceKind": "Offline summary of retained browser and postflight evidence; no runtime calls performed while creating this file.",
+  "scope": "Chain 1 local unforked Anvil swap qualification on the exact installed Kernel342 / EVM Wallet106 / Uniswap103 packages. This run does not qualify later packages.",
+  "deploymentId": "c4b89b6fe632613a6dccab85444e5240",
+  "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+  "installedPackages": [
+    {
+      "id": "kernel",
+      "version": 342,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 106,
+      "sha256": "eba89d8ab27c8f93faa59b82026e9e6393773156532761f6ebfadeaacb2856cf"
+    },
+    {
+      "id": "uniswap",
+      "version": 103,
+      "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+    }
+  ],
+  "installedEvidenceObservedAt": "2026-09-06T13:08:01.959Z",
+  "run": {
+    "command": [
+      "npx",
+      "playwright",
+      "test",
+      "test/e2e/uniswap-networks.spec.ts",
+      "--workers=1",
+      "--grep",
+      "chain 1:",
+      "--reporter=list,json",
+      "--output=/srv/shared/code/neutron/.neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/test-results"
+    ],
+    "stats": {
+      "startTime": "2026-09-06T13:33:53.777Z",
+      "duration": 708363.662,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "results": [
+      {
+        "title": "chain 1: native-to-token uses separate Wallet decisions and recovers its saved swap",
+        "status": "passed",
+        "startTime": "2026-09-06T13:33:55.879Z",
+        "durationMs": 420807
+      },
+      {
+        "title": "chain 1: token-to-token uses separate Wallet decisions and recovers its saved swap",
+        "status": "failed",
+        "startTime": "2026-09-06T13:40:57.311Z",
+        "durationMs": 283080
+      }
+    ],
+    "overallResult": "partial: native-to-token passed; token-to-token failed before Wallet review or signing"
+  },
+  "nativeToToken": {
+    "status": "passed",
+    "source": "native-network-swap-evidence.json",
+    "chainId": "1",
+    "node": "anvil/v1.7.1",
+    "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    "router": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+    "pools": [
+      "0x3a2e8b70e3d6E512222b5b17c7290E77a3f337ee",
+      "0xb5DB0F68e168BB6bA7f6B824ad99EC2E7A37bBC3"
+    ],
+    "savedId": "7225c6f36a70867a94f83405e926b25d",
+    "swapRequestId": "68f2166606e10daec833238dd678b48b",
+    "declinedSavedId": "1ddca9d0df8f022f095e830b1571064f",
+    "declinedSwapRequestId": "26ade7cdd40412f9f95c6cc8db282342",
+    "approvalRequestId": null,
+    "walletOperationId": "34",
+    "recipient": "0x7aA97A4F4F65FBB9eC91AeCcb7B36404f38e3a01",
+    "tokenOut": "0x1000000000000000000000000000000000000011",
+    "amountInWei": "1000000000000000",
+    "priceImpactPercent": "0%",
+    "minimumOut": "992014100874491",
+    "actualOutput": "996999096356273",
+    "outputAtLeastMinimum": true,
+    "transaction": {
+      "hash": "0x4006f0ec5f255fde1a39276a10160317b013725ac14e213dbf4befc80ca26494",
+      "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "to": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+      "valueWei": "1000000000000000",
+      "nonce": 13,
+      "chainId": "1",
+      "blockNumber": "333278",
+      "blockHash": "0x5995ed0d882ebb8e272038eb5e68ed490b10a03c3f71dd0cc791aad17e3c9788",
+      "gasUsed": "141816",
+      "effectiveGasPriceWei": "1000000007"
+    },
+    "consumerReplyLoss": {
+      "boundary": "Wallet-to-Uniswap consumer MessagePort response",
+      "droppedResponseStatus": "unknown",
+      "droppedResponseRequestId": "68f2166606e10daec833238dd678b48b",
+      "droppedResponseTransactionHash": "0x4006f0ec5f255fde1a39276a10160317b013725ac14e213dbf4befc80ca26494",
+      "statusReason": "Broadcast outcome requires reconciliation: EVM RPC broadcast providers disagree; reconcile the saved transaction hash: [(#EthMainnet(#BlockPi), #Ok(#Ok(?\"0x4006f0ec5f255fde1a39276a10160317b013725ac14e213dbf4befc80ca26494\"))), (#EthMainnet(#Alchemy), #Err(#JsonRpcError({code = -32_003; message = \"transaction already imported\"}))), (#EthMainnet(#PublicNode), #Err(#JsonRpcError({code = -32_003; message = \"transaction already imported\"})))]",
+      "result": "The passed browser case recovered the saved request and reconciled the same transaction hash after the dropped consumer response and reload.",
+      "qualification": "This proves reconciliation after loss of the Wallet consumer response. The dropped response was unknown because broadcast providers disagreed. This run did not inject eth_sendRawTransaction provider-response loss."
+    }
+  },
+  "tokenToToken": {
+    "status": "failed",
+    "failureBoundary": "The begin update persisted the new intent; the following complete-history list failed metadata encoding before the app could open the Wallet approval request.",
+    "walletReviewOpened": false,
+    "walletApprovalSubmitted": false,
+    "transactionSigned": false,
+    "transactionBroadcast": false,
+    "reportedBrowserFailure": "The helper waiting for the Wallet request timed out after 120000 ms; the retained app error and offline response encoding identify the underlying history metadata overflow.",
+    "appError": "Self-call result exceeds the metadata byte limit",
+    "begin": {
+      "method": "app_uniswap__uniswap_begin_v1",
+      "ingressRequestId": "7c9bae3c32907f69a952cdb9aa32c970c0d5f24c33088dea03f866ea0e21b48d",
+      "at": "2026-09-06T13:43:39.988Z",
+      "repliedAt": "2026-09-06T13:43:42.060Z",
+      "finalIngressStatus": "replied",
+      "candidInputBytes": 5351,
+      "persisted": true
+    },
+    "historyBefore": {
+      "at": "2026-09-06T13:40:59.298Z",
+      "method": "app_uniswap__uniswap_list_v1",
+      "kind": "query",
+      "requestId": "b3d2d71c6f4392681b88337b367d3d734a75da354aac7a1bf811df3856618f11",
+      "httpStatus": 200,
+      "candidInputBytes": 7,
+      "replyStatus": "replied",
+      "candidOutputBytes": 55539,
+      "records": 8,
+      "metadataBytes": 61013,
+      "encoding": "success"
+    },
+    "historyAfter": {
+      "at": "2026-09-06T13:43:42.127Z",
+      "method": "app_uniswap__uniswap_list_v1",
+      "kind": "query",
+      "requestId": "29a7fe4962851b1bfb8d4d0fd6318f9c1179f907a77816a1526a608d5dd6c54c",
+      "httpStatus": 200,
+      "candidInputBytes": 7,
+      "replyStatus": "replied",
+      "candidOutputBytes": 60856,
+      "records": 9,
+      "metadataBytes": 66960,
+      "encoding": "Error: Self-call result exceeds the metadata byte limit"
+    },
+    "historyArguments": [],
+    "metadataLimitBytes": 65536,
+    "metadataLimitExceededByBytes": 1424,
+    "diagnosis": "Nine full history records normalize to 66960 JSON metadata bytes, exceeding the existing 65536-byte self-call limit. Eight records normalized to 61013 bytes and encoded successfully. The failure was reproduced offline with the retained Candid output and the Kernel metadata encoder.",
+    "savedIntent": {
+      "source": "token-saved-intent.json",
+      "id": "77774efdb57b9491d94e3a68cb524065",
+      "phase": "queued",
+      "revision": "0",
+      "accountId": "main",
+      "chainId": "1",
+      "approvalRequestId": "3d3456803cb12a982a4e259a3a9acfea",
+      "swapRequestId": "c0ce8612b5363313d897bf99caa05f6c",
+      "recipient": "0xda586fBCbe8b5F4Aa7767165c518BFeaf6A1867f",
+      "tokenIn": "0x1000000000000000000000000000000000000011",
+      "tokenOut": "0x1000000000000000000000000000000000000012",
+      "amountIn": "1000000000000000",
+      "amountOutQuoted": "996985511708474",
+      "minimumOut": "992000584149931",
+      "priceImpactBps": "0",
+      "quoteBlockNumber": "333371",
+      "deadline": "1788703310",
+      "deadlineUtc": "2026-09-06T14:01:50.000Z"
+    },
+    "deadlineObservation": {
+      "observedAt": "2026-09-06T13:53:32.821Z",
+      "wasValidAtThatObservation": true,
+      "scope": "Historical observation only; this summary does not assert that the saved deadline is still valid."
+    },
+    "requiredFollowup": "Qualify a checked state-preserving Uniswap history pagination fix using the persisted intent if its deadline remains valid, or retain the expired intent and obtain coordination for a fresh quote. No follow-up execution is claimed by this evidence."
+  },
+  "quoteMining": {
+    "scope": "The coordinator-approved fixture paused mining only for read-only quoting and restored both original settings before approval or signing. A queued interval block could settle after pausing; the app still had to display a finite numeric price impact. Outer before/after equality was not required.",
+    "observations": [
+      {
+        "source": "native-quote-mining-1.json",
+        "chainId": "1",
+        "original": {
+          "automine": false,
+          "interval": 1
+        },
+        "paused": {
+          "automine": false,
+          "interval": null
+        },
+        "restored": {
+          "automine": false,
+          "interval": 1
+        },
+        "blockBefore": "333239",
+        "blockAfter": "333240"
+      },
+      {
+        "source": "native-quote-mining-2.json",
+        "chainId": "1",
+        "original": {
+          "automine": false,
+          "interval": 1
+        },
+        "paused": {
+          "automine": false,
+          "interval": null
+        },
+        "restored": {
+          "automine": false,
+          "interval": 1
+        },
+        "blockBefore": "333257",
+        "blockAfter": "333258"
+      },
+      {
+        "source": "token-quote-mining-1.json",
+        "chainId": "1",
+        "original": {
+          "automine": false,
+          "interval": 1
+        },
+        "paused": {
+          "automine": false,
+          "interval": null
+        },
+        "restored": {
+          "automine": false,
+          "interval": 1
+        },
+        "blockBefore": "333371",
+        "blockAfter": "333371"
+      }
+    ]
+  },
+  "postflight": {
+    "observedAt": "2026-09-06T13:47:38.733180+00:00",
+    "chainId": "1",
+    "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "latestNonce": "14",
+    "pendingNonce": "14",
+    "automine": false,
+    "intervalSeconds": 1,
+    "txpool": {
+      "pending": "0x0",
+      "queued": "0x0"
+    },
+    "scope": "Read-only postflight. Native swap passed and consumed one nonce; token save hit an app self-call metadata limit before Wallet review or signing.",
+    "initialNonce": "13",
+    "finalNonce": "14",
+    "walletNonceConsumed": 1,
+    "nonceEvidence": "The successful native transaction used nonce 13; postflight latest and pending nonce were both 14. The token case did not open a Wallet request."
+  },
+  "limitations": [
+    "This is local unforked Anvil execution, not production Ethereum evidence.",
+    "No chain 42161 execution occurred in this run. Nitro posting fees, sequencer behavior and L1 finality are not exercised.",
+    "The token-to-token case is not qualified by this run; it stopped after durable intent creation and before approval or signing.",
+    "Consumer MessagePort response loss is distinct from eth_sendRawTransaction provider-response loss; the latter was not injected here."
+  ],
+  "sources": [
+    {
+      "path": "report.json",
+      "sha256": "d18ef7fe756e9f4c1a674bd8b7b0707cd3875d3d18b5d143549e44393dc2f740",
+      "size": 164189
+    },
+    {
+      "path": "inputs.json",
+      "sha256": "3101e3b7f80f43cc4c3b6cb2774043c92b7bc97d9a10146767cb70449b017576",
+      "size": 2639
+    },
+    {
+      "path": "installed-candidates.json",
+      "sha256": "79e8bf5fb7d85674466949f15978c05d43c3879e18332ac08cb52d918b4a0723",
+      "size": 9226
+    },
+    {
+      "path": "native-network-swap-evidence.json",
+      "sha256": "95ac871c395d4103b947911b402e056b8f6562981ac28b631c28a6dd24f375be",
+      "size": 6276
+    },
+    {
+      "path": "native-quote-mining-1.json",
+      "sha256": "97e6e7382ea152e6c68c40136de61adb63efafead34ec46999d56c0222e95d4a",
+      "size": 260
+    },
+    {
+      "path": "native-quote-mining-2.json",
+      "sha256": "ab33e6a1e224f742f6e7b9e2b8352cbb3f729b2f2c685d7dd0294d03243d8bd8",
+      "size": 260
+    },
+    {
+      "path": "token-quote-mining-1.json",
+      "sha256": "e90874bc6b8493a1373d620a446217420a02a22ce2944853e12dc91568b08e51",
+      "size": 260
+    },
+    {
+      "path": "token-metadata-limit-diagnosis.json",
+      "sha256": "82e30562dbfc330c3768cc86d484c9bda30ae3d25dc8efe93d20894f5f388153",
+      "size": 14721
+    },
+    {
+      "path": "token-saved-intent.json",
+      "sha256": "02a32c7b4648373d5e9f17a6a423663f131a055398f69551f60d8cfb661b0aaa",
+      "size": 6000
+    },
+    {
+      "path": "chain1-release-state.json",
+      "sha256": "423bf112ddc43ecae74308fbb7be27ebe87637461b0e08b331e6b7b107adaacb",
+      "size": 444
+    }
+  ]
+}

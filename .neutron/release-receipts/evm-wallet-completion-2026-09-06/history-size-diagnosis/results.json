@@ -1,0 +1,330 @@
+{
+  "observedAt": "2026-09-06T12:43:08.201Z",
+  "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+  "version": 105,
+  "existingKernelMetadataLimitBytes": 65536,
+  "snapshot": {
+    "method": "evm_wallet_snapshot_v1",
+    "args": null,
+    "candidBytes": 997,
+    "metadataBytes": 1859,
+    "boundaryError": null
+  },
+  "history": [
+    {
+      "method": "evm_wallet_history_v1",
+      "args": {
+        "offset": "0",
+        "limit": "40"
+      },
+      "candidBytes": 55571,
+      "metadataBytes": 71916,
+      "boundaryError": "Self-call result exceeds the metadata byte limit",
+      "count": 25,
+      "total": "25",
+      "rows": [
+        {
+          "operationId": "25",
+          "metadataBytes": 1994
+        },
+        {
+          "operationId": "24",
+          "metadataBytes": 2963
+        },
+        {
+          "operationId": "23",
+          "metadataBytes": 1018
+        },
+        {
+          "operationId": "22",
+          "metadataBytes": 1904
+        },
+        {
+          "operationId": "21",
+          "metadataBytes": 1917
+        },
+        {
+          "operationId": "20",
+          "metadataBytes": 2480
+        },
+        {
+          "operationId": "19",
+          "metadataBytes": 2491
+        },
+        {
+          "operationId": "18",
+          "metadataBytes": 1982
+        },
+        {
+          "operationId": "17",
+          "metadataBytes": 2951
+        },
+        {
+          "operationId": "16",
+          "metadataBytes": 1002
+        },
+        {
+          "operationId": "15",
+          "metadataBytes": 2480
+        },
+        {
+          "operationId": "14",
+          "metadataBytes": 5391
+        },
+        {
+          "operationId": "13",
+          "metadataBytes": 2793
+        },
+        {
+          "operationId": "12",
+          "metadataBytes": 5934
+        },
+        {
+          "operationId": "11",
+          "metadataBytes": 3662
+        },
+        {
+          "operationId": "10",
+          "metadataBytes": 3294
+        },
+        {
+          "operationId": "9",
+          "metadataBytes": 2490
+        },
+        {
+          "operationId": "8",
+          "metadataBytes": 1888
+        },
+        {
+          "operationId": "7",
+          "metadataBytes": 3292
+        },
+        {
+          "operationId": "6",
+          "metadataBytes": 5380
+        },
+        {
+          "operationId": "5",
+          "metadataBytes": 2781
+        },
+        {
+          "operationId": "4",
+          "metadataBytes": 5380
+        },
+        {
+          "operationId": "3",
+          "metadataBytes": 2781
+        },
+        {
+          "operationId": "2",
+          "metadataBytes": 2479
+        },
+        {
+          "operationId": "1",
+          "metadataBytes": 1135
+        }
+      ]
+    },
+    {
+      "method": "evm_wallet_history_v1",
+      "args": {
+        "offset": "0",
+        "limit": "20"
+      },
+      "candidBytes": 44656,
+      "metadataBytes": 57355,
+      "boundaryError": null,
+      "count": 20,
+      "total": "25",
+      "rows": [
+        {
+          "operationId": "25",
+          "metadataBytes": 1994
+        },
+        {
+          "operationId": "24",
+          "metadataBytes": 2963
+        },
+        {
+          "operationId": "23",
+          "metadataBytes": 1018
+        },
+        {
+          "operationId": "22",
+          "metadataBytes": 1904
+        },
+        {
+          "operationId": "21",
+          "metadataBytes": 1917
+        },
+        {
+          "operationId": "20",
+          "metadataBytes": 2480
+        },
+        {
+          "operationId": "19",
+          "metadataBytes": 2491
+        },
+        {
+          "operationId": "18",
+          "metadataBytes": 1982
+        },
+        {
+          "operationId": "17",
+          "metadataBytes": 2951
+        },
+        {
+          "operationId": "16",
+          "metadataBytes": 1002
+        },
+        {
+          "operationId": "15",
+          "metadataBytes": 2480
+        },
+        {
+          "operationId": "14",
+          "metadataBytes": 5391
+        },
+        {
+          "operationId": "13",
+          "metadataBytes": 2793
+        },
+        {
+          "operationId": "12",
+          "metadataBytes": 5934
+        },
+        {
+          "operationId": "11",
+          "metadataBytes": 3662
+        },
+        {
+          "operationId": "10",
+          "metadataBytes": 3294
+        },
+        {
+          "operationId": "9",
+          "metadataBytes": 2490
+        },
+        {
+          "operationId": "8",
+          "metadataBytes": 1888
+        },
+        {
+          "operationId": "7",
+          "metadataBytes": 3292
+        },
+        {
+          "operationId": "6",
+          "metadataBytes": 5380
+        }
+      ]
+    },
+    {
+      "method": "evm_wallet_history_v1",
+      "args": {
+        "offset": "0",
+        "limit": "10"
+      },
+      "candidBytes": 15535,
+      "metadataBytes": 20741,
+      "boundaryError": null,
+      "count": 10,
+      "total": "25",
+      "rows": [
+        {
+          "operationId": "25",
+          "metadataBytes": 1994
+        },
+        {
+          "operationId": "24",
+          "metadataBytes": 2963
+        },
+        {
+          "operationId": "23",
+          "metadataBytes": 1018
+        },
+        {
+          "operationId": "22",
+          "metadataBytes": 1904
+        },
+        {
+          "operationId": "21",
+          "metadataBytes": 1917
+        },
+        {
+          "operationId": "20",
+          "metadataBytes": 2480
+        },
+        {
+          "operationId": "19",
+          "metadataBytes": 2491
+        },
+        {
+          "operationId": "18",
+          "metadataBytes": 1982
+        },
+        {
+          "operationId": "17",
+          "metadataBytes": 2951
+        },
+        {
+          "operationId": "16",
+          "metadataBytes": 1002
+        }
+      ]
+    },
+    {
+      "method": "evm_wallet_history_v1",
+      "args": {
+        "offset": "0",
+        "limit": "5"
+      },
+      "candidBytes": 7504,
+      "metadataBytes": 9830,
+      "boundaryError": null,
+      "count": 5,
+      "total": "25",
+      "rows": [
+        {
+          "operationId": "25",
+          "metadataBytes": 1994
+        },
+        {
+          "operationId": "24",
+          "metadataBytes": 2963
+        },
+        {
+          "operationId": "23",
+          "metadataBytes": 1018
+        },
+        {
+          "operationId": "22",
+          "metadataBytes": 1904
+        },
+        {
+          "operationId": "21",
+          "metadataBytes": 1917
+        }
+      ]
+    },
+    {
+      "method": "evm_wallet_history_v1",
+      "args": {
+        "offset": "0",
+        "limit": "1"
+      },
+      "candidBytes": 1968,
+      "metadataBytes": 2024,
+      "boundaryError": null,
+      "count": 1,
+      "total": "25",
+      "rows": [
+        {
+          "operationId": "25",
+          "metadataBytes": 1994
+        }
+      ]
+    }
+  ],
+  "scope": "Authenticated read-only query, exact real Candid decode/project/metadata encoder; no EVM or journal mutation."
+}

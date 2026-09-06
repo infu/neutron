@@ -350,6 +350,7 @@ module {
             case (#randomness) "randomness";
             case (#https_outcalls) "https_outcalls";
             case (#chain_key_signing) "chain_key_signing";
+            case (#wallet_custody_signing) "wallet_custody_signing";
             case (#stable_store) "stable_store";
             case (#vetkeys) "vetkeys";
             case (#scheduled_tasks) "scheduled_tasks";
@@ -531,6 +532,7 @@ module {
             case (#randomness) value == "default";
             case (#https_outcalls) validMountId(value);
             case (#chain_key_signing) validMountId(value);
+            case (#wallet_custody_signing) validMountId(value);
             case (#stable_store) validMountId(value);
             case (#persistent_browser_storage) value == "background";
             case (#dedicated_resident_origin) value == "background";

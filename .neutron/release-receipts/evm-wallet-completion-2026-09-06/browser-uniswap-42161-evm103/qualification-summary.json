@@ -1,0 +1,82 @@
+{
+  "schema": "neutron-uniswap-network-browser-qualification-v1",
+  "installedEvidence": "../intermediate-evm103/installed-final-candidates.json",
+  "installedVersions": {
+    "kernel": 341,
+    "evm_wallet": 103,
+    "uniswap": 103
+  },
+  "chainIdsExercised": [
+    "42161"
+  ],
+  "chainIdsNotRun": [
+    "1"
+  ],
+  "allSelectedPassed": true,
+  "stats": {
+    "startTime": "2026-09-06T12:08:21.803Z",
+    "duration": 585499.7359999999,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "cases": [
+    {
+      "title": "chain 42161: native-to-token uses separate Wallet decisions and recovers its saved swap",
+      "ok": true,
+      "results": [
+        {
+          "status": "passed",
+          "durationMs": 313201,
+          "attachments": [
+            {
+              "name": "swap-wallet-review",
+              "contentType": "image/png",
+              "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/1-swap-wallet-review.png",
+              "sha256": "1136c2393573fbe08e3ebcc08cd99ffba8122f2d70217236ab3e43d0c5e54011"
+            },
+            {
+              "name": "network-swap-evidence",
+              "contentType": "application/json",
+              "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/1-network-swap-evidence.json",
+              "sha256": "174e0bac35750eef4adaea5351d345fdc7c3145f8898b6378bf067c89ccfa942"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "chain 42161: token-to-token uses separate Wallet decisions and recovers its saved swap",
+      "ok": true,
+      "results": [
+        {
+          "status": "passed",
+          "durationMs": 268967,
+          "attachments": [
+            {
+              "name": "swap-wallet-review",
+              "contentType": "image/png",
+              "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/2-swap-wallet-review.png",
+              "sha256": "3764f06088b36e10c69d81d2c1068569a824a267cec0ae77d6143622de08ee88"
+            },
+            {
+              "name": "network-swap-evidence",
+              "contentType": "application/json",
+              "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-42161-evm103/2-network-swap-evidence.json",
+              "sha256": "cb4180d919351863a737e4f95fcedb9fe5df9ea88bb4f237e845dcf37d98e7b8"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Chain42161 is unforked Anvil: Nitro posting costs, sequencer behavior and L1 finality not exercised",
+    "Native reply-loss fault drops successful consumer MessagePort reply, not the provider eth_sendRawTransaction RPC response",
+    "Optional factory.getPool price-impact reads trapped IC0502 text_compare_range stack overflow; UI reported unavailable and both actual swap workflows completed. Root diagnosis owns fix."
+  ],
+  "finalState": "chain42161-release-state.json",
+  "runLog": "run.log",
+  "rawReportSha256": "50e72c9faeffc7a7feb5d00b2cf1c70b7a2d4632ea3b90e88987cb77256d6d6a"
+}

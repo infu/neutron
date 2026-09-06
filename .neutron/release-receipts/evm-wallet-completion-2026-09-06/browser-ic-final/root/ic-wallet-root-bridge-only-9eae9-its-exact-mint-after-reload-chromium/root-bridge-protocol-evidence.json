@@ -1,0 +1,385 @@
+{
+  "id": "8d11b8ee45e6f0e642d67e5c4454a89b",
+  "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+  "before": {
+    "nonce": "6",
+    "balance": "9040098000000000000"
+  },
+  "executed": {
+    "prepared": {
+      "id": "8d11b8ee45e6f0e642d67e5c4454a89b",
+      "quote": {
+        "chainId": "1",
+        "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+        "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+        "helperAddress": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "helperMode": "legacy",
+        "minterAddress": "0xfeb45eb9ea035e156871ee72aa527940a73cf592",
+        "tokenAddress": null,
+        "recipient": "yuby6-qp777-77774-aaaaq-cai",
+        "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+        "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "source": {
+        "appId": "kitchensink",
+        "installationUid": "5"
+      },
+      "account": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+      "amount": "20000000000000000",
+      "steps": [
+        {
+          "kind": "reset_approval",
+          "state": "ready",
+          "operationId": null,
+          "transactionHash": null,
+          "error": null
+        },
+        {
+          "kind": "approval",
+          "state": "ready",
+          "operationId": null,
+          "transactionHash": null,
+          "error": null
+        },
+        {
+          "kind": "deposit",
+          "state": "ready",
+          "operationId": null,
+          "transactionHash": null,
+          "error": null
+        }
+      ],
+      "revision": "0",
+      "createdAt": "1788695674167321746",
+      "updatedAt": "1788695674167321746",
+      "eventCursor": "25",
+      "acceptedDeposit": null,
+      "mint": null,
+      "error": null
+    },
+    "next": {
+      "intent": {
+        "id": "8d11b8ee45e6f0e642d67e5c4454a89b",
+        "quote": {
+          "chainId": "1",
+          "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+          "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+          "helperAddress": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+          "helperMode": "legacy",
+          "minterAddress": "0xfeb45eb9ea035e156871ee72aa527940a73cf592",
+          "tokenAddress": null,
+          "recipient": "yuby6-qp777-77774-aaaaq-cai",
+          "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+          "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "source": {
+          "appId": "kitchensink",
+          "installationUid": "5"
+        },
+        "account": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+        "amount": "20000000000000000",
+        "steps": [
+          {
+            "kind": "reset_approval",
+            "state": "ready",
+            "operationId": null,
+            "transactionHash": null,
+            "error": null
+          },
+          {
+            "kind": "approval",
+            "state": "ready",
+            "operationId": null,
+            "transactionHash": null,
+            "error": null
+          },
+          {
+            "kind": "deposit",
+            "state": "unknown",
+            "operationId": "8e11b8ee45e6f0e642d67e5c4454a89b",
+            "transactionHash": null,
+            "error": null
+          }
+        ],
+        "revision": "1",
+        "createdAt": "1788695674167321746",
+        "updatedAt": "1788695687660803603",
+        "eventCursor": "25",
+        "acceptedDeposit": null,
+        "mint": null,
+        "error": null
+      },
+      "step": "deposit",
+      "request": {
+        "accountId": "main",
+        "chainId": "1",
+        "requestId": "8e11b8ee45e6f0e642d67e5c4454a89b",
+        "to": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        "valueWei": "20000000000000000",
+        "data": "0xb214faa50affffffffff8000010101000000000000000000000000000000000000000000"
+      },
+      "message": "Call evm_send_transaction_root_v1 directly with this exact request, then wallet_bridge_attach_root_v1 with its hash. IC Wallet does not inherit or forward root signing authority."
+    },
+    "operation": {
+      "operationId": "8",
+      "requestId": "8e11b8ee45e6f0e642d67e5c4454a89b",
+      "accountId": "main",
+      "chainId": "1",
+      "kind": "transaction",
+      "status": "unknown",
+      "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+      "transactionHash": "0x8733958f3643977cf5ccef3eabf3c5d65a29bdfc15850ee68eb44fa03ebd27ef",
+      "replacementTransactionHash": null,
+      "signature": "0xbdc4147562256c623438ed71fc04d33fdddcae94c2ccdc5fdbc2520e529f0d5a43108c7a1ffaeb1287a1f8e5066fcffd66e9a6166e31a3872e7149e3d87d47501c",
+      "message": "Broadcast outcome requires reconciliation: EVM RPC broadcast providers disagree; reconcile the saved transaction hash: [(#EthMainnet(#BlockPi), #Ok(#Ok(?\"0x8733958f3643977cf5ccef3eabf3c5d65a29bdfc15850ee68eb44fa03ebd27ef\"))), (#EthMainnet(#Alchemy), #Err(#JsonRpcError({code = -32_003; message = \"transaction already imported\"}))), (#EthMainnet(#PublicNode), #Err(#JsonRpcError({code = -32_003; message = \"transaction already imported\"})))]",
+      "reviewRevision": "1",
+      "receipt": null
+    },
+    "attachment": {
+      "id": "8d11b8ee45e6f0e642d67e5c4454a89b",
+      "quote": {
+        "chainId": "1",
+        "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+        "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+        "helperAddress": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "helperMode": "legacy",
+        "minterAddress": "0xfeb45eb9ea035e156871ee72aa527940a73cf592",
+        "tokenAddress": null,
+        "recipient": "yuby6-qp777-77774-aaaaq-cai",
+        "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+        "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "source": {
+        "appId": "kitchensink",
+        "installationUid": "5"
+      },
+      "account": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+      "amount": "20000000000000000",
+      "steps": [
+        {
+          "kind": "reset_approval",
+          "state": "ready",
+          "operationId": null,
+          "transactionHash": null,
+          "error": null
+        },
+        {
+          "kind": "approval",
+          "state": "ready",
+          "operationId": null,
+          "transactionHash": null,
+          "error": null
+        },
+        {
+          "kind": "deposit",
+          "state": "confirmed",
+          "operationId": "8e11b8ee45e6f0e642d67e5c4454a89b",
+          "transactionHash": "0x8733958f3643977cf5ccef3eabf3c5d65a29bdfc15850ee68eb44fa03ebd27ef",
+          "error": null
+        }
+      ],
+      "revision": "3",
+      "createdAt": "1788695674167321746",
+      "updatedAt": "1788695719415904822",
+      "eventCursor": "25",
+      "acceptedDeposit": null,
+      "mint": null,
+      "error": null
+    }
+  },
+  "resumed": {
+    "prepared": {
+      "id": "8d11b8ee45e6f0e642d67e5c4454a89b",
+      "quote": {
+        "chainId": "1",
+        "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+        "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+        "helperAddress": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "helperMode": "legacy",
+        "minterAddress": "0xfeb45eb9ea035e156871ee72aa527940a73cf592",
+        "tokenAddress": null,
+        "recipient": "yuby6-qp777-77774-aaaaq-cai",
+        "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+        "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "source": {
+        "appId": "kitchensink",
+        "installationUid": "5"
+      },
+      "account": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+      "amount": "20000000000000000",
+      "steps": [
+        {
+          "kind": "reset_approval",
+          "state": "ready",
+          "operationId": null,
+          "transactionHash": null,
+          "error": null
+        },
+        {
+          "kind": "approval",
+          "state": "ready",
+          "operationId": null,
+          "transactionHash": null,
+          "error": null
+        },
+        {
+          "kind": "deposit",
+          "state": "confirmed",
+          "operationId": "8e11b8ee45e6f0e642d67e5c4454a89b",
+          "transactionHash": "0x8733958f3643977cf5ccef3eabf3c5d65a29bdfc15850ee68eb44fa03ebd27ef",
+          "error": null
+        }
+      ],
+      "revision": "3",
+      "createdAt": "1788695674167321746",
+      "updatedAt": "1788695719415904822",
+      "eventCursor": "25",
+      "acceptedDeposit": null,
+      "mint": null,
+      "error": null
+    },
+    "next": {
+      "intent": {
+        "id": "8d11b8ee45e6f0e642d67e5c4454a89b",
+        "quote": {
+          "chainId": "1",
+          "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+          "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+          "helperAddress": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+          "helperMode": "legacy",
+          "minterAddress": "0xfeb45eb9ea035e156871ee72aa527940a73cf592",
+          "tokenAddress": null,
+          "recipient": "yuby6-qp777-77774-aaaaq-cai",
+          "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+          "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "source": {
+          "appId": "kitchensink",
+          "installationUid": "5"
+        },
+        "account": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+        "amount": "20000000000000000",
+        "steps": [
+          {
+            "kind": "reset_approval",
+            "state": "ready",
+            "operationId": null,
+            "transactionHash": null,
+            "error": null
+          },
+          {
+            "kind": "approval",
+            "state": "ready",
+            "operationId": null,
+            "transactionHash": null,
+            "error": null
+          },
+          {
+            "kind": "deposit",
+            "state": "confirmed",
+            "operationId": "8e11b8ee45e6f0e642d67e5c4454a89b",
+            "transactionHash": "0x8733958f3643977cf5ccef3eabf3c5d65a29bdfc15850ee68eb44fa03ebd27ef",
+            "error": null
+          }
+        ],
+        "revision": "4",
+        "createdAt": "1788695674167321746",
+        "updatedAt": "1788695734853268376",
+        "eventCursor": "25",
+        "acceptedDeposit": null,
+        "mint": null,
+        "error": null
+      },
+      "step": null,
+      "request": null,
+      "message": "Ethereum deposit confirmed; checking only this deposit's minter and IC mint evidence."
+    }
+  },
+  "mint": {
+    "accepted": {
+      "transactionHash": "0x8733958f3643977cf5ccef3eabf3c5d65a29bdfc15850ee68eb44fa03ebd27ef",
+      "logIndex": "0",
+      "blockNumber": "328794",
+      "fromAddress": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "amount": "20000000000000000",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null,
+      "eventIndex": "25",
+      "timestampNs": "1788695808047861385"
+    },
+    "minted": {
+      "transactionHash": "0x8733958f3643977cf5ccef3eabf3c5d65a29bdfc15850ee68eb44fa03ebd27ef",
+      "logIndex": "0",
+      "ledgerBlockIndex": "7",
+      "eventIndex": "26",
+      "timestampNs": "1788695808193741159"
+    },
+    "ledgerBlock": {
+      "index": "7",
+      "kind": "mint",
+      "amount": "20000000000000000",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null
+    }
+  },
+  "reconciled": {
+    "id": "8d11b8ee45e6f0e642d67e5c4454a89b",
+    "quote": {
+      "chainId": "1",
+      "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+      "helperMode": "legacy",
+      "minterAddress": "0xfeb45eb9ea035e156871ee72aa527940a73cf592",
+      "tokenAddress": null,
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "source": {
+      "appId": "kitchensink",
+      "installationUid": "5"
+    },
+    "account": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "amount": "20000000000000000",
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "confirmed",
+        "operationId": "8e11b8ee45e6f0e642d67e5c4454a89b",
+        "transactionHash": "0x8733958f3643977cf5ccef3eabf3c5d65a29bdfc15850ee68eb44fa03ebd27ef",
+        "error": null
+      }
+    ],
+    "revision": "6",
+    "createdAt": "1788695674167321746",
+    "updatedAt": "1788695810527160469",
+    "eventCursor": "27",
+    "acceptedDeposit": {
+      "logIndex": "0",
+      "blockNumber": "328794",
+      "eventIndex": "25"
+    },
+    "mint": {
+      "ledgerBlockIndex": "7",
+      "eventIndex": "26",
+      "verifiedLedger": true
+    },
+    "error": null
+  }
+}

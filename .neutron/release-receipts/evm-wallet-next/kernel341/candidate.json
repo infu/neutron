@@ -1,0 +1,118 @@
+{
+  "status": "Kernel release checks passed; not published by this agent",
+  "completed_at": "2026-09-06T11:50:42.774028+00:00",
+  "archive": {
+    "path": "apps/kernel/kernel.v0.3.41.neutron",
+    "bytes": 2448966,
+    "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830"
+  },
+  "source": {
+    "kind": "https",
+    "revision": "source-sha256:c59c0f72a88aeb11dee4d7c7db2d79078e813bd1378634cfe38e818082f12605",
+    "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/c59c0f72a88aeb11dee4d7c7db2d79078e813bd1378634cfe38e818082f12605.source.v1.msgpack.gz",
+    "sha256": "c59c0f72a88aeb11dee4d7c7db2d79078e813bd1378634cfe38e818082f12605",
+    "bytes": 3198537
+  },
+  "checks": {
+    "canonical_package": {
+      "command": "npm --workspace neutron-kernel run package",
+      "exit_code": 0,
+      "log": "neutron-kernel341-package.log"
+    },
+    "release_tests": {
+      "command": "npm --workspace neutron-kernel test",
+      "exit_code": 0,
+      "typescript_passed": 752,
+      "typescript_failed": 0,
+      "typescript_assertions": 6487,
+      "motoko_passed": 33,
+      "motoko_suites": [
+        "authenticated_forest_test.mo",
+        "capability_registry_test.mo",
+        "certified_assets_allocator_test.mo",
+        "certified_assets_service_test.mo",
+        "connections_codec_test.mo",
+        "connections_memory_test.mo",
+        "painless_test.mo",
+        "memory_v4_schema_test.mo",
+        "authenticated_forest_lifecycle_test.mo",
+        "backend_calls_test.mo",
+        "chain_key_signing_service_test.mo",
+        "wallet_custody_signing_service_test.mo",
+        "certified_assets_codec_test.mo",
+        "certified_assets_incremental_sha256_test.mo",
+        "certified_assets_public_surface_test.mo",
+        "connections_service_test.mo",
+        "frontend_runtime_admission_test.mo",
+        "gateway_authority_test.mo",
+        "http_canonical_paths_test.mo",
+        "http_privacy_test.mo",
+        "http_certification_test.mo",
+        "memory_v3_schema_test.mo",
+        "http_post_update_handlers_service_test.mo",
+        "https_outcalls_service_test.mo",
+        "app_usage_service_test.mo",
+        "activation_service_test.mo",
+        "public_ingress_service_test.mo",
+        "install_service_test.mo",
+        "randomness_service_test.mo",
+        "scheduler_memory_test.mo",
+        "stable_store_service_test.mo",
+        "vetkeys_memory_test.mo",
+        "vetkeys_service_test.mo"
+      ],
+      "log": "neutron-kernel341-tests.log"
+    },
+    "certified_assets": {
+      "status": "passed",
+      "receipt_sha256": "53ccd3796effbf02aed485085cf8b4170eeb21e62ad1b098f6cf0c5c540035ea",
+      "qualification_log": "neutron-kernel341-ca-qualify.log",
+      "post_package_binding_log": "neutron-kernel341-ca-postpackage.log",
+      "final_binding_log": "neutron-kernel341-ca-final.log"
+    },
+    "offered_source_matches_qualified_snapshot_and_final_workspace": {
+      "status": "passed",
+      "package": {
+        "id": "kernel",
+        "version": 341
+      },
+      "files": 750,
+      "offeredSourceMatchesQualifiedSnapshot": true,
+      "currentWorkspaceMatchesQualifiedSnapshot": true,
+      "checkedAfterFullSuite": true
+    },
+    "memory": {
+      "kernel": 4,
+      "supported_predecessor_schema": 3,
+      "activation": 1,
+      "published339_history_unchanged": {
+        "status": "passed",
+        "published_kernel_version": 339,
+        "current_kernel_version": 341,
+        "unchanged_memory_and_lock_files": [
+          "apps/kernel/backend/memory/activation/v1.mo",
+          "apps/kernel/backend/memory/kernel/v3.mo",
+          "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+          "apps/kernel/backend/memory/kernel/v4.mo",
+          "apps/kernel/neutron.lock.json"
+        ]
+      },
+      "lock_sha256": "ef6f809aadfbdc10e76c5e5f37bd5d796ef8f38ae0974dd84033ddc412040585"
+    },
+    "exact_archived_browser_compilers": {
+      "status": "passed",
+      "assertions": 144,
+      "scope": "Exact336browser to341 +15incumbents and exact341browser to336 +same15incumbents; parsing and Wasm compilation only",
+      "summary": ".neutron/release-receipts/evm-wallet-next/compatibility/kernel341-final-compiler-summary.json",
+      "summary_sha256": "4f97ad117b4653c03fd4e1f9e7226461857881b62848f04a1ce7153b7d260b63"
+    },
+    "checked_actor_upgrades": {
+      "status": "passed",
+      "assertions": 739,
+      "scope": "Four final archive-pinned checked actor upgrade cases; external chain acceptance and browser execution are separate",
+      "summary": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+      "summary_sha256": "f1ea23f51457d4cc9bc40cd33094d6ed4997fab06784d56f9661f142ce4b2744"
+    },
+    "git_diff_check": "passed"
+  }
+}

@@ -32,6 +32,7 @@ import {
   isExecEnvelope,
   isJsonObject,
   isJsonValue,
+  isMsgBusInstallationUid,
   isProgressEnvelope,
   isRecord,
   isRequestCancelEnvelope,
@@ -957,7 +958,9 @@ async function callExposedTool(
       typeof value.endpoint !== "string" ||
       (["appId", "role", "sessionId"] as const).some(
         (key) => Object.hasOwn(value, key) && typeof value[key] !== "string",
-      )
+      ) ||
+      (Object.hasOwn(value, "installationUid") &&
+        !isMsgBusInstallationUid(value.installationUid))
     ) {
       throw new Error("Invalid tool caller context");
     }

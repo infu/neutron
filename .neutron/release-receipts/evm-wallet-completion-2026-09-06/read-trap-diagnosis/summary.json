@@ -1,0 +1,72 @@
+{
+  "status": "fix_qualified_and_source_frozen_for_evm_105",
+  "observed": {
+    "runtime": "isolated actual Kernel341/EVM103/Uniswap103 browser",
+    "chain_id": "42161",
+    "method": "app_evm_wallet__evm_wallet_read_contract_v1",
+    "contract": "0x1f98431c8ad98523631ae4a59f267346ea31f984",
+    "function": "getPool(address,address,uint24)",
+    "selector": "0x1698ee82",
+    "request_evidence": "browser-requests.json",
+    "error": "IC0502 Canister trapped: stack overflow; motoko_rts::text::text_compare_range repeated"
+  },
+  "cause": "json@1.4.0 string serialization builds deep concatenation ropes; exact provider canonical Text equality recursively traverses both ropes and traps for full-sized deployed contract code.",
+  "runtime_phase_scope": "Both browser request inputs and trap are captured. The subsequent eth_getCode consensus phase is established by source inspection and independently reproduced in the exact Client.request pipeline; ordinary historical proxy response bodies were not retained.",
+  "fix": "Compare Text.encodeUtf8(previous) != Text.encodeUtf8(value), preserving exact canonical JSON provider equality over complete UTF-8 bytes.",
+  "boundaries": {
+    "new_size_limits": false,
+    "truncation": false,
+    "kernel_changes": false,
+    "json_parser_changes": false,
+    "persistent_schema_changes": false,
+    "shared_runtime_mutations": false
+  },
+  "reproduction": {
+    "runner": "same repository browser Motoko compiler compiled IC actor; separate ephemeral PocketIC instance without gateway or shared canisters",
+    "before": "full-sized-before.log",
+    "before_result": "matching three-provider eth_getCode response with 24,576-byte contract result traps in text_compare_range",
+    "after": "rpc-targeted-after.log",
+    "after_result": "2 tests pass, 0 failures, 22.36 seconds",
+    "regression_cases": [
+      "complete 24,576-byte matching deployed code across all three configured providers",
+      "last-byte disagreement remains an error",
+      "large nested JSON object keys reordered and Unicode literal/surrogate-pair representations canonicalize equally"
+    ]
+  },
+  "files": [
+    {
+      "path": "apps/evm_wallet/backend/rpc/Client.mo",
+      "sha256": "4b602ad4a6dc41837c48c5ee0c555f03464eacf852cf624608530857337c7313"
+    },
+    {
+      "path": "apps/evm_wallet/test/rpc.test.ts",
+      "sha256": "560a0c9263a239488c9699f8452d5e0a89fd682c5f8a14d55530b26d9ca5c26b"
+    },
+    {
+      "path": "apps/evm_wallet/test/rpc_large_response_test.mo",
+      "sha256": "a3cf21ba4da5f9b0be2b1c467e8507bca58da40be7bb8c2677ac964067dd931d"
+    }
+  ],
+  "local_runtime_source_evidence": [
+    {
+      "path": "/srv/shared/code/sr9/compiler/src/codegen/compile_classical.ml",
+      "line": 12409,
+      "fact": "EncodeUtf8 lowers to Text.to_blob / RTS blob_of_text"
+    },
+    {
+      "path": "/srv/shared/code/sr9/compiler/rts/motoko-rts/src/text.rs",
+      "line": 197,
+      "fact": "blob_of_text creates contiguous byte storage with text_to_buf traversal"
+    },
+    {
+      "path": "/srv/shared/code/sr9/compiler/rts/motoko-rts/src/text.rs",
+      "line": 220,
+      "fact": "text_compare_range recursively traverses concatenation trees"
+    },
+    {
+      "path": "/srv/shared/code/sr9/compiler/rts/motoko-rts/src/text.rs",
+      "line": 346,
+      "fact": "blob_compare uses contiguous byte comparison"
+    }
+  ]
+}

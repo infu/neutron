@@ -26,7 +26,6 @@ import {
 const DECISION_TTL_MS = 30_000;
 const MAX_DEPTH = 8;
 const MAX_PARALLEL_CHILDREN = 4;
-const MAX_NODE_CHALLENGES = 2;
 
 export type AgentGrant = {
   id: string;
@@ -92,7 +91,6 @@ export type InvocationNode = {
   status: "active" | "permission_denied" | "complete" | "cancelled";
   startedAt: number;
   activeChildren: number;
-  challengeCount: number;
 };
 
 export type AgentPermissionSummary = {
@@ -468,17 +466,7 @@ export async function requestAgentConsent(
       "Another agent permission decision is active",
     );
   }
-  if (
-    node.challengeCount >= MAX_NODE_CHALLENGES
-  ) {
-    throw policyError(
-      "AGENT_CONSENT_LIMIT",
-      "Agent permission decision budget exceeded",
-    );
-  }
-
   root.challenges += 1;
-  node.challengeCount += 1;
   updateRootSummary(node.rootId);
   const challenge: AgentConsentChallenge = {
     version: 1,
@@ -656,7 +644,6 @@ function createNode(input: {
     status: "active",
     startedAt: Date.now(),
     activeChildren: 0,
-    challengeCount: 0,
   };
   nodesById.set(node.id, node);
   nodesByCapability.set(node.capability, node);

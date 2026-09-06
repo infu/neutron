@@ -1,0 +1,24 @@
+{
+  "format": 2,
+  "app": "evm_wallet",
+  "memory": {
+    "evm_wallet": {
+      "schemas": {
+        "1": {
+          "hash": "5cf1711e7f72a296ea8dbf320145d7b3d260398f871a3c832f7482388d983590",
+          "entry": "5f59b07b82a1ee1e57f285bc160ae758d10f5944b7e7e152a509691d686fadf4"
+        }
+      },
+      "migrations": {}
+    },
+    "evm_evidence": {
+      "schemas": {
+        "1": {
+          "hash": "2141ab91b6bbd3a60212644870fc1a581922c9aeef6f728bf3ccfd0770a03dec",
+          "entry": "18f54fa7e9064356471adb450971d8d1ccc803f0dda6545ce8ab4ce8910c6bf6"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

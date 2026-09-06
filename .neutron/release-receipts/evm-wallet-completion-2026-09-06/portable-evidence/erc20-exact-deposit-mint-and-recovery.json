@@ -1,0 +1,205 @@
+{
+  "recovered": {
+    "id": "dd60750fcf816c6a8159f6e25ea81e2c",
+    "source": "evm",
+    "account": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "amount": "20000000",
+    "revision": "7",
+    "createdAt": "1788704933743577368",
+    "updatedAt": "1788705203418449536",
+    "eventCursor": "23",
+    "quote": {
+      "chainId": "1",
+      "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "confirmed",
+        "operationId": "dc60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x873097e3a362175ebed8938153b3236b1711e8914b0fb200d7f9bde1e7059f2a",
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "confirmed",
+        "operationId": "df60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd",
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "unknown",
+        "operationId": "de60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": null,
+        "error": null
+      }
+    ],
+    "acceptedDeposit": null,
+    "mint": null,
+    "error": null
+  },
+  "deposited": {
+    "id": "dd60750fcf816c6a8159f6e25ea81e2c",
+    "source": "evm",
+    "account": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "amount": "20000000",
+    "revision": "9",
+    "createdAt": "1788704933743577368",
+    "updatedAt": "1788705264918819501",
+    "eventCursor": "23",
+    "quote": {
+      "chainId": "1",
+      "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "confirmed",
+        "operationId": "dc60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x873097e3a362175ebed8938153b3236b1711e8914b0fb200d7f9bde1e7059f2a",
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "confirmed",
+        "operationId": "df60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd",
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "confirmed",
+        "operationId": "de60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+        "error": null
+      }
+    ],
+    "acceptedDeposit": null,
+    "mint": null,
+    "error": null
+  },
+  "depositTransaction": {
+    "hash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+    "from": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "to": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+    "valueWei": "0",
+    "nonce": 3,
+    "chainId": "1",
+    "raw": "0x02f8d00103843b9aca00843b9aca0e83010166948a791620dd6260079bf849dc5567adc3f2fdc31880b86426b3293f000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000001312d000affffffffff8000010101000000000000000000000000000000000000000000c001a0bfb9f928e524fb54c30de696ce559d8304e9f9f9301556da4097365065c6609ea0526e6f1e58f8702798339d0572031cf39f2f9f1c932237780d8e87e963e46408",
+    "blockNumber": "335863",
+    "blockHash": "0xe64e3e02bc03e7e97e1a752e025dbdfa59fbcae3d0d2f85c93bdf2083d05b98d",
+    "gasUsed": "61094",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "mint": {
+    "accepted": {
+      "transactionHash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+      "logIndex": "2",
+      "blockNumber": "335863",
+      "fromAddress": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+      "amount": "20000000",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "tokenAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "eventIndex": "23"
+    },
+    "minted": {
+      "transactionHash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+      "logIndex": "2",
+      "ledgerBlockIndex": "0",
+      "eventIndex": "24"
+    },
+    "ledgerBlock": {
+      "index": "0",
+      "kind": "mint",
+      "amount": "20000000",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null
+    },
+    "transaction": {
+      "hash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+      "from": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+      "to": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "valueWei": "0",
+      "nonce": 3,
+      "chainId": "1",
+      "raw": "0x02f8d00103843b9aca00843b9aca0e83010166948a791620dd6260079bf849dc5567adc3f2fdc31880b86426b3293f000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000001312d000affffffffff8000010101000000000000000000000000000000000000000000c001a0bfb9f928e524fb54c30de696ce559d8304e9f9f9301556da4097365065c6609ea0526e6f1e58f8702798339d0572031cf39f2f9f1c932237780d8e87e963e46408",
+      "blockNumber": "335863",
+      "blockHash": "0xe64e3e02bc03e7e97e1a752e025dbdfa59fbcae3d0d2f85c93bdf2083d05b98d",
+      "gasUsed": "61094",
+      "effectiveGasPriceWei": "1000000007"
+    }
+  },
+  "completed": {
+    "id": "dd60750fcf816c6a8159f6e25ea81e2c",
+    "source": "evm",
+    "account": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "amount": "20000000",
+    "revision": "14",
+    "createdAt": "1788704933743577368",
+    "updatedAt": "1788705406219697898",
+    "eventCursor": "25",
+    "quote": {
+      "chainId": "1",
+      "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "confirmed",
+        "operationId": "dc60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x873097e3a362175ebed8938153b3236b1711e8914b0fb200d7f9bde1e7059f2a",
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "confirmed",
+        "operationId": "df60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd",
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "confirmed",
+        "operationId": "de60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+        "error": null
+      }
+    ],
+    "acceptedDeposit": {
+      "logIndex": "2",
+      "blockNumber": "335863",
+      "eventIndex": "23"
+    },
+    "mint": {
+      "ledgerBlockIndex": "0",
+      "eventIndex": "24",
+      "verifiedLedger": true
+    },
+    "error": null
+  }
+}

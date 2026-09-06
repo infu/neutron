@@ -158,6 +158,10 @@ compiler, shared-tools, or provisioner source change.
   remaining workflow improvements.
 - [Open Questions And Design Gaps](./open-questions-and-design-gaps.md) records
   unresolved design work; it is not a description of current authority.
+- [EVM Wallet And Consumer Apps](./evm-wallet.md) describes the separate wallet,
+  custody lifecycle, shared client, IC bridge, Kitchen Sink and Uniswap flows.
+  The [research](./evm-wallet-research.md) records design choices; the
+  [implementation checklist](./todo.evm-wallet.md) tracks qualification and release.
 
 ## Repository Map
 

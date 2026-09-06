@@ -1,0 +1,47 @@
+{
+  "exploratorySmoke": false,
+  "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+  "gatewayUrl": "http://localhost:8000/",
+  "chainId": "42161",
+  "clientVersion": "anvil/v1.7.1",
+  "address": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+  "evidence": [
+    {
+      "name": "personal UTF-8 message",
+      "requestId": "0adf3b1eeccdb5530ad9318237e17b2a",
+      "result": "Operation 23: signedReturned signature0x756bab2eb28240549703c9f11e5b20c6a92478f206fa095791681c75ece79d8d19f7ad5c238a21d25ac2741e8e520672a4b84210eef87edd947ced19b297fac11c",
+      "digest": "0x16afd1dd4affddb7fea6beb4e04541529423db8655fc1d93fa6429f28c91eb78",
+      "signature": "0x756bab2eb28240549703c9f11e5b20c6a92478f206fa095791681c75ece79d8d19f7ad5c238a21d25ac2741e8e520672a4b84210eef87edd947ced19b297fac11c",
+      "address": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "r": "0x756bab2eb28240549703c9f11e5b20c6a92478f206fa095791681c75ece79d8d",
+      "s": "0x19f7ad5c238a21d25ac2741e8e520672a4b84210eef87edd947ced19b297fac1",
+      "v": 28
+    },
+    {
+      "name": "typed arrays, Unicode, and exact uint256 JSON number",
+      "requestId": "97c610fdc92041d4d7fa585c48b5d8fd",
+      "result": "Operation 24: signedReturned signature0xe202938c5022e6c9ab8acf235bf83b215fc335ba2f05f9dcddfd0fc6479ffbb40ff25682abe7017ec5bcda87850657f47a468fb6677c0f8c1ad988b0d6ac12001b",
+      "digest": "0xf87774260ffcfa4a7bc339ce5518bbc8054100603c35b0eb50012de23b86d7d0",
+      "signature": "0xe202938c5022e6c9ab8acf235bf83b215fc335ba2f05f9dcddfd0fc6479ffbb40ff25682abe7017ec5bcda87850657f47a468fb6677c0f8c1ad988b0d6ac12001b",
+      "address": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "r": "0xe202938c5022e6c9ab8acf235bf83b215fc335ba2f05f9dcddfd0fc6479ffbb4",
+      "s": "0x0ff25682abe7017ec5bcda87850657f47a468fb6677c0f8c1ad988b0d6ac1200",
+      "v": 27,
+      "wrongChainId": "1",
+      "wrongChainRecoveredAddress": "0x877D32A88B0565BaD4e4DEd3B0ba7B1E568F33DB"
+    },
+    {
+      "name": "ERC-2612 permit",
+      "requestId": "e49f425f9528a76d077eafa8784fd0df",
+      "result": "Operation 25: signedReturned signature0x0ddaaaa90359e7aa7d74fc260b65ce0e2598d2caf4c696bfc730de0ddf217da256b1599bf185544514e6b2db53655412b48096d55114971c3d59df7f9c2658721c",
+      "digest": "0x7e2710596e1a4d9ae6d0a83e9124399cd0707f4bcd1d9dbcba430cc2350c45c7",
+      "signature": "0x0ddaaaa90359e7aa7d74fc260b65ce0e2598d2caf4c696bfc730de0ddf217da256b1599bf185544514e6b2db53655412b48096d55114971c3d59df7f9c2658721c",
+      "address": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "r": "0x0ddaaaa90359e7aa7d74fc260b65ce0e2598d2caf4c696bfc730de0ddf217da2",
+      "s": "0x56b1599bf185544514e6b2db53655412b48096d55114971c3d59df7f9c265872",
+      "v": 28,
+      "wrongChainId": "1",
+      "wrongChainRecoveredAddress": "0x5916d20F54051Fb6ECCF93A797F847EDc52a4c9C"
+    }
+  ]
+}

@@ -30,6 +30,13 @@ import FundingDisplay "./funding/Display";
 import FundingJournal "./funding/Journal";
 import Memory "./memory/wallet/v1";
 import CommandMemory "./memory/wallet_commands/v1";
+import TransferMemory "./memory/wallet_transfers/v1";
+import TransferJournal "./transfers/Journal";
+import TransferSettlement "./transfers/Settlement";
+import TransferRefund "./transfers/Refund";
+import BridgeMemory "./memory/wallet_bridge/v1";
+import BridgeReplacementMemory "./memory/wallet_bridge_replacements/v1";
+import Bridge "./bridge/Journal";
 
 module {
     let BATCH_SIZE = 20;
@@ -305,6 +312,133 @@ module {
         #ok : WalletTransferReceipt;
         #err : Text;
     };
+
+    public type WalletWithdrawalGasAuthorizationV1 = { ledger : Principal; minter : Principal; budget : Nat; ledger_fee : Nat };
+    public type WalletWithdrawalAuthorizationV1 = { asset_fee : Nat; gas : ?WalletWithdrawalGasAuthorizationV1 };
+    public type WalletWithdrawalQuoteRequestV1 = { ledger : Principal; amount : ?Nat };
+    public type WalletWithdrawalGasQuoteV1 = {
+        ledger : Principal; budget : Nat; ledger_fee : Nat; allowance : Nat;
+        total_debit : Nat; balance : Nat; sufficient : Bool;
+    };
+    public type WalletWithdrawalQuoteV1 = {
+        ledger : Principal; minter : Principal; observed_at_ns : Nat64; amount : ?Nat;
+        asset_fee : Nat; asset_allowance : ?Nat; asset_total_debit : ?Nat;
+        asset_balance : Nat; asset_sufficient : ?Bool; gas : ?WalletWithdrawalGasQuoteV1;
+        authorization : WalletWithdrawalAuthorizationV1;
+    };
+    public type WalletWithdrawalQuoteResultV1 = { #ok : WalletWithdrawalQuoteV1; #err : Text };
+
+    public type WalletTransferRequestV2 = {
+        request_id : Blob;
+        transfer : WalletTransferRequest;
+        withdrawal_quote : ?WalletWithdrawalAuthorizationV1;
+    };
+    public type WalletTransferSettlementV2 = {
+        checked_at : Int;
+        status : {
+            #pending : Text;
+            #submitted : { transaction_hash : Text; message : Text };
+            #confirmed : { transaction_hash : Text };
+            #failed : Text;
+            #unknown : Text;
+        };
+    };
+    public type WalletTransferOperationV2 = {
+        request_id : Blob;
+        ledger : Principal;
+        amount : Nat;
+        native : Bool;
+        destination : Text;
+        created_at_ns : Nat64;
+        message : ?Text;
+        settlement : ?WalletTransferSettlementV2;
+        status : { #pending; #succeeded : WalletTransferReceipt; #rejected : Text };
+    };
+    public type WalletTransferResultV2 = { #ok : WalletTransferOperationV2; #err : Text };
+
+    public type WalletBridgeSourceV1 = {
+        #external;
+        #evm;
+        #evm_agent : { app_id : Text; installation_uid : Text };
+    };
+    public type WalletBridgeStepKindV1 = { #reset_approval; #approval; #deposit };
+    public type WalletBridgeStepStateV1 = { #ready; #unknown; #submitted; #confirmed; #failed };
+    public type WalletBridgeQuoteV1 = {
+        chain_id : Nat;
+        ledger : Principal;
+        minter : Principal;
+        helper_address : Text;
+        helper_mode : { #subaccount; #legacy };
+        minter_address : Text;
+        token_address : ?Text;
+        recipient : Principal;
+        principal_word : Text;
+        subaccount_word : Text;
+    };
+    public type WalletBridgeStepV1 = {
+        kind : WalletBridgeStepKindV1;
+        state : WalletBridgeStepStateV1;
+        operation_id : ?Text;
+        transaction_hash : ?Text;
+        error : ?Text;
+    };
+    public type WalletBridgeAcceptedDepositV1 = { log_index : Nat; block_number : Nat; event_index : Nat64 };
+    public type WalletBridgeMintV1 = { ledger_block_index : Nat; event_index : Nat64; verified_ledger : Bool };
+    public type WalletBridgeIntentV1 = {
+        id : Blob;
+        quote : WalletBridgeQuoteV1;
+        source : WalletBridgeSourceV1;
+        account : Text;
+        amount : Nat;
+        subaccount : ?Blob;
+        steps : [WalletBridgeStepV1];
+        revision : Nat;
+        created_at : Int;
+        updated_at : Int;
+        event_cursor : Nat64;
+        accepted_deposit : ?WalletBridgeAcceptedDepositV1;
+        mint : ?WalletBridgeMintV1;
+        error : ?Text;
+    };
+    public type WalletBridgePrepareRequestV1 = {
+        id : Blob;
+        ledger : Principal;
+        source : WalletBridgeSourceV1;
+        account : Text;
+        amount : Nat;
+        subaccount : ?Blob;
+    };
+    public type WalletBridgeClaimRequestV1 = {
+        id : Blob;
+        revision : Nat;
+        step : WalletBridgeStepKindV1;
+        operation_id : ?Text;
+    };
+    public type WalletBridgeRecordStepRequestV1 = {
+        id : Blob;
+        revision : Nat;
+        step : WalletBridgeStepKindV1;
+        state : { #submitted; #confirmed; #failed; #unknown };
+        transaction_hash : ?Text;
+        error : ?Text;
+    };
+    public type WalletBridgeReplacementRequestV1 = {
+        id : Blob; revision : Nat; step : WalletBridgeStepKindV1;
+        original_transaction_hash : Text; previous_transaction_hash : Text; transaction_hash : Text;
+        state : { #submitted; #confirmed; #failed }; error : ?Text;
+    };
+    public type WalletBridgeEffectiveHashRequestV1 = { id : Blob; step : WalletBridgeStepKindV1 };
+    public type WalletBridgeReplacementActionV1 = {
+        #lookup : WalletBridgeEffectiveHashRequestV1;
+        #record : WalletBridgeReplacementRequestV1;
+    };
+    public type WalletBridgeReplacementValueV1 = { #hash : ?Text; #intent : WalletBridgeIntentV1 };
+    public type WalletBridgeReplacementResultV1 = { #ok : WalletBridgeReplacementValueV1; #err : Text };
+    public type WalletBridgeRefreshRequestV1 = { id : Blob; event_page_length : Nat64 };
+    public type WalletBridgeListRequestV1 = { ledger : ?Principal; after : ?Blob; limit : Nat };
+    public type WalletBridgePageV1 = { records : [WalletBridgeIntentV1]; next : ?Blob };
+    public type WalletBridgeQuoteResultV1 = { #ok : WalletBridgeQuoteV1; #err : Text };
+    public type WalletBridgeIntentResultV1 = { #ok : WalletBridgeIntentV1; #err : Text };
 
     public type WalletFundingCallerV1 = {
         endpoint : Text;
@@ -677,6 +811,14 @@ module {
         address_label : ?Text;
     };
 
+    type RefundCursor = { start : Nat64; tail : Nat64; backwards : Bool; latest_evidence : ?Nat64 };
+
+    type SavedTransferContext = {
+        contact : ResolvedTransferDestination;
+        route : ?Catalog.NativeRoute;
+        withdrawal_quote : ?WalletWithdrawalAuthorizationV1;
+    };
+
     type ParsedMetadata = {
         name : ?Text;
         symbol : ?Text;
@@ -706,6 +848,9 @@ module {
         stable_memory : {
             wallet : Memory.Mem;
             wallet_commands : CommandMemory.Mem;
+            wallet_transfers : TransferMemory.Mem;
+            wallet_bridge : BridgeMemory.Mem;
+            wallet_bridge_replacements : BridgeReplacementMemory.Mem;
         };
         app_calls : AppCalls;
         capabilities : {
@@ -716,10 +861,13 @@ module {
     public class Init(env : AppBackendEnvironment) {
         let mem = env.stable_memory.wallet;
         let commandMem = env.stable_memory.wallet_commands;
+        let transferMem = env.stable_memory.wallet_transfers;
         let appCalls = env.app_calls;
         let calls = env.capabilities.backend_calls;
         let history = History.Service(mem, calls);
+        let bridge = Bridge.ServiceWithReplacements(env.stable_memory.wallet_bridge, env.stable_memory.wallet_bridge_replacements, calls);
         var transferInFlight = false;
+        let refundCursors = Map.empty<Blob, RefundCursor>();
 
         public func /*query*/wallet_snapshot(()) : WalletSnapshot {
             snapshot();
@@ -843,6 +991,26 @@ module {
                 case (#ok(())) {};
             };
 
+            if (request.network != #internet_computer) {
+                switch (catalogLedger) {
+                    case (?catalog) switch (catalog.native_route) {
+                        case (?route) {
+                            let minter = catalogRoute(route).minter;
+                            let ledgers = switch (route) {
+                                case (#ckerc20(value)) [request.ledger, Principal.fromText(value.cketh_ledger)];
+                                case (_) [request.ledger];
+                            };
+                            for (ledger in ledgers.vals()) {
+                                if (TransferJournal.allowanceReserved(transferMem, ledger, minter, null) or fundingAllowancePending(ledger, minter)) {
+                                    return #err("An unresolved operation uses this minter allowance. Resume it before starting another withdrawal.");
+                                };
+                            };
+                        };
+                        case null {};
+                    };
+                    case null {};
+                };
+            };
             transferInFlight := true;
             let feeResult = Icrc.decodeFee(await* calls.call(Icrc.feeRequest(request.ledger)));
             let result : WalletTransferResult = switch (feeResult) {
@@ -853,7 +1021,7 @@ module {
                         case (#ok(())) {
                             switch (request.network) {
                                 case (#internet_computer) {
-                                    await* transferIcrc(request, resolved, fee);
+                                    await* transferIcrc(request, resolved, fee, calls, nowNanos(), null);
                                 };
                                 case (_) {
                                     switch (catalogLedger) {
@@ -867,6 +1035,11 @@ module {
                                                         resolved,
                                                         route,
                                                         fee,
+                                                        calls,
+                                                        nowNanos(),
+                                                        false,
+                                                        null,
+                                                        null,
                                                     );
                                                 };
                                             };
@@ -886,6 +1059,9 @@ module {
             request : WalletTransferRequest,
             resolved : ResolvedTransferDestination,
             fee : Nat,
+            executionCalls : Capabilities.BackendCalls,
+            createdAt : Nat64,
+            memo : ?Blob,
         ) : async* WalletTransferResult {
             let account = switch (resolved.destination) {
                 case (#internet_computer(value)) value;
@@ -896,10 +1072,10 @@ module {
                 to = account;
                 amount = request.amount;
                 fee = ?fee;
-                memo = null;
-                created_at_time = ?Nat64.fromNat(Int.abs(Time.now()));
+                memo;
+                created_at_time = ?createdAt;
             };
-            switch (await* Icrc.executeTransfer(calls, request.ledger, args)) {
+            switch (await* Icrc.executeTransfer(executionCalls, request.ledger, args)) {
                 case (#unknown(error)) #err(error);
                 case (#rejected(error)) #err(error);
                 case (#ok(receipt)) {
@@ -911,6 +1087,7 @@ module {
                         false,
                         null,
                         null,
+                        memo,
                     );
                     #ok(transferReceipt(
                         request,
@@ -929,20 +1106,27 @@ module {
             resolved : ResolvedTransferDestination,
             route : Catalog.NativeRoute,
             fee : Nat,
+            executionCalls : Capabilities.BackendCalls,
+            createdAt : Nat64,
+            minterAlreadyDispatched : Bool,
+            memo : ?Blob,
+            authorization : ?WalletWithdrawalAuthorizationV1,
         ) : async* WalletTransferResult {
             let address = switch (nativeAddress(resolved.destination)) {
                 case (#err(error)) return #err(error);
                 case (#ok(value)) value;
             };
-            let withdrawal = await* Withdrawals.withdraw(
+            let withdrawal = await* Withdrawals.withdrawReviewed(
                 route,
                 request.ledger,
                 address,
                 request.amount,
                 fee,
-                Nat64.fromNat(Int.abs(Time.now())),
-                calls,
-                func() { validateTransferDestination(request, resolved.destination) },
+                createdAt,
+                executionCalls,
+                func() { if (minterAlreadyDispatched) #ok(()) else validateTransferDestination(request, resolved.destination) },
+                memo,
+                authorization,
             );
             switch (withdrawal) {
                 case (#err(error)) #err(error);
@@ -963,6 +1147,7 @@ module {
                         true,
                         relatedLedger,
                         relatedBlock,
+                        null,
                     );
                     switch (receipt.gas_burn) {
                         case null {};
@@ -984,6 +1169,502 @@ module {
                 };
             };
         };
+
+        public func /*update*/wallet_withdrawal_quote_v1(request : WalletWithdrawalQuoteRequestV1) : async* WalletWithdrawalQuoteResultV1 {
+            switch (selectedLedger(request.ledger)) { case (#err(error)) return #err(error); case (_) {} };
+            let route = switch (Catalog.find(request.ledger)) {
+                case (?catalog) switch (catalog.native_route) {
+                    case (?value) value;
+                    case null return #err("Ledger has no native withdrawal route");
+                };
+                case null return #err("Ledger has no native withdrawal route");
+            };
+            let result = await* Withdrawals.quote(route, request.ledger, request.amount, calls);
+            switch (selectedLedger(request.ledger)) { case (#err(error)) return #err(error); case (_) {} };
+            result;
+        };
+
+        public func /*update*/wallet_transfer_v2(request : WalletTransferRequestV2) : async* WalletTransferResultV2 {
+            switch (wallet_transfer_prepare_v2(request)) {
+                case (#err(error)) return #err(error);
+                case (#ok(_)) await* wallet_transfer_resume_v2(request.request_id);
+            };
+        };
+
+        // Preparation commits the complete intent without awaiting or moving
+        // value. Execution starts only after the UI receives this durable ID.
+        public func /*update*/wallet_transfer_prepare_v2(request : WalletTransferRequestV2) : WalletTransferResultV2 {
+            if (request.request_id.size() != REQUEST_ID_BYTES) return #err("Invalid transfer request ID");
+            let intent = to_candid (request.transfer);
+            switch (Map.get(transferMem.commands, Blob.compare, request.request_id)) {
+                case (?saved) {
+                    if (saved.intent != intent) return #err("Transfer request ID already belongs to a different intent");
+                    let ?savedContext : ?SavedTransferContext = from_candid saved.resolved else return #err("Invalid saved transfer context");
+                    if (to_candid (savedContext.withdrawal_quote) != to_candid (request.withdrawal_quote)) return #err("Transfer request ID already belongs to a different withdrawal cost review");
+                    return #ok(transferOperation(saved));
+                };
+                case null {};
+            };
+            let transfer = request.transfer;
+            if (transfer.amount == 0) return #err("Transfer amount must be greater than zero");
+            let resolved = switch (resolveTransferDestination(transfer)) {
+                case (#err(error)) return #err(error);
+                case (#ok(value)) value;
+            };
+            let catalog = Catalog.find(transfer.ledger);
+            switch (preflightTransfer(transfer, catalog)) {
+                case (#err(error)) return #err(error);
+                case (#ok(())) {};
+            };
+            let native = transfer.network != #internet_computer;
+            let route : ?Catalog.NativeRoute = if (native) {
+                switch (catalog) { case null null; case (?value) value.native_route };
+            } else null;
+            let minter = switch (route) { case null null; case (?value) ?catalogRoute(value).minter };
+            switch (route, request.withdrawal_quote) {
+                case (?#ckerc20(value), ?review) switch (review.gas) {
+                    case (?gas) {
+                        if (gas.ledger != Principal.fromText(value.cketh_ledger) or gas.minter != Principal.fromText(value.minter)) return #err("Withdrawal gas quote does not match the selected ledger and minter");
+                    };
+                    case null return #err("Review the ckETH gas quote before withdrawing this token");
+                };
+                case (?#ckerc20(_), null) return #err("Review the ckETH gas quote before withdrawing this token");
+                case (_, ?review) if (review.gas != null) return #err("Unexpected separate gas quote for this withdrawal route");
+                case (_) {};
+            };
+            let allowanceLedgers = switch (route) {
+                case (?#ckerc20(value)) [transfer.ledger, Principal.fromText(value.cketh_ledger)];
+                case null [];
+                case (_) [transfer.ledger];
+            };
+            switch (minter) {
+                case null {};
+                case (?spender) {
+                    for (ledger in allowanceLedgers.vals()) {
+                        if (TransferJournal.allowanceReserved(transferMem, ledger, spender, null) or fundingAllowancePending(ledger, spender)) {
+                            return #err("An unresolved operation uses this minter allowance. Resume it before starting another withdrawal.");
+                        };
+                    };
+                };
+            };
+            let command : TransferMemory.Command = {
+                request_id = request.request_id;
+                intent;
+                resolved = to_candid ({ contact = resolved; route; withdrawal_quote = request.withdrawal_quote });
+                created_at = nowNanos();
+                ledger = transfer.ledger;
+                native;
+                minter;
+                allowance_ledgers = allowanceLedgers;
+                var updated_at = Time.now();
+                var status = #pending;
+                var last_error = null;
+                var settlement = null;
+                var acknowledged = false;
+                var calls = [];
+            };
+            Map.add(transferMem.commands, Blob.compare, request.request_id, command);
+            #ok(transferOperation(command));
+        };
+
+        public func /*update*/wallet_transfer_resume_v2(id : Blob) : async* WalletTransferResultV2 {
+            switch (Map.get(transferMem.commands, Blob.compare, id)) {
+                case null #err("Transfer request was not found");
+                case (?command) switch (command.status, partialWithdrawal(command)) {
+                    case (#pending, ?partial) await* refreshPartialWithdrawal(command, partial);
+                    case (_) await* resumeTransfer(command);
+                };
+            };
+        };
+
+        public func /*query*/wallet_transfer_status_v2(id : Blob) : WalletTransferResultV2 {
+            switch (Map.get(transferMem.commands, Blob.compare, id)) {
+                case null #err("Transfer request was not found");
+                case (?command) #ok(transferOperation(command));
+            };
+        };
+
+        public func /*query*/wallet_transfers_pending_v2(()) : [WalletTransferOperationV2] {
+            let results = List.empty<WalletTransferOperationV2>();
+            for ((_, command) in Map.entries(transferMem.commands)) {
+                if (command.status == #pending or nativeSettlementPending(command) or not command.acknowledged) List.add(results, transferOperation(command));
+            };
+            List.toArray(results);
+        };
+
+        public func /*update*/wallet_transfer_acknowledge_v2(id : Blob) : WalletTransferResultV2 {
+            let ?command = Map.get(transferMem.commands, Blob.compare, id) else return #err("Transfer request was not found");
+            if (command.status != #pending) command.acknowledged := true;
+            #ok(transferOperation(command));
+        };
+
+        func nativeSettlementPending(command : TransferMemory.Command) : Bool {
+            if (not command.native) return false;
+            switch (command.status) {
+                case (#succeeded(_)) switch (command.settlement) {
+                    case (?{ status = #confirmed(_) or #failed(_) }) false;
+                    case (_) true;
+                };
+                case (_) false;
+            };
+        };
+
+        public func /*update*/wallet_transfer_refresh_v2(id : Blob) : async* WalletTransferResultV2 {
+            let ?command = Map.get(transferMem.commands, Blob.compare, id) else return #err("Transfer request was not found");
+            switch (command.status, partialWithdrawal(command)) {
+                case (#pending, ?partial) return await* refreshPartialWithdrawal(command, partial);
+                case (_) {};
+            };
+            let receipt = switch (command.status) {
+                case (#succeeded(bytes)) {
+                    let ?value : ?WalletTransferReceipt = from_candid bytes else return #err("Invalid saved transfer receipt");
+                    value;
+                };
+                case (_) return #ok(transferOperation(command));
+            };
+            if (not nativeSettlementPending(command)) return #ok(transferOperation(command));
+            let ?context : ?SavedTransferContext = from_candid command.resolved else return #err("Invalid saved transfer context");
+            let ?minter = command.minter else return #err("Saved transfer has no minter");
+            let ?route = context.route else return #err("Saved transfer has no native route");
+            let block : ?Nat = switch (route) {
+                // The ckETH gas-burn block identifies a ckERC20 withdrawal.
+                case (#ckerc20(_)) receipt.secondary_block_index;
+                case (_) ?receipt.block_index;
+            };
+            switch (block) {
+                case null {
+                    command.settlement := ?{ checked_at = Time.now(); status = #unknown("The saved withdrawal receipt has no required gas-burn identifier.") };
+                    command.acknowledged := false;
+                };
+                case (?value) {
+                    if (value > TransferSettlement.MAX_WITHDRAWAL_ID) {
+                        command.settlement := ?{ checked_at = Time.now(); status = #unknown("Saved withdrawal ID is outside the minter protocol's Nat64 representation") };
+                        command.acknowledged := false;
+                    } else {
+                        let withdrawalId = Nat64.fromNat(value);
+                        let request = switch (route) {
+                            case (#ckbtc(_)) TransferSettlement.requestBtc(minter, withdrawalId);
+                            case (#ckdoge(_)) TransferSettlement.requestDoge(minter, withdrawalId);
+                            case (#cksol(_)) TransferSettlement.requestSol(minter, withdrawalId);
+                            case (_) TransferSettlement.request(minter, withdrawalId);
+                        };
+                        let result = await* calls.call(request);
+                        // A concurrent completed refresh must not be replaced
+                        // by an older unavailable/pending reply.
+                        if (nativeSettlementPending(command)) {
+                            let status = switch (route) {
+                                case (#ckbtc(_) or #ckdoge(_)) TransferSettlement.classifyUtxo(result);
+                                case (#cksol(_)) TransferSettlement.classifySol(result);
+                                case (_) TransferSettlement.classify(result);
+                            };
+                            command.settlement := ?{ checked_at = Time.now(); status };
+                            command.acknowledged := false;
+                        };
+                    };
+                };
+            };
+            switch (command.settlement) {
+                case (?{ status = #confirmed(value) }) recordNativeTransactionHash(command, receipt, context, value.transaction_hash);
+                case (?{ status = #submitted(value) }) recordNativeTransactionHash(command, receipt, context, value.transaction_hash);
+                case (_) {};
+            };
+            command.updated_at := Time.now();
+            #ok(transferOperation(command));
+        };
+
+        func recordNativeTransactionHash(command : TransferMemory.Command, receipt : WalletTransferReceipt, context : SavedTransferContext, hash : Text) {
+            func attach(ledger : Principal, block : Nat) {
+                let ?storedLedger = Map.get(mem.ledgers, Principal.compare, ledger) else return;
+                let ?transaction = Map.get(storedLedger.history.transactions, Nat.compare, block) else return;
+                let ?native = transaction.native else return;
+                ignore HistoryStore.putTransaction(mem, ledger, { transaction with native = ?{ native with transaction_id = ?hash } });
+            };
+            attach(command.ledger, receipt.block_index);
+            switch (context.route, receipt.secondary_block_index) {
+                case (?#ckerc20(route), ?block) attach(Principal.fromText(route.cketh_ledger), block);
+                case (_) {};
+            };
+        };
+
+        func fundingAllowancePending(ledger : Principal, spender : Principal) : Bool {
+            for ((_, command) in Map.entries(commandMem.commands)) {
+                switch (command.status, command.operation) {
+                    case (#pending(_), #approve(value)) {
+                        if (command.ledger == ledger and value.spender.owner == spender and value.spender.subaccount == null) return true;
+                    };
+                    case (_) {};
+                };
+            };
+            false;
+        };
+
+        func transferOperation(command : TransferMemory.Command) : WalletTransferOperationV2 {
+            let ?request : ?WalletTransferRequest = from_candid command.intent else Runtime.trap("Invalid saved transfer intent");
+            let status = switch (command.status) {
+                case (#pending) #pending;
+                case (#rejected(error)) #rejected(error);
+                case (#succeeded(bytes)) {
+                    let ?receipt : ?WalletTransferReceipt = from_candid bytes else Runtime.trap("Invalid saved transfer receipt");
+                    #succeeded(receipt);
+                };
+            };
+            {
+                request_id = command.request_id;
+                ledger = command.ledger;
+                amount = request.amount;
+                native = command.native;
+                destination = destinationText(request.expected_destination);
+                created_at_ns = command.created_at;
+                message = command.last_error;
+                settlement = command.settlement;
+                status;
+            };
+        };
+
+        func resumeTransfer(command : TransferMemory.Command) : async* WalletTransferResultV2 {
+            if (command.status != #pending) return #ok(transferOperation(command));
+            if (transferInFlight) {
+                command.last_error := ?"Another Wallet transfer or approval is in progress. Resume this saved request afterward.";
+                return #ok(transferOperation(command));
+            };
+            let ?request : ?WalletTransferRequest = from_candid command.intent else return #err("Invalid saved transfer intent");
+            let ?context : ?SavedTransferContext = from_candid command.resolved else return #err("Invalid saved transfer destination");
+            let resolved = context.contact;
+            transferInFlight := true;
+            let replay = TransferJournal.Replay(command, calls);
+            switch (context.route) {
+                case (?#ckerc20(value)) {
+                    let minter = Principal.fromText(value.minter);
+                    // Only new sequences receive this optional read prefix.
+                    // Existing released fee/approval bytes keep their positions.
+                    if (command.calls.size() == 0 or isRefundTail(command.calls[0], minter)) {
+                        let result = await* replay.backend_calls.call(TransferRefund.tailRequest(minter));
+                        switch (result) {
+                            case (#err(error)) {
+                                // A failed pre-dispatch read stays failed: a
+                                // later retry must not substitute a tail captured
+                                // after the withdrawal. Recovery can scan backwards.
+                                command.calls[0].outcome := #rejected(error);
+                            };
+                            case (_) {};
+                        };
+                    };
+                };
+                case (_) {};
+            };
+            let feeResult = Icrc.decodeFee(await* replay.backend_calls.call(Icrc.feeRequest(request.ledger)));
+            let result : WalletTransferResult = switch (feeResult) {
+                case (#err(error)) #err("Could not read the ledger fee: " # error);
+                case (#ok(fee)) {
+                    // Exact already-dispatched transfers can reconcile after a
+                    // contact edit. New effects still recheck the contact.
+                    let validation = if ((replay.dispatched() and not command.native) or TransferJournal.minterDispatched(command)) #ok(()) else validateTransferDestination(request, resolved.destination);
+                    switch (validation) {
+                        case (#err(error)) #err(error);
+                        case (#ok(())) {
+                            if (not command.native) {
+                                await* transferIcrc(request, resolved, fee, replay.backend_calls, command.created_at, ?command.request_id);
+                            } else switch (context.route) {
+                                case (?route) await* transferNative(request, resolved, route, fee, replay.backend_calls, command.created_at, TransferJournal.minterDispatched(command), ?command.request_id, context.withdrawal_quote);
+                                case null #err("Saved native route is missing");
+                            };
+                        };
+                    };
+                };
+            };
+            switch (result) {
+                case (#ok(receipt)) {
+                    command.status := #succeeded(to_candid (receipt));
+                    command.last_error := null;
+                    if (command.native and command.settlement == null) {
+                        command.settlement := ?{ checked_at = Time.now(); status = #pending("The minter accepted the burn. Native payment is still pending.") };
+                    };
+                };
+                case (#err(error)) {
+                    command.last_error := ?error;
+                    switch (partialWithdrawal(command)) {
+                        case (?partial) if (command.settlement == null) {
+                            command.settlement := ?{ checked_at = Time.now(); status = #pending("The ckETH gas burn " # Nat.toText(partial.withdrawal_id) # " is saved. The withdrawal failed after that burn; check its reimbursement.") };
+                        };
+                        case (_) {};
+                    };
+                    if (not replay.hasUnknown()) {
+                        // Cached successful minter replies cannot become a new
+                        // failed command because a contact was edited later.
+                        if (not TransferJournal.hasUnresolved(command)) command.status := #rejected(error);
+                    };
+                };
+            };
+            command.updated_at := Time.now();
+            transferInFlight := false;
+            #ok(transferOperation(command));
+        };
+
+        func partialWithdrawal(command : TransferMemory.Command) : ?TransferRefund.PartialFailure {
+            if (not command.native) return null;
+            for (step in command.calls.vals()) {
+                if (command.minter == ?step.canister and step.method == "withdraw_erc20") switch (step.outcome) {
+                    case (#reply(reply)) return TransferRefund.partialFailure(reply);
+                    case (_) {};
+                };
+            };
+            null;
+        };
+
+        func isRefundTail(step : TransferMemory.Step, minter : Principal) : Bool {
+            let request = TransferRefund.tailRequest(minter);
+            step.canister == request.canister and step.method == request.method and step.args == request.args and step.cycles == request.cycles;
+        };
+
+        func savedRefundTail(command : TransferMemory.Command, minter : Principal) : ?Nat64 {
+            if (command.calls.size() == 0 or not isRefundTail(command.calls[0], minter)) return null;
+            switch (command.calls[0].outcome) {
+                case (#reply(reply)) TransferRefund.tail(#ok(reply));
+                case (_) null;
+            };
+        };
+
+        func savedGasReimbursement(command : TransferMemory.Command, burn : Nat) : ?TransferRefund.Reimbursed {
+            for (step in command.calls.vals()) {
+                if (command.minter == ?step.canister and step.method == "get_events") switch (step.outcome) {
+                    case (#reply(reply)) {
+                        let ?args : ?{ start : Nat64; length : Nat64 } = from_candid step.args else return null;
+                        if (args.length > 0) switch (TransferRefund.inspect(#ok(reply), burn, args.start)) {
+                            case (#ok({ evidence = ?#reimbursed(value) })) return ?value;
+                            case (_) {};
+                        };
+                    };
+                    case (_) {};
+                };
+            };
+            null;
+        };
+
+        func recordGasReimbursement(command : TransferMemory.Command, partial : TransferRefund.PartialFailure, value : TransferRefund.Reimbursed) {
+            let evidence = "ckETH gas burn " # Nat.toText(value.withdrawal_id) # " was reimbursed with " # Nat.toText(value.reimbursed_amount) # " atoms in ledger block " # Nat.toText(value.reimbursed_in_block) # ".";
+            let message = if (partial.asset_burn_unresolved) {
+                evidence # " The token burn outcome is still unresolved. This withdrawal will not be sent again.";
+            } else evidence # " The token burn was rejected; no native withdrawal was created.";
+            command.settlement := ?{
+                checked_at = Time.now();
+                status = if (partial.asset_burn_unresolved) #unknown(message) else #failed(message);
+            };
+            if (not partial.asset_burn_unresolved) command.status := #rejected(message);
+            command.last_error := ?message;
+            command.acknowledged := false;
+            command.updated_at := Time.now();
+        };
+
+        func refreshPartialWithdrawal(command : TransferMemory.Command, partial : TransferRefund.PartialFailure) : async* WalletTransferResultV2 {
+            if (command.status != #pending) return #ok(transferOperation(command));
+            switch (savedGasReimbursement(command, partial.withdrawal_id)) {
+                case (?value) {
+                    recordGasReimbursement(command, partial, value);
+                    return #ok(transferOperation(command));
+                };
+                case null {};
+            };
+            let ?minter = command.minter else return #err("Saved partial withdrawal has no minter");
+            let cursor : RefundCursor = switch (Map.get(refundCursors, Blob.compare, command.request_id)) {
+                case (?value) value;
+                case null switch (savedRefundTail(command, minter)) {
+                    case (?start) ({ start; tail = start; backwards = false; latest_evidence = null } : RefundCursor);
+                    case null {
+                        // Released commands have no pre-dispatch anchor. Search
+                        // their exact burn ID from the current tail backwards;
+                        // no timestamp or amount heuristic excludes any event.
+                        let result = await* calls.call(TransferRefund.tailRequest(minter));
+                        if (command.status != #pending) return #ok(transferOperation(command));
+                        let ?tail = TransferRefund.tail(result) else {
+                            command.settlement := ?{ checked_at = Time.now(); status = #unknown("Could not read the minter event tail. The partial withdrawal remains unresolved; retrying only checks its reimbursement.") };
+                            return #ok(transferOperation(command));
+                        };
+                        {
+                            start = if (tail > TransferRefund.pageSize) tail - TransferRefund.pageSize else (0 : Nat64);
+                            tail;
+                            backwards = true;
+                            latest_evidence = null;
+                        };
+                    };
+                };
+            };
+            let request = TransferRefund.request(minter, cursor.start);
+            let result = await* calls.call(request);
+            if (command.status != #pending) return #ok(transferOperation(command));
+            let page = switch (TransferRefund.inspect(result, partial.withdrawal_id, cursor.start)) {
+                case (#err(error)) {
+                    command.settlement := ?{ checked_at = Time.now(); status = #unknown(error) };
+                    return #ok(transferOperation(command));
+                };
+                case (#ok(value)) value;
+            };
+            let newer = switch (cursor.latest_evidence, page.evidence_index) {
+                case (null, ?_) true;
+                case (?previous, ?current) current >= previous;
+                case (_) false;
+            };
+            let next : RefundCursor = if (cursor.backwards) {
+                if (cursor.start == 0) {
+                    { start = cursor.tail; tail = cursor.tail; backwards = false; latest_evidence = if (newer) page.evidence_index else cursor.latest_evidence };
+                } else {
+                    { start = if (cursor.start > TransferRefund.pageSize) cursor.start - TransferRefund.pageSize else (0 : Nat64); tail = cursor.tail; backwards = true; latest_evidence = if (newer) page.evidence_index else cursor.latest_evidence };
+                };
+            } else {
+                { start = page.next; tail = cursor.tail; backwards = false; latest_evidence = if (newer) page.evidence_index else cursor.latest_evidence };
+            };
+            Map.add(refundCursors, Blob.compare, command.request_id, next);
+            // The scan cursor is an optimization in this runtime. The original
+            // burn, optional pre-dispatch tail and matched refund proof are
+            // durable; runtime reinitialization safely restarts read-only scans.
+            if (newer) switch (page.evidence) {
+                case (?#reimbursed(value)) {
+                    switch (result) {
+                        case (#ok(reply)) command.calls := Array.concat<TransferMemory.Step>(command.calls, [{
+                            canister = request.canister; method = request.method; args = request.args; cycles = request.cycles;
+                            var outcome = #reply(reply);
+                        }]);
+                        case (_) {};
+                    };
+                    recordGasReimbursement(command, partial, value);
+                    return #ok(transferOperation(command));
+                };
+                case (?#scheduled(value)) {
+                    let message = if (value.to != calls.canister_principal or value.to_subaccount != null) {
+                        "The matching reimbursement event has an unexpected IC recipient. The partial withdrawal remains unresolved.";
+                    } else "ckETH gas burn " # Nat.toText(value.withdrawal_id) # " is awaiting reimbursement of " # Nat.toText(value.reimbursed_amount) # " atoms.";
+                    command.settlement := ?{ checked_at = Time.now(); status = #pending(message) };
+                };
+                case (?#quarantined(_)) command.settlement := ?{ checked_at = Time.now(); status = #unknown("The minter quarantined the reimbursement for this exact ckETH gas burn. Its outcome remains unresolved; Wallet will not repeat the withdrawal.") };
+                case (?#unexpected_transaction(_)) command.settlement := ?{ checked_at = Time.now(); status = #unknown("The matching reimbursement event refers to an unexpected native transaction. The partial withdrawal remains unresolved.") };
+                case null {};
+            } else if (cursor.latest_evidence == null) {
+                let progress = if (next.backwards) {
+                    "Checking earlier reimbursement events; the next page starts at event " # Nat64.toText(next.start) # ".";
+                } else if (page.exhausted and not cursor.backwards) {
+                    "No matching reimbursement is recorded yet. Later checks continue from the current event tail.";
+                } else "Checking reimbursement events from event " # Nat64.toText(next.start) # ".";
+                command.settlement := ?{ checked_at = Time.now(); status = #pending(progress # " The exact ckETH gas burn remains saved. Scan position may restart after a runtime upgrade.") };
+            };
+            command.updated_at := Time.now();
+            #ok(transferOperation(command));
+        };
+
+        public func /*update*/wallet_bridge_quote_v1(ledger : Principal) : async* WalletBridgeQuoteResultV1 { await* bridge.quote(ledger) };
+        public func /*update*/wallet_bridge_prepare_v1(request : WalletBridgePrepareRequestV1) : async* WalletBridgeIntentResultV1 { await* bridge.prepare(request) };
+        public func /*query*/wallet_bridge_list_v1(request : WalletBridgeListRequestV1) : WalletBridgePageV1 { bridge.list(request) };
+        public func /*query*/wallet_bridge_status_v1(id : Blob) : WalletBridgeIntentResultV1 { bridge.status(id) };
+        public func /*update*/wallet_bridge_claim_v1(request : WalletBridgeClaimRequestV1) : WalletBridgeIntentResultV1 { bridge.claim(request) };
+        public func /*update*/wallet_bridge_record_step_v1(request : WalletBridgeRecordStepRequestV1) : WalletBridgeIntentResultV1 { bridge.recordStep(request) };
+        public func /*update*/wallet_bridge_replacement_v1(request : WalletBridgeReplacementActionV1) : WalletBridgeReplacementResultV1 {
+            switch (request) {
+                case (#lookup(value)) #ok(#hash(bridge.effectiveHash(value.id, value.step)));
+                case (#record(value)) switch (bridge.recordReplacement(value)) {
+                    case (#ok(intent)) #ok(#intent(intent));
+                    case (#err(error)) #err(error);
+                };
+            };
+        };
+        public func /*update*/wallet_bridge_refresh_v1(request : WalletBridgeRefreshRequestV1) : async* WalletBridgeIntentResultV1 { await* bridge.refresh(request) };
 
         public func /*update*/wallet_funding_prepare_v1(
             request : WalletFundingPrepareRequestV1,
@@ -1870,6 +2551,15 @@ module {
             };
         };
 
+        func allocateFundingCreatedAt() : Nat64 {
+            let now = nowNanos();
+            let next = (if (now > transferMem.last_funding_created_at) now else transferMem.last_funding_created_at) + 1;
+            // Persist synchronously with the subsequently frozen call_args,
+            // before any value-moving await. Replays skip this allocation.
+            transferMem.last_funding_created_at := next;
+            next;
+        };
+
         func executeFundingTransfer(
             key : CommandMemory.CommandKey,
             command : CommandMemory.Command,
@@ -1896,7 +2586,7 @@ module {
                         amount = operation.amount;
                         fee = ?metadata.fee;
                         memo = operation.memo;
-                        created_at_time = ?nowNanos();
+                        created_at_time = ?allocateFundingCreatedAt();
                     };
                     let value = to_candid (args);
                     if (not freezeFundingArgs(command, value)) {
@@ -1966,6 +2656,9 @@ module {
             },
             metadata : FundingMetadata,
         ) : async* WalletFundingExecutionResultV1 {
+            if (TransferJournal.allowanceReserved(transferMem, command.ledger, operation.spender.owner, null)) {
+                return keepFundingPending(key, command, "withdrawal_pending", "An unresolved withdrawal uses this minter allowance; reconcile it before replacing the allowance");
+            };
             let current = switch (await* readIcrcAllowance(command.ledger, operation.spender)) {
                 case (#err(error)) {
                     return rejectOrKeepPending(key, command, "allowance_read", error);
@@ -2039,7 +2732,7 @@ module {
                         expires_at = ?operation.expires_at;
                         fee = ?metadata.fee;
                         memo = null;
-                        created_at_time = ?nowNanos();
+                        created_at_time = ?allocateFundingCreatedAt();
                     };
                     let value = to_candid (args);
                     if (not freezeFundingArgs(command, value)) {
@@ -2157,7 +2850,7 @@ module {
                         expires_at = null;
                         fee = ?metadata.fee;
                         memo = null;
-                        created_at_time = ?nowNanos();
+                        created_at_time = ?allocateFundingCreatedAt();
                     };
                     let value = to_candid (args);
                     if (not freezeFundingArgs(command, value)) {
@@ -3246,6 +3939,7 @@ module {
             native : Bool,
             relatedLedger : ?Principal,
             relatedBlockIndex : ?Nat,
+            memo : ?Blob,
         ) : () {
             let destination = switch (resolved.destination) {
                 case (#internet_computer(account)) ?#icrc(account);
@@ -3268,7 +3962,7 @@ module {
                 request.amount,
                 if (native) null else ?fee,
                 destination,
-                null,
+                memo,
                 ?intent,
                 nativeContext,
             );
@@ -4419,6 +5113,54 @@ public type wallet_contact_destinations_Output = WalletContactDestinationsResult
 
 public type wallet_transfer_Input = (request : WalletTransferRequest,);
 public type wallet_transfer_Output = WalletTransferResult;
+
+public type wallet_withdrawal_quote_v1_Input = (request : WalletWithdrawalQuoteRequestV1);
+public type wallet_withdrawal_quote_v1_Output = WalletWithdrawalQuoteResultV1;
+
+public type wallet_transfer_v2_Input = (request : WalletTransferRequestV2);
+public type wallet_transfer_v2_Output = WalletTransferResultV2;
+
+public type wallet_transfer_prepare_v2_Input = (request : WalletTransferRequestV2);
+public type wallet_transfer_prepare_v2_Output = WalletTransferResultV2;
+
+public type wallet_transfer_resume_v2_Input = (id : Blob);
+public type wallet_transfer_resume_v2_Output = WalletTransferResultV2;
+
+public type wallet_transfer_status_v2_Input = (id : Blob);
+public type wallet_transfer_status_v2_Output = WalletTransferResultV2;
+
+public type wallet_transfers_pending_v2_Input = (());
+public type wallet_transfers_pending_v2_Output = [WalletTransferOperationV2];
+
+public type wallet_transfer_acknowledge_v2_Input = (id : Blob);
+public type wallet_transfer_acknowledge_v2_Output = WalletTransferResultV2;
+
+public type wallet_transfer_refresh_v2_Input = (id : Blob);
+public type wallet_transfer_refresh_v2_Output = WalletTransferResultV2;
+
+public type wallet_bridge_quote_v1_Input = (ledger : Principal);
+public type wallet_bridge_quote_v1_Output = WalletBridgeQuoteResultV1;
+
+public type wallet_bridge_prepare_v1_Input = (request : WalletBridgePrepareRequestV1);
+public type wallet_bridge_prepare_v1_Output = WalletBridgeIntentResultV1;
+
+public type wallet_bridge_list_v1_Input = (request : WalletBridgeListRequestV1);
+public type wallet_bridge_list_v1_Output = WalletBridgePageV1;
+
+public type wallet_bridge_status_v1_Input = (id : Blob);
+public type wallet_bridge_status_v1_Output = WalletBridgeIntentResultV1;
+
+public type wallet_bridge_claim_v1_Input = (request : WalletBridgeClaimRequestV1);
+public type wallet_bridge_claim_v1_Output = WalletBridgeIntentResultV1;
+
+public type wallet_bridge_record_step_v1_Input = (request : WalletBridgeRecordStepRequestV1);
+public type wallet_bridge_record_step_v1_Output = WalletBridgeIntentResultV1;
+
+public type wallet_bridge_replacement_v1_Input = (request : WalletBridgeReplacementActionV1);
+public type wallet_bridge_replacement_v1_Output = WalletBridgeReplacementResultV1;
+
+public type wallet_bridge_refresh_v1_Input = (request : WalletBridgeRefreshRequestV1);
+public type wallet_bridge_refresh_v1_Output = WalletBridgeIntentResultV1;
 
 public type wallet_funding_prepare_v1_Input = (request : WalletFundingPrepareRequestV1,);
 public type wallet_funding_prepare_v1_Output = WalletFundingPrepareResultV1;

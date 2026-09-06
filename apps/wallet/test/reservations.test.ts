@@ -71,6 +71,11 @@ test("Wallet reserves ledgers broadly and minter mutations exactly", () => {
       principal: "mqygn-kiaaa-aaaar-qaadq-cai",
       method: "retrieve_btc_with_approval",
     },
+    {
+      kind: "exact",
+      principal: "mqygn-kiaaa-aaaar-qaadq-cai",
+      method: "retrieve_btc_status_v2",
+    },
     { kind: "principal", principal: "ss2fx-dyaaa-aaaar-qacoq-cai" },
     {
       kind: "exact",
@@ -82,6 +87,7 @@ test("Wallet reserves ledgers broadly and minter mutations exactly", () => {
       principal: "sv3dd-oaaaa-aaaar-qacoa-cai",
       method: "withdraw_eth",
     },
+    ...["retrieve_eth_status", "get_minter_info", "get_events"].map((method) => ({ kind: "exact" as const, principal: "sv3dd-oaaaa-aaaar-qacoa-cai", method })),
   ]);
 });
 
@@ -119,6 +125,7 @@ test("Wallet computes one reservation batch for selection changes", () => {
         method: "withdraw_eth",
       },
     },
+    ...["retrieve_eth_status", "get_minter_info", "get_events"].map((method) => ({ kind: "reserve" as const, scope: { kind: "exact" as const, principal: catalog[1]!.nativeRoute!.minter, method } })),
     { kind: "release", scope: current[0]! },
     { kind: "release", scope: current[1]! },
   ]);
@@ -174,6 +181,12 @@ test("Wallet reserves both token and ckETH gas access for ckERC20", () => {
     {
       kind: "exact",
       principal: token.nativeRoute!.minter,
+      method: "get_minter_info",
+    },
+    { kind: "exact", principal: token.nativeRoute!.minter, method: "get_events" },
+    {
+      kind: "exact",
+      principal: token.nativeRoute!.minter,
       method: "eip_1559_transaction_price",
     },
     {
@@ -181,6 +194,7 @@ test("Wallet reserves both token and ckETH gas access for ckERC20", () => {
       principal: token.nativeRoute!.minter,
       method: "withdraw_erc20",
     },
+    { kind: "exact", principal: token.nativeRoute!.minter, method: "retrieve_eth_status" },
     {
       kind: "exact",
       principal: token.nativeRoute!.gasLedger!,
@@ -222,4 +236,23 @@ test("Wallet parses exact reservation snapshots", () => {
       method: "update_balance",
     },
   ]);
+});
+
+test("selected Bitcoin, Dogecoin and Solana routes include only their exact settlement endpoint", () => {
+  const routes = [
+    { kind: "ckbtc" as const, network: "bitcoin_mainnet" as const, method: "retrieve_btc_status_v2" },
+    { kind: "ckdoge" as const, network: "dogecoin_mainnet" as const, method: "retrieve_doge_status" },
+    { kind: "cksol" as const, network: "solana_mainnet" as const, method: "withdrawal_status" },
+  ];
+  for (const route of routes) {
+    const ledger: CatalogLedger = {
+      ...catalog[0]!,
+      networks: ["internet_computer", route.network],
+      nativeRoute: { ...catalog[0]!.nativeRoute!, kind: route.kind, originNetwork: route.network },
+    };
+    const scopes = desiredWalletReservationScopes([ledger], new Set([ledger.principal]));
+    expect(scopes).toContainEqual({ kind: "exact", principal: ledger.nativeRoute!.minter, method: route.method });
+    expect(scopes).not.toContainEqual({ kind: "principal", principal: ledger.nativeRoute!.minter });
+    expect(scopes.filter((scope) => scope.kind === "exact" && routes.some((value) => value.method === scope.method))).toHaveLength(1);
+  }
 });

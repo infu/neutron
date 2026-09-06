@@ -1,0 +1,121 @@
+{
+  "schema": "neutron-uniswap-browser-outcomes-projection-v1",
+  "kind": "Straight extraction of existing report fields; no tests or behavioral checks rerun.",
+  "source": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/browser-report.json",
+    "bytes": 256911,
+    "sha256": "d7404c99a1ce7855a301d8bf8b45aa9f0c302a432b99a116f27ea4224bfe9543",
+    "retention": "local_only"
+  },
+  "qualification": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-qualification.json",
+    "bytes": 4899,
+    "sha256": "abe2ef27cd8b96dcb6b8d8f5c025defc76e50363e5759b9ffc2562ce7cd17b3b"
+  },
+  "checks": [
+    "Missing EVM Wallet provider surfaces an error without saving or sending a swap",
+    "Incompatible provider response is rejected by the shared SDK without effects",
+    "Connect through real SDK and render scoped balances",
+    "Actual QuoterV2 calldata queries four fee tiers and selects best output",
+    "Quote displays separate numeric approval and swap fees and their sum without an effect",
+    "Refreshing a quote re-estimates current fees and updates numeric values",
+    "Quote, settings, and controls fit 1440px",
+    "Quote, settings, and controls fit 375px",
+    "Quote, settings, and controls fit 320px",
+    "Editing amount invalidates completed quote",
+    "A swap estimate unavailable before allowance remains explicit alongside its numeric approval estimate",
+    "Intent and requested phase saved before approval; decline blocks swap",
+    "Saved fee refresh estimates only the remaining frozen swap and preserves request IDs without signing",
+    "Approval receipt gates swap; lost swap reply survives reload and reconciles same ID without repeating",
+    "Changing network clears Ethereum balance and refreshes Arbitrum-scoped balance",
+    "Arbitrum numeric fee includes its posting costs once and describes that composition",
+    "Native-input swap omits optional approval fields and uses generated backend wire schema",
+    "Replacement status follows authenticated linkage, independent receipt and both explorer links across reload without resending",
+    "An in-flight quote cannot reappear after its input amount changes",
+    "An in-flight quote cannot reappear after its recipient changes",
+    "Expired quote is visibly identified and cannot be submitted",
+    "Oversized retained history backs off by actual byte limits, preserves every older record and resumes the newest prepared request with its exact ID"
+  ],
+  "metadataRejections": [
+    {
+      "method": "uniswap_history_v1",
+      "arguments": [
+        {
+          "limit": "32"
+        }
+      ],
+      "bytes": 119181
+    },
+    {
+      "method": "uniswap_history_v1",
+      "arguments": [
+        {
+          "limit": "16"
+        }
+      ],
+      "bytes": 79270
+    },
+    {
+      "method": "uniswap_history_v1",
+      "arguments": [
+        {
+          "limit": "32"
+        }
+      ],
+      "bytes": 119181
+    },
+    {
+      "method": "uniswap_history_v1",
+      "arguments": [
+        {
+          "limit": "16"
+        }
+      ],
+      "bytes": 79270
+    },
+    {
+      "method": "uniswap_history_v1",
+      "arguments": [
+        {
+          "limit": "32"
+        }
+      ],
+      "bytes": 119524
+    },
+    {
+      "method": "uniswap_history_v1",
+      "arguments": [
+        {
+          "limit": "16"
+        }
+      ],
+      "bytes": 79613
+    },
+    {
+      "method": "uniswap_history_v1",
+      "arguments": [
+        {
+          "cursor": "0000000000000000000000000000f002",
+          "limit": "32"
+        }
+      ],
+      "bytes": 75490
+    },
+    {
+      "method": "uniswap_history_v1",
+      "arguments": [
+        {
+          "cursor": "0000000000000000000000000000f002",
+          "limit": "16"
+        }
+      ],
+      "bytes": 71099
+    }
+  ],
+  "errors": [],
+  "omitted": [
+    "Full caller payload list",
+    "Full retained-record bodies"
+  ],
+  "scope": "Recorded22 browser checks on actual Uniswap UI/sharedSDK with schema-validated mocked Kernel transport. This projection adds no live-chain qualification."
+}

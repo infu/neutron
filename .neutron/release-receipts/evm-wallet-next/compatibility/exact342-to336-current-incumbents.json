@@ -1,0 +1,134 @@
+{
+  "observedAt": "2026-09-06T13:08:30.659Z",
+  "status": "passed",
+  "scope": "Package parsing and complete Wasm compilation only; no installation transaction, live canister upgrade, migration-state execution, or frontend flows exercised. All production archives untouched.",
+  "exactArchives": [
+    {
+      "path": "/srv/shared/code/neutron/apps/kernel/kernel.v0.3.36.neutron",
+      "bytes": 2433352,
+      "sha256": "97222bc4c956932ff21b96773cc5a438f92ae5ac7660c0c3f408be7eb25a7eeb"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/agent/agent.v0.3.17.neutron",
+      "bytes": 511078,
+      "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/blast/blast.v0.1.2.neutron",
+      "bytes": 988628,
+      "sha256": "f49b8fc9f313e985b005f3ede9d111d770e5dd9f6634469d02722337048ca732"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/chess/chess.v0.3.4.neutron",
+      "bytes": 282702,
+      "sha256": "4c48a4c89b335bfee147d17104dda3e930cb23aad27091356f6ec0fc01dca3d7"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/contacts/contacts.v0.3.6.neutron",
+      "bytes": 298018,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/vfs/files.v0.4.10.neutron",
+      "bytes": 767453,
+      "sha256": "26af5451805537000d78cb2df50d9a047cafd62c4212214c17e84b8b18e5baea"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/gemma/gemma.v0.2.4.neutron",
+      "bytes": 167849,
+      "sha256": "cf8d6a01c48dd9f3a8d8ca4d0b66c86aca112580701f6b3d26bbb6982c578d3d"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/hello/hello.v0.2.4.neutron",
+      "bytes": 213896,
+      "sha256": "b7596d3ba8288ac06786b5eda2e68d9327881fdf3aec1aced4cb841b5d597c6b"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/hullshift/hullshift.v0.2.5.neutron",
+      "bytes": 436356,
+      "sha256": "9a6e48d86b6f16a5f6664d6bab9a897ce3c992d1f0a4f528851837bc24d49e88"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/jetcreeper/jetcreeper.v0.3.4.neutron",
+      "bytes": 324874,
+      "sha256": "69e19796cff20990bbe326313e04b0b0e4305a9c97720e0b5d383e4048bcfe90"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/kitchensink/kitchensink.v0.3.15.neutron",
+      "bytes": 472282,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/mail/mail.v0.3.5.neutron",
+      "bytes": 724878,
+      "sha256": "d82e7251b67ed250e47e730df49cea4e88f27ec9187de3033abe5a923b7ecdd1"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/mysubnet/mysubnet.v0.3.4.neutron",
+      "bytes": 348464,
+      "sha256": "b69de8f23794b6c1124e31b03f54201174cd5c0af225d5208a97234d43dae4bb"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/spreadsheet/spreadsheet.v0.3.4.neutron",
+      "bytes": 255789,
+      "sha256": "b9e4ebbf87d64a42c519dded7cda87ed24caffb3974fc8245cdf715636ef94d7"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/wagyu/wagyu.v0.3.6.neutron",
+      "bytes": 1217326,
+      "sha256": "dae27b5cc062d703c0d7537a2e582344dc5991e4623ce13f5aa4edee97e61513"
+    },
+    {
+      "path": "/srv/shared/code/neutron/apps/wallet/wallet.v0.3.16.neutron",
+      "bytes": 768823,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    }
+  ],
+  "result": {
+    "wasmBytes": 14134642,
+    "wasmMagic": [
+      0,
+      97,
+      115,
+      109
+    ],
+    "diagnosticErrors": 0,
+    "compatibilityDiagnostics": 0,
+    "inventoryAppIds": [
+      "agent",
+      "blast",
+      "chess",
+      "contacts",
+      "files",
+      "gemma",
+      "hello",
+      "hullshift",
+      "jetcreeper",
+      "kernel",
+      "kitchensink",
+      "mail",
+      "mysubnet",
+      "spreadsheet",
+      "wagyu",
+      "wallet"
+    ],
+    "appIds": [
+      "kernel",
+      "agent",
+      "blast",
+      "chess",
+      "contacts",
+      "files",
+      "gemma",
+      "hello",
+      "hullshift",
+      "jetcreeper",
+      "kitchensink",
+      "mail",
+      "mysubnet",
+      "spreadsheet",
+      "wagyu",
+      "wallet"
+    ]
+  }
+}

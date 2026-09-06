@@ -1,0 +1,485 @@
+{
+  "qualification": "wallet312-kernel336-evm-release",
+  "predecessors": [
+    {
+      "id": "kernel",
+      "version": 336,
+      "bytes": 2433352,
+      "sha256": "97222bc4c956932ff21b96773cc5a438f92ae5ac7660c0c3f408be7eb25a7eeb"
+    },
+    {
+      "id": "contacts",
+      "version": 305,
+      "bytes": 297977,
+      "sha256": "aa5e6ee225b0d2a2057e0a5678797d593745273553dcb9dca38a992f4134e15a"
+    },
+    {
+      "id": "wallet",
+      "version": 312,
+      "bytes": 678721,
+      "sha256": "6875f1f98ae7309fe84885ed77df9847c1c1ad03f5baa8d6aed4b00fb4f48129"
+    },
+    {
+      "id": "kitchensink",
+      "version": 311,
+      "bytes": 430950,
+      "sha256": "4fb7f6fc74c29b05a95f4ce2f706d2f6cd8db4cd2dd9e840233b65e16acaa921"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "kernel",
+      "version": 341,
+      "bytes": 2448966,
+      "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830"
+    },
+    {
+      "id": "wallet",
+      "version": 316,
+      "bytes": 768823,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "bytes": 472282,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 103,
+      "bytes": 391234,
+      "sha256": "80cb4d5a55d52ce1e27114e9bb36686af3d60dd668b7c85e694fb16ed4eb1d92"
+    },
+    {
+      "id": "uniswap",
+      "version": 103,
+      "bytes": 278707,
+      "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+    }
+  ],
+  "scope": "checked actor upgrade via current compiler/install client; browser not exercised",
+  "transitions": [
+    {
+      "deployment_id": "45a490112a32473818b43f13d3fd254e",
+      "memory_plan": {
+        "upgrades": [
+          {
+            "kind": "keep",
+            "owner": "contacts",
+            "memoryId": "contacts",
+            "version": 2
+          },
+          {
+            "kind": "migrate",
+            "owner": "kernel",
+            "memoryId": "kernel",
+            "from": 3,
+            "to": 4,
+            "oldSchemaEntry": "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b",
+            "path": [
+              {
+                "from": 3,
+                "to": 4,
+                "src": "memory/kernel/v3_to_v4.mo",
+                "entry": "e564ce6caf97c098351289f72c0d931c77e70abdc8dc110523f8001c30f0bada"
+              }
+            ]
+          },
+          {
+            "kind": "keep",
+            "owner": "kernel",
+            "memoryId": "kernel_activation",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "kitchensink",
+            "memoryId": "kitchensink",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet",
+            "version": 1
+          },
+          {
+            "kind": "initialize",
+            "owner": "wallet",
+            "memoryId": "wallet_bridge",
+            "to": 1
+          },
+          {
+            "kind": "initialize",
+            "owner": "wallet",
+            "memoryId": "wallet_bridge_replacements",
+            "to": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_commands",
+            "version": 1
+          },
+          {
+            "kind": "initialize",
+            "owner": "wallet",
+            "memoryId": "wallet_transfers",
+            "to": 1
+          }
+        ],
+        "removedApps": [],
+        "destructiveMemoryRoots": []
+      },
+      "runtime_memories": [
+        [
+          "contacts",
+          "contacts",
+          2
+        ],
+        [
+          "kernel",
+          "kernel",
+          4
+        ],
+        [
+          "kernel",
+          "kernel_activation",
+          1
+        ],
+        [
+          "kitchensink",
+          "kitchensink",
+          1
+        ],
+        [
+          "wallet",
+          "wallet",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_bridge",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_bridge_replacements",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_commands",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_transfers",
+          1
+        ]
+      ]
+    },
+    {
+      "deployment_id": "ad5915fb48e8a917c82c820f9ff324d1",
+      "memory_plan": {
+        "upgrades": [
+          {
+            "kind": "keep",
+            "owner": "contacts",
+            "memoryId": "contacts",
+            "version": 2
+          },
+          {
+            "kind": "initialize",
+            "owner": "evm_wallet",
+            "memoryId": "evm_evidence",
+            "to": 1
+          },
+          {
+            "kind": "initialize",
+            "owner": "evm_wallet",
+            "memoryId": "evm_wallet",
+            "to": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "kernel",
+            "memoryId": "kernel",
+            "version": 4
+          },
+          {
+            "kind": "keep",
+            "owner": "kernel",
+            "memoryId": "kernel_activation",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "kitchensink",
+            "memoryId": "kitchensink",
+            "version": 1
+          },
+          {
+            "kind": "initialize",
+            "owner": "uniswap",
+            "memoryId": "uniswap",
+            "to": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_bridge",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_bridge_replacements",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_commands",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_transfers",
+            "version": 1
+          }
+        ],
+        "removedApps": [],
+        "destructiveMemoryRoots": []
+      },
+      "runtime_memories": [
+        [
+          "contacts",
+          "contacts",
+          2
+        ],
+        [
+          "evm_wallet",
+          "evm_evidence",
+          1
+        ],
+        [
+          "evm_wallet",
+          "evm_wallet",
+          1
+        ],
+        [
+          "kernel",
+          "kernel",
+          4
+        ],
+        [
+          "kernel",
+          "kernel_activation",
+          1
+        ],
+        [
+          "kitchensink",
+          "kitchensink",
+          1
+        ],
+        [
+          "uniswap",
+          "uniswap",
+          1
+        ],
+        [
+          "wallet",
+          "wallet",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_bridge",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_bridge_replacements",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_commands",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_transfers",
+          1
+        ]
+      ]
+    },
+    {
+      "deployment_id": "3cb5b71afd7501e3534bb935eff9bbab",
+      "memory_plan": {
+        "upgrades": [
+          {
+            "kind": "keep",
+            "owner": "contacts",
+            "memoryId": "contacts",
+            "version": 2
+          },
+          {
+            "kind": "keep",
+            "owner": "evm_wallet",
+            "memoryId": "evm_evidence",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "evm_wallet",
+            "memoryId": "evm_wallet",
+            "version": 1
+          },
+          {
+            "kind": "initialize",
+            "owner": "hello",
+            "memoryId": "hello",
+            "to": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "kernel",
+            "memoryId": "kernel",
+            "version": 4
+          },
+          {
+            "kind": "keep",
+            "owner": "kernel",
+            "memoryId": "kernel_activation",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "kitchensink",
+            "memoryId": "kitchensink",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "uniswap",
+            "memoryId": "uniswap",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_bridge",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_bridge_replacements",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_commands",
+            "version": 1
+          },
+          {
+            "kind": "keep",
+            "owner": "wallet",
+            "memoryId": "wallet_transfers",
+            "version": 1
+          }
+        ],
+        "removedApps": [],
+        "destructiveMemoryRoots": []
+      },
+      "runtime_memories": [
+        [
+          "contacts",
+          "contacts",
+          2
+        ],
+        [
+          "evm_wallet",
+          "evm_evidence",
+          1
+        ],
+        [
+          "evm_wallet",
+          "evm_wallet",
+          1
+        ],
+        [
+          "hello",
+          "hello",
+          1
+        ],
+        [
+          "kernel",
+          "kernel",
+          4
+        ],
+        [
+          "kernel",
+          "kernel_activation",
+          1
+        ],
+        [
+          "kitchensink",
+          "kitchensink",
+          1
+        ],
+        [
+          "uniswap",
+          "uniswap",
+          1
+        ],
+        [
+          "wallet",
+          "wallet",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_bridge",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_bridge_replacements",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_commands",
+          1
+        ],
+        [
+          "wallet",
+          "wallet_transfers",
+          1
+        ]
+      ]
+    }
+  ],
+  "external_install_modes": [
+    "install"
+  ],
+  "status": "passed"
+}

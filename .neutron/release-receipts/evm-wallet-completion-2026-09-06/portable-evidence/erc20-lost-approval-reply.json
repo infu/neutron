@@ -1,0 +1,296 @@
+{
+  "seed": {
+    "intent": {
+      "id": "610ae7d9ef0b09a6179ef5e6008f5b62",
+      "kind": "approval_call",
+      "chainId": "1",
+      "account": {
+        "accountId": "main",
+        "address": "0x75e6722465bc0579cf08cabbee0a05e64fb5db41",
+        "publicKey": "0x028992387c2011611d33e1d5f549a2c0eddcb0bc1939589a3b4a315f051ff651c1",
+        "keyFingerprint": "0x56ed872b6515dc839fa9d4c3be00fe6d297721b29a07fa762b0aba0e29b3de4a",
+        "namespaceVersion": "1"
+      },
+      "createdAtNs": "1788704885268000000",
+      "steps": [
+        {
+          "title": "Approve the exact ERC20 amount",
+          "kind": "transaction",
+          "request": {
+            "accountId": "main",
+            "chainId": "1",
+            "requestId": "610ae7d9ef0b09a6179ef5e6008f5b62",
+            "to": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "valueWei": "0",
+            "data": "0x095ea7b30000000000000000000000008a791620dd6260079bf849dc5567adc3f2fdc31800000000000000000000000000000000000000000000000000000000000f4240"
+          }
+        },
+        {
+          "title": "Call the approved contract",
+          "kind": "transaction",
+          "request": {
+            "accountId": "main",
+            "chainId": "1",
+            "requestId": "a1aa50e2f71ed78f9ea8a23499be6980",
+            "to": "0x8a791620dd6260079bf849dc5567adc3f2fdc318",
+            "valueWei": "0",
+            "data": "0x93e5d42a"
+          }
+        }
+      ]
+    },
+    "revision": 3,
+    "progress": [
+      {
+        "attempted": true,
+        "operation": {
+          "operationId": "1",
+          "requestId": "610ae7d9ef0b09a6179ef5e6008f5b62",
+          "accountId": "main",
+          "chainId": "1",
+          "kind": "transaction",
+          "status": "confirmed",
+          "address": "0x75e6722465bc0579cf08cabbee0a05e64fb5db41",
+          "transactionHash": "0x1eccca15d9d22c3fe6d528ca5a38ae702f73b132f0a769207cde139e6709a995",
+          "replacementTransactionHash": null,
+          "signature": "0x1828b3deb495d0c887c202c80e603bfe0df96ee7b58bedd04141d0af72f43bc647680e50774cb02405b91d8782912ae314f3b72525387525a54f59f387db79ab1c",
+          "message": null,
+          "reviewRevision": "1",
+          "receipt": {
+            "blockNumber": "335624",
+            "blockHash": "0x70f314d6b76b7be3816dfb0d9c996225478effafa7f9b36f7c0a4c400203d2cb",
+            "status": "success",
+            "gasUsed": "46342",
+            "effectiveGasPriceWei": "1000000007",
+            "logs": [
+              {
+                "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                "data": "0x00000000000000000000000000000000000000000000000000000000000f4240",
+                "topics": [
+                  "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                  "0x00000000000000000000000075e6722465bc0579cf08cabbee0a05e64fb5db41",
+                  "0x0000000000000000000000008a791620dd6260079bf849dc5567adc3f2fdc318"
+                ],
+                "logIndex": "0"
+              }
+            ],
+            "finality": "included",
+            "observedAtNs": "1788704921087464220"
+          }
+        },
+        "error": null,
+        "signatureVerified": false
+      },
+      {
+        "attempted": false,
+        "operation": null,
+        "error": null,
+        "signatureVerified": false
+      }
+    ]
+  },
+  "seedTransaction": {
+    "hash": "0x1eccca15d9d22c3fe6d528ca5a38ae702f73b132f0a769207cde139e6709a995",
+    "from": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "valueWei": "0",
+    "nonce": 0,
+    "chainId": "1",
+    "raw": "0x02f8af0180843b9aca00843b9aca0e82b50694a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844095ea7b30000000000000000000000008a791620dd6260079bf849dc5567adc3f2fdc31800000000000000000000000000000000000000000000000000000000000f4240c001a01828b3deb495d0c887c202c80e603bfe0df96ee7b58bedd04141d0af72f43bc6a047680e50774cb02405b91d8782912ae314f3b72525387525a54f59f387db79ab",
+    "blockNumber": "335624",
+    "blockHash": "0x70f314d6b76b7be3816dfb0d9c996225478effafa7f9b36f7c0a4c400203d2cb",
+    "gasUsed": "46342",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "before": {
+    "nonce": "1",
+    "tokenBalance": "0",
+    "evmTokenBalance": "100000000",
+    "allowance": "1000000"
+  },
+  "prepared": {
+    "id": "dd60750fcf816c6a8159f6e25ea81e2c",
+    "source": "evm",
+    "account": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "amount": "20000000",
+    "revision": "1",
+    "createdAt": "1788704933743577368",
+    "updatedAt": "1788704980644308491",
+    "eventCursor": "23",
+    "quote": {
+      "chainId": "1",
+      "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "unknown",
+        "operationId": "dc60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      }
+    ],
+    "acceptedDeposit": null,
+    "mint": null,
+    "error": null
+  },
+  "resetCompleted": {
+    "id": "dd60750fcf816c6a8159f6e25ea81e2c",
+    "source": "evm",
+    "account": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "amount": "20000000",
+    "revision": "4",
+    "createdAt": "1788704933743577368",
+    "updatedAt": "1788705058385103127",
+    "eventCursor": "23",
+    "quote": {
+      "chainId": "1",
+      "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "confirmed",
+        "operationId": "dc60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x873097e3a362175ebed8938153b3236b1711e8914b0fb200d7f9bde1e7059f2a",
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "unknown",
+        "operationId": "df60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      }
+    ],
+    "acceptedDeposit": null,
+    "mint": null,
+    "error": null
+  },
+  "resetTransaction": {
+    "hash": "0x873097e3a362175ebed8938153b3236b1711e8914b0fb200d7f9bde1e7059f2a",
+    "from": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "valueWei": "0",
+    "nonce": 1,
+    "chainId": "1",
+    "raw": "0x02f8af0101843b9aca00843b9aca0e82717094a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844095ea7b30000000000000000000000008a791620dd6260079bf849dc5567adc3f2fdc3180000000000000000000000000000000000000000000000000000000000000000c080a0bf75c94476d791cd8e93627d2678937b18e1fa4718b99ccca8c05add93cf3ed9a001e7e5985bd18e1176b5e2d30f259e1f6b81b17712b196911370b5c1e1510518",
+    "blockNumber": "335714",
+    "blockHash": "0xa8b54d6bf0dcc17a03bbd3d1d8f29599731338d504e48a128ba42b77306bc341",
+    "gasUsed": "24240",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "dropped": {
+    "operationId": "3",
+    "requestId": "df60750fcf816c6a8159f6e25ea81e2c",
+    "accountId": "main",
+    "chainId": "1",
+    "kind": "transaction",
+    "status": "unknown",
+    "address": "0x75e6722465bc0579cf08cabbee0a05e64fb5db41",
+    "transactionHash": "0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd",
+    "replacementTransactionHash": null,
+    "signature": "0x9d08e5c788b1aa2e160867d38e35aa90d5acb26e743493c0bb3b7baf62fc2906342de45b1db0ffdeadd5718dfcc727c8432700c76de5bce94f1406bceab8ea091c",
+    "message": "Broadcast outcome requires reconciliation: EVM RPC broadcast providers disagree; reconcile the saved transaction hash: [(#EthMainnet(#Alchemy), #Ok(#Ok(?\"0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd\"))), (#EthMainnet(#BlockPi), #Err(#JsonRpcError({code = -32_003; message = \"transaction already imported\"}))), (#EthMainnet(#PublicNode), #Err(#JsonRpcError({code = -32_003; message = \"transaction already imported\"})))]",
+    "reviewRevision": "1",
+    "receipt": null
+  },
+  "approvalTransaction": {
+    "hash": "0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd",
+    "from": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "valueWei": "0",
+    "nonce": 2,
+    "chainId": "1",
+    "raw": "0x02f8af0102843b9aca00843b9aca0e82b50694a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844095ea7b30000000000000000000000008a791620dd6260079bf849dc5567adc3f2fdc3180000000000000000000000000000000000000000000000000000000001312d00c001a09d08e5c788b1aa2e160867d38e35aa90d5acb26e743493c0bb3b7baf62fc2906a0342de45b1db0ffdeadd5718dfcc727c8432700c76de5bce94f1406bceab8ea09",
+    "blockNumber": "335766",
+    "blockHash": "0xee029dc0b2b312302f677241a61381702bcf02e8b773a5d2214ffb959c2d493a",
+    "gasUsed": "46342",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "interrupted": {
+    "id": "dd60750fcf816c6a8159f6e25ea81e2c",
+    "source": "evm",
+    "account": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+    "amount": "20000000",
+    "revision": "4",
+    "createdAt": "1788704933743577368",
+    "updatedAt": "1788705058385103127",
+    "eventCursor": "23",
+    "quote": {
+      "chainId": "1",
+      "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "confirmed",
+        "operationId": "dc60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x873097e3a362175ebed8938153b3236b1711e8914b0fb200d7f9bde1e7059f2a",
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "unknown",
+        "operationId": "df60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      }
+    ],
+    "acceptedDeposit": null,
+    "mint": null,
+    "error": null
+  }
+}

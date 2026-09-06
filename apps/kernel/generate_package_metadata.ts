@@ -48,12 +48,12 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 336;
+export const KERNEL_NPL_RELEASE_VERSION = 342;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
 export const KERNEL_RELEASE_MEMORY_LOCK_SHA256 =
-  "0cc3f918b360f3d2f35d0622870e4c02fed414fe9d2638ae5bcbb229782ecd3d";
+  "ef6f809aadfbdc10e76c5e5f37bd5d796ef8f38ae0974dd84033ddc412040585";
 export const KERNEL_NPL_LICENSE_PATH = "legal/LICENSE.NPL-1.0.txt";
 export const KERNEL_APPLICATION_NOTICE_PATH = "legal/APPLICATION-NOTICE.txt";
 export const KERNEL_ESBUILD_META_PATH = "meta.json";
@@ -82,18 +82,52 @@ const KERNEL_RELEASE_SOURCE_MANIFEST_KEYS = Object.freeze([
   "update_source",
   "version",
 ]);
-const KERNEL_MEMORY_SCHEMA_BINDINGS = Object.freeze({
+type KernelMemoryReleaseBinding = Readonly<{
+  version: number;
+  schemas: Readonly<Record<string, Readonly<{
+    src: string;
+    hash: string;
+    entry: string;
+  }>>>;
+  migrations: readonly Readonly<{
+    from: number;
+    to: number;
+    src: string;
+    entry: string;
+  }>[];
+}>;
+const KERNEL_MEMORY_SCHEMA_BINDINGS: Readonly<Record<string, KernelMemoryReleaseBinding>> = Object.freeze({
   kernel: Object.freeze({
-    version: 3,
-    schema: "3",
-    hash: "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
-    entry: "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b",
+    version: 4,
+    schemas: {
+      "3": {
+        src: "memory/kernel/v3.mo",
+        hash: "50d5dcda32504525875af20f38d3fcb46e61f3e1413f8b99fd7ce8163c0f3477",
+        entry: "bac62a48a7c70cc09cc6e8200784f306db044f5c055cf2a61b3f16f42babce5b",
+      },
+      "4": {
+        src: "memory/kernel/v4.mo",
+        hash: "19801dd4c0544a8213201cbc92786c3a7bd98e88bb9af63b015eed5f15c12699",
+        entry: "6759a85e00da92ef0d9cb0b46bb47864448ac6114f50e0cb75a4b2644a4d39bb",
+      },
+    },
+    migrations: [{
+      from: 3,
+      to: 4,
+      src: "memory/kernel/v3_to_v4.mo",
+      entry: "e564ce6caf97c098351289f72c0d931c77e70abdc8dc110523f8001c30f0bada",
+    }],
   }),
   kernel_activation: Object.freeze({
     version: 1,
-    schema: "1",
-    hash: "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
-    entry: "f2380721e6147d0f0af208a70183e3d8ce6ac19ad533e1367b3f5780305e7ad3",
+    schemas: {
+      "1": {
+        src: "memory/activation/v1.mo",
+        hash: "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
+        entry: "f2380721e6147d0f0af208a70183e3d8ce6ac19ad533e1367b3f5780305e7ad3",
+      },
+    },
+    migrations: [],
   }),
 });
 const KERNEL_RELEASED_SCHEMA_SOURCE_SHA256 = Object.freeze({
@@ -237,6 +271,35 @@ const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
 
 /** Explicitly reviewed new files in this uncommitted release candidate. */
 const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
+  // Custody signing, its migration, shared wallet tools and checked-upgrade fixtures.
+  "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+  "apps/kernel/backend/memory/kernel/v4.mo",
+  "apps/kernel/backend/wallet_custody_signing/Service.mo",
+  "apps/kernel/backend/wallet_custody_signing/Types.mo",
+  "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+  "apps/kernel/test/motoko/wallet_custody_signing_service_test.mo",
+  "apps/kernel/test/wallet_custody_signing.test.ts",
+  "doc/evm-wallet-research.md",
+  "doc/evm-wallet.md",
+  "doc/todo.evm-wallet.md",
+  "packages/neutron-compiler/test/evm_wallet_upgrade.pocketic.test.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/archives.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/existing_apps.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/new_apps.ts",
+  // Reviewed local signed-state and nonempty Wallet journal upgrade fixtures.
+  "packages/neutron-compiler/test/evm_signed_upgrade.pocketic.test.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/actor_fixtures.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/evm_signed_pending.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/evm_signed_rpc_fixture.mo",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_bridge_journals.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_canisters.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_fixture.mo",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_types.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_transfer_journals.ts",
+  "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
+  "packages/neutron-tools/src/evm_wallet.ts",
+  "packages/neutron-tools/test/evm_wallet.test.ts",
+  "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
   "LICENSES.md",
   "apps/kernel/NOTICE",
   "apps/kernel/backend/install/BrowserOrigin.mo",
@@ -348,22 +411,33 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
 
 /** Important local inputs checked before metadata is generated. */
 export const KERNEL_PACKAGE_BUILD_INPUT_PATHS = Object.freeze([
-  "package-lock.json",
-  "package.json",
-  "apps/kernel/build.ts",
   "apps/kernel/LICENSE",
   "apps/kernel/NOTICE",
+  "apps/kernel/backend/capabilities/Registry.mo",
+  "apps/kernel/backend/capabilities/Types.mo",
+  "apps/kernel/backend/chain_key_signing/Namespace.mo",
+  "apps/kernel/backend/chain_key_signing/Service.mo",
+  "apps/kernel/backend/main.mo",
   "apps/kernel/backend/memory/activation/v1.mo",
   "apps/kernel/backend/memory/kernel/v3.mo",
+  "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+  "apps/kernel/backend/memory/kernel/v4.mo",
+  "apps/kernel/backend/wallet_custody_signing/Service.mo",
+  "apps/kernel/backend/wallet_custody_signing/Types.mo",
+  "apps/kernel/build.ts",
   "apps/kernel/generate_package_metadata.ts",
   "apps/kernel/moassemble.ts",
   "apps/kernel/mops.toml",
   "apps/kernel/neutron.json",
   "apps/kernel/neutron.lock.json",
   "apps/kernel/package.json",
+  "package-lock.json",
+  "package.json",
+  "packages/neutron-compiler/src/assemble.ts",
+  "packages/neutron-motoko-capabilities/src/lib.mo",
   "packages/neutron-scripts/src/mopack.ts",
-  "packages/neutron-scripts/src/package_metadata.ts",
   "packages/neutron-scripts/src/pack.ts",
+  "packages/neutron-scripts/src/package_metadata.ts",
   "packages/neutron-scripts/src/third_party_notices.ts",
   "packages/neutron-tools/src/installed_artifacts.ts",
   "packages/neutron-tools/src/package_record.ts",
@@ -413,7 +487,7 @@ export function buildKernelPackageMetadata(
   assertKernelBrowserMetafile(options.esbuildMetafile);
   if (hashContent(options.memoryLock) !== KERNEL_RELEASE_MEMORY_LOCK_SHA256) {
     throw new Error(
-      "The Kernel release must preserve the released managed-memory lock",
+      "The Kernel release must match the reviewed managed-memory lock with preserved released lineage",
     );
   }
   const sourceFiles = normalizeSourceFiles(options.sourceFiles);
@@ -1225,30 +1299,51 @@ function assertReleasedMemoryManifest(
       );
     }
     const schemas = root.schemas;
-    const schema = isRecord(schemas) ? schemas[binding.schema] : undefined;
     if (
       !isRecord(schemas) ||
-      Object.keys(schemas).length !== 1 ||
-      !isRecord(schema)
+      canonicalJson(Object.keys(schemas).sort(compareCanonicalText)) !==
+        canonicalJson(Object.keys(binding.schemas).sort(compareCanonicalText))
     ) {
       throw new Error(
-        `The Kernel release must preserve schema ${memoryId} v${binding.schema}`,
+        `The Kernel release must retain the reviewed schema history for ${memoryId}`,
       );
     }
-    if (packaged) {
-      if (schema.hash !== binding.hash || schema.entry !== binding.entry) {
+    for (const [version, expected] of Object.entries(binding.schemas)) {
+      const schema = schemas[version];
+      const expectedSchema = packaged ? expected : { src: expected.src };
+      if (
+        !isRecord(schema) ||
+        canonicalJson(schema) !== canonicalJson(expectedSchema)
+      ) {
         throw new Error(
-          `The Kernel release changed the schema binding for ${memoryId} v${binding.schema}`,
+          `The Kernel release changed the schema binding for ${memoryId} v${version}`,
         );
       }
     }
+    const migrations = root.migrations;
     if (
-      Object.hasOwn(root, "migrations") &&
-      (!Array.isArray(root.migrations) || root.migrations.length !== 0)
+      !Array.isArray(migrations) ||
+      migrations.length !== binding.migrations.length
     ) {
       throw new Error(
-        `The Kernel release must not introduce a fake migration for ${memoryId}`,
+        `The Kernel release must retain the reviewed migration history for ${memoryId}`,
       );
+    }
+    for (const [index, expected] of binding.migrations.entries()) {
+      const migration = migrations[index];
+      const expectedMigration = packaged ? expected : {
+        from: expected.from,
+        to: expected.to,
+        src: expected.src,
+      };
+      if (
+        !isRecord(migration) ||
+        canonicalJson(migration) !== canonicalJson(expectedMigration)
+      ) {
+        throw new Error(
+          `The Kernel release changed the migration binding for ${memoryId} ${expected.from}->${expected.to}`,
+        );
+      }
     }
   }
 }
@@ -1282,7 +1377,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.36 (packed version 336)",
+    "Package release: v0.3.42 (packed version 342)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

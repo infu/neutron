@@ -1,0 +1,57 @@
+[
+  {
+    "package": {
+      "id": "kernel",
+      "version": 342
+    },
+    "source": "apps/kernel/.neutron/sources/59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692.source.v1.msgpack.gz",
+    "bytes": 3198894,
+    "sha256": "59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692",
+    "files": 750,
+    "mismatches": []
+  },
+  {
+    "package": {
+      "id": "wallet",
+      "version": 316
+    },
+    "source": "apps/wallet/.neutron/sources/e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5.source.v1.msgpack.gz",
+    "bytes": 624669,
+    "sha256": "e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5",
+    "files": 234,
+    "mismatches": []
+  },
+  {
+    "package": {
+      "id": "kitchensink",
+      "version": 315
+    },
+    "source": "apps/kitchensink/.neutron/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+    "bytes": 462990,
+    "sha256": "9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe",
+    "files": 169,
+    "mismatches": []
+  },
+  {
+    "package": {
+      "id": "evm_wallet",
+      "version": 107
+    },
+    "source": "apps/evm_wallet/.neutron/sources/533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574.source.v1.msgpack.gz",
+    "bytes": 524845,
+    "sha256": "533ef243aed9fbf3d2fbb5b4d453edd9921af63468953a0ef4a264c44ba61574",
+    "files": 210,
+    "mismatches": []
+  },
+  {
+    "package": {
+      "id": "uniswap",
+      "version": 103
+    },
+    "source": "apps/uniswap/.neutron/sources/7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd.source.v1.msgpack.gz",
+    "bytes": 455134,
+    "sha256": "7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd",
+    "files": 147,
+    "mismatches": []
+  }
+]

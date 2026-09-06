@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 312,
+  "version": 316,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Canister-owned ICRC token balances",
   "src": "main.mo",
@@ -50,7 +50,23 @@
         "wallet_funding_execute_v1",
         "wallet_funding_reject_v1",
         "wallet_allowances_page_v1",
-        "wallet_token_info_v1"
+        "wallet_token_info_v1",
+        "wallet_transfer_v2",
+        "wallet_transfer_status_v2",
+        "wallet_transfers_pending_v2",
+        "wallet_transfer_resume_v2",
+        "wallet_bridge_quote_v1",
+        "wallet_bridge_prepare_v1",
+        "wallet_bridge_list_v1",
+        "wallet_bridge_status_v1",
+        "wallet_bridge_claim_v1",
+        "wallet_bridge_record_step_v1",
+        "wallet_bridge_replacement_v1",
+        "wallet_bridge_refresh_v1",
+        "wallet_transfer_refresh_v2",
+        "wallet_transfer_prepare_v2",
+        "wallet_transfer_acknowledge_v2",
+        "wallet_withdrawal_quote_v1"
       ]
     },
     "scheduled_tasks": {
@@ -144,6 +160,36 @@
           "kind": "exact",
           "principal": "s3zol-vqaaa-aaaar-qacpa-cai",
           "method": "get_account_transactions"
+        },
+        {
+          "kind": "exact",
+          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
+          "method": "get_minter_info"
+        },
+        {
+          "kind": "exact",
+          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
+          "method": "get_events"
+        },
+        {
+          "kind": "exact",
+          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
+          "method": "retrieve_eth_status"
+        },
+        {
+          "kind": "exact",
+          "principal": "mqygn-kiaaa-aaaar-qaadq-cai",
+          "method": "retrieve_btc_status_v2"
+        },
+        {
+          "kind": "exact",
+          "principal": "eqltq-xqaaa-aaaar-qb3vq-cai",
+          "method": "retrieve_doge_status"
+        },
+        {
+          "kind": "exact",
+          "principal": "lh22c-kyaaa-aaaar-qb5nq-cai",
+          "method": "withdrawal_status"
         }
       ],
       "max_concurrency": 20,
@@ -215,6 +261,70 @@
       "type": "update",
       "async": "async*"
     },
+    "wallet_withdrawal_quote_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_transfer_v2": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_transfer_prepare_v2": {
+      "type": "update",
+      "async": false
+    },
+    "wallet_transfer_resume_v2": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_transfer_status_v2": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_transfers_pending_v2": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_transfer_acknowledge_v2": {
+      "type": "update",
+      "async": false
+    },
+    "wallet_transfer_refresh_v2": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_bridge_quote_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_bridge_prepare_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_bridge_list_v1": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_bridge_status_v1": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_bridge_claim_v1": {
+      "type": "update",
+      "async": false
+    },
+    "wallet_bridge_record_step_v1": {
+      "type": "update",
+      "async": false
+    },
+    "wallet_bridge_replacement_v1": {
+      "type": "update",
+      "async": false
+    },
+    "wallet_bridge_refresh_v1": {
+      "type": "update",
+      "async": "async*"
+    },
     "wallet_funding_prepare_v1": {
       "type": "update",
       "async": "async*"
@@ -267,6 +377,33 @@
       "schemas": {
         "1": {
           "src": "memory/wallet_commands/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "wallet_bridge": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/wallet_bridge/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "wallet_transfers": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/wallet_transfers/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "wallet_bridge_replacements": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/wallet_bridge_replacements/v1.mo"
         }
       },
       "migrations": []

@@ -137,23 +137,32 @@ module {
                 { principal = minter; method = "get_btc_address" },
                 { principal = minter; method = "update_balance" },
                 { principal = minter; method = "retrieve_btc_with_approval" },
+                { principal = minter; method = "retrieve_btc_status_v2" },
             ];
             case (#ckdoge(_)) [
                 { principal = minter; method = "get_doge_address" },
                 { principal = minter; method = "update_balance" },
                 { principal = minter; method = "retrieve_doge_with_approval" },
+                { principal = minter; method = "retrieve_doge_status" },
             ];
             case (#cksol(_)) [
                 { principal = minter; method = "update_balance" },
                 { principal = minter; method = "withdraw" },
+                { principal = minter; method = "withdrawal_status" },
             ];
             // The ckETH minter discovers helper-contract deposits on its own.
             case (#cketh(_)) [
+                { principal = minter; method = "get_minter_info" },
+                { principal = minter; method = "get_events" },
                 { principal = minter; method = "withdraw_eth" },
+                { principal = minter; method = "retrieve_eth_status" },
             ];
             case (#ckerc20(value)) [
+                { principal = minter; method = "get_minter_info" },
+                { principal = minter; method = "get_events" },
                 { principal = minter; method = "eip_1559_transaction_price" },
                 { principal = minter; method = "withdraw_erc20" },
+                { principal = minter; method = "retrieve_eth_status" },
                 {
                     principal = Principal.fromText(value.cketh_ledger);
                     method = "icrc1_fee";

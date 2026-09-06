@@ -33,9 +33,11 @@ user-sovereign Application licenses:
   redistribution, sublicensing, and operation-for-another rights. Its narrow
   installation and use grant also requires a Qualifying Sovereign System.
 
-The current Application using the inspection-oriented use license is:
+The current Applications using the inspection-oriented use license are:
 
 - `apps/blast`
+- `apps/evm_wallet`
+- `apps/uniswap`
 
 Previously published ordinary Applications remain under the exact Neutron
 Sovereign Application License, Version 1.0

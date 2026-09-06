@@ -1,0 +1,118 @@
+{
+  "format": 1,
+  "package_proof": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104.json",
+    "bytes": 1059,
+    "sha256": "e8abd6a1de9595e8661b2d7e9d2a435611d285b4b238c8eaafb197cb8f76ab51"
+  },
+  "package": {
+    "path": "apps/uniswap/uniswap.v0.1.4.neutron",
+    "bytes": 288989,
+    "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+  },
+  "offered_source": {
+    "path": "apps/uniswap/.neutron/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz",
+    "bytes": 462898,
+    "sha256": "3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd",
+    "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/3a62d5d298a1eacebf032bbf391e8acb0ca380d2c58dc85b13c6a798c41384bd.source.v1.msgpack.gz"
+  },
+  "change": "Fix demonstrated aggregate saved-history metadata overflow using stable cursor pages and smaller same-cursor retries. All retained records and exact requests remain available.",
+  "diagnosis": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-uniswap-chain1-final106-quote300/token-metadata-limit-diagnosis.json",
+    "bytes": 14721,
+    "sha256": "82e30562dbfc330c3768cc86d484c9bda30ae3d25dc8efe93d20894f5f388153"
+  },
+  "validation": {
+    "full_release": {
+      "tests_passed": 92,
+      "assertions": 880,
+      "log": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/release-tests.log",
+        "bytes": 28622,
+        "sha256": "069ed2dec5cef7caa94e32529749990010f601560bb118b210f90ca540560058"
+      }
+    },
+    "prepackage_source": {
+      "tests_passed": 89,
+      "assertions": 861,
+      "log": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/source-tests.log",
+        "bytes": 10375,
+        "sha256": "5a934987312df6df063c3aa4deb2ad45591f4f23bb61c002899886350618031b"
+      }
+    },
+    "managed_memory": {
+      "program": "apps/uniswap/test/memory_release.test.mo",
+      "passed": true,
+      "log": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/memory.log",
+        "bytes": 8315,
+        "sha256": "afd3137a70d13eac4ee712f35f367c75fa04b96fc85a4bf3aed41ed657c4d8fc"
+      },
+      "covers": [
+        "retained history with73records greaterthan64KiB",
+        "stablecursor acrossnewinsertandprogressupdate",
+        "fullpagesno loss",
+        "restoredqueued requestIDs",
+        "existingrootinitializationandrestoration"
+      ]
+    },
+    "browser": {
+      "checks_passed": 22,
+      "page_errors": 0,
+      "retained_records": 25,
+      "retained_json_bytes": 119515,
+      "metadata_rejections": 8,
+      "report": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104-validation/browser-report.json",
+        "bytes": 256911,
+        "sha256": "d7404c99a1ce7855a301d8bf8b45aa9f0c302a432b99a116f27ea4224bfe9543"
+      },
+      "new_check": "Oversized retained history backs off by actual byte limits, preserves every older record and resumes the newest prepared request with its exact ID",
+      "scope": "Actual Uniswap UI and shared SDK with schema-validated mock Kernel transport; not a new live-chain transaction run."
+    }
+  },
+  "memory_preservation": {
+    "root": "uniswap",
+    "version": 1,
+    "migration_added": false,
+    "lock_matches_103": true,
+    "current_lock": {
+      "path": "apps/uniswap/neutron.lock.json",
+      "bytes": 328,
+      "sha256": "9d7a2d6749c7d273b92ed565cb943a306f9ed15d5f0c63401cef547641f9ae41"
+    },
+    "preserved_103_lock": {
+      "path": "apps/uniswap/.neutron/candidates/103/neutron.lock.json",
+      "bytes": 328,
+      "sha256": "9d7a2d6749c7d273b92ed565cb943a306f9ed15d5f0c63401cef547641f9ae41"
+    },
+    "schema_source": {
+      "path": "apps/uniswap/backend/memory/uniswap/v1.mo",
+      "bytes": 823,
+      "sha256": "87783d919c6f6922c548ecd0b657ec3501b568d7a89b1825e77171477a3c7832"
+    },
+    "lineage": {
+      "schemas": {
+        "1": {
+          "hash": "f117d98b9278d075acff8b1f62ffa85b42afab9ca4aaa78a84ad9a48b9d25228",
+          "entry": "ad217e3e79429ef8a2cbf4c5b65feb7219d6dfd8adf2075e86fa0734400366b6"
+        }
+      },
+      "migrations": {}
+    }
+  },
+  "changed_backend_source": [
+    {
+      "path": "apps/uniswap/backend/Journal.mo",
+      "bytes": 8711,
+      "sha256": "7e6ede16b60a12431a1a07c83705a70c29683e5e4a12a749354610288bc350e1"
+    },
+    {
+      "path": "apps/uniswap/backend/main.mo",
+      "bytes": 3111,
+      "sha256": "756ee9984afb5028c29545c4c99803d0a62066b857317f9b9a27888d533a8e02"
+    }
+  ],
+  "runtime_status": "Checked104 upgrade and actualsavedintent/replacement continuation are recorded separately by runtime owner; this record makes no new live-chain pass claim."
+}

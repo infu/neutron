@@ -2,7 +2,7 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 336,
+  "version": 342,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "src": "main.mo",
   "init_arg": [
@@ -381,12 +381,22 @@
   },
   "memory": {
     "kernel": {
-      "version": 3,
+      "version": 4,
       "schemas": {
         "3": {
           "src": "memory/kernel/v3.mo"
+        },
+        "4": {
+          "src": "memory/kernel/v4.mo"
         }
-      }
+      },
+      "migrations": [
+        {
+          "from": 3,
+          "to": 4,
+          "src": "memory/kernel/v3_to_v4.mo"
+        }
+      ]
     },
     "kernel_activation": {
       "version": 1,

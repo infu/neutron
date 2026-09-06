@@ -1,0 +1,40 @@
+{
+  "status": "All five immutable342/316/315/107/103 candidates passed canonical package and fullrelease checks; EVM107 checked update, final replacement/bridge protocols and publication pending",
+  "packages": [
+    {
+      "id": "kernel",
+      "version": 342,
+      "path": "apps/kernel/kernel.v0.3.42.neutron",
+      "size": 2448936,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "id": "wallet",
+      "version": 316,
+      "path": "apps/wallet/wallet.v0.3.16.neutron",
+      "size": 768823,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "path": "apps/kitchensink/kitchensink.v0.3.15.neutron",
+      "size": 472282,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 107,
+      "path": "apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+      "size": 391816,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+    },
+    {
+      "id": "uniswap",
+      "version": 103,
+      "path": "apps/uniswap/uniswap.v0.1.3.neutron",
+      "size": 278707,
+      "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+    }
+  ]
+}

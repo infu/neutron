@@ -1,0 +1,24 @@
+{
+  "status": "failed_before_wallet_effect",
+  "durationMs": 37833,
+  "failure": "uniswap_quote_v1: Agent permission decision budget exceeded",
+  "cause": "Kernel MAX_NODE_CHALLENGES=2 counts each nested Uniswap\u2192Wallet read against the same invocation; third permission request is rejected despite active root consent handler.",
+  "source": "apps/kernel/src/ui_attention/agent.ts:473",
+  "installedEvidence": "installed-candidates-at-start.json",
+  "runtimeMutation": "None. Test contract fixture setup/funding completed on authorized local chain1; no approval/swap signatures attempted.",
+  "financialState": {
+    "at": "2026-09-06T12:44:33.494353+00:00",
+    "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "chainId": "0x1",
+    "latestNonce": "0xb",
+    "pendingNonce": "0xb",
+    "broadcastReplyLoss": null,
+    "scope": "Read-only post-failure state; canonical test contracts/funding ran but root approval/swap was not invoked; fault was never armed."
+  },
+  "evidence": [
+    "inputs.json",
+    "report.json",
+    "run.log",
+    "chain1-release-state.json"
+  ]
+}

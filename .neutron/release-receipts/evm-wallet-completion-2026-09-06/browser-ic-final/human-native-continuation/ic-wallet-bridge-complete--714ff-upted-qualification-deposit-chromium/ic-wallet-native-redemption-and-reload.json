@@ -1,0 +1,75 @@
+{
+  "beforeRedemption": {
+    "ethBalance": "9949967265999770862",
+    "ckethBalance": "9110198000000000000",
+    "nonce": "8",
+    "allowance": "0",
+    "ledgerFee": "2000000000000"
+  },
+  "queued": {
+    "requestId": "7cd21d49c6cafc951620be0ead06d465",
+    "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+    "amount": "10000000000000000",
+    "destination": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "native": true,
+    "status": "succeeded",
+    "blockIndex": "12",
+    "settlement": {
+      "status": "pending",
+      "transactionHash": null
+    }
+  },
+  "restoredWithdrawal": {
+    "requestId": "7cd21d49c6cafc951620be0ead06d465",
+    "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+    "amount": "10000000000000000",
+    "destination": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "native": true,
+    "status": "succeeded",
+    "blockIndex": "12",
+    "settlement": {
+      "status": "pending",
+      "transactionHash": null
+    }
+  },
+  "payout": {
+    "burn": {
+      "index": "12",
+      "kind": "burn",
+      "amount": "10000000000000000",
+      "owner": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null
+    },
+    "transaction": {
+      "hash": "0x9ffb6e67bdf3871c7e0e644b91a8002f244d0f01dfe4d7a5418186ca9350dfba",
+      "from": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "to": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "valueWei": "9968499999706000",
+      "nonce": 1,
+      "chainId": "1",
+      "raw": "0x02f87101018459682f008459682f0e82520894d646499ba961ecdfb989d4b716a4a5e3fb7abd5687236a4c456d0b9080c001a0fcb2b989c9a24ad7a1c8b305ea97c84c2e08492d026c192cc62c41f8e5679550a0022d88058fc8f874b6e77192475b450eff45e4f17de1fc2beb59dc1f7711fb72",
+      "blockNumber": "329882",
+      "blockHash": "0x240fcea611bceb2bfc0a401ab537a2631406242acb0bed669d03927ef53a3901",
+      "gasUsed": "21000",
+      "effectiveGasPriceWei": "1500000007"
+    },
+    "minterStatus": "TxFinalized.Success",
+    "effectiveTransactionFeeWei": "31500000147000",
+    "recipientBalanceWei": "9959935765999476862"
+  },
+  "settled": {
+    "requestId": "7cd21d49c6cafc951620be0ead06d465",
+    "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+    "amount": "10000000000000000",
+    "destination": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "native": true,
+    "status": "succeeded",
+    "blockIndex": "12",
+    "settlement": {
+      "status": "confirmed",
+      "transactionHash": "0x9ffb6e67bdf3871c7e0e644b91a8002f244d0f01dfe4d7a5418186ca9350dfba"
+    }
+  },
+  "ckethBalance": "9100196000000000000",
+  "allowance": "2000000000000"
+}

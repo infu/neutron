@@ -17,6 +17,7 @@ import { requestCancellationError } from "../request_cancel.ts";
 export type MsgBusCaller = {
   endpoint: string;
   appId: string;
+  installationUid?: string;
   role: "tile" | "background" | "tray";
   sessionId?: string;
 };

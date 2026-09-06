@@ -1,0 +1,23 @@
+{
+  "completedAt": "2026-09-06T12:29:56.973414+00:00",
+  "status": "passed",
+  "results": [
+    {
+      "title": "factory and pool reads retain complete large code without trapping",
+      "status": "passed",
+      "durationMs": 57499,
+      "errors": []
+    }
+  ],
+  "attachments": [
+    {
+      "name": "complete-large-contract-read-evidence",
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-large-read-evm105/complete-large-contract-read-evidence.json",
+      "size": 190543,
+      "sha256": "5519973d5ede50d21db001a34cad80bc2b78eedfab8da690980872ec7d8f05d5"
+    }
+  ],
+  "installedEvidence": "installed-candidates-at-start.json",
+  "scope": "Actual ordinary Kitchen/Kernel/EVM105 readContract; exact failed getPool input, complete24535-byte factory and22142-byte pool code checked against guarded Anvil42161 at returned blocks, slot0/liquidity/repeat reads and unchanged account nonce. No transaction/deploy/funding/mining/routing changes.",
+  "installedEvidenceSha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287"
+}

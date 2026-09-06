@@ -1,0 +1,69 @@
+{
+  "findings": [
+    {
+      "title": "Manual package chooser can classify an existing app before the installed-app store is ready",
+      "status": "Pre-existing launcher timing issue observed during fixture startup; reported for follow-up",
+      "source": "apps/kernel/src/reducer/apps.ts:2611",
+      "observation": "An early automated chooser open after login displayed Install for an already installed Uniswap. The test stopped before approval or any deployment. Waiting for the installed registry and resident tools produced the correct Update decision.",
+      "qualificationResponse": "The test now waits for observed installed-app readiness and retains strict Update and managed-memory preservation assertions. No committed app was reuploaded.",
+      "releaseChange": "No Kernel runtime change was made for this finding in this EVM release."
+    },
+    {
+      "title": "EVM Wallet own-app requests incorrectly require the cross-app provider presentation callback",
+      "status": "Fixed in EVM105; actual chain1 personal/EIP712/permit signature case passed",
+      "source": "apps/evm_wallet/src/provider.ts:335",
+      "kernelContract": "apps/kernel/src/expose.ts:3326 supplies provider_once interaction only for cross-app calls; SDK faithfully omits it for same-app calls.",
+      "observation": "External Kitchen Sink native transfer succeeded. Own personal-sign request failed before review or backend preparation. Complete authenticated history confirmed no matching command for the failed request.",
+      "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-crypto-42161/own-sign-no-backend-effect.json",
+      "fixScope": "Separate private same-app owner-review entry reusing wallet preparation and explicit user approval; retain external foreground attestation and root-Agent boundaries.",
+      "preservation": "EVM103 package/source and current installed journals retained; no Kernel policy or shared SDK change planned."
+    },
+    {
+      "title": "Large RPC result provider comparison can overflow recursive Motoko text comparison",
+      "status": "Fixed in EVM105; actual full factory/pool code, slot0 and liquidity reads passed after checked upgrade",
+      "source": "apps/evm_wallet/backend/rpc/Client.mo:220",
+      "observation": "Two actual Uniswap pool lookup reads trapped with IC0502/text_compare_range. An isolated actor using the same compiler reproduced the failure while comparing complete deployed-contract-sized JSON results.",
+      "fix": "Compare lossless UTF-8 blobs, preserving complete equality and disagreement outcomes without a new bound or truncation.",
+      "validation": "Compiled tests pass full 24,576-byte contract code agreement, final-byte disagreement and canonical nested JSON/Unicode.",
+      "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/read-trap-diagnosis/summary.json",
+      "inferenceLimit": "The internal eth_getCode phase is identified from source and exact isolated pipeline reproduction; historical internal provider response bodies were not captured."
+    },
+    {
+      "title": "Growing history page exceeds the existing self-call metadata transport limit",
+      "status": "Fixed in EVM106; captured-response regression,20 sandbox cases and actual342/106 paginated/reloaded history passed",
+      "source": "apps/evm_wallet/src/main.tsx:166",
+      "observation": "The requested40-row page contained25 operations and71,916 metadata bytes;20 rows fit57,355 bytes. Existing Kernel limit is64KiB, and the largest measured row was5,934 bytes. Snapshot remained small.",
+      "fixScope": "Shared initial/Load-more reader retries only six exact aggregate size/container/allocation errors at the same offset. Every row remains reachable; malformed, unrelated and unsplittable-row failures propagate.",
+      "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/history-size-diagnosis/results.json",
+      "kernelChange": false,
+      "validation": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/validation.json",
+      "actualRuntimeEvidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-history-recovery-final-342-106/result.json"
+    },
+    {
+      "title": "Sequential approved Wallet reads exhaust a per-invocation Agent consent quota",
+      "status": "Fixed in Kernel342; fullrelease and checkedupgrade passed, and actual direct-root Uniswap multi-read quote completed",
+      "source": "apps/kernel/src/ui_attention/agent.ts",
+      "observation": "Two individually approved delegated requests increment a lifetime counter. A third legitimate read fails before being presented to the root agent, even with no decision pending. The live quote stopped before transaction signing.",
+      "fixScope": "Remove only the lifetime two-decision quota and unused node counter. Retain root challenge accounting, authenticated invocation, active-decision serialization, explicit denial, cancellation and revocation.",
+      "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-root-uniswap-evm105/qualification-summary.json",
+      "kernelQualification": ".neutron/release-receipts/evm-wallet-next/kernel342/candidate.json"
+    },
+    {
+      "title": "Unpinned replacement gas estimation can use different state from mined-block simulation",
+      "status": "Fixed in EVM107; compiled regressions and actual same-nonce approval replacement, reload/discovery and revocation passed",
+      "source": "apps/evm_wallet/backend/main.mo:535; apps/evm_wallet/backend/fees/Estimate.mo:115",
+      "observation": "The original pending approval changes the estimated storage-write cost. Estimation without a block returned24,437gas, but simulation at the pinned pre-inclusion block required44,322gas and failed OutOfGas.",
+      "fixScope": "Use the same explicit mined-block number for gas estimation and surrounding reads/simulation. Preserve schema, journal and public API history; no arbitrary gas multiplier or new quota.",
+      "signingOutcome": "Failed replacement was never reviewed or signed; original approval was reconciled using its saved hash.",
+      "providerDefaultScope": "The demonstrated Anvil path used pending effects. Default block behavior differs by node/provider; the fix supplies the observed block explicitly instead of relying on a default.",
+      "runtimeEvidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-allowance-final-342-107/validation.md"
+    },
+    {
+      "title": "Uniswap full saved-swap list exceeds the metadata response limit",
+      "status": "Fixed in Uniswap104;92tests/880assertions, memory,22browserchecks and checked103-to104 update passed. Existing expired intent retained with no Wallet effect; separate fresh token swap and consumer replacement adoption passed.",
+      "observation": "Nine complete saved records produced60,856Candid bytes and66,960normalizedmetadata bytes, above65,536. The token swap intent was durably saved before the list read failed; no Wallet effect had started.",
+      "fixScope": "Add stable-cursor paging and adaptive reads with all older records reachable. Use the durable begin result to request the Wallet effect instead of depending on an unrelated whole-history refresh. Retain public v1 methods and managed memory unchanged.",
+      "qualification": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/packages/uniswap104.json"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "chainId": "42161",
+  "nodeKind": "unforked Anvil",
+  "scope": "Official V3 bytecode with local fixture tokens; no Nitro posting or L1 finality qualification",
+  "files": [
+    {
+      "path": "@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json",
+      "size": 104076,
+      "sha256": "599479f60ebb056804aff7b2d05bdd0830ddbb1fdfaa0b6c62c02294ca7188b0"
+    },
+    {
+      "path": "@uniswap/v3-periphery/artifacts/contracts/NonfungiblePositionManager.sol/NonfungiblePositionManager.json",
+      "size": 126423,
+      "sha256": "bb4f9f1ca393293831e73db52c5425cc336b49dbda2cd9cd2708c4c885221675"
+    },
+    {
+      "path": "@uniswap/v3-periphery/artifacts/contracts/lens/QuoterV2.sol/QuoterV2.json",
+      "size": 39940,
+      "sha256": "9d0b8700b8b144aced9b5dd95bce4a68e03eb9a809eac53ac2e3ce739cc7d289"
+    },
+    {
+      "path": "@uniswap/swap-router-contracts/artifacts/contracts/SwapRouter02.sol/SwapRouter02.json",
+      "size": 122766,
+      "sha256": "210a7bf29f26de9f45d35dac1214943eca41c3a002007dd6a0e1aa870bf2d2d1"
+    },
+    {
+      "path": "apps/uniswap/test/fixtures/Tokens.sol",
+      "size": 1815,
+      "sha256": "988bb4ea34b9a6cc2cf61ff8ff36f3277e6058290bbcce488a272a50acbd4320"
+    },
+    {
+      "path": "apps/uniswap/src/swap.ts",
+      "size": 12455,
+      "sha256": "d74ebe3042e92eb70035a9a71a4dbeb7edcf492978427bcdf1569906565be34b"
+    }
+  ]
+}

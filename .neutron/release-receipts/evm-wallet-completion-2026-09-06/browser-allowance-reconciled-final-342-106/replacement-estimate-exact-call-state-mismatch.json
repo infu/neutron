@@ -1,0 +1,29 @@
+{
+  "scope": "Read-only complete backend txObject fields (from/to/value/data/nonce/type/accessList/exact replacement fees), at explicit pre-inclusion and inclusion blocks; no EVM state changes.",
+  "call": {
+    "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "to": "0x067c804bb006836469379D4A2A69a81803bd1F45",
+    "value": "0x0",
+    "data": "0x095ea7b3000000000000000000000000eb4f9946985f6d0b1d28481b8f5b1543d85011fe0000000000000000000000000000000000000000000000006124fee993bc0000",
+    "maxFeePerGas": "0x7735941d",
+    "maxPriorityFeePerGas": "0x77359401",
+    "nonce": "0x8",
+    "type": "0x2",
+    "accessList": []
+  },
+  "preInclusionBlock": "0x9b1d",
+  "inclusionBlock": "0x9b1e",
+  "estimateAtPreInclusion": "0xad22",
+  "estimateAtInclusion": "0x5f75",
+  "estimateDefaultAfterMining": "0x5f75",
+  "simulateSmallEstimateAtPreInclusion": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32603,
+      "message": "EVM error OutOfGas"
+    }
+  },
+  "simulateMatchingEstimateAtPreInclusion": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "simulateSmallEstimateAtInclusion": "0x0000000000000000000000000000000000000000000000000000000000000001"
+}

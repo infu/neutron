@@ -1213,3 +1213,15 @@
     }
   }
 }
+@layer app {
+  .ks-evm-intent {
+    border-top: 1px solid var(--nt-line-subtle);
+    margin-top: 16px;
+    padding-top: 16px;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  .ks-evm-intent li { margin-block: 8px; }
+  .ks-evm-hash { overflow-wrap: anywhere; }
+}

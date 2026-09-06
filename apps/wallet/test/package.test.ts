@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.12.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.16.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 312,
+    version: 316,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -106,6 +106,22 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_funding_reject_v1",
           "wallet_allowances_page_v1",
           "wallet_token_info_v1",
+          "wallet_transfer_v2",
+          "wallet_transfer_status_v2",
+          "wallet_transfers_pending_v2",
+          "wallet_transfer_resume_v2",
+          "wallet_bridge_quote_v1",
+          "wallet_bridge_prepare_v1",
+          "wallet_bridge_list_v1",
+          "wallet_bridge_status_v1",
+          "wallet_bridge_claim_v1",
+          "wallet_bridge_record_step_v1",
+          "wallet_bridge_replacement_v1",
+          "wallet_bridge_refresh_v1",
+          "wallet_transfer_refresh_v2",
+          "wallet_transfer_prepare_v2",
+          "wallet_transfer_acknowledge_v2",
+          "wallet_withdrawal_quote_v1",
         ],
       },
       backend_calls: {
@@ -144,6 +160,9 @@ test("Wallet declares managed memory and generic backend calls", async () => {
     memory: {
       wallet: { version: 1 },
       wallet_commands: { version: 1 },
+      wallet_bridge: { version: 1 },
+      wallet_transfers: { version: 1 },
+      wallet_bridge_replacements: { version: 1 },
     },
   });
   expect(value).not.toHaveProperty("init_arg");
@@ -166,7 +185,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value.func).not.toHaveProperty("wallet_remove_ledger");
   expect(value.background).not.toHaveProperty("storage");
   expect(value.capabilities?.backend_calls?.install_reservations).toHaveLength(
-    15,
+    21,
   );
   expect(
     value.capabilities?.backend_calls?.install_reservations?.map(
@@ -189,6 +208,12 @@ test("Wallet declares managed memory and generic backend calls", async () => {
     "exact:ss2fx-dyaaa-aaaar-qacoq-cai:icrc2_approve",
     "exact:ss2fx-dyaaa-aaaar-qacoq-cai:icrc1_balance_of",
     "exact:s3zol-vqaaa-aaaar-qacpa-cai:get_account_transactions",
+    "exact:sv3dd-oaaaa-aaaar-qacoa-cai:get_minter_info",
+    "exact:sv3dd-oaaaa-aaaar-qacoa-cai:get_events",
+    "exact:sv3dd-oaaaa-aaaar-qacoa-cai:retrieve_eth_status",
+    "exact:mqygn-kiaaa-aaaar-qaadq-cai:retrieve_btc_status_v2",
+    "exact:eqltq-xqaaa-aaaar-qb3vq-cai:retrieve_doge_status",
+    "exact:lh22c-kyaaa-aaaar-qb5nq-cai:withdrawal_status",
   ]);
 });
 
@@ -266,14 +291,16 @@ test("generated API-1 ICRC Account inputs use the canonical string shorthand", a
   const paths: string[] = [];
   collectIcrcAccountSchemaPaths(artifact.methods, "", paths);
 
-  expect(paths).toEqual([
+  expect(paths.sort()).toEqual([
     "wallet_transfer/input/prefixItems/0/properties/expected_destination/oneOf/0/properties/internet_computer",
+    "wallet_transfer_v2/input/prefixItems/0/properties/transfer/properties/expected_destination/oneOf/0/properties/internet_computer",
+    "wallet_transfer_prepare_v2/input/prefixItems/0/properties/transfer/properties/expected_destination/oneOf/0/properties/internet_computer",
     "wallet_funding_prepare_v1/input/prefixItems/0/properties/intent/oneOf/0/properties/direct/properties/to",
     "wallet_funding_prepare_v1/input/prefixItems/0/properties/intent/oneOf/1/properties/allowance/properties/spender",
     "wallet_funding_prepare_v1/input/prefixItems/0/properties/intent/oneOf/2/properties/revoke/properties/spender/oneOf/0/properties/icrc",
     "wallet_allowances_page_v1/input/prefixItems/0/properties/cursor/oneOf/0/properties/icrc103/properties/from_account",
     "wallet_allowances_page_v1/input/prefixItems/0/properties/cursor/oneOf/0/properties/icrc103/properties/to_spender",
-  ]);
+  ].sort());
 });
 
 test("Wallet token information is selected-ledger and default-account only", async () => {
@@ -482,8 +509,11 @@ test("Wallet tile and tray mount the same app and gate only focused capabilities
   expect(frontend).toContain('event.key !== "Escape"');
   expect(frontend).toContain("requestBackendCallReservations({");
   expect(frontend).toContain("copyToClipboard(value)");
-  expect(frontend).toContain("connectEthereumProvider()");
-  expect(frontend).toContain("Continue deposit in Wallet");
+  const bridgeFrontend = await readFile(new URL("../src/bridge_control.tsx", import.meta.url), "utf8");
+  expect(frontend).toContain("<WalletBridgeDeposit");
+  expect(bridgeFrontend).toContain("connectEthereumProvider()");
+  expect(bridgeFrontend).toContain("if (tray) { await openInTile(); return; }");
+  expect(bridgeFrontend).toContain("Continue deposit in Wallet");
   expect(frontend).toContain("setProjectionRevision");
   expect(frontend).toContain("publishWalletInvalidation");
   expect(frontend).toContain('className="wallet-custom-ledger-entry"');

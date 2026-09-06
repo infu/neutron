@@ -1,0 +1,151 @@
+{
+  "status": "Kernel342 release checks passed; publication owned by root",
+  "completed_at": "2026-09-06T13:24:54.973647+00:00",
+  "problem_and_fix": "A lifetime two-decision cap rejected the third separately approved permission during one delegated Uniswap quote. Removed only the cap and unused node counter; each request still dispatches a separate decision, aggregate audit counting/root attestation/denial/cancellation and unrelated controls remain.",
+  "archive": {
+    "path": "apps/kernel/kernel.v0.3.42.neutron",
+    "bytes": 2448936,
+    "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+  },
+  "source": {
+    "kind": "https",
+    "revision": "source-sha256:59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692",
+    "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692.source.v1.msgpack.gz",
+    "sha256": "59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692",
+    "bytes": 3198894
+  },
+  "checks": {
+    "canonical_package": {
+      "command": "npm --workspace neutron-kernel run package",
+      "exit_code": 0,
+      "log": "neutron-kernel342-package.log"
+    },
+    "release_tests": {
+      "command": "npm --workspace neutron-kernel test",
+      "exit_code": 0,
+      "typescript_passed": 753,
+      "typescript_failed": 0,
+      "typescript_assertions": 6506,
+      "motoko_passed": 33,
+      "motoko_suites": [
+        "authenticated_forest_test.mo",
+        "capability_registry_test.mo",
+        "certified_assets_allocator_test.mo",
+        "certified_assets_service_test.mo",
+        "connections_codec_test.mo",
+        "connections_memory_test.mo",
+        "painless_test.mo",
+        "memory_v4_schema_test.mo",
+        "authenticated_forest_lifecycle_test.mo",
+        "backend_calls_test.mo",
+        "chain_key_signing_service_test.mo",
+        "wallet_custody_signing_service_test.mo",
+        "certified_assets_codec_test.mo",
+        "certified_assets_incremental_sha256_test.mo",
+        "certified_assets_public_surface_test.mo",
+        "connections_service_test.mo",
+        "frontend_runtime_admission_test.mo",
+        "gateway_authority_test.mo",
+        "http_canonical_paths_test.mo",
+        "http_privacy_test.mo",
+        "http_certification_test.mo",
+        "memory_v3_schema_test.mo",
+        "http_post_update_handlers_service_test.mo",
+        "https_outcalls_service_test.mo",
+        "app_usage_service_test.mo",
+        "activation_service_test.mo",
+        "public_ingress_service_test.mo",
+        "install_service_test.mo",
+        "randomness_service_test.mo",
+        "scheduler_memory_test.mo",
+        "stable_store_service_test.mo",
+        "vetkeys_memory_test.mo",
+        "vetkeys_service_test.mo"
+      ],
+      "log": "neutron-kernel342-tests.log"
+    },
+    "typecheck": {
+      "command": "npx tsc --build apps/kernel --pretty false",
+      "exit_code": 0,
+      "log": "neutron-kernel342-typecheck.log"
+    },
+    "consent_regression": {
+      "before_fix_failed": 3,
+      "after_fix_passed": 12,
+      "after_fix_assertions": 102,
+      "before_log": "neutron-kernel342-agent-before.log",
+      "after_log": "neutron-kernel342-agent-after.log",
+      "routing_regression_log": "neutron-kernel342-routing-tests.log"
+    },
+    "certified_assets": {
+      "status": "passed",
+      "receipt_sha256": "d64ea8bf156624367ba11702a7f54adc019239f6def6f49b6772beb75362f0ff",
+      "qualification_log": "neutron-kernel342-ca-qualify.log",
+      "post_package_binding_log": "neutron-kernel342-ca-postpackage.log",
+      "final_binding_log": "neutron-kernel342-ca-final.log"
+    },
+    "offered_source_matches_qualified_snapshot_and_final_workspace": {
+      "status": "passed",
+      "package": {
+        "id": "kernel",
+        "version": 342
+      },
+      "files": 750,
+      "offeredSourceMatchesQualifiedSnapshot": true,
+      "everyOfferedSourceFileMatchesCurrentWorkspaceBytesAndMode": true,
+      "checkedAfterFullSuite": true,
+      "inventoryScope": "Exact750-file reviewed inventory captured before qualification and matched through canonical packaging. Current genericcollector sees newly staged excluded releaseartifacts; no sourcebyte changes observed.",
+      "stagingObservationResolution": {
+        "status": "resolved",
+        "commit": "ab0e5402c7adfdec88637f28b9d2c459918b215f",
+        "detail": "The root committed the preserved generated release artifacts. The normal source collector and exact qualified/offered/current inventory equality check passed without any overrides afterward. Earlier direct byte-and-mode comparison remains retained as its original observation."
+      }
+    },
+    "memory_and_backend": {
+      "kernel": 4,
+      "supported_predecessor_schema": 3,
+      "activation": 1,
+      "unchanged_backend_schema_migration_and_lock_files": 75,
+      "lineage_equality": "backend-lineage-equality.json",
+      "generated_backend_difference": "release version/derived inventory fingerprint only",
+      "retained_prior341_checked_actor_upgrade_assertions": 739,
+      "new_actor_migration_cases_not_repeated": "Backend/schema/migration/lock bytes are identical; current full memory suite and actual checked341-to342 browser upgrade passed."
+    },
+    "exact_archived_browser_compilers": {
+      "status": "passed",
+      "assertions": 144,
+      "scope": "Exact336browser to342 +15incumbents and exact342browser to336 +same15incumbents; parsing and Wasm compilation only",
+      "summary": ".neutron/release-receipts/evm-wallet-next/compatibility/kernel342-final-compiler-summary.json",
+      "summary_sha256": "6bc15538be4c18359ac8c1bb2826d9a445d7c0e2e393d96097fd0ec34ee91f08"
+    },
+    "checked_browser_upgrade": {
+      "status": "passed",
+      "prior_kernel": 341,
+      "current_kernel": 342,
+      "scope": "Actual per-archive browser Update, pre-acceptance exact build records, retained installation UIDs, unchanged existing memory schemas and declaration history, initialization only of new roots declared in the sealed candidate archive, and identical EVM wallet, IC bridge, Uniswap and profile query replies. IC Wallet snapshots permit only monotonic existing balance/native-refresh timestamps; all other decoded fields must remain identical. Kitchen counter changes must equal its scheduled-run count changes. Linear-memory persistence follows the existing compiler mode: classical replaces the heap and restores managed state from stable memory; enhanced keeps the heap. Runtime memory metadata does not expose physical root pointers. Canonical non-raw HTTP assets are verified by the pinned PocketIC14 gateway with response verification enabled; this harness does not independently repeat HTTP-v2 body verification.",
+      "receipt": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/checked-browser-kernel342-upgrade/checked-upgrade-receipt.json",
+      "receipt_sha256": "38616fb7603fb9b0c2e2b98699732ede654107b72195fea895d7f151ec44266d",
+      "final_deployment": "c4b89b6fe632613a6dccab85444e5240",
+      "provisioning_journal_unchanged": true
+    },
+    "git_diff_check": "passed",
+    "post_commit_source_and_binding": {
+      "status": "passed",
+      "package": {
+        "id": "kernel",
+        "version": 342
+      },
+      "files": 750,
+      "offeredSourceMatchesQualifiedSnapshot": true,
+      "currentCollectorMatchesQualifiedSnapshot": true,
+      "generatedArtifactStagingObservation": "resolved after commit; collector passed without overrides",
+      "checkedAt": "2026-09-06T13:27:54.391Z",
+      "commit": "ab0e5402c7adfdec88637f28b9d2c459918b215f",
+      "collector_log": "neutron-kernel342-postcommit-source-match.log",
+      "binding_command": "npm --workspace neutron-kernel run certified-assets:candidate-binding",
+      "binding_exit_code": 0,
+      "binding_log": "neutron-kernel342-ca-postcommit.log"
+    }
+  },
+  "source_commit": "ab0e5402c7adfdec88637f28b9d2c459918b215f"
+}

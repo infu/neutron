@@ -22,11 +22,10 @@ assertion bytes. The kernel owns everything else:
 
 This deliberately leaves no app-controlled key name, derivation path, raw
 digest, cycle amount, BIP341 auxiliary value, or management-canister actor.
-Future Kernel-provided raw Bitcoin, EVM, Solana, or credential signing flows
-need typed protocol adapters. Any such adapter capable of moving value must
-require a one-shot, transaction-shaped owner review immediately before signing;
-installing this assertion capability and granting an ordinary app/agent tool
-must never preapprove that raw-signing decision.
+Installing this assertion capability and granting an ordinary app/agent tool
+never grants raw signing authority. Wallet custody is a separate explicit
+capability, documented below. Protocol-aware Kernel adapters remain a possible
+future alternative, with their own transaction review contract.
 
 This stricter boundary is about a Kernel broker holding a generic threshold
 transaction-signing primitive. It does not govern a separately installed,
@@ -38,7 +37,8 @@ opens and focuses the exact provider tile but neither renders nor interprets
 the token decision. A separate direct-root Wallet tool may use the same checked
 prepare/execute core without UI only when Kernel attests the active depth-zero
 root. That app-level Wallet remains isolated and untrusted by Kernel; it
-receives no raw chain-key signer from this capability.
+receives no raw chain-key signer from this assertion capability. It may
+separately request the explicit `wallet_custody_signing` custody grant.
 
 A signature is still authority-bearing evidence: an external verifier can
 choose to interpret any assertion as permission for a high-impact action. App
@@ -355,3 +355,86 @@ are distinct future capabilities with their own consent and lifecycle models.
 
 See also the IC overview of [chain-key cryptography](https://docs.internetcomputer.org/concepts/chain-key-cryptography/)
 and the authoritative [management-canister interface](https://docs.internetcomputer.org/references/ic-interface-spec/management-canister/).
+
+
+## Wallet Custody Signing V1
+
+`wallet_custody_signing` is a separate backend capability for an owner-trusted
+wallet app. It accepts exactly a 32-byte digest and signs those bytes unchanged
+with ECDSA secp256k1. It does not apply an assertion prefix, hash the supplied
+digest again, or grant access to an assertion key. An ordinary app can request
+this capability; EVM Wallet has no special app-ID privilege.
+
+The installation decision explicitly grants custody: the installed app can
+create signatures that authorize asset transfers, messages, permits, and other
+external actions. Kernel does not decode EVM transactions or prove that the
+wallet's UI matches its digest. The wallet owns protocol validation, review,
+caller-bound durable commands, and recovery. Users must trust the installed
+wallet package's signing behavior. This authority is stronger than assertion
+signing and never follows implicitly from an assertion grant.
+
+```json
+{
+  "backend": {"capabilities": {"wallet_custody_signing": {"api": 1}}},
+  "capabilities": {
+    "wallet_custody_signing": {
+      "api": 1,
+      "slots": [{"id": "main", "algorithm": "ecdsa_secp256k1", "purpose": "Manage EVM account"}]
+    }
+  }
+}
+```
+
+The reviewed Motoko leaf `WalletCustodySigningV1` exposes `public_key(slot)` and
+`sign_digest({slot; digest})`. Public keys are compressed SEC1, 33 bytes.
+Signatures are raw `r || s`, 64 bytes. The wallet verifies the key, derives the
+address, determines recovery parity, and normalizes low-S as required by its
+protocol. Public tools must expose reviewed protocol operations; the backend
+leaf itself is not a public frontend raw-digest tool.
+
+The immutable namespace is SHA-256 over the following length-prefixed parts,
+using the existing unsigned four-byte big-endian lengths and eight-byte
+big-endian integers:
+
+1. `neutron.wallet-custody-signing.key.v1`
+2. Kernel installation epoch
+3. Neutron canister principal bytes
+4. App ID UTF-8
+5. Kernel-assigned app installation UID
+6. Slot ID UTF-8
+7. `ecdsa_secp256k1`
+8. Compiler-resolved management key name UTF-8
+9. `neutron_wallet_custody_digest_v1`
+
+That digest is the sole management derivation-path component. It is only key
+identity material; the supplied EVM signing digest receives no Neutron domain.
+Apps cannot supply another installation, path, master-key name, or epoch.
+Matching slot names in different apps or in the assertion capability produce
+separate keys. Purpose text is presentation-only and does not change identity
+or reset runtime enablement/accounting.
+
+Assertion and custody signing share the existing aggregate signing inventory,
+per-app/global in-flight resources, management adapter, outgoing-cycle
+accounting, cost admission, and lease/revocation checks. No second signing
+budget or temporal rate limit is introduced. Runtime custody resources are
+independently toggleable under `(AppScope, #wallet_custody_signing, slot_id)`.
+Closed failures are the existing `ChainKeySigningErrorV1` outcomes. An ambiguous
+management response remains `#outcome_unknown`; Kernel never repeats signing.
+Revocation after dispatch suppresses returned signature bytes without claiming
+that the signature was never generated. The stronger ambiguous outcome takes
+precedence when both happen.
+
+Compatible upgrades preserve the app installation UID and key. Disabling
+signing preserves the key and rejects use until enabled. Removing a slot removes
+its live authority/cache; declaring the same slot again in the same installation
+and key configuration restores the same derived key. Uninstall/reinstall or app
+replacement receives a new installation UID and a new key. A new canister ID,
+Kernel installation epoch, or threshold-key configuration also changes identity.
+A state-preserving canister upgrade retains it. No seed/private-key export or
+owner reassignment/recovery registry is provided. A funded account must not be
+removed under the assumption that reinstalling will recover its address.
+
+Kernel memory v4 adds an empty custody cache and the distinct runtime capability
+kind. The v3-to-v4 migration preserves all existing service roots, assertion
+keys, installation identities, and runtime enablement/usage. The original v3
+schema and assertion namespace/format remain unchanged.

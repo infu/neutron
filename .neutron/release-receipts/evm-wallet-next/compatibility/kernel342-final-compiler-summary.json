@@ -1,0 +1,125 @@
+{
+  "status": "passed",
+  "candidate_status": "Final canonical Kernel 342 exact frozen archive; supersedes the unpublished 341 candidate after the nested-consent lifetime-counter fix. Prior 340 and 341 receipts preserved unchanged.",
+  "scope": "Both directions run exact archived browser compiler, package-parser, and assembler closures in real Chromium against all 15 incumbent app archives; complete Wasm compilation with zero diagnostics. No live canister install, checked upgrade, state-migration execution, or frontend flow claimed. New EVM and Uniswap excluded from the 336 legacy first-install boundary.",
+  "forward": {
+    "compilerKernelVersion": 336,
+    "targetKernelVersion": 342,
+    "result": {
+      "wasmBytes": 14150973,
+      "wasmMagic": [
+        0,
+        97,
+        115,
+        109
+      ],
+      "diagnosticErrors": 0,
+      "compatibilityDiagnostics": 0,
+      "inventoryAppIds": [
+        "agent",
+        "blast",
+        "chess",
+        "contacts",
+        "files",
+        "gemma",
+        "hello",
+        "hullshift",
+        "jetcreeper",
+        "kernel",
+        "kitchensink",
+        "mail",
+        "mysubnet",
+        "spreadsheet",
+        "wagyu",
+        "wallet"
+      ],
+      "appIds": [
+        "kernel",
+        "agent",
+        "blast",
+        "chess",
+        "contacts",
+        "files",
+        "gemma",
+        "hello",
+        "hullshift",
+        "jetcreeper",
+        "kitchensink",
+        "mail",
+        "mysubnet",
+        "spreadsheet",
+        "wagyu",
+        "wallet"
+      ]
+    },
+    "receipt": "exact336-to342-current-incumbents.json"
+  },
+  "reverse": {
+    "compilerKernelVersion": 342,
+    "targetKernelVersion": 336,
+    "result": {
+      "wasmBytes": 14134642,
+      "wasmMagic": [
+        0,
+        97,
+        115,
+        109
+      ],
+      "diagnosticErrors": 0,
+      "compatibilityDiagnostics": 0,
+      "inventoryAppIds": [
+        "agent",
+        "blast",
+        "chess",
+        "contacts",
+        "files",
+        "gemma",
+        "hello",
+        "hullshift",
+        "jetcreeper",
+        "kernel",
+        "kitchensink",
+        "mail",
+        "mysubnet",
+        "spreadsheet",
+        "wagyu",
+        "wallet"
+      ],
+      "appIds": [
+        "kernel",
+        "agent",
+        "blast",
+        "chess",
+        "contacts",
+        "files",
+        "gemma",
+        "hello",
+        "hullshift",
+        "jetcreeper",
+        "kitchensink",
+        "mail",
+        "mysubnet",
+        "spreadsheet",
+        "wagyu",
+        "wallet"
+      ]
+    },
+    "receipt": "exact342-to336-current-incumbents.json"
+  },
+  "tests": 2,
+  "assertions": 144,
+  "log": "exact342-browser-compatibility.log",
+  "exact_inputs": "final342-archive-compiler-inputs.json",
+  "kernel342_archive": {
+    "path": "/srv/shared/code/neutron/apps/kernel/kernel.v0.3.42.neutron",
+    "bytes": 2448936,
+    "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+  },
+  "kernel342_source": {
+    "path": "apps/kernel/.neutron/sources/59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692.source.v1.msgpack.gz",
+    "bytes": 3198894,
+    "sha256": "59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692"
+  },
+  "archive_and_source_unchanged_after_tests": true,
+  "reverse_not_carried_forward": "Packaged browser closure changed between 341 and 342; reran using the exact final 342 browser."
+}

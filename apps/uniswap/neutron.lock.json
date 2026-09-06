@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "uniswap",
+  "memory": {
+    "uniswap": {
+      "schemas": {
+        "1": {
+          "hash": "f117d98b9278d075acff8b1f62ffa85b42afab9ca4aaa78a84ad9a48b9d25228",
+          "entry": "ad217e3e79429ef8a2cbf4c5b65feb7219d6dfd8adf2075e86fa0734400366b6"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

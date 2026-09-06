@@ -1,0 +1,38 @@
+{
+  "version": 103,
+  "archive": {
+    "path": "apps/uniswap/uniswap.v0.1.3.neutron",
+    "bytes": 278707,
+    "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+  },
+  "source": {
+    "path": "apps/uniswap/.neutron/sources/7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd.source.v1.msgpack.gz",
+    "bytes": 455134,
+    "sha256": "7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd",
+    "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/7606b2486c9ce4a444570840d415d25378fa2352de1228a40ecc40ec84a5acfd.source.v1.msgpack.gz"
+  },
+  "packedRootLock": {
+    "path": "package-lock.json",
+    "sha256": "10cdb573add8360fcbe6b37c420e3efc094efd2087e882dc06e4d6d65f6d9323",
+    "bytes": 354438
+  },
+  "offeredRootLockMatches": true,
+  "sourcePathsChecked": [
+    "apps/uniswap/src/fees.ts",
+    "apps/uniswap/src/fee_review.tsx",
+    "apps/uniswap/src/controller.ts",
+    "apps/uniswap/src/main.tsx",
+    "apps/uniswap/src/service.ts",
+    "apps/uniswap/src/swap.ts",
+    "apps/uniswap/test/fees.test.ts",
+    "apps/uniswap/test/service.test.ts",
+    "packages/neutron-tools/src/evm_wallet.ts",
+    "apps/uniswap/backend/memory/uniswap/v1.mo"
+  ],
+  "managedRoot": {
+    "name": "uniswap",
+    "version": 1,
+    "lockMatchesPublished102": true
+  },
+  "published102Preserved": true
+}

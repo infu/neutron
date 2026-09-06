@@ -1,0 +1,22 @@
+{
+  "observedAt": "2026-09-06T13:53:30.600481+00:00",
+  "nonce": {
+    "latest": "0xc",
+    "pending": "0xc"
+  },
+  "mining": {
+    "automine": false,
+    "interval": 1
+  },
+  "originalRequest": "ec66d879f33a6952fc7576c87c65f961",
+  "originalHash": "0xbb469fed05bcbc91f8e350bd6b494feeebc3a0c8959e8cd629d254e2a3294623",
+  "originalReceipt": null,
+  "replacementRequest": "58d8bc9320bed7c3b2b22778832ab7ac",
+  "replacementHash": "0x83bb17c9cfd641b7550d60172ff084daf2030cc1a70e4adbf85ce16a3a2d7917",
+  "revocationRequest": "62e3a49c9b1df79133e4fb6e463291d8",
+  "revocationHash": "0xe3de3db7c31f3bcda61d2cacd7efb7516e00071095bf47704e105503a203f068",
+  "allowance": "0",
+  "tokenBalance": "10000000000000000000",
+  "uiObservedBlock": "41014",
+  "specSha256": "dedacaf17446cb364448f4bd024ad1fe10452870fde1a9d5bb2e72bec9dd80be"
+}

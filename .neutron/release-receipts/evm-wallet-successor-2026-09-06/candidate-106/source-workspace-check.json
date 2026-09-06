@@ -1,0 +1,1893 @@
+{
+  "package": {
+    "id": "evm_wallet",
+    "version": 106
+  },
+  "sourcePath": "apps/evm_wallet/.neutron/sources/20ccb7adc5bd5be9d86849523a23ff306b290867692c1f41cc21d809c4aa4fdb.source.v1.msgpack.gz",
+  "checkedAfterCompleteReleaseSuite": true,
+  "filesChecked": 209,
+  "mismatches": [],
+  "files": [
+    {
+      "path": "apps/evm_wallet/NOTICE",
+      "bytes": 441,
+      "capturedSha256": "8f5a72cb9f907a52bcd8d351758fa9a0085d9ba48b0ec0bd4b516f36fcbb2256",
+      "workspaceSha256": "8f5a72cb9f907a52bcd8d351758fa9a0085d9ba48b0ec0bd4b516f36fcbb2256",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/README.md",
+      "bytes": 10903,
+      "capturedSha256": "47ab5217a4e2ed8f7da588924229ce311da5c98b6eec910be2c9493230df962a",
+      "workspaceSha256": "47ab5217a4e2ed8f7da588924229ce311da5c98b6eec910be2c9493230df962a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/Config.mo",
+      "bytes": 1661,
+      "capturedSha256": "35589437a715a99b75f5853d15e37cb422da9411fa731bfb2e53d8cf2f824dae",
+      "workspaceSha256": "35589437a715a99b75f5853d15e37cb422da9411fa731bfb2e53d8cf2f824dae",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/Journal.mo",
+      "bytes": 7463,
+      "capturedSha256": "39a0e8a06755e9e659e4a30a92d1ae84c8e7f0a4b87a5ab685cb9702f3e03675",
+      "workspaceSha256": "39a0e8a06755e9e659e4a30a92d1ae84c8e7f0a4b87a5ab685cb9702f3e03675",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/README.md",
+      "bytes": 5273,
+      "capturedSha256": "1b77528ffb00ec451b268d987c72b1a692bc6d9d50cf4c57c49221ac5bd013d1",
+      "workspaceSha256": "1b77528ffb00ec451b268d987c72b1a692bc6d9d50cf4c57c49221ac5bd013d1",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/ReplacementProof.mo",
+      "bytes": 3207,
+      "capturedSha256": "6caf2cd0e79bc1ac10ce7484f7e6d8e5ccbe5cadfa2f5a902d162b6fd68b0d77",
+      "workspaceSha256": "6caf2cd0e79bc1ac10ce7484f7e6d8e5ccbe5cadfa2f5a902d162b6fd68b0d77",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/Types.mo",
+      "bytes": 2899,
+      "capturedSha256": "9ec9768d692289954281467a2ebbb33ef155708f7050a0ac4d9f491b2c0dea9e",
+      "workspaceSha256": "9ec9768d692289954281467a2ebbb33ef155708f7050a0ac4d9f491b2c0dea9e",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/evm/Eip712.mo",
+      "bytes": 27537,
+      "capturedSha256": "351fa7efb7b06ded6f47a2de42770b1c2c8afa502f025ec7a1e5ab307c050e30",
+      "workspaceSha256": "351fa7efb7b06ded6f47a2de42770b1c2c8afa502f025ec7a1e5ab307c050e30",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/evm/Hex.mo",
+      "bytes": 3673,
+      "capturedSha256": "516e28634b12fe34740cee68fee68e8c2f8c88b2862c1f9fc2e9d3baf7562cbf",
+      "workspaceSha256": "516e28634b12fe34740cee68fee68e8c2f8c88b2862c1f9fc2e9d3baf7562cbf",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/evm/Keccak.mo",
+      "bytes": 2834,
+      "capturedSha256": "313ea555e9159030404fdc7dced6a2633e1531464d083dac330c3b4fc2a440ad",
+      "workspaceSha256": "313ea555e9159030404fdc7dced6a2633e1531464d083dac330c3b4fc2a440ad",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/evm/Personal.mo",
+      "bytes": 428,
+      "capturedSha256": "a2bda8cd1aba2a6af67d7dd8161583811f503a52157927dacec10d43d8930c5f",
+      "workspaceSha256": "a2bda8cd1aba2a6af67d7dd8161583811f503a52157927dacec10d43d8930c5f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/evm/Rlp.mo",
+      "bytes": 1187,
+      "capturedSha256": "fc971b6678fdaa7803261ce8b539c22b8973ba2a2ba0e22e7be104a08bd1e229",
+      "workspaceSha256": "fc971b6678fdaa7803261ce8b539c22b8973ba2a2ba0e22e7be104a08bd1e229",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/evm/Secp256k1.mo",
+      "bytes": 8287,
+      "capturedSha256": "f651c79f9ea58cf41d9201a29d4f0cc93452730e13848f2c08ad3387f1f38c37",
+      "workspaceSha256": "f651c79f9ea58cf41d9201a29d4f0cc93452730e13848f2c08ad3387f1f38c37",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/evm/Transaction.mo",
+      "bytes": 6031,
+      "capturedSha256": "af4e6ad25f6ec11e67bbb07fd8ddc693dfb483ba5b102fda91288e7f748826ab",
+      "workspaceSha256": "af4e6ad25f6ec11e67bbb07fd8ddc693dfb483ba5b102fda91288e7f748826ab",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/fees/Estimate.mo",
+      "bytes": 9035,
+      "capturedSha256": "113ad62e0a12f72f4db46454b2a85cb2fe5ac24accc277a5d2c9df6e702a9f15",
+      "workspaceSha256": "113ad62e0a12f72f4db46454b2a85cb2fe5ac24accc277a5d2c9df6e702a9f15",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/main.mo",
+      "bytes": 49562,
+      "capturedSha256": "69226cde5a916e0d82b5f1320daacbedd70be3f6a16f4aee544f4ab54fa7322f",
+      "workspaceSha256": "69226cde5a916e0d82b5f1320daacbedd70be3f6a16f4aee544f4ab54fa7322f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/memory/evm_evidence/v1.mo",
+      "bytes": 677,
+      "capturedSha256": "a371d6a74ffa69c6a4347410c3825ed3c702d4c47c7960c60b9282f915613e69",
+      "workspaceSha256": "a371d6a74ffa69c6a4347410c3825ed3c702d4c47c7960c60b9282f915613e69",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/memory/evm_wallet/v1.mo",
+      "bytes": 2937,
+      "capturedSha256": "5a8971fa005d0a2e62e1e1f7a692334036b7b7e0ba58fe713f4c4cd579e387a3",
+      "workspaceSha256": "5a8971fa005d0a2e62e1e1f7a692334036b7b7e0ba58fe713f4c4cd579e387a3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/rpc/Client.mo",
+      "bytes": 13125,
+      "capturedSha256": "4b602ad4a6dc41837c48c5ee0c555f03464eacf852cf624608530857337c7313",
+      "workspaceSha256": "4b602ad4a6dc41837c48c5ee0c555f03464eacf852cf624608530857337c7313",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/rpc/Json.mo",
+      "bytes": 8464,
+      "capturedSha256": "efb772a26952e13152a54b2d8693622aad2aa812bac0b56eb1d2649fb24307eb",
+      "workspaceSha256": "efb772a26952e13152a54b2d8693622aad2aa812bac0b56eb1d2649fb24307eb",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/rpc/README.md",
+      "bytes": 5626,
+      "capturedSha256": "83b467138f7dfc3c8908cd2892f8b276614669604ad042ff4bdde0db1e8ccaec",
+      "workspaceSha256": "83b467138f7dfc3c8908cd2892f8b276614669604ad042ff4bdde0db1e8ccaec",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/rpc/Types.mo",
+      "bytes": 2676,
+      "capturedSha256": "16fb8c414e70f34812fb6f1bbebc31c5c8a470a668556d2da5fa07ca7bd235e1",
+      "workspaceSha256": "16fb8c414e70f34812fb6f1bbebc31c5c8a470a668556d2da5fa07ca7bd235e1",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/token/Decode.mo",
+      "bytes": 3278,
+      "capturedSha256": "c04d11fd0005e23525e3725b3aecfadab5fad4e5d34f745e59839fb4e5260672",
+      "workspaceSha256": "c04d11fd0005e23525e3725b3aecfadab5fad4e5d34f745e59839fb4e5260672",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/token/Evidence.mo",
+      "bytes": 5274,
+      "capturedSha256": "c1c264c5e1ab3ff94b117fff12038b4563cd8e07d26ac3ffa05fcfe36bd255cd",
+      "workspaceSha256": "c1c264c5e1ab3ff94b117fff12038b4563cd8e07d26ac3ffa05fcfe36bd255cd",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/build.ts",
+      "bytes": 913,
+      "capturedSha256": "a0105831ebe91394a98baeee14b6c9e37cb726996e17b72f587baae15cd979e2",
+      "workspaceSha256": "a0105831ebe91394a98baeee14b6c9e37cb726996e17b72f587baae15cd979e2",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/mops.toml",
+      "bytes": 169,
+      "capturedSha256": "572434cda5dacaf10794eb6566870606fbead30ab949c377f20290da780e8f86",
+      "workspaceSha256": "572434cda5dacaf10794eb6566870606fbead30ab949c377f20290da780e8f86",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/neutron.json",
+      "bytes": 4208,
+      "capturedSha256": "da0c7560e553cbe54f5c19de3474605e665596bb424bd1acb2b8e7bf83a28ed0",
+      "workspaceSha256": "da0c7560e553cbe54f5c19de3474605e665596bb424bd1acb2b8e7bf83a28ed0",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/neutron.lock.json",
+      "bytes": 611,
+      "capturedSha256": "385132eb6e6fe0d0af37c4c684fcb2f8c3582773b358d891ca6a99705eb062c4",
+      "workspaceSha256": "385132eb6e6fe0d0af37c4c684fcb2f8c3582773b358d891ca6a99705eb062c4",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/package.json",
+      "bytes": 1597,
+      "capturedSha256": "b044f7c1eaeefa7d21cdb34c6a2122c37769e61214600e0739786d0153c5c991",
+      "workspaceSha256": "b044f7c1eaeefa7d21cdb34c6a2122c37769e61214600e0739786d0153c5c991",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/public/index.html",
+      "bytes": 387,
+      "capturedSha256": "2c24de728521f5206bfc55cda739944a6c9e893f59427014ac3df41ef5d43937",
+      "workspaceSha256": "2c24de728521f5206bfc55cda739944a6c9e893f59427014ac3df41ef5d43937",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/public/service.html",
+      "bytes": 249,
+      "capturedSha256": "1fe0ba2928d0442330d6d04468d3d45faee35e57e5d5bca26bc6934426dafcb7",
+      "workspaceSha256": "1fe0ba2928d0442330d6d04468d3d45faee35e57e5d5bca26bc6934426dafcb7",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/public/static/icon.svg",
+      "bytes": 357,
+      "capturedSha256": "0613414cb399b770ef894bd274f7fc95b11dfed809dbe04941c8e15c355f1b3e",
+      "workspaceSha256": "0613414cb399b770ef894bd274f7fc95b11dfed809dbe04941c8e15c355f1b3e",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/data.ts",
+      "bytes": 17925,
+      "capturedSha256": "d9056f048126c1eaed25ebc630b8b1a6aabc40e5a5bef4d2a8e147be3b8d6af8",
+      "workspaceSha256": "d9056f048126c1eaed25ebc630b8b1a6aabc40e5a5bef4d2a8e147be3b8d6af8",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/form_actions.ts",
+      "bytes": 1175,
+      "capturedSha256": "c0d3e82c2015db7a41ac708189a538f60078a501fb50cf2f44bed53b52baa21a",
+      "workspaceSha256": "c0d3e82c2015db7a41ac708189a538f60078a501fb50cf2f44bed53b52baa21a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/history.ts",
+      "bytes": 1425,
+      "capturedSha256": "1a078518c1a08968b4d36c9ca913454a4859c4c4da200ad38bf28c37b71b397d",
+      "workspaceSha256": "1a078518c1a08968b4d36c9ca913454a4859c4c4da200ad38bf28c37b71b397d",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/known_approvals.ts",
+      "bytes": 2338,
+      "capturedSha256": "0dcd9be35528e889053d2847dcf5a17c41b7f4d2e36435692da93e43b17fb1d1",
+      "workspaceSha256": "0dcd9be35528e889053d2847dcf5a17c41b7f4d2e36435692da93e43b17fb1d1",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/local_intent.ts",
+      "bytes": 1829,
+      "capturedSha256": "ccbdafab3cd331aa30f455f16dbbe249fa86902c0c9e596f24099be714513718",
+      "workspaceSha256": "ccbdafab3cd331aa30f455f16dbbe249fa86902c0c9e596f24099be714513718",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/main.tsx",
+      "bytes": 44263,
+      "capturedSha256": "b6522a4c487c175aaac3c8984e990ae053bf1ba2016cf631d32d7ab0c7a91557",
+      "workspaceSha256": "b6522a4c487c175aaac3c8984e990ae053bf1ba2016cf631d32d7ab0c7a91557",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/prompts.ts",
+      "bytes": 8150,
+      "capturedSha256": "16ce171f0c72b286da2b7ff44ed351086b896bc66f3034ecb0358a64d4f14128",
+      "workspaceSha256": "16ce171f0c72b286da2b7ff44ed351086b896bc66f3034ecb0358a64d4f14128",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/provider.ts",
+      "bytes": 14721,
+      "capturedSha256": "bd22e582d7f6609dfbbd0bba38e95f2179c53b1aacd74b35baf11c7aeaef09e8",
+      "workspaceSha256": "bd22e582d7f6609dfbbd0bba38e95f2179c53b1aacd74b35baf11c7aeaef09e8",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/read_adapters.ts",
+      "bytes": 3128,
+      "capturedSha256": "2703ebad814f5ba1e633fc2ba6fdf1e6739af11ce6feac33e33ee7874e434aed",
+      "workspaceSha256": "2703ebad814f5ba1e633fc2ba6fdf1e6739af11ce6feac33e33ee7874e434aed",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/replacement.tsx",
+      "bytes": 5077,
+      "capturedSha256": "c825611d0a052e8f0fa2e0d3972694832b0b9be2fe2511ce2a7505f60c0c7f20",
+      "workspaceSha256": "c825611d0a052e8f0fa2e0d3972694832b0b9be2fe2511ce2a7505f60c0c7f20",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/service.ts",
+      "bytes": 14073,
+      "capturedSha256": "fbfa30fe62c97bf566e2ff4f2a5da4ceec005b8cdf20149f1f4187167221069c",
+      "workspaceSha256": "fbfa30fe62c97bf566e2ff4f2a5da4ceec005b8cdf20149f1f4187167221069c",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/sign_form.tsx",
+      "bytes": 8144,
+      "capturedSha256": "38bd49c91b56cbd186a86f4196e91f9e6a568699539d64bd330bb28cbd68ccf9",
+      "workspaceSha256": "38bd49c91b56cbd186a86f4196e91f9e6a568699539d64bd330bb28cbd68ccf9",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/signature_request.ts",
+      "bytes": 4633,
+      "capturedSha256": "83ff5cfe22d17b046d3e5e508a75a1aeccae7162f02511b04bb20442b1b7ff0e",
+      "workspaceSha256": "83ff5cfe22d17b046d3e5e508a75a1aeccae7162f02511b04bb20442b1b7ff0e",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/style.scss",
+      "bytes": 9806,
+      "capturedSha256": "d83cc81b2733a9265c82483fa941e0c9aca9966cf7cc625ff4e028d18baea87a",
+      "workspaceSha256": "d83cc81b2733a9265c82483fa941e0c9aca9966cf7cc625ff4e028d18baea87a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/styles.d.ts",
+      "bytes": 25,
+      "capturedSha256": "98d6280a1c2d8612897e42c5eef1aa1d886509a44ae7a1cc77cd3cf3241aba31",
+      "workspaceSha256": "98d6280a1c2d8612897e42c5eef1aa1d886509a44ae7a1cc77cd3cf3241aba31",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/src/token_review.tsx",
+      "bytes": 3725,
+      "capturedSha256": "f798b5c3e3287ef40bc911af0a6870eed423d2dc5c6375e7868099121234e8ba",
+      "workspaceSha256": "f798b5c3e3287ef40bc911af0a6870eed423d2dc5c6375e7868099121234e8ba",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/BackendFixtures.mo",
+      "bytes": 3042,
+      "capturedSha256": "6ed8ef6ced481e44ac7ec1d84b408c34e22e4aed213380d2f887723ff097b531",
+      "workspaceSha256": "6ed8ef6ced481e44ac7ec1d84b408c34e22e4aed213380d2f887723ff097b531",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/ERC20Fixtures.mo",
+      "bytes": 1036,
+      "capturedSha256": "5a38feec185dae9d8d868168531ed577bf672e341042aa173814d21df108cc9d",
+      "workspaceSha256": "5a38feec185dae9d8d868168531ed577bf672e341042aa173814d21df108cc9d",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/actor_run.ts",
+      "bytes": 7609,
+      "capturedSha256": "c435a8dba1366f5d8ba2920464337150d3af66e60414b2541035840bf1568f02",
+      "workspaceSha256": "c435a8dba1366f5d8ba2920464337150d3af66e60414b2541035840bf1568f02",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/backend.test.ts",
+      "bytes": 492,
+      "capturedSha256": "04a6be9a8d6be1a395e3fb54bc99746c3ab2120fa438b4b5db8394ce6e55c1b6",
+      "workspaceSha256": "04a6be9a8d6be1a395e3fb54bc99746c3ab2120fa438b4b5db8394ce6e55c1b6",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/backend_actor_test.mo",
+      "bytes": 23283,
+      "capturedSha256": "e1c14cfcdba78461fa5ec05d1fa8cf9cbaa6e748567010f04c4b32ded5dad535",
+      "workspaceSha256": "e1c14cfcdba78461fa5ec05d1fa8cf9cbaa6e748567010f04c4b32ded5dad535",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/backend_run.ts",
+      "bytes": 2647,
+      "capturedSha256": "54f70782709483100bc4b752718fbc61433c94087180c90c2166e3cbffde7d7d",
+      "workspaceSha256": "54f70782709483100bc4b752718fbc61433c94087180c90c2166e3cbffde7d7d",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/backend_test.mo",
+      "bytes": 125,
+      "capturedSha256": "73201541d54f4382930242f6d9c61f23cf1e89ab95457f56fa07fea543c9100e",
+      "workspaceSha256": "73201541d54f4382930242f6d9c61f23cf1e89ab95457f56fa07fea543c9100e",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/browser/mock_app.ts",
+      "bytes": 11218,
+      "capturedSha256": "92dc2b86625ffa1075f3332b074a50a40b1c1575e81a560df3328566c60cc390",
+      "workspaceSha256": "92dc2b86625ffa1075f3332b074a50a40b1c1575e81a560df3328566c60cc390",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/browser/sandbox.mjs",
+      "bytes": 22320,
+      "capturedSha256": "861c948f41b70578fda4a6ee58fc5f0b6dea56e5cbca40142213b2e8ec0d6efe",
+      "workspaceSha256": "861c948f41b70578fda4a6ee58fc5f0b6dea56e5cbca40142213b2e8ec0d6efe",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/concurrency_await.test.ts",
+      "bytes": 18041,
+      "capturedSha256": "c401b77a64550ddfa9516d2c479a20258d8ea9d9f9f587790f6dca0acf5d35a3",
+      "workspaceSha256": "c401b77a64550ddfa9516d2c479a20258d8ea9d9f9f587790f6dca0acf5d35a3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/concurrency_await_gate.mo",
+      "bytes": 1221,
+      "capturedSha256": "64d01b9f527b660e46c1e0a69e687e90eea43263c94ac1277a6137673df943ca",
+      "workspaceSha256": "64d01b9f527b660e46c1e0a69e687e90eea43263c94ac1277a6137673df943ca",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/concurrency_await_wallet.mo",
+      "bytes": 7968,
+      "capturedSha256": "e77edb3661b4cf21332fbd6357e597b022e2f8631e3f6ee0816e51be7f1fbb98",
+      "workspaceSha256": "e77edb3661b4cf21332fbd6357e597b022e2f8631e3f6ee0816e51be7f1fbb98",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/erc20_decode_test.mo",
+      "bytes": 5193,
+      "capturedSha256": "018b532acb601e76f757358c2061d6024042a04bcfbdfa628c08b70a0dab29cf",
+      "workspaceSha256": "018b532acb601e76f757358c2061d6024042a04bcfbdfa628c08b70a0dab29cf",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/evm_crypto.test.ts",
+      "bytes": 738,
+      "capturedSha256": "298233de2af61a053f44f30bb90ba4a26a8aec2c571991234890f64240bfbd82",
+      "workspaceSha256": "298233de2af61a053f44f30bb90ba4a26a8aec2c571991234890f64240bfbd82",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/evm_crypto_eip712.vectors.mjs",
+      "bytes": 14492,
+      "capturedSha256": "96b68b7615501bf7a1aa2a878374445f63edc87d6b2f59d8ac5c23bc61a0fda4",
+      "workspaceSha256": "96b68b7615501bf7a1aa2a878374445f63edc87d6b2f59d8ac5c23bc61a0fda4",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/evm_crypto_eip712_test.mo",
+      "bytes": 42347,
+      "capturedSha256": "5442226ba7810ff50fadb8d4ba5817fbf2957775910fad88fb9a451390a3c1c6",
+      "workspaceSha256": "5442226ba7810ff50fadb8d4ba5817fbf2957775910fad88fb9a451390a3c1c6",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/evm_crypto_protocol.vectors.mjs",
+      "bytes": 5513,
+      "capturedSha256": "6fd555eb475a2697aa24d242ec2d87729cbcc3e9806284f1d649f1aeeee96cb8",
+      "workspaceSha256": "6fd555eb475a2697aa24d242ec2d87729cbcc3e9806284f1d649f1aeeee96cb8",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/evm_crypto_protocol_test.mo",
+      "bytes": 23090,
+      "capturedSha256": "8582e43288fa382cb93f184561836a8e46eb2dbeb90ca892bcd83ad23f81a82d",
+      "workspaceSha256": "8582e43288fa382cb93f184561836a8e46eb2dbeb90ca892bcd83ad23f81a82d",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/evm_crypto_run.ts",
+      "bytes": 2600,
+      "capturedSha256": "dd4c0fc398aedd4567c9eff4bb3cb3b1db81935782786e9cceb6b359087fd306",
+      "workspaceSha256": "dd4c0fc398aedd4567c9eff4bb3cb3b1db81935782786e9cceb6b359087fd306",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/evm_crypto_secp_test.mo",
+      "bytes": 26091,
+      "capturedSha256": "91f34563d72be71bb5014926ca3407ca126f940726adef1c59473b960deacee2",
+      "workspaceSha256": "91f34563d72be71bb5014926ca3407ca126f940726adef1c59473b960deacee2",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/fee_estimate_test.mo",
+      "bytes": 7725,
+      "capturedSha256": "79f2b61982f0793e994bbe33b47945c027dbc49b3948cf7cafe0c63b32fb87ee",
+      "workspaceSha256": "79f2b61982f0793e994bbe33b47945c027dbc49b3948cf7cafe0c63b32fb87ee",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/fixtures/history-25-operations.json",
+      "bytes": 159464,
+      "capturedSha256": "c77a5b32361a9f54f30d7ca77dacf38394261acfd6ad85c9ec4d1381bf6c6f02",
+      "workspaceSha256": "c77a5b32361a9f54f30d7ca77dacf38394261acfd6ad85c9ec4d1381bf6c6f02",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/generate_backend_fixtures.mjs",
+      "bytes": 2081,
+      "capturedSha256": "f71a5e1dd9ced9575fa80bcf070ff2c85b05facf948d6f9c003126c5f2300e92",
+      "workspaceSha256": "f71a5e1dd9ced9575fa80bcf070ff2c85b05facf948d6f9c003126c5f2300e92",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/generate_erc20_fixtures.mjs",
+      "bytes": 3073,
+      "capturedSha256": "1c1b9aa662c17637834a41556124e8d570925affe25bec248036b9fa485a57ee",
+      "workspaceSha256": "1c1b9aa662c17637834a41556124e8d570925affe25bec248036b9fa485a57ee",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/generate_secp_vectors.mjs",
+      "bytes": 9082,
+      "capturedSha256": "0f2e7b90e62b4b5b8e448a17c1c0fcf6853d09d5cee47134562d3a8a018f4d59",
+      "workspaceSha256": "0f2e7b90e62b4b5b8e448a17c1c0fcf6853d09d5cee47134562d3a8a018f4d59",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/history.test.ts",
+      "bytes": 6728,
+      "capturedSha256": "f69143259f982586184ba5c8b514a72e01815f94f19fd9767376c92337980151",
+      "workspaceSha256": "f69143259f982586184ba5c8b514a72e01815f94f19fd9767376c92337980151",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/journal_test.mo",
+      "bytes": 3386,
+      "capturedSha256": "1031e7a85ba7008db535f0603f87ec045a100135e0eabe6d3231cf41ebe0abde",
+      "workspaceSha256": "1031e7a85ba7008db535f0603f87ec045a100135e0eabe6d3231cf41ebe0abde",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/known_approvals.test.ts",
+      "bytes": 6009,
+      "capturedSha256": "7d31687e6d8ab8aef29814aad28af4e513026876990654cc161713bca2cc6f5d",
+      "workspaceSha256": "7d31687e6d8ab8aef29814aad28af4e513026876990654cc161713bca2cc6f5d",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/live_rpc_probe.mo",
+      "bytes": 6081,
+      "capturedSha256": "d29cf0ee91ff57cc11e749f2f50578080dc2dabaaf8357c179d4cedfda027d5c",
+      "workspaceSha256": "d29cf0ee91ff57cc11e749f2f50578080dc2dabaaf8357c179d4cedfda027d5c",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/live_rpc_probe.ts",
+      "bytes": 5164,
+      "capturedSha256": "c9acaa8c210b0a8ceabc5c67bcd6d56e81e98e48056152d248e2382eb2ed1792",
+      "workspaceSha256": "c9acaa8c210b0a8ceabc5c67bcd6d56e81e98e48056152d248e2382eb2ed1792",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/memory_release.test.mo",
+      "bytes": 4505,
+      "capturedSha256": "8a52a8bffc48715d7ca563706580b09cb900fbb10e4d2cf09aa4b0c8aa5a1214",
+      "workspaceSha256": "8a52a8bffc48715d7ca563706580b09cb900fbb10e4d2cf09aa4b0c8aa5a1214",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/package.test.ts",
+      "bytes": 18815,
+      "capturedSha256": "1d8f95e9cdfabb95ccd0b7f345785ae38b5e43bc8eedf2fcdb3067daa0b7bd6a",
+      "workspaceSha256": "1d8f95e9cdfabb95ccd0b7f345785ae38b5e43bc8eedf2fcdb3067daa0b7bd6a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/provider.test.ts",
+      "bytes": 20471,
+      "capturedSha256": "6e6a4a846f1ec448e74e0f7ed734f185e350647c3b75fd028f6ff0201e27c912",
+      "workspaceSha256": "6e6a4a846f1ec448e74e0f7ed734f185e350647c3b75fd028f6ff0201e27c912",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/read_adapters.test.ts",
+      "bytes": 4749,
+      "capturedSha256": "8536f559d9143f2794ca8de07b83d8512c64712228308944d26aebc7c8d24f54",
+      "workspaceSha256": "8536f559d9143f2794ca8de07b83d8512c64712228308944d26aebc7c8d24f54",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/replacement_proof_test.mo",
+      "bytes": 7100,
+      "capturedSha256": "79633a1d189821a64ced4a1e26fb21af207b2765da863a8d40ab5582f79d1851",
+      "workspaceSha256": "79633a1d189821a64ced4a1e26fb21af207b2765da863a8d40ab5582f79d1851",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/rpc.test.ts",
+      "bytes": 412,
+      "capturedSha256": "560a0c9263a239488c9699f8452d5e0a89fd682c5f8a14d55530b26d9ca5c26b",
+      "workspaceSha256": "560a0c9263a239488c9699f8452d5e0a89fd682c5f8a14d55530b26d9ca5c26b",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/rpc_large_response_test.mo",
+      "bytes": 2484,
+      "capturedSha256": "a3cf21ba4da5f9b0be2b1c467e8507bca58da40be7bb8c2677ac964067dd931d",
+      "workspaceSha256": "a3cf21ba4da5f9b0be2b1c467e8507bca58da40be7bb8c2677ac964067dd931d",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/rpc_test.mo",
+      "bytes": 9140,
+      "capturedSha256": "44d09749c28f5211d9cdfbae6a1b12bd9aa82bf436b7ad649244dedf16293627",
+      "workspaceSha256": "44d09749c28f5211d9cdfbae6a1b12bd9aa82bf436b7ad649244dedf16293627",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/sign_form.test.ts",
+      "bytes": 8544,
+      "capturedSha256": "174b271703312ed2051cca3c618179f51db722130e5895f93c0016f3625a617a",
+      "workspaceSha256": "174b271703312ed2051cca3c618179f51db722130e5895f93c0016f3625a617a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/token_evidence_actor_test.mo",
+      "bytes": 7070,
+      "capturedSha256": "13b18ad2263ad708da3fa5b780a61084a7dac9fa6c3a3cf58111047baf5be273",
+      "workspaceSha256": "13b18ad2263ad708da3fa5b780a61084a7dac9fa6c3a3cf58111047baf5be273",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/test/token_review.test.ts",
+      "bytes": 3693,
+      "capturedSha256": "1c736fab122bfca274dfb1c5f963c308009bcb51657684874c80079d90a7b4af",
+      "workspaceSha256": "1c736fab122bfca274dfb1c5f963c308009bcb51657684874c80079d90a7b4af",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/tsconfig.app.json",
+      "bytes": 208,
+      "capturedSha256": "82045441f1cbb553e73c6ad76c94cef22ce51f0cfb6d8a5ddd4bb579aded32c6",
+      "workspaceSha256": "82045441f1cbb553e73c6ad76c94cef22ce51f0cfb6d8a5ddd4bb579aded32c6",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/tsconfig.json",
+      "bytes": 280,
+      "capturedSha256": "fc175cb16396a16abb168cdde469817c1d94614566fbde00c85cde8ab854731c",
+      "workspaceSha256": "fc175cb16396a16abb168cdde469817c1d94614566fbde00c85cde8ab854731c",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/tsconfig.scripts.json",
+      "bytes": 334,
+      "capturedSha256": "ccec1ab3b094b624f66d73eb3caad4f07a7b390241e1b1cf8a94f7e35673fdfe",
+      "workspaceSha256": "ccec1ab3b094b624f66d73eb3caad4f07a7b390241e1b1cf8a94f7e35673fdfe",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "apps/evm_wallet/types/esbuild-copy-static-files.d.ts",
+      "bytes": 305,
+      "capturedSha256": "5ec2343054c3fa2e6c27815a15c808d312ae175e33f36f9665f854db6561893e",
+      "workspaceSha256": "5ec2343054c3fa2e6c27815a15c808d312ae175e33f36f9665f854db6561893e",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "flake.lock",
+      "bytes": 567,
+      "capturedSha256": "678a097122c417e10f0870a035d4d52cb8a52ac4d63e490f464b77281085c4d7",
+      "workspaceSha256": "678a097122c417e10f0870a035d4d52cb8a52ac4d63e490f464b77281085c4d7",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "flake.nix",
+      "bytes": 1835,
+      "capturedSha256": "01d72ee27503ff53097b6b0f56dfca1b541df6298ab940904b140bf1ead742b3",
+      "workspaceSha256": "01d72ee27503ff53097b6b0f56dfca1b541df6298ab940904b140bf1ead742b3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 354438,
+      "capturedSha256": "10cdb573add8360fcbe6b37c420e3efc094efd2087e882dc06e4d6d65f6d9323",
+      "workspaceSha256": "10cdb573add8360fcbe6b37c420e3efc094efd2087e882dc06e4d6d65f6d9323",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "package.json",
+      "bytes": 5765,
+      "capturedSha256": "12883810ba584d5536d966d69453111548538ce7e944a732a15263ece716ea59",
+      "workspaceSha256": "12883810ba584d5536d966d69453111548538ce7e944a732a15263ece716ea59",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/LICENSE",
+      "bytes": 11358,
+      "capturedSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "workspaceSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/NOTICE",
+      "bytes": 205,
+      "capturedSha256": "8c3def4ded31f8e8308abf4f3cf6e069c16a0999bd610f6c22e5e18f5c2d843f",
+      "workspaceSha256": "8c3def4ded31f8e8308abf4f3cf6e069c16a0999bd610f6c22e5e18f5c2d843f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/README.md",
+      "bytes": 5065,
+      "capturedSha256": "c29bd385e8c7cfc014a8fbd9ce3d9f8d052e40162ac77bdd9abc58b51a7e67ba",
+      "workspaceSha256": "c29bd385e8c7cfc014a8fbd9ce3d9f8d052e40162ac77bdd9abc58b51a7e67ba",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/base.scss",
+      "bytes": 76,
+      "capturedSha256": "be99092e758c6e6afffe1688b5a73a66d43a104c0dfa796d68dd93060a4829c2",
+      "workspaceSha256": "be99092e758c6e6afffe1688b5a73a66d43a104c0dfa796d68dd93060a4829c2",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/components.scss",
+      "bytes": 88,
+      "capturedSha256": "0ddce70f45fc81914ef5f780fb570d29018f5dd53fbf069f562fa7802b948653",
+      "workspaceSha256": "0ddce70f45fc81914ef5f780fb570d29018f5dd53fbf069f562fa7802b948653",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/layout.scss",
+      "bytes": 80,
+      "capturedSha256": "9da9b01f81188cf667b0694dcd318b3cd0e0d5fd7edd4b1081e25b108592d2ef",
+      "workspaceSha256": "9da9b01f81188cf667b0694dcd318b3cd0e0d5fd7edd4b1081e25b108592d2ef",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/package.json",
+      "bytes": 1044,
+      "capturedSha256": "0d06cefa3eadabf45312cc466f491541d852ab5c6b07e2c7fbbf3346d856a1ee",
+      "workspaceSha256": "0d06cefa3eadabf45312cc466f491541d852ab5c6b07e2c7fbbf3346d856a1ee",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/_base.scss",
+      "bytes": 4057,
+      "capturedSha256": "5e27cb42ec871ac5f8d37d5b639c1ad6664703e524951460dbb166afef72b2e4",
+      "workspaceSha256": "5e27cb42ec871ac5f8d37d5b639c1ad6664703e524951460dbb166afef72b2e4",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/_layout.scss",
+      "bytes": 3911,
+      "capturedSha256": "fcdb0f16e608b67d880599e9712bf74a5e7ec9c0cab174d714bba5d415696caa",
+      "workspaceSha256": "fcdb0f16e608b67d880599e9712bf74a5e7ec9c0cab174d714bba5d415696caa",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/_tokens.scss",
+      "bytes": 3088,
+      "capturedSha256": "9aec5d25a7ae81270250af4b8c9ca210f9b8ba9a95683845d5d56d0b82d61c0c",
+      "workspaceSha256": "9aec5d25a7ae81270250af4b8c9ca210f9b8ba9a95683845d5d56d0b82d61c0c",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/_utilities.scss",
+      "bytes": 2792,
+      "capturedSha256": "e7a7ca102c19acbdd622368214cf2c38c6779e432120edce1dea9d6733a66abf",
+      "workspaceSha256": "e7a7ca102c19acbdd622368214cf2c38c6779e432120edce1dea9d6733a66abf",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/classes.ts",
+      "bytes": 5151,
+      "capturedSha256": "b41a6081160a9a01b239ae8e5b388268bba753c5b6b851b52eb0348440c2badc",
+      "workspaceSha256": "b41a6081160a9a01b239ae8e5b388268bba753c5b6b851b52eb0348440c2badc",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/components.scss",
+      "bytes": 185,
+      "capturedSha256": "30c7c4cf6d857e537618075d40fbc9ad68fc57cbab1b360ac267951a012d3fad",
+      "workspaceSha256": "30c7c4cf6d857e537618075d40fbc9ad68fc57cbab1b360ac267951a012d3fad",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/components/_button.scss",
+      "bytes": 5685,
+      "capturedSha256": "7753289cd97a1d2c3be4a46a4db4b0a5845f93a7effa284c680aa1182bf17b20",
+      "workspaceSha256": "7753289cd97a1d2c3be4a46a4db4b0a5845f93a7effa284c680aa1182bf17b20",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/components/_data.scss",
+      "bytes": 2219,
+      "capturedSha256": "2f02ed5102014fd57a0fb85411911e4b71051ed914a72eb50c1bc9860f02e2a6",
+      "workspaceSha256": "2f02ed5102014fd57a0fb85411911e4b71051ed914a72eb50c1bc9860f02e2a6",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/components/_feedback.scss",
+      "bytes": 5988,
+      "capturedSha256": "67459f7309b51de5a082e865ea77f2f43d3a0752734d8f171fe59986f7e5adef",
+      "workspaceSha256": "67459f7309b51de5a082e865ea77f2f43d3a0752734d8f171fe59986f7e5adef",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/components/_forms.scss",
+      "bytes": 5486,
+      "capturedSha256": "15ddebb7c5d2f1773c66610e668f567b39233faf07a0999ab257d0194767aea3",
+      "workspaceSha256": "15ddebb7c5d2f1773c66610e668f567b39233faf07a0999ab257d0194767aea3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/components/_overlay.scss",
+      "bytes": 576,
+      "capturedSha256": "2412812fa627a54c031105f51c59946edbbefc0e94ae640ce2f9be2d28e91e15",
+      "workspaceSha256": "2412812fa627a54c031105f51c59946edbbefc0e94ae640ce2f9be2d28e91e15",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/components/_settings.scss",
+      "bytes": 7085,
+      "capturedSha256": "e604e8993f051f12a91921e123a2399da8fccab0a46ca045f6107f4bc65ea86a",
+      "workspaceSha256": "e604e8993f051f12a91921e123a2399da8fccab0a46ca045f6107f4bc65ea86a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/components/_surface.scss",
+      "bytes": 2030,
+      "capturedSha256": "7be293d146267dacc2f0e1a4807243a2968437dd8c421cddc7dfb83485a35302",
+      "workspaceSha256": "7be293d146267dacc2f0e1a4807243a2968437dd8c421cddc7dfb83485a35302",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/src/styles.scss",
+      "bytes": 386,
+      "capturedSha256": "aca9a5e7e69187b6987f9fc0302115dbd54171f05e4f0a7ded0e8d2fc005cdc3",
+      "workspaceSha256": "aca9a5e7e69187b6987f9fc0302115dbd54171f05e4f0a7ded0e8d2fc005cdc3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/styles.scss",
+      "bytes": 19,
+      "capturedSha256": "bbb4a78b40f93202eb061f7d461802474f1f8debea2af5beca799eed86630dc1",
+      "workspaceSha256": "bbb4a78b40f93202eb061f7d461802474f1f8debea2af5beca799eed86630dc1",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/test/classes.test.ts",
+      "bytes": 1424,
+      "capturedSha256": "86ef586445212a0b8f4bc94bd1badcc302865a8ee8826d1e1ccc5aad7dabd433",
+      "workspaceSha256": "86ef586445212a0b8f4bc94bd1badcc302865a8ee8826d1e1ccc5aad7dabd433",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/test/exports.test.ts",
+      "bytes": 761,
+      "capturedSha256": "750eb905c9de102b7cea3ccad7afec0d529ef11c56e3b65526866b60e6efbea5",
+      "workspaceSha256": "750eb905c9de102b7cea3ccad7afec0d529ef11c56e3b65526866b60e6efbea5",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/test/policy.test.ts",
+      "bytes": 11026,
+      "capturedSha256": "44aee7c9220bebb60cbf105aff82a9a7bd6c8feaf355ad9c98e63f6160beb8de",
+      "workspaceSha256": "44aee7c9220bebb60cbf105aff82a9a7bd6c8feaf355ad9c98e63f6160beb8de",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/tokens.scss",
+      "bytes": 80,
+      "capturedSha256": "62247d2ebf61c5cc9c7917f627ceca647a61df3191a1d310bd13808ab1b4eefd",
+      "workspaceSha256": "62247d2ebf61c5cc9c7917f627ceca647a61df3191a1d310bd13808ab1b4eefd",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/tsconfig.build.json",
+      "bytes": 450,
+      "capturedSha256": "39ac9e5296735ca08b15c0566bf6f2232b4771b870551bc13637136229f4fac3",
+      "workspaceSha256": "39ac9e5296735ca08b15c0566bf6f2232b4771b870551bc13637136229f4fac3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-design-system/tsconfig.json",
+      "bytes": 253,
+      "capturedSha256": "c350f7ae23d0c0fc0fe3416fef7c9cdeae7df5cc5726a05632e25d666cf68809",
+      "workspaceSha256": "c350f7ae23d0c0fc0fe3416fef7c9cdeae7df5cc5726a05632e25d666cf68809",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/LICENSE",
+      "bytes": 11358,
+      "capturedSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "workspaceSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/NOTICE",
+      "bytes": 211,
+      "capturedSha256": "e51916d5cac340641ef46166d9fa30ed292d806b3b9895cd4dabc39bede4979e",
+      "workspaceSha256": "e51916d5cac340641ef46166d9fa30ed292d806b3b9895cd4dabc39bede4979e",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/mops.toml",
+      "bytes": 204,
+      "capturedSha256": "0d24435cb48f619d93d62bc1f36090b838137f37a1108f662e1b67fc6a16c9c9",
+      "workspaceSha256": "0d24435cb48f619d93d62bc1f36090b838137f37a1108f662e1b67fc6a16c9c9",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/package.json",
+      "bytes": 386,
+      "capturedSha256": "5df51948f608ccb3527d236165a22b08c97bea22ec1114b4390621b5015c9f2a",
+      "workspaceSha256": "5df51948f608ccb3527d236165a22b08c97bea22ec1114b4390621b5015c9f2a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/src/lib.mo",
+      "bytes": 24240,
+      "capturedSha256": "daaa566c0555a91f920dc813b8925a02de8f1bbde0424154548c82388a79e102",
+      "workspaceSha256": "daaa566c0555a91f920dc813b8925a02de8f1bbde0424154548c82388a79e102",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/test/certified_assets_v2.test.mo",
+      "bytes": 9023,
+      "capturedSha256": "b4ccb969b461af0eedea74f28152a0321257b738208ccad0d0e2c1668ece1bda",
+      "workspaceSha256": "b4ccb969b461af0eedea74f28152a0321257b738208ccad0d0e2c1668ece1bda",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/test/lib.test.mo",
+      "bytes": 4878,
+      "capturedSha256": "0966ab1c34838ac88aa6fe4723143e17609140ad58210bcb08bf012943964fcb",
+      "workspaceSha256": "0966ab1c34838ac88aa6fe4723143e17609140ad58210bcb08bf012943964fcb",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/test/public_surface.test.ts",
+      "bytes": 11536,
+      "capturedSha256": "305f13355cfcda31399b2b93fb4adb168e69a3bbd069175775ad03c50495d3f6",
+      "workspaceSha256": "305f13355cfcda31399b2b93fb4adb168e69a3bbd069175775ad03c50495d3f6",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-motoko-capabilities/test/run.ts",
+      "bytes": 665,
+      "capturedSha256": "0743e22352b3e04155d9ea57e6d56b53225a3921c2ce71d0cb0f2dbce034d567",
+      "workspaceSha256": "0743e22352b3e04155d9ea57e6d56b53225a3921c2ce71d0cb0f2dbce034d567",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/LICENSE",
+      "bytes": 11358,
+      "capturedSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "workspaceSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/NOTICE",
+      "bytes": 224,
+      "capturedSha256": "8e3f35eb02cce87fecc0ca5d87a869ea0bbf3aa7cbf352348421a2e09c815a0f",
+      "workspaceSha256": "8e3f35eb02cce87fecc0ca5d87a869ea0bbf3aa7cbf352348421a2e09c815a0f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/README.md",
+      "bytes": 4955,
+      "capturedSha256": "a34c694396cb64fb90c603fc36adf096cd245f77a7ca1c22325c4f17b7955093",
+      "workspaceSha256": "a34c694396cb64fb90c603fc36adf096cd245f77a7ca1c22325c4f17b7955093",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/package.json",
+      "bytes": 1783,
+      "capturedSha256": "b6cfdafbb7c949af116e3fb6f707b7198348ad074aa988924a32bd79f443fabf",
+      "workspaceSha256": "b6cfdafbb7c949af116e3fb6f707b7198348ad074aa988924a32bd79f443fabf",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/app.ts",
+      "bytes": 86189,
+      "capturedSha256": "60db3959dad5a02e2c236ee2a6203fccebfb78d9a510165c9d65e29f1f8b14c7",
+      "workspaceSha256": "60db3959dad5a02e2c236ee2a6203fccebfb78d9a510165c9d65e29f1f8b14c7",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/app_attachments.ts",
+      "bytes": 23801,
+      "capturedSha256": "8910ab4284d5d1c261baac364bcfca5206b456ecbabaff8448e60b88eb96143f",
+      "workspaceSha256": "8910ab4284d5d1c261baac364bcfca5206b456ecbabaff8448e60b88eb96143f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/app_entry.ts",
+      "bytes": 60,
+      "capturedSha256": "1db18d9e8905dd36fb5e98b1c661cabcfca29a64688085d7fb04e25e96deb283",
+      "workspaceSha256": "1db18d9e8905dd36fb5e98b1c661cabcfca29a64688085d7fb04e25e96deb283",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/app_ids.ts",
+      "bytes": 871,
+      "capturedSha256": "bbde7f774eeeb3cdfe719b6e9faee737a92086e766dcc4a44c39e8d73a9ae2ef",
+      "workspaceSha256": "bbde7f774eeeb3cdfe719b6e9faee737a92086e766dcc4a44c39e8d73a9ae2ef",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/browser_secret_cache.ts",
+      "bytes": 19707,
+      "capturedSha256": "73843c23cbc72b2977b6c1974709d673f34d97d1aab703ba26014b3a57825a0e",
+      "workspaceSha256": "73843c23cbc72b2977b6c1974709d673f34d97d1aab703ba26014b3a57825a0e",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/canonical.ts",
+      "bytes": 1823,
+      "capturedSha256": "a7ae24c5f32e67a4192722c952913e39187e1a67559127a403a3cb8e87677a00",
+      "workspaceSha256": "a7ae24c5f32e67a4192722c952913e39187e1a67559127a403a3cb8e87677a00",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/capabilities/backend_calls.ts",
+      "bytes": 1137,
+      "capturedSha256": "20c09936ebda95128ae43596334f4cd8d1db697787224db3c9473a7045df5771",
+      "workspaceSha256": "20c09936ebda95128ae43596334f4cd8d1db697787224db3c9473a7045df5771",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/capabilities/catalog.ts",
+      "bytes": 141640,
+      "capturedSha256": "373fc391f2410fc4281640c37d8679b3589492d9acaad27db7a77a252e67a026",
+      "workspaceSha256": "373fc391f2410fc4281640c37d8679b3589492d9acaad27db7a77a252e67a026",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/capabilities/index.ts",
+      "bytes": 768,
+      "capturedSha256": "da0d2187348b21de016a8c0f8c458b735dfd721a12f926f8e924a9f4ae00b0fa",
+      "workspaceSha256": "da0d2187348b21de016a8c0f8c458b735dfd721a12f926f8e924a9f4ae00b0fa",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/capabilities/plan.ts",
+      "bytes": 23745,
+      "capturedSha256": "3d5938ead2d4dabc3928113a3d7266ef20156ab2b4b3dcbbbbdb136a6173417b",
+      "workspaceSha256": "3d5938ead2d4dabc3928113a3d7266ef20156ab2b4b3dcbbbbdb136a6173417b",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/capabilities/runtime.ts",
+      "bytes": 9036,
+      "capturedSha256": "b9fba6e0d405898ab878a0e71ea4b1516bfd7cea8110a2dd14eec4777ff148b3",
+      "workspaceSha256": "b9fba6e0d405898ab878a0e71ea4b1516bfd7cea8110a2dd14eec4777ff148b3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/capabilities/wire.ts",
+      "bytes": 38663,
+      "capturedSha256": "d4bc64a482af4909d45093b6643ffd37478e19727570b6312e48bc3c663912b8",
+      "workspaceSha256": "d4bc64a482af4909d45093b6643ffd37478e19727570b6312e48bc3c663912b8",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/certified_asset.ts",
+      "bytes": 18036,
+      "capturedSha256": "aeb0fdc6bade9af5dd0b5c7983b10b55b59ac84d6107071c02c21e0d5ed761f5",
+      "workspaceSha256": "aeb0fdc6bade9af5dd0b5c7983b10b55b59ac84d6107071c02c21e0d5ed761f5",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/certified_assets_qualification.ts",
+      "bytes": 17804,
+      "capturedSha256": "32f2907de045a9e06deaa2e790492180aa694c86bda8157537eaed8a68c14ec3",
+      "workspaceSha256": "32f2907de045a9e06deaa2e790492180aa694c86bda8157537eaed8a68c14ec3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/connections.ts",
+      "bytes": 4649,
+      "capturedSha256": "d0edf6526052723ab20cb790353f4d75d52a1ae5ee6f3544acec14489b1437b3",
+      "workspaceSha256": "d0edf6526052723ab20cb790353f4d75d52a1ae5ee6f3544acec14489b1437b3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/evm_wallet.ts",
+      "bytes": 48463,
+      "capturedSha256": "0c056f5256541733a80417b70df45fc12d489e7cb606068b1221ca292877efb0",
+      "workspaceSha256": "0c056f5256541733a80417b70df45fc12d489e7cb606068b1221ca292877efb0",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/frame_handshake.ts",
+      "bytes": 1145,
+      "capturedSha256": "f3c7cb9068fea27d8509ec34992b75fc58d17b0b765b435dc03431aad858a901",
+      "workspaceSha256": "f3c7cb9068fea27d8509ec34992b75fc58d17b0b765b435dc03431aad858a901",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/hash.ts",
+      "bytes": 584,
+      "capturedSha256": "962b6108f7ffa32bc567813cf7c0fd9154b2262961e49936b39ae0f8aba2e739",
+      "workspaceSha256": "962b6108f7ffa32bc567813cf7c0fd9154b2262961e49936b39ae0f8aba2e739",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/icrc_account.ts",
+      "bytes": 919,
+      "capturedSha256": "38dea4a32bfef9b5f898c4a66989bf0db0ad27dba5e85be402a6593c8066aa36",
+      "workspaceSha256": "38dea4a32bfef9b5f898c4a66989bf0db0ad27dba5e85be402a6593c8066aa36",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/installed_artifacts.ts",
+      "bytes": 7099,
+      "capturedSha256": "e8f1dc1809bf560b73879ebafabfa4d14c8a12634d764b8cdc7bc9fe68346f56",
+      "workspaceSha256": "e8f1dc1809bf560b73879ebafabfa4d14c8a12634d764b8cdc7bc9fe68346f56",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/kernel.ts",
+      "bytes": 6908,
+      "capturedSha256": "0d1daf90bc84b3230a623ffddd37787c8dfdbcaa30d90ba216c0d11c52b58d9a",
+      "workspaceSha256": "0d1daf90bc84b3230a623ffddd37787c8dfdbcaa30d90ba216c0d11c52b58d9a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/memory.ts",
+      "bytes": 11600,
+      "capturedSha256": "3d24f0015cae9b67eb7a6a234a5a6c3fefd0a6f7a17b9e91d141f974377b3fbe",
+      "workspaceSha256": "3d24f0015cae9b67eb7a6a234a5a6c3fefd0a6f7a17b9e91d141f974377b3fbe",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/motoko_imports.ts",
+      "bytes": 2135,
+      "capturedSha256": "6427f946b1d974ffbbf5b18e2b43c9a205eedbf33df04423ad6e0f6334da5440",
+      "workspaceSha256": "6427f946b1d974ffbbf5b18e2b43c9a205eedbf33df04423ad6e0f6334da5440",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/package_archive.ts",
+      "bytes": 510,
+      "capturedSha256": "35e0dba7850c6c214e3cd331f74d4c8bb9806661c114284393e4f4d131d0e7c1",
+      "workspaceSha256": "35e0dba7850c6c214e3cd331f74d4c8bb9806661c114284393e4f4d131d0e7c1",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/package_record.ts",
+      "bytes": 39026,
+      "capturedSha256": "c0992deb793254286b06cceee781a1d5a0afb4f9dfbc3f63f3b39d7caeb0c64f",
+      "workspaceSha256": "c0992deb793254286b06cceee781a1d5a0afb4f9dfbc3f63f3b39d7caeb0c64f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/package_surface_origins.ts",
+      "bytes": 1340,
+      "capturedSha256": "2990cc2353d2677c6979da5ce9ed75407db96a944354fecb496fc1edc619ef81",
+      "workspaceSha256": "2990cc2353d2677c6979da5ce9ed75407db96a944354fecb496fc1edc619ef81",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/physical_names.ts",
+      "bytes": 2955,
+      "capturedSha256": "1e57f1a7d173ef8d261345c366112f6b45b58b6fe20ed63b2d760bcb8d891e15",
+      "workspaceSha256": "1e57f1a7d173ef8d261345c366112f6b45b58b6fe20ed63b2d760bcb8d891e15",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/protocol.ts",
+      "bytes": 41665,
+      "capturedSha256": "9d7a0f22c91a3d268900b792fac0920e7ef064a0dea9e2170e7f9b706453146f",
+      "workspaceSha256": "9d7a0f22c91a3d268900b792fac0920e7ef064a0dea9e2170e7f9b706453146f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/repository.ts",
+      "bytes": 37538,
+      "capturedSha256": "5ad4c544256a4dc31b2ea7f2c379540a5e6da96160b2e8e618c261f3c0ae1825",
+      "workspaceSha256": "5ad4c544256a4dc31b2ea7f2c379540a5e6da96160b2e8e618c261f3c0ae1825",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/runtime.ts",
+      "bytes": 18141,
+      "capturedSha256": "83fade6d9e6f0ac8367bfafe6dbaae554de320fe206758eb60c1482f70860c73",
+      "workspaceSha256": "83fade6d9e6f0ac8367bfafe6dbaae554de320fe206758eb60c1482f70860c73",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/runtime_config.ts",
+      "bytes": 7692,
+      "capturedSha256": "d6a40f6eeffc84a6227cd63a543be9ab92b3db7b2d2dee83d8364f8858183523",
+      "workspaceSha256": "d6a40f6eeffc84a6227cd63a543be9ab92b3db7b2d2dee83d8364f8858183523",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/schema.ts",
+      "bytes": 36926,
+      "capturedSha256": "2a84bd2bb29f95f58dff4e503261227a11b3c7cb0316cbbad832f48f5d011c5a",
+      "workspaceSha256": "2a84bd2bb29f95f58dff4e503261227a11b3c7cb0316cbbad832f48f5d011c5a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/tile_ids.ts",
+      "bytes": 380,
+      "capturedSha256": "b9208b12735ab19ac167e443e327edacb72cbf70feba58c9aa4ce2c6cb786c8b",
+      "workspaceSha256": "b9208b12735ab19ac167e443e327edacb72cbf70feba58c9aa4ce2c6cb786c8b",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/tools.ts",
+      "bytes": 276,
+      "capturedSha256": "1ac6ee1f92c2732120860dd9af0555506d79c9ee700744aff787dbe0888d2153",
+      "workspaceSha256": "1ac6ee1f92c2732120860dd9af0555506d79c9ee700744aff787dbe0888d2153",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/types/js-sha256.d.ts",
+      "bytes": 269,
+      "capturedSha256": "9c0f8e99bad0eb323e5bc8fea7483c147b3cbf6425ed4077de0b0ef6d26079f3",
+      "workspaceSha256": "9c0f8e99bad0eb323e5bc8fea7483c147b3cbf6425ed4077de0b0ef6d26079f3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/validate_schema.ts",
+      "bytes": 207,
+      "capturedSha256": "eba6ee7cd7c491743dcdb62e0d2bdd78fb1dbd0381ad8691775a0db64bd4c070",
+      "workspaceSha256": "eba6ee7cd7c491743dcdb62e0d2bdd78fb1dbd0381ad8691775a0db64bd4c070",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/version.ts",
+      "bytes": 3076,
+      "capturedSha256": "9450f3ad5e2462d3619dd8c681a0654ec7d23383fdffe4da9d67a9ec5bbd04ab",
+      "workspaceSha256": "9450f3ad5e2462d3619dd8c681a0654ec7d23383fdffe4da9d67a9ec5bbd04ab",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/src/wasm_metadata.ts",
+      "bytes": 7538,
+      "capturedSha256": "29bef40c8bd68c9e1e8b95e152d72db5a32cfbc21f439c55cfa352b8d38d0a1a",
+      "workspaceSha256": "29bef40c8bd68c9e1e8b95e152d72db5a32cfbc21f439c55cfa352b8d38d0a1a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/app_attachments.test.ts",
+      "bytes": 5594,
+      "capturedSha256": "3d3084cfcc8beae0de996aa5c5377e4e6e4f8a2af031633e0173e34b9f19d0d2",
+      "workspaceSha256": "3d3084cfcc8beae0de996aa5c5377e4e6e4f8a2af031633e0173e34b9f19d0d2",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/app_ids.test.ts",
+      "bytes": 524,
+      "capturedSha256": "88c591922509b2ddf82dc4e9523d588654037431596092b3b21ea86be11ab272",
+      "workspaceSha256": "88c591922509b2ddf82dc4e9523d588654037431596092b3b21ea86be11ab272",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/app_self_calls.test.ts",
+      "bytes": 12724,
+      "capturedSha256": "823fda8bec50a06b9a65726e36ff38a858f5d499a1ce3c3579582e146dc5ab7b",
+      "workspaceSha256": "823fda8bec50a06b9a65726e36ff38a858f5d499a1ce3c3579582e146dc5ab7b",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/browser_secret_cache.test.ts",
+      "bytes": 2970,
+      "capturedSha256": "831a336a3a6999cfcc7c3ba7c7d38f4129868357d190a77d303a8ad37b983398",
+      "workspaceSha256": "831a336a3a6999cfcc7c3ba7c7d38f4129868357d190a77d303a8ad37b983398",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/canonical.test.ts",
+      "bytes": 752,
+      "capturedSha256": "107dca9b8de5b273303f0a831e057f14031de2ce874c5dfe5cd56c7ea140cdd1",
+      "workspaceSha256": "107dca9b8de5b273303f0a831e057f14031de2ce874c5dfe5cd56c7ea140cdd1",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/capabilities.test.ts",
+      "bytes": 71003,
+      "capturedSha256": "4ac9618d98d30c20672eb34de8fb7ba79233041ac1f545c76503b74bcddbe1d7",
+      "workspaceSha256": "4ac9618d98d30c20672eb34de8fb7ba79233041ac1f545c76503b74bcddbe1d7",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/certified_asset.test.ts",
+      "bytes": 16033,
+      "capturedSha256": "2168df56bcca6195f1a7401fc8697239516f6fec07a70a5ca9672a8dff9e4f31",
+      "workspaceSha256": "2168df56bcca6195f1a7401fc8697239516f6fec07a70a5ca9672a8dff9e4f31",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/certified_assets_qualification.test.ts",
+      "bytes": 4605,
+      "capturedSha256": "31496856882707af12c70d6808b0923ec0d0010c4ac52167a7eb07042e54e4df",
+      "workspaceSha256": "31496856882707af12c70d6808b0923ec0d0010c4ac52167a7eb07042e54e4df",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/connection_provider_support.test.ts",
+      "bytes": 2863,
+      "capturedSha256": "29345df2abb389bbd03fe3ecca97ce8b547b204784c0994ebd8aefa76b832b3f",
+      "workspaceSha256": "29345df2abb389bbd03fe3ecca97ce8b547b204784c0994ebd8aefa76b832b3f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/entrypoints.test.ts",
+      "bytes": 1300,
+      "capturedSha256": "b76f0724a660e98992855e943bb5c5cc668a03201c1776fb0908963f1c661715",
+      "workspaceSha256": "b76f0724a660e98992855e943bb5c5cc668a03201c1776fb0908963f1c661715",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/evm_wallet.test.ts",
+      "bytes": 57545,
+      "capturedSha256": "eeda50507967831561ca6482b34abf9a3481041e7bdd8996b94ec5377e5e5948",
+      "workspaceSha256": "eeda50507967831561ca6482b34abf9a3481041e7bdd8996b94ec5377e5e5948",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/icrc_account.test.ts",
+      "bytes": 1451,
+      "capturedSha256": "66b64c38dc51fd62bcefba65910192dde88e8b51d7f001289664ecaed5195f88",
+      "workspaceSha256": "66b64c38dc51fd62bcefba65910192dde88e8b51d7f001289664ecaed5195f88",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/installed_artifacts.test.ts",
+      "bytes": 3321,
+      "capturedSha256": "ecf4a7769bb5b9e443474e7a35016709e297db675cd85c773a7d74a51bbe93e8",
+      "workspaceSha256": "ecf4a7769bb5b9e443474e7a35016709e297db675cd85c773a7d74a51bbe93e8",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/motoko_imports.test.ts",
+      "bytes": 2636,
+      "capturedSha256": "56bce2b40f9baa3b5e4633b25468a068cfe154a9f1901d57fbea0af5c7fc4555",
+      "workspaceSha256": "56bce2b40f9baa3b5e4633b25468a068cfe154a9f1901d57fbea0af5c7fc4555",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/package_archive.test.ts",
+      "bytes": 632,
+      "capturedSha256": "4adf564aaa9e510c28ad631e54cd7f50942f8f3c48ec1debfb955214eb2e8c5a",
+      "workspaceSha256": "4adf564aaa9e510c28ad631e54cd7f50942f8f3c48ec1debfb955214eb2e8c5a",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/package_record.test.ts",
+      "bytes": 19861,
+      "capturedSha256": "6115b1df0cc937b6bac8fb479443f84f01baf10c0fff008002938e026d75b5d5",
+      "workspaceSha256": "6115b1df0cc937b6bac8fb479443f84f01baf10c0fff008002938e026d75b5d5",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/physical_names.test.ts",
+      "bytes": 3269,
+      "capturedSha256": "f18c0365f5bde1f9db3c66f45a7fb751c6f96093cf90befba2932cfd5c9df782",
+      "workspaceSha256": "f18c0365f5bde1f9db3c66f45a7fb751c6f96093cf90befba2932cfd5c9df782",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/repository.test.ts",
+      "bytes": 18247,
+      "capturedSha256": "6de5228520cc465161231d59befca60e6e65cb91dd267754c421c8b453dbec6f",
+      "workspaceSha256": "6de5228520cc465161231d59befca60e6e65cb91dd267754c421c8b453dbec6f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/runtime.test.ts",
+      "bytes": 14337,
+      "capturedSha256": "77bfdda1f722de518af8ac8bcae156c3064f61eadb780b06e7a1afc44cd37f56",
+      "workspaceSha256": "77bfdda1f722de518af8ac8bcae156c3064f61eadb780b06e7a1afc44cd37f56",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/runtime_capabilities.test.ts",
+      "bytes": 21232,
+      "capturedSha256": "39f0ed5b015827b9a01eba8c7797231b57e0d917197bf197d9634f9e8203a570",
+      "workspaceSha256": "39f0ed5b015827b9a01eba8c7797231b57e0d917197bf197d9634f9e8203a570",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/runtime_config.test.ts",
+      "bytes": 3824,
+      "capturedSha256": "2a97743d1bd36b6afefeb59f5ae0d5f4a21a23592341071bbbe41129eab7a600",
+      "workspaceSha256": "2a97743d1bd36b6afefeb59f5ae0d5f4a21a23592341071bbbe41129eab7a600",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/schema.test.ts",
+      "bytes": 81046,
+      "capturedSha256": "825877aace5008761b9e070a532a383a6d44af073685682ae5607dd9311fb210",
+      "workspaceSha256": "825877aace5008761b9e070a532a383a6d44af073685682ae5607dd9311fb210",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/tools.test.ts",
+      "bytes": 129972,
+      "capturedSha256": "a7d48faf6b3152a70337c9afdbc0dc78103682290ae9f8ee484b1fa58af8647d",
+      "workspaceSha256": "a7d48faf6b3152a70337c9afdbc0dc78103682290ae9f8ee484b1fa58af8647d",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/version.test.ts",
+      "bytes": 3284,
+      "capturedSha256": "e946446debe5e3f02ceecd0b56fb8fb7bacebf9737775cea619c215ecb9fc657",
+      "workspaceSha256": "e946446debe5e3f02ceecd0b56fb8fb7bacebf9737775cea619c215ecb9fc657",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
+      "bytes": 6646,
+      "capturedSha256": "809a936b937546ee2414d99ed14517345d8280aeb92a6559eabce467766afc7f",
+      "workspaceSha256": "809a936b937546ee2414d99ed14517345d8280aeb92a6559eabce467766afc7f",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/test/wasm_metadata.test.ts",
+      "bytes": 3790,
+      "capturedSha256": "3f42f87070bca3d624ad951c075cb5f98f366e37bb1304550b2c271b7a6098a4",
+      "workspaceSha256": "3f42f87070bca3d624ad951c075cb5f98f366e37bb1304550b2c271b7a6098a4",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/tsconfig.json",
+      "bytes": 193,
+      "capturedSha256": "b1d0f4e2676517621e41e95d2c52840fb7751eda9656447e1affd41f66fa7c47",
+      "workspaceSha256": "b1d0f4e2676517621e41e95d2c52840fb7751eda9656447e1affd41f66fa7c47",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/tsconfig.src.json",
+      "bytes": 210,
+      "capturedSha256": "577ec333542cd497d24032d4e57ddbae19a509d1c4aa502dab903877f8c850ff",
+      "workspaceSha256": "577ec333542cd497d24032d4e57ddbae19a509d1c4aa502dab903877f8c850ff",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "packages/neutron-tools/tsconfig.test.json",
+      "bytes": 296,
+      "capturedSha256": "8437e305eb9cb68097b1e785e6b9ab84a87720927eb24c32068837c448f09e26",
+      "workspaceSha256": "8437e305eb9cb68097b1e785e6b9ab84a87720927eb24c32068837c448f09e26",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "tsconfig.base.json",
+      "bytes": 591,
+      "capturedSha256": "42aee62458b14b51eb4c28f16b97c83101589fc428fd292d80d3d10245626ce3",
+      "workspaceSha256": "42aee62458b14b51eb4c28f16b97c83101589fc428fd292d80d3d10245626ce3",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "tsconfig.browser.json",
+      "bytes": 208,
+      "capturedSha256": "81386bbd37e5f48e9eb76029ee83aea87c4571538a79b8494cb288a25147ed56",
+      "workspaceSha256": "81386bbd37e5f48e9eb76029ee83aea87c4571538a79b8494cb288a25147ed56",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "tsconfig.bun.json",
+      "bytes": 210,
+      "capturedSha256": "acd1687e3fe77e5f6dd48b5ffb435711cfa40bba9ea6fdb17e175213bf8cf6c1",
+      "workspaceSha256": "acd1687e3fe77e5f6dd48b5ffb435711cfa40bba9ea6fdb17e175213bf8cf6c1",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    },
+    {
+      "path": "tsconfig.json",
+      "bytes": 1342,
+      "capturedSha256": "2b88616d62128e2feb6a905ba0ed40d0660f8a20d47c37ecf1367f4050b1ac05",
+      "workspaceSha256": "2b88616d62128e2feb6a905ba0ed40d0660f8a20d47c37ecf1367f4050b1ac05",
+      "capturedMode": 420,
+      "workspaceMode": 420,
+      "matches": true
+    }
+  ]
+}

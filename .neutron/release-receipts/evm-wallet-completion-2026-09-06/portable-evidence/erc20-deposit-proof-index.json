@@ -1,0 +1,338 @@
+{
+  "schema": "neutron-erc20-deposit-evidence-index-v1",
+  "generatedAt": "2026-09-06T15:21:18.885239+00:00",
+  "scope": "Exact saved artifacts for fresh local final-package installation and20-USDC-equivalent deposit through the official helper/released minter and ledger protocols, using the disclosed six-decimal local ERC20 stand-in. Not production token bytecode or funded production-network execution.",
+  "evidenceKind": "Portable byte-for-byte copies and straight extraction of existing recorded fields; no runtime, signature, transaction, test or git operation performed.",
+  "overallScenario": "Passed across the saved initial deposit/mint recovery and separate redemption-only continuation from the same completed bridge. The initial combined browser case remains failed before withdrawal because the released minter fee cache was unavailable; ordinary donor protocol initialization and the later successful continuation are recorded separately.",
+  "setupEvidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-setup.json",
+  "copies": [
+    {
+      "source": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-lost-approval-reply.json",
+        "bytes": 11745,
+        "sha256": "da169c0361e9c925108245d5b4e4655c34d6d37151a6e8ef467fcf5927ad092b",
+        "retention": "local_original"
+      },
+      "portableCopy": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-lost-approval-reply.json",
+        "bytes": 11745,
+        "sha256": "da169c0361e9c925108245d5b4e4655c34d6d37151a6e8ef467fcf5927ad092b"
+      },
+      "copyMethod": "Exact unchanged original bytes; no reserialization or new behavioral verification."
+    },
+    {
+      "source": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-exact-deposit-mint-and-recovery.json",
+        "bytes": 8019,
+        "sha256": "1fe06c8df45303fa56669a03846cb60aefdc4ccf3ccda8f292d5f581991880cc",
+        "retention": "local_original"
+      },
+      "portableCopy": {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-exact-deposit-mint-and-recovery.json",
+        "bytes": 8019,
+        "sha256": "1fe06c8df45303fa56669a03846cb60aefdc4ccf3ccda8f292d5f581991880cc"
+      },
+      "copyMethod": "Exact unchanged original bytes; no reserialization or new behavioral verification."
+    }
+  ],
+  "installedInputSource": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/ic-wallet-erc20-bridge-ckU-43a99-deems-with-quoted-ckETH-gas-chromium/ckusdc-selected-local-archives.json",
+    "bytes": 18025,
+    "sha256": "96622ff04efaf86ab6a5995f56ef18925756a18d067206a4e73268e84f999c7f",
+    "retention": "local_only; embedded process/control/state supervisor fields omitted"
+  },
+  "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+  "archives": [
+    {
+      "path": "apps/kernel/kernel.v0.3.42.neutron",
+      "size": 2448936,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "path": "apps/contacts/contacts.v0.3.6.neutron",
+      "size": 298018,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    },
+    {
+      "path": "apps/wallet/wallet.v0.3.16.neutron",
+      "size": 768823,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "path": "apps/kitchensink/kitchensink.v0.3.15.neutron",
+      "size": 472282,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.7.neutron",
+      "size": 391816,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+    },
+    {
+      "path": "apps/uniswap/uniswap.v0.1.4.neutron",
+      "size": 288989,
+      "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+    },
+    {
+      "path": "apps/agent/agent.v0.3.17.neutron",
+      "size": 511078,
+      "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+    }
+  ],
+  "recordedBridge": {
+    "id": "dd60750fcf816c6a8159f6e25ea81e2c",
+    "amountAtoms": "20000000",
+    "quote": {
+      "chainId": "1",
+      "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "confirmed",
+        "operationId": "dc60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x873097e3a362175ebed8938153b3236b1711e8914b0fb200d7f9bde1e7059f2a",
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "confirmed",
+        "operationId": "df60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd",
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "confirmed",
+        "operationId": "de60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+        "error": null
+      }
+    ],
+    "acceptedDeposit": {
+      "logIndex": "2",
+      "blockNumber": "335863",
+      "eventIndex": "23"
+    },
+    "mint": {
+      "ledgerBlockIndex": "0",
+      "eventIndex": "24",
+      "verifiedLedger": true
+    },
+    "error": null
+  },
+  "recordedApprovalReply": {
+    "droppedRequestId": "df60750fcf816c6a8159f6e25ea81e2c",
+    "droppedStatus": "unknown",
+    "droppedTransactionHash": "0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd",
+    "droppedMessage": "Broadcast outcome requires reconciliation: EVM RPC broadcast providers disagree; reconcile the saved transaction hash: [(#EthMainnet(#Alchemy), #Ok(#Ok(?\"0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd\"))), (#EthMainnet(#BlockPi), #Err(#JsonRpcError({code = -32_003; message = \"transaction already imported\"}))), (#EthMainnet(#PublicNode), #Err(#JsonRpcError({code = -32_003; message = \"transaction already imported\"})))]",
+    "scope": "The consumer response was dropped; its serialized status was unknown after broadcast provider disagreement. This is not an injected provider-response-loss case.",
+    "recoveredSteps": [
+      {
+        "kind": "reset_approval",
+        "state": "confirmed",
+        "operationId": "dc60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x873097e3a362175ebed8938153b3236b1711e8914b0fb200d7f9bde1e7059f2a",
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "confirmed",
+        "operationId": "df60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": "0x5ff3808b83508045d52376a2a42b6933b3e64bb878845bc4b0cee755c359d4dd",
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "unknown",
+        "operationId": "de60750fcf816c6a8159f6e25ea81e2c",
+        "transactionHash": null,
+        "error": null
+      }
+    ]
+  },
+  "recordedDepositAndMint": {
+    "accepted": {
+      "transactionHash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+      "logIndex": "2",
+      "blockNumber": "335863",
+      "fromAddress": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+      "amount": "20000000",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "tokenAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "eventIndex": "23"
+    },
+    "minted": {
+      "transactionHash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+      "logIndex": "2",
+      "ledgerBlockIndex": "0",
+      "eventIndex": "24"
+    },
+    "ledgerBlock": {
+      "index": "0",
+      "kind": "mint",
+      "amount": "20000000",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null
+    },
+    "transaction": {
+      "hash": "0xfe9efc703d6219244075ba3360a97bcf2405c493bdcf441cf8b6bc2b18d02cca",
+      "from": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+      "to": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "valueWei": "0",
+      "nonce": 3,
+      "chainId": "1",
+      "raw": "0x02f8d00103843b9aca00843b9aca0e83010166948a791620dd6260079bf849dc5567adc3f2fdc31880b86426b3293f000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000001312d000affffffffff8000010101000000000000000000000000000000000000000000c001a0bfb9f928e524fb54c30de696ce559d8304e9f9f9301556da4097365065c6609ea0526e6f1e58f8702798339d0572031cf39f2f9f1c932237780d8e87e963e46408",
+      "blockNumber": "335863",
+      "blockHash": "0xe64e3e02bc03e7e97e1a752e025dbdfa59fbcae3d0d2f85c93bdf2083d05b98d",
+      "gasUsed": "61094",
+      "effectiveGasPriceWei": "1000000007"
+    }
+  },
+  "omitted": [
+    "Whole browser report and its pass/fail configuration",
+    "Traces and screenshots",
+    "Runtime process identities, control endpoints and state directories from selected-local-archives"
+  ],
+  "initialBrowserOutcome": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-initial-case-outcome.json",
+  "ownerInterruptionEvidence": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json",
+    "bytes": 2145,
+    "sha256": "9085d4cbda94b8e6b724b9124f65daa0045b63dd1946b1dc3e106fa6203fffe5"
+  },
+  "redemptionContinuation": {
+    "status": "confirmed_after_reload_and_canonical_minter_payout",
+    "scope": "The separate redemption-only continuation reused the same completed bridge with no new deposit or repeated donor funding. Original submission and reload restored one request; canonical minter finalization confirmed the exact ERC20 payout. The initial combined-case failure remains unchanged.",
+    "inputPreservation": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-redemption-continuation-input.json",
+      "bytes": 8866,
+      "sha256": "ee9e48ec3925577f908e3e7ec54f455a638f221facbb74366805057584de4bef"
+    },
+    "feeReadinessEvidence": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/fee-readiness.json",
+      "bytes": 5221,
+      "sha256": "88a64d10bc970454f5ce03a3d0fe29f81590774a13ca7c9e363d44d162ab1372"
+    },
+    "copies": [
+      {
+        "source": {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-prewithdrawal-gas-review.json",
+          "bytes": 1155,
+          "sha256": "f8657ab2ae48e24dae1f0e646471e5d77155ea5a92220070cccc1d92431931bd",
+          "retention": "local_original"
+        },
+        "portableCopy": {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-prewithdrawal-gas-review.json",
+          "bytes": 1155,
+          "sha256": "f8657ab2ae48e24dae1f0e646471e5d77155ea5a92220070cccc1d92431931bd"
+        },
+        "copyMethod": "Exact unchanged original bytes; no reserialization or new behavioral verification."
+      },
+      {
+        "source": {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-requested-redemption-and-debits.json",
+          "bytes": 1664,
+          "sha256": "3f52ca05d1fbe70ac2197bf6db117203778073ca39b1a7e3551437274dd03d67",
+          "retention": "local_original"
+        },
+        "portableCopy": {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-requested-redemption-and-debits.json",
+          "bytes": 1664,
+          "sha256": "3f52ca05d1fbe70ac2197bf6db117203778073ca39b1a7e3551437274dd03d67"
+        },
+        "copyMethod": "Exact unchanged original bytes; no reserialization or new behavioral verification."
+      },
+      {
+        "source": {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/redemption-continuation/ic-wallet-erc20-bridge-com-dbd3a--after-minter-fee-readiness-chromium/ckusdc-native-redemption-quote-debits-and-reload.json",
+          "bytes": 4115,
+          "sha256": "41f90f088c4fd45d3b159bdc5796f4ce33bc300a307d74f72814b7b8a8d05c46",
+          "retention": "local_original"
+        },
+        "portableCopy": {
+          "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/portable-evidence/erc20-native-redemption-quote-debits-and-reload.json",
+          "bytes": 4115,
+          "sha256": "41f90f088c4fd45d3b159bdc5796f4ce33bc300a307d74f72814b7b8a8d05c46"
+        },
+        "copyMethod": "Exact unchanged original bytes; no reserialization or new behavioral verification."
+      }
+    ],
+    "qualificationSummary": {
+      "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/qualification-summary.json",
+      "bytes": 14787,
+      "sha256": "68132eaa5c3b75f2e6eff645a2f1f52dcfe8eaab2491c1e94dee961bf098386d"
+    },
+    "recordedFinalRedemption": {
+      "requestId": "1a35d176c447545c9d8e6695bc381b94",
+      "amountAtoms": "5000000",
+      "assetBurnIndex": "2",
+      "gasBurnIndex": "7",
+      "quotedGasBudgetWei": "97500000910000",
+      "quotedGasMaximumDebitWei": "99500000910000",
+      "assetApprovalFeeAtoms": "10000",
+      "gasApprovalFeeWei": "2000000000000",
+      "before": {
+        "nonce": "4",
+        "evmTokenBalance": "80000000",
+        "assetBalance": "20000000",
+        "assetFee": "10000",
+        "assetAllowance": "0",
+        "gasBalance": "9000800000000000000",
+        "gasFee": "2000000000000",
+        "gasAllowance": "0"
+      },
+      "afterBurn": {
+        "assetBalance": "14990000",
+        "gasBalance": "9000700499999090000",
+        "assetAllowance": "0",
+        "gasAllowance": "0"
+      },
+      "restoredIdentically": true,
+      "minterStatus": "TxFinalized.Success",
+      "payoutHash": "0x455267e77819404cb2a95c42a03f98aa8b345909b62c0a07f5f803bb032f258c",
+      "recipientTokenBalanceAtoms": "85000000",
+      "effectiveTransactionFeeWei": "51978000242564",
+      "settled": {
+        "requestId": "1a35d176c447545c9d8e6695bc381b94",
+        "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+        "amount": "5000000",
+        "destination": "0x75e6722465bc0579Cf08CAbBEE0a05E64Fb5Db41",
+        "native": true,
+        "status": "succeeded",
+        "blockIndex": "2",
+        "settlement": {
+          "status": "confirmed",
+          "transactionHash": "0x455267e77819404cb2a95c42a03f98aa8b345909b62c0a07f5f803bb032f258c"
+        }
+      },
+      "finalAssetBalance": "14990000",
+      "finalGasBalance": "9000700499999090000",
+      "userEvmNonceUnchanged": "4"
+    }
+  },
+  "runtimeRestoration": {
+    "status": "terminal_browser_exit0_then_owned_runtime_stopped_original_gateway_restored_and_verified",
+    "owner": "/root/evm_provenance",
+    "restoredAt": "2026-09-06T15:17:24.850Z",
+    "evidence": [
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/erc20-runtime/retained-restored.json",
+        "bytes": 671,
+        "sha256": "55b703c8603693f52825cc8a12aae573c6ac4ff7db06f04f408dce2747e978af"
+      },
+      {
+        "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/final-runtime-restoration.json",
+        "bytes": 1868,
+        "sha256": "e6d68ce06f4765f72865935b95a24d41a5bd770dbeac2e3ec7934d0dcee2d311"
+      }
+    ]
+  }
+}

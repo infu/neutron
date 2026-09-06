@@ -36,7 +36,7 @@ const legacyNsalAppWorkspaces = [
 ];
 
 const nsalAppWorkspaces: string[] = [];
-const nsalUseAppWorkspaces = ["apps/blast"];
+const nsalUseAppWorkspaces = ["apps/blast", "apps/evm_wallet", "apps/uniswap"];
 
 const apacheAppWorkspaces = ["apps/gemma"];
 const kernelWorkspaces = ["apps/kernel"];

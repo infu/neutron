@@ -19,11 +19,13 @@ const compiledTests = [
   "connections_codec_test.mo",
   "connections_memory_test.mo",
   "painless_test.mo",
+  "memory_v4_schema_test.mo",
 ];
 const interpretedTests = [
   "authenticated_forest_lifecycle_test.mo",
   "backend_calls_test.mo",
   "chain_key_signing_service_test.mo",
+  "wallet_custody_signing_service_test.mo",
   "certified_assets_codec_test.mo",
   "certified_assets_incremental_sha256_test.mo",
   "certified_assets_public_surface_test.mo",

@@ -1,0 +1,100 @@
+{
+  "status": "source_frozen_for_evm107_after_targeted_compiled_actor_tests",
+  "actual_failure": {
+    "candidate": "EVM106",
+    "operation_id": "29",
+    "original_operation_id": "28",
+    "replacement_request_id": "db244aad991030715bcdf1a1a4b06e29",
+    "nonce": "8",
+    "symptom": "Simulation failed: EVM error OutOfGas before review/signing",
+    "evidence_directory": "../browser-allowance-reconciled-final-342-106/",
+    "evidence_files": [
+      "replacement-preparation-diagnosis.json",
+      "replacement-estimate-exact-call-state-mismatch.json"
+    ]
+  },
+  "cause": "Gas estimation omitted the second block parameter while balance, mined-nonce check and simulation used a pinned block. A pending original approval or a newly mined block can already set the allowance in the default estimate state, understating the gas needed at the pinned zero-allowance state.",
+  "reproduced_rpc_facts": {
+    "before_inclusion_block": "0x9b1d",
+    "inclusion_block": "0x9b1e",
+    "gas_before_inclusion": 44322,
+    "gas_after_inclusion": 24437,
+    "small_gas_at_before_block": "OutOfGas",
+    "matching_gas_at_before_block": "success",
+    "call_fields": "from,to,value,data,nonce,type,accessList,maxFeePerGas,maxPriorityFeePerGas"
+  },
+  "fix": {
+    "review": "eth_estimateGas receives the same explicit block number as balance reads and eth_call simulation",
+    "readonly": "eth_estimateGas receives the block number returned by its block read; if that read is unavailable, retain partial facts with explicit latest and block_number:null",
+    "explicit_block_failure": "Reported without retrying against pending or omitted state",
+    "gas_multiplier": false,
+    "new_size_or_policy_bound": false,
+    "public_api_changes": false,
+    "schema_or_lock_changes": false,
+    "kernel_changes": false
+  },
+  "qualification": {
+    "runtime": "Repository browser Motoko compiler to IC wasm; separate ephemeral PocketIC instances, no gateway/shared financial actions",
+    "backend_before": "backend-before-compiled.log: expected prepared status assertion fails",
+    "backend_after": "backend-after.log: passes on chains1 and42161",
+    "readonly_before": "Agent tool-captured compiled red: assertion7d8712b76cc3f86d23def78186719f92c240c2d7c01aed393c51ed3499a805fa.mo:71.13-71.90, reported gas mismatch; no disk log",
+    "readonly_after": "readonly-after.log: all existing arithmetic/partial-facts cases and six new cases pass",
+    "backend_checks": [
+      "state-sensitive gas44,322 versus default24,437",
+      "replacement nonce8 retained while pending count9",
+      "same contract/calldata/fees and full gas reach successful pinned simulation",
+      "retained original journal transaction/raw/hash/reservation unchanged",
+      "no signature/broadcast",
+      "same request replay performs no further RPC calls"
+    ],
+    "readonly_checks": [
+      "correct observed-block estimate on Ethereum and42161",
+      "explicitlatest fallback with null observation block",
+      "pinned-block failure returns unavailable without default-state retry"
+    ]
+  },
+  "primary_sources": [
+    {
+      "url": "https://ethereum.github.io/execution-apis/api/methods/eth_estimateGas/",
+      "claim": "Second positional block number or tag is supported; no universal omitted-parameter default is specified"
+    },
+    {
+      "url": "https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go#L907-L918",
+      "claim": "Current upstream Geth chooses latest when omitted and uses the supplied selector when present"
+    },
+    {
+      "url": "https://github.com/OffchainLabs/go-ethereum/blob/934a55fd1b4e81101c51b81095cb1a7299748357/internal/ethapi/api.go#L867-L950",
+      "claim": "Nitro v3.10.0 pinnedGeth chooses pending by default; supplied selector loads the chosen state/header"
+    },
+    {
+      "url": "https://github.com/dfinity/evm-rpc-canister/blob/main/src/http/legacy.rs#L14-L48",
+      "claim": "Generic request preserves caller JSON-RPC parameter semantics"
+    },
+    {
+      "url": "https://docs.arbitrum.io/arbitrum-essentials/how-to-estimate-gas",
+      "claim": "Arbitrum gas estimates include execution and parent-chain posting in child-chain gas units; this fix does not change fee arithmetic"
+    }
+  ],
+  "files": [
+    {
+      "path": "apps/evm_wallet/backend/main.mo",
+      "sha256": "01b71d4d1c81ebfd437cc0b3d2d02bfbf7ee3869191da063082a52cdf7417072"
+    },
+    {
+      "path": "apps/evm_wallet/backend/fees/Estimate.mo",
+      "sha256": "f1b21c66974f8ef721dd100ffbd5c78d8245f11d3179aefa80983976488998ba"
+    },
+    {
+      "path": "apps/evm_wallet/test/backend.test.ts",
+      "sha256": "aa50f406c7bbc94c43109dd8a1436eff8b8f7962ce6cb1ceaddae5ab8d0ec232"
+    },
+    {
+      "path": "apps/evm_wallet/test/estimate_block_actor_test.mo",
+      "sha256": "11be875b0af52193670c172608c7163ad062eb0e175001eb8dc5c8d311b9d630"
+    },
+    {
+      "path": "apps/evm_wallet/test/fee_estimate_test.mo",
+      "sha256": "989453ff428a0c757ab56173af93cd49b6d727c1484fac8cc91fef335310f2fe"
+    }
+  ]
+}

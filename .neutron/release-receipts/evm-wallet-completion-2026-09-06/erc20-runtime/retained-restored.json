@@ -1,0 +1,27 @@
+{
+  "restoredAt": "2026-09-06T15:17:24.850Z",
+  "retainedPid": 1276378,
+  "retainedInstanceId": 0,
+  "gateways": [
+    {
+      "instance_id": 4,
+      "port": 8000,
+      "forward_to": {
+        "PocketIcInstance": 0
+      },
+      "domains": null,
+      "https_config": null
+    }
+  ],
+  "restorationResponse": {
+    "Created": {
+      "instance_id": 4,
+      "port": 8000
+    }
+  },
+  "status": {
+    "rootKeyBase64": "MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAItStJlPlMfOS+HBVC18gdx5/qF9Se/o+kLoVmNzWB1LlpxKWelqDvUbcR/lAn7AFgEYJRnQp4j0v+OI5ZO5fNHX5EkE3nlCJDC8poasjCEwWzOXtbpNcDfReHcxL7fuNA==",
+    "replicaHealthStatus": "healthy"
+  },
+  "autoProgress": true
+}

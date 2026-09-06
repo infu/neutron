@@ -667,7 +667,7 @@ function resourceText(value: unknown, kind: RuntimeCapabilityKind): string {
   if (
     ((kind === "backend_calls" || kind === "randomness") &&
       value !== "default") ||
-    (kind === "chain_key_signing" &&
+    ((kind === "chain_key_signing" || kind === "wallet_custody_signing") &&
       !/^[a-z][a-z0-9_]{0,39}$/u.test(value)) ||
     (kind === "stable_store" &&
       !/^[a-z][a-z0-9_]{0,39}$/u.test(value)) ||

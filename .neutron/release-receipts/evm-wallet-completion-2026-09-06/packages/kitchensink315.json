@@ -1,0 +1,40 @@
+{
+  "candidate": 315,
+  "published": false,
+  "archive": {
+    "path": "apps/kitchensink/kitchensink.v0.3.15.neutron",
+    "bytes": 472282,
+    "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+  },
+  "source": {
+    "kind": "https",
+    "revision": "source-sha256:9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe",
+    "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+    "sha256": "9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe",
+    "bytes": 462990,
+    "path": "apps/kitchensink/.neutron/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+    "verifiedWorkspaceFiles": 169,
+    "workspaceMismatches": []
+  },
+  "tests": {
+    "command": "npm --workspace neutron-kitchensink test",
+    "canonicalPackageIncluded": true,
+    "pass": 66,
+    "fail": 0,
+    "assertions": 1655,
+    "residentChildPass": 7,
+    "residentChildAssertions": 72,
+    "motokoMemory": "passed",
+    "typescript": "passed",
+    "diffCheck": "passed",
+    "productionMemoryBaselines": [
+      310,
+      311,
+      314
+    ]
+  },
+  "preserved314": {
+    "archiveSha256": "e25c5230a91f2c99f72119e92c62204da5c13604785d018a358e57ea0a1bf18b",
+    "sourceSha256": "4dd491251be9d63f1c6ecc32b1cbc9bcf9ac9e35f82f12336c96e7e950817902"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "status": "passed",
+  "scope": "Actual installed Kernel341/IC Wallet316/EVM Wallet103; root bridge and human ckETH deposit/reload/native redemption. Human completion is the same intent across a test-harness interruption and explicit recovery/native-only continuations, not a claimed uninterrupted full-scenario pass.",
+  "installed_candidates": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/intermediate-evm103/installed-final-candidates.json",
+  "root_bridge": {
+    "tests_passed": 1,
+    "duration": "2.5min",
+    "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root/ic-wallet-root-bridge-only-9eae9-its-exact-mint-after-reload-chromium/root-bridge-protocol-evidence.json",
+    "log": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/root-test.log"
+  },
+  "human_bridge": {
+    "bridge_id": "a3f80a051dd133b25b87d5606091572d",
+    "request_id": "a0f80a051dd133b25b87d5606091572d",
+    "transaction_hash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+    "ledger_mint_block": "9",
+    "unrelated_transfer_did_not_complete_deposit": true,
+    "consumer_reply_dropped": true,
+    "saved_intent_recovered": true,
+    "no_second_signature_or_nonce": true,
+    "recovery_tests_passed": 1,
+    "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-recovery-2/ic-wallet-bridge-reconcile-a049d-t-without-another-signature-chromium/interrupted-qualification-reconciled.json",
+    "initial_harness_failure": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-first-attempt-classification.json",
+    "recovery_log": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-recovery-test.log"
+  },
+  "native_redemption": {
+    "tests_passed": 1,
+    "duration": "4.4min",
+    "request_id": "7cd21d49c6cafc951620be0ead06d465",
+    "burn_block_index": "12",
+    "payout_hash": "0x9ffb6e67bdf3871c7e0e644b91a8002f244d0f01dfe4d7a5418186ca9350dfba",
+    "exact_ledger_debit_and_residual_allowance": true,
+    "saved_operation_reloaded": true,
+    "exact_finalized_payout_and_balance": true,
+    "durable_status": "confirmed",
+    "evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-native-continuation/ic-wallet-bridge-complete--714ff-upted-qualification-deposit-chromium/ic-wallet-native-redemption-and-reload.json",
+    "log": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-native-test.log"
+  },
+  "fixture_failures_retained": [
+    ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-first-attempt.log",
+    ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-final/human-interrupted-first-recovery.log"
+  ],
+  "product_source_changes_during_runtime": false,
+  "remaining": [
+    "fresh isolated ckUSDC official helper/minter/ledger bridge and redemption"
+  ]
+}

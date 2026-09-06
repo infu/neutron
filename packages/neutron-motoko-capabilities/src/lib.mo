@@ -143,6 +143,46 @@ module {
         sign_assertion : ChainKeySignAssertionRequestV1 -> async* ChainKeySignatureResultV1;
     };
 
+    // Explicit wallet custody authority. This leaf signs the exact supplied
+    // 32-byte digest. The wallet owns protocol validation and transaction review.
+    // Keys use a separate installation namespace from assertion signing.
+    public type WalletCustodyAlgorithmV1 = { #ecdsa_secp256k1 };
+
+    public type WalletCustodyPublicKeyV1 = {
+        slot : Text;
+        algorithm : WalletCustodyAlgorithmV1;
+        public_key : Blob;
+        key_fingerprint : Blob;
+        namespace_version : Nat;
+    };
+
+    public type WalletCustodySignatureV1 = {
+        slot : Text;
+        algorithm : WalletCustodyAlgorithmV1;
+        digest : Blob;
+        signature : Blob;
+    };
+
+    public type WalletCustodySignDigestRequestV1 = {
+        slot : Text;
+        digest : Blob;
+    };
+
+    public type WalletCustodyPublicKeyResultV1 = {
+        #ok : WalletCustodyPublicKeyV1;
+        #err : ChainKeySigningErrorV1;
+    };
+
+    public type WalletCustodySignatureResultV1 = {
+        #ok : WalletCustodySignatureV1;
+        #err : ChainKeySigningErrorV1;
+    };
+
+    public type WalletCustodySigningV1 = {
+        public_key : Text -> async* WalletCustodyPublicKeyResultV1;
+        sign_digest : WalletCustodySignDigestRequestV1 -> async* WalletCustodySignatureResultV1;
+    };
+
     public type HttpsOutcallMethodV1 = {
         #get;
         #head;

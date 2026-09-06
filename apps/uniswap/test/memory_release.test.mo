@@ -1,0 +1,251 @@
+import Map "mo:core/Map";
+import Nat "mo:core/Nat";
+import Text "mo:core/Text";
+import Uniswap "../backend/main";
+import Journal "../backend/Journal";
+import Memory "../backend/memory/uniswap/v1";
+
+func ok(result : Journal.Result) : Memory.Swap {
+    switch (result) {
+        case (#ok(value)) value;
+        case (#err(_)) { assert false; loop {} };
+    };
+};
+
+func rejects(result : Journal.Result) {
+    switch (result) {
+        case (#err(message)) assert (message != "");
+        case (#ok(_)) assert false;
+    };
+};
+
+// This is Uniswap's first release: initialization creates its sole empty root.
+// Future releases must keep this v1 source and explicitly test their migration
+// or same-schema restoration against the production package.
+let fresh = Memory.init();
+assert (Map.size(fresh.swaps) == 0);
+let input : Journal.BeginInput = {
+    id = "swap-1";
+    account_id = "primary";
+    chain_id = 42161;
+    recipient = "0x0000000000000000000000000000000000000001";
+    quote_json = "{\"amountIn\":\"100\",\"minimumOut\":\"90\"}";
+    approval_request_id = ?"approval-1";
+    approval_request_json = ?"{\"requestId\":\"approval-1\",\"chainId\":42161}";
+    swap_request_id = "wallet-swap-1";
+    swap_request_json = "{\"requestId\":\"wallet-swap-1\",\"chainId\":42161}";
+};
+let begun = ok(Journal.begin(fresh, input, 100));
+assert (begun.phase == "queued");
+assert (begun.revision == 0);
+assert (begun.created_at == 100 and begun.updated_at == 100);
+assert (begun.approval_operation_json == null and begun.swap_operation_json == null);
+
+// A timeout after writing the intent replays the original journal record,
+// including its original timestamps. Changed immutable facts cannot take it.
+assert (ok(Journal.begin(fresh, input, 200)) == begun);
+rejects(Journal.begin(fresh, { input with account_id = "other" }, 200));
+rejects(Journal.begin(fresh, { input with chain_id = 1 }, 200));
+rejects(Journal.begin(fresh, { input with recipient = "other" }, 200));
+rejects(Journal.begin(fresh, { input with quote_json = "changed" }, 200));
+rejects(Journal.begin(fresh, { input with approval_request_id = ?"other" }, 200));
+rejects(Journal.begin(fresh, { input with approval_request_json = ?"changed" }, 200));
+rejects(Journal.begin(fresh, { input with swap_request_id = "other" }, 200));
+rejects(Journal.begin(fresh, { input with swap_request_json = "changed" }, 200));
+rejects(Journal.begin(fresh, { input with id = "invalid-1"; approval_request_id = null }, 200));
+rejects(Journal.begin(fresh, { input with id = "invalid-2"; approval_request_json = null }, 200));
+rejects(Journal.begin(fresh, { input with id = "invalid-3"; approval_request_id = ?input.swap_request_id }, 200));
+assert (Map.size(fresh.swaps) == 1);
+
+// Persist dispatch ambiguity before opening the wallet. Restore a new backend
+// over the same root as a reload/upgrade would do; no fresh request id appears.
+let requestApproval : Journal.UpdateInput = {
+    id = input.id;
+    expected_revision = 0;
+    stage = "approval";
+    request_id = "approval-1";
+    account_id = "primary";
+    chain_id = 42161;
+    operation_json = null;
+    phase = "approval_requested";
+};
+let approvalRequested = ok(Journal.update(fresh, requestApproval, 300));
+assert (approvalRequested.revision == 1 and approvalRequested.updated_at == 300);
+assert (ok(Journal.update(fresh, requestApproval, 350)) == approvalRequested);
+let restored : Memory.Mem = fresh;
+let app = Uniswap.Init({ stable_memory = { uniswap = restored } });
+assert (app.uniswap_get_v1(input.id) == ?approvalRequested);
+assert (app.uniswap_list_v1() == [approvalRequested]);
+
+// Both the stage request and its account/network must match before even an
+// otherwise identical operation can be acknowledged.
+rejects(Journal.update(fresh, { requestApproval with account_id = "other" }, 400));
+rejects(Journal.update(fresh, { requestApproval with chain_id = 1 }, 400));
+rejects(Journal.update(fresh, { requestApproval with request_id = "wallet-swap-1" }, 400));
+rejects(Journal.update(fresh, { requestApproval with stage = "unknown" }, 400));
+let approveDone = {
+    requestApproval with
+    expected_revision = 1;
+    operation_json = ?"{\"requestId\":\"approval-1\",\"status\":\"confirmed\"}";
+    phase = "approval_confirmed";
+};
+let approvalConfirmed = ok(Journal.update(fresh, approveDone, 500));
+assert (approvalConfirmed.revision == 2);
+assert (ok(Journal.update(fresh, approveDone, 510)) == approvalConfirmed);
+// A reply from a stale tab cannot replace a confirmed approval with pending.
+rejects(Journal.update(fresh, {
+    requestApproval with
+    expected_revision = 1;
+    operation_json = ?"{\"requestId\":\"approval-1\",\"status\":\"pending\"}";
+}, 520));
+assert (Journal.get(fresh, input.id) == ?approvalConfirmed);
+
+let requestSwap : Journal.UpdateInput = {
+    requestApproval with
+    expected_revision = 2;
+    stage = "swap";
+    request_id = "wallet-swap-1";
+    phase = "swap_requested";
+};
+let swapRequested = ok(Journal.update(fresh, requestSwap, 600));
+assert (swapRequested.approval_operation_json == approveDone.operation_json);
+assert (swapRequested.swap_operation_json == null);
+assert (app.uniswap_get_v1(input.id) == ?swapRequested);
+let swapDone = {
+    requestSwap with
+    expected_revision = 3;
+    phase = "completed";
+    operation_json = ?"{\"requestId\":\"wallet-swap-1\",\"status\":\"confirmed\",\"txHash\":\"0xabc\"}";
+};
+let completed = ok(Journal.update(fresh, swapDone, 700));
+assert (completed.revision == 4);
+assert (completed.created_at == 100 and completed.updated_at == 700);
+assert (completed.approval_operation_json == approveDone.operation_json);
+assert (completed.swap_operation_json == swapDone.operation_json);
+assert (ok(Journal.begin(fresh, input, 800)) == completed);
+// An update with no new observation preserves the final receipt.
+assert (ok(Journal.update(fresh, { swapDone with operation_json = null }, 800)) == completed);
+assert (Uniswap.Init({ stable_memory = { uniswap = restored } }).uniswap_get_v1(input.id) == ?completed);
+
+// Native input has no ERC20 approval step and cannot be given one later.
+let nativeInput = { input with id = "native-swap"; approval_request_id = null; approval_request_json = null };
+let nativeSwap = ok(Journal.begin(fresh, nativeInput, 900));
+assert (nativeSwap.approval_request_id == null and nativeSwap.approval_operation_json == null);
+rejects(Journal.update(fresh, { requestApproval with id = "native-swap" }, 1_000));
+rejects(Journal.update(fresh, { requestSwap with id = "missing" }, 1_000));
+assert (Map.size(restored.swaps) == 2);
+
+func page(result : Journal.HistoryResult) : Journal.HistoryPage {
+    switch (result) {
+        case (#ok(value)) value;
+        case (#err(_)) { assert false; loop {} };
+    };
+};
+
+func historyRejects(result : Journal.HistoryResult) {
+    switch (result) {
+        case (#err(message)) assert (message != "");
+        case (#ok(_)) assert false;
+    };
+};
+
+// A durable history can outgrow the existing self-call metadata transport.
+// Retain more than 64 KiB of real quote bodies and fetch all records by cursor
+// instead of truncating the root or returning the entire collection at once.
+let historyMemory = Memory.init();
+let emptyPage = page(Journal.history(historyMemory, { cursor = null; limit = 7 }));
+assert (emptyPage.rows == [] and emptyPage.next_cursor == null);
+historyRejects(Journal.history(historyMemory, { cursor = null; limit = 0 }));
+historyRejects(Journal.history(historyMemory, { cursor = ?"missing"; limit = 7 }));
+var payload = "0123456789abcdef";
+var repeat = 0;
+while (repeat < 7) {
+    payload #= payload;
+    repeat += 1;
+};
+func historyId(index : Nat) : Text {
+    "history-" # (if (index < 10) "0" else "") # Nat.toText(index);
+};
+var inserted = 0;
+var aggregateQuoteBytes = 0;
+while (inserted < 73) {
+    let id = historyId(inserted);
+    let quoteJson = "{\"retainedQuote\":\"" # payload # "\",\"index\":\"" # id # "\"}";
+    ignore ok(Journal.begin(historyMemory, {
+        input with
+        id;
+        quote_json = quoteJson;
+        approval_request_id = ?("approval-" # id);
+        approval_request_json = ?("{\"requestId\":\"approval-" # id # "\"}");
+        swap_request_id = "swap-" # id;
+        swap_request_json = "{\"requestId\":\"swap-" # id # "\"}";
+    }, 1_000 + inserted / 2));
+    aggregateQuoteBytes += Text.encodeUtf8(quoteJson).size();
+    inserted += 1;
+};
+assert (aggregateQuoteBytes > 65_536);
+assert (Map.size(historyMemory.swaps) == 73);
+let snapshot = Journal.list(historyMemory);
+let firstPage = page(Journal.history(historyMemory, { cursor = null; limit = 7 }));
+assert (firstPage.rows.size() == 7 and firstPage.next_cursor == ?historyId(66));
+var firstIndex = 0;
+for (record in firstPage.rows.vals()) {
+    assert (record.id == historyId(Nat.sub(72, firstIndex)));
+    firstIndex += 1;
+};
+assert (Journal.list(historyMemory) == snapshot);
+
+// New records appear before the saved cursor. A progress update changes only
+// updated_at and revision, so it cannot move the anchor's creation ordering.
+let insertedDuringPaging = ok(Journal.begin(historyMemory, {
+    input with
+    id = "new-during-paging";
+    swap_request_id = "new-durable-request";
+    swap_request_json = "{\"requestId\":\"new-durable-request\"}";
+}, 3_000));
+let anchorId = historyId(66);
+let updatedAnchor = ok(Journal.update(historyMemory, {
+    requestApproval with
+    id = anchorId;
+    request_id = "approval-" # anchorId;
+}, 4_000));
+assert (updatedAnchor.created_at == 1_033 and updatedAnchor.updated_at == 4_000);
+let historyRestored : Memory.Mem = historyMemory;
+let historyApp = Uniswap.Init({ stable_memory = { uniswap = historyRestored } });
+let snapshotAfterInsert = Journal.list(historyRestored);
+let visited = Map.empty<Text, Bool>();
+for (record in firstPage.rows.vals()) Map.add(visited, Text.compare, record.id, true);
+var cursor = firstPage.next_cursor;
+var seen = 7;
+label remaining loop {
+    let current = page(historyApp.uniswap_history_v1({ cursor; limit = 7 }));
+    assert (current.rows.size() > 0 and current.rows.size() <= 7);
+    for (record in current.rows.vals()) {
+        assert (Map.get(visited, Text.compare, record.id) == null);
+        assert (record.id == historyId(Nat.sub(72, seen)));
+        assert (record.swap_request_id == "swap-" # record.id);
+        assert (record.swap_request_json == "{\"requestId\":\"swap-" # record.id # "\"}");
+        assert (record.approval_request_id == ?("approval-" # record.id));
+        assert (record.phase == "queued" and record.revision == 0);
+        Map.add(visited, Text.compare, record.id, true);
+        seen += 1;
+    };
+    cursor := current.next_cursor;
+    if (cursor == null) break remaining;
+};
+assert (seen == 73 and Map.size(visited) == 73);
+assert (Map.get(visited, Text.compare, insertedDuringPaging.id) == null);
+assert (Journal.list(historyRestored) == snapshotAfterInsert);
+assert (Map.size(historyRestored.swaps) == 74);
+assert (historyApp.uniswap_get_v1(anchorId) == ?updatedAnchor);
+assert (historyApp.uniswap_get_v1("new-during-paging") == ?insertedDuringPaging);
+let refreshed = page(historyApp.uniswap_history_v1({ cursor = null; limit = 7 }));
+assert (refreshed.rows[0].id == "new-during-paging");
+let beyondLast = page(historyApp.uniswap_history_v1({ cursor = ?historyId(0); limit = 7 }));
+assert (beyondLast.rows == [] and beyondLast.next_cursor == null);
+historyRejects(historyApp.uniswap_history_v1({ cursor = ?"invalid-cursor"; limit = 7 }));
+// The caller may request a larger page; paging introduces no history quota or
+// fixed page cap. If transport rejects its size, the client can request fewer.
+let completeHistory = page(historyApp.uniswap_history_v1({ cursor = null; limit = 1_000 }));
+assert (completeHistory.rows.size() == 74 and completeHistory.next_cursor == null);
+assert (Journal.list(historyRestored) == snapshotAfterInsert);

@@ -17,6 +17,7 @@ export const RUNTIME_CAPABILITY_KINDS = Object.freeze([
   "backend_calls",
   "randomness",
   "chain_key_signing",
+  "wallet_custody_signing",
   "stable_store",
   "https_outcalls",
   "vetkeys",
@@ -142,6 +143,16 @@ function runtimeResources(entry: CapabilityPlanEntry): RuntimeResource[] {
             max_assertion_bytes: slot.max_assertion_bytes,
           },
         },
+      }));
+    case "wallet_custody_signing":
+      return entry.config.slots.map((slot) => ({
+        kind: "wallet_custody_signing",
+        resource_id: slot.id,
+        api: entry.api,
+        grant: "declaration",
+        toggleable: true,
+        // Purpose is presentation text, not custody signing authority.
+        authority: { slot: { id: slot.id, algorithm: slot.algorithm } },
       }));
     case "stable_store":
       return entry.config.stores.map((store) => ({

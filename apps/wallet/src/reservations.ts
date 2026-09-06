@@ -118,6 +118,7 @@ function nativeScopes(
       exact(route.minter, "get_btc_address"),
       exact(route.minter, "update_balance"),
       exact(route.minter, "retrieve_btc_with_approval"),
+      exact(route.minter, "retrieve_btc_status_v2"),
     ];
   }
   if (route.kind === "ckdoge") {
@@ -125,22 +126,27 @@ function nativeScopes(
       exact(route.minter, "get_doge_address"),
       exact(route.minter, "update_balance"),
       exact(route.minter, "retrieve_doge_with_approval"),
+      exact(route.minter, "retrieve_doge_status"),
     ];
   }
   if (route.kind === "cksol") {
     return [
       exact(route.minter, "update_balance"),
       exact(route.minter, "withdraw"),
+      exact(route.minter, "withdrawal_status"),
     ];
   }
   if (route.kind === "cketh") {
-    return [exact(route.minter, "withdraw_eth")];
+    return [exact(route.minter, "withdraw_eth"), exact(route.minter, "retrieve_eth_status"), exact(route.minter, "get_minter_info"), exact(route.minter, "get_events")];
   }
   if (route.kind === "ckerc20") {
     if (!route.gasLedger) throw new Error("ckERC20 route is missing ckETH ledger");
     return [
+      exact(route.minter, "get_minter_info"),
+      exact(route.minter, "get_events"),
       exact(route.minter, "eip_1559_transaction_price"),
       exact(route.minter, "withdraw_erc20"),
+      exact(route.minter, "retrieve_eth_status"),
       exact(route.gasLedger, "icrc1_fee"),
       exact(route.gasLedger, "icrc2_approve"),
     ];

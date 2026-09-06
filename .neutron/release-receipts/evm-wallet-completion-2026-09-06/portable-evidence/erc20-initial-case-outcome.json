@@ -1,0 +1,25 @@
+{
+  "schema": "neutron-erc20-initial-browser-outcome-v1",
+  "recordedAt": "2026-09-06T14:44:54.911085+00:00",
+  "source": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/.last-run.json",
+    "bytes": 96,
+    "sha256": "073afb1434f2968cc0932327f164a5c699d4d337fcdcf47a2cfdd4915afe2f93",
+    "retention": "local_original; preserved outcome projection remains fixed if a later run changes its own status file"
+  },
+  "recordedOutcome": {
+    "status": "failed",
+    "failedTests": [
+      "529d7d20f0bb16f32333-7a9c548e7b7956d9d877"
+    ]
+  },
+  "scope": "Initial combined ERC20 browser case outcome only. Successful lost-approval-reply and exact deposit/mint stage artifacts are preserved separately; the full case is not a pass.",
+  "continuationStatus": "Redemption-only continuation remains pending in the runtime owner qualification. No second deposit is claimed or requested.",
+  "coordinatorReportedBoundary": "The fresh released minter reported that its last transaction price estimate was unavailable. IC Wallet displayed Gas quote unavailable and kept Withdraw disabled. The coordinator is initializing the fee cache through the normal released protocol; no app change is inferred here.",
+  "causeEvidenceStatus": "The IC owner initial-interruption record now binds the exact original log, failed status, error context, raw trace and completeddeposit artifact; no new runtime verification performed by this projection.",
+  "ownerInterruptionEvidence": {
+    "path": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/browser-ic-erc20-final/initial-interruption.json",
+    "bytes": 2145,
+    "sha256": "9085d4cbda94b8e6b724b9124f65daa0045b63dd1946b1dc3e106fa6203fffe5"
+  }
+}

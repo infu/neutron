@@ -1,0 +1,35 @@
+@use "neutron-design-system/styles.scss";
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+@layer app {
+  html, body { margin: 0; background: #07090c; }
+  .uni-app { --nt-accent: #ff80c3; --nt-accent-muted: #301a29; min-height: 100dvh; padding: 24px 16px; }
+  .uni-shell { max-width: 700px; margin: 0 auto; display: grid; gap: 24px; min-width: 0; }
+  .uni-header, .uni-activity > header, .uni-saved-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .uni-header h1 { font-size: 32px; }
+  .uni-muted { color: var(--nt-text-muted); font-size: 12px; line-height: 1.6; margin: 0; }
+  .uni-alert { padding: 14px; background: #311d20; color: #ffb8c1; overflow-wrap: anywhere; }
+  .uni-form, .uni-review, .uni-settings, .uni-activity, .uni-saved { display: grid; gap: 16px; min-width: 0; }
+  .uni-form { padding: 24px; }
+  .uni-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .uni-app label { display: grid; gap: 8px; font-size: 12px; color: var(--nt-text-muted); min-width: 0; }
+  .uni-app input, .uni-app select { background: var(--nt-bg-control); color: var(--nt-text); border: 0; outline: 1px solid var(--nt-line); border-radius: 3px; padding: 10px; font: inherit; width: 100%; min-width: 0; box-sizing: border-box; }
+  .uni-app input:focus, .uni-app select:focus { outline-color: var(--nt-accent); }
+  .uni-token-panel { display: grid; grid-template-columns: minmax(0, 1fr) 120px; align-items: center; gap: 12px; padding: 18px; background: var(--nt-bg-page); }
+  .uni-token-panel input, .uni-token-panel output { font-size: 26px; font-weight: 500; background: none; outline: none; padding: 0; min-width: 0; color: var(--nt-text); overflow-wrap: anywhere; }
+  .uni-token-panel code { grid-column: 1 / -1; }
+  .uni-direction { text-align: center; color: var(--nt-accent); font-size: 20px; height: 10px; line-height: 10px; }
+  .uni-primary { width: 100%; min-height: 44px; background: var(--nt-accent); color: #251222; font-weight: 600; }
+  .uni-app summary { cursor: pointer; font-size: 12px; color: var(--nt-text-muted); }
+  .uni-settings { padding-top: 16px; }
+  .uni-review { padding-top: 16px; border-top: 1px solid var(--nt-line); }
+  .uni-review dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 12px; font-size: 12px; margin: 0; }
+  .uni-review dt { color: var(--nt-text-muted); }
+  .uni-review dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+  .uni-app code { overflow-wrap: anywhere; font-size: 11px; color: var(--nt-text-muted); }
+  .uni-app pre { overflow: auto; max-width: 100%; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .uni-saved { padding: 20px; }
+  .uni-saved p { margin: 0; font-size: 12px; }
+  .uni-saved a { color: var(--nt-accent); font-size: 12px; }
+  .uni-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  @media (max-width: 450px) { .uni-app { padding: 16px 8px; } .uni-form, .uni-saved { padding: 16px; } .uni-row { grid-template-columns: 1fr; } .uni-token-panel { padding: 12px; grid-template-columns: minmax(0, 1fr) 100px; } .uni-review dl { grid-template-columns: 1fr; gap: 6px; } .uni-review dd { text-align: left; margin-bottom: 10px; } }
+}

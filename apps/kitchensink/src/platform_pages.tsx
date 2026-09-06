@@ -52,12 +52,14 @@ import {
   WALLET_TOKEN_INFO_TOOL,
   callWalletTokenInfoDemo,
 } from "./wallet_token_info_demo.ts";
+import { EvmWalletPage } from "./evm_wallet_page.tsx";
 
 export const PLATFORM_IDS = [
   "overview",
   "memory",
   "bus",
   "wallet_funding",
+  "evm_wallet",
   "tray",
   "schemas",
   "data",
@@ -95,6 +97,7 @@ export function PlatformPage({
     case "memory": return <MemoryPage runtime={runtime} />;
     case "bus": return <MessageBusPage />;
     case "wallet_funding": return <WalletFundingPage />;
+    case "evm_wallet": return <EvmWalletPage />;
     case "tray": return <TrayPage />;
     case "schemas": return <SchemasPage runtime={runtime} methods={methods} />;
     case "data": return <DataPage context={context} runtime={runtime} />;
