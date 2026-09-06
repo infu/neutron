@@ -65,10 +65,23 @@ Direct browser RPC calls do not incur IC outcall cycles.
 ## Review, recovery and replacements
 
 Other apps call the resident service. Effects marked `provider_once` open this
-Wallet's private foreground review tool. The Kernel supplies the authenticated
-caller app and installation UID. A separate root-agent tool family uses the
-same backend preparation and execution path and requires Kernel root-agent
-attestation. A nested app invocation does not acquire root authority.
+Wallet's private foreground review tool for ordinary users. In Agent mode, the
+same public tools prepare the exact transaction or signature and request a fresh
+Kernel permission decision from the active root Agent. Its review includes the
+signing account, network, complete transaction or signature payload, nonce, fees,
+simulation and available token observations. The amount and parties use the same
+calldata-derived presentation as the owner dialog. The Kernel binds this one-use
+approval callback to the authenticated provider invocation; an Agent-mode flag
+alone never authorizes execution. Installation tool grants connect consumer apps
+without replacing this fresh effect review.
+
+The Kernel supplies the authenticated caller app and installation UID. Nested
+requests stay owned by that consumer installation. A separate root-agent tool
+family retains the same backend preparation and execution path and requires
+Kernel root-agent attestation. A nested app invocation does not acquire root
+authority. Denial or cancellation before execution leaves an unsigned request
+available for the same-ID retry; already submitted requests return their saved
+outcome without another approval.
 
 Requests are identified by caller app, caller installation and a 16-byte request
 ID written as 32 lowercase hexadecimal characters. Identical replay resolves the
@@ -81,6 +94,9 @@ asks for approval again after estimating and simulating the new candidate.
 It does not silently sign the changed transaction. Send shows preparation
 progress immediately, including the token amount and recipient, then displays
 the exact transaction and an explicit approval button.
+An Agent provider call returns `prepared` when its reviewed candidate changes;
+the consumer must call again with the same request ID to obtain a fresh decision.
+The previous approval cannot be reused for the changed candidate.
 Explicit token-observation refresh also advances the review revision so an
 approval for an older view cannot race the refreshed view. Its observations are
 saved separately from the transaction and can become stale as the chain changes.
@@ -145,8 +161,9 @@ approved signed bytes. Transaction evidence can verify that a
 public hash belongs to an exact saved Wallet request without revealing private
 messages or signatures.
 
-Human effect tools are `evm_send_transaction_v1`, `evm_sign_message_v1`,
-`evm_sign_typed_data_v1` and `evm_replace_transaction_v1`. Their `_root_v1`
+Public effect tools are `evm_send_transaction_v1`, `evm_sign_message_v1`,
+`evm_sign_typed_data_v1` and `evm_replace_transaction_v1`. They support both owner
+dialogs and nested Agent review. Their `_root_v1`
 counterparts are available only to the active root Agent. Consumer apps persist
 complete intent and the expected Wallet identity before invoking them. Do not
 replace a saved request ID after a timeout.
@@ -178,7 +195,8 @@ editing actions, field validation, keyboard behavior and duplicate prevention.
 Own Wallet requests travel through the resident service back to their originating
 tile's private review handler. This same-app route checks the Kernel-authenticated
 tile and resident identities and does not accept Agent invocations. Cross-app
-requests retain the Kernel's foreground provider presentation. Both paths use the
+requests use the Kernel's foreground provider presentation for ordinary users
+and its one-use Agent approval callback for Agent invocations. These paths use the
 same durable prepare, review and execution flow; repeating a request ID returns
 its saved outcome.
 The former EVM RPC canister adapter remains historical test material. Current

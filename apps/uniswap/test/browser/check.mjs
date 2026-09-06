@@ -76,9 +76,7 @@ async function fixtureTransport(kind,args){
   if(kind==='callTool'){
     const call=args[0], request=call.arguments;
     if(call.target==='kernel'){
-      assert.equal(call.name,'permissions.request');assert.equal(request.target,'app:evm_wallet:background');
-      assert.deepEqual(request.tools,['evm_accounts_v1','evm_balances_v1','evm_call_contract_v1','evm_estimate_transaction_v1','evm_transaction_v1','evm_replacement_transaction_v1','evm_operation_status_v1']);
-      return {granted:true};
+      assert.fail('Wallet access is declared at installation; the UI must not request runtime permission');
     }
     assert.equal(call.target,'app:evm_wallet:background');
     if(toolOverrides.has(call.name))return toolOverrides.get(call.name)(request);
@@ -126,11 +124,18 @@ try{
  page=await browser.newPage({viewport:{width:1440,height:1000}});
  page.on('pageerror',e=>errors.push(e.message));
  await page.exposeFunction('fixtureCall',transport);
+ toolOverrides.set('evm_accounts_v1',()=>{throw Error('Wallet is starting');});
  await page.goto(url);
- await page.getByRole('button',{name:'Connect EVM Wallet',exact:true}).click();
+ await page.getByText('Wallet unavailable · retrying automatically',{exact:true}).waitFor();
+ assert(await page.getByRole('button',{name:'Wallet unavailable',exact:true}).isDisabled());
+ assert.equal(await page.getByRole('button',{name:/Connect|Reconnect/i}).count(),0);
+ assert(!calls.some(c=>c.kind==='callTool'&&c.args[0].target==='kernel'));
+ toolOverrides.delete('evm_accounts_v1');
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await page.getByText('Balance: 5 ETH',{exact:true}).waitFor();
- assert.equal(await page.getByRole('button',{name:/Refresh wallet|Refresh history|Get quote/i}).count(),0);
- pass('Connected balances load automatically without refresh or quote buttons');
+ pass('Temporary Wallet startup failure recovers automatically on focus without a permission request');
+ assert.equal(await page.getByRole('button',{name:/Connect|Reconnect|Refresh wallet|Refresh history|Get quote/i}).count(),0);
+ pass('Wallet accounts and balances load automatically without connection, refresh, or quote buttons');
  await page.getByRole('button',{name:'Input token',exact:true}).click();
  await page.getByRole('textbox',{name:'Input token search',exact:true}).fill('usd');
  await page.getByRole('button',{name:'Select USDC',exact:true}).click();
@@ -162,7 +167,7 @@ try{
  const lost=[...records.values()].find(r=>r.id!==first.id);
  const sendsBeforeResume=calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1').length;
  await page.getByRole('button',{name:'Continue swap',exact:true}).waitFor();
- await page.getByRole('button',{name:'Reconnect wallet',exact:true}).first().waitFor();
+ await page.getByText('Updates delayed · retrying automatically',{exact:true}).waitFor();
  blockedStatusRequest=null;
  await page.getByRole('button',{name:'Continue swap',exact:true}).click();
  await page.waitForFunction(()=>document.querySelectorAll('.uni-saved-complete').length===2);
@@ -176,7 +181,7 @@ try{
  assert(calls.slice(beforeFocus).some(c=>c.kind==='callTool'&&c.args[0].name==='evm_balances_v1'));
  assert(calls.slice(beforeFocus).some(c=>c.kind==='querySelf'&&c.args[0]==='uniswap_history_v1'));
  assert(!calls.slice(beforeFocus).some(c=>c.kind==='callTool'&&c.args[0].target==='kernel'));
- pass('Focus automatically refreshes balances and history using the established connection');
+ pass('Focus automatically refreshes accounts, balances, and history without requesting permission');
  const routerAbi=parseAbi(['function multicall(uint256 deadline,bytes[] data) payable returns(bytes[] results)']);
  const saved=JSON.parse(first.quote_json), oldDeadline=String(Math.floor(Date.now()/1000)-60);
  saved.quote.deadline=oldDeadline;
@@ -201,6 +206,25 @@ try{
  assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_send_transaction_v1').length,beforeReload+1);
  assert.equal(records.get(old.id).swap_request_id,swapRequest.requestId);
  pass('Expired approved swap survives reload, requotes after one click, and uses existing allowance for a newly reviewed swap');
+ const externalRequestIds=[];
+ for(const [mode,seed] of [['agent','cc'],['provider','dd']]){
+  const externalIntent={...JSON.parse(first.quote_json),executionMode:mode};
+  const externalApproval={...JSON.parse(first.approval_request_json),requestId:seed.repeat(16)};
+  const externalSwap={...JSON.parse(first.swap_request_json),requestId:seed.repeat(15)+'ee'};
+  externalRequestIds.push(externalApproval.requestId,externalSwap.requestId);
+  const external={...first,id:mode+'-managed-swap',quote_json:JSON.stringify(externalIntent),approval_request_id:externalApproval.requestId,approval_request_json:JSON.stringify(externalApproval),swap_request_id:externalSwap.requestId,swap_request_json:JSON.stringify(externalSwap),phase:'approval_requested',created_at:ns(),updated_at:ns()};
+  delete external.approval_operation_json;delete external.swap_operation_json;
+  records.set(external.id,external);
+ }
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await page.getByText('Managed by your agent.',{exact:true}).waitFor();
+ await page.getByText('Managed by the requesting app.',{exact:true}).waitFor();
+ for(const text of ['Managed by your agent.','Managed by the requesting app.'])assert.equal(await page.locator('article').filter({hasText:text}).getByRole('button',{name:/Continue|Refresh swap|Try swap again/i}).count(),0);
+ const beforeExternalRefresh=calls.length;
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await new Promise(resolve=>setTimeout(resolve,250));
+ assert(!calls.slice(beforeExternalRefresh).some(c=>c.kind==='callTool'&&externalRequestIds.includes(c.args[0].arguments?.requestId)));
+ pass('Automatic refresh and UI actions leave Agent and provider-owned swaps with their original owner');
  for(const width of [375,320]){
   await page.setViewportSize({width,height:900});
   await page.getByRole('button',{name:'Input token',exact:true}).click();
@@ -210,6 +234,7 @@ try{
   await page.getByRole('button',{name:'Close token list',exact:true}).click();
   pass('Compact swap and token picker fit '+width+'px');
  }
+ assert(!calls.some(c=>c.kind==='callTool'&&c.args[0].target==='kernel'));
  assert.deepEqual(errors,[]);
  await writeFile(resolve(artifacts,'report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],metadataRejections,errors},null,2));
 } catch (error) {

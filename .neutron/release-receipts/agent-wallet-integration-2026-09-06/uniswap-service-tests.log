@@ -1,0 +1,10 @@
+bun test v1.2.13 (64ed68c9)
+
+test/service.test.ts:
+(pass) Uniswap resident registers every tool through the real SDK validator [209.00ms]
+(pass) resident Uniswap handlers satisfy wallet and managed-journal contracts in an isolated process [3045.00ms]
+
+ 2 pass
+ 0 fail
+ 4 expect() calls
+Ran 2 tests across 1 files. [3.91s]

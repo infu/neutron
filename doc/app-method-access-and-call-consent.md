@@ -416,24 +416,25 @@ does not receive the optional callback—for example, because Kernel omitted the
 support marker required by its SDK—must reject before preparation or execution;
 it must not fall back to an ordinary session grant.
 
-Agent automation is deliberately separate. A provider may expose an exact tool
-with both `{"neutron:visibility":"same_app"}` and
-`{"neutron:audience":"agent_root"}`. Kernel hides it from ordinary calls,
-admits only the active depth-zero root, and injects `context.audience` as
-`agent_root`; the SDK rejects missing or mismatched attestation before the
-handler. The provider verifies that audience and may prepare and execute using
-its own preapproved self calls without any provider or Kernel UI. Delegated
-descendants cannot call it, and Agent invocations cannot use the public
-provider-presentation route.
+During an active Agent invocation, the same public `provider_once` tool receives
+`context.requestApproval(review)` instead of `presentUserInterface`. The provider
+prepares an exact operation, submits its bounded review, and executes only after
+the root Agent allows that review. The callback preserves the immediate caller
+and the exact provider invocation, and creates no standing transaction or signing
+grant. Normal users continue to review actions in the provider's own tile.
 
-`context.requestApproval(review)` is a deprecated generic compatibility
-surface. It remains available to `provider_once` handlers so providers already
-published with that contract, including Wallet 0.3.6, continue to work. This
-is a provider-development policy, not a Kernel app/version allowlist: current
-providers must use provider-owned UI. Both callbacks share one use, so a
-handler cannot stack the two paths. Only this deprecated path renders its
-separate bounded review as inert raw JSON. Current provider-presentation
-arguments and results remain opaque to Kernel and are never rendered there.
+Providers may also retain direct-root tools with both
+`{"neutron:visibility":"same_app"}` and `{"neutron:audience":"agent_root"}`.
+Kernel hides those tools from ordinary calls, admits only the active depth-zero
+root, and injects `context.audience` as `agent_root`. The SDK rejects missing or
+mismatched attestation before the handler, and delegated descendants cannot use
+these tools. Existing direct-root integrations remain compatible.
+
+Both provider callbacks share one use, so a handler cannot stack the two paths.
+For ordinary callers, the legacy `requestApproval(review)` path remains supported
+and renders the bounded review as inert raw JSON. For an Agent invocation, that
+same callback sends a fresh, one-operation review to the root permission judge;
+provider presentation arguments and results remain opaque to Kernel.
 
 | Kernel \ Wallet | W306 | W307 | W308 | W309 | W310 | W311 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -711,8 +712,9 @@ grant to an owner-trusted wallet app. It authorizes that app's backend to sign
 exact 32-byte digests using its own custody namespace. Kernel does not decode
 transaction effects or enforce the wallet's UI against its digest; the installed
 wallet owns protocol validation, provider decisions, and durable command replay.
-Human callers use wallet-owned provider presentation and direct-root Agent
-callers use the separate attested root tools. An assertion grant never implies
+Human callers use wallet-owned provider presentation. Agent callers can use
+the public provider tool with a fresh root-reviewed operation or the existing
+separate attested direct-root tools. An assertion grant never implies
 custody authority. See the [wallet custody contract](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1).
 
 `capabilities.chain_key_signing` has a different lifetime from vetKey lifecycle
@@ -747,8 +749,8 @@ The message bus allows calls between UI endpoints:
 - calls among tile, tray, and background endpoints belonging to the same app
   are allowed by default;
 - outside a validated Agent Mode invocation, calls to another app require a
-  one-call or session grant unless the exact target tool declares
-  `provider_once`; and
+  matching install-declared `frontend_tools` grant, a one-call or session grant,
+  or the exact target tool's `provider_once` confirmation; and
 - each endpoint publishes JSON Schema tool descriptors used for discovery and
   validation.
 
@@ -759,13 +761,70 @@ perform local browser work without a prompt, but if it then requests an
 
 Likewise, granting one app permission to call another app's frontend tool does
 not grant either app an authorized principal or bypass a backend wrapper. A
-live Agent invocation uses the invocation decision policy rather than an
-ordinary session grant. A `provider_once` invocation deliberately ignores exact
-and wildcard session grants. Its target provider must ask through the invocation-scoped
+live Agent invocation honors its calling app's install-declared exact tool
+access; other nested calls use the invocation decision policy rather than an
+ordinary session grant. A `provider_once` invocation deliberately ignores
+install-declared, exact, and wildcard session grants for its fresh decision.
+Its target provider must ask through the invocation-scoped
 presentation callback, and the result completes only that suspended request.
 The private `foreground_tile` tool cannot be called through ordinary routing.
 The separate `agent_root` tool is visible and callable only from the active
 depth-zero root.
+
+### Declare Exact App Tools At Installation
+
+`frontend_tools` requires the successor Kernel parser. Kernel 0.3.43 and earlier
+reject this new field in their closed capability schema before installing an app.
+For those installations, update the Kernel first, reload, then review and apply
+the app updates. The compatible Kernel and app archives can still be published in
+one atomic catalog transaction; this installation order requires no separate
+publication phase or compatibility shim.
+
+An app with known integrations can declare the tools it uses in `neutron.json`:
+
+```json
+{
+  "capabilities": {
+    "frontend_tools": {
+      "api": 1,
+      "targets": [
+        {
+          "app": "evm_wallet",
+          "tools": ["evm_accounts_v1", "evm_balances_v1"]
+        }
+      ]
+    }
+  }
+}
+```
+
+Installation and upgrade review list the exact apps and tool names. Approval
+activates those calls for every surface of the consumer installation, including
+its invocation-scoped Agent handlers. A consumer can call a declared tool directly;
+it does not need a Connect button or `permissions.request` to establish the same
+access. Calling the grouped permission API for already declared tools also returns
+immediately after checking the live descriptors. The normal runtime permission
+API remains available for integrations selected later by the owner.
+
+Target app IDs and tool names are exact, with no wildcard declarations. Duplicate
+targets and tool names are rejected; the capability plan sorts both inventories
+before fingerprinting them. No new list quota or endpoint-role restriction is
+introduced. The current target descriptor still controls tool visibility, audience,
+argument validation, and provider confirmation. Declaring a private or root-only
+tool never makes it callable from another audience. Declaring a provider-confirmed
+transaction tool permits using that integration, while the provider must still
+obtain a fresh decision about each actual transaction.
+
+The declaration is part of the existing persisted app capability plan, like
+`preapproved_self_calls`; it creates no additional session cache or managed-memory
+root. Every dispatch checks the current caller plan and both live AppScopes,
+versions, generations, and endpoint sessions. Reconnecting an approved app does
+not discard its install declaration. Removing the declaration takes away that
+authority, and replacing the consumer installation cannot inherit its predecessor's
+plan. Targets refer to the currently owner-installed app with that ID, as app
+dependencies do; installing or replacing a target app is a separate owner-reviewed
+installation. This capability grants frontend routing only and does not grant
+backend method authorization or wallet signing authority.
 
 ### Request An Exact Group Of Session Tools
 
@@ -815,17 +874,19 @@ again; no grant is saved to managed memory. Repeating the request while every
 grant is still valid returns without another owner dialog. Cancellation,
 rejection, or endpoint replacement while consent is pending creates no new grants.
 
-Uniswap uses this explicit group for its six pure wallet reads and for tracking
-its saved wallet requests once per live connection. Tracking updates the journal
+Consumers without an install declaration can use this explicit group for wallet
+reads and for tracking saved wallet requests once per live connection. Tracking updates the journal
 and may rebroadcast only bytes already approved and signed; the initial connection
 grant explicitly includes that tool so waiting for a receipt needs no repeated
-prompt. New transaction and signature tools are excluded. Kernel introduces no
+prompt. Transaction and signature tools are excluded from this example. Kernel introduces no
 global read bypass: `neutron:effects` remains
 descriptive metadata, and a tool claiming `read` does not acquire permission
 automatically. The same generic grouped API can request other exact tools, but
 `provider_once` actions still require their own fresh provider decision.
-Within Agent Mode, a grouped permission request follows the existing
-invocation decision policy and creates no standing session grants.
+Within Agent Mode, an undeclared grouped permission request follows the existing
+invocation decision policy and creates no standing session grants. Uniswap now
+declares its exact wallet integration at installation instead of asking the owner
+to connect every live session.
 
 ## Agent Mode Calls
 
@@ -848,14 +909,21 @@ creating a reduced challenge. An allow for a frontend tool resumes only that
 request and creates no one-call or session grant. A denial closes further
 permission requests from that invocation node.
 
-The provider-owned presentation route is not available inside an Agent
-invocation. A provider that supports autonomous root work exposes a separate
-`same_app` + `agent_root` tool. Kernel admits it only for the active depth-zero
-root, injects the audience attestation, and rejects a descendant before target
-dispatch. A prior ordinary tool grant cannot bypass either restriction. The
-provider receives the Kernel-derived immediate caller but no owner identity
-claim from tool arguments, and it uses `context.kernel` for its exact
-preapproved self update.
+Public `provider_once` tools support both direct and nested Agent callers. The
+provider receives a private `context.requestApproval(review)` callback scoped to
+its exact active invocation and immediate caller. The Kernel sends the full
+bounded provider review to the root judge as a fresh, high-risk frontend-tool
+decision with no persistence. The provider executes only after that decision
+succeeds. No generic routing prompt precedes this provider review, and neither an
+install-declared tool nor a session grant can substitute for the review. Dropped,
+sibling, expired, and cancelled invocation contexts cannot consume the callback.
+
+`presentUserInterface` remains the ordinary human presentation path and is not
+exposed during an Agent invocation. Providers can retain separate `same_app` +
+`agent_root` tools for direct-root integrations. Kernel admits those tools only
+for the active depth-zero root and rejects a descendant before target dispatch.
+All these handlers use the Kernel-derived caller and invocation-scoped
+`context.kernel` for their preapproved self calls.
 
 Nested handlers must issue invocation-dependent work through the
 `context.kernel` client supplied to their `exposeTool()` handler. It preserves
@@ -906,9 +974,10 @@ the invocation ends are separate future authority designs.
 3. List only exact, owner-authorized methods whose no-dialog behavior is
    appropriate for every live endpoint of that app.
 4. Use `provider_once` only when the owner deliberately trusts the target app
-   to own preparation, display, decision, and execution. Invoke
-   `presentUserInterface` before preparation, and never let a session grant
-   substitute for its scoped callback.
+   to own preparation, review, decision, and execution. Human flows invoke
+   `presentUserInterface` before preparation; Agent flows submit the prepared
+   operation through `requestApproval` before execution. Never let an installed
+   tool declaration or session grant substitute for the scoped callback.
 5. Use frontend tools for app-to-app integration instead of coupling callers
    to globally named backend methods.
 6. Use `querySelf()` and `updateSelf()` only for exact declared self calls; use
@@ -945,8 +1014,13 @@ target endpoint bindings and never accepts caller, provider, owner, or audience
 identity from provider arguments. It derives the provider app, opens or focuses
 only its exact tile, and routes bounded opaque arguments only to its private
 `foreground_tile` tool. The provider owns the display value and decision; the
-public handler remains responsible for completing that one presentation. A
-separate direct-root tool receives `agent_root` attestation and no UI.
+public handler remains responsible for completing that one presentation. During
+an Agent invocation, the one-shot capability instead binds the exact provider
+invocation and sends its bounded review to the root Agent. The Kernel rechecks
+caller, provider, owner session, and invocation authority before completing the
+callback and returning the tool result. Root cancellation aborts the interaction.
+Existing separate direct-root tools still receive `agent_root` attestation and
+no UI.
 
 ## Related Documentation
 

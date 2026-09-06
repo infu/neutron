@@ -234,16 +234,25 @@ account remain in the top-level kernel broker and are never exposed directly to
 the opaque Wallet iframe. Wallet receives only a short-lived, endpoint-bound
 EIP-1193 request proxy and does not persist it. Wallet offers a separate **EVM Wallet** source alongside the external browser
 wallet. EVM Wallet holds the namespaced key and presents each approval or deposit
-transaction in its own tile. IC Wallet supplies the reviewed official helper and
+transaction in its own tile. Installation approves IC Wallet’s declared EVM
+account, contract-read, transaction-tracking and send tools; fresh transactions
+still require Wallet review. IC Wallet supplies the reviewed official helper and
 recipient; it never acquires EVM Wallet's signing capability. Both routes are
 Ethereum Mainnet deposits. Arbitrum USDC cannot be sent directly to the Ethereum
 ckUSDC helper.
 
 The `wallet_bridge` v1 managed root saves the source account, immutable route,
 amount, recipient, step IDs and transaction hashes before effects. A Wallet
-reload opens saved deposits. **Resume saved deposit** reconciles the same EVM
-Wallet request or known browser transaction hash, retaining completed approvals.
-An unknown browser submission without a hash remains unresolved: browser wallets
+reload starts with a fresh compact wrapping form. An unfinished-deposit shortcut
+opens the existing request; older records remain in collapsed **Activity**.
+**Continue deposit** reconciles the same EVM Wallet request or known browser
+transaction hash, retaining completed approvals. The three visible steps are
+USDC approval, Ethereum deposit, and receipt of ckUSDC. Approval automatically
+continues to the deposit; submitted deposits refresh their mint status while
+the page is visible. Transaction hashes and contract details stay in **Details**.
+A transient missing Ethereum block leaves the existing request resumable; latest
+contract reads retry once with a newly observed block, and ordinary allowance
+reads avoid downloading contract code. An unknown browser submission without a hash remains unresolved: browser wallets
 do not supply a durable request ID that Wallet can safely replay. If the source
 wallet shows a transaction hash, **Verify and attach transaction** checks its
 actual sender, destination, value and calldata through EVM Wallet's read-only

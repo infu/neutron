@@ -11,6 +11,7 @@ import {
   type NeutronChainKeySigningCapabilityConfig,
   type NeutronWalletCustodySigningCapabilityConfig,
   type NeutronEthereumProviderCapabilityConfig,
+  type NeutronFrontendToolsCapabilityConfig,
   type NeutronHttpRoutesCapabilityConfig,
   type NeutronHttpsOutcallsCapabilityConfig,
   type NeutronCertifiedAssetsCapabilityConfig,
@@ -57,6 +58,7 @@ export type DeclaredCapabilityPlanEntry =
   | DeclaredEntry<"vetkeys", NeutronVetKeysCapabilityConfig>
   | DeclaredEntry<"scheduled_tasks", NeutronScheduledTasksCapabilityConfig>
   | DeclaredEntry<"preapproved_self_calls", PreapprovedSelfCallsPlanConfig>
+  | DeclaredEntry<"frontend_tools", NeutronFrontendToolsCapabilityConfig>
   | DeclaredEntry<"agent_entrypoints", NeutronAgentEntrypointsCapabilityConfig>
   | DeclaredEntry<
       "background_ui_requests",
@@ -443,6 +445,9 @@ export function buildCapabilityPlan(manifest: NeutronManifest): CapabilityPlan {
         })),
       }),
     );
+  }
+  if (capabilities.frontend_tools) {
+    entries.push(declaredEntry("frontend_tools", capabilities.frontend_tools));
   }
   if (capabilities.agent_entrypoints) {
     entries.push(

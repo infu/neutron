@@ -34,6 +34,7 @@ import {
   BROWSER_PERMISSION_FEATURE_DISCLOSURES,
   BROWSER_PERMISSION_PERSISTENCE_DISCLOSURE,
   DEDICATED_RESIDENT_ORIGIN_DISCLOSURE,
+  FRONTEND_TOOLS_DISCLOSURE,
   WALLET_CUSTODY_SIGNING_DISCLOSURE,
   WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
   browserPermissionFeaturesTitle,
@@ -147,6 +148,7 @@ export function AppSettingsEntry({
   const backgroundUiRequests =
     declaredCapability(entry, "background_ui_requests")?.categories ?? [];
   const ethereumProvider = declaredCapability(entry, "ethereum_provider");
+  const frontendTools = declaredCapability(entry, "frontend_tools");
   const publicRoutes = permissionsOf(
     capabilityPlanPermissions(entry.capability_plan),
     "http_route",
@@ -454,6 +456,9 @@ export function AppSettingsEntry({
                       <HttpsOutcallsSettingsDetails
                         endpoints={httpsOutcalls.endpoints}
                       />
+                    ) : null}
+                    {capability.id === "frontend_tools" && frontendTools ? (
+                      <FrontendToolsSettingsDetails targets={frontendTools.targets} />
                     ) : null}
                     {capability.id === "chain_key_signing" && chainKeySigning ? (
                       <ChainKeySigningSettingsDetails
@@ -957,6 +962,7 @@ function NormalAppDetails({
   const scheduled = permissionsOf(permissions, "scheduled_task");
   const agentEntrypoints = permissionsOf(permissions, "agent_entrypoint");
   const ethereumProvider = permissionsOf(permissions, "ethereum_provider")[0];
+  const frontendTools = permissionsOf(permissions, "frontend_tools")[0];
   const connections = permissionsOf(permissions, "connection");
   const publicIngress = permissionsOf(permissions, "public_ingress_route");
   const httpRoutes = permissionsOf(permissions, "http_route");
@@ -1423,6 +1429,24 @@ function NormalAppDetails({
           </NormalPermissionCard>
         ) : null}
 
+        {frontendTools ? (
+          <NormalPermissionCard
+            description={FRONTEND_TOOLS_DISCLOSURE}
+            kind="frontend_tools"
+            title="Connected apps"
+          >
+            <div className="settings-app-normal-lines">
+              {frontendTools.targets.map(({ app, tools }) => (
+                <NormalPermissionLine
+                  key={app}
+                  title={app}
+                  description={tools.join(", ")}
+                />
+              ))}
+            </div>
+          </NormalPermissionCard>
+        ) : null}
+
         {agentEntrypoints.length > 0 ? (
           <NormalPermissionCard
             description="Authorized agents can use tools supplied by this app after agent access is approved."
@@ -1475,6 +1499,27 @@ function NormalAppDetails({
           </NormalPermissionCard>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function FrontendToolsSettingsDetails({
+  targets,
+}: {
+  targets: Extract<Permission, { kind: "frontend_tools" }>["targets"];
+}) {
+  return (
+    <div className="settings-app-normal-lines" data-permission-kind="frontend_tools">
+      <p>{FRONTEND_TOOLS_DISCLOSURE}</p>
+      {targets.map(({ app, tools }) => (
+        <AppDetailItem
+          key={app}
+          title={app}
+          description={tools.join(", ")}
+          fullDescription
+          meta={[]}
+        />
+      ))}
     </div>
   );
 }

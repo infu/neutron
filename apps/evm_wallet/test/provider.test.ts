@@ -21,6 +21,7 @@ import {
 import { atomicAmount, parseBalance, parseOperation } from "../src/data.ts";
 import { assertLocalAccount } from "../src/local_intent.ts";
 import { browserEvmRpc } from "../src/browser_rpc.ts";
+import { encodeFunctionData, erc20Abi, parseAbi } from "viem";
 
 let rpc: ReturnType<typeof spyOn<typeof browserEvmRpc, "request">>;
 beforeEach(() => {
@@ -322,6 +323,204 @@ test("public provider delegates privately without preparing or signing", async (
       arguments: request,
     },
   ]);
+});
+test("nested Agent provider executes only after the exact caller-scoped transaction review is approved", async () => {
+  const calls: string[] = [];
+  let approved = false;
+  const ctx = context(async (method, args) => {
+    calls.push(method);
+    if (method === "evm_wallet_prepare_browser_v1") return wire();
+    expect(method).toBe("evm_wallet_execute_v1");
+    expect(approved).toBe(true);
+    expect(args).toEqual([{
+      identity: {
+        caller: { app_id: caller.appId, installation_uid: caller.installationUid, endpoint: caller.endpoint },
+        request_id: request.requestId,
+      },
+      review_revision: "1",
+    }]);
+    return wire({ status: "submitted", transaction_hash: `0x${"aa".repeat(32)}` });
+  }, {
+    agentMode: true,
+    requestApproval: async (review) => {
+      expect(calls).toEqual(["evm_wallet_prepare_browser_v1"]);
+      expect(review).toMatchObject({
+        provider: "EVM Wallet", kind: "transaction", caller,
+        operationId: "1", requestId: request.requestId, reviewRevision: "1",
+        accountId: "main", chainId: "1", signingAddress: wire().ok.address,
+        transaction: {
+          to: request.to, valueWei: "7", data: "0x", accessList: [], nonce: "0",
+          gasLimit: "21000", transactionType: "eip1559", maxFeePerGasWei: "2", maxPriorityFeePerGasWei: "1", gasPriceWei: null,
+        },
+        observations: { nativeBalanceWei: "999999", maximumNetworkFeeWei: "42000", simulation: "0x", observedAtNs: "1000000" },
+        personalMessageHex: null, typedDataJson: null, replacement: null,
+      });
+      approved = true;
+    },
+    presentUserInterface: async () => { throw new Error("Agent must use the exact Kernel review"); },
+  });
+  delete ctx.audience;
+  expect((await handleHumanEffect("transaction", request, ctx)).status).toBe("submitted");
+  expect(calls).toEqual(["evm_wallet_prepare_browser_v1", "evm_wallet_execute_v1"]);
+  expect(getPrompts()).toHaveLength(0);
+});
+test("Agent flag without an authenticated provider callback cannot prepare or execute", async () => {
+  const ctx = context(async () => { throw new Error("Unexpected wallet operation"); }, { agentMode: true });
+  await expect(handleHumanEffect("transaction", request, ctx)).rejects.toThrow("Kernel provider approval support");
+});
+test("denied or cancelled Agent review leaves the unsigned request without executing", async () => {
+  for (const cancelled of [false, true]) {
+    const calls: string[] = [];
+    const abort = new AbortController();
+    const ctx = context(async (method) => {
+      calls.push(method);
+      if (method !== "evm_wallet_prepare_browser_v1") throw new Error("Unexpected effect");
+      return wire();
+    }, {
+      agentMode: true,
+      signal: abort.signal,
+      requestApproval: async () => {
+        if (cancelled) abort.abort(new Error("Owner cancelled"));
+        else throw new Error("Owner intent does not authorize this transaction");
+      },
+    });
+    await expect(handleHumanEffect("transaction", request, ctx)).rejects.toThrow(cancelled ? "Owner cancelled" : "does not authorize");
+    expect(calls).toEqual(["evm_wallet_prepare_browser_v1"]);
+  }
+});
+test("Agent token approval review includes exact spender and observed allowance before approval", async () => {
+  const spender = `0x${"44".repeat(20)}` as const;
+  const tokenRequest = { ...request, valueWei: "0", data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender, 3_000_000n] }) };
+  const saved = wire({
+    intent: effectIntent("transaction", tokenRequest),
+    prepared_transaction: { ...wire().ok.prepared_transaction, value: "0", data: tokenRequest.data },
+  });
+  const calls: string[] = [];
+  const ctx = context(async (method) => {
+    calls.push(method);
+    if (method === "evm_wallet_prepare_browser_v1") return saved;
+    expect(method).toBe("evm_wallet_review_evidence_v1");
+    return { operation: saved.ok, token_evidence: {
+      chain_id: "1", contract: request.to, method: "approve", owner: saved.ok.address,
+      spender, recipient: null, amount: "3000000", recognition: "erc20_calldata",
+      block_number: "0x10", block_hash: `0x${"55".repeat(32)}`, block_error: null,
+      observed_at: "1000000", balance: { value: "7000030" }, allowance: { value: "0" },
+    } };
+  }, {
+    agentMode: true,
+    requestApproval: async (review) => {
+      expect(calls).toEqual(["evm_wallet_prepare_browser_v1", "evm_wallet_review_evidence_v1"]);
+      expect(review).toMatchObject({
+        transaction: { to: request.to, valueWei: "0", data: tokenRequest.data },
+        decodedTokenCall: { name: "ERC-20 approval", details: [
+          { label: "Spender", value: spender }, { label: "Allowance (atomic units)", value: "3000000" },
+        ] },
+        tokenEvidence: { contract: request.to, owner: saved.ok.address, spender, amount: "3000000", balance: { value: "7000030" }, allowance: { value: "0" } },
+      });
+      throw new Error("Declined token approval");
+    },
+  });
+  await expect(handleHumanEffect("transaction", tokenRequest, ctx)).rejects.toThrow("Declined token approval");
+  expect(calls).toHaveLength(2);
+});
+test("Agent swap review uses the owner dialog's decoded input and minimum output", async () => {
+  const router = "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45";
+  const weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+  const usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+  const recipient = `0x${"22".repeat(20)}` as const;
+  const abi = parseAbi([
+    "function multicall(uint256 deadline,bytes[] data) payable returns (bytes[])",
+    "function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96) params) payable returns (uint256)",
+    "function unwrapWETH9(uint256 amountMinimum,address recipient) payable",
+  ]);
+  const data = encodeFunctionData({ abi, functionName: "multicall", args: [2_000_000_000n, [
+    encodeFunctionData({ abi, functionName: "exactInputSingle", args: [{ tokenIn: usdc, tokenOut: weth, fee: 3000, recipient: router, amountIn: 3_000_000n, amountOutMinimum: 10n ** 14n, sqrtPriceLimitX96: 0n }] }),
+    encodeFunctionData({ abi, functionName: "unwrapWETH9", args: [10n ** 14n, recipient] }),
+  ]] });
+  const swapRequest = { ...request, to: router, valueWei: "0", data };
+  const ctx = context(async (method) => {
+    expect(method).toBe("evm_wallet_prepare_browser_v1");
+    return wire({ intent: effectIntent("transaction", swapRequest), prepared_transaction: { ...wire().ok.prepared_transaction, to: router, value: "0", data } });
+  }, {
+    agentMode: true,
+    requestApproval: async (review) => {
+      expect(review).toMatchObject({
+        summary: { title: "Swap tokens", amount: "3 USDC", parties: [
+          { label: "Minimum received", value: "0.0001 ETH" }, { label: "Recipient", value: recipient },
+        ], swap: {
+          tokenIn: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          tokenOut: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          amountIn: "3000000", amountOutMinimum: "100000000000000", recipient,
+          deadline: "2000000000", poolFee: "3000", inputNative: false, outputNative: true,
+        } },
+        transaction: { data, valueWei: "0" },
+      });
+      throw new Error("Review inspected");
+    },
+  });
+  await expect(handleHumanEffect("transaction", swapRequest, ctx)).rejects.toThrow("Review inspected");
+});
+test("Agent review changes return unsigned and need a new call with a fresh approval", async () => {
+  let approvals = 0;
+  let executes = 0;
+  let saved = wire();
+  const ctx = context(async (method, args) => {
+    if (method === "evm_wallet_prepare_browser_v1") return saved;
+    expect(method).toBe("evm_wallet_execute_v1");
+    executes++;
+    expect(approvals).toBe(executes);
+    expect(args[0]).toMatchObject({ review_revision: String(executes) });
+    saved = executes === 1
+      ? wire({ review_revision: "2", review: { ...wire().ok.review, nonce: "1" }, message: "Review changed" })
+      : wire({ status: "submitted", review_revision: "2", review: { ...wire().ok.review, nonce: "1" }, transaction_hash: `0x${"aa".repeat(32)}` });
+    return saved;
+  }, {
+    agentMode: true,
+    requestApproval: async (review) => {
+      approvals++;
+      expect(review).toMatchObject({ reviewRevision: String(approvals), transaction: { nonce: String(approvals - 1) } });
+    },
+  });
+  expect((await handleHumanEffect("transaction", request, ctx)).status).toBe("prepared");
+  expect(executes).toBe(1);
+  expect((await handleHumanEffect("transaction", request, ctx)).status).toBe("submitted");
+  expect(executes).toBe(2);
+});
+test("a saved submitted Agent provider request returns without another review or execution", async () => {
+  const calls: string[] = [];
+  const ctx = context(async (method) => {
+    calls.push(method);
+    return wire({ status: "submitted", transaction_hash: `0x${"aa".repeat(32)}` });
+  }, {
+    agentMode: true,
+    requestApproval: async () => { throw new Error("Already submitted operation must not request fresh approval"); },
+  });
+  expect((await handleHumanEffect("transaction", request, ctx)).status).toBe("submitted");
+  expect(calls).toEqual(["evm_wallet_prepare_browser_v1"]);
+});
+test("Agent signature reviews retain the complete personal message and exact typed data", async () => {
+  for (const kind of ["message", "typed_data"] as const) {
+    const signatureRequest = kind === "message"
+      ? { requestId: request.requestId, accountId: "main" as const, chainId: "1", messageHex: "0x48656c6c6f" }
+      : { requestId: request.requestId, accountId: "main" as const, chainId: "1", typedDataJson: JSON.stringify({ domain: { chainId: 1 }, types: { Permit: [{ name: "value", type: "uint256" }] }, primaryType: "Permit", message: { value: "3000000" } }) };
+    let approved = false;
+    const ctx = context(async (method) => {
+      if (method === "evm_wallet_execute_v1") expect(approved).toBe(true);
+      else expect(method).toBe("evm_wallet_prepare_browser_v1");
+      return wire({
+        kind, intent: effectIntent(kind, signatureRequest), prepared_transaction: null, review: null,
+        ...(approved ? { status: "signed", signature: `0x${"aa".repeat(65)}` } : {}),
+      });
+    }, {
+      agentMode: true,
+      requestApproval: async (review) => {
+        expect(review).toMatchObject({ kind, transaction: null, observations: null, signingAddress: wire().ok.address, chainId: "1" });
+        expect(kind === "message" ? review.personalMessageHex : review.typedDataJson).toBe(kind === "message" ? signatureRequest.messageHex! : signatureRequest.typedDataJson!);
+        approved = true;
+      },
+    });
+    expect((await handleHumanEffect(kind, signatureRequest, ctx)).status).toBe("signed");
+  }
 });
 const ownerTile = {
   appId: "evm_wallet",

@@ -1,19 +1,18 @@
 import { expect, test } from "bun:test";
-import type { callTool } from "neutron-tools/app";
-import { connectWalletReads } from "../src/read_connection.ts";
+import type { EvmAccount } from "neutron-tools/evm_wallet";
+import { readWalletAccounts } from "../src/read_connection.ts";
 
-test("wallet connection grants reads and saved-transaction tracking without new signing", async () => {
-  const calls: Parameters<typeof callTool>[0][] = [];
-  await connectWalletReads({ callTool: async (call) => { calls.push(call); return undefined as never; } });
-  expect(calls).toEqual([{
-    target: "kernel", name: "permissions.request", arguments: {
-      target: "app:evm_wallet:background",
-      tools: ["evm_accounts_v1", "evm_balances_v1", "evm_call_contract_v1", "evm_estimate_transaction_v1", "evm_transaction_v1", "evm_replacement_transaction_v1", "evm_operation_status_v1"],
-    },
-  }]);
+const account: EvmAccount = { accountId: "main", address: "0x1111111111111111111111111111111111111111", publicKey: `0x02${"22".repeat(32)}`, keyFingerprint: `0x${"33".repeat(32)}`, namespaceVersion: "1" };
+
+test("opening Wallet reads available accounts without a runtime permission request", async () => {
+  let reads = 0;
+  const wallet = { accounts: async () => { reads++; return { accounts: [account] }; } };
+  expect(await readWalletAccounts(wallet, "main")).toEqual({ accounts: [account], selected: account });
+  expect(await readWalletAccounts(wallet, "removed-account")).toEqual({ accounts: [account], selected: account });
+  expect(reads).toBe(2);
 });
 
-test("declining the read connection fails before wallet reads start", async () => {
-  await expect(connectWalletReads({ callTool: async () => { throw new Error("Owner declined permission"); } }))
-    .rejects.toThrow("Owner declined permission");
+test("an empty Wallet and a temporary read error remain distinguishable for automatic recovery", async () => {
+  expect(await readWalletAccounts({ accounts: async () => ({ accounts: [] }) }, "main")).toEqual({ accounts: [], selected: null });
+  await expect(readWalletAccounts({ accounts: async () => { throw new Error("Wallet is starting"); } }, "main")).rejects.toThrow("Wallet is starting");
 });

@@ -2,8 +2,9 @@ import { querySelf, updateSelf, type JsonValue } from "neutron-tools/app";
 import { createEvmRequestId, parseEvmOperationResult, parseEvmReplacementTransactionResult, parseEvmSendTransactionRequest, parseEvmTransactionResult, type EvmAccount, type EvmAccountId, type EvmOperationResult, type EvmReplacementTransactionResult, type EvmSendTransactionRequest, type EvmTransactionResult, type EvmWalletClient, type EvmWalletCaller } from "neutron-tools/evm_wallet";
 import { decodeEventLog, getAddress, parseAbi, type Hex } from "viem";
 import { prepareSwap, quoteSwap, swapTransaction, type PreparedSwap, type QuoteInput, type QuoteProgress, type Reader, type Transaction } from "./swap.ts";
+import type { ProviderFlow } from "./provider_flow.ts";
 
-export type SavedIntent = PreparedSwap & { account: EvmAccount; executionMode: "human" | "agent"; walletCaller: EvmWalletCaller | null };
+export type SavedIntent = PreparedSwap & { account: EvmAccount; executionMode: "human" | "agent" | "provider"; walletCaller: EvmWalletCaller | null; providerFlow?: ProviderFlow };
 export type SwapRecord = {
   id: string; account_id: string; chain_id: string; recipient: string; quote_json: string;
   approval_request_id: string | null; approval_request_json: string | null;
@@ -215,8 +216,14 @@ export async function reconcileStep(wallet: EvmWalletClient, store: Store, recor
   return store.update(record, stage, `${stage}_${operationView(record, stage, operation).status}`, operation);
 }
 export async function executeStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap"): Promise<SwapRecord> {
+  return executeOwnedStep(wallet, store, record, stage, "human");
+}
+export async function executeProviderStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap"): Promise<SwapRecord> {
+  return executeOwnedStep(wallet, store, record, stage, "provider");
+}
+async function executeOwnedStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap", mode: "human" | "provider"): Promise<SwapRecord> {
   const intent = savedIntent(record);
-  if (intent.executionMode !== "human") throw new Error("This swap belongs to an Agent workflow. The root agent must call EVM Wallet directly.");
+  if (intent.executionMode !== mode) throw new Error(mode === "human" && intent.executionMode === "agent" ? "This swap belongs to an Agent workflow. The root agent must call EVM Wallet directly." : "This swap belongs to a different workflow; continue its original saved requests.");
   await checkAccount(wallet, intent);
   record = await reconcileStep(wallet, store, record, stage);
   const recorded = stage === "approval" ? record.approval_operation_json : record.swap_operation_json;

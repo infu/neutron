@@ -105,6 +105,7 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
     return step;
   };
   const confirm = async (kind: EthereumDepositStep, hash: Hex, browserConfirm?: (hash: Hex) => Promise<void>) => {
+    options.onProgress?.(kind === "deposit" ? "confirming" : kind === "approval" ? "approving" : "clearing-allowance");
     const step = stepOf(kind);
     try {
       if (current.source === "evm") {
@@ -134,6 +135,7 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
     else if (current.source === "external") throw new Error("The browser wallet reply was lost. This saved deposit is unresolved; check the source wallet before creating another deposit. It will not be resent.");
     else {
       if (!evm || !saved.operationId) throw new Error("Reconnect EVM Wallet to reconcile this saved request");
+      options.onProgress?.(saved.kind === "deposit" ? "submitting" : saved.kind === "approval" ? "approving" : "clearing-allowance");
       try {
         const hash = await evm.send(saved.operationId, bridgeTransaction(current, saved.kind), async () => {
           assertBridgeQuoteCurrent(current.quote, await client.quote(current.quote.ledger));
@@ -153,6 +155,7 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
     let step = stepOf(kind);
     if (step.state === "failed") throw new Error(step.error ?? "This deposit transaction failed");
     if (step.state === "confirmed" && step.transactionHash) return step.transactionHash;
+    options.onProgress?.(kind === "deposit" ? "submitting" : kind === "approval" ? "approving" : "clearing-allowance");
     if (step.state === "ready") {
       // A distinct deterministic EVM request per step is frozen before the
       // wallet prompt. CAS prevents two Wallet tiles dispatching one step.

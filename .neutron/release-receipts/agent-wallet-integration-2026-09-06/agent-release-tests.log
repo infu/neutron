@@ -1,0 +1,199 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/agent/test/package.test.ts:
+(pass) Agent declares one resident credential connection [14.00ms]
+(pass) Agent bundles local UI and resident AI SDK runtime [27.00ms]
+(pass) Agent package contains both app entrypoints [226.00ms]
+
+apps/agent/test/markdown_message.test.tsx:
+(pass) assistant Markdown renders CommonMark and GFM structures [41.00ms]
+(pass) assistant Markdown renders inline and block math locally [11.00ms]
+(pass) assistant math cannot create trusted links or remote assets [5.00ms]
+(pass) assistant Markdown drops HTML and images and restricts links [12.00ms]
+(pass) footnote ids are isolated by the stable message id [7.00ms]
+
+apps/agent/test/agent_tools.test.ts:
+(pass) agent app discovery stays compact and gives permission dialogs one minute [3.00ms]
+(pass) agent tool routing rejects non-canonical app ids [1.00ms]
+(pass) discovery includes apps after 128 and exposes undisplayed endpoint representatives [1.00ms]
+(pass) agent reads one current schema and re-reads before a call [1.00ms]
+(pass) agent honors long-running app tools and forwards turn cancellation
+(pass) agent tool results stay within the byte bound after Unicode escaping [22.00ms]
+(pass) agent tool failures preserve kernel policy details [2.00ms]
+(pass) agent marks every declared state-changing effect as unsafe to retry [1.00ms]
+(pass) agent commits the state-change journal before dispatch [1.00ms]
+(pass) agent does not dispatch when the state-change journal cannot commit
+(pass) agent does not mark a declared network read as state-changing [1.00ms]
+(pass) agent journals tools without an explicit read-only effect contract
+(pass) agent marks an actually aborted state-changing call as unsafe [1.00ms]
+(pass) agent retains a successful state-changing attempt for turn interruption
+
+apps/agent/test/permission_context.test.ts:
+(pass) long owner history fits the existing model budget without cutting away a recent cancellation [4.00ms]
+(pass) ordinary retry permissions retain owner instructions across turns and exclude model-authored authority [473.00ms]
+(pass) a changed financial scope reaches the judge with the original request and exact differing action [52.00ms]
+(pass) clearing a running goal persists owner cancellation after the turn settles and reset removes its authority [83.00ms]
+(pass) a replacement goal defines a new scope without assistant checkpoints or earlier tasks [70.00ms]
+
+apps/agent/test/runtime.test.ts:
+(pass) agent work continues through checkpoint boundaries [1.00ms]
+(pass) agent stream timeout permits bounded long-running tools
+(pass) agent never retries explicitly non-retryable app results
+(pass) agent discovers visual workspace controls from the Kernel
+(pass) agent treats public web content as untrusted and protects private data
+(pass) browser runtimes fail closed when cross-tab locking is unavailable [1.00ms]
+(pass) uncached tiles activate independently and status reports only model turns [5.00ms]
+(pass) two uncached tile mutations can activate concurrently [1.00ms]
+(pass) mutation preactivation cannot replace newer tile state after a slow load
+(pass) an interrupted state-changing warning survives into the next model turn
+(pass) the latest maximum recovery warning survives the minimum history budget [1.00ms]
+(pass) recovery materializes every recorded target and is idempotent [1.00ms]
+(pass) startup recovery rejects an invalid durable owner prompt
+(pass) conversation reset cannot erase a journaled active turn prompt
+(pass) a cancelled reset cannot delete history after its reload finishes [1.00ms]
+(pass) a reset cancelled while queued for mutation keeps its history [1.00ms]
+(pass) a stale tile cannot clear a conversation it has not reviewed
+(pass) stop affects only the requesting tile's turn [2.00ms]
+(pass) a delayed cross-tab stop cannot abort the next turn
+(pass) stop cancels a turn while its durable conversation is still loading [1.00ms]
+(pass) distinct tiles run concurrently and stop remains isolated [4.00ms]
+(pass) each tile chooses independently whether one turn receives web tools [3.00ms]
+(pass) parallel tiles fence released v307 mutations and turns [12.00ms]
+(pass) the same tile cannot start a second concurrent turn [3.00ms]
+(pass) model selection is tile-scoped and updates only the new-tile default [1.00ms]
+(pass) a removed Kernel connection is rejected before model work [1.00ms]
+(pass) disconnect is idempotent when another device removed the connection [1.00ms]
+(pass) a connection relay preserves the matching live Kernel connection [1.00ms]
+(pass) snapshots stay below the message-bus limit without deleting history [37.00ms]
+(pass) a model changed in this tile fails before sending the prompt [2.00ms]
+(pass) a conversation changed in another tab fails before model work [1.00ms]
+(pass) external state refresh leaves an unrelated local turn in place [1.00ms]
+(pass) an oversized completed mutation turn retains compact reconciliation context [76.00ms]
+(pass) legacy state has no pending state-change journal [3.00ms]
+(pass) a malformed oversized journal records explicit overflow [2.00ms]
+(pass) browser fetch keeps its required global receiver [1.00ms]
+(pass) cancelling model refresh aborts its fetch and releases the mutation [2.00ms]
+(pass) model loading remains visible until every concurrent refresh finishes [3.00ms]
+(pass) model catalog keeps only unique tool-capable models [36.00ms]
+(pass) model catalog excludes models that cannot require a tool call
+(pass) agent routing does not require one provider to support every option
+(pass) web citations append a bounded safe source list without excerpt content [1.00ms]
+(pass) model history preserves complete tool-call turns [1.00ms]
+(pass) model history rejects incomplete and malformed turns
+(pass) legacy tool and unfinished rows are removed from the visible transcript
+(pass) progress keeps the latest tool visible until the turn result arrives
+(pass) model catalog rejects malformed provider responses [1.00ms]
+(pass) permission judge input excludes transport identifiers
+
+apps/agent/test/development.test.ts:
+(pass) Agent development API accepts only the exact local PocketIC tile URL [1.00ms]
+(pass) Agent development trace is bounded, cloned, and cannot send a chat [1.00ms]
+(pass) Agent development trace rejects invalid prompts and cursors
+
+apps/agent/test/long_running.test.ts:
+(pass) a fresh reviewer rejects early completion and the worker continues with actual evidence [87.00ms]
+(pass) a abort after a completed write never becomes a successful empty answer [63.00ms]
+44 |       }), finish("tool-calls")]);
+45 |       if (ending === "abort") {
+46 |         await runtime.stop(historyId);
+47 |         return answer("Should be ignored");
+48 |       }
+49 |       return response([{ type: "error", error: new Error("Provider stream failed") }]);
+                                                    ^
+error: Provider stream failed
+      at <anonymous> (/srv/shared/code/neutron/apps/agent/test/long_running.test.ts:49:48)
+      at doStream (/srv/shared/code/neutron/apps/agent/test/long_running.test.ts:41:55)
+      at <anonymous> (/srv/shared/code/neutron/node_modules/ai/dist/test/index.js:192:22)
+      at <anonymous> (/srv/shared/code/neutron/node_modules/ai/dist/test/index.js:189:28)
+      at <anonymous> (/srv/shared/code/neutron/node_modules/ai/dist/index.js:8009:46)
+      at <anonymous> (/srv/shared/code/neutron/apps/agent/test/long_running.test.ts:55:36)
+
+(pass) a error after a completed write never becomes a successful empty answer [42.00ms]
+(pass) a truncated root response continues without replaying a completed write or prematurely reviewing the goal [44.00ms]
+(pass) steering wakes a day-long sleep and arrives as an owner message at the next step [49.00ms]
+(pass) Stop cancels sleep and durably pauses the goal [18.00ms]
+(pass) queued messages wait for a work-cycle boundary and run in order [89.00ms]
+(pass) oversized tool history retains the task and recent evidence [3.00ms]
+(pass) sleep validates durations and handles pre-existing cancellation
+(pass) an ordinary task continues beyond 32 tool steps without forcing a final answer [999.00ms]
+(pass) steering waits for an in-flight mutation and updates the permission judge's owner instructions [60.00ms]
+(pass) cancellation during a write retains the uncertainty warning before another turn [22.00ms]
+(pass) large completed text refreshes status without exceeding the progress envelope [33.00ms]
+
+apps/agent/test/model_picker.test.ts:
+(pass) model author helpers derive friendly, stable identities [1.00ms]
+(pass) model family helpers keep the picker trigger short [1.00ms]
+(pass) model search matches names, exact ids, and publishers across terms [1.00ms]
+(pass) model search ranks exact and prefix matches before contains matches
+(pass) reasoning and free filters compose without mutating the catalog [1.00ms]
+(pass) model results expose the full supported catalog with a safe upper bound [16.00ms]
+(pass) free status requires valid zero input and output prices
+(pass) price formatting is precise and labels per-million-token values [1.00ms]
+(pass) context formatting stays compact
+
+apps/agent/test/storage.test.ts:
+(pass) Agent tile history storage > goal and queue state survive old history writes, reopen, and concurrent arrivals [12.00ms]
+(pass) Agent tile history storage > accepts only authenticated Agent chat tile endpoint identities
+(pass) Agent tile history storage > restores one tile across reloads without exposing it to another tile [3.00ms]
+(pass) Agent tile history storage > captures the current default model once for each new tile [2.00ms]
+(pass) Agent tile history storage > keeps a tile model when a live v307 frame rewrites or clears it [7.00ms]
+(pass) Agent tile history storage > moves the v306 flat conversation once while preserving shared model state [20.00ms]
+(pass) Agent tile history storage > waits for a live v306 database before claiming its final state [3.00ms]
+(pass) Agent tile history storage > atomically gives a legacy conversation to only one concurrent tile [2.00ms]
+
+apps/agent/test/subagents.test.ts:
+(pass) worker tools are exposed only with a live Agent Mode permission registration [21.00ms]
+(pass) workers run model requests in parallel with isolated contexts and shared root consent [110.00ms]
+(pass) stop cancels sleeping workers and settles them before releasing the root [66.00ms]
+(pass) revoke cancels sleeping workers and settles them before releasing the root [64.00ms]
+(pass) owner steering wakes the parent and its sleeping worker and preserves permission scope [118.00ms]
+(pass) completed worker writes survive reload and older residents saving their conversation shape [50.00ms]
+(pass) interrupted worker mutations retain their own reconciliation evidence [32.00ms]
+(pass) stopping one worker leaves its sibling running [79.00ms]
+(pass) a message arriving during final persistence starts another worker cycle [29.00ms]
+(pass) a new root resumes a crashed worker with saved mutation evidence [79.00ms]
+(pass) worker status pages fit the existing transport envelope without losing saved workers [17.00ms]
+(pass) goal review waits for workers and receives their actual successful tool evidence [131.00ms]
+376 |   let root = 0;
+377 |   const model = new MockLanguageModelV4({ doStream: async (options) => {
+378 |     if (workerRequest(options)) return response([call("sleep", { seconds: 86_400 }), finish("tool-calls")]);
+379 |     if (++root === 1) return response([call("spawn_agent", { task: "Monitor records" }), finish("tool-calls")]);
+380 |     await sleeping.promise;
+381 |     return response([{ type: "error", error: new Error("Parent provider failed") }]);
+                                                   ^
+error: Parent provider failed
+      at <anonymous> (/srv/shared/code/neutron/apps/agent/test/subagents.test.ts:381:46)
+      at <anonymous> (/srv/shared/code/neutron/apps/agent/test/subagents.test.ts:388:29)
+
+(pass) a parent stream failure cancels its active workers [72.00ms]
+(pass) a worker continues truncated synthesis with saved reads and same-step write evidence [180.00ms]
+(pass) a truncated malformed tool call is never dispatched and can be corrected on continuation [94.00ms]
+479 |   let root = 0;
+480 |   let child = 0;
+481 |   const states: string[] = [];
+482 |   const model = new MockLanguageModelV4({ doStream: async (options) => {
+483 |     if (workerRequest(options)) return ++child === 1
+484 |       ? response([{ type: "error", error: new Error("Source provider temporarily unavailable") }])
+                                                ^
+error: Source provider temporarily unavailable
+      at <anonymous> (/srv/shared/code/neutron/apps/agent/test/subagents.test.ts:484:43)
+      at doStream (/srv/shared/code/neutron/apps/agent/test/subagents.test.ts:482:60)
+      at <anonymous> (/srv/shared/code/neutron/node_modules/ai/dist/test/index.js:192:22)
+      at <anonymous> (/srv/shared/code/neutron/node_modules/ai/dist/test/index.js:189:28)
+      at <anonymous> (/srv/shared/code/neutron/node_modules/ai/dist/index.js:8009:46)
+
+(pass) resuming an errored worker retains its actual failure and marks recovery only after completion [66.00ms]
+(pass) repeated output-limit continuation accepts owner steering and Stop retains an interrupted recovery [64.00ms]
+(pass) released worker records preserve saved evidence and normalize intentional stop errors on upgrade [3.00ms]
+
+apps/agent/test/memory_release.test.ts:
+(pass) Agent 0.3.18 keeps the oldest production v1 memory root [250.00ms]
+(pass) Agent 0.3.18 keeps its immediate predecessor's v1 memory root [351.00ms]
+
+apps/agent/test/openrouter_web_tools.test.ts:
+(pass) OpenRouter web tools use the current bounded server-tool wire format [13.00ms]
+
+ 129 pass
+ 0 fail
+ 742 expect() calls
+Ran 129 tests across 12 files. [5.62s]

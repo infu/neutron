@@ -1,0 +1,672 @@
+{
+  "schema": "neutron-memory-compatibility-audit-v1",
+  "status": "passed",
+  "scope": "Final packaged Kernel344, Agent318, Wallet317, EVMWallet111 and Uniswap108 managed-memory preservation against published Kernel343, Agent317, Wallet316, EVMWallet110 and Uniswap107",
+  "preflight": {
+    "path": ".neutron/release-receipts/uniswap-agent-flow-2026-09-06/preflight.json",
+    "sha256": "b52b58e8b71ff613a83dc50705955989440875bed55007d0bb72d657c66bdc30"
+  },
+  "apps": [
+    {
+      "id": "kernel",
+      "baselineVersion": 343,
+      "archive": {
+        "path": "/srv/shared/code/neutron/apps/kernel/kernel.v0.3.43.neutron",
+        "bytes": 2449439,
+        "sha256": "8051a00b4784e6e4a28f1e208677ef94647c36c83af66e2e2a37195924a0db27"
+      },
+      "offeredSource": {
+        "path": "/srv/shared/code/neutron/apps/kernel/.neutron/sources/b95766b962fabb891e3febac663578505a85d85c50ea51ee0d867f56909ee3a6.source.v1.msgpack.gz",
+        "bytes": 3209964,
+        "sha256": "b95766b962fabb891e3febac663578505a85d85c50ea51ee0d867f56909ee3a6"
+      },
+      "backend": {
+        "filesCompared": 75,
+        "allIdentical": false,
+        "extraMotokoFiles": [],
+        "baselinePathHashListSha256": "023887b4ffaf247dec60ea3d9c8ff3b9b82a68c46020088a37d6aec3ca87592c",
+        "identicalFiles": 74,
+        "expectedGeneratedDifferences": [
+          {
+            "path": "apps/kernel/backend/_neutron.mo",
+            "baseline": {
+              "bytes": 28658,
+              "sha256": "63c365c4e3b960ad87c8f2bca7b288edd380e0123c297c4e6d11590ffda053bd"
+            },
+            "candidate": {
+              "bytes": 28658,
+              "sha256": "a5c69ee72d42f11b2cd4a4cae55e4a1bcb900412c012c96745f438a04a0e9677"
+            },
+            "lines": [
+              {
+                "line": 79,
+                "before": "    transient let NeutronActiveAppInstanceInventory = [{ app_id = \"kernel\"; version = 343; capability_plan_fingerprint = \"3eb8017e78daf867b503e6ea6b8c1d1f29e229774e8cd5026f804669d3bc1b16\"; resident_frame_security = #credentialless_opaque_v1 }];",
+                "after": "    transient let NeutronActiveAppInstanceInventory = [{ app_id = \"kernel\"; version = 344; capability_plan_fingerprint = \"bd32c44a7711a33e720da6cbaf3ce58e2f403f3fa054131ef6cd16bd52d7f9db\"; resident_frame_security = #credentialless_opaque_v1 }];"
+              }
+            ],
+            "reason": "Canonical Kernel packaging regenerates transient active-app release version and capability-plan fingerprint. Persistent declarations and memory history are unchanged."
+          }
+        ],
+        "candidatePathHashListSha256": "3bf85d6c37642923a94a68a298220edb7210a3c6d95a86529ca410f91a168954",
+        "candidatePathHashListEncoding": "SHA-256 of compact JSON array sorted by path, with objects containing path and sha256"
+      },
+      "lock": {
+        "path": "apps/kernel/neutron.lock.json",
+        "bytes": 896,
+        "sha256": "ef6f809aadfbdc10e76c5e5f37bd5d796ef8f38ae0974dd84033ddc412040585",
+        "identical": true,
+        "identicalToFinalCandidate": true
+      },
+      "memoryFiles": [
+        {
+          "path": "apps/kernel/backend/memory/activation/v1.mo",
+          "bytes": 352,
+          "sha256": "828b20f8bfdf7b516774ef720eee1514bf917ce7e785917b0a1a62b775a1a1b6",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/kernel/backend/memory/kernel/v3.mo",
+          "bytes": 48948,
+          "sha256": "1a588ddddaef0c4f1bdcd4f11459e0c9b351e46481ffb81fcaab7eb4ecbfc77f",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+          "bytes": 1596,
+          "sha256": "ec92a5d68c132bbebb8c661324256d38fd8c839bd5d1d14f5ecfafa41fffaf94",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/kernel/backend/memory/kernel/v4.mo",
+          "bytes": 49153,
+          "sha256": "2bd917b2baf60547d1c108d7382c3d523dc24b1e065ef223241ffe9195a3db83",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "managedMemory": {
+        "kernel": {
+          "version": 4,
+          "schemas": {
+            "3": {
+              "src": "memory/kernel/v3.mo"
+            },
+            "4": {
+              "src": "memory/kernel/v4.mo"
+            }
+          },
+          "migrations": [
+            {
+              "from": 3,
+              "to": 4,
+              "src": "memory/kernel/v3_to_v4.mo"
+            }
+          ]
+        },
+        "kernel_activation": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/activation/v1.mo"
+            }
+          },
+          "migrations": []
+        }
+      },
+      "fullMemoryDeclarationIdentical": true,
+      "testSources": [
+        {
+          "path": "apps/kernel/test/motoko/memory_v3_schema_test.mo",
+          "sha256": "7a4f80e529971990c87355fad7eeab6d14feb47f0f6780b598a42f4aeb0fc47f",
+          "identicalToPublishedSource": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/kernel/test/motoko/memory_v4_schema_test.mo",
+          "sha256": "3ebb7287db2b0a9529b9762b7ba4e5f5ad8b20a126bb72bc4479c740c1cdc6b2",
+          "identicalToPublishedSource": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/kernel/test/motoko/activation_service_test.mo",
+          "sha256": "270628b0c85d9f911082c2da3a4c261555df4646953d4390ee87cbb8beda8d4a",
+          "identicalToPublishedSource": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "candidate": {
+        "version": 344,
+        "archive": {
+          "path": "/srv/shared/code/neutron/apps/kernel/kernel.v0.3.44.neutron",
+          "bytes": 2450651,
+          "sha256": "89fb9872b41460e39942cd33a8e984ad47104c0624fa15102416f6e09c6cec75"
+        },
+        "offeredSource": {
+          "path": "/srv/shared/code/neutron/apps/kernel/.neutron/sources/0a7c916be0ddbbf57e5d99f46747f2abbd50dd725d134413f1219edf644f804c.source.v1.msgpack.gz",
+          "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/0a7c916be0ddbbf57e5d99f46747f2abbd50dd725d134413f1219edf644f804c.source.v1.msgpack.gz",
+          "publicationPath": "/repo/v1/sources/0a7c916be0ddbbf57e5d99f46747f2abbd50dd725d134413f1219edf644f804c.source.v1.msgpack.gz",
+          "bytes": 3231887,
+          "sha256": "0a7c916be0ddbbf57e5d99f46747f2abbd50dd725d134413f1219edf644f804c"
+        },
+        "backendMatchesWorkspace": true,
+        "fullMemoryDeclarationIdentical": true
+      }
+    },
+    {
+      "id": "agent",
+      "baselineVersion": 317,
+      "archive": {
+        "path": "/srv/shared/code/neutron/apps/agent/agent.v0.3.17.neutron",
+        "bytes": 511078,
+        "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+      },
+      "offeredSource": {
+        "path": "/srv/shared/code/neutron/apps/agent/.neutron/sources/b84534b75ef210fc488e2300de5774e105c230f0ca5a162910b2b86c5fd11c9b.source.v1.msgpack.gz",
+        "bytes": 408003,
+        "sha256": "b84534b75ef210fc488e2300de5774e105c230f0ca5a162910b2b86c5fd11c9b"
+      },
+      "backend": {
+        "filesCompared": 2,
+        "allIdentical": true,
+        "extraMotokoFiles": [],
+        "baselinePathHashListSha256": "cb76eb8fde8f637ce79c8e968401d18fee13501bc28c677772e7f857211ffe1c",
+        "identicalFiles": 2,
+        "expectedGeneratedDifferences": [],
+        "candidatePathHashListSha256": "1f125e50f0cd1a2af59fa424f0861e6d22f3fea1b4369a1c656a3ae42a5cf1e7",
+        "candidatePathHashListEncoding": "SHA-256 of compact JSON array sorted by path, with objects containing path and sha256"
+      },
+      "lock": {
+        "path": "apps/agent/neutron.lock.json",
+        "bytes": 324,
+        "sha256": "8dad6e45341996d689be59e92108915aadf5535518fa75410a6a62b0d31ac7f0",
+        "identical": true,
+        "identicalToFinalCandidate": true
+      },
+      "memoryFiles": [
+        {
+          "path": "apps/agent/backend/memory/agent/v1.mo",
+          "bytes": 291,
+          "sha256": "43cadd340fb2cf3e68769ce6ba07b1eef040117ee26fdc181a7f9994b24949e1",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "managedMemory": {
+        "agent": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/agent/v1.mo"
+            }
+          },
+          "migrations": []
+        }
+      },
+      "fullMemoryDeclarationIdentical": true,
+      "testSources": [
+        {
+          "path": "apps/agent/test/memory_release.test.mo",
+          "sha256": "4046121284d1e4c8e1e9f0513189d9802b70f2009a84afe4e6f4236451e5d72d",
+          "identicalToPublishedSource": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "candidate": {
+        "version": 318,
+        "archive": {
+          "path": "/srv/shared/code/neutron/apps/agent/agent.v0.3.18.neutron",
+          "bytes": 513437,
+          "sha256": "6d02e4098e22abf3089c773abdd0b6c20b876ad7f6c3eab35ddac21bb1527568"
+        },
+        "offeredSource": {
+          "path": "/srv/shared/code/neutron/apps/agent/.neutron/sources/1a48fa3c672c09c8c89bc600f71e6f32a7a5865644ee448cd166596cb7239bb5.source.v1.msgpack.gz",
+          "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/1a48fa3c672c09c8c89bc600f71e6f32a7a5865644ee448cd166596cb7239bb5.source.v1.msgpack.gz",
+          "publicationPath": "/repo/v1/sources/1a48fa3c672c09c8c89bc600f71e6f32a7a5865644ee448cd166596cb7239bb5.source.v1.msgpack.gz",
+          "bytes": 453449,
+          "sha256": "1a48fa3c672c09c8c89bc600f71e6f32a7a5865644ee448cd166596cb7239bb5"
+        },
+        "backendMatchesWorkspace": true,
+        "fullMemoryDeclarationIdentical": true
+      }
+    },
+    {
+      "id": "wallet",
+      "baselineVersion": 316,
+      "archive": {
+        "path": "/srv/shared/code/neutron/apps/wallet/wallet.v0.3.16.neutron",
+        "bytes": 768823,
+        "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+      },
+      "offeredSource": {
+        "path": "/srv/shared/code/neutron/apps/wallet/.neutron/sources/e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5.source.v1.msgpack.gz",
+        "bytes": 624669,
+        "sha256": "e3b14ca43837efb6c614764ed1ee2fb9f9d085dd8f90bdfd8dba0b598f3234a5"
+      },
+      "backend": {
+        "filesCompared": 34,
+        "allIdentical": true,
+        "extraMotokoFiles": [],
+        "baselinePathHashListSha256": "8880e480c2e4d68d58b029a26050844884aa569e99f1554b34f470d5cb3ca242",
+        "identicalFiles": 34,
+        "expectedGeneratedDifferences": [],
+        "candidatePathHashListSha256": "bc901c3e1ef4f8bd7cb41a723b25bc8f67c6e2a6dff2ab527acbea85894cc24d",
+        "candidatePathHashListEncoding": "SHA-256 of compact JSON array sorted by path, with objects containing path and sha256"
+      },
+      "lock": {
+        "path": "apps/wallet/neutron.lock.json",
+        "bytes": 1456,
+        "sha256": "6cef1e7080321e7ec1238f175a443b835500658982ffdcad155116e2b555ed57",
+        "identical": true,
+        "identicalToFinalCandidate": true
+      },
+      "memoryFiles": [
+        {
+          "path": "apps/wallet/backend/memory/wallet/v1.mo",
+          "bytes": 6110,
+          "sha256": "4820233f164de0b765626d61610e92aaa83c22b02d577150c88027e2c87d2c4d",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_bridge/v1.mo",
+          "bytes": 1753,
+          "sha256": "3c19bbc8d0f3b1a7fe3285848350aa3ba2db4016f0bb238ef0c61ed8b4ff6a26",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_bridge_replacements/v1.mo",
+          "bytes": 696,
+          "sha256": "cc6b90fff1e74fd72bc099679ef39a36186028df64cf01359fecc25059a107bf",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_commands/v1.mo",
+          "bytes": 4184,
+          "sha256": "7a79040770f54b78dd3a0be0555f5814d42bf5eb7e7333e39aee80e3ecf5ee51",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/wallet/backend/memory/wallet_transfers/v1.mo",
+          "bytes": 2045,
+          "sha256": "495605389ef3af1d18be5bcea81ab6afb7d409c308ec5188742f523931e5213f",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "managedMemory": {
+        "wallet": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/wallet/v1.mo"
+            }
+          },
+          "migrations": []
+        },
+        "wallet_commands": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/wallet_commands/v1.mo"
+            }
+          },
+          "migrations": []
+        },
+        "wallet_bridge": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/wallet_bridge/v1.mo"
+            }
+          },
+          "migrations": []
+        },
+        "wallet_transfers": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/wallet_transfers/v1.mo"
+            }
+          },
+          "migrations": []
+        },
+        "wallet_bridge_replacements": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/wallet_bridge_replacements/v1.mo"
+            }
+          },
+          "migrations": []
+        }
+      },
+      "fullMemoryDeclarationIdentical": true,
+      "testSources": [
+        {
+          "path": "apps/wallet/test/memory_release.test.mo",
+          "sha256": "17c1849d69b4c45647efad26809176cce895f8316fa3644801a4ddadc1a44964",
+          "identicalToPublishedSource": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "candidate": {
+        "version": 317,
+        "archive": {
+          "path": "/srv/shared/code/neutron/apps/wallet/wallet.v0.3.17.neutron",
+          "bytes": 777746,
+          "sha256": "599dcfdb5a75dc1924b5e0918ad2ef4e0f715317ddbc05d276a093b7b96d4711"
+        },
+        "offeredSource": {
+          "path": "/srv/shared/code/neutron/apps/wallet/.neutron/sources/83f637123ef44ace0f1d216e2ad4b936c6c2a9da468072d0a9526bb018ff003a.source.v1.msgpack.gz",
+          "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/83f637123ef44ace0f1d216e2ad4b936c6c2a9da468072d0a9526bb018ff003a.source.v1.msgpack.gz",
+          "publicationPath": "/repo/v1/sources/83f637123ef44ace0f1d216e2ad4b936c6c2a9da468072d0a9526bb018ff003a.source.v1.msgpack.gz",
+          "bytes": 646257,
+          "sha256": "83f637123ef44ace0f1d216e2ad4b936c6c2a9da468072d0a9526bb018ff003a"
+        },
+        "backendMatchesWorkspace": true,
+        "fullMemoryDeclarationIdentical": true
+      }
+    },
+    {
+      "id": "evm_wallet",
+      "baselineVersion": 110,
+      "archive": {
+        "path": "/srv/shared/code/neutron/apps/evm_wallet/evm_wallet.v0.1.10.neutron",
+        "bytes": 582768,
+        "sha256": "3b4b4deebe186dd90c0d3bfc49369373b849a0e9c0889e0a09b5330f3eab4d93"
+      },
+      "offeredSource": {
+        "path": "/srv/shared/code/neutron/apps/evm_wallet/.neutron/sources/0489b9fb3f62be7933a7ac9f29280696a4237a89aa7d973a6e9e68cce383fb55.source.v1.msgpack.gz",
+        "bytes": 571059,
+        "sha256": "0489b9fb3f62be7933a7ac9f29280696a4237a89aa7d973a6e9e68cce383fb55"
+      },
+      "backend": {
+        "filesCompared": 20,
+        "allIdentical": true,
+        "extraMotokoFiles": [],
+        "baselinePathHashListSha256": "fe7b5d805ae8a2fcb9f6d7edf3e74ba7b533da7554990aaffec56b0298f64753",
+        "identicalFiles": 20,
+        "expectedGeneratedDifferences": [],
+        "candidatePathHashListSha256": "45a9b3d3667c563c5383e23460dbbd50ef05db19cc27fd91ad5fdf5a566540a2",
+        "candidatePathHashListEncoding": "SHA-256 of compact JSON array sorted by path, with objects containing path and sha256"
+      },
+      "lock": {
+        "path": "apps/evm_wallet/neutron.lock.json",
+        "bytes": 611,
+        "sha256": "385132eb6e6fe0d0af37c4c684fcb2f8c3582773b358d891ca6a99705eb062c4",
+        "identical": true,
+        "identicalToFinalCandidate": true
+      },
+      "memoryFiles": [
+        {
+          "path": "apps/evm_wallet/backend/memory/evm_evidence/v1.mo",
+          "bytes": 677,
+          "sha256": "a371d6a74ffa69c6a4347410c3825ed3c702d4c47c7960c60b9282f915613e69",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        },
+        {
+          "path": "apps/evm_wallet/backend/memory/evm_wallet/v1.mo",
+          "bytes": 2937,
+          "sha256": "5a8971fa005d0a2e62e1e1f7a692334036b7b7e0ba58fe713f4c4cd579e387a3",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "managedMemory": {
+        "evm_wallet": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/evm_wallet/v1.mo"
+            }
+          },
+          "migrations": []
+        },
+        "evm_evidence": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/evm_evidence/v1.mo"
+            }
+          },
+          "migrations": []
+        }
+      },
+      "fullMemoryDeclarationIdentical": true,
+      "testSources": [
+        {
+          "path": "apps/evm_wallet/test/memory_release.test.mo",
+          "sha256": "8a52a8bffc48715d7ca563706580b09cb900fbb10e4d2cf09aa4b0c8aa5a1214",
+          "identicalToPublishedSource": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "candidate": {
+        "version": 111,
+        "archive": {
+          "path": "/srv/shared/code/neutron/apps/evm_wallet/evm_wallet.v0.1.11.neutron",
+          "bytes": 586514,
+          "sha256": "7207dc470ca4ddb123860f7200af95a38a227f71895842d93b91c121e3d4afb8"
+        },
+        "offeredSource": {
+          "path": "/srv/shared/code/neutron/apps/evm_wallet/.neutron/sources/b4003d36d2c78f99eae370196b297846132a7f8dffc6c24b02ac4c9fc5133535.source.v1.msgpack.gz",
+          "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/b4003d36d2c78f99eae370196b297846132a7f8dffc6c24b02ac4c9fc5133535.source.v1.msgpack.gz",
+          "publicationPath": "/repo/v1/sources/b4003d36d2c78f99eae370196b297846132a7f8dffc6c24b02ac4c9fc5133535.source.v1.msgpack.gz",
+          "bytes": 579008,
+          "sha256": "b4003d36d2c78f99eae370196b297846132a7f8dffc6c24b02ac4c9fc5133535"
+        },
+        "backendMatchesWorkspace": true,
+        "fullMemoryDeclarationIdentical": true
+      }
+    },
+    {
+      "id": "uniswap",
+      "baselineVersion": 107,
+      "archive": {
+        "path": "/srv/shared/code/neutron/apps/uniswap/uniswap.v0.1.7.neutron",
+        "bytes": 303722,
+        "sha256": "c52f97192dd3bc246b48c51ab8af09a96091d159fca87850aa7d9d28fc5198d2"
+      },
+      "offeredSource": {
+        "path": "/srv/shared/code/neutron/apps/uniswap/.neutron/sources/b5de6083ea7993aa3a744015faabfd67688718a18782ded1022277d313af3cc3.source.v1.msgpack.gz",
+        "bytes": 494183,
+        "sha256": "b5de6083ea7993aa3a744015faabfd67688718a18782ded1022277d313af3cc3"
+      },
+      "backend": {
+        "filesCompared": 3,
+        "allIdentical": true,
+        "extraMotokoFiles": [],
+        "baselinePathHashListSha256": "8b1296303bd1a86439b1c91f1d52aca3aa18386e8a116125f9fdcd205000500e",
+        "identicalFiles": 3,
+        "expectedGeneratedDifferences": [],
+        "candidatePathHashListSha256": "27faeecb3698000008d0280d02846627e89bb67a0dc05999e28cd680fe7af0ea",
+        "candidatePathHashListEncoding": "SHA-256 of compact JSON array sorted by path, with objects containing path and sha256"
+      },
+      "lock": {
+        "path": "apps/uniswap/neutron.lock.json",
+        "bytes": 328,
+        "sha256": "9d7a2d6749c7d273b92ed565cb943a306f9ed15d5f0c63401cef547641f9ae41",
+        "identical": true,
+        "identicalToFinalCandidate": true
+      },
+      "memoryFiles": [
+        {
+          "path": "apps/uniswap/backend/memory/uniswap/v1.mo",
+          "bytes": 823,
+          "sha256": "87783d919c6f6922c548ecd0b657ec3501b568d7a89b1825e77171477a3c7832",
+          "identical": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "managedMemory": {
+        "uniswap": {
+          "version": 1,
+          "schemas": {
+            "1": {
+              "src": "memory/uniswap/v1.mo"
+            }
+          },
+          "migrations": []
+        }
+      },
+      "fullMemoryDeclarationIdentical": true,
+      "testSources": [
+        {
+          "path": "apps/uniswap/test/memory_release.test.mo",
+          "sha256": "603e0d5411762bd16d25558124155f4533c5245268bea3745a4bbfcf25e9d945",
+          "identicalToPublishedSource": true,
+          "identicalToFinalCandidate": true
+        }
+      ],
+      "candidate": {
+        "version": 108,
+        "archive": {
+          "path": "/srv/shared/code/neutron/apps/uniswap/uniswap.v0.1.8.neutron",
+          "bytes": 309215,
+          "sha256": "c8ee81a62b312cf8b6c3408a0328731daf06763a2de1717de972aaa784943c56"
+        },
+        "offeredSource": {
+          "path": "/srv/shared/code/neutron/apps/uniswap/.neutron/sources/fa55bcc0b911b77f29b3bd2d9933ed6df79c5711366e41637836eee233fd6d1f.source.v1.msgpack.gz",
+          "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/fa55bcc0b911b77f29b3bd2d9933ed6df79c5711366e41637836eee233fd6d1f.source.v1.msgpack.gz",
+          "publicationPath": "/repo/v1/sources/fa55bcc0b911b77f29b3bd2d9933ed6df79c5711366e41637836eee233fd6d1f.source.v1.msgpack.gz",
+          "bytes": 507244,
+          "sha256": "fa55bcc0b911b77f29b3bd2d9933ed6df79c5711366e41637836eee233fd6d1f"
+        },
+        "backendMatchesWorkspace": true,
+        "fullMemoryDeclarationIdentical": true
+      }
+    }
+  ],
+  "migrationsRequired": false,
+  "canisterRuntimeCreated": false,
+  "financialTransactions": false,
+  "sourceVersionPackageChangesByAuditor": false,
+  "tests": [
+    {
+      "app": "kernel",
+      "command": "MOTOKO_TEST=memory_v3_schema_test.mo,memory_v4_schema_test.mo,activation_service_test.mo bun test/motoko/run.ts",
+      "cwd": "apps/kernel",
+      "log": ".neutron/release-receipts/agent-wallet-integration-2026-09-06/kernel-memory.log",
+      "exitCode": 0,
+      "runsThisAudit": 1,
+      "completions": [
+        "Motoko test passed: memory_v3_schema_test.mo",
+        "Motoko test passed: memory_v4_schema_test.mo",
+        "Motoko test passed: activation_service_test.mo"
+      ],
+      "logBytes": 59275,
+      "logSha256": "a449cd8a29c4f753c187487a09527ebc5c71edec357bfc2a82babdf68a2bb2e8"
+    },
+    {
+      "app": "agent",
+      "command": "npm --workspace neutron-agent run test:memory",
+      "cwd": ".",
+      "log": ".neutron/release-receipts/agent-wallet-integration-2026-09-06/agent-memory.log",
+      "exitCode": 0,
+      "runsThisAudit": 1,
+      "completions": [
+        "Browser Motoko test passed: test/memory_release.test.mo"
+      ],
+      "logBytes": 332,
+      "logSha256": "a757becea7c0b5d9638142f31daa0b5ac313c95df886ab7bc7e4a5105e00a143"
+    },
+    {
+      "app": "uniswap",
+      "command": "npm --workspace neutron-uniswap run test:memory",
+      "cwd": ".",
+      "log": ".neutron/release-receipts/agent-wallet-integration-2026-09-06/uniswap-memory.log",
+      "exitCode": 0,
+      "runsThisAudit": 1,
+      "completions": [
+        "Browser Motoko test passed: test/memory_release.test.mo"
+      ],
+      "logBytes": 8315,
+      "logSha256": "afd3137a70d13eac4ee712f35f367c75fa04b96fc85a4bf3aed41ed657c4d8fc"
+    },
+    {
+      "app": "wallet",
+      "command": "npm --workspace neutron-wallet run test:memory",
+      "cwd": ".",
+      "log": ".neutron/release-receipts/agent-wallet-integration-2026-09-06/wallet-memory-reused.log",
+      "exitCode": 0,
+      "runsThisAudit": 0,
+      "reusedFrom": {
+        "audit": ".neutron/release-receipts/ckdeposit-memory-audit-2026-09-06.json",
+        "auditSha256": "f8fe32e6ed326cf21b7eff7fe631f3d16a919bd0b8d3ca9e0db5dc48833d2c50",
+        "log": "/tmp/neutron-ckdeposit-wallet-memory.log",
+        "logSha256": "3fd8b790b9d556db2a47ab888bb718e127351eb22cb870c46cfdf3f1875e3e5d"
+      },
+      "completions": [
+        "Browser Motoko test passed: test/memory_release.test.mo"
+      ],
+      "logBytes": 15629,
+      "logSha256": "3fd8b790b9d556db2a47ab888bb718e127351eb22cb870c46cfdf3f1875e3e5d"
+    },
+    {
+      "app": "evm_wallet",
+      "command": "npm --workspace neutron-evm-wallet run test:memory",
+      "cwd": ".",
+      "log": ".neutron/release-receipts/agent-wallet-integration-2026-09-06/evm_wallet-memory-reused.log",
+      "exitCode": 0,
+      "runsThisAudit": 0,
+      "reusedFrom": {
+        "audit": ".neutron/release-receipts/ckdeposit-memory-audit-2026-09-06.json",
+        "auditSha256": "f8fe32e6ed326cf21b7eff7fe631f3d16a919bd0b8d3ca9e0db5dc48833d2c50",
+        "log": "/tmp/neutron-ckdeposit-evm-memory.log",
+        "logSha256": "3ac1625855f4b00094b4fff7c0b5a5207547eb06c856b4b41497afe218c2c417"
+      },
+      "completions": [
+        "Browser Motoko test passed: test/memory_release.test.mo"
+      ],
+      "logBytes": 7103,
+      "logSha256": "3ac1625855f4b00094b4fff7c0b5a5207547eb06c856b4b41497afe218c2c417"
+    }
+  ],
+  "verifiedAt": "2026-09-06T19:04:17.127Z",
+  "totalManagedRoots": 11,
+  "totalBackendFilesCompared": 134,
+  "totalMemoryHistoryFiles": 13,
+  "testScope": "Existing Motoko memory tests only. Kernel v4 compiles and executes Region-backed fresh initialization and v3-to-v4 migration; v3 schema and activation tests preserve historical contracts. Agent and Uniswap initialization/restoration tests ran once. Earlier current-task Wallet/EVM memory tests are reused after exact backend, schema, lock and test-source equality checks; no reruns.",
+  "kernelTestCoordination": "Only three selected existing tests ran via MOTOKO_TEST, not the complete Kernel Motoko runner; coordinator notified to avoid duplicate work.",
+  "totalIdenticalBackendFiles": 133,
+  "totalExpectedGeneratedBackendDifferences": 1,
+  "postPackageReconciliation": {
+    "verifiedAt": "2026-09-06T19:25:09.855Z",
+    "priorAudit": {
+      "path": ".neutron/release-receipts/agent-wallet-integration-2026-09-06/memory-audit-before-packaging.json",
+      "bytes": 17344,
+      "sha256": "032360c6a97c30706e3ab7244dbdc15d4d3ca5b93b00b3f912573d08320d2a5c",
+      "scope": "Historical pre-package workspace audit; 134 backend files then matched published baselines before canonical Kernel wrapper regeneration."
+    },
+    "finalPreflight": {
+      "path": ".neutron/release-receipts/agent-wallet-integration-2026-09-06/preflight.json",
+      "bytes": 18614,
+      "sha256": "8da40f083e84033d3cc56949cee465a672aef7a18a47e1a2ae104ad096bb2a81"
+    },
+    "allFinalArchivesAndOfferedSourcesHashVerified": true,
+    "allFinalCandidateBackendsMatchWorkspace": true,
+    "all13ReleasedHistoryModulesUnchanged": true,
+    "all5LockFilesUnchanged": true,
+    "all11ManagedRootsRetainMemoryVersions": true,
+    "memoryTestsRerun": false,
+    "existingMemoryTestLogsHashVerified": true,
+    "kernelPackageVerification": {
+      "log": ".neutron/release-receipts/agent-wallet-integration-2026-09-06/kernel-package-verification.log",
+      "bytes": 4580,
+      "sha256": "5ba371706b53b1e02aebb2cc7ebef6a14715d1739bcca0dd9cea0e865ecb62da",
+      "testsPassed": 44,
+      "testsFailed": 0,
+      "assertions": 580,
+      "files": 3,
+      "includes": "Generated Kernel artifacts preserve V3-to-V4 migration and activation V1; package metadata and certified-assets candidate binding checks.",
+      "rerunByAuditor": false
+    }
+  }
+}

@@ -341,6 +341,7 @@ type PendingProviderApproval = {
   targetAppGeneration: number | undefined;
   targetInstallationUid: string | undefined;
   descriptor: MsgBusToolDescriptor;
+  invocation: InvocationNode | null;
   expiresAt: number;
   controller: AbortController;
   timer?: ReturnType<typeof setTimeout>;
@@ -430,6 +431,13 @@ subscribeEndpointChanges(() =>
   ),
 );
 setAgentRootCancelDispatcher((root) => {
+  for (const binding of pendingProviderApprovals.values()) {
+    if (binding.invocation?.rootId === root.id) {
+      binding.controller.abort(
+        new KernelPolicyError("AGENT_MODE_REVOKED", "Agent invocation revoked"),
+      );
+    }
+  }
   const endpoint = getRegisteredEndpoint(root.endpointId);
   if (!endpoint || endpoint.sessionId !== root.endpointSessionId) return;
   void execEndpoint(
@@ -1722,11 +1730,16 @@ defineKernelTool(
       assertEndpointDispatchCurrent(targetDispatch);
     };
     assertEndpointsCurrent();
-    const descriptors = tools
+    const exactTools = tools ?? (
+      tool !== "*" && hasInstalledFrontendToolGrant(caller, targetEndpoint, tool)
+        ? [tool]
+        : undefined
+    );
+    const descriptors = exactTools
       ? await readEndpointTools(targetEndpoint, signal)
       : undefined;
     assertEndpointsCurrent();
-    const requestedTools = tools?.map((name) => {
+    const requestedTools = exactTools?.map((name) => {
       const descriptor = descriptors!.find(
         (candidate) => candidate.name === name,
       );
@@ -1752,6 +1765,13 @@ defineKernelTool(
     if (targetEndpoint.context.appId === caller.context.appId) {
       return { granted: true };
     }
+    const undeclaredTools = requestedTools?.filter(
+      (item) => !hasInstalledFrontendToolGrant(caller, targetEndpoint, item.name),
+    );
+    if (undeclaredTools?.length === 0) {
+      assertScopedContextForActiveAppInvocation(caller, invocation);
+      return { granted: true };
+    }
     const agentApproved = await authorizeAgentPermission(
       caller,
       invocation,
@@ -1762,8 +1782,8 @@ defineKernelTool(
         action: {
           targetAppId: targetEndpoint.context.appId,
           targetRole: targetEndpoint.context.role,
-          ...(requestedTools
-            ? { tools: requestedTools.map((item) => item.name) }
+          ...(undeclaredTools
+            ? { tools: undeclaredTools.map((item) => item.name) }
             : { tool }),
         },
       },
@@ -1771,7 +1791,7 @@ defineKernelTool(
     );
     assertEndpointsCurrent();
     if (!agentApproved) {
-      const missingTools = requestedTools?.filter(
+      const missingTools = undeclaredTools?.filter(
         (item) =>
           !hasFrontendToolGrant(
             callerContext(caller),
@@ -3382,12 +3402,6 @@ async function invokeEndpointTool(
     if (providerOnce && !effectiveInvocation) {
       assertScopedContextForActiveAppInvocation(caller, null);
     }
-    if (providerOnce && effectiveInvocation) {
-      throw new KernelPolicyError(
-        "INVOCATION_INVALID",
-        "Provider-confirmed tools are unavailable to Agent invocations",
-      );
-    }
     if (!providerOnce) {
       await authorizeEndpointAccess(
         caller,
@@ -3410,6 +3424,7 @@ async function invokeEndpointTool(
         caller,
         endpoint,
         descriptor,
+        targetInvocation,
         signal,
       );
     }
@@ -3425,7 +3440,7 @@ async function invokeEndpointTool(
               providerApproval: {
                 capability: providerApproval.capability,
               },
-              providerUi: true,
+              ...(!targetInvocation ? { providerUi: true } : {}),
             }
           : {}),
         ...(agentRootAudience
@@ -3464,6 +3479,7 @@ function createProviderApproval(
   caller: RegisteredEndpoint,
   target: RegisteredEndpoint,
   descriptor: MsgBusToolDescriptor,
+  invocation: InvocationNode | null,
   signal?: AbortSignal,
 ): PendingProviderApproval {
   throwIfRequestCancelled(signal);
@@ -3510,6 +3526,7 @@ function createProviderApproval(
     targetAppGeneration: target.appGeneration,
     targetInstallationUid: target.appScope?.installationUid,
     descriptor,
+    invocation,
     expiresAt: Date.now() + PROVIDER_APPROVAL_TTL_MS,
     controller,
     state: "pending",
@@ -3593,6 +3610,9 @@ function assertProviderApprovalCurrent(binding: PendingProviderApproval): void {
   }
   assertCurrentEndpointVersion(caller);
   assertCurrentEndpointVersion(target);
+  if (binding.invocation) {
+    resolveInvocation(target, invocationMetadata(binding.invocation));
+  }
 }
 
 function reconcileProviderApprovalEndpoints(): void {
@@ -3643,24 +3663,54 @@ async function requestProviderApprovalForEndpoint(
         "Provider approval review",
         MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES,
       );
-      await requestFrontendToolPermission({
-        caller: callerContext(binding.caller),
-        callerSessionId: binding.callerSessionId,
-        target: binding.target.endpointId,
-        targetSessionId: binding.targetSessionId,
-        tool: binding.descriptor.name,
-        ...(binding.descriptor.title
-          ? { toolTitle: binding.descriptor.title }
-          : {}),
-        ...(binding.descriptor.description
-          ? { toolDescription: binding.descriptor.description }
-          : {}),
-        arguments: {},
-        providerReview: review,
-        onceOnly: true,
-        requireFreshDecision: true,
-        signal: binding.controller.signal,
-      });
+      if (binding.invocation) {
+        const invocation = binding.invocation;
+        await requestAgentConsent(
+          invocation,
+          {
+            kind: "frontend_tool",
+            persistence: "none",
+            risk: "high",
+            action: {
+              caller: callerContext(binding.caller),
+              targetAppId: binding.target.context.appId,
+              targetRole: binding.target.context.role,
+              tool: binding.descriptor.name,
+              ...(binding.descriptor.title
+                ? { toolTitle: binding.descriptor.title }
+                : {}),
+              ...(binding.descriptor.description
+                ? { toolDescription: binding.descriptor.description }
+                : {}),
+              providerReview: review,
+              onceOnly: true,
+              requireFreshDecision: true,
+            },
+          },
+          (challenge, decisionSignal) =>
+            dispatchAgentConsent(invocation, challenge, decisionSignal),
+          binding.controller.signal,
+        );
+      } else {
+        await requestFrontendToolPermission({
+          caller: callerContext(binding.caller),
+          callerSessionId: binding.callerSessionId,
+          target: binding.target.endpointId,
+          targetSessionId: binding.targetSessionId,
+          tool: binding.descriptor.name,
+          ...(binding.descriptor.title
+            ? { toolTitle: binding.descriptor.title }
+            : {}),
+          ...(binding.descriptor.description
+            ? { toolDescription: binding.descriptor.description }
+            : {}),
+          arguments: {},
+          providerReview: review,
+          onceOnly: true,
+          requireFreshDecision: true,
+          signal: binding.controller.signal,
+        });
+      }
       assertProviderApprovalCurrent(binding);
       return { approved: true };
     },
@@ -3701,10 +3751,10 @@ async function consumeProviderInteraction<T>(
 ): Promise<T> {
   throwIfRequestCancelled(signal);
   assertProviderApprovalCurrent(binding);
-  if (callbackInvocation !== null) {
+  if (callbackInvocation !== binding.invocation) {
     throw new KernelPolicyError(
       "INVOCATION_INVALID",
-      "Provider interactions are unavailable to Agent invocations",
+      "Provider interaction does not match its invocation",
     );
   }
   binding.state = "deciding";
@@ -3737,6 +3787,12 @@ async function presentProviderUiForEndpoint(
     callbackInvocation,
     signal,
     async () => {
+      if (binding.invocation) {
+        throw new KernelPolicyError(
+          "INVOCATION_INVALID",
+          "Agent provider interactions must submit a review to the root Agent",
+        );
+      }
       if (
         !isJsonObject(payload) ||
         Object.keys(payload).length !== 4 ||
@@ -4119,6 +4175,26 @@ function endpointToolVisibleToCaller(
   );
 }
 
+/** Install-reviewed routing authority, always read from the current app plan.
+ * It creates no session grant and cannot make a private tool visible or satisfy
+ * a provider-owned transaction/signature decision.
+ */
+function hasInstalledFrontendToolGrant(
+  caller: RegisteredEndpoint,
+  target: RegisteredEndpoint,
+  tool: string,
+): boolean {
+  assertCurrentEndpointVersion(caller);
+  assertCurrentEndpointVersion(target);
+  const declaration = declaredCapability(
+    useAppsStore.getState().list[caller.context.appId],
+    "frontend_tools",
+  );
+  return declaration?.targets.some(
+    (candidate) => candidate.app === target.context.appId && candidate.tools.includes(tool),
+  ) ?? false;
+}
+
 async function authorizeEndpointAccess(
   caller: RegisteredEndpoint,
   target: RegisteredEndpoint,
@@ -4133,6 +4209,12 @@ async function authorizeEndpointAccess(
   const targetDispatch = bindEndpointDispatch(target);
   const tool = typeof descriptor === "string" ? descriptor : descriptor.name;
   if (caller.context.appId === target.context.appId) return;
+  if (hasInstalledFrontendToolGrant(caller, target, tool)) {
+    assertScopedContextForActiveAppInvocation(caller, invocation);
+    assertEndpointDispatchCurrent(callerDispatch);
+    assertEndpointDispatchCurrent(targetDispatch);
+    return;
+  }
   const agentPermission: AgentPermissionSummary = {
     kind: "frontend_tool",
     persistence: "none",

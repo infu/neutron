@@ -40,8 +40,20 @@ challenges exclude raw tool arguments. A v2 external signed-call challenge is
 the deliberate exception: it includes the complete canonical prepared argument
 array shown for approval. The runtime makes one separate `generateText` request
 with the selected OpenRouter model and one forced `permission_decision` tool.
-It receives the original owner goal, applied steering instructions, and those
-permission facts, not the transcript, tool output, credentials, private keys, or transport ids.
+It receives the retained owner messages in order (or the active goal and its
+steering instructions) and those permission facts. Ordinary follow-ups such as
+"try again" retain the original request, while later cancellations and narrower
+instructions take precedence. Assistant replies, reviewer checkpoints, tool
+output, credentials, private keys, and transport ids do not become owner
+authority. The judge can approve necessary reads, preparation, and exact
+requested sensitive actions without inventing another UI confirmation;
+unrelated actions and broader access remain subject to denial.
+Long owner histories use the selected model's existing context budget,
+retaining complete recent messages and identifying omitted context. Worker
+requests reserve room for that same owner context alongside their evidence.
+After a policy denial, a new owner retry or a changed prerequisite permits
+reevaluation. Agent does not repeat unchanged denials automatically or replay
+an unresolved mutation.
 
 Tools that opt into both `"neutron:visibility":"same_app"` and
 `"neutron:audience":"agent_root"` are a separate automation surface. Kernel
@@ -146,6 +158,9 @@ proposes completion or reaches a 32-step checkpoint. It returns complete,
 continue with concrete next work, or needs-input with an actual missing owner
 decision. It is separate from the permission judge and grants no additional
 authority. Review failure pauses the saved goal rather than accepting completion.
+Clearing a goal waits for its stopped turn to save, then records the owner's
+clear action in the existing conversation so a later retry retains that
+cancellation. No additional browser storage schema is introduced.
 
 Enter applies a new owner message at the next safe model step, after an
 in-flight tool call settles. Tab or **Queue** saves it for the next work cycle;

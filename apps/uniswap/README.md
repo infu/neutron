@@ -40,10 +40,11 @@ state and quote cannot be observed at the same block.
 ## Use
 
 1. Install EVM Wallet and Uniswap through the compatible Kernel update set.
-   Connect EVM Wallet in the Uniswap tile and select Ethereum or Arbitrum. One
-   connection prompt grants this session's exact wallet reads and saved-request
-   tracking. Tracking can reconcile or resend only already-approved signed
-   bytes. New transactions retain their separate Wallet confirmation.
+   Open the Uniswap tile and select Ethereum or Arbitrum. Account, balance and
+   history reads start automatically using the exact Wallet tools declared in
+   installation consent. There is no separate Connect or Refresh permission
+   prompt. Tracking can reconcile or resend only already-approved signed bytes.
+   New transactions retain their separate exact Wallet confirmation.
 2. Fund the EVM address on that network, including ETH for gas. IC cycles used
    by signing/state updates and EVM gas are separate balances. Quote and balance
    reads use direct browser RPC and do not spend IC outcall cycles.
@@ -76,7 +77,7 @@ state and quote cannot be observed at the same block.
    transactions and are not atomic. No approval is silently unlimited. Ordinary
    ERC20 allowance has no automatic expiry: it remains until spent or revoked;
    the swap deadline does not expire that approval.
-6. Balances and history refresh while the connected app is visible and on focus.
+6. Balances and history refresh while the app is visible and on focus.
    A reload retains the saved intent and exact request IDs; pending requests are
    reconciled before another dispatch. **Continue** resumes an interrupted
    owner-started flow. Expired quotes offer a fresh draft that checks the existing
@@ -155,6 +156,7 @@ exact-request binding remain unchanged.
 
 | Tool | Behavior |
 | --- | --- |
+| `uniswap_swap_v1` | Complete a provider-reviewed swap, including allowance, approval, safe quote renewal, swap and receipt; retry the same original inputs and `swapId` |
 | `uniswap_quote_v1` | Live direct-pool quote with read-only fee observations; native token is `null`; amounts are atomic decimal strings |
 | `uniswap_prepare_v1` | Validate the quote and save immutable approval/swap requests under the supplied 32-hex swap ID |
 | `uniswap_status_v1` | Read one saved intent and progress |
@@ -163,7 +165,42 @@ exact-request binding remain unchanged.
 | `uniswap_record_result_v1` | Bind a supplied wallet result to the saved request, then independently verify public transaction fields and receipt |
 | `uniswap_next_action_v1` | Reconcile supplied root Wallet observations and return the next exact tool call for a saved Agent swap |
 
-The root Agent obtains a quote and prepared requests, then uses
+For a new tool-driven swap, call `uniswap_swap_v1` once with one 32-hex `swapId`,
+chain, input/output token addresses (`null` for ETH), and atomic input amount.
+Optional defaults are the main account, the Wallet's own receiving address,
+50 slippage basis points, and a 1200-second quote validity window. The tool
+quotes, checks allowance, obtains an exact Wallet approval when needed, waits
+for confirmation, and obtains the exact swap review before following its receipt.
+An approval receipt alone is never reported as a completed swap.
+
+Every effect uses the ordinary public EVM Wallet provider tool. A normal caller
+receives the Wallet modal; an active root Agent receives the same exact prepared
+transaction through its permission judge and retained owner instructions.
+Uniswap does not call a root-only signing tool on this path, impersonate the
+Agent, or receive a standing signing grant. Changed prepared transaction details
+return `review` and need a new call with the same original inputs and `swapId`.
+
+New tool flows add `executionMode: "provider"` and a versioned `providerFlow`
+record inside the existing immutable quote JSON. It binds the original caller
+installation, human/Agent mode, exact inputs, root flow ID and renewal attempt.
+The existing `uniswap` memory schema stays at v1. If an unsigned quote expires
+after approval resolves, the tool reads allowance again and creates a distinct
+immutable successor with a deterministic ID; it does not repeat an already
+sufficient approval. A retry finds that successor even when its creation reply
+was lost. Signed, submitted, signing, and unknown operations remain attached to
+their original request IDs. An expired dispatch with no visible Wallet result
+cannot justify a fresh intent. Both the legacy Agent records and new provider
+records remain visible in history, and the tile cannot resume their effects.
+
+Long calls yield `pending` before the Agent's existing transport deadline.
+Cancellation and lost replies preserve the flow ID and saved request IDs. Retry
+`uniswap_swap_v1` with the identical original arguments to reconcile and continue;
+never create another swap merely because tracking paused. There is no attempt
+limit or transaction expiry introduced by this tracking window. Every fresh
+Wallet review still checks the owner's current instructions.
+
+The earlier root-owned workflow remains available for installed 0.1.7 and older
+intents and approvals. The root Agent obtains a quote and prepared requests, then uses
 `uniswap_next_action_v1` to determine which saved Wallet request to check or
 execute. The Agent calls EVM Wallet's root tools directly and supplies their
 status results to the continuation tool. Hash-bearing results are verified
@@ -174,8 +211,8 @@ consumer a signer.
 Agent tool invocations serialize their nested Wallet calls so independent pool,
 token-metadata and fee reads cannot compete for the same Kernel permission
 decision. The queue is scoped to that tool invocation and honors cancellation;
-the connected tile still performs independent reads concurrently. This uses the
-existing Kernel permission behavior and does not weaken or bypass decisions.
+the tile still performs independent reads concurrently. Install-declared tool
+access removes repeated read prompts while preserving exact provider review.
 Quote and continuation tools report progress and use the Agent's existing
 long-running-tool annotation.
 

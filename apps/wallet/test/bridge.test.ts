@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { encodeFunctionResult, type Hex } from "viem";
 import { bridgeComplete, bridgeEvmRequestId, bridgeLabel, executeBridgeDeposit, type BridgeClient, type BridgeIntent } from "../src/bridge.ts";
 import type { EthereumProvider } from "../src/ethereum.ts";
+import { connectEvmBridgeReads } from "../src/evm_bridge.ts";
 const account = `0x${"11".repeat(20)}`, helper = `0x${"22".repeat(20)}`, minter = `0x${"33".repeat(20)}`, token = `0x${"44".repeat(20)}`;
 const hash = `0x${"ab".repeat(32)}` as Hex, approvalHash = `0x${"cd".repeat(32)}` as Hex;
 const helperAbi = [{ type: "function", name: "getMinterAddress", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "address" }] }] as const;
@@ -21,6 +22,16 @@ function store(initial = intent()) {
 function provider(override: (method: string) => unknown = () => undefined): EthereumProvider {
   return { async request({ method }) { const value = override(method); if (value !== undefined) return value; if (method === "eth_requestAccounts") return [account]; if (method === "eth_chainId") return "0x1"; if (method === "eth_getCode") return "0x6001"; if (method === "eth_call") return encodeFunctionResult({ abi: helperAbi, functionName: "getMinterAddress", result: minter as Hex }); if (method === "eth_sendTransaction") return hash; if (method === "eth_getTransactionReceipt") return { status: "0x1" }; throw new Error(`Unexpected ${method}`); } };
 }
+test("deposit connection groups reads and saved-request tracking without granting fresh sends", async () => {
+  const calls: unknown[] = [];
+  await connectEvmBridgeReads({ callTool: async (call) => { calls.push(call); return undefined as never; } });
+  expect(calls).toEqual([{
+    target: "kernel", name: "permissions.request", arguments: {
+      target: "app:evm_wallet:background",
+      tools: ["evm_accounts_v1", "evm_call_contract_v1", "evm_read_contract_v1", "evm_operation_status_v1", "evm_transaction_v1"],
+    },
+  }]);
+});
 test("accepted browser send with lost reply remains unknown and never resends after reload", async () => {
   const db = store(); let sends = 0; const wallet = provider((method) => { if (method === "eth_sendTransaction") { sends++; expect(db.saved().steps[2]?.state).toBe("unknown"); throw new Error("reply lost after broadcast"); } });
   await expect(executeBridgeDeposit({ intent: intent(), client: db.client, provider: wallet })).rejects.toThrow("reply lost");
@@ -45,6 +56,41 @@ test("unresolved EVM approval resumes the same request before deposit and preser
   const db = store(start), calls: string[] = []; const base = provider(); const wallet: EthereumProvider = { async request(args) { if (args.method === "eth_call" && (args.params as [{to:string}])[0].to !== helper) return `0x${12n.toString(16).padStart(64, "0")}`; return base.request(args); } };
   await executeBridgeDeposit({ intent: start, client: db.client, provider: wallet, evm: { send: async (id) => { calls.push(id); return id === start.steps[1]!.operationId ? approvalHash : hash; }, confirm: async () => undefined } });
   expect(calls).toEqual([start.steps[1]!.operationId!, bridgeEvmRequestId(start.id, "deposit")]); expect(db.saved().steps.map((s) => s.state)).toEqual(["confirmed", "confirmed", "confirmed"]);
+});
+test("a contract read failure after approval resumes only the saved deposit request", async () => {
+  const start = intent(); start.source = "evm"; start.quote.tokenAddress = token; start.amount = "3000000";
+  const db = store(start), sent = new Map<string, Hex>(), phases: string[] = [];
+  let allowance = 0n, failCodeAfterApproval = true;
+  const base = provider();
+  const wallet: EthereumProvider = { async request(args) {
+    if (args.method === "eth_getCode" && allowance !== 0n && failCodeAfterApproval) throw new Error("RPC eth_getCode on chain 1: header not found");
+    if (args.method === "eth_call" && (args.params as [{ to: string }])[0].to.toLowerCase() === token.toLowerCase()) return `0x${allowance.toString(16).padStart(64, "0")}`;
+    return base.request(args);
+  } };
+  const evm = {
+    async send(requestId: string, _transaction: unknown, beforeFreshSend?: () => Promise<void>): Promise<Hex> {
+      if (sent.has(requestId)) return sent.get(requestId)!;
+      await beforeFreshSend?.();
+      const approval = requestId === bridgeEvmRequestId(start.id, "approval");
+      const txHash = approval ? approvalHash : hash;
+      sent.set(requestId, txHash);
+      if (approval) allowance = 3_000_000n;
+      return txHash;
+    },
+    async confirm() {},
+  };
+  await expect(executeBridgeDeposit({ intent: start, client: db.client, provider: wallet, evm, onProgress: value => phases.push(value) })).rejects.toThrow("header not found");
+  expect([...sent.keys()]).toEqual([bridgeEvmRequestId(start.id, "approval")]);
+  expect(db.saved().steps[1]).toMatchObject({ state: "confirmed", transactionHash: approvalHash });
+  expect(db.saved().steps[2]).toMatchObject({ state: "unknown", operationId: bridgeEvmRequestId(start.id, "deposit"), transactionHash: null });
+  failCodeAfterApproval = false;
+  const resumed = await executeBridgeDeposit({ intent: db.saved(), client: db.client, provider: wallet, evm });
+  expect(resumed.steps[2]).toMatchObject({ state: "confirmed", transactionHash: hash });
+  await executeBridgeDeposit({ intent: resumed, client: db.client, provider: wallet, evm });
+  expect([...sent.keys()]).toEqual([bridgeEvmRequestId(start.id, "approval"), bridgeEvmRequestId(start.id, "deposit")]);
+  expect(resumed.steps[1]?.transactionHash).toBe(approvalHash);
+  expect(bridgeComplete(resumed)).toBe(false); // IC mint still needs its own evidence.
+  expect(phases).toEqual(expect.arrayContaining(["approving", "submitting"]));
 });
 test("minter acceptance or an unverified mint is not mint completion", () => {
   const saved = intent(); saved.steps[2]!.state = "confirmed"; saved.steps[2]!.transactionHash = hash; saved.acceptedDeposit = { logIndex: "3", blockNumber: "200", eventIndex: "90" }; expect(bridgeComplete(saved)).toBe(false); expect(bridgeLabel(saved)).toContain("awaiting its mint"); saved.mint = { ledgerBlockIndex: "44", eventIndex: "91", verifiedLedger: false }; expect(bridgeComplete(saved)).toBe(false); saved.mint.verifiedLedger = true; expect(bridgeComplete(saved)).toBe(true);

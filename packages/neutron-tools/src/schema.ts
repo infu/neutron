@@ -116,6 +116,8 @@ export {
   type NeutronConnectionsCapabilityConfig,
   type NeutronEthereumProviderCapabilityConfig,
   type NeutronEthereumProviderMethod,
+  type NeutronFrontendToolTargetConfig,
+  type NeutronFrontendToolsCapabilityConfig,
   type NeutronCertifiedAssetsCapabilityConfig,
   type NeutronCertifiedAssetsCapabilityV2,
   type NeutronCertifiedAssetsCollectionConfig,

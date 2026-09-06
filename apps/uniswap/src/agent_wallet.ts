@@ -7,7 +7,8 @@ import { createEvmWalletClient } from "neutron-tools/evm_wallet";
  * Kernel client and each request's cancellation/transport options.
  */
 export function createServiceWallet(context: MsgBusToolContext) {
-  if (!context.agentMode) return createEvmWalletClient(context.kernel);
+  const options = context.signal ? { callOptions: { signal: context.signal } } : {};
+  if (!context.agentMode) return createEvmWalletClient(context.kernel, options);
   let tail: Promise<unknown> = Promise.resolve();
   const callTool = <T extends JsonValue = JsonValue>(call: MsgBusToolCall, options?: number | MsgBusCallOptions): Promise<T> => {
     const pending = tail.then(() => {
@@ -19,5 +20,5 @@ export function createServiceWallet(context: MsgBusToolContext) {
     tail = pending.catch(() => undefined);
     return pending;
   };
-  return createEvmWalletClient({ callTool });
+  return createEvmWalletClient({ callTool }, options);
 }

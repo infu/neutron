@@ -6,6 +6,7 @@ import { createSwapStore, savedIntent, verifyAgentResult, walletReader, type Sav
 import { estimateSwapFees } from "./fees.ts";
 import { createServiceWallet } from "./agent_wallet.ts";
 import { nextAgentSwapAction } from "./agent_workflow.ts";
+import { parseProviderSwapInput, providerSwapResult, runProviderSwap, type ProviderSwapInput, type ProviderSwapResult } from "./provider_flow.ts";
 
 const text = { type: "string" };
 const address = { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" };
@@ -17,10 +18,68 @@ function recordOutput(record: SwapRecord) {
 }
 const recordSchema = schema({ swapId: text, phase: text, recordJson: text, approvalRequestJson: { oneOf: [text, { type: "null" }] }, swapRequestJson: text });
 const quoteSchema = schema({ chainId: { enum: ["1", "42161"] }, accountId: { const: "main" }, tokenIn: { oneOf: [address, { type: "null" }] }, tokenOut: { oneOf: [address, { type: "null" }] }, amountIn: nat, slippageBps: { type: "integer", minimum: 0, maximum: 9999 }, recipient: address, deadline: nat });
+const flowCalls = new Map<string, Promise<ProviderSwapResult>>();
+
+exposeTool("uniswap_swap_v1", {
+  title: "Swap tokens on Uniswap through approval and confirmation",
+  description: "Complete a swap: quote, check allowance, approve if needed, wait, swap, and record its receipt. Wallet's public provider tool shows a human modal or sends exact review to the active Agent judge. Null token means ETH; amountIn is atomic units. Keep one 32-hex swapId. After pending, review or a lost reply, retry this tool with identical original arguments; never create another flow or stop at approval. Expired unsigned quotes renew with the same inputs and live allowance; ambiguous submitted requests retain their IDs. Defaults: main account, own recipient, 50 slippage basis points, 1200 seconds per quote. Every effect needs exact Wallet review within current owner instructions. Legacy root-owned intents use uniswap_next_action_v1.",
+  inputSchema: {
+    type: "object", properties: {
+      swapId: { type: "string", pattern: "^[0-9a-f]{32}$" }, chainId: { enum: ["1", "42161"] }, accountId: { const: "main" },
+      tokenIn: { oneOf: [address, { type: "null" }] }, tokenOut: { oneOf: [address, { type: "null" }] }, amountIn: nat,
+      recipient: { oneOf: [address, { type: "null" }] }, slippageBps: { type: "integer", minimum: 0, maximum: 9999 }, quoteValiditySeconds: nat,
+    }, required: ["swapId", "chainId", "tokenIn", "tokenOut", "amountIn"], additionalProperties: false,
+  },
+  outputSchema: schema({
+    flowId: text, swapId: { oneOf: [text, { type: "null" }] }, state: { enum: ["complete", "pending", "review", "stopped"] }, phase: text,
+    transactionHash: { oneOf: [text, { type: "null" }] }, approvalTransactionHash: { oneOf: [text, { type: "null" }] },
+    receivedAmountAtoms: { oneOf: [text, { type: "null" }] }, message: text,
+  }),
+  annotations: { "neutron:effects": ["read", "write", "network", "user_visible_ui"], "neutron:longRunning": true },
+}, async (args, context) => {
+  const input = parseProviderSwapInput(args as Partial<ProviderSwapInput>), caller = requireEvmWalletCaller(context);
+  const controller = new AbortController();
+  const cancel = () => controller.abort(context.signal?.reason ?? new Error("Swap tracking paused"));
+  context.signal?.addEventListener("abort", cancel, { once: true });
+  if (context.signal?.aborted) cancel();
+  // Yield with a recoverable result before the Agent's existing 300-second
+  // long-tool transport deadline. This does not limit attempts or transaction life.
+  const timer = setTimeout(() => controller.abort(new Error("Continue tracking this saved swap in another tool call")), 240_000);
+  let latest: SwapRecord | null = null;
+  const key = `${caller.appId}:${caller.installationUid}:${input.swapId}`;
+  const previous = flowCalls.get(key);
+  const task = Promise.resolve(previous).catch(() => undefined).then(async () => {
+    controller.signal.throwIfAborted();
+    return runProviderSwap(createServiceWallet({ ...context, signal: controller.signal }), createSwapStore(context.kernel), input, caller, !!context.agentMode, {
+      signal: controller.signal,
+      onRecord: (record) => { latest = record; },
+      onProgress: (phase, record) => context.reportProgress({ phase, flowId: input.swapId, swapId: record?.id ?? null }),
+    });
+  });
+  flowCalls.set(key, task);
+  // Keep an interrupted underlying call in the same-flow queue until it settles.
+  // Its signal is already revoked, so it cannot advance to another signature.
+  const release = () => { if (flowCalls.get(key) === task) flowCalls.delete(key); };
+  void task.then(release, release);
+  let rejectInterrupted!: () => void;
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    rejectInterrupted = () => reject(controller.signal.reason ?? new Error("Swap tracking paused"));
+    controller.signal.addEventListener("abort", rejectInterrupted, { once: true });
+    if (controller.signal.aborted) rejectInterrupted();
+  });
+  try { return json(await Promise.race([task, interrupted])); }
+  catch (error) {
+    if (!controller.signal.aborted) throw error;
+    return json(providerSwapResult(input, latest, "pending", "Tracking paused with the original flow retained. Call uniswap_swap_v1 again with the same swapId and identical original arguments to reconcile and continue. An interrupted reply does not mean the transaction failed; do not create a second swap."));
+  } finally {
+    clearTimeout(timer); context.signal?.removeEventListener("abort", cancel);
+    controller.signal.removeEventListener("abort", rejectInterrupted);
+  }
+});
 
 exposeTool("uniswap_quote_v1", {
   title: "Quote a Uniswap V3 swap",
-  description: "Read live direct-pool exact-input quotes on Ethereum or Arbitrum through EVM Wallet. tokenIn/tokenOut null means native ETH; amountIn is atomic units. Compare available V3 fee tiers and check live allowance, including approvals from earlier expired quotes. No transaction or signature is requested. To execute, save this quote with uniswap_prepare_v1, then follow uniswap_next_action_v1 through approval and swap confirmation.",
+  description: "Read live direct-pool exact-input quotes on Ethereum or Arbitrum through EVM Wallet. tokenIn/tokenOut null means native ETH; amountIn is atomic units. Compare available V3 fee tiers and check live allowance, including approvals from earlier expired quotes. No transaction or signature is requested. For a new complete swap use uniswap_swap_v1. The prepare/next_action tools remain available for existing legacy root-owned workflows.",
   inputSchema: quoteSchema, outputSchema: schema({ quoteJson: text }), annotations: { "neutron:effects": ["read", "network"], "neutron:longRunning": true },
 }, async (args, context) => {
   context.reportProgress({ phase: "Checking EVM Wallet account" });

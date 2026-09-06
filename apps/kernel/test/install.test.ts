@@ -26,7 +26,7 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.43.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.44.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -35,7 +35,7 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(343);
+  expect(manifest.version).toBe(344);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   expect(manifest.memory.kernel.version).toBe(4);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3", "4"]);
@@ -59,7 +59,7 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(343);
+  expect(packagedManifest.version).toBe(344);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
@@ -70,10 +70,10 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(4);
-  expect(packagedArchive.manifest.version).toBe(343);
+  expect(packagedArchive.manifest.version).toBe(344);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 343 },
+    package: { id: "kernel", version: 344 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });

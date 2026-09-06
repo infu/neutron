@@ -204,13 +204,14 @@ for (const entry of [
     {
       title: entry.title,
       description:
-        "Open EVM Wallet to review this exact request. Reuse the same request ID and fields after uncertain outcomes.",
+        "Review this exact request in EVM Wallet, or through the active root Agent's fresh permission decision in Agent mode. Reuse the same request ID and fields after uncertain outcomes. A prepared result requires another call to review the changed transaction before it can execute.",
       inputSchema: entry.schema,
       outputSchema: evmOperationOutputSchema,
       annotations: {
         "neutron:audit": "metadata_only",
         "neutron:consent": "provider_once",
         "neutron:effects": ["write", "network", "user_visible_ui"],
+        "neutron:longRunning": true,
       },
     },
     async (args, context) => {

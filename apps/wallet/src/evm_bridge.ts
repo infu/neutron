@@ -1,10 +1,23 @@
-import { createEvmWalletClient, type EvmOperationResult, type EvmSendTransactionRequest } from "neutron-tools/evm_wallet";
+import { callTool } from "neutron-tools/app";
+import { createEvmWalletClient, EVM_WALLET_TARGET, EVM_WALLET_TOOLS, type EvmOperationResult, type EvmSendTransactionRequest } from "neutron-tools/evm_wallet";
 import { encodeFunctionData, type Hex } from "viem";
 import { EthereumReceiptRevertedError, type EthereumProvider, type EthereumTransaction } from "./ethereum.ts";
 
 export type EvmBridgeClient = ReturnType<typeof createEvmWalletClient>;
 const allowanceAbi = [{ type: "function", name: "allowance", stateMutability: "view", inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], outputs: [{ name: "", type: "uint256" }] }] as const;
 const minterAbi = [{ type: "function", name: "getMinterAddress", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "address" }] }] as const;
+
+/** Connect the foreground deposit flow once. Tracking can reconcile only saved
+ * signed bytes; every fresh transaction keeps its separate Wallet review.
+ */
+export async function connectEvmBridgeReads(kernel: { callTool: typeof callTool } = { callTool }): Promise<void> {
+  await kernel.callTool({
+    target: "kernel", name: "permissions.request", arguments: {
+      target: EVM_WALLET_TARGET,
+      tools: [EVM_WALLET_TOOLS.accounts, EVM_WALLET_TOOLS.callContract, EVM_WALLET_TOOLS.readContract, EVM_WALLET_TOOLS.operationStatus, EVM_WALLET_TOOLS.transaction],
+    },
+  });
+}
 
 export async function connectEvmBridge(client: EvmBridgeClient, helper: string, token: string | null, expectedAddress?: string) {
   const accounts = await client.accounts();
@@ -23,7 +36,7 @@ export async function connectEvmBridge(client: EvmBridgeClient, helper: string, 
       if (!Array.isArray(params)) throw new Error("Invalid EVM bridge read parameters");
       if (method === "eth_call") {
         const tx = params[0] as { to: string; data: string };
-        return (await client.readContract({ ...scope, to: tx.to, data: tx.data })).result;
+        return (await client.callContract({ ...scope, to: tx.to, data: tx.data })).result;
       }
       if (method === "eth_getCode") {
         const to = String(params[0]);

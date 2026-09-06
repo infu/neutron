@@ -1,0 +1,878 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/kernel/test/agent_provenance.test.tsx:
+(pass) Agent Mode identifies the app by id and labels its supplied name [19.00ms]
+
+apps/kernel/test/vetkeys_service.test.ts:
+(pass) app-isolated vetKeys browser broker > rejects a retired installation scope and pending frontend authority [2.00ms]
+(pass) app-isolated vetKeys browser broker > derives app identity from the live source and normalizes only declared slots [2.00ms]
+(pass) app-isolated vetKeys browser broker > strictly normalizes canonical Candid option arrays [1.00ms]
+(pass) app-isolated vetKeys browser broker > rejects malformed Candid option arrays [1.00ms]
+(pass) app-isolated vetKeys browser broker > normalizes icblast hex vectors and omitted option fields [13.00ms]
+(pass) app-isolated vetKeys browser broker > rejects malformed nonce, transport key, generation, and authority fields [1.00ms]
+(pass) app-isolated vetKeys browser broker > copies nonce and transport inputs before awaits and detects a changed transport binding [5.00ms]
+(pass) app-isolated vetKeys browser broker > lifecycle requests require a focused direct tile and one-shot owner consent [1.00ms]
+(pass) app-isolated vetKeys browser broker > lifecycle consent cannot survive auth, manifest, or tile-session changes
+(pass) app-isolated vetKeys browser broker > snapshots the principal value across lifecycle consent
+(pass) app-isolated vetKeys browser broker > lets an authorized non-manager recover seamlessly only through its exact originating endpoint [8.00ms]
+(pass) app-isolated vetKeys browser broker > expires and consumes opaque challenges exactly once [4.00ms]
+(pass) app-isolated vetKeys browser broker > retains exactly 256 terminal challenges and evicts the oldest [584.00ms]
+(pass) app-isolated vetKeys browser broker > requester closure and replacement cancel pending and dispatched results [6.00ms]
+(pass) app-isolated vetKeys browser broker > tray recovery stays denied while delegated and Agent tool work may recover [7.00ms]
+(pass) app-isolated vetKeys browser broker > bounds pending challenges per app and globally, then cleans every reservation [171.00ms]
+(pass) app-isolated vetKeys browser broker > enforces one derivation per app and four globally before backend awaits [19.00ms]
+(pass) app-isolated vetKeys browser broker > rejects post-await results when the source session is replaced [1.00ms]
+(pass) app-isolated vetKeys browser broker > does not create a challenge after authorization, principal, or manifest changes during begin [11.00ms]
+(pass) app-isolated vetKeys browser broker > withholds post-derive results after authorization, principal, manifest, or requester changes [19.00ms]
+(pass) app-isolated vetKeys browser broker > rejects changed generation output and forwards post-await status/holder closure [14.00ms]
+(pass) app-isolated vetKeys browser broker > coalesces identical public-key requests and revalidates each source [1.00ms]
+(pass) app-isolated vetKeys browser broker > preserves the closed SDK error contract without exposing a stack [1.00ms]
+(pass) app-isolated vetKeys browser broker > maps every surrounding kernel policy failure into the closed vetKeys domain [1.00ms]
+(pass) app-isolated vetKeys browser broker > classifies browser slot-state failures without general policy codes [2.00ms]
+(pass) app-isolated vetKeys browser broker > serializes every closed backend error without detail or stack leakage [2.00ms]
+(pass) app-isolated vetKeys browser broker > redacts malformed closed-error payloads and backend exceptions [1.00ms]
+(pass) app-isolated vetKeys browser broker > redacts unexpected vetKeys failures to one closed error
+
+apps/kernel/test/certified_assets_diagnostics.test.ts:
+(pass) Certified Assets diagnostics is a Kernel-authorized query [34.00ms]
+(pass) Certified Assets diagnostics has a read-only aggregate facade [7.00ms]
+
+apps/kernel/test/raw_self_update.test.ts:
+(pass) raw attachment updates submit once and return certified poll bytes [1.00ms]
+(pass) raw attachment updates reject V2 submission failures [1.00ms]
+(pass) raw attachment updates reject an impossible async response shape
+
+apps/kernel/test/scale_inventory_acceptance.test.ts:
+(pass) two hundred neutral headless apps cross install, runtime, Settings, and batched removal boundaries [1350.00ms]
+
+apps/kernel/test/config_perm.test.ts:
+(pass) hello app requests no exceptional permissions or explanations [7.00ms]
+(pass) declaring an app-owned tray adds no install permission or explanation [1.00ms]
+(pass) browser permissions disclose exact canonical tile grants [4.00ms]
+(pass) frontend tool permissions disclose only the exact canonical provider tools [1.00ms]
+(pass) bounded deferred timers add no install permission [1.00ms]
+(pass) persistent background storage is a structured kernel fact [1.00ms]
+(pass) dedicated resident origin is a distinct structured kernel fact [1.00ms]
+(pass) resident credentials and agent entrypoints retain machine-derived risk [2.00ms]
+(pass) backend-call facts disclose normalized modes and concurrency without a target [12.00ms]
+(pass) randomness is a kernel permission without a temporal quota [1.00ms]
+(pass) chain-key signing separates exact slot authority from unverified purpose [1.00ms]
+(pass) wallet custody authority stays separate from assertions and app-authored purpose [1.00ms]
+(pass) stable stores separate exact schema and quotas from unverified purpose
+(pass) HTTPS outcalls disclose one exact grouped transport authority [2.00ms]
+(pass) public ingress discloses exact route authority and update admission [2.00ms]
+(pass) authenticated public updates disclose direct self-authenticating ingress without payment
+(pass) certified app routes disclose exact public mounts and storage quotas [3.00ms]
+(pass) public POST routes disclose the exact handler and admission budget [1.00ms]
+(pass) shared POST paths disclose their kernel-derived public bases and surface
+(pass) vetKeys declarations are a kernel risk fact while app intent stays unverified [11.00ms]
+(pass) app explanations have a separate unverified discriminant and cannot affect risk [1.00ms]
+(pass) preapproved self calls disclose every exact method and query/update mode [1.00ms]
+(pass) backend dependencies and exports remain exact structured facts [1.00ms]
+(pass) kernel permissions are explicit and deduplicated [3.00ms]
+(pass) ambiguous or internal allow metadata is rejected before disclosure
+(pass) canister principal injection is a level-one read-only fact [1.00ms]
+(pass) task capability permission identity includes its exact interface API [1.00ms]
+(pass) memory retirement requires destructive approval [1.00ms]
+(pass) consumed memory is machine-marked as consolidation [1.00ms]
+(pass) current Chess disclosure includes backend policy, eight self calls, and a bounded public exchange route [9.00ms]
+(pass) authoritative policy changes produce different install disclosures [1.00ms]
+(pass) install approval uses a deeply copied immutable disclosure snapshot [1.00ms]
+
+apps/kernel/test/vetkeys_icblast_boundary.test.ts:
+(pass) icblast vetKeys result boundary > restores a result envelope for every unwrapped operation success
+(pass) icblast vetKeys result boundary > retains direct canonical Ok/Err results
+(pass) icblast vetKeys result boundary > reconstructs every thrown closed error without leaking extra data
+(pass) icblast vetKeys result boundary > rejects malformed, unknown, and non-operation failures
+
+apps/kernel/test/install_offer_ui.test.tsx:
+(pass) package dialog attributes the app and never renders URL secrets [6.00ms]
+(pass) repository dialog shows normalized group identity and agent source [3.00ms]
+(pass) safe URL display contains only origin and path
+(pass) install offers keep exact provenance collapsed [4.00ms]
+
+apps/kernel/test/package_metadata_generation.test.ts:
+(pass) Kernel v343 NPL package metadata > binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs [88.00ms]
+
+Size: 19347
+Writing: kernel.v0.3.44.neutron
+(pass) Kernel v343 NPL package metadata > packs the NPL legal envelope without changing the closed format-3 manifest [145.00ms]
+(pass) Kernel v343 NPL package metadata > fails closed on wrong release identity, license, notice, or memory [10.00ms]
+(pass) Kernel v343 NPL package metadata > requires schema 3 history, the custody schema 4, and its exact forward migration [15.00ms]
+(pass) Kernel v343 NPL package metadata > retains the exact released schema source bytes in the offered source [21.00ms]
+(pass) Kernel v343 NPL package metadata > rejects symbolic, sensitive, and arbitrary unreviewed source inputs [178.00ms]
+(pass) Kernel v343 NPL package metadata > rejects stale files before pack traverses Kernel dist [17.00ms]
+(pass) Kernel v343 NPL package metadata > generates a deterministic inventory of exact installed Kernel artifacts [26.00ms]
+(pass) Kernel v343 NPL package metadata > current workspace review includes every required changed source [476.00ms]
+
+apps/kernel/test/bootstrap.test.ts:
+(pass) kernel captures the internal handoff before importing auth or React [5.00ms]
+(pass) kernel setup storage reports session denial after retaining a volatile copy [2.00ms]
+(pass) kernel stops when a captured setup handoff cannot be stripped [4.00ms]
+(pass) kernel ignores a malformed setup fragment after stripping it
+(pass) kernel fails closed when stale handoff retirement fails
+
+apps/kernel/test/build_runtime_repairs.test.ts:
+Processing /tmp/neutron-kernel-wasm-build-KruUSD/backend/_neutron.mo
+Processing /tmp/neutron-kernel-wasm-build-KruUSD/backend/local.mo
+Processing /tmp/neutron-kernel-wasm-build-KruUSD/packages/build-fixture/lib.mo
+(pass) kernel Motoko builds use vendored Wasm and never resolve a host moc [962.00ms]
+(pass) prepared package uses the Candid emitted with its Wasm
+(pass) prepared package includes the exact stable types emitted with its Wasm
+(pass) legacy boot metadata uses the valid identity content encoding [1.00ms]
+
+apps/kernel/test/self_calls.test.ts:
+(pass) top-level absent Candid options become JSON null [2.00ms]
+(pass) nullary Candid Result errors retain a stable rejection code [1.00ms]
+(pass) API1 preapproval binds an exact logical method and mode [3.00ms]
+(pass) consented and physical self-call lookup remains source-app scoped [1.00ms]
+(pass) generic signed calls cannot bypass the source-bound self-call service
+(pass) live Candid is authoritative for self-call existence, mode, and shape [1.00ms]
+(pass) self-call arity errors identify the installed app and method without exposing argument values [1.00ms]
+(pass) nested and repeated binary fields bind only at live Candid blob leaves [1.00ms]
+(pass) live blobs require their exact transferable sidecars [1.00ms]
+(pass) structural nested records bind absent and present optional blobs [1.00ms]
+(pass) released icblast string record shorthands stay opaque and sidecar-free
+(pass) non-binary containers are recursively bounded against live Candid [21.00ms]
+(pass) non-binary siblings cannot bypass bounds beside a bound blob [4.00ms]
+(pass) strings and number arrays are never reinterpreted as blobs [1.00ms]
+(pass) binary markers materialize through optional Candid fields
+(pass) self-call JavaScript conversion fails closed on metaproperty labels [1.00ms]
+(pass) marker-bearing branches reject unknown fields and misplaced markers
+(pass) wire binary parsing rejects ambiguous objects and reports aggregates [1.00ms]
+(pass) raw request and reply preflight meters all nested blob leaves [4.00ms]
+(pass) raw preflight enforces binary field-count and aggregate-byte limits [21.00ms]
+(pass) raw request byte accounting excludes bounded binary payload bytes
+(pass) self-call result normalization preserves blobs and Candid boundary shape [1.00ms]
+(pass) API-1 projection preserves top-level absent option [1.00ms]
+(pass) API-1 projection preserves absent option in a record
+(pass) API-1 projection preserves absent option in a vector
+(pass) API-1 projection preserves absent option in a tuple
+(pass) API-1 projection preserves absent option selected as a variant payload
+(pass) API-1 projection preserves absent option selected as Result Ok
+(pass) API-1 projection renders principals and bigints as text [1.00ms]
+(pass) generic projection never reinterprets a record with an optional blob
+(pass) empty blobs preserve the one native sidecar convention
+(pass) native result projection owns binary leaves and is prototype-safe [1.00ms]
+(pass) self-call result encoding extracts multiple immutable binary leaves
+(pass) trusted binary inspection exposes exact path, size, and SHA-256 transiently [1.00ms]
+(pass) self-call reservations cover request, raw reply, and decoder allocation
+
+apps/kernel/test/vetkeys_ui.test.tsx:
+(pass) vetKeys install disclosure keeps spoofed purpose in the unverified section [12.00ms]
+(pass) runtime lifecycle consent is app-bound, default-cancel, and action-specific [19.00ms]
+(pass) vetKeys administrative wire model validates, normalizes, and renders audit [21.00ms]
+(pass) vetKeys administrative model fails closed on malformed or spoofing data [1.00ms]
+(pass) settings policies preserve cleanup while blocking unsafe suspended actions [1.00ms]
+(pass) Settings confirmation and baseline disclosure preserve destructive security copy [12.00ms]
+(pass) Access rendering blocks removal for every principal holding an active slot [8.00ms]
+(pass) vetKeys operation errors are owner-safe and redact backend detail [1.00ms]
+
+apps/kernel/test/wallet_custody_signing.test.ts:
+(pass) custody adapter fixture independently verifies the exact digest and compressed secp256k1 key [83.00ms]
+(pass) custody namespace vector independently binds canister, installation, app, slot and authority [10.00ms]
+
+apps/kernel/test/certified_assets_settings.test.ts:
+(pass) Certified Assets Settings loads scoped usage and rejects plan drift [4.00ms]
+(pass) admission ceilings are canonical, manifest-bounded, and response-checked [2.00ms]
+(pass) write freeze and one-page maintenance use only the captured scope [1.00ms]
+(pass) Kernel Certified Assets Settings expose no app-owned cleanup hook [1.00ms]
+(pass) Certified Assets controls load once per generic installation scope [37.00ms]
+
+apps/kernel/test/package_url.test.ts:
+(pass) package URL parsing requires an absolute private-free HTTPS URL
+(pass) package URL parsing permits HTTP only for local loopback development [1.00ms]
+(pass) install offers require an exact .neutron pathname while manual URLs remain flexible
+(pass) URL package fetch is credentialless, referrerless, uncached, and bounded [2.00ms]
+(pass) URL package fetch rejects HTTP failures and declared oversized bodies [2.00ms]
+(pass) URL package fetch cancels a stream that exceeds its actual byte limit [2.00ms]
+(pass) URL package fetch preserves exact-limit bytes across chunks [1.00ms]
+(pass) URL package fetch gives a useful CORS-safe transport error
+
+apps/kernel/test/kernel_tray.test.tsx:
+(pass) Kernel tray scales heap-labelled Memory against the canister memory limit [6.00ms]
+(pass) Kernel tray clamps an over-limit heap scale [2.00ms]
+
+apps/kernel/test/app_frame_origin.test.ts:
+(pass) resident capabilities never move ordinary surfaces onto the Kernel origin [8.00ms]
+
+apps/kernel/test/connections.test.ts:
+(pass) connection consent is cancelled with its app lifecycle [1.00ms]
+(pass) connection consent closes when its exact endpoint disappears [1.00ms]
+(pass) stale connection consent cannot open an authorization popup
+(pass) identity restoration preserves popup recovery but logout clears it [1.00ms]
+(pass) kernel provider catalog accepts only trusted provider declarations
+(pass) connection summaries retain their installation identity [1.00ms]
+(pass) generated provider catalogs exactly match the trusted provider source [2.00ms]
+(pass) tiles cannot invoke private connection actions [1.00ms]
+(pass) tray popouts cannot invoke private connection actions
+(pass) background requests reject legacy fields and undeclared providers [2.00ms]
+
+apps/kernel/test/repository_client.test.ts:
+(pass) repository byte verification > fetches and verifies every pinned package through one uniform path [4.00ms]
+(pass) repository byte verification > keeps a 50-package manifest within the four-read concurrency bound [7.00ms]
+(pass) repository byte verification > rejects the manifest before any package read when its pin differs [1.00ms]
+(pass) repository byte verification > settles and cancels sibling package reads before exposing failure [8.00ms]
+(pass) repository transport strips credentials, referrer, and cache [1.00ms]
+
+apps/kernel/test/activation_handoff.test.ts:
+(pass) captures, strips, and takes an activation-only handoff once [1.00ms]
+(pass) captures repository setup and activation from one fragment [5.00ms]
+(pass) does not retain an activation when address-bar stripping fails
+(pass) rejects malformed, duplicate, and query-shaped activation fields [1.00ms]
+(pass) removes query-string handoffs without retaining their secrets
+
+apps/kernel/test/settings.test.ts:
+(pass) settings format large Nat values without Number conversion [1.00ms]
+(pass) heap memory pressure stays bounded and formats compactly [1.00ms]
+(pass) memory snapshot validation requires usable limits
+(pass) settings app rows put the kernel first and project owned memory [1.00ms]
+(pass) settings projects two hundred arbitrary headless apps without app knowledge [35.00ms]
+(pass) settings keeps equal app-local memory ids under their owners
+(pass) capability accessors verify the canonical plan fingerprint [2.00ms]
+(pass) registry reconciliation compares ids and declared versions
+(pass) snapshot validation rejects unsafe browser numbers [1.00ms]
+(pass) scheduled-task snapshots validate exact limits and unique ids
+(pass) access snapshots canonicalize, sort, and validate principals [5.00ms]
+(pass) principal input rejects malformed and anonymous identities [1.00ms]
+
+apps/kernel/test/repository_offer_service.test.ts:
+(pass) isolated repository offer admission [406.00ms]
+
+apps/kernel/test/uninstall_flow.test.ts:
+(pass) uninstall preparation, cancellation, and approval stay transactionally separated [367.00ms]
+
+apps/kernel/test/tile_frame.test.tsx:
+(pass) fully opaque tiles omit the opacity style [3.00ms]
+(pass) translucent tiles apply opacity only to the existing tile root
+(pass) spotlight control exposes its expand and restore states [2.00ms]
+
+apps/kernel/test/certified_assets_settings_idl.test.ts:
+(pass) static kernel actor includes the five exact Certified Assets Settings methods [7.00ms]
+(pass) static scope and usage results round-trip every semantic field [15.00ms]
+(pass) static mutation inputs, full errors, and direct maintenance output are generated-compatible [7.00ms]
+
+apps/kernel/test/ethereum_provider.test.ts:
+(pass) ethereum provider session is tile, focus, activation, and manifest bound [2.00ms]
+(pass) ethereum provider broker validates accounts, chains, methods, and transactions [2.00ms]
+(pass) ethereum provider sessions revoke when same-version capabilities change [1.00ms]
+(pass) ethereum provider sessions revoke across a same-version reinstall [1.00ms]
+(pass) ethereum provider requests have no elapsed-time quota [1.00ms]
+(pass) ethereum provider retains bounded in-flight backpressure [1.00ms]
+(pass) EIP-6963 request and announce automatically bind exactly one provider [30.00ms]
+(pass) EIP-6963 requires the owner to choose among multiple announced providers [30.00ms]
+(pass) EIP-6963 provider choice rejects cancellation and invalid selections [55.00ms]
+(pass) browser-wallet discovery never falls back to window.ethereum [30.00ms]
+
+apps/kernel/test/update_service.test.ts:
+(pass) isolated updater service orchestration [583.00ms]
+
+apps/kernel/test/clipboard.test.ts:
+(pass) clipboard service writes exact text and notifies after success [1.00ms]
+(pass) clipboard service rejects background and tray surfaces plus inactive or unauthorized tiles
+(pass) clipboard service validates the exact bounded payload [1.00ms]
+(pass) trusted Kernel UI can explicitly copy bounded deployment evidence [9.00ms]
+(pass) clipboard service does not impose an elapsed-time quota [1.00ms]
+(pass) clipboard service does not notify and permits retry after a browser failure
+
+apps/kernel/test/deployment_integrity_ui.test.tsx:
+(pass) Runtime module-hash detail renders the complete hash and copy control [2.00ms]
+(pass) Runtime module-hash failure is an alert with a working retry [2.00ms]
+
+apps/kernel/test/https_outcalls_adapter_boundary.test.ts:
+(pass) app HTTPS outcalls always use one non-replicated request [1.00ms]
+
+apps/kernel/test/manual_install_review_flow.test.ts:
+(pass) manual install review remains a read-only boundary until exact deployment [391.00ms]
+
+apps/kernel/test/install_recovery.test.ts:
+(pass) pending install recovery exposes only authoritative reservation blockers [2.00ms]
+(pass) predecessor recovery inspection is a quick read and never retries activation [1.00ms]
+(pass) running-target recovery releases only the selected blocker and retries safely [4.00ms]
+(pass) running targets never enter the impossible discard path
+(pass) discard rejects predecessor install status shape 0 [1.00ms]
+(pass) discard rejects predecessor install status shape 1
+
+apps/kernel/test/updates_store.test.ts:
+(pass) queued results settle in place and cancellation keeps completed rows [1.00ms]
+(pass) failure stages remain explicit and success retires candidates [1.00ms]
+
+apps/kernel/test/installed_package_record_ui.test.tsx:
+(pass) normal mode shows a concise license and plainly labelled source download [5.00ms]
+(pass) developer mode keeps the package-record and outer archive digests separate [7.00ms]
+(pass) missing records are labelled as legacy without guessing a license
+(pass) a malformed present record is a visible escaped per-app error [1.00ms]
+(pass) an explicit package source status is shown as a claim, not an offer [1.00ms]
+(pass) embedded source is described as package-only rather than an installed download [3.00ms]
+(pass) archive-only licenses and third-party notices are not presented as installed assets [2.00ms]
+(pass) download verification errors are visible text and never rendered as markup [3.00ms]
+
+apps/kernel/test/deployment_build_record_ui.test.tsx:
+(pass) deployment record UI distinguishes legacy, unavailable, and invalid [5.00ms]
+(pass) complete record UI shows a whole-canister verified transport match [15.00ms]
+(pass) legacy observed match is not presented as pre-dispatch verification [5.00ms]
+(pass) stale and same-deployment mismatch are visibly distinct [7.00ms]
+(pass) refresh races, runtime inconsistency, and hash failure preserve the record [8.00ms]
+
+apps/kernel/test/activation_redeem.test.ts:
+(pass) accepts a committed activation result [1.00ms]
+(pass) confirms a lost activation response without replaying the bearer
+(pass) reports an already-consumed activation
+
+apps/kernel/test/runtime_authority_registry_race.test.ts:
+(pass) registry authority loads reject stale async continuations [397.00ms]
+
+apps/kernel/test/state.test.ts:
+(pass) app approval waits for the exact compiled deployment review [8.00ms]
+(pass) app rejection clears compiled and request state [1.00ms]
+(pass) install errors are explicit UI state and can be cleared
+(pass) shared uninstall confirmation resolves and clears its request [7.00ms]
+(pass) cancelling the shared uninstall confirmation preserves app state [7.00ms]
+(pass) browser surface-origin adoption invalidates only changed app runtimes [2.00ms]
+(pass) runtime capability revisions participate in the authority CAS [1.00ms]
+(pass) sidecar authority is exact for the v25 bridge and v26 runtime [1.00ms]
+(pass) content-identical authority refresh preserves app and instance identity
+(pass) uninstall confirmation is bound to the exact compiled destruction plan [2.00ms]
+(pass) kernel uninstall cannot enter the confirmation flow [1.00ms]
+(pass) shared uninstall confirmation blocks required providers [7.00ms]
+(pass) shared uninstall confirmation permits a provider with all selected consumers [5.00ms]
+(pass) call approval resolves pending request and removes it [1.00ms]
+(pass) call requests keep iframe-derived app and tile context
+(pass) call rejection rejects pending request and removes it [1.00ms]
+(pass) app authority revocation cancels its pending signed call exactly once
+(pass) signed-call bindings retain exact source, session, scope, and generation
+(pass) signed-call reply fences suppress stale success and rejection data [1.00ms]
+
+apps/kernel/test/backend_calls.test.ts:
+(pass) backend consent remains pending until explicit owner action [2.00ms]
+(pass) request cancellation removes only its pending backend consent [1.00ms]
+(pass) backend consent is cancelled when its app surface closes
+(pass) expired backend consent cannot leave a pending or hidden approval [1.00ms]
+(pass) endpoint replacement during preflight cannot create consent or apply grants [4.00ms]
+(pass) backend consent has no hidden queue [1.00ms]
+(pass) source-bound backend tools require the installed declaration
+(pass) tray popouts cannot change durable backend access [2.00ms]
+(pass) an app cannot request a reservation scope outside its manifest [1.00ms]
+(pass) backend reservation batches reject duplicate scopes before consent [1.00ms]
+(pass) backend reservation requests require actions or a same-app call
+(pass) invalid attached call arguments fail before consent or reservation work [1.00ms]
+(pass) attachment request cancellation reaches authorization and stops before apply [10.00ms]
+(pass) owner sees the immutable attached arguments that are revalidated and executed [4.00ms]
+(pass) owner consent discloses trusted nested binary sidecar facts [3.00ms]
+(pass) pending backend consent clones and freezes source and reservation facts
+(pass) rejecting backend consent does not pause an immediate retry [1.00ms]
+(pass) consent annotates authoritative existing state and applies its exact snapshot [7.00ms]
+(pass) authorization loss after approval cannot apply a grant or run an attached call [5.00ms]
+(pass) backend reservations decode absent Candid option methods [1.00ms]
+(pass) backend reservations accept every compiler-owned physical method
+
+apps/kernel/test/deployment_build_review.test.ts:
+(pass) pre-dispatch deployment build review > normal mode renders a compact result without the developer dump [23.00ms]
+(pass) pre-dispatch deployment build review > normal review distinguishes classical upgrades from a storage-resetting reinstall [16.00ms]
+(pass) pre-dispatch deployment build review > normal review distinguishes migrated storage from deletion without migration [15.00ms]
+(pass) pre-dispatch deployment build review > recordless unofficial input stays explicitly unknown [18.00ms]
+(pass) pre-dispatch deployment build review > an explicit package source status is a status, never an offer [24.00ms]
+(pass) pre-dispatch deployment build review > verified Package Information Record exposes verified license and embedded source facts [51.00ms]
+(pass) pre-dispatch deployment build review > retained package details require their exact record bytes and digest [12.00ms]
+(pass) pre-dispatch deployment build review > multiple packages still render exactly one deployment-level Wasm [32.00ms]
+(pass) pre-dispatch deployment build review > record-only digest and legacy archive evidence remains visible [29.00ms]
+(pass) pre-dispatch deployment build review > a supplied archive must exactly match a verified record entry [18.00ms]
+(pass) pre-dispatch deployment build review > material diagnostics, memory retirements, removals, and destructive roots are not hidden [47.00ms]
+(pass) pre-dispatch deployment build review > all app-authored and diagnostic text is escaped and rendering does no network I/O [19.00ms]
+(pass) pre-dispatch deployment build review > artifact builder preserves canonical record and exact archive bytes with stable filenames [15.00ms]
+(pass) pre-dispatch deployment build review > exports detect mutation both before artifact build and before download [12.00ms]
+(pass) pre-dispatch deployment build review > download helper triggers and always revokes the reviewed artifact URL [8.00ms]
+
+apps/kernel/test/install_recovery_ui.test.tsx:
+(pass) pending install recovery is an inline Settings panel, not a global modal [1.00ms]
+(pass) running-target recovery shows the exact safe blocker and retry actions [1.00ms]
+(pass) recovery actions expose busy and still-pending feedback
+
+apps/kernel/test/vetkeys_adapter_boundary.test.ts:
+(pass) vetKD management adapter target boundary > always requests the local calling canister public key
+(pass) vetKD management adapter target boundary > does not expose a remote canister selector to adapter callers [1.00ms]
+
+apps/kernel/test/privacy_client.test.ts:
+(pass) kernel package assets use the HTTP asset reader [3.00ms]
+
+apps/kernel/test/workspace_switcher.test.ts:
+(pass) workspace preview lists each app once in workspace order [1.00ms]
+(pass) workspace occupancy preserves compact switcher labels and four-cell cap
+(pass) workspace preview keyboard entry follows navigation orientation
+(pass) horizontal workspace preview aligns row icons with the workspace glyph
+(pass) vertical workspace preview opens right and aligns its first icon
+
+apps/kernel/test/deployment_integrity.test.ts:
+(pass) certified module-hash loading validates the public state result [1.00ms]
+(pass) certified module-hash loading rejects absent or malformed results
+(pass) certified module-hash loading preserves read-state failures [1.00ms]
+(pass) module-hash comparison distinguishes unavailable, stale, match, and mismatch
+(pass) module-hash comparison rejects uncertified or malformed evidence
+(pass) production loader uses certificate-verified module_hash with freshness enabled [1.00ms]
+
+apps/kernel/test/npl_hash_semantics.test.ts:
+(pass) one certified deployment module hash remains distinct from per-app package digests [4.00ms]
+
+apps/kernel/test/auth.test.ts:
+(pass) a stale authorization response cannot survive a newer auth action
+(pass) the current authorization response remains usable
+(pass) an unauthorized identity remains in Neutron for manual authorization [7.00ms]
+(pass) local and production share the typed-kernel plus dynamic-app actor split [1.00ms]
+(pass) auth agents take their gateway only from certified runtime [1.00ms]
+(pass) the dynamic self actor is single-flight and generation scoped
+
+apps/kernel/test/toast.test.ts:
+(pass) toast store bounds the visible stack and dismisses entries
+(pass) toast store deduplicates a repeated notification
+
+apps/kernel/test/certified_assets_candidate_binding.test.ts:
+(pass) generic Certified Assets qualification binding > binds only the synthetic actor and generic implementation [126.00ms]
+(pass) generic Certified Assets qualification binding > binds the exact deterministic five-manifest set and runner source set [89.00ms]
+(pass) generic Certified Assets qualification binding > binds a fixed repository-confined Motoko package source set without mops resolution [122.00ms]
+(pass) generic Certified Assets qualification binding > returns detached manifests that cannot mutate the bound fixture set [55.00ms]
+(pass) generic Certified Assets qualification binding > rejects a stale source binding [275.00ms]
+(pass) generic Certified Assets qualification binding > uses one canonical candidate-binding input [58.00ms]
+321 |   test("keeps the checked candidate binding exact and current", () => {
+322 |     const expected = certifiedAssetsCandidateBindingInputBytes(
+323 |       buildCertifiedAssetsCandidateBindingInput(repositoryRoot),
+324 |     );
+325 |     const checked = readFileSync(checkedBindingPath);
+326 |     expect(checked.equals(Buffer.from(expected))).toBe(true);
+                                                        ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (/srv/shared/code/neutron/apps/kernel/test/certified_assets_candidate_binding.test.ts:326:51)
+(fail) generic Certified Assets qualification binding > keeps the checked candidate binding exact and current [70.00ms]
+(pass) generic Certified Assets qualification binding > binds the exact raw and transport Wasm and inspects the raw Wasm [234.00ms]
+(pass) generic Certified Assets qualification binding > normal frontend builds do not consume qualification results [1.00ms]
+
+apps/kernel/test/runtime_limits.test.ts:
+(pass) Connections capacity is derived from the resident-frame envelope
+(pass) hundreds of headless apps fit the frontend runtime envelope [7.00ms]
+(pass) installed-app and resident-frame ceilings have exact boundaries [2.00ms]
+(pass) install preflight counts replacements against the complete target
+
+apps/kernel/test/app_usage_ui.test.tsx:
+(pass) app-usage v2 snapshots validate costs and accepted incoming cycles [3.00ms]
+(pass) app-usage validation follows bounded saturation for instruction and cycle counters
+(pass) Installed Apps applies low-side 13-node execution pricing with four TC decimals [6.00ms]
+(pass) usage lookup accepts only the active installation scope [1.00ms]
+(pass) expanded Installed Apps usage retains raw window and installation totals [1.00ms]
+
+apps/kernel/test/app_updates_ui.test.tsx:
+(pass) Installed Apps has no separate check control and distinguishes manual apps [6.00ms]
+(pass) checking uses row-level spinners without a separate control [1.00ms]
+(pass) update results are joined to rows by app id and expose one-app actions [1.00ms]
+(pass) verified updates expose one bulk upgrade action
+(pass) Settings selection replaces Upgrade all with explicit selected actions [1.00ms]
+(pass) terminal update states stay visible in their Installed Apps cells
+(pass) failure feedback distinguishes preparation from uncertain deployment [1.00ms]
+(pass) verified review and apply stay in the consolidated per-app update flow [27.00ms]
+(pass) bulk review stays plural and preserves a bulk return target [17.00ms]
+(pass) review distinguishes update-source add, change, and removal [26.00ms]
+(pass) normal updates keep system authority visible without repeating unchanged access [10.00ms]
+(pass) success feedback reports the committed app count [1.00ms]
+(pass) preparing one app keeps one toolbar cancel and passive row status [1.00ms]
+(pass) bulk preparation has one cancel action and passive row status
+
+apps/kernel/test/uninstall_review_ui.test.tsx:
+(pass) final uninstall confirmation renders the exact deployment review [22.00ms]
+(pass) one uninstall review lists every selected app and owned memory [7.00ms]
+
+apps/kernel/test/unauthorized_session.test.tsx:
+(pass) unauthorized session keeps identity controls in the centered screen [2.00ms]
+
+apps/kernel/test/attachment_bus.test.ts:
+(pass) attachment declarations are closed, bounded, and media-type specific [1.00ms]
+(pass) wire envelopes accept one exact ArrayBuffer and reject arbitrary clones [1.00ms]
+(pass) delegation tokens are endpoint-bound, one-use, and expire closed [2.00ms]
+(pass) delegation admission is bounded per endpoint and globally [4.00ms]
+(pass) endpoint replacement prunes every outstanding delegation
+(pass) settlement-retained capacity survives disconnect until explicit release [1.00ms]
+(pass) capacity is capped per endpoint and globally and releases exactly once
+(pass) endpoint removal aborts and releases an active reservation
+(pass) attachment progress keeps total bounds without an elapsed-time quota [3.00ms]
+(pass) outgoing timeout drops callback state after transferring its input [12.00ms]
+(pass) endpoint reconnection rejects pending calls and active byte reservations [1.00ms]
+
+apps/kernel/test/access_settings_ui.test.tsx:
+(pass) controller addition is explicit, default-cancel, and warns about equal authority [7.00ms]
+(pass) controller list visibly identifies and explains the protected Self-Controller [3.00ms]
+
+apps/kernel/test/install_only_guard.test.ts:
+(pass) install-only compiler guard uses the authenticated runtime baseline [385.00ms]
+
+apps/kernel/test/agent_release_memory.test.ts:
+(pass) Kernel 0.3.36 restores both released memory roots without migration [1381.00ms]
+
+apps/kernel/test/installed_artifact_inspection.test.ts:
+(pass) ordinary inspection is app-scoped, excludes route storage, and walks one shared backend graph [17.00ms]
+(pass) only one cold installed-artifact catalog build is admitted [3.00ms]
+(pass) Kernel inventory owns packaged files and adds only the closed runtime artifacts [6.00ms]
+(pass) required backend roots fail closed when missing, oversized, or digest-mismatched [17.00ms]
+(pass) source.files paginates canonically and binds cursors to exact arguments [6.00ms]
+(pass) source.read preserves UTF-8 boundaries and paginates a long minified line [14.00ms]
+(pass) source.read and source.search preserve BOM and chunk-leading U+FEFF [7.00ms]
+(pass) source.read and source.search classify invalid UTF-8 and NUL as binary [4.00ms]
+(pass) source.search is literal, ASCII-insensitive only, and cursor-bound [4.00ms]
+(pass) source.search bounds dense matches per file without rescanning it [8.00ms]
+(pass) source.search paginates maximum-length matching paths without omissions [21.00ms]
+(pass) large and unavailable ordinary artifacts are bounded without hiding traversal state [6.00ms]
+(pass) source.search yields after a bounded number of unavailable files [9.00ms]
+(pass) runtime cache changes preserve the public revision while target changes cancel it [14.00ms]
+(pass) cancellation reaches an in-flight installed-artifact read [6.00ms]
+
+apps/kernel/test/provenance_binding.test.ts:
+(pass) install provenance must name the exact reviewed archive digest [8.00ms]
+(pass) archive mutation after review is rejected even when provenance matches the reviewed digest [5.00ms]
+(pass) the session checks archive-bound provenance before baseline reads or deployment [8.00ms]
+
+apps/kernel/test/install.test.ts:
+(pass) kernel generated artifacts migrate V3 to V4 and retain activation V1 [1267.00ms]
+(pass) certified-assets capability toggles rotate stable write authority [9.00ms]
+(pass) pending install journals freeze public static mutations [3.00ms]
+(pass) resident-origin toggles reconcile only the affected app subtree [1.00ms]
+(pass) capability toggles publish runtime authority only after reconciliation [1.00ms]
+(pass) installation CSP is exact to the certified gateway environment [1.00ms]
+(pass) selected app package proofs are retired into a passive MIME profile [1.00ms]
+(pass) Kernel activation retires every retained Kernel-profile response [1.00ms]
+(pass) certified reads and POST handlers have independent runtime toggles [3.00ms]
+(pass) prepare_files rewrites valid package paths
+(pass) prepare_files rejects malformed Motoko package paths
+(pass) prepare_files rejects Motoko hash mismatches [1.00ms]
+(pass) prepare_files rejects unsafe package paths
+(pass) kernel self-upgrade keeps the management install call one-way [1.00ms]
+(pass) large self-upgrades use bounded journal-scoped management chunks [2.00ms]
+(pass) upgrade and install work never scales with existing certified records [4.00ms]
+(pass) checked install APIs are hard-cutover and fail closed [4.00ms]
+(pass) frontend app state is cleared only after the atomic install commit [1.00ms]
+(pass) frontend deployments signal sibling tabs at activation and commit [1.00ms]
+(pass) observed runtime replacement retires cached actors before registry reconciliation [1.00ms]
+(pass) frontend authority commits reject stale continuations and legacy postflight [1.00ms]
+(pass) manual install and uninstall use a consistent checked deployment baseline [2.00ms]
+(pass) an interrupted install keeps recovery in Settings without blocking the shell [1.00ms]
+(pass) kernel local async chains suspend only at external calls [1.00ms]
+(pass) kernel settings snapshot is authenticated and reports bounded memory [6.00ms]
+(pass) kernel access management preserves owner and self-controller recovery [2.00ms]
+
+apps/kernel/test/canister_principal_permission.test.ts:
+(pass) canister principal disclosure promises a scalar, not actor authority [1.00ms]
+
+apps/kernel/test/updates.test.ts:
+(pass) release checks use one fixed credentialless certified asset path [3.00ms]
+(pass) release checks distinguish not-published and reject malformed transport
+(pass) release checks reject redirected and wrong-origin responses [1.00ms]
+(pass) release checks reject encoded aliases and malformed encoded response paths
+(pass) release checks reject a valid record for a different app ID [1.00ms]
+(pass) package headers fail before a large response body is read
+(pass) release checks bound a stalled response body [8.00ms]
+(pass) content-addressed update packages require exact bytes and identity encoding [3.00ms]
+(pass) update assets accept jointly hidden proofs and reject every incomplete visible envelope [2.00ms]
+(pass) update assets trust proof verification only at the exact fixed gateway [1.00ms]
+(pass) checks request only installed IDs in bounded waves of 20 [16.00ms]
+(pass) checks only exact installed paths in a source with 100 unrelated releases [5.00ms]
+(pass) checker maps a certified 404 to not published and isolates HTTP 500 [2.00ms]
+(pass) equal version and provisioned installed digest is current
+(pass) Update All selection bounds reject too many apps and aggregate bytes [1.00ms]
+(pass) checks deduplicate identical IDs and never mix source groups [1.00ms]
+(pass) partial failures, regressions, manual apps, and equivocation remain isolated
+(pass) cancelling a check rejects late work without a final summary [1.00ms]
+
+apps/kernel/test/ui_attention_owner.test.ts:
+(pass) owner attention has one active request but no elapsed-time quota [5.00ms]
+(pass) explicit app pauses remain enforced independently of admission counts [1.00ms]
+
+apps/kernel/test/deployment_build_record.test.ts:
+(pass) deployment-record inspection treats only a missing fixed path as legacy [1.00ms]
+(pass) Settings fences the certified hash and record between runtime reads [3.00ms]
+(pass) deployment-record inspection separates transport failure and invalid content [2.00ms]
+(pass) complete records compare the deterministic gzip transport, never raw Wasm [3.00ms]
+(pass) legacy observed records retain only their certified observation [1.00ms]
+(pass) a valid record for another canister is invalid here [1.00ms]
+(pass) same-deployment records must match the runtime inventory [1.00ms]
+(pass) the fixed asset reader rejects redirects and oversized declared bodies [11.00ms]
+(pass) record download uses validated canonical JSON, a fixed name, and revokes [4.00ms]
+
+apps/kernel/test/repository_model.test.ts:
+(pass) repository reconciliation > uses the union of registry, compiler, and runtime presence [1.00ms]
+(pass) repository reconciliation > an overlapping manifest skips installed versions and leaves only missing apps [1.00ms]
+(pass) repository reconciliation > an all-installed manifest has no selectable or deployable apps [1.00ms]
+(pass) repository selection > auto-selects a missing dependency but keeps only roots editable [2.00ms]
+(pass) repository selection > blocks a dependency on an older installed provider
+(pass) repository selection > accepts a compatible installed dependency outside the setup [1.00ms]
+(pass) repository selection > loads unrelated choices when an advertised dependent cannot use an older installed provider [3.00ms]
+(pass) provenance is closed, merged, and removable [2.00ms]
+(pass) repository load accepts one pending action and only intentional retries
+(pass) repository install owns focus for the whole attempt and reconciles the stored registry [3.00ms]
+(pass) fresh setup captures restart identical attempts and failed installs restore expiry [6.00ms]
+
+apps/kernel/test/app_frame_security.test.ts:
+(pass) ordinary frame policy binds each role and tile to its exact origin [2.00ms]
+(pass) undeclared tiles receive no iframe browser-feature delegation
+(pass) frame authority is exact across scope, deployment, generation, and adoption
+(pass) the bridge and unadopted apps preserve exact legacy opaque URLs [2.00ms]
+(pass) publication declarations do not create frame-origin exceptions [5.00ms]
+(pass) credentialless qualification selects the originful policy before navigation
+(pass) unsupported credentialless frames fall back opaque without delegation
+
+apps/kernel/test/prepare_browser_deployment.test.ts:
+(pass) prepareBrowserDeployment retained evidence > missing legacy records remain explicit and provenance contributes only an outer digest [16.00ms]
+(pass) prepareBrowserDeployment retained evidence > a matching complete record carries exact versioned evidence bound to runtime and canister [15.00ms]
+(pass) prepareBrowserDeployment retained evidence > invalid and stale installed deployment records fail before a review is returned [3.00ms]
+(pass) prepareBrowserDeployment retained evidence > claimed retained-record digests are rechecked against the exact bytes [4.00ms]
+
+apps/kernel/test/repository_build_review_service.test.ts:
+(pass) isolated repository pre-dispatch build review [1719.00ms]
+
+apps/kernel/test/polling_update_agent.test.ts:
+(pass) the polling-update adapter submits one asynchronous update [1.00ms]
+(pass) the ICBlast fetch adapter changes only v3 update calls
+
+apps/kernel/test/installed_package_record.test.ts:
+(pass) installed package inspection distinguishes a missing legacy record [1.00ms]
+(pass) installed inspection applies bounded parsing and manifest binding without fetching an HTTPS source offer [5.00ms]
+(pass) embedded source and license payloads remain lazy during Settings inspection [4.00ms]
+(pass) a present malformed or mismatched record fails visibly without hiding other apps [7.00ms]
+(pass) installed inspection rejects a record whose manifest digest no longer matches [6.00ms]
+(pass) record transport failures remain distinct from malformed installed data [1.00ms]
+(pass) explicit installed-asset downloads verify bytes before creating and always revoke the Blob URL [5.00ms]
+(pass) HTTPS source download is user-initiated, bounded, and digest verified before download [3.00ms]
+(pass) HTTPS source verification fails closed on changed bytes and transport encoding [1.00ms]
+(pass) HTTPS source verification rejects unsafe URLs and oversized offers before fetching
+(pass) the package-only source snapshot cannot be fetched as an installed asset
+(pass) archive-only legal materials cannot be fetched as installed assets
+(pass) Blob URLs are revoked even when the browser download trigger fails [1.00ms]
+(pass) the default embedded reader stops an oversized response stream at the declared bound
+
+apps/kernel/test/ui_mode.test.tsx:
+(pass) Kernel UI mode strictly defaults and hydrates from browser storage [1.00ms]
+(pass) Kernel UI mode remains usable when browser storage is denied [1.00ms]
+(pass) Settings exposes developer mode as an accessible Interface switch [7.00ms]
+
+apps/kernel/test/runtime_required.test.ts:
+(pass) Kernel clients require certified runtime routing [353.00ms]
+
+apps/kernel/test/frame_context.test.ts:
+(pass) frame context registers, replaces, and unregisters by exact source [1.00ms]
+(pass) background endpoints use one canonical app namespace
+(pass) tray endpoints preserve instance spelling and app binding through replacement
+(pass) replacing an endpoint id invalidates the previous source [1.00ms]
+(pass) resident background ports require authenticated frame readiness
+(pass) authenticated ready replaces exact-origin sessions without duplicate churn [1.00ms]
+(pass) port replacement cancels the exact retired transport before closing it [15.00ms]
+(pass) legacy opaque tray reload replaces the old document's port [1.00ms]
+(pass) legacy opaque background reload waits for the new document's readiness
+(pass) a retained legacy opaque tile reconnects after re-registration [1.00ms]
+(pass) exact-origin initial load can precede SDK readiness
+(pass) replacement and unregister detach before notifying reconnect listeners
+(pass) frame readiness requires the exact source and a current private port [1.00ms]
+(pass) kernel waits for a loading frame's private message port
+(pass) request cancellation stops waiting for a frame port [1.00ms]
+(pass) frame readiness and registration form a lossless handshake
+(pass) a tile-origin ready handshake cannot claim a background context
+(pass) kernel stops waiting when a loading frame is replaced [1.00ms]
+(pass) kernel targets real-origin background handshakes exactly
+(pass) kernel ignores a dedicated frame's initial same-origin document
+(pass) kernel does not probe a resident before dedicated-origin navigation
+(pass) resident endpoint ports are bound to current mode, nonce, and epoch [1.00ms]
+(pass) resident endpoint binding rejects the wrong surface and origin class
+(pass) frame context ignores null and unknown sources
+
+apps/kernel/test/app_settings_mode.test.tsx:
+(pass) normal app details keep material access and controls without developer diagnostics [9.00ms]
+(pass) developer app details retain the exact capability and package view [11.00ms]
+(pass) resident settings distinguish an ephemeral credential partition from persistent browser storage [13.00ms]
+(pass) browser permissions are read-only exact declarations in Settings [9.00ms]
+(pass) Settings retain exact install-approved frontend tools and provider confirmation disclosure [10.00ms]
+(pass) headless apps use the trusted fallback icon without fetching a missing tile asset [2.00ms]
+(pass) Certified Assets settings show derived publication and blob policy [33.00ms]
+
+apps/kernel/test/agent_mode.test.ts:
+(pass) request cancellation removes a pending agent grant [2.00ms]
+(pass) an enabled exact root starts without per-turn focus or activation [1.00ms]
+(pass) agent authority does not survive an app reinstall at the same version
+(pass) downstream permission requires one exact agent decision [1.00ms]
+(pass) sequential nested quote reads each require a separate agent decision [1.00ms]
+(pass) request cancellation settles a later nested decision and permits a fresh decision [1.00ms]
+(pass) an oversized agent consent challenge fails before dispatch [2.00ms]
+(pass) delegated agent calls cannot target a transient tray popout [1.00ms]
+(pass) a denial closes the descendant permission path [1.00ms]
+(pass) agent roots can continue beyond the old duration and call budgets, one at a time [40.00ms]
+(pass) a long root retains caller identity and cancellation revokes late capabilities [1.00ms]
+(pass) active descendants are tracked app-wide [1.00ms]
+
+apps/kernel/test/capability_registry.test.ts:
+(pass) capability summaries strictly parse closed Candid records and variants [14.00ms]
+(pass) custody runtime controls bind the installed custody slot separately from assertion signing [7.00ms]
+(pass) capability page parser rejects oversized pages and malformed cursors [7.00ms]
+(pass) capability inventory loader follows bounded pagination and rejects repeats [6.00ms]
+(pass) capability inventory reconciles exact active app scopes and verified plans [10.00ms]
+(pass) capability toggle accepts only the canister-returned matching resource [5.00ms]
+
+apps/kernel/test/permission_dialog.test.tsx:
+(pass) manual install exposes the exact build review before enabling its final action [16.00ms]
+(pass) manual install gives a short source summary and keeps exact checks in details [3.00ms]
+(pass) launcher exposes a real modal dialog boundary [2.00ms]
+(pass) launcher reuses its controls as a non-modal workspace region
+(pass) launcher opens installed tiles without exposing app deletion [11.00ms]
+(pass) a pending install disables launcher mutations without hiding the launcher [1.00ms]
+(pass) only the interactive empty workspace mounts the shared launcher [5.00ms]
+(pass) Chess install renders every verified capability separately from app prose [9.00ms]
+(pass) API-1 self-call install review shows exact methods and modes [2.00ms]
+(pass) trusted binary review renders only exact path, size, and SHA-256 [1.00ms]
+(pass) offered install review shows observed package facts and query-free attribution [2.00ms]
+(pass) app prose is escaped, isolated, and cannot lower broad-scope risk [3.00ms]
+(pass) randomness install permission discloses cycle and concurrency protections [2.00ms]
+(pass) dedicated resident origin disclosure names the ephemeral credential partition [3.00ms]
+(pass) browser permission install disclosure is exact and never claims capture [4.00ms]
+(pass) browser permission headline names only the declared feature [1.00ms]
+(pass) chain-key consent discloses autonomous bounded assertion authority [5.00ms]
+(pass) wallet custody install review discloses raw signing trust and the key lifecycle [8.00ms]
+(pass) stable-store consent discloses exact quotas and ordinary-state privacy [4.00ms]
+(pass) HTTPS consent groups endpoints and discloses cost and plaintext boundaries [5.00ms]
+(pass) public protocol consent shows route, caller, mode, byte bounds, and update rate [6.00ms]
+(pass) direct authenticated ingress consent distinguishes owner-funded updates from paid protocols [5.00ms]
+(pass) Settings discloses exact canister payment for public updates while queries stay read-only [13.00ms]
+(pass) Certified Assets install review derives publication policy and routes [6.00ms]
+(pass) Certified Assets install review derives portable blob policies and routes [6.00ms]
+(pass) public POST route consent names handler, bounds, headers, and cycle risk [4.00ms]
+(pass) shared POST path consent shows the derived path and same-origin boundary [3.00ms]
+(pass) scheduled task consent names the exact injected capability interface [5.00ms]
+(pass) update consent shows an exact installed-to-target capability diff [5.00ms]
+(pass) browser permission updates show the exact feature change [3.00ms]
+(pass) update consent identifies a version-only plan change [3.00ms]
+(pass) manual update removing access does not repeat unchanged permissions [3.00ms]
+(pass) runtime backend consent renders its retained source, scope, and complete call [5.00ms]
+(pass) canonical runtime JSON keeps scalar types distinct and escapes spoofing text
+(pass) generic canister consent review renders exact canonical JSON arguments
+(pass) provider-owned tool consent renders the provider review canonically [3.00ms]
+(pass) grouped tool consent lists each exact tool and its session scope [2.00ms]
+(pass) an app-defined workspace tool name stays in the generic consent dialog [1.00ms]
+(pass) generic canister consent quotes and escapes an arbitrary Candid method name
+(pass) runtime backend consent gives broad scopes stronger persistent warnings [2.00ms]
+(pass) Settings labels app names and tile/background display text as unverified [11.00ms]
+(pass) Settings shows preapproved self calls only in Backend functions [5.00ms]
+(pass) Settings exposes one canonical scheduled-task authority switch [8.00ms]
+(pass) Settings identifies public POST handlers and their exact operating bounds [8.00ms]
+(pass) Settings shows HTTPS endpoint authority beside its live toggle [6.00ms]
+(pass) Settings shows chain-key slot authority, unverified purpose, and live toggle [6.00ms]
+(pass) Settings keeps wallet custody trust, key continuity, and live controls in both modes [16.00ms]
+(pass) Settings shows stable-store authority, unverified purpose, and live toggle [6.00ms]
+
+apps/kernel/test/runtime_deployment.test.ts:
+(pass) runtime deployment requires a certified config response [5.00ms]
+(pass) runtime deployment resolves an exact IC package binding
+(pass) runtime deployment resolves only the exact PocketIC binding
+(pass) runtime deployment enforces its certified frame-origin template
+
+apps/kernel/test/app_scope.test.ts:
+(pass) runtime app instances are exact, canonical, and deployment-bound [2.00ms]
+(pass) runtime inventory accepts exactly 256 total apps and rejects one more [5.00ms]
+(pass) frontend authority rejects pending and retired installation scopes [1.00ms]
+
+apps/kernel/test/workspace.test.ts:
+(pass) workspace store starts with three workspaces
+(pass) a fourth workspace appears only after the initial three are occupied [1.00ms]
+(pass) sequentially filling workspaces reveals at most twenty [1.00ms]
+(pass) visibility contracts after closing the highest tile and keeps its active empty workspace [1.00ms]
+(pass) replacement tile frames cold-start only in the active workspace
+(pass) opening the same app tile creates multiple instances
+(pass) opening with placement uses the canonical split tree
+(pass) expanded tile state is transient and follows canonical close and switch actions
+(pass) moving the expanded focused tile to its current workspace is a no-op
+(pass) closing the last tile leaves the workspace empty
+(pass) closing the focused tile moves focus to a visible remaining tile
+(pass) workspace store switches between independent workspaces
+(pass) moving a tile between workspaces atomically moves the exact requested tile [1.00ms]
+(pass) background placement can move a tile without activating its target workspace
+(pass) layout placement preserves the explicitly focused and expanded tile
+(pass) stale tile moves cannot insert phantom layout nodes
+(pass) app uninstall removes its tiles from every workspace
+(pass) layout ratios clamp and rects honor the gap
+(pass) plain alt is a layout modifier but not a system shortcut modifier
+(pass) modifier state is invoked with the browser event as this
+(pass) launcher shortcut uses browser-friendly command palette keys
+(pass) launcher filters app tiles and exposes system action ids [1.00ms]
+(pass) resident frames mount only for apps declaring one background [1.00ms]
+(pass) resident mounting fails closed above the admitted frame ceiling [4.00ms]
+(pass) resident readiness remounts once, then blocks without a reload loop
+(pass) resident frames are unavailable without committed instance authority [1.00ms]
+(pass) persistent background storage requires a dedicated app origin [1.00ms]
+(pass) persistent origin cleanup keeps the origin and exact authority query
+(pass) persistent origin cleanup accepts only its exact result envelope
+(pass) ephemeral dedicated residents use the nonce origin without persistence
+(pass) backgrounds without storage permission remain opaque [1.00ms]
+(pass) resident frame modes are closed and mutually exclusive
+(pass) credentialless preflight runs against the initial Window before navigation
+(pass) resident background keys bind package, deployment, scope, mode, nonce, and authority epoch [1.00ms]
+(pass) ordinary background authority is bound to per-app sidecar adoption
+(pass) resident endpoint authority rechecks runtime mode, nonce, epoch, and generation [1.00ms]
+(pass) approval labels distinguish tile and background callers
+
+apps/kernel/test/auth_dynamic_actor.test.ts:
+(pass) isolated dynamic actor caches and external privacy boundary [144.00ms]
+
+apps/kernel/test/appearance.test.ts:
+(pass) appearance preferences strictly default and retain valid workspace colors
+(pass) appearance store hydrates and persists only small scalar and color preferences
+(pass) appearance remains live when local preference storage is denied
+(pass) appearance background uses independent blob storage and remains live on failure [2.00ms]
+(pass) appearance background persists overlapping changes in invocation order [1.00ms]
+
+apps/kernel/test/consent_presentation.test.tsx:
+(pass) developer mode expands technical details while omission starts collapsed [1.00ms]
+(pass) detailed consent has a consequence for every verified permission kind [3.00ms]
+(pass) material danger is shown first while technical identifiers stay out of the summary [1.00ms]
+(pass) browser-device consequences disclose requestable access without claiming use [1.00ms]
+(pass) frontend tool consent preserves provider confirmation and the exact approved inventory [2.00ms]
+(pass) adding a frontend tool is spotlighted during an app upgrade [1.00ms]
+(pass) normal permission rows are shorter while retaining meaningful consequences [5.00ms]
+(pass) normal review distinguishes future broad requests from grants created now [1.00ms]
+(pass) update spotlight keeps system and deletion risks even without permission changes
+(pass) signed-call consent derives read versus change only from live Candid [1.00ms]
+
+apps/kernel/test/install_offer_service.test.ts:
+(pass) presents one inert offer with a request id and owner-attention token [2.00ms]
+(pass) approval re-attests then releases the prompt before handoff [1.00ms]
+(pass) reconciliation cancels a stale request without handoff
+(pass) approval converts an attestation exception into a stale cancellation [1.00ms]
+(pass) timeout rejects and releases state without invoking install code [6.00ms]
+(pass) agent requests retain Kernel-attested agent attribution
+(pass) invalid trusted inputs fail before reserving owner attention
+
+apps/kernel/test/theme_settings.test.tsx:
+(pass) Theme settings are collapsed with current-layout defaults [4.00ms]
+
+apps/kernel/test/tray.test.ts:
+(pass) tray state is source-bound to the authenticated resident background [2.00ms]
+(pass) tray updates require the installed declaration and exact app version
+(pass) tray badges accept only the exact null and integer bounds
+(pass) tray badge updates are not subject to an elapsed-time quota [1.00ms]
+(pass) tray state reconciles versions and supports app removal and auth clearing [1.00ms]
+(pass) tray dismiss is exact, source-bound, version-bound, and instance-bound
+(pass) tray badge text and accessible labels stay compact and exact [1.00ms]
+(pass) tray identity removes repeated names but keeps distinct provenance
+(pass) horizontal tray popover follows the visible viewport and clamps edges
+(pass) vertical tray popover opens right and stays aligned to its trigger
+
+apps/kernel/test/runtime_authority_monitor.test.ts:
+(pass) runtime observations distinguish current, changed, and pending authority [1.00ms]
+(pass) current runtimes require a bounded capability authority revision
+(pass) failed post-activation deploys retain a fail-closed recovery fence [1.00ms]
+(pass) same-version actor changes advance generations and clear wildcard grants [1.00ms]
+(pass) monitor coalesces refreshes and signals stale authority while hidden [1.00ms]
+(pass) monitor reloads once when an external deployment changes the live shell
+(pass) monitor keeps a shell live for a signaled app-only deployment
+(pass) runtime authority signals are exact and canister-bound
+(pass) settings toggles revoke locally, signal siblings, then store runtime authority [1.00ms]
+
+1 tests failed:
+(fail) generic Certified Assets qualification binding > keeps the checked candidate binding exact and current [70.00ms]
+
+ 671 pass
+ 1 fail
+ 5376 expect() calls
+Ran 672 tests across 89 files. [16.68s]

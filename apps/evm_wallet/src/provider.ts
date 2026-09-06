@@ -20,9 +20,14 @@ import {
   identityArgs,
   parseOperation,
   hex,
+  decodeKnownCall,
+  errorMessage,
+  maxFee,
   type Operation,
 } from "./data.ts";
 import { prepareBrowserOperation, executeBrowserOperation, reconcileBrowserOperation, refreshBrowserEvidence } from "./browser_operations.ts";
+import { mergeEvmAssets } from "neutron-tools/src/evm_assets.js";
+import { presentOperation } from "./presentation.ts";
 
 export type ProviderKind = EvmEffectKind | "replacement";
 export type ProviderRequest = EvmEffectRequest | EvmReplaceTransactionRequest;
@@ -326,6 +331,7 @@ export async function handleHumanEffect(
       arguments: parseEffect(kind, args) as JsonObject,
     });
   }
+  if (context.agentMode) return handleAgentProviderEffect(kind, args, context);
   if (typeof context.presentUserInterface !== "function")
     throw new Error("EVM Wallet requires Kernel provider presentation support");
   return context.presentUserInterface({
@@ -333,6 +339,107 @@ export async function handleHumanEffect(
     tool: PRESENT_TOOLS[kind],
     arguments: parseEffect(kind, args) as JsonObject,
   });
+}
+
+/** The Agent sees the same exact candidate and observations as an owner review.
+ * Calldata labels are explanatory only; the bytes remain part of the decision. */
+export function agentProviderReview(
+  prepared: Prepared,
+  evidenceError: string | null = null,
+): JsonObject {
+  const operation = prepared.operation;
+  assertOperationMatches(prepared, operation);
+  const tx = operation.preparedTransaction;
+  const decoded = tx ? decodeKnownCall(tx.data) : null;
+  const summary = presentOperation(operation, mergeEvmAssets([]));
+  return {
+    provider: "EVM Wallet",
+    kind: prepared.kind,
+    summary: {
+      title: summary.title,
+      amount: summary.amount,
+      amountLabel: summary.amountLabel,
+      description: summary.description,
+      parties: summary.parties,
+      contract: summary.contract,
+      nativeValue: summary.nativeValue,
+      unlimitedApproval: summary.unlimitedApproval,
+      tokenAddress: summary.tokenAddress ?? null,
+      tokenSymbol: summary.tokenSymbol,
+      swap: summary.swap ?? null,
+      recognition: "Transaction labels are inferred from exact calldata and the Wallet token catalog; they do not verify contract behavior",
+    },
+    caller: { ...operation.caller },
+    operationId: operation.operationId,
+    requestId: operation.requestId,
+    reviewRevision: operation.reviewRevision,
+    accountId: operation.accountId,
+    chainId: operation.chainId,
+    signingAddress: operation.address,
+    transaction: tx ? {
+      transactionType: tx.transactionType,
+      to: tx.to,
+      valueWei: tx.value,
+      data: tx.data,
+      accessList: tx.accessList,
+      nonce: tx.nonce,
+      gasLimit: tx.gasLimit,
+      maxFeePerGasWei: tx.maxFeePerGas,
+      maxPriorityFeePerGasWei: tx.maxPriorityFeePerGas,
+      gasPriceWei: tx.gasPrice,
+    } : null,
+    personalMessageHex: operation.intent.messageHex ?? null,
+    typedDataJson: operation.intent.typedDataJson ?? null,
+    replacement: operation.intent.replacement ?? null,
+    observations: operation.review ? {
+      nativeBalanceWei: operation.review.balance,
+      maximumNetworkFeeWei: maxFee(operation.review),
+      simulation: operation.review.simulation,
+      observedAtNs: operation.review.observedAtNs,
+    } : null,
+    decodedTokenCall: decoded ? {
+      name: decoded.name,
+      details: decoded.details.map(([label, value]) => ({ label, value })),
+      recognition: "Inferred from calldata; this does not verify contract behavior",
+    } : null,
+    tokenEvidence: operation.tokenEvidence,
+    tokenEvidenceError: evidenceError,
+    notice: operation.message,
+  };
+}
+
+async function handleAgentProviderEffect(
+  kind: ProviderKind,
+  args: JsonObject,
+  context: MsgBusToolContext,
+): Promise<JsonObject> {
+  // agentMode alone grants nothing. The Kernel callback is bound to this exact
+  // provider invocation and obtains a fresh decision from the active root Agent.
+  if (typeof context.requestApproval !== "function")
+    throw new Error("EVM Wallet requires Kernel provider approval support for Agent requests");
+  let prepared = await prepareEffect(kind, args, context);
+  if (prepared.operation.status !== "prepared")
+    return operationJson(prepared.operation);
+  let evidenceError: string | null = null;
+  if (prepared.operation.preparedTransaction && decodeKnownCall(prepared.operation.preparedTransaction.data)) {
+    try {
+      prepared = { ...prepared, operation: await refreshReviewEvidence(prepared, context, false) };
+    } catch (error) {
+      context.signal?.throwIfAborted();
+      // The owner dialog also shows unavailable observations without replacing
+      // the exact candidate. Let the Agent judge assess the same information.
+      evidenceError = errorMessage(error);
+    }
+    if (prepared.operation.status !== "prepared")
+      return operationJson(prepared.operation);
+  }
+  context.signal?.throwIfAborted();
+  await context.requestApproval(agentProviderReview(prepared, evidenceError));
+  context.signal?.throwIfAborted();
+  // executeBrowserOperation binds execution to this review revision. If another
+  // transaction changed its nonce, return the new unsigned review; a later call
+  // must obtain its own fresh approval before executing it.
+  return operationJson(await executeEffect(prepared, context));
 }
 export async function handleRootEffect(
   kind: ProviderKind,

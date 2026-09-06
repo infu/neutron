@@ -1,7 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import type { MsgBusToolContext } from "neutron-tools/app";
 import { balances, callContract, readContract, estimateTransaction, transaction, replacementTransaction } from "../src/read_adapters.ts";
-import { browserEvmRpc } from "../src/browser_rpc.ts";
+import { BrowserEvmRpcError, browserEvmRpc } from "../src/browser_rpc.ts";
 
 const request = { accountId: "main", chainId: "1", to: `0x${"22".repeat(20)}`, valueWei: "7", data: "0x" };
 const address = `0x${"11".repeat(20)}`;
@@ -63,6 +63,55 @@ test("compatibility contract read retains code at the exact call block", async (
     { method: "eth_blockNumber", params: [] },
     { method: "eth_call", params: [{ from: address, to: request.to, data: "0x" }, "0x55"] },
     { method: "eth_getCode", params: [request.to, "0x55"] },
+  ]);
+});
+
+test("a missing latest code header restarts the whole observation without mixing blocks", async () => {
+  let heads = 0;
+  const rpc = rpcFixture({
+    eth_blockNumber: () => ++heads === 1 ? "0x55" : "0x56",
+    eth_call: (params: unknown[]) => uintWord(params[1] === "0x55" ? 7n : 8n),
+    eth_getCode: (params: unknown[]) => {
+      if (params[1] === "0x55") throw new BrowserEvmRpcError("RPC eth_getCode on chain 1: header not found", -32000);
+      return "0x6001";
+    },
+  });
+  expect(await readContract({ accountId: "main", chainId: "1", to: request.to, data: "0x" }, context().ctx))
+    .toMatchObject({ code: "0x6001", result: uintWord(8n), blockNumber: "86" });
+  expect(rpc.calls.map(({ method, params }) => [method, params[1]])).toEqual([
+    ["eth_blockNumber", undefined], ["eth_call", "0x55"], ["eth_getCode", "0x55"],
+    ["eth_blockNumber", undefined], ["eth_call", "0x56"], ["eth_getCode", "0x56"],
+  ]);
+});
+
+test("a latest contract call can refresh an unavailable head but an explicit block stays pinned", async () => {
+  let firstCall = true;
+  const rpc = rpcFixture({ eth_call: () => {
+    if (firstCall) { firstCall = false; throw new BrowserEvmRpcError("RPC eth_call on chain 1: header not found", -32000); }
+    return uintWord(9n);
+  } });
+  const input = { accountId: "main", chainId: "1", to: request.to, data: "0x", blockTag: "latest" };
+  expect(await callContract(input, context().ctx)).toMatchObject({ result: uintWord(9n), blockNumber: "85" });
+  expect(rpc.calls.map(({ method }) => method)).toEqual(["eth_blockNumber", "eth_call", "eth_blockNumber", "eth_call"]);
+
+  firstCall = true;
+  rpc.calls.length = 0;
+  await expect(callContract({ ...input, blockTag: "85" }, context().ctx)).rejects.toThrow("header not found");
+  expect(rpc.calls.map(({ method, params }) => [method, params[1]])).toEqual([["eth_call", "0x55"]]);
+});
+
+test("contract read recovery does not retry reverts or loop on unavailable headers", async () => {
+  const rpc = rpcFixture({ eth_call: new BrowserEvmRpcError("RPC eth_call on chain 1: execution reverted", -32000) });
+  const input = { accountId: "main", chainId: "1", to: request.to, data: "0x" };
+  await expect(readContract(input, context().ctx)).rejects.toThrow("execution reverted");
+  expect(rpc.calls.map(({ method }) => method)).toEqual(["eth_blockNumber", "eth_call"]);
+
+  rpc.calls.length = 0;
+  rpc.replies.eth_call = uintWord(7n);
+  rpc.replies.eth_getCode = new BrowserEvmRpcError("RPC eth_getCode on chain 1: header not found", -32000);
+  await expect(readContract(input, context().ctx)).rejects.toThrow("header not found");
+  expect(rpc.calls.map(({ method }) => method)).toEqual([
+    "eth_blockNumber", "eth_call", "eth_getCode", "eth_blockNumber", "eth_call", "eth_getCode",
   ]);
 });
 

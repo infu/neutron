@@ -13,6 +13,17 @@ export type OperationPresentation = {
   unlimitedApproval: boolean;
   tokenSymbol: string | null;
   tokenAddress?: string | null;
+  swap?: {
+    tokenIn: string;
+    tokenOut: string;
+    amountIn: string;
+    amountOutMinimum: string;
+    recipient: string;
+    deadline: string;
+    poolFee: string;
+    inputNative: boolean;
+    outputNative: boolean;
+  };
 };
 
 const MAX_UINT256 = (2n ** 256n - 1n).toString();

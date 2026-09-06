@@ -4,6 +4,29 @@ export function contextCharacterBudget(contextLength: number): number {
   return Math.max(8_000, Math.min(600_000, contextLength * 3));
 }
 
+/** Retain complete, recent owner messages within the existing model window.
+ * Cutting a message in half could remove a cancellation or qualification.
+ */
+export function ownerInstructionContext(instructions: readonly string[], budget: number): string {
+  const separator = "\n\nLater owner instruction:\n";
+  const complete = instructions.join(separator);
+  if (complete.length <= budget) return complete;
+  const omitted = "Earlier owner instructions were omitted to fit the selected model. Do not infer authorization from missing context.\n\n";
+  const selected: string[] = [];
+  let used = omitted.length;
+  for (let index = instructions.length - 1; index >= 0; index -= 1) {
+    const instruction = instructions[index]!;
+    const added = instruction.length + (selected.length > 0 ? separator.length : 0);
+    if (used + added > budget) break;
+    selected.unshift(instruction);
+    used += added;
+  }
+  if (selected.length === 0) {
+    throw new Error("The latest owner instruction does not fit the selected model's context. Select a model with more context or shorten the instruction.");
+  }
+  return omitted + selected.join(separator);
+}
+
 export function checkpointModelTurn(messages: readonly ModelMessage[]): ModelMessage[] {
   const turn = compactModelContext(messages, 600_000);
   return turn.some((entry) => entry.role !== "user") ? turn : [

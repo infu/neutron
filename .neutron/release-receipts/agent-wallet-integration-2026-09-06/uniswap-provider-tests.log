@@ -1,0 +1,82 @@
+bun test v1.2.13 (64ed68c9)
+
+test/service.test.ts:
+(pass) Uniswap resident registers every tool through the real SDK validator [293.00ms]
+(pass) resident Uniswap handlers satisfy wallet and managed-journal contracts in an isolated process [3146.00ms]
+
+test/provider_flow.test.ts:
+(pass) one provider call persists exact public Wallet approvals and waits for both receipts before completing [40.00ms]
+(pass) an expired approved 3 USDC quote creates one immutable successor and resumes that successor without approving again [29.00ms]
+(pass) a lost swap reply returns a recoverable same-ID flow and retry reconciles its receipt without resending [8.00ms]
+(pass) cancellation while a swap is unknown or preparing preserves its original request through quote expiry [14.00ms]
+(pass) a changed exact Wallet review returns review and requires a new invocation using the same request [10.00ms]
+(pass) a lost retry after prepared review cannot renew an expired flow using stale prepared evidence [11.00ms]
+(pass) flow ownership and changed arguments reject before any Wallet read, new preparation or effect [8.00ms]
+
+test/read_connection.test.ts:
+(pass) opening Wallet reads available accounts without a runtime permission request [1.00ms]
+(pass) an empty Wallet and a temporary read error remain distinguishable for automatic recovery
+
+test/controller.test.ts:
+(pass) independent Agent result verification > a Wallet-proven approval replacement is verified even when the original transaction is no longer visible [9.00ms]
+(pass) independent Agent result verification > a Wallet-proven swap replacement is verified even when the original transaction is no longer visible [5.00ms]
+(pass) independent Agent result verification > Agent replacement claims require both exact original binding and a separately proven replacement relationship [4.00ms]
+(pass) independent Agent result verification > replacement proofs for a different caller, request, chain or hash cannot be recorded [6.00ms]
+(pass) independent Agent result verification > a proven Agent replacement still needs the exact saved execution and a successful receipt [14.00ms]
+(pass) independent Agent result verification > the original canonical receipt wins over an unproved Agent replacement claim [2.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose from differs despite a claimed successful receipt [2.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose to differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose data differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose valueWei differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > the SDK binds independent evidence to the requested chain and transaction hash [3.00ms]
+(pass) independent Agent result verification > the independently read receipt replaces a fake claimed receipt and status [2.00ms]
+(pass) independent Agent result verification > a visible pending transaction clears a fake claimed receipt without declaring completion [1.00ms]
+(pass) independent Agent result verification > missing public transactions and claims without a hash stay unresolved [2.00ms]
+(pass) independent Agent result verification > a wallet request match of %s cannot complete an otherwise identical confirmed transaction [2.00ms]
+(pass) independent Agent result verification > a wallet request match of %s cannot complete an otherwise identical confirmed transaction [1.00ms]
+(pass) independent Agent result verification > an earlier identical transaction relabeled as the current request remains unresolved [2.00ms]
+(pass) independent Agent result verification > an approval binding comes from its saved caller and approval ID rather than the swap ID or claimed operation number [2.00ms]
+(pass) independent Agent result verification > saved Agent intents without a caller identity do not invent an origin [2.00ms]
+(pass) the backend adapter omits absent Candid input fields and recovers a lost begin reply using the same wallet request [201.00ms]
+(pass) the backend adapter sends typed journal identity without absent operation evidence and accepts direct Kernel results [81.00ms]
+(pass) approval and swap receipts fit the real journal transport while preserving every output-token log [73.00ms]
+(pass) list and get use generated method schemas and normalize omitted output options [78.00ms]
+(pass) lost wallet replies retain the requested phase, then reload reconciles without resending [5.00ms]
+(pass) a missing status after a lost reply retries exactly the saved wallet request ID and calldata [3.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: Insufficient native balance for maximum gas fee [3.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: Token transfer simulation reverted: insufficient token balance [3.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: RPC providers disagree; transaction fee estimate is unavailable [3.00ms]
+(pass) confirmed approvals are skipped while swap submission waits for their successful receipt [8.00ms]
+(pass) a successful exact replacement approval unlocks the saved swap without repeating approval [8.00ms]
+(pass) a pending approval replacement is observed through inclusion without repeating either transaction [12.00ms]
+(pass) a pending swap replacement is observed through inclusion without repeating either transaction [15.00ms]
+(pass) a reverted exact approval replacement remains reverted after reload and cannot complete the step [8.00ms]
+(pass) a reverted exact swap replacement remains reverted after reload and cannot complete the step [9.00ms]
+(pass) cancelled or changed approval replacements never satisfy the frozen request [29.00ms]
+(pass) cancelled or changed swap replacements never satisfy the frozen request [41.00ms]
+(pass) missing replacement evidence stays unresolved and mismatched hashes or networks are never saved [7.00ms]
+(pass) saved replacement proof is bound to the original linkage and untrusted claims cannot inject it [1.00ms]
+(pass) rejected or reverted wallet operations remain terminal for that saved request [3.00ms]
+(pass) expired saved swaps reconcile existing chain work but cannot dispatch a fresh transaction [2.00ms]
+(pass) human execution does not forward an Agent workflow into the wallet [1.00ms]
+(pass) replacement signing fingerprints, namespaces, addresses, or missing accounts stop before status or dispatch [2.00ms]
+(pass) wallet operations are bound to saved request, account, network, address, and transaction kind [3.00ms]
+(pass) a mismatched status is never persisted, even if it claims success [1.00ms]
+(pass) modified saved swap calldata and exact approval amounts fail before dispatch [1.00ms]
+(pass) received output counts only output-token Transfer logs to the requested recipient [4.00ms]
+(pass) the wallet reader surfaces a different observation block instead of calculating a misleading price impact
+
+test/agent_workflow.test.ts:
+(pass) Agent continuation checks the original swap before any approval and does not call root tools itself [3.00ms]
+(pass) Agent receives exact approval then swap requests and only chain evidence can complete the swap [11.00ms]
+(pass) an expired 3 USDC approval is verified and reused by a fresh quote without another approval [4.00ms]
+(pass) an expired lost swap reply remains tied to the original pending request [3.00ms]
+(pass) a transaction not yet visible is a same-request wait, not a failed workflow or fresh quote [2.00ms]
+(pass) in-flight preparation remains pending even after expiry [3.00ms]
+(pass) caller mismatch, wrong request identity and false Wallet binding cannot advance a swap [3.00ms]
+(pass) a declined request stays stopped and an unneeded approval is never invented [3.00ms]
+
+ 66 pass
+ 0 fail
+ 523 expect() calls
+Ran 66 tests across 5 files. [5.08s]

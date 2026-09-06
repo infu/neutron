@@ -1,0 +1,140 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/kernel/test/msg_bus.isolated.ts:
+(pass) app uninstall clears grants, pending requests, and audit entries [1.00ms]
+(pass) an auth $transition synchronously revokes Agent authority [7.00ms]
+(pass) an auth $transition synchronously revokes Agent authority
+(pass) an auth $transition synchronously revokes Agent authority [1.00ms]
+(pass) installed source tool descriptors stay bounded, read-only, and metadata-only [1.00ms]
+(pass) installed source inspection admits only the active direct Agent root [5.00ms]
+(pass) installed source inspection withholds a result after its Agent root ends [1.00ms]
+(pass) every installed source tool receives request cancellation [6.00ms]
+(pass) a new Kernel keeps a released provider surface and fails closed for an absent successor tool [4.00ms]
+(pass) same-app tile and background-style endpoints call through the broker
+(pass) same-app tools are hidden and uncallable across apps [1.00ms]
+(pass) declared cancellation control remains available at ordinary lane saturation [26.00ms]
+(pass) a tray endpoint calls its own background without prompting [1.00ms]
+(pass) signed calls are cancelled when frontend authority becomes pending [3.00ms]
+(pass) private self-call operations are not available as generic kernel tools
+(pass) generic call_dialog rejects self targets before any JSON call path [1.00ms]
+(pass) legacy call rejection retains owner discovery but sends no method call [1.00ms]
+(pass) legacy call approval retains default conversion and sends one method call
+(pass) request cancellation leaves the compatible v1 call lifecycle unchanged [1.00ms]
+(pass) call_dialog_v2 is registered and resolves a Candid then method privately [1.00ms]
+(pass) call_dialog_v2 reviews and dispatches the same prepared arguments [1.00ms]
+(pass) v2 agent consent includes the complete prepared arguments
+(pass) agent-scoped legacy call_dialog fails before discovery or dispatch
+(pass) agent-scoped call_dialog_v2 dispatches its exact prepared arguments
+(pass) source-bound request cancellation removes consent and prevents later dispatch [7.00ms]
+(pass) cancelling a dispatched v2 update aborts its native fetch and preserves outcome unknown [3.00ms]
+(pass) replacing an app endpoint aborts its outstanding v2 discovery fetch [3.00ms]
+(pass) direct app ports preserve released v1 shapes while enforcing byte and JSON bounds [19.00ms]
+(pass) schema_v2 uses anonymous discovery and disables principal shorthand [1.00ms]
+(pass) canister tools reject noncanonical principals before discovery [1.00ms]
+(pass) legacy schema retains owner discovery and default principal conversion [1.00ms]
+(pass) call_dialog_v2 never dispatches a legacy collision-prone actor property
+(pass) agent stop during external discovery prevents signed-call dispatch [2.00ms]
+(pass) generic backend access tool rejects attached calls
+(pass) self-call argument mismatch replies immediately with the installed app and method [5.00ms]
+(pass) self-call cancellation dismisses its pending backend consent [9.00ms]
+(pass) self-call cancellation dismisses its pending owner signature dialog [3.00ms]
+(pass) valid unified self queries and updates dispatch through the private binary port [6.00ms]
+(pass) routed self dialogs require invocation provenance during an active agent call [3.00ms]
+(pass) scoped binary self calls bind invocation provenance and revoke closed [11.00ms]
+(pass) signed calls revalidate the exact source after approval before dispatch [2.00ms]
+(pass) signed calls revalidate owner authorization after approval [2.00ms]
+(pass) private-port attachment calls transfer buffers through the broker [6.00ms]
+(pass) one-use delegation preserves scoped provenance for a nested attachment call [2.00ms]
+(pass) app state changes stay source-bound and within one app [3.00ms]
+(pass) a retained tile receives the latest state invalidation when it reconnects [2.00ms]
+(pass) broker forwards bounded target progress to the exact active caller [1.00ms]
+(pass) a background endpoint can call a live tile tool in its own app
+(pass) cross-app calls require and honor an explicit session grant [2.00ms]
+(pass) tool caller installation identity comes from scope, survives endpoint replacement, and changes on reinstall [2.00ms]
+(pass) a nested Agent call cannot reuse an ordinary frontend session grant [2.00ms]
+(pass) a grant cannot dispatch after the caller session changes during descriptor discovery [4.00ms]
+(pass) a target session change during Agent consent cancels before dispatch [2.00ms]
+(pass) provider presentation opens then reuses the exact provider tile with caller and audience attestation [5.00ms]
+(pass) provider presentation stays valid when focus moves and leaves the new focus alone [1.00ms]
+(pass) a background app can request provider UI without focus or transient activation [1.00ms]
+(pass) a tray app can request provider UI without focus or transient activation [1.00ms]
+(pass) provider presentation rejects a reconnected endpoint during $phase dispatch [4.00ms]
+(pass) provider presentation rejects a reconnected endpoint during $phase dispatch [1.00ms]
+(pass) concurrent provider presentations reuse the provider tile without post-settlement focus changes [3.00ms]
+(pass) provider presentation leaves normal tile focus unchanged when port connection is cancelled [1.00ms]
+(pass) provider presentation rejects a replaced tile during descriptor and result waits [5.00ms]
+(pass) provider presentation allows focus and workspace changes but rejects a closed provider tile [8.00ms]
+(pass) provider presentation cancels immediately when the owner session rotates [2.00ms]
+(pass) provider presentation rejects forged and wrong-app capabilities without consuming the real provider request [3.00ms]
+(pass) provider presentation rejects wrong tools and wrong audiences before tile dispatch [2.00ms]
+(pass) provider presentation capability is shared and consumed by exactly one callback [1.00ms]
+(pass) provider presentation rejects Agent invocations before opening a tile or dispatching its foreground handler [1.00ms]
+(pass) agent-root tools stay hidden and reject forged human audience before dispatch
+(pass) agent-root tools reject nested invocations but attest and dispatch a direct active root [2.00ms]
+(pass) provider-owned consent validates arguments without focus or activation
+(pass) provider-owned consent rejects control and attachment tool combinations [1.00ms]
+(pass) provider-owned consent shows one canonical provider review and ignores grants [4.00ms]
+(pass) provider-owned consent fails closed when the handler omits its callback [1.00ms]
+(pass) provider-owned consent rejects oversized reviews and aborts the handler [1.00ms]
+(pass) provider-owned consent rejects extended approval payloads and aborts the handler [1.00ms]
+(pass) provider-owned consent cancels when the provider endpoint is replaced [1.00ms]
+(pass) provider-owned consent cancels when the caller session is replaced [1.00ms]
+(pass) provider-owned consent rechecks the authorized owner after review [1.00ms]
+(pass) provider-owned consent rechecks owner authority after the approved handler returns [3.00ms]
+(pass) a direct Agent provider call requires a fresh exact review for each operation [3.00ms]
+(pass) a nested Agent provider call sends the bounded review to its root judge [1.00ms]
+(pass) an Agent denial aborts the provider even when its handler catches the denial [1.00ms]
+(pass) Agent provider capabilities reject detached callbacks [1.00ms]
+(pass) Agent provider capabilities reject sibling invocation callbacks [2.00ms]
+(pass) cancelling an Agent root cancels its pending provider review [4.00ms]
+(pass) one exact-tools permission approves six concurrent reads without granting a send tool [8.00ms]
+(pass) exact-tools permission reviews only missing grants and deduplicates requested names [1.00ms]
+(pass) exact-tools permissions reject unknown, private, wildcard, and ambiguous selections before consent [2.00ms]
+(pass) exact-tools permission cancellation and endpoint reconnection leave no grants [5.00ms]
+(pass) exact-tools permission rechecks the endpoint after live descriptor discovery [2.00ms]
+(pass) provider-owned actions still require fresh review after exact-tools session approval [4.00ms]
+(pass) Agent exact-tools permission decisions do not create standing session grants [1.00ms]
+(pass) install-declared frontend tools connect immediately and leave undeclared tools for consent [5.00ms]
+(pass) install-declared nested Agent tools avoid parallel permission decisions without losing invocation scope [3.00ms]
+(pass) install-declared frontend tools preserve private audiences and fresh provider confirmation [6.00ms]
+(pass) legacy single-tool and wildcard session permission APIs remain compatible [3.00ms]
+(pass) permission requests cancel through tool and direct action routes [3.00ms]
+(pass) an app tool named workspace.open_tile keeps generic owner attention
+(pass) a cross-app tray call retains tray provenance in explicit consent [2.00ms]
+(pass) approved grants are invalidated when either endpoint reconnects
+(pass) unknown windows cannot invoke kernel bus actions
+(pass) removed raw canister actions are not registered
+(pass) updated and uninstalled app versions invalidate their live endpoints
+(pass) same-version reinstalls invalidate their live endpoint generation [2.00ms]
+(pass) private tray, connection, and browser-wallet actions are not model-visible
+(pass) install offers expose only the closed URL union and redact invalid-call audits [1.00ms]
+(pass) direct install offers require focus and activation before presenting owner UI [11.00ms]
+(pass) a scoped agent invocation presents an owner-attributed install offer [2.00ms]
+(pass) endpoint discovery reports the exact transient tray instance
+(pass) delegated tool discovery cannot target a transient tray endpoint [1.00ms]
+(pass) delegated backend consent includes source, reservation state, and complete call arguments
+(pass) kernel discovery fails closed on non-canonical installed app metadata
+(pass) a normal agent background inspects the workspace without Agent Mode or a dialog [2.00ms]
+(pass) workspace tools stay unavailable to a background without agent entrypoints
+(pass) a delegated nested agent cannot control the workspace [1.00ms]
+(pass) a direct Agent Mode root controls the workspace without navigation cooldowns [4.00ms]
+(pass) a normal agent opens and stacks tiles, then focuses and closes exact instances [5.00ms]
+(pass) a normal agent expands, restores, and moves a tile without switching workspaces [4.00ms]
+(pass) agent moves retain the existing per-workspace tile capacity [2.00ms]
+(pass) agent open and focus bring an explicit target workspace into view [2.00ms]
+(pass) cross-workspace focus waits for an already-mounted iframe to leave its inert layer [43.00ms]
+(pass) direct app calls open tiles only in the current workspace [1.00ms]
+(pass) workspace.open_tile does not depend on direct tile focus or activation [1.00ms]
+(pass) workspace.open_tile lets a live background open an installed tile
+(pass) workspace.open_tile lets a live tray open another app's tile [1.00ms]
+(pass) direct calls reuse an existing app tile in the current workspace
+(pass) a challenged Agent reuse cannot become a new tile after approval [2.00ms]
+(pass) a challenged Agent navigation cannot restore a stale workspace [4.00ms]
+(pass) an unfocused direct caller opens a missing tile without consent [1.00ms]
+(pass) a delayed tile mount follows the canonical workspace focus [41.00ms]
+NEUTRON_MSG_BUS_ISOLATED_SUCCESS
+
+ 131 pass
+ 0 fail
+ 1393 expect() calls
+Ran 131 tests across 1 files. [735.00ms]

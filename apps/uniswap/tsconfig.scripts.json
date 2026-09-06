@@ -19,7 +19,8 @@
     "src/read_connection.ts",
     "src/workflow.ts",
     "src/agent_wallet.ts",
-    "src/agent_workflow.ts"
+    "src/agent_workflow.ts",
+    "src/provider_flow.ts"
   ],
   "exclude": [
     "test/fixtures/**"

@@ -65,6 +65,17 @@ export function presentUniswapSwap(operation: Operation, assets: readonly Asset[
       unlimitedApproval: false,
       tokenSymbol: inputNative ? "ETH" : input?.symbol ?? null,
       tokenAddress: inputNative ? null : swap.tokenIn,
+      swap: {
+        tokenIn: getAddress(swap.tokenIn),
+        tokenOut: getAddress(swap.tokenOut),
+        amountIn: swap.amountIn.toString(),
+        amountOutMinimum: swap.amountOutMinimum.toString(),
+        recipient: getAddress(recipient),
+        deadline: outer.args[0].toString(),
+        poolFee: swap.fee.toString(),
+        inputNative,
+        outputNative,
+      },
     };
   } catch { return null; }
 }

@@ -108,7 +108,7 @@ describe("Kernel v343 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(343);
+    expect(packagedManifest.version).toBe(344);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -129,7 +129,7 @@ describe("Kernel v343 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 343");
+    ).toThrow("restricted to Kernel version 344");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -344,7 +344,7 @@ describe("Kernel v343 NPL package metadata", () => {
       }),
     );
 
-    await installKernelInstalledArtifactInventory(root, 343);
+    await installKernelInstalledArtifactInventory(root, 344);
     const inventoryPath = path.join(
       root,
       KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
@@ -357,7 +357,7 @@ describe("Kernel v343 NPL package metadata", () => {
       parsed.artifacts.map((file) => [file.package_path, file] as const),
     );
 
-    expect(parsed.package).toEqual({ id: "kernel", version: 343 });
+    expect(parsed.package).toEqual({ id: "kernel", version: 344 });
     expect(byPackagePath.has("neutron.did")).toBe(false);
     expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
     expect(
@@ -382,7 +382,7 @@ describe("Kernel v343 NPL package metadata", () => {
     }
 
     await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
-    await installKernelInstalledArtifactInventory(root, 343);
+    await installKernelInstalledArtifactInventory(root, 344);
     expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
       firstBytes,
     );

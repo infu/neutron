@@ -23,7 +23,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
     expect(stderr).toBe("");
     expect(JSON.parse(stdout).sort()).toEqual([
       "uniswap_list_page_v1", "uniswap_list_v1", "uniswap_next_action_v1", "uniswap_prepare_v1",
-      "uniswap_quote_v1", "uniswap_record_result_v1", "uniswap_status_v1",
+      "uniswap_quote_v1", "uniswap_record_result_v1", "uniswap_status_v1", "uniswap_swap_v1",
     ]);
   });
 
@@ -120,10 +120,12 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
   function receipt(): EvmReceipt {
     return { blockNumber: "21000001", blockHash: BLOCK_HASH, status: "success", gasUsed: "45000", effectiveGasPriceWei: "2500000000", logs: [], finality: "safe", observedAtNs: "1800000000000000000" };
   }
-  function fixture(options: { quotesUnavailable?: boolean; allowance?: bigint; authorize?: (call: WalletCall) => Promise<void>; estimatesAvailable?: boolean; failApprovalEstimate?: boolean; failQuoteFee?: number; bestQuoteFee?: number } = {}) {
+  function fixture(options: { quotesUnavailable?: boolean; allowance?: bigint; authorize?: (call: WalletCall) => Promise<void>; estimatesAvailable?: boolean; failApprovalEstimate?: boolean; failQuoteFee?: number; bestQuoteFee?: number; providerEffects?: boolean; abortAfterApproval?: AbortController } = {}) {
     const rows = new Map<string, WireRecord>();
     const walletCalls: WalletCall[] = [], mutations: { method: string; args: JsonValue[] }[] = [], queries: { method: string; args: JsonValue[] }[] = [];
     let chainEvidence: EvmTransactionResult | null = null;
+    const providerOperations = new Map<string, EvmOperationResult>();
+    let providerAborted = false;
     const kernel = {
       async querySelf(method: string, args: JsonValue[]) {
         validateInput(method, args); queries.push({ method, args: structuredClone(args) });
@@ -164,6 +166,18 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
         walletCalls.push(structuredClone(call));
         expect(call.target).toBe("app:evm_wallet:background");
         if (call.name === "evm_accounts_v1") return { accounts: [account] };
+        if (options.providerEffects && call.name === "evm_operation_status_v1") return (providerOperations.get(String(call.arguments.requestId)) ?? { ...call.arguments, status: "not_found" }) as unknown as JsonValue;
+        if (options.providerEffects && call.name === "evm_send_transaction_v1") {
+          const request = parseEvmSendTransactionRequest(call.arguments);
+          const approval = request.to.toLowerCase() !== ROUTER.toLowerCase();
+          const operation: EvmOperationResult = { ...request, operationId: String(providerOperations.size + 1), kind: "transaction", status: "confirmed", address: ACCOUNT, transactionHash: `0x${(approval ? "dd" : "bb").repeat(32)}`, signature: null, message: null, reviewRevision: "1", receipt: receipt() };
+          // Effect requests include transaction fields that are absent from the
+          // closed operation-result schema; project the real Wallet result shape.
+          const result = { requestId: operation.requestId, accountId: operation.accountId, chainId: operation.chainId, operationId: operation.operationId, kind: operation.kind, status: operation.status, address: operation.address, transactionHash: operation.transactionHash, signature: operation.signature, message: operation.message, reviewRevision: operation.reviewRevision, receipt: operation.receipt };
+          providerOperations.set(request.requestId, result);
+          if (approval && options.abortAfterApproval && !providerAborted) { providerAborted = true; options.abortAfterApproval.abort(new Error("Pause after Wallet approval")); throw new Error("Wallet reply interrupted after approval"); }
+          return result as unknown as JsonValue;
+        }
         if (call.name === "evm_call_contract_v1") {
           const request = parseEvmCallContractRequest(call.arguments);
           expect(request.accountId).toBe("main"); expect(request.chainId).toBe("1");
@@ -229,8 +243,24 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
 
   describe("resident service", () => {
     test("exposes quote, prepare, status, list and independently verified result handlers", () => {
-      expect([...handlers.keys()]).toEqual(["uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_next_action_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_list_page_v1", "uniswap_record_result_v1"]);
+      expect([...handlers.keys()]).toEqual(["uniswap_swap_v1", "uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_next_action_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_list_page_v1", "uniswap_record_result_v1"]);
       expect(handlers.get("uniswap_quote_v1")!.descriptor.annotations?.["neutron:effects"]).toEqual(["read", "network"]);
+    });
+
+    test("one swap tool handles public Wallet approval and swap, including an interrupted approval reply", async () => {
+      const cancellation = new AbortController(), app = fixture({ providerEffects: true, abortAfterApproval: cancellation });
+      const args = { swapId: SWAP_ID, chainId: "1", tokenIn: USDC, tokenOut: null, amountIn: "3000000" };
+      const paused = await app.invoke("uniswap_swap_v1", args, { ...app.context(), signal: cancellation.signal });
+      expect(paused).toMatchObject({ state: "pending", flowId: SWAP_ID, swapId: SWAP_ID, phase: "approval_requested" });
+      const saved = structuredClone(app.rows.get(SWAP_ID)!);
+      const completed = await app.invoke("uniswap_swap_v1", args);
+      expect(completed).toMatchObject({ state: "complete", flowId: SWAP_ID, swapId: SWAP_ID, transactionHash: HASH });
+      const effects = app.walletCalls.filter((call) => call.name === "evm_send_transaction_v1");
+      expect(effects).toHaveLength(2);
+      expect(effects.map((call) => call.arguments.requestId)).toEqual([saved.approval_request_id, saved.swap_request_id]);
+      expect(app.walletCalls.some((call) => call.name.endsWith("_root_v1"))).toBe(false);
+      expect(app.rows.size).toBe(1);
+      expect(JSON.parse(String(saved.quote_json))).toMatchObject({ executionMode: "provider", providerFlow: { caller: { appId: "agent", installationUid: "17" }, agentMode: true } });
     });
 
     test("quotes use real wallet SDK contract reads and perform no signature, transaction, or journal mutation", async () => {
@@ -324,7 +354,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       const queued = wallet.accounts(cancellation === "request" ? { signal: controller.signal } : undefined);
       const outcome = queued.then(() => null, (error: unknown) => error);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(calls).toEqual([{ timeout: 3210, onProgress: progress }]);
+      expect(calls).toEqual([{ timeout: 3210, onProgress: progress, ...(cancellation === "context" ? { signal: controller.signal } : {}) }]);
       controller.abort(new Error("Cancelled queued wallet read"));
       release(); await first;
       expect(await outcome).toMatchObject({ message: "Cancelled queued wallet read" });

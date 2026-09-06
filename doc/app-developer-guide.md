@@ -1103,8 +1103,8 @@ validate the caller role when a control is tile-only.
 
 Use `provider_once` when a trusted provider app must own one informed,
 domain-specific decision for a cross-app operation. Keep the public tool name
-and schema stable for callers, but have its resident handler present the
-provider's own foreground UI before preparing or executing any effect:
+and schema stable for callers. Outside Agent Mode, have its resident handler
+present the provider's own foreground UI before preparing or executing any effect:
 
 ```ts
 exposeTool(
@@ -1183,8 +1183,10 @@ settles.
 
 For every provider flow:
 
-- feature-detect and consume `presentUserInterface()` before preparation or
-  execution, and use only Kernel-attested caller and audience facts;
+- outside Agent Mode, feature-detect and consume `presentUserInterface()` before
+  preparation or execution; during Agent Mode, prepare an exact review and await
+  `requestApproval(review)` before execution. Use only Kernel-attested caller
+  and audience facts;
 - keep request/result schemas closed and bounded; the attested tile may use
   exact preapproved methods to prepare immutable non-value-moving review state
   and persist terminal rejection, while only the affirmative action may
@@ -1208,20 +1210,27 @@ const funding = await callTool({
 });
 ```
 
-Do not rely on wildcard payment grants. `context.requestApproval()` is a
-deprecated generic compatibility member, not an app/version allowlist. Current
-providers must use `presentUserInterface()` and cannot stack the two members of
-the shared one-use interaction. Released provider SDKs which predate and ignore
-the provider-UI marker, including Wallet 0.3.6, expose only
-`requestApproval()` and retain the generic Kernel raw-JSON review.
+Do not rely on wildcard payment grants. During an active Agent invocation,
+`context.requestApproval(review)` submits the complete bounded operation review
+to the root Agent's permission judge. Await its fresh decision before executing
+that exact operation through `context.kernel`. Kernel binds the callback to the
+original caller, provider, and live invocation; approval has no persistence and
+cancellation invalidates it. The preliminary tool-access prompt is skipped, but
+a standing tool grant does not replace this review. `presentUserInterface()` is
+absent during Agent Mode, and the callbacks share one use.
+
+Outside Agent Mode, current providers use `presentUserInterface()`. Released
+provider SDKs which predate and ignore the provider-UI marker, including Wallet
+0.3.6, expose only `requestApproval()` and retain the generic Kernel raw-JSON
+owner review.
 
 The complete protocol, security invariants, and Wallet funding contract live in
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#provider-mediated-one-shot-tools),
 [Kernel-App Communication](./kernel-app-communication.md#provider-mediated-one-shot-consent),
 and [Wallet](../apps/wallet/README.md#app-funding-contract).
 
-For an active root agent, expose a separate exact tool instead of bypassing the
-human flow inside `wallet_fund_v1`:
+An existing separate direct-root tool remains compatible. It may share the
+provider's validated prepare/execute core and keep its restricted audience:
 
 ```ts
 exposeTool(
@@ -1332,13 +1341,14 @@ as cancellation of future work, not rollback of a remote call already sent.
 false otherwise. Use it only for a narrow app-owned policy; it is not a
 substitute for normal kernel permission checks or caller validation.
 
-Do not call a human `provider_once` presentation flow from Agent Mode. A trusted
-provider that supports autonomous root work exposes a separate
-`same_app` + `agent_root` tool, checks `context.audience`, and shares only its
-validated prepare/execute core with the human path. Kernel admits that tool
-only for the active depth-zero root; human callers and nested agent invocations
-are rejected before target dispatch. Do not expose an ordinary public bypass
-or branch around Wallet UI based only on caller-supplied data.
+For nested Agent work, call the provider's public `provider_once` tool through
+`context.kernel`. The provider uses `requestApproval(review)` to obtain a fresh
+root Agent decision for the exact prepared operation, then executes only after
+approval. It must not attempt human presentation or treat `agentMode` alone as
+approval. A separate `same_app` + `agent_root` tool remains restricted to the
+active depth-zero root; human callers and nested agent invocations are rejected
+before target dispatch. Do not expose an ordinary public bypass or branch
+around Wallet review based only on caller-supplied data.
 
 Only the approved root agent handler receives `context.agentConsent`. Register
 its private decision and cancellation callbacks for the dynamic extent of the

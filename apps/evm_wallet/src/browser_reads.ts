@@ -8,7 +8,7 @@ import {
   type EvmEstimateTransactionRequest, type EvmEstimateTransactionResult,
   type EvmTransactionRequest, type EvmReceipt,
 } from "neutron-tools/evm_wallet";
-import { browserEvmRpc } from "./browser_rpc.ts";
+import { BrowserEvmRpcError, browserEvmRpc } from "./browser_rpc.ts";
 import { address as parseAddress, hex, record, errorMessage, type Asset } from "./data.ts";
 
 export type BrowserReadRpc = Pick<typeof browserEvmRpc, "request">;
@@ -35,19 +35,40 @@ async function blockNumber(chainId: string, requested: string | undefined, rpc: 
     : BigInt(requested);
 }
 
+async function latestObservation<T>(chainId: string, rpc: BrowserReadRpc, read: (block: bigint) => Promise<T>): Promise<T> {
+  const block = await blockNumber(chainId, undefined, rpc);
+  try {
+    return await read(block);
+  } catch (error) {
+    if (!(error instanceof BrowserEvmRpcError) || !/\bheader not found\b/i.test(error.message)) throw error;
+    // Public RPC backends can disagree briefly about the latest available
+    // header. Discard every partial result, resolve the head again and replay
+    // this read once. Keep each result pinned; never substitute another block
+    // for an explicitly requested historical read or retry a transaction.
+    return read(await blockNumber(chainId, undefined, rpc));
+  }
+}
+
 export async function browserCallContract(input: EvmCallContractRequest, address: string, rpc: BrowserReadRpc = browserEvmRpc) {
   const request = parseEvmCallContractRequest(input);
-  const from = parseAddress(address), block = await blockNumber(request.chainId, request.blockTag, rpc);
-  const result = hex(await rpc.request(request.chainId, "eth_call", [{ from, to: request.to, data: request.data }, quantityHex(block)]), "contract return bytes");
-  return parseEvmCallContractResult({ accountId: request.accountId, chainId: request.chainId, address: from,
-    to: request.to, data: request.data, result, blockNumber: block.toString(), observedAtNs: observedAt() }, request);
+  const from = parseAddress(address);
+  const read = async (block: bigint) => {
+    const result = hex(await rpc.request(request.chainId, "eth_call", [{ from, to: request.to, data: request.data }, quantityHex(block)]), "contract return bytes");
+    return parseEvmCallContractResult({ accountId: request.accountId, chainId: request.chainId, address: from,
+      to: request.to, data: request.data, result, blockNumber: block.toString(), observedAtNs: observedAt() }, request);
+  };
+  return request.blockTag === undefined || request.blockTag === "latest"
+    ? latestObservation(request.chainId, rpc, read)
+    : read(BigInt(request.blockTag));
 }
 
 export async function browserReadContract(input: EvmReadContractRequest, address: string, rpc: BrowserReadRpc = browserEvmRpc) {
   const request = parseEvmReadContractRequest(input);
-  const result = await browserCallContract(request, address, rpc);
-  const code = hex(await rpc.request(request.chainId, "eth_getCode", [request.to, quantityHex(BigInt(result.blockNumber))]), "contract code");
-  return parseEvmReadContractResult({ ...result, code, observedAtNs: observedAt() }, request);
+  return latestObservation(request.chainId, rpc, async (block) => {
+    const result = await browserCallContract({ ...request, blockTag: block.toString() }, address, rpc);
+    const code = hex(await rpc.request(request.chainId, "eth_getCode", [request.to, quantityHex(block)]), "contract code");
+    return parseEvmReadContractResult({ ...result, code, observedAtNs: observedAt() }, request);
+  });
 }
 
 export async function browserBalances(input: EvmBalancesRequest, address: string, assets: readonly Asset[] = [], rpc: BrowserReadRpc = browserEvmRpc) {

@@ -1,0 +1,38 @@
+
+> neutron-agent@1.0.0 package
+> npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts
+
+
+> neutron-agent@1.0.0 validate
+> bun ../../packages/neutron-scripts/src/validate.ts
+
+neutron.json is valid
+
+> neutron-agent@1.0.0 build
+> bun build.ts && npm run mogen
+
+
+> neutron-agent@1.0.0 mogen
+> bun ../../packages/neutron-scripts/src/mogen.ts
+
+
+> neutron-agent@1.0.0 mopack
+> bun ../../packages/neutron-scripts/src/mopack.ts
+
+Processing Motoko package roots...
+Processing /srv/shared/code/neutron/apps/agent/backend/main.mo
+Processing /srv/shared/code/neutron/apps/agent/backend/memory/agent/v1.mo
+app entry: 643851023e767a44e1be1349dccaa16729872fd1b45df9d25e2c183c14a6fb6c
+Processing /srv/shared/code/neutron/apps/agent/backend/memory/agent/v1.mo
+memory agent schema v1: cae3096c6238e7217c0cdd242e1c1094faecf1c85ee92c0b2d13a88b3bf0f134
+
+> neutron-agent@1.0.0 schema
+> bun ../../packages/neutron-scripts/src/method_schema.ts
+
+
+> neutron-agent@1.0.0 package:metadata
+> bun ../../packages/neutron-scripts/src/package_metadata.ts
+
+
+Size: 513437
+Writing: agent.v0.3.18.neutron
