@@ -22,9 +22,12 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
     ], { cwd: new URL("..", import.meta.url).pathname });
     expect(stderr).toBe("");
     expect(JSON.parse(stdout).sort()).toEqual([
+      "uniswap_action_status_v1", "uniswap_actions_page_v1", "uniswap_import_position_v1",
+      "uniswap_liquidity_quote_v1",
       "uniswap_list_page_v1", "uniswap_list_v1", "uniswap_next_action_v1", "uniswap_prepare_v1",
-      "uniswap_quote_v1", "uniswap_record_result_v1", "uniswap_status_v1", "uniswap_swap_v1",
-    ]);
+      "uniswap_manage_liquidity_v1", "uniswap_pool_v1", "uniswap_position_v1", "uniswap_positions_v1",
+      "uniswap_quote_v1", "uniswap_quote_v2", "uniswap_record_result_v1", "uniswap_status_v1", "uniswap_swap_v1", "uniswap_swap_v2",
+    ].sort());
   });
 
   test("resident Uniswap handlers satisfy wallet and managed-journal contracts in an isolated process", async () => {
@@ -72,14 +75,15 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
   const quoteAbi = parseAbi(["function quoteExactInputSingle((address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96) params) returns(uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)"]);
   const factoryAbi = parseAbi(["function getPool(address tokenA,address tokenB,uint24 fee) view returns(address pool)"]);
   const poolAbi = parseAbi(["function slot0() view returns(uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)"]);
+  const manifest = JSON.parse(readFileSync(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
   const methodSchemas = generateAppMethodSchemaArtifact(
-    JSON.parse(readFileSync(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest,
+    manifest,
     readFileSync(new URL("../backend/main.mo", import.meta.url), "utf8"),
   );
   type WireRecord = Record<string, JsonValue>;
   type WalletCall = { target: string; name: string; arguments: JsonObject };
-  // Exercise the production guard without replacing any Kernel module. Its
-  // decision remains pending over a microtask, just like the Agent judge's reply.
+  // Kernel 344's install grants bypass routing decisions for declared tools.
+  // Exercise the real guard only when a call still requires routing consent.
   async function withAgentConsent(run: (authorize: (call: WalletCall) => Promise<void>, errors: string[]) => Promise<void>) {
     const moduleUrl = new URL("../../kernel/src/ui_attention/agent.ts", import.meta.url).href;
     const agent = await import(moduleUrl);
@@ -96,6 +100,10 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
     const child = agent.createChildInvocation(root, endpoint("uniswap", "background"), "uniswap_quote_v1");
     const errors: string[] = [];
     const authorize = async (call: WalletCall) => {
+      const granted = manifest.capabilities?.frontend_tools?.targets.some(
+        (target) => target.app === "evm_wallet" && target.tools.includes(call.name),
+      );
+      if (granted) return;
       try {
         await agent.requestAgentConsent(child, { kind: "frontend_tool", persistence: "none", risk: "low", action: { provider: "evm_wallet", tool: call.name } }, async () => {
           await Promise.resolve();
@@ -243,7 +251,10 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
 
   describe("resident service", () => {
     test("exposes quote, prepare, status, list and independently verified result handlers", () => {
-      expect([...handlers.keys()]).toEqual(["uniswap_swap_v1", "uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_next_action_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_list_page_v1", "uniswap_record_result_v1"]);
+      expect([...handlers.keys()].sort()).toEqual([
+        "uniswap_swap_v1", "uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_next_action_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_list_page_v1", "uniswap_record_result_v1",
+        "uniswap_quote_v2", "uniswap_swap_v2", "uniswap_liquidity_quote_v1", "uniswap_manage_liquidity_v1", "uniswap_action_status_v1", "uniswap_actions_page_v1", "uniswap_positions_v1", "uniswap_position_v1", "uniswap_import_position_v1", "uniswap_pool_v1",
+      ].sort());
       expect(handlers.get("uniswap_quote_v1")!.descriptor.annotations?.["neutron:effects"]).toEqual(["read", "network"]);
     });
 
@@ -294,7 +305,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       expect(app.mutations).toHaveLength(0);
     });
 
-    test("Agent quotes compare all four fee tiers and estimate both transactions through the real permission guard", async () => {
+    test("Agent quotes compare all four fee tiers and estimate both transactions through declared install grants", async () => {
       await withAgentConsent(async (authorize, errors) => {
         const app = fixture({ authorize, estimatesAvailable: true, bestQuoteFee: 10000 });
         const response = await app.quote(true), quote = JSON.parse(String(response.quoteJson));
@@ -310,7 +321,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       });
     });
 
-    test("Agent custom-token decimals and symbol both resolve while permission decisions are asynchronous", async () => {
+    test("Agent custom-token decimals and symbol both resolve through declared read grants", async () => {
       await withAgentConsent(async (authorize, errors) => {
         const app = fixture({ authorize, estimatesAvailable: true });
         const response = await app.invoke("uniswap_quote_v1", {
@@ -326,7 +337,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       });
     });
 
-    test("a failed Agent pool or approval fee read releases queued reads without a permission retry", async () => {
+    test("a failed Agent pool or approval fee read does not prevent other installed reads", async () => {
       await withAgentConsent(async (authorize, errors) => {
         const app = fixture({ authorize, estimatesAvailable: true, failQuoteFee: 100, bestQuoteFee: 10000, failApprovalEstimate: true });
         const response = await app.quote(true), quote = JSON.parse(String(response.quoteJson));
@@ -340,18 +351,18 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       });
     });
 
-    test.each(["context", "request"])("queued Agent reads respect %s cancellation before dispatch", async (cancellation) => {
+    test.each(["context", "request"])("queued ungranted Agent reads respect %s cancellation before dispatch", async (cancellation) => {
       const controller = new AbortController();
       let release!: () => void;
       const held = new Promise<void>((resolve) => { release = resolve; });
       const calls: unknown[] = [], progress = () => {};
       const kernel = { async callTool(_call: unknown, options: unknown) {
         expect(this).toBe(kernel); calls.push(options);
-        await held; return { accounts: [account] };
+        await held; return { networks: [] };
       } };
       const wallet = createServiceWallet({ kernel, agentMode: true, ...(cancellation === "context" ? { signal: controller.signal } : {}), reportProgress() {} });
-      const first = wallet.accounts({ timeout: 3210, onProgress: progress });
-      const queued = wallet.accounts(cancellation === "request" ? { signal: controller.signal } : undefined);
+      const first = wallet.networks({ timeout: 3210, onProgress: progress });
+      const queued = wallet.networks(cancellation === "request" ? { signal: controller.signal } : undefined);
       const outcome = queued.then(() => null, (error: unknown) => error);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(calls).toEqual([{ timeout: 3210, onProgress: progress, ...(cancellation === "context" ? { signal: controller.signal } : {}) }]);
@@ -360,7 +371,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       expect(await outcome).toMatchObject({ message: "Cancelled queued wallet read" });
       expect(calls).toHaveLength(1);
       if (cancellation === "request") {
-        await wallet.accounts();
+        await wallet.networks();
         expect(calls).toHaveLength(2);
       }
     });

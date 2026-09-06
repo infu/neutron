@@ -4,12 +4,14 @@ import { callTool } from "neutron-tools/app";
 import { createEvmWalletClient, type EvmAccount, type EvmBalancesResult } from "neutron-tools/evm_wallet";
 import { formatUnits, getAddress } from "viem";
 import { amountAtoms, slippageBasisPoints, customToken, defaultTokens, NETWORKS, type Chain, type Token } from "./swap.ts";
-import { createIntent, createSwapStore, reconcileStep, savedIntent, approvalConfirmed, receivedTokenAtoms, walletReader, storedOperation, effectiveOperation, type SavedIntent, type SwapRecord } from "./controller.ts";
+import { createSwapStore, reconcileStep, savedIntent, approvalConfirmed, receivedTokenAtoms, walletReader, storedOperation, effectiveOperation, type SavedIntent, type SwapRecord } from "./controller.ts";
 import { estimateSwapFees, totalEstimatedFee } from "./fees.ts";
 import { NetworkFees } from "./fee_review.tsx";
 import { readWalletAccounts } from "./read_connection.ts";
 import { continueSwap, type SwapProgress } from "./workflow.ts";
 import { TokenPicker } from "./token_picker.tsx";
+import { quoteUnifiedSwap, prepareQuotedSwap, parseUnifiedSwapInput, type UnifiedQuote, type UnifiedSwapInput } from "./swap_routes.ts";
+import { ActionHistory, ActionProgress, LiquidityView, useActionController } from "./liquidity_view.tsx";
 import "./style.scss";
 
 const wallet = createEvmWalletClient({ callTool });
@@ -26,6 +28,8 @@ function expired(saved: SavedIntent, now = Date.now()) { return BigInt(saved.quo
 
 export function App() {
   const [chain, setChain] = useState<Chain>("1");
+  const [tab, setTab] = useState<"swap" | "liquidity">("swap");
+  const [protocol, setProtocol] = useState<"auto" | "v3" | "v4">("auto");
   const [accounts, setAccounts] = useState<EvmAccount[]>([]);
   const [accountId, setAccountId] = useState("main");
   const [tokens, setTokens] = useState(defaultTokens("1"));
@@ -37,7 +41,8 @@ export function App() {
   const [recipient, setRecipient] = useState("");
   const [custom, setCustom] = useState("");
   const [balances, setBalances] = useState<EvmBalancesResult | null>(null);
-  const [intent, setIntent] = useState<SavedIntent | null>(null);
+  const [quote, setQuote] = useState<UnifiedQuote | null>(null);
+  const [approvalRequired, setApprovalRequired] = useState<boolean | null>(null);
   const [records, setRecords] = useState<SwapRecord[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,7 +70,9 @@ export function App() {
   const tokenIn = tokens.find((token) => tokenKey(token) === inputKey)!;
   const tokenOut = tokens.find((token) => tokenKey(token) === outputKey)!;
   const destination = recipient || account?.address || "";
-  const draftIdentity = JSON.stringify({ chain, accountId, inputKey, outputKey, amount, destination, slippage, minutes });
+  const actions = useActionController(async () => { setAmount(""); await refreshBalances().catch((error) => setRefreshError(errorText(error))); });
+  const locked = busy || actions.busy;
+  const draftIdentity = JSON.stringify({ chain, accountId, inputKey, outputKey, amount, destination, slippage, minutes, protocol });
   const currentDraft = useRef(draftIdentity);
   currentDraft.current = draftIdentity;
   const balanceScope = useRef(`${chain}:${accountId}`);
@@ -114,7 +121,7 @@ export function App() {
   // The app's install-declared access makes these ordinary Wallet reads. A
   // temporary failure is retried on the next visible poll or focus event.
   refreshCurrent.current = async () => {
-    if (document.visibilityState === "hidden" || working.current) return;
+    if (document.visibilityState === "hidden" || working.current || actions.busy) return;
     if (refreshing.current) { refreshQueued.current = true; return refreshing.current; }
     const refresh = async () => {
       const failures: string[] = [];
@@ -157,39 +164,53 @@ export function App() {
     return () => { clearInterval(clock); clearInterval(poll); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); tracking.current?.abort(); };
   }, []);
   useEffect(() => { setBalances(null); }, [chain, accountId, account?.address]);
-  useEffect(() => { if (!busy) void refreshCurrent.current(); }, [chain, accountId, tokens, busy]);
+  useEffect(() => { if (!locked) void refreshCurrent.current(); }, [chain, accountId, tokens, locked]);
 
+  function swapInput(): UnifiedSwapInput {
+    const duration = Number(minutes);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isSafeInteger(Math.round(duration * 60))) throw new Error("Enter a positive deadline in minutes.");
+    return parseUnifiedSwapInput({ protocol, chainId: chain, accountId, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn: amountAtoms(amount, tokenIn), recipient: destination, slippageBps: slippageBasisPoints(slippage), quoteValiditySeconds: String(Math.round(duration * 60)) });
+  }
   useEffect(() => {
     const generation = ++quoteGeneration.current;
-    if (busy) { setQuoting(false); return; }
-    setIntent(null); setQuoteError(""); setQuoting(false);
-    if (!account || walletError || busy || !amount || !tokenIn || !tokenOut || inputKey === outputKey) return;
-    let amountIn: string, duration: number, bps: number;
-    try {
-      amountIn = amountAtoms(amount, tokenIn); duration = Number(minutes); bps = slippageBasisPoints(slippage);
-      if (BigInt(amountIn) === 0n) return;
-      if (!Number.isFinite(duration) || duration <= 0 || !Number.isSafeInteger(Math.round(duration * 60))) throw new Error("Enter a positive deadline in minutes.");
-      getAddress(destination);
-    } catch (e) { setQuoteError(errorText(e)); return; }
+    if (locked) { setQuoting(false); return; }
+    setQuote(null); setApprovalRequired(null); setQuoteError(""); setQuoting(false);
+    if (tab !== "swap" || !account || walletError || !amount || !tokenIn || !tokenOut || inputKey === outputKey) return;
+    let input: UnifiedSwapInput;
+    try { input = swapInput(); } catch (error) { setQuoteError(errorText(error)); return; }
     setQuoting(true);
     const timer = setTimeout(() => {
       const selected = account;
       void (async () => {
+        let quoted: UnifiedQuote | null = null;
         try {
-          const next = await createIntent(wallet, { chainId: chain, accountId: selected.accountId, accountAddress: getAddress(selected.address), tokenIn, tokenOut, amountIn, slippageBps: bps, recipient: getAddress(destination), deadline: (BigInt(Math.floor(Date.now() / 1000)) + BigInt(Math.round(duration * 60))).toString() });
+          const next = await quoteUnifiedSwap(walletReader(wallet, selected.accountId), selected, input);
           if (quoteGeneration.current !== generation) return;
           quoteDraft.current = draftIdentity;
-          setIntent(next); setQuoting(false);
-          const networkFees = await estimateSwapFees(wallet, next);
-          if (quoteGeneration.current === generation) setIntent({ ...next, quote: { ...next.quote, networkFees } });
-        } catch (e) {
-          if (quoteGeneration.current === generation) { setQuoteError(errorText(e)); setQuoting(false); }
+          quoted = next; setQuote(next); setQuoting(false);
+          if (next.protocol === "v3") {
+            const plan = await prepareQuotedSwap(walletReader(wallet, selected.accountId), next);
+            if (quoteGeneration.current !== generation) return;
+            const approvals = plan.steps.filter((step) => step.kind === "approval");
+            setApprovalRequired(approvals.length > 0);
+            // The legacy fee panel has one approval slot. A reset plus approval
+            // must not be presented as a complete two-transaction fee estimate.
+            if (approvals.length > 1) { setQuote({ ...next, routeWarnings: [...next.routeWarnings, "This token needs an approval reset first. Wallet reviews each transaction’s network fee."] }); return; }
+            const networkFees = await estimateSwapFees(wallet, { quote: next, allowance: null, approval: approvals[0]?.transaction ?? null, swap: plan.steps.at(-1)!.transaction });
+            if (quoteGeneration.current === generation) setQuote({ ...next, networkFees });
+          }
+        } catch (error) {
+          if (quoteGeneration.current === generation) {
+            if (quoted) setQuote({ ...quoted, routeWarnings: [...quoted.routeWarnings, `Token access or fee observation unavailable: ${errorText(error)}`] });
+            else setQuoteError(errorText(error));
+            setQuoting(false);
+          }
         }
       })();
     }, 450);
     return () => { clearTimeout(timer); if (quoteGeneration.current === generation) quoteGeneration.current++; };
-  }, [draftIdentity, account?.address, walletError, busy, quoteNonce]);
-  useEffect(() => { if (intent && expired(intent, now) && !busy && !quoting) setQuoteNonce((value) => value + 1); }, [now, intent, busy, quoting]);
+  }, [draftIdentity, account?.address, walletError, locked, quoteNonce, tab]);
+  useEffect(() => { if (quote && BigInt(quote.deadline) <= BigInt(Math.floor(now / 1000)) && !locked && !quoting) setQuoteNonce((value) => value + 1); }, [now, quote, locked, quoting]);
 
   function changeChain(value: Chain) { const next = defaultTokens(value); setChain(value); setTokens(next); setInputKey("native"); setOutputKey(tokenKey(next[1]!)); }
   function selectToken(stage: "input" | "output", key: string) {
@@ -209,7 +230,7 @@ export function App() {
     setInputKey(tokenKey(saved.quote.tokenIn)); setOutputKey(tokenKey(saved.quote.tokenOut));
     setAmount(formatUnits(BigInt(saved.quote.amountIn), saved.quote.tokenIn.decimals));
     setRecipient(saved.quote.recipient); setSlippage(String(saved.quote.slippageBps / 100));
-    setIntent(null); setQuoteNonce((value) => value + 1);
+    setQuote(null); setProtocol("v3"); setTab("swap"); setQuoteNonce((value) => value + 1);
     setNotice("Review the updated quote above, then tap Swap. Any existing token allowance is checked automatically.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -230,12 +251,14 @@ export function App() {
     finally { await reload().catch((e) => setError(errorText(e))); }
   }
   async function save() {
-    if (!intent || expired(intent) || quoting) return;
-    const selected = intent;
+    if (!quote || BigInt(quote.deadline) <= BigInt(Math.floor(Date.now() / 1000)) || quoting || !account) return;
     if (quoteDraft.current !== currentDraft.current) return;
-    const record = await store.begin(selected);
-    showRecord(record);
-    await proceed(record);
+    const input = swapInput(), previous = actions.currentEnvelope;
+    if (previous?.kind === "swap" && JSON.stringify(previous.input) === JSON.stringify(input) && actions.progress && ["pending", "review"].includes(actions.progress.state)) {
+      await actions.perform(previous); return;
+    }
+    const operationId = [...crypto.getRandomValues(new Uint8Array(16))].map((value) => value.toString(16).padStart(2, "0")).join("");
+    await actions.perform({ operationId, kind: "swap", chainId: chain, accountId: account.accountId, input });
   }
   async function retryWithFreshQuote(record: SwapRecord) {
     if (savedIntent(record).executionMode !== "human") throw new Error("This swap is managed by its originating app or agent.");
@@ -248,37 +271,44 @@ export function App() {
     if (waiting || op?.status === "confirmed") await proceed(record);
     else useSavedDraft(savedIntent(record));
   }
-  const totalFee = intent?.quote.networkFees ? totalEstimatedFee(intent.quote.networkFees) : null;
-  const validQuote = intent && quoteDraft.current === draftIdentity && !expired(intent, now);
-  const swapButton = walletLoading ? "Loading wallet…" : !account || walletError ? "Wallet unavailable" : !amount || Number(amount) === 0 ? "Enter an amount" : quoting ? "Finding the best price…" : !validQuote ? "Swap unavailable" : "Swap";
+  const totalFee = quote?.networkFees ? totalEstimatedFee(quote.networkFees) : null;
+  const validQuote = quote && quoteDraft.current === draftIdentity && BigInt(quote.deadline) > BigInt(Math.floor(now / 1000));
+  const swapButton = walletLoading ? "Loading wallet…" : !account || walletError ? "Wallet unavailable" : !amount || Number(amount) === 0 ? "Enter an amount" : quoting ? "Comparing pools…" : !validQuote ? "Swap unavailable" : "Swap";
 
   return <main className="nt-app uni-app"><div className="uni-shell">
-    <header className="uni-header"><div><p className="nt-eyebrow">Uniswap</p><h1 className="nt-title">Swap tokens</h1></div>{account && !walletError ? <span className="uni-connected" title={account.address}><span/> {short(account.address)}</span> : <span className="uni-muted" role="status">{walletLoading ? "Loading wallet…" : "Wallet unavailable"}</span>}</header>
-    <section className="nt-panel uni-form" aria-label="Swap tokens">
-      <div className="uni-form-top"><label className="uni-network"><span className="nt-sr-only">Network</span><select aria-label="Network" value={chain} disabled={busy} onChange={(e) => changeChain(e.target.value as Chain)}>{Object.entries(NETWORKS).map(([id, net]) => <option key={id} value={id}>{net.name}</option>)}</select></label><span className="uni-muted">Powered by EVM Wallet</span></div>
-      <div className="uni-token-panel"><label>You pay<input aria-label="Input amount" inputMode="decimal" placeholder="0" value={amount} disabled={busy} onChange={(e) => setAmount(e.target.value)}/></label><TokenPicker label="Input token" tokens={tokens} value={inputKey} disabled={busy} onChange={(value) => selectToken("input", value)}/><p className="uni-muted">Balance: {balance(tokenIn)} {tokenIn.symbol}</p></div>
-      <button className="uni-direction" aria-label="Reverse tokens" title="Reverse tokens" disabled={busy} onClick={() => { setInputKey(outputKey); setOutputKey(inputKey); }}>↓</button>
-      <div className="uni-token-panel uni-receive"><label>You receive<output aria-label="Output amount" aria-live="polite">{intent ? displayAmount(intent.quote.amountOut, intent.quote.tokenOut.decimals) : quoting ? "…" : "0"}</output></label><TokenPicker label="Output token" tokens={tokens} value={outputKey} disabled={busy} onChange={(value) => selectToken("output", value)}/><p className="uni-muted">Balance: {balance(tokenOut)} {tokenOut.symbol}</p></div>
-      {intent && <div className="uni-quote-summary"><span>Estimated network fee</span><span>{totalFee === null ? "Reviewed in Wallet" : `${displayAmount(totalFee, 18)} ETH`}</span></div>}
-      {quoteError && !busy && <div className="uni-quote-error"><p>No quote available yet.</p><details><summary>Show reason</summary><p>{quoteError}</p></details><button className="uni-text-button" onClick={() => setQuoteNonce((value) => value + 1)}>Try again</button></div>}
+    <header className="uni-header"><div><p className="nt-eyebrow">Uniswap</p><h1 className="nt-title">{tab === "swap" ? "Swap tokens" : "Manage liquidity"}</h1></div>{account && !walletError ? <span className="uni-connected" title={account.address}><span/> {short(account.address)}</span> : <span className="uni-muted" role="status">{walletLoading ? "Loading wallet…" : "Wallet unavailable"}</span>}</header>
+    <nav className="uni-tabs" aria-label="Uniswap views"><button aria-current={tab === "swap" ? "page" : undefined} disabled={locked} onClick={() => setTab("swap")}>Swap</button><button aria-current={tab === "liquidity" ? "page" : undefined} disabled={locked} onClick={() => setTab("liquidity")}>Liquidity</button></nav>
+    {actions.error && <div role="alert" className="uni-alert"><strong>We couldn’t complete that step.</strong><p>{actions.progress ? "Your request is saved in activity. Continue the same action to check its status." : "Review the details and try again. Activity below shows any saved requests."}</p><details><summary>Show details</summary><p>{actions.error}</p></details></div>}
+    {actions.notice && actions.currentEnvelope?.kind === tab && actions.currentEnvelope.chainId === chain && <p role="status" className="uni-notice">{actions.notice}</p>}
+    {tab === "liquidity" && <><div className="uni-form-top"><label className="uni-network"><span className="nt-sr-only">Network</span><select aria-label="Network" value={chain} disabled={locked} onChange={(event) => changeChain(event.target.value as Chain)}>{Object.entries(NETWORKS).map(([id, network]) => <option key={id} value={id}>{network.name}</option>)}</select></label><span className="uni-muted">Powered by EVM Wallet</span></div><LiquidityView wallet={wallet} account={account} chain={chain} tokens={tokens} balance={balance} actions={actions} disabled={locked || !!walletError} onTokens={(token) => setTokens((previous) => previous.some((value) => tokenKey(value) === tokenKey(token)) ? previous : [...previous, token])}/></>}
+    {tab === "swap" && <section className="nt-panel uni-form" aria-label="Swap tokens">
+      <div className="uni-form-top"><label className="uni-network"><span className="nt-sr-only">Network</span><select aria-label="Network" value={chain} disabled={locked} onChange={(e) => changeChain(e.target.value as Chain)}>{Object.entries(NETWORKS).map(([id, net]) => <option key={id} value={id}>{net.name}</option>)}</select></label><span className="uni-muted">Powered by EVM Wallet</span></div>
+      <div className="uni-token-panel"><label>You pay<input aria-label="Input amount" inputMode="decimal" placeholder="0" value={amount} disabled={locked} onChange={(e) => setAmount(e.target.value)}/></label><TokenPicker label="Input token" tokens={tokens} value={inputKey} disabled={locked} onChange={(value) => selectToken("input", value)}/><p className="uni-muted">Balance: {balance(tokenIn)} {tokenIn.symbol}</p></div>
+      <button className="uni-direction" aria-label="Reverse tokens" title="Reverse tokens" disabled={locked} onClick={() => { setInputKey(outputKey); setOutputKey(inputKey); }}>↓</button>
+      <div className="uni-token-panel uni-receive"><label>You receive<output aria-label="Output amount" aria-live="polite">{quote ? displayAmount(quote.amountOut, quote.tokenOut.decimals) : quoting ? "…" : "0"}</output></label><TokenPicker label="Output token" tokens={tokens} value={outputKey} disabled={locked} onChange={(value) => selectToken("output", value)}/><p className="uni-muted">Balance: {balance(tokenOut)} {tokenOut.symbol}</p></div>
+      {quote && <div className="uni-quote-summary"><span>Estimated network fee</span><span>{totalFee === null ? "Reviewed in Wallet" : `${displayAmount(totalFee, 18)} ETH`}</span></div>}
+      {quoteError && !locked && <div className="uni-quote-error"><p>No quote available yet.</p><details><summary>Show reason</summary><p>{quoteError}</p></details><button className="uni-text-button" onClick={() => setQuoteNonce((value) => value + 1)}>Try again</button></div>}
       {busy && <div role="status" className="uni-progress" data-testid="uniswap-progress"><span className="uni-spinner"/><div><strong>{progress || "Working…"}</strong>{workflowProgress && <p className="uni-muted">{workflowProgress.stage === "approval" ? "Token approval · swap confirmation follows automatically" : "Your tokens are swapped when this transaction confirms"}</p>}</div></div>}
-      <button className="nt-button uni-primary" disabled={busy || !account || !!walletError || !validQuote || quoting} onClick={() => void run(save)}>{busy ? workflowProgress?.state === "review" ? "Confirm in EVM Wallet" : "Swap in progress…" : swapButton}</button>
+      <ActionProgress actions={actions}/>
+      <button className="nt-button uni-primary" disabled={locked || !account || !!walletError || !validQuote || quoting} onClick={() => void save()}>{locked ? workflowProgress?.state === "review" ? "Confirm in EVM Wallet" : "Swap in progress…" : swapButton}</button>
       {(walletError || refreshError) && <details className="uni-quote-error"><summary>{walletError ? "Wallet unavailable · retrying automatically" : "Updates delayed · retrying automatically"}</summary><p>{walletError || refreshError}</p></details>}
       {busy && tracking.current && workflowProgress?.state === "pending" && <button className="uni-text-button" onClick={() => tracking.current?.abort()}>Pause tracking</button>}
-      {intent?.approval && !busy && <p className="uni-help">Your wallet will ask for token approval, then confirm the swap.</p>}
+      {approvalRequired && !locked && <p className="uni-help">Your wallet will ask for token approval, then confirm the swap.</p>}
       <details className="uni-details"><summary title="Price details, slippage, recipient and custom tokens">⚙ <span>Details & settings</span></summary><div className="uni-settings">
-        {intent && <><dl><dt>Minimum received</dt><dd>{formatUnits(BigInt(intent.quote.minimumOut), tokenOut.decimals)} {tokenOut.symbol}</dd><dt>Pool fee</dt><dd>{intent.quote.fee / 10000}%</dd><dt>Price impact</dt><dd>{intent.quote.priceImpactBps === null ? "Unavailable" : `${Number(intent.quote.priceImpactBps) / 100}%`}</dd><dt>Quote age</dt><dd>{Math.max(0, Math.floor((now - intent.quote.quotedAtMs) / 1000))} seconds</dd><dt>Token access</dt><dd>{intent.approval ? `Approve exactly ${amount} ${tokenIn.symbol}; unused allowance remains until spent or revoked.` : "No new approval needed"}</dd></dl><NetworkFees fees={intent.quote.networkFees} approvalRequired={!!intent.approval} chainId={chain}/>{intent.quote.routeWarnings.map((warning) => <p className="uni-muted" key={warning}>{warning}</p>)}</>}
-        <div className="uni-row"><label>Slippage %<input disabled={busy} inputMode="decimal" value={slippage} onChange={(e) => setSlippage(e.target.value)}/></label><label>Deadline · minutes<input disabled={busy} inputMode="decimal" value={minutes} onChange={(e) => setMinutes(e.target.value)}/></label></div>
-        <label>Account<select value={accountId} disabled={!accounts.length || busy} onChange={(e) => setAccountId(e.target.value)}>{accounts.length ? accounts.map((value) => <option key={value.accountId} value={value.accountId}>{value.accountId} · {short(value.address)}</option>) : <option value="main">{walletLoading ? "Loading accounts…" : "No account available"}</option>}</select></label>
-        <label>Recipient<input value={recipient} disabled={busy} spellCheck={false} onChange={(e) => setRecipient(e.target.value)} placeholder={account?.address ?? "Your wallet address"}/></label>
+        {quote && <><dl><dt>Minimum received</dt><dd>{formatUnits(BigInt(quote.minimumOut), tokenOut.decimals)} {tokenOut.symbol}</dd><dt>Route</dt><dd>Uniswap {quote.protocol.toUpperCase()}</dd><dt>Pool fee</dt><dd>{quote.fee / 10000}%</dd><dt>Price impact</dt><dd>{quote.priceImpactBps === null ? "Unavailable" : `${Number(quote.priceImpactBps) / 100}%`}</dd><dt>Quote age</dt><dd>{Math.max(0, Math.floor((now - quote.quotedAtMs) / 1000))} seconds</dd><dt>Token access</dt><dd>{approvalRequired ? `Approve exactly ${amount} ${tokenIn.symbol}; unused allowance remains until spent or revoked.` : approvalRequired === false ? "No new approval needed" : "Exact token access is reviewed in Wallet"}</dd></dl><NetworkFees fees={quote.networkFees} approvalRequired={!!approvalRequired} chainId={chain}/>{quote.routeWarnings.map((warning) => <p className="uni-muted" key={warning}>{warning}</p>)}</>}
+        <label>Pool version<select value={protocol} disabled={locked} onChange={(event) => setProtocol(event.target.value as "auto" | "v3" | "v4")}><option value="auto">Auto · compare V3 & V4</option><option value="v4">Uniswap V4</option><option value="v3">Uniswap V3</option></select></label>
+        <div className="uni-row"><label>Slippage %<input disabled={locked} inputMode="decimal" value={slippage} onChange={(e) => setSlippage(e.target.value)}/></label><label>Deadline · minutes<input disabled={locked} inputMode="decimal" value={minutes} onChange={(e) => setMinutes(e.target.value)}/></label></div>
+        <label>Account<select value={accountId} disabled={!accounts.length || locked} onChange={(e) => setAccountId(e.target.value)}>{accounts.length ? accounts.map((value) => <option key={value.accountId} value={value.accountId}>{value.accountId} · {short(value.address)}</option>) : <option value="main">{walletLoading ? "Loading accounts…" : "No account available"}</option>}</select></label>
+        <label>Recipient<input value={recipient} disabled={locked} spellCheck={false} onChange={(e) => setRecipient(e.target.value)} placeholder={account?.address ?? "Your wallet address"}/></label>
         <div className="uni-contracts"><p>Pay token: <code>{tokenIn.address ?? "Native ETH"}</code></p><p>Receive token: <code>{tokenOut.address ?? "Native ETH"}</code></p></div>
-        <label>Add token by contract<input value={custom} disabled={busy} spellCheck={false} onChange={(e) => setCustom(e.target.value)} placeholder="0x…"/></label><button className="nt-button nt-button--sm" disabled={busy || !account || !!walletError || !custom} onClick={() => void run(async () => { setProgress("Reading token details…"); const token = await customToken(walletReader(wallet, account!.accountId), chain, custom); setTokens((previous) => previous.some((value) => tokenKey(value) === tokenKey(token)) ? previous : [...previous, token]); setCustom(""); })}>Add token</button>
-        <p className="uni-muted">Direct Uniswap V3 pools. Verify custom token addresses. Quotes can change; your minimum received and deadline are enforced on-chain.</p>
+        <label>Add token by contract<input value={custom} disabled={locked} spellCheck={false} onChange={(e) => setCustom(e.target.value)} placeholder="0x…"/></label><button className="nt-button nt-button--sm" disabled={locked || !account || !!walletError || !custom} onClick={() => void run(async () => { setProgress("Reading token details…"); const token = await customToken(walletReader(wallet, account!.accountId), chain, custom); setTokens((previous) => previous.some((value) => tokenKey(value) === tokenKey(token)) ? previous : [...previous, token]); setCustom(""); })}>Add token</button>
+        <p className="uni-muted">Direct Uniswap V3 & V4 pools. Auto compares output across supported pools; it does not compare every possible route. Verify custom token addresses. Quotes can change; your minimum received and deadline are enforced on-chain.</p>
       </div></details>
-    </section>
+    </section>}
     {error && <div role="alert" className="uni-alert"><strong>We couldn't complete that step.</strong><p>Your saved swaps are below. Continue the same swap to check its status.</p><details><summary>Show details</summary><p>{error}</p></details></div>}
     {notice && <p role="status" className="uni-notice">{notice}</p>}
-    <section className="uni-activity"><header><h2 className="nt-subtitle">Your swaps</h2><span className="uni-muted" title="Balances and history update automatically" aria-label="Updates automatically">↻</span></header>{!records.length && <p className="uni-empty">Your swaps will appear here.</p>}
+    {tab === "swap" && <ActionHistory actions={actions} kind="swap" chain={chain} accountId={accountId}/>}
+    {tab === "swap" && records.length > 0 && <section className="uni-activity"><header><h2 className="nt-subtitle">Earlier swaps</h2><span className="uni-muted" title="Balances and history update automatically" aria-label="Updates automatically">↻</span></header>{!records.length && <p className="uni-empty">Your swaps will appear here.</p>}
       {records.map((record) => {
         try {
           const saved = savedIntent(record), op = effectiveOperation(record, "swap"), approval = effectiveOperation(record, "approval"), received = receivedTokenAtoms(record);
@@ -292,14 +322,14 @@ export function App() {
             <div className="uni-saved-title"><strong>{displayAmount(saved.quote.amountIn, saved.quote.tokenIn.decimals)} {saved.quote.tokenIn.symbol}<span className="uni-arrow"> → </span>{saved.quote.tokenOut.symbol}</strong><span className="uni-status">{complete ? "✓ Complete" : NETWORKS[saved.quote.chainId as Chain].name}</span></div>
             {!complete && <p className="uni-saved-state">{label}</p>}{complete && received !== null && <p>Received {displayAmount(received, saved.quote.tokenOut.decimals)} {saved.quote.tokenOut.symbol}</p>}
             {!complete && approvalConfirmed(record) && record.approval_request_id && <p className="uni-muted">Token approved. {saved.executionMode !== "human" ? "The requesting app controls the next step." : needsFreshQuote ? "Update the price to continue your swap." : "Continue to confirm the swap in your wallet."}</p>}
-            {saved.executionMode !== "human" ? <p className="uni-muted">{saved.executionMode === "agent" ? "Managed by your agent." : "Managed by the requesting app."}</p> : !complete && <button className="nt-button uni-continue" disabled={busy} onClick={() => void run(() => needsFreshQuote ? retryWithFreshQuote(record) : proceed(record))}>{activeId === record.id ? "In progress…" : needsFreshQuote ? terminal ? "Try swap again" : "Refresh swap" : "Continue swap"}</button>}
+            {saved.executionMode !== "human" ? <p className="uni-muted">{saved.executionMode === "agent" ? "Managed by your agent." : "Managed by the requesting app."}</p> : !complete && <button className="nt-button uni-continue" disabled={locked} onClick={() => void run(() => needsFreshQuote ? retryWithFreshQuote(record) : proceed(record))}>{activeId === record.id ? "In progress…" : needsFreshQuote ? terminal ? "Try swap again" : "Refresh swap" : "Continue swap"}</button>}
             {op?.transactionHash && <a href={`${NETWORKS[saved.quote.chainId as Chain].explorer}${op.transactionHash}`} target="_blank" rel="noreferrer">View transaction ↗</a>}
             <details className="uni-details"><summary>Transaction details</summary><div className="uni-settings"><p>Minimum {formatUnits(BigInt(saved.quote.minimumOut), saved.quote.tokenOut.decimals)} {saved.quote.tokenOut.symbol}</p><p>Recipient <code>{saved.quote.recipient}</code></p><p>Saved status: {record.phase.replaceAll("_", " ")}</p>{op?.message && <p>{op.message}</p>}{approval?.message && <p>{approval.message}</p>}{originalApproval?.transactionHash && <a href={`${NETWORKS[saved.quote.chainId as Chain].explorer}${originalApproval.transactionHash}`} target="_blank" rel="noreferrer">View token approval ↗</a>}{[originalApproval?.replacementTransactionHash, originalSwap?.replacementTransactionHash].filter(Boolean).map((hash) => <a key={hash} href={`${NETWORKS[saved.quote.chainId as Chain].explorer}${hash}`} target="_blank" rel="noreferrer">View replacement transaction ↗</a>)}<NetworkFees fees={saved.quote.networkFees} approvalRequired={!!saved.approval} chainId={saved.quote.chainId}/><pre>{JSON.stringify({ id: record.id, approvalRequest: record.approval_request_json ? JSON.parse(record.approval_request_json) : null, swapRequest: JSON.parse(record.swap_request_json) }, null, 2)}</pre></div></details>
           </article>;
         } catch (e) { return <article className="nt-panel uni-saved" key={record.id}><strong>Saved swap needs attention</strong><details><summary>Show details</summary><p>{errorText(e)}</p></details></article>; }
-      })}{historyCursor !== null && <button className="uni-text-button" disabled={busy} onClick={() => void run(loadOlder)}>Load older swaps</button>}
-    </section>
-    <footer className="uni-muted">Ethereum & Arbitrum · An independent interface for Uniswap V3</footer>
+      })}{historyCursor !== null && <button className="uni-text-button" disabled={locked} onClick={() => void run(loadOlder)}>Load older swaps</button>}
+    </section>}
+    <footer className="uni-muted">Ethereum & Arbitrum · An independent interface for Uniswap V3 & V4</footer>
   </div></main>;
 }
 const root = document.getElementById("root"); if (!root) throw new Error("Missing app root"); createRoot(root).render(<App/>);

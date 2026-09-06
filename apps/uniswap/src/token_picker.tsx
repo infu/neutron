@@ -3,7 +3,7 @@ import { evmTokenIcon, evmTokenInitials } from "neutron-tools/src/evm_token_icon
 import type { Token } from "./swap.ts";
 const keyOf = (token: Token) => token.address?.toLowerCase() ?? "native";
 
-function TokenIcon({ token }: { token: Token }) {
+export function TokenIcon({ token }: { token: Token }) {
   const source = evmTokenIcon(token.chainId, token.address);
   return source ? <img className="uni-token-icon" src={source} alt=""/> : <span className="uni-token-icon uni-token-initials" aria-hidden="true">{evmTokenInitials(token.symbol)}</span>;
 }

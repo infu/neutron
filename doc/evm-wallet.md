@@ -248,24 +248,22 @@ across uncertain replies. Where a minter outcome cannot be proven, it remains
 unresolved rather than generating a fresh withdrawal. See
 [IC Wallet](../apps/wallet/README.md).
 
-Uniswap compares direct V3 pools on Ethereum and Arbitrum, using QuoterV2 and
-SwapRouter02. Its install-reviewed tool declaration connects it to EVM Wallet
-automatically; quoting compares pools over browser RPC and shows
-the result while separate fee estimates finish. It saves the quoted minimum output, recipient and deadline,
-requests an exact ERC20 approval when needed, then requests the swap through
-EVM Wallet. Native ETH wrapping, output unwrapping and refunds are part of the
-router calldata. Numeric network-fee observations are refreshed separately from
-the saved quote and intent; an unavailable estimate is not replaced with the
-Quoter's execution-gas number. Approval and swap are separate transactions.
-Ordinary ERC20 allowances have no permit nonce, signature domain or expiry;
-they last until spent or changed, independently of the swap deadline. V4, Permit2,
-multi-hop/split routing and liquidity provision are outside this initial route.
-`uniswap_swap_v1` drives a complete tool-requested swap through quote, approval,
-submission and receipt tracking. The caller retains one swap ID for retries;
-expired unsigned quotes refresh with the same inputs and existing allowance.
-Pending or uncertain submissions retain their original Wallet request IDs.
-Legacy root-owned intents still use `uniswap_next_action_v1`.
-See [Uniswap](../apps/uniswap/README.md).
+Uniswap compares direct V3 and V4 pools on Ethereum and Arbitrum, using
+QuoterV2/SwapRouter02 and V4 Quoter/Universal Router 2.1.1 respectively. It also
+manages V3 and V4 liquidity positions: mint in an initialized pool, inspect, add,
+remove, collect and close. Pool reads and authoritative position verification use
+Wallet browser RPC. V4 NFT discovery uses browser Blockscout hints, combined with
+saved/imported IDs; ownership and state are verified onchain.
+
+`uniswap_swap_v2` and `uniswap_manage_liquidity_v1` drive complete durable flows.
+Each operation keeps one ID and its original inputs for retries. Exact ERC20 and
+Permit2 approvals advance through confirmation to the final action, which alone
+can complete the requested swap or position change. Ordinary ERC20 allowances
+remain until spent or changed; Permit2 approvals have an explicit expiry.
+Every fresh effect receives the same human or Agent Wallet review. Existing V3
+swap tools and saved intents remain compatible. No Kernel code is needed for
+routing or liquidity management. See [Uniswap](../apps/uniswap/README.md) and
+[the V4 integration research](./uniswap-v4-liquidity.md).
 
 ## Verification And Release
 

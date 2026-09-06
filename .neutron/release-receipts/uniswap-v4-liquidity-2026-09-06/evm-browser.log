@@ -1,0 +1,10 @@
+
+> neutron-evm-wallet@1.0.0 test:browser
+> node test/browser/sandbox.mjs
+
+{
+  "passed": true,
+  "checks": 22,
+  "output": "/tmp/neutron-evm-wallet-sandbox-VGEzyL",
+  "failure": null
+}

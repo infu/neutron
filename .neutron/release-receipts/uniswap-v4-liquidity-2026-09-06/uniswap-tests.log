@@ -1,0 +1,253 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/uniswap/test/swap_routes.test.ts:
+(pass) unified swap canonicalizes exact owner inputs and preserves default validity [2.00ms]
+(pass) auto compares both protocols and chooses the larger atomic output [11.00ms]
+(pass) auto retains the available version and reports the failed comparison [3.00ms]
+(pass) explicit V4 hook pool is not replaced by auto routing
+(pass) both route versions produce an exact approval sequence ending in the swap [5.00ms]
+(pass) liquidity tool canonicalization preserves zero hard budgets and original range
+(pass) tool continuation omits full receipts and calldata even from a large saved action
+
+apps/uniswap/test/package.test.ts:
+(pass) Uniswap owns its managed journal and declares exact public Wallet access [12.00ms]
+(pass) the packaged tile, resident service and managed-memory root are installable [337.00ms]
+(pass) journal methods emit schemas that preserve typed identity and optional operation evidence [233.00ms]
+
+apps/uniswap/test/agent_wallet.test.ts:
+(pass) Agent account and position contract reads dispatch together using their install grants [2.00ms]
+(pass) Agent provider effects serialize while installed reads continue, and a rejected effect releases the queue [2.00ms]
+(pass) queued Agent effects never dispatch after context cancellation
+(pass) queued Agent effects never dispatch after request cancellation [1.00ms]
+
+apps/uniswap/test/service.test.ts:
+(pass) Uniswap resident registers every tool through the real SDK validator [323.00ms]
+(pass) resident Uniswap handlers satisfy wallet and managed-journal contracts in an isolated process [1430.00ms]
+
+apps/uniswap/test/history.test.ts:
+(pass) large valid history retries smaller pages at the same cursor and preserves every record byte [210.00ms]
+(pass) the page cursor remains anchored when newer swaps arrive between pages [46.00ms]
+(pass) store page reads one page while list follows the same lossless cursor contract [43.00ms]
+(pass) single oversized records fail explicitly without skipping their cursor [79.00ms]
+(pass) known aggregate response-size errors halve only the current page request
+(pass) unrelated failures and lookalike size messages are not retried
+(pass) invalid page sizes and malformed or nonprogressing responses cannot loop or truncate history [1.00ms]
+
+apps/uniswap/test/workflow.test.ts:
+(pass) one continuation approves, waits, requests the swap and reports its receipt [4.00ms]
+(pass) a lost swap reply is reconciled before any approval or swap is requested [1.00ms]
+(pass) expired approved swaps return to fresh quote review without another transaction [1.00ms]
+(pass) an expired but submitted swap is tracked without replacing its intent [2.00ms]
+(pass) pausing after approval prevents automatic swap dispatch [1.00ms]
+(pass) a declined approval stops and retains the saved swap for an explicit retry [1.00ms]
+
+apps/uniswap/test/action_workflow.test.ts:
+(pass) the complete action runs every approval in order and verifies the final transaction receipt [17.00ms]
+(pass) a crash after persisting requested but before send resumes the same exact Wallet request [4.00ms]
+(pass) a lost reply retries the original ID while valid and never renews an expired ambiguous dispatch [2.00ms]
+(pass) an old prepared status poll cannot erase a later unresolved dispatch and refresh its expired intent [2.00ms]
+(pass) expired known-unsigned plans freeze the predecessor and reuse already confirmed allowances [7.00ms]
+(pass) changed input, caller, execution mode and signing identity cannot resume a saved action [2.00ms]
+(pass) successful approval alone cannot complete an action whose final transaction is rejected [3.00ms]
+(pass) a claimed successful receipt with different transaction calldata stays incomplete [2.00ms]
+(pass) authenticated replacements complete only when their sender, destination, data and value match [2.00ms]
+(pass) confirmed NFT mint receipts retain discoverable position IDs without indexer availability [4.00ms]
+(pass) pause is forwarded to the active public Wallet review and leaves the exact dispatch recoverable [1.00ms]
+(pass) concurrent continuations keep identical deterministic requests and preserve later CAS progress [7.00ms]
+(pass) receipt observations explicitly omit unrelated log payloads instead of duplicating them in self-call metadata [2.00ms]
+
+apps/uniswap/test/v4_swap.test.ts:
+(pass) V4 on chain 1 > native input stays native, pays the explicit recipient, and refunds unused ETH [3.00ms]
+(pass) V4 on chain 1 > token to native plans both exact approvals and takes ETH directly [3.00ms]
+(pass) V4 on chain 42161 > native input stays native, pays the explicit recipient, and refunds unused ETH [1.00ms]
+(pass) V4 on chain 42161 > token to native plans both exact approvals and takes ETH directly [2.00ms]
+(pass) UR2.1.1 action calldata matches the independently pinned SDK encoder [6.00ms]
+(pass) existing sufficient approvals are reused and expiring Permit2 allowances are renewed [2.00ms]
+(pass) explicit hook pool retains its exact key and hook bytes without imposing V3 fee tiers [1.00ms]
+(pass) V4 recognizes native ETH and wrapped ETH as different currencies [1.00ms]
+(pass) best output wins with deterministic fee tie break and failed candidates remain visible [2.00ms]
+(pass) state read failure preserves a successful quote and reports unavailable price impact
+(pass) price impact removes the direction-specific protocol fee before comparing pool output [2.00ms]
+(pass) empty pools and zero or overflowing output cannot produce an executable quote [2.00ms]
+(pass) expired or mismatched serialized quote fails before approval reads [1.00ms]
+(pass) pool validation follows V4 protocol bounds and exact currency ordering [1.00ms]
+
+apps/uniswap/test/fees.test.ts:
+(pass) both chains estimate exact approval and swap separately and sum wei beyond Number precision [3.00ms]
+(pass) unavailable swap simulation retains numeric approval and does not manufacture total from Quoter gas
+(pass) native swaps and confirmed approvals estimate only the remaining swap [1.00ms]
+(pass) Arbitrum execution-only prices do not become a posting-inclusive total
+(pass) approval and swap fee observations start together without waiting for an unrelated read [3.00ms]
+(pass) provider absence, incompatible results and mismatched scope remain unavailable without effect calls [1.00ms]
+(pass) refresh observes changed fees without altering the quoted minimum, deadline or calldata [1.00ms]
+(pass) old or malformed saved fee annotations render unavailable instead of being treated as zero
+
+apps/uniswap/test/swap.test.ts:
+(pass) Uniswap deployment on chain 1 > native input funds exactly one swap and returns unused ETH [3.00ms]
+(pass) Uniswap deployment on chain 1 > native output is received by router then unwrapped to the requested recipient [1.00ms]
+(pass) Uniswap deployment on chain 1 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) Uniswap deployment on chain 1 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) Uniswap deployment on chain 1 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) Uniswap deployment on chain 1 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) Uniswap deployment on chain 42161 > native input funds exactly one swap and returns unused ETH [1.00ms]
+(pass) Uniswap deployment on chain 42161 > native output is received by router then unwrapped to the requested recipient [1.00ms]
+(pass) Uniswap deployment on chain 42161 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) Uniswap deployment on chain 42161 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) Uniswap deployment on chain 42161 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) Uniswap deployment on chain 42161 > token input allowance %s only requests an exact approval when needed [1.00ms]
+(pass) quotes choose the greatest output, break ties by fee, and retain failed-pool warnings [1.00ms]
+(pass) independent fee tiers share one read round and retain each failure [1.00ms]
+(pass) price impact uses token ordering and the pool fee in integer arithmetic [1.00ms]
+(pass) a missing impact read is visible and does not discard a successful quote [1.00ms]
+(pass) all failed pools or zero-output pools fail before any wallet transaction is prepared [1.00ms]
+(pass) slippage floors the minimum atom count and rejects a zero minimum [1.00ms]
+(pass) expired quotes, changed routes, and changed slippage fail before allowance reads [1.00ms]
+(pass) a failed allowance read cannot be treated as zero or enough allowance [2.00ms]
+(pass) only own supported network IDs and their matching token addresses are accepted
+(pass) input validation rejects malformed and overflowing amounts, expired deadlines, and invalid slippage
+(pass) display amounts become exact atomic units without floating point or excess precision [1.00ms]
+(pass) numeric strings reject trailing line terminators instead of accepting a regex prefix
+(pass) slippage percentages become exact basis points and reject invalid precision or trailing characters
+(pass) custom metadata is read on the selected chain; address remains authoritative if symbol fails [1.00ms]
+
+apps/uniswap/test/provider_flow.test.ts:
+(pass) one provider call persists exact public Wallet approvals and waits for both receipts before completing [12.00ms]
+(pass) an expired approved 3 USDC quote creates one immutable successor and resumes that successor without approving again [10.00ms]
+(pass) a lost swap reply returns a recoverable same-ID flow and retry reconciles its receipt without resending [4.00ms]
+(pass) cancellation while a swap is unknown or preparing preserves its original request through quote expiry [8.00ms]
+(pass) a changed exact Wallet review returns review and requires a new invocation using the same request [6.00ms]
+(pass) a lost retry after prepared review cannot renew an expired flow using stale prepared evidence [8.00ms]
+(pass) flow ownership and changed arguments reject before any Wallet read, new preparation or effect [5.00ms]
+
+apps/uniswap/test/read_connection.test.ts:
+(pass) opening Wallet reads available accounts without a runtime permission request [1.00ms]
+(pass) an empty Wallet and a temporary read error remain distinguishable for automatic recovery
+
+apps/uniswap/test/approval_plan.test.ts:
+(pass) exact ERC20 approvals > reuses adequate allowance %s [1.00ms]
+(pass) exact ERC20 approvals > reuses adequate allowance %s
+(pass) exact ERC20 approvals > preserves USDT reset order for allowance %s
+(pass) exact ERC20 approvals > preserves USDT reset order for allowance %s
+(pass) exact ERC20 approvals > ordinary tokens replace a deficient allowance directly ({"chainId":"1","token":"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48","symbol":"USDC"}) [1.00ms]
+(pass) exact ERC20 approvals > ordinary tokens replace a deficient allowance directly ({"chainId":"1","token":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","symbol":"WETH"})
+(pass) exact ERC20 approvals > ordinary tokens replace a deficient allowance directly ({"chainId":"42161","token":"0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9","symbol":"USDT0"})
+(pass) exact ERC20 approvals > ordinary tokens replace a deficient allowance directly ({"chainId":"1","token":"0x1111111111111111111111111111111111111111","symbol":"USDT"})
+(pass) exact ERC20 approvals > ordinary tokens replace a deficient allowance directly ({"chainId":"42161","token":"0xdAC17F958D2ee523a2206206994597C13D831ec7","symbol":"USDT"})
+(pass) exact ERC20 approvals > a zero amount needs no RPC read
+(pass) exact ERC20 approvals > rejects invalid uint256 -1 before reading
+(pass) exact ERC20 approvals > rejects invalid uint256 1.5 before reading
+(pass) exact ERC20 approvals > rejects invalid uint256 1e6 before reading
+(pass) exact ERC20 approvals > rejects invalid uint256 01 before reading
+(pass) exact ERC20 approvals > rejects invalid uint256 3
+ before reading
+(pass) exact ERC20 approvals > rejects invalid uint256 115792089237316195423570985008687907853269984665640564039457584007913129639936 before reading
+(pass) Permit2 allowance planning > queries the exact owner, token and downstream spender and reuses valid approval [1.00ms]
+(pass) Permit2 allowance planning > insufficient or expiring allowance produces one exact authorization
+(pass) Permit2 allowance planning > insufficient or expiring allowance produces one exact authorization
+(pass) Permit2 allowance planning > insufficient or expiring allowance produces one exact authorization
+(pass) Permit2 allowance planning > preserves maximum uint160 amount and uint48 expiration without truncation
+(pass) Permit2 allowance planning > rejects unusable authorization before RPC ({"amount":"1461501637330902918203684832716283019655932542976"})
+(pass) Permit2 allowance planning > rejects unusable authorization before RPC ({"expiration":"281474976710656"})
+(pass) Permit2 allowance planning > rejects unusable authorization before RPC ({"expiration":"-1"})
+(pass) Permit2 allowance planning > rejects unusable authorization before RPC ({"expiration":"1800000600.5"})
+(pass) Permit2 allowance planning > rejects unusable authorization before RPC ({"expiration":"1800000000"})
+(pass) Permit2 allowance planning > a zero amount needs no RPC read
+(pass) Permit2 allowance planning > shared V4 plan sets ERC20→Permit2 then Permit2→manager, omitting zero amounts
+
+apps/uniswap/test/controller.test.ts:
+(pass) independent Agent result verification > a Wallet-proven approval replacement is verified even when the original transaction is no longer visible [5.00ms]
+(pass) independent Agent result verification > a Wallet-proven swap replacement is verified even when the original transaction is no longer visible [3.00ms]
+(pass) independent Agent result verification > Agent replacement claims require both exact original binding and a separately proven replacement relationship [2.00ms]
+(pass) independent Agent result verification > replacement proofs for a different caller, request, chain or hash cannot be recorded [3.00ms]
+(pass) independent Agent result verification > a proven Agent replacement still needs the exact saved execution and a successful receipt [7.00ms]
+(pass) independent Agent result verification > the original canonical receipt wins over an unproved Agent replacement claim [1.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose from differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose to differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > rejects a public transaction whose data differs despite a claimed successful receipt
+(pass) independent Agent result verification > rejects a public transaction whose valueWei differs despite a claimed successful receipt [1.00ms]
+(pass) independent Agent result verification > the SDK binds independent evidence to the requested chain and transaction hash [2.00ms]
+(pass) independent Agent result verification > the independently read receipt replaces a fake claimed receipt and status
+(pass) independent Agent result verification > a visible pending transaction clears a fake claimed receipt without declaring completion [1.00ms]
+(pass) independent Agent result verification > missing public transactions and claims without a hash stay unresolved [1.00ms]
+(pass) independent Agent result verification > a wallet request match of %s cannot complete an otherwise identical confirmed transaction [1.00ms]
+(pass) independent Agent result verification > a wallet request match of %s cannot complete an otherwise identical confirmed transaction
+(pass) independent Agent result verification > an earlier identical transaction relabeled as the current request remains unresolved [1.00ms]
+(pass) independent Agent result verification > an approval binding comes from its saved caller and approval ID rather than the swap ID or claimed operation number [1.00ms]
+(pass) independent Agent result verification > saved Agent intents without a caller identity do not invent an origin [1.00ms]
+(pass) the backend adapter omits absent Candid input fields and recovers a lost begin reply using the same wallet request [48.00ms]
+(pass) the backend adapter sends typed journal identity without absent operation evidence and accepts direct Kernel results [24.00ms]
+(pass) approval and swap receipts fit the real journal transport while preserving every output-token log [32.00ms]
+(pass) list and get use generated method schemas and normalize omitted output options [37.00ms]
+(pass) lost wallet replies retain the requested phase, then reload reconciles without resending [2.00ms]
+(pass) a missing status after a lost reply retries exactly the saved wallet request ID and calldata [2.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: Insufficient native balance for maximum gas fee [1.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: Token transfer simulation reverted: insufficient token balance [2.00ms]
+(pass) wallet estimation failure preserves completed approval and reconciles the same swap: RPC providers disagree; transaction fee estimate is unavailable [1.00ms]
+(pass) confirmed approvals are skipped while swap submission waits for their successful receipt [1.00ms]
+(pass) a successful exact replacement approval unlocks the saved swap without repeating approval [3.00ms]
+(pass) a pending approval replacement is observed through inclusion without repeating either transaction [6.00ms]
+(pass) a pending swap replacement is observed through inclusion without repeating either transaction [6.00ms]
+(pass) a reverted exact approval replacement remains reverted after reload and cannot complete the step [3.00ms]
+(pass) a reverted exact swap replacement remains reverted after reload and cannot complete the step [4.00ms]
+(pass) cancelled or changed approval replacements never satisfy the frozen request [16.00ms]
+(pass) cancelled or changed swap replacements never satisfy the frozen request [17.00ms]
+(pass) missing replacement evidence stays unresolved and mismatched hashes or networks are never saved [4.00ms]
+(pass) saved replacement proof is bound to the original linkage and untrusted claims cannot inject it
+(pass) rejected or reverted wallet operations remain terminal for that saved request [2.00ms]
+(pass) expired saved swaps reconcile existing chain work but cannot dispatch a fresh transaction [1.00ms]
+(pass) human execution does not forward an Agent workflow into the wallet [1.00ms]
+(pass) replacement signing fingerprints, namespaces, addresses, or missing accounts stop before status or dispatch [1.00ms]
+(pass) wallet operations are bound to saved request, account, network, address, and transaction kind [1.00ms]
+(pass) a mismatched status is never persisted, even if it claims success
+(pass) modified saved swap calldata and exact approval amounts fail before dispatch [1.00ms]
+(pass) received output counts only output-token Transfer logs to the requested recipient [1.00ms]
+(pass) the wallet reader surfaces a different observation block instead of calculating a misleading price impact [1.00ms]
+
+apps/uniswap/test/agent_workflow.test.ts:
+(pass) Agent continuation checks the original swap before any approval and does not call root tools itself [3.00ms]
+(pass) Agent receives exact approval then swap requests and only chain evidence can complete the swap [13.00ms]
+(pass) an expired 3 USDC approval is verified and reused by a fresh quote without another approval [2.00ms]
+(pass) an expired lost swap reply remains tied to the original pending request [1.00ms]
+(pass) a transaction not yet visible is a same-request wait, not a failed workflow or fresh quote [1.00ms]
+(pass) in-flight preparation remains pending even after expiry [1.00ms]
+(pass) caller mismatch, wrong request identity and false Wallet binding cannot advance a swap [1.00ms]
+(pass) a declined request stays stopped and an unneeded approval is never invented [1.00ms]
+
+apps/uniswap/test/positions.test.ts:
+(pass) authoritative liquidity positions > V3 uses NFT fee snapshots, preserves stored principal separately and pins every read [6.00ms]
+(pass) authoritative liquidity positions > V4 decodes negative packed ticks and uses manager ownership plus NFT ID salt for fee reads [4.00ms]
+(pass) authoritative liquidity positions > zero-liquidity V3 retains collectible tokens; V4 does not invent accrued fees [3.00ms]
+(pass) authoritative liquidity positions > V4 preserves the dynamic PoolKey fee instead of replacing it with the current LP fee [2.00ms]
+(pass) authoritative liquidity positions > rejects a foreign owner before reading pool data and rejects mixed block observations [2.00ms]
+(pass) authoritative liquidity positions > fee growth wraps at uint256 rather than clamping negative differences
+(pass) keyless position discovery > queries exact manager/owner, follows scalar cursor and strips all index metadata
+(pass) keyless position discovery > rejects wrong collection, owner, unsafe integer cursor and repeated pages [1.00ms]
+(pass) keyless position discovery > V3 enumeration pages quickly and skips durable references transferred away [6.00ms]
+(pass) keyless position discovery > burned saved references do not poison discovery of remaining positions, while RPC failures stay visible [10.00ms]
+(pass) keyless position discovery > imports between pages cannot shift the saved-reference cursor or falsely satisfy the owner count [6.00ms]
+(pass) keyless position discovery > V4 pages retain unprocessed index IDs, merge known IDs and verify count without truncation [7.00ms]
+(pass) keyless position discovery > index failure preserves known positions and reports incomplete; zero balance never contacts index [6.00ms]
+(pass) keyless position discovery > cursor is account bound and cancellation propagates rather than looking like discovery failure [2.00ms]
+
+apps/uniswap/test/liquidity.test.ts:
+(pass) liquidity contract plans > V4 mint fits explicit budgets including slippage, sorted orientation and custom recipient [34.00ms]
+(pass) liquidity contract plans > native V4 mint funds the exact maximum and refunds to Wallet [23.00ms]
+(pass) liquidity contract plans > V4 increase handles accrued-fee credits in either currency with CLOSE_CURRENCY [25.00ms]
+(pass) liquidity contract plans > V4 partial removal binds exact units, minimum outputs, currencies and recipient [2.00ms]
+(pass) liquidity contract plans > V4 collect leaves liquidity intact; empty close burns NFT [4.00ms]
+(pass) liquidity contract plans > V4 hook address and hook data survive mint/increase/remove [53.00ms]
+(pass) liquidity contract plans > V3 native add uses wrapped pool currency, exact ETH value and refund [2.00ms]
+(pass) liquidity contract plans > V3 authored encoding matches the SDK oracle for mint, increase and native refunds [16.00ms]
+(pass) liquidity contract plans > V3 removal pays principal and fees in one transaction; full close burns after collect [3.00ms]
+(pass) liquidity contract plans > V3 empty position collection previews stored owed funds when fresh fees are zero
+(pass) liquidity contract plans > V3 optional native removal unwraps and sweeps to the same recipient [2.00ms]
+(pass) liquidity contract plans > both networks use their actual PositionManager [40.00ms]
+(pass) liquidity contract plans > rejects changed owner/pool/range, mismatched currencies and oversized removal
+(pass) exact liquidity math > full-range ticks align correctly for positive and negative extremes
+(pass) exact liquidity math > V4 fitted liquidity stays within both budgets across slippage and asymmetric inputs [264.00ms]
+(pass) exact liquidity math > single-sided out-of-range mint does not require the unused token [2.00ms]
+
+ 212 pass
+ 0 fail
+ 1613 expect() calls
+Ran 212 tests across 17 files. [4.50s]

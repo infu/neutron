@@ -24,8 +24,14 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
 - **Send** prepares an exact native transfer, selected ERC-20 transfer or contract
   call. Review shows the amount, network, recipient or spender, requesting app,
   and maximum network fee before confirmation. Calldata, nonce, simulation and
-  other technical fields start collapsed. Supported Uniswap V3 router calls
+  other technical fields start collapsed. Supported Uniswap V3 and V4 router calls
   show the exact input amount and enforced minimum output from their calldata.
+  V3/V4 position calls describe minting, adding, removing, collecting or closing,
+  with position IDs, input maxima, output minima and recipients. Permit2 approvals
+  show their exact token, spender, amount and expiry. Existing-position calldata
+  that contains only an NFT ID labels token0/token1 amounts as atomic units; it
+  does not invent token identities. Unrecognized call sequences keep the generic
+  contract review with complete original bytes.
   Known ERC-20 selectors
   are decoded as hints, not proof of the called contract's behavior. Recognized
   `approve`, `transfer` and `transferFrom` calls show the observed token balance

@@ -22,6 +22,8 @@ import { atomicAmount, parseBalance, parseOperation } from "../src/data.ts";
 import { assertLocalAccount } from "../src/local_intent.ts";
 import { browserEvmRpc } from "../src/browser_rpc.ts";
 import { encodeFunctionData, erc20Abi, parseAbi } from "viem";
+import { mergeEvmAssets } from "neutron-tools/src/evm_assets.js";
+import { presentOperation } from "../src/presentation.ts";
 
 let rpc: ReturnType<typeof spyOn<typeof browserEvmRpc, "request">>;
 beforeEach(() => {
@@ -459,6 +461,40 @@ test("Agent swap review uses the owner dialog's decoded input and minimum output
     },
   });
   await expect(handleHumanEffect("transaction", swapRequest, ctx)).rejects.toThrow("Review inspected");
+});
+test("Agent liquidity and Permit2 reviews carry the same limits and details as the owner dialog", async () => {
+  const manager = "0xc36442b4a4522e871399cd717abdd847ab11fe88";
+  const usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+  const weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+  const recipient = `0x${"22".repeat(20)}` as const;
+  const abi = parseAbi([
+    "function mint((address token0,address token1,uint24 fee,int24 tickLower,int24 tickUpper,uint256 amount0Desired,uint256 amount1Desired,uint256 amount0Min,uint256 amount1Min,address recipient,uint256 deadline) params) payable",
+    "function approve(address token,address spender,uint160 amount,uint48 expiration)",
+  ]);
+  for (const candidate of [
+    { to: manager, data: encodeFunctionData({ abi, functionName: "mint", args: [{ token0: usdc, token1: weth, fee: 3000, tickLower: -120, tickUpper: 120, amount0Desired: 3_000_000n, amount1Desired: 10n ** 15n, amount0Min: 2_970_000n, amount1Min: 99n * 10n ** 13n, recipient, deadline: 2_000_000_000n }] }) },
+    { to: "0x000000000022d473030f116ddee9f6b43ac78ba3", data: encodeFunctionData({ abi, functionName: "approve", args: [usdc, manager, 3_000_000n, 2_000_000_000] }) },
+  ]) {
+    const effect = { ...request, ...candidate, valueWei: "0" };
+    const saved = wire({ intent: effectIntent("transaction", effect), prepared_transaction: { ...wire().ok.prepared_transaction, ...candidate, value: "0" } });
+    const ownerSummary = presentOperation(parseOperation(saved.ok), mergeEvmAssets([]));
+    const ctx = context(async method => {
+      expect(method).toBe("evm_wallet_prepare_browser_v1");
+      return saved;
+    }, {
+      agentMode: true,
+      requestApproval: async review => {
+        expect(review).toMatchObject({ summary: {
+          title: ownerSummary.title, amount: ownerSummary.amount, parties: ownerSummary.parties,
+          liquidity: ownerSummary.liquidity ?? null,
+          permit2Approval: ownerSummary.permit2Approval ?? null,
+          advancedDetails: ownerSummary.advancedDetails ?? [],
+        }, transaction: { data: candidate.data, valueWei: "0" } });
+        throw new Error("Review inspected");
+      },
+    });
+    await expect(handleHumanEffect("transaction", effect, ctx)).rejects.toThrow("Review inspected");
+  }
 });
 test("Agent review changes return unsigned and need a new call with a fresh approval", async () => {
   let approvals = 0;

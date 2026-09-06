@@ -79,6 +79,53 @@
   .uni-saved a { color: var(--nt-accent); font-size: 12px; text-decoration: none; }
   .uni-continue { width: 100%; border: 0; border-radius: 12px; background: #382735; color: #ffc4e6; padding: 12px; font-size: 13px; }
   .uni-shell > footer { text-align: center; font-size: 11px; }
+  .uni-tabs { display: flex; padding: 4px; gap: 4px; background: #19191f; border: 1px solid #2b2b34; border-radius: 16px; }
+  .uni-tabs button { flex: 1; padding: 12px; background: transparent; border: 0; border-radius: 12px; color: var(--nt-text-muted); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .uni-tabs button[aria-current="page"] { background: #302431; color: #ffb8df; }
+  .uni-tabs button:disabled { cursor: default; }
+  .uni-action-progress, .uni-positions { display: grid; gap: 14px; min-width: 0; }
+  .uni-step-list { display: grid; gap: 11px; padding: 0 8px; margin: 0; list-style: none; }
+  .uni-step-list li { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--nt-text-muted); }
+  .uni-step-list li > span:first-child { display: inline-grid; place-items: center; width: 23px; height: 23px; flex: 0 0 23px; border-radius: 50%; background: #302832; font-size: 11px; }
+  .uni-step-list li > span:nth-child(2) { flex: 1; }
+  .uni-step-list li small { font-size: 10px; text-align: right; }
+  .uni-step-list li.is-complete { color: #9edac0; }
+  .uni-step-list li.is-complete > span:first-child { background: #243b32; }
+  .uni-positions > header { padding: 0 3px; }
+  .uni-positions h2, .uni-liquidity-editor h2 { margin: 0; font-size: 17px; }
+  .uni-new-position { padding: 10px 12px; border: 0; border-radius: 12px; background: #382735; color: #ffc4e6; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .uni-position-empty { padding: 34px 18px; text-align: center; border: 1px solid #303039; border-radius: 22px; background: #15151b; }
+  .uni-position-empty > span { display: block; color: var(--nt-accent); font-size: 34px; margin-bottom: 15px; }
+  .uni-position-empty h3 { font-size: 16px; margin: 0 0 8px; }
+  .uni-position-card { display: grid; gap: 12px; padding: 18px; border: 1px solid #303039; border-radius: 20px; background: #17171e; min-width: 0; }
+  .uni-position-pair { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+  .uni-position-heading { display: flex; align-items: center; gap: 9px; }
+  .uni-pair-icons { display: flex; flex: 0 0 auto; }
+  .uni-pair-icons .uni-token-icon:last-child { margin-left: -8px; outline: 2px solid #17171e; }
+  .uni-version { display: inline-block; margin-left: 8px; color: var(--nt-text-muted); font-size: 11px; font-weight: 400; }
+  .uni-range-status { font-size: 10px; color: #c6acb5; padding: 5px 7px; border-radius: 8px; background: #30242b; white-space: nowrap; }
+  .uni-range-status.is-active { color: #a2dec6; background: #21332c; }
+  .uni-position-tokens { display: grid; gap: 7px; padding: 8px 0; font-size: 21px; letter-spacing: -.3px; overflow-wrap: anywhere; }
+  .uni-position-tokens span { font-size: 14px; font-weight: 400; color: var(--nt-text-muted); }
+  .uni-collectible { display: grid; gap: 5px; margin: 0; padding: 12px; background: #212127; border-radius: 11px; font-size: 11px; color: var(--nt-text-muted); }
+  .uni-collectible span { font-size: 12px; color: #ddd2df; overflow-wrap: anywhere; }
+  .uni-position-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .uni-position-buttons button { padding: 11px 6px; background: #352834; color: #ffbde3; font: inherit; font-size: 12px; border: 0; border-radius: 10px; cursor: pointer; }
+  .uni-position-buttons button:disabled { opacity: .4; cursor: default; }
+  .uni-position-card .uni-details { padding-top: 11px; }
+  .uni-position-card .uni-details p { margin: 0; overflow-wrap: anywhere; }
+  .uni-range-choice, .uni-remove-amount { display: grid; gap: 11px; padding: 7px 4px; }
+  .uni-range-choice > strong { color: var(--nt-text-muted); font-size: 12px; font-weight: 400; }
+  .uni-segmented { display: flex; gap: 5px; padding: 4px; background: #222128; border-radius: 12px; }
+  .uni-segmented button { flex: 1; padding: 9px 5px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-size: 12px; color: var(--nt-text-muted); cursor: pointer; }
+  .uni-segmented button.is-selected { background: #40303d; color: #ffc5e6; }
+  .uni-percentage { display: flex; align-items: center; justify-content: center; gap: 2px; padding: 16px; border-radius: 15px; background: #212027; }
+  .uni-percentage input { width: 125px; background: transparent; padding: 0; font-size: 52px; text-align: center; letter-spacing: -2px; }
+  .uni-percentage span { font-size: 32px; }
+  .uni-liquidity-preview { display: grid; gap: 10px; padding: 15px; background: #25212a; border-radius: 14px; }
+  .uni-liquidity-preview > p { margin: 0; color: var(--nt-text-muted); font-size: 12px; }
+  .uni-liquidity-preview > div { display: grid; gap: 8px; font-size: 17px; overflow-wrap: anywhere; }
+  .uni-liquidity-editor .uni-primary { margin-top: 2px; }
   .uni-app .nt-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   @media (max-width: 420px) { .uni-app { padding: 20px 10px 30px; } .uni-header h1 { font-size: 23px; } .uni-header { gap: 8px; } .uni-form { padding: 10px; border-radius: 20px; } .uni-form-top > span { font-size: 10px; } .uni-token-panel { padding: 16px 12px; grid-template-columns: minmax(0, 1fr) 126px; } .uni-token-panel input, .uni-token-panel output { font-size: 30px; } .uni-token-trigger { font-size: 13px; gap: 5px; } .uni-token-trigger .uni-token-icon { width: 21px; height: 21px; flex-basis: 21px; } .uni-saved { padding: 16px; } }
   @media (prefers-reduced-motion: reduce) { .uni-spinner { animation: none; } }

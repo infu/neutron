@@ -1,0 +1,156 @@
+
+> neutron-uniswap@1.0.0 package
+> npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts
+
+
+> neutron-uniswap@1.0.0 validate
+> bun ../../packages/neutron-scripts/src/validate.ts
+
+neutron.json is valid
+
+> neutron-uniswap@1.0.0 build
+> bun build.ts && npm run mogen
+
+
+> neutron-uniswap@1.0.0 mogen
+> bun ../../packages/neutron-scripts/src/mogen.ts
+
+
+> neutron-uniswap@1.0.0 mopack
+> bun ../../packages/neutron-scripts/src/mopack.ts
+
+Processing Motoko package roots...
+Processing /srv/shared/code/neutron/apps/uniswap/backend/main.mo
+Processing .mops/_github/core#v2.6.0/src/Time.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Int.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Result.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/internal/SortHelper.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/backend/memory/uniswap/v1.mo
+Processing .mops/_github/core#v2.6.0/src/Map.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/pure/Map.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Stack.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/pure/List.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Result.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/internal/BTreeHelper.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/backend/Journal.mo
+Processing .mops/_github/core#v2.6.0/src/Map.mo
+Processing .mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing .mops/_github/core#v2.6.0/src/Int.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing .mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing .mops/_github/core#v2.6.0/src/List.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/pure/List.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Nat32.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing .mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing .mops/_github/core#v2.6.0/src/Text.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Stack.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/uniswap/backend/memory/uniswap/v1.mo
+Processing /srv/shared/code/neutron/apps/uniswap/backend/memory/uniswap_actions/v1.mo
+Processing .mops/_github/core#v2.6.0/src/Map.mo
+Processing /srv/shared/code/neutron/apps/uniswap/backend/Actions.mo
+Processing .mops/_github/core#v2.6.0/src/Array.mo
+Processing .mops/_github/core#v2.6.0/src/Int.mo
+Processing .mops/_github/core#v2.6.0/src/Iter.mo
+Processing .mops/_github/core#v2.6.0/src/List.mo
+Processing .mops/_github/core#v2.6.0/src/Map.mo
+Processing .mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Int.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/uniswap/.mops/_github/core#v2.6.0/src/Order.mo
+Processing .mops/_github/core#v2.6.0/src/Order.mo
+Processing .mops/_github/core#v2.6.0/src/Text.mo
+Processing /srv/shared/code/neutron/apps/uniswap/backend/memory/uniswap_actions/v1.mo
+app entry: 88eadc83fc585b946bbdd22179f50885a541c4ddb5aeefb46ac84ec058492408
+Processing /srv/shared/code/neutron/apps/uniswap/backend/memory/uniswap/v1.mo
+memory uniswap schema v1: ad217e3e79429ef8a2cbf4c5b65feb7219d6dfd8adf2075e86fa0734400366b6
+Processing /srv/shared/code/neutron/apps/uniswap/backend/memory/uniswap_actions/v1.mo
+memory uniswap_actions schema v1: 5594e482e673ad2a95d764cb817d4ef89bab1cbfd71702e4d4e6e7c67abcbbab
+
+> neutron-uniswap@1.0.0 schema
+> bun ../../packages/neutron-scripts/src/method_schema.ts
+
+
+> neutron-uniswap@1.0.0 package:metadata
+> bun ../../packages/neutron-scripts/src/package_metadata.ts
+
+
+Size: 994770
+Writing: uniswap.v0.1.9.neutron

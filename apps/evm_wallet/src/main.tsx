@@ -1042,6 +1042,7 @@ function ReviewDialog({
         <details className="evm-pro-details" data-testid="evm-review-pro-details">
           <summary>Advanced details</summary>
         <dl className="evm-review-details">
+          {presentation.advancedDetails?.map((field) => <div className="evm-review-detail-pair" key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}
           <dt>Network</dt>
           <dd>
             {network?.name ?? `Chain ${operation.chainId}`} ·{" "}

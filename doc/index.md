@@ -162,6 +162,8 @@ compiler, shared-tools, or provisioner source change.
   custody lifecycle, shared client, IC bridge, Kitchen Sink and Uniswap flows.
   The [research](./evm-wallet-research.md) records design choices; the
   [implementation checklist](./todo.evm-wallet.md) tracks qualification and release.
+  [Uniswap V4 and liquidity](./uniswap-v4-liquidity.md) records contract research,
+  browser position discovery and durable UI/Agent execution.
 
 ## Repository Map
 

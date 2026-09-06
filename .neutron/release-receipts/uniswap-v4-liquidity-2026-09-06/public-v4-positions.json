@@ -1,0 +1,36 @@
+{
+  "readOnly": true,
+  "publicBurnAddressFixture": true,
+  "results": [
+    {
+      "chainId": "1",
+      "tokenId": "394432",
+      "blockNumber": "25920940",
+      "owner": "0x000000000000000000000000000000000000dEaD",
+      "poolId": "0x409ffb4098fdd4cb53a30c09819953f21dd3cf770f4d745f65d2f2658d4ab2cb",
+      "token0": "ETH",
+      "token1": "JPGM",
+      "fee": 10000,
+      "liquidity": "1",
+      "amount0": "980099999999975",
+      "amount1": "0",
+      "fees0": "9900000000012",
+      "fees1": "79"
+    },
+    {
+      "chainId": "42161",
+      "tokenId": "194311",
+      "blockNumber": "502464874",
+      "owner": "0x000000000000000000000000000000000000dEaD",
+      "poolId": "0xf1ec3bd68c765d6c6ab3c0cfaa9c72271bf47dadbdcdfd0edb94c6d2e9166349",
+      "token0": "ETH",
+      "token1": "ODYS",
+      "fee": 250000,
+      "liquidity": "0",
+      "amount0": "0",
+      "amount1": "0",
+      "fees0": "0",
+      "fees1": "0"
+    }
+  ]
+}

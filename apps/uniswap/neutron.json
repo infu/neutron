@@ -2,13 +2,13 @@
   "format": 3,
   "id": "uniswap",
   "name": "Uniswap",
-  "version": 108,
+  "version": 109,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
-  "description": "Uniswap V3 swaps using EVM Wallet",
+  "description": "Uniswap V3/V4 swaps and liquidity positions using EVM Wallet",
   "src": "main.mo",
   "background": {
     "path": "service.html",
-    "description": "Uniswap quote, preparation and saved swap tools"
+    "description": "Uniswap swaps, position discovery and liquidity management tools"
   },
   "tiles": [
     {
@@ -26,7 +26,13 @@
         "uniswap_get_v1",
         "uniswap_list_v1",
         "uniswap_update_v1",
-        "uniswap_history_v1"
+        "uniswap_history_v1",
+        "uniswap_action_begin_v1",
+        "uniswap_action_get_v1",
+        "uniswap_action_page_v1",
+        "uniswap_action_update_v1",
+        "uniswap_position_track_v1",
+        "uniswap_position_refs_v1"
       ]
     },
     "frontend_tools": {
@@ -68,6 +74,30 @@
     "uniswap_update_v1": {
       "type": "update",
       "async": false
+    },
+    "uniswap_action_begin_v1": {
+      "type": "update",
+      "async": false
+    },
+    "uniswap_action_get_v1": {
+      "type": "query",
+      "async": false
+    },
+    "uniswap_action_page_v1": {
+      "type": "query",
+      "async": false
+    },
+    "uniswap_action_update_v1": {
+      "type": "update",
+      "async": false
+    },
+    "uniswap_position_track_v1": {
+      "type": "update",
+      "async": false
+    },
+    "uniswap_position_refs_v1": {
+      "type": "query",
+      "async": false
     }
   },
   "memory": {
@@ -76,6 +106,15 @@
       "schemas": {
         "1": {
           "src": "memory/uniswap/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "uniswap_actions": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/uniswap_actions/v1.mo"
         }
       },
       "migrations": []

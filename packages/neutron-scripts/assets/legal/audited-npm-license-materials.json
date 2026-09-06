@@ -1,0 +1,62 @@
+[
+  {
+    "name": "@ethersproject/logger",
+    "version": "5.8.0",
+    "packageJsonSha256": "f23f4010d33b38e5fa0cf5fd2c33192d863bb7a78e3f72b58bb9ff93d3b47238",
+    "material": {
+      "asset": "Ethers-5.8.0.LICENSE",
+      "sourcePath": "https://raw.githubusercontent.com/ethers-io/ethers.js/fa5f647bb2cde63dd0b9664c42cbfbdc1515e800/LICENSE.md",
+      "sha256": "38f156ca482f33e6ec062da7c682da058c65c2932782fd4ea47aaecd01138704"
+    }
+  },
+  {
+    "name": "elliptic",
+    "version": "6.6.1",
+    "packageJsonSha256": "6fc56c88cf0e6bd7050d7f2630e9ef91b6687b8163f8dbe7444f11242052d51a",
+    "material": {
+      "installedPath": "README.md",
+      "sourcePath": "README.md (contains the complete MIT license)",
+      "sha256": "361389f7c5c5e493c2af0e89333b4dce12cf6f4c8901b30f035475d2c0215473"
+    }
+  },
+  {
+    "name": "brorand",
+    "version": "1.1.0",
+    "packageJsonSha256": "6a271145938041a44e1fb46558a4df1a70d2d82ebab42652c488a0e42c86c6de",
+    "material": {
+      "installedPath": "README.md",
+      "sourcePath": "README.md (contains the complete MIT license)",
+      "sha256": "d506a235e27d2912c7c93be50beaaffaa9cd11e5c3852acc08362005108b61dc"
+    }
+  },
+  {
+    "name": "hash.js",
+    "version": "1.1.7",
+    "packageJsonSha256": "b97d8c10d1ed1b3355394a6a0cf9846716e39e87d32ee13e7edd56195b9b8950",
+    "material": {
+      "installedPath": "README.md",
+      "sourcePath": "README.md (contains the complete MIT license)",
+      "sha256": "5df660fe115c8ddcdb81c5d733c117b94abb706b91c26dac3ab7dc817dd9ba71"
+    }
+  },
+  {
+    "name": "hmac-drbg",
+    "version": "1.0.1",
+    "packageJsonSha256": "51686d06bb1a95461ccd713a0dbbdbd7af6f4c1738d172345598660f19af3e8e",
+    "material": {
+      "installedPath": "README.md",
+      "sourcePath": "README.md (contains the complete MIT license)",
+      "sha256": "31de905f4580f7a7f0eef6f2f09be85b261c64560bd072bc58d9b61ae225551f"
+    }
+  },
+  {
+    "name": "minimalistic-crypto-utils",
+    "version": "1.0.1",
+    "packageJsonSha256": "4a73d64162b21429dde273e9565a986bab12abd253487b9ba6b2c5c2a124ffc6",
+    "material": {
+      "installedPath": "README.md",
+      "sourcePath": "README.md (contains the complete MIT license)",
+      "sha256": "64608431631207282f74532d8b9eeda5cb42fced09c663f21e1462987270950c"
+    }
+  }
+]

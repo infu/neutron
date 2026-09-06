@@ -1,0 +1,9 @@
+1: V4 A/B: mint, exact-budget approvals, both swap directions, slippage/deadline reverts, fee-credit increase, partial remove, collect and close passed
+1: V4 ETH/A: mint, exact-budget approvals, both swap directions, slippage/deadline reverts, fee-credit increase, partial remove, collect and close passed
+1: V3 A/B: app mint, swap fees, increase, remove-and-collect, native unwrap, collect and close passed
+1: V3 ETH/A: app mint, swap fees, increase, remove-and-collect, native unwrap, collect and close passed
+42161: V4 A/B: mint, exact-budget approvals, both swap directions, slippage/deadline reverts, fee-credit increase, partial remove, collect and close passed
+42161: V4 ETH/A: mint, exact-budget approvals, both swap directions, slippage/deadline reverts, fee-credit increase, partial remove, collect and close passed
+42161: V3 A/B: app mint, swap fees, increase, remove-and-collect, native unwrap, collect and close passed
+42161: V3 ETH/A: app mint, swap fees, increase, remove-and-collect, native unwrap, collect and close passed
+Official V3/V4 liquidity and Universal Router 2.1.1 fixture passed for Ethereum and Arbitrum configurations.

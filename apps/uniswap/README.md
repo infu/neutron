@@ -1,14 +1,29 @@
 # Uniswap
 
-An independent Neutron app for exact-input Uniswap V3 swaps on Ethereum (1) and
-Arbitrum One (42161). It uses the separate **EVM Wallet** app for accounts, public
+An independent Neutron app for exact-input Uniswap V3/V4 swaps and liquidity
+management on Ethereum (1) and Arbitrum One (42161). It uses the separate **EVM Wallet** app for accounts, public
 RPC reads, transaction review, signing, broadcasting, and receipts. It has no
 signing capability, private key, browser wallet provider, embedded provider key,
 or independent transaction sender.
 
-## Supported route
+## Swaps and liquidity
 
-The first release compares **direct, single-pool V3 routes** across the 0.01%,
+New swaps compare direct V3 and V4 pools, with Auto, V3 and V4 selection. V4
+uses Universal Router 2.1.1 and its exact deployed tuple encoding. Native ETH
+is a zero-address V4 currency; it is separate from WETH. The official pinned
+SDK handles concentrated-liquidity amounts, ranges and position calldata.
+See [the integration research and design](../../doc/uniswap-v4-liquidity.md)
+for deployments, SDK pins, Permit2 and browser discovery.
+
+The **Liquidity** tab lists V3 and V4 positions and supports minting in an
+initialized pool, adding, removing, collecting fees and closing a position.
+Amounts are maximum deposit budgets. The preview fits liquidity and slippage
+maxima within them. Approvals and the final action advance in one resumable
+flow; approval alone is never completion. Pool, range, hook and raw transaction
+details remain expandable. Creating a new pool with an initial price is not
+part of minting a position in this release.
+
+V3 compares **direct, single-pool V3 routes** across the 0.01%,
 0.05%, 0.3%, and 1% fee tiers. It uses `QuoterV2.quoteExactInputSingle` through
 EVM Wallet's direct browser-to-RPC `eth_call` path and builds a deadline-protected
 `SwapRouter02.multicall` containing `exactInputSingle`.
@@ -27,10 +42,11 @@ Deployments and interface definitions were verified against official sources on
 - [Deadline multicall](https://github.com/Uniswap/swap-router-contracts/blob/550c0f20373a487996fcc957075377b67af9df07/contracts/base/MulticallExtended.sol)
 - [QuoterV2 interface](https://github.com/Uniswap/v3-periphery/blob/697c2474757ea89fec12a4e6db16a574fe259610/contracts/interfaces/IQuoterV2.sol)
 
-Uniswap recommends Universal Router for broader current integrations. This
-initial route deliberately uses the deployed V3 router's ordinary ERC20 approval
-flow. **Permit2, EIP-2612, V4, split/multi-hop routing, liquidity provision, and
-UniswapX are not used or represented as supported.** No API credential is needed.
+The V3 route retains ordinary ERC20 approvals to SwapRouter02. V4 uses exact
+ERC20 approvals to Permit2 and expiring Permit2 approvals to the selected router
+or position manager, reusing existing sufficient allowances. These prerequisites
+are separate transactions and advance automatically. EIP-2612, split/multi-hop
+routing and UniswapX are not represented as supported. No API credential is needed.
 The direct-pool quote is the best observed output among available fee tiers, not
 an assertion that it is the globally best route. A missing pool or provider
 failure is recorded as unavailable. If every quote fails, the app cannot prepare
@@ -80,9 +96,10 @@ state and quote cannot be observed at the same block.
 6. Balances and history refresh while the app is visible and on focus.
    A reload retains the saved intent and exact request IDs; pending requests are
    reconciled before another dispatch. **Continue** resumes an interrupted
-   owner-started flow. Expired quotes offer a fresh draft that checks the existing
-   allowance and requires a new Swap action; old signed requests are never
-   silently replaced. Raw request and transaction details remain collapsed.
+   owner-started flow. New unified flows renew expired, known unsigned quotes
+   within their original inputs and recheck existing allowance. Old signed or
+   uncertain requests retain their original identity. Earlier V3 intents keep
+   their compatible continuation behavior. Raw request and transaction details remain collapsed.
 
 Fee arithmetic uses exact integer wei throughout. Ethereum estimates use the
 observed base fee plus priority fee, with a separately displayed suggested
@@ -94,16 +111,15 @@ and request path, not Nitro posting costs or finality. Quote refresh obtains new
 fee observations. EVM Wallet prepares current fees before each transaction
 confirmation. Original quote observations remain in the durable intent.
 
-Native ETH input is sent as the transaction value; the router wraps it and
+For V3, native ETH input is sent as the transaction value; the router wraps it and
 refunds any remainder in the same multicall. Native output goes to the router,
 then `unwrapWETH9(minimum, recipient)` pays the intended recipient. Token output
 is sent directly to that recipient. ETH↔WETH wrapping is not a pool swap.
 
-The default ETH/USDC/WETH routes use ordinary ERC20 approvals. A custom token
-requiring an allowance reset before approval (for example USDT-style behavior)
-can reject a nonzero-to-nonzero change: explicitly revoke that spender allowance
-in EVM Wallet, then quote again. The app does not silently introduce an extra
-approval transaction. Fee-on-transfer/rebasing tokens can fail standard V3
+New flows include the required zero-allowance reset for Ethereum USDT when
+replacing an insufficient nonzero allowance. Other ordinary tokens avoid that
+extra transaction; a custom token with different approval behavior may require
+an explicit revoke in EVM Wallet. Every planned approval receives Wallet review. Fee-on-transfer/rebasing tokens can fail standard V3
 assumptions and are not advertised as supported. Output ERC20 receipt transfers
 are counted only for the selected token and intended recipient. Native transfers
 have no ERC20 Transfer log; their destination/minimum are bound by the verified
@@ -111,7 +127,17 @@ router calldata and successful unwrap call.
 
 ## Durable recovery
 
-The sole managed root, `uniswap` v1, owns complete quote-derived intents, wallet
+New unified swaps and liquidity operations use the separate `uniswap_actions`
+v1 root, with immutable original inputs/account/caller, retained attempts, exact
+step request IDs, receipts and compact paginated history. Known unsigned expired
+plans can renew within the original inputs. Ambiguous dispatched steps retain
+their IDs and reconcile before further effects. Imported and minted position
+references are durable hints; current NFT ownership and state are always read
+onchain. Existing roots and legacy request identities remain intact.
+
+The following compatibility behavior applies to previously saved V3 swaps:
+
+The legacy managed root, `uniswap` v1, owns complete quote-derived intents, wallet
 identity (address, key fingerprint, namespace version), authenticated Agent caller
 installation where applicable, exact approval and swap
 request IDs/JSON, operation evidence, phases, revisions, and timestamps.
@@ -154,6 +180,17 @@ exact-request binding remain unchanged.
 
 ## Resident tools and Agent
 
+Use `uniswap_swap_v2` for new Auto/V3/V4 swaps and
+`uniswap_manage_liquidity_v1` for complete mint/increase/decrease/collect/close
+flows. Keep the same `operationId` and original inputs on every retry.
+`uniswap_quote_v2`, `uniswap_positions_v1`, `uniswap_position_v1`,
+`uniswap_pool_v1` and `uniswap_liquidity_quote_v1` perform reads and previews.
+`uniswap_action_status_v1` and `uniswap_actions_page_v1` show durable progress.
+Reads use installation-approved Wallet tools; each effect still receives the
+Wallet's exact human or Agent provider review.
+
+The v1 swap tools remain compatible with previously saved intents:
+
 | Tool | Behavior |
 | --- | --- |
 | `uniswap_swap_v1` | Complete a provider-reviewed swap, including allowance, approval, safe quote renewal, swap and receipt; retry the same original inputs and `swapId` |
@@ -165,7 +202,7 @@ exact-request binding remain unchanged.
 | `uniswap_record_result_v1` | Bind a supplied wallet result to the saved request, then independently verify public transaction fields and receipt |
 | `uniswap_next_action_v1` | Reconcile supplied root Wallet observations and return the next exact tool call for a saved Agent swap |
 
-For a new tool-driven swap, call `uniswap_swap_v1` once with one 32-hex `swapId`,
+For the compatible V3-only tool flow, call `uniswap_swap_v1` once with one 32-hex `swapId`,
 chain, input/output token addresses (`null` for ETH), and atomic input amount.
 Optional defaults are the main account, the Wallet's own receiving address,
 50 slippage basis points, and a 1200-second quote validity window. The tool
@@ -257,7 +294,10 @@ lock. It deploys the official Uniswap factory, pools, position manager, QuoterV2
 and SwapRouter02 bytecode on local EVM chains 1 and 42161. It executes native→token,
 token→native and token→token swaps, compares actual recipient balances, checks
 router refunds/unwraps, and proves expired deadlines/excessive minima revert.
-It uses fixture funds only and does not send transactions to public networks.
+The same harness also starts Cancun-capable Anvil nodes, verifies pinned
+Universal Router 2.1.1 source downloads, and executes V3/V4 mint, fee-accruing
+swaps, increases, partial removals, collection and closure for native/ERC20
+pairs. It uses fixture funds only and does not send transactions to public networks.
 Local chain 42161 validates contract semantics and chain binding; it does not
 emulate the Arbitrum sequencer's fee calculation or settlement protocol.
 

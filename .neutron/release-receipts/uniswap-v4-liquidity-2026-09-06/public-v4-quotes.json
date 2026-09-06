@@ -1,0 +1,49 @@
+{
+  "at": "2026-09-06T21:16:15.680Z",
+  "readOnly": true,
+  "rpcCalls": 14,
+  "reports": [
+    {
+      "chainId": "1",
+      "block": "0x18b85a9",
+      "router": "0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA",
+      "routerCodeBytes": 24546,
+      "protocol": "v4",
+      "poolKey": {
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "fee": 100,
+        "tickSpacing": 1,
+        "hooks": "0x0000000000000000000000000000000000000000"
+      },
+      "poolId": "0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7",
+      "amountIn": "1000000000000000",
+      "amountOut": "2510073",
+      "minimumOut": "2497522",
+      "gasEstimate": "42535",
+      "priceImpactBps": "0",
+      "routeWarnings": []
+    },
+    {
+      "chainId": "42161",
+      "block": "0x1df300da",
+      "router": "0x8B844f885672f333Bc0042cB669255f93a4C1E6b",
+      "routerCodeBytes": 24546,
+      "protocol": "v4",
+      "poolKey": {
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "fee": 500,
+        "tickSpacing": 10,
+        "hooks": "0x0000000000000000000000000000000000000000"
+      },
+      "poolId": "0x864abca0a6202dba5b8868772308da953ff125b0f95015adbf89aaf579e903a8",
+      "amountIn": "1000000000000000",
+      "amountOut": "2509093",
+      "minimumOut": "2496547",
+      "gasEstimate": "42535",
+      "priceImpactBps": "0",
+      "routeWarnings": []
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "protocol": "neutron-evm-release-verification-v1",
+  "batchId": "58",
+  "postflightBatchId": null,
+  "packages": 18,
+  "changed": [
+    "evm_wallet",
+    "uniswap"
+  ],
+  "verifiedAt": "2026-09-06T21:58:08.375Z",
+  "allLocalBytesMatch": true
+}

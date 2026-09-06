@@ -28,12 +28,15 @@
     "viem": "^2.55.1"
   },
   "devDependencies": {
+    "@dfinity/candid": "^3.4.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@uniswap/sdk-core": "7.19.2",
+    "@uniswap/v3-sdk": "3.31.3",
+    "@uniswap/v4-sdk": "2.3.3",
     "esbuild": "^0.28.1",
     "esbuild-copy-static-files": "^0.1.0",
     "esbuild-sass-plugin": "^3.7.0",
-    "neutron-scripts": "^1.1.0",
-    "@dfinity/candid": "^3.4.3"
+    "neutron-scripts": "^1.1.0"
   }
 }
