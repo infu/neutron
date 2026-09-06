@@ -235,11 +235,22 @@ test("backend-call facts disclose normalized modes and concurrency without a tar
     maxCyclesPerCall: 0,
     maxCyclesPerDay: 0,
   });
-  expect(backend?.installReservations).toHaveLength(18);
+  expect(backend?.installReservations).toHaveLength(21);
   for (const method of ["get_minter_info", "get_events", "retrieve_eth_status"]) {
     expect(backend?.installReservations).toContainEqual({
       kind: "exact",
       principal: "sv3dd-oaaaa-aaaar-qacoa-cai",
+      method,
+    });
+  }
+  for (const [principal, method] of [
+    ["mqygn-kiaaa-aaaar-qaadq-cai", "retrieve_btc_status_v2"],
+    ["eqltq-xqaaa-aaaar-qb3vq-cai", "retrieve_doge_status"],
+    ["lh22c-kyaaa-aaaar-qb5nq-cai", "withdrawal_status"],
+  ] as const) {
+    expect(backend?.installReservations).toContainEqual({
+      kind: "exact",
+      principal,
       method,
     });
   }

@@ -137,15 +137,18 @@ module {
                 { principal = minter; method = "get_btc_address" },
                 { principal = minter; method = "update_balance" },
                 { principal = minter; method = "retrieve_btc_with_approval" },
+                { principal = minter; method = "retrieve_btc_status_v2" },
             ];
             case (#ckdoge(_)) [
                 { principal = minter; method = "get_doge_address" },
                 { principal = minter; method = "update_balance" },
                 { principal = minter; method = "retrieve_doge_with_approval" },
+                { principal = minter; method = "retrieve_doge_status" },
             ];
             case (#cksol(_)) [
                 { principal = minter; method = "update_balance" },
                 { principal = minter; method = "withdraw" },
+                { principal = minter; method = "withdrawal_status" },
             ];
             // The ckETH minter discovers helper-contract deposits on its own.
             case (#cketh(_)) [

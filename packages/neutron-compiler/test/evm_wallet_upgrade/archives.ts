@@ -11,6 +11,12 @@ export const sha256 = (bytes: Uint8Array): string => createHash("sha256").update
 
 // Immutable production archives, never rebuilt as predecessor evidence.
 const predecessors = {
+  kitchensink314: ["kitchensink", 314, 471_268, "e25c5230a91f2c99f72119e92c62204da5c13604785d018a358e57ea0a1bf18b"],
+  evm_wallet101: ["evm_wallet", 101, 377_833, "1f7e9fb0ab82b60543ed38d81f215e7655ef4ca9fb1afab0f6ea6eb4cf456048"],
+  uniswap102: ["uniswap", 102, 273_807, "720781594416ac568d10de0c6594afadf8ba09fbab7dff50976ef9db82f7f10d"],
+  kernel339: ["kernel", 339, 2_448_952, "8391f8508cf1f3929cf3b7e3e02612de29beb0bc387a4e89d8bc12b1d3677462"],
+  wallet315: ["wallet", 315, 753_979, "1d1156e18ee3116dbda8c8c410f6c4987ba062db345ddf169a822f3d3c20ffcd"],
+  contacts306: ["contacts", 306, 298_018, "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"],
   kernel336: ["kernel", 336, 2_433_352, "97222bc4c956932ff21b96773cc5a438f92ae5ac7660c0c3f408be7eb25a7eeb"],
   wallet312: ["wallet", 312, 678_721, "6875f1f98ae7309fe84885ed77df9847c1c1ad03f5baa8d6aed4b00fb4f48129"],
   wallet306: ["wallet", 306, 666_413, "bea0d49e351bb8efa04bf03057b4f9175474a54bd198b382add790718b7b8aae"],

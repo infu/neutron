@@ -279,6 +279,55 @@ test("a confirmed approval survives a failed contract call and neither is automa
     .toBe(approval.progress[0]!.operation?.transactionHash);
 });
 
+test("a provider RPC failure on the next call retains approval and retries only its saved call ID", async () => {
+  const fixture = new DemoFixture();
+  const intent = fixture.intent({ kind: "approval_call" });
+  await fixture.journal.prepare(intent);
+  const approved = await advanceEvmWalletDemo(fixture.wallet, fixture.journal, intent.id);
+  const approval = approved.progress[0]!.operation;
+  fixture.effectError = new Error("RPC providers unavailable during preparation");
+  await expect(advanceEvmWalletDemo(fixture.wallet, fixture.journal, intent.id))
+    .rejects.toThrow("RPC providers unavailable");
+  const pending = await fixture.journal.get(intent.id);
+  expect(pending.intent).toEqual(intent);
+  expect(pending.progress[0]!.operation).toEqual(approval);
+  expect(pending.progress[1]).toMatchObject({ attempted: true, operation: null, error: "RPC providers unavailable during preparation" });
+  expect(evmDemoRecordTerminal(pending)).toBe(false);
+  expect(fixture.operations.has(operationKey(intent.steps[1]!.request))).toBe(false);
+  fixture.effectError = null;
+  const recovered = await advanceEvmWalletDemo(fixture.wallet, fixture.journal, intent.id);
+  expect(recovered.progress[0]!.operation).toEqual(approval);
+  expect(recovered.progress[1]!.operation?.status).toBe("confirmed");
+  expect(evmDemoRecordTerminal(recovered)).toBe(true);
+  expect(fixture.effects.map(({ request }) => request.requestId)).toEqual([
+    intent.steps[0]!.request.requestId,
+    intent.steps[1]!.request.requestId,
+    intent.steps[1]!.request.requestId,
+  ]);
+});
+
+test("an unavailable RPC status response cannot trigger resubmission of a pending transaction", async () => {
+  const fixture = new DemoFixture();
+  fixture.effectStatus = "submitted";
+  const intent = fixture.intent();
+  await fixture.journal.prepare(intent);
+  const submitted = await advanceEvmWalletDemo(fixture.wallet, fixture.journal, intent.id);
+  const original = submitted.progress[0]!.operation;
+  fixture.statusError = new Error("RPC providers disagree about the canonical receipt");
+  await expect(advanceEvmWalletDemo(fixture.wallet, fixture.journal, intent.id))
+    .rejects.toThrow("RPC providers disagree");
+  const retained = await fixture.journal.get(intent.id);
+  expect(retained.intent).toEqual(intent);
+  expect(retained.progress[0]!.operation).toEqual(original);
+  expect(retained.progress[0]!.error).toContain("RPC providers disagree");
+  expect(evmDemoRecordTerminal(retained)).toBe(false);
+  expect(fixture.effects).toHaveLength(1);
+  expect(fixture.statusReads.at(-1)).toEqual({ accountId: "main", chainId: "1", requestId: intent.id });
+  fixture.statusError = null;
+  expect((await advanceEvmWalletDemo(fixture.wallet, fixture.journal, intent.id)).progress[0]!.operation).toEqual(original);
+  expect(fixture.effects).toHaveLength(1);
+});
+
 test("an approval receipt removed by a reorganization blocks the call until reconfirmed", async () => {
   const fixture = new DemoFixture();
   const intent = fixture.intent({ kind: "approval_call" });
@@ -642,6 +691,8 @@ class DemoFixture {
   accountList = clone([account]);
   networkList = clone(networks);
   accountsError: Error | null = null;
+  effectError: Error | null = null;
+  statusError: Error | null = null;
   beforeAccounts: (() => Promise<void>) | null = null;
   beforeNetworks: (() => Promise<void>) | null = null;
   effectStatus: EvmOperationResult["status"] = "confirmed";
@@ -672,6 +723,7 @@ class DemoFixture {
       if (call.name === EVM_WALLET_TOOLS.operationStatus) {
         const request = call.arguments as EvmOperationStatusRequest;
         this.statusReads.push(clone(request));
+        if (this.statusError) throw this.statusError;
         return clone(this.operations.get(operationKey(request)) ?? { ...request, status: "not_found" });
       }
       const kind = call.name === EVM_WALLET_TOOLS.sendTransaction ? "transaction"
@@ -681,6 +733,7 @@ class DemoFixture {
       const request = call.arguments as EvmEffectRequest;
       this.beforeEffect?.(kind, request);
       this.effects.push({ kind, request: clone(request) });
+      if (this.effectError) throw this.effectError;
       const key = operationKey(request);
       let operation = this.operations.get(key);
       if (!operation) {

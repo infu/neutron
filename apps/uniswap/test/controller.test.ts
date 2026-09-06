@@ -5,14 +5,14 @@ import { generateAppMethodSchemaArtifact, validateAppMethodArgs } from "neutron-
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, getAddress, parseAbi, type Hex } from "viem";
 import {
-  parseEvmOperationResult, parseEvmTransactionResult,
+  parseEvmOperationResult, parseEvmReplacementTransactionResult, parseEvmTransactionResult,
   type EvmAccount, type EvmOperationResult, type EvmOperationStatusRequest, type EvmOperationStatusResult,
   type EvmReceipt, type EvmReceiptLog, type EvmSendTransactionRequest,
-  type EvmTransactionRequest, type EvmTransactionResult, type EvmWalletClient,
+  type EvmReplacementTransactionRequest, type EvmReplacementTransactionResult, type EvmTransactionRequest, type EvmTransactionResult, type EvmWalletClient,
 } from "neutron-tools/evm_wallet";
 import {
-  approvalConfirmed, createSwapStore, executeStep, parseSwapRecord, receivedTokenAtoms, reconcileStep,
-  savedIntent, validateOperation, verifyAgentResult, walletReader, walletRequest,
+  approvalConfirmed, createSwapStore, effectiveOperation, executeStep, parseSwapRecord, receivedTokenAtoms, reconcileStep,
+  savedIntent, storedOperation, validateOperation, verifyAgentResult, walletReader, walletRequest,
   type SavedIntent, type Store, type SwapRecord,
 } from "../src/controller.ts";
 import { swapTransaction, type Quote, type Transaction } from "../src/swap.ts";
@@ -26,6 +26,7 @@ const USDC = getAddress("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
 const WETH = getAddress("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
 const APPROVAL_ID = "11".repeat(16), SWAP_ID = "22".repeat(16), OTHER_ID = "33".repeat(16);
 const HASH = `0x${"44".repeat(32)}`;
+const REPLACEMENT_HASH = `0x${"99".repeat(32)}`;
 const BLOCK_HASH = `0x${"55".repeat(32)}`;
 const account: EvmAccount = {
   accountId: "main", address: ACCOUNT,
@@ -119,9 +120,10 @@ function walletMock(options: {
   status?: (request: EvmOperationStatusRequest) => EvmOperationStatusResult | Promise<EvmOperationStatusResult>;
   send?: (request: EvmSendTransactionRequest) => EvmOperationResult | Promise<EvmOperationResult>;
   transaction?: (request: EvmTransactionRequest) => EvmTransactionResult | Promise<EvmTransactionResult>;
+  replacement?: (request: EvmReplacementTransactionRequest) => EvmReplacementTransactionResult | Promise<EvmReplacementTransactionResult>;
   events?: string[];
 } = {}) {
-  const sends: EvmSendTransactionRequest[] = [], statuses: EvmOperationStatusRequest[] = [], transactionReads: EvmTransactionRequest[] = [];
+  const sends: EvmSendTransactionRequest[] = [], statuses: EvmOperationStatusRequest[] = [], transactionReads: EvmTransactionRequest[] = [], replacementReads: EvmReplacementTransactionRequest[] = [];
   const wallet = {
     async accounts() { return { accounts: options.account === null ? [] : [{ ...(options.account ?? account) }] }; },
     async operationStatus(request: EvmOperationStatusRequest) {
@@ -139,13 +141,21 @@ function walletMock(options: {
       // and binds the evidence to the requested network and hash.
       return parseEvmTransactionResult(await options.transaction(request), request);
     },
+    async replacementTransaction(request: EvmReplacementTransactionRequest) {
+      replacementReads.push(structuredClone(request));
+      if (!options.replacement) throw new Error("Unexpected replacement proof read");
+      return parseEvmReplacementTransactionResult(await options.replacement(request), request);
+    },
   } as unknown as EvmWalletClient;
-  return { wallet, sends, statuses, transactionReads };
+  return { wallet, sends, statuses, transactionReads, replacementReads };
 }
 
 function evidence(saved: SwapRecord, stage: "approval" | "swap" = "swap", actualReceipt: EvmReceipt | null = receipt()): EvmTransactionResult {
   const request = JSON.parse((stage === "approval" ? saved.approval_request_json : saved.swap_request_json)!);
   return { chainId: saved.chain_id, transactionHash: HASH, walletRequestMatches: true, transaction: { from: ACCOUNT, to: request.to, data: request.data, valueWei: request.valueWei, nonce: "17", blockNumber: actualReceipt?.blockNumber ?? null, blockHash: actualReceipt?.blockHash ?? null }, receipt: actualReceipt, observedAtNs: "1800000000000000001", source: "evm_rpc" };
+}
+function replacementProof(request: EvmReplacementTransactionRequest, matches = true): EvmReplacementTransactionResult {
+  return { ...request, walletReplacementMatches: matches, observedAtNs: "1800000000000000001", source: "evm_wallet_journal" };
 }
 
 test("the backend adapter omits absent Candid input fields and recovers a lost begin reply using the same wallet request", async () => {
@@ -256,6 +266,31 @@ test("a missing status after a lost reply retries exactly the saved wallet reque
   expect(sends[1]).toEqual(JSON.parse(initial.swap_request_json)); expect(resumed.phase).toBe("swap_submitted");
 });
 
+test.each([
+  "Insufficient native balance for maximum gas fee",
+  "Token transfer simulation reverted: insufficient token balance",
+  "RPC providers disagree; transaction fee estimate is unavailable",
+])("wallet estimation failure preserves completed approval and reconciles the same swap: %s", async (error) => {
+  const initial = { ...record(intent({ approval: true })), approval_operation_json: JSON.stringify(confirmed("approval")), phase: "approval_confirmed" };
+  const journal = memoryStore(initial);
+  let failed = false;
+  const { wallet, sends, statuses } = walletMock({
+    status: (request) => failed ? operation("swap", { status: "failed", transactionHash: null, message: error }) : { ...request, status: "not_found" },
+    send: () => { failed = true; throw new Error(error); },
+  });
+  await expect(executeStep(wallet, journal.store, initial, "swap")).rejects.toThrow(error);
+  const interrupted = journal.current();
+  expect(interrupted).toMatchObject({ phase: "swap_requested", quote_json: initial.quote_json, approval_operation_json: initial.approval_operation_json, swap_request_id: SWAP_ID, swap_request_json: initial.swap_request_json, swap_operation_json: null });
+  const reloaded = memoryStore(interrupted);
+  const reconciled = await executeStep(wallet, reloaded.store, interrupted, "swap");
+  expect(reconciled.phase).toBe("swap_failed");
+  expect(reconciled.approval_operation_json).toBe(initial.approval_operation_json);
+  expect(reconciled.swap_request_json).toBe(initial.swap_request_json);
+  expect(statuses.map((request) => request.requestId)).toEqual([SWAP_ID, SWAP_ID]);
+  expect(sends).toEqual([JSON.parse(initial.swap_request_json)]);
+  expect(effectiveOperation(reconciled, "swap")).toMatchObject({ status: "failed", message: error, receipt: null });
+});
+
 test("confirmed approvals are skipped while swap submission waits for their successful receipt", async () => {
   const initial = record(intent({ approval: true }));
   const journal = memoryStore(initial);
@@ -267,6 +302,119 @@ test("confirmed approvals are skipped while swap submission waits for their succ
   const result = await executeStep(wallet, journal.store, approved, "swap");
   expect(sends.map(({ requestId }) => requestId)).toEqual([SWAP_ID]);
   expect(result.approval_operation_json).toBe(approved.approval_operation_json);
+});
+
+test("a successful exact replacement approval unlocks the saved swap without repeating approval", async () => {
+  const initial = record(intent({ approval: true })), journal = memoryStore(initial);
+  const original = operation("approval", { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH });
+  const replacement = { ...evidence(initial, "approval"), transactionHash: REPLACEMENT_HASH, walletRequestMatches: null };
+  const { wallet, sends, transactionReads } = walletMock({
+    status: (request) => request.requestId === APPROVAL_ID ? original : { ...request, status: "not_found" },
+    transaction: () => replacement,
+  });
+  const approved = await executeStep(wallet, journal.store, initial, "approval");
+  expect(approvalConfirmed(approved)).toBe(true);
+  expect(approved.phase).toBe("approval_confirmed");
+  expect(sends).toHaveLength(0);
+  expect(transactionReads).toEqual([{ chainId: "1", transactionHash: REPLACEMENT_HASH }]);
+  const stored = JSON.parse(approved.approval_operation_json!);
+  expect(stored).toMatchObject({ requestId: APPROVAL_ID, transactionHash: HASH, status: "replaced", receipt: null, replacementTransactionHash: REPLACEMENT_HASH, replacementEvidence: replacement });
+  const reloaded = memoryStore(approved);
+  const result = await executeStep(wallet, reloaded.store, approved, "swap");
+  expect(sends.map(({ requestId }) => requestId)).toEqual([SWAP_ID]);
+  expect(result.approval_operation_json).toBe(approved.approval_operation_json);
+});
+
+test.each(["approval", "swap"] as const)("a pending %s replacement is observed through inclusion without repeating either transaction", async (stage) => {
+  const initial = record(intent({ approval: stage === "approval" })), journal = memoryStore(initial);
+  let mined = false;
+  const { wallet, sends, statuses, transactionReads } = walletMock({
+    status: () => operation(stage, { status: mined ? "replaced" : "unknown", replacementTransactionHash: REPLACEMENT_HASH }),
+    transaction: () => ({ ...evidence(initial, stage, mined ? receipt({ logs: [transfer(USDC, RECIPIENT, 350n, 0), transfer(USDC, OTHER, 999n, 1)] }) : null), transactionHash: REPLACEMENT_HASH, walletRequestMatches: null }),
+  });
+  const pending = await executeStep(wallet, journal.store, initial, stage);
+  expect(pending.phase).toBe(`${stage}_submitted`);
+  expect(effectiveOperation(pending, stage)).toMatchObject({ status: "submitted", receipt: null, transactionHash: REPLACEMENT_HASH, source: "replacement" });
+  if (stage === "approval") expect(approvalConfirmed(pending)).toBe(false);
+  expect(sends).toHaveLength(0);
+  mined = true;
+  const reloaded = memoryStore(pending);
+  const included = await executeStep(wallet, reloaded.store, pending, stage);
+  expect(included.phase).toBe(`${stage}_confirmed`);
+  expect(effectiveOperation(included, stage)).toMatchObject({ status: "confirmed", receipt: { status: "success" }, transactionHash: REPLACEMENT_HASH, source: "replacement" });
+  expect(storedOperation(included, stage)).toMatchObject({ status: "replaced", transactionHash: HASH, receipt: null, replacementTransactionHash: REPLACEMENT_HASH });
+  if (stage === "swap") expect(receivedTokenAtoms(included)).toBe("350");
+  const again = await executeStep(wallet, reloaded.store, included, stage);
+  expect(again.phase).toBe(included.phase);
+  expect(sends).toHaveLength(0);
+  expect(statuses.map((request) => request.requestId)).toEqual([stage === "approval" ? APPROVAL_ID : SWAP_ID, stage === "approval" ? APPROVAL_ID : SWAP_ID, stage === "approval" ? APPROVAL_ID : SWAP_ID]);
+  expect(transactionReads.every((request) => request.transactionHash === REPLACEMENT_HASH && request.walletRequest === undefined)).toBe(true);
+});
+
+test.each(["approval", "swap"] as const)("a reverted exact %s replacement remains reverted after reload and cannot complete the step", async (stage) => {
+  const initial = record(intent({ approval: stage === "approval" })), journal = memoryStore(initial);
+  const { wallet, sends } = walletMock({
+    status: () => operation(stage, { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH }),
+    transaction: () => ({ ...evidence(initial, stage, receipt({ status: "reverted" })), transactionHash: REPLACEMENT_HASH, walletRequestMatches: null }),
+  });
+  const observed = await executeStep(wallet, journal.store, initial, stage);
+  expect(observed.phase).toBe(`${stage}_reverted`);
+  expect(effectiveOperation(observed, stage)).toMatchObject({ status: "reverted", receipt: { status: "reverted" }, source: "replacement" });
+  if (stage === "approval") expect(approvalConfirmed(observed)).toBe(false);
+  expect(receivedTokenAtoms(observed)).toBeNull();
+  const resumed = memoryStore(observed);
+  expect((await executeStep(wallet, resumed.store, observed, stage)).phase).toBe(`${stage}_reverted`);
+  expect(sends).toHaveLength(0);
+});
+
+test.each(["approval", "swap"] as const)("cancelled or changed %s replacements never satisfy the frozen request", async (stage) => {
+  for (const changed of [{ to: ACCOUNT, data: "0x", valueWei: "0" }, { from: OTHER }, { to: OTHER }, { data: "0x1234" }, { valueWei: "17" }]) {
+    const initial = record(intent({ approval: stage === "approval" })), journal = memoryStore(initial);
+    const actual = evidence(initial, stage);
+    Object.assign(actual.transaction!, changed);
+    const { wallet, sends } = walletMock({
+      status: () => operation(stage, { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH }),
+      transaction: () => ({ ...actual, transactionHash: REPLACEMENT_HASH, walletRequestMatches: null }),
+    });
+    const observed = await executeStep(wallet, journal.store, initial, stage);
+    expect(observed.phase).toBe(`${stage}_replaced`);
+    expect(effectiveOperation(observed, stage)).toMatchObject({ status: "replaced", receipt: null, source: "replacement" });
+    expect(effectiveOperation(observed, stage)?.message).toContain("does not execute the saved");
+    if (stage === "approval") expect(approvalConfirmed(observed)).toBe(false);
+    expect(receivedTokenAtoms(observed)).toBeNull();
+    expect(sends).toHaveLength(0);
+  }
+});
+
+test("missing replacement evidence stays unresolved and mismatched hashes or networks are never saved", async () => {
+  const initial = record(), journal = memoryStore(initial);
+  const original = operation("swap", { status: "unknown", replacementTransactionHash: REPLACEMENT_HASH });
+  const absent = walletMock({ status: () => original, transaction: () => ({ ...evidence(initial, "swap", null), transaction: null, transactionHash: REPLACEMENT_HASH, walletRequestMatches: null }) });
+  const pending = await executeStep(absent.wallet, journal.store, initial, "swap");
+  expect(pending.phase).toBe("swap_unknown");
+  expect(effectiveOperation(pending, "swap")?.receipt).toBeNull();
+  expect(absent.sends).toHaveLength(0);
+  for (const changed of [{ transactionHash: HASH }, { chainId: "42161" }]) {
+    const fresh = memoryStore(initial);
+    const mismatch = walletMock({ status: () => original, transaction: () => ({ ...evidence(initial), transactionHash: REPLACEMENT_HASH, walletRequestMatches: null, ...changed }) });
+    await expect(executeStep(mismatch.wallet, fresh.store, initial, "swap")).rejects.toThrow("evidence does not match");
+    expect(fresh.updates).toHaveLength(0); expect(mismatch.sends).toHaveLength(0);
+  }
+  const invalid = walletMock({ status: () => ({ ...original, replacementTransactionHash: "0x12" }) });
+  await expect(executeStep(invalid.wallet, memoryStore(initial).store, initial, "swap")).rejects.toThrow();
+  expect(invalid.transactionReads).toHaveLength(0);
+});
+
+test("saved replacement proof is bound to the original linkage and untrusted claims cannot inject it", async () => {
+  const initial = record(intent({ mode: "agent" })), journal = memoryStore(initial);
+  const original = operation("swap", { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH });
+  const injected = { ...original, replacementEvidence: { ...evidence(initial), transactionHash: REPLACEMENT_HASH, walletRequestMatches: null } };
+  const { wallet, transactionReads } = walletMock();
+  await expect(verifyAgentResult(wallet, journal.store, initial, "swap", injected)).rejects.toThrow();
+  expect(transactionReads).toHaveLength(0); expect(journal.updates).toHaveLength(0);
+  const human = record();
+  const wrong = { ...human, swap_operation_json: JSON.stringify({ ...injected, replacementEvidence: { ...injected.replacementEvidence, transactionHash: HASH } }) };
+  expect(() => storedOperation(wrong, "swap")).toThrow("evidence does not match");
 });
 
 test("rejected or reverted wallet operations remain terminal for that saved request", async () => {
@@ -338,6 +486,81 @@ test("modified saved swap calldata and exact approval amounts fail before dispat
 });
 
 describe("independent Agent result verification", () => {
+  test.each(["approval", "swap"] as const)("a Wallet-proven %s replacement is verified even when the original transaction is no longer visible", async (stage) => {
+    const initial = record(intent({ mode: "agent", approval: stage === "approval" })), journal = memoryStore(initial);
+    const original = operation(stage, { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH });
+    const replacement = { ...evidence(initial, stage), transactionHash: REPLACEMENT_HASH, walletRequestMatches: null };
+    const { wallet, transactionReads, replacementReads, sends, statuses } = walletMock({
+      transaction: (request) => request.transactionHash === HASH ? { ...evidence(initial, stage, null), transaction: null } : replacement,
+      replacement: (request) => replacementProof(request),
+    });
+    const verified = await verifyAgentResult(wallet, journal.store, initial, stage, original);
+    expect(verified.phase).toBe(`${stage}_confirmed`);
+    const requestId = stage === "approval" ? APPROVAL_ID : SWAP_ID;
+    expect(transactionReads).toEqual([
+      { chainId: "1", transactionHash: HASH, walletRequest: { callerAppId: "agent", callerInstallationUid: "17", requestId } },
+      { chainId: "1", transactionHash: REPLACEMENT_HASH },
+    ]);
+    expect(replacementReads).toEqual([{ chainId: "1", transactionHash: REPLACEMENT_HASH, originalWalletRequest: { callerAppId: "agent", callerInstallationUid: "17", requestId } }]);
+    expect(storedOperation(verified, stage)).toMatchObject({ requestId, transactionHash: HASH, receipt: null, status: "replaced", replacementEvidence: { ...replacement, walletReplacementProof: replacementProof(replacementReads[0]!) } });
+    expect(effectiveOperation(structuredClone(verified), stage)).toMatchObject({ status: "confirmed", transactionHash: REPLACEMENT_HASH, source: "replacement", receipt: { status: "success" } });
+    if (stage === "approval") expect(approvalConfirmed(structuredClone(verified))).toBe(true);
+    expect(sends).toHaveLength(0); expect(statuses).toHaveLength(0);
+  });
+
+  test("Agent replacement claims require both exact original binding and a separately proven replacement relationship", async () => {
+    const original = operation("swap", { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH });
+    for (const originalMatches of [false, null]) {
+      const initial = record(intent({ mode: "agent" })), journal = memoryStore(initial);
+      const { wallet, replacementReads } = walletMock({ transaction: () => ({ ...evidence(initial, "swap", null), walletRequestMatches: originalMatches }) });
+      await expect(verifyAgentResult(wallet, journal.store, initial, "swap", original)).rejects.toThrow();
+      expect(replacementReads).toHaveLength(0); expect(journal.updates).toHaveLength(0);
+    }
+    const initial = record(intent({ mode: "agent" })), journal = memoryStore(initial);
+    const { wallet, transactionReads } = walletMock({ transaction: () => evidence(initial, "swap", null), replacement: (request) => replacementProof(request, false) });
+    await expect(verifyAgentResult(wallet, journal.store, initial, "swap", original)).rejects.toThrow("did not prove the replacement relationship");
+    expect(transactionReads).toHaveLength(1); expect(journal.updates).toHaveLength(0);
+  });
+
+  test("replacement proofs for a different caller, request, chain or hash cannot be recorded", async () => {
+    const original = operation("swap", { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH });
+    for (const changed of [
+      { chainId: "42161" }, { transactionHash: HASH },
+      { originalWalletRequest: { callerAppId: "uniswap", callerInstallationUid: "17", requestId: SWAP_ID } },
+      { originalWalletRequest: { callerAppId: "agent", callerInstallationUid: "18", requestId: SWAP_ID } },
+      { originalWalletRequest: { callerAppId: "agent", callerInstallationUid: "17", requestId: OTHER_ID } },
+    ]) {
+      const initial = record(intent({ mode: "agent" })), journal = memoryStore(initial);
+      const { wallet, transactionReads } = walletMock({ transaction: () => evidence(initial, "swap", null), replacement: (request) => ({ ...replacementProof(request), ...changed }) });
+      await expect(verifyAgentResult(wallet, journal.store, initial, "swap", original)).rejects.toThrow("proof does not match");
+      expect(transactionReads).toHaveLength(1); expect(journal.updates).toHaveLength(0);
+    }
+  });
+
+  test("a proven Agent replacement still needs the exact saved execution and a successful receipt", async () => {
+    for (const outcome of ["missing", "pending", "cancel", "reverted"] as const) {
+      const initial = record(intent({ mode: "agent", approval: true })), journal = memoryStore(initial);
+      const original = operation("approval", { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH });
+      const replacement = { ...evidence(initial, "approval", outcome === "pending" || outcome === "missing" ? null : receipt({ status: outcome === "reverted" ? "reverted" : "success" })), transactionHash: REPLACEMENT_HASH, walletRequestMatches: null };
+      if (outcome === "missing") replacement.transaction = null;
+      if (outcome === "cancel") Object.assign(replacement.transaction!, { to: ACCOUNT, data: "0x", valueWei: "0" });
+      const { wallet, sends } = walletMock({ transaction: (request) => request.transactionHash === HASH ? evidence(initial, "approval", null) : replacement, replacement: (request) => replacementProof(request) });
+      const result = await verifyAgentResult(wallet, journal.store, initial, "approval", original);
+      expect(result.phase).toBe(`approval_${outcome === "missing" ? "unknown" : outcome === "pending" ? "submitted" : outcome === "cancel" ? "replaced" : "reverted"}`);
+      expect(approvalConfirmed(result)).toBe(false);
+      expect(sends).toHaveLength(0);
+    }
+  });
+
+  test("the original canonical receipt wins over an unproved Agent replacement claim", async () => {
+    const initial = record(intent({ mode: "agent" })), journal = memoryStore(initial);
+    const { wallet, replacementReads } = walletMock({ transaction: () => evidence(initial) });
+    const result = await verifyAgentResult(wallet, journal.store, initial, "swap", operation("swap", { status: "replaced", replacementTransactionHash: REPLACEMENT_HASH }));
+    expect(result.phase).toBe("swap_confirmed");
+    expect(storedOperation(result, "swap")).toMatchObject({ transactionHash: HASH, replacementTransactionHash: null, receipt: { status: "success" } });
+    expect(replacementReads).toHaveLength(0);
+  });
+
   test.each(["from", "to", "data", "valueWei"] as const)("rejects a public transaction whose %s differs despite a claimed successful receipt", async (field) => {
     const initial = record(intent({ mode: "agent" })), journal = memoryStore(initial);
     const actual = evidence(initial);

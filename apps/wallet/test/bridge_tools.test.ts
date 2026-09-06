@@ -16,7 +16,7 @@ import {
   bridgeEvmRequestId, bridgeTransaction, createBridgeClient, executeBridgeDeposit,
   type BridgeIntent, type BridgeQuote,
 } from "../src/bridge.ts";
-import { handleBridgeRootAttach, handleBridgeRootNext, handleBridgeRootPrepare } from "../src/bridge_tools.ts";
+import { handleBridgeRootAttach, handleBridgeRootAttachReplacement, handleBridgeRootNext, handleBridgeRootPrepare } from "../src/bridge_tools.ts";
 import { connectEvmBridge } from "../src/evm_bridge.ts";
 
 const account = `0x${"11".repeat(20)}` as Hex;
@@ -119,11 +119,13 @@ function evidence(saved = claimed()): EvmTransactionResult {
 function fixture(initial = intent()) {
   let saved = structuredClone(initial);
   const calls: MsgBusToolCall[] = [];
+  let effectiveHash: string | null = null;
   const selfCalls: Array<{ method: string; args: SelfCallValue[] }> = [];
   const state = {
     liveQuote: structuredClone(initial.quote), evidence: evidence(initial),
     status: operation() as EvmOperationStatusResult, sendResult: operation(),
     helperCode: "0x6001", actualMinter: minter,
+    evidenceByHash: {} as Record<string, EvmTransactionResult>, replacementMatches: true,
   };
   const accounts = {
     accounts: [{ accountId: "main", address: account, publicKey: `0x02${"78".repeat(32)}`, keyFingerprint: fingerprint, namespaceVersion: "1" }],
@@ -138,13 +140,25 @@ function fixture(initial = intent()) {
     selfCalls.push({ method, args: structuredClone(args) });
     if (method === "wallet_bridge_quote_v1") return wireQuote(state.liveQuote);
     if (method === "wallet_bridge_refresh_v1") return wireIntent(saved);
-    const input = args[0] as Record<string, unknown>;
+    let input = args[0] as Record<string, unknown>;
     if (method === "wallet_bridge_prepare_v1") {
       const caller = (input.source as { evm_agent: { app_id: string; installation_uid: string } }).evm_agent;
       saved.source = { appId: caller.app_id, installationUid: caller.installation_uid };
       saved.account = input.account as string;
       saved.amount = input.amount as string;
       return wireIntent(saved);
+    }
+    if (method === "wallet_bridge_replacement_v1") {
+      if (input.lookup) return { hash: effectiveHash };
+      input = input.record as Record<string, unknown>;
+      if (input.revision !== saved.revision) throw new Error("revision conflict");
+      const kind = Object.keys(input.step as object)[0];
+      const step = saved.steps.find((entry) => entry.kind === kind)!;
+      if (input.original_transaction_hash !== step.transactionHash || input.previous_transaction_hash !== (effectiveHash ?? step.transactionHash)) throw new Error("replacement identity conflict");
+      effectiveHash = String(input.transaction_hash);
+      step.state = Object.keys(input.state as object)[0] as typeof step.state;
+      saved.revision = String(BigInt(saved.revision) + 1n);
+      return { intent: wireIntent(saved) };
     }
     if (method === "wallet_bridge_claim_v1" || method === "wallet_bridge_record_step_v1") {
       if (input.revision !== saved.revision) throw new Error("revision conflict");
@@ -155,6 +169,7 @@ function fixture(initial = intent()) {
         step.state = "unknown";
         step.operationId = input.operation_id as string ?? null;
       } else {
+        if (step.transactionHash && input.transaction_hash && step.transactionHash !== input.transaction_hash) throw new Error("A saved transaction hash cannot change");
         step.state = Object.keys(input.state as object)[0] as typeof step.state;
         step.transactionHash = input.transaction_hash as Hex ?? null;
         step.error = input.error as string ?? null;
@@ -172,7 +187,11 @@ function fixture(initial = intent()) {
       calls.push(structuredClone(call));
       expect(call.target).toBe(EVM_WALLET_TARGET);
       if (call.name === EVM_WALLET_TOOLS.accounts) return structuredClone(accounts);
-      if (call.name === EVM_WALLET_TOOLS.transaction) return structuredClone(state.evidence);
+      if (call.name === EVM_WALLET_TOOLS.transaction) {
+        const selected = state.evidenceByHash[String(call.arguments?.transactionHash)];
+        return structuredClone(selected ? { ...selected, walletRequestMatches: call.arguments?.walletRequest ? selected.walletRequestMatches : null } : state.evidence);
+      }
+      if (call.name === EVM_WALLET_TOOLS.replacementTransaction) return { ...call.arguments, walletReplacementMatches: state.replacementMatches, observedAtNs: "1", source: "evm_wallet_journal" };
       if (call.name === EVM_WALLET_TOOLS.operationStatus) return structuredClone(state.status);
       if (call.name === EVM_WALLET_TOOLS.sendTransaction) return structuredClone(state.sendResult);
       if (call.name === EVM_WALLET_TOOLS.readContract) return {
@@ -274,7 +293,7 @@ test("root bridge attach rejects an otherwise identical transaction belonging to
   f.state.evidence.walletRequestMatches = false;
   await expect(handleBridgeRootAttach({ id: intent().id, step: "deposit", transactionHash: hash }, f.context)).rejects.toThrow("not bound to this exact root caller installation");
   expect(f.saved().steps[2]).toMatchObject({ state: "unknown", transactionHash: null });
-  expect(f.selfCalls.some((call) => call.method === "wallet_bridge_record_step_v1")).toBe(false);
+  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_record_step_v1").some((call) => (call.args[0] as Record<string, unknown>).transaction_hash === replacementHash)).toBe(false);
 });
 
 test("a known root transaction hash remains reconcilable after its helper retires and never yields another executable request", async () => {
@@ -500,6 +519,8 @@ test("every actual bridge client input matches generated method schemas and Kern
   saved = await f.bridge.claim(saved, "deposit", bridgeEvmRequestId(saved.id, "deposit"));
   saved = await f.bridge.record(saved, "deposit", "unknown", null);
   saved = await f.bridge.record(saved, "deposit", "submitted", hash);
+  await f.bridge.effectiveHash(saved.id, "deposit");
+  saved = await f.bridge.recordReplacement(saved, "deposit", hash, hash, `0x${"99".repeat(32)}` as Hex, "submitted");
   await f.bridge.refresh(saved.id);
   expect(await f.bridge.list(null)).toEqual([saved]);
   expect(await f.bridge.list(saved.quote.ledger)).toEqual([saved]);
@@ -517,4 +538,93 @@ test("every actual bridge client input matches generated method schemas and Kern
     expect(normalizeSelfCallResult(decoded[0], inputType)).toEqual(args[0]);
     expect(validateAppMethodArgs(idl.artifact, method, args.map(publicSchemaValue))).toEqual({ valid: true, errors: [] });
   }
+});
+
+const replacementHash = `0x${"98".repeat(32)}` as Hex;
+function replacementFixture(initial = claimed(hash)) {
+  const f = fixture(initial);
+  f.state.status = operation({ status: "replaced", replacementTransactionHash: replacementHash });
+  f.state.evidenceByHash[hash] = { ...evidence(initial), receipt: null };
+  f.state.evidenceByHash[replacementHash] = { ...evidence(initial), transactionHash: replacementHash, walletRequestMatches: false };
+  return f;
+}
+test("human speed-up preserves original durable identity while confirming exact replacement effect", async () => {
+  const saved = claimed(hash); saved.source = "evm";
+  const f = replacementFixture(saved);
+  const connection = await connectEvmBridge(f.evm, helper, null, account);
+  const result = await executeBridgeDeposit({ intent: saved, client: f.bridge, ...connection });
+  expect(result.steps[2]).toMatchObject({ state: "confirmed", transactionHash: hash, operationId: saved.steps[2]!.operationId });
+  expect(await f.bridge.effectiveHash(saved.id, "deposit")).toBe(replacementHash);
+  expect(f.calls.some((call) => call.name === EVM_WALLET_TOOLS.sendTransaction)).toBe(false);
+  const calls = f.calls.length;
+  await executeBridgeDeposit({ intent: result, client: f.bridge, ...connection });
+  expect(f.calls.slice(calls).some((call) => call.name === EVM_WALLET_TOOLS.sendTransaction)).toBe(false);
+});
+for (const changed of ["to", "from", "data", "valueWei"] as const) test(`human replacement with changed ${changed} cannot advance the bridge`, async () => {
+  const saved = claimed(hash); saved.source = "evm";
+  const f = replacementFixture(saved);
+  const tx = f.state.evidenceByHash[replacementHash]!.transaction!;
+  tx[changed] = changed === "data" ? "0x" : changed === "valueWei" ? "0" : other;
+  const connection = await connectEvmBridge(f.evm, helper, null, account);
+  await expect(executeBridgeDeposit({ intent: saved, client: f.bridge, ...connection })).rejects.toThrow("cancellation or changed replacement");
+  expect(f.saved().steps[2]!.state).toBe("submitted");
+  expect(await f.bridge.effectiveHash(saved.id, "deposit")).toBeNull();
+  expect(f.calls.some((call) => call.name === EVM_WALLET_TOOLS.sendTransaction)).toBe(false);
+});
+test("root replacement requires exact journal ancestry and retains original hash after reload", async () => {
+  const f = replacementFixture();
+  const args = { id: intent().id, step: "deposit", transactionHash: replacementHash };
+  f.state.replacementMatches = false;
+  await expect(handleBridgeRootAttach(args, f.context)).rejects.toThrow("did not prove");
+  expect(await f.bridge.effectiveHash(intent().id, "deposit")).toBeNull();
+  f.state.replacementMatches = true;
+  const result = await handleBridgeRootAttach(args, f.context) as unknown as BridgeIntent;
+  expect(result.steps[2]).toMatchObject({ state: "confirmed", transactionHash: hash });
+  expect(await f.bridge.effectiveHash(result.id, "deposit")).toBe(replacementHash);
+  expect(f.calls.filter((call) => call.name === EVM_WALLET_TOOLS.replacementTransaction).at(-1)?.arguments?.originalWalletRequest).toEqual({ callerAppId: root.appId, callerInstallationUid: root.installationUid, requestId: result.steps[2]!.operationId });
+});
+test("root can recover replacement after original attach was lost and original RPC transaction evicted", async () => {
+  const f = replacementFixture(claimed());
+  f.state.evidenceByHash[hash]!.transaction = null;
+  const result = await handleBridgeRootAttachReplacement({ id: intent().id, step: "deposit", originalTransactionHash: hash, transactionHash: replacementHash }, f.context) as unknown as BridgeIntent;
+  expect(result.steps[2]).toMatchObject({ state: "confirmed", transactionHash: hash });
+  expect(await f.bridge.effectiveHash(result.id, "deposit")).toBe(replacementHash);
+});
+test("root cancellation and different-nonce evidence remain unresolved", async () => {
+  for (const mutation of ["cancel", "nonce"] as const) {
+    const f = replacementFixture();
+    const tx = f.state.evidenceByHash[replacementHash]!.transaction!;
+    if (mutation === "cancel") { tx.to = account; tx.data = "0x"; tx.valueWei = "0"; }
+    else tx.nonce = "11";
+    await expect(handleBridgeRootAttachReplacement({ id: intent().id, step: "deposit", originalTransactionHash: hash, transactionHash: replacementHash }, f.context)).rejects.toThrow(mutation === "cancel" ? "does not match" : "different nonce");
+    expect(await f.bridge.effectiveHash(intent().id, "deposit")).toBeNull();
+    expect(f.saved().steps[2]!.state).toBe("submitted");
+  }
+});
+
+test("a lost replacement journal reply resumes its existing edge without another signature", async () => {
+  const saved = claimed(hash); saved.source = "evm";
+  const f = replacementFixture(saved);
+  f.state.evidenceByHash[replacementHash]!.receipt = null;
+  const persist = f.bridge.recordReplacement;
+  f.bridge.recordReplacement = async (...args) => { await persist(...args); throw new Error("replacement record reply lost"); };
+  const connection = await connectEvmBridge(f.evm, helper, null, account);
+  await expect(executeBridgeDeposit({ intent: saved, client: f.bridge, ...connection })).rejects.toThrow("record reply lost");
+  expect(await f.bridge.effectiveHash(saved.id, "deposit")).toBe(replacementHash);
+  expect(f.saved().steps[2]).toMatchObject({ state: "submitted", transactionHash: hash });
+  f.state.evidenceByHash[replacementHash]!.receipt = receipt();
+  const result = await executeBridgeDeposit({ intent: f.saved(), client: f.bridge, ...connection });
+  expect(result.steps[2]).toMatchObject({ state: "confirmed", transactionHash: hash });
+  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_replacement_v1" && (call.args[0] as Record<string, unknown>).record)).toHaveLength(1);
+  expect(f.calls.some((call) => call.name === EVM_WALLET_TOOLS.sendTransaction)).toBe(false);
+});
+for (const original of [null, hash]) test(`a reverted exact replacement preserves original identity after ${original ? "saved hash" : "lost first reply"}`, async () => {
+  const saved = claimed(original); saved.source = "evm";
+  const f = replacementFixture(saved);
+  f.state.evidenceByHash[replacementHash]!.receipt = receipt("reverted");
+  const connection = await connectEvmBridge(f.evm, helper, null, account);
+  await expect(executeBridgeDeposit({ intent: saved, client: f.bridge, ...connection })).rejects.toThrow("replacement deposit transaction reverted");
+  expect(f.saved().steps[2]).toMatchObject({ state: "failed", transactionHash: hash });
+  expect(await f.bridge.effectiveHash(saved.id, "deposit")).toBe(replacementHash);
+  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_record_step_v1").some((call) => (call.args[0] as Record<string, unknown>).transaction_hash === replacementHash)).toBe(false);
 });

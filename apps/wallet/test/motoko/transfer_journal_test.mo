@@ -306,8 +306,7 @@ switch (await* Withdrawals.withdraw(ethRoute, gasLedger, address, 1_000, 10, cre
 };
 assert (malformedEthRetryScript.count == 0 and malformedEthRetry.hasUnknown());
 
-// A complete minter rejection is definite and stays cached. The Solana
-// adapter's actual method is "withdraw", and AlreadyProcessing is ambiguous.
+// A complete minter rejection is definite and stays cached.
 let rejectedEthWire : { #Err : { #AmountTooLow : { min_withdrawal_amount : Nat } } } = #Err(#AmountTooLow({ min_withdrawal_amount = 9_000 }));
 let rejectedEth = command(Blob.fromArray([8]), true);
 let rejectedEthScript = Script(rejectedEth, [{ request = ethWithdrawal; result = #ok(to_candid (rejectedEthWire)) }]);
@@ -320,7 +319,126 @@ assert (not rejectedEthFirst.hasUnknown() and not Journal.hasUnresolved(rejected
 let solReceipt : { #Ok : { block_index : Nat64 } } = #Ok({ block_index = 99 });
 let alreadyProcessing : { #Err : { #AlreadyProcessing } } = #Err(#AlreadyProcessing);
 assert (not Withdrawals.replyNeedsReconciliation("withdraw", to_candid (solReceipt)));
-assert (Withdrawals.replyNeedsReconciliation("withdraw", to_candid (alreadyProcessing)));
+assert (not Withdrawals.replyNeedsReconciliation("withdraw", to_candid (alreadyProcessing)));
+
+// BTC, DOGE and SOL guard AlreadyProcessing before this invocation burns.
+// Exercise each complete approval/withdrawal protocol, not only its decoder:
+// approval already paid its fee, but the refused withdrawal is definite and
+// both replies stay cached. A separate earlier unknown minter call remains
+// unknown and is never dispatched again to obtain this refusal.
+let guardedRoutes : [{ id : Blob; prior_id : Blob; temporary_id : Blob; route : Catalog.NativeRoute; method : Text; symbol : Text; destination : Text }] = [
+    {
+        id = Blob.fromArray([40]); prior_id = Blob.fromArray([41]);
+        temporary_id = Blob.fromArray([46]);
+        route = #ckbtc({ minter = Principal.toText(minter) });
+        method = "retrieve_btc_with_approval"; symbol = "ckBTC";
+        destination = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
+    },
+    {
+        id = Blob.fromArray([42]); prior_id = Blob.fromArray([43]);
+        temporary_id = Blob.fromArray([47]);
+        route = #ckdoge({ minter = Principal.toText(minter) });
+        method = "retrieve_doge_with_approval"; symbol = "ckDOGE";
+        destination = "D5bJ6V7acpTgNVqiU5GPkJGEhsMi43xniX";
+    },
+    {
+        id = Blob.fromArray([44]); prior_id = Blob.fromArray([45]);
+        temporary_id = Blob.fromArray([48]);
+        route = #cksol({ minter = Principal.toText(minter) });
+        method = "withdraw"; symbol = "ckSOL";
+        destination = "11111111111111111111111111111111";
+    },
+];
+for (fixture in guardedRoutes.vals()) {
+    let approval = approveRequest(ledger, 1_010, 10);
+    let withdrawal : Capabilities.CallRequest = {
+        canister = minter;
+        method = fixture.method;
+        args = to_candid ({ address = fixture.destination; amount = 1_000 : Nat64; from_subaccount = null : ?Blob });
+        cycles = 0;
+    };
+    let prior = command(fixture.prior_id, true);
+    let priorScript = Script(prior, [
+        { request = approval; result = #ok(to_candid (approvalOk)) },
+        { request = withdrawal; result = lostReply },
+    ]);
+    let priorReplay = Journal.Replay(prior, priorScript.calls);
+    switch (await* Withdrawals.withdraw(fixture.route, ledger, fixture.destination, 1_000, 10, createdAt, priorReplay.backend_calls, validDestination)) {
+        case (#err(_)) {};
+        case (#ok(_)) assert false;
+    };
+    assert (priorScript.count == 2 and priorReplay.hasUnknown());
+    assert (Journal.hasUnresolved(prior) and isUnknownStep(prior.calls[1]));
+
+    // The upstream minter maps a ledger response decode failure into a typed
+    // TemporarilyUnavailable reply even if the ledger committed the burn.
+    // Model that verified path with a simulated burn before the mapped reply:
+    // keep the complete reply and never send a new approval or minter call.
+    let temporary = command(fixture.temporary_id, true);
+    let temporaryMessage = if (fixture.method == "withdraw") {
+        "Failed to burn tokens: The inter-canister call response could not be decoded";
+    } else {
+        "cannot enqueue a burn transaction: candid decode failed (reject_code = 5)";
+    };
+    let temporaryReply : { #Err : { #TemporarilyUnavailable : Text } } = #Err(#TemporarilyUnavailable(temporaryMessage));
+    let temporaryScript = Script(temporary, [
+        { request = approval; result = #ok(to_candid (approvalOk)) },
+        { request = withdrawal; result = #ok(to_candid (temporaryReply)) },
+    ]);
+    var simulatedBurnedAmount = 0;
+    let burnThenReplyCalls : Capabilities.BackendCalls = {
+        temporaryScript.calls with
+        call = func(request : Capabilities.CallRequest) : async* Capabilities.CallResult {
+            if (request.method == fixture.method) simulatedBurnedAmount += 1_000;
+            await* temporaryScript.calls.call(request);
+        };
+    };
+    let temporaryReplay = Journal.Replay(temporary, burnThenReplyCalls);
+    assert ((await* Withdrawals.withdraw(fixture.route, ledger, fixture.destination, 1_000, 10, createdAt, temporaryReplay.backend_calls, validDestination)) == #err(temporaryMessage));
+    assert (temporaryScript.count == 2 and simulatedBurnedAmount == 1_000);
+    assert (temporaryReplay.hasUnknown() and Journal.hasUnresolved(temporary));
+    assert (temporary.status == #pending and temporary.calls.size() == 2);
+    assert (temporary.calls[0].outcome == #reply(to_candid (approvalOk)));
+    assert (temporary.calls[1].outcome == #reply(to_candid (temporaryReply)));
+    assert (Withdrawals.replyNeedsReconciliation(fixture.method, to_candid (temporaryReply)));
+    let temporaryRetryScript = Script(temporary, []);
+    let temporaryRetry = Journal.Replay(temporary, temporaryRetryScript.calls);
+    assert ((await* Withdrawals.withdraw(fixture.route, ledger, fixture.destination, 1_000, 10, createdAt, temporaryRetry.backend_calls, validDestination)) == #err(temporaryMessage));
+    assert (temporaryRetryScript.count == 0 and simulatedBurnedAmount == 1_000);
+    assert (temporaryRetry.hasUnknown() and Journal.hasUnresolved(temporary));
+    assert (temporary.calls[1].args == withdrawal.args);
+    assert (temporary.calls[1].outcome == #reply(to_candid (temporaryReply)));
+
+    let refused = command(fixture.id, true);
+    let refusedScript = Script(refused, [
+        { request = approval; result = #ok(to_candid (approvalOk)) },
+        { request = withdrawal; result = #ok(to_candid (alreadyProcessing)) },
+    ]);
+    let refusedReplay = Journal.Replay(refused, refusedScript.calls);
+    let refusal = fixture.symbol # " minter is already processing a withdrawal";
+    assert ((await* Withdrawals.withdraw(fixture.route, ledger, fixture.destination, 1_000, 10, createdAt, refusedReplay.backend_calls, validDestination)) == #err(refusal));
+    assert (refusedScript.count == 2 and refused.calls.size() == 2);
+    assert (not refusedReplay.hasUnknown() and not Journal.hasUnresolved(refused));
+    assert (refused.calls[0].outcome == #reply(to_candid (approvalOk)));
+    assert (refused.calls[1].outcome == #reply(to_candid (alreadyProcessing)));
+    assert (not Withdrawals.replyNeedsReconciliation(fixture.method, to_candid (alreadyProcessing)));
+
+    let cachedScript = Script(refused, []);
+    let cachedReplay = Journal.Replay(refused, cachedScript.calls);
+    assert ((await* Withdrawals.withdraw(fixture.route, ledger, fixture.destination, 1_000, 10, createdAt, cachedReplay.backend_calls, validDestination)) == #err(refusal));
+    assert (cachedScript.count == 0 and not cachedReplay.hasUnknown());
+    assert (Journal.hasUnresolved(temporary) and temporary.status == #pending);
+
+    let unknownRetryScript = Script(prior, []);
+    let unknownRetry = Journal.Replay(prior, unknownRetryScript.calls);
+    switch (await* Withdrawals.withdraw(fixture.route, ledger, fixture.destination, 1_000, 10, createdAt, unknownRetry.backend_calls, validDestination)) {
+        case (#err(error)) assert (Text.contains(error, #text("not repeated")));
+        case (#ok(_)) assert false;
+    };
+    assert (unknownRetryScript.count == 0 and unknownRetry.hasUnknown());
+    assert (Journal.hasUnresolved(prior) and isUnknownStep(prior.calls[1]));
+    assert (prior.calls[1].args == withdrawal.args);
+};
 
 // Exercise the real ckERC20 withdrawal workflow. The token approval succeeds
 // before the gas approval reply is lost. The retry must keep the original gas

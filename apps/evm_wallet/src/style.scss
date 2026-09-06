@@ -418,6 +418,15 @@ body {
 
   .evm-review-detail-pair { display: contents; }
 
+  .evm-token-review {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+
+    > :where(h3, p) { margin: 0; }
+    > button { justify-self: start; }
+  }
+
   .evm-review-footer {
     display: flex;
     flex-wrap: wrap;

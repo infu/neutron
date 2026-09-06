@@ -37,6 +37,15 @@
         }
       },
       "migrations": {}
+    },
+    "wallet_bridge_replacements": {
+      "schemas": {
+        "1": {
+          "hash": "92b240166e7c7707d35a71e7988b261ed177fe1f130813c9cebfb8ba0495291c",
+          "entry": "eb2640563690222ee84e1396ae267c5a3dfe78284b7473e5c46b5d8f555dd7e5"
+        }
+      },
+      "migrations": {}
     }
   }
 }

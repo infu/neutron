@@ -55,8 +55,8 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-const allMemoryRoots = ["wallet", "wallet_bridge", "wallet_commands", "wallet_transfers"] as const;
-const addedMemoryRoots = ["wallet_bridge", "wallet_transfers"] as const;
+const allMemoryRoots = ["wallet", "wallet_bridge", "wallet_bridge_replacements", "wallet_commands", "wallet_transfers"] as const;
+const addedMemoryRoots = ["wallet_bridge", "wallet_bridge_replacements", "wallet_transfers"] as const;
 
 test("Wallet candidate keeps the original root and initializes independent journals", async () => {
   const [productionBytes, sourceText, lockText] = await Promise.all([
@@ -111,11 +111,12 @@ test("Wallet candidate keeps the original root and initializes independent journ
 });
 
 // These immutable archives cover the production schema baseline and later
-// releases carrying wallet_commands. Skipping app versions keeps the same v1
-// roots and initializes only the two new journals; no reset or fake migration.
-test("Current Wallet archive keeps every predecessor root and adds bridge and transfer journals", async () => {
+// releases carrying wallet_commands, then the published four-root Wallet315.
+// Skipping app versions keeps every existing v1 root and initializes only the
+// missing journals. The Wallet315 successor adds the independent replacement journal.
+test("Current Wallet archive keeps every predecessor root and initializes only missing journals", async () => {
   const source = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
-  expect(source.version).toBeGreaterThan(312);
+  expect(source.version).toBeGreaterThan(315);
   const candidate = packageManifest(await readFile(new URL(`../${packageArchiveFilename("wallet", source.version)}`, import.meta.url)));
   expect(candidate.version).toBe(source.version);
   expect(Object.keys(candidate.memory ?? {}).sort()).toEqual([...allMemoryRoots]);
@@ -136,6 +137,7 @@ test("Current Wallet archive keeps every predecessor root and adds bridge and tr
     { version: 310, bytes: releasedWallet310Bytes, sha256: releasedWallet310Sha256 },
     { version: 311, bytes: releasedWallet311Bytes, sha256: releasedWallet311Sha256 },
     { version: 312, bytes: 678_721, sha256: "6875f1f98ae7309fe84885ed77df9847c1c1ad03f5baa8d6aed4b00fb4f48129" },
+    { version: 315, bytes: 753_979, sha256: "1d1156e18ee3116dbda8c8c410f6c4987ba062db345ddf169a822f3d3c20ffcd" },
   ];
   for (const predecessor of predecessors) {
     const bytes = await readFile(new URL(`../${packageArchiveFilename("wallet", predecessor.version)}`, import.meta.url));
@@ -143,6 +145,11 @@ test("Current Wallet archive keeps every predecessor root and adds bridge and tr
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(predecessor.sha256);
     const production = packageManifest(bytes);
     expect(production.version).toBe(predecessor.version);
+    if (predecessor.version === 315) {
+      expect(Object.keys(production.memory ?? {}).sort()).toEqual([
+        "wallet", "wallet_bridge", "wallet_commands", "wallet_transfers",
+      ]);
+    }
     for (const [memoryId, memory] of Object.entries(production.memory ?? {})) {
       expect(requiredMemory(candidate, memoryId)).toEqual(memory);
       expect(lock.memory[memoryId]).toEqual(createMemoryLock(production).memory[memoryId]);

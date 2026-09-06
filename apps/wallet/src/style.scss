@@ -913,6 +913,16 @@ body {
     }
   }
 
+  .wallet-saved-transfers {
+    align-items: stretch;
+    flex-direction: column;
+    height: auto;
+    min-width: 0;
+
+    > div { min-width: 0; }
+    p, code { overflow-wrap: anywhere; }
+  }
+
   .wallet-spinner {
     animation: wallet-spin 0.75s linear infinite;
     border: 1px solid rgb(141 224 207 / 20%);

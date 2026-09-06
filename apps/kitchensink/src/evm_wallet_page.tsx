@@ -162,7 +162,7 @@ export function EvmWalletPage() {
   </CapabilityFrame>;
 }
 
-function SavedEvmRequest({ record, busy, advance }: { record: EvmDemoRecord; busy: boolean; advance: () => void }) {
+export function SavedEvmRequest({ record, busy, advance }: { record: EvmDemoRecord; busy: boolean; advance: () => void }) {
   const terminal = evmDemoRecordTerminal(record);
   const next = record.progress.findIndex((entry) => !evmDemoStepSucceeded(entry));
   return <article className="ks-evm-intent" data-tid={`evm-intent-${record.intent.id}`}>
@@ -172,7 +172,9 @@ function SavedEvmRequest({ record, busy, advance }: { record: EvmDemoRecord; bus
       const progress = record.progress[index]!;
       return <li key={step.request.requestId}><strong>{step.title}</strong>: {progress.operation?.status ?? (progress.attempted ? "reply unknown; reconcile saved request" : "saved; not submitted")}
         {progress.operation?.transactionHash ? <div className="ks-evm-hash">Transaction: <code>{progress.operation.transactionHash}</code></div> : null}
-        {progress.operation?.replacementTransactionHash ? <div className="ks-evm-hash">Replacement: <code>{progress.operation.replacementTransactionHash}</code><p>The original transaction was replaced and this sequence has ended. Review the replacement in EVM Wallet. You can explicitly save a new intent above.</p></div> : null}
+        {progress.operation?.replacementTransactionHash ? <div className="ks-evm-hash">Replacement: <code>{progress.operation.replacementTransactionHash}</code><p>{progress.operation.status === "replaced"
+          ? "The original transaction was replaced and this sequence has ended. Review the replacement in EVM Wallet. You can explicitly save a new intent above."
+          : "The replacement outcome is pending or unknown. Reconcile this saved request in EVM Wallet to establish what happened."}</p></div> : null}
         {progress.operation ? <div>Operation {progress.operation.operationId}{progress.operation.receipt ? ` · receipt ${progress.operation.receipt.status} · ${progress.operation.receipt.finality}` : ""}</div> : null}
         {progress.signatureVerified ? <div>Signature independently verified against the saved account and message.</div> : null}
         {progress.operation?.message ? <div>{progress.operation.message}</div> : null}

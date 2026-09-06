@@ -193,6 +193,6 @@ module {
     };
 
     func isEffect(method : Text) : Bool {
-        method != "icrc1_fee" and method != "eip_1559_transaction_price";
+        method != "icrc1_fee" and method != "eip_1559_transaction_price" and method != "get_events";
     };
 };

@@ -16,6 +16,7 @@ export const EVM_WALLET_TOOLS = {
   networks: "evm_networks_v1",
   balances: "evm_balances_v1",
   readContract: "evm_read_contract_v1",
+  estimateTransaction: "evm_estimate_transaction_v1",
   sendTransaction: "evm_send_transaction_v1",
   sendTransactionRoot: "evm_send_transaction_root_v1",
   signMessage: "evm_sign_message_v1",
@@ -24,6 +25,7 @@ export const EVM_WALLET_TOOLS = {
   signTypedDataRoot: "evm_sign_typed_data_root_v1",
   operationStatus: "evm_operation_status_v1",
   transaction: "evm_transaction_v1",
+  replacementTransaction: "evm_replacement_transaction_v1",
   replaceTransaction: "evm_replace_transaction_v1",
   replaceTransactionRoot: "evm_replace_transaction_root_v1",
 } as const;
@@ -53,6 +55,8 @@ export type EvmSignMessageRequest = EvmEffectIdentity & { messageHex: string };
 export type EvmSignTypedDataRequest = EvmEffectIdentity & { typedDataJson: string };
 export type EvmBalancesRequest = EvmScope & { tokens: string[] };
 export type EvmReadContractRequest = EvmScope & { to: string; data: string };
+/** A read-only estimate for this exact call; it grants no transaction authority. */
+export type EvmEstimateTransactionRequest = EvmScope & { to: string; valueWei: string; data: string };
 export type EvmOperationStatusRequest = EvmEffectIdentity;
 export type EvmEffectKind = "transaction" | "message" | "typed_data";
 export type EvmEffectRequest = EvmSendTransactionRequest | EvmSignMessageRequest | EvmSignTypedDataRequest;
@@ -92,6 +96,28 @@ export type EvmReadContractResult = EvmScope & {
   code: string;
   blockNumber: string;
   observedAtNs: string;
+};
+export type EvmEstimateTransactionResult = EvmEstimateTransactionRequest & {
+  address: string;
+  status: "available" | "unavailable";
+  gasLimit: string | null;
+  /** Raw eth_gasPrice observation, which can differ from base fee plus tip. */
+  gasPriceWei: string | null;
+  baseFeePerGasWei: string | null;
+  maxPriorityFeePerGasWei: string | null;
+  maxFeePerGasWei: string | null;
+  /** Gas estimate times current price; excludes the transferred value. */
+  estimatedFeeWei: string | null;
+  /** Gas estimate times suggested maximum price; not an authorized spending cap. */
+  maximumFeeWei: string | null;
+  blockNumber: string | null;
+  /** Observations can span RPC calls and are not a single atomic block snapshot. */
+  observedAtNs: string;
+  feeBasis: "base_fee_plus_priority" | "gas_price" | "arbitrum_total_gas" | "unavailable";
+  /** Arbitrum's total gas estimate already includes posting; never add it twice. */
+  postingCosts: "included" | "not_applicable" | "unavailable";
+  reasons: string[];
+  source: "evm_rpc";
 };
 export type EvmReceiptLog = { address: string; data: string; topics: string[]; logIndex: string };
 export type EvmReceipt = {
@@ -143,6 +169,7 @@ export const evmAccountsInputSchema = evmEmptyInputSchema;
 export const evmNetworksInputSchema = evmEmptyInputSchema;
 export const evmBalancesInputSchema = closedSchema({ ...scopeProperties, tokens: array(ADDRESS) });
 export const evmReadContractInputSchema = closedSchema({ ...scopeProperties, to: ADDRESS, data: HEX });
+export const evmEstimateTransactionInputSchema = closedSchema({ ...scopeProperties, to: ADDRESS, valueWei: UINT, data: HEX });
 export const evmSendTransactionInputSchema = closedSchema({
   ...identityProperties, to: ADDRESS, valueWei: UINT, data: HEX,
   transactionType: { enum: ["eip1559", "legacy"] }, gasLimit: POSITIVE_UINT,
@@ -173,6 +200,15 @@ export const evmBalancesOutputSchema = closedSchema({
 });
 export const evmReadContractOutputSchema = closedSchema({
   ...scopeProperties, address: ADDRESS, to: ADDRESS, data: HEX, result: HEX, code: HEX, blockNumber: UINT, observedAtNs: UINT,
+});
+export const evmEstimateTransactionOutputSchema = closedSchema({
+  ...scopeProperties, address: ADDRESS, to: ADDRESS, valueWei: UINT, data: HEX,
+  status: { enum: ["available", "unavailable"] }, gasLimit: nullable(POSITIVE_UINT),
+  gasPriceWei: nullable(UINT), baseFeePerGasWei: nullable(UINT), maxPriorityFeePerGasWei: nullable(UINT),
+  maxFeePerGasWei: nullable(UINT), estimatedFeeWei: nullable(UINT), maximumFeeWei: nullable(UINT),
+  blockNumber: nullable(UINT), observedAtNs: UINT,
+  feeBasis: { enum: ["base_fee_plus_priority", "gas_price", "arbitrum_total_gas", "unavailable"] },
+  postingCosts: { enum: ["included", "not_applicable", "unavailable"] }, reasons: array(TEXT), source: { const: "evm_rpc" },
 });
 export const evmReceiptSchema = closedSchema({
   blockNumber: UINT, blockHash: HASH, status: { enum: ["success", "reverted"] },
@@ -275,6 +311,12 @@ export function parseEvmReadContractRequest(value: unknown): EvmReadContractRequ
   scope(request); request.to = hex(request.to); request.data = hex(request.data);
   return request;
 }
+export function parseEvmEstimateTransactionRequest(value: unknown): EvmEstimateTransactionRequest {
+  const request = parseShape<EvmEstimateTransactionRequest>(value, evmEstimateTransactionInputSchema, "transaction estimate request");
+  scope(request); uint256(request.valueWei, "estimated transaction value");
+  request.to = hex(request.to); request.data = hex(request.data);
+  return request;
+}
 export function parseEvmSendTransactionRequest(value: unknown): EvmSendTransactionRequest {
   const request = parseShape<EvmSendTransactionRequest>(value, evmSendTransactionInputSchema, "transaction request");
   scope(request); uint256(request.valueWei, "valueWei");
@@ -371,6 +413,45 @@ export function parseEvmReadContractResult(value: unknown, expected?: EvmReadCon
   if (expected) {
     const request = parseEvmReadContractRequest(expected); assertSameScope(request, result);
     if (request.to !== result.to || request.data !== result.data) invalid("contract read response does not match the request");
+  }
+  return result;
+}
+export function parseEvmEstimateTransactionResult(value: unknown, expected?: EvmEstimateTransactionRequest): EvmEstimateTransactionResult {
+  const result = parseShape<EvmEstimateTransactionResult>(value, evmEstimateTransactionOutputSchema, "transaction estimate result");
+  scope(result); uint256(result.valueWei, "estimated transaction value");
+  result.address = hex(result.address); result.to = hex(result.to); result.data = hex(result.data);
+  for (const key of ["gasLimit", "gasPriceWei", "baseFeePerGasWei", "maxPriorityFeePerGasWei", "maxFeePerGasWei"] as const) {
+    if (result[key] !== null) uint256(result[key], key);
+  }
+  const available = result.status === "available";
+  if (available !== (result.estimatedFeeWei !== null) || available === (result.feeBasis === "unavailable")) invalid("estimate status and fee evidence disagree");
+  if (!available && !result.reasons.some((reason) => reason.length !== 0)) invalid("unavailable estimate has no reason");
+  if (available) {
+    if (result.gasLimit === null) invalid("available estimate has no gas estimate");
+    let price: bigint;
+    switch (result.feeBasis) {
+      case "base_fee_plus_priority":
+        if (result.baseFeePerGasWei === null || result.maxPriorityFeePerGasWei === null) invalid("estimate has no base or priority fee");
+        price = BigInt(result.baseFeePerGasWei) + BigInt(result.maxPriorityFeePerGasWei); break;
+      case "gas_price":
+        if (result.gasPriceWei === null) invalid("estimate has no gas price");
+        price = BigInt(result.gasPriceWei); break;
+      case "arbitrum_total_gas": {
+        const observedPrice = result.gasPriceWei ?? result.baseFeePerGasWei;
+        if (observedPrice === null || result.postingCosts !== "included") invalid("Arbitrum estimate has no total gas price or posting evidence");
+        price = BigInt(observedPrice); break;
+      }
+      default: return invalid("available estimate has no price basis");
+    }
+    // Products are arbitrary-precision decimal amounts, not rounded JS numbers.
+    if (BigInt(result.estimatedFeeWei!) !== BigInt(result.gasLimit) * price) invalid("estimated fee does not match gas and price evidence");
+  }
+  if (result.maximumFeeWei !== null) {
+    if (result.gasLimit === null || result.maxFeePerGasWei === null || BigInt(result.maximumFeeWei) !== BigInt(result.gasLimit) * BigInt(result.maxFeePerGasWei)) invalid("maximum fee does not match gas and price evidence");
+  }
+  if (expected) {
+    const request = parseEvmEstimateTransactionRequest(expected); assertSameScope(request, result);
+    if (request.to !== result.to || request.valueWei !== result.valueWei || request.data !== result.data) invalid("transaction estimate does not match the request");
   }
   return result;
 }
@@ -474,6 +555,10 @@ export class EvmWalletClient {
     const request = parseEvmReadContractRequest(value);
     return parseEvmReadContractResult(await this.invoke(EVM_WALLET_TOOLS.readContract, request, options), request);
   }
+  async estimateTransaction(value: EvmEstimateTransactionRequest, options?: EvmWalletCallOptions): Promise<EvmEstimateTransactionResult> {
+    const request = parseEvmEstimateTransactionRequest(value);
+    return parseEvmEstimateTransactionResult(await this.invoke(EVM_WALLET_TOOLS.estimateTransaction, request, options), request);
+  }
   async sendTransaction(value: EvmSendTransactionRequest, options?: EvmWalletCallOptions): Promise<EvmOperationResult> {
     return this.effect("transaction", EVM_WALLET_TOOLS.sendTransaction, value, options);
   }
@@ -508,6 +593,10 @@ export class EvmWalletClient {
   async transaction(value: EvmTransactionRequest, options?: EvmWalletCallOptions): Promise<EvmTransactionResult> {
     const request = parseEvmTransactionRequest(value);
     return parseEvmTransactionResult(await this.invoke(EVM_WALLET_TOOLS.transaction, request, options), request);
+  }
+  async replacementTransaction(value: EvmReplacementTransactionRequest, options?: EvmWalletCallOptions): Promise<EvmReplacementTransactionResult> {
+    const request = parseEvmReplacementTransactionRequest(value);
+    return parseEvmReplacementTransactionResult(await this.invoke(EVM_WALLET_TOOLS.replacementTransaction, request, options), request);
   }
   async operationStatus(value: EvmOperationStatusRequest, options?: EvmWalletCallOptions): Promise<EvmOperationStatusResult> {
     const request = parseEvmOperationStatusRequest(value);
@@ -649,6 +738,48 @@ export function parseEvmTransactionResult(value: unknown, expected?: EvmTransact
     const request = parseEvmTransactionRequest(expected);
     if (request.chainId !== result.chainId || request.transactionHash !== result.transactionHash) invalid("transaction evidence does not match the request");
     if ((request.walletRequest === undefined) !== (result.walletRequestMatches === null)) invalid("wallet request binding result does not match the query");
+  }
+  return result;
+}
+
+/**
+ * Read-only journal proof for a signed replacement descending from a saved
+ * command. It does not establish inclusion or success: obtain the replacement's
+ * public transaction and receipt separately with transaction().
+ */
+export type EvmReplacementTransactionRequest = {
+  chainId: string;
+  transactionHash: string;
+  originalWalletRequest: EvmWalletRequestReference;
+};
+export type EvmReplacementTransactionResult = EvmReplacementTransactionRequest & {
+  walletReplacementMatches: boolean;
+  observedAtNs: string;
+  source: "evm_wallet_journal";
+};
+export const evmReplacementTransactionInputSchema = closedSchema({
+  chainId: POSITIVE_UINT, transactionHash: HASH, originalWalletRequest: evmWalletRequestReferenceSchema,
+});
+export const evmReplacementTransactionOutputSchema = closedSchema({
+  chainId: POSITIVE_UINT, transactionHash: HASH, originalWalletRequest: evmWalletRequestReferenceSchema,
+  walletReplacementMatches: { type: "boolean" }, observedAtNs: UINT, source: { const: "evm_wallet_journal" },
+});
+export function parseEvmReplacementTransactionRequest(value: unknown): EvmReplacementTransactionRequest {
+  const request = parseShape<EvmReplacementTransactionRequest>(value, evmReplacementTransactionInputSchema, "replacement journal proof request");
+  const checked = parseEvmTransactionRequest({ chainId: request.chainId, transactionHash: request.transactionHash, walletRequest: request.originalWalletRequest });
+  return { chainId: checked.chainId, transactionHash: checked.transactionHash, originalWalletRequest: checked.walletRequest! };
+}
+export function parseEvmReplacementTransactionResult(value: unknown, expected?: EvmReplacementTransactionRequest): EvmReplacementTransactionResult {
+  const result = parseShape<EvmReplacementTransactionResult>(value, evmReplacementTransactionOutputSchema, "replacement journal proof result");
+  const identity = parseEvmReplacementTransactionRequest({ chainId: result.chainId, transactionHash: result.transactionHash, originalWalletRequest: result.originalWalletRequest });
+  result.transactionHash = identity.transactionHash;
+  if (expected) {
+    const request = parseEvmReplacementTransactionRequest(expected);
+    const original = result.originalWalletRequest;
+    if (request.chainId !== result.chainId || request.transactionHash !== result.transactionHash ||
+      request.originalWalletRequest.callerAppId !== original.callerAppId ||
+      request.originalWalletRequest.callerInstallationUid !== original.callerInstallationUid ||
+      request.originalWalletRequest.requestId !== original.requestId) invalid("replacement journal proof does not match the request");
   }
   return result;
 }

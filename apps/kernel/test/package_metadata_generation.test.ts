@@ -47,7 +47,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v339 NPL package metadata", () => {
+describe("Kernel v342 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -108,7 +108,7 @@ describe("Kernel v339 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(339);
+    expect(packagedManifest.version).toBe(342);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -129,7 +129,7 @@ describe("Kernel v339 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 339");
+    ).toThrow("restricted to Kernel version 342");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -344,7 +344,7 @@ describe("Kernel v339 NPL package metadata", () => {
       }),
     );
 
-    await installKernelInstalledArtifactInventory(root, 339);
+    await installKernelInstalledArtifactInventory(root, 342);
     const inventoryPath = path.join(
       root,
       KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
@@ -357,7 +357,7 @@ describe("Kernel v339 NPL package metadata", () => {
       parsed.artifacts.map((file) => [file.package_path, file] as const),
     );
 
-    expect(parsed.package).toEqual({ id: "kernel", version: 339 });
+    expect(parsed.package).toEqual({ id: "kernel", version: 342 });
     expect(byPackagePath.has("neutron.did")).toBe(false);
     expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
     expect(
@@ -382,7 +382,7 @@ describe("Kernel v339 NPL package metadata", () => {
     }
 
     await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
-    await installKernelInstalledArtifactInventory(root, 339);
+    await installKernelInstalledArtifactInventory(root, 342);
     expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
       firstBytes,
     );
@@ -415,6 +415,16 @@ describe("Kernel v339 NPL package metadata", () => {
       "packages/neutron-compiler/test/evm_wallet_upgrade/archives.ts",
       "packages/neutron-compiler/test/evm_wallet_upgrade/existing_apps.ts",
       "packages/neutron-compiler/test/evm_wallet_upgrade/new_apps.ts",
+      "packages/neutron-compiler/test/evm_signed_upgrade.pocketic.test.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/actor_fixtures.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/evm_signed_pending.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/evm_signed_rpc_fixture.mo",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_bridge_journals.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_canisters.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_fixture.mo",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_types.ts",
+      "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_transfer_journals.ts",
+      "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
       "doc/evm-wallet.md",
       "doc/evm-wallet-research.md",
       "doc/todo.evm-wallet.md",
@@ -458,11 +468,21 @@ async function metadataFixture(): Promise<MetadataFixture> {
   }>;
   for (const [memoryId, memory] of Object.entries(packagedMemory)) {
     const locked = memoryLockValue.memory[memoryId];
+    if (!locked) throw new Error(`Missing memory lock for ${memoryId}`);
     for (const [version, schema] of Object.entries(memory.schemas)) {
-      Object.assign(schema, locked.schemas[version]);
+      const lockedSchema = locked.schemas[version];
+      if (!lockedSchema) {
+        throw new Error(`Missing locked schema for ${memoryId} v${version}`);
+      }
+      Object.assign(schema, lockedSchema);
     }
     for (const migration of memory.migrations) {
-      migration.entry = locked.migrations[`${migration.from}->${migration.to}`];
+      const edge = `${migration.from}->${migration.to}`;
+      const lockedMigration = locked.migrations[edge];
+      if (!lockedMigration) {
+        throw new Error(`Missing locked migration for ${memoryId} ${edge}`);
+      }
+      migration.entry = lockedMigration;
     }
   }
   const sourceManifest = jsonBytes(sourceManifestValue);

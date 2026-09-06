@@ -11,9 +11,13 @@ export type EvmWalletFaultState = {
  * Drop one successful consumer reply, or emulate a Kernel without the additive
  * caller UID. Neither fault fabricates a wallet result or signs a transaction.
  */
-export async function installEvmWalletBrowserFaults(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    if (!/\/app\/(?:evm_wallet|kitchensink)\//u.test(location.pathname)) return;
+export async function installEvmWalletBrowserFaults(
+  page: Page,
+  appIds: readonly string[] = ["evm_wallet", "kitchensink"],
+): Promise<void> {
+  await page.addInitScript((includedApps) => {
+    const appId = /^\/app\/([^/]+)\//u.exec(location.pathname)?.[1];
+    if (appId === undefined || !includedApps.includes(appId)) return;
     const scope = window as typeof window & {
       __NEUTRON_EVM_E2E_FAULTS__?: EvmWalletFaultState;
     };
@@ -85,7 +89,7 @@ export async function installEvmWalletBrowserFaults(page: Page): Promise<void> {
       if (!listener) return;
       return originalRemove.call(this, type, wrappers.get(listener) ?? listener, options);
     };
-  });
+  }, [...appIds]);
 }
 
 export async function setEvmWalletFault(
@@ -163,7 +167,7 @@ export async function allowEvmInspectionGrantsUntil(
     const dialog = page.locator('[data-tid="frontend-tool-dialog"]');
     if (await dialog.isVisible()) {
       const content = await dialog.textContent() ?? "";
-      const allowed = ["evm_accounts_v1", "evm_networks_v1", "evm_operation_status_v1", "evm_balances_v1", "evm_read_contract_v1", "evm_transaction_v1"];
+      const allowed = ["evm_accounts_v1", "evm_networks_v1", "evm_operation_status_v1", "evm_balances_v1", "evm_read_contract_v1", "evm_transaction_v1", "evm_estimate_transaction_v1"];
       expect(allowed.some((name) => content.includes(name)), content).toBe(true);
       await dialog.locator('[data-tid="frontend-tool-approve-session"]').click();
     }

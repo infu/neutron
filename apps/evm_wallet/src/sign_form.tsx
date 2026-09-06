@@ -7,6 +7,7 @@ import {
 } from "neutron-tools/evm_wallet";
 import { hexToString } from "viem";
 import { errorMessage } from "./data.ts";
+import { onFormActionKeyDown, runFormAction } from "./form_actions.ts";
 import {
   checkSignatureRequest,
   createSignatureRequest,
@@ -190,10 +191,8 @@ export function SignForm({
       {!current && (
         <form
           className="evm-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run("new");
-          }}
+          onSubmit={(e) => e.preventDefault()}
+          onKeyDown={(e) => onFormActionKeyDown(e, busy, () => void run("new"))}
         >
           <label className="evm-field">
             <span>Signature type</span>
@@ -231,9 +230,11 @@ export function SignForm({
             signature.
           </p>
           <button
+            type="button"
             className="nt-button"
             data-testid="evm-sign-review"
             disabled={busy}
+            onClick={(e) => runFormAction(e.currentTarget.form, busy, () => void run("new"))}
           >
             {busy ? "Working…" : "Review signature"}
           </button>

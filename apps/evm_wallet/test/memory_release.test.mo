@@ -3,6 +3,7 @@ import Nat "mo:core/Nat";
 import Text "mo:core/Text";
 import Config "../backend/Config";
 import Memory "../backend/memory/evm_wallet/v1";
+import Evidence "../backend/memory/evm_evidence/v1";
 
 let fresh = Memory.init();
 assert Map.size(fresh.accounts) == 0;
@@ -13,8 +14,10 @@ Config.initialize(fresh);
 assert Map.size(fresh.networks) == 3;
 assert Map.size(fresh.assets) == 2;
 
-// This is a new root, so no prior production migration exists. A compatible
-// same-schema upgrade must keep every root object, including unknown effects.
+// Published wallet v1 keeps its existing object. The additive evidence root
+// initializes independently and never replaces installed commands or nonce state.
+let freshEvidence = Evidence.init();
+assert Map.size(freshEvidence.observations) == 0;
 let installed = Memory.init();
 let account : Memory.Account = { id = "main"; slot = "main"; address = "funded-address"; public_key = "key bytes"; key_fingerprint = "fingerprint"; namespace_version = 1 };
 Map.add(installed.accounts, Text.compare, "main", account);
@@ -53,3 +56,21 @@ assert pending.transaction_hash == ?"original hash" and pending.replacement_hash
 assert pending.reserved_nonce;
 pending.status := "submitted";
 assert command.status == "submitted";
+
+// The successor adds evidence with #init beside the restored wallet #keep.
+// An already-installed evidence root must also keep exact observations.
+let observation : Evidence.Evidence = {
+  chain_id = 1; contract = "token"; method = "approve"; owner = "account";
+  spender = ?"spender"; recipient = null; amount = "100";
+  recognition = "erc20_calldata"; block_number = ?"0x64";
+  block_hash = ?"observed block"; block_error = null; observed_at = 789;
+  balance = { value = ?"123456789012345678901234567890"; error = null };
+  allowance = ?{ value = null; error = ?"Provider unavailable" };
+};
+Map.add(freshEvidence.observations, Nat.compare, 42, observation);
+let restoredEvidence : Evidence.Mem = freshEvidence;
+assert Map.get(restoredEvidence.observations, Nat.compare, 42) == ?observation;
+assert pending.signed_raw == ?"exact signed transaction bytes";
+assert pending.transaction_hash == ?"original hash";
+assert Map.get(restored.nonce_next, Text.compare, "main-chain-key") == ?17;
+assert restored.next_operation_id == 43;

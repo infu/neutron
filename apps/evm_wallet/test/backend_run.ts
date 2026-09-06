@@ -10,7 +10,7 @@ import { parsePackageString } from "neutron-scripts/src/walk.js";
 const execute = promisify(execFile);
 const appRoot = path.resolve(import.meta.dir, "..");
 const requested = process.argv.slice(2);
-const tests = requested.length ? requested : ["journal_test.mo", "backend_test.mo"];
+const tests = requested.length ? requested : ["journal_test.mo", "backend_test.mo", "erc20_decode_test.mo", "replacement_proof_test.mo"];
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "evm-backend-test-"));
 const sources = await execute("mops", ["sources"], { cwd: appRoot });
 const packages = Object.fromEntries(Object.entries(parsePackageString(sources.stdout.replace(/\n/g, " ").trim())).map(([name, root]) => [name, path.resolve(appRoot, root)]));
@@ -33,7 +33,7 @@ try {
   const compiler = await loadMotoko();
   try {
     for (const test of tests) {
-      if (!["journal_test.mo", "backend_test.mo"].includes(test)) throw new Error(`Unexpected backend test filename: ${test}`);
+      if (!["journal_test.mo", "backend_test.mo", "erc20_decode_test.mo", "replacement_proof_test.mo"].includes(test)) throw new Error(`Unexpected backend test filename: ${test}`);
       const prepared = await prepareMotokoProgram({ compiler, sourcePath: path.join(appRoot, "test", test), packages, allowDangerous: true });
       const compiled = await compiler.wasm(prepared.entryPath, "wasi");
       const wasmPath = path.join(temporary, test.replace(/\.mo$/, ".wasm"));

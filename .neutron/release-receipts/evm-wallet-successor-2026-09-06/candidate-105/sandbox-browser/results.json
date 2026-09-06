@@ -1,0 +1,341 @@
+{
+  "passed": true,
+  "scope": "Actual React/SDK in allow-scripts-only opaque-origin iframe; mocked Kernel bridge and backend replies; no real Kernel/canister/signing/on-chain proof",
+  "sourceDirectory": "/srv/shared/code/neutron/apps/evm_wallet/src",
+  "sourceHashes": {
+    "main.tsx": "9c7f315cb1cf0c47298c72fb74b92031d9a6a7a337e6727ec44f765fec317d04",
+    "provider.ts": "bd22e582d7f6609dfbbd0bba38e95f2179c53b1aacd74b35baf11c7aeaef09e8",
+    "sign_form.tsx": "38bd49c91b56cbd186a86f4196e91f9e6a568699539d64bd330bb28cbd68ccf9",
+    "token_review.tsx": "f798b5c3e3287ef40bc911af0a6870eed423d2dc5c6375e7868099121234e8ba",
+    "local_intent.ts": "ccbdafab3cd331aa30f455f16dbbe249fa86902c0c9e596f24099be714513718",
+    "form_actions.ts": "c0d3e82c2015db7a41ac708189a538f60078a501fb50cf2f44bed53b52baa21a",
+    "prompts.ts": "16ce171f0c72b286da2b7ff44ed351086b896bc66f3034ecb0358a64d4f14128",
+    "known_approvals.ts": "0dcd9be35528e889053d2847dcf5a17c41b7f4d2e36435692da93e43b17fb1d1",
+    "replacement.tsx": "c825611d0a052e8f0fa2e0d3972694832b0b9be2fe2511ce2a7505f60c0c7f20",
+    "data.ts": "d9056f048126c1eaed25ebc630b8b1a6aabc40e5a5bef4d2a8e147be3b8d6af8",
+    "signature_request.ts": "83ff5cfe22d17b046d3e5e508a75a1aeccae7162f02511b04bb20442b1b7ff0e"
+  },
+  "checks": [
+    {
+      "label": "1440-send-click",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "label": "1440-send-enter",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "label": "1440-sign-click",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "label": "1440-sign-enter",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "label": "1440-replacement-click",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "label": "1440-replacement-enter",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "label": "1440-token-click",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": false,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "label": "1440-token-enter",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": false,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "label": "375-send-click",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 375,
+        "scrollWidth": 375
+      }
+    },
+    {
+      "label": "375-send-enter",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 375,
+        "scrollWidth": 375
+      }
+    },
+    {
+      "label": "375-sign-click",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 375,
+        "scrollWidth": 375
+      }
+    },
+    {
+      "label": "375-sign-enter",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 375,
+        "scrollWidth": 375
+      }
+    },
+    {
+      "label": "375-replacement-click",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 375,
+        "scrollWidth": 375
+      }
+    },
+    {
+      "label": "375-replacement-enter",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": true,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 375,
+        "scrollWidth": 375
+      }
+    },
+    {
+      "label": "375-token-click",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": false,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 375,
+        "scrollWidth": 375
+      }
+    },
+    {
+      "label": "375-token-enter",
+      "restrictions": {
+        "opaqueOrigin": true,
+        "parentDenied": true,
+        "localStorageDenied": true,
+        "indexedDBDenied": true
+      },
+      "invalidInputPreventsAction": true,
+      "actionCount": 1,
+      "duplicatePendingActionCount": 0,
+      "executedEffects": 0,
+      "residentHandlerExercised": false,
+      "synthesizedPresenter": false,
+      "geometry": {
+        "width": 375,
+        "scrollWidth": 375
+      }
+    }
+  ],
+  "screenshots": [
+    "1440-send-click.png",
+    "1440-send-enter.png",
+    "1440-sign-click.png",
+    "1440-sign-enter.png",
+    "1440-replacement-click.png",
+    "1440-replacement-enter.png",
+    "375-send-click.png",
+    "375-send-enter.png",
+    "375-sign-click.png",
+    "375-sign-enter.png",
+    "375-replacement-click.png",
+    "375-replacement-enter.png"
+  ],
+  "browserErrors": [],
+  "consoleMessages": [],
+  "failure": null
+}

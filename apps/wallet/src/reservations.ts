@@ -118,6 +118,7 @@ function nativeScopes(
       exact(route.minter, "get_btc_address"),
       exact(route.minter, "update_balance"),
       exact(route.minter, "retrieve_btc_with_approval"),
+      exact(route.minter, "retrieve_btc_status_v2"),
     ];
   }
   if (route.kind === "ckdoge") {
@@ -125,12 +126,14 @@ function nativeScopes(
       exact(route.minter, "get_doge_address"),
       exact(route.minter, "update_balance"),
       exact(route.minter, "retrieve_doge_with_approval"),
+      exact(route.minter, "retrieve_doge_status"),
     ];
   }
   if (route.kind === "cksol") {
     return [
       exact(route.minter, "update_balance"),
       exact(route.minter, "withdraw"),
+      exact(route.minter, "withdrawal_status"),
     ];
   }
   if (route.kind === "cketh") {

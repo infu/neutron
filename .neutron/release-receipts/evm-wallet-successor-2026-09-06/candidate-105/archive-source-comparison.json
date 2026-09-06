@@ -1,0 +1,1369 @@
+{
+  "archive": {
+    "path": "apps/evm_wallet/evm_wallet.v0.1.5.neutron",
+    "bytes": 391603,
+    "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2"
+  },
+  "offeredSource": {
+    "path": "apps/evm_wallet/.neutron/sources/8ae9900d2bb6dc9c6915c303a6d78158898f58b0e4b5dabbce7cab5216c8719a.source.v1.msgpack.gz",
+    "bytes": 489047,
+    "sha256": "8ae9900d2bb6dc9c6915c303a6d78158898f58b0e4b5dabbce7cab5216c8719a"
+  },
+  "sourceBindingVerified": true,
+  "priorCandidate": {
+    "path": "apps/evm_wallet/evm_wallet.v0.1.3.neutron",
+    "bytes": 391234,
+    "sha256": "80cb4d5a55d52ce1e27114e9bb36686af3d60dd668b7c85e694fb16ed4eb1d92",
+    "publication": "Private prepared candidate; local qualification only"
+  },
+  "modules": {
+    "priorCount": 80,
+    "currentCount": 80,
+    "unchangedCommonCount": 77,
+    "commonModules": [
+      {
+        "path": "mo/00bf6dc15ec20fec4b7f1acfee48b63ede4d913bb570d189df14f7673a125c15.mo",
+        "bytes": 36632,
+        "sha256": "00bf6dc15ec20fec4b7f1acfee48b63ede4d913bb570d189df14f7673a125c15",
+        "unchanged": true
+      },
+      {
+        "path": "mo/038514c49bd2d0145f5de8cd4dc7c3278fa1cb1f44ea1b926d2dfe7025e8789e.mo",
+        "bytes": 8834,
+        "sha256": "038514c49bd2d0145f5de8cd4dc7c3278fa1cb1f44ea1b926d2dfe7025e8789e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/0e908d8e686bdd55fd1b2b25ecb6680dbfbf40cd55aaa83cd46107923c7df772.mo",
+        "bytes": 54723,
+        "sha256": "0e908d8e686bdd55fd1b2b25ecb6680dbfbf40cd55aaa83cd46107923c7df772",
+        "unchanged": true
+      },
+      {
+        "path": "mo/0f77351f79a83056506e288d4c8d66c252e8a12bd6bab1b550b658543b971714.mo",
+        "bytes": 26979,
+        "sha256": "0f77351f79a83056506e288d4c8d66c252e8a12bd6bab1b550b658543b971714",
+        "unchanged": true
+      },
+      {
+        "path": "mo/1139a72434524d135111737f2989032ad31b0607ca80812f3e6e6cf1dab0f565.mo",
+        "bytes": 47501,
+        "sha256": "1139a72434524d135111737f2989032ad31b0607ca80812f3e6e6cf1dab0f565",
+        "unchanged": true
+      },
+      {
+        "path": "mo/18f54fa7e9064356471adb450971d8d1ccc803f0dda6545ce8ab4ce8910c6bf6.mo",
+        "bytes": 597,
+        "sha256": "18f54fa7e9064356471adb450971d8d1ccc803f0dda6545ce8ab4ce8910c6bf6",
+        "unchanged": true
+      },
+      {
+        "path": "mo/1a7e3db706620709d2f22b7706a7cb961304cf11bdedeb519b90f7c8eb0104d3.mo",
+        "bytes": 23151,
+        "sha256": "1a7e3db706620709d2f22b7706a7cb961304cf11bdedeb519b90f7c8eb0104d3",
+        "unchanged": true
+      },
+      {
+        "path": "mo/1ae38af22bbd20d80bd4bb2c276075935a1c9069b03d6773928b247616e48193.mo",
+        "bytes": 17410,
+        "sha256": "1ae38af22bbd20d80bd4bb2c276075935a1c9069b03d6773928b247616e48193",
+        "unchanged": true
+      },
+      {
+        "path": "mo/2417203b21adfa4b8db0619ecb775e6bde85ba5aaf7a3722ade042375a908e55.mo",
+        "bytes": 20470,
+        "sha256": "2417203b21adfa4b8db0619ecb775e6bde85ba5aaf7a3722ade042375a908e55",
+        "unchanged": true
+      },
+      {
+        "path": "mo/34a4bd91ea4287266316daebec7afdd3fa15a4cf9ccf79452a53cda0d65f9a34.mo",
+        "bytes": 7874,
+        "sha256": "34a4bd91ea4287266316daebec7afdd3fa15a4cf9ccf79452a53cda0d65f9a34",
+        "unchanged": true
+      },
+      {
+        "path": "mo/394eda524ad6869af6e1f8bf5be2f6885951b4191c71c790ca325539ef65464e.mo",
+        "bytes": 10606,
+        "sha256": "394eda524ad6869af6e1f8bf5be2f6885951b4191c71c790ca325539ef65464e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/3a5e6b3eabd4e0b9b7fa9743ab76123a2a0bc40074de46ea9acc460061e6b398.mo",
+        "bytes": 9335,
+        "sha256": "3a5e6b3eabd4e0b9b7fa9743ab76123a2a0bc40074de46ea9acc460061e6b398",
+        "unchanged": true
+      },
+      {
+        "path": "mo/3aeed20003aa1864549527075a8298f890157a6e37366384c9e275a38dc0d8ba.mo",
+        "bytes": 3528,
+        "sha256": "3aeed20003aa1864549527075a8298f890157a6e37366384c9e275a38dc0d8ba",
+        "unchanged": true
+      },
+      {
+        "path": "mo/43e221b68f6addcd1519baa2010da2011f0337a7a4bd14536e019d54a1923102.mo",
+        "bytes": 2811,
+        "sha256": "43e221b68f6addcd1519baa2010da2011f0337a7a4bd14536e019d54a1923102",
+        "unchanged": true
+      },
+      {
+        "path": "mo/466196523f97224d13f7f09087818253e1294ff1626816b93a99920859fcc28b.mo",
+        "bytes": 2868,
+        "sha256": "466196523f97224d13f7f09087818253e1294ff1626816b93a99920859fcc28b",
+        "unchanged": true
+      },
+      {
+        "path": "mo/48aacd3789b269175f5b093421b47797083054788ee251a25e16b51259de81d3.mo",
+        "bytes": 2862,
+        "sha256": "48aacd3789b269175f5b093421b47797083054788ee251a25e16b51259de81d3",
+        "unchanged": true
+      },
+      {
+        "path": "mo/4b6d97683d4354a7fe185827a135298026e670b1279af4284c74059628ec0f39.mo",
+        "bytes": 1142,
+        "sha256": "4b6d97683d4354a7fe185827a135298026e670b1279af4284c74059628ec0f39",
+        "unchanged": true
+      },
+      {
+        "path": "mo/4c7242cfad07425b869644b5125c032cee120d71c21a6564f2576f728280fcd1.mo",
+        "bytes": 2461,
+        "sha256": "4c7242cfad07425b869644b5125c032cee120d71c21a6564f2576f728280fcd1",
+        "unchanged": true
+      },
+      {
+        "path": "mo/4ccc6d374a588e539573ba5d6d2488a663d79cc99fbbeec13475a2c51cb28cd4.mo",
+        "bytes": 1857,
+        "sha256": "4ccc6d374a588e539573ba5d6d2488a663d79cc99fbbeec13475a2c51cb28cd4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/4f93d651fa8d4b902056d0cd302eb22e00164d9796f9065b8c6b464a79085ed8.mo",
+        "bytes": 11292,
+        "sha256": "4f93d651fa8d4b902056d0cd302eb22e00164d9796f9065b8c6b464a79085ed8",
+        "unchanged": true
+      },
+      {
+        "path": "mo/52a7c600886416b0c0d29373b0cc53a9f47ee2a65dce6950ca2e546341f9fc8d.mo",
+        "bytes": 35059,
+        "sha256": "52a7c600886416b0c0d29373b0cc53a9f47ee2a65dce6950ca2e546341f9fc8d",
+        "unchanged": true
+      },
+      {
+        "path": "mo/5584e23cbcf391d048c53efb5aa6385045d65bcb7ad0dd3a7d73ea86c6109384.mo",
+        "bytes": 6067,
+        "sha256": "5584e23cbcf391d048c53efb5aa6385045d65bcb7ad0dd3a7d73ea86c6109384",
+        "unchanged": true
+      },
+      {
+        "path": "mo/57b4a4f666f951ede85a452fa915fb8b7b7ba9488bdd14ba7e4d63e9f7f32c8f.mo",
+        "bytes": 16042,
+        "sha256": "57b4a4f666f951ede85a452fa915fb8b7b7ba9488bdd14ba7e4d63e9f7f32c8f",
+        "unchanged": true
+      },
+      {
+        "path": "mo/57baa9d207f96b7c6a4f43ea628e5ed76e6ffb9d9858d515a3d2c21f32bf427b.mo",
+        "bytes": 9733,
+        "sha256": "57baa9d207f96b7c6a4f43ea628e5ed76e6ffb9d9858d515a3d2c21f32bf427b",
+        "unchanged": true
+      },
+      {
+        "path": "mo/588db7b5f2ea922d37ea28856ea71ca78b25640afe7d5535e182040a6df2a7db.mo",
+        "bytes": 1347,
+        "sha256": "588db7b5f2ea922d37ea28856ea71ca78b25640afe7d5535e182040a6df2a7db",
+        "unchanged": true
+      },
+      {
+        "path": "mo/588ed9b28e7b6a15b8100df4edf5744028a8e7e748407208cf2c3751f6cd11b0.mo",
+        "bytes": 4662,
+        "sha256": "588ed9b28e7b6a15b8100df4edf5744028a8e7e748407208cf2c3751f6cd11b0",
+        "unchanged": true
+      },
+      {
+        "path": "mo/594e895209d8ca72b91848155f7b1b70d88d3174e5690a9e3fa43b75d8b044b0.mo",
+        "bytes": 3763,
+        "sha256": "594e895209d8ca72b91848155f7b1b70d88d3174e5690a9e3fa43b75d8b044b0",
+        "unchanged": true
+      },
+      {
+        "path": "mo/59d991367413199580f31df1021c41cd6aafb1ad1580824a58e45ca6e5d1f9f2.mo",
+        "bytes": 54459,
+        "sha256": "59d991367413199580f31df1021c41cd6aafb1ad1580824a58e45ca6e5d1f9f2",
+        "unchanged": true
+      },
+      {
+        "path": "mo/5f59b07b82a1ee1e57f285bc160ae758d10f5944b7e7e152a509691d686fadf4.mo",
+        "bytes": 2765,
+        "sha256": "5f59b07b82a1ee1e57f285bc160ae758d10f5944b7e7e152a509691d686fadf4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/621db19b6950199c8b3ddc025567b550b7d9955194ed1fb64cf8025b0e69f328.mo",
+        "bytes": 55,
+        "sha256": "621db19b6950199c8b3ddc025567b550b7d9955194ed1fb64cf8025b0e69f328",
+        "unchanged": true
+      },
+      {
+        "path": "mo/63fe26df6eebff106da89126ebdec8b10d5e7e302947a928d9c07e94c994154a.mo",
+        "bytes": 7525,
+        "sha256": "63fe26df6eebff106da89126ebdec8b10d5e7e302947a928d9c07e94c994154a",
+        "unchanged": true
+      },
+      {
+        "path": "mo/644fa6a9a95c6f64cea9ffe84c391a04b31ff0400061866d24eaf6004979bac6.mo",
+        "bytes": 5947,
+        "sha256": "644fa6a9a95c6f64cea9ffe84c391a04b31ff0400061866d24eaf6004979bac6",
+        "unchanged": true
+      },
+      {
+        "path": "mo/64bdc15beb8a2dc43d15537d5cdfb9aacf8b44222a0113d14d6f0807d62315df.mo",
+        "bytes": 3258,
+        "sha256": "64bdc15beb8a2dc43d15537d5cdfb9aacf8b44222a0113d14d6f0807d62315df",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6a26999a45845a93a99d88a30904254c536ee46e8812cb16707edc8cc2a540ac.mo",
+        "bytes": 3741,
+        "sha256": "6a26999a45845a93a99d88a30904254c536ee46e8812cb16707edc8cc2a540ac",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6b12444ba3440d17a35660b85fa5e92878624c70daff10df735d82dae952e0a7.mo",
+        "bytes": 1301,
+        "sha256": "6b12444ba3440d17a35660b85fa5e92878624c70daff10df735d82dae952e0a7",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6b2b987b9aa5f9e9a6924258908bd33d3900db61720292d343fbe394cca29e96.mo",
+        "bytes": 3232,
+        "sha256": "6b2b987b9aa5f9e9a6924258908bd33d3900db61720292d343fbe394cca29e96",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6b55cd79695007c5e81724fa433fe56c3d131c9359d98465e93352324c183811.mo",
+        "bytes": 1323,
+        "sha256": "6b55cd79695007c5e81724fa433fe56c3d131c9359d98465e93352324c183811",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6d505744823771cdd06a55a0d7f54e774e6eaeedac6fa3c3457a1878da71e66b.mo",
+        "bytes": 5411,
+        "sha256": "6d505744823771cdd06a55a0d7f54e774e6eaeedac6fa3c3457a1878da71e66b",
+        "unchanged": true
+      },
+      {
+        "path": "mo/7063f209c517e1e3565b8baed3ce18310147aad933ee8e1cb61309e62d5f9a50.mo",
+        "bytes": 1369,
+        "sha256": "7063f209c517e1e3565b8baed3ce18310147aad933ee8e1cb61309e62d5f9a50",
+        "unchanged": true
+      },
+      {
+        "path": "mo/7556f15978afab561ddfb9381ce896f19727c8884f9b9bcb37cc4ae5a3ef8f62.mo",
+        "bytes": 8059,
+        "sha256": "7556f15978afab561ddfb9381ce896f19727c8884f9b9bcb37cc4ae5a3ef8f62",
+        "unchanged": true
+      },
+      {
+        "path": "mo/78222225a965bef98f662c85ff9e55e747c729bdd0633968a3935628fabccb98.mo",
+        "bytes": 2019,
+        "sha256": "78222225a965bef98f662c85ff9e55e747c729bdd0633968a3935628fabccb98",
+        "unchanged": true
+      },
+      {
+        "path": "mo/78b0acb9f0900091bce9517ab1aee1ba233f6cc919f0e639caa089b3750271fd.mo",
+        "bytes": 624,
+        "sha256": "78b0acb9f0900091bce9517ab1aee1ba233f6cc919f0e639caa089b3750271fd",
+        "unchanged": true
+      },
+      {
+        "path": "mo/8b5938bcdece62a75117e2a4fc00e097214dd834d350b3b76ae9ae941fa90e96.mo",
+        "bytes": 7478,
+        "sha256": "8b5938bcdece62a75117e2a4fc00e097214dd834d350b3b76ae9ae941fa90e96",
+        "unchanged": true
+      },
+      {
+        "path": "mo/8bd0d49ebae7f7937ccaaf6937d11645a1d3b36054ea351eafc237bad2e779f1.mo",
+        "bytes": 28433,
+        "sha256": "8bd0d49ebae7f7937ccaaf6937d11645a1d3b36054ea351eafc237bad2e779f1",
+        "unchanged": true
+      },
+      {
+        "path": "mo/8f7ba5186679103e80a42dca00450ff94fab29e498762db1b9958fc80a3ce8e4.mo",
+        "bytes": 655,
+        "sha256": "8f7ba5186679103e80a42dca00450ff94fab29e498762db1b9958fc80a3ce8e4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/99b0c3802d360218b101b05951495389e7f07af8eccbf2ba51c6e4bf64f09fe5.mo",
+        "bytes": 306,
+        "sha256": "99b0c3802d360218b101b05951495389e7f07af8eccbf2ba51c6e4bf64f09fe5",
+        "unchanged": true
+      },
+      {
+        "path": "mo/99f432a14400666847200e9e443e3a127df6d9de2101938ea13cdd39b69660b9.mo",
+        "bytes": 3276,
+        "sha256": "99f432a14400666847200e9e443e3a127df6d9de2101938ea13cdd39b69660b9",
+        "unchanged": true
+      },
+      {
+        "path": "mo/a9d98c8d611f5597e8b1dcad75b304786427ee549648d4de448967ec71a6201e.mo",
+        "bytes": 560,
+        "sha256": "a9d98c8d611f5597e8b1dcad75b304786427ee549648d4de448967ec71a6201e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/b26cb06e713f34861bfc636863b41d476448442d53aa582dc8e9c513f14da90e.mo",
+        "bytes": 1912,
+        "sha256": "b26cb06e713f34861bfc636863b41d476448442d53aa582dc8e9c513f14da90e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/b28a4a7776ac8d70095f0bcf15b97da0e8a77560b5c8ba7fe143b8b741596b9d.mo",
+        "bytes": 6928,
+        "sha256": "b28a4a7776ac8d70095f0bcf15b97da0e8a77560b5c8ba7fe143b8b741596b9d",
+        "unchanged": true
+      },
+      {
+        "path": "mo/b678a094cc5b6321db8414215a636365978e09bf255cdabd8546e9286c353fe6.mo",
+        "bytes": 1302,
+        "sha256": "b678a094cc5b6321db8414215a636365978e09bf255cdabd8546e9286c353fe6",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ba9cd383f91b639746f5c1913f42f82f71daf7c21f5fc7e45e77b02128a10a2f.mo",
+        "bytes": 4440,
+        "sha256": "ba9cd383f91b639746f5c1913f42f82f71daf7c21f5fc7e45e77b02128a10a2f",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c005f913a62bfe381c4c484058716a83eb0c54209e368699f87c6708f6e0af51.mo",
+        "bytes": 7618,
+        "sha256": "c005f913a62bfe381c4c484058716a83eb0c54209e368699f87c6708f6e0af51",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c05c82cb03869ccf72382a72f34bca553dde0ce611d10645c6e3332dbd1c2b67.mo",
+        "bytes": 3141,
+        "sha256": "c05c82cb03869ccf72382a72f34bca553dde0ce611d10645c6e3332dbd1c2b67",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c0cef2856d7c7452084c3dffc8dfe50535a586cf2f3cec64af84b0700b963b09.mo",
+        "bytes": 4772,
+        "sha256": "c0cef2856d7c7452084c3dffc8dfe50535a586cf2f3cec64af84b0700b963b09",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c3fd7433de4d2b3e2211bddebf7058b3de5668e673849461d9a93bb1195b6e41.mo",
+        "bytes": 14209,
+        "sha256": "c3fd7433de4d2b3e2211bddebf7058b3de5668e673849461d9a93bb1195b6e41",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c82070463bd208ede03fdc7ded5dba63c762845c344baaa715edf25ab61bee46.mo",
+        "bytes": 1769,
+        "sha256": "c82070463bd208ede03fdc7ded5dba63c762845c344baaa715edf25ab61bee46",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ccb23e2d72bb4ab9edc842d7dc106d708734b3a441117e4a7816067209391eac.mo",
+        "bytes": 373,
+        "sha256": "ccb23e2d72bb4ab9edc842d7dc106d708734b3a441117e4a7816067209391eac",
+        "unchanged": true
+      },
+      {
+        "path": "mo/d1ceaf3da72a662842dad6256b90f6c4214b079f5658917a72e0fa3b97e21bdc.mo",
+        "bytes": 3654,
+        "sha256": "d1ceaf3da72a662842dad6256b90f6c4214b079f5658917a72e0fa3b97e21bdc",
+        "unchanged": true
+      },
+      {
+        "path": "mo/d6ead510bdcb1d51da9b00e1f2a0c831b4cfa8573f7e53124b665179b1feb369.mo",
+        "bytes": 4726,
+        "sha256": "d6ead510bdcb1d51da9b00e1f2a0c831b4cfa8573f7e53124b665179b1feb369",
+        "unchanged": true
+      },
+      {
+        "path": "mo/d90e11c9838c6391efabd0c913db450d98b0165234f5888aec373bdad3018826.mo",
+        "bytes": 4037,
+        "sha256": "d90e11c9838c6391efabd0c913db450d98b0165234f5888aec373bdad3018826",
+        "unchanged": true
+      },
+      {
+        "path": "mo/d9cbfc954806d3b1eaaffd69b487ff3e6ba78382b70eb435c29106f1add128a0.mo",
+        "bytes": 3039,
+        "sha256": "d9cbfc954806d3b1eaaffd69b487ff3e6ba78382b70eb435c29106f1add128a0",
+        "unchanged": true
+      },
+      {
+        "path": "mo/e24aaba6604ca32a07c8d49d130b78d85de7cc9670375c3b6452b55a1be53449.mo",
+        "bytes": 2745,
+        "sha256": "e24aaba6604ca32a07c8d49d130b78d85de7cc9670375c3b6452b55a1be53449",
+        "unchanged": true
+      },
+      {
+        "path": "mo/e34368c73dec890d9b56beaac5650de43bfeeee3192b2c881bc28088f42a1abc.mo",
+        "bytes": 5654,
+        "sha256": "e34368c73dec890d9b56beaac5650de43bfeeee3192b2c881bc28088f42a1abc",
+        "unchanged": true
+      },
+      {
+        "path": "mo/e493d59e3fe8ea2dd4946d5f3bcddce905a95110e17763776f26eabd634ae10e.mo",
+        "bytes": 3255,
+        "sha256": "e493d59e3fe8ea2dd4946d5f3bcddce905a95110e17763776f26eabd634ae10e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ec64e40330b2bd235aaff46d7c1c5878ddd9e7011d37b71c32b2f52bc6af8cc4.mo",
+        "bytes": 10460,
+        "sha256": "ec64e40330b2bd235aaff46d7c1c5878ddd9e7011d37b71c32b2f52bc6af8cc4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ed6e47cb80f1da72c69a052013e766ee5da4e119e120eb125f1671fa148b1cb7.mo",
+        "bytes": 8622,
+        "sha256": "ed6e47cb80f1da72c69a052013e766ee5da4e119e120eb125f1671fa148b1cb7",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ef68324962c683aae3966a81d3ce74fd8c433dab14180d3dac366d0922551cf4.mo",
+        "bytes": 649,
+        "sha256": "ef68324962c683aae3966a81d3ce74fd8c433dab14180d3dac366d0922551cf4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ef79bd3a2daff777c4064d0e81f84feaf2a3bbf2fb1ee979b0a0d94151907e3d.mo",
+        "bytes": 1446,
+        "sha256": "ef79bd3a2daff777c4064d0e81f84feaf2a3bbf2fb1ee979b0a0d94151907e3d",
+        "unchanged": true
+      },
+      {
+        "path": "mo/f3dffd4ec6c6c5c0b6935030901c42120fdbe685207d45bd7bc13bca163a3fe6.mo",
+        "bytes": 14308,
+        "sha256": "f3dffd4ec6c6c5c0b6935030901c42120fdbe685207d45bd7bc13bca163a3fe6",
+        "unchanged": true
+      },
+      {
+        "path": "mo/f5342d880badeb950aa4314dda0c00e4a68913ba938669b248004f593cc2ee55.mo",
+        "bytes": 690,
+        "sha256": "f5342d880badeb950aa4314dda0c00e4a68913ba938669b248004f593cc2ee55",
+        "unchanged": true
+      },
+      {
+        "path": "mo/f648f2f47bf47de7ea63ddbec9b0a2a70208191934cf8668f78bd197f90e280e.mo",
+        "bytes": 22142,
+        "sha256": "f648f2f47bf47de7ea63ddbec9b0a2a70208191934cf8668f78bd197f90e280e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/f7e8e92b71641a4dd395f76ed03816ef837edbaa7fb2ad7ee716f813f3445c64.mo",
+        "bytes": 2981,
+        "sha256": "f7e8e92b71641a4dd395f76ed03816ef837edbaa7fb2ad7ee716f813f3445c64",
+        "unchanged": true
+      },
+      {
+        "path": "mo/fa199a6485faffac99bc2176ae63c40fff68668c9e44d0ddd511a3a43197a793.mo",
+        "bytes": 3494,
+        "sha256": "fa199a6485faffac99bc2176ae63c40fff68668c9e44d0ddd511a3a43197a793",
+        "unchanged": true
+      },
+      {
+        "path": "mo/fe45cc69bcad5c3283a472988075a08cb2bd3c578ee5bf802670fe0b38bfa994.mo",
+        "bytes": 13380,
+        "sha256": "fe45cc69bcad5c3283a472988075a08cb2bd3c578ee5bf802670fe0b38bfa994",
+        "unchanged": true
+      },
+      {
+        "path": "mo/fe978927aef5e91dfe4dfc50409631e306d9ce904f720d3ab123a50e4e2f1282.mo",
+        "bytes": 178,
+        "sha256": "fe978927aef5e91dfe4dfc50409631e306d9ce904f720d3ab123a50e4e2f1282",
+        "unchanged": true
+      },
+      {
+        "path": "mo/fefcc21197346ff0720fb317fe710d084decb146d8bcaa774728fb443ca9ef6e.mo",
+        "bytes": 696,
+        "sha256": "fefcc21197346ff0720fb317fe710d084decb146d8bcaa774728fb443ca9ef6e",
+        "unchanged": true
+      }
+    ],
+    "removedPaths": [
+      "mo/abad722e84614b3fe426a7beb6d344f3eb0844a352dd4cc74a8ee1c3f79ce200.mo",
+      "mo/bd82932d68572417c25f60d18f1c8557f9f5d68424ee776e6a72943e92f6222a.mo",
+      "mo/eb5a28960952ac71ebfb6cb3f7c4e1ed569cbbea294005dd59690ccf5c5b6ac1.mo"
+    ],
+    "addedPaths": [
+      "mo/252800a3b8167430585648a129a651c10954442c6e1acdf9bc910d7a167623d3.mo",
+      "mo/93a6ac309cc3bbc83138b622792d6a4881f9a66d802e90ef237d33feb352928c.mo",
+      "mo/9ab5faf5333ba5bd0603b0cf1b6d66fd452b733662ce0379e9a523603e15a17b.mo"
+    ],
+    "importsOnly": [
+      {
+        "priorPath": "mo/abad722e84614b3fe426a7beb6d344f3eb0844a352dd4cc74a8ee1c3f79ce200.mo",
+        "currentPath": "mo/9ab5faf5333ba5bd0603b0cf1b6d66fd452b733662ce0379e9a523603e15a17b.mo",
+        "normalizedSha256": "b08851c8b39eeb4935f8f84c004451281163e6cc4b4aa793a04473f0f464c779"
+      },
+      {
+        "priorPath": "mo/bd82932d68572417c25f60d18f1c8557f9f5d68424ee776e6a72943e92f6222a.mo",
+        "currentPath": "mo/93a6ac309cc3bbc83138b622792d6a4881f9a66d802e90ef237d33feb352928c.mo",
+        "normalizedSha256": "01b369d8388581443748b9a446f5307a07d86ed9f91f575a18ba6bddbf26f096"
+      }
+    ],
+    "changedBodies": [
+      {
+        "backendSource": "apps/evm_wallet/backend/rpc/Client.mo",
+        "priorPath": "mo/eb5a28960952ac71ebfb6cb3f7c4e1ed569cbbea294005dd59690ccf5c5b6ac1.mo",
+        "currentPath": "mo/252800a3b8167430585648a129a651c10954442c6e1acdf9bc910d7a167623d3.mo",
+        "change": "Compare UTF-8 blobs instead of Text equality"
+      }
+    ]
+  },
+  "backendSourceClosure": {
+    "fromVersion": 103,
+    "toVersion": 105,
+    "pathsUnchanged": true,
+    "filesChecked": 22,
+    "changedFiles": [
+      "apps/evm_wallet/backend/rpc/Client.mo"
+    ],
+    "exactAllowedSourceReplacement": {
+      "before": "if (previous != value)",
+      "after": "// JSON strings can be deep concatenation ropes (for\n                                    // example deployed contract code). UTF-8 blobs preserve\n                                    // exact equality without recursive rope comparison.\n                                    if (Text.encodeUtf8(previous) != Text.encodeUtf8(value))"
+    },
+    "explanatoryComment": "// JSON strings can be deep concatenation ropes (for\n                                    // example deployed contract code). UTF-8 blobs preserve\n                                    // exact equality without recursive rope comparison.",
+    "files": [
+      {
+        "path": "apps/evm_wallet/backend/Config.mo",
+        "priorSha256": "35589437a715a99b75f5853d15e37cb422da9411fa731bfb2e53d8cf2f824dae",
+        "currentSha256": "35589437a715a99b75f5853d15e37cb422da9411fa731bfb2e53d8cf2f824dae",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/Journal.mo",
+        "priorSha256": "39a0e8a06755e9e659e4a30a92d1ae84c8e7f0a4b87a5ab685cb9702f3e03675",
+        "currentSha256": "39a0e8a06755e9e659e4a30a92d1ae84c8e7f0a4b87a5ab685cb9702f3e03675",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/README.md",
+        "priorSha256": "1b77528ffb00ec451b268d987c72b1a692bc6d9d50cf4c57c49221ac5bd013d1",
+        "currentSha256": "1b77528ffb00ec451b268d987c72b1a692bc6d9d50cf4c57c49221ac5bd013d1",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/ReplacementProof.mo",
+        "priorSha256": "6caf2cd0e79bc1ac10ce7484f7e6d8e5ccbe5cadfa2f5a902d162b6fd68b0d77",
+        "currentSha256": "6caf2cd0e79bc1ac10ce7484f7e6d8e5ccbe5cadfa2f5a902d162b6fd68b0d77",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/Types.mo",
+        "priorSha256": "9ec9768d692289954281467a2ebbb33ef155708f7050a0ac4d9f491b2c0dea9e",
+        "currentSha256": "9ec9768d692289954281467a2ebbb33ef155708f7050a0ac4d9f491b2c0dea9e",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/evm/Eip712.mo",
+        "priorSha256": "351fa7efb7b06ded6f47a2de42770b1c2c8afa502f025ec7a1e5ab307c050e30",
+        "currentSha256": "351fa7efb7b06ded6f47a2de42770b1c2c8afa502f025ec7a1e5ab307c050e30",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/evm/Hex.mo",
+        "priorSha256": "516e28634b12fe34740cee68fee68e8c2f8c88b2862c1f9fc2e9d3baf7562cbf",
+        "currentSha256": "516e28634b12fe34740cee68fee68e8c2f8c88b2862c1f9fc2e9d3baf7562cbf",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/evm/Keccak.mo",
+        "priorSha256": "313ea555e9159030404fdc7dced6a2633e1531464d083dac330c3b4fc2a440ad",
+        "currentSha256": "313ea555e9159030404fdc7dced6a2633e1531464d083dac330c3b4fc2a440ad",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/evm/Personal.mo",
+        "priorSha256": "a2bda8cd1aba2a6af67d7dd8161583811f503a52157927dacec10d43d8930c5f",
+        "currentSha256": "a2bda8cd1aba2a6af67d7dd8161583811f503a52157927dacec10d43d8930c5f",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/evm/Rlp.mo",
+        "priorSha256": "fc971b6678fdaa7803261ce8b539c22b8973ba2a2ba0e22e7be104a08bd1e229",
+        "currentSha256": "fc971b6678fdaa7803261ce8b539c22b8973ba2a2ba0e22e7be104a08bd1e229",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/evm/Secp256k1.mo",
+        "priorSha256": "f651c79f9ea58cf41d9201a29d4f0cc93452730e13848f2c08ad3387f1f38c37",
+        "currentSha256": "f651c79f9ea58cf41d9201a29d4f0cc93452730e13848f2c08ad3387f1f38c37",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/evm/Transaction.mo",
+        "priorSha256": "af4e6ad25f6ec11e67bbb07fd8ddc693dfb483ba5b102fda91288e7f748826ab",
+        "currentSha256": "af4e6ad25f6ec11e67bbb07fd8ddc693dfb483ba5b102fda91288e7f748826ab",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/fees/Estimate.mo",
+        "priorSha256": "113ad62e0a12f72f4db46454b2a85cb2fe5ac24accc277a5d2c9df6e702a9f15",
+        "currentSha256": "113ad62e0a12f72f4db46454b2a85cb2fe5ac24accc277a5d2c9df6e702a9f15",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/main.mo",
+        "priorSha256": "69226cde5a916e0d82b5f1320daacbedd70be3f6a16f4aee544f4ab54fa7322f",
+        "currentSha256": "69226cde5a916e0d82b5f1320daacbedd70be3f6a16f4aee544f4ab54fa7322f",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/memory/evm_evidence/v1.mo",
+        "priorSha256": "a371d6a74ffa69c6a4347410c3825ed3c702d4c47c7960c60b9282f915613e69",
+        "currentSha256": "a371d6a74ffa69c6a4347410c3825ed3c702d4c47c7960c60b9282f915613e69",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/memory/evm_wallet/v1.mo",
+        "priorSha256": "5a8971fa005d0a2e62e1e1f7a692334036b7b7e0ba58fe713f4c4cd579e387a3",
+        "currentSha256": "5a8971fa005d0a2e62e1e1f7a692334036b7b7e0ba58fe713f4c4cd579e387a3",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/rpc/Client.mo",
+        "priorSha256": "f7aca4f950cd50805e76a74590d0582ce7a5cecc1a0bc6b9daeda997e8a65a73",
+        "currentSha256": "4b602ad4a6dc41837c48c5ee0c555f03464eacf852cf624608530857337c7313",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": false
+      },
+      {
+        "path": "apps/evm_wallet/backend/rpc/Json.mo",
+        "priorSha256": "efb772a26952e13152a54b2d8693622aad2aa812bac0b56eb1d2649fb24307eb",
+        "currentSha256": "efb772a26952e13152a54b2d8693622aad2aa812bac0b56eb1d2649fb24307eb",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/rpc/README.md",
+        "priorSha256": "83b467138f7dfc3c8908cd2892f8b276614669604ad042ff4bdde0db1e8ccaec",
+        "currentSha256": "83b467138f7dfc3c8908cd2892f8b276614669604ad042ff4bdde0db1e8ccaec",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/rpc/Types.mo",
+        "priorSha256": "16fb8c414e70f34812fb6f1bbebc31c5c8a470a668556d2da5fa07ca7bd235e1",
+        "currentSha256": "16fb8c414e70f34812fb6f1bbebc31c5c8a470a668556d2da5fa07ca7bd235e1",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/token/Decode.mo",
+        "priorSha256": "c04d11fd0005e23525e3725b3aecfadab5fad4e5d34f745e59839fb4e5260672",
+        "currentSha256": "c04d11fd0005e23525e3725b3aecfadab5fad4e5d34f745e59839fb4e5260672",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      },
+      {
+        "path": "apps/evm_wallet/backend/token/Evidence.mo",
+        "priorSha256": "c1c264c5e1ab3ff94b117fff12038b4563cd8e07d26ac3ffa05fcfe36bd255cd",
+        "currentSha256": "c1c264c5e1ab3ff94b117fff12038b4563cd8e07d26ac3ffa05fcfe36bd255cd",
+        "priorMode": 420,
+        "currentMode": 420,
+        "unchanged": true
+      }
+    ]
+  },
+  "preservedUiOnlyProof103To104": {
+    "modulesUnchanged": 80,
+    "modules": [
+      {
+        "path": "mo/00bf6dc15ec20fec4b7f1acfee48b63ede4d913bb570d189df14f7673a125c15.mo",
+        "bytes": 36632,
+        "sha256": "00bf6dc15ec20fec4b7f1acfee48b63ede4d913bb570d189df14f7673a125c15",
+        "unchanged": true
+      },
+      {
+        "path": "mo/038514c49bd2d0145f5de8cd4dc7c3278fa1cb1f44ea1b926d2dfe7025e8789e.mo",
+        "bytes": 8834,
+        "sha256": "038514c49bd2d0145f5de8cd4dc7c3278fa1cb1f44ea1b926d2dfe7025e8789e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/0e908d8e686bdd55fd1b2b25ecb6680dbfbf40cd55aaa83cd46107923c7df772.mo",
+        "bytes": 54723,
+        "sha256": "0e908d8e686bdd55fd1b2b25ecb6680dbfbf40cd55aaa83cd46107923c7df772",
+        "unchanged": true
+      },
+      {
+        "path": "mo/0f77351f79a83056506e288d4c8d66c252e8a12bd6bab1b550b658543b971714.mo",
+        "bytes": 26979,
+        "sha256": "0f77351f79a83056506e288d4c8d66c252e8a12bd6bab1b550b658543b971714",
+        "unchanged": true
+      },
+      {
+        "path": "mo/1139a72434524d135111737f2989032ad31b0607ca80812f3e6e6cf1dab0f565.mo",
+        "bytes": 47501,
+        "sha256": "1139a72434524d135111737f2989032ad31b0607ca80812f3e6e6cf1dab0f565",
+        "unchanged": true
+      },
+      {
+        "path": "mo/18f54fa7e9064356471adb450971d8d1ccc803f0dda6545ce8ab4ce8910c6bf6.mo",
+        "bytes": 597,
+        "sha256": "18f54fa7e9064356471adb450971d8d1ccc803f0dda6545ce8ab4ce8910c6bf6",
+        "unchanged": true
+      },
+      {
+        "path": "mo/1a7e3db706620709d2f22b7706a7cb961304cf11bdedeb519b90f7c8eb0104d3.mo",
+        "bytes": 23151,
+        "sha256": "1a7e3db706620709d2f22b7706a7cb961304cf11bdedeb519b90f7c8eb0104d3",
+        "unchanged": true
+      },
+      {
+        "path": "mo/1ae38af22bbd20d80bd4bb2c276075935a1c9069b03d6773928b247616e48193.mo",
+        "bytes": 17410,
+        "sha256": "1ae38af22bbd20d80bd4bb2c276075935a1c9069b03d6773928b247616e48193",
+        "unchanged": true
+      },
+      {
+        "path": "mo/2417203b21adfa4b8db0619ecb775e6bde85ba5aaf7a3722ade042375a908e55.mo",
+        "bytes": 20470,
+        "sha256": "2417203b21adfa4b8db0619ecb775e6bde85ba5aaf7a3722ade042375a908e55",
+        "unchanged": true
+      },
+      {
+        "path": "mo/34a4bd91ea4287266316daebec7afdd3fa15a4cf9ccf79452a53cda0d65f9a34.mo",
+        "bytes": 7874,
+        "sha256": "34a4bd91ea4287266316daebec7afdd3fa15a4cf9ccf79452a53cda0d65f9a34",
+        "unchanged": true
+      },
+      {
+        "path": "mo/394eda524ad6869af6e1f8bf5be2f6885951b4191c71c790ca325539ef65464e.mo",
+        "bytes": 10606,
+        "sha256": "394eda524ad6869af6e1f8bf5be2f6885951b4191c71c790ca325539ef65464e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/3a5e6b3eabd4e0b9b7fa9743ab76123a2a0bc40074de46ea9acc460061e6b398.mo",
+        "bytes": 9335,
+        "sha256": "3a5e6b3eabd4e0b9b7fa9743ab76123a2a0bc40074de46ea9acc460061e6b398",
+        "unchanged": true
+      },
+      {
+        "path": "mo/3aeed20003aa1864549527075a8298f890157a6e37366384c9e275a38dc0d8ba.mo",
+        "bytes": 3528,
+        "sha256": "3aeed20003aa1864549527075a8298f890157a6e37366384c9e275a38dc0d8ba",
+        "unchanged": true
+      },
+      {
+        "path": "mo/43e221b68f6addcd1519baa2010da2011f0337a7a4bd14536e019d54a1923102.mo",
+        "bytes": 2811,
+        "sha256": "43e221b68f6addcd1519baa2010da2011f0337a7a4bd14536e019d54a1923102",
+        "unchanged": true
+      },
+      {
+        "path": "mo/466196523f97224d13f7f09087818253e1294ff1626816b93a99920859fcc28b.mo",
+        "bytes": 2868,
+        "sha256": "466196523f97224d13f7f09087818253e1294ff1626816b93a99920859fcc28b",
+        "unchanged": true
+      },
+      {
+        "path": "mo/48aacd3789b269175f5b093421b47797083054788ee251a25e16b51259de81d3.mo",
+        "bytes": 2862,
+        "sha256": "48aacd3789b269175f5b093421b47797083054788ee251a25e16b51259de81d3",
+        "unchanged": true
+      },
+      {
+        "path": "mo/4b6d97683d4354a7fe185827a135298026e670b1279af4284c74059628ec0f39.mo",
+        "bytes": 1142,
+        "sha256": "4b6d97683d4354a7fe185827a135298026e670b1279af4284c74059628ec0f39",
+        "unchanged": true
+      },
+      {
+        "path": "mo/4c7242cfad07425b869644b5125c032cee120d71c21a6564f2576f728280fcd1.mo",
+        "bytes": 2461,
+        "sha256": "4c7242cfad07425b869644b5125c032cee120d71c21a6564f2576f728280fcd1",
+        "unchanged": true
+      },
+      {
+        "path": "mo/4ccc6d374a588e539573ba5d6d2488a663d79cc99fbbeec13475a2c51cb28cd4.mo",
+        "bytes": 1857,
+        "sha256": "4ccc6d374a588e539573ba5d6d2488a663d79cc99fbbeec13475a2c51cb28cd4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/4f93d651fa8d4b902056d0cd302eb22e00164d9796f9065b8c6b464a79085ed8.mo",
+        "bytes": 11292,
+        "sha256": "4f93d651fa8d4b902056d0cd302eb22e00164d9796f9065b8c6b464a79085ed8",
+        "unchanged": true
+      },
+      {
+        "path": "mo/52a7c600886416b0c0d29373b0cc53a9f47ee2a65dce6950ca2e546341f9fc8d.mo",
+        "bytes": 35059,
+        "sha256": "52a7c600886416b0c0d29373b0cc53a9f47ee2a65dce6950ca2e546341f9fc8d",
+        "unchanged": true
+      },
+      {
+        "path": "mo/5584e23cbcf391d048c53efb5aa6385045d65bcb7ad0dd3a7d73ea86c6109384.mo",
+        "bytes": 6067,
+        "sha256": "5584e23cbcf391d048c53efb5aa6385045d65bcb7ad0dd3a7d73ea86c6109384",
+        "unchanged": true
+      },
+      {
+        "path": "mo/57b4a4f666f951ede85a452fa915fb8b7b7ba9488bdd14ba7e4d63e9f7f32c8f.mo",
+        "bytes": 16042,
+        "sha256": "57b4a4f666f951ede85a452fa915fb8b7b7ba9488bdd14ba7e4d63e9f7f32c8f",
+        "unchanged": true
+      },
+      {
+        "path": "mo/57baa9d207f96b7c6a4f43ea628e5ed76e6ffb9d9858d515a3d2c21f32bf427b.mo",
+        "bytes": 9733,
+        "sha256": "57baa9d207f96b7c6a4f43ea628e5ed76e6ffb9d9858d515a3d2c21f32bf427b",
+        "unchanged": true
+      },
+      {
+        "path": "mo/588db7b5f2ea922d37ea28856ea71ca78b25640afe7d5535e182040a6df2a7db.mo",
+        "bytes": 1347,
+        "sha256": "588db7b5f2ea922d37ea28856ea71ca78b25640afe7d5535e182040a6df2a7db",
+        "unchanged": true
+      },
+      {
+        "path": "mo/588ed9b28e7b6a15b8100df4edf5744028a8e7e748407208cf2c3751f6cd11b0.mo",
+        "bytes": 4662,
+        "sha256": "588ed9b28e7b6a15b8100df4edf5744028a8e7e748407208cf2c3751f6cd11b0",
+        "unchanged": true
+      },
+      {
+        "path": "mo/594e895209d8ca72b91848155f7b1b70d88d3174e5690a9e3fa43b75d8b044b0.mo",
+        "bytes": 3763,
+        "sha256": "594e895209d8ca72b91848155f7b1b70d88d3174e5690a9e3fa43b75d8b044b0",
+        "unchanged": true
+      },
+      {
+        "path": "mo/59d991367413199580f31df1021c41cd6aafb1ad1580824a58e45ca6e5d1f9f2.mo",
+        "bytes": 54459,
+        "sha256": "59d991367413199580f31df1021c41cd6aafb1ad1580824a58e45ca6e5d1f9f2",
+        "unchanged": true
+      },
+      {
+        "path": "mo/5f59b07b82a1ee1e57f285bc160ae758d10f5944b7e7e152a509691d686fadf4.mo",
+        "bytes": 2765,
+        "sha256": "5f59b07b82a1ee1e57f285bc160ae758d10f5944b7e7e152a509691d686fadf4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/621db19b6950199c8b3ddc025567b550b7d9955194ed1fb64cf8025b0e69f328.mo",
+        "bytes": 55,
+        "sha256": "621db19b6950199c8b3ddc025567b550b7d9955194ed1fb64cf8025b0e69f328",
+        "unchanged": true
+      },
+      {
+        "path": "mo/63fe26df6eebff106da89126ebdec8b10d5e7e302947a928d9c07e94c994154a.mo",
+        "bytes": 7525,
+        "sha256": "63fe26df6eebff106da89126ebdec8b10d5e7e302947a928d9c07e94c994154a",
+        "unchanged": true
+      },
+      {
+        "path": "mo/644fa6a9a95c6f64cea9ffe84c391a04b31ff0400061866d24eaf6004979bac6.mo",
+        "bytes": 5947,
+        "sha256": "644fa6a9a95c6f64cea9ffe84c391a04b31ff0400061866d24eaf6004979bac6",
+        "unchanged": true
+      },
+      {
+        "path": "mo/64bdc15beb8a2dc43d15537d5cdfb9aacf8b44222a0113d14d6f0807d62315df.mo",
+        "bytes": 3258,
+        "sha256": "64bdc15beb8a2dc43d15537d5cdfb9aacf8b44222a0113d14d6f0807d62315df",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6a26999a45845a93a99d88a30904254c536ee46e8812cb16707edc8cc2a540ac.mo",
+        "bytes": 3741,
+        "sha256": "6a26999a45845a93a99d88a30904254c536ee46e8812cb16707edc8cc2a540ac",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6b12444ba3440d17a35660b85fa5e92878624c70daff10df735d82dae952e0a7.mo",
+        "bytes": 1301,
+        "sha256": "6b12444ba3440d17a35660b85fa5e92878624c70daff10df735d82dae952e0a7",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6b2b987b9aa5f9e9a6924258908bd33d3900db61720292d343fbe394cca29e96.mo",
+        "bytes": 3232,
+        "sha256": "6b2b987b9aa5f9e9a6924258908bd33d3900db61720292d343fbe394cca29e96",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6b55cd79695007c5e81724fa433fe56c3d131c9359d98465e93352324c183811.mo",
+        "bytes": 1323,
+        "sha256": "6b55cd79695007c5e81724fa433fe56c3d131c9359d98465e93352324c183811",
+        "unchanged": true
+      },
+      {
+        "path": "mo/6d505744823771cdd06a55a0d7f54e774e6eaeedac6fa3c3457a1878da71e66b.mo",
+        "bytes": 5411,
+        "sha256": "6d505744823771cdd06a55a0d7f54e774e6eaeedac6fa3c3457a1878da71e66b",
+        "unchanged": true
+      },
+      {
+        "path": "mo/7063f209c517e1e3565b8baed3ce18310147aad933ee8e1cb61309e62d5f9a50.mo",
+        "bytes": 1369,
+        "sha256": "7063f209c517e1e3565b8baed3ce18310147aad933ee8e1cb61309e62d5f9a50",
+        "unchanged": true
+      },
+      {
+        "path": "mo/7556f15978afab561ddfb9381ce896f19727c8884f9b9bcb37cc4ae5a3ef8f62.mo",
+        "bytes": 8059,
+        "sha256": "7556f15978afab561ddfb9381ce896f19727c8884f9b9bcb37cc4ae5a3ef8f62",
+        "unchanged": true
+      },
+      {
+        "path": "mo/78222225a965bef98f662c85ff9e55e747c729bdd0633968a3935628fabccb98.mo",
+        "bytes": 2019,
+        "sha256": "78222225a965bef98f662c85ff9e55e747c729bdd0633968a3935628fabccb98",
+        "unchanged": true
+      },
+      {
+        "path": "mo/78b0acb9f0900091bce9517ab1aee1ba233f6cc919f0e639caa089b3750271fd.mo",
+        "bytes": 624,
+        "sha256": "78b0acb9f0900091bce9517ab1aee1ba233f6cc919f0e639caa089b3750271fd",
+        "unchanged": true
+      },
+      {
+        "path": "mo/8b5938bcdece62a75117e2a4fc00e097214dd834d350b3b76ae9ae941fa90e96.mo",
+        "bytes": 7478,
+        "sha256": "8b5938bcdece62a75117e2a4fc00e097214dd834d350b3b76ae9ae941fa90e96",
+        "unchanged": true
+      },
+      {
+        "path": "mo/8bd0d49ebae7f7937ccaaf6937d11645a1d3b36054ea351eafc237bad2e779f1.mo",
+        "bytes": 28433,
+        "sha256": "8bd0d49ebae7f7937ccaaf6937d11645a1d3b36054ea351eafc237bad2e779f1",
+        "unchanged": true
+      },
+      {
+        "path": "mo/8f7ba5186679103e80a42dca00450ff94fab29e498762db1b9958fc80a3ce8e4.mo",
+        "bytes": 655,
+        "sha256": "8f7ba5186679103e80a42dca00450ff94fab29e498762db1b9958fc80a3ce8e4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/99b0c3802d360218b101b05951495389e7f07af8eccbf2ba51c6e4bf64f09fe5.mo",
+        "bytes": 306,
+        "sha256": "99b0c3802d360218b101b05951495389e7f07af8eccbf2ba51c6e4bf64f09fe5",
+        "unchanged": true
+      },
+      {
+        "path": "mo/99f432a14400666847200e9e443e3a127df6d9de2101938ea13cdd39b69660b9.mo",
+        "bytes": 3276,
+        "sha256": "99f432a14400666847200e9e443e3a127df6d9de2101938ea13cdd39b69660b9",
+        "unchanged": true
+      },
+      {
+        "path": "mo/a9d98c8d611f5597e8b1dcad75b304786427ee549648d4de448967ec71a6201e.mo",
+        "bytes": 560,
+        "sha256": "a9d98c8d611f5597e8b1dcad75b304786427ee549648d4de448967ec71a6201e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/abad722e84614b3fe426a7beb6d344f3eb0844a352dd4cc74a8ee1c3f79ce200.mo",
+        "bytes": 5650,
+        "sha256": "abad722e84614b3fe426a7beb6d344f3eb0844a352dd4cc74a8ee1c3f79ce200",
+        "unchanged": true
+      },
+      {
+        "path": "mo/b26cb06e713f34861bfc636863b41d476448442d53aa582dc8e9c513f14da90e.mo",
+        "bytes": 1912,
+        "sha256": "b26cb06e713f34861bfc636863b41d476448442d53aa582dc8e9c513f14da90e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/b28a4a7776ac8d70095f0bcf15b97da0e8a77560b5c8ba7fe143b8b741596b9d.mo",
+        "bytes": 6928,
+        "sha256": "b28a4a7776ac8d70095f0bcf15b97da0e8a77560b5c8ba7fe143b8b741596b9d",
+        "unchanged": true
+      },
+      {
+        "path": "mo/b678a094cc5b6321db8414215a636365978e09bf255cdabd8546e9286c353fe6.mo",
+        "bytes": 1302,
+        "sha256": "b678a094cc5b6321db8414215a636365978e09bf255cdabd8546e9286c353fe6",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ba9cd383f91b639746f5c1913f42f82f71daf7c21f5fc7e45e77b02128a10a2f.mo",
+        "bytes": 4440,
+        "sha256": "ba9cd383f91b639746f5c1913f42f82f71daf7c21f5fc7e45e77b02128a10a2f",
+        "unchanged": true
+      },
+      {
+        "path": "mo/bd82932d68572417c25f60d18f1c8557f9f5d68424ee776e6a72943e92f6222a.mo",
+        "bytes": 49406,
+        "sha256": "bd82932d68572417c25f60d18f1c8557f9f5d68424ee776e6a72943e92f6222a",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c005f913a62bfe381c4c484058716a83eb0c54209e368699f87c6708f6e0af51.mo",
+        "bytes": 7618,
+        "sha256": "c005f913a62bfe381c4c484058716a83eb0c54209e368699f87c6708f6e0af51",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c05c82cb03869ccf72382a72f34bca553dde0ce611d10645c6e3332dbd1c2b67.mo",
+        "bytes": 3141,
+        "sha256": "c05c82cb03869ccf72382a72f34bca553dde0ce611d10645c6e3332dbd1c2b67",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c0cef2856d7c7452084c3dffc8dfe50535a586cf2f3cec64af84b0700b963b09.mo",
+        "bytes": 4772,
+        "sha256": "c0cef2856d7c7452084c3dffc8dfe50535a586cf2f3cec64af84b0700b963b09",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c3fd7433de4d2b3e2211bddebf7058b3de5668e673849461d9a93bb1195b6e41.mo",
+        "bytes": 14209,
+        "sha256": "c3fd7433de4d2b3e2211bddebf7058b3de5668e673849461d9a93bb1195b6e41",
+        "unchanged": true
+      },
+      {
+        "path": "mo/c82070463bd208ede03fdc7ded5dba63c762845c344baaa715edf25ab61bee46.mo",
+        "bytes": 1769,
+        "sha256": "c82070463bd208ede03fdc7ded5dba63c762845c344baaa715edf25ab61bee46",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ccb23e2d72bb4ab9edc842d7dc106d708734b3a441117e4a7816067209391eac.mo",
+        "bytes": 373,
+        "sha256": "ccb23e2d72bb4ab9edc842d7dc106d708734b3a441117e4a7816067209391eac",
+        "unchanged": true
+      },
+      {
+        "path": "mo/d1ceaf3da72a662842dad6256b90f6c4214b079f5658917a72e0fa3b97e21bdc.mo",
+        "bytes": 3654,
+        "sha256": "d1ceaf3da72a662842dad6256b90f6c4214b079f5658917a72e0fa3b97e21bdc",
+        "unchanged": true
+      },
+      {
+        "path": "mo/d6ead510bdcb1d51da9b00e1f2a0c831b4cfa8573f7e53124b665179b1feb369.mo",
+        "bytes": 4726,
+        "sha256": "d6ead510bdcb1d51da9b00e1f2a0c831b4cfa8573f7e53124b665179b1feb369",
+        "unchanged": true
+      },
+      {
+        "path": "mo/d90e11c9838c6391efabd0c913db450d98b0165234f5888aec373bdad3018826.mo",
+        "bytes": 4037,
+        "sha256": "d90e11c9838c6391efabd0c913db450d98b0165234f5888aec373bdad3018826",
+        "unchanged": true
+      },
+      {
+        "path": "mo/d9cbfc954806d3b1eaaffd69b487ff3e6ba78382b70eb435c29106f1add128a0.mo",
+        "bytes": 3039,
+        "sha256": "d9cbfc954806d3b1eaaffd69b487ff3e6ba78382b70eb435c29106f1add128a0",
+        "unchanged": true
+      },
+      {
+        "path": "mo/e24aaba6604ca32a07c8d49d130b78d85de7cc9670375c3b6452b55a1be53449.mo",
+        "bytes": 2745,
+        "sha256": "e24aaba6604ca32a07c8d49d130b78d85de7cc9670375c3b6452b55a1be53449",
+        "unchanged": true
+      },
+      {
+        "path": "mo/e34368c73dec890d9b56beaac5650de43bfeeee3192b2c881bc28088f42a1abc.mo",
+        "bytes": 5654,
+        "sha256": "e34368c73dec890d9b56beaac5650de43bfeeee3192b2c881bc28088f42a1abc",
+        "unchanged": true
+      },
+      {
+        "path": "mo/e493d59e3fe8ea2dd4946d5f3bcddce905a95110e17763776f26eabd634ae10e.mo",
+        "bytes": 3255,
+        "sha256": "e493d59e3fe8ea2dd4946d5f3bcddce905a95110e17763776f26eabd634ae10e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/eb5a28960952ac71ebfb6cb3f7c4e1ed569cbbea294005dd59690ccf5c5b6ac1.mo",
+        "bytes": 12455,
+        "sha256": "eb5a28960952ac71ebfb6cb3f7c4e1ed569cbbea294005dd59690ccf5c5b6ac1",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ec64e40330b2bd235aaff46d7c1c5878ddd9e7011d37b71c32b2f52bc6af8cc4.mo",
+        "bytes": 10460,
+        "sha256": "ec64e40330b2bd235aaff46d7c1c5878ddd9e7011d37b71c32b2f52bc6af8cc4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ed6e47cb80f1da72c69a052013e766ee5da4e119e120eb125f1671fa148b1cb7.mo",
+        "bytes": 8622,
+        "sha256": "ed6e47cb80f1da72c69a052013e766ee5da4e119e120eb125f1671fa148b1cb7",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ef68324962c683aae3966a81d3ce74fd8c433dab14180d3dac366d0922551cf4.mo",
+        "bytes": 649,
+        "sha256": "ef68324962c683aae3966a81d3ce74fd8c433dab14180d3dac366d0922551cf4",
+        "unchanged": true
+      },
+      {
+        "path": "mo/ef79bd3a2daff777c4064d0e81f84feaf2a3bbf2fb1ee979b0a0d94151907e3d.mo",
+        "bytes": 1446,
+        "sha256": "ef79bd3a2daff777c4064d0e81f84feaf2a3bbf2fb1ee979b0a0d94151907e3d",
+        "unchanged": true
+      },
+      {
+        "path": "mo/f3dffd4ec6c6c5c0b6935030901c42120fdbe685207d45bd7bc13bca163a3fe6.mo",
+        "bytes": 14308,
+        "sha256": "f3dffd4ec6c6c5c0b6935030901c42120fdbe685207d45bd7bc13bca163a3fe6",
+        "unchanged": true
+      },
+      {
+        "path": "mo/f5342d880badeb950aa4314dda0c00e4a68913ba938669b248004f593cc2ee55.mo",
+        "bytes": 690,
+        "sha256": "f5342d880badeb950aa4314dda0c00e4a68913ba938669b248004f593cc2ee55",
+        "unchanged": true
+      },
+      {
+        "path": "mo/f648f2f47bf47de7ea63ddbec9b0a2a70208191934cf8668f78bd197f90e280e.mo",
+        "bytes": 22142,
+        "sha256": "f648f2f47bf47de7ea63ddbec9b0a2a70208191934cf8668f78bd197f90e280e",
+        "unchanged": true
+      },
+      {
+        "path": "mo/f7e8e92b71641a4dd395f76ed03816ef837edbaa7fb2ad7ee716f813f3445c64.mo",
+        "bytes": 2981,
+        "sha256": "f7e8e92b71641a4dd395f76ed03816ef837edbaa7fb2ad7ee716f813f3445c64",
+        "unchanged": true
+      },
+      {
+        "path": "mo/fa199a6485faffac99bc2176ae63c40fff68668c9e44d0ddd511a3a43197a793.mo",
+        "bytes": 3494,
+        "sha256": "fa199a6485faffac99bc2176ae63c40fff68668c9e44d0ddd511a3a43197a793",
+        "unchanged": true
+      },
+      {
+        "path": "mo/fe45cc69bcad5c3283a472988075a08cb2bd3c578ee5bf802670fe0b38bfa994.mo",
+        "bytes": 13380,
+        "sha256": "fe45cc69bcad5c3283a472988075a08cb2bd3c578ee5bf802670fe0b38bfa994",
+        "unchanged": true
+      },
+      {
+        "path": "mo/fe978927aef5e91dfe4dfc50409631e306d9ce904f720d3ab123a50e4e2f1282.mo",
+        "bytes": 178,
+        "sha256": "fe978927aef5e91dfe4dfc50409631e306d9ce904f720d3ab123a50e4e2f1282",
+        "unchanged": true
+      },
+      {
+        "path": "mo/fefcc21197346ff0720fb317fe710d084decb146d8bcaa774728fb443ca9ef6e.mo",
+        "bytes": 696,
+        "sha256": "fefcc21197346ff0720fb317fe710d084decb146d8bcaa774728fb443ca9ef6e",
+        "unchanged": true
+      }
+    ],
+    "backendSourcesUnchanged": true
+  },
+  "memory": {
+    "evm_wallet": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/evm_wallet/v1.mo",
+          "hash": "5cf1711e7f72a296ea8dbf320145d7b3d260398f871a3c832f7482388d983590",
+          "entry": "5f59b07b82a1ee1e57f285bc160ae758d10f5944b7e7e152a509691d686fadf4"
+        }
+      },
+      "migrations": []
+    },
+    "evm_evidence": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/evm_evidence/v1.mo",
+          "hash": "2141ab91b6bbd3a60212644870fc1a581922c9aeef6f728bf3ccfd0770a03dec",
+          "entry": "18f54fa7e9064356471adb450971d8d1ccc803f0dda6545ce8ab4ce8910c6bf6"
+        }
+      },
+      "migrations": []
+    }
+  },
+  "memoryUnchanged": true,
+  "memorySources": [
+    {
+      "path": "apps/evm_wallet/backend/memory/evm_wallet/v1.mo",
+      "sha256": "5a8971fa005d0a2e62e1e1f7a692334036b7b7e0ba58fe713f4c4cd579e387a3",
+      "unchanged": true
+    },
+    {
+      "path": "apps/evm_wallet/backend/memory/evm_evidence/v1.mo",
+      "sha256": "a371d6a74ffa69c6a4347410c3825ed3c702d4c47c7960c60b9282f915613e69",
+      "unchanged": true
+    },
+    {
+      "path": "apps/evm_wallet/neutron.lock.json",
+      "sha256": "385132eb6e6fe0d0af37c4c684fcb2f8c3582773b358d891ca6a99705eb062c4",
+      "unchanged": true
+    }
+  ],
+  "lockUnchanged": true,
+  "selfCallMethodSchemasUnchanged": true,
+  "schemaArtifactChanges": [
+    "app.version"
+  ],
+  "existingPublicToolDefinitions": [
+    {
+      "path": "apps/evm_wallet/src/service.ts",
+      "sha256": "fbfa30fe62c97bf566e2ff4f2a5da4ceec005b8cdf20149f1f4187167221069c",
+      "unchanged": true
+    },
+    {
+      "path": "packages/neutron-tools/src/evm_wallet.ts",
+      "sha256": "0c056f5256541733a80417b70df45fc12d489e7cb606068b1221ca292877efb0",
+      "unchanged": true
+    }
+  ],
+  "manifestChanges": [
+    "version",
+    "entry"
+  ],
+  "backendEntry": {
+    "prior": "bd82932d68572417c25f60d18f1c8557f9f5d68424ee776e6a72943e92f6222a",
+    "current": "93a6ac309cc3bbc83138b622792d6a4881f9a66d802e90ef237d33feb352928c"
+  },
+  "sourceChanges": [
+    {
+      "path": "apps/evm_wallet/README.md",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/backend/rpc/Client.mo",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/neutron.json",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/src/main.tsx",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/src/prompts.ts",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/src/provider.ts",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/test/browser/mock_app.ts",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/test/browser/sandbox.mjs",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/test/package.test.ts",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/test/provider.test.ts",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/test/rpc.test.ts",
+      "change": "changed"
+    },
+    {
+      "path": "apps/evm_wallet/test/rpc_large_response_test.mo",
+      "change": "added"
+    }
+  ],
+  "preserved": [
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.1.neutron",
+      "bytes": 377833,
+      "sha256": "1f7e9fb0ab82b60543ed38d81f215e7655ef4ca9fb1afab0f6ea6eb4cf456048"
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.2.neutron",
+      "bytes": 390962,
+      "sha256": "57d8b1c69af50e70d865d2f01dd6b8c1484af8fd5907b21aaa483116ecd92641"
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.3.neutron",
+      "bytes": 391234,
+      "sha256": "80cb4d5a55d52ce1e27114e9bb36686af3d60dd668b7c85e694fb16ed4eb1d92"
+    },
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.4.neutron",
+      "bytes": 391585,
+      "sha256": "002759fbb401bfcf9e399fa0a9a654bbdd7833dba1c30c4cecd888a8a0a3c820"
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/4f86e2c3b0733e3f5857fc4ffb15b2288277bbed4281987c5c238b50f34d8cd2.source.v1.msgpack.gz",
+      "bytes": 442851,
+      "sha256": "4f86e2c3b0733e3f5857fc4ffb15b2288277bbed4281987c5c238b50f34d8cd2"
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/e7bc1a914462747f4075bd9b2a15fa9600b4f65cb4c382f5227effc1ab32cadb.source.v1.msgpack.gz",
+      "bytes": 478220,
+      "sha256": "e7bc1a914462747f4075bd9b2a15fa9600b4f65cb4c382f5227effc1ab32cadb"
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/9b77656b1e59d6b02778c4810f7a982f4b3c73515e520b4f8ba28e95514c17cf.source.v1.msgpack.gz",
+      "bytes": 485726,
+      "sha256": "9b77656b1e59d6b02778c4810f7a982f4b3c73515e520b4f8ba28e95514c17cf"
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/2223837c9da324bdbcfc56d3fb98120303f28027b0d9605eb833d9b7f0b884f0.source.v1.msgpack.gz",
+      "bytes": 488139,
+      "sha256": "2223837c9da324bdbcfc56d3fb98120303f28027b0d9605eb833d9b7f0b884f0"
+    },
+    {
+      "path": "apps/evm_wallet/neutron.lock.json",
+      "bytes": 611,
+      "sha256": "385132eb6e6fe0d0af37c4c684fcb2f8c3582773b358d891ca6a99705eb062c4"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 354438,
+      "sha256": "10cdb573add8360fcbe6b37c420e3efc094efd2087e882dc06e4d6d65f6d9323"
+    }
+  ],
+  "postSuiteWorkspaceComparison": {
+    "files": 206,
+    "mismatches": 0
+  }
+}

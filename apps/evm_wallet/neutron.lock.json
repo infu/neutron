@@ -10,6 +10,15 @@
         }
       },
       "migrations": {}
+    },
+    "evm_evidence": {
+      "schemas": {
+        "1": {
+          "hash": "2141ab91b6bbd3a60212644870fc1a581922c9aeef6f728bf3ccfd0770a03dec",
+          "entry": "18f54fa7e9064356471adb450971d8d1ccc803f0dda6545ce8ab4ce8910c6bf6"
+        }
+      },
+      "migrations": {}
     }
   }
 }

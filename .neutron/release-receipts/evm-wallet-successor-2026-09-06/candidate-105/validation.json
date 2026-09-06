@@ -1,0 +1,57 @@
+{
+  "appId": "evm_wallet",
+  "version": 105,
+  "publication": "not published",
+  "archive": {
+    "path": "apps/evm_wallet/evm_wallet.v0.1.5.neutron",
+    "bytes": 391603,
+    "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2"
+  },
+  "offeredSource": {
+    "path": "apps/evm_wallet/.neutron/sources/8ae9900d2bb6dc9c6915c303a6d78158898f58b0e4b5dabbce7cab5216c8719a.source.v1.msgpack.gz",
+    "bytes": 489047,
+    "sha256": "8ae9900d2bb6dc9c6915c303a6d78158898f58b0e4b5dabbce7cab5216c8719a"
+  },
+  "sourceBindingVerified": true,
+  "postSuiteWorkspaceComparison": {
+    "files": 206,
+    "mismatches": 0,
+    "report": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/source-workspace-check.json"
+  },
+  "releaseTests": {
+    "command": "npm --workspace neutron-evm-wallet test",
+    "exitCode": 0,
+    "tests": 54,
+    "assertions": 452,
+    "failures": 0,
+    "seconds": 87.1,
+    "log": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/evm-wallet-105-release-tests.log",
+    "motokoMemoryRelease": "passed",
+    "sandboxBrowserCases": 16,
+    "sandboxBrowserReport": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/sandbox-browser/results.json"
+  },
+  "typeScript": {
+    "app": "passed",
+    "scripts": "passed"
+  },
+  "compatibility": {
+    "report": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-105/archive-source-comparison.json",
+    "backendSourceChange": "Only backend/rpc/Client.mo replaces recursive text equality with complete UTF-8 byte equality, plus its explanatory comment.",
+    "compiledModules": {
+      "identical": 77,
+      "onlyImportHashChanges": 2,
+      "exactClientFix": 1
+    },
+    "publicMethods": "All input/output shapes unchanged; only schema artifact app.version metadata differs.",
+    "existingPublicTools": "service.ts and shared SDK definitions unchanged.",
+    "memory": "Both roots and lock unchanged from private103/104; published101 walletv1 and lock lineage preserved.",
+    "uiFixIsolated": "Private103\u2192104 all80backendmodules exact."
+  },
+  "sandboxRegression": {
+    "routing": "Actual resident handleHumanEffect and registered owner presentOwnEffect run through mocked Kernel transport; no synthesized presenter or foreground audience.",
+    "validation": "16actualChrome allow-scripts-only opaque-origin sandbox cases: Sign, Send, replacement, tokeneditor; clicks and appropriateEnter, requiredfields, duplicateprevention, review/decline.",
+    "baseline": ".neutron/release-receipts/evm-wallet-sandbox-2026-09-06/103-owner-routing-baseline/results.json",
+    "scope": "No real financial effects in sandboxfixture; actualKernel105 qualification remains separate."
+  },
+  "realKernelQualification": "Exact105 pins ready for checked103\u2192105 upgrade and affected runtime qualification; not yet installed or published."
+}

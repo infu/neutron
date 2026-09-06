@@ -13,6 +13,10 @@ import Caps "mo:neutron-capabilities";
 import Config "./Config";
 import Journal "./Journal";
 import Memory "./memory/evm_wallet/v1";
+import EvidenceMemory "./memory/evm_evidence/v1";
+import TokenEvidence "./token/Evidence";
+import Estimate "./fees/Estimate";
+import ReplacementProof "./ReplacementProof";
 import Types "./Types";
 import Hex "./evm/Hex";
 import Personal "./evm/Personal";
@@ -69,6 +73,14 @@ module {
     max_priority_fee_per_gas : ?Text; gas_price : ?Text; balance : Text;
     simulation : Text; observed_at : Int;
   };
+  public type WalletTokenObservation = { value : ?Text; error : ?Text };
+  public type WalletTokenEvidence = {
+    chain_id : Nat; contract : Text; method : Text;
+    owner : Text; spender : ?Text; recipient : ?Text; amount : Text;
+    recognition : Text;
+    block_number : ?Text; block_hash : ?Text; block_error : ?Text;
+    observed_at : Int; balance : WalletTokenObservation; allowance : ?WalletTokenObservation;
+  };
   public type WalletOperation = {
     operation_id : Nat; request_id : Text; account_id : Text; chain_id : Nat;
     caller : WalletCaller;
@@ -89,6 +101,9 @@ module {
   };
   public type WalletPrepareRequest = { identity : WalletIdentity; intent : WalletIntent };
   public type WalletExecuteRequest = { identity : WalletIdentity; review_revision : Nat };
+  public type WalletEvidenceRequest = { identity : WalletIdentity; review_revision : Nat; refresh : Bool };
+  public type WalletEvidenceReview = { operation : WalletOperation; token_evidence : ?WalletTokenEvidence };
+  public type WalletEvidenceResult = { #ok : WalletEvidenceReview; #err : Text };
   public type WalletStatusRequest = { identity : WalletIdentity; refresh : Bool };
   public type WalletIdentityRequest = { identity : WalletIdentity };
   public type WalletHistoryRequest = { offset : Nat; limit : Nat };
@@ -122,10 +137,28 @@ module {
   public type WalletReadResultResult = { #ok : WalletReadResult; #err : Text };
   public type WalletTransactionLookupResult = { #ok : WalletTransactionLookup; #err : Text };
   public type WalletOperationResult = { #ok : WalletOperation; #err : Text };
+  public type WalletEstimateRequest = { chain_id : Nat; to : Text; value : Text; data : Text };
+  public type WalletEstimate = {
+    chain_id : Nat; from : Text; to : Text; value : Text; data : Text; status : Text;
+    gas_limit : ?Text; gas_price : ?Text; base_fee_per_gas : ?Text;
+    max_priority_fee_per_gas : ?Text; max_fee_per_gas : ?Text;
+    estimated_fee : ?Text; max_fee : ?Text; block_number : ?Text; observed_at : Int;
+    fee_basis : Text; posting_costs : Text; reasons : [Text];
+  };
+  public type WalletEstimateResult = { #ok : WalletEstimate; #err : Text };
+  public type WalletRequestReference = { caller_app_id : Text; caller_installation_uid : Nat64; request_id : Text };
+  public type WalletReplacementProofRequest = {
+    chain_id : Nat; transaction_hash : Text; original_wallet_request : WalletRequestReference;
+  };
+  public type WalletReplacementProof = {
+    chain_id : Nat; transaction_hash : Text; original_wallet_request : WalletRequestReference;
+    wallet_replacement_matches : Bool; observed_at : Int; source : Text;
+  };
+  public type WalletReplacementProofResult = { #ok : WalletReplacementProof; #err : Text };
   // PUBLIC WIRE TYPES END
 
   public type AppBackendEnvironment = {
-    stable_memory : { evm_wallet : Memory.Mem };
+    stable_memory : { evm_wallet : Memory.Mem; evm_evidence : EvidenceMemory.Mem };
     capabilities : {
       backend_calls : Caps.BackendCallsV1;
       wallet_custody_signing : Caps.WalletCustodySigningV1;
@@ -135,6 +168,7 @@ module {
     let mem = env.stable_memory.evm_wallet;
     let journal = Journal.Store(mem);
     let rpc = Rpc.Client(env.capabilities.backend_calls);
+    let evidence = TokenEvidence.Service(env.stable_memory.evm_evidence, rpc);
     let signing = env.capabilities.wallet_custody_signing;
     // Only transient invocation locks live outside managed memory. Persisted
     // signing/submission phases are reconciled, never repeated after reload.
@@ -200,6 +234,29 @@ module {
       switch (Hex.decode(code)) { case (#err(_)) return #err("RPC returned invalid contract code"); case (_) {} };
       #ok({ chain_id = request.chain_id; to; data = request.data; result; code; block_number = block; observed_at = Time.now() });
     };
+    public func /*update*/evm_wallet_estimate_transaction_v1(request : WalletEstimateRequest) : async* WalletEstimateResult {
+      if (not supported(request.chain_id)) return #err("Unsupported network");
+      let a = switch (await* account("main")) { case (#err(error)) return #err(error); case (#ok(value)) value };
+      await* Estimate.estimate({ request with from = a.address }, rpc);
+    };
+    public func /*query*/evm_wallet_replacement_transaction_v1(request : WalletReplacementProofRequest) : WalletReplacementProofResult {
+      if (not supported(request.chain_id)) return #err("Unsupported network");
+      let hash = switch (Hex.decode(request.transaction_hash)) {
+        case (#err(error)) return #err(error);
+        case (#ok(bytes)) { if (bytes.size() != 32) return #err("Transaction hash must be 32 bytes"); Hex.encode(bytes) };
+      };
+      let expected = request.original_wallet_request;
+      let identity : Memory.Identity = {
+        caller = { app_id = expected.caller_app_id; installation_uid = expected.caller_installation_uid; endpoint = "" };
+        request_id = expected.request_id;
+      };
+      switch (Journal.validateIdentity(identity)) { case (#err(error)) return #err(error); case (_) {} };
+      #ok({
+        chain_id = request.chain_id; transaction_hash = hash; original_wallet_request = expected;
+        wallet_replacement_matches = ReplacementProof.matches(mem, identity, request.chain_id, hash);
+        observed_at = Time.now(); source = "evm_wallet_journal";
+      });
+    };
     public func /*update*/evm_wallet_transaction_v1(request : WalletTransactionLookupRequest) : async* WalletTransactionLookupResult {
       if (not supported(request.chain_id)) return #err("Unsupported network");
       let hash = switch (Hex.decode(request.transaction_hash)) { case (#err(e)) return #err(e); case (#ok(bytes)) { if (bytes.size() != 32) return #err("Transaction hash must be 32 bytes"); Hex.encode(bytes) } };
@@ -252,7 +309,7 @@ module {
       let a = switch (await* account(request.intent.account_id)) { case (#err(e)) return #err(e); case (#ok(a)) a };
       let command = switch (journal.start(request, Time.now())) { case (#err(e)) return #err(e); case (#ok(c)) c };
       command.address := a.address;
-      if (command.status != "preparing" or Set.contains(running, Nat.compare, command.id)) return #ok(Journal.view(command));
+      if (command.status != "preparing" or Set.contains(running, Nat.compare, command.id)) return #ok(view(command));
       Set.add(running, Nat.compare, command.id);
       let prepared = try { await* prepare(command) } catch (e) { #err(Error.message(e)) };
       Set.remove(running, Nat.compare, command.id);
@@ -261,18 +318,18 @@ module {
         case (#err(e)) { command.status := "failed"; command.message := ?e };
         case (#ok(_)) { command.status := "prepared"; command.review_revision += 1 };
       };
-      #ok(Journal.view(command));
+      #ok(view(command));
     };
     public func /*update*/evm_wallet_execute_v1(request : WalletExecuteRequest) : async* WalletOperationResult {
       let command = switch (journal.find(request.identity)) { case null return #err("not_found"); case (?c) c };
-      if (Set.contains(running, Nat.compare, command.id)) return #ok(Journal.view(command));
+      if (Set.contains(running, Nat.compare, command.id)) return #ok(view(command));
       if (command.status != "prepared") {
         // An ambiguous signer must never be called again under this identity.
         if (command.status == "signing") { command.status := "unknown"; command.message := ?"Signing was interrupted. No signature is available; this request will not sign again." };
-        return #ok(Journal.view(command));
+        return #ok(view(command));
       };
       if (request.review_revision != command.review_revision) return #err("review_changed: review the current operation before approving");
-      switch (journal.reserve(command)) { case (#err(e)) return #err(e); case (#ok(false)) return #ok(Journal.view(command)); case (_) {} };
+      switch (journal.reserve(command)) { case (#err(e)) return #err(e); case (#ok(false)) return #ok(view(command)); case (_) {} };
       let digest = switch (command.transaction) {
         case (?tx) switch (Transaction.signingHash(tx)) { case (#err(e)) return #err(e); case (#ok(v)) v };
         case null switch (command.digest) { case null return #err("Prepared operation has no digest"); case (?v) v };
@@ -326,7 +383,7 @@ module {
       };
       Set.remove(running, Nat.compare, command.id);
       command.updated_at := Time.now();
-      #ok(Journal.view(command));
+      #ok(view(command));
     };
     public func /*update*/evm_wallet_reject_v1(request : WalletIdentityRequest) : WalletOperationResult {
       let command = switch (journal.find(request.identity)) { case null return #err("not_found"); case (?c) c };
@@ -336,7 +393,7 @@ module {
         if (command.signature == null and command.signed_raw == null) command.reserved_nonce := false;
         command.status := "rejected"; command.message := ?"Rejected by owner"; command.updated_at := Time.now();
       };
-      #ok(Journal.view(command));
+      #ok(view(command));
     };
     public func /*update*/evm_wallet_status_v1(request : WalletStatusRequest) : async* WalletOperationResult {
       let command = switch (journal.find(request.identity)) { case null return #err("not_found"); case (?c) c };
@@ -345,7 +402,23 @@ module {
         try { await* reconcile(command) } catch (e) { command.message := ?("Status unavailable: " # Error.message(e)) };
         Set.remove(running, Nat.compare, command.id);
       };
-      #ok(Journal.view(command));
+      #ok(view(command));
+    };
+    public func /*update*/evm_wallet_review_evidence_v1(request : WalletEvidenceRequest) : async* WalletEvidenceResult {
+      let command = switch (journal.find(request.identity)) { case null return #err("not_found"); case (?c) c };
+      if (not request.refresh or Set.contains(running, Nat.compare, command.id)) return #ok({ operation = view(command); token_evidence = evidence.get(command.id) });
+      if (command.status != "prepared") return #err("Only a prepared operation can refresh the facts for its approval");
+      if (request.review_revision != command.review_revision) return #err("review_changed: use the current review before refreshing evidence");
+      let tx = switch (command.transaction) { case null return #err("Message signatures do not have ERC20 transaction evidence"); case (?v) v };
+      // The signed fields remain identical. A new revision prevents a parallel
+      // approval from confirming an older display while observations refresh.
+      command.review_revision += 1;
+      Set.add(running, Nat.compare, command.id);
+      try { await* evidence.capture(command.id, tx, command.address, null) }
+      catch (error) { evidence.fail(command.id, "Observation unavailable: " # Error.message(error)) };
+      Set.remove(running, Nat.compare, command.id);
+      command.updated_at := Time.now();
+      #ok({ operation = view(command); token_evidence = evidence.get(command.id) });
     };
 
     func account(id : Text) : async* Types.Result<Memory.Account> {
@@ -475,6 +548,8 @@ module {
         gas_price = switch (tx.fee) { case (#legacy(f)) ?Nat.toText(f.gasPrice); case (_) null };
         balance = Nat.toText(balance); simulation; observed_at = Time.now();
       };
+      try { await* evidence.capture(command.id, tx, a.address, ?block) }
+      catch (error) { evidence.fail(command.id, "Observation unavailable: " # Error.message(error)) };
       #ok(());
     };
     func broadcast(command : Memory.Command) : async* () {
@@ -575,6 +650,9 @@ module {
       };
       selected;
     };
+    func view(command : Memory.Command) : Types.Operation {
+      Journal.view(command);
+    };
     func supported(chain : Nat) : Bool = Map.containsKey(mem.networks, Nat.compare, chain);
     func snapshot() : Types.Snapshot {
       { accounts = Array.fromIter(Map.values(mem.accounts)); networks = Array.fromIter(Map.values(mem.networks)); assets = Array.fromIter(Map.values(mem.assets)); lifecycle = "The installation owns this custody namespace. Compatible upgrades preserve the account. Uninstall/reinstall rotates its key and cannot recover this address. There is no seed or private-key export." };
@@ -659,6 +737,12 @@ public type evm_wallet_balances_v1_Output = WalletBalanceResult;
 public type evm_wallet_read_contract_v1_Input = (request : WalletReadRequest);
 public type evm_wallet_read_contract_v1_Output = WalletReadResultResult;
 
+public type evm_wallet_estimate_transaction_v1_Input = (request : WalletEstimateRequest);
+public type evm_wallet_estimate_transaction_v1_Output = WalletEstimateResult;
+
+public type evm_wallet_replacement_transaction_v1_Input = (request : WalletReplacementProofRequest);
+public type evm_wallet_replacement_transaction_v1_Output = WalletReplacementProofResult;
+
 public type evm_wallet_transaction_v1_Input = (request : WalletTransactionLookupRequest);
 public type evm_wallet_transaction_v1_Output = WalletTransactionLookupResult;
 
@@ -673,6 +757,9 @@ public type evm_wallet_reject_v1_Output = WalletOperationResult;
 
 public type evm_wallet_status_v1_Input = (request : WalletStatusRequest);
 public type evm_wallet_status_v1_Output = WalletOperationResult;
+
+public type evm_wallet_review_evidence_v1_Input = (request : WalletEvidenceRequest);
+public type evm_wallet_review_evidence_v1_Output = WalletEvidenceResult;
 
 /*---NEUTRON GENERATED END---*/
 };

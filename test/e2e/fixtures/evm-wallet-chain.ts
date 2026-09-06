@@ -23,6 +23,7 @@ export type LocalEvmTransactionEvidence = {
   chainId: string;
   raw: string;
   blockNumber: string;
+  blockHash: string;
   gasUsed: string;
   effectiveGasPriceWei: string;
 };
@@ -36,10 +37,17 @@ export type LocalEvmChain = {
 };
 
 /** Real local chain evidence; importing this module does not contact a node. */
-export async function createLocalEvmChain(): Promise<LocalEvmChain> {
-  const url = new URL(LOCAL_ANVIL_RPC_URL);
-  if (url.href !== "http://127.0.0.1:8545/") {
-    throw new Error("EVM wallet E2E requires the pinned local Anvil endpoint");
+export async function createLocalEvmChain(options: {
+  chainId: "1" | "42161";
+  rpcUrl: string;
+} = { chainId: "1", rpcUrl: LOCAL_ANVIL_RPC_URL }): Promise<LocalEvmChain> {
+  const url = new URL(options.rpcUrl);
+  const expectedChainId = BigInt(options.chainId);
+  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("EVM wallet E2E requires an explicit loopback fixture RPC endpoint");
+  }
+  if (options.chainId === "1" && url.href !== "http://127.0.0.1:8545/") {
+    throw new Error("Ethereum fixtures must retain the pinned local Anvil endpoint");
   }
   let nextId = 0;
 
@@ -72,16 +80,18 @@ export async function createLocalEvmChain(): Promise<LocalEvmChain> {
     return body.result as T;
   }
 
-  async function assertLocalChain(): Promise<void> {
+  async function assertLocalChain(requireAnvil = false): Promise<void> {
     const [clientVersion, chainId] = await Promise.all([
       rpc("web3_clientVersion"),
       rpc("eth_chainId"),
     ]);
-    if (typeof clientVersion !== "string" || !/^anvil\b/iu.test(clientVersion)) {
-      throw new Error("EVM wallet E2E requires a running Anvil node");
+    const anvil = typeof clientVersion === "string" && /^anvil\b/iu.test(clientVersion);
+    const nitro = typeof clientVersion === "string" && /^(?:nitro|arbitrum)(?:\b|\/)/iu.test(clientVersion);
+    if (!(anvil || (options.chainId === "42161" && nitro)) || (requireAnvil && !anvil)) {
+      throw new Error(requireAnvil ? "Balance overrides are only allowed on Anvil fixtures" : "EVM wallet E2E requires an Anvil or Nitro fixture node");
     }
-    if (quantity(chainId, "chain ID") !== 1n) {
-      throw new Error("EVM wallet E2E requires local Anvil chain ID 1");
+    if (quantity(chainId, "chain ID") !== expectedChainId) {
+      throw new Error(`EVM fixture chain ID does not match ${options.chainId}`);
     }
   }
 
@@ -104,7 +114,7 @@ export async function createLocalEvmChain(): Promise<LocalEvmChain> {
     },
     async fund(address) {
       const account = getAddress(address);
-      await assertLocalChain();
+      await assertLocalChain(true);
       await rpc("anvil_setBalance", [account, `0x${LOCAL_FUNDING_WEI.toString(16)}`]);
       if (await balance(account) !== LOCAL_FUNDING_WEI) {
         throw new Error("Local Anvil did not set the E2E account balance to 10 ETH");
@@ -112,10 +122,16 @@ export async function createLocalEvmChain(): Promise<LocalEvmChain> {
     },
     async evidence(hash) {
       const expectedHash = hex(hash, 32, "transaction hash");
-      const [transactionValue, receiptValue] = await Promise.all([
-        rpc("eth_getTransactionByHash", [expectedHash]),
-        rpc("eth_getTransactionReceipt", [expectedHash]),
-      ]);
+      // A successful broadcast may precede interval-mined inclusion. Wait on
+      // this exact hash only; evidence gathering never broadcasts or signs.
+      const deadline = Date.now() + 60_000;
+      let receiptValue = await rpc("eth_getTransactionReceipt", [expectedHash]);
+      while (receiptValue === null && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        receiptValue = await rpc("eth_getTransactionReceipt", [expectedHash]);
+      }
+      if (receiptValue === null) throw new Error(`Local EVM transaction ${expectedHash} was not included within 60 seconds`);
+      const transactionValue = await rpc("eth_getTransactionByHash", [expectedHash]);
       const transaction = object(transactionValue, "mined transaction");
       const receipt = object(receiptValue, "transaction receipt");
       if (quantity(transaction.type, "transaction type") !== 2n) {
@@ -136,8 +152,8 @@ export async function createLocalEvmChain(): Promise<LocalEvmChain> {
         raw = fromRpc.serialized;
       }
       const decoded = Transaction.from(raw);
-      if (decoded.type !== 2 || !decoded.isSigned() || decoded.chainId !== 1n) {
-        throw new Error("The raw transaction is not signed EIP-1559 on chain ID 1");
+      if (decoded.type !== 2 || !decoded.isSigned() || decoded.chainId !== expectedChainId) {
+        throw new Error(`The raw transaction is not signed EIP-1559 on chain ID ${options.chainId}`);
       }
       const r = BigInt(decoded.signature.r);
       const s = BigInt(decoded.signature.s);
@@ -153,6 +169,17 @@ export async function createLocalEvmChain(): Promise<LocalEvmChain> {
         fromRpc.serialized.toLowerCase() !== raw.toLowerCase()
       ) {
         throw new Error("Raw transaction, RPC transaction, receipt, and hash disagree");
+      }
+      const blockHash = hex(receipt.blockHash, 32, "receipt block hash");
+      const blockNumber = quantity(receipt.blockNumber, "receipt block number");
+      const canonicalBlock = object(await rpc("eth_getBlockByNumber", [
+        `0x${blockNumber.toString(16)}`, false,
+      ]), "canonical inclusion block");
+      if (hex(canonicalBlock.hash, 32, "canonical block hash") !== blockHash ||
+          quantity(canonicalBlock.number, "canonical block number") !== blockNumber ||
+          !Array.isArray(canonicalBlock.transactions) ||
+          !canonicalBlock.transactions.some((hash) => hex(hash, 32, "included transaction hash") === expectedHash)) {
+        throw new Error("The transaction receipt is not included in the canonical block");
       }
       const sender = recoverAddress(decoded.unsignedHash, decoded.signature);
       const recipient = address(decoded.to, "signed recipient");
@@ -176,7 +203,8 @@ export async function createLocalEvmChain(): Promise<LocalEvmChain> {
         nonce: decoded.nonce,
         chainId: decoded.chainId.toString(),
         raw,
-        blockNumber: quantity(receipt.blockNumber, "receipt block number").toString(),
+        blockNumber: blockNumber.toString(),
+        blockHash,
         gasUsed: quantity(receipt.gasUsed, "receipt gas used").toString(),
         effectiveGasPriceWei: quantity(receipt.effectiveGasPrice, "receipt gas price").toString(),
       };

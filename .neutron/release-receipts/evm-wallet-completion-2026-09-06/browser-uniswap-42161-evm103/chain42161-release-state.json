@@ -1,0 +1,10 @@
+{
+  "observedAt": "2026-09-06T12:18:35.114819+00:00",
+  "chainId": "42161",
+  "clientVersion": "anvil/v1.7.1",
+  "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+  "latestNonce": "4",
+  "pendingNonce": "4",
+  "automine": false,
+  "stateChanges": "Read-only postflight; no reset, automine change or transaction"
+}

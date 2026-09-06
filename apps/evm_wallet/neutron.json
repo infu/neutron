@@ -2,7 +2,7 @@
   "format": 3,
   "id": "evm_wallet",
   "name": "EVM Wallet",
-  "version": 101,
+  "version": 106,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Chain-key accounts, transactions and signatures across EVM networks",
   "src": "main.mo",
@@ -44,7 +44,10 @@
         "evm_wallet_transaction_v1",
         "evm_wallet_prepare_v1",
         "evm_wallet_execute_v1",
-        "evm_wallet_status_v1"
+        "evm_wallet_status_v1",
+        "evm_wallet_review_evidence_v1",
+        "evm_wallet_estimate_transaction_v1",
+        "evm_wallet_replacement_transaction_v1"
       ]
     },
     "backend_calls": {
@@ -114,6 +117,14 @@
       "type": "update",
       "async": "async*"
     },
+    "evm_wallet_estimate_transaction_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "evm_wallet_replacement_transaction_v1": {
+      "type": "query",
+      "async": false
+    },
     "evm_wallet_transaction_v1": {
       "type": "update",
       "async": "async*"
@@ -133,6 +144,10 @@
     "evm_wallet_status_v1": {
       "type": "update",
       "async": "async*"
+    },
+    "evm_wallet_review_evidence_v1": {
+      "type": "update",
+      "async": "async*"
     }
   },
   "memory": {
@@ -141,6 +156,15 @@
       "schemas": {
         "1": {
           "src": "memory/evm_wallet/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "evm_evidence": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/evm_evidence/v1.mo"
         }
       },
       "migrations": []

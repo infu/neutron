@@ -1,0 +1,47 @@
+{
+  "status": "passed",
+  "scope": "Actual checked actor upgrade and clean initialization via current compiler/client; isolated RPC fixture, browser/external-chain acceptance qualified separately.",
+  "assertions": 561,
+  "cases": [
+    {
+      "receipt": "evm101-signed-successor.json",
+      "receipt_sha256": "59c3ea711a938dd1ca4d3ad9c445483fe0ee00ed8e36c5a255c74bd1be279f84",
+      "log": "evm101-signed-successor.log",
+      "assertions": 259,
+      "elapsed_seconds": 241.13,
+      "candidate_versions": {
+        "kernel": 341,
+        "wallet": 316,
+        "kitchensink": 315,
+        "evm_wallet": 103,
+        "uniswap": 103
+      }
+    },
+    {
+      "receipt": "wallet312-kernel336-evm-release.json",
+      "receipt_sha256": "9ef4e3159448fa3731456f5b5b2e3d5e1a8a4f2657f1cb521609ac3c2ff7aaa9",
+      "log": "wallet312.log",
+      "assertions": 214,
+      "elapsed_seconds": 244.61,
+      "candidate_versions": {
+        "kernel": 341,
+        "wallet": 316,
+        "kitchensink": 315,
+        "evm_wallet": 103,
+        "uniswap": 103
+      }
+    },
+    {
+      "receipt": "wallet306-kernel336-evm-release.json",
+      "receipt_sha256": "b81371e2bb1882c77a8d9417e861b63a280aa64fb035a3a61cef73fdf3e19499",
+      "log": "wallet306.log",
+      "assertions": 88,
+      "elapsed_seconds": 142.79,
+      "candidate_versions": {
+        "kernel": 341,
+        "wallet": 316,
+        "kitchensink": 315
+      }
+    }
+  ]
+}

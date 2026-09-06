@@ -9,6 +9,7 @@ import HistoryStore "../backend/history/Store";
 import Memory "../backend/memory/wallet/v1";
 import CommandMemory "../backend/memory/wallet_commands/v1";
 import BridgeMemory "../backend/memory/wallet_bridge/v1";
+import ReplacementMemory "../backend/memory/wallet_bridge_replacements/v1";
 import TransferMemory "../backend/memory/wallet_transfers/v1";
 import BridgeJournal "../backend/bridge/Journal";
 import TransferJournal "../backend/transfers/Journal";
@@ -215,8 +216,10 @@ switch (Map.get(restored.ledgers, Principal.compare, ledgerPrincipal)) {
 // previously released wallet or wallet_commands data above.
 let freshBridges = BridgeMemory.init();
 let freshTransfers = TransferMemory.init();
+let freshReplacements = ReplacementMemory.init();
 assert (Map.size(freshBridges.intents) == 0);
 assert (Map.size(freshTransfers.commands) == 0);
+assert (Map.size(freshReplacements.replacements) == 0);
 assert (restored.next_id == 8 and restored.configured);
 assert (Map.size(freshCommands.commands) == 1);
 
@@ -285,7 +288,22 @@ let noCalls : BridgeCapabilities.BackendCalls = {
     call_batch = func(_ : [BridgeCapabilities.CallRequest]) : async* [BridgeCapabilities.CallResult] { Runtime.trap("Restoring a memory root must not make a backend batch call") };
 };
 let retainedBridges : BridgeMemory.Mem = freshBridges;
-let restoredBridgeService = BridgeJournal.Service(retainedBridges, noCalls);
+// Released bridge hashes remain the original effect identity. The independent
+// sidecar retains the proven replacement chain without rewriting that schema.
+let replacementHash = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+let replacementTip = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+let retainedAncestry : [ReplacementMemory.Entry] = [
+    { step = #deposit; original_transaction_hash = ethereumHash; previous_transaction_hash = ethereumHash; transaction_hash = replacementHash; recorded_at = 10_200 },
+    { step = #deposit; original_transaction_hash = ethereumHash; previous_transaction_hash = replacementHash; transaction_hash = replacementTip; recorded_at = 10_300 },
+];
+Map.add(freshReplacements.replacements, Blob.compare, evmBridgeId, retainedAncestry);
+let retainedReplacementRoot : ReplacementMemory.Mem = freshReplacements;
+let restoredBridgeService = BridgeJournal.ServiceWithReplacements(retainedBridges, retainedReplacementRoot, noCalls);
+assert (Map.size(retainedReplacementRoot.replacements) == 1);
+assert (Map.get(retainedReplacementRoot.replacements, Blob.compare, evmBridgeId) == ?retainedAncestry);
+assert (restoredBridgeService.effectiveHash(evmBridgeId, #deposit) == ?replacementTip);
+assert (restoredBridgeService.effectiveHash(evmBridgeId, #approval) == ?evmApprovalHash);
+assert (restoredBridgeService.effectiveHash(bridgeId, #deposit) == null);
 switch (restoredBridgeService.status(bridgeId)) {
     case (#ok(intent)) {
         assert (intent == bridgeIntent);
@@ -312,6 +330,28 @@ switch (restoredBridgeService.status(bridgeId)) {
     case (#err(_)) assert false;
 };
 assert (Map.size(freshBridges.intents) == 2);
+
+// Superseded and current hashes still belong to the original intent after
+// restoration. Another saved unknown external intent cannot claim any of them.
+for (claimedHash in [ethereumHash, replacementHash, replacementTip].vals()) {
+    switch (restoredBridgeService.recordStep({ id = bridgeId; revision = 8; step = #deposit; state = #confirmed; transaction_hash = ?claimedHash; error = null })) {
+        case (#err(error)) assert (Text.contains(error, #text("already recorded")));
+        case (#ok(_)) assert false;
+    };
+};
+// The instantiated service reads the retained sidecar itself. A fresh root or
+// a copied snapshot would miss this later proven edge.
+let newestReplacement = "0x1212121212121212121212121212121212121212121212121212121212121212";
+let newestEntry : ReplacementMemory.Entry = {
+    step = #deposit; original_transaction_hash = ethereumHash;
+    previous_transaction_hash = replacementTip; transaction_hash = newestReplacement;
+    recorded_at = 10_400;
+};
+Map.add(retainedReplacementRoot.replacements, Blob.compare, evmBridgeId, Array.concat(retainedAncestry, [newestEntry]));
+assert (restoredBridgeService.effectiveHash(evmBridgeId, #deposit) == ?newestReplacement);
+assert (Map.get(freshReplacements.replacements, Blob.compare, evmBridgeId) == ?Array.concat(retainedAncestry, [newestEntry]));
+assert (Map.size(ReplacementMemory.init().replacements) == 0);
+assert (Map.size(retainedReplacementRoot.replacements) == 1);
 
 // Preserve each completed approval and the exact arguments of an ambiguous
 // minter call, including a separately tracked origin-network settlement state.

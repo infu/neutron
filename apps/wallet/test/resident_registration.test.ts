@@ -21,7 +21,7 @@ test("Wallet resident registers every bridge, quote, and released tool through t
   expect(stderr).toBe("");
   const descriptors = JSON.parse(stdout) as MsgBusToolDescriptor[];
   expect(descriptors.map(({ name }) => name).sort()).toEqual([
-    "wallet_bridge_attach_root_v1", "wallet_bridge_next_root_v1",
+    "wallet_bridge_attach_replacement_root_v1", "wallet_bridge_attach_root_v1", "wallet_bridge_next_root_v1",
     "wallet_bridge_prepare_root_v1", "wallet_bridge_quote_v1",
     "wallet_bridge_refresh_v1", "wallet_bridge_status_v1",
     "wallet_fund_root_v1", "wallet_fund_v1", "wallet_overview",

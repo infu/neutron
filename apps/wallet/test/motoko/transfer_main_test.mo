@@ -12,6 +12,7 @@ import IcrcTypes "../../backend/icrc1/Types";
 import Main "../../backend/main";
 import WalletMemory "../../backend/memory/wallet/v1";
 import BridgeMemory "../../backend/memory/wallet_bridge/v1";
+import BridgeReplacementMemory "../../backend/memory/wallet_bridge_replacements/v1";
 import CommandMemory "../../backend/memory/wallet_commands/v1";
 import TransferMemory "../../backend/memory/wallet_transfers/v1";
 
@@ -131,7 +132,7 @@ persistent actor {
                 wallet = memory;
                 wallet_commands = CommandMemory.init();
                 wallet_transfers = TransferMemory.init();
-                wallet_bridge = BridgeMemory.init();
+                wallet_bridge = BridgeMemory.init(); wallet_bridge_replacements = BridgeReplacementMemory.init();
             };
             capabilities = { backend_calls = calls };
             app_calls = {
@@ -332,6 +333,11 @@ persistent actor {
                     };
                     #ok(to_candid (price));
                 };
+                case ("get_events") {
+                    assert (request.canister == minter);
+                    assert (request.args == to_candid ({ start = 0 : Nat64; length = 0 : Nat64 }));
+                    #err({ code = "unavailable"; message = "Optional recovery tail unavailable" });
+                };
                 case (_) Runtime.trap("Cost rejection dispatched a financial effect: " # request.method);
             };
         };
@@ -348,7 +354,7 @@ persistent actor {
         let nativeEnv : Main.AppBackendEnvironment = {
             stable_memory = {
                 wallet = nativeMemory; wallet_commands = CommandMemory.init();
-                wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init();
+                wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init(); wallet_bridge_replacements = BridgeReplacementMemory.init();
             };
             capabilities = { backend_calls = nativeCalls };
             app_calls = { contacts = {
@@ -388,9 +394,9 @@ persistent actor {
         // Each mismatch terminates before reserving an allowance for the next
         // case. The mock traps on every approval or minter withdrawal call.
         let changedCosts : [(Nat8, Nat, Nat, Nat, Nat)] = [
-            (10, 11, 65_000, 20, 1),
-            (11, 10, 130_000, 20, 3),
-            (12, 10, 65_000, 21, 3),
+            (10, 11, 65_000, 20, 2),
+            (11, 10, 130_000, 20, 4),
+            (12, 10, 65_000, 21, 4),
         ];
         for ((id, assetFee, gasBudget, gasFee, expectedReads) in changedCosts.vals()) {
             let request = { nativeRequest with request_id = requestId(id) };

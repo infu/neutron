@@ -9,6 +9,7 @@ import {
   type EvmReplaceTransactionRequest,
 } from "neutron-tools/evm_wallet";
 import { errorMessage, requestId, type Operation } from "./data.ts";
+import { onFormActionKeyDown, runFormAction } from "./form_actions.ts";
 export function ReplacementForm({
   operation,
   onResult,
@@ -98,10 +99,8 @@ export function ReplacementForm({
       <summary>Speed up or cancel</summary>
       <form
         className="evm-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void review();
-        }}
+        onSubmit={(e) => e.preventDefault()}
+        onKeyDown={(e) => onFormActionKeyDown(e, busy, () => void review())}
       >
         <p className="evm-muted">
           The backend saves replacements before approval. After reload, recover
@@ -141,7 +140,12 @@ export function ReplacementForm({
         </label>
         {error && <p className="evm-error">{error}</p>}
         {notice && <p className="evm-notice">{notice}</p>}
-        <button className="nt-button nt-button--secondary" disabled={busy}>
+        <button
+          type="button"
+          className="nt-button nt-button--secondary"
+          disabled={busy}
+          onClick={(e) => runFormAction(e.currentTarget.form, busy, () => void review())}
+        >
           {busy ? "Working…" : "Review replacement"}
         </button>
       </form>

@@ -71,6 +71,11 @@ test("Wallet reserves ledgers broadly and minter mutations exactly", () => {
       principal: "mqygn-kiaaa-aaaar-qaadq-cai",
       method: "retrieve_btc_with_approval",
     },
+    {
+      kind: "exact",
+      principal: "mqygn-kiaaa-aaaar-qaadq-cai",
+      method: "retrieve_btc_status_v2",
+    },
     { kind: "principal", principal: "ss2fx-dyaaa-aaaar-qacoq-cai" },
     {
       kind: "exact",
@@ -231,4 +236,23 @@ test("Wallet parses exact reservation snapshots", () => {
       method: "update_balance",
     },
   ]);
+});
+
+test("selected Bitcoin, Dogecoin and Solana routes include only their exact settlement endpoint", () => {
+  const routes = [
+    { kind: "ckbtc" as const, network: "bitcoin_mainnet" as const, method: "retrieve_btc_status_v2" },
+    { kind: "ckdoge" as const, network: "dogecoin_mainnet" as const, method: "retrieve_doge_status" },
+    { kind: "cksol" as const, network: "solana_mainnet" as const, method: "withdrawal_status" },
+  ];
+  for (const route of routes) {
+    const ledger: CatalogLedger = {
+      ...catalog[0]!,
+      networks: ["internet_computer", route.network],
+      nativeRoute: { ...catalog[0]!.nativeRoute!, kind: route.kind, originNetwork: route.network },
+    };
+    const scopes = desiredWalletReservationScopes([ledger], new Set([ledger.principal]));
+    expect(scopes).toContainEqual({ kind: "exact", principal: ledger.nativeRoute!.minter, method: route.method });
+    expect(scopes).not.toContainEqual({ kind: "principal", principal: ledger.nativeRoute!.minter });
+    expect(scopes.filter((scope) => scope.kind === "exact" && routes.some((value) => value.method === scope.method))).toHaveLength(1);
+  }
 });

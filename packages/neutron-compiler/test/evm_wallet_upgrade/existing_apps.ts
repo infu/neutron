@@ -91,6 +91,8 @@ const usageType = IDL.Record({ total: IDL.Nat64, succeeded: IDL.Nat64, denied: I
 const capabilityType = IDL.Record({ scope: scopeType, kind: kindType, resource_id: IDL.Text, enabled: IDL.Bool, toggleable: IDL.Bool, usage: usageType });
 const pageMethod = IDL.Func([IDL.Record({ after: IDL.Opt(IDL.Text), limit: IDL.Nat })], [IDL.Record({ entries: IDL.Vec(capabilityType), next: IDL.Opt(IDL.Text) })], ["query"]);
 type Capability = { scope: { app_id: string; installation_uid: bigint }; kind: Record<string, null>; resource_id: string; enabled: boolean; toggleable: boolean; usage: Record<string, bigint> };
+export { pageMethod as upgradeCapabilityPageMethod };
+export type { Capability };
 
 export async function seedKernelState(callApp: CallApp, direct: DirectPocketIcCalls, canister: Principal, owner: Principal): Promise<() => Promise<void>> {
   const callKernel = (name: string, method: IDL.FuncClass, args: unknown[]) => direct.actorCall(canister, owner, name, method, args);

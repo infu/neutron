@@ -5,6 +5,7 @@ import {
   handleHumanEffect,
   handleRootEffect,
   operationReceipt,
+  OWNER_REVIEW_TOOLS,
   prepareEffect,
 } from "../src/provider.ts";
 import {
@@ -13,6 +14,8 @@ import {
   declinePrompt,
   getPrompts,
   presentEffect,
+  presentOwnEffect,
+  refreshPromptEvidence,
 } from "../src/prompts.ts";
 import { atomicAmount, parseBalance, parseOperation } from "../src/data.ts";
 import { assertLocalAccount } from "../src/local_intent.ts";
@@ -175,6 +178,101 @@ test("public provider delegates privately without preparing or signing", async (
       arguments: request,
     },
   ]);
+});
+const ownerTile = {
+  appId: "evm_wallet",
+  installationUid: "12",
+  role: "tile",
+  endpoint: "app:evm_wallet:tile:evm_wallet:instance:owner-7",
+};
+const ownerResident = { ...ownerTile, role: "background", endpoint: "app:evm_wallet:background" };
+function humanOwnerContext(
+  update: (method: string, args: unknown[]) => Promise<unknown>,
+  extra: Partial<MsgBusToolContext> = {},
+): MsgBusToolContext {
+  const ctx = context(update, extra);
+  delete ctx.audience;
+  return ctx;
+}
+test("own requests route to their exact tile without provider presentation or backend effects", async () => {
+  const forwarded: unknown[] = [];
+  const ctx = humanOwnerContext(async () => { throw new Error("Resident must not prepare or sign"); }, {
+    caller: ownerTile,
+    kernel: {
+      callTool: async (call: unknown) => { forwarded.push(call); return { routed: true }; },
+    } as unknown as MsgBusToolContext["kernel"],
+  });
+  expect(await handleHumanEffect("transaction", request, ctx)).toEqual({ routed: true });
+  expect(forwarded).toEqual([{ target: ownerTile.endpoint, name: OWNER_REVIEW_TOOLS.transaction, arguments: request }]);
+  expect(ctx.presentUserInterface).toBeUndefined();
+});
+test("own route rejects missing provenance, non-tile endpoints and Agent invocation before dispatch", async () => {
+  let forwarded = 0;
+  const ctx = humanOwnerContext(async () => { throw new Error("Unexpected backend work"); }, {
+    caller: ownerTile,
+    kernel: { callTool: async () => { forwarded++; } } as unknown as MsgBusToolContext["kernel"],
+  });
+  for (const changed of [
+    { caller: { appId: ownerTile.appId, role: ownerTile.role, endpoint: ownerTile.endpoint } },
+    { caller: ownerResident },
+    { caller: { ...ownerTile, role: "background" } },
+    { caller: { ...ownerTile, endpoint: "app:evm_wallet:tile:evm_wallet" } },
+    { caller: { ...ownerTile, endpoint: "app:kitchensink:tile:main:instance:owner-7" } },
+    { agentMode: true },
+  ]) await expect(handleHumanEffect("transaction", request, { ...ctx, ...changed })).rejects.toThrow();
+  await expect(handleHumanEffect("transaction", request, { ...ctx, caller })).rejects.toThrow("provider presentation");
+  expect(forwarded).toBe(0);
+});
+test("owner review only accepts the authenticated resident without Agent invocation", async () => {
+  let prepares = 0;
+  const ctx = humanOwnerContext(async () => { prepares++; return wire(); }, { caller: ownerResident });
+  for (const changed of [
+    { caller },
+    { caller: ownerTile },
+    { caller: { appId: ownerResident.appId, role: ownerResident.role, endpoint: ownerResident.endpoint } },
+    { caller: { ...ownerResident, role: "tile" } },
+    { caller: { ...ownerResident, endpoint: "app:evm_wallet:background:other" } },
+    { agentMode: true },
+  ]) await expect(presentOwnEffect("transaction", request, { ...ctx, ...changed })).rejects.toThrow();
+  // Existing external private tools still require Kernel foreground attestation.
+  await expect(presentEffect("transaction", request, ctx)).rejects.toThrow("foreground-tile attestation");
+  expect(prepares).toBe(0);
+  expect(getPrompts()).toHaveLength(0);
+});
+test("own two-leg review preserves request identity, explicit approval and saved-result replay", async () => {
+  const calls: string[] = [];
+  let submitted = false;
+  const ownerContext = humanOwnerContext(async (method, args) => {
+    calls.push(method);
+    expect((args[0] as Record<string, unknown>).identity).toEqual({
+      caller: { app_id: ownerResident.appId, installation_uid: ownerResident.installationUid, endpoint: ownerResident.endpoint },
+      request_id: request.requestId,
+    });
+    if (method.endsWith("execute_v1")) submitted = true;
+    return wire({
+      caller: { app_id: ownerResident.appId, installation_uid: ownerResident.installationUid, endpoint: ownerResident.endpoint },
+      ...(submitted ? { status: "submitted", transaction_hash: `0x${"aa".repeat(32)}` } : {}),
+    });
+  }, { caller: ownerResident });
+  const ctx = humanOwnerContext(async () => { throw new Error("Unexpected resident backend call"); }, {
+    caller: ownerTile,
+    kernel: { callTool: async (call: { target: string; name: string; arguments: typeof request }) => {
+      expect(call.target).toBe(ownerTile.endpoint);
+      expect(call.name).toBe(OWNER_REVIEW_TOOLS.transaction);
+      return presentOwnEffect("transaction", call.arguments, ownerContext);
+    } } as unknown as MsgBusToolContext["kernel"],
+  });
+  const pending = handleHumanEffect("transaction", request, ctx);
+  const prompt = await promptReady();
+  expect(calls).toEqual(["evm_wallet_prepare_v1"]);
+  expect(prompt.context.audience).toBeUndefined();
+  expect(prompt.prepared.request.requestId).toBe(request.requestId);
+  await acceptPrompt(prompt);
+  const result = await pending;
+  expect(result.status).toBe("submitted");
+  expect(await handleHumanEffect("transaction", request, ctx)).toEqual(result);
+  expect(calls).toEqual(["evm_wallet_prepare_v1", "evm_wallet_execute_v1", "evm_wallet_prepare_v1"]);
+  expect(getPrompts()).toHaveLength(0);
 });
 test("decline durably rejects without executing", async () => {
   const calls: string[] = [];
@@ -439,4 +537,61 @@ test("replacement review requires the exact resolved transaction and preserves b
   expect(operation.operation.preparedTransaction?.to).toBe(wire().ok.address);
   expect(operation.operation.preparedTransaction?.value).toBe("0");
   expect(operation.operation.message).toBe(message);
+});
+
+test("refreshing token observations uses the revised review without signing or changing the request", async () => {
+  let finishRead!: () => void;
+  const waitForRead = new Promise<void>((resolve) => { finishRead = resolve; });
+  let executions = 0;
+  const ctx = context(async (method, args) => {
+    if (method === "evm_wallet_prepare_v1") return wire();
+    if (method === "evm_wallet_review_evidence_v1") {
+      expect(args).toEqual([{
+        identity: { caller: { app_id: caller.appId, installation_uid: caller.installationUid, endpoint: caller.endpoint }, request_id: request.requestId },
+        review_revision: "1",
+        refresh: true,
+      }]);
+      await waitForRead;
+      return { operation: wire({ review_revision: "2" }).ok, token_evidence: null };
+    }
+    if (method === "evm_wallet_execute_v1") {
+      executions++;
+      expect((args[0] as { review_revision: string }).review_revision).toBe("2");
+      return wire({ status: "submitted", review_revision: "2", transaction_hash: `0x${"33".repeat(32)}` });
+    }
+    throw new Error(`Unexpected method ${method}`);
+  });
+  const completion = presentEffect("transaction", request, ctx);
+  const prompt = await promptReady();
+  const refreshing = refreshPromptEvidence(prompt);
+  await acceptPrompt(prompt);
+  expect(executions).toBe(0);
+  expect(prompt.phase).toBe("checking");
+  finishRead();
+  await refreshing;
+  expect(prompt.prepared.operation.reviewRevision).toBe("2");
+  expect(prompt.prepared.request).toEqual(request);
+  await acceptPrompt(prompt);
+  expect(executions).toBe(1);
+  expect((await completion).status).toBe("submitted");
+});
+
+test("failed token refresh keeps the saved review available and never executes an effect", async () => {
+  let executions = 0;
+  const ctx = context(async (method) => {
+    if (method === "evm_wallet_prepare_v1") return wire();
+    if (method === "evm_wallet_review_evidence_v1") throw new Error("Transport reply lost");
+    if (method === "evm_wallet_reject_v1") return wire({ status: "rejected" });
+    if (method === "evm_wallet_execute_v1") executions++;
+    throw new Error(`Unexpected method ${method}`);
+  });
+  const completion = presentEffect("transaction", request, ctx);
+  const prompt = await promptReady();
+  await refreshPromptEvidence(prompt);
+  expect(prompt.phase).toBe("review");
+  expect(prompt.error).toContain("could not be refreshed");
+  expect(prompt.prepared.operation.reviewRevision).toBe("1");
+  expect(executions).toBe(0);
+  await declinePrompt(prompt);
+  expect((await completion).status).toBe("rejected");
 });

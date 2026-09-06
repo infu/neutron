@@ -22,7 +22,16 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
   const [error, setError] = useState<string | null>(null);
   const [recoveryHash, setRecoveryHash] = useState("");
   const [phase, setPhase] = useState<string | null>(null);
+  const [effectiveHashes, setEffectiveHashes] = useState<Record<string, string>>({});
   const current = records.find((record) => record.id === selectedId) ?? null;
+  useEffect(() => {
+    let active = true;
+    setEffectiveHashes({});
+    if (current) void Promise.all(current.steps.filter((step) => step.transactionHash).map(async (step) => [step.kind, await bridge.effectiveHash(current.id, step.kind)] as const)).then((entries) => {
+      if (active) { const hashes: Record<string, string> = {}; for (const [kind, hash] of entries) if (hash !== null) hashes[kind] = hash; setEffectiveHashes(hashes); }
+    }).catch((reason) => { if (active) setError(message(reason)); });
+    return () => { active = false; };
+  }, [bridge, current?.id, current?.revision]);
   const remember = useCallback((intent: BridgeIntent) => {
     setRecords((old) => [intent, ...old.filter((record) => record.id !== intent.id)]);
     setSelectedId(intent.id);
@@ -106,7 +115,7 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
     } catch (reason) { setError(message(reason)); }
     finally { setBusy(false); }
   };
-  const depositedHash = current?.steps.find((step) => step.kind === "deposit")?.transactionHash;
+
   return <div className="wallet-ethereum-deposit">
     {tray ? <button type="button" className="nt-button nt-button--secondary nt-button--sm" onClick={() => void openInTile()}><IoOpenOutline /> Continue deposit in Wallet</button> : <>
       {records.length > 0 ? <label className="wallet-bridge-selector">Saved deposits<select className="nt-input" disabled={busy} value={selectedId ?? ""} onChange={(event) => { setSelectedId(event.target.value || null); setError(null); }}><option value="">New deposit</option>{records.map((record) => <option key={record.id} value={record.id}>{new Date(Number(BigInt(record.createdAt) / 1_000_000n)).toLocaleString()} · {bridgeLabel(record)}</option>)}</select></label> : null}
@@ -119,7 +128,7 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
     {unresolvedBrowserStep && !tray ? <label className="wallet-bridge-selector">Recover the existing browser transaction<small>Find the hash in the source wallet. Wallet checks its actual Ethereum fields before attaching it; this does not send a transaction.</small><input className="nt-input" aria-label="Existing browser transaction hash" placeholder="0x…" value={recoveryHash} disabled={busy} onChange={(event) => setRecoveryHash(event.target.value)} /><button className="nt-button nt-button--secondary nt-button--sm" type="button" disabled={busy || !/^0x[0-9a-fA-F]{64}$/.test(recoveryHash.trim())} onClick={() => void recoverBrowserHash()}>Verify and attach transaction</button></label> : null}
     {!loaded && !loading ? <button className="nt-button nt-button--secondary nt-button--sm" type="button" onClick={() => { setLoading(true); void reload().then((saved) => { setLoaded(true); setSelectedId(saved.find((record) => !bridgeComplete(record))?.id ?? null); setError(null); }).catch((reason) => setError(message(reason))).finally(() => setLoading(false)); }}>Retry loading saved deposits</button> : null}
     <small>Ethereum Mainnet only. Arbitrum assets must be bridged to Ethereum before wrapping into ck-tokens.</small>
-    {current || error || phase ? <div className={`wallet-ethereum-status wallet-bridge-status${error ? " is-error" : current && bridgeComplete(current) ? " is-complete" : ""}`} role={error ? "alert" : "status"}><span><strong>{error ?? phase ?? (current ? bridgeLabel(current) : "Preparing deposit")}</strong>{current?.error && !error ? <small>{current.error}</small> : null}{depositedHash ? <code title={depositedHash}>{depositedHash}</code> : null}</span></div> : null}
+    {current || error || phase ? <div className={`wallet-ethereum-status wallet-bridge-status${error ? " is-error" : current && bridgeComplete(current) ? " is-complete" : ""}`} role={error ? "alert" : "status"}><span><strong>{error ?? phase ?? (current ? bridgeLabel(current) : "Preparing deposit")}</strong>{current?.error && !error ? <small>{current.error}</small> : null}{current?.steps.filter((step) => step.transactionHash).map((step) => <span key={step.kind}><small>{step.kind.replaceAll("_", " ")} original transaction</small><code title={step.transactionHash!}>{step.transactionHash}</code>{effectiveHashes[step.kind] && effectiveHashes[step.kind] !== step.transactionHash ? <><small>Verified replacement execution</small><code title={effectiveHashes[step.kind]}>{effectiveHashes[step.kind]}</code></> : null}</span>)}</span></div> : null}
   </div>;
 }
 function message(value: unknown): string { return value instanceof Error ? value.message : String(value); }

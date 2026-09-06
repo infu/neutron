@@ -3,6 +3,7 @@ import { createEvmWalletClient, requireEvmWalletCaller, evmSendTransactionInputS
 import { decodeFunctionResult, encodeFunctionData, type Hex } from "viem";
 import { assertBridgeQuoteCurrent, bridgeEvmRequestId, bridgeTransaction, createBridgeClient, type BridgeIntent, type BridgeSource } from "./bridge.ts";
 import type { EthereumDepositStep } from "./ethereum.ts";
+import { assertBridgeTransactionMatches } from "./evm_bridge.ts";
 
 const text: JsonObject = { type: "string" };
 const nat: JsonObject = { type: "string", pattern: "^0$|^[1-9][0-9]*$" };
@@ -32,6 +33,7 @@ export function registerBridgeTools(): void {
   exposeTool("wallet_bridge_prepare_root_v1", { title: "Save a ck-token bridge for root Agent execution", description: "Save an Ethereum Mainnet deposit from EVM Wallet, bound to this original root caller installation. No signing occurs. Call wallet_bridge_next_root_v1 for the next exact transaction, invoke EVM Wallet's root transaction tool directly, then attach its hash.", inputSchema: closed({ id: requestId, ledger: text, amountAtoms: { type: "string", pattern: "^[1-9][0-9]*$" } }), outputSchema: bridgeIntentSchema, annotations: rootAnnotations }, handleBridgeRootPrepare);
   exposeTool("wallet_bridge_next_root_v1", { title: "Prepare the next root bridge transaction", description: "Validate helper identity and allowance, durably claim one exact approval/deposit step, and return its stable EVM Wallet request. Pending steps return the same request; never replace its request ID. Execute using EVM Wallet's root tool directly, then attach the actual chain transaction hash.", inputSchema: closed({ id: requestId }), outputSchema: nextSchema, annotations: rootAnnotations }, handleBridgeRootNext);
   exposeTool("wallet_bridge_attach_root_v1", { title: "Attach a root bridge transaction", description: "Verify a transaction's actual network, sender, helper/token destination, value and calldata before binding its hash to the saved bridge step. Records receipts and mint progress without submitting any transaction.", inputSchema: closed({ id: requestId, step: stepSchema, transactionHash: hash }), outputSchema: bridgeIntentSchema, annotations: rootAnnotations }, handleBridgeRootAttach);
+  exposeTool("wallet_bridge_attach_replacement_root_v1", { title: "Attach a verified root bridge speed-up", description: "Preserve the original EVM Wallet request/hash and record its journal-proven replacement separately. The replacement must perform the exact saved approval/deposit. Cancellations and changed calls cannot advance the bridge. Use both hashes even if the original RPC transaction was evicted before attachment.", inputSchema: closed({ id: requestId, step: stepSchema, originalTransactionHash: hash, transactionHash: hash }), outputSchema: bridgeIntentSchema, annotations: rootAnnotations }, handleBridgeRootAttachReplacement);
 }
 export async function handleBridgeRootPrepare(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
   const source = rootCaller(context);
@@ -54,7 +56,13 @@ export async function handleBridgeRootNext(args: JsonObject, context: MsgBusTool
   const deposit = intent.steps.find((step) => step.kind === "deposit")!;
   if (deposit.state === "confirmed") return json({ intent: await bridge.refresh(intent.id), step: null, request: null, message: "Ethereum deposit confirmed; checking only this deposit's minter and IC mint evidence." });
   const pending = intent.steps.find((step) => step.state === "unknown" || step.state === "submitted");
-  if (pending?.transactionHash) return json({ intent, step: pending.kind, request: null, message: `Saved transaction ${pending.transactionHash}; call wallet_bridge_attach_root_v1 with this hash to reconcile its receipt. Do not submit another transaction.` });
+  if (pending?.transactionHash) {
+    const effective = await bridge.effectiveHash(intent.id, pending.kind);
+    const message = effective && effective.toLowerCase() !== pending.transactionHash.toLowerCase()
+      ? `Saved original transaction ${pending.transactionHash}; verified replacement execution ${effective}. Call wallet_bridge_attach_replacement_root_v1 with originalTransactionHash ${pending.transactionHash} and transactionHash ${effective} to reconcile. Do not submit another transaction.`
+      : `Saved transaction ${pending.transactionHash}; call wallet_bridge_attach_root_v1 with this hash to reconcile its receipt. Do not submit another transaction.`;
+    return json({ intent, step: pending.kind, request: null, message });
+  }
   // A claim can survive a crash before EVM Wallet saw it. Without a recorded
   // hash this is not proof of dispatch, so validate the live route and helper
   // before returning an executable request. Known hashes reconcile above.
@@ -89,7 +97,10 @@ export async function handleBridgeRootAttach(args: JsonObject, context: MsgBusTo
   const hash = stringArg(args, "transactionHash");
   if (!step.operationId) throw new Error("This bridge step has no saved EVM Wallet request identity");
   const evidence = await createEvmWalletClient(context.kernel).transaction({ chainId: "1", transactionHash: hash, walletRequest: { callerAppId: caller.appId, callerInstallationUid: caller.installationUid, requestId: step.operationId } });
-  if (evidence.walletRequestMatches !== true) throw new Error("The Ethereum transaction is not bound to this exact root caller installation and saved EVM Wallet request");
+  if (evidence.walletRequestMatches !== true) {
+    if (step.transactionHash && step.transactionHash.toLowerCase() !== hash.toLowerCase()) return attachRootReplacement(bridge, intent, caller, kind, step.transactionHash, hash, context);
+    throw new Error("The Ethereum transaction is not bound to this exact root caller installation and saved EVM Wallet request");
+  }
   const expected = bridgeTransaction(intent, kind);
   const actual = evidence.transaction;
   if (!actual) throw new Error("This transaction is not yet available from Ethereum. Keep the same hash and retry reconciliation.");
@@ -101,6 +112,43 @@ export async function handleBridgeRootAttach(args: JsonObject, context: MsgBusTo
   const recorded = await bridge.record(latest, kind, state, hash as Hex, state === "failed" ? "The Ethereum transaction reverted" : null);
   return json(kind === "deposit" ? await bridge.refresh(recorded.id) : recorded);
 }
+export async function handleBridgeRootAttachReplacement(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
+  const caller = rootCaller(context);
+  const bridge = scopedBridge(context);
+  const intent = await bridge.status(stringArg(args, "id"));
+  assertExecutor(intent, caller);
+  const kind = stringArg(args, "step") as EthereumDepositStep;
+  if (!["reset_approval", "approval", "deposit"].includes(kind)) throw new Error("Invalid bridge step");
+  return attachRootReplacement(bridge, intent, caller, kind, stringArg(args, "originalTransactionHash"), stringArg(args, "transactionHash"), context);
+}
+async function attachRootReplacement(bridge: ReturnType<typeof createBridgeClient>, intent: BridgeIntent, caller: Exclude<BridgeSource, string>, kind: EthereumDepositStep, originalHash: string, replacementHash: string, context: MsgBusToolContext): Promise<JsonObject> {
+  const step = intent.steps.find((entry) => entry.kind === kind)!;
+  if (step.state === "ready" || !step.operationId) throw new Error("Claim the saved bridge step before attaching its replacement");
+  if (step.transactionHash && step.transactionHash.toLowerCase() !== originalHash.toLowerCase()) throw new Error("The replacement cannot change the saved original transaction hash");
+  if (originalHash.toLowerCase() === replacementHash.toLowerCase()) throw new Error("A replacement requires a different execution hash");
+  const wallet = createEvmWalletClient(context.kernel);
+  const walletRequest = { callerAppId: caller.appId, callerInstallationUid: caller.installationUid, requestId: step.operationId };
+  const original = await wallet.transaction({ chainId: "1", transactionHash: originalHash, walletRequest });
+  if (original.walletRequestMatches !== true) throw new Error("The original hash is not bound to this exact root caller installation and saved EVM Wallet request");
+  if (original.receipt) throw new Error("The original transaction already has a receipt; reconcile that execution before attributing a replacement");
+  const proof = await wallet.replacementTransaction({ chainId: "1", transactionHash: replacementHash, originalWalletRequest: walletRequest });
+  if (!proof.walletReplacementMatches) throw new Error("EVM Wallet did not prove this replacement descends from the exact saved root request");
+  const evidence = await wallet.transaction({ chainId: "1", transactionHash: replacementHash });
+  if (!evidence.transaction) throw new Error("The replacement is not yet visible on Ethereum; keep both hashes and retry reconciliation");
+  assertBridgeTransactionMatches(bridgeTransaction(intent, kind), evidence.transaction);
+  if (original.transaction && original.transaction.nonce !== evidence.transaction.nonce) throw new Error("The replacement transaction has a different nonce");
+  const state = evidence.receipt?.status === "success" ? "confirmed" : evidence.receipt?.status === "reverted" ? "failed" : "submitted";
+  let latest = await bridge.status(intent.id);
+  assertExecutor(latest, caller);
+  if (!latest.steps.find((entry) => entry.kind === kind)!.transactionHash) latest = await bridge.record(latest, kind, "submitted", originalHash as Hex);
+  const previous = await bridge.effectiveHash(intent.id, kind) ?? originalHash as Hex;
+  const error = state === "failed" ? "The replacement transaction reverted on Ethereum" : null;
+  const recorded = previous.toLowerCase() === replacementHash.toLowerCase()
+    ? await bridge.record(latest, kind, state, originalHash as Hex, error)
+    : await bridge.recordReplacement(latest, kind, originalHash as Hex, previous, replacementHash as Hex, state, error);
+  return json(kind === "deposit" ? await bridge.refresh(recorded.id) : recorded);
+}
+
 function evmRequest(intent: BridgeIntent, kind: EthereumDepositStep): EvmSendTransactionRequest {
   const tx = bridgeTransaction(intent, kind);
   const operation = intent.steps.find((step) => step.kind === kind)?.operationId;

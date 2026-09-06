@@ -1,0 +1,25 @@
+{
+  "appId": "evm_wallet",
+  "version": 104,
+  "publication": "not published",
+  "pins": [
+    {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.4.neutron",
+      "bytes": 391585,
+      "sha256": "002759fbb401bfcf9e399fa0a9a654bbdd7833dba1c30c4cecd888a8a0a3c820"
+    },
+    {
+      "path": "apps/evm_wallet/.neutron/sources/2223837c9da324bdbcfc56d3fb98120303f28027b0d9605eb833d9b7f0b884f0.source.v1.msgpack.gz",
+      "bytes": 488139,
+      "sha256": "2223837c9da324bdbcfc56d3fb98120303f28027b0d9605eb833d9b7f0b884f0"
+    }
+  ],
+  "releaseTests": {
+    "exitCode": 1,
+    "passed": 52,
+    "failed": 1,
+    "reason": "Test compared complete schema artifact bytes including expected app.version metadata. Method schemas are unchanged. Preserve this candidate; test source correction requires successor."
+  },
+  "sandboxCases": 16,
+  "typeScript": "both passed"
+}

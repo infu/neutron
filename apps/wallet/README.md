@@ -257,6 +257,14 @@ cannot complete the deposit. Archived mint blocks are verified through the
 reviewed ledger index; unavailable evidence stays pending. The UI distinguishes
 Ethereum inclusion, minter acceptance, and a verified IC mint.
 
+EVM Wallet speed-ups keep the original step hash and request ID unchanged.
+The additive `wallet_bridge_replacements` v1 root retains each proven replacement
+hash separately. Wallet checks the replacement's actual sender, destination,
+calldata and value before following its receipt and minter event. A cancellation
+or changed transaction cannot complete a deposit. The UI shows original and
+replacement hashes distinctly. External browser replacements remain unresolved
+without an authenticated request relationship.
+
 Agent orchestration uses `wallet_bridge_quote_v1`, `wallet_bridge_status_v1`,
 `wallet_bridge_refresh_v1`, and the direct-root-only
 `wallet_bridge_prepare_root_v1`, `wallet_bridge_next_root_v1`, and
@@ -265,7 +273,11 @@ tool itself using each returned frozen request, then attaches the actual hash.
 Attachment verifies both public transaction fields and EVM Wallet's stored
 original caller installation/request binding. IC Wallet never forwards a nested
 root signing call. UI cannot silently resume a root-owned bridge under IC Wallet's
-different EVM command identity.
+different EVM command identity. `wallet_bridge_attach_replacement_root_v1`
+accepts the original and replacement hashes, verifies both the original request
+binding and Wallet's signed replacement ancestry, then checks the actual chain
+effect. This also recovers an original attachment lost before its RPC transaction
+was evicted.
 
 Wallet keeps durable Activity history in its v1 app memory. Every preset ledger
 has a permanent companion index principal in the catalog. Activity sync first
@@ -393,9 +405,22 @@ terminal receipts until `wallet_transfer_acknowledge_v2` confirms the UI receive
 them, so a lost success reply survives reload even in opaque-origin tiles. Native minter calls without a supported idempotency key are never
 blindly repeated after an ambiguous reply. Without a recoverable burn identifier,
 that outcome can remain unresolved; the Wallet does not manufacture a success or
-clear a potentially active minter allowance. A known ckETH/ckERC20 burn is tracked
-separately from Ethereum settlement using the minter's `retrieve_eth_status`.
-The ckERC20 flow preserves its separately quoted ckETH gas allowance and burn.
+clear a potentially active minter allowance. Known burns are tracked separately
+from native settlement through each official minter's status endpoint:
+`retrieve_eth_status` for ckETH/ckERC20, `retrieve_btc_status_v2` for ckBTC,
+`retrieve_doge_status` for ckDOGE, and `withdrawal_status` for ckSOL.
+`AlreadyProcessing` is a definite pre-burn refusal; `TemporarilyUnavailable` can
+hide an accepted ledger burn and remains unresolved.
+
+The ckERC20 flow preserves its separate ckETH gas allowance and burn. New
+withdrawals retain an optional pre-dispatch minter-event cursor; released315
+commands keep their original frozen sequence and search backward through the
+complete event history. Exact gas-refund evidence is saved durably. A gas refund
+alone does not resolve an ambiguous token burn: that command stays pending even
+after the refund is verified. If the earlier token refusal proves no asset burn,
+the matching refund can resolve the failed withdrawal. Unavailable event reads
+remain recoverable and do not become an additional withdrawal prerequisite.
+Malformed optional browser cache cannot hide these backend recovery records.
 
 Before a ckERC20 withdrawal, `wallet_withdrawal_quote_v1` shows the native
 amount, asset approval fee, separate ckETH gas budget and approval fee, exact

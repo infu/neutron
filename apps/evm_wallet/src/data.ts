@@ -72,7 +72,25 @@ export type TransactionIntent = {
   data: string;
   accessList: Array<{ address: string; storageKeys: string[] }>;
 };
+export type TokenEvidenceValue = { value: string | null; error: string | null };
+export type TokenEvidence = {
+  chainId: string;
+  contract: string;
+  method: "approve" | "transfer" | "transferFrom";
+  owner: string;
+  spender: string | null;
+  recipient: string | null;
+  amount: string;
+  recognition: "erc20_calldata";
+  blockNumber: string | null;
+  blockHash: string | null;
+  blockError: string | null;
+  observedAtNs: string;
+  balance: TokenEvidenceValue;
+  allowance: TokenEvidenceValue | null;
+};
 export type Operation = {
+  tokenEvidence: TokenEvidence | null;
   preparedTransaction:
     | (TransactionIntent & { chainId: string; nonce: string })
     | null;
@@ -117,6 +135,7 @@ export const METHODS = {
   status: "evm_wallet_status_v1",
   history: "evm_wallet_history_v1",
   assetSet: "evm_wallet_asset_set_v1",
+  reviewEvidence: "evm_wallet_review_evidence_v1",
 } as const;
 export function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -243,6 +262,46 @@ export function parseBalance(value: unknown): Balance {
 export function parseOperation(value: unknown): Operation {
   return parseOperationRecord(unwrap(value));
 }
+export function parseReviewEvidence(value: unknown): Operation {
+  const r = record(unwrap(value), "review evidence response");
+  return {
+    ...parseOperationRecord(r.operation),
+    tokenEvidence: parseTokenEvidence(r.token_evidence),
+  };
+}
+export function parseTokenEvidence(value: unknown): TokenEvidence | null {
+  if (value == null) return null;
+  const r = record(value, "token review evidence");
+  const method = text(r.method, "token method");
+  if (!["approve", "transfer", "transferFrom"].includes(method))
+    throw new Error("Invalid token review method");
+  if (r.recognition !== "erc20_calldata")
+    throw new Error("Invalid token review recognition");
+  const observation = (value: unknown): TokenEvidenceValue => {
+    const v = record(value, "token observation");
+    const observed = optionalNat(v.value, "observed token amount");
+    const error = optionalText(v.error, "token observation error");
+    if ((observed === null) === (error === null))
+      throw new Error("Token observation must contain a value or an error");
+    return { value: observed, error };
+  };
+  return {
+    chainId: natural(r.chain_id, "token evidence chain"),
+    contract: address(r.contract),
+    method: method as TokenEvidence["method"],
+    owner: address(r.owner),
+    spender: r.spender == null ? null : address(r.spender),
+    recipient: r.recipient == null ? null : address(r.recipient),
+    amount: natural(r.amount, "token amount"),
+    recognition: "erc20_calldata",
+    blockNumber: r.block_number == null ? null : quantity(r.block_number, "token evidence block"),
+    blockHash: optionalText(r.block_hash, "token evidence block hash"),
+    blockError: optionalText(r.block_error, "token evidence block error"),
+    observedAtNs: integer(r.observed_at, "token evidence observed at"),
+    balance: observation(r.balance),
+    allowance: r.allowance == null ? null : observation(r.allowance),
+  };
+}
 export function parseOperationRecord(value: unknown): Operation {
   const r = record(value, "operation");
   const i = record(r.intent, "intent");
@@ -317,6 +376,7 @@ export function parseOperationRecord(value: unknown): Operation {
       }
     : null;
   return {
+    tokenEvidence: null,
     preparedTransaction,
     caller: {
       appId: text(caller.app_id, "caller app"),
@@ -425,6 +485,15 @@ export function decodeKnownCall(
         details: [
           ["Recipient", String(d.args[0])],
           ["Amount (atomic units)", String(d.args[1])],
+        ],
+      };
+    if (d.functionName === "transferFrom")
+      return {
+        name: "ERC-20 transfer from",
+        details: [
+          ["Token owner", String(d.args[0])],
+          ["Recipient", String(d.args[1])],
+          ["Amount (atomic units)", String(d.args[2])],
         ],
       };
     return null;

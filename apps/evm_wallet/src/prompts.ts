@@ -1,10 +1,12 @@
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
-import { errorMessage, type Operation } from "./data.ts";
+import { requireEvmWalletCaller } from "neutron-tools/evm_wallet";
+import { decodeKnownCall, errorMessage, type Operation } from "./data.ts";
 import {
   executeEffect,
   operationJson,
   prepareEffect,
   rejectEffect,
+  refreshReviewEvidence,
   statusEffect,
   type Prepared,
   type ProviderKind,
@@ -52,7 +54,42 @@ export async function presentEffect(
     throw new Error(
       "EVM Wallet review requires Kernel foreground-tile attestation",
     );
-  const prepared = await prepareEffect(kind, args, context);
+  return queueReview(kind, args, context);
+}
+export async function presentOwnEffect(
+  kind: ProviderKind,
+  args: JsonObject,
+  context: MsgBusToolContext,
+): Promise<JsonObject> {
+  context.signal?.throwIfAborted();
+  const caller = requireEvmWalletCaller(context);
+  if (context.agentMode)
+    throw new Error("EVM Wallet owner review is unavailable to Agent invocations");
+  if (
+    caller.appId !== "evm_wallet" ||
+    context.caller!.role !== "background" ||
+    context.caller!.endpoint !== "app:evm_wallet:background"
+  )
+    throw new Error("EVM Wallet owner review requires its authenticated resident service");
+  return queueReview(kind, args, context);
+}
+async function queueReview(
+  kind: ProviderKind,
+  args: JsonObject,
+  context: MsgBusToolContext,
+): Promise<JsonObject> {
+  let prepared = await prepareEffect(kind, args, context);
+  if (prepared.operation.status !== "prepared")
+    return operationJson(prepared.operation);
+  let evidenceError: string | null = null;
+  const tx = prepared.operation.preparedTransaction ?? prepared.operation.intent.transaction;
+  if (tx && decodeKnownCall(tx.data)) {
+    try {
+      prepared = { ...prepared, operation: await refreshReviewEvidence(prepared, context, false) };
+    } catch (error) {
+      evidenceError = `Saved token observations could not be loaded. ${errorMessage(error)}`;
+    }
+  }
   if (prepared.operation.status !== "prepared")
     return operationJson(prepared.operation);
   const id = prepared.operation.operationId;
@@ -64,7 +101,7 @@ export async function presentEffect(
       prepared,
       context,
       phase: "review",
-      error: null,
+      error: evidenceError,
       resolve,
       reject,
       removeAbort: () => undefined,
@@ -95,6 +132,17 @@ export async function acceptPrompt(prompt: ReviewPrompt): Promise<void> {
     if (!prompts.includes(prompt)) return;
     if (operation.status === "prepared") {
       prompt.prepared = { ...prompt.prepared, operation };
+      const tx = operation.preparedTransaction ?? operation.intent.transaction;
+      if (tx && decodeKnownCall(tx.data)) {
+        try {
+          prompt.prepared = { ...prompt.prepared, operation: await refreshReviewEvidence(prompt.prepared, prompt.context, false) };
+        } catch { /* Keep missing observations explicit in the revised review. */ }
+        if (!prompts.includes(prompt)) return;
+        if (prompt.prepared.operation.status !== "prepared") {
+          finish(prompt, prompt.prepared.operation);
+          return;
+        }
+      }
       prompt.phase = "review";
       prompt.error =
         operation.message ??
@@ -123,6 +171,28 @@ export async function declinePrompt(prompt: ReviewPrompt): Promise<void> {
     emit();
   }
 }
+export async function refreshPromptEvidence(prompt: ReviewPrompt): Promise<void> {
+  if (!prompts.includes(prompt) || prompt.phase !== "review") return;
+  prompt.phase = "checking";
+  prompt.error = null;
+  emit();
+  try {
+    const operation = await refreshReviewEvidence(prompt.prepared, prompt.context);
+    if (!prompts.includes(prompt)) return;
+    if (operation.status !== "prepared") {
+      finish(prompt, operation);
+      return;
+    }
+    prompt.prepared = { ...prompt.prepared, operation };
+    prompt.phase = "review";
+    emit();
+  } catch (error) {
+    if (!prompts.includes(prompt)) return;
+    prompt.phase = "review";
+    prompt.error = `Token observations could not be refreshed. ${errorMessage(error)}`;
+    emit();
+  }
+}
 export async function checkPrompt(prompt: ReviewPrompt): Promise<void> {
   if (!prompts.includes(prompt) || prompt.phase !== "uncertain") return;
   prompt.phase = "checking";
@@ -131,6 +201,20 @@ export async function checkPrompt(prompt: ReviewPrompt): Promise<void> {
     const operation = await statusEffect(prompt.prepared, prompt.context);
     if (operation.status === "prepared") {
       prompt.prepared = { ...prompt.prepared, operation };
+      const tx = operation.preparedTransaction ?? operation.intent.transaction;
+      if (tx && decodeKnownCall(tx.data)) {
+        try {
+          prompt.prepared = {
+            ...prompt.prepared,
+            operation: await refreshReviewEvidence(prompt.prepared, prompt.context, false),
+          };
+        } catch { /* Missing observations stay explicit and can be refreshed. */ }
+        if (!prompts.includes(prompt)) return;
+        if (prompt.prepared.operation.status !== "prepared") {
+          finish(prompt, prompt.prepared.operation);
+          return;
+        }
+      }
       prompt.phase = "review";
       prompt.error = operation.message;
       emit();

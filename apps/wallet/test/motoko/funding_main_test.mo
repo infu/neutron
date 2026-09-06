@@ -12,6 +12,7 @@ import IcrcTypes "../../backend/icrc1/Types";
 import Main "../../backend/main";
 import WalletMemory "../../backend/memory/wallet/v1";
 import BridgeMemory "../../backend/memory/wallet_bridge/v1";
+import BridgeReplacementMemory "../../backend/memory/wallet_bridge_replacements/v1";
 import CommandMemory "../../backend/memory/wallet_commands/v1";
 import TransferMemory "../../backend/memory/wallet_transfers/v1";
 
@@ -99,7 +100,7 @@ persistent actor Test {
         let env : Main.AppBackendEnvironment = {
             stable_memory = {
                 wallet = memory; wallet_commands = CommandMemory.init();
-                wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init();
+                wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init(); wallet_bridge_replacements = BridgeReplacementMemory.init();
             };
             capabilities = { backend_calls = calls };
             app_calls = { contacts = {

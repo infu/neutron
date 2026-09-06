@@ -1,0 +1,391 @@
+{
+  "status": "passed",
+  "prior_version": 341,
+  "current_version": 342,
+  "offered_source_sha256": {
+    "341": "c59c0f72a88aeb11dee4d7c7db2d79078e813bd1378634cfe38e818082f12605",
+    "342": "59c14b2e2c0db3f62b2cccc7ba57ec3c0c3264ae598e079300719d0f11c58692"
+  },
+  "exact_equal_files": 75,
+  "files": [
+    {
+      "path": "apps/kernel/backend/aaa_interface.mo",
+      "sha256": "cd7b7096ac8d64b815525e95dda4109aaa6971ebe9c721d14205113ebe4bbb97",
+      "bytes": 9582
+    },
+    {
+      "path": "apps/kernel/backend/activation/Service.mo",
+      "sha256": "eb804fe7d63ad86b576943f54ba40e7f544015ea070587d40f82b8685e8708a7",
+      "bytes": 3567
+    },
+    {
+      "path": "apps/kernel/backend/app_usage/Service.mo",
+      "sha256": "bab6854687757ee724f92fad7f806f28b34874dd405e6ca6525954726dda7875",
+      "bytes": 19938
+    },
+    {
+      "path": "apps/kernel/backend/app_usage/Types.mo",
+      "sha256": "965ed8dd05b2a31ce3fb30c1a3c0ecc18ca8dc95de95a7c1b3ba5f9b0a9233bf",
+      "bytes": 3432
+    },
+    {
+      "path": "apps/kernel/backend/assets.mo",
+      "sha256": "6249b3bd1668f29ad2b78cabf3084278cfbf0625621fd16597c194cd9fbbec73",
+      "bytes": 1687
+    },
+    {
+      "path": "apps/kernel/backend/backend_calls/Memory.mo",
+      "sha256": "53475fadb41e57c3185184a5d6f60a6b02037a12335afc6f28d06afb2f7c6a76",
+      "bytes": 34621
+    },
+    {
+      "path": "apps/kernel/backend/backend_calls/Raw.mo",
+      "sha256": "72a22ebd04888efbd8007adbd6408042f62b34ad7755881adbc8a361b941e4de",
+      "bytes": 1731
+    },
+    {
+      "path": "apps/kernel/backend/backend_calls/Service.mo",
+      "sha256": "a8fbe470623ba30dc0b2cc70a72e2e916b556566031340a038b0ec2271791299",
+      "bytes": 41999
+    },
+    {
+      "path": "apps/kernel/backend/backend_calls/Types.mo",
+      "sha256": "af98ced887f7ffbca27143f82bb0d22dca967a483812c208879cae2ebfdd86ef",
+      "bytes": 3424
+    },
+    {
+      "path": "apps/kernel/backend/capabilities/Registry.mo",
+      "sha256": "b6afcf0a85172a3a5dafbaa3847bf7dbbf35f8378fc32d3569dd67abda322f4c",
+      "bytes": 26069
+    },
+    {
+      "path": "apps/kernel/backend/capabilities/Scope.mo",
+      "sha256": "528947fd8269ee58250d7a8f68d27316bef53033e13bc009191bb886941efe8d",
+      "bytes": 1299
+    },
+    {
+      "path": "apps/kernel/backend/capabilities/Types.mo",
+      "sha256": "719ea658853df51ba0c22f90696023999aa3a042caadf5166db5907618524a91",
+      "bytes": 4776
+    },
+    {
+      "path": "apps/kernel/backend/certified_assets/Allocator.mo",
+      "sha256": "efdd5ac77cf85b975db7d08657f70cd1dda6f1d2ca4af31d2e272b9f20a5826e",
+      "bytes": 55680
+    },
+    {
+      "path": "apps/kernel/backend/certified_assets/AuthenticatedForest.mo",
+      "sha256": "97d431e0c57bc16ae86684ef9155c7b1c14a26bc369c2ee44e29597555015268",
+      "bytes": 154213
+    },
+    {
+      "path": "apps/kernel/backend/certified_assets/Codec.mo",
+      "sha256": "ad803abfbb4a028243a3e72abbb3fdcb709819ed9d9762abda839ee305f793ab",
+      "bytes": 18597
+    },
+    {
+      "path": "apps/kernel/backend/certified_assets/Paths.mo",
+      "sha256": "5d896ac156fcc816b923a8d4d9cb1ec6716a656b5e432b42a918b63710ea7caf",
+      "bytes": 11967
+    },
+    {
+      "path": "apps/kernel/backend/certified_assets/Service.mo",
+      "sha256": "44ef6c8c4d76ba04eb8d4a7f7924b6e2fd135fff3bd408b067a1fd76bfdfddc2",
+      "bytes": 336538
+    },
+    {
+      "path": "apps/kernel/backend/certified_assets/Types.mo",
+      "sha256": "bfb085a947a6c4d1d69e65377ca20ff31134bd90ae71a3eee6193ee526b4581c",
+      "bytes": 19196
+    },
+    {
+      "path": "apps/kernel/backend/certified_http.mo",
+      "sha256": "38bfc4bc53601c2ca992143b9b720aab3d72aa572d23de866468673a4587502e",
+      "bytes": 128194
+    },
+    {
+      "path": "apps/kernel/backend/certified_http_v2.mo",
+      "sha256": "d5a13a4fd80c16b9c80cc786d29bdf5981dffb7ab8be492ea9a6f2a9a03da0b6",
+      "bytes": 46578
+    },
+    {
+      "path": "apps/kernel/backend/certified_subtrees.mo",
+      "sha256": "fc1ede828bd7e384b20fbf25122e698b2e0fe9a7f2bede1c904d18a56eb0353d",
+      "bytes": 9080
+    },
+    {
+      "path": "apps/kernel/backend/chain_key_signing/Adapter.mo",
+      "sha256": "6dea83940b1cfae5dc86937270b8f61cf57280ad301e7264dcc96a412b24d054",
+      "bytes": 7409
+    },
+    {
+      "path": "apps/kernel/backend/chain_key_signing/Namespace.mo",
+      "sha256": "8be8dcd0f857c9edf0fd8b6d65646ecfd4ac4ccb260387f33c4d4d2aaf930da6",
+      "bytes": 8234
+    },
+    {
+      "path": "apps/kernel/backend/chain_key_signing/Service.mo",
+      "sha256": "83a7c95b0bc1efccdb28f9183785435ee043372ea5a284fbb6979a31e26719f4",
+      "bytes": 28628
+    },
+    {
+      "path": "apps/kernel/backend/chain_key_signing/Types.mo",
+      "sha256": "140eae3363c52206c495f5ac6dd65ab5b7dff4f86a71402b9164ecd5f186aa10",
+      "bytes": 3199
+    },
+    {
+      "path": "apps/kernel/backend/connections/CatalogData.mo",
+      "sha256": "8612b1be5b3b219966ba1e6fdfca6d001c616c2095638df3ff92a2b050d033cf",
+      "bytes": 730
+    },
+    {
+      "path": "apps/kernel/backend/connections/Codec.mo",
+      "sha256": "9af7c892f315a8e4020b0398a7fad2899167903ae3272206aa2fcd880d80d204",
+      "bytes": 2515
+    },
+    {
+      "path": "apps/kernel/backend/connections/Crypto.mo",
+      "sha256": "06bb33a20c778a4f6feceaa4b112bc9c295b889d53329baf8d219b31dc3ee37d",
+      "bytes": 838
+    },
+    {
+      "path": "apps/kernel/backend/connections/Http.mo",
+      "sha256": "e4b829231c81615c6144f39bcd703ded029a563b445bfc993471ff1d626839b1",
+      "bytes": 2904
+    },
+    {
+      "path": "apps/kernel/backend/connections/Memory.mo",
+      "sha256": "352e5cd97fa2050c1a24db68380a2758b14adda5d901ce8c36cc5479ee347b87",
+      "bytes": 8467
+    },
+    {
+      "path": "apps/kernel/backend/connections/Service.mo",
+      "sha256": "c9344389475ad3fea34007a8ef618b89683faba0c889afb0380aaf4f56b7da67",
+      "bytes": 28304
+    },
+    {
+      "path": "apps/kernel/backend/connections/Types.mo",
+      "sha256": "572c0068d58b56836d76de8c11e8af60276fc696aaf80ca8a982534177501764",
+      "bytes": 2524
+    },
+    {
+      "path": "apps/kernel/backend/connections/providers/OpenRouter.mo",
+      "sha256": "c61ed6410d6cc8d853440bd9a35f11e74ace483d05290655354864d05c9c910a",
+      "bytes": 1301
+    },
+    {
+      "path": "apps/kernel/backend/connections/providers/OpenRouterProtocol.mo",
+      "sha256": "d8ca11ad0bfd28d75f20e73bf85e89fd40a584e5229a92020dd613ac5f48e57c",
+      "bytes": 884
+    },
+    {
+      "path": "apps/kernel/backend/connections/providers/Provider.mo",
+      "sha256": "8b6507e02c27b507a61bbdcf4e52571163827a0eff37676b9e468b54e7d71030",
+      "bytes": 254
+    },
+    {
+      "path": "apps/kernel/backend/connections/providers/Registry.mo",
+      "sha256": "b8b81c903dc1cf1fb0b37d1bc4664d70d341cb3c89312bb6e9cbb04c7f45ab92",
+      "bytes": 1976
+    },
+    {
+      "path": "apps/kernel/backend/frontend_runtime/Admission.mo",
+      "sha256": "623aef70140296ee1a7e36f71c59cad30baf2d88ad44072664181c2d7f0d3bfa",
+      "bytes": 726
+    },
+    {
+      "path": "apps/kernel/backend/http_post_update_handlers/Service.mo",
+      "sha256": "36d46502550c3323388b26a7b79d797ca1426a5d132a92a70b99fe179f3764b7",
+      "bytes": 40212
+    },
+    {
+      "path": "apps/kernel/backend/http_post_update_handlers/Types.mo",
+      "sha256": "62931e5bc1dab1c92ec326bc2632b16223a0553d29885b23ed0663dc0f4d135d",
+      "bytes": 3457
+    },
+    {
+      "path": "apps/kernel/backend/http_routes/GatewayAuthority.mo",
+      "sha256": "ea1fa6338d0acdfefa54dbc7bb799caddc48833a6d8ea2c4b534fa3315067222",
+      "bytes": 4981
+    },
+    {
+      "path": "apps/kernel/backend/http_routes/Namespace.mo",
+      "sha256": "a38632a014640c42330ac44c27d5c260f6cdd1026956a9749fa3f2ef830cb175",
+      "bytes": 5697
+    },
+    {
+      "path": "apps/kernel/backend/https_outcalls/Adapter.mo",
+      "sha256": "bb65e5453271dc909a2ce82b2da1b602cbb85ab7f738becf0cd10b143d86e5fd",
+      "bytes": 3786
+    },
+    {
+      "path": "apps/kernel/backend/https_outcalls/Service.mo",
+      "sha256": "6fa954690f7f3dbf38b38770675f6bc345f160854ef9c16596ff661517d7fdec",
+      "bytes": 26027
+    },
+    {
+      "path": "apps/kernel/backend/https_outcalls/Types.mo",
+      "sha256": "9d372be308848fb2b566fd200183296c0ff97e69f789b792786326396b3c42bf",
+      "bytes": 2161
+    },
+    {
+      "path": "apps/kernel/backend/install/BrowserOrigin.mo",
+      "sha256": "d847753ba8b536ef83f420eb3779515a14abcf0a5e68e18b4e0bddf210d70671",
+      "bytes": 1576
+    },
+    {
+      "path": "apps/kernel/backend/install/Limits.mo",
+      "sha256": "4b86b6026fe042bc64250d79c1ced5bab23a4f0f52621ba6f97281b680f020f9",
+      "bytes": 776
+    },
+    {
+      "path": "apps/kernel/backend/install/Memory.mo",
+      "sha256": "067052aaee23c7ccd1e8533a62afee5ef1535883f34ac068683f3ab0d37d7698",
+      "bytes": 4678
+    },
+    {
+      "path": "apps/kernel/backend/install/Service.mo",
+      "sha256": "ae8338d9746b5db042b83c6d7aa825e96c8db58fac3a27b9dec3e513040e3dc6",
+      "bytes": 45793
+    },
+    {
+      "path": "apps/kernel/backend/install/Types.mo",
+      "sha256": "531ea7f41e73e980c3eb87d72ee6246fd6c937f1e12c9eb1a5a4f47d1c5e9743",
+      "bytes": 1870
+    },
+    {
+      "path": "apps/kernel/backend/lib/Painless.mo",
+      "sha256": "ef11e0939b4adffa1a94f6b777cf4312c37eed88bcfdfe81c13dbf3c5589a13d",
+      "bytes": 3702
+    },
+    {
+      "path": "apps/kernel/backend/main.mo",
+      "sha256": "abfab5d0856a856764f23772fa15e72692009a69e4df2144985ee81a116fb7e0",
+      "bytes": 192012
+    },
+    {
+      "path": "apps/kernel/backend/memory/activation/v1.mo",
+      "sha256": "828b20f8bfdf7b516774ef720eee1514bf917ce7e785917b0a1a62b775a1a1b6",
+      "bytes": 352
+    },
+    {
+      "path": "apps/kernel/backend/memory/kernel/v3.mo",
+      "sha256": "1a588ddddaef0c4f1bdcd4f11459e0c9b351e46481ffb81fcaab7eb4ecbfc77f",
+      "bytes": 48948
+    },
+    {
+      "path": "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+      "sha256": "ec92a5d68c132bbebb8c661324256d38fd8c839bd5d1d14f5ecfafa41fffaf94",
+      "bytes": 1596
+    },
+    {
+      "path": "apps/kernel/backend/memory/kernel/v4.mo",
+      "sha256": "2bd917b2baf60547d1c108d7382c3d523dc24b1e065ef223241ffe9195a3db83",
+      "bytes": 49153
+    },
+    {
+      "path": "apps/kernel/backend/public_ingress/Service.mo",
+      "sha256": "a91c7635d7a7e1966b50748fab19b6e998d8654ef7d155860141777aabd0600a",
+      "bytes": 43893
+    },
+    {
+      "path": "apps/kernel/backend/public_ingress/Types.mo",
+      "sha256": "f258ccddcda2e9a52e1b20a2d317a1de3b5d6aefe002d5e1aa7c5873ea018886",
+      "bytes": 4246
+    },
+    {
+      "path": "apps/kernel/backend/randomness/Adapter.mo",
+      "sha256": "ab95fc21485d11f16722d42fd54754e1ad133aac97e8c5186e8de885e27fa1d0",
+      "bytes": 415
+    },
+    {
+      "path": "apps/kernel/backend/randomness/Service.mo",
+      "sha256": "d7f7c8db40d420f3006ce7e5d4d0bde83e6202900ab1cc406722c66110795e21",
+      "bytes": 5337
+    },
+    {
+      "path": "apps/kernel/backend/randomness/Types.mo",
+      "sha256": "896b42e8cb4ef5df9b3cb25104d6691f5f5dd2a91fbcaee36b296690a82a2bed",
+      "bytes": 747
+    },
+    {
+      "path": "apps/kernel/backend/scheduler/Service.mo",
+      "sha256": "8c6eb061a44d8fcc189cccfcd676d4462a018849c569c228bdd52bcae583b404",
+      "bytes": 15871
+    },
+    {
+      "path": "apps/kernel/backend/scheduler/Types.mo",
+      "sha256": "3ef6f4b19629d09daafc7ea594e22a1def3a4915b2e4a45661c9f87a2ddcde25",
+      "bytes": 1752
+    },
+    {
+      "path": "apps/kernel/backend/settings/Access.mo",
+      "sha256": "a413527bc1eac8ee6081f51ceb413e89facf361893ddcd2d40b89daa43716fc9",
+      "bytes": 6831
+    },
+    {
+      "path": "apps/kernel/backend/settings/Service.mo",
+      "sha256": "a56e8cdca5e126a0100a1da78d2d2edaf1b9b7abb0682fee85fb40fa80c712b1",
+      "bytes": 1821
+    },
+    {
+      "path": "apps/kernel/backend/settings/Types.mo",
+      "sha256": "7a30d7b7c5971150f5a3b65bff6f2c671bb9073f9115ab93228978d9c5744460",
+      "bytes": 830
+    },
+    {
+      "path": "apps/kernel/backend/stable_store/Service.mo",
+      "sha256": "62d2dad7d9cda3236036fc9b81ffc6c2bb3b7f40fa9e31246b89d5f858bcdd95",
+      "bytes": 38645
+    },
+    {
+      "path": "apps/kernel/backend/stable_store/Types.mo",
+      "sha256": "f98c807dbe557178c3fb122940ca8946c4784d9f247e8fc840441c692c50369d",
+      "bytes": 4039
+    },
+    {
+      "path": "apps/kernel/backend/vetkeys/Adapter.mo",
+      "sha256": "9b2adf699c9955880495cb41f209937b4d766d8c40d09124e407a6c03834f5d9",
+      "bytes": 2025
+    },
+    {
+      "path": "apps/kernel/backend/vetkeys/Memory.mo",
+      "sha256": "81609f836e2c66fed46031f608046b5e27523a9dea482f9944be3587ac51e49c",
+      "bytes": 22371
+    },
+    {
+      "path": "apps/kernel/backend/vetkeys/Namespace.mo",
+      "sha256": "5a7ac9a2d8b5672377a717ed9bcf2dccfc36541a1b07c3b46c896ffd178d3b95",
+      "bytes": 4167
+    },
+    {
+      "path": "apps/kernel/backend/vetkeys/Service.mo",
+      "sha256": "b008dcf68f2cfe7a6694b7c52e36592486b97e737c9ec479e107fec2cdd26c27",
+      "bytes": 54513
+    },
+    {
+      "path": "apps/kernel/backend/vetkeys/Types.mo",
+      "sha256": "1661e0c8623150cea409453b98449703eb00ba9e14f33ae1fa0cd4de217d24ae",
+      "bytes": 7385
+    },
+    {
+      "path": "apps/kernel/backend/wallet_custody_signing/Service.mo",
+      "sha256": "110ac40bc76818034d736e88bdd3520824036093db52f1d0c96d30d5d4200504",
+      "bytes": 3625
+    },
+    {
+      "path": "apps/kernel/backend/wallet_custody_signing/Types.mo",
+      "sha256": "e0f2ff906595d2bfa0152bfa4a453e0f510a1f8a7d952f2572613fa55e7310a6",
+      "bytes": 586
+    },
+    {
+      "path": "apps/kernel/neutron.lock.json",
+      "sha256": "ef6f809aadfbdc10e76c5e5f37bd5d796ef8f38ae0974dd84033ddc412040585",
+      "bytes": 896
+    }
+  ],
+  "generated_backend_only_difference": "NeutronActiveAppInstanceInventory release version and derived capability-plan fingerprint",
+  "prior_upgrade_evidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/upgrades/final/qualification-summary.json",
+  "prior_upgrade_assertions": 739,
+  "scope": "Exact offered-source backend/schema/migration/lock comparison; permits reuse of prior actor migration qualification. Current browser Agent consent runtime separately changed and requires its new browser test."
+}

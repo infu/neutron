@@ -62,13 +62,28 @@ export async function connectEvmBridge(client: EvmBridgeClient, helper: string, 
         await assertAccount();
         return check(await client.sendTransaction(request(requestId, tx)));
       },
-      async confirm(requestId: string, hash: Hex): Promise<void> {
+      async confirm(requestId: string, hash: Hex, expected?: EthereumTransaction, onReplacement?: (hash: Hex, state: "submitted" | "confirmed" | "failed") => Promise<void>): Promise<void> {
+        let recordedReplacement: string | null = null;
         const deadline = Date.now() + 300_000;
         do {
           const result = await client.operationStatus({ ...scope, requestId });
           if (result.status === "not_found") throw new Error("The saved EVM Wallet operation is unavailable; no replacement transaction was submitted");
           check(result, hash);
-          if (result.receipt?.status === "success") return;
+          if (result.replacementTransactionHash && !result.receipt) {
+            // operationStatus is scoped by the actual Kernel caller: this hash
+            // is the Wallet journal's replacement of this exact saved request.
+            // Its real effect must still match; a cancellation cannot deposit.
+            if (!expected || !onReplacement) throw new Error("Replacement recovery requires the saved bridge transaction and durable evidence journal");
+            const replacement = result.replacementTransactionHash as Hex;
+            const evidence = await client.transaction({ chainId: "1", transactionHash: replacement });
+            if (!evidence.transaction) throw new Error("The replacement transaction is not yet visible on Ethereum; keep the saved deposit and reconcile again");
+            assertBridgeTransactionMatches(expected, evidence.transaction);
+            const state = evidence.receipt?.status === "success" ? "confirmed" : evidence.receipt?.status === "reverted" ? "failed" : "submitted";
+            const marker = `${replacement}:${state}`;
+            if (marker !== recordedReplacement) { await onReplacement(replacement, state); recordedReplacement = marker; }
+            if (state === "failed") throw new EthereumReceiptRevertedError("The replacement deposit transaction reverted on Ethereum", replacement);
+            if (state === "confirmed") return;
+          } else if (result.receipt?.status === "success") return;
           await new Promise((resolve) => globalThis.setTimeout(resolve, 1_500));
         } while (Date.now() < deadline);
         throw new Error("This saved EVM transaction is still pending. Resume to check the same operation.");
@@ -96,4 +111,11 @@ export async function attachExternalBridgeTransaction(
   if (current.source !== "external") throw new Error("The saved deposit source changed");
   const state = evidence.receipt?.status === "success" ? "confirmed" : evidence.receipt?.status === "reverted" ? "failed" : "submitted";
   return bridge.record(current, kind, state, transactionHash as Hex, state === "failed" ? "The Ethereum transaction reverted" : null);
+}
+
+/** Exact signed effect, independently read from the selected chain. */
+export function assertBridgeTransactionMatches(expected: EthereumTransaction, actual: NonNullable<import("neutron-tools/evm_wallet").EvmTransactionResult["transaction"]>): void {
+  if (actual.from.toLowerCase() !== expected.from.toLowerCase() || actual.to?.toLowerCase() !== expected.to.toLowerCase() || actual.data.toLowerCase() !== expected.data.toLowerCase() || actual.valueWei !== BigInt(expected.value ?? "0x0").toString()) {
+    throw new Error("The Ethereum transaction does not match this saved bridge step; a cancellation or changed replacement cannot complete it");
+  }
 }

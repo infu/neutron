@@ -5,6 +5,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Bridge "../../backend/bridge/Journal";
 import Memory "../../backend/memory/wallet_bridge/v1";
+import ReplacementMemory "../../backend/memory/wallet_bridge_replacements/v1";
 import Capabilities "../../backend/capabilities/Types";
 import Minter "../../backend/bridge/Minter";
 import Ledger "../../backend/bridge/Ledger";
@@ -30,6 +31,7 @@ let info : Minter.Info = {
     cketh_ledger_id = ?Principal.fromText("ss2fx-dyaaa-aaaar-qacoq-cai");
 };
 let memory = Memory.init();
+let replacements = ReplacementMemory.init();
 var queries = 0;
 var eventFeed : [Minter.Event] = [];
 var ledgerFeed : ?Ledger.Reply = null;
@@ -53,7 +55,7 @@ let calls : Capabilities.BackendCalls = {
     };
     call_batch = func(_ : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] { Runtime.trap("Unexpected batch") };
 };
-let service = Bridge.Service(memory, calls);
+let service = Bridge.ServiceWithReplacements(memory, replacements, calls);
 let id = Blob.fromArray(Array.tabulate<Nat8>(16, func(_) { 7 }));
 let prepared = ok(await* service.prepare({ id; ledger; source = #external; account = address; amount = 42; subaccount = null }));
 assert queries == 2;
@@ -76,7 +78,7 @@ let claimed = ok(service.claim({ id; revision = 0; step = #deposit; operation_id
 assert claimed.steps[2].state == #unknown;
 assert err(service.claim({ id; revision = 0; step = #deposit; operation_id = null }));
 assert err(service.claim({ id; revision = claimed.revision; step = #deposit; operation_id = null }));
-let restoredService = Bridge.Service(memory, calls);
+let restoredService = Bridge.ServiceWithReplacements(memory, replacements, calls);
 assert ok(restoredService.status(id)).steps[2].state == #unknown;
 let submitted = ok(restoredService.recordStep({ id; revision = claimed.revision; step = #deposit; state = #submitted; transaction_hash = ?hash; error = null }));
 assert err(service.recordStep({ id = competingId; revision = competingClaim.revision; step = #deposit; state = #submitted; transaction_hash = ?hash; error = null }));
@@ -131,7 +133,7 @@ let legacyInfo = { info with deposit_with_subaccount_helper_contract_address = n
 let legacyCalls : Capabilities.BackendCalls = { calls with call = func(request : Capabilities.CallRequest) : async* Capabilities.CallResult {
     if (request.method == "get_minter_info") #ok(to_candid (legacyInfo)) else await* calls.call(request);
 } };
-let legacyService = Bridge.Service(Memory.init(), legacyCalls);
+let legacyService = Bridge.ServiceWithReplacements(Memory.init(), ReplacementMemory.init(), legacyCalls);
 assert err(await* legacyService.quote(ledger));
 let ethQuote = ok(await* legacyService.quote(Principal.fromText("ss2fx-dyaaa-aaaar-qacoq-cai")));
 assert ethQuote.helper_mode == #legacy and ethQuote.token_address == null;
@@ -139,7 +141,7 @@ let wrongLedgerInfo = { info with cketh_ledger_id = ?ledger };
 let wrongLedgerCalls : Capabilities.BackendCalls = { calls with call = func(request : Capabilities.CallRequest) : async* Capabilities.CallResult {
     if (request.method == "get_minter_info") #ok(to_candid (wrongLedgerInfo)) else await* calls.call(request);
 } };
-assert err(await* Bridge.Service(Memory.init(), wrongLedgerCalls).quote(Principal.fromText("ss2fx-dyaaa-aaaar-qacoq-cai")));
+assert err(await* Bridge.ServiceWithReplacements(Memory.init(), ReplacementMemory.init(), wrongLedgerCalls).quote(Principal.fromText("ss2fx-dyaaa-aaaar-qacoq-cai")));
 // Wrong recipient, source account, subaccount and event log cannot complete it.
 let wrongRecipient = { accepted with principal = Principal.fromText("2vxsx-fae") };
 let wrongSender = { accepted with from_address = helper };

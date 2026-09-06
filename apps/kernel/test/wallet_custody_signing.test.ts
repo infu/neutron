@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { Principal } from "@dfinity/principal";
 
@@ -14,12 +15,14 @@ const text = (s: string) => Buffer.from(s, "utf8");
 const literal = (hex: string) => `"${hex.match(/../g)!.map((byte) => `\\${byte}`).join("")}"`;
 
 test("custody adapter fixture independently verifies the exact digest and compressed secp256k1 key", async () => {
-  const source = await Bun.file(new URL("./motoko/wallet_custody_signing_service_test.mo", import.meta.url)).text();
+  const source = await readFile(new URL("./motoko/wallet_custody_signing_service_test.mo", import.meta.url), "utf8");
   expect(source).toContain(literal(publicKey));
   expect(source).toContain(literal(signature));
   const digest = Buffer.alloc(32, 0x42);
-  expect(secp256k1.verify(signature, digest, publicKey)).toBe(true);
-  expect(secp256k1.verify(signature, createHash("sha256").update(digest).digest(), publicKey)).toBe(false);
+  const signatureBytes = Buffer.from(signature, "hex");
+  const publicKeyBytes = Buffer.from(publicKey, "hex");
+  expect(secp256k1.verify(signatureBytes, digest, publicKeyBytes)).toBe(true);
+  expect(secp256k1.verify(signatureBytes, createHash("sha256").update(digest).digest(), publicKeyBytes)).toBe(false);
 });
 
 test("custody namespace vector independently binds canister, installation, app, slot and authority", async () => {
@@ -29,6 +32,6 @@ test("custody namespace vector independently binds canister, installation, app, 
     text("evm_wallet"), u64(17n), text("main"), text("ecdsa_secp256k1"),
     text("key_1"), text("neutron_wallet_custody_digest_v1"),
   ]);
-  const source = await Bun.file(new URL("./motoko/wallet_custody_signing_service_test.mo", import.meta.url)).text();
+  const source = await readFile(new URL("./motoko/wallet_custody_signing_service_test.mo", import.meta.url), "utf8");
   expect(source).toContain(`Namespace.hex(namespace.derivation_path[0]) == "${namespace}"`);
 });

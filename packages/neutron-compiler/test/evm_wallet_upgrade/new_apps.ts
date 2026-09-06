@@ -134,6 +134,17 @@ const statusMethod = IDL.Func(
   [],
 );
 
+// Shared Candid declarations for later release qualification. Keep signed
+// recovery fixtures on the same public API contract as first-install tests.
+export const evmUpgradeMethods = {
+  snapshot: snapshotMethod,
+  history: historyMethod,
+  status: statusMethod,
+  prepare: IDL.Func([IDL.Record({ identity, intent })], [result(operation)], []),
+  execute: IDL.Func([IDL.Record({ identity, review_revision: IDL.Nat })], [result(operation)], []),
+  evidence: IDL.Func([IDL.Record({ identity, review_revision: IDL.Nat, refresh: IDL.Bool })], [result(IDL.Record({ token_evidence: IDL.Opt(IDL.Reserved) }))], []),
+};
+
 const beginFields = {
   id: IDL.Text,
   account_id: IDL.Text,
@@ -155,6 +166,7 @@ const swap = IDL.Record({
   updated_at: IDL.Int,
 });
 const swapListMethod = IDL.Func([IDL.Null], [IDL.Vec(swap)], ["query"]);
+export { swapListMethod as upgradeSwapListMethod };
 const swapGetMethod = IDL.Func([IDL.Text], [IDL.Opt(swap)], ["query"]);
 
 function ok(value: unknown): Record<string, unknown> {

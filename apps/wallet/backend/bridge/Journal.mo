@@ -11,6 +11,8 @@ import Time "mo:core/Time";
 import Catalog "../Catalog";
 import Capabilities "../capabilities/Types";
 import Memory "../memory/wallet_bridge/v1";
+import ReplacementMemory "../memory/wallet_bridge_replacements/v1";
+import Replacement "Replacement";
 import Types "Types";
 import Minter "Minter";
 import Ledger "Ledger";
@@ -25,7 +27,7 @@ module {
     public type ListRequest = Types.ListRequest;
     public type Page = Types.Page;
 
-    public class Service(mem : Memory.Mem, calls : Capabilities.BackendCalls) {
+    public class ServiceWithReplacements(mem : Memory.Mem, replacements : ReplacementMemory.Mem, calls : Capabilities.BackendCalls) {
         public func quote(ledger : Principal) : async* Result<Quote> {
             let route = switch (Catalog.find(ledger)) {
                 case null return #err("This ledger has no supported Ethereum deposit route");
@@ -192,16 +194,7 @@ module {
                     // manually recovered external-wallet hash. Check and save
                     // atomically so two intents cannot claim the same deposit,
                     // or count one approval as both reset and approval.
-                    for ((id, savedIntent) in Map.entries(mem.intents)) {
-                        for (savedStep in savedIntent.steps.vals()) {
-                            if (
-                                (id != request.id or savedStep.kind != request.step) and
-                                savedStep.transaction_hash == ?transactionHash
-                            ) {
-                                return #err("This transaction is already recorded for another bridge intent or step; resume its original saved operation");
-                            };
-                        };
-                    };
+                    if (hashUsedElsewhere(request.id, request.step, transactionHash)) return #err("This transaction is already recorded for another bridge intent or step; resume its original saved operation");
                 };
             };
             if (prior.state == #confirmed or prior.state == #failed) {
@@ -212,20 +205,70 @@ module {
             #ok(saveStep(intent, step));
         };
 
+        public func effectiveHash(id : Blob, kind : Memory.StepKind) : ?Text {
+            let intent = switch (status(id)) { case (#err(_)) return null; case (#ok(value)) value };
+            Replacement.effectiveHash(replacements, id, kind, intent.steps[stepIndex(kind)].transaction_hash);
+        };
+
+        // The resident confirms EVM Wallet ancestry and exact same call bytes
+        // before this synchronous commit. Keep the released intent's original
+        // hash intact and reserve every hash in the proven replacement chain.
+        public func recordReplacement(request : Replacement.Request) : Result<Intent> {
+            let intent = switch (current(request.id, request.revision)) { case (#err(error)) return #err(error); case (#ok(value)) value };
+            if (not validHex(request.original_transaction_hash, 32) or not validHex(request.previous_transaction_hash, 32) or not validHex(request.transaction_hash, 32)) return #err("Invalid Ethereum replacement transaction hash");
+            let original = lower(request.original_transaction_hash);
+            let previous = lower(request.previous_transaction_hash);
+            let replacementHash = lower(request.transaction_hash);
+            let prior = intent.steps[stepIndex(request.step)];
+            if (prior.transaction_hash != ?original) return #err("Replacement ancestry does not match the bridge's original transaction");
+            let effective = effectiveHash(request.id, request.step);
+            // A lost success reply may be retried with the same proven edge.
+            // It never appends ancestry or rewinds a successfully scanned mint.
+            if (effective == ?replacementHash) {
+                var known = false;
+                for (entry in Replacement.entries(replacements, request.id).vals()) {
+                    if (entry.step == request.step and entry.original_transaction_hash == original and entry.previous_transaction_hash == previous and entry.transaction_hash == replacementHash) known := true;
+                };
+                if (not known) return #err("This hash is not the recorded replacement ancestry");
+                if (prior.state == request.state and prior.error == request.error) return #ok(intent);
+                if (prior.state == #confirmed or prior.state == #failed) return #err("A completed replacement cannot change outcome");
+                return #ok(saveStep(intent, { prior with state = request.state; error = request.error }));
+            };
+            if (effective != ?previous) return #err("The effective bridge transaction changed; reload its replacement status before continuing");
+            if (replacementHash == original or replacementHash == previous) return #err("A replacement must name a new transaction hash");
+            for (entry in Replacement.entries(replacements, request.id).vals()) {
+                if (entry.step == request.step and (entry.transaction_hash == replacementHash or entry.previous_transaction_hash == replacementHash)) return #err("A bridge replacement cannot return to an earlier transaction");
+            };
+            if (hashUsedElsewhere(request.id, request.step, replacementHash)) return #err("This transaction is already recorded for another bridge intent or step; resume its original saved operation");
+            switch (intent.mint) { case (?mint) if (mint.verified_ledger and request.step == #deposit) return #err("This deposit already has a verified IC mint"); case (_) {} };
+            let entry : ReplacementMemory.Entry = { step = request.step; original_transaction_hash = original; previous_transaction_hash = previous; transaction_hash = replacementHash; recorded_at = Time.now() };
+            Map.add(replacements.replacements, Blob.compare, request.id, Array.concat(Replacement.entries(replacements, request.id), [entry]));
+            let step : Memory.Step = { prior with state = request.state; error = request.error };
+            let updated = { intent with steps = Array.map<Memory.Step, Memory.Step>(intent.steps, func(old) { if (old.kind == step.kind) step else old }) };
+            // Existing released intents retain only their moving event cursor.
+            // A replacement may already have minted in a page scanned for the
+            // original hash; rescan the audit log for this exact proven hash.
+            #ok(store(if (request.step == #deposit) ({ updated with event_cursor = 0; accepted_deposit = null; mint = null; error = null }) else updated));
+        };
+
         public func refresh(request : RefreshRequest) : async* Result<Intent> {
             let captured = switch (status(request.id)) { case (#err(error)) return #err(error); case (#ok(value)) value };
-            let hash = switch (captured.steps[2].transaction_hash) { case null return #ok(captured); case (?value) value };
+            let hash = switch (effectiveHash(request.id, #deposit)) { case null return #ok(captured); case (?value) value };
             switch (captured.mint) { case (?mint) if (mint.verified_ledger) return #ok(captured); case (_) {} };
             if (request.event_page_length == 0) return #err("Event page length must be greater than zero");
             let events = switch (Minter.decodeEvents(await* calls.call(Minter.eventsRequest(captured.quote.minter, captured.event_cursor, request.event_page_length)))) {
-                case (#err(error)) return saveError(request.id, error);
+                case (#err(error)) {
+                    let latest = switch (status(request.id)) { case (#err(message)) return #err(message); case (#ok(value)) value };
+                    if (latest.event_cursor != captured.event_cursor or effectiveHash(request.id, #deposit) != ?hash) return #ok(latest);
+                    return saveError(request.id, error);
+                };
                 case (#ok(value)) value;
             };
             let currentIntent = switch (status(request.id)) { case (#err(error)) return #err(error); case (#ok(value)) value };
             // Overlapping refreshes never rewind the cursor or overwrite newer
             // transaction state. A later refresh resumes from the stored cursor.
             if (currentIntent.event_cursor != captured.event_cursor) return #ok(currentIntent);
-            if (currentIntent.steps[2].transaction_hash != ?hash) return #ok(currentIntent);
+            if (effectiveHash(request.id, #deposit) != ?hash) return #ok(currentIntent);
             let next = Nat64.toNat(captured.event_cursor) + events.events.size();
             if (next > Nat64.toNat(events.total_event_count) or events.events.size() > Nat64.toNat(request.event_page_length)) {
                 return saveError(request.id, "Minter returned an inconsistent event page");
@@ -233,7 +276,7 @@ module {
             if (events.events.size() == 0 and captured.event_cursor < events.total_event_count) {
                 return saveError(request.id, "Minter returned no progress before the event tail");
             };
-            let scanned = applyEvents(currentIntent, events.events);
+            let scanned = applyEventsForHash(currentIntent, hash, events.events);
             let updated = store({ scanned with event_cursor = Nat64.fromNat(next) });
             switch (updated.mint) {
                 case null #ok(updated);
@@ -247,7 +290,7 @@ module {
                         };
                     } else Ledger.verify(ledgerReply, updated, mint.ledger_block_index);
                     let latest = switch (status(request.id)) { case (#err(error)) return #err(error); case (#ok(value)) value };
-                    if (latest.mint != ?mint) return #ok(latest);
+                    if (latest.mint != ?mint or effectiveHash(request.id, #deposit) != ?hash) return #ok(latest);
                     switch (verification) {
                         case (#err(error)) saveError(request.id, error);
                         case (#ok(())) #ok(store({ latest with mint = ?{ mint with verified_ledger = true }; error = null }));
@@ -265,6 +308,13 @@ module {
                     } else #ok(?intent);
                 };
             };
+        };
+        func hashUsedElsewhere(id : Blob, kind : Memory.StepKind, hash : Text) : Bool {
+            if (Replacement.usedElsewhere(replacements, id, kind, hash)) return true;
+            for ((savedId, savedIntent) in Map.entries(mem.intents)) for (savedStep in savedIntent.steps.vals()) {
+                if ((savedId != id or savedStep.kind != kind) and savedStep.transaction_hash == ?hash) return true;
+            };
+            false;
         };
         func current(id : Blob, revision : Nat) : Result<Intent> {
             switch (status(id)) {
@@ -292,6 +342,9 @@ module {
     // shapes. Only this transaction + log + asset + amount + recipient can mint.
     public func applyEvents(intent : Intent, events : [Minter.Event]) : Intent {
         let hash = switch (intent.steps[2].transaction_hash) { case null return intent; case (?value) value };
+        applyEventsForHash(intent, hash, events);
+    };
+    public func applyEventsForHash(intent : Intent, hash : Text, events : [Minter.Event]) : Intent {
         var accepted = intent.accepted_deposit;
         var mint = intent.mint;
         var error = intent.error;

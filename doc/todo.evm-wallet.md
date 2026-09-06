@@ -4,6 +4,11 @@ Created: 2026-09-05. Updated: 2026-09-06. Status: implementation and qualificati
 in progress. An unchecked item may have code present while its integration or
 release evidence is still pending. See the [implementation guide](./evm-wallet.md).
 
+The [completion evidence](../.neutron/release-receipts/evm-wallet-completion-2026-09-06/requirements.json)
+retains all 64 requirements and their individual verification status. Exact
+publication receipts are recorded separately from implementation and fixture
+results.
+
 Design and source references: [EVM Wallet research](./evm-wallet-research.md).
 This checklist covers a **separate EVM Wallet app**, fixes and integration in
 the existing IC Wallet, a Kitchen Sink consumer example, and a **new Uniswap
@@ -255,6 +260,11 @@ state and the same public provider contract demonstrated by Kitchen Sink.
 - [ ] Add optional token discovery/history and enhanced simulation only behind
   replaceable adapters. Make coverage/partial failures explicit, resolve any
   provider-credential needs, and verify current APIs before choosing them.
+  The selected implementation uses requested/selected token balances, local
+  activity and standard `eth_call` simulation. No optional indexer or enhanced
+  simulation provider is selected, and no provider credentials are embedded.
+  Additional services remain app adapters, with their own coverage and error
+  reporting; these optional services are not prerequisites for wallet execution.
 - [ ] Document network setup, funding/gas, signatures and approvals, pending
   recovery, namespace lifecycle, the SDK, and all three consumer examples.
   Update capability/consent docs to match implemented authority.

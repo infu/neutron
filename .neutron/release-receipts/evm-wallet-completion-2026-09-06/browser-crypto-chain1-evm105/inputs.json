@@ -1,0 +1,49 @@
+{
+  "installedEvidence": ".neutron/release-receipts/evm-wallet-completion-2026-09-06/installed-final-candidates.json",
+  "installedEvidenceSha256": "9882270c824ac8e1275118a738328bec08536cd10adac2c5b9b0e13988c38287",
+  "installed": [
+    {
+      "id": "kernel",
+      "version": 341,
+      "sha256": "8ebd6e88f22415a0dc982601c408408a521da954fd1020fa8d0a7e9665fdf830"
+    },
+    {
+      "id": "contacts",
+      "version": 306,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    },
+    {
+      "id": "wallet",
+      "version": 316,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 105,
+      "sha256": "a3a792b9716914bc73ba56826a9bfde583806f6b278109bdd8712e7ab1802bc2"
+    },
+    {
+      "id": "uniswap",
+      "version": 103,
+      "sha256": "bdd87299d889b820840e72023cf6c430a9bda97d309dfc4fb4cc01db85f168a4"
+    },
+    {
+      "id": "agent",
+      "version": 317,
+      "sha256": "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"
+    }
+  ],
+  "files": {
+    "test/e2e/evm-wallet-networks.spec.ts": "d7b7f645af8b95b9f857b098f2aa74d27da9a837e03610cd0ddf6129917c29e5",
+    "test/e2e/fixtures/evm-wallet-network.ts": "77902209fd50d4fb7de62266178c4b38250b99de378dc7b71a7d063462ff0b5c",
+    "test/e2e/fixtures/evm-wallet-chain.ts": "6b220d867b06933ac2eba8b1612125a480482b621cceeba499a78156de6c67ad",
+    "test/e2e/fixtures/evm-wallet-signatures.ts": "5ace380938186df6dde56a767d5482b7544f6b2cf87b6f872ff2a5e21f535904",
+    "test/e2e/fixtures/evm-wallet-browser.ts": "58240c2b87e49ab0fe433fcc1457742050086745b93e726366988606af1b23c9"
+  },
+  "scope": "Final EVM105 chain1 actual ordinary-app read/send, own contract call and independent personal/EIP712/permit signatures. No concurrent chain1 financial user; separate42161 test performs read-only code comparison."
+}

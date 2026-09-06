@@ -1,0 +1,57 @@
+{
+  "appId": "evm_wallet",
+  "version": 106,
+  "publication": "not published",
+  "archive": {
+    "path": "apps/evm_wallet/evm_wallet.v0.1.6.neutron",
+    "bytes": 391788,
+    "sha256": "eba89d8ab27c8f93faa59b82026e9e6393773156532761f6ebfadeaacb2856cf"
+  },
+  "offeredSource": {
+    "path": "apps/evm_wallet/.neutron/sources/20ccb7adc5bd5be9d86849523a23ff306b290867692c1f41cc21d809c4aa4fdb.source.v1.msgpack.gz",
+    "bytes": 522778,
+    "sha256": "20ccb7adc5bd5be9d86849523a23ff306b290867692c1f41cc21d809c4aa4fdb"
+  },
+  "sourceBindingVerified": true,
+  "postSuiteWorkspaceComparison": {
+    "files": 209,
+    "mismatches": 0,
+    "report": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/source-workspace-check.json"
+  },
+  "releaseTests": {
+    "command": "npm --workspace neutron-evm-wallet test",
+    "exitCode": 0,
+    "tests": 59,
+    "assertions": 585,
+    "failures": 0,
+    "seconds": 163.23,
+    "log": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/evm-wallet-106-release-tests.log",
+    "motokoMemoryRelease": "passed",
+    "sandboxBrowserCases": 20,
+    "sandboxBrowserReport": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/sandbox-browser/results.json"
+  },
+  "typeScript": {
+    "app": "passed",
+    "scripts": "passed"
+  },
+  "compatibility": {
+    "report": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/archive-source-comparison.json",
+    "baseline": "Private candidate105, installed only in local qualification. Published101 memory lineage remains immutable.",
+    "backendSourcesUnchanged": 22,
+    "compiledModulesUnchanged": 80,
+    "managedRootsAndLock": "unchanged",
+    "publicMethods": "Input/output shapes unchanged; only schema artifact app.version metadata differs.",
+    "existingPublicTools": "service.ts and shared SDK definitions unchanged.",
+    "sharedInputs": "unchanged"
+  },
+  "historyRegression": {
+    "capturedOperations": 25,
+    "capturedMetadataBytes": 71916,
+    "existingKernelMetadataLimit": 65536,
+    "transportProof": "Actual captured Candid bytes decoded using the generated method type, projected and encoded by the existing Kernel boundary.",
+    "adaptiveBehavior": "Initial loading and Load more retry only recognized aggregate response-size/container/allocation failures at the same offset. All rows stay reachable. Unrelated, malformed, depth and type failures propagate; a single oversized row is never skipped.",
+    "browserProof": "25- and 50-operation histories load every row in order exactly once at desktop and narrow widths, with account/balance intact and no signing or broadcast effects. All16existing form regressions also pass.",
+    "baseline": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-106/browser-history/summary.json"
+  },
+  "realKernelQualification": "Pins ready for checked105\u2192106 update, real saved-op22 recovery and allowance qualification. Not yet installed or published."
+}

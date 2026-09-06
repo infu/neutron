@@ -1,0 +1,148 @@
+{
+  "expectedHash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+  "beforeNonce": "8",
+  "interrupted": {
+    "id": "a3f80a051dd133b25b87d5606091572d",
+    "source": "evm",
+    "account": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "amount": "50000000000000000",
+    "revision": "1",
+    "createdAt": "1788695847879667467",
+    "updatedAt": "1788695878828647659",
+    "eventCursor": "27",
+    "quote": {
+      "chainId": "1",
+      "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": null,
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "unknown",
+        "operationId": "a0f80a051dd133b25b87d5606091572d",
+        "transactionHash": null,
+        "error": null
+      }
+    ],
+    "acceptedDeposit": null,
+    "mint": null,
+    "error": null
+  },
+  "transaction": {
+    "hash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+    "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "to": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "valueWei": "50000000000000000",
+    "nonce": 7,
+    "chainId": "1",
+    "raw": "0x02f8950107843b9aca00843b9aca0e8288ab945fbdb2315678afecb367f032d93f642f64180aa387b1a2bc2ec50000a4b214faa50affffffffff8000010101000000000000000000000000000000000000000000c001a087d3b444822e811965e630d3705e667be46f67b83178c14cea2fbe470d72b022a05911b56f18c4577702b8aafb2a2e6daf2af6e3dbcbe3fc4a0d8fae31bb1112c8",
+    "blockNumber": "329082",
+    "blockHash": "0x181533f81c3705403a5d9eb59ccb556e9cffe1f3446a1a59f48332d77da750e2",
+    "gasUsed": "32734",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "mint": {
+    "accepted": {
+      "transactionHash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+      "logIndex": "0",
+      "blockNumber": "329082",
+      "fromAddress": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "amount": "50000000000000000",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null,
+      "eventIndex": "27",
+      "timestampNs": "1788696168014665582"
+    },
+    "minted": {
+      "transactionHash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+      "logIndex": "0",
+      "ledgerBlockIndex": "9",
+      "eventIndex": "28",
+      "timestampNs": "1788696168159977223"
+    },
+    "ledgerBlock": {
+      "index": "9",
+      "kind": "mint",
+      "amount": "50000000000000000",
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "subaccount": null
+    }
+  },
+  "reconciled": {
+    "id": "a3f80a051dd133b25b87d5606091572d",
+    "source": "evm",
+    "account": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "amount": "50000000000000000",
+    "revision": "5",
+    "createdAt": "1788695847879667467",
+    "updatedAt": "1788696612067340243",
+    "eventCursor": "31",
+    "quote": {
+      "chainId": "1",
+      "ledger": "ss2fx-dyaaa-aaaar-qacoq-cai",
+      "minter": "sv3dd-oaaaa-aaaar-qacoa-cai",
+      "helperAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "helperMode": "legacy",
+      "minterAddress": "0xFeB45Eb9eA035E156871EE72Aa527940A73cF592",
+      "tokenAddress": null,
+      "recipient": "yuby6-qp777-77774-aaaaq-cai",
+      "principalWord": "0x0affffffffff8000010101000000000000000000000000000000000000000000",
+      "subaccountWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "steps": [
+      {
+        "kind": "reset_approval",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "approval",
+        "state": "ready",
+        "operationId": null,
+        "transactionHash": null,
+        "error": null
+      },
+      {
+        "kind": "deposit",
+        "state": "confirmed",
+        "operationId": "a0f80a051dd133b25b87d5606091572d",
+        "transactionHash": "0xac6a347c870dbb108180c39e33a41655a79ba57e34e85c26309110fa05c0cf88",
+        "error": null
+      }
+    ],
+    "acceptedDeposit": {
+      "logIndex": "0",
+      "blockNumber": "329082",
+      "eventIndex": "27"
+    },
+    "mint": {
+      "ledgerBlockIndex": "9",
+      "eventIndex": "28",
+      "verifiedLedger": true
+    },
+    "error": null
+  }
+}

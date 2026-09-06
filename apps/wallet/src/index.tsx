@@ -59,7 +59,7 @@ import "./style.scss";
 import { readWalletWithdrawalQuote, quoteAuthorizationWire, type WalletWithdrawalQuote } from "./withdrawal_quote.ts";
 import {
   finishSavedWalletTransfer,
-  loadSavedWalletTransfers,
+  readSavedWalletTransfersForRecovery,
   localTransferOperation,
   parseTransferOperation,
   saveWalletTransfer,
@@ -907,6 +907,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const [transferAmount, setTransferAmount] = useState("");
   const [transferBusy, setTransferBusy] = useState(false);
   const [pendingTransfers, setPendingTransfers] = useState<WalletTransferOperation[]>([]);
+  const [transferCacheWarning, setTransferCacheWarning] = useState<string | null>(null);
   const [transferReceipt, setTransferReceipt] =
     useState<WalletTransferReceipt | null>(null);
   const [depositLedgerId, setDepositLedgerId] = useState<string | null>(null);
@@ -1833,7 +1834,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
 
   const refreshPendingTransfers = async () => {
     if (!snapshot) return;
-    const local = loadSavedWalletTransfers(snapshot.owner).map(localTransferOperation);
+    const cache = readSavedWalletTransfersForRecovery(snapshot.owner);
+    setTransferCacheWarning(cache.warning);
+    const local = cache.transfers.map(localTransferOperation);
     setPendingTransfers(local);
     const result = await querySelf("wallet_transfers_pending_v2", [null]);
     if (!Array.isArray(result)) throw new Error("Invalid Wallet pending transfers");
@@ -1855,7 +1858,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       await refreshPendingTransfers();
       return;
     }
-    finishSavedWalletTransfer(snapshot.owner, operation.requestId);
+    const cache = readSavedWalletTransfersForRecovery(snapshot.owner);
+    setTransferCacheWarning(cache.warning);
+    if (cache.warning === null) finishSavedWalletTransfer(snapshot.owner, operation.requestId);
     if (operation.status === "rejected") {
       setError(operation.message ?? "Transfer was rejected");
     } else {
@@ -1879,7 +1884,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setError(null);
     try {
       const operation = pendingTransfers.find((entry) => entry.requestId === id);
-      const saved = loadSavedWalletTransfers(snapshot.owner).find((entry) => entry.requestId === id);
+      const cache = readSavedWalletTransfersForRecovery(snapshot.owner);
+      setTransferCacheWarning(cache.warning);
+      const saved = cache.transfers.find((entry) => entry.requestId === id);
       if (saved) await updateSelf("wallet_transfer_prepare_v2", [savedTransferArgs(saved)], 30);
       const value = operation?.status === "succeeded" && operation.native
         ? await updateSelf("wallet_transfer_refresh_v2", [transferIdBytes(id)], 120)
@@ -2293,8 +2300,10 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
 
         {error ? <WalletNotice message={error} /> : null}
 
+        {transferCacheWarning ? <WalletNotice message={transferCacheWarning} /> : null}
+
         {pendingTransfers.length > 0 ? (
-          <section className="wallet-empty" aria-label="Saved transfers awaiting recovery">
+          <section className="wallet-empty wallet-saved-transfers" aria-label="Saved transfers awaiting recovery">
             <strong>Saved transfers</strong>
             {pendingTransfers.map((operation) => {
               const ledger = snapshot.ledgers.find((item) => item.principal === operation.ledger);

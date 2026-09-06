@@ -41,9 +41,10 @@ import {
   identityArgs,
   maxFee,
   parseBalance,
-  parseHistory,
   parseOperation,
+  parseReviewEvidence,
   parseSnapshot,
+  quantity,
   record,
   requestId,
   shortAddress,
@@ -54,7 +55,7 @@ import {
   type Operation,
   type Snapshot,
 } from "./data.ts";
-import { PRESENT_TOOLS } from "./provider.ts";
+import { OWNER_REVIEW_TOOLS, PRESENT_TOOLS } from "./provider.ts";
 import {
   acceptPrompt,
   checkPrompt,
@@ -62,6 +63,8 @@ import {
   declinePrompt,
   getPrompts,
   presentEffect,
+  presentOwnEffect,
+  refreshPromptEvidence,
   subscribePrompts,
 } from "./prompts.ts";
 import {
@@ -71,6 +74,10 @@ import {
 } from "./local_intent.ts";
 import { SignForm } from "./sign_form.tsx";
 import { ReplacementForm } from "./replacement.tsx";
+import { knownApprovals } from "./known_approvals.ts";
+import { TokenReview } from "./token_review.tsx";
+import { onFormActionKeyDown, runFormAction } from "./form_actions.ts";
+import { queryHistoryPage } from "./history.ts";
 import "./style.scss";
 
 function tileRuntime(): boolean {
@@ -104,6 +111,22 @@ if (tileRuntime())
         },
       },
       (args, context) => presentEffect(kind, args, context),
+    );
+    exposeTool(
+      OWNER_REVIEW_TOOLS[kind],
+      {
+        title: "Review own EVM Wallet request",
+        description:
+          "Review a request from this Wallet's resident service in the originating Wallet tile.",
+        inputSchema: schema,
+        outputSchema: evmOperationOutputSchema,
+        annotations: {
+          "neutron:audit": "metadata_only",
+          "neutron:visibility": "same_app",
+          "neutron:effects": ["write", "network", "user_visible_ui"],
+        },
+      },
+      (args, context) => presentOwnEffect(kind, args, context),
     );
   }
 const tabs = [
@@ -139,9 +162,7 @@ export function EvmWalletApp() {
       current = parseSnapshot(await querySelf(METHODS.snapshot, [null]));
     }
     setSnapshot(current);
-    const activity = parseHistory(
-      await querySelf(METHODS.history, [{ offset: "0", limit: "40" }]),
-    );
+    const activity = await queryHistoryPage("0");
     setHistory(activity.operations);
     setTotal(activity.total);
   }, []);
@@ -235,12 +256,40 @@ export function EvmWalletApp() {
       if (next.status === "prepared") {
         setManualReview(next);
         setReviewError(next.message);
+        const tx = next.preparedTransaction ?? next.intent.transaction;
+        if (tx && decodeKnownCall(tx.data)) {
+          await refreshManualEvidence(false, next, true);
+        }
       } else setManualReview(null);
       await load();
     } catch (e) {
       setReviewError(
         `Outcome unresolved. Check operation ${manualReview.operationId} in Activity before submitting again. ${errorMessage(e)}`,
       );
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+  async function refreshManualEvidence(refresh = true, current = manualReview, alreadyBusy = false) {
+    if (!current || (reviewBusy && !alreadyBusy)) return;
+    setReviewBusy(true);
+    setReviewError(null);
+    try {
+      const operation = parseReviewEvidence(await updateSelf(
+        METHODS.reviewEvidence,
+        [{
+          identity: identityArgs(current.caller, current.requestId),
+          review_revision: current.reviewRevision,
+          refresh,
+        }],
+        120,
+      ));
+      setManualReview((previous) => previous?.operationId === current.operationId
+        ? operation.status === "prepared" ? operation : null
+        : previous);
+      if (refresh) await load();
+    } catch (e) {
+      setReviewError(`Token observations could not be refreshed. ${errorMessage(e)}`);
     } finally {
       setReviewBusy(false);
     }
@@ -410,6 +459,8 @@ export function EvmWalletApp() {
                   onReview={() => {
                     setReviewError(null);
                     setManualReview(operation);
+                    const tx = operation.preparedTransaction ?? operation.intent.transaction;
+                    if (tx && decodeKnownCall(tx.data)) void refreshManualEvidence(false, operation);
                   }}
                 />
               ))
@@ -419,10 +470,7 @@ export function EvmWalletApp() {
             <button
               className="nt-button nt-button--secondary"
               onClick={() => {
-                void querySelf(METHODS.history, [
-                  { offset: String(history.length), limit: "40" },
-                ])
-                  .then(parseHistory)
+                void queryHistoryPage(String(history.length))
                   .then(
                     (page) => {
                       setHistory([...history, ...page.operations]);
@@ -490,6 +538,7 @@ export function EvmWalletApp() {
           onApprove={() => void acceptPrompt(prompt)}
           onDecline={() => void declinePrompt(prompt)}
           onCheck={() => void checkPrompt(prompt)}
+          onRefreshEvidence={() => void refreshPromptEvidence(prompt)}
           onClose={() => closeUncertainPrompt(prompt)}
         />
       )}
@@ -501,6 +550,7 @@ export function EvmWalletApp() {
           busy={reviewBusy}
           uncertain={reviewError?.startsWith("Outcome unresolved") ?? false}
           onApprove={() => void continueOperation(true)}
+          onRefreshEvidence={() => void refreshManualEvidence()}
           onDecline={() => void continueOperation(false)}
           onCheck={() => {
             void refreshOperation(manualReview).then(() =>
@@ -716,10 +766,8 @@ function SendForm({
       )}
       <form
         className="evm-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
+        onSubmit={(e) => e.preventDefault()}
+        onKeyDown={(e) => onFormActionKeyDown(e, busy || saved !== null, () => void send())}
       >
         <Field label="Asset">
           <select
@@ -790,9 +838,11 @@ function SendForm({
           </p>
         )}
         <button
+          type="button"
           className="nt-button"
           data-testid="evm-send-review"
           disabled={busy || saved !== null}
+          onClick={(e) => runFormAction(e.currentTarget.form, busy || saved !== null, () => void send())}
         >
           {busy ? "Working…" : "Review transaction"}
         </button>
@@ -922,6 +972,7 @@ function ReviewDialog({
   onApprove,
   onDecline,
   onCheck,
+  onRefreshEvidence,
   onClose,
 }: {
   operation: Operation;
@@ -933,6 +984,7 @@ function ReviewDialog({
   onApprove: () => void;
   onDecline: () => void;
   onCheck: () => void;
+  onRefreshEvidence: () => void;
   onClose: () => void;
 }) {
   const network = networks.find((n) => n.chainId === operation.chainId),
@@ -999,6 +1051,10 @@ function ReviewDialog({
           )}
           {fee && (
             <>
+              <dt>Observed native balance</dt>
+              <dd>
+                {amount(fee.balance)} ETH ({fee.balance} wei)
+              </dd>
               <dt>Nonce</dt>
               <dd>{fee.nonce}</dd>
               <dt>Gas limit</dt>
@@ -1035,6 +1091,13 @@ function ReviewDialog({
             Method labels are inferred from calldata. They do not verify the
             contract’s behavior.
           </p>
+        )}
+        {decoded && operation.status === "prepared" && !uncertain && (
+          <TokenReview
+            evidence={operation.tokenEvidence}
+            busy={busy}
+            onRefresh={onRefreshEvidence}
+          />
         )}
         {tx && tx.data !== "0x" && (
           <details open={!decoded}>
@@ -1152,44 +1215,40 @@ function TokenForm({
     [decimals, setDecimals] = useState("18"),
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
+  const saving = useRef(false);
+  async function save() {
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      if (
+        !/^(0|[1-9][0-9]{0,2})$/.test(decimals) ||
+        Number(decimals) > 255
+      )
+        throw new Error("Decimals must be an integer from 0 to 255");
+      unwrap(
+        await updateSelf(
+          METHODS.assetSet,
+          [{ chain_id: chainId, address: address(contract), symbol, decimals }],
+          60,
+        ),
+      );
+      setContract("");
+      setSymbol("");
+      onSaved();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }
   return (
     <form
       className="evm-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        setBusy(true);
-        setError(null);
-        void (async () => {
-          try {
-            if (
-              !/^(0|[1-9][0-9]{0,2})$/.test(decimals) ||
-              Number(decimals) > 255
-            )
-              throw new Error("Decimals must be an integer from 0 to 255");
-            unwrap(
-              await updateSelf(
-                METHODS.assetSet,
-                [
-                  {
-                    chain_id: chainId,
-                    address: address(contract),
-                    symbol,
-                    decimals,
-                  },
-                ],
-                60,
-              ),
-            );
-            setContract("");
-            setSymbol("");
-            onSaved();
-          } catch (e) {
-            setError(errorMessage(e));
-          } finally {
-            setBusy(false);
-          }
-        })();
-      }}
+      onSubmit={(e) => e.preventDefault()}
+      onKeyDown={(e) => onFormActionKeyDown(e, busy, () => void save())}
     >
       <Field label="Token contract">
         <input
@@ -1223,7 +1282,12 @@ function TokenForm({
         contract before saving.
       </p>
       {error && <p className="evm-error">{error}</p>}
-      <button className="nt-button" disabled={busy}>
+      <button
+        type="button"
+        className="nt-button"
+        disabled={busy}
+        onClick={(e) => runFormAction(e.currentTarget.form, busy, () => void save())}
+      >
         {busy ? "Saving…" : "Save selected token"}
       </button>
     </form>
@@ -1241,22 +1305,13 @@ function Approvals({
   onResult: () => void;
 }) {
   const [error, setError] = useState<string | null>(null),
-    [results, setResults] = useState<Record<string, string>>({}),
+    [results, setResults] = useState<Record<string, {
+      value: string;
+      blockNumber: string;
+      observedAtNs: string;
+    }>>({}),
     [busy, setBusy] = useState<string | null>(null);
-  const known = new Map<string, { token: string; spender: string }>();
-  for (const operation of history) {
-    const tx = operation.intent.transaction;
-    if (
-      operation.chainId !== chainId ||
-      !tx ||
-      !["submitted", "confirmed"].includes(operation.status)
-    )
-      continue;
-    const decoded = decodeKnownCall(tx.data);
-    if (decoded?.name !== "ERC-20 approval") continue;
-    const spender = decoded.details[0]![1];
-    known.set(`${tx.to}:${spender}`, { token: tx.to, spender });
-  }
+  const known = knownApprovals(history, chainId);
   async function check(key: string, token: string, spender: string) {
     setBusy(key);
     setError(null);
@@ -1285,7 +1340,11 @@ function Approvals({
         ),
         "allowance read",
       );
-      setResults({ ...results, [key]: BigInt(hex(r.result)).toString() });
+      setResults((previous) => ({ ...previous, [key]: {
+        value: BigInt(hex(r.result)).toString(),
+        blockNumber: quantity(r.block_number, "allowance block"),
+        observedAtNs: quantity(r.observed_at, "allowance observation time"),
+      } }));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -1338,24 +1397,31 @@ function Approvals({
     <section className="evm-card">
       <h2 className="evm-card-title">Known token approvals</h2>
       <p className="evm-muted">
-        Spenders from the loaded Wallet activity only. Older pages, external
-        approvals and signed permits are not exhaustively indexed. Check the
-        live allowance before revoking.
+        Spenders from successful confirmed transactions in the loaded Wallet
+        activity. Pending requests, older pages, external approvals and signed
+        permits are not exhaustively indexed. Check the live allowance before
+        revoking.
       </p>
       {error && <p className="evm-error">{error}</p>}
-      {known.size === 0 ? (
+      {known.length === 0 ? (
         <p className="evm-empty">
           No approval transactions in the loaded activity.
         </p>
       ) : (
-        [...known].map(([key, a]) => (
+        known.map(({ key, ...a }) => (
           <article className="evm-operation" key={key}>
             <p className="evm-address">Token {a.token}</p>
             <p className="evm-address">Spender {a.spender}</p>
             <p>
-              Live allowance: {results[key] ?? "Not checked"}
+              Observed allowance: {results[key]?.value ?? "Not checked"}
               {results[key] ? " atomic units" : ""}
             </p>
+            {results[key] && (
+              <p className="evm-muted">
+                Block {results[key].blockNumber} · {when(results[key].observedAtNs)}.
+                {" "}The allowance may have changed since this observation.
+              </p>
+            )}
             <div className="evm-actions">
               <button
                 className="nt-button nt-button--secondary"

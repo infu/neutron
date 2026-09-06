@@ -3,6 +3,7 @@ import { createEvmWalletClient, requireEvmWalletCaller } from "neutron-tools/evm
 import { getAddress } from "viem";
 import { customToken, defaultTokens, prepareSwap, quoteSwap, validateInput, type Quote } from "./swap.ts";
 import { createSwapStore, savedIntent, verifyAgentResult, walletReader, type SavedIntent, type SwapRecord } from "./controller.ts";
+import { estimateSwapFees } from "./fees.ts";
 
 const text = { type: "string" };
 const address = { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" };
@@ -26,7 +27,9 @@ exposeTool("uniswap_quote_v1", {
   const chain = String(args.chainId), read = walletReader(wallet, account.accountId);
   const token = async (value: JsonValue | undefined) => value === null ? defaultTokens(chain)[0]! : customToken(read, chain, String(value));
   const input = { chainId: chain, accountId: account.accountId, accountAddress: getAddress(account.address), tokenIn: await token(args.tokenIn), tokenOut: await token(args.tokenOut), amountIn: String(args.amountIn), slippageBps: Number(args.slippageBps), recipient: getAddress(String(args.recipient)), deadline: String(args.deadline) };
-  return { quoteJson: JSON.stringify(await quoteSwap(read, input)) };
+  const prepared = await prepareSwap(read, await quoteSwap(read, input));
+  const quote = { ...prepared.quote, networkFees: await estimateSwapFees(wallet, prepared) };
+  return { quoteJson: JSON.stringify(quote) };
 });
 
 exposeTool("uniswap_prepare_v1", {

@@ -14,6 +14,7 @@
     "test/**/*.ts",
     "types/**/*.d.ts",
     "src/swap.ts",
+    "src/fees.ts",
     "src/controller.ts"
   ],
   "exclude": [

@@ -1,0 +1,122 @@
+{
+  "status": "passed",
+  "candidate_status": "Final canonical Kernel341 exact frozen archive",
+  "scope": "Both directions run exact archived browser compiler/package-parser/assembler closures in real Chromium against all15 incumbent app archives; complete Wasm compilation with zero diagnostics. No live canister install/checked upgrade or state-migration execution claimed. New EVM and Uniswap excluded from336 legacy first-install boundary.",
+  "forward": {
+    "compilerKernelVersion": 336,
+    "targetKernelVersion": 341,
+    "result": {
+      "wasmBytes": 14150973,
+      "wasmMagic": [
+        0,
+        97,
+        115,
+        109
+      ],
+      "diagnosticErrors": 0,
+      "compatibilityDiagnostics": 0,
+      "inventoryAppIds": [
+        "agent",
+        "blast",
+        "chess",
+        "contacts",
+        "files",
+        "gemma",
+        "hello",
+        "hullshift",
+        "jetcreeper",
+        "kernel",
+        "kitchensink",
+        "mail",
+        "mysubnet",
+        "spreadsheet",
+        "wagyu",
+        "wallet"
+      ],
+      "appIds": [
+        "kernel",
+        "agent",
+        "blast",
+        "chess",
+        "contacts",
+        "files",
+        "gemma",
+        "hello",
+        "hullshift",
+        "jetcreeper",
+        "kitchensink",
+        "mail",
+        "mysubnet",
+        "spreadsheet",
+        "wagyu",
+        "wallet"
+      ]
+    },
+    "tests": 1,
+    "assertions": 72,
+    "log": "exact336-to341-current-incumbents.log",
+    "receipt": "exact336-to341-current-incumbents.json"
+  },
+  "reverse": {
+    "compilerKernelVersion": 341,
+    "targetKernelVersion": 336,
+    "result": {
+      "wasmBytes": 14134642,
+      "wasmMagic": [
+        0,
+        97,
+        115,
+        109
+      ],
+      "diagnosticErrors": 0,
+      "compatibilityDiagnostics": 0,
+      "inventoryAppIds": [
+        "agent",
+        "blast",
+        "chess",
+        "contacts",
+        "files",
+        "gemma",
+        "hello",
+        "hullshift",
+        "jetcreeper",
+        "kernel",
+        "kitchensink",
+        "mail",
+        "mysubnet",
+        "spreadsheet",
+        "wagyu",
+        "wallet"
+      ],
+      "appIds": [
+        "kernel",
+        "agent",
+        "blast",
+        "chess",
+        "contacts",
+        "files",
+        "gemma",
+        "hello",
+        "hullshift",
+        "jetcreeper",
+        "kitchensink",
+        "mail",
+        "mysubnet",
+        "spreadsheet",
+        "wagyu",
+        "wallet"
+      ]
+    },
+    "tests": 1,
+    "assertions": 72,
+    "log": "exact341-to336-current-incumbents.log",
+    "receipt": "exact341-to336-current-incumbents.json"
+  },
+  "kernel341_source": {
+    "path": "apps/kernel/.neutron/sources/c59c0f72a88aeb11dee4d7c7db2d79078e813bd1378634cfe38e818082f12605.source.v1.msgpack.gz",
+    "bytes": 3198537,
+    "sha256": "c59c0f72a88aeb11dee4d7c7db2d79078e813bd1378634cfe38e818082f12605"
+  },
+  "archive_and_source_unchanged_after_tests": true,
+  "reverse_not_carried_forward": "Packaged browser JS import/chunk hashes changed between340/341, so reran using exact final341 browser rather than relying on previous current-source result."
+}

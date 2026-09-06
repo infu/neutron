@@ -31,6 +31,10 @@ import {
   parseEvmNetworksResult,
   parseEvmBalancesResult,
   parseEvmReadContractResult,
+  evmEstimateTransactionInputSchema,
+  evmEstimateTransactionOutputSchema,
+  evmReplacementTransactionInputSchema,
+  evmReplacementTransactionOutputSchema,
 } from "neutron-tools/evm_wallet";
 import {
   METHODS,
@@ -52,9 +56,34 @@ import {
   quantity,
   receiptJson,
 } from "./provider.ts";
+import { estimateTransaction, replacementTransaction } from "./read_adapters.ts";
 
 const bytesHex = (bytes: Uint8Array) =>
   `0x${[...bytes].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+exposeTool(
+  EVM_WALLET_TOOLS.estimateTransaction,
+  {
+    title: "Estimate EVM transaction fees",
+    description:
+      "Estimate gas and current fees for exact transaction fields without creating a command, reserving a nonce or signing. Observations can span RPC calls and fees may change. Arbitrum total gas already includes posting costs; do not add them again.",
+    inputSchema: evmEstimateTransactionInputSchema,
+    outputSchema: evmEstimateTransactionOutputSchema,
+    annotations: { "neutron:effects": ["read", "network"] },
+  },
+  estimateTransaction,
+);
+exposeTool(
+  EVM_WALLET_TOOLS.replacementTransaction,
+  {
+    title: "Check EVM replacement authorization",
+    description:
+      "Check whether this exact signed transaction belongs to an explicit replacement of the original Wallet request. This journal proof does not prove inclusion or success; read the transaction and receipt separately and require both pieces of evidence.",
+    inputSchema: evmReplacementTransactionInputSchema,
+    outputSchema: evmReplacementTransactionOutputSchema,
+    annotations: { "neutron:effects": ["read"] },
+  },
+  replacementTransaction,
+);
 exposeTool(
   EVM_WALLET_TOOLS.accounts,
   {

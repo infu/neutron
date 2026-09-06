@@ -47,16 +47,34 @@ state and quote cannot be observed at the same block.
    chain and full address; token-provided symbols are descriptive only.
 4. Enter the input amount, recipient, slippage and deadline, then request a
    quote. Review the minimum output, fee tier, observation age, recipient and
-   allowance. The gas-unit estimate is for the quoted swap execution; EVM Wallet
-   estimates and displays the actual transaction fee, including Arbitrum posting
-   costs, before signing. It does not add those costs twice.
+   allowance, and separate approval and swap network-fee estimates. These
+   read-only estimates use EVM Wallet's `evm_estimate_transaction_v1` with the
+   exact sender, destination, value and calldata. The Quoter gas-unit estimate
+   describes pool execution and is never substituted for a full network fee.
+   Missing fees are shown as unavailable, with the provider's reason; a swap
+   requiring approval may not simulate until that approval confirms. The total
+   is unavailable until every required transaction has a complete estimate.
+   EVM Wallet separately reviews live fees before each signature.
 5. Save and review the exact approval when needed, then wait for its successful
    receipt before reviewing the swap. Approval and swap are separate EOA
-   transactions and are not atomic. No approval is silently unlimited.
+   transactions and are not atomic. No approval is silently unlimited. Ordinary
+   ERC20 allowance has no automatic expiry: it remains until spent or revoked;
+   the swap deadline does not expire that approval.
 6. Use **Check wallet status** after a pending or lost reply. A reload retains
    the saved intent and exact request IDs. An expired deadline requires a fresh
    quote for a new swap; the earlier approval remains visible and can be managed
    in EVM Wallet.
+
+Fee arithmetic uses exact integer wei throughout. Ethereum estimates use the
+observed base fee plus priority fee, with a separately displayed suggested
+maximum. On a real Arbitrum Nitro RPC, the full `eth_estimateGas` result already
+includes the L1 posting component in L2 gas units. The app uses that total once
+and never adds another posting charge. An incomplete RPC estimate is explicitly
+unavailable; a plain Anvil chain configured as `42161` only proves the arithmetic
+and request path, not Nitro posting costs or finality. Quote refresh obtains new
+fee observations. Before a saved swap is submitted, **Refresh network fees**
+estimates its remaining transactions without changing the frozen requests or
+signing anything. Original quote observations remain in the durable intent.
 
 Native ETH input is sent as the transaction value; the router wraps it and
 refunds any remainder in the same multicall. Native output goes to the router,
@@ -87,19 +105,33 @@ newer observation. The app saves `*_requested` before awaiting EVM Wallet.
 On resumption the consumer checks the same wallet identity and scoped operation
 status. A known submitted, unknown, rejected, reverted, or completed operation is
 not turned into a fresh send. A definitive absent operation may submit the same
-saved request. Compatible app upgrades retain the root unchanged. The first
-release has no production predecessor and no fake migration. A replacement EVM
-Wallet signing namespace is not treated as the same account.
+saved request. Compatible app upgrades retain the published `uniswap` v1 root
+unchanged. Optional fee observations and verified replacement evidence use the
+existing quote/operation JSON fields; old records without those annotations
+remain readable and retain their original request IDs. There is no fake schema
+migration. A replacement EVM Wallet signing namespace is not treated as the
+same account.
 
 Receipt inclusion is shown separately from finality. An included Ethereum or
 Arbitrum receipt can still be reorganized. The interface preserves the wallet's
 reported finality instead of claiming immediate final settlement.
 
+For a replacement transaction, the original Wallet request ID and transaction
+hash remain intact. The app follows the Wallet's authenticated replacement link,
+independently checks the replacement sender, destination, calldata and value,
+and keeps its receipt separate. A successful exact replacement approval can
+unblock the swap; a cancellation or changed payload never counts as that
+approval or swap. Pending replacement evidence stays unresolved and is checked
+again with the same saved request IDs. Agent results additionally require
+`evm_replacement_transaction_v1` to prove the signed replacement belongs to the
+saved original caller and request. The original `evm_transaction_v1` schema and
+exact-request binding remain unchanged.
+
 ## Resident tools and Agent
 
 | Tool | Behavior |
 | --- | --- |
-| `uniswap_quote_v1` | Live direct-pool quote; native token is `null`; amounts are atomic decimal strings |
+| `uniswap_quote_v1` | Live direct-pool quote with read-only fee observations; native token is `null`; amounts are atomic decimal strings |
 | `uniswap_prepare_v1` | Validate the quote and save immutable approval/swap requests under the supplied 32-hex swap ID |
 | `uniswap_status_v1` | Read one saved intent and progress |
 | `uniswap_list_v1` | Read saved swaps |

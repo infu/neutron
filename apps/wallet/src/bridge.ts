@@ -59,6 +59,17 @@ export function createBridgeClient(backend: BridgeBackend = selfBackend) {
     async record(intent: BridgeIntent, kind: EthereumDepositStep, state: Exclude<BridgeStep["state"], "ready">, hash: Hex | null, error: string | null = null) {
       return parseBridgeIntent(await backend.update("wallet_bridge_record_step_v1", [{ id: idWire(intent.id), revision: intent.revision, step: { [kind]: null }, state: { [state]: null }, ...(hash === null ? {} : { transaction_hash: hash }), ...(error === null ? {} : { error }) }]));
     },
+    async effectiveHash(id: string, kind: EthereumDepositStep): Promise<Hex | null> {
+      const value = object(await backend.update("wallet_bridge_replacement_v1", [{ lookup: { id: idWire(id), step: { [kind]: null } } }])).hash;
+      return value == null ? null : word(value) as Hex;
+    },
+    async recordReplacement(intent: BridgeIntent, kind: EthereumDepositStep, originalHash: Hex, previousHash: Hex, hash: Hex, state: "submitted" | "confirmed" | "failed", error: string | null = null) {
+      return parseBridgeIntent(object(await backend.update("wallet_bridge_replacement_v1", [{ record: {
+        id: idWire(intent.id), revision: intent.revision, step: { [kind]: null },
+        original_transaction_hash: originalHash, previous_transaction_hash: previousHash, transaction_hash: hash,
+        state: { [state]: null }, ...(error === null ? {} : { error }),
+      } }])).intent);
+    },
     async refresh(id: string) { return parseBridgeIntent(await backend.update("wallet_bridge_refresh_v1", [{ id: idWire(id), event_page_length: "100" }])); },
   };
 }
@@ -69,7 +80,7 @@ export type BridgeExecutionOptions = {
   // an equivalent request identity; an unknown browser reply is never resent.
   evm?: {
     send(requestId: string, transaction: EthereumTransaction, beforeFreshSend?: () => Promise<void>): Promise<Hex>;
-    confirm(requestId: string, hash: Hex): Promise<void>;
+    confirm(requestId: string, hash: Hex, transaction?: EthereumTransaction, onReplacement?: (hash: Hex, state: "submitted" | "confirmed" | "failed") => Promise<void>): Promise<void>;
   };
   onChange?: (intent: BridgeIntent) => void;
   onProgress?: (phase: EthereumDepositPhase) => void;
@@ -98,12 +109,19 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
     try {
       if (current.source === "evm") {
         if (!evm || !step.operationId) throw new Error("Reconnect EVM Wallet to reconcile this deposit");
-        await evm.confirm(step.operationId, hash);
+        await evm.confirm(step.operationId, hash, bridgeTransaction(current, kind), async (replacement, state) => {
+          const latest = await client.status(current.id);
+          const previous = await client.effectiveHash(current.id, kind) ?? hash;
+          const error = state === "failed" ? "The replacement transaction reverted on Ethereum" : null;
+          update(previous.toLowerCase() === replacement.toLowerCase()
+            ? await client.record(latest, kind, state, hash, error)
+            : await client.recordReplacement(latest, kind, hash, previous, replacement, state, error));
+        });
       } else if (browserConfirm) await browserConfirm(hash);
       else await requireSuccessfulReceipt(provider, hash, options.confirmationTimeoutMs ?? 300_000, options.pollIntervalMs ?? 1_500, kind === "deposit" ? "Deposit" : "Approval");
       update(await client.record(current, kind, "confirmed", hash));
     } catch (error) {
-      if (error instanceof EthereumReceiptRevertedError) update(await client.record(current, kind, "failed", hash, error.message));
+      if (error instanceof EthereumReceiptRevertedError && (!error.transactionHash || error.transactionHash.toLowerCase() === hash.toLowerCase())) update(await client.record(current, kind, "failed", hash, error.message));
       throw error;
     }
   };
@@ -124,7 +142,7 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
         update(await client.record(current, saved.kind, "submitted", hash));
         await confirm(saved.kind, hash);
       } catch (error) {
-        if (error instanceof EthereumReceiptRevertedError && error.transactionHash) update(await client.record(current, saved.kind, "failed", error.transactionHash, error.message));
+        if (error instanceof EthereumReceiptRevertedError && error.transactionHash && (!stepOf(saved.kind).transactionHash || stepOf(saved.kind).transactionHash!.toLowerCase() === error.transactionHash.toLowerCase())) update(await client.record(current, saved.kind, "failed", error.transactionHash, error.message));
         else if (isUserRejected(error)) update(await client.record(current, saved.kind, "failed", null, "EVM Wallet declined this request"));
         throw error;
       }

@@ -214,7 +214,10 @@ module {
                             switch (agreed) {
                                 case (null) agreed := ?value;
                                 case (?previous) {
-                                    if (previous != value) return #err("EVM RPC providers disagree: " # debug_show(providers[0]) # " returned " # previous # "; " # debug_show(providers[i]) # " returned " # value);
+                                    // JSON strings can be deep concatenation ropes (for
+                                    // example deployed contract code). UTF-8 blobs preserve
+                                    // exact equality without recursive rope comparison.
+                                    if (Text.encodeUtf8(previous) != Text.encodeUtf8(value)) return #err("EVM RPC providers disagree: " # debug_show(providers[0]) # " returned " # previous # "; " # debug_show(providers[i]) # " returned " # value);
                                 };
                             };
                             i += 1;

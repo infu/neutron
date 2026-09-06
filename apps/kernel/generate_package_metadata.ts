@@ -48,7 +48,7 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 339;
+export const KERNEL_NPL_RELEASE_VERSION = 342;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
@@ -286,6 +286,17 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "packages/neutron-compiler/test/evm_wallet_upgrade/archives.ts",
   "packages/neutron-compiler/test/evm_wallet_upgrade/existing_apps.ts",
   "packages/neutron-compiler/test/evm_wallet_upgrade/new_apps.ts",
+  // Reviewed local signed-state and nonempty Wallet journal upgrade fixtures.
+  "packages/neutron-compiler/test/evm_signed_upgrade.pocketic.test.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/actor_fixtures.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/evm_signed_pending.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/evm_signed_rpc_fixture.mo",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_bridge_journals.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_canisters.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_fixture.mo",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_journal_types.ts",
+  "packages/neutron-compiler/test/evm_wallet_upgrade/wallet_transfer_journals.ts",
+  "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
   "packages/neutron-tools/src/evm_wallet.ts",
   "packages/neutron-tools/test/evm_wallet.test.ts",
   "packages/neutron-tools/test/wallet_custody_capabilities.test.ts",
@@ -1366,7 +1377,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.39 (packed version 339)",
+    "Package release: v0.3.42 (packed version 342)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

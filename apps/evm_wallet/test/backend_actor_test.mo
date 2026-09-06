@@ -7,12 +7,14 @@ import Text "mo:core/Text";
 import Caps "mo:neutron-capabilities";
 import Main "../backend/main";
 import Memory "../backend/memory/evm_wallet/v1";
+import EvidenceMemory "../backend/memory/evm_evidence/v1";
 import Types "../backend/Types";
 import Journal "../backend/Journal";
 import Hex "../backend/evm/Hex";
 import RpcTypes "../backend/rpc/Types";
 import Json "../backend/rpc/Json";
 import Fixtures "BackendFixtures";
+import ERC20 "ERC20Fixtures";
 
 persistent actor {
   public func run() : async Text {
@@ -113,7 +115,7 @@ persistent actor {
       };
       call = performCall;
     };
-    let env : Main.AppBackendEnvironment = { stable_memory = { evm_wallet = mem }; capabilities = { backend_calls = calls; wallet_custody_signing = signing } };
+    let env : Main.AppBackendEnvironment = { stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init() }; capabilities = { backend_calls = calls; wallet_custody_signing = signing } };
     let service = Main.Init(env);
     func identity(id : Text) : Memory.Identity = { caller = { app_id = "consumer"; installation_uid = 10; endpoint = "tile" }; request_id = id };
     let first = identity("00000000000000000000000000000001");
@@ -171,6 +173,13 @@ persistent actor {
     assert replacementTx.to == ?txRequest.to and replacementTx.value == "1" and replacementTx.data == "0x" and replacementTx.nonce == "0";
     let replacementSent = ok(await* restored.evm_wallet_execute_v1({ identity = replaceId; review_revision = replacement.review_revision }));
     assert replacementSent.transaction_hash == ?Fixtures.vectors[3].hash;
+    let proof = ok(restored.evm_wallet_replacement_transaction_v1({
+      chain_id = 1; transaction_hash = Fixtures.vectors[3].hash;
+      original_wallet_request = { caller_app_id = "consumer"; caller_installation_uid = 10; request_id = first.request_id };
+    }));
+    assert proof.wallet_replacement_matches and proof.source == "evm_wallet_journal";
+    let originalBinding = ok(await* restored.evm_wallet_transaction_v1({ chain_id = 1; transaction_hash = Fixtures.vectors[3].hash; wallet_request = ?{ caller_app_id = "consumer"; caller_installation_uid = 10; request_id = first.request_id } }));
+    assert originalBinding.wallet_request_matches == ?false;
     let cancelId = identity("00000000000000000000000000000009");
     let cancel = ok(await* restored.evm_wallet_prepare_v1({ identity = cancelId; intent = { intent with operation = #replacement({ operation_id = replacement.operation_id; cancel = true; max_fee_per_gas = "300"; max_priority_fee_per_gas = "2" }) } }));
     let ?cancelTx = cancel.prepared_transaction else { assert false; loop {} };
@@ -221,6 +230,87 @@ persistent actor {
     let ?legacyTx = legacy.prepared_transaction else { assert false; loop {} };
     assert legacyTx.transaction_type == "legacy" and legacyTx.gas_price == ?"100";
     assert ok(await* restored.evm_wallet_execute_v1({ identity = legacyId; review_revision = legacy.review_revision })).transaction_hash == ?Fixtures.vectors[5].hash;
-    "Backend journal, signing, exact recovery, replacement and receipt tests passed";
+    let beforeEstimation = (Map.size(mem.commands), Map.size(mem.nonce_next), signAttempts, broadcasts.size());
+    let estimate = ok(await* restored.evm_wallet_estimate_transaction_v1({ chain_id = 1; to = txRequest.to; value = "0"; data = "0x" }));
+    assert estimate.status == "available" and estimate.estimated_fee == ?"1071000" and estimate.max_fee == ?"2100000";
+    assert estimate.from == prepared.address and estimate.block_number == ?"100";
+    assert beforeEstimation == (Map.size(mem.commands), Map.size(mem.nonce_next), signAttempts, broadcasts.size());
+
+    // Exact ERC20 approval signing with independently generated viem/noble
+    // bytes. Evidence refresh changes the displayed facts/revision only.
+    let approveMem = Memory.init();
+    let evidenceMem = EvidenceMemory.init();
+    var approveSigns = 0;
+    var approveBroadcasts = 0;
+    var observedAllowance = 7;
+    func approveCall(request : Caps.BackendCallRequestV1) : async* Caps.BackendCallResultV1 {
+      if (request.method == "request") {
+        let ?(_, payload, _) : ?(RpcTypes.RpcService, Text, Nat64) = from_candid(request.args) else { assert false; loop {} };
+        let body = ok(Json.parse(payload));
+        if (Json.field(body, "method") == ?#string("eth_call")) {
+          let ?#array(params) = Json.field(body, "params") else { assert false; loop {} };
+          let ?#string(data) = Json.field(params[0], "data") else { assert false; loop {} };
+          if (Text.startsWith(data, #text("0x70a08231")) or Text.startsWith(data, #text("0xdd62ed3e"))) {
+            assert params[1] == #string("0x64");
+            let value = if (Text.startsWith(data, #text("0x70a08231"))) 500 else observedAllowance;
+            let response : RpcTypes.RequestResult = #Ok("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":" # Json.quote(Hex.encode(ok(Hex.word(value)))) # "}");
+            return #ok(to_candid(response));
+          };
+        };
+      };
+      if (request.method == "eth_sendRawTransaction") {
+        let ?(_, _, raw) : ?(RpcTypes.RpcServices, ?RpcTypes.RpcConfig, Text) = from_candid(request.args) else { assert false; loop {} };
+        assert raw == ERC20.approveRaw;
+        let ?saved = Journal.Store(approveMem).find(identity("0000000000000000000000000000000a")) else { assert false; loop {} };
+        assert saved.transaction_hash == ?ERC20.approveHash and saved.signed_raw == ?ok(Hex.decode(ERC20.approveRaw));
+        approveBroadcasts += 1;
+        let result : RpcTypes.MultiSendRawTransactionResult = #Consistent(#Ok(#Ok(null)));
+        return #ok(to_candid(result));
+      };
+      await* performCall(request);
+    };
+    let approveCaps : Caps.BackendCallsV1 = {
+      calls with call = approveCall;
+      call_batch = func(requests : [Caps.BackendCallRequestV1]) : async* [Caps.BackendCallResultV1] {
+        var replies : [Caps.BackendCallResultV1] = [];
+        for (request in requests.vals()) replies := Array.concat(replies, [await* approveCall(request)]);
+        replies;
+      };
+    };
+    let approveSigner : Caps.WalletCustodySigningV1 = {
+      signing with sign_digest = func(request : Caps.WalletCustodySignDigestRequestV1) : async* Caps.WalletCustodySignatureResultV1 {
+        assert Hex.encode(request.digest) == ERC20.approveDigest;
+        approveSigns += 1;
+        #ok({ slot = request.slot; algorithm = #ecdsa_secp256k1; digest = request.digest; signature = ok(Hex.decode(ERC20.approveSignature)) });
+      };
+    };
+    let approveEnv : Main.AppBackendEnvironment = {
+      stable_memory = { evm_wallet = approveMem; evm_evidence = evidenceMem };
+      capabilities = { backend_calls = approveCaps; wallet_custody_signing = approveSigner };
+    };
+    let approveService = Main.Init(approveEnv);
+    let approveId = identity("0000000000000000000000000000000a");
+    let approveIntent : Memory.Intent = { intent with operation = #transaction({ txRequest with data = ERC20.approveData; value = "0" }) };
+    let approvePrepared = ok(await* approveService.evm_wallet_prepare_v1({ identity = approveId; intent = approveIntent }));
+    assert approvePrepared.status == "prepared";
+    let captured = ok(await* approveService.evm_wallet_review_evidence_v1({ identity = approveId; review_revision = approvePrepared.review_revision; refresh = false }));
+    let ?firstEvidence = captured.token_evidence else { assert false; loop {} };
+    assert firstEvidence.method == "approve" and firstEvidence.amount == "100";
+    assert firstEvidence.balance.value == ?"500" and firstEvidence.allowance == ?{ value = ?"7"; error = null };
+    assert firstEvidence.block_number == ?"0x64" and firstEvidence.block_hash == ?blockHash;
+    observedAllowance := 21;
+    let refreshed = ok(await* approveService.evm_wallet_review_evidence_v1({ identity = approveId; review_revision = approvePrepared.review_revision; refresh = true }));
+    assert refreshed.operation.review_revision == approvePrepared.review_revision + 1;
+    assert refreshed.operation.prepared_transaction == approvePrepared.prepared_transaction;
+    let ?newEvidence = refreshed.token_evidence else { assert false; loop {} };
+    assert newEvidence.allowance == ?{ value = ?"21"; error = null };
+    switch (await* approveService.evm_wallet_execute_v1({ identity = approveId; review_revision = approvePrepared.review_revision })) { case (#err(_)) {}; case (_) assert false };
+    assert approveSigns == 0 and approveBroadcasts == 0;
+    let approveRestored = Main.Init(approveEnv);
+    let restoredReview = ok(await* approveRestored.evm_wallet_review_evidence_v1({ identity = approveId; review_revision = refreshed.operation.review_revision; refresh = false }));
+    assert restoredReview.token_evidence == ?newEvidence;
+    let approved = ok(await* approveRestored.evm_wallet_execute_v1({ identity = approveId; review_revision = refreshed.operation.review_revision }));
+    assert approved.transaction_hash == ?ERC20.approveHash and approveSigns == 1 and approveBroadcasts == 1;
+    "Backend journal, signing, exact recovery, replacement, fee estimation and ERC20 review tests passed";
   };
 };

@@ -1,4 +1,5 @@
 import Memory "./memory/evm_wallet/v1";
+import Evidence "./memory/evm_evidence/v1";
 module {
   public type Result<T> = { #ok : T; #err : Text };
   public type Account = Memory.Account;
@@ -7,6 +8,7 @@ module {
   public type Identity = Memory.Identity;
   public type Intent = Memory.Intent;
   public type Review = Memory.Review;
+  public type TokenEvidence = Evidence.Evidence;
   public type Operation = {
     operation_id : Nat; request_id : Text; account_id : Text; chain_id : Nat;
     caller : Memory.Caller;
@@ -27,6 +29,8 @@ module {
   };
   public type PrepareRequest = { identity : Identity; intent : Intent };
   public type ExecuteRequest = { identity : Identity; review_revision : Nat };
+  public type EvidenceRequest = { identity : Identity; review_revision : Nat; refresh : Bool };
+  public type EvidenceReview = { operation : Operation; token_evidence : ?TokenEvidence };
   public type StatusRequest = { identity : Identity; refresh : Bool };
   public type IdentityRequest = { identity : Identity };
   public type HistoryRequest = { offset : Nat; limit : Nat };

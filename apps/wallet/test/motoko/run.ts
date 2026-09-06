@@ -18,8 +18,13 @@ const testRoot = path.resolve("test/motoko");
 const compiledIcTests = [
   "transfer_journal_test.mo",
   "bridge_test.mo",
+  "bridge_replacements_test.mo",
   "transfer_main_test.mo",
   "funding_main_test.mo",
+  "settlement_test.mo",
+  "native_settlement_main_test.mo",
+  "refund_test.mo",
+  "erc20_refund_main_test.mo",
 ];
 const availableTests = [
   "allowances_test.mo",

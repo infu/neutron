@@ -19,6 +19,7 @@ import {
   METHODS,
   identityArgs,
   parseOperation,
+  parseReviewEvidence,
   hex,
   type Operation,
 } from "./data.ts";
@@ -30,6 +31,15 @@ export const PRESENT_TOOLS = {
   transaction: "evm_transaction_present_v1",
   message: "evm_message_present_v1",
   typed_data: "evm_typed_data_present_v1",
+} as const;
+// Same-app calls intentionally have no Kernel provider presentation capability.
+// These ordinary private tools return to the exact Wallet tile that requested
+// review; the external provider tools retain their foreground attestation.
+export const OWNER_REVIEW_TOOLS = {
+  replacement: "evm_replacement_owner_review_v1",
+  transaction: "evm_transaction_owner_review_v1",
+  message: "evm_message_owner_review_v1",
+  typed_data: "evm_typed_data_owner_review_v1",
 } as const;
 export type Prepared = {
   request: ProviderRequest;
@@ -308,13 +318,43 @@ export async function statusEffect(
   assertOperationMatches(prepared, operation);
   return operation;
 }
+export async function refreshReviewEvidence(
+  prepared: Prepared,
+  context: MsgBusToolContext,
+  refresh = true,
+): Promise<Operation> {
+  const operation = parseReviewEvidence(
+    await context.kernel.updateSelf(
+      METHODS.reviewEvidence,
+      [{ identity: prepared.identity, review_revision: prepared.operation.reviewRevision, refresh }],
+      120,
+    ),
+  );
+  assertOperationMatches(prepared, operation);
+  return operation;
+}
 export async function handleHumanEffect(
   kind: ProviderKind,
   args: JsonObject,
   context: MsgBusToolContext,
 ): Promise<JsonObject> {
   context.signal?.throwIfAborted();
-  requireEvmWalletCaller(context);
+  const caller = requireEvmWalletCaller(context);
+  if (caller.appId === "evm_wallet") {
+    if (context.agentMode)
+      throw new Error("EVM Wallet owner review is unavailable to Agent invocations");
+    const endpoint = context.caller!.endpoint;
+    if (
+      context.caller!.role !== "tile" ||
+      !/^app:evm_wallet:tile:evm_wallet:instance:[^:]+$/.test(endpoint)
+    )
+      throw new Error("EVM Wallet owner review requires an authenticated Wallet tile instance");
+    return context.kernel.callTool<JsonObject>({
+      target: endpoint as `app:evm_wallet:tile:evm_wallet:instance:${string}`,
+      name: OWNER_REVIEW_TOOLS[kind],
+      arguments: parseEffect(kind, args) as JsonObject,
+    });
+  }
   if (typeof context.presentUserInterface !== "function")
     throw new Error("EVM Wallet requires Kernel provider presentation support");
   return context.presentUserInterface({

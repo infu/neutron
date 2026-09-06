@@ -12,6 +12,8 @@ import {
   parseEvmBalancesRequest,
   parseEvmBalancesResult,
   parseEvmEffectRequest,
+  parseEvmEstimateTransactionRequest,
+  parseEvmEstimateTransactionResult,
   parseEvmNetworksResult,
   parseEvmOperationResult,
   parseEvmOperationStatusRequest,
@@ -19,6 +21,8 @@ import {
   parseEvmReadContractRequest,
   parseEvmReadContractResult,
   parseEvmReplaceTransactionRequest,
+  parseEvmReplacementTransactionRequest,
+  parseEvmReplacementTransactionResult,
   parseEvmReceipt,
   parseEvmSendTransactionRequest,
   parseEvmSignMessageRequest,
@@ -34,9 +38,13 @@ import {
   type EvmBalancesResult,
   type EvmEffectIdentity,
   type EvmEffectKind,
+  type EvmEstimateTransactionRequest,
+  type EvmEstimateTransactionResult,
   type EvmOperationResult,
   type EvmReadContractResult,
   type EvmReplaceTransactionRequest,
+  type EvmReplacementTransactionRequest,
+  type EvmReplacementTransactionResult,
   type EvmReceipt,
   type EvmSendTransactionRequest,
   type EvmWalletIntent,
@@ -105,12 +113,33 @@ function readResult(patch: Partial<EvmReadContractResult> = {}): EvmReadContract
   return { ...SCOPE, address: ADDRESS, to: TOKEN, data: "0xaabb", result: "0x1234", code: "0x6000", blockNumber: "100", observedAtNs: "1000000000", ...patch };
 }
 
+function estimateRequest(patch: Partial<EvmEstimateTransactionRequest> = {}): EvmEstimateTransactionRequest {
+  return { ...SCOPE, to: TOKEN, valueWei: "7", data: "0xaabb", ...patch };
+}
+
+function estimateResult(patch: Partial<EvmEstimateTransactionResult> = {}): EvmEstimateTransactionResult {
+  return {
+    ...estimateRequest(), address: ADDRESS, status: "available", gasLimit: "21000", gasPriceWei: "40",
+    baseFeePerGasWei: "20", maxPriorityFeePerGasWei: "3", maxFeePerGasWei: "50", estimatedFeeWei: "483000",
+    maximumFeeWei: "1050000", blockNumber: "100", observedAtNs: "1000000000",
+    feeBasis: "base_fee_plus_priority", postingCosts: "not_applicable", reasons: [], source: "evm_rpc", ...patch,
+  };
+}
+
 function chainEvidence(patch: Partial<EvmTransactionResult> = {}): EvmTransactionResult {
   return {
     chainId: "1", transactionHash: HASH, walletRequestMatches: null,
     transaction: { from: ADDRESS, to: TOKEN, data: "0xaabb", valueWei: "0", nonce: "10", blockNumber: "100", blockHash: HASH },
     receipt: receipt(), observedAtNs: "1000000000", source: "evm_rpc", ...patch,
   };
+}
+
+function replacementProofRequest(patch: Partial<EvmReplacementTransactionRequest> = {}): EvmReplacementTransactionRequest {
+  return { chainId: "1", transactionHash: HASH, originalWalletRequest: { callerAppId: "uniswap", callerInstallationUid: "7", requestId: IDENTITY.requestId }, ...patch };
+}
+
+function replacementProof(patch: Partial<EvmReplacementTransactionResult> = {}): EvmReplacementTransactionResult {
+  return { ...replacementProofRequest(), walletReplacementMatches: true, observedAtNs: "1000000000", source: "evm_wallet_journal", ...patch };
 }
 
 function deferred<T>() {
@@ -287,6 +316,104 @@ test("contract-read responses bind account, network, destination and exact calld
   }
 });
 
+test("transaction estimates accept only an exact read request, without transaction authority or fee authorization", () => {
+  const request = estimateRequest({ chainId: MAX_UINT256, valueWei: MAX_UINT256, to: `0x${"CD".repeat(20)}`, data: "0xAABB" });
+  expect(parseEvmEstimateTransactionRequest(request)).toEqual({ ...request, to: TOKEN, data: "0xaabb" });
+  for (const patch of [
+    { chainId: "0" }, { chainId: OVER_UINT256 }, { valueWei: "01" }, { valueWei: OVER_UINT256 }, { valueWei: "1\n" },
+    { data: "0xa" }, { requestId: IDENTITY.requestId }, { maxFeePerGasWei: "50" }, { gasLimit: "21000" },
+    { audience: "agent_root" }, { caller: { appId: "agent", installationUid: "1" } },
+  ]) expect(() => parseEvmEstimateTransactionRequest({ ...estimateRequest(), ...patch })).toThrow(EvmWalletProtocolError);
+  for (const key of Object.keys(estimateRequest())) {
+    const missing = { ...estimateRequest() } as Record<string, unknown>; delete missing[key];
+    expect(() => parseEvmEstimateTransactionRequest(missing)).toThrow(EvmWalletProtocolError);
+  }
+  for (const patch of [{ chainId: "42161" }, { accountId: "other" }, { to: OTHER_ADDRESS }, { valueWei: "8" }, { data: "0xaabc" }]) {
+    expect(() => parseEvmEstimateTransactionResult({ ...estimateResult(), ...patch }, estimateRequest())).toThrow(EvmWalletProtocolError);
+  }
+});
+
+test("Ethereum estimates distinguish base-plus-tip prices, raw gas price fallback, and maximum fee without adding value", () => {
+  const dynamic = parseEvmEstimateTransactionResult(estimateResult(), estimateRequest());
+  expect(dynamic.estimatedFeeWei).toBe("483000");
+  expect(dynamic.maximumFeeWei).toBe("1050000");
+  expect(dynamic.gasPriceWei).toBe("40");
+  expect(BigInt(dynamic.estimatedFeeWei!)).not.toBe(21000n * 40n);
+  expect(BigInt(dynamic.estimatedFeeWei!)).not.toBe(21000n * (20n + 3n) + 7n);
+  const fallback = estimateResult({ feeBasis: "gas_price", baseFeePerGasWei: null, maxPriorityFeePerGasWei: null, maxFeePerGasWei: null, maximumFeeWei: null, estimatedFeeWei: "840000", blockNumber: null, reasons: ["Base fee observation unavailable; using gas price."] });
+  expect(parseEvmEstimateTransactionResult(fallback, estimateRequest())).toEqual(fallback);
+  const zero = estimateResult({ gasPriceWei: "0", baseFeePerGasWei: "0", maxPriorityFeePerGasWei: "0", maxFeePerGasWei: "0", estimatedFeeWei: "0", maximumFeeWei: "0" });
+  expect(parseEvmEstimateTransactionResult(zero).estimatedFeeWei).toBe("0");
+});
+
+test("Arbitrum total-gas estimates include posting once and prefer raw gas price over base fee", () => {
+  const arbitrum = estimateResult({ chainId: "42161", feeBasis: "arbitrum_total_gas", postingCosts: "included", estimatedFeeWei: "840000" });
+  expect(parseEvmEstimateTransactionResult(arbitrum, estimateRequest({ chainId: "42161" }))).toEqual(arbitrum);
+  const baseFallback = { ...arbitrum, gasPriceWei: null, estimatedFeeWei: "420000" };
+  expect(parseEvmEstimateTransactionResult(baseFallback).estimatedFeeWei).toBe("420000");
+  for (const patch of [
+    { estimatedFeeWei: "483000" }, { estimatedFeeWei: "1680000" },
+    { gasPriceWei: null, baseFeePerGasWei: null }, { postingCosts: "not_applicable" }, { postingCosts: "unavailable" },
+  ]) expect(() => parseEvmEstimateTransactionResult({ ...arbitrum, ...patch })).toThrow(EvmWalletProtocolError);
+});
+
+test("unavailable estimates retain partial observations and reasons without pretending a total exists", () => {
+  const unavailable = estimateResult({ status: "unavailable", feeBasis: "unavailable", postingCosts: "unavailable", gasLimit: null, gasPriceWei: null, baseFeePerGasWei: null, maxPriorityFeePerGasWei: null, maxFeePerGasWei: null, estimatedFeeWei: null, maximumFeeWei: null, blockNumber: null, reasons: ["RPC providers disagreed on the pending gas estimate."] });
+  expect(parseEvmEstimateTransactionResult(unavailable, estimateRequest())).toEqual(unavailable);
+  const partial = { ...unavailable, gasPriceWei: "40", baseFeePerGasWei: "20", maxPriorityFeePerGasWei: "3", blockNumber: "100" };
+  expect(parseEvmEstimateTransactionResult(partial)).toEqual(partial);
+  const postingOnly = { ...unavailable, chainId: "42161", gasLimit: "150000", postingCosts: "included" as const, reasons: ["Posting is included in the gas estimate; current price observations failed."] };
+  expect(parseEvmEstimateTransactionResult(postingOnly)).toEqual(postingOnly);
+  for (const patch of [{ reasons: [] }, { reasons: [""] }, { reasons: [null] }, { estimatedFeeWei: "0" }, { feeBasis: "gas_price" }]) {
+    expect(() => parseEvmEstimateTransactionResult({ ...unavailable, ...patch })).toThrow(EvmWalletProtocolError);
+  }
+});
+
+test("estimate amounts keep arbitrary-precision products and reject missing or inconsistent arithmetic evidence", () => {
+  const huge = estimateResult({
+    gasLimit: MAX_UINT256, gasPriceWei: MAX_UINT256, baseFeePerGasWei: MAX_UINT256, maxPriorityFeePerGasWei: "3", maxFeePerGasWei: MAX_UINT256,
+    estimatedFeeWei: (BigInt(MAX_UINT256) * (BigInt(MAX_UINT256) + 3n)).toString(), maximumFeeWei: (BigInt(MAX_UINT256) ** 2n).toString(),
+  });
+  expect(parseEvmEstimateTransactionResult(huge)).toEqual(huge);
+  expect(BigInt(huge.estimatedFeeWei!)).toBeGreaterThan(BigInt(MAX_UINT256));
+  for (const patch of [
+    { gasLimit: null }, { gasLimit: "0" }, { gasLimit: OVER_UINT256 }, { gasPriceWei: OVER_UINT256 },
+    { baseFeePerGasWei: null }, { maxPriorityFeePerGasWei: null }, { maxFeePerGasWei: OVER_UINT256 },
+    { estimatedFeeWei: null }, { estimatedFeeWei: "483001" }, { estimatedFeeWei: "4.83e5" },
+    { maximumFeeWei: "1050001" }, { maxFeePerGasWei: null }, { feeBasis: "unavailable" }, { status: "unavailable" },
+  ]) expect(() => parseEvmEstimateTransactionResult({ ...estimateResult(), ...patch })).toThrow(EvmWalletProtocolError);
+  expect(() => parseEvmEstimateTransactionResult(estimateResult({ feeBasis: "gas_price", gasPriceWei: null }))).toThrow(EvmWalletProtocolError);
+  const unsafeProduct = Number(huge.estimatedFeeWei);
+  expect(() => parseEvmEstimateTransactionResult({ ...huge, estimatedFeeWei: unsafeProduct })).toThrow(EvmWalletProtocolError);
+});
+
+test("estimate calls snapshot the exact invocation and stay on their read tool even when transport fails", async () => {
+  const reply = deferred<EvmEstimateTransactionResult>();
+  const mock = transport(() => reply.promise);
+  const request = estimateRequest();
+  const original = structuredClone(request);
+  const controller = new AbortController();
+  const options = { timeout: 100, signal: controller.signal, control: "root", transportContext: { invocationId: "spoofed" } };
+  const pending = mock.client.estimateTransaction(request, options);
+  request.to = OTHER_ADDRESS; request.chainId = "42161"; request.valueWei = "8";
+  reply.resolve(estimateResult());
+  expect(await pending).toEqual(estimateResult());
+  expect(mock.calls).toEqual([{ call: { target: EVM_WALLET_TARGET, name: EVM_WALLET_TOOLS.estimateTransaction, arguments: original }, options: { timeout: 100, signal: controller.signal } }]);
+  const unavailable = transport(() => { throw new Error("Estimate transport unavailable"); });
+  await expect(unavailable.client.estimateTransaction(original)).rejects.toThrow("Estimate transport unavailable");
+  expect(unavailable.calls.map(({ call }) => call.name)).toEqual([EVM_WALLET_TOOLS.estimateTransaction]);
+});
+
+test("new evidence tools do not loosen previously released closed schemas", () => {
+  for (const patch of [{ tokenEvidence: [] }, { walletReplacementMatches: false }]) {
+    expect(() => parseEvmBalancesResult({ ...balanceResult(), ...patch })).toThrow(EvmWalletProtocolError);
+    expect(() => parseEvmReadContractResult({ ...readResult(), ...patch })).toThrow(EvmWalletProtocolError);
+    expect(() => parseEvmTransactionResult({ ...chainEvidence(), ...patch })).toThrow(EvmWalletProtocolError);
+    expect(() => parseEvmOperationResult({ ...operation(), ...patch })).toThrow(EvmWalletProtocolError);
+    expect(() => parseEvmSendTransactionRequest({ ...transaction(), ...patch })).toThrow(EvmWalletProtocolError);
+  }
+});
+
 test("public transaction evidence cannot mix networks, hashes, pending transactions or receipts from different blocks", () => {
   const request = { chainId: "1", transactionHash: HASH };
   expect(parseEvmTransactionResult(chainEvidence(), request)).toEqual(chainEvidence());
@@ -357,6 +484,64 @@ test("transaction lookup forwards a snapshotted journal reference without giving
   expect(result.walletRequestMatches).toBe(false);
   expect(mock.calls).toEqual([{ call: { target: EVM_WALLET_TARGET, name: EVM_WALLET_TOOLS.transaction, arguments: original }, options: { timeout: 100 } }]);
   expect(result).not.toHaveProperty("walletRequest");
+});
+
+test("replacement journal proof requests are closed, normalized references rather than authority or replacement effects", () => {
+  const request = replacementProofRequest({ transactionHash: `0x${"AB".repeat(32)}` });
+  expect(parseEvmReplacementTransactionRequest(request)).toEqual({ ...request, transactionHash: `0x${"ab".repeat(32)}` });
+  for (const patch of [
+    { chainId: "0" }, { chainId: "01" }, { chainId: OVER_UINT256 }, { transactionHash: "0x00" },
+    { walletReplacementMatches: true }, { walletRequest: request.originalWalletRequest }, { audience: "agent_root" }, { cancel: true },
+  ]) expect(() => parseEvmReplacementTransactionRequest({ ...request, ...patch })).toThrow(EvmWalletProtocolError);
+  for (const originalWalletRequest of [
+    null, {}, [], { ...request.originalWalletRequest, callerAppId: "" },
+    { ...request.originalWalletRequest, callerInstallationUid: "0" },
+    { ...request.originalWalletRequest, callerInstallationUid: "7\n" },
+    { ...request.originalWalletRequest, callerInstallationUid: "18446744073709551616" },
+    { ...request.originalWalletRequest, requestId: "F".repeat(32) },
+    { ...request.originalWalletRequest, caller: { appId: "agent", installationUid: "1" } },
+  ]) expect(() => parseEvmReplacementTransactionRequest({ ...request, originalWalletRequest })).toThrow(EvmWalletProtocolError);
+  for (const key of Object.keys(request)) {
+    const missing = { ...request } as Record<string, unknown>; delete missing[key];
+    expect(() => parseEvmReplacementTransactionRequest(missing)).toThrow(EvmWalletProtocolError);
+  }
+});
+
+test("replacement proofs bind every echoed command field and distinguish mismatch from inclusion or execution success", () => {
+  const request = replacementProofRequest();
+  for (const walletReplacementMatches of [true, false]) {
+    expect(parseEvmReplacementTransactionResult(replacementProof({ walletReplacementMatches }), request).walletReplacementMatches).toBe(walletReplacementMatches);
+  }
+  for (const patch of [
+    { chainId: "42161" }, { transactionHash: FINGERPRINT },
+    { originalWalletRequest: { ...request.originalWalletRequest, callerAppId: "wallet" } },
+    { originalWalletRequest: { ...request.originalWalletRequest, callerInstallationUid: "8" } },
+    { originalWalletRequest: { ...request.originalWalletRequest, requestId: "f".repeat(32) } },
+    { walletReplacementMatches: null }, { walletReplacementMatches: "false" }, { walletReplacementMatches: 1 },
+    { observedAtNs: "01" }, { source: "evm_rpc" }, { receipt: receipt() }, { status: "confirmed" },
+  ]) expect(() => parseEvmReplacementTransactionResult({ ...replacementProof(), ...patch }, request)).toThrow(EvmWalletProtocolError);
+  for (const key of Object.keys(replacementProof())) {
+    const missing = { ...replacementProof() } as Record<string, unknown>; delete missing[key];
+    expect(() => parseEvmReplacementTransactionResult(missing, request)).toThrow(EvmWalletProtocolError);
+  }
+});
+
+test("replacement journal proof lookup preserves its original reference and never forwards authority or invokes an effect", async () => {
+  const reply = deferred<EvmReplacementTransactionResult>();
+  const mock = transport(() => reply.promise);
+  const request = replacementProofRequest();
+  const original = structuredClone(request);
+  const options = { timeout: 100, transportContext: { invocationId: "spoofed" }, control: "root", caller: { appId: "agent" } };
+  const pending = mock.client.replacementTransaction(request, options);
+  request.originalWalletRequest.callerAppId = "agent";
+  request.originalWalletRequest.callerInstallationUid = "8";
+  request.originalWalletRequest.requestId = "f".repeat(32);
+  reply.resolve(replacementProof({ walletReplacementMatches: false }));
+  expect((await pending).walletReplacementMatches).toBe(false);
+  expect(mock.calls).toEqual([{ call: { target: EVM_WALLET_TARGET, name: EVM_WALLET_TOOLS.replacementTransaction, arguments: original }, options: { timeout: 100 } }]);
+  const mismatched = transport(() => replacementProof({ chainId: "42161" }));
+  await expect(mismatched.client.replacementTransaction(original)).rejects.toThrow("does not match");
+  expect(mismatched.calls.map(({ call }) => call.name)).toEqual([EVM_WALLET_TOOLS.replacementTransaction]);
 });
 
 test("operation results require consistent transaction evidence and cannot cross request identity", () => {

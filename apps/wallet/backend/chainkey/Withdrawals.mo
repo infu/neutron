@@ -245,17 +245,25 @@ module {
             };
             case ("retrieve_btc_with_approval" or "retrieve_doge_with_approval") {
                 let decoded : ?UtxoWithdrawalResult = from_candid reply;
+                // AlreadyProcessing refuses this invocation before its burn.
+                // A different invocation's unknown outcome remains in its own
+                // journal; this reply cannot resolve or repeat that dispatch.
                 switch (decoded) {
                     case null true;
-                    case (?#Err(#AlreadyProcessing)) true;
+                    // The upstream ledger client also maps a failed reply
+                    // decode after a possible burn into this error variant.
+                    case (?#Err(#TemporarilyUnavailable(_))) true;
                     case (_) false;
                 };
             };
             case ("withdraw") {
                 let decoded : ?SolWithdrawalResult = from_candid reply;
+                // The Solana guard also rejects before burning this request.
                 switch (decoded) {
                     case null true;
-                    case (?#Err(#AlreadyProcessing)) true;
+                    // Solana likewise uses this variant for ledger response
+                    // decode failures, which do not prove the burn failed.
+                    case (?#Err(#TemporarilyUnavailable(_))) true;
                     case (_) false;
                 };
             };

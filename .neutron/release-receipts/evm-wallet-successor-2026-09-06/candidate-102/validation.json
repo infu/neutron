@@ -1,0 +1,62 @@
+{
+  "appId": "evm_wallet",
+  "version": 102,
+  "publication": "not published",
+  "archive": {
+    "path": "apps/evm_wallet/evm_wallet.v0.1.2.neutron",
+    "bytes": 390962,
+    "sha256": "57d8b1c69af50e70d865d2f01dd6b8c1484af8fd5907b21aaa483116ecd92641"
+  },
+  "offeredSource": {
+    "path": "apps/evm_wallet/.neutron/sources/e7bc1a914462747f4075bd9b2a15fa9600b4f65cb4c382f5227effc1ab32cadb.source.v1.msgpack.gz",
+    "bytes": 478220,
+    "sha256": "e7bc1a914462747f4075bd9b2a15fa9600b4f65cb4c382f5227effc1ab32cadb"
+  },
+  "sourceBindingVerified": true,
+  "postSuiteWorkspaceComparison": {
+    "files": 202,
+    "mismatches": 0,
+    "report": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/source-workspace-check.json"
+  },
+  "releaseTests": {
+    "command": "npm --workspace neutron-evm-wallet test",
+    "exitCode": 0,
+    "tests": 49,
+    "assertions": 323,
+    "failures": 0,
+    "seconds": 84.05,
+    "log": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/candidate-102/evm-wallet-102-release-tests.log",
+    "motokoMemoryRelease": "passed"
+  },
+  "typeScript": {
+    "app": "passed",
+    "scripts": "passed"
+  },
+  "memory": {
+    "publishedRoot": "evm_wallet v1 retained byte-identical schema and lock entries",
+    "newIndependentRoot": "evm_evidence v1 initialized",
+    "cleanBothRoots": "passed",
+    "retainBothRoots": "passed",
+    "upgrade101To102": "keep wallet root and initialize evidence root passed"
+  },
+  "published101": {
+    "archive": {
+      "path": "apps/evm_wallet/evm_wallet.v0.1.1.neutron",
+      "bytes": 377833,
+      "sha256": "1f7e9fb0ab82b60543ed38d81f215e7655ef4ca9fb1afab0f6ea6eb4cf456048"
+    },
+    "offeredSource": {
+      "path": "apps/evm_wallet/.neutron/sources/4f86e2c3b0733e3f5857fc4ffb15b2288277bbed4281987c5c238b50f34d8cd2.source.v1.msgpack.gz",
+      "bytes": 442851,
+      "sha256": "4f86e2c3b0733e3f5857fc4ffb15b2288277bbed4281987c5c238b50f34d8cd2"
+    },
+    "allSelfCallInputsAndClosedOutputs": "unchanged comparison passed"
+  },
+  "rootLock": {
+    "path": "package-lock.json",
+    "bytes": 354438,
+    "sha256": "10cdb573add8360fcbe6b37c420e3efc094efd2087e882dc06e4d6d65f6d9323"
+  },
+  "browserUi": ".neutron/release-receipts/evm-wallet-successor-2026-09-06/browser-ui/summary.json",
+  "checkedKernelUpgradeAndRealAllowanceScenario": "handed to custody_memory and provenance; pending"
+}

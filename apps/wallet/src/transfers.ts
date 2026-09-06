@@ -69,6 +69,15 @@ export function loadSavedWalletTransfers(owner: string): SavedWalletTransfer[] {
 
   });
 }
+// Recovery must remain available when this optional cache is unreadable.
+// Keep its original bytes; fresh sends still use the strict reader below.
+export function readSavedWalletTransfersForRecovery(owner: string): { transfers: SavedWalletTransfer[]; warning: string | null } {
+  try { return { transfers: loadSavedWalletTransfers(owner), warning: null }; }
+  catch {
+    return { transfers: [], warning: "The local transfer cache cannot be read and has been kept unchanged. Saved backend transfers can still be recovered; fresh sends remain blocked until the cache is reconciled." };
+  }
+}
+
 export function saveWalletTransfer(owner: string, transfer: SelfCallObject, withdrawalQuote?: SelfCallObject): SavedWalletTransfer {
   const saved = loadSavedWalletTransfers(owner);
   const intent = encode(transfer);

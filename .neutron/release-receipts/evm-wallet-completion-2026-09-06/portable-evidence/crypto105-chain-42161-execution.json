@@ -1,0 +1,101 @@
+{
+  "canisterId": "yuby6-qp777-77774-aaaaq-cai",
+  "gatewayUrl": "http://localhost:8000/",
+  "chainId": "42161",
+  "rpcUrl": "http://127.0.0.1:8546",
+  "clientVersion": "anvil/v1.7.1",
+  "executionFixture": "anvil",
+  "scope": "Actual app chain-key signing and independent EVM execution; no Nitro parent fee or finality claim",
+  "address": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+  "balanceRead": {
+    "accountId": "main",
+    "chainId": "42161",
+    "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "nativeBalanceWei": "10000000000000000000",
+    "tokens": [],
+    "blockNumber": "36889",
+    "observedAtNs": "1788697990814621437",
+    "completeness": "requested_only"
+  },
+  "native": {
+    "hash": "0x30ce7aefb72258bc5b3afd5d73c002832d5dfa12c95e180308ef19752f6802f0",
+    "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+    "to": "0xE5eeD0599AA5F1349E6eDb976D7B82171AdA94f5",
+    "valueWei": "1000000000000",
+    "nonce": 4,
+    "chainId": "42161",
+    "raw": "0x02f87182a4b104843b9aca00843b9aca0e82520994e5eed0599aa5f1349e6edb976d7b82171ada94f585e8d4a5100080c080a08b425df0703398a0c4bb18a4d6e2561175fb888c23ed58af3c55e8c4d8b31260a01bb9498b249c16b8a30b6cc214bea4c04e5dbd849649c824b8ad12b91f80a8be",
+    "blockNumber": "36904",
+    "blockHash": "0xf98f7849399c5551de374e9118027bcc92d1634739ca40a34556e028357d2019",
+    "gasUsed": "21000",
+    "effectiveGasPriceWei": "1000000007"
+  },
+  "nativeOperation": {
+    "operationId": "19",
+    "requestId": "26a15eee3375164d28e8035ec7beea4d",
+    "accountId": "main",
+    "chainId": "42161",
+    "kind": "transaction",
+    "status": "confirmed",
+    "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+    "transactionHash": "0x30ce7aefb72258bc5b3afd5d73c002832d5dfa12c95e180308ef19752f6802f0",
+    "replacementTransactionHash": null,
+    "signature": "0x8b425df0703398a0c4bb18a4d6e2561175fb888c23ed58af3c55e8c4d8b312601bb9498b249c16b8a30b6cc214bea4c04e5dbd849649c824b8ad12b91f80a8be1b",
+    "message": null,
+    "reviewRevision": "1",
+    "receipt": {
+      "blockNumber": "36904",
+      "blockHash": "0xf98f7849399c5551de374e9118027bcc92d1634739ca40a34556e028357d2019",
+      "status": "success",
+      "gasUsed": "21000",
+      "effectiveGasPriceWei": "1000000007",
+      "logs": [],
+      "finality": "included",
+      "observedAtNs": "1788698012337624972"
+    }
+  },
+  "contract": {
+    "requestId": "3c076660a5aa4fc22f96607246ccc6ab",
+    "fixture": {
+      "address": "0xbAD739b6B49D3bE4B94F24b569171E15F550466f",
+      "runtime": "0x3615600b576000356000555b60005460005260206000f3",
+      "transactionHash": null
+    },
+    "initial": {
+      "accountId": "main",
+      "chainId": "42161",
+      "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+      "to": "0xbad739b6b49d3be4b94f24b569171e15f550466f",
+      "data": "0x",
+      "code": "0x3615600b576000356000555b60005460005260206000f3",
+      "result": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "blockNumber": "36914",
+      "observedAtNs": "1788698017857670492"
+    },
+    "calldata": "0x0000000000000100000000000000000000000000000000000020000000000001",
+    "transaction": {
+      "hash": "0xe2470566d726f886fea7dd1166d22c9851f3bc5817fe9986ab48a91914abf060",
+      "from": "0xd646499bA961Ecdfb989d4b716A4A5E3fb7abd56",
+      "to": "0xbAD739b6B49D3bE4B94F24b569171E15F550466f",
+      "valueWei": "0",
+      "nonce": 5,
+      "chainId": "42161",
+      "raw": "0x02f88c82a4b105843b9aca00843b9aca0e82a99294bad739b6b49d3be4b94f24b569171e15f550466f80a00000000000000100000000000000000000000000000000000020000000000001c001a051b6a32deae1abb623e87fa5b97c3bec36f6f0bd8fbb2b9919d65717146ca29fa0345ccc7d9e1065633c570046e8d9b95ed78faea8e5b570aa7645eee10ba49198",
+      "blockNumber": "36927",
+      "blockHash": "0xd103b18f61524b05771bdde7c0750b6fdd032acaeecdbcc85c12d74a365543b4",
+      "gasUsed": "43410",
+      "effectiveGasPriceWei": "1000000007"
+    },
+    "final": {
+      "accountId": "main",
+      "chainId": "42161",
+      "address": "0xd646499ba961ecdfb989d4b716a4a5e3fb7abd56",
+      "to": "0xbad739b6b49d3be4b94f24b569171e15f550466f",
+      "data": "0x",
+      "code": "0x3615600b576000356000555b60005460005260206000f3",
+      "result": "0x0000000000000100000000000000000000000000000000000020000000000001",
+      "blockNumber": "36929",
+      "observedAtNs": "1788698035600796675"
+    }
+  }
+}

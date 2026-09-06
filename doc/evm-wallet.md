@@ -13,11 +13,13 @@ archive evidence belong in the release record, not in these general instructions
 
 ## Installation And Account Identity
 
-Install the compatible Kernel successor before first installing EVM Wallet.
-Older compilers do not understand the new custody capability. Existing installed
-apps and the Kernel can still be updated together through the ordinary checked,
-state-preserving upgrade transaction; this does not require separate production
-publication phases.
+EVM Wallet requires a Kernel with `wallet_custody_signing` API 1 and
+installation-aware tool provenance. Apply a compatible Kernel successor and
+updates to already installed apps together through the ordinary checked
+**Upgrade all** transaction. First-time installation of an absent EVM Wallet
+uses the setup flow after that support is available; **Upgrade all** updates
+installed apps and does not add absent ones. The compatible packages are
+published together, without separate production publication phases.
 
 EVM Wallet requests `wallet_custody_signing` API 1 with the immutable slot `main`.
 The owner reviews this custody authority during installation. The capability
@@ -31,9 +33,11 @@ slot, algorithm and trusted management key configuration. Another app declaring
 namespace; no second reservation registry is required.
 
 Compatible upgrades retaining that identity preserve the address. Disabling and
-reenabling the unchanged capability preserves it too. Removing/reinstalling the
-wallet, removing/reintroducing a slot, changing the key configuration or
-reinstalling the entire Neutron may rotate the key. The wallet has no seed phrase
+reenabling the unchanged capability preserves it too. Removing a slot removes
+its authority and cache; restoring the same slot within the same installation
+and trusted key configuration derives the same key. Uninstalling/reinstalling
+the wallet, changing the trusted key configuration or creating a new Neutron
+installation identity changes the key. The wallet has no seed phrase
 or private-key export. Moving funds out before removal is distinct from recovering
 an old namespace; automatic reassignment of removed custody identities is not
 implemented. See the precise [signing lifecycle](./app-isolated-chain-key-signing.md).
@@ -63,6 +67,21 @@ Gas preparation uses exact integer fields and live RPC evidence. Arbitrum gas
 estimation already accounts for posting costs; the app does not add that cost a
 second time. Sequencer inclusion, provider-reported safe/finalized heads, Ethereum
 settlement and bridge withdrawal readiness are different observations.
+
+For recognized ERC20 calls, Wallet review also records the token balance and
+applicable allowance at an explicit block. Approval review shows the observed
+allowance, requested allowance and change in exact atomic units. Missing or
+failed reads stay visible. Refreshing these observations revises the same review;
+it neither signs nor starts a new transfer. The block and observation time remain
+visible because a saved observation is not a guarantee of the current balance.
+
+Consumers can request a read-only transaction fee estimate without reserving a
+nonce or preparing a command. The estimate separates expected cost from the
+suggested fee cap and excludes the transferred value. Pricing can succeed while
+gas estimation fails, for example before an approval is mined; a missing total
+is shown as unavailable. Arbitrum estimates multiply the returned gas estimate
+once, including its posting component. A chain-ID fixture alone does not test
+Nitro posting costs or sequencer settlement.
 
 ## Requests And Recovery
 
@@ -134,10 +153,12 @@ retain completed approvals and failed/pending later steps.
 | Account and network discovery | `evm_accounts_v1`, `evm_networks_v1` |
 | Native/requested ERC20 balances | `evm_balances_v1` |
 | Contract result and code at an observed block | `evm_read_contract_v1` |
+| Read-only transaction gas and fee observations | `evm_estimate_transaction_v1` |
 | Transaction review and execution | `evm_send_transaction_v1` |
 | Personal and typed-data signatures | `evm_sign_message_v1`, `evm_sign_typed_data_v1` |
 | Caller-owned command reconciliation | `evm_operation_status_v1` |
 | Public chain evidence by network and hash | `evm_transaction_v1` |
+| Signed replacement ancestry for an exact original request | `evm_replacement_transaction_v1` |
 
 Amounts, chain IDs and nonces use canonical decimal strings; bytes use hex.
 The SDK validates closed request and response shapes and matching identities.
@@ -157,6 +178,14 @@ against the saved intent. For root execution they also supply the saved
 `walletRequestMatches: true`. The backend checks the stored command and signed
 hash, preventing an old identical transaction from being relabeled as a new
 request. This returns a match verdict without exposing another caller's journal.
+
+A replacement has its own hash and does not match the original request's exact
+hash. Consumers use the separate replacement-proof tool to establish signed
+journal ancestry, then check the replacement's actual sender, destination,
+value, calldata and canonical receipt. A speed-up can complete the saved step
+only when its effects still match that step. A cancellation cannot complete a
+swap or deposit. Existing version-1 transaction and operation response shapes
+remain unchanged for installed consumers.
 
 ## Consumer Examples
 
@@ -181,7 +210,11 @@ Uniswap compares direct V3 pools on Ethereum and Arbitrum, using QuoterV2 and
 SwapRouter02. It saves the quoted minimum output, recipient and deadline,
 requests an exact ERC20 approval when needed, then requests the swap through
 EVM Wallet. Native ETH wrapping, output unwrapping and refunds are part of the
-router calldata. Approval and swap are separate transactions. V4, Permit2,
+router calldata. Numeric network-fee observations are refreshed separately from
+the saved quote and intent; an unavailable estimate is not replaced with the
+Quoter's execution-gas number. Approval and swap are separate transactions.
+Ordinary ERC20 allowances have no permit nonce, signature domain or expiry;
+they last until spent or changed, independently of the swap deadline. V4, Permit2,
 multi-hop/split routing and liquidity provision are outside this initial route.
 See [Uniswap](../apps/uniswap/README.md).
 

@@ -100,7 +100,13 @@ async function runQualification(walletVersion: 306 | 312, withNewApps: boolean):
     expect(upgraded.migrationPlan.upgrades.find((entry) => entry.owner === "wallet" && entry.memoryId === memoryId))
       .toMatchObject({ kind: "keep", version: 1 });
   }
-  for (const memoryId of ["wallet_bridge", "wallet_transfers"]) {
+  const initializedWalletRoots = ["wallet_bridge", "wallet_transfers"];
+  // Later same-schema Wallet successors may add this independent journal.
+  // Its absence in the first EVM release remains supported by this harness.
+  if (updatePackages.find(({ manifest }) => manifest.id === "wallet")!.manifest.memory?.wallet_bridge_replacements) {
+    initializedWalletRoots.push("wallet_bridge_replacements");
+  }
+  for (const memoryId of initializedWalletRoots) {
     expect(upgraded.migrationPlan.upgrades.find((entry) => entry.owner === "wallet" && entry.memoryId === memoryId))
       .toMatchObject({ kind: "initialize", to: 1 });
   }
@@ -199,7 +205,7 @@ async function runQualification(walletVersion: 306 | 312, withNewApps: boolean):
     const expectedRoots = normalizeMemoryInventory(before.memories).map<[string, string, number]>(([ownerId, id, version]) =>
       [ownerId, id, ownerId === "kernel" && id === "kernel" ? 4 : version],
     );
-    expectedRoots.push(["wallet", "wallet_bridge", 1], ["wallet", "wallet_transfers", 1]);
+    expectedRoots.push(...initializedWalletRoots.map<[string, string, number]>((id) => ["wallet", id, 1]));
     expect(normalizeMemoryInventory(after.memories).sort()).toEqual(expectedRoots.sort());
     await assertExisting();
     await assertKernel();
