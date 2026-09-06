@@ -50,18 +50,29 @@ nonces and operation records always carry the explicit chain ID. UI selection
 never changes the chain of another app's saved request.
 
 Fund the selected network's address with ETH for gas. The Neutron also needs IC
-cycles for chain-key signing and EVM RPC calls. These are separate resources.
+cycles for chain-key signing and durable wallet updates. Browser RPC requests do
+not consume this Neutron's outcall cycles. These are separate resources.
 Token identity is the chain plus full contract address; symbols and manually
 configured display decimals are not proof of identity. Balances cover requested
 or selected tokens, history covers recorded wallet activity, and known approvals
 cover locally observed spenders. None is an exhaustive portfolio index.
 
-The backend uses the released EVM RPC canister interface through existing
-`backend_calls` reservations. Read requests use multiple providers and expose
-unavailable or inconsistent outcomes. Cycle attachment comes from the RPC cost
-methods, within the platform's existing declared bounds. No provider API key is
-embedded in the app. Optional indexers, credentialed RPC providers and enhanced
-simulation services can be added as app adapters later.
+All Ethereum JSON-RPC requests go directly from Wallet's browser client to one
+PublicNode endpoint for the selected chain. This includes balances, contract
+reads, Uniswap quotes, fees, simulation, submission and receipt checks. The
+client validates the endpoint's chain ID and uses CORS without browser-wallet
+extensions or embedded API keys. It does not use the EVM RPC canister, replicated
+HTTP outcalls, or a Kernel HTTP proxy. A single provider supplies observations;
+these are not multi-provider consensus or Ethereum light-client proofs.
+
+The backend retains account identity, immutable request intent, nonce
+reservations, review revisions, chain-key signatures and signed transaction
+bytes. Browser observations prepare a candidate, then gas estimation and
+simulation use that exact candidate before the backend marks it ready for
+review. A concurrent nonce change requires another simulation and approval.
+Signing saves the raw transaction and hash before the browser submits it once.
+An ambiguous submission is recovered by looking up that hash and, on an
+explicit status check, resubmitting only the retained bytes when absent.
 
 Gas preparation uses exact integer fields and live RPC evidence. Arbitrum gas
 estimation already accounts for posting costs; the app does not add that cost a
@@ -153,6 +164,7 @@ retain completed approvals and failed/pending later steps.
 | Account and network discovery | `evm_accounts_v1`, `evm_networks_v1` |
 | Native/requested ERC20 balances | `evm_balances_v1` |
 | Contract result and code at an observed block | `evm_read_contract_v1` |
+| Lightweight contract result at latest or an explicit block | `evm_call_contract_v1` |
 | Read-only transaction gas and fee observations | `evm_estimate_transaction_v1` |
 | Transaction review and execution | `evm_send_transaction_v1` |
 | Personal and typed-data signatures | `evm_sign_message_v1`, `evm_sign_typed_data_v1` |
@@ -207,7 +219,9 @@ unresolved rather than generating a fresh withdrawal. See
 [IC Wallet](../apps/wallet/README.md).
 
 Uniswap compares direct V3 pools on Ethereum and Arbitrum, using QuoterV2 and
-SwapRouter02. It saves the quoted minimum output, recipient and deadline,
+SwapRouter02. Connect requests the exact read tools together for the live
+connection; quoting then compares pools concurrently over browser RPC and shows
+the result while separate fee estimates finish. It saves the quoted minimum output, recipient and deadline,
 requests an exact ERC20 approval when needed, then requests the swap through
 EVM Wallet. Native ETH wrapping, output unwrapping and refunds are part of the
 router calldata. Numeric network-fee observations are refreshed separately from
@@ -235,7 +249,7 @@ require the exact-byte receipt-v2 no-op, following
 or change the Dispenser starter.
 
 
-The completed release is Kernel 342, IC Wallet 316, Kitchen Sink 315, EVM Wallet 107
+The initial completed release was Kernel 342, IC Wallet 316, Kitchen Sink 315, EVM Wallet 107
 and Uniswap 104. [Release qualification](../.neutron/release-receipts/evm-wallet-completion-2026-09-06/validation.md)
 records the state-preserving upgrades, version-bound local protocol runs and
 batch 52 publication with its exact-byte receipt-v2 no-op. All wallet transaction

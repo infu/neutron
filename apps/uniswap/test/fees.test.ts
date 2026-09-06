@@ -89,13 +89,13 @@ test("Arbitrum execution-only prices do not become a posting-inclusive total", a
   expect(fees.swap.reason).not.toBeNull();
 });
 
-test("fee read permission requests are sequential on first use", async () => {
+test("approval and swap fee observations start together without waiting for an unrelated read", async () => {
   let release!: () => void;
   const first = new Promise<void>((resolve) => { release = resolve; });
   const { wallet, calls } = client(async (request) => { if (calls.length === 1) await first; return estimate(request); });
   const result = estimateSwapFees(wallet, prepared());
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(calls).toHaveLength(1);
+  expect(calls).toHaveLength(2);
   release();
   await result;
   expect(calls).toHaveLength(2);

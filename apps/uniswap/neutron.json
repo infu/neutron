@@ -2,7 +2,7 @@
   "format": 3,
   "id": "uniswap",
   "name": "Uniswap",
-  "version": 104,
+  "version": 105,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Uniswap V3 swaps using EVM Wallet",
   "src": "main.mo",

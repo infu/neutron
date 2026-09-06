@@ -145,7 +145,8 @@ authorization boundary.
 | Run a listed self update | `updateSelf(method, args)` | No | Exact method must be listed in `preapproved_self_calls.methods`, owner-authorized, owned by the source app, and an update. Arguments and results follow the method's complete live Candid type, including nested or repeated blobs. |
 | Make a canister call through the owner identity | `callCanisterDialog({ canister, method, args })` | When the source app has no active invocation | A same-Neutron target uses the private attachment-aware API-1 self-call wire and ordinary owner consent when the source app has no active invocation. While that app has an active invocation, an unscoped request fails with `SCOPED_CONTEXT_REQUIRED`, while a valid scoped request fails with `USER_INTERACTION_REQUIRED`. An eligible external call made through a live invocation-scoped client uses the generic JSON route and agent decision policy. The Kernel validates live input and calls only after the applicable decision. |
 | Call a tile, tray, or background tool in the same app | `callTool(...)` | No | Target must be a live endpoint; JSON Schema is checked at the endpoint and kernel. |
-| Call another app's live endpoint tool | `callTool(...)` | When the source app has no active invocation: one-call or session grant | Kernel identifies both endpoints. A matching live session grant is honored first; otherwise an invocation-scoped call uses the agent decision policy and an ordinary call uses the owner dialog. |
+| Call another app's live endpoint tool | `callTool(...)` | When the source app has no active invocation: one-call or session grant | Kernel identifies both endpoints. Ordinary calls honor a matching live session grant before asking the owner; invocation-scoped calls use the agent decision policy even if a session grant exists. |
+| Request session access to an exact set of another app's tools | Kernel `permissions.request` with `target` and `tools` | One session-access dialog for the missing tools | Kernel discovers and validates every requested live descriptor, displays their titles and descriptions, and records a separate grant for each approved name, bound to both endpoint sessions. Existing valid grants require no new owner dialog. |
 | Open or focus an installed app tile | `openAppTile(...)` | No for a live direct app endpoint | The retained compatibility route confines navigation to the active workspace, forces exact app/tile reuse, and applies workspace capacity. This grants visible navigation only and has no navigation cooldown. |
 | Inspect or arrange the visual workspace | Kernel `workspace.inspect` / `workspace.control` tools | No | Source must be a live resident background whose installed app declares `agent_entrypoints`. Invocation-free resident calls and live direct roots are admitted; delegated descendants are rejected. Control applies one open/focus/close/place/resize/move/switch/expand/restore operation through the canonical workspace store and grants no target-app effect authority. |
 | Call another app's `provider_once` tool on the current provider-UI lane | `callTool(...)`, then target-only `context.presentUserInterface(...)` | One decision in the provider's tile | Kernel validates the public tool input, ignores session grants, and gives that invocation one callback which can open or focus only the provider's exact tile and route opaque arguments to a private `same_app` + `foreground_tile` tool. The provider tile may use exact preapproved methods to prepare non-value-moving review state and persist cancellation; only the affirmative action may dispatch value-moving execution. Kernel opens no dialog and learns no app-domain semantics. |
@@ -758,14 +759,71 @@ perform local browser work without a prompt, but if it then requests an
 
 Likewise, granting one app permission to call another app's frontend tool does
 not grant either app an authorized principal or bypass a backend wrapper. A
-matching live session grant keeps its normal meaning inside an agent invocation
-and is checked before the Kernel asks for a new agent decision for an ordinary
-tool. A `provider_once` invocation deliberately ignores exact and wildcard
-session grants. Its target provider must ask through the invocation-scoped
+live Agent invocation uses the invocation decision policy rather than an
+ordinary session grant. A `provider_once` invocation deliberately ignores exact
+and wildcard session grants. Its target provider must ask through the invocation-scoped
 presentation callback, and the result completes only that suspended request.
 The private `foreground_tile` tool cannot be called through ordinary routing.
 The separate `agent_root` tool is visible and callable only from the active
 depth-zero root.
+
+### Request An Exact Group Of Session Tools
+
+An ordinary consumer can establish access before starting concurrent reads:
+
+```ts
+import { callTool } from "neutron-tools/app";
+import { EVM_WALLET_TARGET, EVM_WALLET_TOOLS } from "neutron-tools/evm_wallet";
+
+await callTool({
+  target: "kernel",
+  name: "permissions.request",
+  arguments: {
+    target: EVM_WALLET_TARGET,
+    tools: [
+      EVM_WALLET_TOOLS.accounts,
+      EVM_WALLET_TOOLS.balances,
+      EVM_WALLET_TOOLS.callContract,
+      EVM_WALLET_TOOLS.estimateTransaction,
+      EVM_WALLET_TOOLS.transaction,
+      EVM_WALLET_TOOLS.replacementTransaction,
+    ],
+  },
+});
+```
+
+The request accepts exactly one of `tool: string` or `tools: string[]`, plus
+the target endpoint. The existing single-tool form, optional `arguments`
+review, and legacy `tool: "*"` form retain their behavior. The grouped form
+requires a nonempty list of exact tool names, deduplicates repeats, and never
+creates a wildcard grant. Kernel discovers the target's current descriptors
+and rejects an unknown or caller-inaccessible tool before presenting consent.
+
+The dialog lists each requested tool that lacks a matching grant, using the
+target's live title and description. These descriptions are app-supplied and
+unverified; they do not establish that a tool is safe or read-only. The dialog
+offers **Allow session** and **Reject**, explains that access can be reused
+only by that exact source surface, and shows the exact endpoint and names in
+technical details. It does not offer or describe an **Allow once** decision
+for a session-only request.
+
+Approval returns `{ granted: true }` and creates the same individual session
+grants used by ordinary tool calls. Those grants bind the requesting app and
+endpoint, its live session, and the target endpoint and its live session.
+Reopening or reconnecting either surface requires access to be established
+again; no grant is saved to managed memory. Repeating the request while every
+grant is still valid returns without another owner dialog. Cancellation,
+rejection, or endpoint replacement while consent is pending creates no new grants.
+
+Uniswap uses this explicit group for its six pure wallet reads once per live
+connection, before quote and account reads run concurrently. Transactions,
+signatures, and recovery operations that may rebroadcast are excluded from
+that group. Kernel introduces no global read bypass: `neutron:effects` remains
+descriptive metadata, and a tool claiming `read` does not acquire permission
+automatically. The same generic grouped API can request other exact tools, but
+`provider_once` actions still require their own fresh provider decision.
+Within Agent Mode, a grouped permission request follows the existing
+invocation decision policy and creates no standing session grants.
 
 ## Agent Mode Calls
 

@@ -27,6 +27,7 @@ const FACTORY_ABI = parseAbi(["function getPool(address tokenA,address tokenB,ui
 const POOL_ABI = parseAbi(["function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)"]);
 export type ReadResult = { data: Hex; blockNumber: string | null; observedAtMs: number };
 export type Reader = (chainId: string, address: Address, data: Hex, blockTag?: string) => Promise<ReadResult>;
+export type QuoteProgress = (message: string) => void;
 export type QuoteInput = { chainId: string; accountId: string; accountAddress: Address; tokenIn: Token; tokenOut: Token; amountIn: string; slippageBps: number; recipient: Address; deadline: string };
 export type Quote = QuoteInput & { router: Address; quoter: Address; fee: number; amountOut: string; minimumOut: string; gasEstimate: string; priceImpactBps: string | null; quotedAtMs: number; blockNumber: string | null; pool: Address | null; routeWarnings: string[]; networkFees?: import("./fees.ts").SwapFeeEstimates };
 export type Transaction = { chainId: string; accountId: string; to: Address; value: string; data: Hex };
@@ -65,34 +66,41 @@ export function validateInput(input: QuoteInput, nowMs = Date.now()): void {
 }
 export async function customToken(read: Reader, chainId: string, address: string): Promise<Token> {
   network(chainId); const checked = getAddress(address);
-  const decimals = await read(chainId, checked, encodeFunctionData({ abi: TOKEN_ABI, functionName: "decimals" }));
+  const [decimals, symbol] = await Promise.all([
+    read(chainId, checked, encodeFunctionData({ abi: TOKEN_ABI, functionName: "decimals" })),
+    read(chainId, checked, encodeFunctionData({ abi: TOKEN_ABI, functionName: "symbol" }))
+      .then((value) => decodeFunctionResult({ abi: TOKEN_ABI, functionName: "symbol", data: value.data }))
+      .catch(() => checked.slice(0, 8)), // Metadata is descriptive; address is authoritative.
+  ]);
   const d = decodeFunctionResult({ abi: TOKEN_ABI, functionName: "decimals", data: decimals.data });
-  let symbol = checked.slice(0, 8);
-  try { symbol = decodeFunctionResult({ abi: TOKEN_ABI, functionName: "symbol", data: (await read(chainId, checked, encodeFunctionData({ abi: TOKEN_ABI, functionName: "symbol" }))).data }); } catch { /* Metadata is descriptive; address is authoritative. */ }
   return { chainId, address: checked, decimals: d, symbol };
 }
-export async function quoteSwap(read: Reader, input: QuoteInput, nowMs = Date.now()): Promise<Quote> {
+export async function quoteSwap(read: Reader, input: QuoteInput, nowMs = Date.now(), onProgress?: QuoteProgress): Promise<Quote> {
   validateInput(input, nowMs);
   const tokenIn = tokenAddress(input.tokenIn), tokenOut = tokenAddress(input.tokenOut);
+  let completed = 0;
+  onProgress?.(`Comparing pools · ${completed}/${FEE_TIERS.length}`);
   const quotePool = async (fee: typeof FEE_TIERS[number]) => {
-    const r = await read(input.chainId, QUOTER, encodeFunctionData({ abi: QUOTER_ABI, functionName: "quoteExactInputSingle", args: [{ tokenIn, tokenOut, amountIn: BigInt(input.amountIn), fee, sqrtPriceLimitX96: 0n }] }));
-    const [amountOut, , , gasEstimate] = decodeFunctionResult({ abi: QUOTER_ABI, functionName: "quoteExactInputSingle", data: r.data });
-    if (amountOut <= 0n) throw new Error("Pool returned no output");
-    return { fee, amountOut, gasEstimate, response: r };
+    try {
+      const r = await read(input.chainId, QUOTER, encodeFunctionData({ abi: QUOTER_ABI, functionName: "quoteExactInputSingle", args: [{ tokenIn, tokenOut, amountIn: BigInt(input.amountIn), fee, sqrtPriceLimitX96: 0n }] }));
+      const [amountOut, , , gasEstimate] = decodeFunctionResult({ abi: QUOTER_ABI, functionName: "quoteExactInputSingle", data: r.data });
+      if (amountOut <= 0n) throw new Error("Pool returned no output");
+      return { fee, amountOut, gasEstimate, response: r };
+    } finally {
+      completed += 1;
+      onProgress?.(`Comparing pools · ${completed}/${FEE_TIERS.length}`);
+    }
   };
-  // A fresh Wallet read can ask for owner consent. Await it before the next
-  // pool so concurrent permission prompts cannot hide otherwise valid routes.
-  const results: PromiseSettledResult<Awaited<ReturnType<typeof quotePool>>>[] = [];
-  for (const fee of FEE_TIERS) {
-    try { results.push({ status: "fulfilled", value: await quotePool(fee) }); }
-    catch (reason) { results.push({ status: "rejected", reason }); }
-  }
+  // Connect establishes read access before quoting. Independent fee tiers can
+  // therefore share one round of provider latency without competing for consent.
+  const results = await Promise.allSettled(FEE_TIERS.map(quotePool));
   const available = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
   if (!available.length) throw new Error(`No direct V3 pool quote is available. ${results.map((r) => r.status === "rejected" ? String(r.reason) : "").join("; ")}`);
   available.sort((a, b) => a.amountOut > b.amountOut ? -1 : a.amountOut < b.amountOut ? 1 : a.fee - b.fee);
   const best = available[0]!;
   const routeWarnings = results.flatMap((r, i) => r.status === "rejected" ? [`${FEE_TIERS[i]! / 10000}% pool unavailable: ${String(r.reason)}`] : []);
   let pool: Address | null = null, priceImpactBps: string | null = null;
+  onProgress?.("Reading pool price impact…");
   try {
     const tag = best.response.blockNumber === null ? undefined : `0x${BigInt(best.response.blockNumber).toString(16)}`;
     pool = decodeFunctionResult({ abi: FACTORY_ABI, functionName: "getPool", data: (await read(input.chainId, FACTORY, encodeFunctionData({ abi: FACTORY_ABI, functionName: "getPool", args: [tokenIn, tokenOut, best.fee] }), tag)).data });

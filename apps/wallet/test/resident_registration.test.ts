@@ -74,5 +74,5 @@ test("real exposeTool rejects the unsupported grouped pattern before registering
      console.log(JSON.stringify({ error, registered: listExposedTools().some(tool => tool.name === name) }));`,
   ], { cwd: new URL("..", import.meta.url).pathname });
   expect(stderr).toBe("");
-  expect(JSON.parse(stdout)).toEqual({ error: "Tool inputSchema contains an unsafe pattern", registered: false });
+  expect(JSON.parse(stdout)).toEqual({ error: 'Tool inputSchema contains an unsafe pattern (tool "wallet_test_unsupported_pattern")', registered: false });
 });

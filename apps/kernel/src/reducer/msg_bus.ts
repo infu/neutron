@@ -29,6 +29,8 @@ export type PendingFrontendToolRequest = {
   tool: string;
   toolTitle?: string;
   toolDescription?: string;
+  /** Exact live tools included in one session-access decision. */
+  tools?: { name: string; title?: string; description?: string }[];
   arguments: JsonObject;
   providerReview?: JsonObject;
   sessionOnly: boolean;
@@ -179,6 +181,7 @@ export function requestFrontendToolPermission(input: {
   tool: string;
   toolTitle?: string;
   toolDescription?: string;
+  tools?: PendingFrontendToolRequest["tools"];
   arguments?: JsonObject;
   providerReview?: JsonObject;
   sessionOnly?: boolean;
@@ -203,12 +206,14 @@ export function requestFrontendToolPermission(input: {
   }
   if (
     !input.requireFreshDecision &&
-    hasFrontendToolGrant(
-      input.caller,
-      input.callerSessionId,
-      input.target,
-      input.targetSessionId,
-      input.tool,
+    (input.tools?.map((tool) => tool.name) ?? [input.tool]).every((tool) =>
+      hasFrontendToolGrant(
+        input.caller,
+        input.callerSessionId,
+        input.target,
+        input.targetSessionId,
+        tool,
+      ),
     )
   ) {
     return Promise.resolve();
@@ -228,6 +233,7 @@ export function requestFrontendToolPermission(input: {
     ...(input.toolDescription
       ? { toolDescription: input.toolDescription }
       : {}),
+    ...(input.tools ? { tools: input.tools } : {}),
     arguments: input.arguments ?? {},
     ...(input.providerReview ? { providerReview: input.providerReview } : {}),
     sessionOnly: input.sessionOnly ?? false,
@@ -274,16 +280,18 @@ export function approveFrontendToolRequest(
   const request = useMsgBusPermissionStore.getState().requests[cid];
   if (!request) return;
   if (!request.onceOnly && (duration === "session" || request.sessionOnly)) {
-    grantFrontendToolSession(
-      request.caller.appId,
-      request.target,
-      request.tool,
-      {
-        callerEndpoint: request.caller.endpoint,
-        callerSessionId: request.callerSessionId,
-        targetSessionId: request.targetSessionId,
-      },
-    );
+    for (const tool of request.tools?.map((tool) => tool.name) ?? [request.tool]) {
+      grantFrontendToolSession(
+        request.caller.appId,
+        request.target,
+        tool,
+        {
+          callerEndpoint: request.caller.endpoint,
+          callerSessionId: request.callerSessionId,
+          targetSessionId: request.targetSessionId,
+        },
+      );
+    }
   }
   const callback = callbacks.get(cid);
   if (callback) cleanupCallback(callback);

@@ -734,8 +734,10 @@ export function FrontendToolRequest({
         <div className="call">
           <ConsentNotice tone="warning">
             <span id={summaryId}>
-              <strong>{callerName}</strong> wants to run{" "}
-              <strong>{toolTitle}</strong> in {targetName}.
+              <strong>{callerName}</strong> wants to{" "}
+              {request.tools ? "use" : "run"}{" "}
+              <strong>{request.tools ? "the following tools" : toolTitle}</strong>{" "}
+              in {targetName}.
               {request.providerReview ? (
                 <>
                   {" "}
@@ -743,8 +745,12 @@ export function FrontendToolRequest({
                   Neutron binds this decision to one request but does not
                   interpret the provider&apos;s values.
                 </>
+              ) : request.tools ? (
+                " The target app supplies these titles and descriptions; Neutron cannot verify what the tools mean."
               ) : request.tool === "*" ? (
-                " Allowing this inspection once only lists the available tools; it does not run one."
+                request.sessionOnly
+                  ? " Session access includes every tool exposed by the target app."
+                  : " Allowing this inspection once only lists the available tools; it does not run one."
               ) : request.toolDescription ? (
                 <>
                   {" "}
@@ -756,17 +762,31 @@ export function FrontendToolRequest({
               )}
             </span>
           </ConsentNotice>
+          {request.tools ? (
+            <ul className="dialog-section" data-tid="frontend-tool-list">
+              {request.tools.map((tool) => (
+                <li key={tool.name}>
+                  <strong>{tool.title ?? tool.name}</strong>
+                  {tool.description ? <> — {tool.description}</> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {!request.onceOnly ? (
             <ConsentNotice
               tone={request.sessionOnly ? "danger" : "warning"}
             >
               <strong>Session access can be reused.</strong> It lets this exact
               app surface{" "}
-              {request.tool === "*"
+              {request.tools
+                ? "repeat the listed tools"
+                : request.tool === "*"
                 ? "use any tool exposed by the target app"
                 : "repeat this tool"}{" "}
-              until either app reconnects or this browser session ends. “Allow
-              once” authorizes only this request.
+              until either app reconnects or this browser session ends.
+              {!request.sessionOnly
+                ? " “Allow once” authorizes only this request."
+                : null}
             </ConsentNotice>
           ) : null}
           {request.providerReview ? (
@@ -786,8 +806,10 @@ export function FrontendToolRequest({
               </div>
               <div className="label">Target</div>
               <div className="val principal">{request.target}</div>
-              <div className="label">Tool</div>
-              <div className="val">{request.tool}</div>
+              <div className="label">{request.tools ? "Tools" : "Tool"}</div>
+              <div className="val">
+                {request.tools?.map((tool) => tool.name).join(", ") ?? request.tool}
+              </div>
               {request.attachmentBytes ? (
                 <>
                   <div className="label">Binary input</div>

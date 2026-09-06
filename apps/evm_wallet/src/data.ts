@@ -127,8 +127,6 @@ export type Operation = {
 export const METHODS = {
   snapshot: "evm_wallet_snapshot_v1",
   accounts: "evm_wallet_accounts_v1",
-  balances: "evm_wallet_balances_v1",
-  readContract: "evm_wallet_read_contract_v1",
   prepare: "evm_wallet_prepare_v1",
   execute: "evm_wallet_execute_v1",
   reject: "evm_wallet_reject_v1",

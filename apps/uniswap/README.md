@@ -10,7 +10,7 @@ or independent transaction sender.
 
 The first release compares **direct, single-pool V3 routes** across the 0.01%,
 0.05%, 0.3%, and 1% fee tiers. It uses `QuoterV2.quoteExactInputSingle` through
-EVM Wallet's keyless `eth_call` RPC path and builds a deadline-protected
+EVM Wallet's direct browser-to-RPC `eth_call` path and builds a deadline-protected
 `SwapRouter02.multicall` containing `exactInputSingle`.
 
 | Chain | QuoterV2 | SwapRouter02 | Wrapped native token |
@@ -40,9 +40,14 @@ state and quote cannot be observed at the same block.
 ## Use
 
 1. Install EVM Wallet and Uniswap through the compatible Kernel update set.
-   Connect EVM Wallet in the Uniswap tile and select Ethereum or Arbitrum.
+   Connect EVM Wallet in the Uniswap tile and select Ethereum or Arbitrum. One
+   connection prompt grants this session's exact wallet read tools. Quotes,
+   balances and fee observations then reuse that grant; signatures and sends
+   retain their separate review. Reconnecting a wallet provider renews read
+   access before another quote.
 2. Fund the EVM address on that network, including ETH for gas. IC cycles used
-   by signing/RPC and EVM gas are separate balances.
+   by signing/state updates and EVM gas are separate balances. Quote and balance
+   reads use direct browser RPC and do not spend IC outcall cycles.
 3. Select ETH, USDC, WETH, or read a custom token contract. Token identity is its
    chain and full address; token-provided symbols are descriptive only.
 4. Enter the input amount, recipient, slippage and deadline, then request a
@@ -55,6 +60,13 @@ state and quote cannot be observed at the same block.
    requiring approval may not simulate until that approval confirms. The total
    is unavailable until every required transaction has a complete estimate.
    EVM Wallet separately reviews live fees before each signature.
+
+   Pool tiers are read concurrently. The quote appears as soon as its route
+   and allowance are ready, while separate fee estimates load with visible
+   progress and elapsed time. Contract calls use the Wallet's lightweight read
+   path without repeatedly downloading deployed bytecode. Price-impact reads
+   request the selected quote's exact block. Getting a quote does not repeat
+   unrelated balance reads.
 5. Save and review the exact approval when needed, then wait for its successful
    receipt before reviewing the swap. Approval and swap are separate EOA
    transactions and are not atomic. No approval is silently unlimited. Ordinary

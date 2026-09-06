@@ -19,10 +19,10 @@ import {
   METHODS,
   identityArgs,
   parseOperation,
-  parseReviewEvidence,
   hex,
   type Operation,
 } from "./data.ts";
+import { prepareBrowserOperation, executeBrowserOperation, reconcileBrowserOperation, refreshBrowserEvidence } from "./browser_operations.ts";
 
 export type ProviderKind = EvmEffectKind | "replacement";
 export type ProviderRequest = EvmEffectRequest | EvmReplaceTransactionRequest;
@@ -258,13 +258,7 @@ export async function prepareEffect(
   context.signal?.throwIfAborted();
   const request = parseEffect(kind, args),
     identity = invocationIdentity(context, request.requestId, root);
-  const operation = parseOperation(
-    await context.kernel.updateSelf(
-      METHODS.prepare,
-      [{ identity, intent: effectIntent(kind, request) }],
-      120,
-    ),
-  );
+  const operation = await prepareBrowserOperation(context.kernel, identity, effectIntent(kind, request), { signal: context.signal });
   const prepared = { request, kind, identity, operation };
   assertOperationMatches(prepared, operation);
   context.signal?.throwIfAborted();
@@ -275,18 +269,7 @@ export async function executeEffect(
   context: MsgBusToolContext,
 ): Promise<Operation> {
   context.signal?.throwIfAborted();
-  const operation = parseOperation(
-    await context.kernel.updateSelf(
-      METHODS.execute,
-      [
-        {
-          identity: prepared.identity,
-          review_revision: prepared.operation.reviewRevision,
-        },
-      ],
-      120,
-    ),
-  );
+  const operation = await executeBrowserOperation(context.kernel, prepared.operation, { signal: context.signal });
   assertOperationMatches(prepared, operation);
   return operation;
 }
@@ -308,13 +291,7 @@ export async function statusEffect(
   prepared: Prepared,
   context: MsgBusToolContext,
 ): Promise<Operation> {
-  const operation = parseOperation(
-    await context.kernel.updateSelf(
-      METHODS.status,
-      [{ identity: prepared.identity, refresh: true }],
-      120,
-    ),
-  );
+  const operation = await reconcileBrowserOperation(context.kernel, prepared.operation, { signal: context.signal });
   assertOperationMatches(prepared, operation);
   return operation;
 }
@@ -323,13 +300,7 @@ export async function refreshReviewEvidence(
   context: MsgBusToolContext,
   refresh = true,
 ): Promise<Operation> {
-  const operation = parseReviewEvidence(
-    await context.kernel.updateSelf(
-      METHODS.reviewEvidence,
-      [{ identity: prepared.identity, review_revision: prepared.operation.reviewRevision, refresh }],
-      120,
-    ),
-  );
+  const operation = await refreshBrowserEvidence(context.kernel, prepared.operation, refresh, { signal: context.signal });
   assertOperationMatches(prepared, operation);
   return operation;
 }

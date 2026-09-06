@@ -669,8 +669,10 @@ test("received output counts only output-token Transfer logs to the requested re
 });
 
 test("the wallet reader surfaces a different observation block instead of calculating a misleading price impact", async () => {
-  const wallet = { async readContract() { return { result: "0x1234", blockNumber: "100", observedAtNs: "1234567000000" }; } } as unknown as EvmWalletClient;
+  const requests: unknown[] = [];
+  const wallet = { async callContract(request: unknown) { requests.push(request); return { result: "0x1234", blockNumber: "100", observedAtNs: "1234567000000" }; } } as unknown as EvmWalletClient;
   const read = walletReader(wallet, "main");
   expect(await read("1", ROUTER, "0x", "0x64")).toEqual({ data: "0x1234", blockNumber: "100", observedAtMs: 1234567 });
+  expect(requests).toEqual([{ accountId: "main", chainId: "1", to: ROUTER, data: "0x", blockTag: "0x64" }]);
   await expect(read("1", ROUTER, "0x", "0x63")).rejects.toThrow("different blocks");
 });

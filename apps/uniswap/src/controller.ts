@@ -1,7 +1,7 @@
 import { querySelf, updateSelf, type JsonValue } from "neutron-tools/app";
 import { createEvmRequestId, parseEvmOperationResult, parseEvmReplacementTransactionResult, parseEvmSendTransactionRequest, parseEvmTransactionResult, type EvmAccount, type EvmAccountId, type EvmOperationResult, type EvmReplacementTransactionResult, type EvmSendTransactionRequest, type EvmTransactionResult, type EvmWalletClient, type EvmWalletCaller } from "neutron-tools/evm_wallet";
 import { decodeEventLog, getAddress, parseAbi, type Hex } from "viem";
-import { prepareSwap, quoteSwap, swapTransaction, type PreparedSwap, type QuoteInput, type Reader, type Transaction } from "./swap.ts";
+import { prepareSwap, quoteSwap, swapTransaction, type PreparedSwap, type QuoteInput, type QuoteProgress, type Reader, type Transaction } from "./swap.ts";
 
 export type SavedIntent = PreparedSwap & { account: EvmAccount; executionMode: "human" | "agent"; walletCaller: EvmWalletCaller | null };
 export type SwapRecord = {
@@ -105,16 +105,18 @@ export function createSwapStore(kernel: SelfKernel = { querySelf, updateSelf }):
 }
 export function walletReader(wallet: EvmWalletClient, accountId: EvmAccountId): Reader {
   return async (chainId, to, data, blockTag) => {
-    const response = await wallet.readContract({ accountId, chainId, to, data });
+    const response = await wallet.callContract({ accountId, chainId, to, data, ...(blockTag ? { blockTag } : {}) });
     if (blockTag && BigInt(blockTag).toString() !== response.blockNumber) throw new Error("Pool state and quote were observed in different blocks; price impact is unavailable.");
     return { data: response.result as Hex, blockNumber: response.blockNumber, observedAtMs: Number(BigInt(response.observedAtNs) / 1_000_000n) };
   };
 }
-export async function createIntent(wallet: EvmWalletClient, input: QuoteInput): Promise<SavedIntent> {
+export async function createIntent(wallet: EvmWalletClient, input: QuoteInput, onProgress?: QuoteProgress): Promise<SavedIntent> {
+  onProgress?.("Checking EVM Wallet account…");
   const account = (await wallet.accounts()).accounts.find((entry) => entry.accountId === input.accountId);
   if (!account || account.address.toLowerCase() !== input.accountAddress.toLowerCase()) throw new Error("The selected EVM Wallet account changed. Reconnect and quote again.");
   const read = walletReader(wallet, account.accountId);
-  const quote = await quoteSwap(read, input);
+  const quote = await quoteSwap(read, input, Date.now(), onProgress);
+  if (quote.tokenIn.address !== null) onProgress?.("Reading token allowance…");
   return { ...await prepareSwap(read, quote), account, executionMode: "human", walletCaller: null };
 }
 export function savedIntent(record: SwapRecord): SavedIntent {

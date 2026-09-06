@@ -1834,6 +1834,30 @@ test("endpoint-local tool actions ignore sibling windows", async () => {
   removeExposedTool("sibling_private");
 });
 
+test("failed schema registration identifies the tool and preserves the validator cause", () => {
+  for (const slot of ["inputSchema", "outputSchema"] as const) {
+    const name = `failed_${slot}`;
+    let failure: unknown;
+    try {
+      exposeTool(name, {
+        inputSchema: { type: "object" },
+        [slot]: {
+          type: "object",
+          properties: { amount: { type: "string", pattern: "^(0|[1-9][0-9]*)$" } },
+        },
+      }, () => ({}));
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    const error = failure as Error;
+    expect(error.message).toBe(`Tool ${slot} contains an unsafe pattern (tool "${name}")`);
+    expect(error.cause).toBeInstanceOf(Error);
+    expect((error.cause as Error).message).toBe(`Tool ${slot} contains an unsafe pattern`);
+    expect(listExposedTools().some(tool => tool.name === name)).toBe(false);
+  }
+});
+
 test("tool descriptors reject unsafe model-visible metadata", () => {
   for (const character of [
     "\u034f",

@@ -4,24 +4,32 @@ import { decodeKnownCall, errorMessage, type Operation } from "./data.ts";
 import {
   executeEffect,
   operationJson,
+  parseEffect,
   prepareEffect,
   rejectEffect,
   refreshReviewEvidence,
   statusEffect,
   type Prepared,
   type ProviderKind,
+  type ProviderRequest,
 } from "./provider.ts";
+export type PreparingReview = {
+  kind: ProviderKind;
+  request: ProviderRequest;
+  startedAt: number;
+};
 export type ReviewPrompt = {
   id: string;
   prepared: Prepared;
   context: MsgBusToolContext;
-  phase: "review" | "executing" | "checking" | "uncertain";
+  phase: "review" | "loading_evidence" | "executing" | "checking" | "uncertain";
   error: string | null;
   resolve: (value: JsonObject) => void;
   reject: (error: unknown) => void;
   removeAbort: () => void;
 };
 let prompts: ReviewPrompt[] = [];
+let preparations: PreparingReview[] = [];
 const listeners = new Set<() => void>();
 export const subscribePrompts = (listener: () => void) => {
   listeners.add(listener);
@@ -30,8 +38,10 @@ export const subscribePrompts = (listener: () => void) => {
   };
 };
 export const getPrompts = () => prompts;
+export const getPreparations = () => preparations;
 function emit() {
   prompts = [...prompts];
+  preparations = [...preparations];
   for (const listener of listeners) listener();
 }
 function remove(prompt: ReviewPrompt): boolean {
@@ -78,20 +88,27 @@ async function queueReview(
   args: JsonObject,
   context: MsgBusToolContext,
 ): Promise<JsonObject> {
-  let prepared = await prepareEffect(kind, args, context);
-  if (prepared.operation.status !== "prepared")
-    return operationJson(prepared.operation);
-  let evidenceError: string | null = null;
-  const tx = prepared.operation.preparedTransaction ?? prepared.operation.intent.transaction;
-  if (tx && decodeKnownCall(tx.data)) {
-    try {
-      prepared = { ...prepared, operation: await refreshReviewEvidence(prepared, context, false) };
-    } catch (error) {
-      evidenceError = `Saved token observations could not be loaded. ${errorMessage(error)}`;
-    }
+  // Display preparation as soon as the authenticated foreground handler starts.
+  // There is no approval yet: the exact gas, nonce and simulation must arrive first.
+  const preparation = { kind, request: parseEffect(kind, args), startedAt: Date.now() };
+  const removePreparation = () => {
+    preparations = preparations.filter((entry) => entry !== preparation);
+    emit();
+  };
+  preparations.push(preparation);
+  context.signal?.addEventListener("abort", removePreparation, { once: true });
+  emit();
+  let prepared: Prepared;
+  try {
+    prepared = await prepareEffect(kind, args, context);
+  } finally {
+    context.signal?.removeEventListener("abort", removePreparation);
+    removePreparation();
   }
   if (prepared.operation.status !== "prepared")
     return operationJson(prepared.operation);
+  const tx = prepared.operation.preparedTransaction ?? prepared.operation.intent.transaction;
+  const needsEvidence = !!(tx && decodeKnownCall(tx.data));
   const id = prepared.operation.operationId;
   if (prompts.some((p) => p.id === id))
     throw new Error("This EVM request is already awaiting review");
@@ -100,8 +117,8 @@ async function queueReview(
       id,
       prepared,
       context,
-      phase: "review",
-      error: evidenceError,
+      phase: needsEvidence ? "loading_evidence" : "review",
+      error: null,
       resolve,
       reject,
       removeAbort: () => undefined,
@@ -120,7 +137,26 @@ async function queueReview(
     prompts.push(prompt);
     emit();
     if (context.signal?.aborted) abort();
+    // Saved observations are a separate read. Keep the prepared transaction
+    // visible while it finishes instead of hiding the entire review behind it.
+    if (needsEvidence && prompts.includes(prompt)) void loadPromptEvidence(prompt);
   });
+}
+async function loadPromptEvidence(prompt: ReviewPrompt): Promise<void> {
+  try {
+    const operation = await refreshReviewEvidence(prompt.prepared, prompt.context, false);
+    if (!prompts.includes(prompt)) return;
+    if (operation.status !== "prepared") {
+      finish(prompt, operation);
+      return;
+    }
+    prompt.prepared = { ...prompt.prepared, operation };
+  } catch (error) {
+    if (!prompts.includes(prompt)) return;
+    prompt.error = `Saved token observations could not be loaded. ${errorMessage(error)}`;
+  }
+  prompt.phase = "review";
+  emit();
 }
 export async function acceptPrompt(prompt: ReviewPrompt): Promise<void> {
   if (!prompts.includes(prompt) || prompt.phase !== "review") return;

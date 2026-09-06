@@ -2,6 +2,7 @@ import Array "mo:core/Array";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Principal "mo:core/Principal";
+import Set "mo:core/Set";
 import Text "mo:core/Text";
 import Caps "mo:neutron-capabilities";
 import Main "../backend/main";
@@ -9,19 +10,18 @@ import Memory "../backend/memory/evm_wallet/v1";
 import EvidenceMemory "../backend/memory/evm_evidence/v1";
 import Types "../backend/Types";
 import Hex "../backend/evm/Hex";
-import RpcTypes "../backend/rpc/Types";
-import Json "../backend/rpc/Json";
 import Fixtures "BackendFixtures";
 
 // All wallet decisions, journaling, nonce allocation and signature validation
 // are the production implementation. Only the external capabilities are a
-// scripted transport, and both nonce RPC and signer actually await Gate.
+// scripted signer. A browser preparation gate and the signer actually await
+// Gate so separate ingress messages can overlap the production state machine.
 persistent actor class Wallet(gateId : Principal) {
   type Gate = actor { hold : shared Text -> async (); release : shared (Text, Nat) -> async () };
   transient let gate : Gate = actor (Principal.toText(gateId));
   transient let mem = Memory.init();
   transient var attempts : [Attempt] = [];
-  transient var broadcasts : [Text] = [];
+  transient let preparing = Set.empty<Nat>();
   transient let signerErrors = Map.empty<Nat, Text>();
   type Attempt = { operation_id : Nat; caller : Memory.Caller; chain_id : Nat; nonce : ?Text; digest : Text };
   type Summary = {
@@ -30,6 +30,7 @@ persistent actor class Wallet(gateId : Principal) {
     nonce : ?Text; transaction_hash : ?Text;
   };
   type Result = { #ok : Summary; #err : Text };
+  type SubmissionResult = { #ok : { chain_id : Nat; transaction_hash : Text; raw_transaction : Text }; #err : Text };
 
   func ok<T>(result : Types.Result<T>) : T {
     switch (result) { case (#ok(v)) v; case (#err(_)) { assert false; loop {} } };
@@ -79,56 +80,7 @@ persistent actor class Wallet(gateId : Principal) {
       assert false; #err(#invalid_request);
     };
   };
-  func chain(service : RpcTypes.RpcService) : Nat {
-    switch (service) { case (#EthMainnet(_)) 1; case (#ArbitrumOne(_)) 42161; case (_) { assert false; 0 } };
-  };
-  func performCall(request : Caps.BackendCallRequestV1) : async* Caps.BackendCallResultV1 {
-    if (request.method == "requestCost" or Text.endsWith(request.method, #text("CyclesCost"))) {
-      let cost : RpcTypes.RequestCostResult = #Ok(1_234);
-      return #ok(to_candid(cost));
-    };
-    assert request.cycles == 1_234;
-    if (request.method == "eth_sendRawTransaction") {
-      let ?(_, _, raw) : ?(RpcTypes.RpcServices, ?RpcTypes.RpcConfig, Text) = from_candid(request.args) else { assert false; loop {} };
-      var id : ?Nat = null;
-      for ((_, c) in Map.entries(mem.commands)) {
-        if (c.signed_raw == ?ok(Hex.decode(raw))) { assert c.transaction_hash != null; id := ?c.id };
-      };
-      let ?operationId = id else { assert false; loop {} };
-      broadcasts := Array.concat(broadcasts, [raw]);
-      await gate.hold("broadcast:" # Nat.toText(operationId));
-      let result : RpcTypes.MultiSendRawTransactionResult = #Consistent(#Ok(#Ok(null)));
-      return #ok(to_candid(result));
-    };
-    assert request.method == "request";
-    let ?(provider, payload, _) : ?(RpcTypes.RpcService, Text, Nat64) = from_candid(request.args) else { assert false; loop {} };
-    let body = ok(Json.parse(payload));
-    let ?#string(method) = Json.field(body, "method") else { assert false; loop {} };
-    if (method == "eth_getTransactionCount") await gate.hold("nonce:" # Nat.toText(chain(provider)));
-    let result : Text = switch (method) {
-      case ("eth_blockNumber") "\"0x64\"";
-      case ("eth_getBalance") "\"0xde0b6b3a7640000\"";
-      case ("eth_getTransactionCount") "\"0x0\"";
-      case ("eth_estimateGas") "\"0x5208\"";
-      case ("eth_call") "\"0x\"";
-      case ("eth_getCode") "\"0x\"";
-      case ("eth_getTransactionReceipt" or "eth_getTransactionByHash") "null";
-      case (_) { assert false; "null" };
-    };
-    let response : RpcTypes.RequestResult = #Ok("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":" # result # "}");
-    #ok(to_candid(response));
-  };
-  transient let calls : Caps.BackendCallsV1 = {
-    canister_principal = Principal.fromText("aaaaa-aa");
-    can_call = func(_ : Principal, _ : Text) : Bool { true };
-    call = performCall;
-    call_batch = func(requests : [Caps.BackendCallRequestV1]) : async* [Caps.BackendCallResultV1] {
-      var replies : [Caps.BackendCallResultV1] = [];
-      for (request in requests.vals()) replies := Array.concat(replies, [await* performCall(request)]);
-      replies;
-    };
-  };
-  transient let service = Main.Init({ stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init() }; capabilities = { backend_calls = calls; wallet_custody_signing = signing } });
+  transient let service = Main.Init({ stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init() }; capabilities = { wallet_custody_signing = signing } });
 
   public func prepare(identity : Memory.Identity, chainId : Nat, value : Text, message : Bool) : async Result {
     let tx : Memory.TransactionRequest = {
@@ -137,7 +89,31 @@ persistent actor class Wallet(gateId : Principal) {
       gas_price = null; transaction_type = ?"eip1559"; access_list = [];
     };
     let operation : Memory.Intent = { account_id = "main"; chain_id = chainId; operation = if (message) #personal_message({ message = "0x6869" }) else #transaction(tx) };
-    summary(await* service.evm_wallet_prepare_v1({ identity; intent = operation }));
+    let candidate = await* service.evm_wallet_prepare_browser_v1({
+      request = { identity; intent = operation };
+      observation = {
+        block_number = "0x64"; balance = "1000000000000000000";
+        pending_nonce = "0"; mined_nonce = "0"; gas_price = "100";
+        max_priority_fee_per_gas = "2"; base_fee_per_gas = "40";
+      };
+    });
+    let c = switch (candidate) { case (#err(_)) return summary(candidate); case (#ok(c)) c };
+    if (c.status != "preparing" or Set.contains(preparing, Nat.compare, c.operation_id)) return summary(candidate);
+    Set.add(preparing, Nat.compare, c.operation_id);
+    // The browser is estimating and simulating the frozen candidate while a
+    // second invocation may replay it or another installation prepares a swap.
+    await gate.hold("prepare:" # Nat.toText(chainId));
+    Set.remove(preparing, Nat.compare, c.operation_id);
+    summary(service.evm_wallet_finish_prepare_browser_v1({
+      identity; review_revision = c.review_revision;
+      balance = "1000000000000000000"; pending_nonce = "0"; mined_nonce = "0"; gas_estimate = "21000"; gas_limit = "21000"; simulation = "0x";
+    }));
+  };
+  public func finishPrepare(identity : Memory.Identity, revision : Nat) : async Result {
+    summary(service.evm_wallet_finish_prepare_browser_v1({
+      identity; review_revision = revision;
+      balance = "1000000000000000000"; pending_nonce = "0"; mined_nonce = "0"; gas_estimate = "21000"; gas_limit = "21000"; simulation = "0x";
+    }));
   };
   public func execute(identity : Memory.Identity, revision : Nat) : async Result {
     summary(await* service.evm_wallet_execute_v1({ identity; review_revision = revision }));
@@ -145,10 +121,21 @@ persistent actor class Wallet(gateId : Principal) {
   public func status(identity : Memory.Identity, refresh : Bool) : async Result {
     summary(await* service.evm_wallet_status_v1({ identity; refresh }));
   };
+  public query func submission(identity : Memory.Identity) : async SubmissionResult {
+    service.evm_wallet_submission_v1({ identity });
+  };
+  public func observePending(identity : Memory.Identity, hash : Text) : async Result {
+    summary(service.evm_wallet_observe_browser_v1({
+      identity; transaction_hash = hash;
+      transaction_json = "{\"hash\":\"" # hash # "\",\"blockNumber\":null}";
+      receipt_json = null; canonical_block_json = null;
+      safe_block_json = null; finalized_block_json = null; broadcast_error = null;
+    }));
+  };
   public func signerError(operationId : Nat, error : Text) : async () {
     Map.add(signerErrors, Nat.compare, operationId, error);
   };
-  public query func observations() : async { attempts : [Attempt]; broadcasts : [Text]; commands : Nat } {
-    { attempts; broadcasts; commands = Map.size(mem.commands) };
+  public query func observations() : async { attempts : [Attempt]; commands : Nat } {
+    { attempts; commands = Map.size(mem.commands) };
   };
 };

@@ -70,8 +70,11 @@ async function estimateTransaction(wallet: EvmWalletClient, transaction: Transac
 }
 
 export async function estimateSwapFees(wallet: EvmWalletClient, prepared: PreparedSwap, approvalComplete = false): Promise<SwapFeeEstimates> {
-  // First-use read permissions share Kernel attention. Prompt once at a time.
-  const approval = prepared.approval && !approvalComplete ? await estimateTransaction(wallet, prepared.approval, prepared.quote.accountAddress) : null;
-  const swap = await estimateTransaction(wallet, prepared.swap, prepared.quote.accountAddress);
+  // Connect establishes read access. These observations do not change allowance
+  // or depend on one another; an unapproved swap remains explicitly unavailable.
+  const [approval, swap] = await Promise.all([
+    prepared.approval && !approvalComplete ? estimateTransaction(wallet, prepared.approval, prepared.quote.accountAddress) : null,
+    estimateTransaction(wallet, prepared.swap, prepared.quote.accountAddress),
+  ]);
   return { approval, swap };
 }

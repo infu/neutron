@@ -6,13 +6,27 @@ import { promisify } from "node:util";
 import { validate, type Schema } from "jsonschema";
 import { decodeFunctionData, encodeFunctionResult, getAddress, parseAbi } from "viem";
 import { generateAppMethodSchemaArtifact, validateAppMethodArgs } from "neutron-scripts/src/method_schema.js";
-import { parseEvmOperationResult, parseEvmReadContractRequest, parseEvmSendTransactionRequest, parseEvmTransactionRequest, type EvmOperationResult, type EvmReceipt, type EvmTransactionResult } from "neutron-tools/evm_wallet";
-import { validateToolArguments, validateToolResult, type ExposedToolOptions, type JsonObject, type JsonValue, type MsgBusToolContext, type MsgBusToolDescriptor, type MsgBusToolHandler } from "neutron-tools/protocol";
+import { parseEvmCallContractRequest, parseEvmOperationResult, parseEvmSendTransactionRequest, parseEvmTransactionRequest, type EvmOperationResult, type EvmReceipt, type EvmTransactionResult } from "neutron-tools/evm_wallet";
+import { normalizeToolDescriptor, validateToolArguments, validateToolResult, type ExposedToolOptions, type JsonObject, type JsonValue, type MsgBusToolContext, type MsgBusToolDescriptor, type MsgBusToolHandler } from "neutron-tools/protocol";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 
 // Only the child process imports the resident module and replaces exposeTool.
 // Other app tests keep the real neutron-tools/app module and its singleton.
 if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
+  test("Uniswap resident registers every tool through the real SDK validator", async () => {
+    const { stdout, stderr } = await promisify(execFile)(process.execPath, ["--eval",
+      `await import(${JSON.stringify(new URL("../src/service.ts", import.meta.url).href)});
+       const { listExposedTools } = await import("neutron-tools/app");
+       console.log(JSON.stringify(listExposedTools().map(tool => tool.name)));
+       process.exit(0);`,
+    ], { cwd: new URL("..", import.meta.url).pathname });
+    expect(stderr).toBe("");
+    expect(JSON.parse(stdout).sort()).toEqual([
+      "uniswap_list_page_v1", "uniswap_list_v1", "uniswap_prepare_v1",
+      "uniswap_quote_v1", "uniswap_record_result_v1", "uniswap_status_v1",
+    ]);
+  });
+
   test("resident Uniswap handlers satisfy wallet and managed-journal contracts in an isolated process", async () => {
     try {
       const result = await promisify(execFile)(process.execPath, ["test", fileURLToPath(import.meta.url)], {
@@ -31,7 +45,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
   mock.module("neutron-tools/app", () => ({
     exposeTool(name: string, options: ExposedToolOptions, handler: MsgBusToolHandler) {
       if (handlers.has(name)) throw new Error(`Duplicate resident tool: ${name}`);
-      handlers.set(name, { descriptor: { name, ...options }, handler });
+      handlers.set(name, { descriptor: normalizeToolDescriptor({ name, ...options }), handler });
     },
     querySelf() { throw new Error("Resident tools must use their invocation-scoped Kernel client"); },
     updateSelf() { throw new Error("Resident tools must use their invocation-scoped Kernel client"); },
@@ -116,8 +130,8 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
         walletCalls.push(structuredClone(call));
         expect(call.target).toBe("app:evm_wallet:background");
         if (call.name === "evm_accounts_v1") return { accounts: [account] };
-        if (call.name === "evm_read_contract_v1") {
-          const request = parseEvmReadContractRequest(call.arguments);
+        if (call.name === "evm_call_contract_v1") {
+          const request = parseEvmCallContractRequest(call.arguments);
           expect(request.accountId).toBe("main"); expect(request.chainId).toBe("1");
           let result: `0x${string}`;
           if (request.to === QUOTER.toLowerCase()) {
@@ -127,13 +141,13 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
           } else if (request.to === FACTORY.toLowerCase()) result = encodeFunctionResult({ abi: factoryAbi, functionName: "getPool", result: POOL });
           else if (request.to === POOL.toLowerCase()) result = encodeFunctionResult({ abi: poolAbi, functionName: "slot0", result: [2n ** 96n, 0, 0, 1, 1, 0, true] });
           else {
-            expect([USDC.toLowerCase(), WETH.toLowerCase()]).toContain(request.to);
+            expect([USDC.toLowerCase(), WETH.toLowerCase(), OTHER.toLowerCase()]).toContain(request.to);
             const decoded = decodeFunctionData({ abi: tokenAbi, data: request.data as `0x${string}` });
-            if (decoded.functionName === "decimals") result = encodeFunctionResult({ abi: tokenAbi, functionName: "decimals", result: request.to === USDC.toLowerCase() ? 6 : 18 });
-            else if (decoded.functionName === "symbol") result = encodeFunctionResult({ abi: tokenAbi, functionName: "symbol", result: request.to === USDC.toLowerCase() ? "USDC" : "WETH" });
+            if (decoded.functionName === "decimals") result = encodeFunctionResult({ abi: tokenAbi, functionName: "decimals", result: request.to === OTHER.toLowerCase() ? 8 : request.to === USDC.toLowerCase() ? 6 : 18 });
+            else if (decoded.functionName === "symbol") result = encodeFunctionResult({ abi: tokenAbi, functionName: "symbol", result: request.to === OTHER.toLowerCase() ? "CUSTOM" : request.to === USDC.toLowerCase() ? "USDC" : "WETH" });
             else result = encodeFunctionResult({ abi: tokenAbi, functionName: "allowance", result: options.allowance ?? 0n });
           }
-          return { ...request, address: ACCOUNT, result, code: "0x6000", blockNumber: "21000000", observedAtNs: "1800000000000000000" };
+          return { accountId: request.accountId, chainId: request.chainId, to: request.to, data: request.data, address: ACCOUNT, result, blockNumber: "21000000", observedAtNs: "1800000000000000000" };
         }
         if (call.name === "evm_transaction_v1") {
           parseEvmTransactionRequest(call.arguments);
@@ -185,8 +199,27 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       expect(quote).toMatchObject({ chainId: "1", accountId: "main", amountIn: "1000000", amountOut: "2000000", minimumOut: "1990000", fee: 500, recipient: RECIPIENT, router: ROUTER });
       expect(quote.networkFees).toMatchObject({ approval: null, swap: { estimatedFeeWei: null, maximumFeeWei: null, gasLimit: null, postingCosts: "unavailable" } });
       expect(typeof quote.networkFees.swap.reason).toBe("string");
-      expect(app.walletCalls.some((call) => call.name === "evm_read_contract_v1" && call.arguments.to === QUOTER.toLowerCase())).toBe(true);
-      expect(app.walletCalls.every((call) => ["evm_accounts_v1", "evm_read_contract_v1", "evm_estimate_transaction_v1"].includes(call.name))).toBe(true);
+      const reads = app.walletCalls.filter((call) => call.name === "evm_call_contract_v1");
+      expect(reads.filter((call) => call.arguments.to === QUOTER.toLowerCase())).toHaveLength(4);
+      expect(reads.filter((call) => [FACTORY.toLowerCase(), POOL.toLowerCase()].includes(String(call.arguments.to))).map((call) => call.arguments.blockTag)).toEqual(["21000000", "21000000"]);
+      expect(reads).toHaveLength(6);
+      expect(app.walletCalls.every((call) => ["evm_accounts_v1", "evm_call_contract_v1", "evm_estimate_transaction_v1"].includes(call.name))).toBe(true);
+      expect(app.mutations).toHaveLength(0);
+    });
+
+    test("unknown token metadata still resolves through read-only calls", async () => {
+      const app = fixture();
+      const response = await app.invoke("uniswap_quote_v1", {
+        chainId: "1", accountId: "main", tokenIn: null, tokenOut: OTHER,
+        amountIn: "1000000", slippageBps: 50, recipient: RECIPIENT,
+        deadline: String(Math.floor(Date.now() / 1000) + 3600),
+      });
+      expect(JSON.parse(String(response.quoteJson)).tokenOut).toEqual({
+        chainId: "1", address: OTHER, symbol: "CUSTOM", decimals: 8,
+      });
+      const metadataCalls = app.walletCalls.filter((call) => call.arguments.to === OTHER.toLowerCase());
+      expect(metadataCalls.map((call) => decodeFunctionData({ abi: tokenAbi, data: call.arguments.data as `0x${string}` }).functionName)).toEqual(["decimals", "symbol"]);
+      expect(metadataCalls.every((call) => call.name === "evm_call_contract_v1")).toBe(true);
       expect(app.mutations).toHaveLength(0);
     });
 

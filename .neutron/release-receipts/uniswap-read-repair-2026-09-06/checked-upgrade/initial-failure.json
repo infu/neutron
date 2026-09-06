@@ -1,0 +1,22 @@
+{
+  "status": "failed",
+  "scope": "Exact published predecessor compiled; successor compilation failed before any PocketIC creation or upgrade",
+  "runtimeCreated": false,
+  "package": "evm_wallet",
+  "version": 108,
+  "sha256": "506d74475ddaebc465df7df6759d705a920d421f3d75bfd01da717024df46009",
+  "module": "mo/a220ab568c7f120c059d3728528c055ceb01ebc05b1f0fcef79e500f1018cfed.mo",
+  "lines": [
+    583,
+    585,
+    587,
+    591
+  ],
+  "cause": "Generated Input aliases use underscore as named tuple type label; Motoko rejects (_ : WalletBalanceRequest) and equivalent aliases",
+  "log": {
+    "path": ".neutron/release-receipts/uniswap-read-repair-2026-09-06/checked-upgrade/run.log",
+    "bytes": 3785,
+    "sha256": "b0b4a23618ddcce4572378e85d807a03f9348f158f75f2c35746e462d5f8cff1"
+  },
+  "archiveUnmodified": true
+}

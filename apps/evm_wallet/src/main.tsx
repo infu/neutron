@@ -20,6 +20,7 @@ import {
 import {
   EVM_WALLET_TARGET,
   EVM_WALLET_TOOLS,
+  createEvmWalletClient,
   evmReplaceTransactionInputSchema,
   evmSendTransactionInputSchema,
   evmSignMessageInputSchema,
@@ -40,12 +41,8 @@ import {
   hex,
   identityArgs,
   maxFee,
-  parseBalance,
   parseOperation,
-  parseReviewEvidence,
   parseSnapshot,
-  quantity,
-  record,
   requestId,
   shortAddress,
   unwrap,
@@ -62,10 +59,12 @@ import {
   closeUncertainPrompt,
   declinePrompt,
   getPrompts,
+  getPreparations,
   presentEffect,
   presentOwnEffect,
   refreshPromptEvidence,
   subscribePrompts,
+  type PreparingReview,
 } from "./prompts.ts";
 import {
   assertLocalAccount,
@@ -78,6 +77,7 @@ import { knownApprovals } from "./known_approvals.ts";
 import { TokenReview } from "./token_review.tsx";
 import { onFormActionKeyDown, runFormAction } from "./form_actions.ts";
 import { queryHistoryPage } from "./history.ts";
+import { executeBrowserOperation, reconcileBrowserOperation, refreshBrowserEvidence } from "./browser_operations.ts";
 import "./style.scss";
 
 function tileRuntime(): boolean {
@@ -153,6 +153,7 @@ export function EvmWalletApp() {
     [reviewBusy, setReviewBusy] = useState(false);
   const prompts = useSyncExternalStore(subscribePrompts, getPrompts),
     prompt = prompts[0];
+  const preparations = useSyncExternalStore(subscribePrompts, getPreparations);
   const account = snapshot?.accounts[0],
     network = snapshot?.networks.find((n) => n.chainId === chainId);
   const load = useCallback(async () => {
@@ -181,15 +182,16 @@ export function EvmWalletApp() {
     const tokens = (snapshot?.assets ?? [])
       .filter((t) => t.chainId === chainId)
       .map((t) => t.address);
-    void updateSelf(
-      METHODS.balances,
-      [{ account_id: account.id, chain_id: chainId, tokens }],
-      120,
-    )
-      .then(parseBalance)
+    void createEvmWalletClient({ callTool }).balances({ accountId: "main", chainId, tokens })
       .then(
         (result) => {
-          if (active) setBalance(result);
+          if (active) setBalance({
+            accountId: result.accountId, chainId: result.chainId, address: result.address,
+            nativeBalance: result.nativeBalanceWei, blockNumber: result.blockNumber,
+            observedAtNs: result.observedAtNs, completeness: result.completeness,
+            tokens: result.tokens.map((token) => ({ address: token.address, balance: token.balanceAtoms,
+              decimals: token.decimals === null ? null : Number(token.decimals), symbol: token.symbol, error: token.error })),
+          });
         },
         (e) => {
           if (active) setBalanceError(errorMessage(e));
@@ -214,16 +216,7 @@ export function EvmWalletApp() {
     setBusy(true);
     setError(null);
     try {
-      await updateSelf(
-        METHODS.status,
-        [
-          {
-            identity: identityArgs(operation.caller, operation.requestId),
-            refresh: true,
-          },
-        ],
-        120,
-      ).then(parseOperation);
+      await reconcileBrowserOperation({ querySelf, updateSelf }, operation);
       await load();
     } catch (e) {
       setError(errorMessage(e));
@@ -236,18 +229,15 @@ export function EvmWalletApp() {
     setReviewBusy(true);
     setReviewError(null);
     try {
-      const next = parseOperation(
+      const next = accept ? await executeBrowserOperation({ querySelf, updateSelf }, manualReview) : parseOperation(
         await updateSelf(
-          accept ? METHODS.execute : METHODS.reject,
+          METHODS.reject,
           [
             {
               identity: identityArgs(
                 manualReview.caller,
                 manualReview.requestId,
               ),
-              ...(accept
-                ? { review_revision: manualReview.reviewRevision }
-                : {}),
             },
           ],
           120,
@@ -275,15 +265,7 @@ export function EvmWalletApp() {
     setReviewBusy(true);
     setReviewError(null);
     try {
-      const operation = parseReviewEvidence(await updateSelf(
-        METHODS.reviewEvidence,
-        [{
-          identity: identityArgs(current.caller, current.requestId),
-          review_revision: current.reviewRevision,
-          refresh,
-        }],
-        120,
-      ));
+      const operation = await refreshBrowserEvidence({ querySelf, updateSelf }, current, refresh);
       setManualReview((previous) => previous?.operationId === current.operationId
         ? operation.status === "prepared" ? operation : null
         : previous);
@@ -521,8 +503,8 @@ export function EvmWalletApp() {
             <p className="evm-muted">{network?.finalityDescription}</p>
             <p className="evm-muted">
               Transactions need native gas on the selected EVM network.
-              Chain-key signing and RPC calls also consume this Neutron's IC
-              cycles.
+              Chain-key signing consumes this Neutron's IC cycles. Network
+              reads and transaction broadcasts connect directly from your browser.
             </p>
           </section>
         </section>
@@ -531,9 +513,11 @@ export function EvmWalletApp() {
         <ReviewDialog
           operation={prompt.prepared.operation}
           networks={snapshot?.networks ?? []}
+          assets={snapshot?.assets ?? []}
           error={prompt.error}
           queued={prompts.length - 1}
-          busy={prompt.phase === "executing" || prompt.phase === "checking"}
+          busy={prompt.phase === "executing" || prompt.phase === "checking" || prompt.phase === "loading_evidence"}
+          progress={prompt.phase === "loading_evidence" ? "Loading saved token observations…" : prompt.phase === "checking" ? "Checking current request…" : prompt.phase === "executing" ? "Saving your decision and resolving the request…" : null}
           uncertain={prompt.phase === "uncertain"}
           onApprove={() => void acceptPrompt(prompt)}
           onDecline={() => void declinePrompt(prompt)}
@@ -542,10 +526,14 @@ export function EvmWalletApp() {
           onClose={() => closeUncertainPrompt(prompt)}
         />
       )}
+      {!prompt && !manualReview && preparations[0] && (
+        <PreparationStatus preparation={preparations[0]} snapshot={snapshot} />
+      )}
       {!prompt && manualReview && (
         <ReviewDialog
           operation={manualReview}
           networks={snapshot?.networks ?? []}
+          assets={snapshot?.assets ?? []}
           error={reviewError}
           busy={reviewBusy}
           uncertain={reviewError?.startsWith("Outcome unresolved") ?? false}
@@ -738,14 +726,13 @@ function SendForm({
     <section className="evm-card">
       <h2 className="evm-card-title">Send or call a contract</h2>
       {saved && (
-        <div className="evm-notice">
-          <strong>Current request awaiting resolution</strong>
+        <div className="evm-notice" aria-live="polite">
+          <strong>{busy ? "Opening transaction review…" : "Saved request awaiting resolution"}</strong>
           <p className="evm-address">
             {saved.request.requestId} · Chain {saved.request.chainId}
           </p>
-          <p>
-            {saved.request.to} · {saved.request.valueWei} wei
-          </p>
+          <TransactionIntentDetails request={saved.request} snapshot={snapshot} />
+          {busy && <p>Loading the saved request and its review. Any new signing requires your approval.</p>}
           <div className="evm-actions">
             <button
               className="nt-button nt-button--secondary"
@@ -772,6 +759,7 @@ function SendForm({
         <Field label="Asset">
           <select
             className="nt-select"
+            data-testid="evm-send-asset"
             value={token}
             onChange={(e) => setToken(e.target.value)}
           >
@@ -962,11 +950,52 @@ function OperationRow({
     </article>
   );
 }
+function TransactionIntentDetails({ request, snapshot }: {
+  request: EvmSendTransactionRequest;
+  snapshot: Snapshot | null;
+}) {
+  const decoded = decodeKnownCall(request.data);
+  const asset = snapshot?.assets.find((entry) => entry.chainId === request.chainId && entry.address.toLowerCase() === request.to.toLowerCase());
+  const transferred = decoded?.details.find(([label]) => label === "Amount (atomic units)")?.[1];
+  const recipient = decoded?.details.find(([label]) => label === "Recipient")?.[1];
+  return (
+    <div className="evm-address" data-testid="evm-intent-details">
+      {transferred && recipient ? <>
+        <p>{asset ? `${amount(transferred, asset.decimals)} ${asset.symbol}` : `${transferred} token atomic units`} to {recipient}</p>
+        <p className="evm-muted">Token contract: {request.to}</p>
+        {request.valueWei !== "0" && <p>Native value: {amount(request.valueWei)} ETH</p>}
+      </> : <p>{amount(request.valueWei)} ETH · {request.to}{decoded ? ` · ${decoded.name}` : request.data === "0x" ? "" : " · Contract call"}</p>}
+    </div>
+  );
+}
+function PreparationStatus({ preparation, snapshot }: { preparation: PreparingReview; snapshot: Snapshot | null }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const elapsed = Math.max(0, Math.floor((now - preparation.startedAt) / 1000));
+  const network = snapshot?.networks.find((entry) => entry.chainId === preparation.request.chainId);
+  return (
+    <div className="evm-review-overlay">
+      <section className="evm-review" role="status" aria-live="polite" data-testid="evm-preparing-review">
+        <span className="evm-tag">EVM Wallet</span>
+        <h2>Preparing your {preparation.kind === "transaction" || preparation.kind === "replacement" ? "transaction" : "signature"}</h2>
+        <p>{network?.name ?? `Chain ${preparation.request.chainId}`} · {elapsed}s elapsed</p>
+        {preparation.kind === "transaction" && <TransactionIntentDetails request={preparation.request as EvmSendTransactionRequest} snapshot={snapshot} />}
+        <p>{preparation.kind === "transaction" || preparation.kind === "replacement" ? "Checking current balances, network fees and transaction simulation. Your approval buttons appear when the exact transaction is ready." : "Loading the exact saved request for your review."}</p>
+        <p className="evm-muted">Your approval is required before signing. Keep this review open to continue.</p>
+      </section>
+    </div>
+  );
+}
 function ReviewDialog({
   operation,
   networks,
+  assets,
   error,
   busy,
+  progress = null,
   uncertain = false,
   queued = 0,
   onApprove,
@@ -977,8 +1006,10 @@ function ReviewDialog({
 }: {
   operation: Operation;
   networks: Network[];
+  assets: Snapshot["assets"];
   error: string | null;
   busy: boolean;
+  progress?: string | null;
   uncertain?: boolean;
   queued?: number;
   onApprove: () => void;
@@ -990,6 +1021,8 @@ function ReviewDialog({
   const network = networks.find((n) => n.chainId === operation.chainId),
     tx = operation.preparedTransaction ?? operation.intent.transaction,
     decoded = tx ? decodeKnownCall(tx.data) : null;
+  const token = tx ? assets.find((asset) => asset.chainId === operation.chainId && asset.address.toLowerCase() === tx.to.toLowerCase()) : undefined;
+  const tokenAmount = decoded?.details.find(([label]) => label === "Amount (atomic units)")?.[1];
   let messageText: string | null = null;
   if (operation.intent.messageHex)
     try {
@@ -1023,6 +1056,7 @@ function ReviewDialog({
           Requested by {operation.caller.appId} · Installation{" "}
           {operation.caller.installationUid}
         </p>
+        {token && tokenAmount && <p className="evm-notice">Token amount: {amount(tokenAmount, token.decimals)} {token.symbol}</p>}
         <dl className="evm-review-details">
           <dt>Network</dt>
           <dd>
@@ -1155,6 +1189,7 @@ function ReviewDialog({
             {error}
           </p>
         )}
+        {progress && <p className="evm-notice" role="status">{progress}</p>}
         <footer className="evm-review-footer">
           {uncertain ? (
             <>
@@ -1316,34 +1351,15 @@ function Approvals({
     setBusy(key);
     setError(null);
     try {
-      const r = record(
-        unwrap(
-          await updateSelf(
-            METHODS.readContract,
-            [
-              {
-                chain_id: chainId,
-                to: token,
-                data: encodeFunctionData({
-                  abi: erc20Abi,
-                  functionName: "allowance",
-                  args: [
-                    address(accountAddress) as `0x${string}`,
-                    address(spender) as `0x${string}`,
-                  ],
-                }),
-                block: "latest",
-              },
-            ],
-            120,
-          ),
-        ),
-        "allowance read",
-      );
+      const r = await createEvmWalletClient({ callTool }).callContract({
+        accountId: "main", chainId, to: token,
+        data: encodeFunctionData({ abi: erc20Abi, functionName: "allowance",
+          args: [address(accountAddress) as `0x${string}`, address(spender) as `0x${string}`] }),
+      });
       setResults((previous) => ({ ...previous, [key]: {
         value: BigInt(hex(r.result)).toString(),
-        blockNumber: quantity(r.block_number, "allowance block"),
-        observedAtNs: quantity(r.observed_at, "allowance observation time"),
+        blockNumber: r.blockNumber,
+        observedAtNs: r.observedAtNs,
       } }));
     } catch (e) {
       setError(errorMessage(e));

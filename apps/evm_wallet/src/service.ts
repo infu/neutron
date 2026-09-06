@@ -13,6 +13,8 @@ import {
   evmBalancesOutputSchema,
   evmReadContractInputSchema,
   evmReadContractOutputSchema,
+  evmCallContractInputSchema,
+  evmCallContractOutputSchema,
   evmReplaceTransactionInputSchema,
   evmSendTransactionInputSchema,
   evmSignMessageInputSchema,
@@ -20,17 +22,11 @@ import {
   evmOperationOutputSchema,
   evmOperationStatusInputSchema,
   evmOperationStatusOutputSchema,
-  parseEvmBalancesRequest,
-  parseEvmReadContractRequest,
   parseEvmOperationStatusRequest,
   evmTransactionInputSchema,
   evmTransactionOutputSchema,
-  parseEvmTransactionRequest,
-  parseEvmTransactionResult,
   parseEvmAccountsResult,
   parseEvmNetworksResult,
-  parseEvmBalancesResult,
-  parseEvmReadContractResult,
   evmEstimateTransactionInputSchema,
   evmEstimateTransactionOutputSchema,
   evmReplacementTransactionInputSchema,
@@ -39,27 +35,33 @@ import {
 import {
   METHODS,
   parseAccounts,
-  parseBalance,
-  parseOperation,
   parseSnapshot,
   record,
-  text,
-  natural,
   unwrap,
-  errorMessage,
 } from "./data.ts";
 import {
   handleHumanEffect,
   handleRootEffect,
   invocationIdentity,
   operationJson,
-  quantity,
-  receiptJson,
 } from "./provider.ts";
-import { estimateTransaction, replacementTransaction } from "./read_adapters.ts";
+import { balances, readContract, callContract, estimateTransaction, transaction, replacementTransaction } from "./read_adapters.ts";
+import { readBrowserOperation, reconcileBrowserOperation } from "./browser_operations.ts";
 
 const bytesHex = (bytes: Uint8Array) =>
   `0x${[...bytes].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+exposeTool(
+  EVM_WALLET_TOOLS.callContract,
+  {
+    title: "Read EVM contract result",
+    description:
+      "Read eth_call return bytes at the latest or an explicit block without downloading contract code. The browser contacts the configured RPC provider directly; no transaction is signed.",
+    inputSchema: evmCallContractInputSchema,
+    outputSchema: evmCallContractOutputSchema,
+    annotations: { "neutron:effects": ["read", "network"] },
+  },
+  callContract,
+);
 exposeTool(
   EVM_WALLET_TOOLS.estimateTransaction,
   {
@@ -95,9 +97,10 @@ exposeTool(
     annotations: { "neutron:effects": ["read", "network"] },
   },
   async (_, context) => {
-    const raw = unwrap(
-      await context.kernel.updateSelf(METHODS.accounts, [null], 120),
-    );
+    const snapshot = record(unwrap(await context.kernel.querySelf(METHODS.snapshot, [null])), "wallet snapshot");
+    let raw = snapshot.accounts;
+    if (!Array.isArray(raw)) throw new Error("Invalid wallet accounts");
+    if (raw.length === 0) raw = unwrap(await context.kernel.updateSelf(METHODS.accounts, [null], 120));
     const accounts = parseAccounts({ ok: raw });
     return parseEvmAccountsResult({
       accounts: accounts.map((a, i) => {
@@ -152,43 +155,7 @@ exposeTool(
     outputSchema: evmBalancesOutputSchema,
     annotations: { "neutron:effects": ["read", "network"] },
   },
-  async (args, context) => {
-    const request = parseEvmBalancesRequest(args),
-      balance = parseBalance(
-        await context.kernel.updateSelf(
-          METHODS.balances,
-          [
-            {
-              account_id: request.accountId,
-              chain_id: request.chainId,
-              tokens: request.tokens,
-            },
-          ],
-          120,
-        ),
-      );
-    if (
-      balance.accountId !== request.accountId ||
-      balance.chainId !== request.chainId
-    )
-      throw new Error("Wallet balance scope mismatch");
-    return parseEvmBalancesResult({
-      accountId: balance.accountId,
-      chainId: balance.chainId,
-      address: balance.address,
-      nativeBalanceWei: balance.nativeBalance,
-      tokens: balance.tokens.map((t) => ({
-        address: t.address,
-        balanceAtoms: t.balance,
-        decimals: t.decimals === null ? null : String(t.decimals),
-        symbol: t.symbol,
-        error: t.error,
-      })),
-      blockNumber: balance.blockNumber,
-      observedAtNs: balance.observedAtNs,
-      completeness: "requested_only",
-    }) as unknown as JsonObject;
-  },
+  balances,
 );
 exposeTool(
   EVM_WALLET_TOOLS.readContract,
@@ -200,42 +167,7 @@ exposeTool(
     outputSchema: evmReadContractOutputSchema,
     annotations: { "neutron:effects": ["read", "network"] },
   },
-  async (args, context) => {
-    const request = parseEvmReadContractRequest(args);
-    const accounts = parseAccounts(
-        await context.kernel.updateSelf(METHODS.accounts, [null], 120),
-      ),
-      account = accounts.find((a) => a.id === request.accountId);
-    if (!account) throw new Error("Account unavailable");
-    const read = record(
-      unwrap(
-        await context.kernel.updateSelf(
-          METHODS.readContract,
-          [
-            {
-              chain_id: request.chainId,
-              to: request.to,
-              data: request.data,
-              block: "latest",
-            },
-          ],
-          120,
-        ),
-      ),
-      "contract read",
-    );
-    return parseEvmReadContractResult({
-      accountId: request.accountId,
-      chainId: natural(read.chain_id, "chain"),
-      address: account.address,
-      to: text(read.to, "to"),
-      data: text(read.data, "data"),
-      code: text(read.code, "code"),
-      result: text(read.result, "result"),
-      blockNumber: quantity(read.block_number, "block"),
-      observedAtNs: natural(read.observed_at, "observation time"),
-    }) as unknown as JsonObject;
-  },
+  readContract,
 );
 for (const entry of [
   {
@@ -330,26 +262,14 @@ exposeTool(
   async (args, context) => {
     const request = parseEvmOperationStatusRequest(args),
       identity = invocationIdentity(context, request.requestId);
-    let raw: unknown;
-    try {
-      raw = await context.kernel.updateSelf(
-        METHODS.status,
-        [{ identity, refresh: true }],
-        120,
-      );
-    } catch (error) {
-      if (errorMessage(error) === "not_found")
-        return { ...request, status: "not_found" };
-      throw error;
-    }
-    const r = record(raw, "status result");
-    if (r.err === "not_found") return { ...request, status: "not_found" };
-    const operation = parseOperation(raw);
+    const saved = await readBrowserOperation(context.kernel, identity);
+    if (!saved) return { ...request, status: "not_found" };
     if (
-      operation.chainId !== request.chainId ||
-      operation.accountId !== request.accountId
+      saved.chainId !== request.chainId ||
+      saved.accountId !== request.accountId
     )
       throw new Error("Operation status scope mismatch");
+    const operation = await reconcileBrowserOperation(context.kernel, saved, context.signal ? { signal: context.signal } : {});
     return operationJson(operation);
   },
 );
@@ -364,68 +284,5 @@ exposeTool(
     outputSchema: evmTransactionOutputSchema,
     annotations: { "neutron:effects": ["read", "network"] },
   },
-  async (args, context) => {
-    const request = parseEvmTransactionRequest(args);
-    const result = record(
-      unwrap(
-        await context.kernel.updateSelf(
-          "evm_wallet_transaction_v1",
-          [
-            {
-              chain_id: request.chainId,
-              transaction_hash: request.transactionHash,
-              ...(request.walletRequest
-                ? {
-                    wallet_request: {
-                      caller_app_id: request.walletRequest.callerAppId,
-                      caller_installation_uid:
-                        request.walletRequest.callerInstallationUid,
-                      request_id: request.walletRequest.requestId,
-                    },
-                  }
-                : {}),
-            },
-          ],
-          120,
-        ),
-      ),
-      "transaction evidence",
-    );
-    const tx = JSON.parse(text(result.transaction_json, "transaction JSON"));
-    const observedAtNs = natural(result.observed_at, "observation time"),
-      finality =
-        result.finality == null ? null : text(result.finality, "finality");
-    return parseEvmTransactionResult(
-      {
-        chainId: natural(result.chain_id, "chain"),
-        transactionHash: text(result.transaction_hash, "hash"),
-        transaction:
-          tx === null
-            ? null
-            : {
-                from: tx.from,
-                to: tx.to,
-                data: tx.input,
-                valueWei: quantity(tx.value, "value"),
-                nonce: quantity(tx.nonce, "nonce"),
-                blockNumber:
-                  tx.blockNumber == null
-                    ? null
-                    : quantity(tx.blockNumber, "block"),
-                blockHash: tx.blockHash,
-              },
-        receipt: receiptJson(
-          result.receipt_json == null
-            ? null
-            : text(result.receipt_json, "receipt JSON"),
-          finality,
-          observedAtNs,
-        ),
-        observedAtNs,
-        source: "evm_rpc",
-        walletRequestMatches: result.wallet_request_matches ?? null,
-      },
-      request,
-    ) as unknown as JsonObject;
-  },
+  transaction,
 );

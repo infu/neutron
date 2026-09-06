@@ -11,6 +11,11 @@ journal in Activity, including pending signatures and replacements. Ordinary
 tiles need no persistent browser storage grant. Neither the tile nor consumer apps receive a private
 key or a Kernel signing capability.
 
+All EVM JSON-RPC calls use the browser's direct CORS connection to one PublicNode
+endpoint per network. No MetaMask or API key is required. Balances, contract
+reads, fees, simulation, broadcast and receipt checks do not pass through an IC
+HTTP outcall. The backend preserves wallet state and performs chain-key signing.
+
 ## Using the wallet
 
 - **Assets** shows native ETH and selected ERC-20 balances at the returned block.
@@ -46,7 +51,8 @@ Arbitrum gas estimates include its posting-cost component; the Wallet does not
 add a second arbitrary posting fee. A receipt records canonical inclusion and
 observed safe/finalized evidence. Arbitrum inclusion alone does not imply final
 Ethereum settlement. EVM transactions need native gas on their EVM network;
-chain-key signing and RPC calls separately consume this Neutron's IC cycles.
+chain-key signing and durable wallet updates consume this Neutron's IC cycles.
+Direct browser RPC calls do not incur IC outcall cycles.
 
 ## Review, recovery and replacements
 
@@ -63,7 +69,10 @@ same request within the same installation.
 
 Prepared operations require their current review revision. If another request
 reserves their proposed nonce first, the Wallet returns a revised review and
-asks for approval again. It does not silently sign the changed transaction.
+asks for approval again after estimating and simulating the new candidate.
+It does not silently sign the changed transaction. Send shows preparation
+progress immediately, including the token amount and recipient, then displays
+the exact transaction and an explicit approval button.
 Explicit token-observation refresh also advances the review revision so an
 approval for an older view cannot race the refreshed view. Its observations are
 saved separately from the transaction and can become stale as the chain changes.
@@ -109,7 +118,10 @@ draft is not account recovery.
 
 Use the shared `neutron-tools/evm_wallet` client and closed schemas. Read-only
 methods cover accounts, networks, requested balances, contract calls and public
-transaction evidence. `evm_estimate_transaction_v1` estimates fees for exact
+transaction evidence. `evm_call_contract_v1` reads return bytes at latest or an
+explicit block without downloading contract bytecode; the existing
+`evm_read_contract_v1` retains its code-inclusive result for consumers that need
+it. `evm_estimate_transaction_v1` estimates fees for exact
 transaction fields without creating a command, reserving a nonce or signing.
 It returns its pricing basis, partial facts and unavailable reasons; its estimate
 is not spending authorization. Arbitrum total gas already includes posting cost.
@@ -161,10 +173,9 @@ tile and resident identities and does not accept Agent invocations. Cross-app
 requests retain the Kernel's foreground provider presentation. Both paths use the
 same durable prepare, review and execution flow; repeating a request ID returns
 its saved outcome.
-RPC consensus compares the complete canonical response bytes, including large
-contract-code responses, without recursive text comparison or truncation. A
-compiled actor regression covers full-size code, disagreement at its final byte
-and equivalent nested JSON with Unicode.
+The former EVM RPC canister adapter remains historical test material. Current
+app paths use the direct browser RPC client and no backend outcall capability.
+Direct observations are provided by one server, not replica/provider consensus.
 History reads retry existing aggregate response-size failures with smaller pages
 at the same offset. Initial loading and Load more share this path; no operations
 are discarded or capped. Unrelated errors and a single operation that cannot fit

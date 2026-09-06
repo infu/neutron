@@ -1,0 +1,200 @@
+{
+  "timestamp": "2026-09-06T16:18:22.155Z",
+  "scope": "Read-only eth_chainId and eth_blockNumber from Chromium iframe sandbox=\"allow-scripts\" with opaque origin. No wallet extension, no canister HTTP outcalls, no signing or transactions.",
+  "browser": "Chromium /run/current-system/sw/bin/google-chrome-stable",
+  "result": {
+    "serializedOrigin": "null",
+    "locationOrigin": "null",
+    "hasInjectedEthereum": false,
+    "endpoints": [
+      {
+        "endpoint": "https://ethereum-rpc.publicnode.com",
+        "calls": [
+          {
+            "method": "eth_chainId",
+            "status": 200,
+            "responseType": "cors",
+            "headersMs": 981,
+            "totalMs": 981,
+            "body": {
+              "jsonrpc": "2.0",
+              "result": "0x1",
+              "id": 1
+            }
+          },
+          {
+            "method": "eth_blockNumber",
+            "status": 200,
+            "responseType": "cors",
+            "headersMs": 126,
+            "totalMs": 126,
+            "body": {
+              "jsonrpc": "2.0",
+              "result": "0x18b7fdc",
+              "id": 2
+            }
+          }
+        ]
+      },
+      {
+        "endpoint": "https://arbitrum-one-rpc.publicnode.com",
+        "calls": [
+          {
+            "method": "eth_chainId",
+            "status": 200,
+            "responseType": "cors",
+            "headersMs": 989,
+            "totalMs": 989,
+            "body": {
+              "jsonrpc": "2.0",
+              "result": "0xa4b1",
+              "id": 1
+            }
+          },
+          {
+            "method": "eth_blockNumber",
+            "status": 200,
+            "responseType": "cors",
+            "headersMs": 128,
+            "totalMs": 128,
+            "body": {
+              "jsonrpc": "2.0",
+              "result": "0x1df1efd7",
+              "id": 2
+            }
+          }
+        ]
+      },
+      {
+        "endpoint": "https://ethereum-sepolia-rpc.publicnode.com",
+        "calls": [
+          {
+            "method": "eth_chainId",
+            "status": 200,
+            "responseType": "cors",
+            "headersMs": 1000,
+            "totalMs": 1001,
+            "body": {
+              "jsonrpc": "2.0",
+              "result": "0xaa36a7",
+              "id": 1
+            }
+          },
+          {
+            "method": "eth_blockNumber",
+            "status": 200,
+            "responseType": "cors",
+            "headersMs": 123,
+            "totalMs": 124,
+            "body": {
+              "jsonrpc": "2.0",
+              "result": "0xb1bd62",
+              "id": 2
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "network": [
+    {
+      "kind": "browserRequest",
+      "method": "POST",
+      "url": "https://ethereum-rpc.publicnode.com/",
+      "origin": "null"
+    },
+    {
+      "kind": "browserResponse",
+      "url": "https://ethereum-rpc.publicnode.com/",
+      "status": 200,
+      "allowOrigin": "*",
+      "allowMethods": null,
+      "allowHeaders": null
+    },
+    {
+      "kind": "browserRequest",
+      "method": "POST",
+      "url": "https://arbitrum-one-rpc.publicnode.com/",
+      "origin": "null"
+    },
+    {
+      "kind": "browserResponse",
+      "url": "https://arbitrum-one-rpc.publicnode.com/",
+      "status": 200,
+      "allowOrigin": "*",
+      "allowMethods": null,
+      "allowHeaders": null
+    },
+    {
+      "kind": "browserRequest",
+      "method": "POST",
+      "url": "https://ethereum-sepolia-rpc.publicnode.com/",
+      "origin": "null"
+    },
+    {
+      "kind": "browserResponse",
+      "url": "https://ethereum-sepolia-rpc.publicnode.com/",
+      "status": 200,
+      "allowOrigin": "*",
+      "allowMethods": null,
+      "allowHeaders": null
+    },
+    {
+      "kind": "browserRequest",
+      "method": "POST",
+      "url": "https://ethereum-rpc.publicnode.com/",
+      "origin": "null"
+    },
+    {
+      "kind": "browserResponse",
+      "url": "https://ethereum-rpc.publicnode.com/",
+      "status": 200,
+      "allowOrigin": "*",
+      "allowMethods": null,
+      "allowHeaders": null
+    },
+    {
+      "kind": "browserRequest",
+      "method": "POST",
+      "url": "https://arbitrum-one-rpc.publicnode.com/",
+      "origin": "null"
+    },
+    {
+      "kind": "browserResponse",
+      "url": "https://arbitrum-one-rpc.publicnode.com/",
+      "status": 200,
+      "allowOrigin": "*",
+      "allowMethods": null,
+      "allowHeaders": null
+    },
+    {
+      "kind": "browserRequest",
+      "method": "POST",
+      "url": "https://ethereum-sepolia-rpc.publicnode.com/",
+      "origin": "null"
+    },
+    {
+      "kind": "browserResponse",
+      "url": "https://ethereum-sepolia-rpc.publicnode.com/",
+      "status": 200,
+      "allowOrigin": "*",
+      "allowMethods": null,
+      "allowHeaders": null
+    }
+  ],
+  "errors": [],
+  "sources": [
+    {
+      "url": "https://ethereum-rpc.publicnode.com",
+      "role": "Official PublicNode endpoint information page"
+    },
+    {
+      "url": "https://arbitrum-one-rpc.publicnode.com",
+      "role": "Official PublicNode endpoint information page"
+    },
+    {
+      "url": "https://ethereum-sepolia-rpc.publicnode.com",
+      "role": "Official PublicNode endpoint information page"
+    }
+  ]
+}

@@ -1676,13 +1676,19 @@ defineKernelTool(
   {
     title: "Request App Tool Access",
     description:
-      "Ask the user for a session grant to call another app endpoint.",
+      "Ask the user for session access to one tool or an exact list of tools on another app endpoint.",
     inputSchema: {
       type: "object",
-      required: ["target", "tool"],
+      required: ["target"],
+      oneOf: [{ required: ["tool"] }, { required: ["tools"] }],
       properties: {
         target: { type: "string", minLength: 1, maxLength: 240 },
         tool: { type: "string", minLength: 1, maxLength: 128 },
+        tools: {
+          type: "array",
+          minItems: 1,
+          items: { type: "string", minLength: 1, maxLength: 128 },
+        },
         arguments: { type: "object" },
       },
       additionalProperties: false,
@@ -1697,8 +1703,12 @@ defineKernelTool(
   },
   async (args, caller, invocation, _invocationContext, signal) => {
     const target = String(args.target);
-    const tool = String(args.tool);
-    if (tool !== "*") assertToolName(tool);
+    const tools = Array.isArray(args.tools)
+      ? [...new Set(args.tools as string[])]
+      : undefined;
+    const tool = tools?.[0] ?? String(args.tool);
+    if (tools) tools.forEach(assertToolName);
+    else if (tool !== "*") assertToolName(tool);
     if (!isEndpointId(target) || target === "kernel") {
       throw new Error("Permission target must be a live app endpoint");
     }
@@ -1712,6 +1722,33 @@ defineKernelTool(
       assertEndpointDispatchCurrent(targetDispatch);
     };
     assertEndpointsCurrent();
+    const descriptors = tools
+      ? await readEndpointTools(targetEndpoint, signal)
+      : undefined;
+    assertEndpointsCurrent();
+    const requestedTools = tools?.map((name) => {
+      const descriptor = descriptors!.find(
+        (candidate) => candidate.name === name,
+      );
+      if (
+        !descriptor ||
+        !endpointToolVisibleToCaller(
+          descriptor,
+          caller,
+          targetEndpoint,
+          invocation,
+        )
+      ) {
+        throw new Error(`Unknown tool '${name}' on '${target}'`);
+      }
+      return {
+        name,
+        ...(descriptor.title ? { title: descriptor.title } : {}),
+        ...(descriptor.description
+          ? { description: descriptor.description }
+          : {}),
+      };
+    });
     if (targetEndpoint.context.appId === caller.context.appId) {
       return { granted: true };
     }
@@ -1725,13 +1762,26 @@ defineKernelTool(
         action: {
           targetAppId: targetEndpoint.context.appId,
           targetRole: targetEndpoint.context.role,
-          tool,
+          ...(requestedTools
+            ? { tools: requestedTools.map((item) => item.name) }
+            : { tool }),
         },
       },
       signal,
     );
     assertEndpointsCurrent();
     if (!agentApproved) {
+      const missingTools = requestedTools?.filter(
+        (item) =>
+          !hasFrontendToolGrant(
+            callerContext(caller),
+            caller.sessionId,
+            target,
+            targetEndpoint.sessionId,
+            item.name,
+          ),
+      );
+      if (missingTools?.length === 0) return { granted: true };
       await requestFrontendToolPermission({
         caller: callerContext(caller),
         ...(caller.sessionId ? { callerSessionId: caller.sessionId } : {}),
@@ -1739,7 +1789,8 @@ defineKernelTool(
         ...(targetEndpoint.sessionId
           ? { targetSessionId: targetEndpoint.sessionId }
           : {}),
-        tool,
+        tool: missingTools?.[0]?.name ?? tool,
+        ...(missingTools ? { tools: missingTools } : {}),
         arguments: isJsonObject(args.arguments) ? args.arguments : {},
         sessionOnly: true,
         ...(signal ? { signal } : {}),
@@ -2589,6 +2640,7 @@ async function prepareBinarySelfMethod(
     encodedArgs,
     blobs,
     candidMethod.argTypes,
+    { appId: caller.context.appId, appVersion: app.version, method: logicalMethod },
   );
   // The private self-call boundary is validated against the exact installed
   // live-Candid method. Public icblast JSON schemas intentionally project some

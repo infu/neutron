@@ -19,12 +19,16 @@ const Identity = IDL.Record({ caller: Caller, request_id: IDL.Text });
 const Summary = IDL.Record({ operation_id: IDL.Nat, caller: Caller, request_id: IDL.Text, chain_id: IDL.Nat, status: IDL.Text, review_revision: IDL.Nat, nonce: IDL.Opt(IDL.Text), transaction_hash: IDL.Opt(IDL.Text) });
 const Result = IDL.Variant({ ok: Summary, err: IDL.Text });
 const Attempt = IDL.Record({ operation_id: IDL.Nat, caller: Caller, chain_id: IDL.Nat, nonce: IDL.Opt(IDL.Text), digest: IDL.Text });
-const Observations = IDL.Record({ attempts: IDL.Vec(Attempt), broadcasts: IDL.Vec(IDL.Text), commands: IDL.Nat });
+const Submission = IDL.Record({ chain_id: IDL.Nat, transaction_hash: IDL.Text, raw_transaction: IDL.Text });
+const SubmissionResult = IDL.Variant({ ok: Submission, err: IDL.Text });
+const Observations = IDL.Record({ attempts: IDL.Vec(Attempt), commands: IDL.Nat });
 type CallerValue = { app_id: string; installation_uid: bigint; endpoint: string };
 type IdentityValue = { caller: CallerValue; request_id: string };
 type SummaryValue = { operation_id: bigint; caller: CallerValue; request_id: string; chain_id: bigint; status: string; review_revision: bigint; nonce: string[]; transaction_hash: string[] };
 type ResultValue = { ok: SummaryValue } | { err: string };
-type ObservationsValue = { attempts: Array<{ operation_id: bigint; caller: CallerValue; chain_id: bigint; nonce: string[]; digest: string }>; broadcasts: string[]; commands: bigint };
+type SubmissionValue = { chain_id: bigint; transaction_hash: string; raw_transaction: string };
+type SubmissionResultValue = { ok: SubmissionValue } | { err: string };
+type ObservationsValue = { attempts: Array<{ operation_id: bigint; caller: CallerValue; chain_id: bigint; nonce: string[]; digest: string }>; commands: bigint };
 const identity = (installation_uid: bigint, request = "1", app_id = "consumer", endpoint = "original-tile"): IdentityValue => ({ caller: { app_id, installation_uid, endpoint }, request_id: request.padStart(32, "0") });
 function ok(result: ResultValue): SummaryValue {
   if ("err" in result) throw new Error(result.err);
@@ -111,16 +115,25 @@ test("overlapping caller installations and chains preserve nonce, review and sig
     }
     const release = (key: string, through = 100n) => call(gate, "release", [IDL.Text, IDL.Nat], [key, through], []);
     const prepare = (id: IdentityValue, chain = 1n, value = "1", message = false) => submit(wallet, "prepare", [Identity, IDL.Nat, IDL.Text, IDL.Bool], [id, chain, value, message]);
+    const finishPrepare = (id: IdentityValue, revision: bigint) => call<ResultValue>(wallet, "finishPrepare", [Identity, IDL.Nat], [id, revision]);
     const execute = (id: IdentityValue, revision: bigint) => submit(wallet, "execute", [Identity, IDL.Nat], [id, revision]);
     const status = (id: IdentityValue, refresh = true) => call<ResultValue>(wallet, "status", [Identity, IDL.Bool], [id, refresh]);
     const observations = () => query<ObservationsValue>(wallet, "observations", [], [], Observations);
+    const submissions: SubmissionValue[] = [];
+    const submission = (id: IdentityValue) => query<SubmissionResultValue>(wallet, "submission", [Identity], [id], SubmissionResult);
+    async function readSubmission(id: IdentityValue): Promise<SubmissionValue> {
+      const result = await submission(id);
+      if ("err" in result) throw new Error(result.err);
+      return result.ok;
+    }
+    const observePending = (id: IdentityValue, value: SubmissionValue) => call<ResultValue>(wallet, "observePending", [Identity, IDL.Text], [id, value.transaction_hash]);
     const signerError = (id: bigint, error: string) => call(wallet, "signerError", [IDL.Nat, IDL.Text], [id, error], []);
 
     const a = identity(101n);
     const b = identity(102n); // Same app/request ID, different installation.
     const c = identity(101n, "2", "other-consumer");
     const aPreparing = await prepare(a);
-    await suspended("nonce:1");
+    await suspended("prepare:1");
     const replay = ok(await finish<ResultValue>(await prepare({ ...a, caller: { ...a.caller, endpoint: "replacement-tile" } })));
     expect(replay.status).toBe("preparing");
     expect(replay.caller).toEqual(a.caller); // Original attribution survives replacement endpoints.
@@ -128,15 +141,15 @@ test("overlapping caller installations and chains preserve nonce, review and sig
     expect(await status(b)).toEqual({ err: "not_found" });
     const bPreparing = await prepare(b);
     const cPreparing = await prepare(c, 42161n);
-    await suspended("nonce:1", 2n);
-    await suspended("nonce:42161");
+    await suspended("prepare:1", 2n);
+    await suspended("prepare:42161");
     expect((await observations()).commands).toBe(3n);
-    await release("nonce:42161");
+    await release("prepare:42161");
     const cp = ok(await finish<ResultValue>(cPreparing));
     expect(cp.nonce).toEqual(["0"]);
     expect(cp.caller).toEqual(c.caller);
     expect(ok(await status(a, false)).status).toBe("preparing");
-    await release("nonce:1");
+    await release("prepare:1");
     const ap = ok(await finish<ResultValue>(aPreparing));
     const bp = ok(await finish<ResultValue>(bPreparing));
     expect(ap.operation_id).toBe(replay.operation_id);
@@ -149,10 +162,15 @@ test("overlapping caller installations and chains preserve nonce, review and sig
     await suspended(`sign:${ap.operation_id}`);
     expect(ok(await finish<ResultValue>(await execute(a, ap.review_revision))).status).toBe("signing");
     expect(ok(await status(a)).status).toBe("signing");
-    const revisedB = ok(await finish<ResultValue>(await execute(b, bp.review_revision)));
+    const candidateB = ok(await finish<ResultValue>(await execute(b, bp.review_revision)));
+    expect(candidateB.status).toBe("preparing");
+    expect(candidateB.nonce).toEqual(["1"]);
+    expect(candidateB.review_revision).toBe(bp.review_revision + 1n);
+    expect(ok(await finish<ResultValue>(await execute(b, candidateB.review_revision))).status).toBe("preparing");
+    expect(await finishPrepare(b, bp.review_revision)).toEqual({ err: expect.stringContaining("review_changed") });
+    const revisedB = ok(await finishPrepare(b, candidateB.review_revision));
     expect(revisedB.status).toBe("prepared");
-    expect(revisedB.nonce).toEqual(["1"]);
-    expect(revisedB.review_revision).toBe(bp.review_revision + 1n);
+    expect(revisedB.review_revision).toBe(candidateB.review_revision + 1n);
     expect(await finish<ResultValue>(await execute(b, bp.review_revision))).toEqual({ err: expect.stringContaining("review_changed") });
     expect((await observations()).attempts).toHaveLength(1);
 
@@ -173,44 +191,53 @@ test("overlapping caller installations and chains preserve nonce, review and sig
     await suspended(`sign:${cp.operation_id}`, 2n);
     await release(`sign:${cp.operation_id}`, 2n);
     expect(ok(await finish<ResultValue>(cDisabled)).status).toBe("prepared");
-    expect((await observations()).broadcasts).toHaveLength(0);
+    expect(submissions).toHaveLength(0);
 
     // Complete B before A, then C before A. The older suspended callback must
-    // still sign/broadcast A's original chain, nonce and installation.
+    // still sign A's original chain, nonce and installation. Browser submission
+    // is a separate step; completing the signer alone cannot claim a broadcast.
     await release(`sign:${bp.operation_id}`, 1n);
-    await suspended(`broadcast:${bp.operation_id}`);
+    expect(ok(await finish<ResultValue>(bSigning)).status).toBe("signed");
     expect(ok(await status(a)).status).toBe("signing");
-    expect(ok(await finish<ResultValue>(await execute(b, revisedB.review_revision))).status).toBe("submitted");
-    expect((await observations()).broadcasts).toHaveLength(1);
-    await release(`broadcast:${bp.operation_id}`);
-    expect(ok(await finish<ResultValue>(bSigning)).status).toBe("submitted");
+    expect(ok(await finish<ResultValue>(await execute(b, revisedB.review_revision))).status).toBe("signed");
+    const sentB = await readSubmission(b);
+    expect(await readSubmission(b)).toEqual(sentB);
+    expect(await submission(a)).toEqual({ err: expect.any(String) });
+    submissions.push(sentB);
+    expect(ok(await observePending(b, sentB)).status).toBe("submitted");
     await signerError(cp.operation_id, "");
     const cSigning = await execute(c, cp.review_revision);
     await suspended(`sign:${cp.operation_id}`, 3n);
     await release(`sign:${cp.operation_id}`, 3n);
-    await suspended(`broadcast:${cp.operation_id}`);
-    await release(`broadcast:${cp.operation_id}`);
-    expect(ok(await finish<ResultValue>(cSigning)).status).toBe("submitted");
+    expect(ok(await finish<ResultValue>(cSigning)).status).toBe("signed");
+    const sentC = await readSubmission(c);
+    submissions.push(sentC);
+    expect(ok(await observePending(c, sentC)).status).toBe("submitted");
     expect(ok(await status(a)).status).toBe("signing");
     await release(`sign:${ap.operation_id}`, 1n);
-    await suspended(`broadcast:${ap.operation_id}`);
-    expect(ok(await finish<ResultValue>(await execute(a, ap.review_revision))).status).toBe("submitted");
-    expect(ok(await status(a)).status).toBe("submitted");
-    await release(`broadcast:${ap.operation_id}`);
-    const sentA = ok(await finish<ResultValue>(aSigning));
+    const signedA = ok(await finish<ResultValue>(aSigning));
+    expect(signedA.status).toBe("signed");
+    expect(ok(await finish<ResultValue>(await execute(a, ap.review_revision))).status).toBe("signed");
+    expect(ok(await status(a)).status).toBe("signed");
+    const rawA = await readSubmission(a);
+    submissions.push(rawA);
+    const sentA = ok(await observePending(a, rawA));
+    expect(sentA.status).toBe("submitted");
     expect(sentA.caller).toEqual(a.caller);
     expect(ok(await finish<ResultValue>(await prepare(a))).transaction_hash).toEqual(sentA.transaction_hash);
     expect(await finish<ResultValue>(await prepare(a, 42161n))).toEqual({ err: expect.stringContaining("request_conflict") });
     seen = await observations();
-    expect(seen.broadcasts).toHaveLength(3);
-    expect(new Set(seen.broadcasts).size).toBe(3);
-    const decoded = seen.broadcasts.map((raw) => Transaction.from(raw));
+    expect(submissions).toHaveLength(3);
+    expect(new Set(submissions.map((entry) => entry.raw_transaction)).size).toBe(3);
+    const decoded = submissions.map((entry) => Transaction.from(entry.raw_transaction));
     expect(decoded.map((tx) => [tx.chainId, tx.nonce])).toEqual([[1n, 1], [42161n, 0], [1n, 0]]);
-    for (const tx of decoded) {
+    for (const [index, tx] of decoded.entries()) {
       expect(tx.from?.toLowerCase()).toBe("0x7e5f4552091a69125d5dfcb7b8c2659029395bdf");
       expect(tx.to?.toLowerCase()).toBe("0x0000000000000000000000000000000000000002");
       expect(tx.value).toBe(1n);
       expect(tx.type).toBe(2);
+      expect(submissions[index]!.chain_id).toBe(tx.chainId);
+      expect(submissions[index]!.transaction_hash).toBe(tx.hash!);
     }
     expect(sentA.transaction_hash).toEqual([decoded[2]!.hash!]);
     expect(seen.attempts.filter((v) => v.operation_id === ap.operation_id)).toHaveLength(1);
@@ -232,8 +259,9 @@ test("overlapping caller installations and chains preserve nonce, review and sig
     expect(ok(await finish<ResultValue>(await prepare(d, 1n, "1", true))).status).toBe("unknown");
     seen = await observations();
     expect(seen.attempts.filter((v) => v.operation_id === dp.operation_id)).toHaveLength(1);
-    expect(seen.broadcasts).toHaveLength(3);
-    console.log("Real ingress overlap passed: delayed RPC/signing/broadcast, out-of-order callbacks, nonce review revision, caller/chain isolation and definitive/ambiguous signer outcomes");
+    expect(submissions).toHaveLength(3);
+    expect(await submission(d)).toEqual({ err: expect.any(String) });
+    console.log("Real ingress overlap passed: delayed browser preparation/signing, out-of-order callbacks, frozen submission bytes, nonce review revision, caller/chain isolation and definitive/ambiguous signer outcomes");
   } finally {
     if (client && instanceId !== undefined) await client.deleteInstance(instanceId).catch(() => undefined);
     if (server && server.exitCode === null) {

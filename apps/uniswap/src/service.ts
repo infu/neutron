@@ -25,8 +25,10 @@ exposeTool("uniswap_quote_v1", {
   const account = (await wallet.accounts()).accounts.find((entry) => entry.accountId === args.accountId);
   if (!account) throw new Error("EVM Wallet account is unavailable.");
   const chain = String(args.chainId), read = walletReader(wallet, account.accountId);
-  const token = async (value: JsonValue | undefined) => value === null ? defaultTokens(chain)[0]! : customToken(read, chain, String(value));
-  const input = { chainId: chain, accountId: account.accountId, accountAddress: getAddress(account.address), tokenIn: await token(args.tokenIn), tokenOut: await token(args.tokenOut), amountIn: String(args.amountIn), slippageBps: Number(args.slippageBps), recipient: getAddress(String(args.recipient)), deadline: String(args.deadline) };
+  const defaults = defaultTokens(chain);
+  const token = async (value: JsonValue | undefined) => defaults.find((entry) => value === null ? entry.address === null : entry.address?.toLowerCase() === String(value).toLowerCase()) ?? customToken(read, chain, String(value));
+  const [tokenIn, tokenOut] = await Promise.all([token(args.tokenIn), token(args.tokenOut)]);
+  const input = { chainId: chain, accountId: account.accountId, accountAddress: getAddress(account.address), tokenIn, tokenOut, amountIn: String(args.amountIn), slippageBps: Number(args.slippageBps), recipient: getAddress(String(args.recipient)), deadline: String(args.deadline) };
   const prepared = await prepareSwap(read, await quoteSwap(read, input));
   const quote = { ...prepared.quote, networkFees: await estimateSwapFees(wallet, prepared) };
   return { quoteJson: JSON.stringify(quote) };

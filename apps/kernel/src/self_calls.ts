@@ -1209,6 +1209,7 @@ export function materializeSelfCallArguments(
   encodedArgs: unknown,
   blobsValue: unknown,
   argumentTypes: readonly IDL.Type[],
+  context?: { appId: string; appVersion: number; method: string },
 ): {
   args: unknown[];
   metadata: JsonValue[];
@@ -1219,7 +1220,12 @@ export function materializeSelfCallArguments(
     !isDensePlainArray(encodedArgs) ||
     encodedArgs.length !== argumentTypes.length
   ) {
-    throw new Error("Self-call argument count does not match live Candid");
+    const details = context
+      ? ` (${context.appId}.${context.method}, app version ${context.appVersion}; expected ${argumentTypes.length}, received ${
+          Array.isArray(encodedArgs) ? encodedArgs.length : "non-array"
+        }${isDensePlainArray(encodedArgs) ? "" : "; arguments must be a dense plain array"})`
+      : "";
+    throw new Error(`Self-call argument count does not match live Candid${details}`);
   }
   const blobs = parseSelfCallWireBlobs(blobsValue);
   const byPath = new Map(

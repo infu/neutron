@@ -325,7 +325,9 @@ Current Kernel tools include:
 - `apps.install_offer`;
 - `endpoints.list`;
 - `attachments.delegate`;
-- `permissions.request`;
+- `permissions.request`, accepting the existing single `tool` or an exact
+  `tools` array for one grouped session-access decision, as documented in
+  [Frontend Tool Permissions](./app-method-access-and-call-consent.md#request-an-exact-group-of-session-tools);
 - `audit.list`; and
 - `workspace.open_tile`;
 - `workspace.inspect`; and

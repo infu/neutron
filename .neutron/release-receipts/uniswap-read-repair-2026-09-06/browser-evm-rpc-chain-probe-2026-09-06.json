@@ -1,0 +1,181 @@
+{
+  "startedAt": "2026-09-06T16:41:57.081Z",
+  "scope": "Fresh unforked Anvil and isolated PocketIC; local test ETH/token only. Actual Chromium helpers, live Candid, production wallet backend with fixture custody and no backend RPC capability.",
+  "actorWasmSha256": "4f201c50f9b644c05cd4830b73663f0aef78e914b228b84a25c52b45ae4aa32c",
+  "browserBundleSha256": "8536eb412f066ef0b1bd79172c75780734133a2c94954fbb11cf6a8fe966258f",
+  "sourceHashes": {
+    "apps/evm_wallet/src/browser_operations.ts": "3be8fcdee062f378d4acdfcf94935df4870b6497ab99a70ded96b3227c8f2f8c",
+    "apps/evm_wallet/src/browser_reads.ts": "c11b575bbc0315e7cbc6b4e6a92cc57a9c867ab40d80e6a365805af3e462f8b0",
+    "apps/evm_wallet/src/browser_rpc.ts": "833bf0c394a952cfc3bc13e053b7c5a99c21bef649c42dd30cb9e597cbfe696d",
+    "apps/evm_wallet/backend/main.mo": "2bfc3fad9deae8f6395f42aca04692d4b266af4cbdfa7963f89570d0d2a3b274",
+    "apps/evm_wallet/backend/BrowserObservations.mo": "77fa180f899ba21532633cee4f47a413247640346c089f8632bcff898dd72255",
+    "apps/kernel/src/self_calls.ts": "e35e882721ca795e819615419b715f1fc1c8a7233c7a15e4fe43d429b4ab43b7",
+    "apps/evm_wallet/test/browser_chain_actor.mo": "4ebf60f2808a2efa85fdae779e055ede3ab7f7bcf9ade9384c0bfe0ec32fe6fa"
+  },
+  "sourceHashesVerifiedBeforeAndAfter": true,
+  "passed": true,
+  "elapsedPipelineMs": 705,
+  "chainId": 1,
+  "opaqueOrigin": "null",
+  "anvilPort": 44909,
+  "isolatedCanister": "lxzze-o7777-77777-aaaaa-cai",
+  "native": {
+    "operationId": "1",
+    "hash": "0x46ed13d6a49f9a6b4adeac9189f9d0a23bcad855db6f5e9592e116c4904a36b3",
+    "nonce": "0",
+    "receivedWei": "1000000000000000",
+    "status": "confirmed"
+  },
+  "token": {
+    "contract": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+    "operationId": "2",
+    "hash": "0x674fb27ac5fdcbbe157adde606c79c4c12b910688fc1ce2c4154c90196fbdf29",
+    "nonce": "1",
+    "receivedAtoms": "5000000000000000000",
+    "retainedAtoms": "15000000000000000000",
+    "status": "confirmed",
+    "droppedBroadcastReply": true,
+    "reloadRecovery": true
+  },
+  "signatures": 2,
+  "browserBroadcasts": 2,
+  "browserRpcCalls": [
+    "eth_chainId",
+    "eth_getBlockByNumber",
+    "eth_getTransactionCount",
+    "eth_gasPrice",
+    "eth_maxPriorityFeePerGas",
+    "eth_getBalance",
+    "eth_getTransactionCount",
+    "eth_estimateGas",
+    "eth_call",
+    "eth_getTransactionCount",
+    "eth_getTransactionCount",
+    "eth_sendRawTransaction",
+    "eth_getTransactionByHash",
+    "eth_getTransactionReceipt",
+    "eth_getBlockByNumber",
+    "eth_getBlockByNumber",
+    "eth_getBlockByNumber",
+    "eth_chainId",
+    "eth_getBlockByNumber",
+    "eth_getTransactionCount",
+    "eth_gasPrice",
+    "eth_maxPriorityFeePerGas",
+    "eth_getBalance",
+    "eth_getTransactionCount",
+    "eth_estimateGas",
+    "eth_call",
+    "eth_getTransactionCount",
+    "eth_getTransactionCount",
+    "eth_getBlockByNumber",
+    "eth_call",
+    "eth_sendRawTransaction",
+    "eth_chainId",
+    "eth_getTransactionByHash",
+    "eth_getTransactionReceipt",
+    "eth_getBlockByNumber",
+    "eth_getBlockByNumber",
+    "eth_getBlockByNumber",
+    "eth_blockNumber",
+    "eth_getBalance",
+    "eth_call"
+  ],
+  "kernelCalls": [
+    {
+      "kind": "query",
+      "method": "evm_wallet_operation_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_accounts_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_prepare_browser_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_finish_prepare_browser_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_execute_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_submission_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_observe_browser_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_operation_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_operation_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_prepare_browser_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_operation_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_accounts_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_prepare_browser_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_finish_prepare_browser_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_review_evidence_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_observe_evidence_browser_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_execute_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_submission_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_operation_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_operation_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_operation_v1"
+    },
+    {
+      "kind": "query",
+      "method": "evm_wallet_superseding_v1"
+    },
+    {
+      "kind": "update",
+      "method": "evm_wallet_observe_browser_v1"
+    }
+  ],
+  "browserErrors": [],
+  "finishedAt": "2026-09-06T16:42:10.548Z",
+  "ownedRuntimeStopped": true
+}

@@ -1,0 +1,528 @@
+{
+  "status": "passed",
+  "qualification": "batch52-browser-rpc-combined-upgrade",
+  "scope": "Exact batch52 predecessor and one combined checked actor upgrade, clean successor initialization, actual released custody signature, scripted browser-observation API recovery. No browser UI, external-chain acceptance or production financial calls.",
+  "predecessors": [
+    {
+      "id": "kernel",
+      "version": 342,
+      "bytes": 2448936,
+      "sha256": "ed8dbd29b9c13e91786e3c836489ca81505d5c079884e37a573b3719be63dce4"
+    },
+    {
+      "id": "wallet",
+      "version": 316,
+      "bytes": 768823,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "bytes": 472282,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 107,
+      "bytes": 391816,
+      "sha256": "ce05d6106fcfd398281411e488759d52d331d73a735cd7cc05f36574c72e4e91"
+    },
+    {
+      "id": "uniswap",
+      "version": 104,
+      "bytes": 288989,
+      "sha256": "63b84e763186c64f834a8c5ed15361d70bb74a5837b6d14a6e759d23b5f0c685"
+    },
+    {
+      "id": "contacts",
+      "version": 306,
+      "bytes": 298018,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "kernel",
+      "version": 343,
+      "bytes": 2449439,
+      "sha256": "8051a00b4784e6e4a28f1e208677ef94647c36c83af66e2e2a37195924a0db27"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 109,
+      "bytes": 569396,
+      "sha256": "dbcf92bcfef04f21ee92f2d95bd612bfd359310bfcbb5906d5c7e3f9d4c54de4"
+    },
+    {
+      "id": "uniswap",
+      "version": 105,
+      "bytes": 289769,
+      "sha256": "3dde37a5c76c76cd6618b13cb030c46fffa41a61ed9f0477037439bef8749730"
+    }
+  ],
+  "targets": [
+    {
+      "id": "kernel",
+      "version": 343,
+      "bytes": 2449439,
+      "sha256": "8051a00b4784e6e4a28f1e208677ef94647c36c83af66e2e2a37195924a0db27"
+    },
+    {
+      "id": "wallet",
+      "version": 316,
+      "bytes": 768823,
+      "sha256": "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76"
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "bytes": 472282,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6"
+    },
+    {
+      "id": "evm_wallet",
+      "version": 109,
+      "bytes": 569396,
+      "sha256": "dbcf92bcfef04f21ee92f2d95bd612bfd359310bfcbb5906d5c7e3f9d4c54de4"
+    },
+    {
+      "id": "uniswap",
+      "version": 105,
+      "bytes": 289769,
+      "sha256": "3dde37a5c76c76cd6618b13cb030c46fffa41a61ed9f0477037439bef8749730"
+    },
+    {
+      "id": "contacts",
+      "version": 306,
+      "bytes": 298018,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"
+    }
+  ],
+  "fixture_wasm_sha256": "83502ade90b196c2a07d1f1a396edd37314d892a52c25be3b7977c173a2487db",
+  "signed_pending": {
+    "scope": "Real Kernel custody signature and exact Wallet archive; isolated scripted RPC observations, no external-chain acceptance claim",
+    "identity": {
+      "caller": {
+        "app_id": "kitchensink",
+        "installation_uid": "4",
+        "endpoint": "app:kitchensink:browser-upgrade-fixture"
+      },
+      "request_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "operation_id": "2",
+    "account": "0x86d6b52beda0ede153aabb525f2cc42b5745f999",
+    "raw": "0x02f865010902648252089400000000000000000000000000000000000000028312d68780c001a054fbdc0b158e9576c3c9509a6bc99435bd056f8df227efc7b60b9604277af36ba059dd4e37a63c305f689312f002afb37866d7d2e217c24c3d1f6a953819bdd075",
+    "hash": "0x8aa3fe4382afd95e010e7d91c4ed4e98e1e54752586ff1a294d56c59e6cee935",
+    "nonce": 9,
+    "chain_id": "1",
+    "signature": "0x54fbdc0b158e9576c3c9509a6bc99435bd056f8df227efc7b60b9604277af36b59dd4e37a63c305f689312f002afb37866d7d2e217c24c3d1f6a953819bdd0751c",
+    "signing_usage_before": {
+      "total": "1",
+      "revoked": "0",
+      "rate_limited": "0",
+      "busy": "0",
+      "denied": "0",
+      "failed": "0",
+      "succeeded": "1"
+    },
+    "signing_usage_after": {
+      "total": "2",
+      "revoked": "0",
+      "rate_limited": "0",
+      "busy": "0",
+      "denied": "0",
+      "failed": "0",
+      "succeeded": "2"
+    },
+    "broadcasts_before": [
+      "0x02f865010902648252089400000000000000000000000000000000000000028312d68780c001a054fbdc0b158e9576c3c9509a6bc99435bd056f8df227efc7b60b9604277af36ba059dd4e37a63c305f689312f002afb37866d7d2e217c24c3d1f6a953819bdd075"
+    ]
+  },
+  "browser_recovery": {
+    "scope": "Public browser preparation/submission/observation APIs via actual Candid calls; no browser UI or external-chain acceptance claim",
+    "recovery_identity": {
+      "caller": {
+        "app_id": "kitchensink",
+        "installation_uid": "4",
+        "endpoint": "app:kitchensink:browser-after-upgrade"
+      },
+      "request_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "retained_raw": "0x02f865010902648252089400000000000000000000000000000000000000028312d68780c001a054fbdc0b158e9576c3c9509a6bc99435bd056f8df227efc7b60b9604277af36ba059dd4e37a63c305f689312f002afb37866d7d2e217c24c3d1f6a953819bdd075",
+    "retained_hash": "0x8aa3fe4382afd95e010e7d91c4ed4e98e1e54752586ff1a294d56c59e6cee935",
+    "reconciled_status": "confirmed",
+    "receipt": [
+      "{\"transactionHash\":\"0x8aa3fe4382afd95e010e7d91c4ed4e98e1e54752586ff1a294d56c59e6cee935\",\"blockNumber\":\"0x64\",\"blockHash\":\"0xabababababababababababababababababababababababababababababababab\",\"status\":\"0x1\",\"gasUsed\":\"0x5208\",\"effectiveGasPrice\":\"0x64\",\"logs\":[]}"
+    ],
+    "next_unsigned_nonce": "10",
+    "signing_capability_before": {
+      "kind": {
+        "wallet_custody_signing": null
+      },
+      "scope": {
+        "installation_uid": "2",
+        "app_id": "evm_wallet"
+      },
+      "enabled": true,
+      "resource_id": "main",
+      "usage": {
+        "total": "2",
+        "revoked": "0",
+        "rate_limited": "0",
+        "busy": "0",
+        "denied": "0",
+        "failed": "0",
+        "succeeded": "2"
+      },
+      "toggleable": true
+    },
+    "signing_capability_after": {
+      "kind": {
+        "wallet_custody_signing": null
+      },
+      "scope": {
+        "installation_uid": "2",
+        "app_id": "evm_wallet"
+      },
+      "enabled": true,
+      "resource_id": "main",
+      "usage": {
+        "total": "2",
+        "revoked": "0",
+        "rate_limited": "0",
+        "busy": "0",
+        "denied": "0",
+        "failed": "0",
+        "succeeded": "2"
+      },
+      "toggleable": true
+    },
+    "legacy_rpc_before": {
+      "broadcasts": [
+        "0x02f865010902648252089400000000000000000000000000000000000000028312d68780c001a054fbdc0b158e9576c3c9509a6bc99435bd056f8df227efc7b60b9604277af36ba059dd4e37a63c305f689312f002afb37866d7d2e217c24c3d1f6a953819bdd075"
+      ],
+      "reads": [
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_getBalance",
+        "eth_getBalance",
+        "eth_getBalance",
+        "eth_getTransactionCount",
+        "eth_getTransactionCount",
+        "eth_getTransactionCount",
+        "eth_estimateGas",
+        "eth_estimateGas",
+        "eth_estimateGas",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_getBalance",
+        "eth_getBalance",
+        "eth_getBalance",
+        "eth_getTransactionCount",
+        "eth_getTransactionCount",
+        "eth_getTransactionCount",
+        "eth_estimateGas",
+        "eth_estimateGas",
+        "eth_estimateGas",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_getBlockByNumber",
+        "eth_getBlockByNumber",
+        "eth_getBlockByNumber",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_getBlockByNumber",
+        "eth_getBlockByNumber",
+        "eth_getBlockByNumber",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call"
+      ]
+    },
+    "legacy_rpc_after": {
+      "broadcasts": [
+        "0x02f865010902648252089400000000000000000000000000000000000000028312d68780c001a054fbdc0b158e9576c3c9509a6bc99435bd056f8df227efc7b60b9604277af36ba059dd4e37a63c305f689312f002afb37866d7d2e217c24c3d1f6a953819bdd075"
+      ],
+      "reads": [
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_getBalance",
+        "eth_getBalance",
+        "eth_getBalance",
+        "eth_getTransactionCount",
+        "eth_getTransactionCount",
+        "eth_getTransactionCount",
+        "eth_estimateGas",
+        "eth_estimateGas",
+        "eth_estimateGas",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_getBalance",
+        "eth_getBalance",
+        "eth_getBalance",
+        "eth_getTransactionCount",
+        "eth_getTransactionCount",
+        "eth_getTransactionCount",
+        "eth_estimateGas",
+        "eth_estimateGas",
+        "eth_estimateGas",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_getBlockByNumber",
+        "eth_getBlockByNumber",
+        "eth_getBlockByNumber",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_blockNumber",
+        "eth_getBlockByNumber",
+        "eth_getBlockByNumber",
+        "eth_getBlockByNumber",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call",
+        "eth_call"
+      ]
+    },
+    "additional_replicated_rpc_calls": 0,
+    "additional_signatures": 0
+  },
+  "deployment_id_before": "d063a0cbda171985c8ac720b7535e2d3",
+  "deployment_id_after": "a3529053a17f224b0626bd4106cd93d7",
+  "memory_plan": {
+    "upgrades": [
+      {
+        "kind": "keep",
+        "owner": "contacts",
+        "memoryId": "contacts",
+        "version": 2
+      },
+      {
+        "kind": "keep",
+        "owner": "evm_wallet",
+        "memoryId": "evm_evidence",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "evm_wallet",
+        "memoryId": "evm_wallet",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "kernel",
+        "memoryId": "kernel",
+        "version": 4
+      },
+      {
+        "kind": "keep",
+        "owner": "kernel",
+        "memoryId": "kernel_activation",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "kitchensink",
+        "memoryId": "kitchensink",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "uniswap",
+        "memoryId": "uniswap",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "wallet",
+        "memoryId": "wallet",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "wallet",
+        "memoryId": "wallet_bridge",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "wallet",
+        "memoryId": "wallet_bridge_replacements",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "wallet",
+        "memoryId": "wallet_commands",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "wallet",
+        "memoryId": "wallet_transfers",
+        "version": 1
+      }
+    ],
+    "removedApps": [],
+    "destructiveMemoryRoots": []
+  },
+  "runtime_memories": [
+    [
+      "contacts",
+      "contacts",
+      2
+    ],
+    [
+      "evm_wallet",
+      "evm_evidence",
+      1
+    ],
+    [
+      "evm_wallet",
+      "evm_wallet",
+      1
+    ],
+    [
+      "kernel",
+      "kernel",
+      4
+    ],
+    [
+      "kernel",
+      "kernel_activation",
+      1
+    ],
+    [
+      "kitchensink",
+      "kitchensink",
+      1
+    ],
+    [
+      "uniswap",
+      "uniswap",
+      1
+    ],
+    [
+      "wallet",
+      "wallet",
+      1
+    ],
+    [
+      "wallet",
+      "wallet_bridge",
+      1
+    ],
+    [
+      "wallet",
+      "wallet_bridge_replacements",
+      1
+    ],
+    [
+      "wallet",
+      "wallet_commands",
+      1
+    ],
+    [
+      "wallet",
+      "wallet_transfers",
+      1
+    ]
+  ],
+  "clean_runtime_memories": [
+    [
+      "contacts",
+      "contacts",
+      2
+    ],
+    [
+      "evm_wallet",
+      "evm_evidence",
+      1
+    ],
+    [
+      "evm_wallet",
+      "evm_wallet",
+      1
+    ],
+    [
+      "kernel",
+      "kernel",
+      4
+    ],
+    [
+      "kernel",
+      "kernel_activation",
+      1
+    ],
+    [
+      "kitchensink",
+      "kitchensink",
+      1
+    ],
+    [
+      "uniswap",
+      "uniswap",
+      1
+    ],
+    [
+      "wallet",
+      "wallet",
+      1
+    ],
+    [
+      "wallet",
+      "wallet_bridge",
+      1
+    ],
+    [
+      "wallet",
+      "wallet_bridge_replacements",
+      1
+    ],
+    [
+      "wallet",
+      "wallet_commands",
+      1
+    ],
+    [
+      "wallet",
+      "wallet_transfers",
+      1
+    ]
+  ],
+  "external_install_modes": [
+    "install",
+    "install"
+  ],
+  "gateway_created": false
+}

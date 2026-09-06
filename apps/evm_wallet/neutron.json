@@ -2,15 +2,12 @@
   "format": 3,
   "id": "evm_wallet",
   "name": "EVM Wallet",
-  "version": 107,
+  "version": 109,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Chain-key accounts, transactions and signatures across EVM networks",
   "src": "main.mo",
   "backend": {
     "capabilities": {
-      "backend_calls": {
-        "api": 1
-      },
       "wallet_custody_signing": {
         "api": 1
       }
@@ -47,40 +44,16 @@
         "evm_wallet_status_v1",
         "evm_wallet_review_evidence_v1",
         "evm_wallet_estimate_transaction_v1",
-        "evm_wallet_replacement_transaction_v1"
+        "evm_wallet_replacement_transaction_v1",
+        "evm_wallet_prepare_browser_v1",
+        "evm_wallet_finish_prepare_browser_v1",
+        "evm_wallet_operation_v1",
+        "evm_wallet_submission_v1",
+        "evm_wallet_observe_browser_v1",
+        "evm_wallet_observe_evidence_browser_v1",
+        "evm_wallet_transaction_request_matches_v1",
+        "evm_wallet_superseding_v1"
       ]
-    },
-    "backend_calls": {
-      "api": 1,
-      "description": "Read EVM networks and submit signed transactions through the EVM RPC canister",
-      "reservation_scopes": [
-        "exact"
-      ],
-      "install_reservations": [
-        {
-          "kind": "exact",
-          "principal": "7hfb6-caaaa-aaaar-qadga-cai",
-          "method": "request"
-        },
-        {
-          "kind": "exact",
-          "principal": "7hfb6-caaaa-aaaar-qadga-cai",
-          "method": "requestCost"
-        },
-        {
-          "kind": "exact",
-          "principal": "7hfb6-caaaa-aaaar-qadga-cai",
-          "method": "eth_sendRawTransaction"
-        },
-        {
-          "kind": "exact",
-          "principal": "7hfb6-caaaa-aaaar-qadga-cai",
-          "method": "eth_sendRawTransactionCyclesCost"
-        }
-      ],
-      "max_concurrency": 20,
-      "max_cycles_per_call": 100000000000000,
-      "max_cycles_per_day": 1000000000000000
     }
   },
   "tiles": [
@@ -129,6 +102,34 @@
       "type": "update",
       "async": "async*"
     },
+    "evm_wallet_transaction_request_matches_v1": {
+      "type": "query",
+      "async": false
+    },
+    "evm_wallet_operation_v1": {
+      "type": "query",
+      "async": false
+    },
+    "evm_wallet_submission_v1": {
+      "type": "query",
+      "async": false
+    },
+    "evm_wallet_superseding_v1": {
+      "type": "query",
+      "async": false
+    },
+    "evm_wallet_observe_browser_v1": {
+      "type": "update",
+      "async": false
+    },
+    "evm_wallet_prepare_browser_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "evm_wallet_finish_prepare_browser_v1": {
+      "type": "update",
+      "async": false
+    },
     "evm_wallet_prepare_v1": {
       "type": "update",
       "async": "async*"
@@ -148,6 +149,10 @@
     "evm_wallet_review_evidence_v1": {
       "type": "update",
       "async": "async*"
+    },
+    "evm_wallet_observe_evidence_browser_v1": {
+      "type": "update",
+      "async": false
     }
   },
   "memory": {

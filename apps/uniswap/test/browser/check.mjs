@@ -33,7 +33,7 @@ const tokenAbi=parseAbi(['function allowance(address owner,address spender) view
 const records=new Map(), operations=new Map(), transactionEvidence=new Map(), calls=[], toolOverrides=new Map(), metadataRejections=[];
 const selfQueryMetadataLimit=65_536;
 let nextApproval='confirm', nextSwap='lost-reply', delayedReads=null, releaseReads=null;
-let feeMultiplier=1n, swapFeeUnavailable=false;
+let feeMultiplier=1n, swapFeeUnavailable=false, delayedFees=null, releaseFees=null;
 const ns=()=>String(BigInt(Date.now())*1_000_000n);
 function receipt(){return {blockNumber:'21000000',blockHash:'0x'+'44'.repeat(32),status:'success',gasUsed:'90000',effectiveGasPriceWei:'1000000000',logs:[],finality:'included',observedAtNs:ns()};}
 async function transport(kind,args){
@@ -74,20 +74,27 @@ async function fixtureTransport(kind,args){
     }
   }
   if(kind==='callTool'){
-    const call=args[0], request=call.arguments;assert.equal(call.target,'app:evm_wallet:background');
+    const call=args[0], request=call.arguments;
+    if(call.target==='kernel'){
+      assert.equal(call.name,'permissions.request');assert.equal(request.target,'app:evm_wallet:background');
+      assert.deepEqual(request.tools,['evm_accounts_v1','evm_balances_v1','evm_call_contract_v1','evm_estimate_transaction_v1','evm_transaction_v1','evm_replacement_transaction_v1']);
+      return {granted:true};
+    }
+    assert.equal(call.target,'app:evm_wallet:background');
     if(toolOverrides.has(call.name))return toolOverrides.get(call.name)(request);
     if(call.name==='evm_accounts_v1')return {accounts:[account]};
     if(call.name==='evm_balances_v1')return {...request,address:account.address,nativeBalanceWei:request.chainId==='1'?'5000000000000000000':'2000000000000000000',tokens:request.tokens.map(address=>({address,balanceAtoms:'120000000',decimals:address.toLowerCase().startsWith('0xa0b')||address.toLowerCase().startsWith('0xaf88')?'6':'18',symbol:'TOKEN',error:null})),blockNumber:'21000000',observedAtNs:ns(),completeness:'requested_only'};
-    if(call.name==='evm_read_contract_v1'){
+    if(call.name==='evm_call_contract_v1'){
       if(delayedReads)await delayedReads;
       let result;
       if(request.to.toLowerCase()===QUOTER){const decoded=decodeFunctionData({abi:quoteAbi,data:request.data});assert.equal(decoded.functionName,'quoteExactInputSingle');const q=decoded.args[0];const isUsdc=q.tokenOut.toLowerCase().startsWith('0xa0b')||q.tokenOut.toLowerCase().startsWith('0xaf88');const output=(q.fee===500?4_990_000n:4_900_000n)*(isUsdc?1n:1_000_000_000n);result=encodeFunctionResult({abi:quoteAbi,functionName:'quoteExactInputSingle',result:[output,2n**96n,1,90000n]});}
       else if(request.to.toLowerCase()===FACTORY)result=encodeFunctionResult({abi:factoryAbi,functionName:'getPool',result:POOL});
       else if(request.to.toLowerCase()===POOL)result=encodeFunctionResult({abi:poolAbi,functionName:'slot0',result:[(2n**96n*22_360_679_774_997_896n)/1_000_000_000_000n,0,0,1,1,0,true]});
       else {assert.equal(decodeFunctionData({abi:tokenAbi,data:request.data}).functionName,'allowance');result=encodeFunctionResult({abi:tokenAbi,functionName:'allowance',result:0n});}
-      return {...request,address:account.address,result,code:'0x6000',blockNumber:'21000000',observedAtNs:ns()};
+      return {accountId:request.accountId,chainId:request.chainId,to:request.to,data:request.data,address:account.address,result,blockNumber:'21000000',observedAtNs:ns()};
     }
     if(call.name==='evm_estimate_transaction_v1'){
+      if(delayedFees)await delayedFees;
       assert(!Object.hasOwn(request,'requestId'),'A readonly estimate must not allocate an operation identity');
       const approval=request.data.startsWith('0x095ea7b3'), arbitrum=request.chainId==='42161';
       if(swapFeeUnavailable&&!approval)return {...request,address:account.address,status:'unavailable',gasLimit:null,gasPriceWei:null,baseFeePerGasWei:null,maxPriorityFeePerGasWei:null,maxFeePerGasWei:null,estimatedFeeWei:null,maximumFeeWei:null,blockNumber:'21000000',observedAtNs:ns(),feeBasis:'unavailable',postingCosts:'unavailable',reasons:['ERC20: insufficient allowance for swap simulation.'],source:'evm_rpc'};
@@ -139,10 +146,22 @@ try{
  await page.getByLabel('Input token',{exact:true}).selectOption({label:'USDC'});
  await page.getByLabel('Output token',{exact:true}).selectOption('native');
  await page.getByLabel('Input amount',{exact:true}).fill('10');
+ const balancesBeforeQuote=calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_balances_v1').length;
+ delayedFees=new Promise(resolve=>{releaseFees=resolve;});
  await page.getByRole('button',{name:'Get quote',exact:true}).click();
- await page.getByRole('button',{name:'Save swap and review approval',exact:true}).waitFor();
+ await page.getByTestId('uniswap-progress').filter({hasText:'Reading network fees…'}).waitFor();
  assert.equal(await page.locator('output').innerText(),'0.00499');
- assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_read_contract_v1'&&c.args[0].arguments.to.toLowerCase()===QUOTER).length,4);
+ assert(await page.getByRole('button',{name:'Save swap and review approval',exact:true}).isDisabled());
+ assert.equal(await page.locator('.uni-review').getByText('Reading network fee estimates…',{exact:true}).count(),1);
+ assert.equal(operations.size,0);assert.equal(records.size,0);
+ assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_estimate_transaction_v1').length,2);
+ pass('Quote and progress appear while both fee reads are still pending; signing remains explicit');
+ releaseFees();delayedFees=null;
+ await page.waitForFunction(()=>!document.querySelector('button.uni-primary')?.disabled);
+ assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_balances_v1').length,balancesBeforeQuote);
+ pass('Quote completion does not repeat unrelated wallet balance reads');
+ assert.equal(await page.locator('output').innerText(),'0.00499');
+ assert.equal(calls.filter(c=>c.kind==='callTool'&&c.args[0].name==='evm_call_contract_v1'&&c.args[0].arguments.to.toLowerCase()===QUOTER).length,4);
  pass('Actual QuoterV2 calldata queries four fee tiers and selects best output');
  const quoteReview=page.locator('.uni-review');
  assert.match(await quoteReview.getByTestId('uniswap-approval-fee').innerText(),/^0\.00005 ETH/);
@@ -288,6 +307,16 @@ try{
  await page.getByRole('button',{name:/Get quote|Refresh quote/,exact:true}).waitFor();
  assert.equal(await page.locator('.uni-review').count(),0,'An in-flight quote was committed after its recipient changed');
  pass('An in-flight quote cannot reappear after its recipient changes');
+ delayedFees=new Promise(resolve=>{releaseFees=resolve;});
+ await page.getByRole('button',{name:'Get quote',exact:true}).click();
+ await page.getByTestId('uniswap-progress').filter({hasText:'Reading network fees…'}).waitFor();
+ assert.equal(await page.locator('.uni-review').count(),1);
+ await page.getByLabel('Input amount',{exact:true}).fill('3');
+ assert.equal(await page.locator('.uni-review').count(),0);
+ releaseFees();delayedFees=null;
+ await page.getByRole('button',{name:/Get quote|Refresh quote/,exact:true}).waitFor();
+ assert.equal(await page.locator('.uni-review').count(),0,'Late fee observations restored an outdated quote');
+ pass('Late fee observations cannot restore a quote after its input changes');
  await page.getByRole('button',{name:'Get quote',exact:true}).click();
  await page.getByRole('button',{name:'Review swap in EVM Wallet',exact:true}).waitFor();
  const operationsBeforeExpiry=operations.size;

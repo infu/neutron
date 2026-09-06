@@ -1,45 +1,71 @@
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
 import {
+  parseEvmBalancesRequest,
+  parseEvmCallContractRequest,
+  parseEvmReadContractRequest,
   parseEvmEstimateTransactionRequest,
-  parseEvmEstimateTransactionResult,
+  parseEvmTransactionRequest,
   parseEvmReplacementTransactionRequest,
   parseEvmReplacementTransactionResult,
 } from "neutron-tools/evm_wallet";
-import { natural, quantity, record, unwrap } from "./data.ts";
+import { METHODS, natural, record, unwrap, parseSnapshot } from "./data.ts";
+import { browserEvmRpc } from "./browser_rpc.ts";
+import { browserBalances, browserCallContract, browserReadContract, browserEstimateTransaction, browserTransaction, type BrowserReadRpc } from "./browser_reads.ts";
+
+function rpcFor(context: MsgBusToolContext): BrowserReadRpc {
+  return { request: (chainId, method, params, options) => browserEvmRpc.request(chainId, method, params, { ...options, ...(context.signal ? { signal: context.signal } : {}) }) };
+}
+function readResult(value: unknown, context: MsgBusToolContext): JsonObject {
+  // Partial RPC failures can be useful fee/balance evidence, but an explicit
+  // caller cancellation must still cancel the complete tool invocation.
+  context.signal?.throwIfAborted();
+  return value as JsonObject;
+}
+
+async function accountSnapshot(context: MsgBusToolContext, accountId: string, chainId: string) {
+  const snapshot = parseSnapshot(await context.kernel.querySelf(METHODS.snapshot, [null]));
+  const account = snapshot.accounts.find((entry) => entry.id === accountId);
+  if (!account) throw new Error("Connect EVM Wallet to initialize its chain-key account first.");
+  if (!snapshot.networks.some((network) => network.chainId === chainId)) throw new Error("Unsupported EVM Wallet network");
+  return { snapshot, account };
+}
+
+export async function balances(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
+  const request = parseEvmBalancesRequest(args), { snapshot, account } = await accountSnapshot(context, request.accountId, request.chainId);
+  return readResult(await browserBalances(request, account.address, snapshot.assets, rpcFor(context)), context);
+}
+
+export async function readContract(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
+  const request = parseEvmReadContractRequest(args), { account } = await accountSnapshot(context, request.accountId, request.chainId);
+  return readResult(await browserReadContract(request, account.address, rpcFor(context)), context);
+}
+
+export async function callContract(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
+  const request = parseEvmCallContractRequest(args), { account } = await accountSnapshot(context, request.accountId, request.chainId);
+  return readResult(await browserCallContract(request, account.address, rpcFor(context)), context);
+}
 
 export async function estimateTransaction(
   args: JsonObject,
   context: MsgBusToolContext,
 ): Promise<JsonObject> {
-  const request = parseEvmEstimateTransactionRequest(args);
-  const raw = record(unwrap(await context.kernel.updateSelf(
-    "evm_wallet_estimate_transaction_v1",
-    [{ chain_id: request.chainId, to: request.to, value: request.valueWei, data: request.data }],
-    120,
-  )), "transaction fee estimate");
-  const optional = (field: string) => raw[field] == null ? null : natural(raw[field], field);
-  return parseEvmEstimateTransactionResult({
-    accountId: request.accountId,
-    chainId: natural(raw.chain_id, "estimate chain"),
-    address: raw.from,
-    to: raw.to,
-    valueWei: natural(raw.value, "estimated transaction value"),
-    data: raw.data,
-    status: raw.status,
-    gasLimit: optional("gas_limit"),
-    gasPriceWei: optional("gas_price"),
-    baseFeePerGasWei: optional("base_fee_per_gas"),
-    maxPriorityFeePerGasWei: optional("max_priority_fee_per_gas"),
-    maxFeePerGasWei: optional("max_fee_per_gas"),
-    estimatedFeeWei: optional("estimated_fee"),
-    maximumFeeWei: optional("max_fee"),
-    blockNumber: raw.block_number == null ? null : quantity(raw.block_number, "estimate block"),
-    observedAtNs: natural(raw.observed_at, "estimate observation time"),
-    feeBasis: raw.fee_basis,
-    postingCosts: raw.posting_costs,
-    reasons: raw.reasons,
-    source: "evm_rpc",
-  }, request) as unknown as JsonObject;
+  const request = parseEvmEstimateTransactionRequest(args), { account } = await accountSnapshot(context, request.accountId, request.chainId);
+  return readResult(await browserEstimateTransaction(request, account.address, rpcFor(context)), context);
+}
+
+export async function transaction(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
+  const request = parseEvmTransactionRequest(args);
+  let matches: boolean | null = null;
+  if (request.walletRequest) {
+    const expected = request.walletRequest;
+    const raw = unwrap(await context.kernel.querySelf("evm_wallet_transaction_request_matches_v1", [{
+      chain_id: request.chainId, transaction_hash: request.transactionHash,
+      wallet_request: { caller_app_id: expected.callerAppId, caller_installation_uid: expected.callerInstallationUid, request_id: expected.requestId },
+    }]));
+    if (typeof raw !== "boolean") throw new Error("Invalid Wallet request journal proof");
+    matches = raw;
+  }
+  return readResult(await browserTransaction(request, matches, rpcFor(context)), context);
 }
 
 export async function replacementTransaction(
