@@ -185,7 +185,7 @@ the setup page uses an explicit **Open Wallet** action, copy affordances use an
 open icon instead of pretending to copy, and Ethereum deposit entry starts only
 after the handoff so no draft is discarded. Escape dismisses the popout.
 
-The non-persistent resident exposes four public tools:
+The non-persistent resident retains four released public tools:
 `wallet_overview` reads the bounded wallet projection, `wallet_refresh`
 refreshes selected ledger balances and returns that same projection,
 `wallet_token_info_v1` reads live metadata, the authoritative current fee, and
@@ -232,9 +232,40 @@ different prior helper allowance, approves exactly the entered amount, verifies
 that allowance, and calls `depositErc20`. The injected provider and connected
 account remain in the top-level kernel broker and are never exposed directly to
 the opaque Wallet iframe. Wallet receives only a short-lived, endpoint-bound
-EIP-1193 request proxy and does not persist it. After the Ethereum
-transaction confirms, Wallet polls its canister balance while the minter credits
-the corresponding ckToken.
+EIP-1193 request proxy and does not persist it. Wallet offers a separate **EVM Wallet** source alongside the external browser
+wallet. EVM Wallet holds the namespaced key and presents each approval or deposit
+transaction in its own tile. IC Wallet supplies the reviewed official helper and
+recipient; it never acquires EVM Wallet's signing capability. Both routes are
+Ethereum Mainnet deposits. Arbitrum USDC cannot be sent directly to the Ethereum
+ckUSDC helper.
+
+The `wallet_bridge` v1 managed root saves the source account, immutable route,
+amount, recipient, step IDs and transaction hashes before effects. A Wallet
+reload opens saved deposits. **Resume saved deposit** reconciles the same EVM
+Wallet request or known browser transaction hash, retaining completed approvals.
+An unknown browser submission without a hash remains unresolved: browser wallets
+do not supply a durable request ID that Wallet can safely replay. If the source
+wallet shows a transaction hash, **Verify and attach transaction** checks its
+actual sender, destination, value and calldata through EVM Wallet's read-only
+chain adapter before recovering that existing transaction. Choosing
+**New deposit** is a separate explicit action, never an automatic timeout retry.
+
+Mint completion requires the exact deposit transaction and log to appear in the
+official minter's accepted event, the corresponding asset/amount/recipient mint
+event, and the associated IC ledger mint block. An unrelated incoming transfer
+cannot complete the deposit. Archived mint blocks are verified through the
+reviewed ledger index; unavailable evidence stays pending. The UI distinguishes
+Ethereum inclusion, minter acceptance, and a verified IC mint.
+
+Agent orchestration uses `wallet_bridge_quote_v1`, `wallet_bridge_status_v1`,
+`wallet_bridge_refresh_v1`, and the direct-root-only
+`wallet_bridge_prepare_root_v1`, `wallet_bridge_next_root_v1`, and
+`wallet_bridge_attach_root_v1` tools. The root calls EVM Wallet's root transaction
+tool itself using each returned frozen request, then attaches the actual hash.
+Attachment verifies both public transaction fields and EVM Wallet's stored
+original caller installation/request binding. IC Wallet never forwards a nested
+root signing call. UI cannot silently resume a root-owned bridge under IC Wallet's
+different EVM command identity.
 
 Wallet keeps durable Activity history in its v1 app memory. Every preset ledger
 has a permanent companion index principal in the catalog. Activity sync first
@@ -341,3 +372,51 @@ than copying the send implementation.
 ```sh
 npm --workspace neutron-wallet test
 ```
+
+## Durable Send and withdrawal recovery
+
+The Send UI first calls `wallet_transfer_prepare_v2` to persist its reviewed
+intent without effects, then `wallet_transfer_resume_v2` to execute through the
+new `wallet_transfers` v1 root. `wallet_transfer_v2` combines both for callers
+that already retain a durable request ID.
+It saves the request ID, contact-bound intent, unique request memo and every
+ledger/minter call's exact bytes before dispatch. Retry reuses those bytes;
+accepted transfers with lost replies can reconcile through ledger duplicate
+responses. An expired duplicate window remains unresolved, rather than becoming
+a fresh transfer. Separate requests created at the same IC time retain distinct
+ledger identities. Completed approval and ckETH gas steps survive retries.
+
+`wallet_transfer_status_v2`, `wallet_transfers_pending_v2`,
+`wallet_transfer_resume_v2`, and `wallet_transfer_refresh_v2` expose the saved
+outcome. Browser storage is an optional cache; the backend retains unacknowledged
+terminal receipts until `wallet_transfer_acknowledge_v2` confirms the UI received
+them, so a lost success reply survives reload even in opaque-origin tiles. Native minter calls without a supported idempotency key are never
+blindly repeated after an ambiguous reply. Without a recoverable burn identifier,
+that outcome can remain unresolved; the Wallet does not manufacture a success or
+clear a potentially active minter allowance. A known ckETH/ckERC20 burn is tracked
+separately from Ethereum settlement using the minter's `retrieve_eth_status`.
+The ckERC20 flow preserves its separately quoted ckETH gas allowance and burn.
+
+Before a ckERC20 withdrawal, `wallet_withdrawal_quote_v1` shows the native
+amount, asset approval fee, separate ckETH gas budget and approval fee, exact
+allowances, maximum debits, and both balances. The saved review authorizes those
+costs; changed fees or gas reject execution before an approval and require a new
+review. The minter's burn does not add a ledger transfer fee, so each allowance
+covers its exact burn amount while its approval fee is shown separately.
+
+Fresh app-funding calls allocate a durable, unique nanosecond timestamp in this
+new root. Funding retries retain their released command records, exact frozen
+arguments, and caller-supplied memo, so two independent requests accepted at the
+same IC time cannot collapse into one ledger duplicate.
+
+The released `wallet_transfer` signature remains compatible for old callers.
+Callers requiring durable replay must use v2; its request ID cannot be inferred
+from a legacy call. Legacy and v2 effects respect shared outstanding allowance
+reservations. Released `wallet` v1 and `wallet_commands` v1 schemas remain
+unchanged; the two new roots initialize on upgrade without rewriting their data.
+
+For redemption to EVM Wallet, choose the Ethereum withdrawal network and
+**Use EVM Wallet address**. Wallet reads the current EVM account and filters the
+existing compatible contacts. If missing, save the displayed address in Contacts
+first; the normal contact revision and destination checks still apply. Redemption
+arrives on Ethereum Mainnet, even when EVM Wallet also displays Arbitrum assets.

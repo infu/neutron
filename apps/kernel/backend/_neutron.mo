@@ -6,7 +6,7 @@
 
 import NeutronPrim "mo:prim";
 import NeutronModule_a6_kernel "main";
-import NeutronMemorySchema_a6_kernel_r6_kernel_v3 "memory/kernel/v3";
+import NeutronMemorySchema_a6_kernel_r6_kernel_v4 "memory/kernel/v4";
 import NeutronMemorySchema_a6_kernel_r17_kernel_activation_v1 "memory/activation/v1";
 
 
@@ -50,12 +50,12 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
 
 
     type NeutronMemoryType_a6_kernel_r6_kernel = {
-        #v3 : NeutronMemorySchema_a6_kernel_r6_kernel_v3.Mem;
+        #v4 : NeutronMemorySchema_a6_kernel_r6_kernel_v4.Mem;
     };
 
-    let NeutronMemoryStore_a6_kernel_r6_kernel:NeutronMemoryType_a6_kernel_r6_kernel = #v3(NeutronMemorySchema_a6_kernel_r6_kernel_v3.init());
+    let NeutronMemoryStore_a6_kernel_r6_kernel:NeutronMemoryType_a6_kernel_r6_kernel = #v4(NeutronMemorySchema_a6_kernel_r6_kernel_v4.init());
 
-    transient let #v3(NeutronMemory_a6_kernel_r6_kernel) = NeutronMemoryStore_a6_kernel_r6_kernel;
+    transient let #v4(NeutronMemory_a6_kernel_r6_kernel) = NeutronMemoryStore_a6_kernel_r6_kernel;
 
 
     type NeutronMemoryType_a6_kernel_r17_kernel_activation = {
@@ -76,7 +76,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     };
 
 
-    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 336; capability_plan_fingerprint = "f3ebd7de59e733b943d3f346edc7371bc0f23318688380f6e39876ee16614512"; resident_frame_security = #credentialless_opaque_v1 }];
+    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 339; capability_plan_fingerprint = "421a28b71df998fed6d8181acb3ba2384a2a3110608243ff67335dbaa8f68aa3"; resident_frame_security = #credentialless_opaque_v1 }];
 
 
 
@@ -511,7 +511,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
         compiler_id = "unknown";
         capability_authority_revision = ?NeutronKernel.capability_authority_revision();
         apps = NeutronKernel.runtime_app_instances("development");
-        memories = [{ id = "kernel"; owner = "kernel"; version = 3; schema = "memory/kernel/v3" }, { id = "kernel_activation"; owner = "kernel"; version = 1; schema = "memory/activation/v1" }];
+        memories = [{ id = "kernel"; owner = "kernel"; version = 4; schema = "memory/kernel/v4" }, { id = "kernel_activation"; owner = "kernel"; version = 1; schema = "memory/activation/v1" }];
       }
     };
 

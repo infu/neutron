@@ -58,6 +58,12 @@
       "path": "./apps/wallet"
     },
     {
+      "path": "./apps/evm_wallet"
+    },
+    {
+      "path": "./apps/uniswap"
+    },
+    {
       "path": "./apps/blast"
     },
     {

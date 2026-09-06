@@ -170,6 +170,7 @@ contain selected interfaces such as:
 - `backend_calls`;
 - `randomness`;
 - `chain_key_signing`;
+- `wallet_custody_signing`;
 - `stable_store`;
 - `https_outcalls`;
 - `vetkeys_public`; and

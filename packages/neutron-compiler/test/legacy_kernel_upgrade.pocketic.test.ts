@@ -4050,3 +4050,29 @@ function isMissing(error: unknown): boolean {
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
+
+// Share the established checked-upgrade transport and exact production-state
+// fixtures with the EVM Wallet release qualification. Importing these exports
+// does not opt any legacy qualification into execution.
+export {
+  DirectPocketIcCalls,
+  advancePackageState,
+  deployExactTransition,
+  freshDeployment,
+  freshPackageState,
+  fundIcp,
+  kitchenSinkUpgradeMethods,
+  launchPocketIc,
+  loadProvisionHarness,
+  normalizeAppInstances,
+  normalizeMemoryInventory,
+  preparePinnedProductionArchive,
+  requiredAppInstance,
+  requiredPocketIcBinary,
+  stopPocketIc,
+  createApplicationInstance,
+  walletUpgradeCommandId,
+  walletUpgradeFundingRequest,
+  walletUpgradeMethods,
+};
+export type { DirectPocketIcClient, PreparedArchive };

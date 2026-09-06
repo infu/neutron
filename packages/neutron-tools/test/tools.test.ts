@@ -2454,6 +2454,7 @@ test("inherited tool call fields and security metadata are ignored", async () =>
     presentation: boolean;
     caller: boolean;
     callerAppId: boolean | null;
+    callerInstallationUid: boolean | null;
     callerRole: boolean | null;
     callerSession: boolean | null;
     arguments: string[];
@@ -2469,6 +2470,9 @@ test("inherited tool call fields and security metadata are ignored", async () =>
         caller: Object.hasOwn(context, "caller"),
         callerAppId: context.caller
           ? Object.hasOwn(context.caller, "appId")
+          : null,
+        callerInstallationUid: context.caller
+          ? Object.hasOwn(context.caller, "installationUid")
           : null,
         callerRole: context.caller
           ? Object.hasOwn(context.caller, "role")
@@ -2491,6 +2495,7 @@ test("inherited tool call fields and security metadata are ignored", async () =>
     "name",
     "endpoint",
     "appId",
+    "installationUid",
     "role",
     "sessionId",
   ] as const;
@@ -2523,6 +2528,7 @@ test("inherited tool call fields and security metadata are ignored", async () =>
       name: { configurable: true, value: "own_metadata_only" },
       endpoint: { configurable: true, value: "app:forged:tile" },
       appId: { configurable: true, value: "forged" },
+      installationUid: { configurable: true, value: "999" },
       role: { configurable: true, value: "tile" },
       sessionId: { configurable: true, value: "forged-session" },
     });
@@ -2599,6 +2605,7 @@ test("inherited tool call fields and security metadata are ignored", async () =>
       presentation: false,
       caller: false,
       callerAppId: null,
+      callerInstallationUid: null,
       callerRole: null,
       callerSession: null,
       arguments: [],
@@ -2609,12 +2616,69 @@ test("inherited tool call fields and security metadata are ignored", async () =>
       presentation: false,
       caller: true,
       callerAppId: false,
+      callerInstallationUid: false,
       callerRole: false,
       callerSession: false,
       arguments: [],
     },
   ]);
   removeExposedTool("own_metadata_only");
+});
+
+test("caller installation identities are canonical Nat64 strings and remain optional for older Kernels", async () => {
+  const fakeWindow = installFakeWindow();
+  const callers: JsonObject[] = [];
+  exposeTool(
+    "installation_identity",
+    { inputSchema: { type: "object", additionalProperties: false } },
+    (_args, context) => {
+      callers.push(context.caller!);
+      return null;
+    },
+  );
+  const caller = { endpoint: "app:requester:background", appId: "requester" };
+  let id = 10_000;
+  const dispatch = async (metadata: JsonObject): Promise<void> => {
+    fakeWindow.dispatch({
+      type: "exec",
+      id: ++id,
+      payload: {
+        action: msgBusLocalActions.toolsCall,
+        payload: { name: "installation_identity", caller: metadata },
+      },
+    });
+    await nextTick();
+  };
+
+  for (const metadata of [
+    caller,
+    { ...caller, installationUid: "1" },
+    { ...caller, installationUid: "9007199254740993" },
+    { ...caller, installationUid: "18446744073709551615" },
+  ]) {
+    await dispatch(metadata);
+    expect(fakeWindow.parent.messages.at(-1)?.message).toEqual({
+      type: "response",
+      id,
+      ok: null,
+    });
+    expect(callers.at(-1)).toEqual(metadata);
+    expect(Object.getPrototypeOf(callers.at(-1))).toBeNull();
+  }
+
+  for (const installationUid of [
+    null, 1, true, {}, [], "", "0", "01", "+1", "-1", "1.0", "1e1",
+    " 1", "1 ", "1\n", "18446744073709551616", "9".repeat(100),
+  ]) {
+    await dispatch({ ...caller, installationUid });
+    expect(fakeWindow.parent.messages.at(-1)?.message).toMatchObject({
+      type: "response",
+      id,
+      error: { message: "Invalid tool caller context" },
+    });
+  }
+  expect(callers).toHaveLength(4);
+  removeExposedTool("installation_identity");
 });
 
 test("provider approval metadata requires one own capability", async () => {

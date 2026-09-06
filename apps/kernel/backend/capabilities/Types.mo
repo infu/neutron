@@ -41,6 +41,7 @@ module {
         #randomness;
         #https_outcalls;
         #chain_key_signing;
+        #wallet_custody_signing;
         #stable_store;
         #vetkeys;
         #scheduled_tasks;

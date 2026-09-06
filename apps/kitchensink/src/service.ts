@@ -29,6 +29,13 @@ import {
   walletFundingIntentResultSchema,
   type WalletFundingIntentAction,
 } from "./wallet_funding_intent_storage.ts";
+import {
+  EVM_DEMO_INTENT_TOOL,
+  EVM_DEMO_STORAGE_KEY,
+  evmDemoIntentActionSchema,
+  evmDemoIntentResultSchema,
+  runEvmDemoIntentAction,
+} from "./evm_wallet_intent_storage.ts";
 
 const emptyInputSchema: JsonObject = {
   type: "object",
@@ -402,6 +409,25 @@ exposeTool(
         args as WalletFundingIntentAction,
       ),
     );
+  },
+);
+
+exposeTool(
+  EVM_DEMO_INTENT_TOOL,
+  {
+    title: "Persist Kitchen Sink EVM Wallet Intent",
+    description: "Save complete EVM consumer intents and operation evidence in the isolated resident origin. This tool only manages Kitchen Sink state and never forwards wallet effects or root Agent authority.",
+    inputSchema: evmDemoIntentActionSchema,
+    outputSchema: evmDemoIntentResultSchema,
+    annotations: { "neutron:effects": ["read", "write"], "neutron:visibility": "same_app" },
+  },
+  async (args, context) => {
+    requireOwnTile(context);
+    if (!context.signal) throw new Error("EVM intent storage requires cancellation.");
+    const locks = globalThis.navigator?.locks;
+    if (!locks) throw new Error("Exclusive EVM intent storage is unavailable.");
+    return locks.request(EVM_DEMO_STORAGE_KEY, { mode: "exclusive", signal: context.signal }, () =>
+      runEvmDemoIntentAction(requireBrowserStorage(), args) as unknown as JsonObject);
   },
 );
 

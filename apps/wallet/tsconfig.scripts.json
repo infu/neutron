@@ -3,7 +3,11 @@
   "extends": "../../tsconfig.bun.json",
   "compilerOptions": {
     "composite": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
   },
   "include": [
     "build.ts",
@@ -29,6 +33,18 @@
     "src/wallet_data.ts",
     "src/wallet_projection.ts",
     "test/**/*.ts",
-    "types/**/*.d.ts"
+    "types/**/*.d.ts",
+    "src/bridge.ts",
+    "src/bridge_control.tsx",
+    "src/bridge_tools.ts",
+    "src/evm_bridge.ts",
+    "src/transfers.ts",
+    "../kernel/src/self_calls.ts",
+    "../kernel/src/capabilities/plan.ts",
+    "../../packages/neutron-provision/src/pocketic_binary.ts",
+    "../../packages/neutron-provision/src/pocketic_rest.ts",
+    "../../packages/neutron-provision/src/idl.ts",
+    "../../packages/neutron-provision/src/local_environment.ts",
+    "src/withdrawal_quote.ts"
   ]
 }

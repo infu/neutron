@@ -134,13 +134,16 @@ function nativeScopes(
     ];
   }
   if (route.kind === "cketh") {
-    return [exact(route.minter, "withdraw_eth")];
+    return [exact(route.minter, "withdraw_eth"), exact(route.minter, "retrieve_eth_status"), exact(route.minter, "get_minter_info"), exact(route.minter, "get_events")];
   }
   if (route.kind === "ckerc20") {
     if (!route.gasLedger) throw new Error("ckERC20 route is missing ckETH ledger");
     return [
+      exact(route.minter, "get_minter_info"),
+      exact(route.minter, "get_events"),
       exact(route.minter, "eip_1559_transaction_price"),
       exact(route.minter, "withdraw_erc20"),
+      exact(route.minter, "retrieve_eth_status"),
       exact(route.gasLedger, "icrc1_fee"),
       exact(route.gasLedger, "icrc2_approve"),
     ];

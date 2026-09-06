@@ -36,7 +36,16 @@ export type EthereumDepositResult = {
   transactionHash: Hex;
 };
 
-type SubmitEthereumDepositOptions = {
+export type EthereumDepositStep = "reset_approval" | "approval" | "deposit";
+export type EthereumTransaction = { from: Address; to: Address; data: Hex; value?: Hex };
+export type EthereumDepositExecution = {
+  step: EthereumDepositStep;
+  transaction: EthereumTransaction;
+  send: () => Promise<Hex>;
+  confirm: (hash: Hex) => Promise<void>;
+};
+
+export type SubmitEthereumDepositOptions = {
   amount: bigint;
   helperMode: "subaccount" | "legacy";
   helperAddress: string;
@@ -46,6 +55,8 @@ type SubmitEthereumDepositOptions = {
   subaccount: string;
   tokenAddress?: string | null;
   onProgress?: (progress: EthereumDepositProgress) => void;
+  expectedAccount?: string;
+  executeTransaction?: (execution: EthereumDepositExecution) => Promise<Hex>;
   confirmationTimeoutMs?: number;
   pollIntervalMs?: number;
 };
@@ -149,6 +160,8 @@ export async function submitEthereumDeposit({
   onProgress = () => undefined,
   confirmationTimeoutMs = DEFAULT_CONFIRMATION_TIMEOUT_MS,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+  expectedAccount,
+  executeTransaction,
 }: SubmitEthereumDepositOptions): Promise<EthereumDepositResult> {
   if (!provider) {
     throw new Error("MetaMask is not available in this browser");
@@ -169,6 +182,23 @@ export async function submitEthereumDeposit({
     throw new Error("MetaMask did not return an Ethereum account");
   }
   const account = checkedAddress(accounts[0], "Ethereum account");
+  if (expectedAccount && account.toLowerCase() !== checkedAddress(expectedAccount, "saved source account").toLowerCase()) {
+    throw new Error("Connect the saved Ethereum source account to resume this deposit");
+  }
+  const execute = async (step: EthereumDepositStep, transaction: EthereumTransaction, label: string, phase: EthereumDepositPhase): Promise<Hex> => {
+    const execution: EthereumDepositExecution = {
+      step, transaction,
+      send: () => sendTransaction(provider, transaction),
+      confirm: async (hash) => {
+        onProgress({ phase, transactionHash: hash });
+        await requireSuccessfulReceipt(provider, hash, confirmationTimeoutMs, pollIntervalMs, label);
+      },
+    };
+    if (executeTransaction) return executeTransaction(execution);
+    const hash = await execution.send();
+    await execution.confirm(hash);
+    return hash;
+  };
 
   await requireMainnet(provider, onProgress);
   await requireHelperIdentity(provider, helper, minter);
@@ -182,40 +212,23 @@ export async function submitEthereumDeposit({
     // Reset a different existing allowance first. This is compatible with
     // USDT and prevents a larger old helper allowance surviving the deposit.
     if (allowance !== 0n && allowance !== amount) {
-      const resetHash = await sendTransaction(provider, {
+      const resetHash = await execute("reset_approval", {
         from: account,
         to: token,
         data: buildApproveData(helper, 0n),
-      });
+      }, "Allowance reset", "clearing-allowance");
       approvalHashes.push(resetHash);
-      onProgress({
-        phase: "clearing-allowance",
-        transactionHash: resetHash,
-      });
-      await requireSuccessfulReceipt(
-        provider,
-        resetHash,
-        confirmationTimeoutMs,
-        pollIntervalMs,
-        "Allowance reset",
-      );
+
     }
 
     if (allowance !== amount) {
-      const approvalHash = await sendTransaction(provider, {
+      const approvalHash = await execute("approval", {
         from: account,
         to: token,
         data: buildApproveData(helper, amount),
-      });
+      }, "Token approval", "approving");
       approvalHashes.push(approvalHash);
-      onProgress({ phase: "approving", transactionHash: approvalHash });
-      await requireSuccessfulReceipt(
-        provider,
-        approvalHash,
-        confirmationTimeoutMs,
-        pollIntervalMs,
-        "Token approval",
-      );
+
     }
 
     const approved = await readAllowance(provider, token, account, helper);
@@ -225,7 +238,7 @@ export async function submitEthereumDeposit({
   }
 
   onProgress({ phase: "submitting" });
-  const transactionHash = await sendTransaction(provider, {
+  const transactionHash = await execute("deposit", {
     from: account,
     to: helper,
     data: token
@@ -241,15 +254,7 @@ export async function submitEthereumDeposit({
         ? buildEthDepositData(principalWord, subaccountWord)
         : buildLegacyEthDepositData(principalWord),
     ...(token ? {} : { value: quantityHex(amount) }),
-  });
-  onProgress({ phase: "confirming", transactionHash });
-  await requireSuccessfulReceipt(
-    provider,
-    transactionHash,
-    confirmationTimeoutMs,
-    pollIntervalMs,
-    "Deposit",
-  );
+  }, "Deposit", "confirming");
 
   return { account, approvalHashes, transactionHash };
 }
@@ -405,7 +410,11 @@ async function sendTransaction(
   return result;
 }
 
-async function requireSuccessfulReceipt(
+export class EthereumReceiptRevertedError extends Error {
+  constructor(message: string, public readonly transactionHash?: Hex) { super(message); }
+}
+
+export async function requireSuccessfulReceipt(
   provider: EthereumProvider,
   transactionHash: Hex,
   timeoutMs: number,
@@ -420,9 +429,10 @@ async function requireSuccessfulReceipt(
       [transactionHash],
     );
     if (receipt !== null) {
-      if (!isRecord(receipt) || chainId(receipt.status) !== 1n) {
-        throw new Error(`${label} transaction failed on Ethereum`);
-      }
+      if (!isRecord(receipt)) throw new Error(`${label} returned an invalid Ethereum receipt`);
+      const status = chainId(receipt.status);
+      if (status === 0n) throw new EthereumReceiptRevertedError(`${label} transaction failed on Ethereum`);
+      if (status !== 1n) throw new Error(`${label} returned an invalid Ethereum receipt status`);
       return;
     }
     await delay(pollIntervalMs);
@@ -472,5 +482,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+  return new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds));
+}
+
+export async function validateEthereumDepositHelper(provider: EthereumProvider, helper: string, minter: string, token: string | null): Promise<void> {
+  await requireHelperIdentity(provider, checkedAddress(helper, "helper"), checkedAddress(minter, "minter"));
+  if (token) await requireContract(provider, checkedAddress(token, "token"), "token");
 }

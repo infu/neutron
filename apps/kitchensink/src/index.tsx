@@ -133,6 +133,7 @@ const DEMOS: readonly DemoDefinition[] = [
   { id: "memory", group: "Platform", label: "Memory", summary: "Managed stable memory and reviewed writes.", icon: IoAppsOutline },
   { id: "bus", group: "Platform", label: "Message bus", summary: "Live endpoint discovery and app tools.", icon: IoSwapHorizontalOutline },
   { id: "wallet_funding", group: "Platform", label: "Wallet funding", summary: "Wallet-owned ICP transfer and allowance approval.", icon: IoWalletOutline },
+  { id: "evm_wallet", group: "Platform", label: "EVM Wallet", summary: "Chain-key wallet reads, transfers, contract calls, and signatures.", icon: IoWalletOutline },
   { id: "tray", group: "Platform", label: "Tray", summary: "Resident popout with optional live badge state.", icon: IoBrowsersOutline },
   { id: "schemas", group: "Platform", label: "Schemas", summary: "Installed Candid-derived method metadata.", icon: IoCodeSlashOutline },
   { id: "data", group: "Platform", label: "Dense data", summary: "Copy, wrapping, and JSON containment.", icon: IoGridOutline },

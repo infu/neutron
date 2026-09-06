@@ -82,6 +82,7 @@ test("Wallet reserves ledgers broadly and minter mutations exactly", () => {
       principal: "sv3dd-oaaaa-aaaar-qacoa-cai",
       method: "withdraw_eth",
     },
+    ...["retrieve_eth_status", "get_minter_info", "get_events"].map((method) => ({ kind: "exact" as const, principal: "sv3dd-oaaaa-aaaar-qacoa-cai", method })),
   ]);
 });
 
@@ -119,6 +120,7 @@ test("Wallet computes one reservation batch for selection changes", () => {
         method: "withdraw_eth",
       },
     },
+    ...["retrieve_eth_status", "get_minter_info", "get_events"].map((method) => ({ kind: "reserve" as const, scope: { kind: "exact" as const, principal: catalog[1]!.nativeRoute!.minter, method } })),
     { kind: "release", scope: current[0]! },
     { kind: "release", scope: current[1]! },
   ]);
@@ -174,6 +176,12 @@ test("Wallet reserves both token and ckETH gas access for ckERC20", () => {
     {
       kind: "exact",
       principal: token.nativeRoute!.minter,
+      method: "get_minter_info",
+    },
+    { kind: "exact", principal: token.nativeRoute!.minter, method: "get_events" },
+    {
+      kind: "exact",
+      principal: token.nativeRoute!.minter,
       method: "eip_1559_transaction_price",
     },
     {
@@ -181,6 +189,7 @@ test("Wallet reserves both token and ckETH gas access for ckERC20", () => {
       principal: token.nativeRoute!.minter,
       method: "withdraw_erc20",
     },
+    { kind: "exact", principal: token.nativeRoute!.minter, method: "retrieve_eth_status" },
     {
       kind: "exact",
       principal: token.nativeRoute!.gasLedger!,

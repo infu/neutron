@@ -20,6 +20,8 @@ import HttpsOutcallsTypes "./https_outcalls/Types";
 import ChainKeySigningAdapter "./chain_key_signing/Adapter";
 import ChainKeySigningService "./chain_key_signing/Service";
 import ChainKeySigningTypes "./chain_key_signing/Types";
+import WalletCustodySigningTypes "./wallet_custody_signing/Types";
+import WalletCustodySigningService "./wallet_custody_signing/Service";
 import StableStoreService "./stable_store/Service";
 import StableStoreTypes "./stable_store/Types";
 import SettingsService "./settings/Service";
@@ -43,7 +45,7 @@ import PublicIngressService "./public_ingress/Service";
 import PublicIngressTypes "./public_ingress/Types";
 import GatewayAuthority "./http_routes/GatewayAuthority";
 import RouteNamespace "./http_routes/Namespace";
-import KernelMemory "./memory/kernel/v3";
+import KernelMemory "./memory/kernel/v4";
 import ActivationMemory "./memory/activation/v1";
 import ActivationService "./activation/Service";
 import Array "mo:core/Array";
@@ -92,6 +94,7 @@ module {
     public type RandomnessCapability = RandomnessTypes.Capability;
     public type HttpsOutcallsCapability = HttpsOutcallsTypes.Capability;
     public type ChainKeySigningCapability = ChainKeySigningTypes.Capability;
+    public type WalletCustodySigningCapability = WalletCustodySigningTypes.Capability;
     public type StableStoreCapability = StableStoreTypes.Capability;
     public type CertifiedAssetsCapability = CertifiedAssetsTypes.Capability;
     public type DeferredTimersV1 = SchedulerTypes.DeferredTimersV1;
@@ -108,6 +111,9 @@ module {
     public type PublicIngressHandlerRegistrationV1 = PublicIngressTypes.HandlerRegistrationV1;
     public type TaskInvocationLease = SchedulerTypes.InvocationLease;
 
+    // Released assembler contract: add new capability initialization through
+    // separate hooks instead of requiring predecessor-generated records to
+    // contain additional fields.
     public type AppCapabilitiesDeclaration = {
         app_scope : CapabilityTypes.AppScope;
         backend_calls : ?BackendCallTypes.BackendCallsDeclaration;
@@ -1082,7 +1088,8 @@ module {
             runtimeCapabilityRegistry,
             outgoingCycleAccounting,
         );
-        let chainKeySigning = ChainKeySigningService.Service(
+        let signingResources = ChainKeySigningService.Resources();
+        let chainKeySigning = ChainKeySigningService.Engine(
             mem.chain_key_signing,
             ChainKeySigningAdapter.management(),
             canisterPrincipal,
@@ -1095,7 +1102,30 @@ module {
             },
             runtimeCapabilityRegistry,
             outgoingCycleAccounting,
+            #assertion,
+            signingResources,
         );
+        let walletCustodySigning = WalletCustodySigningService.Service(
+            mem.wallet_custody_signing,
+            ChainKeySigningAdapter.management(),
+            canisterPrincipal,
+            InstallMemory.installEpoch(mem.install),
+            func(scope) {
+                InstallMemory.scopeActive(mem.install, runningDeploymentId, scope)
+            },
+            func() {
+                InstallMemory.deploymentCommitted(mem.install, runningDeploymentId)
+            },
+            runtimeCapabilityRegistry,
+            outgoingCycleAccounting,
+            signingResources,
+        );
+        // Predecessor assemblers know only configure_app_capabilities. The
+        // separate optional custody hook stages declarations before that
+        // unchanged initializer, and their absence configures an empty broker.
+        var walletCustodyDeclarations : [WalletCustodySigningTypes.AppDeclaration] = [];
+        var walletCustodyDeclarationsStaged = false;
+        var appCapabilitiesConfigured = false;
         let stableStore = StableStoreService.Service(
             mem.stable_store,
             func(scope) {
@@ -2298,6 +2328,7 @@ module {
                 publicIngress.commitConfiguration();
                 httpsOutcalls.commitConfiguration();
                 chainKeySigning.commitConfiguration();
+                walletCustodySigning.commitConfiguration();
                 stableStore.commitConfiguration();
                 appUsage.removeScopes(
                     Array.map<InstallTypes.AppInstance, CapabilityTypes.AppScope>(
@@ -2415,10 +2446,20 @@ module {
             };
         };
 
+        public func configure_wallet_custody_signing(
+            declarations : [WalletCustodySigningTypes.AppDeclaration],
+        ) : () {
+            assert (not appCapabilitiesConfigured and not walletCustodyDeclarationsStaged);
+            walletCustodyDeclarations := declarations;
+            walletCustodyDeclarationsStaged := true;
+        };
+
         public func configure_app_capabilities(
             declarations : [AppCapabilitiesDeclaration],
             configuration : AppCapabilitiesConfiguration,
         ) : () {
+            assert (not appCapabilitiesConfigured);
+            appCapabilitiesConfigured := true;
             Map.clear(residentBackgroundPaths);
             for (declaration in declarations.vals()) {
                 assert (CapabilityScope.valid(declaration.app_scope));
@@ -2521,6 +2562,10 @@ module {
                     },
                 ),
             );
+            walletCustodySigning.configure(
+                configuration.chain_key_signing_keys,
+                walletCustodyDeclarations,
+            );
             stableStore.configure(
                 Array.map<AppCapabilitiesDeclaration, StableStoreTypes.AppDeclaration>(
                     declarations,
@@ -2605,6 +2650,7 @@ module {
                 publicIngress.commitConfiguration();
                 httpsOutcalls.commitConfiguration();
                 chainKeySigning.commitConfiguration();
+                walletCustodySigning.commitConfiguration();
                 stableStore.commitConfiguration();
             };
             assert (
@@ -2771,6 +2817,12 @@ module {
             appScope : CapabilityTypes.AppScope,
         ) : HttpsOutcallsTypes.Capability {
             httpsOutcalls.capability(appScope);
+        };
+
+        public func wallet_custody_signing_capability(
+            appScope : CapabilityTypes.AppScope,
+        ) : WalletCustodySigningTypes.Capability {
+            walletCustodySigning.capability(appScope);
         };
 
         public func chain_key_signing_capability(

@@ -1,4 +1,6 @@
 import Nat "mo:core/Nat";
+import Int "mo:core/Int";
+import Time "mo:core/Time";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Catalog "../Catalog";
@@ -12,6 +14,80 @@ module {
     public type Result<T> = {
         #ok : T;
         #err : Text;
+    };
+
+    public type GasAuthorization = { ledger : Principal; minter : Principal; budget : Nat; ledger_fee : Nat };
+    public type Authorization = { asset_fee : Nat; gas : ?GasAuthorization };
+    public type GasQuote = {
+        ledger : Principal;
+        budget : Nat;
+        ledger_fee : Nat;
+        allowance : Nat;
+        total_debit : Nat;
+        balance : Nat;
+        sufficient : Bool;
+    };
+    public type Quote = {
+        ledger : Principal;
+        minter : Principal;
+        observed_at_ns : Nat64;
+        amount : ?Nat;
+        asset_fee : Nat;
+        asset_allowance : ?Nat;
+        asset_total_debit : ?Nat;
+        asset_balance : Nat;
+        asset_sufficient : ?Bool;
+        gas : ?GasQuote;
+        authorization : Authorization;
+    };
+
+    public func quote(route : Catalog.NativeRoute, ledger : Principal, amount : ?Nat, calls : Capabilities.BackendCalls) : async* Result<Quote> {
+        switch (route) { case (#cketh(_) or #ckerc20(_)) {}; case (_) return #err("Withdrawal quotes support ckETH and ckERC20"); };
+        if (amount == ?0) return #err("Withdrawal amount must be greater than zero");
+        let fee = switch (Icrc.decodeFee(await* calls.call(Icrc.feeRequest(ledger)))) {
+            case (#err(error)) return #err("Could not read the asset approval fee: " # error);
+            case (#ok(value)) value;
+        };
+        let balance = switch (Icrc.decodeBalance(await* calls.call(Icrc.balanceRequest(ledger, calls.canister_principal)))) {
+            case (#err(error)) return #err("Could not read the asset balance: " # error);
+            case (#ok(value)) value;
+        };
+        let minter = routeMinter(route);
+        let gas : ?GasQuote = switch (route) {
+            case (#ckerc20(value)) {
+                let gasLedger = Principal.fromText(value.cketh_ledger);
+                let price = switch (decodePrice(await* calls.call(priceRequest(minter, ledger)))) {
+                    case (#err(error)) return #err(error);
+                    case (#ok(value)) value;
+                };
+                let gasFee = switch (Icrc.decodeFee(await* calls.call(Icrc.feeRequest(gasLedger)))) {
+                    case (#err(error)) return #err("Could not read the ckETH approval fee: " # error);
+                    case (#ok(value)) value;
+                };
+                let gasBalance = switch (Icrc.decodeBalance(await* calls.call(Icrc.balanceRequest(gasLedger, calls.canister_principal)))) {
+                    case (#err(error)) return #err("Could not read the ckETH gas balance: " # error);
+                    case (#ok(value)) value;
+                };
+                // Minter burns go to the minting account and have zero ledger
+                // transfer fee (ICRC-1). Only icrc2_approve charges gasFee.
+                let total = price.max_transaction_fee + gasFee;
+                ?{ ledger = gasLedger; budget = price.max_transaction_fee; ledger_fee = gasFee; allowance = price.max_transaction_fee; total_debit = total; balance = gasBalance; sufficient = gasBalance >= total };
+            };
+            case (_) null;
+        };
+        let total = switch (amount) { case null null; case (?value) ?(value + fee) };
+        #ok({
+            ledger; minter; observed_at_ns = Nat64.fromNat(Int.abs(Time.now())); amount;
+            asset_fee = fee; asset_allowance = amount; asset_total_debit = total; asset_balance = balance;
+            asset_sufficient = switch (total) { case null null; case (?value) ?(balance >= value) };
+            gas;
+            authorization = { asset_fee = fee; gas = switch (gas) { case null null; case (?value) ?{ ledger = value.ledger; minter; budget = value.budget; ledger_fee = value.ledger_fee } } };
+        });
+    };
+
+    func priceRequest(minter : Principal, ledger : Principal) : Capabilities.CallRequest {
+        let priceArgs : ?Eip1559TransactionPriceArg = ?{ ckerc20_ledger_id = ledger };
+        { canister = minter; method = "eip_1559_transaction_price"; args = to_candid (priceArgs); cycles = 0 };
     };
 
     public type BurnReceipt = {
@@ -151,6 +227,42 @@ module {
         #Err : Erc20WithdrawalError;
     };
 
+    // A decoded ckERC20 error may already contain a ckETH burn. It must stay
+    // unresolved rather than authorizing another approval/withdrawal sequence.
+    public func replyNeedsReconciliation(method : Text, reply : Blob) : Bool {
+        switch (method) {
+            case ("withdraw_erc20") {
+                let decoded : ?Erc20WithdrawalResult = from_candid reply;
+                switch (decoded) {
+                    case null true;
+                    case (?#Err(#CkErc20LedgerError(_))) true;
+                    case (_) false;
+                };
+            };
+            case ("withdraw_eth") {
+                let decoded : ?EthWithdrawalResult = from_candid reply;
+                decoded == null;
+            };
+            case ("retrieve_btc_with_approval" or "retrieve_doge_with_approval") {
+                let decoded : ?UtxoWithdrawalResult = from_candid reply;
+                switch (decoded) {
+                    case null true;
+                    case (?#Err(#AlreadyProcessing)) true;
+                    case (_) false;
+                };
+            };
+            case ("withdraw") {
+                let decoded : ?SolWithdrawalResult = from_candid reply;
+                switch (decoded) {
+                    case null true;
+                    case (?#Err(#AlreadyProcessing)) true;
+                    case (_) false;
+                };
+            };
+            case (_) true;
+        };
+    };
+
     public func withdraw(
         route : Catalog.NativeRoute,
         ledger : Principal,
@@ -161,6 +273,43 @@ module {
         calls : Capabilities.BackendCalls,
         validateDestination : ValidateDestination,
     ) : async* Result<Receipt> {
+        await* withdrawWithMemo(route, ledger, address, amount, ledgerFee, createdAt, calls, validateDestination, null);
+    };
+
+    public func withdrawWithMemo(
+        route : Catalog.NativeRoute,
+        ledger : Principal,
+        address : Text,
+        amount : Nat,
+        ledgerFee : Nat,
+        createdAt : Nat64,
+        calls : Capabilities.BackendCalls,
+        validateDestination : ValidateDestination,
+        memo : ?Blob,
+    ) : async* Result<Receipt> {
+        await* withdrawReviewed(route, ledger, address, amount, ledgerFee, createdAt, calls, validateDestination, memo, null);
+    };
+
+    public func withdrawReviewed(
+        route : Catalog.NativeRoute,
+        ledger : Principal,
+        address : Text,
+        amount : Nat,
+        ledgerFee : Nat,
+        createdAt : Nat64,
+        calls : Capabilities.BackendCalls,
+        validateDestination : ValidateDestination,
+        memo : ?Blob,
+        authorization : ?Authorization,
+    ) : async* Result<Receipt> {
+        switch (authorization) {
+            case (?review) if (review.asset_fee != ledgerFee) return #err("Withdrawal costs changed. Refresh the quote and review it before withdrawing.");
+            case (_) {};
+        };
+        switch (route, authorization) {
+            case (#ckerc20(_), ?{ gas = null }) return #err("Review the ckETH gas quote before withdrawing this token");
+            case (_) {};
+        };
         let minter = routeMinter(route);
         let expiresAt = createdAt + ALLOWANCE_LIFETIME_NS;
         switch (route) {
@@ -171,11 +320,12 @@ module {
                 switch (await* approve(
                     ledger,
                     minter,
-                    amount + ledgerFee,
+                    amount + (if (authorization == null) ledgerFee else 0),
                     ledgerFee,
                     createdAt,
                     expiresAt,
                     calls,
+                    memo,
                 )) {
                     case (#err(error)) return #err(error);
                     case (#ok(_)) {};
@@ -201,11 +351,12 @@ module {
                 switch (await* approve(
                     ledger,
                     minter,
-                    amount + ledgerFee,
+                    amount + (if (authorization == null) ledgerFee else 0),
                     ledgerFee,
                     createdAt,
                     expiresAt,
                     calls,
+                    memo,
                 )) {
                     case (#err(error)) return #err(error);
                     case (#ok(_)) {};
@@ -228,11 +379,12 @@ module {
                 switch (await* approve(
                     ledger,
                     minter,
-                    amount + ledgerFee,
+                    amount + (if (authorization == null) ledgerFee else 0),
                     ledgerFee,
                     createdAt,
                     expiresAt,
                     calls,
+                    memo,
                 )) {
                     case (#err(error)) return #err(error);
                     case (#ok(_)) {};
@@ -255,6 +407,8 @@ module {
                     expiresAt,
                     calls,
                     validateDestination,
+                    memo,
+                    switch (authorization) { case null null; case (?value) value.gas },
                 );
             };
             case (#cksol(_)) {
@@ -264,11 +418,12 @@ module {
                 switch (await* approve(
                     ledger,
                     minter,
-                    amount + ledgerFee,
+                    amount + (if (authorization == null) ledgerFee else 0),
                     ledgerFee,
                     createdAt,
                     expiresAt,
                     calls,
+                    memo,
                 )) {
                     case (#err(error)) return #err(error);
                     case (#ok(_)) {};
@@ -293,16 +448,10 @@ module {
         expiresAt : Nat64,
         calls : Capabilities.BackendCalls,
         validateDestination : ValidateDestination,
+        memo : ?Blob,
+        authorization : ?GasAuthorization,
     ) : async* Result<Receipt> {
-        let priceArgs : ?Eip1559TransactionPriceArg = ?{
-            ckerc20_ledger_id = ledger;
-        };
-        let priceResult = await* calls.call({
-            canister = minter;
-            method = "eip_1559_transaction_price";
-            args = to_candid (priceArgs);
-            cycles = 0;
-        });
+        let priceResult = await* calls.call(priceRequest(minter, ledger));
         let gasAmount = switch (decodePrice(priceResult)) {
             case (#err(error)) return #err(error);
             case (#ok(price)) price.max_transaction_fee;
@@ -325,14 +474,24 @@ module {
             case (#ok(())) {};
         };
 
+        switch (authorization) {
+            case (?review) {
+                if (review.ledger != ckethLedger or review.minter != minter or review.budget != gasAmount or review.ledger_fee != ckethFee) {
+                    return #err("Withdrawal costs changed. Refresh the quote and review it before withdrawing.");
+                };
+            };
+            case null {};
+        };
+
         switch (await* approve(
             ledger,
             minter,
-            amount + ledgerFee,
+            amount + (if (authorization == null) ledgerFee else 0),
             ledgerFee,
             createdAt,
             expiresAt,
             calls,
+            memo,
         )) {
             case (#err(error)) return #err(error);
             case (#ok(_)) {};
@@ -345,11 +504,12 @@ module {
         switch (await* approve(
             ckethLedger,
             minter,
-            gasAmount + ckethFee,
+            gasAmount + (if (authorization == null) ckethFee else 0),
             ckethFee,
             createdAt,
             expiresAt,
             calls,
+            memo,
         )) {
             case (#err(error)) return #err("Could not approve ckETH gas: " # error);
             case (#ok(_)) {};
@@ -391,6 +551,7 @@ module {
         createdAt : Nat64,
         expiresAt : Nat64,
         calls : Capabilities.BackendCalls,
+        memo : ?Blob,
     ) : async* Result<Nat> {
         let args = {
             from_subaccount = null;
@@ -399,7 +560,7 @@ module {
             expected_allowance = null;
             expires_at = ?expiresAt;
             fee = ?fee;
-            memo = null;
+            memo;
             created_at_time = ?createdAt;
         };
         switch (await* Icrc.executeApprove(calls, ledger, args)) {
@@ -630,7 +791,8 @@ module {
                 "ckETH gas payment failed: " # ledgerErrorText(value.error);
             };
             case (#CkErc20LedgerError(value)) {
-                "Token withdrawal failed: " # ledgerErrorText(value.error);
+                "ckETH gas was burned in block " # Nat.toText(value.cketh_block_index) #
+                "; token withdrawal needs reconciliation: " # ledgerErrorText(value.error);
             };
             case (#TemporarilyUnavailable(message)) message;
         };

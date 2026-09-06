@@ -46,7 +46,7 @@ test("reviewed capability package exports leaf types only", async () => {
   expect(source).not.toMatch(/HttpsOutcallsV1[\s\S]*(?:cyclesAdd|management_canister|AppScope)/);
   const chainKeySurface = source.slice(
     source.indexOf("public type ChainKeyAlgorithmV1"),
-    source.indexOf("public type HttpsOutcallMethodV1"),
+    source.indexOf("public type WalletCustodyAlgorithmV1"),
   );
   expect(chainKeySurface).toContain(
     "#neutron_app_assertion_v1",
@@ -66,6 +66,16 @@ test("reviewed capability package exports leaf types only", async () => {
   expect(chainKeySurface).toContain("#cost_too_high");
   expect(chainKeySurface.match(/public type ChainKeySignAssertionRequestV1 = \{([\s\S]*?)\};/)?.[1])
     .toBe("\n        slot : Text;\n        assertion : Blob;\n    ");
+
+  expect(chainKeySurface).not.toContain("sign_digest");
+  const custodySurface = source.slice(
+    source.indexOf("public type WalletCustodyAlgorithmV1"),
+    source.indexOf("public type HttpsOutcallMethodV1"),
+  );
+  expect(custodySurface).toContain("public_key : Text -> async* WalletCustodyPublicKeyResultV1");
+  expect(custodySurface).toContain("sign_digest : WalletCustodySignDigestRequestV1 -> async* WalletCustodySignatureResultV1");
+  expect(custodySurface).not.toMatch(/\b(?:derivation_path|key_name|chain_code|signing_domain|AppScope)\b/);
+  expect(custodySurface).not.toContain("sign_assertion");
 
   const stableStoreSurface = source.slice(
     source.indexOf("public type StableStoreConditionV1"),

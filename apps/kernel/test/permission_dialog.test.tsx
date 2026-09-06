@@ -697,6 +697,52 @@ test("chain-key consent discloses autonomous bounded assertion authority", () =>
   expect(html.match(new RegExp(purpose, "g"))).toHaveLength(1);
 });
 
+test("wallet custody install review discloses raw signing trust and the key lifecycle", () => {
+  const purpose = "App claims swaps are always safe";
+  const disclosure = configInstallDisclosures({
+    format: 3,
+    id: "ordinary_wallet_app",
+    name: "Ordinary Wallet",
+    version: 100,
+    capabilities: {
+      wallet_custody_signing: {
+        api: 1,
+        slots: [{ id: "account", algorithm: "ecdsa_secp256k1", purpose }],
+      },
+    },
+  });
+  const request = fixtureAppInstallRequest({
+    id: "ordinary_wallet_app",
+    size: 1,
+    capabilityPlanFingerprint: disclosure.planFingerprint,
+    capabilityDisclosures: disclosure.capabilityDisclosures,
+    permissions: disclosure.permissions,
+    appExplanations: disclosure.appExplanations,
+  });
+  for (const uiMode of ["normal", "developer"] as const) {
+    const html = renderToStaticMarkup(
+      <AppRequestDialog compiled={{ size: 1 }} request={request} uiMode={uiMode} />,
+    );
+    expect(html).toContain('data-capability="wallet_custody_signing"');
+    expect(html).toContain('data-kind="wallet_custody_signing"');
+    expect(html).toContain("Wallet custody signing");
+    expect(html).toContain("arbitrary exact 32-byte digests");
+    expect(html).toContain("asset transfers, messages, or other actions");
+    expect(html).toContain("Kernel does not validate transaction meaning or ask for each signature");
+    expect(html).toContain("other apps cannot use them");
+    expect(html).toContain("Each signature spends Neutron cycles");
+    expect(html).toContain("Compatible app upgrades preserve these keys");
+    expect(html).toContain("Disabling a slot retains its key");
+    expect(html).toContain("same slot back within the same installation derives the same key");
+    expect(html).toContain("Uninstalling and reinstalling creates new keys");
+    expect(html).toContain("does not restore access to assets at the old addresses");
+    expect(html).toContain("ecdsa_secp256k1");
+    expect(html).toContain("App-provided purpose — unverified");
+    expect(html.match(new RegExp(purpose, "g"))).toHaveLength(1);
+    expect(html).not.toContain("prevents direct raw blockchain transaction signing");
+  }
+});
+
 test("stable-store consent discloses exact quotas and ordinary-state privacy", () => {
   const purpose = "App claims this keeps private notes";
   const disclosure = configInstallDisclosures({
@@ -2401,6 +2447,94 @@ test("Settings shows chain-key slot authority, unverified purpose, and live togg
   expect(html).toContain(
     "Disable chain_key_signing resource login_assertion for this app",
   );
+});
+
+test("Settings keeps wallet custody trust, key continuity, and live controls in both modes", () => {
+  const purpose = "App claims swaps are always safe";
+  const entry = registryApp({
+    id: "ordinary_wallet_app",
+    name: "Ordinary Wallet",
+    backend: { capabilities: { wallet_custody_signing: { api: 1 } } },
+    capabilities: {
+      wallet_custody_signing: {
+        api: 1,
+        slots: [{ id: "account", algorithm: "ecdsa_secp256k1", purpose }],
+      },
+    },
+  });
+  const summary: CapabilitySummary = {
+    appId: "ordinary_wallet_app",
+    installationUid: "12",
+    planFingerprint: entry.capability_plan_fingerprint,
+    kind: "wallet_custody_signing",
+    resourceId: "account",
+    api: 1,
+    declarationFingerprint: "e".repeat(64),
+    grant: "declaration",
+    toggleable: true,
+    enabled: true,
+    createdAt: 1_700_000_000_000_000_000n,
+    createdBy: "aaaaa-aa",
+    updatedAt: 1_700_000_000_000_000_000n,
+    updatedBy: "aaaaa-aa",
+    usage: {
+      total: 1n, succeeded: 1n, denied: 0n, failed: 0n,
+      rateLimited: 0n, busy: 0n, revoked: 0n,
+      lastAt: 1_700_000_000_000_000_000n,
+      lastOperation: "sign_digest", lastOutcome: "ok",
+    },
+  };
+  for (const uiMode of ["normal", "developer"] as const) {
+    for (const enabled of [true, false]) {
+      const html = renderToStaticMarkup(
+        <AppSettingsEntry
+          backendReservations={[]}
+          capabilityActionsDisabled={false}
+          capabilityOperation={null}
+          capabilitySummaries={[{ ...summary, enabled }]}
+          dependencies={[]}
+          dependents={[]}
+          entry={entry}
+          id="ordinary_wallet_app"
+          uiMode={uiMode}
+          usage={{ kind: "ready", usage: null }}
+          memories={[]}
+          onRevokeReservation={() => undefined}
+          onSetCapabilityEnabled={() => undefined}
+          onToggleSelected={() => undefined}
+          registry={{}}
+          reservationActionsDisabled={false}
+          runtimeVersion={100n}
+          scheduledTasks={[]}
+          transitiveDependentIds={[]}
+          selected={false}
+          selectionDisabled={false}
+          selectionTitle="Select app for app actions"
+          update={null}
+        />,
+      );
+      expect(html).toContain("Wallet custody signing");
+      expect(html).toContain("arbitrary exact 32-byte digests");
+      expect(html).toContain("Kernel does not validate transaction meaning or ask for each signature");
+      expect(html).toContain("other apps cannot use them");
+      expect(html).toContain("Compatible app upgrades preserve these keys");
+      expect(html).toContain("Disabling a slot retains its key");
+      expect(html).toContain("same slot back within the same installation derives the same key");
+      expect(html).toContain("Uninstalling and reinstalling creates new keys");
+      expect(html).toContain("does not restore access to assets at the old addresses");
+      if (uiMode === "developer") {
+        expect(html).toContain("App-provided purpose — unverified");
+        expect(html).toContain(purpose);
+        expect(html).toContain("Wallet-signing authority");
+        expect(html).toContain("without adding Neutron assertion hashing");
+        expect(html).toContain("ecdsa_secp256k1");
+        expect(html).toContain(`${enabled ? "Disable" : "Enable"} wallet_custody_signing resource account for this app`);
+      } else {
+        expect(html).toContain(`Turn ${enabled ? "off" : "on"} Wallet signing slot account for Ordinary Wallet`);
+      }
+      expect(html).not.toContain("prevents direct raw blockchain transaction signing");
+    }
+  }
 });
 
 test("Settings shows stable-store authority, unverified purpose, and live toggle", () => {

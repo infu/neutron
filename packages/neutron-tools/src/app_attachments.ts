@@ -6,6 +6,7 @@ import {
   type MsgBusInvocationMetadata,
 } from "./app.ts";
 import { kernelParentOriginFromAppWindow } from "./runtime.js";
+import { isMsgBusInstallationUid } from "./protocol.js";
 
 const EXEC_TYPE = "neutron:msgbus:attachment:exec";
 const RESPONSE_TYPE = "neutron:msgbus:attachment:response";
@@ -24,6 +25,7 @@ export type AppToolAttachment = {
 export type AttachmentToolCaller = {
   endpoint: string;
   appId: string;
+  installationUid?: string;
   role: "tile" | "background" | "tray";
   sessionId: string;
 };
@@ -525,6 +527,8 @@ function parseCaller(value: unknown): AttachmentToolCaller | undefined {
     !isRecord(value) ||
     typeof value.endpoint !== "string" ||
     typeof value.appId !== "string" ||
+    (Object.hasOwn(value, "installationUid") &&
+      !isMsgBusInstallationUid(value.installationUid)) ||
     typeof value.sessionId !== "string" ||
     value.sessionId.length < 16 ||
     value.sessionId.length > 128 ||
@@ -538,6 +542,9 @@ function parseCaller(value: unknown): AttachmentToolCaller | undefined {
   return {
     endpoint: value.endpoint,
     appId: value.appId,
+    ...(Object.hasOwn(value, "installationUid")
+      ? { installationUid: value.installationUid as string }
+      : {}),
     role: value.role,
     sessionId: value.sessionId,
   };

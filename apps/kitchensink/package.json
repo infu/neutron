@@ -25,7 +25,8 @@
     "neutron-tools": "^1.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-icons": "^5.7.0"
+    "react-icons": "^5.7.0",
+    "viem": "^2.55.1"
   },
   "devDependencies": {
     "@dfinity/candid": "^3.4.3",

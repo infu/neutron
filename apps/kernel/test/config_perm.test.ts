@@ -235,7 +235,14 @@ test("backend-call facts disclose normalized modes and concurrency without a tar
     maxCyclesPerCall: 0,
     maxCyclesPerDay: 0,
   });
-  expect(backend?.installReservations).toHaveLength(15);
+  expect(backend?.installReservations).toHaveLength(18);
+  for (const method of ["get_minter_info", "get_events", "retrieve_eth_status"]) {
+    expect(backend?.installReservations).toContainEqual({
+      kind: "exact",
+      principal: "sv3dd-oaaaa-aaaar-qacoa-cai",
+      method,
+    });
+  }
   expect(backend && permissionLevel(backend)).toBe(3);
   const scheduled = factsOfKind(
     disclosure.permissions,
@@ -358,6 +365,50 @@ test("chain-key signing separates exact slot authority from unverified purpose",
       text: "receipt — App says this signs harmless receipts",
     },
   ]);
+});
+
+test("wallet custody authority stays separate from assertions and app-authored purpose", () => {
+  const makeDisclosure = (purpose: string) => configInstallDisclosures({
+    format: 3,
+    id: "ordinary_wallet_app",
+    name: "Ordinary Wallet",
+    version: 100,
+    capabilities: {
+      chain_key_signing: {
+        api: 1,
+        slots: [{
+          id: "account",
+          algorithm: "ecdsa_secp256k1",
+          max_assertion_bytes: 1024,
+          purpose: "Prove a login",
+        }],
+      },
+      wallet_custody_signing: {
+        api: 1,
+        slots: [{ id: "account", algorithm: "ecdsa_secp256k1", purpose }],
+      },
+    },
+  });
+  const disclosure = makeDisclosure("App claims transfers always need approval");
+  const [custody] = factsOfKind(disclosure.permissions, "wallet_custody_signing");
+  expect(custody).toEqual({
+    source: "kernel",
+    kind: "wallet_custody_signing",
+    slots: [{ id: "account", algorithm: "ecdsa_secp256k1" }],
+  });
+  expect(permissionLevel(custody!)).toBe(4);
+  expect(permissionKey(custody!)).toBe(
+    'wallet_custody_signing:[["account","ecdsa_secp256k1"]]',
+  );
+  expect(permissionKey(custody!)).not.toBe(permissionKey(
+    factsOfKind(disclosure.permissions, "chain_key_signing")[0]!,
+  ));
+  expect(disclosure.permissions).toEqual(makeDisclosure("Different app claim").permissions);
+  expect(disclosure.appExplanations).toContainEqual({
+    source: "app",
+    kind: "wallet_custody_signing_slot_purpose",
+    text: "account — App claims transfers always need approval",
+  });
 });
 
 test("stable stores separate exact schema and quotas from unverified purpose", () => {

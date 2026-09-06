@@ -269,9 +269,23 @@ export type MsgBusToolCall = JsonObject & {
 export type MsgBusCallerContext = JsonObject & {
   endpoint: string;
   appId?: string;
+  /**
+   * Kernel-authenticated installation identity, a canonical positive Nat64.
+   * Absent on older Kernels; effect providers requiring installation-scoped
+   * command identities must check for it before accepting a new command.
+   */
+  installationUid?: string;
   role?: string;
   sessionId?: string;
 };
+
+export function isMsgBusInstallationUid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[1-9][0-9]{0,19}/u.exec(value)?.[0] === value &&
+    BigInt(value) <= 18_446_744_073_709_551_615n
+  );
+}
 
 export type KernelPolicyErrorCode =
   | "UI_BUSY"

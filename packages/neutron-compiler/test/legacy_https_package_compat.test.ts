@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
+import { cp, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, expect, test } from "bun:test";
 import { gzipSync } from "fflate";
@@ -13,6 +17,7 @@ import {
 } from "neutron-tools/src/package_surface_origins.js";
 import {
   buildPackagesCompileInput,
+  compilePackages,
   preparePackageInstall,
   unpackNeutronPackage,
 } from "../src/install.ts";
@@ -49,7 +54,8 @@ type LegacyKernelExecutableFixture = Readonly<{
     | "v0.3.7"
     | "v0.3.15"
     | "v0.3.17"
-    | "v0.3.20";
+    | "v0.3.20"
+    | "v0.3.36";
   archivePath: string;
   bytes: number;
   sha256: string;
@@ -57,6 +63,7 @@ type LegacyKernelExecutableFixture = Readonly<{
   prepareSymbol: string;
   batchSymbol: string;
   compileSymbol: string;
+  compilerBundlePath?: string;
   emptyRuntimeMarker: string;
 }>;
 
@@ -87,6 +94,41 @@ const KERNEL_320_RELEASE_FIXTURE = Object.freeze({
   compileSymbol: "cS",
   emptyRuntimeMarker: "var Kt=4096,X=null;",
 } satisfies LegacyKernelExecutableFixture);
+
+const KERNEL_336_RELEASE_FIXTURE = Object.freeze({
+  label: "v0.3.36",
+  archivePath: fileURLToPath(
+    new URL("../../../apps/kernel/kernel.v0.3.36.neutron", import.meta.url),
+  ),
+  bytes: 2_433_352,
+  sha256: "97222bc4c956932ff21b96773cc5a438f92ae5ac7660c0c3f408be7eb25a7eeb",
+  mainTailMarker: "var Na=O(F(),1),PA=document.getElementById",
+  compilerBundlePath: "web/chunks/chunk-KQVPKMZ6.js",
+  prepareSymbol: "ws",
+  batchSymbol: "Tp",
+  compileSymbol: "Ps",
+  emptyRuntimeMarker: "var Kt=4096,X=null;",
+} satisfies LegacyKernelExecutableFixture);
+
+// Pin incumbent production apps independently of the mutable release catalog:
+// new apps may require capabilities that predecessor validators cannot parse.
+const KERNEL_336_INCUMBENT_APPS = [
+  ["agent/agent.v0.3.17.neutron", "fd1cc607c8e2c666415baa0594e415e76c71f6f71d992fea728290c22e520d9d"],
+  ["blast/blast.v0.1.2.neutron", "f49b8fc9f313e985b005f3ede9d111d770e5dd9f6634469d02722337048ca732"],
+  ["chess/chess.v0.3.4.neutron", "4c48a4c89b335bfee147d17104dda3e930cb23aad27091356f6ec0fc01dca3d7"],
+  ["contacts/contacts.v0.3.6.neutron", "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f"],
+  ["vfs/files.v0.4.10.neutron", "26af5451805537000d78cb2df50d9a047cafd62c4212214c17e84b8b18e5baea"],
+  ["gemma/gemma.v0.2.4.neutron", "cf8d6a01c48dd9f3a8d8ca4d0b66c86aca112580701f6b3d26bbb6982c578d3d"],
+  ["hello/hello.v0.2.4.neutron", "b7596d3ba8288ac06786b5eda2e68d9327881fdf3aec1aced4cb841b5d597c6b"],
+  ["hullshift/hullshift.v0.2.5.neutron", "9a6e48d86b6f16a5f6664d6bab9a897ce3c992d1f0a4f528851837bc24d49e88"],
+  ["jetcreeper/jetcreeper.v0.3.4.neutron", "69e19796cff20990bbe326313e04b0b0e4305a9c97720e0b5d383e4048bcfe90"],
+  ["kitchensink/kitchensink.v0.3.11.neutron", "4fb7f6fc74c29b05a95f4ce2f706d2f6cd8db4cd2dd9e840233b65e16acaa921"],
+  ["mail/mail.v0.3.5.neutron", "d82e7251b67ed250e47e730df49cea4e88f27ec9187de3033abe5a923b7ecdd1"],
+  ["mysubnet/mysubnet.v0.3.4.neutron", "b69de8f23794b6c1124e31b03f54201174cd5c0af225d5208a97234d43dae4bb"],
+  ["spreadsheet/spreadsheet.v0.3.4.neutron", "b9e4ebbf87d64a42c519dded7cda87ed24caffb3974fc8245cdf715636ef94d7"],
+  ["wagyu/wagyu.v0.3.6.neutron", "dae27b5cc062d703c0d7537a2e582344dc5991e4623ce13f5aa4edee97e61513"],
+  ["wallet/wallet.v0.3.12.neutron", "6875f1f98ae7309fe84885ed77df9847c1c1ad03f5baa8d6aed4b00fb4f48129"],
+] as const;
 
 const LEGACY_KERNEL_EXECUTABLE_FIXTURES = [
   {
@@ -148,6 +190,8 @@ const LEGACY_SYNTHETIC_SUCCESSOR_FIXTURES =
   LEGACY_KERNEL_EXECUTABLE_FIXTURES;
 const RUN_CURRENT_RELEASE_ARTIFACT_GATE =
   process.env.NEUTRON_RUN_LEGACY_CURRENT_ARCHIVE_GATE === "1";
+const RUN_CURRENT_KERNEL_SOURCE_GATE =
+  process.env.NEUTRON_RUN_LEGACY_CURRENT_SOURCE_GATE === "1";
 let sharedLegacyBrowserPromise: Promise<Browser> | undefined;
 
 afterAll(async () => {
@@ -288,6 +332,103 @@ function syntheticSuccessorKernelArchive(): Uint8Array {
       Object.entries(files).map(([path, content]) => [path, gzipSync(content)]),
     ),
   );
+}
+
+function incumbentProductionAppArchives(): Uint8Array[] {
+  return KERNEL_336_INCUMBENT_APPS.map(([path, sha256]) => {
+    const archive = new Uint8Array(
+      readFileSync(fileURLToPath(
+        new URL(`../../../apps/${path}`, import.meta.url),
+      )),
+    );
+    expect(hashContent(archive)).toBe(sha256);
+    return archive;
+  });
+}
+
+async function currentKernelSourceArchive(): Promise<Uint8Array> {
+  const { packageMotoko } = await import("../../neutron-scripts/src/mopack.ts");
+  const { parsePackageString } = await import("../../neutron-scripts/src/walk.ts");
+  const kernelDirectory = fileURLToPath(
+    new URL("../../../apps/kernel", import.meta.url),
+  );
+  const temporaryDirectory = await mkdtemp(
+    join(tmpdir(), "neutron-legacy-kernel-source-"),
+  );
+  try {
+    await cp(
+      join(kernelDirectory, "backend"),
+      join(temporaryDirectory, "backend"),
+      { recursive: true },
+    );
+    await cp(
+      join(kernelDirectory, "neutron.lock.json"),
+      join(temporaryDirectory, "neutron.lock.json"),
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(kernelDirectory, "neutron.json"), "utf8"),
+    );
+    // This is only a private compiler fixture, never a release candidate. All
+    // generated files stay in /tmp; no manifest, lock, dist or archive in the
+    // workspace is built or overwritten under a released version.
+    manifest.version = Math.max(manifest.version, 336) + 1;
+    await writeFile(
+      join(temporaryDirectory, "neutron.json"),
+      JSON.stringify(manifest),
+    );
+    const packageSources = parsePackageString(
+      execFileSync("mops", ["sources"], {
+        cwd: kernelDirectory,
+        encoding: "utf8",
+      }).replace(/\n/g, " ").trim(),
+    );
+    await packageMotoko({
+      cwd: temporaryDirectory,
+      packages: Object.fromEntries(
+        Object.entries(packageSources).map(([name, path]) => [
+          name, resolve(kernelDirectory, path),
+        ]),
+      ),
+    });
+    const archive = new Uint8Array(
+      readFileSync(KERNEL_336_RELEASE_FIXTURE.archivePath),
+    );
+    expect(hashContent(archive)).toBe(KERNEL_336_RELEASE_FIXTURE.sha256);
+    const files = unpackNeutronPackage(archive);
+    for (const path of Object.keys(files)) {
+      if (path.startsWith("mo/")) delete files[path];
+    }
+    for (const name of await readdir(join(temporaryDirectory, "dist/mo"))) {
+      files[`mo/${name}`] = new Uint8Array(
+        readFileSync(join(temporaryDirectory, "dist/mo", name)),
+      );
+    }
+    files["neutron.json"] = new Uint8Array(
+      readFileSync(join(temporaryDirectory, "dist/neutron.json")),
+    );
+    files["neutron.lock.json"] = new Uint8Array(
+      readFileSync(join(temporaryDirectory, "dist/neutron.lock.json")),
+    );
+    const record = JSON.parse(
+      decoder.decode(files["legal/package-record.v1.json"]),
+    );
+    const reference = (path: string) => ({
+      path,
+      bytes: files[path]!.byteLength,
+      sha256: hashContent(files[path]!),
+    });
+    record.package.version = manifest.version;
+    record.package.manifest = reference("neutron.json");
+    record.memory.lock = reference("neutron.lock.json");
+    files["legal/package-record.v1.json"] = encoder.encode(JSON.stringify(record));
+    return msgpack.encode(
+      Object.fromEntries(
+        Object.entries(files).map(([path, content]) => [path, gzipSync(content)]),
+      ),
+    );
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
 }
 
 type LegacyAcceptanceResult = Readonly<{
@@ -475,6 +616,58 @@ test("the exact archived browser compilers compile a clean HTTPS app with a succ
     expectSuccessfulLegacyCompile(result, ["kernel", "hello"]);
   }
 }, 120_000);
+
+test.skipIf(!RUN_CURRENT_KERNEL_SOURCE_GATE)(
+  "the exact production 336 browser compiler compiles live successor Kernel source with all incumbent apps",
+  async () => {
+    const archives = [
+      await currentKernelSourceArchive(),
+      ...incumbentProductionAppArchives(),
+    ];
+    const appIds = archives.map(
+      (archive) => preparePackageInstall(archive).manifest.id,
+    );
+    const result = await compileLegacyArchiveBatch(
+      KERNEL_336_RELEASE_FIXTURE,
+      archives,
+    );
+    expectSuccessfulLegacyCompile(result, appIds);
+  },
+  300_000,
+);
+
+test.skipIf(!RUN_CURRENT_KERNEL_SOURCE_GATE)(
+  "the current compiler compiles exact production 336 Kernel and all incumbent apps",
+  async () => {
+    const kernelArchive = new Uint8Array(
+      readFileSync(KERNEL_336_RELEASE_FIXTURE.archivePath),
+    );
+    expect(hashContent(kernelArchive)).toBe(KERNEL_336_RELEASE_FIXTURE.sha256);
+    const packages = [kernelArchive, ...incumbentProductionAppArchives()].map(
+      (archive) => preparePackageInstall(archive),
+    );
+    const compiled = await compilePackages({
+      packages,
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+    });
+    expectSuccessfulLegacyCompile(
+      {
+        appIds: packages.map(({ manifest }) => manifest.id),
+        inventoryAppIds: compiled.appInstanceInventory
+          .map(({ app_id }) => app_id).sort(),
+        wasmBytes: compiled.wasm.byteLength,
+        wasmMagic: [...compiled.wasm.slice(0, 4)],
+        diagnosticErrors: compiled.diagnostics.filter(
+          ({ severity }) => severity === 1,
+        ).length,
+        compatibilityDiagnostics: compiled.compatibilityDiagnostics.length,
+      },
+      packages.map(({ manifest }) => manifest.id),
+    );
+  },
+  300_000,
+);
 
 test.skipIf(!RUN_CURRENT_RELEASE_ARTIFACT_GATE)(
   "release-only archived browser compilers compile the manifest-selected production package set in one batch",
@@ -744,11 +937,19 @@ async function withLegacyKernelExecutable<T>(
   // Only the rendered-UI tail is replaced. The archived decoder, manifest
   // validator, package-record parser, file preparation, and batch validation
   // closures execute byte-for-byte from the immutable browser bundle.
-  mainSource =
-    mainSource.slice(0, mainTail) +
+  const exposure =
     `globalThis.__legacyPreparePackageInstall=${fixture.prepareSymbol};` +
     `globalThis.__legacyBuildPackagesCompileInput=${fixture.batchSymbol};` +
     `globalThis.__legacyCompilePackages=${fixture.compileSymbol};`;
+  mainSource = mainSource.slice(0, mainTail) +
+    (fixture.compilerBundlePath ? "" : exposure);
+  // 336 moved these closures to a shared chunk. Append their exposure there,
+  // preserving the exact archived compiler and all of its dependencies.
+  const compilerSource = fixture.compilerBundlePath === undefined
+    ? undefined
+    : encoder.encode(
+      decoder.decode(files[fixture.compilerBundlePath]) + exposure,
+    );
 
   let runtimeSource = decoder.decode(files[runtimePath]);
   const emptyRuntime = fixture.emptyRuntimeMarker;
@@ -791,9 +992,11 @@ async function withLegacyKernelExecutable<T>(
     const content =
       archivePath === mainPath
         ? encoder.encode(mainSource)
-        : archivePath === runtimePath
-          ? encoder.encode(runtimeSource)
-          : files[archivePath];
+        : archivePath === fixture.compilerBundlePath
+          ? compilerSource
+          : archivePath === runtimePath
+            ? encoder.encode(runtimeSource)
+            : files[archivePath];
     if (content === undefined) {
       response.writeHead(404);
       response.end("Not found");

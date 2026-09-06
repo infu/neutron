@@ -1,4 +1,6 @@
 import {
+  WALLET_CUSTODY_SIGNING_DISCLOSURE,
+  WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE,
   browserPermissionFeaturesTitle,
   permissionLevel,
   type Permission,
@@ -56,6 +58,12 @@ export function compactPermissionConsequences(
       case "chain_key_signing":
         if (permission.slots.length > 0) {
           add(permission, "signing", "Digital signatures", "Can sign requests that services may accept as approval, without asking each time. Signing uses Neutron's running balance.");
+        }
+        break;
+      case "wallet_custody_signing":
+        if (permission.slots.length > 0) {
+          add(permission, "wallet-custody-signing", "Wallet custody signing", WALLET_CUSTODY_SIGNING_DISCLOSURE);
+          add(permission, "wallet-custody-signing", "Wallet custody signing", WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE);
         }
         break;
       case "agent_entrypoint":

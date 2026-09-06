@@ -705,6 +705,15 @@ a browser or restored snapshot. See [App-Isolated vetKeys](./app-isolated-vetkey
 
 ## Chain-Key Assertion Consent Is Install-Bounded
 
+`capabilities.wallet_custody_signing` is an independent explicit installation
+grant to an owner-trusted wallet app. It authorizes that app's backend to sign
+exact 32-byte digests using its own custody namespace. Kernel does not decode
+transaction effects or enforce the wallet's UI against its digest; the installed
+wallet owns protocol validation, provider decisions, and durable command replay.
+Human callers use wallet-owned provider presentation and direct-root Agent
+callers use the separate attested root tools. An assertion grant never implies
+custody authority. See the [wallet custody contract](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1).
+
 `capabilities.chain_key_signing` has a different lifetime from vetKey lifecycle
 actions. Installing it grants the backend autonomous use of the exact declared
 assertion slots within their byte, rate, cycle, concurrency, namespace, and

@@ -649,6 +649,7 @@ test("assembler emits modern persistent Motoko actor shape", () => {
   expect(source).toContain(
     `${initName("kernel")}.configure_app_capabilities([], {`,
   );
+  expect(source).not.toContain("configure_wallet_custody_signing");
   expect(source).toContain("vetkeys_environment = #production");
   expect(source).toContain('ecdsa_secp256k1 = ?"key_1"');
   expect(source).toContain('schnorr_bip340secp256k1 = ?"key_1"');
@@ -1790,6 +1791,7 @@ test("assembler emits exact assertion-signing slots and only the attenuated hand
   };
   const source = assemble({ kernel: kernelConfig, receipt_app: app });
 
+  expect(source).not.toContain("configure_wallet_custody_signing");
   expect(source).toContain("chain_key_signing = ?{");
   expect(source).toContain('id = "receipts"');
   expect(source).toContain("algorithm = #schnorr_ed25519");
@@ -1822,6 +1824,113 @@ test("assembler emits exact assertion-signing slots and only the attenuated hand
   expect(unselected).toContain(`${moduleName("receipt_app")}.Init()`);
   expect(unselected).not.toContain(
     `chain_key_signing_capability(${scopeName("receipt_app")})`,
+  );
+});
+
+test("assembler keeps wallet custody separate and injects only its scoped handle", () => {
+  const app: AssemblyManifest = {
+    format: 3,
+    id: "evm_wallet",
+    name: "EVM Wallet",
+    version: 100,
+    entry: "evm_wallet",
+    capabilities: {
+      wallet_custody_signing: {
+        api: 1,
+        slots: [{
+          id: "account",
+          algorithm: "ecdsa_secp256k1",
+          purpose: 'Sign wallet "transactions" and messages',
+        }],
+      },
+    },
+    backend: { capabilities: { wallet_custody_signing: { api: 1 } } },
+  };
+  const source = assemble({ kernel: kernelConfig, evm_wallet: app });
+
+  const custodyConfiguration = source.indexOf(
+    `${initName("kernel")}.configure_wallet_custody_signing([`,
+  );
+  const appConfiguration = source.indexOf(
+    `${initName("kernel")}.configure_app_capabilities([`,
+  );
+  expect(custodyConfiguration).toBeGreaterThanOrEqual(0);
+  expect(custodyConfiguration).toBeLessThan(appConfiguration);
+  const custodyDeclarations = source.slice(custodyConfiguration, appConfiguration);
+  expect(custodyDeclarations).toContain(`app_scope = ${scopeName("evm_wallet")}`);
+  expect(custodyDeclarations).toContain("wallet_custody_signing = ?{");
+  expect(custodyDeclarations).not.toContain("chain_key_signing =");
+  const appDeclarations = source.match(
+    /configure_app_capabilities\(\[(.*?)\], \{/s,
+  );
+  expect(appDeclarations).not.toBeNull();
+  expect(appDeclarations![1]).not.toContain("wallet_custody_signing");
+  expect(source).toContain("wallet_custody_signing = ?{");
+  expect(source).toContain('id = "account"');
+  expect(source).toContain("algorithm = #ecdsa_secp256k1");
+  expect(source).toContain('purpose = "Sign wallet \\"transactions\\" and messages"');
+  expect(source).toContain("kind = #wallet_custody_signing");
+  expect(source).toContain('resource_id = "account"');
+  expect(source).toContain("chain_key_signing = null");
+  expect(source).not.toContain("max_assertion_bytes");
+
+  const factory =
+    `wallet_custody_signing = ${initName("kernel")}.wallet_custody_signing_capability(${scopeName("evm_wallet")});`;
+  const environmentStart = source.indexOf(environmentName("evm_wallet"));
+  const environmentEnd = source.indexOf(
+    `${moduleName("evm_wallet")}.Init`,
+    environmentStart,
+  );
+  const environment = source.slice(environmentStart, environmentEnd);
+  expect(environment).toContain(factory);
+  expect(environment).not.toMatch(
+    /management|derivation|key_1|dfx_test_key|chain_code|cycles|NeutronActor|path/,
+  );
+  expect(environment).not.toContain("chain_key_signing_capability");
+
+  const { backend: _backend, ...unselectedApp } = app;
+  const unselected = assemble({
+    kernel: kernelConfig,
+    evm_wallet: unselectedApp,
+  });
+  expect(unselected).toContain("wallet_custody_signing = ?{");
+  expect(unselected).toContain("configure_wallet_custody_signing([");
+  expect(unselected).toContain(`${moduleName("evm_wallet")}.Init()`);
+  expect(unselected).not.toContain(
+    `wallet_custody_signing_capability(${scopeName("evm_wallet")})`,
+  );
+
+  const combined = assemble({
+    kernel: kernelConfig,
+    evm_wallet: {
+      ...app,
+      capabilities: {
+        ...app.capabilities,
+        chain_key_signing: {
+          api: 1,
+          slots: [{
+            id: "account",
+            algorithm: "ecdsa_secp256k1",
+            purpose: "Sign account assertions separately",
+            max_assertion_bytes: 64,
+          }],
+        },
+      },
+      backend: {
+        capabilities: {
+          chain_key_signing: { api: 1 },
+          wallet_custody_signing: { api: 1 },
+        },
+      },
+    },
+  });
+  expect(combined).toContain("chain_key_signing = ?{");
+  expect(combined).toContain("wallet_custody_signing = ?{");
+  expect(combined).toContain("kind = #chain_key_signing");
+  expect(combined).toContain("kind = #wallet_custody_signing");
+  expect(combined).toContain(factory);
+  expect(combined).toContain(
+    `chain_key_signing = ${initName("kernel")}.chain_key_signing_capability(${scopeName("evm_wallet")});`,
   );
 });
 

@@ -1,5 +1,4 @@
 import Text "mo:core/Text";
-import Map "mo:core/Map";
 import Allocator "../../backend/certified_assets/Allocator";
 import AuthenticatedForest "../../backend/certified_assets/AuthenticatedForest";
 import AssetTypes "../../backend/certified_assets/Types";
@@ -34,24 +33,8 @@ func asStableAppInstance(
     instance;
 };
 
-func asServiceCapabilityRegistry(
-    memory : MemoryV3.CapabilityRegistryMemory,
-) : CapabilityTypes.CapabilityRegistryMemory {
-    memory;
-};
-
-func asStableCapabilityRegistry(
-    memory : CapabilityTypes.CapabilityRegistryMemory,
-) : MemoryV3.CapabilityRegistryMemory {
-    memory;
-};
-
-let serviceCapabilityRegistry = asServiceCapabilityRegistry({
-    entries = Map.empty<Text, MemoryV3.CapabilityRegistryEntry>();
-});
-let stableCapabilityRegistry = asStableCapabilityRegistry(
-    serviceCapabilityRegistry
-);
+// CapabilityKind was widened in v4. The migration and current registry
+// alignment are checked by memory_v4_schema_test.mo.
 
 let appInstance : MemoryV3.AppInstance = {
     scope = { app_id = "sample"; installation_uid = 1 };
@@ -86,4 +69,3 @@ assert (
     stableAppInstance.resident_frame_security ==
     #credentialless_ephemeral_dedicated_v1
 );
-assert (Map.size(stableCapabilityRegistry.entries) == 0);
