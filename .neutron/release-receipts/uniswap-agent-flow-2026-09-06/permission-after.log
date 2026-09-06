@@ -1,0 +1,28 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/uniswap/test/service.test.ts:
+(pass) resident service > exposes quote, prepare, status, list and independently verified result handlers [1.00ms]
+(pass) resident service > quotes use real wallet SDK contract reads and perform no signature, transaction, or journal mutation [14.00ms]
+(pass) resident service > unknown token metadata still resolves through read-only calls [5.00ms]
+(pass) resident service > Agent quotes compare all four fee tiers and estimate both transactions through the real permission guard [19.00ms]
+(pass) resident service > Agent custom-token decimals and symbol both resolve while permission decisions are asynchronous [5.00ms]
+(pass) resident service > a failed Agent pool or approval fee read releases queued reads without a permission retry [5.00ms]
+(pass) resident service > queued Agent reads respect context cancellation before dispatch [5.00ms]
+(pass) resident service > queued Agent reads respect request cancellation before dispatch [2.00ms]
+(pass) resident service > non-Agent service reads retain parallel dispatch
+(pass) resident service > provider disagreement produces an unavailable quote and no saved or executed work [1.00ms]
+(pass) resident service > prepare saves the authenticated caller and immutable requests without forwarding EVM effects [97.00ms]
+(pass) resident service > identical prepare retries reuse every request ID while another installation cannot claim that swap ID [86.00ms]
+(pass) resident service > preparation without a Kernel-authenticated installation identity fails before persistence [2.00ms]
+(pass) resident service > status and list restore native-swap options without querying or invoking the wallet [85.00ms]
+(pass) resident service > paged history returns complete immutable records with an explicit continuation and no wallet calls [62.00ms]
+(pass) resident service > recording a root result verifies the saved caller/request and stores the actual chain receipt [68.00ms]
+(pass) resident service > a wallet request binding of %s leaves even a matching public transaction unresolved [59.00ms]
+(pass) resident service > a wallet request binding of %s leaves even a matching public transaction unresolved [47.00ms]
+(pass) resident service > a different public transaction or a relabeled hash cannot satisfy a root success claim [143.00ms]
+(pass) resident service > a confirmed approval is recorded separately using its own immutable request ID [118.00ms]
+
+ 20 pass
+ 0 fail
+ 651 expect() calls
+Ran 20 tests across 1 files. [1306.00ms]

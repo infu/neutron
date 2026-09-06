@@ -161,11 +161,32 @@ exact-request binding remain unchanged.
 | `uniswap_list_v1` | Read saved swaps |
 | `uniswap_list_page_v1` | Read a complete-record history page; start with null cursor and follow `nextCursor` until null |
 | `uniswap_record_result_v1` | Bind a supplied wallet result to the saved request, then independently verify public transaction fields and receipt |
+| `uniswap_next_action_v1` | Reconcile supplied root Wallet observations and return the next exact tool call for a saved Agent swap |
 
-The root Agent obtains a quote and prepared requests, calls EVM Wallet's
-`evm_send_transaction_root_v1` directly for the approval, reconciles that request
-until confirmed, records it, then calls the swap request directly. Uniswap never
-forwards a nested call as root or grants its consumer a signer.
+The root Agent obtains a quote and prepared requests, then uses
+`uniswap_next_action_v1` to determine which saved Wallet request to check or
+execute. The Agent calls EVM Wallet's root tools directly and supplies their
+status results to the continuation tool. Hash-bearing results are verified
+through the existing public transaction and journal-binding checks before they
+count as progress. Uniswap never forwards a nested call as root or grants its
+consumer a signer.
+
+Agent tool invocations serialize their nested Wallet calls so independent pool,
+token-metadata and fee reads cannot compete for the same Kernel permission
+decision. The queue is scoped to that tool invocation and honors cancellation;
+the connected tile still performs independent reads concurrently. This uses the
+existing Kernel permission behavior and does not weaken or bypass decisions.
+Quote and continuation tools report progress and use the Agent's existing
+long-running-tool annotation.
+
+Continuation preserves ambiguous signed/submitted request IDs and asks for
+their status even after the quote deadline. It checks the swap before initiating
+another effect. Once the previous swap is known to be unsubmitted and the
+approval is resolved, an expired quote can be refreshed with the original
+amount, assets, recipient and slippage. The refreshed quote checks live
+allowance so a successful approval is reused; the Agent reviews the fresh quote
+against the owner's instructions before preparing a distinct intent. Quote
+expiry does not by itself require another owner prompt or another approval.
 
 Root-owned EVM Wallet commands are scoped to the Agent installation, so Uniswap
 does not impersonate that installation to query its journal. The root supplies a

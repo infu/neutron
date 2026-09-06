@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { validate, type Schema } from "jsonschema";
 import { decodeFunctionData, encodeFunctionResult, getAddress, parseAbi } from "viem";
 import { generateAppMethodSchemaArtifact, validateAppMethodArgs } from "neutron-scripts/src/method_schema.js";
-import { parseEvmCallContractRequest, parseEvmOperationResult, parseEvmSendTransactionRequest, parseEvmTransactionRequest, type EvmOperationResult, type EvmReceipt, type EvmTransactionResult } from "neutron-tools/evm_wallet";
+import { parseEvmCallContractRequest, parseEvmEstimateTransactionRequest, parseEvmOperationResult, parseEvmSendTransactionRequest, parseEvmTransactionRequest, type EvmOperationResult, type EvmReceipt, type EvmTransactionResult } from "neutron-tools/evm_wallet";
 import { normalizeToolDescriptor, validateToolArguments, validateToolResult, type ExposedToolOptions, type JsonObject, type JsonValue, type MsgBusToolContext, type MsgBusToolDescriptor, type MsgBusToolHandler } from "neutron-tools/protocol";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 
@@ -22,7 +22,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
     ], { cwd: new URL("..", import.meta.url).pathname });
     expect(stderr).toBe("");
     expect(JSON.parse(stdout).sort()).toEqual([
-      "uniswap_list_page_v1", "uniswap_list_v1", "uniswap_prepare_v1",
+      "uniswap_list_page_v1", "uniswap_list_v1", "uniswap_next_action_v1", "uniswap_prepare_v1",
       "uniswap_quote_v1", "uniswap_record_result_v1", "uniswap_status_v1",
     ]);
   });
@@ -52,6 +52,8 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
   }));
   const residentModuleUrl = new URL("../src/service.ts", import.meta.url).href;
   await import(residentModuleUrl);
+  const walletModuleUrl = new URL("../src/agent_wallet.ts", import.meta.url).href;
+  const { createServiceWallet } = await import(walletModuleUrl);
 
   const ACCOUNT = getAddress("0x1111111111111111111111111111111111111111");
   const RECIPIENT = getAddress("0x2222222222222222222222222222222222222222");
@@ -76,6 +78,37 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
   );
   type WireRecord = Record<string, JsonValue>;
   type WalletCall = { target: string; name: string; arguments: JsonObject };
+  // Exercise the production guard without replacing any Kernel module. Its
+  // decision remains pending over a microtask, just like the Agent judge's reply.
+  async function withAgentConsent(run: (authorize: (call: WalletCall) => Promise<void>, errors: string[]) => Promise<void>) {
+    const moduleUrl = new URL("../../kernel/src/ui_attention/agent.ts", import.meta.url).href;
+    const agent = await import(moduleUrl);
+    const ownerPrincipal = "2muv7-iopdh-zcmmn-yb3ls-ane4w-ei7h2-gketm-rnyra-cxzmm-y6qy2-wqe";
+    const endpoint = (appId: string, role: "tile" | "background") => ({
+      endpointId: `app:${appId}:${role}`, source: {},
+      context: { role, appId, ...(role === "tile" ? { tileId: "chat", instanceId: "root", workspace: 1 } : {}) },
+      sessionId: `${appId}-${role}-session`, appScope: { appId, installationUid: appId === "agent" ? "17" : "18" },
+    });
+    agent.clearAgentModeForAuth();
+    const granted = agent.requestAgentGrant({ appId: "agent", appName: "Agent", version: 100, installationUid: "17", entrypoint: "agent_chat", ownerPrincipal });
+    agent.approveAgentGrant(); await granted;
+    const root = agent.beginAgentRoot({ caller: endpoint("agent", "tile"), target: endpoint("agent", "background"), tool: "agent_chat", ownerPrincipal, installedVersion: 100 });
+    const child = agent.createChildInvocation(root, endpoint("uniswap", "background"), "uniswap_quote_v1");
+    const errors: string[] = [];
+    const authorize = async (call: WalletCall) => {
+      try {
+        await agent.requestAgentConsent(child, { kind: "frontend_tool", persistence: "none", risk: "low", action: { provider: "evm_wallet", tool: call.name } }, async () => {
+          await Promise.resolve();
+          return { decision: "allow", reason: "Read required for the requested swap" };
+        });
+      } catch (error) {
+        errors.push(String((error as { code?: string }).code));
+        throw error;
+      }
+    };
+    try { await run(authorize, errors); }
+    finally { agent.clearAgentModeForAuth(); }
+  }
   function validateInput(method: string, args: JsonValue[]) {
     const result = validateAppMethodArgs(methodSchemas, method, args);
     expect(result.errors).toEqual([]); expect(result.valid).toBe(true);
@@ -87,7 +120,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
   function receipt(): EvmReceipt {
     return { blockNumber: "21000001", blockHash: BLOCK_HASH, status: "success", gasUsed: "45000", effectiveGasPriceWei: "2500000000", logs: [], finality: "safe", observedAtNs: "1800000000000000000" };
   }
-  function fixture(options: { quotesUnavailable?: boolean; allowance?: bigint } = {}) {
+  function fixture(options: { quotesUnavailable?: boolean; allowance?: bigint; authorize?: (call: WalletCall) => Promise<void>; estimatesAvailable?: boolean; failApprovalEstimate?: boolean; failQuoteFee?: number; bestQuoteFee?: number } = {}) {
     const rows = new Map<string, WireRecord>();
     const walletCalls: WalletCall[] = [], mutations: { method: string; args: JsonValue[] }[] = [], queries: { method: string; args: JsonValue[] }[] = [];
     let chainEvidence: EvmTransactionResult | null = null;
@@ -127,6 +160,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
         throw new Error(`Unexpected journal mutation ${method}`);
       },
       async callTool(call: WalletCall): Promise<JsonValue> {
+        await options.authorize?.(call);
         walletCalls.push(structuredClone(call));
         expect(call.target).toBe("app:evm_wallet:background");
         if (call.name === "evm_accounts_v1") return { accounts: [account] };
@@ -137,7 +171,8 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
           if (request.to === QUOTER.toLowerCase()) {
             if (options.quotesUnavailable) throw new Error("Providers disagree on the current pool state");
             const decoded = decodeFunctionData({ abi: quoteAbi, data: request.data as `0x${string}` });
-            result = encodeFunctionResult({ abi: quoteAbi, functionName: "quoteExactInputSingle", result: [decoded.args[0].fee === 500 ? 2_000_000n : 1_800_000n, 2n ** 96n, 1, 90_000n] });
+            if (decoded.args[0].fee === options.failQuoteFee) throw new Error("This pool has no liquidity");
+            result = encodeFunctionResult({ abi: quoteAbi, functionName: "quoteExactInputSingle", result: [decoded.args[0].fee === (options.bestQuoteFee ?? 500) ? 2_000_000n : 1_800_000n, 2n ** 96n, 1, 90_000n] });
           } else if (request.to === FACTORY.toLowerCase()) result = encodeFunctionResult({ abi: factoryAbi, functionName: "getPool", result: POOL });
           else if (request.to === POOL.toLowerCase()) result = encodeFunctionResult({ abi: poolAbi, functionName: "slot0", result: [2n ** 96n, 0, 0, 1, 1, 0, true] });
           else {
@@ -154,7 +189,13 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
           if (!chainEvidence) throw new Error("No independent chain evidence configured");
           return structuredClone(chainEvidence) as unknown as JsonValue;
         }
-        if (call.name === "evm_estimate_transaction_v1") throw new Error("Fee estimation is unavailable from this fixture provider");
+        if (call.name === "evm_estimate_transaction_v1") {
+          if (!options.estimatesAvailable) throw new Error("Fee estimation is unavailable from this fixture provider");
+          const request = parseEvmEstimateTransactionRequest(call.arguments);
+          const approval = request.to !== ROUTER.toLowerCase(), gas = approval ? 50_000n : 130_000n;
+          if (approval && options.failApprovalEstimate) throw new Error("Approval fee provider unavailable");
+          return { ...request, address: ACCOUNT, status: "available", gasLimit: gas.toString(), gasPriceWei: "3000000000", baseFeePerGasWei: "2999999999", maxPriorityFeePerGasWei: "1", maxFeePerGasWei: "5999999999", estimatedFeeWei: (gas * 3_000_000_000n).toString(), maximumFeeWei: (gas * 5_999_999_999n).toString(), blockNumber: "21000000", observedAtNs: "1800000000000000000", source: "evm_rpc", feeBasis: "base_fee_plus_priority", postingCosts: "not_applicable", reasons: [] };
+        }
         throw new Error(`Resident Uniswap attempted an unexpected wallet tool or effect: ${call.name}`);
       },
     };
@@ -188,7 +229,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
 
   describe("resident service", () => {
     test("exposes quote, prepare, status, list and independently verified result handlers", () => {
-      expect([...handlers.keys()]).toEqual(["uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_list_page_v1", "uniswap_record_result_v1"]);
+      expect([...handlers.keys()]).toEqual(["uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_next_action_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_list_page_v1", "uniswap_record_result_v1"]);
       expect(handlers.get("uniswap_quote_v1")!.descriptor.annotations?.["neutron:effects"]).toEqual(["read", "network"]);
     });
 
@@ -221,6 +262,87 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       expect(metadataCalls.map((call) => decodeFunctionData({ abi: tokenAbi, data: call.arguments.data as `0x${string}` }).functionName)).toEqual(["decimals", "symbol"]);
       expect(metadataCalls.every((call) => call.name === "evm_call_contract_v1")).toBe(true);
       expect(app.mutations).toHaveLength(0);
+    });
+
+    test("Agent quotes compare all four fee tiers and estimate both transactions through the real permission guard", async () => {
+      await withAgentConsent(async (authorize, errors) => {
+        const app = fixture({ authorize, estimatesAvailable: true, bestQuoteFee: 10000 });
+        const response = await app.quote(true), quote = JSON.parse(String(response.quoteJson));
+        const poolReads = app.walletCalls.filter((call) => call.arguments.to === QUOTER.toLowerCase());
+        expect(poolReads.map((call) => decodeFunctionData({ abi: quoteAbi, data: call.arguments.data as `0x${string}` }).args[0].fee)).toEqual([100, 500, 3000, 10000]);
+        expect(quote).toMatchObject({ fee: 10000, amountOut: "2000000", networkFees: {
+          approval: { estimatedFeeWei: "150000000000000", reason: null },
+          swap: { estimatedFeeWei: "390000000000000", reason: null },
+        } });
+        expect(errors).toEqual([]);
+        expect(app.mutations).toHaveLength(0);
+        expect(app.walletCalls.some((call) => /send_transaction|sign_/.test(call.name))).toBe(false);
+      });
+    });
+
+    test("Agent custom-token decimals and symbol both resolve while permission decisions are asynchronous", async () => {
+      await withAgentConsent(async (authorize, errors) => {
+        const app = fixture({ authorize, estimatesAvailable: true });
+        const response = await app.invoke("uniswap_quote_v1", {
+          chainId: "1", accountId: "main", tokenIn: OTHER, tokenOut: null,
+          amountIn: "1000000", slippageBps: 50, recipient: RECIPIENT,
+          deadline: String(Math.floor(Date.now() / 1000) + 3600),
+        });
+        expect(JSON.parse(String(response.quoteJson)).tokenIn).toEqual({ chainId: "1", address: OTHER, symbol: "CUSTOM", decimals: 8 });
+        const metadata = app.walletCalls.filter((call) => call.name === "evm_call_contract_v1" && call.arguments.to === OTHER.toLowerCase());
+        expect(metadata.map((call) => decodeFunctionData({ abi: tokenAbi, data: call.arguments.data as `0x${string}` }).functionName)).toEqual(["decimals", "symbol", "allowance"]);
+        expect(errors).toEqual([]);
+        expect(app.mutations).toHaveLength(0);
+      });
+    });
+
+    test("a failed Agent pool or approval fee read releases queued reads without a permission retry", async () => {
+      await withAgentConsent(async (authorize, errors) => {
+        const app = fixture({ authorize, estimatesAvailable: true, failQuoteFee: 100, bestQuoteFee: 10000, failApprovalEstimate: true });
+        const response = await app.quote(true), quote = JSON.parse(String(response.quoteJson));
+        expect(app.walletCalls.filter((call) => call.arguments.to === QUOTER.toLowerCase())).toHaveLength(4);
+        expect(quote.fee).toBe(10000);
+        expect(quote.networkFees.approval).toMatchObject({ estimatedFeeWei: null, reason: "Approval fee provider unavailable" });
+        expect(quote.networkFees.swap).toMatchObject({ estimatedFeeWei: "390000000000000", reason: null });
+        expect(app.walletCalls.filter((call) => call.name === "evm_estimate_transaction_v1")).toHaveLength(2);
+        expect(errors).toEqual([]);
+        expect(app.mutations).toHaveLength(0);
+      });
+    });
+
+    test.each(["context", "request"])("queued Agent reads respect %s cancellation before dispatch", async (cancellation) => {
+      const controller = new AbortController();
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      const calls: unknown[] = [], progress = () => {};
+      const kernel = { async callTool(_call: unknown, options: unknown) {
+        expect(this).toBe(kernel); calls.push(options);
+        await held; return { accounts: [account] };
+      } };
+      const wallet = createServiceWallet({ kernel, agentMode: true, ...(cancellation === "context" ? { signal: controller.signal } : {}), reportProgress() {} });
+      const first = wallet.accounts({ timeout: 3210, onProgress: progress });
+      const queued = wallet.accounts(cancellation === "request" ? { signal: controller.signal } : undefined);
+      const outcome = queued.then(() => null, (error: unknown) => error);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(calls).toEqual([{ timeout: 3210, onProgress: progress }]);
+      controller.abort(new Error("Cancelled queued wallet read"));
+      release(); await first;
+      expect(await outcome).toMatchObject({ message: "Cancelled queued wallet read" });
+      expect(calls).toHaveLength(1);
+      if (cancellation === "request") {
+        await wallet.accounts();
+        expect(calls).toHaveLength(2);
+      }
+    });
+
+    test("non-Agent service reads retain parallel dispatch", async () => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      let calls = 0;
+      const wallet = createServiceWallet({ kernel: { async callTool() { calls += 1; await held; return { accounts: [account] }; } }, agentMode: false, reportProgress() {} });
+      const first = wallet.accounts(), second = wallet.accounts();
+      expect(calls).toBe(2);
+      release(); await Promise.all([first, second]);
     });
 
     test("provider disagreement produces an unavailable quote and no saved or executed work", async () => {

@@ -1,0 +1,76 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/uniswap/test/service.test.ts:
+(pass) resident service > exposes quote, prepare, status, list and independently verified result handlers
+(pass) resident service > quotes use real wallet SDK contract reads and perform no signature, transaction, or journal mutation [11.00ms]
+(pass) resident service > unknown token metadata still resolves through read-only calls [4.00ms]
+265 |     test("Agent quotes compare all four fee tiers and estimate both transactions through the real permission guard", async () => {
+266 |       await withAgentConsent(async (authorize, errors) => {
+267 |         const app = fixture({ authorize, estimatesAvailable: true, bestQuoteFee: 10000 });
+268 |         const response = await app.quote(true), quote = JSON.parse(String(response.quoteJson));
+269 |         const poolReads = app.walletCalls.filter((call) => call.arguments.to === QUOTER.toLowerCase());
+270 |         expect(poolReads.map((call) => decodeFunctionData({ abi: quoteAbi, data: call.arguments.data as `0x${string}` }).args[0].fee)).toEqual([100, 500, 3000, 10000]);
+                                                                                                                                             ^
+error: expect(received).toEqual(expected)
+
+  [
++   100
+-   100,
+-   500,
+-   3000,
+-   10000
+  ]
+
+- Expected  - 4
++ Received  + 1
+
+      at <anonymous> (/srv/shared/code/neutron/apps/uniswap/test/service.test.ts:270:136)
+(fail) resident service > Agent quotes compare all four fee tiers and estimate both transactions through the real permission guard [16.00ms]
+284 |         const response = await app.invoke("uniswap_quote_v1", {
+285 |           chainId: "1", accountId: "main", tokenIn: OTHER, tokenOut: null,
+286 |           amountIn: "1000000", slippageBps: 50, recipient: RECIPIENT,
+287 |           deadline: String(Math.floor(Date.now() / 1000) + 3600),
+288 |         });
+289 |         expect(JSON.parse(String(response.quoteJson)).tokenIn).toEqual({ chainId: "1", address: OTHER, symbol: "CUSTOM", decimals: 8 });
+                                                                     ^
+error: expect(received).toEqual(expected)
+
+  {
+    address: "0x4444444444444444444444444444444444444444",
+    chainId: "1",
+    decimals: 8,
++   symbol: "0x444444",
+-   symbol: "CUSTOM",
+  }
+
+- Expected  - 1
++ Received  + 1
+
+      at <anonymous> (/srv/shared/code/neutron/apps/uniswap/test/service.test.ts:289:64)
+(fail) resident service > Agent custom-token decimals and symbol both resolve while permission decisions are asynchronous [4.00ms]
+94 |   };
+95 |   // Connect establishes read access before quoting. Independent fee tiers can
+96 |   // therefore share one round of provider latency without competing for consent.
+97 |   const results = await Promise.allSettled(FEE_TIERS.map(quotePool));
+98 |   const available = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+99 |   if (!available.length) throw new Error(`No direct V3 pool quote is available. ${results.map((r) => r.status === "rejected" ? String(r.reason) : "").join("; ")}`);
+                                    ^
+error: No direct V3 pool quote is available. Error: This pool has no liquidity; KernelPolicyError: Another agent permission decision is active; KernelPolicyError: Another agent permission decision is active; KernelPolicyError: Another agent permission decision is active
+      at quoteSwap (/srv/shared/code/neutron/apps/uniswap/src/swap.ts:99:32)
+(fail) resident service > a failed Agent pool or approval fee read releases queued reads without a permission retry [1.00ms]
+(pass) resident service > provider disagreement produces an unavailable quote and no saved or executed work [1.00ms]
+(pass) resident service > prepare saves the authenticated caller and immutable requests without forwarding EVM effects [79.00ms]
+(pass) resident service > identical prepare retries reuse every request ID while another installation cannot claim that swap ID [76.00ms]
+(pass) resident service > preparation without a Kernel-authenticated installation identity fails before persistence [2.00ms]
+(pass) resident service > status and list restore native-swap options without querying or invoking the wallet [72.00ms]
+(pass) resident service > paged history returns complete immutable records with an explicit continuation and no wallet calls [56.00ms]
+(pass) resident service > recording a root result verifies the saved caller/request and stores the actual chain receipt [61.00ms]
+(pass) resident service > a wallet request binding of %s leaves even a matching public transaction unresolved [48.00ms]
+(pass) resident service > a wallet request binding of %s leaves even a matching public transaction unresolved [41.00ms]
+(pass) resident service > a different public transaction or a relabeled hash cannot satisfy a root success claim [88.00ms]
+(pass) resident service > a confirmed approval is recorded separately using its own immutable request ID [54.00ms]
+
+ 14 pass
+ 3 fail
+ 581 expect() calls
+Ran 17 tests across 1 files. [1094.00ms]

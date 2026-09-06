@@ -135,7 +135,7 @@ export function validateOperation(record: SwapRecord, stage: "approval" | "swap"
   if (operation.requestId !== requestId || operation.accountId !== record.account_id || operation.chainId !== record.chain_id || operation.address.toLowerCase() !== intent.account.address.toLowerCase() || operation.kind !== "transaction") throw new Error("Wallet operation does not match the saved swap request.");
   return operation;
 }
-function stageRequest(record: SwapRecord, stage: "approval" | "swap"): EvmSendTransactionRequest {
+export function stageRequest(record: SwapRecord, stage: "approval" | "swap"): EvmSendTransactionRequest {
   const intent = savedIntent(record);
   const json = stage === "approval" ? record.approval_request_json : record.swap_request_json;
   if (!json) throw new Error("This swap has no approval step.");
