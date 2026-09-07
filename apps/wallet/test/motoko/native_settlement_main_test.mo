@@ -1,3 +1,4 @@
+import BridgeProviderMemory "../../backend/memory/wallet_bridge_provider/v1";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 import Map "mo:core/Map";
@@ -124,7 +125,7 @@ persistent actor NativeSettlementMain {
                 stable_memory = {
                     wallet; wallet_transfers = transfers;
                     wallet_commands = CommandMemory.init(); wallet_bridge = BridgeMemory.init();
-                    wallet_bridge_replacements = ReplacementMemory.init();
+                    wallet_bridge_provider = BridgeProviderMemory.init(); wallet_bridge_replacements = ReplacementMemory.init();
                 };
                 capabilities = { backend_calls = calls };
                 app_calls = { contacts = {

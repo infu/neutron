@@ -248,6 +248,16 @@ across uncertain replies. Where a minter outcome cannot be proven, it remains
 unresolved rather than generating a fresh withdrawal. See
 [IC Wallet](../apps/wallet/README.md).
 
+Agents discover supported pairs with `wallet_conversion_routes_v1`, then use
+`wallet_wrap_root_v1` for Ethereum ETH/ERC20 → IC ck-tokens or
+`wallet_unwrap_root_v1` for the reverse direction. Both tools retain their
+original request ID across approvals, submission and later settlement. The wrap
+tool uses EVM Wallet's provider review under the root Agent; withdrawals reuse
+IC Wallet's existing minter journal. Status tools distinguish approval, deposit
+or burn acceptance from actual destination settlement. IC Wallet's Send →
+Ethereum UI accepts EVM Wallet or a raw Ethereum address without a Contacts
+setup step, and tracks pending withdrawals automatically.
+
 Uniswap compares direct V3 and V4 pools on Ethereum and Arbitrum, using
 QuoterV2/SwapRouter02 and V4 Quoter/Universal Router 2.1.1 respectively. It also
 manages V3 and V4 liquidity positions: mint in an initialized pool, inspect, add,

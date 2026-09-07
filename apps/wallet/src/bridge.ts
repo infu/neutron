@@ -85,13 +85,21 @@ export type BridgeExecutionOptions = {
   onChange?: (intent: BridgeIntent) => void;
   onProgress?: (phase: EthereumDepositPhase) => void;
   confirmationTimeoutMs?: number; pollIntervalMs?: number;
+  signal?: AbortSignal;
+  // Only the provider tool supplies this after checking its separate durable
+  // binding. The UI and legacy direct-root flow retain their original lane.
+  providerAgent?: { appId: string; installationUid: string };
 };
 
 /** Resume the same durable bridge and preserve every completed approval. */
 export async function executeBridgeDeposit(options: BridgeExecutionOptions): Promise<BridgeIntent> {
   const { client, provider, evm, onChange = () => undefined } = options;
+  options.signal?.throwIfAborted();
   let current = await client.status(options.intent.id);
-  if (typeof current.source !== "string") throw new Error("This deposit is controlled by its original root Agent. Resume it there; Wallet can refresh the recorded transaction and mint status.");
+  const providerAgent = options.providerAgent;
+  if (typeof current.source !== "string" && (!providerAgent || current.source.appId !== providerAgent.appId || current.source.installationUid !== providerAgent.installationUid)) throw new Error("This deposit is controlled by its original root Agent. Resume it there; Wallet can refresh the recorded transaction and mint status.");
+  if (providerAgent && typeof current.source === "string") throw new Error("An Agent provider cannot adopt a UI deposit");
+  const usesEvmWallet = current.source === "evm" || providerAgent !== undefined;
   const accounts = await provider.request({ method: "eth_requestAccounts" });
   if (!Array.isArray(accounts) || typeof accounts[0] !== "string" || accounts[0].toLowerCase() !== current.account.toLowerCase()) throw new Error("Connect the saved source account to resume this deposit");
   if (await provider.request({ method: "eth_chainId" }) !== "0x1") {
@@ -105,10 +113,11 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
     return step;
   };
   const confirm = async (kind: EthereumDepositStep, hash: Hex, browserConfirm?: (hash: Hex) => Promise<void>) => {
+    options.signal?.throwIfAborted();
     options.onProgress?.(kind === "deposit" ? "confirming" : kind === "approval" ? "approving" : "clearing-allowance");
     const step = stepOf(kind);
     try {
-      if (current.source === "evm") {
+      if (usesEvmWallet) {
         if (!evm || !step.operationId) throw new Error("Reconnect EVM Wallet to reconcile this deposit");
         await evm.confirm(step.operationId, hash, bridgeTransaction(current, kind), async (replacement, state) => {
           const latest = await client.status(current.id);
@@ -129,6 +138,7 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
   // Reconcile saved submitted approvals first. A changed live allowance alone
   // cannot explain whether an earlier signature/submission succeeded.
   for (const saved of [...current.steps]) {
+    options.signal?.throwIfAborted();
     if (saved.state === "failed") throw new Error(saved.error ?? "A transaction in this deposit reverted");
     if (saved.state === "confirmed" || saved.state === "ready") continue;
     if (saved.transactionHash) await confirm(saved.kind, saved.transactionHash);
@@ -152,6 +162,7 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
   }
   if (stepOf("deposit").state === "confirmed") return current;
   const execute = async ({ step: kind, transaction, send, confirm: browserConfirm }: EthereumDepositExecution): Promise<Hex> => {
+    options.signal?.throwIfAborted();
     let step = stepOf(kind);
     if (step.state === "failed") throw new Error(step.error ?? "This deposit transaction failed");
     if (step.state === "confirmed" && step.transactionHash) return step.transactionHash;
@@ -160,7 +171,7 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
       // A distinct deterministic EVM request per step is frozen before the
       // wallet prompt. CAS prevents two Wallet tiles dispatching one step.
       assertBridgeQuoteCurrent(current.quote, await client.quote(current.quote.ledger));
-      update(await client.claim(current, kind, current.source === "evm" ? bridgeEvmRequestId(current.id, kind) : null));
+      update(await client.claim(current, kind, usesEvmWallet ? bridgeEvmRequestId(current.id, kind) : null));
       step = stepOf(kind);
     } else if (current.source === "external" && !step.transactionHash) {
       throw new Error("This browser wallet request has an unresolved outcome and cannot safely be resent");
@@ -168,7 +179,7 @@ export async function executeBridgeDeposit(options: BridgeExecutionOptions): Pro
     let hash = step.transactionHash;
     if (!hash) {
       try {
-        if (current.source === "evm") {
+        if (usesEvmWallet) {
           if (!evm || !step.operationId) throw new Error("EVM Wallet is unavailable");
           hash = await evm.send(step.operationId, transaction, async () => {
             assertBridgeQuoteCurrent(current.quote, await client.quote(current.quote.ledger));

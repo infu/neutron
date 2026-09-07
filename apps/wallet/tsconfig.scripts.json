@@ -45,6 +45,11 @@
     "../../packages/neutron-provision/src/pocketic_rest.ts",
     "../../packages/neutron-provision/src/idl.ts",
     "../../packages/neutron-provision/src/local_environment.ts",
-    "src/withdrawal_quote.ts"
+    "src/withdrawal_quote.ts",
+    "src/bridge_provider.ts",
+    "src/conversion_tools.ts",
+    "src/deposit_tools.ts",
+    "src/ethereum_withdrawal.tsx",
+    "src/ethereum_withdrawal_controller.ts"
   ]
 }

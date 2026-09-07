@@ -134,6 +134,7 @@ function fixture(initial = intent()) {
     selfCalls.push({ method, args: structuredClone(args) });
     if (method === "wallet_bridge_status_v1") return wireIntent(saved);
     if (method === "wallet_bridge_list_v1") return { records: [wireIntent(saved)] };
+    if (method === "wallet_bridge_provider_binding_v1") return {};
     throw new Error(`Unexpected Wallet query ${method}`);
   };
   const update = async (method: string, args: SelfCallValue[] = []) => {
@@ -444,7 +445,7 @@ async function bridgeIdl() {
   const aliases = extractPublicTypeAliases(source);
   // Use the actual declarations and installed function configuration, while
   // keeping this bridge contract test independent of unrelated wallet APIs.
-  const func = Object.fromEntries(Object.entries(manifest.func ?? {}).filter(([name]) => name.startsWith("wallet_bridge_")));
+  const func = Object.fromEntries(Object.entries(manifest.func ?? {}).filter(([name]) => name.startsWith("wallet_bridge_") && !name.startsWith("wallet_bridge_provider_")));
   return {
     artifact: generateAppMethodSchemaArtifact({ ...manifest, func }, source),
     type: (alias: string) => {

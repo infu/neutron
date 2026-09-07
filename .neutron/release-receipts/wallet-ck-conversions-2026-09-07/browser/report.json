@@ -1,0 +1,341 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "label": "1440 evm ready",
+      "width": 1440,
+      "doc": 1440,
+      "body": 1440,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900,
+        "top": 0,
+        "right": 1440,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 478,
+        "y": 212.3125,
+        "width": 437.015625,
+        "height": 40.5625,
+        "top": 212.3125,
+        "right": 915.015625,
+        "bottom": 252.875,
+        "left": 478
+      }
+    },
+    {
+      "label": "1440 evm pending",
+      "width": 1440,
+      "doc": 1440,
+      "body": 1440,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900,
+        "top": 0,
+        "right": 1440,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 478,
+        "y": 158.3125,
+        "width": 437.015625,
+        "height": 40.5625,
+        "top": 158.3125,
+        "right": 915.015625,
+        "bottom": 198.875,
+        "left": 478
+      }
+    },
+    {
+      "label": "1440 evm complete",
+      "width": 1440,
+      "doc": 1440,
+      "body": 1440,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900,
+        "top": 0,
+        "right": 1440,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 478,
+        "y": 158.3125,
+        "width": 437.015625,
+        "height": 40.5625,
+        "top": 158.3125,
+        "right": 915.015625,
+        "bottom": 198.875,
+        "left": 478
+      }
+    },
+    {
+      "label": "1440 address ready",
+      "width": 1440,
+      "doc": 1440,
+      "body": 1440,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900,
+        "top": 0,
+        "right": 1440,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 478,
+        "y": 228.453125,
+        "width": 437.015625,
+        "height": 40.5625,
+        "top": 228.453125,
+        "right": 915.015625,
+        "bottom": 269.015625,
+        "left": 478
+      }
+    },
+    {
+      "label": "1440 address pending",
+      "width": 1440,
+      "doc": 1440,
+      "body": 1440,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900,
+        "top": 0,
+        "right": 1440,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 478,
+        "y": 158.3125,
+        "width": 437.015625,
+        "height": 40.5625,
+        "top": 158.3125,
+        "right": 915.015625,
+        "bottom": 198.875,
+        "left": 478
+      }
+    },
+    {
+      "label": "1440 address complete",
+      "width": 1440,
+      "doc": 1440,
+      "body": 1440,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900,
+        "top": 0,
+        "right": 1440,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 478,
+        "y": 158.3125,
+        "width": 437.015625,
+        "height": 40.5625,
+        "top": 158.3125,
+        "right": 915.015625,
+        "bottom": 198.875,
+        "left": 478
+      }
+    },
+    {
+      "label": "375 evm ready",
+      "width": 375,
+      "doc": 375,
+      "body": 375,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 375,
+        "height": 900,
+        "top": 0,
+        "right": 375,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 32,
+        "y": 208.3125,
+        "width": 264.015625,
+        "height": 40.5625,
+        "top": 208.3125,
+        "right": 296.015625,
+        "bottom": 248.875,
+        "left": 32
+      }
+    },
+    {
+      "label": "375 evm pending",
+      "width": 375,
+      "doc": 375,
+      "body": 375,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 375,
+        "height": 900,
+        "top": 0,
+        "right": 375,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 32,
+        "y": 154.3125,
+        "width": 264.015625,
+        "height": 40.5625,
+        "top": 154.3125,
+        "right": 296.015625,
+        "bottom": 194.875,
+        "left": 32
+      }
+    },
+    {
+      "label": "375 evm complete",
+      "width": 375,
+      "doc": 375,
+      "body": 375,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 375,
+        "height": 900,
+        "top": 0,
+        "right": 375,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 32,
+        "y": 154.3125,
+        "width": 264.015625,
+        "height": 40.5625,
+        "top": 154.3125,
+        "right": 296.015625,
+        "bottom": 194.875,
+        "left": 32
+      }
+    },
+    {
+      "label": "375 address ready",
+      "width": 375,
+      "doc": 375,
+      "body": 375,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 375,
+        "height": 900,
+        "top": 0,
+        "right": 375,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 32,
+        "y": 224.453125,
+        "width": 264.015625,
+        "height": 40.5625,
+        "top": 224.453125,
+        "right": 296.015625,
+        "bottom": 265.015625,
+        "left": 32
+      }
+    },
+    {
+      "label": "375 address pending",
+      "width": 375,
+      "doc": 375,
+      "body": 375,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 375,
+        "height": 900,
+        "top": 0,
+        "right": 375,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 32,
+        "y": 154.3125,
+        "width": 264.015625,
+        "height": 40.5625,
+        "top": 154.3125,
+        "right": 296.015625,
+        "bottom": 194.875,
+        "left": 32
+      }
+    },
+    {
+      "label": "375 address complete",
+      "width": 375,
+      "doc": 375,
+      "body": 375,
+      "form": {
+        "x": 0,
+        "y": 0,
+        "width": 375,
+        "height": 900,
+        "top": 0,
+        "right": 375,
+        "bottom": 900,
+        "left": 0
+      },
+      "amount": {
+        "x": 32,
+        "y": 154.3125,
+        "width": 264.015625,
+        "height": 40.5625,
+        "top": 154.3125,
+        "right": 296.015625,
+        "bottom": 194.875,
+        "left": 32
+      }
+    },
+    {
+      "label": "Direct address usable when EVM account unavailable"
+    },
+    {
+      "label": "Insufficient ckETH gas is visible and submission disabled"
+    }
+  ],
+  "bugs": [],
+  "errors": [],
+  "screenshots": [
+    "/tmp/neutron-ckwithdraw-ui-browser/1440-evm-ready.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/1440-evm-pending.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/1440-evm-complete.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/1440-address-ready.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/1440-address-pending.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/1440-address-complete.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/375-evm-ready.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/375-evm-pending.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/375-evm-complete.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/375-address-ready.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/375-address-pending.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/375-address-complete.png",
+    "/tmp/neutron-ckwithdraw-ui-browser/375-insufficient-gas.png"
+  ],
+  "fixture": "Real WalletEthereumWithdrawal, EthereumWithdrawalController, format, quote parsing, shared EVM SDK, and app styles. Only Kernel self-calls and message bus transport mocked. Full index integration inspected separately."
+}

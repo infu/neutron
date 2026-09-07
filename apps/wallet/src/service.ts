@@ -5,6 +5,8 @@ import {
   walletWithdrawalQuoteOutputSchema,
 } from "./withdrawal_quote.ts";
 import { registerBridgeTools } from "./bridge_tools.ts";
+import { registerConversionTools } from "./conversion_tools.ts";
+import { registerDepositTools } from "./deposit_tools.ts";
 import {
   exposeTool,
   publishAppStateChange,
@@ -49,6 +51,8 @@ import {
 } from "./token_info.ts";
 
 registerBridgeTools();
+registerConversionTools();
+registerDepositTools();
 exposeTool(
   WALLET_WITHDRAWAL_QUOTE_TOOL,
   {

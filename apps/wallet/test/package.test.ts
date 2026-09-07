@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.17.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.18.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 317,
+    version: 318,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -98,15 +98,12 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_refresh_deposits",
           "wallet_history_page",
           "wallet_history_status",
-          "wallet_history_sources",
           "wallet_history_sync",
-          "wallet_transfer",
           "wallet_funding_prepare_v1",
           "wallet_funding_execute_v1",
           "wallet_funding_reject_v1",
           "wallet_allowances_page_v1",
           "wallet_token_info_v1",
-          "wallet_transfer_v2",
           "wallet_transfer_status_v2",
           "wallet_transfers_pending_v2",
           "wallet_transfer_resume_v2",
@@ -122,6 +119,9 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_transfer_prepare_v2",
           "wallet_transfer_acknowledge_v2",
           "wallet_withdrawal_quote_v1",
+          "wallet_ethereum_withdraw_prepare_v1",
+          "wallet_bridge_provider_prepare_v1",
+          "wallet_bridge_provider_binding_v1",
         ],
       },
       backend_calls: {
@@ -163,6 +163,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
       wallet_bridge: { version: 1 },
       wallet_transfers: { version: 1 },
       wallet_bridge_replacements: { version: 1 },
+      wallet_bridge_provider: { version: 1 },
     },
   });
   expect(value).not.toHaveProperty("init_arg");

@@ -10,6 +10,7 @@ import Memory "../backend/memory/wallet/v1";
 import CommandMemory "../backend/memory/wallet_commands/v1";
 import BridgeMemory "../backend/memory/wallet_bridge/v1";
 import ReplacementMemory "../backend/memory/wallet_bridge_replacements/v1";
+import BridgeProviderMemory "../backend/memory/wallet_bridge_provider/v1";
 import TransferMemory "../backend/memory/wallet_transfers/v1";
 import BridgeJournal "../backend/bridge/Journal";
 import TransferJournal "../backend/transfers/Journal";
@@ -28,6 +29,17 @@ assert not fresh.configured;
 // The independent command journal starts empty without rewriting Wallet v1.
 let freshCommands = CommandMemory.init();
 assert (Map.size(freshCommands.commands) == 0);
+let freshProviders = BridgeProviderMemory.init();
+assert (Map.size(freshProviders.bindings) == 0);
+let providerId = Blob.fromArray(Array.repeat<Nat8>(0x7c, 16));
+let providerEntry : BridgeProviderMemory.Entry = {
+    binding = { app_id = "agent"; installation_uid = "51"; agent_mode = true;
+        key_fingerprint = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; namespace_version = "1" };
+    intent = Blob.fromArray([0x44, 0x49, 0x44, 0x4c]);
+};
+Map.add(freshProviders.bindings, Blob.compare, providerId, providerEntry);
+let restoredProviders = freshProviders;
+assert (Map.get(restoredProviders.bindings, Blob.compare, providerId) == ?providerEntry);
 
 func compareCommandKeys(
     left : CommandMemory.CommandKey,

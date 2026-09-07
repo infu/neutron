@@ -24,8 +24,10 @@ test("Wallet resident registers every bridge, quote, and released tool through t
     "wallet_bridge_attach_replacement_root_v1", "wallet_bridge_attach_root_v1", "wallet_bridge_next_root_v1",
     "wallet_bridge_prepare_root_v1", "wallet_bridge_quote_v1",
     "wallet_bridge_refresh_v1", "wallet_bridge_status_v1",
+    "wallet_conversion_routes_v1",
     "wallet_fund_root_v1", "wallet_fund_v1", "wallet_overview",
-    "wallet_refresh", "wallet_token_info_v1", "wallet_withdrawal_quote_v1",
+    "wallet_refresh", "wallet_token_info_v1", "wallet_unwrap_root_v1", "wallet_unwrap_status_v1", "wallet_withdrawal_quote_v1",
+    "wallet_wrap_pending_v1", "wallet_wrap_root_v1", "wallet_wrap_status_v1",
   ]);
   for (const name of ["prepare", "next", "attach"]) {
     expect(descriptors.find((tool) => tool.name === `wallet_bridge_${name}_root_v1`)?.annotations).toMatchObject({

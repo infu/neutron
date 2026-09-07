@@ -19,13 +19,15 @@ export async function connectEvmBridgeReads(kernel: { callTool: typeof callTool 
   });
 }
 
-export async function connectEvmBridge(client: EvmBridgeClient, helper: string, token: string | null, expectedAddress?: string) {
+export async function connectEvmBridge(client: EvmBridgeClient, helper: string, token: string | null, expectedAddress?: string, options: { signal?: AbortSignal; confirmationTimeoutMs?: number; pollIntervalMs?: number } = {}) {
+  options.signal?.throwIfAborted();
   const accounts = await client.accounts();
   const account = accounts.accounts.find((entry) => entry.accountId === "main");
   if (!account) throw new Error("EVM Wallet has no available signing account");
   if (expectedAddress && account.address.toLowerCase() !== expectedAddress.toLowerCase()) throw new Error("EVM Wallet's account changed. This saved deposit belongs to its original address and will not be replayed with another key.");
   const scope = { accountId: "main" as const, chainId: "1" };
   const assertAccount = async () => {
+    options.signal?.throwIfAborted();
     const fresh = (await client.accounts()).accounts.find((entry) => entry.accountId === "main");
     if (!fresh || fresh.address.toLowerCase() !== account.address.toLowerCase() || fresh.keyFingerprint !== account.keyFingerprint) throw new Error("EVM Wallet's signing account changed during this deposit");
   };
@@ -77,8 +79,9 @@ export async function connectEvmBridge(client: EvmBridgeClient, helper: string, 
       },
       async confirm(requestId: string, hash: Hex, expected?: EthereumTransaction, onReplacement?: (hash: Hex, state: "submitted" | "confirmed" | "failed") => Promise<void>): Promise<void> {
         let recordedReplacement: string | null = null;
-        const deadline = Date.now() + 300_000;
+        const deadline = Date.now() + (options.confirmationTimeoutMs ?? 300_000);
         do {
+          options.signal?.throwIfAborted();
           const result = await client.operationStatus({ ...scope, requestId });
           if (result.status === "not_found") throw new Error("The saved EVM Wallet operation is unavailable; no replacement transaction was submitted");
           check(result, hash);
@@ -97,12 +100,22 @@ export async function connectEvmBridge(client: EvmBridgeClient, helper: string, 
             if (state === "failed") throw new EthereumReceiptRevertedError("The replacement deposit transaction reverted on Ethereum", replacement);
             if (state === "confirmed") return;
           } else if (result.receipt?.status === "success") return;
-          await new Promise((resolve) => globalThis.setTimeout(resolve, 1_500));
+          await bridgePause(options.pollIntervalMs ?? 1_500, options.signal);
         } while (Date.now() < deadline);
         throw new Error("This saved EVM transaction is still pending. Resume to check the same operation.");
       },
     },
   };
+}
+
+function bridgePause(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const finish = () => { signal?.removeEventListener("abort", abort); resolve(); };
+    const timer = globalThis.setTimeout(finish, milliseconds);
+    const abort = () => { globalThis.clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(signal?.reason ?? new Error("Deposit cancelled")); };
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 /** Owner-supplied browser hash is accepted only after independent chain reads. */

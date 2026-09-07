@@ -4,6 +4,7 @@ import { decodeFunctionResult, encodeFunctionData, type Hex } from "viem";
 import { assertBridgeQuoteCurrent, bridgeEvmRequestId, bridgeTransaction, createBridgeClient, type BridgeIntent, type BridgeSource } from "./bridge.ts";
 import type { EthereumDepositStep } from "./ethereum.ts";
 import { assertBridgeTransactionMatches } from "./evm_bridge.ts";
+import { assertLegacyBridgeExecutor } from "./bridge_provider.ts";
 
 const text: JsonObject = { type: "string" };
 const nat: JsonObject = { type: "string", pattern: "^0$|^[1-9][0-9]*$" };
@@ -45,6 +46,7 @@ export async function handleBridgeRootPrepare(args: JsonObject, context: MsgBusT
 }
 export async function handleBridgeRootNext(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
   const caller = rootCaller(context);
+  await assertLegacyBridgeExecutor(context, stringArg(args, "id"));
   const bridge = scopedBridge(context);
   let intent = await bridge.status(stringArg(args, "id"));
   assertExecutor(intent, caller);
@@ -87,6 +89,7 @@ export async function handleBridgeRootNext(args: JsonObject, context: MsgBusTool
 }
 export async function handleBridgeRootAttach(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
   const caller = rootCaller(context);
+  await assertLegacyBridgeExecutor(context, stringArg(args, "id"));
   const bridge = scopedBridge(context);
   const intent = await bridge.status(stringArg(args, "id"));
   assertExecutor(intent, caller);
@@ -114,6 +117,7 @@ export async function handleBridgeRootAttach(args: JsonObject, context: MsgBusTo
 }
 export async function handleBridgeRootAttachReplacement(args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
   const caller = rootCaller(context);
+  await assertLegacyBridgeExecutor(context, stringArg(args, "id"));
   const bridge = scopedBridge(context);
   const intent = await bridge.status(stringArg(args, "id"));
   assertExecutor(intent, caller);

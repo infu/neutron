@@ -1,3 +1,4 @@
+import BridgeProviderMemory "../../backend/memory/wallet_bridge_provider/v1";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 import Int "mo:core/Int";
@@ -100,7 +101,7 @@ persistent actor Test {
         let env : Main.AppBackendEnvironment = {
             stable_memory = {
                 wallet = memory; wallet_commands = CommandMemory.init();
-                wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init(); wallet_bridge_replacements = BridgeReplacementMemory.init();
+                wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init(); wallet_bridge_provider = BridgeProviderMemory.init(); wallet_bridge_replacements = BridgeReplacementMemory.init();
             };
             capabilities = { backend_calls = calls };
             app_calls = { contacts = {

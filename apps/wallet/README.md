@@ -166,6 +166,39 @@ minter, and ckETH gas-helper reservations are accepted with the app installation
 changing the picker later still uses the same runtime permission flow. An
 existing configured wallet keeps its current selection during an update.
 
+The asset picker includes the Ethereum counterparts already available in EVM
+Wallet and Uniswap. All use Ethereum Mainnet and the shared ckETH minter;
+selecting one retains the usual ledger, history-index, minter, and ckETH-gas
+reservation flow. Adding a catalog entry does not select it in an existing wallet.
+
+| Ethereum asset | IC token | Ledger canister | Decimals observed |
+| --- | --- | --- | --- |
+| ETH | ckETH | `ss2fx-dyaaa-aaaar-qacoq-cai` | 18 |
+| USDC | ckUSDC | `xevnm-gaaaa-aaaar-qafnq-cai` | 6 |
+| USDT | ckUSDT | `cngnf-vqaaa-aaaar-qag4q-cai` | 6 |
+| EURC | ckEURC | `pe5t5-diaaa-aaaar-qahwa-cai` | 6 |
+| WBTC | ckWBTC | `bptq2-faaaa-aaaar-qagxq-cai` | 8 |
+| wstETH | ckWSTETH | `j2tuh-yqaaa-aaaar-qahcq-cai` | 18 |
+| LINK | ckLINK | `g4tto-rqaaa-aaaar-qageq-cai` | 18 |
+| UNI | ckUNI | `ilzky-ayaaa-aaaar-qahha-cai` | 18 |
+| SHIB | ckSHIB | `fxffn-xiaaa-aaaar-qagoa-cai` | 18 |
+| PEPE | ckPEPE | `etik7-oiaaa-aaaar-qagia-cai` | 18 |
+| XAUT | ckXAUT | `nza5v-qaaaa-aaaar-qahzq-cai` | 6 |
+| OCT | ckOCT | `ebo5g-cyaaa-aaaar-qagla-cai` | 18 |
+
+Contract/ledger mappings follow the [ICP chain-key canister registry](https://docs.internetcomputer.org/references/chain-key-canister-ids/).
+They were checked on 2026-09-07 with anonymous, read-only
+`get_minter_info` calls to `sv3dd-oaaaa-aaaar-qacoa-cai` and
+`get_orchestrator_info` calls to `vxkom-oyaaa-aaaar-qafda-cai`, which also
+provided each index canister. Ledger `icrc1_symbol`, `icrc1_name`, and
+`icrc1_decimals` queries verified the metadata. The minter's
+[`supported_ckerc20_tokens`](https://github.com/dfinity/ic/blob/master/rs/ethereum/cketh/minter/cketh_minter.did)
+is authoritative at runtime; Wallet rechecks each deposit's contract/ledger
+mapping and reads current ledger decimals and fees instead of using this table
+for amounts. WETH is distinct from ETH, and Arbitrum assets must first reach
+Ethereum Mainnet before using these routes. The new catalog entries have no
+assumed USD price feed.
+
 Wallet's tray popout mounts the same `WalletApp` component, state model, inner
 pages, actions, and styles as the Wallet tile. Assets, Activity, Approvals,
 Receive, Send, transfer confirmation and revoke actions, and the searchable ledger
@@ -274,7 +307,28 @@ or changed transaction cannot complete a deposit. The UI shows original and
 replacement hashes distinctly. External browser replacements remain unresolved
 without an authenticated request relationship.
 
-Agent orchestration uses `wallet_bridge_quote_v1`, `wallet_bridge_status_v1`,
+Agent conversion discovery uses `wallet_conversion_routes_v1`, which returns
+the available Ethereum/ck-token pairs, ledger IDs, enabled state, decimals and
+cached balances. Use `wallet_token_info_v1` for live metadata and balances. Enable
+an unselected token in Wallet once before converting it.
+
+`wallet_wrap_root_v1({ requestId, ledger, amountAtoms })` drives the full
+Ethereum-to-IC flow through EVM Wallet's ordinary transaction provider. The
+current root Agent reviews each financial request; the tool continues approvals
+through the actual deposit without asking the Agent to copy calldata or attach
+transaction hashes. Repeating the identical request continues its saved steps.
+`wallet_wrap_status_v1` reads one operation and `wallet_wrap_pending_v1` pages
+through unfinished operations. A deposit is complete only after its exact IC
+mint is verified. Ethereum confirmation alone remains pending.
+
+The additive `wallet_bridge_provider` v1 root records the original Agent
+installation, EVM account key identity, and frozen preparation input. It
+distinguishes new provider-mediated operations from the released direct-root
+workflow below. Existing bridge schemas and their signing identities stay
+unchanged; neither workflow can take over the other's request IDs. The UI shows
+Agent operation progress and leaves execution with its original Agent.
+
+For saved legacy requests, Agent orchestration uses `wallet_bridge_quote_v1`, `wallet_bridge_status_v1`,
 `wallet_bridge_refresh_v1`, and the direct-root-only
 `wallet_bridge_prepare_root_v1`, `wallet_bridge_next_root_v1`, and
 `wallet_bridge_attach_root_v1` tools. The root calls EVM Wallet's root transaction
@@ -383,9 +437,9 @@ revalidated after every inter-canister await and all Wallet sends are serialized
 to prevent shared minter allowances from racing.
 
 The existing contact-bound `wallet_transfer` method keeps its released
-signature and semantics but is now an exact preapproved self update. The
-Wallet's own Send/Withdraw confirmation is therefore the single user decision;
-there is no second generic backend-call dialog. Cross-app direct and allowance
+backend signature and semantics. Wallet's current UI uses the exact preapproved
+v2 prepare/resume methods, so its Send/Withdraw confirmation is the single user
+decision. Cross-app direct and allowance
 funding use separate versioned prepare/execute methods and share the same
 internal transfer, approval, fee, history, and reply-decoding helpers rather
 than copying the send implementation.
@@ -449,8 +503,34 @@ from a legacy call. Legacy and v2 effects respect shared outstanding allowance
 reservations. Released `wallet` v1 and `wallet_commands` v1 schemas remain
 unchanged; the two new roots initialize on upgrade without rewriting their data.
 
-For redemption to EVM Wallet, choose the Ethereum withdrawal network and
-**Use EVM Wallet address**. Wallet reads the current EVM account and filters the
-existing compatible contacts. If missing, save the displayed address in Contacts
-first; the normal contact revision and destination checks still apply. Redemption
+For redemption, choose **Send → Ethereum** and select **EVM Wallet**, enter an
+**Ethereum address**, or choose a saved contact. Direct destinations do not need
+a Contacts entry. Review the amount and fees once; Wallet executes the existing
+approve/withdraw flow and automatically checks settlement while open. Exact
+allowances and transaction identifiers remain in collapsed Details. Redemption
 arrives on Ethereum Mainnet, even when EVM Wallet also displays Arbitrum assets.
+
+`wallet_unwrap_root_v1({ requestId, ledger, amountAtoms, ethereumAddress })`
+provides the same redemption to the active root Agent. Set `ethereumAddress` to
+`null` for EVM Wallet or provide an Ethereum address. It quotes fees, freezes the
+destination and review, and executes through the existing `wallet_transfers` v1
+journal. Retrying uses the original request ID and arguments; an accepted burn
+is never reissued. `wallet_unwrap_status_v1({ operationId })` refreshes minter
+settlement without sending another transaction. Its `completed` phase requires
+confirmed Ethereum settlement, not merely a successful IC burn. ERC20 withdrawals
+require the separately quoted ckETH gas budget.
+
+Direct withdrawal preparation uses additive
+`wallet_ethereum_withdraw_prepare_v1` and `wallet_ethereum_withdraw_status_v1`
+backend methods. An optional binding in the journal's opaque saved Candid context
+distinguishes direct Ethereum destinations from Contacts. Released schema bytes
+remain unchanged, and old contexts decode with no direct binding and retain
+their original Contacts checks. The existing resume/status/refresh APIs serve
+both destination types. No Kernel change is required.
+
+The frontend keeps the existing 32-method self-call inventory size. Unused
+frontend grants for `wallet_transfer`, `wallet_transfer_v2`, and
+`wallet_history_sources` make room for the new preparation/provider methods;
+those backend APIs remain owner-authorized and available. Conversion tools
+reuse `wallet_transfer_status_v2`; the dedicated direct-withdrawal inspector is
+an owner-authorized backend API, not an additional frontend grant.
