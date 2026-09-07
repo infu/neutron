@@ -101,7 +101,7 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 113,
+    version: 114,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -325,13 +325,24 @@ test("released estimate output and active replacement proof retain Candid option
     originalWalletRequest: { callerAppId: "wallet", callerInstallationUid: "9007199254740993", requestId: request.requestId },
   }, ctx)).toMatchObject({ walletReplacementMatches: false, originalWalletRequest: { callerInstallationUid: "9007199254740993" } });
 });
-test("release 113 initializes cleanly and preserves published 101 and 107 roots with additive browser methods", async () => {
+test("Curve presentation preserves the exact released 113 Wallet roots and lineage", async () => {
+  const previous = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.13.neutron", import.meta.url)));
+  const current = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.14.neutron", import.meta.url)));
+  const old = JSON.parse(new TextDecoder().decode(previous["neutron.json"]!));
+  const next = JSON.parse(new TextDecoder().decode(current["neutron.json"]!));
+  expect(next.memory).toEqual(old.memory); expect(current["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
+  for (const root of Object.values(old.memory) as { schemas: Record<string, { entry: string }> }[]) for (const schema of Object.values(root.schemas)) {
+    expect(current[`mo/${schema.entry}.mo`]).toEqual(previous[`mo/${schema.entry}.mo`]);
+  }
+});
+
+test("release 114 initializes cleanly and preserves published 101 and 107 roots with additive browser methods", async () => {
   const files = unpackNeutronPackage(
-    await readFile(new URL("../evm_wallet.v0.1.13.neutron", import.meta.url)),
+    await readFile(new URL("../evm_wallet.v0.1.14.neutron", import.meta.url)),
   );
   const prepared = preparePackageInstall(files);
   expect(prepared.manifest.id).toBe("evm_wallet");
-  expect(prepared.manifest.version).toBe(113);
+  expect(prepared.manifest.version).toBe(114);
   expect(Object.keys(files)).toEqual(
     expect.arrayContaining([
       "web/index.html",
@@ -431,7 +442,7 @@ test("release 113 initializes cleanly and preserves published 101 and 107 roots 
   function assertRetainedMethods(previous: typeof priorSchema) {
     expect(currentSchema.$schema).toBe(previous.$schema);
     expect(currentSchema.version).toBe(previous.version);
-    expect(currentSchema.app).toEqual({ ...previous.app, version: 113 });
+    expect(currentSchema.app).toEqual({ ...previous.app, version: 114 });
     for (const [name, method] of Object.entries(previous.methods)) expect(currentSchema.methods[name]).toEqual(method);
     expect(Object.keys(currentSchema.methods).filter(name => !Object.hasOwn(previous.methods, name)).sort()).toEqual([...browserBackendMethods].sort());
   }

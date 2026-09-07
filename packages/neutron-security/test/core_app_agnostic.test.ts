@@ -433,6 +433,19 @@ test("covers public, Kernel, CLI, compiler, provision, and release roots", async
   ).toEqual(files);
 });
 
+test("token display names may overlap apps while app identity branches remain forbidden", async () => {
+  const workspace = await fixtureWorkspace();
+  await writeFixtureSource(workspace, "packages/neutron-tools/src/evm_assets.ts", [
+    'const assets = [',
+    '  ["0x1111111111111111111111111111111111111111", "SAMPLE", 18, "sample"],',
+    '];',
+    'const coupled = appId === "sample";',
+  ]);
+  expect(await checkCoreAppAgnostic(workspace)).toEqual([
+    { file: "packages/neutron-tools/src/evm_assets.ts", line: 4, rule: "app_identity_branch", value: "sample" },
+  ]);
+});
+
 test("excludes tests, generated build output, and declarative catalogs", async () => {
   const workspace = await fixtureWorkspace();
   const source = 'const coupled = appId === "sample";';

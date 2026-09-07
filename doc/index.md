@@ -164,6 +164,9 @@ compiler, shared-tools, or provisioner source change.
   [implementation checklist](./todo.evm-wallet.md) tracks qualification and release.
   [Uniswap V4 and liquidity](./uniswap-v4-liquidity.md) records contract research,
   browser position discovery and durable UI/Agent execution.
+- [Curve swaps and liquidity](../apps/curve/README.md) documents the Ethereum
+  Wallet integration, supported pools, durable execution and qualification.
+  The [Curve implementation checklist](./todo.curve.md) tracks the release.
 
 ## Repository Map
 

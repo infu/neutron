@@ -1,0 +1,23 @@
+Pinned official contract fork: 42161 block 502541973
+Verifying stable-ng 0x186cF879186986A20aADFb7eAD50e3C20cb26CeC
+  Deposit: minted 164740077471223 LP atomic units
+  Proportional and single-coin withdrawals: confirmed
+  Router swap: recipient credited; impossible minimum reverted
+Verifying twocrypto-ng 0x98961b846D1a046701Af1a56023e29FF55522aD5
+  Deposit: minted 146497720445696425 LP atomic units
+  Proportional and single-coin withdrawals: confirmed
+  Router swap: recipient credited; impossible minimum reverted
+Verifying tricrypto-ng 0x82670f35306253222F8a165869B28c64739ac62e
+  Deposit: minted 1945796169439838 LP atomic units
+  Proportional and single-coin withdrawals: confirmed
+  Router swap: recipient credited; impossible minimum reverted
+  Native ETH liquidity and Router wrap hop: confirmed
+Verifying legacy-2 0x7f90122BF0700F9E7e1F688fe926940E8839F353
+  Deposit: minted 6214529910143174867 LP atomic units
+  Proportional and single-coin withdrawals: confirmed
+  Router swap: recipient credited; impossible minimum reverted
+Verifying legacy-2 0x6eB2dc694eB516B16Dc9FBc678C60052BbdD7d80
+  Deposit: minted 396168374250761 LP atomic units
+  Proportional and single-coin withdrawals: confirmed
+  Router swap: recipient credited; impossible minimum reverted
+PASS 42161: official contracts, fixture funds only

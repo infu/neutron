@@ -235,6 +235,9 @@ function collectPolicyMatches(
       ) {
         continue;
       }
+      if (allowedEvmTokenDisplayName(file, source, offset, match[0].length)) {
+        continue;
+      }
       pushMatch(issues, file, source, offset, "app_identity_branch", value);
     }
     if (policy.methods.has(value)) {
@@ -356,6 +359,17 @@ function allowedGenericFilesTypeProperty(
   if (!KERNEL_GENERIC_FILES_TYPE_PROPERTY_FILES.has(file)) return false;
   const before = source.slice(Math.max(0, offset - 96), offset);
   return /\b[A-Z][$\w]*(?:\s*<[^>\r\n]*>)?\s*\[\s*$/u.test(before);
+}
+
+// A public ERC20's display name can coincide with an installed app's name
+// (e.g. UNI / Uniswap). Only the label column of the reviewed token metadata
+// tuples is data; branches, app IDs and other uses remain subject to the rule.
+function allowedEvmTokenDisplayName(file: string, source: string, offset: number, length: number): boolean {
+  if (file !== "packages/neutron-tools/src/evm_assets.ts") return false;
+  const lineStart = source.lastIndexOf("\n", offset - 1) + 1;
+  const before = source.slice(lineStart, offset), after = source.slice(offset + length);
+  return /^\s*\[\s*["']0x[0-9a-fA-F]{40}["']\s*,\s*["'][^"'\r\n]+["']\s*,\s*\d+\s*,\s*$/u.test(before)
+    && /^\s*\]\s*,?\s*(?:\r?\n|$)/u.test(after);
 }
 
 function conservativeBareMethod(method: string): boolean {

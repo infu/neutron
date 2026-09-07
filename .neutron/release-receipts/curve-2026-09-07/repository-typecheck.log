@@ -1,0 +1,43 @@
+
+> typecheck
+> tsc -b --pretty false
+
+packages/neutron-compiler/test/legacy_https_package_compat.test.ts(350,42): error TS6307: File '/srv/shared/code/neutron/packages/neutron-scripts/src/mopack.ts' is not listed within the file list of project '/srv/shared/code/neutron/packages/neutron-compiler/tsconfig.json'. Projects must list all files or use an 'include' pattern.
+packages/neutron-scripts/src/motoko.ts(8,8): error TS6307: File '/srv/shared/code/neutron/packages/neutron-scripts/src/walk.ts' is not listed within the file list of project '/srv/shared/code/neutron/packages/neutron-compiler/tsconfig.json'. Projects must list all files or use an 'include' pattern.
+  The file is in the program because:
+    Imported via "./walk.ts" from file '/srv/shared/code/neutron/packages/neutron-scripts/src/motoko.ts'
+    Imported via "neutron-scripts/src/walk.ts" from file '/srv/shared/code/neutron/packages/neutron-compiler/test/evm_wallet_upgrade/actor_fixtures.ts' with packageId 'neutron-scripts/src/walk.ts@1.1.0'
+    Imported via "./walk.ts" from file '/srv/shared/code/neutron/packages/neutron-scripts/src/mopack.ts'
+    Imported via "../../neutron-scripts/src/walk.ts" from file '/srv/shared/code/neutron/packages/neutron-compiler/test/legacy_https_package_compat.test.ts'
+apps/kitchensink/src/evm_wallet_demo.ts(20,8): error TS6307: File '/srv/shared/code/neutron/apps/kitchensink/src/evm_wallet_signatures.ts' is not listed within the file list of project '/srv/shared/code/neutron/apps/kitchensink/tsconfig.scripts.json'. Projects must list all files or use an 'include' pattern.
+  The file is in the program because:
+    Imported via "./evm_wallet_signatures.ts" from file '/srv/shared/code/neutron/apps/kitchensink/src/evm_wallet_demo.ts'
+    Imported via "../src/evm_wallet_signatures.ts" from file '/srv/shared/code/neutron/apps/kitchensink/test/evm_wallet_signatures.test.ts'
+apps/kitchensink/test/evm_wallet_demo.test.ts(27,8): error TS6307: File '/srv/shared/code/neutron/apps/kitchensink/src/evm_wallet_demo.ts' is not listed within the file list of project '/srv/shared/code/neutron/apps/kitchensink/tsconfig.scripts.json'. Projects must list all files or use an 'include' pattern.
+  The file is in the program because:
+    Imported via "../src/evm_wallet_demo.ts" from file '/srv/shared/code/neutron/apps/kitchensink/test/evm_wallet_demo.test.ts'
+    Imported via "./evm_wallet_demo.ts" from file '/srv/shared/code/neutron/apps/kitchensink/src/evm_wallet_intent_storage.ts'
+    Imported via "../src/evm_wallet_demo.ts" from file '/srv/shared/code/neutron/apps/kitchensink/test/evm_wallet_resident_integration.test.ts'
+apps/kitchensink/test/evm_wallet_demo.test.ts(33,8): error TS6307: File '/srv/shared/code/neutron/apps/kitchensink/src/evm_wallet_intent_storage.ts' is not listed within the file list of project '/srv/shared/code/neutron/apps/kitchensink/tsconfig.scripts.json'. Projects must list all files or use an 'include' pattern.
+apps/kitchensink/test/evm_wallet_demo.test.ts(705,5): error TS2322: Type '(value: MsgBusToolCall) => Promise<{ accounts: EvmAccount[]; } | { networks: EvmNetwork[]; } | { accountId: EvmAccountId; chainId: string; requestId: string; status: string; } | JsonValue>' is not assignable to type '<T extends JsonValue = JsonValue>(call: MsgBusToolCall, options?: number | MsgBusCallOptions | undefined) => Promise<T>'.
+  Type 'Promise<{ accounts: EvmAccount[]; } | { networks: EvmNetwork[]; } | { accountId: "main"; chainId: string; requestId: string; status: string; } | JsonValue>' is not assignable to type 'Promise<T>'.
+    Type '{ accounts: EvmAccount[]; } | { networks: EvmNetwork[]; } | { accountId: "main"; chainId: string; requestId: string; status: string; } | JsonValue' is not assignable to type 'T'.
+      '{ accounts: EvmAccount[]; } | { networks: EvmNetwork[]; } | { accountId: "main"; chainId: string; requestId: string; status: string; } | JsonValue' is assignable to the constraint of type 'T', but 'T' could be instantiated with a different subtype of constraint 'JsonValue'.
+        Type 'null' is not assignable to type 'T'.
+          'null' is assignable to the constraint of type 'T', but 'T' could be instantiated with a different subtype of constraint 'JsonValue'.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(26,25): error TS6307: File '/srv/shared/code/neutron/apps/evm_wallet/src/data.ts' is not listed within the file list of project '/srv/shared/code/neutron/apps/kitchensink/tsconfig.scripts.json'. Projects must list all files or use an 'include' pattern.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(95,25): error TS2379: Argument of type '{ kind: "query" | "update"; method: string; args: JsonValue[]; timeout: number | undefined; }' is not assignable to parameter of type 'BackendCall' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'timeout' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(107,32): error TS2339: Property 'balances' does not exist on type '{ readonly snapshot: "evm_wallet_snapshot_v1"; readonly accounts: "evm_wallet_accounts_v1"; readonly prepare: "evm_wallet_prepare_v1"; readonly execute: "evm_wallet_execute_v1"; ... 4 more ...; readonly reviewEvidence: "evm_wallet_review_evidence_v1"; }'.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(123,32): error TS2339: Property 'readContract' does not exist on type '{ readonly snapshot: "evm_wallet_snapshot_v1"; readonly accounts: "evm_wallet_accounts_v1"; readonly prepare: "evm_wallet_prepare_v1"; readonly execute: "evm_wallet_execute_v1"; ... 4 more ...; readonly reviewEvidence: "evm_wallet_review_evidence_v1"; }'.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(182,9): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Type '{ kind: "query"; method: "evm_wallet_snapshot_v1"; args: [null]; timeout: undefined; }' is not assignable to type 'BackendCall' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+      Types of property 'timeout' are incompatible.
+        Type 'undefined' is not assignable to type 'number'.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(209,71): error TS2339: Property 'balances' does not exist on type '{ readonly snapshot: "evm_wallet_snapshot_v1"; readonly accounts: "evm_wallet_accounts_v1"; readonly prepare: "evm_wallet_prepare_v1"; readonly execute: "evm_wallet_execute_v1"; ... 4 more ...; readonly reviewEvidence: "evm_wallet_review_evidence_v1"; }'.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(225,43): error TS2339: Property 'readContract' does not exist on type '{ readonly snapshot: "evm_wallet_snapshot_v1"; readonly accounts: "evm_wallet_accounts_v1"; readonly prepare: "evm_wallet_prepare_v1"; readonly execute: "evm_wallet_execute_v1"; ... 4 more ...; readonly reviewEvidence: "evm_wallet_review_evidence_v1"; }'.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(244,76): error TS2339: Property 'balances' does not exist on type '{ readonly snapshot: "evm_wallet_snapshot_v1"; readonly accounts: "evm_wallet_accounts_v1"; readonly prepare: "evm_wallet_prepare_v1"; readonly execute: "evm_wallet_execute_v1"; ... 4 more ...; readonly reviewEvidence: "evm_wallet_review_evidence_v1"; }'.
+apps/kitchensink/test/evm_wallet_resident_integration.test.ts(244,112): error TS2339: Property 'readContract' does not exist on type '{ readonly snapshot: "evm_wallet_snapshot_v1"; readonly accounts: "evm_wallet_accounts_v1"; readonly prepare: "evm_wallet_prepare_v1"; readonly execute: "evm_wallet_execute_v1"; ... 4 more ...; readonly reviewEvidence: "evm_wallet_review_evidence_v1"; }'.

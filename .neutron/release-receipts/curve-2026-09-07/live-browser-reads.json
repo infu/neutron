@@ -1,0 +1,67 @@
+{
+  "origin": "opaque sandbox",
+  "catalogs": [
+    {
+      "network": "ethereum",
+      "family": "factory-stable-ng",
+      "success": true,
+      "pools": 1057
+    },
+    {
+      "network": "ethereum",
+      "family": "factory-twocrypto",
+      "success": true,
+      "pools": 403
+    },
+    {
+      "network": "ethereum",
+      "family": "factory-tricrypto",
+      "success": true,
+      "pools": 125
+    },
+    {
+      "network": "ethereum",
+      "family": "main",
+      "success": true,
+      "pools": 49
+    },
+    {
+      "network": "arbitrum",
+      "family": "factory-stable-ng",
+      "success": true,
+      "pools": 328
+    },
+    {
+      "network": "arbitrum",
+      "family": "factory-twocrypto",
+      "success": true,
+      "pools": 133
+    },
+    {
+      "network": "arbitrum",
+      "family": "factory-tricrypto",
+      "success": true,
+      "pools": 56
+    },
+    {
+      "network": "arbitrum",
+      "family": "main",
+      "success": true,
+      "pools": 5
+    }
+  ],
+  "rpc": [
+    {
+      "chain": "0x1",
+      "expected": "0x1",
+      "block": "0x18b8c9c",
+      "coinBytes": 128
+    },
+    {
+      "chain": "0xa4b1",
+      "expected": "0xa4b1",
+      "block": "0x1df442ad",
+      "coinBytes": 128
+    }
+  ]
+}

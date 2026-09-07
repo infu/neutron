@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "curve",
+  "memory": {
+    "curve": {
+      "schemas": {
+        "1": {
+          "hash": "d868ad50372aea551fb908e60feac6c2435b2ed674240860007d70a16aad06a3",
+          "entry": "bb75fa56a65f382e4c8316a1db103e4c0b2ca74bd676a701f15328b56d934775"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}
