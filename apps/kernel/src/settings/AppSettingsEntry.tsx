@@ -2140,7 +2140,7 @@ function WalletCustodySigningSettingsDetails({ slots }: {
       />
       {slots.flatMap((slot) => [
         <AppDetailItem
-          description="This slot signs the exact digest supplied by the installed app without adding Neutron assertion hashing. The key namespace is bound to this app installation and slot."
+          description="This slot signs the exact digest supplied by the installed app without adding Neutron assertion hashing. The key identity belongs to this Neutron, app ID and slot and survives app uninstall/reinstall."
           fullDescription
           key={`authority:${slot.id}`}
           meta={[`slot ${slot.id}`, slot.algorithm, "exact 32-byte digest"]}

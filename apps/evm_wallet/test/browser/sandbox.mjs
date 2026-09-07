@@ -29,6 +29,7 @@ const historyOnly = process.argv.includes("--history-only");
 const pricesOnly = process.argv.includes("--prices-only");
 const decodersOnly = process.argv.includes("--decoders-only");
 const approvalsOnly = process.argv.includes("--approvals-only");
+const custodyOnly = process.argv.includes("--custody-only");
 const output = option("--output-dir") ?? await mkdtemp(join(tmpdir(), "neutron-evm-wallet-sandbox-"));
 await mkdir(output, { recursive: true });
 const mock = await readFile(join(here, "mock_app.ts"), "utf8");
@@ -699,16 +700,83 @@ async function runDecoderCase(width) {
     conflictingPacksFallBack: true, importedApprovalCannotOverrideCore: true, pendingAndRevertedKeepMinimumSemantics: true, executedEffects: 0, geometry: await geometry("final history") });
   await page.close(); activePage = null;
 }
+async function runCustodyCase(width, kernelVersion, namespaceVersion) {
+  const label = `${width}-custody-kernel-${kernelVersion}-namespace-${namespaceVersion}`;
+  activeLabel = label;
+  const page = await browser.newPage({ viewport: { width, height: 900 } });
+  activePage = page;
+  page.on("pageerror", (error) => browserErrors.push({ label, error: String(error) }));
+  await page.goto(`http://127.0.0.1:${server.address().port}/?kernel=${kernelVersion}&namespace=${namespaceVersion}`);
+  const frame = page.frames().find((candidate) => candidate.url().includes("/app?kernel="));
+  assert(frame, `${label}: sandbox frame missing`);
+  await frame.getByTestId("evm-account-address").filter({ hasText: "0x2222222222222222222222222222222222222222" }).waitFor();
+  const originalHistory = await frame.evaluate(() => window.__evmSandbox.operationSnapshot());
+  await frame.locator("nav").getByRole("button", { name: "Settings", exact: true }).click();
+  const lifecycle = frame.getByTestId("evm-custody-lifecycle");
+  const expected = kernelVersion === "344" ? "fully uninstall EVM Wallet before installing Kernel 0.3.46"
+    : kernelVersion === "346" && namespaceVersion === "1" ? "cannot sign for this saved address"
+    : kernelVersion === "346" && namespaceVersion === "2" ? "restores the same address after you grant custody access"
+    : "Could not verify this account's custody lifecycle";
+  await lifecycle.filter({ hasText: expected }).waitFor();
+  const text = await lifecycle.textContent();
+  if (kernelVersion === "346" && namespaceVersion === "2") {
+    assert.match(text, /same app ID \(evm_wallet\) and account slot \(main\)/);
+    assert.match(text, /in this Neutron/);
+  } else if (["344", "346"].includes(kernelVersion)) {
+    assert.match(text, /uninstall.*EVM Wallet/i);
+    assert.match(text, /assets.*permissions/i);
+    assert.doesNotMatch(text, /restores the same address/);
+    if (kernelVersion === "344") {
+      assert.match(text, /fully uninstall EVM Wallet before installing Kernel 0\.3\.46, then reinstall EVM Wallet/);
+    }
+    if (kernelVersion === "346") await frame.getByTestId("evm-custody-reset-required").waitFor();
+  } else {
+    assert.doesNotMatch(text, /restores the same address/);
+    assert.match(text, /recovery of this saved address has not been verified/);
+  }
+  await frame.getByText(/Uninstalling removes wallet history, settings and pending transaction records/).waitFor();
+  assert.match(await frame.locator("body").textContent(), /There is no private-key or seed export/);
+  assert.deepEqual([...new Set(await frame.evaluate(() => window.__evmSandbox.kernelDescriptions))], ["kernel"]);
+  await lifecycle.scrollIntoViewIfNeeded();
+  const file = `${label}.png`;
+  await page.screenshot({ path: join(output, file), fullPage: true });
+  screenshots.push(file);
+  // A Kernel upgrade while Wallet stays installed cannot turn an old cached
+  // account into a recovery guarantee. Namespace-v2 accounts keep that guarantee.
+  await frame.evaluate(() => window.__evmSandbox.setKernelDescription({ id: "kernel", version: 346 }));
+  await frame.getByRole("button", { name: /Refresh wallet$/ }).click();
+  await lifecycle.filter({ hasText: namespaceVersion === "1"
+    ? "cannot sign for this saved address" : "restores the same address after you grant custody access" }).waitFor();
+  if (namespaceVersion === "1") {
+    await frame.locator("nav").getByRole("button", { name: "Assets", exact: true }).click();
+    await frame.getByTestId("evm-custody-reset-required").waitFor();
+    await frame.locator("nav").getByRole("button", { name: "Settings", exact: true }).click();
+  }
+  // A failed later lookup cannot leave a stale recovery guarantee visible.
+  await frame.evaluate(() => window.__evmSandbox.setKernelDescription(null));
+  await frame.getByRole("button", { name: /Refresh wallet$/ }).click();
+  await lifecycle.filter({ hasText: "Could not verify this account's custody lifecycle" }).waitFor();
+  assert.equal((await calls(frame, methods.prepare)).length, 0);
+  assert.equal((await calls(frame, methods.execute)).length, 0);
+  assert.deepEqual(await frame.evaluate(() => window.__evmSandbox.operationSnapshot()), originalHistory, "Lifecycle checks changed the saved wallet history");
+  const geometry = await frame.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }));
+  assert(geometry.content <= geometry.viewport + 1, `${label}: lifecycle copy overflows the viewport`);
+  checks.push({ label, freshAccountNamespace: namespaceVersion, runtimeKernelDiscovery: true, malformedAndUnavailableDiscoveryWarn: true,
+    refreshTracksKernelUpgrade: true, legacyCacheHasNoRecoveryGuarantee: true, manualResetDoesNotMutateRecords: true,
+    failedRecheckRemovesGuarantee: true, localDataDeletionDisclosed: true, geometry });
+  await page.close(); activePage = null;
+}
 let failure = null;
 try {
-  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) for (const form of ["send", "sign", "replacement", "token"]) for (const action of ["click", "enter"]) await runCase(width, form, action);
-  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) await runDelayedTokenSend(width);
-  if (!pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) for (const rowCount of [25, 50]) await runHistoryCase(width, rowCount);
-  if (!pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) await runHistoryRefreshCase(width);
-  if (!historyOnly && !decodersOnly && !approvalsOnly) for (const width of [700, 375]) await runUsdCase(width, true);
-  if (!historyOnly && !decodersOnly && !approvalsOnly) await runUsdCase(375, false);
-  if (!historyOnly && !pricesOnly && !approvalsOnly) for (const width of [1440, 360]) await runDecoderCase(width);
-  if (!historyOnly && !pricesOnly && !decodersOnly) for (const width of [1440, 375]) await runApprovalsCase(width);
+  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) for (const form of ["send", "sign", "replacement", "token"]) for (const action of ["click", "enter"]) await runCase(width, form, action);
+  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) await runDelayedTokenSend(width);
+  if (!pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) for (const rowCount of [25, 50]) await runHistoryCase(width, rowCount);
+  if (!pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) await runHistoryRefreshCase(width);
+  if (!historyOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [700, 375]) await runUsdCase(width, true);
+  if (!historyOnly && !decodersOnly && !approvalsOnly && !custodyOnly) await runUsdCase(375, false);
+  if (!historyOnly && !pricesOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 360]) await runDecoderCase(width);
+  if (!historyOnly && !pricesOnly && !decodersOnly && !custodyOnly) for (const width of [1440, 375]) await runApprovalsCase(width);
+  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) for (const [kernelVersion, namespaceVersion] of [["344", "1"], ["346", "1"], ["346", "2"], ["unknown", "1"], ["unknown", "2"], ["malformed", "1"]]) await runCustodyCase(width, kernelVersion, namespaceVersion);
   assert.deepEqual(browserErrors, [], "Browser runtime errors");
   assert.equal(consoleMessages.filter((message) => /blocked form submission|allow-forms/i.test(message.text)).length, 0, "Native form submission attempted inside sandbox");
 } catch (error) {

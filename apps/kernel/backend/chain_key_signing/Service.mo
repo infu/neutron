@@ -172,7 +172,7 @@ module {
                             };
                             let built = switch (authority) {
                                 case (#assertion) Namespace.build(input);
-                                case (#custody) Namespace.buildCustody(input);
+                                case (#custody) Namespace.buildDurableCustody(input);
                             };
                             let #ok(value) = built else Runtime.trap(
                                 "Invalid chain-key namespace configuration"
@@ -516,7 +516,7 @@ module {
                     publicKey,
                 );
                 signing_domain = material.signing_domain;
-                namespace_version = Namespace.VERSION;
+                namespace_version = material.namespace_version;
                 message_format = #neutron_app_assertion_v1;
             };
         };

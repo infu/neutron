@@ -160,6 +160,8 @@ compiler, shared-tools, or provisioner source change.
   unresolved design work; it is not a description of current authority.
 - [EVM Wallet And Consumer Apps](./evm-wallet.md) describes the separate wallet,
   custody lifecycle, shared client, IC bridge, Kitchen Sink and Uniswap flows.
+  [Wallet fresh start](./todo.wallet-fresh-start.md) tracks the Kernel 0.3.46
+  cutover to a new stable app-ID account and later reinstall recovery.
   [Transaction decoder packs](../apps/evm_wallet/src/decoders/README.md) explains
   extensible protocol presentation, import provenance and readable Activity;
   the [implementation checklist](./todo.evm-decoders.md) tracks qualification.

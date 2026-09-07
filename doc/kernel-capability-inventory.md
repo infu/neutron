@@ -41,7 +41,7 @@ and finite bounds.
 | `backend_calls` | Call reserved remote canisters and methods, optionally transferring bounded cycles | Exact reservations, per-call/day cycles, concurrency, transport bounds, post-`await` lease checks |
 | `randomness` | Obtain 32 bytes of consensus randomness | Bounded concurrency, low-cycle reserve, no raw management handle |
 | `chain_key_signing` | Sign domain-separated app assertions | Exact algorithm slots, 4 KiB assertion ceiling, cost and concurrency limits |
-| `wallet_custody_signing` | Owner-trusted wallet exact-digest secp256k1 signing | Separate installation namespace, exact 32-byte digest, existing shared signing resources and runtime revocation |
+| `wallet_custody_signing` | Owner-trusted wallet exact-digest secp256k1 signing | Kernel 346 namespace-v2 Neutron/app-ID/slot key identity (fresh-account cutover for legacy wallets), live installation authority, exact 32-byte digest, existing shared signing resources and runtime revocation |
 | `stable_store` | Durable app-installation key/value stores | Exact stores, schemas, entry/key/value/byte quotas, conditional writes |
 | `https_outcalls` | Call exact external HTTPS URL prefixes | Closed methods/headers, request/response limits, transform, cycles, concurrency |
 | `vetkeys` | Use app-isolated encrypted-key slots | Exact slots, browser derivation, attenuated backend public-key access, generation lifecycle |

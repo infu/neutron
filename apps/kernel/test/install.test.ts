@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { preparePackageInstall } from "neutron-compiler/src/install.js";
+import { preparePackageInstall, unpackNeutronPackage } from "neutron-compiler/src/install.js";
+import { planMemoryMigrations } from "neutron-compiler/src/memory_migrations.js";
+import type { NeutronMemorySchemaConfig } from "neutron-tools/src/schema.js";
 import { hashContent } from "neutron-tools/src/hash.js";
 import { prepare_files } from "../src/tools/install.ts";
 
@@ -10,7 +13,7 @@ function bytes(text: string): Uint8Array {
   return encoder.encode(text);
 }
 
-test("kernel generated artifacts migrate V3 to V4 and retain activation V1", async () => {
+test("kernel generated artifacts restore V4 and activation V1", async () => {
   const [
     manifestText,
     lockText,
@@ -26,7 +29,7 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.44.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.46.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -35,7 +38,7 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(344);
+  expect(manifest.version).toBe(346);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   expect(manifest.memory.kernel.version).toBe(4);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3", "4"]);
@@ -59,7 +62,7 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(344);
+  expect(packagedManifest.version).toBe(346);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
@@ -70,10 +73,10 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(4);
-  expect(packagedArchive.manifest.version).toBe(344);
+  expect(packagedArchive.manifest.version).toBe(346);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 344 },
+    package: { id: "kernel", version: 346 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });
@@ -126,6 +129,107 @@ test("kernel generated artifacts migrate V3 to V4 and retain activation V1", asy
     "kernel_publication_entropy_initialize",
   ]) {
     expect(candid).toContain(`${method}:`);
+  }
+});
+
+test("release 346 preserves deployed Kernel 336/343/344 lineage and restores schema 4 without a custody migration", async () => {
+  const currentFiles = unpackNeutronPackage(
+    await readFile(new URL("../kernel.v0.3.46.neutron", import.meta.url)),
+  );
+  const current = preparePackageInstall(currentFiles).manifest;
+  const decode = (content: Uint8Array) => new TextDecoder().decode(content);
+  const currentLock = JSON.parse(decode(currentFiles["neutron.lock.json"]!));
+  expect(current.version).toBe(346);
+  expect(hashContent(currentFiles["neutron.lock.json"]!)).toBe("ef6f809aadfbdc10e76c5e5f37bd5d796ef8f38ae0974dd84033ddc412040585");
+  expect(current.memory?.kernel?.version).toBe(4);
+  assert(current.memory?.kernel?.migrations, "Current Kernel migrations must be packaged");
+  const currentMigrationPath = current.memory.kernel.migrations.map((migration) => {
+    assert(migration.entry, `Packaged migration ${migration.from}->${migration.to} must have an entry`);
+    return { ...migration, entry: migration.entry };
+  });
+  expect(planMemoryMigrations({}, { kernel: current })).toEqual({
+    upgrades: [
+      { kind: "initialize", owner: "kernel", memoryId: "kernel", to: 4 },
+      { kind: "initialize", owner: "kernel", memoryId: "kernel_activation", to: 1 },
+    ],
+    removedApps: [],
+    destructiveMemoryRoots: [],
+  });
+  expect(planMemoryMigrations({ kernel: current }, { kernel: current })).toEqual({
+    upgrades: [
+      { kind: "keep", owner: "kernel", memoryId: "kernel", version: 4 },
+      { kind: "keep", owner: "kernel", memoryId: "kernel_activation", version: 1 },
+    ],
+    removedApps: [],
+    destructiveMemoryRoots: [],
+  });
+
+  for (const predecessor of [
+    { release: "0.3.36", version: 336, schema: 3, sha256: "97222bc4c956932ff21b96773cc5a438f92ae5ac7660c0c3f408be7eb25a7eeb" },
+    { release: "0.3.43", version: 343, schema: 4, sha256: "8051a00b4784e6e4a28f1e208677ef94647c36c83af66e2e2a37195924a0db27" },
+    { release: "0.3.44", version: 344, schema: 4, sha256: "89fb9872b41460e39942cd33a8e984ad47104c0624fa15102416f6e09c6cec75" },
+  ]) {
+    const previousBytes = await readFile(new URL(`../kernel.v${predecessor.release}.neutron`, import.meta.url));
+    // The published archives are immutable fixtures, never regenerated from current source.
+    expect(hashContent(previousBytes)).toBe(predecessor.sha256);
+    const previousFiles = unpackNeutronPackage(previousBytes);
+    const previous = preparePackageInstall(previousFiles).manifest;
+    const previousLock = JSON.parse(decode(previousFiles["neutron.lock.json"]!));
+    expect(previous.version).toBe(predecessor.version);
+    expect(previous.memory?.kernel?.version).toBe(predecessor.schema);
+    assert(previous.memory, "Published Kernel must declare its memory roots");
+    if (predecessor.schema === 4) expect(current.memory).toEqual(previous.memory);
+    const oldSchema = previous.memory.kernel?.schemas?.[String(predecessor.schema)];
+    assert(oldSchema?.entry, "Published Kernel active schema must have an entry");
+    expect(current.memory?.kernel_activation).toEqual(previous.memory?.kernel_activation);
+    expect(currentLock.memory.kernel_activation).toEqual(previousLock.memory.kernel_activation);
+
+    const checkedModules = new Set<string>();
+    function preserveModuleClosure(entry: string): void {
+      if (checkedModules.has(entry)) return;
+      checkedModules.add(entry);
+      const modulePath = `mo/${entry}.mo`;
+      expect(previousFiles[modulePath]).toBeDefined();
+      expect(currentFiles[modulePath]).toEqual(previousFiles[modulePath]);
+      for (const match of decode(previousFiles[modulePath]!).matchAll(/^\s*import\s+\w+\s+"([a-f0-9]{64})"\s*;/gm)) {
+        preserveModuleClosure(match[1]!);
+      }
+    }
+    for (const [memoryId, memory] of Object.entries(previous.memory)) {
+      assert(memory.schemas, `Published memory ${memoryId} must retain its schemas`);
+      const currentSchemas: Record<string, NeutronMemorySchemaConfig> | undefined = current.memory[memoryId]?.schemas;
+      assert(currentSchemas, `Current memory ${memoryId} must retain its schemas`);
+      for (const [version, schema] of Object.entries(memory.schemas)) {
+        expect(currentSchemas[version]).toEqual(schema);
+        expect(currentLock.memory[memoryId].schemas[version]).toEqual(previousLock.memory[memoryId].schemas[version]);
+        assert(schema.entry, `Published memory ${memoryId} v${version} must have an entry`);
+        preserveModuleClosure(schema.entry);
+      }
+      // The published schema-3 manifest predates migrations and omits this
+      // optional list; a missing list denotes no released migration edges.
+      for (const migration of memory.migrations ?? []) {
+        expect(current.memory?.[memoryId]?.migrations).toContainEqual(migration);
+        const edge = `${migration.from}->${migration.to}`;
+        expect(currentLock.memory[memoryId].migrations[edge]).toEqual(previousLock.memory[memoryId].migrations[edge]);
+        assert(migration.entry, `Published migration ${memoryId} ${edge} must have an entry`);
+        preserveModuleClosure(migration.entry);
+      }
+    }
+    expect(checkedModules.size).toBeGreaterThan(2);
+    expect(planMemoryMigrations({ kernel: previous }, { kernel: current })).toEqual({
+      upgrades: [
+        predecessor.schema === 4
+          ? { kind: "keep", owner: "kernel", memoryId: "kernel", version: 4 }
+          : {
+              kind: "migrate", owner: "kernel", memoryId: "kernel", from: predecessor.schema, to: 4,
+              oldSchemaEntry: oldSchema.entry,
+              path: currentMigrationPath.filter((migration) => migration.from >= predecessor.schema),
+            },
+        { kind: "keep", owner: "kernel", memoryId: "kernel_activation", version: 1 },
+      ],
+      removedApps: [],
+      destructiveMemoryRoots: [],
+    });
   }
 });
 

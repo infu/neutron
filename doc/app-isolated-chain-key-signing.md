@@ -359,6 +359,10 @@ and the authoritative [management-canister interface](https://docs.internetcompu
 
 ## Wallet Custody Signing V1
 
+The API version remains 1. Kernel 346 uses stable app-ID custody namespace v2.
+Upgrading from Kernel 344 requires a fresh Wallet account. The assertion-signing
+namespace and rotation behavior described above remain unchanged.
+
 `wallet_custody_signing` is a separate backend capability for an owner-trusted
 wallet app. It accepts exactly a 32-byte digest and signs those bytes unchanged
 with ECDSA secp256k1. It does not apply an assertion prefix, hash the supplied
@@ -392,23 +396,31 @@ address, determines recovery parity, and normalizes low-S as required by its
 protocol. Public tools must expose reviewed protocol operations; the backend
 leaf itself is not a public frontend raw-digest tool.
 
-The immutable namespace is SHA-256 over the following length-prefixed parts,
-using the existing unsigned four-byte big-endian lengths and eight-byte
-big-endian integers:
+Kernel 346 always selects custody namespace v2. The app cannot choose an
+identity, derivation path or namespace version. Its length-prefixed inputs use
+the `H`, `LP`, and `U64` encodings defined above:
 
-1. `neutron.wallet-custody-signing.key.v1`
-2. Kernel installation epoch
-3. Neutron canister principal bytes
-4. App ID UTF-8
-5. Kernel-assigned app installation UID
-6. Slot ID UTF-8
-7. `ecdsa_secp256k1`
-8. Compiler-resolved management key name UTF-8
-9. `neutron_wallet_custody_digest_v1`
+```text
+namespace = H(
+  "neutron.wallet-custody-signing.key.v2",
+  neutron_canister_principal_blob,
+  UTF8(app_id),
+  UTF8(slot_id),
+  UTF8(algorithm),
+  UTF8(trusted_resolved_key_name),
+  "neutron_wallet_custody_digest_v2"
+)
+```
+
+The canister, app ID, slot, algorithm, and resolved key name identify this
+account. Neither the app installation UID nor the Kernel installation epoch is
+an input. Reinstalling the same app ID and slot in this Neutron therefore uses
+the same key under the same algorithm and key configuration.
 
 That digest is the sole management derivation-path component. It is only key
 identity material; the supplied EVM signing digest receives no Neutron domain.
-Apps cannot supply another installation, path, master-key name, or epoch.
+Apps cannot supply another app identity, installation, path, master-key name,
+or epoch.
 Matching slot names in different apps or in the assertion capability produce
 separate keys. Purpose text is presentation-only and does not change identity
 or reset runtime enablement/accounting.
@@ -424,17 +436,35 @@ Revocation after dispatch suppresses returned signature bytes without claiming
 that the signature was never generated. The stronger ambiguous outcome takes
 precedence when both happen.
 
-Compatible upgrades preserve the app installation UID and key. Disabling
-signing preserves the key and rejects use until enabled. Removing a slot removes
-its live authority/cache; declaring the same slot again in the same installation
-and key configuration restores the same derived key. Uninstall/reinstall or app
-replacement receives a new installation UID and a new key. A new canister ID,
-Kernel installation epoch, or threshold-key configuration also changes identity.
-A state-preserving canister upgrade retains it. No seed/private-key export or
-owner reassignment/recovery registry is provided. A funded account must not be
-removed under the assumption that reinstalling will recover its address.
+Kernel 346 retains the Kernel memory v4 used by Kernel 344. The memory
+declaration contains v3 and v4 with the existing v3-to-v4 edge; upgrading from
+344 restores v4 without a migration. The
+[custody service](../apps/kernel/backend/wallet_custody_signing/Service.mo)
+derives namespace v2 directly from the current app ID and declared slot.
 
-Kernel memory v4 adds an empty custody cache and the distinct runtime capability
-kind. The v3-to-v4 migration preserves all existing service roots, assertion
-keys, installation identities, and runtime enablement/usage. The original v3
-schema and assertion namespace/format remain unchanged.
+Key identity and live authority have separate lifetimes. After the fresh start,
+compatible app upgrades retain the namespace-v2 account. Disabling signing
+retains its identity while rejecting use.
+Removing a slot revokes its live authority and clears its cache; uninstalling
+the app revokes the current `AppScope` and removes its live capability/cache
+state. In-flight calls still undergo the existing revocation checks.
+Reinstalling the same app ID and slot restores access to the
+same account after the normal explicit custody grant. A different app ID cannot
+select that account through its own capability, and EVM Wallet receives no
+special Kernel privilege.
+
+Uninstall still deletes app-owned memory, including wallet history, saved
+settings, and request journals. Assets, positions, and permissions already on
+EVM networks remain at the recovered address; reinstall does not restore the
+deleted local records. There is no seed/private-key export, cross-app identity
+reassignment, or recovery into a different Neutron canister. A different canister,
+slot, algorithm, or threshold-key configuration derives a different key. Full
+Neutron deletion or destructive reinstallation is outside this app-uninstall
+contract.
+
+**Fresh-account cutover from Kernel 344:** fully uninstall EVM Wallet and
+complete that install transaction first. Then install Kernel 346, and install
+EVM Wallet 119 afresh. The owner deliberately abandons the old account; its
+assets, positions and permissions remain at that old address. Do not combine
+removal with the Kernel upgrade or carry a legacy Wallet cache into the new
+runtime. Later Wallet reinstalls recover the new stable account.

@@ -11,7 +11,7 @@ const validator = new Validator();
 const address = "0x2222222222222222222222222222222222222222";
 const recipient = "0x4444444444444444444444444444444444444444";
 const stamp = "1788652800000000000";
-const account = { id: "main", slot: "main", address, public_key: new Uint8Array(33).fill(2), namespace_version: "1" };
+const account = { id: "main", slot: "main", address, public_key: new Uint8Array(33).fill(2), namespace_version: new URLSearchParams(location.search).get("namespace") ?? "2" };
 const snapshot = {
   accounts: [account],
   networks: [
@@ -41,6 +41,10 @@ const operations = new Map<string, any>([[original.request_id, original]]);
 const signedBytes = new Map<string, Hex>();
 const registrations = new Map<string, any>();
 const gates = new Map<string, { wait: Promise<void>; release: () => void }>();
+const kernelDescriptions: string[] = [];
+const kernelVersion = new URLSearchParams(location.search).get("kernel") ?? "346";
+let kernelDescription: any = kernelVersion === "unknown" ? null
+  : { id: "kernel", version: kernelVersion === "malformed" ? "346" : Number(kernelVersion) };
 const appStateListeners = new Map<string, Set<(event: any) => void>>();
 let sequence = 100;
 const copy = <T,>(value: T): T => structuredClone(value);
@@ -119,6 +123,14 @@ function validate(value: unknown, schema: any) {
 }
 export const loadTileContext = () => ({ app: "evm_wallet", tile: "evm_wallet" });
 export const copyToClipboard = async () => undefined;
+export async function describeApp(appId: string) {
+  kernelDescriptions.push(appId);
+  if (appId !== "kernel") throw new Error(`Unexpected app discovery: ${appId}`);
+  const description = copy(kernelDescription);
+  await gates.get("describe_kernel")?.wait;
+  if (description === null) throw new Error("Kernel discovery is unavailable");
+  return description;
+}
 export function onAppStateChange(topic: string, listener: (event: any) => void) {
   const listeners = appStateListeners.get(topic) ?? new Set();
   listeners.add(listener);
@@ -292,7 +304,7 @@ export async function callTool(request: any) {
     };
   }
   if (request.name === EVM_WALLET_TOOLS.accounts) return { accounts: [{
-    accountId: "main", address, publicKey: "0x02" + "22".repeat(32), keyFingerprint: "0x" + "11".repeat(32), namespaceVersion: "1",
+    accountId: "main", address, publicKey: "0x02" + "22".repeat(32), keyFingerprint: "0x" + "11".repeat(32), namespaceVersion: account.namespace_version,
   }] };
   if (request.name === EVM_WALLET_TOOLS.operationStatus) return {
     ...request.arguments, status: "not_found",
@@ -332,6 +344,8 @@ export async function callTool(request: any) {
 }
 (window as any).__evmSandbox = {
   calls, toolCalls, routing, historyAttempts, expectedHistoryIds: historyRows?.map(operation => operation.operation_id),
+  kernelDescriptions,
+  setKernelDescription(value: unknown) { kernelDescription = copy(value); },
   decoderSnapshot: () => copy([...decoderPacks.values()]),
   async setDecoderEnabled(id: string, enabled: boolean) {
     const pack = decoderPacks.get(id);

@@ -3,9 +3,21 @@
 The wallet owns the `main` custody slot. Its public key, address and key
 fingerprint are cached in the `evm_wallet` v1 managed root. Ethereum, Arbitrum
 One and Sepolia share that address and keep separate nonce reservations.
-Compatible upgrades retain the root and key. Installation-scoped custody keys
-rotate after uninstall/reinstall; this app does not offer key export or recovery
-of a removed installation.
+Kernel 0.3.46 always derives the namespace-v2 account from the Neutron canister,
+app ID `evm_wallet`, slot `main`, algorithm and trusted key name. After a fresh
+start, compatible upgrades and Wallet uninstall/reinstall recover that same
+account. Legacy namespace-v1 accounts are deliberately not retained by this
+release. Fully uninstall the old Wallet on Kernel 0.3.44 before upgrading to
+Kernel 0.3.46, then install Wallet 0.1.19 afresh. This creates a new address and
+blank Wallet roots; it does not move on-chain
+assets, permissions or positions from the old address.
+
+All three Wallet memory roots remain at v1. Kernel 0.3.46 restores the v4
+root used by 0.3.44. Neither app introduces a memory migration. A cached legacy
+account is incompatible with the new key; the UI requests a manual fresh
+install and never clears account data automatically. Uninstall removes local
+history, settings and pending transaction records. There is no seed/private-key
+export or cross-Neutron recovery.
 
 `main.mo` exposes closed versioned methods for snapshot/accounts, tracked assets,
 browser-observed preparation, approval, rejection, saved operations, submission

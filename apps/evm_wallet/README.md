@@ -37,7 +37,8 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
   liquidity interfaces show indexed token budgets, LP burns, output minima and
   the receiver from calldata; interface recognition does not assert factory
   membership. These same details reach Agent review. The existing Wallet and
-  evidence roots retain their released v1 schemas and existing signing identities.
+  evidence roots retain their released v1 schemas. See Account lifecycle and
+  authority below for signing identity and upgrade requirements.
   Aave V3 Ethereum Core and Arbitrum Pool and Rewards Controller calls show
   supply, withdrawal, variable borrowing and repayment, repayment with supplied
   aTokens, collateral settings, efficiency-mode category IDs and reward claims.
@@ -162,20 +163,40 @@ public key and sign exact 32-byte digests. It is stronger authority than the
 existing assertion-signing grant: the Kernel does not interpret ERC-20
 approvals, swap calldata or EIP-712 permits. Wallet code owns that review.
 
-The Kernel's existing installation namespace reserves the key while the app is
-installed. Another app using the slot name `main` receives a different key.
-Compatible upgrades preserve the installation namespace, slot and address.
-Disabling the capability prevents signing; reenabling the same installed slot
-restores its use. Removing the app and reinstalling creates a new namespace and
-address. Removing the slot loses its active handle; a replacement app cannot
-claim the old handle. There is no independent post-uninstall reservation or
-owner reassignment registry in this release.
+Kernel 0.3.46 (release 346) always derives custody namespace v2 from this
+Neutron canister, app ID `evm_wallet`, slot `main`, algorithm and trusted key
+name. Installation UID and Kernel installation epoch are not inputs. Another
+app ID receives a different key even if its slot is also named `main`.
 
-Keep EVM Wallet installed while the address has funds, approvals or outstanding
-signatures. There is no seed/private-key export. Restoring durable state in the
-same Neutron must preserve the Kernel installation identity and Wallet memory;
-a different Neutron canister has a different derivation scope. Copying a frontend
-draft is not account recovery.
+Upgrading from Kernel 0.3.44 requires a fresh account. **Fully uninstall EVM
+Wallet while still on 0.3.44; then install Kernel 0.3.46 and reinstall EVM Wallet
+0.1.19.** These are separate
+completed install transactions. Do not keep the old Wallet installed during
+this cutover: its cached address and journals belong to a different key. The
+new installation starts with blank Wallet memory and a new address. This
+abandons supported signing access to the old account; its on-chain balances,
+approvals and protocol positions remain at the old address and do not move.
+
+After that fresh start, compatible upgrades and reinstalling EVM Wallet in the
+same Neutron recover the same namespace-v2 account when you grant its custody
+capability. Disabling or removing a slot stops signing without changing its
+key identity. An owner-approved replacement package using the same app ID and
+slot can therefore control the same account: only grant custody access to a
+package you trust. Uninstall removes Wallet history, preferences, custom
+tokens, decoder packs and transaction records. Those local records are not
+restored automatically.
+
+Kernel 0.3.46 restores the same Kernel memory v4 used by 0.3.44 without a
+migration. Wallet also keeps its three v1 schemas; the fresh install initializes
+blank roots. Settings checks the Kernel version and cached account namespace,
+warning when an old account still requires a manual fresh install.
+
+There is no seed/private-key export. A different Neutron canister has a
+different key scope; copying Wallet data or a frontend draft to it does not
+recover this account. Changing the slot, algorithm or threshold master-key
+configuration also changes its key. Destructive reinstallation of the entire
+Neutron is outside this app-reinstall contract. See the
+[fresh-start checklist](../../doc/todo.wallet-fresh-start.md).
 
 ## Consumer tools
 

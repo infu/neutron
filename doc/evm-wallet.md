@@ -31,20 +31,41 @@ retrieves its scoped public key and signs an exact 32-byte digest. Its derivatio
 domain is distinct from the existing assertion-signing capability, whose API
 and keys remain unchanged.
 
-Kernel binds custody to the Neutron, installation epoch, app installation UID,
-slot, algorithm and trusted management key configuration. Another app declaring
-`main` gets a different key. Another app cannot take the installed wallet's
-namespace; no second reservation registry is required.
+Kernel 0.3.46 (release 346) always derives custody namespace v2 from the
+Neutron canister, app ID `evm_wallet`, slot `main`, algorithm and trusted
+management key name. Neither the installation UID nor the Kernel installation
+epoch affects this account. Another app ID derives a different key, even if
+its slot is also `main`.
 
-Compatible upgrades retaining that identity preserve the address. Disabling and
-reenabling the unchanged capability preserves it too. Removing a slot removes
-its authority and cache; restoring the same slot within the same installation
-and trusted key configuration derives the same key. Uninstalling/reinstalling
-the wallet, changing the trusted key configuration or creating a new Neutron
-installation identity changes the key. The wallet has no seed phrase
-or private-key export. Moving funds out before removal is distinct from recovering
-an old namespace; automatic reassignment of removed custody identities is not
-implemented. See the precise [signing lifecycle](./app-isolated-chain-key-signing.md).
+Upgrading from Kernel 0.3.44 starts a fresh account. **Fully uninstall EVM
+Wallet while still on 0.3.44, complete that transaction, upgrade Kernel to
+0.3.46, then install EVM Wallet 0.1.19.** The new
+Wallet starts with blank local memory and a different address. Old balances,
+approvals and protocol positions stay on-chain at the old address; they are
+not transferred or recovered by this procedure. Keeping the old Wallet
+installed across this cutover leaves a cache for a key the new Kernel does not
+use. Wallet Settings detects that mismatch and explains the manual fresh
+install; it does not silently clear account data.
+
+After the fresh start, reinstalling the same app ID and slot in the same
+Neutron restores the namespace-v2 account when the owner grants custody again.
+A replacement package with that ID can control the account, so grant custody
+to trusted Wallet code. Compatible app upgrades and disable/re-enable preserve
+that key. Uninstall still deletes Wallet history, custom tokens, decoder packs,
+settings and pending transaction records; those local records are not rebuilt
+automatically.
+
+Kernel 0.3.46 restores the Kernel memory v4 already installed with 0.3.44.
+Wallet keeps its three v1 schemas, initialized blank by the fresh install.
+Neither app introduces a memory migration. Package versions continue increasing
+through the existing update-source publication workflow.
+
+There is no seed phrase or private-key export. A different canister, slot,
+algorithm or threshold master-key configuration derives a different key.
+Destructive whole-Neutron reinstallation is outside the app-reinstall contract.
+See the precise
+[signing lifecycle](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1)
+and [fresh-start checklist](./todo.wallet-fresh-start.md).
 
 ## Networks, Balances And Costs
 

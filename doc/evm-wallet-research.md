@@ -1,8 +1,13 @@
 # Separate EVM Wallet: Research And Proposed Design
 
-Research date: 2026-09-05. This document preserves the design research.
-Implementation is now in progress; see the [implementation guide](./evm-wallet.md)
-for the selected contract and the checklist below for qualification status.
+Research date: 2026-09-05. This document preserves the initial design research;
+its proposals and component inventory describe that stage of development. See
+the [implementation guide](./evm-wallet.md) for the implemented contract and the
+checklist below for qualification status.
+
+The custody lifecycle uses stable app-ID derivation in Kernel 346. Upgrading
+from Kernel 344 starts a fresh Wallet account while retaining Kernel memory v4;
+see the [fresh-start checklist](./todo.wallet-fresh-start.md).
 
 Implementation checklist: [EVM Wallet and app integrations TODO](./todo.evm-wallet.md),
 including IC Wallet fixes, Kitchen Sink examples, and a separate Uniswap app.
@@ -45,46 +50,42 @@ Relevant local contracts: [product model](./product-model-and-user-story.md),
 
 ## Namespaces And Exclusive Signing
 
-**Existing namespacing already provides exclusive effective ownership while an
-app is installed.** Kernel constructs the namespace from the Neutron, app ID,
-installation UID, slot, algorithm, and trusted key configuration. The scoped
-handle does not accept another app's scope or an arbitrary management derivation
-path. Matching another app's slot name does not select its key.
+Kernel 346 derives custody namespace v2 from the Neutron canister, app ID,
+slot, algorithm and trusted key name. The installation UID and Kernel epoch
+are not inputs. This lets a fresh installation of the same app ID and slot
+recover the same key. The exact encoding is in the
+[custody signing contract](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1)
+and [namespace implementation](../apps/kernel/backend/chain_key_signing/Namespace.mo).
 
-See [the namespace implementation](../apps/kernel/backend/chain_key_signing/Namespace.mo)
-and [the scoped service](../apps/kernel/backend/chain_key_signing/Service.mo).
+The current `AppScope` controls access. A scoped handle cannot select another
+app's identity or an arbitrary management derivation path. Slot removal,
+uninstall, disablement and stale/in-flight handle checks retain their existing
+revocation behavior. Reinstallation receives access through the ordinary
+explicit custody grant. Only grant access to trusted packages: a replacement
+using the same app ID and slot can control the same account. Uniswap and IC
+Wallet use EVM Wallet's tools, never its backend signing capability.
 
-For the user's requirement that no other app take EVM Wallet's signing namespace
-while active, reuse this isolation. The installed declaration grants its slot
-to that installation. Do not add a second global name-reservation system just
-to duplicate the existing guarantee. Uniswap and IC Wallet obtain signatures
-only through EVM Wallet's tools, never through its backend capability handle.
-
-There is a separate lifecycle question:
-
-| Event | Existing namespace behavior |
+| Event | Custody behavior with Kernel 346 |
 | --- | --- |
-| Compatible update retaining app, slot, key configuration, and scope | Same key |
-| Disable/re-enable unchanged capability | Signing unavailable while disabled; same identity retained |
+| Compatible app update retaining app ID, slot, algorithm and key configuration | Same key |
+| Disable/re-enable unchanged capability | Signing unavailable while disabled; same key afterwards |
 | Another app declares the same local slot name | Different key |
-| App uninstall/reinstall | New installation UID and a different key |
-| Full Neutron reinstall | New installation epoch and a different key |
+| Remove and restore the same slot | Same key; signing requires the declared capability |
+| App uninstall/reinstall with the same app ID and slot | Same key after the custody grant; deleted local data is not restored |
+| Different canister, slot, algorithm or key configuration | Different key |
 
-If the product should retain a funded address after app removal or allow the
-owner to replace its wallet provider, add a **durable custody identity** as a
-separate feature. Kernel would retain the key descriptor and an exclusive claim
-by the current AppScope. Explicit owner reassignment changes access, not the
-derivation path. A replacement installation must not automatically inherit a
-funded key merely by using the same app ID. This registry is an option for
-recovery, not a prerequisite for exclusivity while installed.
+Upgrading from Kernel 344 starts a different Wallet account. Fully uninstall
+EVM Wallet first, complete that transaction, upgrade Kernel to 346, and install
+Wallet 119 afresh. Kernel retains its v4 memory root without a migration;
+Wallet initializes its existing v1 roots blank. Assets, positions and permissions
+at the old address do not move. Assertion-signing keys remain unchanged.
 
-Choose and document that lifecycle before presenting the wallet as recoverable.
-No automatic uninstall block or new policy limit is proposed here. Recovery
-across a different canister is a different problem: IC's signing derivation
-includes the signing canister identity. There is no seed phrase/private-key
-export provided by the threshold signing API. An EOA migration may therefore
-require transferring assets while the old signer still works; contract-account
-recovery is a later product option. [IC management API](https://docs.internetcomputer.org/references/management-canister/#chain-key-signing)
+Uninstall deletes local wallet settings, history and request journals. Whole
+Neutron reinstallation is outside the app-reinstall contract. Recovery into
+another canister is not provided: IC signing derivation includes the signing
+canister identity. The threshold-signing API provides no seed phrase or
+private-key export.
+[IC management API](https://docs.internetcomputer.org/references/management-canister/#chain-key-signing)
 
 ## The Necessary Signing Extension
 
@@ -391,8 +392,8 @@ These are source findings, not claims of observed production fund loss:
 
 ## Implementation Order And Release Evidence
 
-1. Settle the new custody-grant contract and account lifecycle. Existing
-   namespace exclusivity is reusable; uninstall recovery is the separate choice.
+1. Define the custody grant and app-ID account lifecycle, including the fresh
+   account required when upgrading from Kernel 344.
 2. Add the isolated signing extension and test key retention, cross-app
    isolation, revoked/stale handles, and actual EVM signature vectors.
 3. Build EVM Wallet's durable backend and Ethereum/Sepolia flows: address,

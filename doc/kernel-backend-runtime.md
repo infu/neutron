@@ -55,13 +55,15 @@ The manifest declares the kernel app as:
   not pin the active release
 - `init_arg`: `memory_kernel`, `memory_kernel_activation`, `deployment_id`, and
   `active_app_instance_inventory`, plus `canister_principal`
-- one `kernel` memory schema at v3 and one
-  `kernel_activation` schema at v1, both with no predecessor or migration edge
+- one active `kernel` memory schema at v4, with v3 and the released v3-to-v4
+  forward migration, and one `kernel_activation` schema at v1 with no
+  predecessor or migration edge
 
-Versions 3 and 1 are released production memory history. Their schema sources
-and existing `neutron.lock.json` entries are immutable. A code-only Kernel
-release retains both versions and restores the existing roots; it does not add a
-fake migration. Discarded split-root and earlier development-only shapes remain
+Kernel 346 retains the v4 and activation-v1 roots already installed with
+Kernel 344, so this upgrade restores both without a migration. The existing
+v3-to-v4 path remains available for older supported installations. Schema
+source and `neutron.lock.json` lineage remain unchanged. Discarded split-root
+and earlier development-only shapes remain
 unsupported, but that exception is not a release path for an installed
 production Neutron. See
 [Managed Memory Migrations And Uninstall](./memory-migrations-and-uninstall.md)
@@ -541,9 +543,19 @@ byte totals, raw rejects, or request/response content.
 for exact 32-byte secp256k1 digests. It reuses the checked signing engine and
 management adapter below, sharing existing slot/in-flight accounting, with a
 distinct custody namespace and runtime capability kind. The digest is not
-re-hashed. Kernel memory v4 adds a separate empty custody cache and widens
+re-hashed. Kernel memory v4 added a separate empty custody cache and widened
 runtime capability entries through a v3-to-v4 migration; all existing service
-roots and assertion keys are retained. See the [custody contract](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1).
+roots and assertion keys were retained. Kernel 0.3.46 keeps that active memory
+v4 and always derives custody v2 from the Neutron canister, app ID, slot,
+algorithm and trusted key name. The app installation UID and Kernel epoch do
+not affect the key. Upgrading from Kernel 0.3.44 requires completing Wallet
+uninstall before the Kernel upgrade and installing a fresh Wallet afterwards.
+Other Kernel roots retain their state.
+After that fresh start, app uninstall revokes live signing authority and deletes
+app-owned memory; reinstalling the same app ID and slot recovers the v2 account
+through the ordinary custody grant. No new Wallet migration is introduced.
+Existing assertion signing is unchanged. See the
+[custody contract](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1).
 
 `backend/chain_key_signing/` owns app-isolated threshold assertion signing.
 The compiler supplies exact slot declarations and a trusted environment key map;

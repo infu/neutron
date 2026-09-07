@@ -106,7 +106,7 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 117,
+    version: 119,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -524,10 +524,57 @@ test("release 117 keeps every production root, decoder pack and method contract 
   expect(checked.size).toBeGreaterThan(3);
   const schema = JSON.parse(decode(files["schema.json"]!));
   const priorSchema = JSON.parse(decode(previous["schema.json"]!));
-  expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
+  // This released transition stays tied to its own immutable backend.
+  expect(schema).toEqual(generateAppMethodSchemaArtifact(next, decode(files[`mo/${next.entry}.mo`]!)));
   expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 117 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
   const roots = ["evm_wallet", "evm_evidence", "evm_decoders"];
+  const clean = planMemoryMigrations({ kernel }, { kernel, evm_wallet: next });
+  expect(clean.upgrades).toHaveLength(roots.length);
+  expect(clean.upgrades).toEqual(expect.arrayContaining(roots.map(memoryId => ({ kind: "initialize", owner: "evm_wallet", memoryId, to: 1 }))));
+  expect(clean.destructiveMemoryRoots).toEqual([]);
+  const upgraded = planMemoryMigrations({ kernel, evm_wallet: old }, { kernel, evm_wallet: next });
+  expect(upgraded.upgrades).toHaveLength(roots.length);
+  expect(upgraded.upgrades).toEqual(expect.arrayContaining(roots.map(memoryId => ({ kind: "keep", owner: "evm_wallet", memoryId, version: 1 }))));
+  expect(upgraded.destructiveMemoryRoots).toEqual([]);
+  expect(planMemoryMigrations({ kernel, evm_wallet: next }, { kernel, evm_wallet: next })).toEqual(upgraded);
+});
+
+test("release 119 retains every production root, closure, lineage and method contract from 117", async () => {
+  const previousBytes = await readFile(new URL("../evm_wallet.v0.1.17.neutron", import.meta.url));
+  // The published predecessor is immutable; this code-only release adds no Wallet migration.
+  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe("fc299ca5292761bd6b300b9fd3205843788972594a37c4376f4a6a9f16f37b4c");
+  const previous = unpackNeutronPackage(previousBytes);
+  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.19.neutron", import.meta.url)));
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 119 });
+  const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+  const old = JSON.parse(decode(previous["neutron.json"]!));
+  const next = JSON.parse(decode(files["neutron.json"]!));
+  expect(old.version).toBe(117);
+  expect(next.memory).toEqual(old.memory);
+  const roots = ["evm_decoders", "evm_evidence", "evm_wallet"];
+  expect(Object.keys(next.memory).sort()).toEqual(roots);
+  for (const memoryId of roots) expect(next.memory[memoryId]).toMatchObject({ version: 1, migrations: [] });
+  expect(files["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
+  expect(JSON.parse(decode(files["neutron.lock.json"]!))).toEqual(JSON.parse(await readFile(new URL("../neutron.lock.json", import.meta.url), "utf8")));
+  const checked = new Set<string>();
+  function retain(entry: string) {
+    if (checked.has(entry)) return;
+    checked.add(entry);
+    const path = `mo/${entry}.mo`;
+    expect(previous[path]).toBeDefined();
+    expect(files[path]).toEqual(previous[path]);
+    for (const match of decode(previous[path]!).matchAll(/^\s*import\s+\w+\s+"([a-f0-9]{64})"\s*;/gm)) retain(match[1]!);
+  }
+  for (const root of Object.values(old.memory) as { schemas: Record<string, { entry: string }> }[]) {
+    for (const schema of Object.values(root.schemas)) retain(schema.entry);
+  }
+  expect(checked.size).toBeGreaterThan(3);
+  const schema = JSON.parse(decode(files["schema.json"]!));
+  const priorSchema = JSON.parse(decode(previous["schema.json"]!));
+  expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 119 } });
+  const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 346, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, evm_wallet: next });
   expect(clean.upgrades).toHaveLength(roots.length);
   expect(clean.upgrades).toEqual(expect.arrayContaining(roots.map(memoryId => ({ kind: "initialize", owner: "evm_wallet", memoryId, to: 1 }))));

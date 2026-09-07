@@ -603,7 +603,7 @@ module {
     };
     func supported(chain : Nat) : Bool = Map.containsKey(mem.networks, Nat.compare, chain);
     func snapshot() : Types.Snapshot {
-      { accounts = Array.fromIter(Map.values(mem.accounts)); networks = Array.fromIter(Map.values(mem.networks)); assets = Array.fromIter(Map.values(mem.assets)); lifecycle = "The installation owns this custody namespace. Compatible upgrades preserve the account. Uninstall/reinstall rotates its key and cannot recover this address. There is no seed or private-key export." };
+      { accounts = Array.fromIter(Map.values(mem.accounts)); networks = Array.fromIter(Map.values(mem.networks)); assets = Array.fromIter(Map.values(mem.assets)); lifecycle = "Kernel 0.3.46 uses the stable account for this Neutron, app ID evm_wallet and slot main. Reinstalling restores that new account after you grant custody access. Legacy accounts are not carried forward: fully uninstall the old Wallet before upgrading Kernel, then install Wallet afresh. Uninstall removes wallet history, settings and pending transaction records; old on-chain assets and permissions do not move. There is no seed or private-key export." };
     };
   };
   let browserRequired = "This read or transaction preparation requires the updated EVM Wallet browser service. Reload or update EVM Wallet; no canister HTTP request was made.";
