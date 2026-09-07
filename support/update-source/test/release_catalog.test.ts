@@ -58,6 +58,21 @@ describe("release catalog", () => {
     ]);
   });
 
+  test("catalog inventory can exceed one mutation while retaining its byte bound and nonempty shape", async () => {
+    const fixture = await emptyFixture();
+    const base = {
+      format: 1,
+      update_source: updateSource,
+      packages: Array.from({ length: 21 }, (_, index) => ({ id: `app_${index}`, directory: `../apps/app_${index}` })),
+    };
+    await writeCatalog(fixture.catalogPath, base);
+    expect((await loadReleaseCatalog(fixture.catalogPath, { repositoryRoot: fixture.root })).packages).toHaveLength(21);
+    await writeCatalog(fixture.catalogPath, { ...base, packages: [] });
+    await expect(loadReleaseCatalog(fixture.catalogPath, { repositoryRoot: fixture.root })).rejects.toThrow("must contain at least one entry");
+    await writeFile(fixture.catalogPath, JSON.stringify(base) + " ".repeat(256 * 1024));
+    await expect(loadReleaseCatalog(fixture.catalogPath, { repositoryRoot: fixture.root })).rejects.toThrow("Release catalog exceeds 262144 bytes");
+  });
+
   test("rejects unknown fields, duplicate identities, and paths outside the repository", async () => {
     const fixture = await emptyFixture();
     const base = {

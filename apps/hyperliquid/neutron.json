@@ -1,0 +1,85 @@
+{
+  "format": 3,
+  "id": "hyperliquid",
+  "name": "Hyperliquid",
+  "version": 100,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Trade perpetual futures and move USDC between Ethereum and Hyperliquid",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Direct Hyperliquid market data, Agent trading and durable USDC transfers"
+  },
+  "tiles": [
+    {
+      "id": "hyperliquid",
+      "title": "Hyperliquid",
+      "path": "index.html",
+      "icon": "static/icon.svg"
+    }
+  ],
+  "capabilities": {
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "hyperliquid_begin_v1",
+        "hyperliquid_get_v1",
+        "hyperliquid_page_v1",
+        "hyperliquid_update_v1"
+      ]
+    },
+    "frontend_tools": {
+      "api": 1,
+      "targets": [
+        {
+          "app": "evm_wallet",
+          "tools": [
+            "evm_accounts_v1",
+            "evm_balances_v1",
+            "evm_wallet_prices_v1",
+            "evm_call_contract_v1",
+            "evm_estimate_transaction_v1",
+            "evm_transaction_v1",
+            "evm_replacement_transaction_v1",
+            "evm_operation_status_v1",
+            "evm_send_transaction_v1",
+            "evm_sign_typed_data_v1"
+          ]
+        }
+      ]
+    }
+  },
+  "func": {
+    "hyperliquid_begin_v1": {
+      "type": "update",
+      "async": false
+    },
+    "hyperliquid_get_v1": {
+      "type": "query",
+      "async": false
+    },
+    "hyperliquid_update_v1": {
+      "type": "update",
+      "async": false
+    },
+    "hyperliquid_page_v1": {
+      "type": "query",
+      "async": false
+    }
+  },
+  "memory": {
+    "hyperliquid": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/hyperliquid/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

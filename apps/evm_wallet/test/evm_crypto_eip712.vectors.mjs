@@ -114,6 +114,46 @@ const noChain = {
 };
 positive("A chain-neutral EIP-712 domain hashes without inventing a chain", noChain);
 
+// Hyperliquid's official signing helper uses this qualified primary type:
+// https://github.com/hyperliquid-dex/hyperliquid-python-sdk/blob/2fdb18f9517675ea03695a0962bd19eece9c83f0/hyperliquid/utils/signing.py#L383
+// signatureChainId is a signing-wallet context; hyperliquidChain binds the venue.
+const hyperliquidDomain = {
+  name: "HyperliquidSignTransaction", version: "1", chainId: 42161,
+  verifyingContract: "0x0000000000000000000000000000000000000000",
+};
+const hyperliquid = (primaryType, fields, message) => ({
+  types: { EIP712Domain: mail.types.EIP712Domain, [primaryType]: fields },
+  primaryType, domain: hyperliquidDomain, message,
+});
+const approveAgent = hyperliquid("HyperliquidTransaction:ApproveAgent", [
+  field("hyperliquidChain", "string"), field("agentAddress", "address"),
+  field("agentName", "string"), field("nonce", "uint64"),
+], {
+  hyperliquidChain: "Testnet", agentAddress: "0x1111111111111111111111111111111111111111",
+  agentName: "neutron-research", nonce: 1788820000000,
+});
+positive("Hyperliquid approved trading signer with exact qualified primary type", approveAgent);
+if (hashTypedData(approveAgent) !== "0x80742b882ad5ba923c11dc9c2b320213d317ee149e25cf8959178dfecece9bd9") {
+  throw new Error("The Hyperliquid approval regression digest changed");
+}
+positive("Hyperliquid mainnet approval has a different environment digest", {
+  ...approveAgent, message: { ...approveAgent.message, hyperliquidChain: "Mainnet" },
+});
+// Circle's HyperCore withdrawal specification, with Ethereum destination domain
+// zero (distinct from the selected EVM signing network 42161):
+// https://developers.circle.com/cctp/howtos/withdraw-usdc-from-hypercore-to-evm
+const withdraw = hyperliquid("HyperliquidTransaction:SendToEvmWithData", [
+  field("hyperliquidChain", "string"), field("token", "string"), field("amount", "string"),
+  field("sourceDex", "string"), field("destinationRecipient", "string"),
+  field("addressEncoding", "string"), field("destinationChainId", "uint32"),
+  field("gasLimit", "uint64"), field("data", "bytes"), field("nonce", "uint64"),
+], {
+  hyperliquidChain: "Mainnet", token: "USDC", amount: "12.345678", sourceDex: "",
+  destinationRecipient: "0x1234567890123456789012345678901234567890", addressEncoding: "hex",
+  destinationChainId: 0, gasLimit: "200000", data: "0x", nonce: "1788820000001",
+});
+positive("HyperCore perps USDC withdrawal to Ethereum", withdraw);
+
 const negatives = [];
 const negative = (label, data) => negatives.push({ label, json: typeof data === "string" ? data : JSON.stringify(data) });
 const copy = (data) => JSON.parse(JSON.stringify(data));
@@ -136,6 +176,10 @@ for (const type of ["uint", "int", "uint0", "uint7", "uint264", "int9", "bytes0"
 modify("Missing referenced type", (data) => { data.types.Value[0].type = "Missing[]"; data.message.value = []; });
 modify("An invalid type identifier", (data) => { data.types["Bad-Name"] = data.types.Value; delete data.types.Value; data.primaryType = "Bad-Name"; });
 modify("An invalid member identifier", (data) => { data.types.Value[0].name = "bad-name"; data.message = { "bad-name": 1 }; });
+modify("Qualified names are not accepted as field names", (data) => { data.types.Value[0].name = "scope:value"; data.message = { "scope:value": 1 }; });
+for (const name of [":Value", "Value:", "Protocol::Value", "Protocol:9Value", "Protocol:Bad-Name", "Protocol:Value(uint256)", "Protocol:Value,Other", "Protocol: Value"]) {
+  modify(`Invalid qualified struct name ${name}`, (data) => { data.types[name] = data.types.Value; delete data.types.Value; data.primaryType = name; });
+}
 for (const [type, value] of [
   ["uint8", -1], ["uint8", 256], ["int8", -129], ["int8", 128],
   ["uint256", (1n << 256n).toString()], ["int256", (1n << 255n).toString()], ["int256", (-(1n << 255n) - 1n).toString()],
@@ -207,6 +251,16 @@ const output = [
   ...vectors.flatMap(({ label, json, digest }) => [`valid(${moText(label)},`, `    ${moText(json)},`, `    ${moText(digest)},`, ');', '']),
   ...negatives.flatMap(({ label, json }) => [`invalid(${moText(label)},`, `    ${moText(json)},`, ');', '']),
   '// The wallet-selected chain must agree with the chain actually signed.',
+  ...[approveAgent, withdraw].flatMap((data) => [
+    `switch (Eip712.hashForChain(${moText(JSON.stringify(data))}, 42161)) {`,
+    `    case (#ok(value)) assert (Hex.encode(value) == "${hashTypedData(data)}");`,
+    '    case (#err(reason)) Runtime.trap("Rejected Hyperliquid signing on supported Arbitrum context: " # reason);',
+    '};',
+    `switch (Eip712.hashForChain(${moText(JSON.stringify(data))}, 1)) {`,
+    '    case (#err(_)) {};',
+    '    case (#ok(_)) Runtime.trap("Qualified types bypassed selected-chain binding");',
+    '};',
+  ]),
   `let mail = ${moText(JSON.stringify(mail))};`,
   'switch (Eip712.hashForChain(mail, 1)) {',
   `    case (#ok(value)) assert (Hex.encode(value) == ${moText(vectors[0].digest)});`,

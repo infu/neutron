@@ -1,5 +1,15 @@
 [
   {
+    "name": "fancy-canvas",
+    "version": "2.1.0",
+    "packageJsonSha256": "9b204f723c7986396eb03d091067f6ce82bcd851e43a3498fd0793d3a6d9b227",
+    "material": {
+      "asset": "Fancy-Canvas-2.1.0.LICENSE",
+      "sourcePath": "https://raw.githubusercontent.com/tradingview/fancy-canvas/7ece7601f05b624496f485cee65789ad691427df/LICENSE",
+      "sha256": "52d2ba0c8f8f4532bd524358d679693ff3dd9e40c56fe0c0c63061ed0733aa18"
+    }
+  },
+  {
     "name": "@ethersproject/logger",
     "version": "5.8.0",
     "packageJsonSha256": "f23f4010d33b38e5fa0cf5fd2c33192d863bb7a78e3f72b58bb9ff93d3b47238",

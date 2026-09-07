@@ -203,6 +203,16 @@ module {
         };
         not first;
     };
+    // Some EIP-712 protocols qualify struct names (for example Hyperliquid's
+    // "HyperliquidTransaction:ApproveAgent"). These names are hashed verbatim,
+    // including the separator. Keep ordinary field identifiers unchanged and
+    // reject empty/invalid components rather than accepting encodeType syntax.
+    func typeIdentifier(value : Text) : Bool {
+        for (component in Text.split(value, #char(':'))) {
+            if (not identifier(component)) return false;
+        };
+        value.size() > 0;
+    };
     func decimal(value : Text) : ?Nat {
         if (value.size() == 0) return null;
         var n = 0;
@@ -217,7 +227,7 @@ module {
         var end = 0;
         while (end < chars.size() and chars[end] != '[') end += 1;
         let name = part(chars, 0, end);
-        if (not identifier(name)) return #err("Invalid EIP-712 type: " # spelling);
+        if (not typeIdentifier(name)) return #err("Invalid EIP-712 type: " # spelling);
         var kind : Kind = #structure(name);
         if (name == "address") kind := #address
         else if (name == "bool") kind := #bool
@@ -280,7 +290,7 @@ module {
         let entries = switch (value) { case (#Object(v)) v; case (_) return #err("types must be a JSON object") };
         let output = List.empty<(Text, [Field])>();
         for ((name, definition) in entries.vals()) {
-            if (not identifier(name)) return #err("Invalid struct name: " # name);
+            if (not typeIdentifier(name)) return #err("Invalid struct name: " # name);
             switch (parseKind(name)) {
                 case (#ok(#structure(_))) {};
                 case (_) return #err("Struct name conflicts with an EIP-712 atomic type: " # name);

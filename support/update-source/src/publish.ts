@@ -84,11 +84,6 @@ export async function publishPackageFiles(
   files: readonly string[],
   options: PublishOptions,
 ): Promise<PublicationReceipt> {
-  if (files.length > MAX_PACKAGES_PER_PUBLICATION) {
-    throw new Error(
-      `One publication may contain at most ${MAX_PACKAGES_PER_PUBLICATION} packages`,
-    );
-  }
   const inspected = await inspectPackageFiles(files, {
     ...(options.read ? { read: options.read } : {}),
     ...(options.readSource ? { readSource: options.readSource } : {}),
@@ -107,6 +102,13 @@ export async function publishPackageFiles(
   }
 
   const changed = plans.filter((plan) => !plan.unchanged);
+  // Every catalog entry is inspected and checked above. Only changed releases
+  // contribute operations to the single atomic asset-canister batch.
+  if (changed.length > MAX_PACKAGES_PER_PUBLICATION) {
+    throw new Error(
+      `One publication may contain at most ${MAX_PACKAGES_PER_PUBLICATION} changed packages`,
+    );
+  }
   let committedBatch: bigint | null = null;
   if (changed.length > 0) {
     committedBatch = await commitPublication(changed, options);

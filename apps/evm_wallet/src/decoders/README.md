@@ -18,11 +18,20 @@ Imported explanations carry their pack name/version; Details shows their ID,
 origin, exact document SHA-256 and optional source text. The source is a statement
 by the pack author: Wallet does not fetch it or treat it as verification.
 
-Built-in Uniswap, Curve, Aave and Permit2 adapters retain precedence, followed by
-standard ERC-20 interpretation. If multiple enabled imports match, Wallet shows
+Built-in Uniswap, Curve, Aave, Hyperliquid/CCTP and Permit2 adapters retain
+precedence, followed by standard ERC-20 interpretation. If multiple enabled imports match, Wallet shows
 the generic transaction and an ambiguity notice. Installation order never
 chooses between conflicting definitions. Native transfers remain ordinary
 native transfers.
+
+Hyperliquid master-action reviews recognize the exact EIP-712 signing domain,
+ordered type definitions, and signed message fields. They describe trading-key
+authorization/revocation and USDC withdrawals to Ethereum or Arbitrum. Circle
+deposits require native USDC on Ethereum or Arbitrum, the known TokenMessengerV2,
+both HyperEVM forwarder addresses, and the complete perps-beneficiary hook. The
+beneficiary, fee ceiling, source balance, and CCTP domain are shown independently
+of the requesting app's text. Unsupported domains, schemas, tokens or hooks keep
+the generic review and exact input; decoding does not restrict Wallet signing.
 
 Generic token selector hints remain authoritative over imports. ERC-721
 `approve` and `transferFrom` share ERC-20 selectors. When fungible-token metadata

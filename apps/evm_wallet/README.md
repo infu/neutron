@@ -275,6 +275,13 @@ and lock lineage after release. Installation and publication follow
 [`doc/memory-migrations-and-uninstall.md`](../../doc/memory-migrations-and-uninstall.md).
 The production update source is `233tv-xiaaa-aaaay-aacta-cai`.
 
+Release 120 supports Hyperliquid's qualified EIP-712 struct names, including
+`HyperliquidTransaction:ApproveAgent` and `HyperliquidTransaction:SendToEvmWithData`.
+The exact type names are signed; ordinary field validation and the selected
+signing-chain check remain unchanged. Hyperliquid callers use Arbitrum (42161)
+as the signing context and include only the declared signed message fields.
+The release retains all three version-1 memory roots and their exact lineage.
+
 Release 116 adds the independent `evm_decoders@1` root for imported definitions.
 It keeps the exact released Wallet and evidence roots and initializes the new
 inventory without migrating or rewriting account state or transaction history.

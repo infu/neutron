@@ -1,4 +1,26 @@
-# Uniswap SDK notice provenance
+# Audited npm notice provenance
+
+## Hyperliquid chart dependency
+
+Audited on 2026-09-07 for `lightweight-charts@5.2.1`, which pins
+`fancy-canvas@2.1.0`. The latter declares MIT but its npm archive omits `LICENSE`.
+The upstream `2.1.0` tag resolves to
+`7ece7601f05b624496f485cee65789ad691427df`; the exact
+[upstream license](https://github.com/tradingview/fancy-canvas/blob/7ece7601f05b624496f485cee65789ad691427df/LICENSE)
+is preserved as `Fancy-Canvas-2.1.0.LICENSE`, including TradingView's copyright.
+Its 1,060 bytes have SHA-256
+`52d2ba0c8f8f4532bd524358d679693ff3dd9e40c56fe0c0c63061ed0733aa18`.
+
+The npm registry archive integrity was verified against its published SHA-512
+and SHA-1. The pinned upstream `tools/build-package-json.js` selects distribution
+fields and substitutes the release tag for the source manifest's `0.0.0`
+placeholder. Applying it to tag `2.1.0` reproduces the npm manifest's exact
+536 bytes, SHA-256
+`9b204f723c7986396eb03d091067f6ce82bcd851e43a3498fd0793d3a6d9b227`.
+The audited rule binds that version, manifest and exact license material;
+changed identities need a fresh audit. There is no generic MIT replacement.
+
+## Uniswap SDKs
 
 Audited on 2026-09-06 for sdk-core 7.19.2, v3-sdk 3.31.3 and v4-sdk 2.3.3.
 All three SDKs declare MIT. Exact missing-file decisions are in

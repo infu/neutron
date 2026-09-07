@@ -87,7 +87,7 @@ export function presentOperation(
     unlimitedApproval: false,
     tokenSymbol: null,
   };
-  if (!tx) return base;
+  if (!tx) return decodeBuiltin(operation, assets, network) ?? base;
 
   const nativeValue = `${amount(tx.value)} ${nativeSymbol}`;
   if (operation.intent.replacement) {

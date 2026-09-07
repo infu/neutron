@@ -83,6 +83,9 @@
     },
     {
       "path": "./apps/aave"
+    },
+    {
+      "path": "./apps/hyperliquid"
     }
   ]
 }

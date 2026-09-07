@@ -4,7 +4,6 @@ import { preparePackageInstall } from "neutron-compiler/src/install.ts";
 import { isValidAppId } from "neutron-tools/src/app_ids.ts";
 import { packageArchiveFilename } from "neutron-tools/src/package_archive.ts";
 import { normalizeUpdateSourcePrincipal } from "neutron-tools/src/schema.ts";
-import { MAX_PACKAGES_PER_PUBLICATION } from "./model.ts";
 
 const RELEASE_CATALOG_FORMAT = 1;
 const MAX_RELEASE_CATALOG_BYTES = 256 * 1024;
@@ -61,11 +60,10 @@ export async function loadReleaseCatalog(
   }
   if (
     !Array.isArray(value.packages) ||
-    value.packages.length < 1 ||
-    value.packages.length > MAX_PACKAGES_PER_PUBLICATION
+    value.packages.length < 1
   ) {
     throw new Error(
-      `Release catalog packages must contain 1-${MAX_PACKAGES_PER_PUBLICATION} entries`,
+      "Release catalog packages must contain at least one entry",
     );
   }
 

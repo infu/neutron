@@ -175,6 +175,9 @@ compiler, shared-tools, or provisioner source change.
 - [Aave lending and borrowing](../apps/aave/README.md) documents market positions,
   collateral and debt management through EVM Wallet. The
   [Aave implementation checklist](./todo.aave.md) tracks qualification and release.
+- [Hyperliquid perpetuals](../apps/hyperliquid/README.md) covers browser trading,
+  Agent chart/orderbook tools, and Ethereum/Arbitrum USDC transfers. The
+  [Hyperliquid checklist](../todo.hl.md) records implementation and qualification.
 
 ## Repository Map
 

@@ -473,6 +473,51 @@ test("notice bundle fails closed when a non-Apache package omits its license", a
   }
 });
 
+test("fancy-canvas 2.1.0 retains its exact tagged license and rejects changed package identity", async () => {
+  const fixture = await createBaseFixture();
+  const dependencyRoot = path.join(fixture.repositoryRoot, "node_modules", "fancy-canvas");
+  // Exact published manifest field order and whitespace, reproduced by the
+  // upstream 2.1.0 tag's tools/build-package-json.js (no terminal newline).
+  const manifest = JSON.stringify({
+    name: "fancy-canvas",
+    version: "2.1.0",
+    author: "smakarov@tradingview.com",
+    description: "Functionality on top of HTML canvas element, including support for HiDPI and pixel-perfect rendering",
+    keywords: ["html", "canvas", "graphics", "hidpi", "pixel-perfect"],
+    license: "MIT",
+    exports: { import: "./index.mjs", require: "./index.js" },
+    module: "./index.mjs",
+    type: "commonjs",
+    files: ["**/*.mjs", "**/*.d.mts", "**/*.js", "**/*.d.ts"],
+  }, null, 2);
+  const sourcePath = "https://raw.githubusercontent.com/tradingview/fancy-canvas/7ece7601f05b624496f485cee65789ad691427df/LICENSE";
+  const licenseHash = "52d2ba0c8f8f4532bd524358d679693ff3dd9e40c56fe0c0c63061ed0733aa18";
+  const exactLicense = await fs.readFile(new URL("../assets/legal/Fancy-Canvas-2.1.0.LICENSE", import.meta.url), "utf8");
+  expect(sha256(manifest)).toBe("9b204f723c7986396eb03d091067f6ce82bcd851e43a3498fd0793d3a6d9b227");
+  expect(Buffer.byteLength(manifest)).toBe(536);
+  expect(sha256(exactLicense)).toBe(licenseHash);
+  expect(Buffer.byteLength(exactLicense)).toBe(1060);
+  try {
+    await writePackage(fixture.appRoot, { name: "demo-app", version: "1.0.0", dependencies: { "fancy-canvas": "2.1.0" } });
+    await fs.mkdir(dependencyRoot, { recursive: true });
+    await fs.writeFile(path.join(dependencyRoot, "package.json"), manifest);
+    const buildBundle = () => buildThirdPartyNoticeBundle({ ...fixture, mopsSourcesOutput: "" });
+    const bundle = await buildBundle();
+    const component = bundle.components.find(({ name }) => name === "fancy-canvas");
+    expect(component).toMatchObject({ ecosystem: "npm", name: "fancy-canvas", version: "2.1.0", declaredLicense: "MIT", selectedLicense: "MIT" });
+    expect(component?.materials).toHaveLength(1);
+    expect(component?.materials[0]).toMatchObject({ sourcePath, sha256: licenseHash, bytes: 1060 });
+    expect(new TextDecoder().decode(bundle.files[THIRD_PARTY_NOTICE_MATERIAL_BUNDLE_PATH])).toContain(exactLicense);
+
+    await fs.writeFile(path.join(dependencyRoot, "package.json"), JSON.stringify({ ...JSON.parse(manifest), description: "changed identity" }, null, 2));
+    await expect(buildBundle()).rejects.toThrow("fancy-canvas@2.1.0 needs a fresh missing-license audit: package.json changed");
+    await fs.writeFile(path.join(dependencyRoot, "package.json"), JSON.stringify({ ...JSON.parse(manifest), version: "2.1.1" }, null, 2));
+    await expect(buildBundle()).rejects.toThrow("fancy-canvas has no installed LICENSE or COPYING file for MIT");
+  } finally {
+    await fs.rm(fixture.repositoryRoot, { recursive: true, force: true });
+  }
+});
+
 test("notice bundle rejects an unaudited or copyleft dependency expression", async () => {
   const fixture = await createBaseFixture();
   try {

@@ -266,4 +266,22 @@ describe("update package inspection", () => {
       `Publication exceeds the ${MAX_PUBLICATION_BYTES}-byte upload limit`,
     );
   });
+
+  test("the complete larger inventory still counts against the existing aggregate byte bound", async () => {
+    const files = Array.from({ length: 21 }, (_, index) => `app_${index}.neutron`);
+    const bytes = new Uint8Array([1]);
+    // Avoid allocating 128 MiB in a unit test; inspection checks byteLength
+    // before invoking the metadata inspector for each candidate.
+    Object.defineProperty(bytes, "byteLength", { value: Math.floor(MAX_PUBLICATION_BYTES / files.length) + 1 });
+    let reads = 0;
+    await expect(inspectPackageFiles(files, {
+      read: async () => { reads += 1; return bytes; },
+      inspect: file => {
+        const id = file.replace(/\.neutron$/, "");
+        const record = parseRepositoryReleaseRecord({ protocol: NEUTRON_REPOSITORY_PROTOCOL, id, version: 100, sha256: "a".repeat(64), size: 1 });
+        return { record, releaseBytes: serializeRepositoryReleaseRecord(record), packagePath: repositoryPackagePath(record.sha256), releasePath: repositoryReleasePath(id) };
+      },
+    })).rejects.toThrow(`Publication exceeds the ${MAX_PUBLICATION_BYTES}-byte upload limit`);
+    expect(reads).toBe(files.length);
+  });
 });

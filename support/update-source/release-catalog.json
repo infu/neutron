@@ -81,6 +81,10 @@
     {
       "id": "aave",
       "directory": "../../apps/aave"
+    },
+    {
+      "id": "hyperliquid",
+      "directory": "../../apps/hyperliquid"
     }
   ]
 }

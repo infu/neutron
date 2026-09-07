@@ -5,6 +5,7 @@ import { presentUniswapV4Swap } from "./adapters/v4_swap_presentation.ts";
 import { presentUniswapLiquidity, presentPermit2Approval } from "./adapters/liquidity_presentation.ts";
 import { presentCurve } from "./adapters/curve_presentation.ts";
 import { presentAave } from "./adapters/aave_presentation.ts";
+import { presentHyperliquidAuthorization, presentHyperliquidDeposit } from "./adapters/hyperliquid_presentation.ts";
 import { decodeDescriptorPack, descriptorTokens, type DecoderPack } from "./descriptor.ts";
 
 /** Pure adapters interpret exact bytes. They receive no signing or network
@@ -24,6 +25,8 @@ export const builtinDecoders: readonly TransactionDecoder[] = [
   { id: "permit2", name: "Permit2", version: "1", decode: presentPermit2Approval },
   { id: "curve", name: "Curve and pool interfaces", version: "1", decode: presentCurve },
   { id: "aave-v3", name: "Aave V3", version: "1", decode: presentAave },
+  { id: "hyperliquid-authorization", name: "Hyperliquid authorization", version: "1", decode: presentHyperliquidAuthorization },
+  { id: "hyperliquid-cctp", name: "Circle CCTP to Hyperliquid", version: "1", decode: presentHyperliquidDeposit },
 ];
 
 export function decodeBuiltin(operation: Operation, assets: readonly Asset[], network?: Network): OperationPresentation | null {
