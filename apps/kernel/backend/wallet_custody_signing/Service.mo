@@ -13,15 +13,16 @@ module {
         mem : Types.Memory,
         adapter : SigningTypes.Adapter,
         canisterPrincipal : Principal,
-        installEpoch : Nat64,
         scopeActive : CapabilityTypes.AppScope -> Bool,
         deploymentCommitted : () -> Bool,
         registry : CapabilityTypes.RuntimeRegistry,
         outgoingCycles : AppUsageTypes.OutgoingCycleAccounting,
         resources : Signing.Resources,
     ) {
+        // Custody keys use the app ID and slot in this canister. Capabilities,
+        // cached state and in-flight authorization still use the current scope.
         let engine = Signing.Engine(
-            mem, adapter, canisterPrincipal, installEpoch, scopeActive,
+            mem, adapter, canisterPrincipal, 0, scopeActive,
             deploymentCommitted, registry, outgoingCycles, #custody, resources,
         );
 

@@ -47,7 +47,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v343 NPL package metadata", () => {
+describe("Kernel v346 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -108,7 +108,7 @@ describe("Kernel v343 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(344);
+    expect(packagedManifest.version).toBe(346);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -129,7 +129,7 @@ describe("Kernel v343 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 344");
+    ).toThrow("restricted to Kernel version 346");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -344,7 +344,7 @@ describe("Kernel v343 NPL package metadata", () => {
       }),
     );
 
-    await installKernelInstalledArtifactInventory(root, 344);
+    await installKernelInstalledArtifactInventory(root, 346);
     const inventoryPath = path.join(
       root,
       KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
@@ -357,7 +357,7 @@ describe("Kernel v343 NPL package metadata", () => {
       parsed.artifacts.map((file) => [file.package_path, file] as const),
     );
 
-    expect(parsed.package).toEqual({ id: "kernel", version: 344 });
+    expect(parsed.package).toEqual({ id: "kernel", version: 346 });
     expect(byPackagePath.has("neutron.did")).toBe(false);
     expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
     expect(
@@ -382,7 +382,7 @@ describe("Kernel v343 NPL package metadata", () => {
     }
 
     await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
-    await installKernelInstalledArtifactInventory(root, 344);
+    await installKernelInstalledArtifactInventory(root, 346);
     expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
       firstBytes,
     );
@@ -428,6 +428,8 @@ describe("Kernel v343 NPL package metadata", () => {
       "doc/evm-wallet.md",
       "doc/evm-wallet-research.md",
       "doc/todo.evm-wallet.md",
+      "doc/todo.wallet-fresh-start.md",
+      "packages/neutron-compiler/test/fresh_custody_cutover.pocketic.test.ts",
     ]) {
       expect(sourcePaths).toContain(required);
     }

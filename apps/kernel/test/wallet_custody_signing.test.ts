@@ -25,7 +25,7 @@ test("custody adapter fixture independently verifies the exact digest and compre
   expect(secp256k1.verify(signatureBytes, createHash("sha256").update(digest).digest(), publicKeyBytes)).toBe(false);
 });
 
-test("custody namespace vector independently binds canister, installation, app, slot and authority", async () => {
+test("fresh custody account deliberately differs from the released installation-scoped namespace", async () => {
   const namespace = hashParts([
     text("neutron.wallet-custody-signing.key.v1"), u64(3n),
     Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai").toUint8Array(),
@@ -33,5 +33,25 @@ test("custody namespace vector independently binds canister, installation, app, 
     text("key_1"), text("neutron_wallet_custody_digest_v1"),
   ]);
   const source = await readFile(new URL("./motoko/wallet_custody_signing_service_test.mo", import.meta.url), "utf8");
-  expect(source).toContain(`Namespace.hex(namespace.derivation_path[0]) == "${namespace}"`);
+  expect(source).toContain(`let legacyNamespace = "${namespace}"`);
+  const durable = hashParts([
+    text("neutron.wallet-custody-signing.key.v2"),
+    Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai").toUint8Array(),
+    text("evm_wallet"), text("main"), text("ecdsa_secp256k1"),
+    text("key_1"), text("neutron_wallet_custody_digest_v2"),
+  ]);
+  expect(durable).not.toBe(namespace);
+  expect(source).toContain(`Namespace.hex(namespace.derivation_path[0]) == "${durable}"`);
+});
+
+test("durable custody namespace vector independently binds canister, app and slot without installation identity", async () => {
+  const namespace = hashParts([
+    text("neutron.wallet-custody-signing.key.v2"),
+    Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai").toUint8Array(),
+    text("other_wallet"), text("main"), text("ecdsa_secp256k1"),
+    text("key_1"), text("neutron_wallet_custody_digest_v2"),
+  ]);
+  expect(namespace).toBe("02ca7ab65b14b8e8f69ff51c4d4ebf3e2f2ee7f273c10b275ae4bbd2ba6b571b");
+  const source = await readFile(new URL("./motoko/wallet_custody_signing_service_test.mo", import.meta.url), "utf8");
+  expect(source).toContain(`Namespace.hex(durable.derivation_path[0]) == "${namespace}"`);
 });

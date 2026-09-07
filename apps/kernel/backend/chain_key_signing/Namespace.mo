@@ -87,32 +87,28 @@ module {
         });
     };
 
-    // Wallet custody is a distinct authority and key identity. Nothing in the
-    // released assertion build() path above changes, including its byte format.
-    public func buildCustody(input : Input) : BuildResult {
+    // Custody is a distinct authority with a key bound to the app ID and slot
+    // in this canister. Removing or reinstalling an app changes its runtime
+    // authority without changing this key. Assertion build() remains unchanged.
+    public func buildDurableCustody(input : Input) : BuildResult {
         if (
             input.algorithm != #ecdsa_secp256k1 or
-            input.app_scope.installation_uid == 0 or
             not validAppId(input.app_scope.app_id) or
             not validSlotId(input.slot_id) or
             not validKeyName(input.key_name)
         ) return #err(#invalid_input);
         let namespace = hashParts([
-            "neutron.wallet-custody-signing.key.v1",
-            u64(input.install_epoch),
+            "neutron.wallet-custody-signing.key.v2",
             Principal.toBlob(input.canister),
             Text.encodeUtf8(input.app_scope.app_id),
-            u64(input.app_scope.installation_uid),
             Text.encodeUtf8(input.slot_id),
             Text.encodeUtf8(algorithmText(input.algorithm)),
             Text.encodeUtf8(input.key_name),
-            "neutron_wallet_custody_digest_v1",
+            "neutron_wallet_custody_digest_v2",
         ]);
         #ok({
-            namespace_version = VERSION;
+            namespace_version = 2;
             derivation_path = [namespace];
-            // Private engine compatibility only; never applied to the digest
-            // or exposed as a custody message-domain promise.
             signing_domain = namespace;
             identity_fingerprint = hex(namespace);
         });

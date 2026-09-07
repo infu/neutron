@@ -10,6 +10,7 @@ import {
 import {
   callTool,
   copyToClipboard,
+  describeApp,
   exposeTool,
   loadTileContext,
   onAppStateChange,
@@ -148,7 +149,23 @@ const tabs = [
   "Settings",
 ] as const;
 type Tab = (typeof tabs)[number];
+type CustodyStatus = "checking" | "durable" | "legacy" | "reset-required" | "unknown";
 export function EvmWalletApp() {
+  const [custodyKernelVersion, setCustodyKernelVersion] = useState<number | null | undefined>(undefined);
+  const custodyCheckRevision = useRef(0);
+  const refreshCustody = useCallback(async () => {
+    const revision = ++custodyCheckRevision.current;
+    let version: number | null = null;
+    try {
+      const kernel = await describeApp("kernel");
+      if (kernel && typeof kernel === "object" && !Array.isArray(kernel) &&
+          kernel.id === "kernel" && typeof kernel.version === "number" &&
+          Number.isSafeInteger(kernel.version) && kernel.version > 0) {
+        version = kernel.version;
+      }
+    } catch { /* Version discovery failure must not promise account recovery. */ }
+    if (custodyCheckRevision.current === revision) setCustodyKernelVersion(version);
+  }, []);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [balance, setBalance] = useState<Balance | null>(null),
     [history, setHistory] = useState<Operation[]>([]),
@@ -170,6 +187,22 @@ export function EvmWalletApp() {
   reviewActiveRef.current = reviewActive;
   const account = snapshot?.accounts[0],
     network = snapshot?.networks.find((n) => n.chainId === chainId);
+  const custodyStatus: CustodyStatus = custodyKernelVersion === undefined ? "checking"
+    : custodyKernelVersion === null ? "unknown"
+    : custodyKernelVersion < 346 ? "legacy"
+    : !account ? "checking"
+    : account.namespaceVersion === "2" ? "durable"
+    : account.namespaceVersion !== "1" ? "unknown"
+    : "reset-required";
+  const custodyLifecycle = custodyStatus === "durable"
+    ? "Your account belongs to EVM Wallet in this Neutron. Reinstalling the same app ID (evm_wallet) and account slot (main) restores the same address after you grant custody access. Compatible upgrades preserve your account."
+    : custodyStatus === "legacy"
+      ? "This account uses the older custody system. To start with the new stable account, fully uninstall EVM Wallet before installing Kernel 0.3.46, then reinstall EVM Wallet. This deliberately abandons the legacy account; it does not transfer its assets or permissions."
+      : custodyStatus === "reset-required"
+        ? "This Wallet still has an old account saved. Kernel 0.3.46 uses a different account and cannot sign for this saved address. Fully uninstall and reinstall EVM Wallet to start with the new stable account. The old account's assets and permissions do not move."
+        : custodyStatus === "unknown"
+          ? "Could not verify this account's custody lifecycle. Check the installed Kernel version and account before uninstalling or upgrading; recovery of this saved address has not been verified."
+          : "Checking the account and this Neutron's Kernel version before showing account recovery advice.";
   const { priceFor } = useEvmPrices([
     { chainId, address: null },
     ...(snapshot?.assets ?? []).filter((asset) => asset.chainId === chainId),
@@ -243,14 +276,18 @@ export function EvmWalletApp() {
     return work;
   }, [account?.address, balanceKey, chainId, balanceTokenKey]);
   useEffect(() => {
+    void refreshCustody();
+  }, [tab, refreshCustody]);
+  useEffect(() => {
     void load().catch((e) => setError(errorMessage(e)));
     return onAppStateChange("evm_wallet", (event) => {
       if (event.topic === "evm_wallet") {
+        void refreshCustody();
         void load().catch((e) => setError(errorMessage(e)));
         if (document.visibilityState !== "hidden" && !reviewActiveRef.current) void refreshBalance();
       }
     });
-  }, [load, refreshBalance]);
+  }, [load, refreshBalance, refreshCustody]);
   useEffect(() => {
     setBalance(null);
     setBalanceError(null);
@@ -272,7 +309,7 @@ export function EvmWalletApp() {
     setError(null);
     setBackgroundError(null);
     try {
-      await Promise.all([load(), refreshBalance()]);
+      await Promise.all([load(), refreshBalance(), refreshCustody()]);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -375,6 +412,11 @@ export function EvmWalletApp() {
       {error && (
         <p role="alert" className="evm-error">
           {error}
+        </p>
+      )}
+      {custodyStatus === "reset-required" && (
+        <p role="alert" className="evm-error" data-testid="evm-custody-reset-required">
+          {custodyLifecycle}
         </p>
       )}
       <section className="evm-account">
@@ -545,15 +587,13 @@ export function EvmWalletApp() {
           <DecoderSettings />
           <section className="evm-card">
             <h2 className="evm-card-title">Account and network</h2>
-            <p className="evm-muted">
-              {snapshot?.lifecycle ??
-                "Account lifecycle information is loading."}
+            <p className={custodyStatus === "durable" ? "evm-muted" : "evm-notice"} data-testid="evm-custody-lifecycle">
+              {custodyLifecycle}
             </p>
             <p className="evm-notice">
-              Keep EVM Wallet installed while the address holds assets or
-              permissions. Compatible upgrades preserve the key. Uninstalling
-              and reinstalling rotates the installation namespace and address.
-              There is no private-key or seed export.
+              Uninstalling removes wallet history, settings and pending
+              transaction records. Account access depends on keeping this
+              Neutron's state intact. There is no private-key or seed export.
             </p>
             <p className="evm-muted">{network?.finalityDescription}</p>
             <p className="evm-muted">

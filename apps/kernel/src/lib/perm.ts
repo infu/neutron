@@ -57,10 +57,10 @@ export const FRONTEND_TOOLS_DISCLOSURE =
   "Installation approves calling these exact tools in the named installed apps without another connection prompt. Private and root-agent-only tools remain restricted. Each provider still controls transaction confirmation and other action approvals, including any approval delegated to an authorized root agent.";
 
 export const WALLET_CUSTODY_SIGNING_DISCLOSURE =
-  "Trust this installed app to sign arbitrary exact 32-byte digests that can authorize asset transfers, messages, or other actions. The app decides what to sign; the Kernel does not validate transaction meaning or ask for each signature. Keys are isolated by app installation and slot, so other apps cannot use them. Each signature spends Neutron cycles.";
+  "Trust this installed app to sign arbitrary exact 32-byte digests that can authorize asset transfers, messages, or other actions. The app decides what to sign; the Kernel does not validate transaction meaning or ask for each signature. Keys are isolated by this Neutron, app ID and slot, so apps with different IDs cannot use them. Each signature spends Neutron cycles.";
 
 export const WALLET_CUSTODY_SIGNING_LIFECYCLE_DISCLOSURE =
-  "Compatible app upgrades preserve these keys. Disabling a slot retains its key. Removing a slot deletes its cached public key; adding the same slot back within the same installation derives the same key. Uninstalling and reinstalling creates new keys and does not restore access to assets at the old addresses.";
+  "Kernel 0.3.46 uses the stable app-ID account and does not retain legacy accounts from older Kernels. After that fresh start, compatible app upgrades preserve these keys, and reinstalling the same app ID and slot in this Neutron restores them after you grant custody access. Disabling or removing a slot stops signing. Only grant access to a package you trust to control these accounts. Uninstalling removes app data. There is no private-key or seed export.";
 
 export const DEDICATED_RESIDENT_ORIGIN_DISCLOSURE =
   "isolated resident origin with ephemeral credential partition";

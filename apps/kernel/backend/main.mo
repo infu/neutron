@@ -1109,7 +1109,6 @@ module {
             mem.wallet_custody_signing,
             ChainKeySigningAdapter.management(),
             canisterPrincipal,
-            InstallMemory.installEpoch(mem.install),
             func(scope) {
                 InstallMemory.scopeActive(mem.install, runningDeploymentId, scope)
             },
