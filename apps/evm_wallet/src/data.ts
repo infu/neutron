@@ -4,6 +4,7 @@ import {
   formatUnits,
   parseUnits,
   decodeFunctionData,
+  encodeFunctionData,
   erc20Abi,
 } from "viem";
 import type { SelfCallObject } from "neutron-tools/app";
@@ -470,6 +471,9 @@ export function decodeKnownCall(
 ): { name: string; details: Array<[string, string]> } | null {
   try {
     const d = decodeFunctionData({ abi: erc20Abi, data: hex(data) });
+    // A selector alone is not a complete interpretation. Keep trailing bytes,
+    // invalid padding and other noncanonical calls in the generic review.
+    if (encodeFunctionData({ abi: erc20Abi, ...d }).toLowerCase() !== data.toLowerCase()) return null;
     if (d.functionName === "approve")
       return {
         name: "ERC-20 approval",

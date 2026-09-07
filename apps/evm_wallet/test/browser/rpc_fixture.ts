@@ -1,10 +1,12 @@
 /** Deterministic HTTP server substitute for the actual browser RPC transport.
  * The fixture never contacts a chain and has no signing key or real funds. */
-import { keccak256, parseTransaction, type Hex } from "viem";
+import { encodeAbiParameters, keccak256, parseTransaction, type Hex } from "viem";
 
 const calls: Array<{ method: string; params: unknown[]; url: string }> = [];
 const gates = new Map<string, { wait: Promise<void>; release: () => void }>();
 const transactions = new Map<string, Record<string, unknown>>();
+const allowanceResults = new Map<string, string | { error: string }>();
+const tokenMetadata = new Map<string, { decimals: number; symbol: string }>();
 const originalHash = `0x${"ab".repeat(32)}`;
 transactions.set(originalHash, { hash: originalHash, from: "0x2222222222222222222222222222222222222222", to: "0x4444444444444444444444444444444444444444", nonce: "0x11", blockHash: null, blockNumber: null, input: "0x", value: "0x38d7ea4c68000" });
 const blockNumber = "0x16cbeb2";
@@ -28,7 +30,17 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     case "eth_estimateGas": result = "0xfde8"; break;
     case "eth_call": {
       const data = String((params[0] as Record<string, unknown>).data ?? "0x");
-      result = data.startsWith("0x70a08231") ? `0x${100_000_000n.toString(16).padStart(64, "0")}`
+      const to = String((params[0] as Record<string, unknown>).to ?? "").toLowerCase();
+      const allowance = allowanceResults.get(to), metadata = tokenMetadata.get(to);
+      if (data.startsWith("0xdd62ed3e") && allowance !== undefined) {
+        if (typeof allowance !== "string") return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code: -32000, message: allowance.error } }), { headers: { "Content-Type": "application/json" } });
+        result = allowance; break;
+      }
+      result = metadata && data === "0x313ce567" ? encodeAbiParameters([{ type: "uint8" }], [metadata.decimals])
+        : metadata && data === "0x95d89b41" ? encodeAbiParameters([{ type: "string" }], [metadata.symbol])
+        : to === "0x7777777777777777777777777777777777777777" && data === "0x313ce567" ? encodeAbiParameters([{ type: "uint8" }], [8])
+        : to === "0x7777777777777777777777777777777777777777" && data === "0x95d89b41" ? encodeAbiParameters([{ type: "string" }], ["NEW"])
+        : data.startsWith("0x70a08231") ? `0x${100_000_000n.toString(16).padStart(64, "0")}`
         : data.startsWith("0xdd62ed3e") ? `0x${"0".repeat(64)}` : "0x";
       break;
     }
@@ -46,6 +58,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 }) as typeof globalThis.fetch;
 (window as any).__evmRpcFixture = {
   calls,
+  setAllowanceResult(to: string, result: string | { error: string }) { allowanceResults.set(to.toLowerCase(), result); },
+  setTokenMetadata(to: string, decimals: number, symbol: string) { tokenMetadata.set(to.toLowerCase(), { decimals, symbol }); },
   hold(method: string) {
     if (gates.has(method)) throw new Error(`Already held RPC: ${method}`);
     let release!: () => void;

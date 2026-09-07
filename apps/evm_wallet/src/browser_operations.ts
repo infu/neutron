@@ -44,7 +44,10 @@ export async function prepareBrowserOperation(kernel: OperationKernel, identity:
   const operationIntent = intent.operation as SelfCallObject;
   const isTransaction = !!(operationIntent.transaction || operationIntent.replacement);
   const emptyObservation = { block_number: "0", balance: "0", pending_nonce: "0", mined_nonce: "0", gas_price: "0", max_priority_fee_per_gas: "0", base_fee_per_gas: "0" };
-  if (!isTransaction || existing) {
+  // A preparing transaction needs real observations before the backend can
+  // refresh its unsigned candidate. Zero observations are only used when no
+  // transaction construction is needed; they must not replace live fees.
+  if (!isTransaction || (existing && existing.status !== "preparing")) {
     const retained = parseOperation(await kernel.updateSelf("evm_wallet_prepare_browser_v1", [{ request, observation: emptyObservation }], 120));
     if (retained.status !== "preparing" || !isTransaction) return retained;
   }

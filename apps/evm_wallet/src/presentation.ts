@@ -1,11 +1,13 @@
 import { amount, decodeKnownCall, type Asset, type Network, type Operation } from "./data";
-import { presentUniswapSwap } from "./swap_presentation.ts";
-import { presentUniswapV4Swap } from "./v4_swap_presentation.ts";
-import { presentPermit2Approval, presentUniswapLiquidity } from "./liquidity_presentation.ts";
-import { presentCurve } from "./curve_presentation.ts";
+import { decodeBuiltin, decodeImported, type ActiveDecoderPack } from "./decoders/registry.ts";
 
 export type PresentationField = { label: string; value: string };
 export type OperationPresentation = {
+  decoder?: { id: string; name: string; version: string; kind: "built-in" | "imported"; sha256?: string; source?: string };
+  decoderWarning?: string;
+  tokenAddresses?: string[];
+  amountAtoms?: string;
+  amountDecimals?: number;
   title: string;
   amount: string | null;
   amountLabel: string;
@@ -70,6 +72,7 @@ export function presentOperation(
   operation: Operation,
   assets: readonly Asset[] = [],
   network?: Network,
+  packs: readonly ActiveDecoderPack[] = [],
 ): OperationPresentation {
   const tx = operation.preparedTransaction ?? operation.intent.transaction;
   const nativeSymbol = network?.nativeSymbol ?? "ETH";
@@ -89,7 +92,7 @@ export function presentOperation(
   const nativeValue = `${amount(tx.value)} ${nativeSymbol}`;
   if (operation.intent.replacement) {
     const cancel = operation.intent.replacement.cancel;
-    const replacement = presentOperation({ ...operation, intent: { transaction: tx } }, assets, network);
+    const replacement = presentOperation({ ...operation, intent: { transaction: tx } }, assets, network, packs);
     return {
       ...replacement,
       title: cancel ? "Cancel transaction" : "Speed up transaction",
@@ -101,12 +104,8 @@ export function presentOperation(
     };
   }
 
-  const swap = presentUniswapSwap(operation, assets) ?? presentUniswapV4Swap(operation, assets);
-  if (swap) return swap;
-  const liquidity = presentUniswapLiquidity(operation, assets) ?? presentPermit2Approval(operation, assets);
-  if (liquidity) return liquidity;
-  const curve = presentCurve(operation, assets);
-  if (curve) return curve;
+  const builtin = decodeBuiltin(operation, assets, network);
+  if (builtin) return builtin;
   const decoded = decodeKnownCall(tx.data);
   const token = assets.find((asset) => asset.chainId === operation.chainId && asset.address.toLowerCase() === tx.to.toLowerCase());
   if (decoded) {
@@ -123,6 +122,24 @@ export function presentOperation(
     for (const label of ["Token owner", "Recipient", "Spender"]) {
       const value = details.get(label);
       if (value) parties.push({ label, value });
+    }
+    // ERC-721 approve/transferFrom share these exact selectors and ABI types.
+    // Without fungible-token metadata, zero may be token ID 0, not a revocation.
+    if (!token && (approval || details.has("Token owner"))) {
+      return {
+        ...base,
+        title: approval ? "Approve token permission" : "Transfer token",
+        amount: atomic,
+        amountLabel: approval ? "Allowance or token ID" : "Amount or token ID",
+        description: approval
+          ? "Authorize the listed address. This shared selector can set an ERC-20 allowance or approve an ERC-721 token ID; the token interface is not identified."
+          : "Transfer from the listed owner to the recipient. This shared selector can transfer an ERC-20 amount or an ERC-721 token ID; the token interface is not identified.",
+        ...(unlimitedApproval ? { decoderWarning: "If this is an ERC-20 token, this grants an unlimited allowance, including tokens you receive later." } : {}),
+        parties,
+        contract: tx.to,
+        nativeValue: tx.value === "0" ? null : nativeValue,
+        tokenAddress: tx.to,
+      };
     }
     return {
       ...base,
@@ -146,12 +163,16 @@ export function presentOperation(
       unlimitedApproval,
       tokenSymbol: token?.symbol ?? null,
       tokenAddress: tx.to,
+      amountAtoms: atomic,
     };
   }
 
+  const imported = decodeImported(operation, assets, network, packs);
+  if (imported.presentation) return imported.presentation;
   const nativeTransfer = tx.data === "0x";
   return {
     ...base,
+    ...(imported.warning ? { decoderWarning: imported.warning } : {}),
     title: nativeTransfer ? `Send ${nativeSymbol}` : "Contract interaction",
     ...(nativeTransfer ? { tokenAddress: null } : {}),
     amount: nativeTransfer || tx.value !== "0" ? nativeValue : null,

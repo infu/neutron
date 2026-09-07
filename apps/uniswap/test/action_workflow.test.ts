@@ -112,6 +112,24 @@ test("the complete action runs every approval in order and verifies the final tr
   expect(await f.run()).toEqual(result); expect(f.sends).toHaveLength(3);
 });
 
+test("resuming an included action rechecks a reorganized final receipt without sending again", async () => {
+  const f = fixture(0);
+  expect((await f.run()).state).toBe("complete");
+  const request = f.sends[0]!;
+  // The receipt was included, not finalized. The Wallet and its independent
+  // transaction read now report that the same transaction is pending again.
+  f.operations.set(request.requestId, f.operation(request, "submitted"));
+  f.transactions.set(f.hash(request), f.evidence(request));
+  const cancel = new AbortController();
+  f.waitWith(async () => { cancel.abort(new Error("Waiting for reinclusion")); cancel.signal.throwIfAborted(); });
+  await expect(f.run({ signal: cancel.signal })).rejects.toThrow("Waiting for reinclusion");
+  const pending = actionResult((await f.store.get(envelope.operationId))!);
+  expect(pending.state).toBe("pending"); expect(pending.steps[0]?.status).toBe("submitted");
+  expect(f.sends).toHaveLength(1);
+  await f.confirm();
+  expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(1);
+});
+
 test("a crash after persisting requested but before send resumes the same exact Wallet request", async () => {
   const f = fixture(0), abort = new AbortController();
   f.writeWith((row) => { if (row.phase === "step_0_requested") abort.abort(new Error("Page closed")); });

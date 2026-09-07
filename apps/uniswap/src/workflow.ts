@@ -30,6 +30,7 @@ function waitForReceipt(signal?: AbortSignal): Promise<void> {
 export async function continueSwap(wallet: EvmWalletClient, store: Store, initial: SwapRecord, options: Options = {}): Promise<SwapOutcome> {
   const reconcile = options.reconcile ?? reconcileStep, execute = options.execute ?? executeStep;
   const wait = options.wait ?? waitForReceipt;
+  const callOptions = options.signal ? { signal: options.signal } : undefined;
   let record = await store.get(initial.id) ?? initial;
   if (savedIntent(record).executionMode !== "human") throw new Error("This swap is managed by the agent that created it.");
   const requested = new Set<"approval" | "swap">();
@@ -38,7 +39,7 @@ export async function continueSwap(wallet: EvmWalletClient, store: Store, initia
   abort(options.signal);
   // A swap may already have been submitted even when its last reply was lost.
   progress("swap", "checking", "Checking your saved swap…");
-  update(await reconcile(wallet, store, record, "swap"));
+  update(await reconcile(wallet, store, record, "swap", callOptions));
   for (;;) {
     abort(options.signal);
     const swap = effectiveOperation(record, "swap");
@@ -49,7 +50,7 @@ export async function continueSwap(wallet: EvmWalletClient, store: Store, initia
     // Existing submitted swaps take precedence over approval state and expiry.
     const stage = swap && !["preparing", "prepared"].includes(swap.status) ? "swap" : approvalConfirmed(record) ? "swap" : "approval";
     progress(stage, "checking", stage === "approval" ? "Checking token approval…" : "Checking your swap…");
-    update(await reconcile(wallet, store, record, stage));
+    update(await reconcile(wallet, store, record, stage, callOptions));
     abort(options.signal);
     const operation = effectiveOperation(record, stage);
     if (operation?.status === "confirmed" && operation.receipt?.status === "success") {
@@ -64,7 +65,7 @@ export async function continueSwap(wallet: EvmWalletClient, store: Store, initia
       if (requested.has(stage)) return { record, state: "review" };
       requested.add(stage);
       progress(stage, "review", stage === "approval" ? "Approve token access in EVM Wallet" : "Confirm your swap in EVM Wallet");
-      update(await execute(wallet, store, record, stage));
+      update(await execute(wallet, store, record, stage, callOptions));
       continue;
     }
     progress(stage, "pending", stage === "approval" ? "Waiting for token approval. Swap confirmation opens next." : "Swap submitted. Waiting for confirmation…");

@@ -1,6 +1,6 @@
 import { decodeFunctionData, encodeFunctionData, getAddress, parseAbi, type Abi, type Hex } from "viem";
-import { amount, type Asset, type Operation } from "./data.ts";
-import type { OperationPresentation, PresentationField } from "./presentation.ts";
+import { amount, type Asset, type Operation } from "../../data.ts";
+import type { OperationPresentation, PresentationField } from "../../presentation.ts";
 
 // Official Curve Router deployments. Recognition is bound to both network and
 // destination, independently of any title supplied by a requesting app.
@@ -35,6 +35,7 @@ export function presentCurve(operation: Operation, assets: readonly Asset[]): Op
       return { ...base, title: "Swap through Curve", amountLabel: "You pay", amount: show(inputAmount, tokenIn), nativeValue: null,
         description: "Exchange through Curve Router. The minimum received is enforced onchain. This transaction has no onchain expiry.",
         tokenSymbol: nativeIn ? "ETH" : inputToken?.symbol ?? null, tokenAddress: nativeIn ? null : tokenIn,
+        amountAtoms: inputAmount.toString(), tokenAddresses: [tokenIn, tokenOut],
         parties: [{ label: "Minimum received", value: show(minimum, tokenOut) }, { label: "Recipient", value: getAddress(recipient) }],
         advancedDetails: [
           { label: "Input asset", value: tokenIn }, { label: "Output asset", value: tokenOut },

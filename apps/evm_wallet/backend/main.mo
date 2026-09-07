@@ -12,6 +12,8 @@ import Config "./Config";
 import Journal "./Journal";
 import Memory "./memory/evm_wallet/v1";
 import EvidenceMemory "./memory/evm_evidence/v1";
+import DecoderMemory "./memory/evm_decoders/v1";
+import DecoderPacks "./DecoderPacks";
 import TokenEvidence "./token/Evidence";
 import ReplacementProof "./ReplacementProof";
 import BrowserObservations "./BrowserObservations";
@@ -133,6 +135,17 @@ module {
   public type WalletIdentityRequest = { identity : WalletIdentity };
   public type WalletHistoryRequest = { offset : Nat; limit : Nat };
   public type WalletHistory = { operations : [WalletOperation]; total : Nat };
+  public type WalletDecoderPack = {
+    id : Text; version : Text; name : Text; document_json : Text;
+    sha256 : Text; enabled : Bool; created_at : Int; updated_at : Int;
+  };
+  public type WalletDecoderSetRequest = {
+    id : Text; version : Text; name : Text; document_json : Text;
+    sha256 : Text; enabled : Bool;
+  };
+  public type WalletDecoderPacks = { packs : [WalletDecoderPack] };
+  public type WalletDecoderPacksResult = { #ok : WalletDecoderPacks; #err : Text };
+  public type WalletDecoderPackResult = { #ok : WalletDecoderPack; #err : Text };
   public type WalletBalanceRequest = { account_id : Text; chain_id : Nat; tokens : [Text] };
   public type WalletTokenBalance = {
     address : Text; balance : ?Text; decimals : ?Nat; symbol : ?Text; error : ?Text;
@@ -183,7 +196,7 @@ module {
   // PUBLIC WIRE TYPES END
 
   public type AppBackendEnvironment = {
-    stable_memory : { evm_wallet : Memory.Mem; evm_evidence : EvidenceMemory.Mem };
+    stable_memory : { evm_wallet : Memory.Mem; evm_evidence : EvidenceMemory.Mem; evm_decoders : DecoderMemory.Mem };
     capabilities : {
       wallet_custody_signing : Caps.WalletCustodySigningV1;
     };
@@ -192,6 +205,7 @@ module {
     let mem = env.stable_memory.evm_wallet;
     let journal = Journal.Store(mem);
     let evidence = TokenEvidence.Service(env.stable_memory.evm_evidence);
+    let decoders = DecoderPacks.Store(env.stable_memory.evm_decoders);
     let signing = env.capabilities.wallet_custody_signing;
     // Only transient invocation locks live outside managed memory. Persisted
     // signing/submission phases are reconciled, never repeated after reload.
@@ -206,6 +220,15 @@ module {
     };
     public func /*query*/evm_wallet_history_v1(request : WalletHistoryRequest) : WalletHistoryResult {
       #ok(journal.history(request));
+    };
+    public func /*query*/evm_wallet_decoder_packs_v1(()) : WalletDecoderPacksResult {
+      #ok(decoders.list());
+    };
+    public func /*update*/evm_wallet_decoder_set_v1(request : WalletDecoderSetRequest) : WalletDecoderPackResult {
+      decoders.set(request, Time.now());
+    };
+    public func /*update*/evm_wallet_decoder_remove_v1(id : Text) : WalletBoolResult {
+      #ok(decoders.remove(id));
     };
     public func /*update*/evm_wallet_asset_set_v1(asset : WalletAsset) : WalletSnapshotResult {
       if (not supported(asset.chain_id)) return #err("Unsupported network");
@@ -268,7 +291,14 @@ module {
       let a = switch (await* account(request.intent.account_id)) { case (#err(e)) return #err(e); case (#ok(value)) value };
       let command = switch (journal.start(request, Time.now())) { case (#err(e)) return #err(e); case (#ok(value)) value };
       command.address := a.address;
-      if (command.status != "preparing" or command.transaction != null or Set.contains(running, Nat.compare, command.id)) return #ok(view(command));
+      if (command.status != "preparing" or Set.contains(running, Nat.compare, command.id)) return #ok(view(command));
+      // A retained unsigned candidate can outlive its fee observations after
+      // interrupted browser preparation. Rebuild it from the same immutable
+      // request and fresh observations, retaining all explicit fee choices.
+      // Changed candidates require a new estimate and simulation. Identical
+      // retries retain their revision while another browser may be simulating.
+      let previousTransaction = command.transaction;
+      let previousReview = command.review;
       Set.add(running, Nat.compare, command.id);
       let prepared = try { await* prepare(command, ?input.observation) } catch (e) { #err(Error.message(e)) };
       Set.remove(running, Nat.compare, command.id);
@@ -276,7 +306,9 @@ module {
       switch (prepared) {
         case (#err(e)) { command.status := "failed"; command.message := ?e };
         case (#ok(_)) {
-          command.review_revision += 1;
+          if (previousTransaction != null and command.transaction == previousTransaction) {
+            command.review := previousReview;
+          } else command.review_revision += 1;
           command.status := if (command.transaction == null) "prepared" else "preparing";
         };
       };
@@ -600,6 +632,15 @@ public type evm_wallet_accounts_v1_Output = WalletAccountsResult;
 
 public type evm_wallet_history_v1_Input = (request : WalletHistoryRequest);
 public type evm_wallet_history_v1_Output = WalletHistoryResult;
+
+public type evm_wallet_decoder_packs_v1_Input = (());
+public type evm_wallet_decoder_packs_v1_Output = WalletDecoderPacksResult;
+
+public type evm_wallet_decoder_set_v1_Input = (request : WalletDecoderSetRequest);
+public type evm_wallet_decoder_set_v1_Output = WalletDecoderPackResult;
+
+public type evm_wallet_decoder_remove_v1_Input = (id : Text);
+public type evm_wallet_decoder_remove_v1_Output = WalletBoolResult;
 
 public type evm_wallet_asset_set_v1_Input = (asset : WalletAsset);
 public type evm_wallet_asset_set_v1_Output = WalletSnapshotResult;

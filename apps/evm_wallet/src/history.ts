@@ -34,3 +34,35 @@ export async function queryHistoryPage(
     }
   }
 }
+
+/**
+ * Refresh the loaded window from its beginning instead of merging a new first
+ * page into stale rows. Every returned row therefore has a current offset, even
+ * when new requests have pushed previously visible operations onto later pages.
+ * A zero minimum retains the initial, transport-sized page.
+ */
+export async function queryHistoryWindow(
+  minimumCount = 0,
+  query: HistoryQuery = querySelf,
+): Promise<ReturnType<typeof parseHistory>> {
+  for (;;) {
+    const first = await queryHistoryPage("0", 40, query);
+    const operations = [...first.operations];
+    const ids = new Set(operations.map((operation) => operation.operationId));
+    if (ids.size !== operations.length) throw new Error("Wallet history returned duplicate operations");
+    let changed = false;
+    while (operations.length < minimumCount && BigInt(operations.length) < BigInt(first.total)) {
+      const next = await queryHistoryPage(String(operations.length), 40, query);
+      // History is append-only. A new request changes every later offset, so
+      // discard the partial window and start at the new beginning.
+      if (next.total !== first.total) { changed = true; break; }
+      if (next.operations.length === 0) throw new Error("Wallet history returned an incomplete page");
+      for (const operation of next.operations) {
+        if (ids.has(operation.operationId)) throw new Error("Wallet history returned duplicate operations");
+        ids.add(operation.operationId);
+        operations.push(operation);
+      }
+    }
+    if (!changed) return { operations, total: first.total };
+  }
+}

@@ -22,6 +22,19 @@ test("native wrapping hops and pool routing preserve direction and chain", () =>
   expect(() => parseInput({ kind: "swap", chainId: "10", tokenIn: null, tokenOut: address, amountIn: "1" })).toThrow();
   expect(() => parseInput({ kind: "deposit", chainId: "1", pool: { chainId: "42161", address, family: "stable-ng" } })).toThrow("another network");
 });
+test("WETH routes unwrap into native ETH pools and wrap their output on both networks", () => {
+  for (const chainId of ["1", "42161"] as const) {
+    const weth = CHAINS[chainId].weth;
+    const pool = { address, family: "legacy-2" as const, coins: [{ address: null }, { address: receiver }] } as VerifiedPool;
+    const incoming = swapRoute(chainId, weth, receiver, pool), outgoing = swapRoute(chainId, receiver, weth, pool);
+    expect(incoming.route.slice(0, 5)).toEqual([weth, weth, NATIVE, address, receiver]);
+    expect(incoming.params.slice(0, 2)).toEqual([[0n, 0n, 8n, 0n, 0n], [0n, 1n, 1n, 1n, 2n]]);
+    expect(outgoing.route.slice(0, 5)).toEqual([receiver, address, NATIVE, weth, weth]);
+    expect(outgoing.params.slice(0, 2)).toEqual([[1n, 0n, 1n, 1n, 2n], [0n, 0n, 8n, 0n, 0n]]);
+    expect(swapRoute(chainId, null, receiver, pool).route.slice(0, 3)).toEqual([NATIVE, address, receiver]);
+    expect(swapRoute(chainId, receiver, null, pool).route.slice(0, 3)).toEqual([receiver, address, NATIVE]);
+  }
+});
 test.each(["stable-ng", "stable-meta-ng", "twocrypto-ng", "tricrypto-ng", "legacy-2", "legacy-3"] as const)("%s liquidity encodes exact arrays, receiver and minima against independent ABI", (family) => {
   const ref = { chainId: "1" as const, address, family }, sig = liquiditySignatures(ref);
   const dimension = family === "stable-ng" ? "[]" : ["tricrypto-ng", "legacy-3"].includes(family) ? "[3]" : "[2]";

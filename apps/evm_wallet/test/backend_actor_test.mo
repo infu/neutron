@@ -1,3 +1,4 @@
+import DecoderMemory "../backend/memory/evm_decoders/v1";
 import Array "mo:core/Array";
 import Runtime "mo:core/Runtime";
 import Map "mo:core/Map";
@@ -52,7 +53,7 @@ persistent actor {
     };
     // There is deliberately no backend_calls capability. The production
     // backend can prepare, sign and reconcile with browser observations only.
-    let env : Main.AppBackendEnvironment = { stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init() }; capabilities = { wallet_custody_signing = signing } };
+    let env : Main.AppBackendEnvironment = { stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init(); evm_decoders = DecoderMemory.init() }; capabilities = { wallet_custody_signing = signing } };
     let service = Main.Init(env);
     func identity(id : Text) : Memory.Identity = { caller = { app_id = "consumer"; installation_uid = 10; endpoint = "tile" }; request_id = id };
     let observation = {
@@ -201,7 +202,7 @@ persistent actor {
         #ok({ slot = request.slot; algorithm = #ecdsa_secp256k1; digest = request.digest; signature = ok(Hex.decode(ERC20.approveSignature)) });
       };
     };
-    let approveEnv : Main.AppBackendEnvironment = { stable_memory = { evm_wallet = approveMem; evm_evidence = evidenceMem }; capabilities = { wallet_custody_signing = approveSigner } };
+    let approveEnv : Main.AppBackendEnvironment = { stable_memory = { evm_wallet = approveMem; evm_evidence = evidenceMem; evm_decoders = DecoderMemory.init() }; capabilities = { wallet_custody_signing = approveSigner } };
     let approveService = Main.Init(approveEnv);
     let approveId = identity("0000000000000000000000000000000a");
     let approveIntent : Memory.Intent = { intent with operation = #transaction({ txRequest with data = ERC20.approveData; value = "0" }) };

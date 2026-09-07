@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { encodeFunctionData, getAddress, parseAbi } from "viem";
 import { mergeEvmAssets } from "neutron-tools/src/evm_assets.js";
-import { presentCurve } from "../src/curve_presentation.ts";
+import { presentCurve } from "../src/decoders/adapters/curve_presentation.ts";
 import { presentOperation } from "../src/presentation.ts";
 import type { Operation } from "../src/data.ts";
 const router = "0x45312ea0eff7e09c83cbe249fa1d7598c4c8cd4e", native = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", recipient = "0x4444444444444444444444444444444444444444", pool = "0x5555555555555555555555555555555555555555", zero = "0x0000000000000000000000000000000000000000";

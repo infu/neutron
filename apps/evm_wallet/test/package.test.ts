@@ -44,6 +44,11 @@ const browserBackendMethods = [
   "evm_wallet_observe_evidence_browser_v1",
   "evm_wallet_transaction_request_matches_v1",
 ] as const;
+const decoderBackendMethods = [
+  "evm_wallet_decoder_packs_v1",
+  "evm_wallet_decoder_set_v1",
+  "evm_wallet_decoder_remove_v1",
+] as const;
 const account = {
   id: "main",
   slot: "main",
@@ -101,7 +106,7 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 114,
+    version: 117,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -113,10 +118,12 @@ test("separate EVM Wallet declares custody and browser observation methods witho
     memory: {
       evm_wallet: { version: 1, migrations: [] },
       evm_evidence: { version: 1, migrations: [] },
+      evm_decoders: { version: 1, migrations: [] },
     },
   });
-  expect(Object.keys(m.func ?? {})).toHaveLength(14 + browserBackendMethods.length);
-  expect(Object.keys(m.func ?? {})).toEqual(expect.arrayContaining([...browserBackendMethods]));
+  expect(Object.keys(m.func ?? {})).toHaveLength(14 + browserBackendMethods.length + decoderBackendMethods.length);
+  expect(Object.keys(m.func ?? {})).toEqual(expect.arrayContaining([...browserBackendMethods, ...decoderBackendMethods]));
+  expect(m.capabilities?.preapproved_self_calls?.methods).toEqual(expect.arrayContaining([...decoderBackendMethods]));
   expect(m.capabilities).not.toHaveProperty("chain_key_signing");
   expect(m.capabilities).not.toHaveProperty("ethereum_provider");
   expect(m.capabilities).not.toHaveProperty("backend_calls");
@@ -127,6 +134,37 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(pkg.license).toBe(
     "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",
   );
+});
+test("owner decoder storage arguments and exact document records round trip through closed Candid schemas", async () => {
+  const artifact = generateAppMethodSchemaArtifact(await manifest(), await source());
+  const document_json = JSON.stringify({
+    format: 1, id: "owner.example", version: "9007199254740993", name: "Example protocol",
+    description: "An owner imported decoder", decoders: [],
+  });
+  const imported = {
+    id: "owner.example", version: "9007199254740993", name: "Example protocol",
+    document_json, sha256: createHash("sha256").update(document_json).digest("hex"), enabled: true,
+  };
+  const cases: Array<[string, unknown]> = [
+    ["evm_wallet_decoder_packs_v1", null],
+    ["evm_wallet_decoder_set_v1", imported],
+    ["evm_wallet_decoder_remove_v1", imported.id],
+  ];
+  for (const [method, value] of cases) {
+    expect(validateAppMethodArgs(artifact, method, [value] as never).valid).toBe(true);
+    expect(validateAppMethodArgs(artifact, method, [] as never).valid).toBe(false);
+    expect(validateAppMethodArgs(artifact, method, [value, null] as never).valid).toBe(false);
+  }
+  const { sha256: _, ...missingDigest } = imported;
+  for (const value of [missingDigest, { ...imported, version: 1 }, { ...imported, enabled: "true" }, { ...imported, document_json: {} }, { ...imported, unknown: true }]) {
+    expect(validateAppMethodArgs(artifact, "evm_wallet_decoder_set_v1", [value] as never).valid).toBe(false);
+  }
+  const saved = { ...imported, created_at: "999999999999999999", updated_at: "1000000000000000000" };
+  expect(await project("evm_wallet_decoder_set_v1", saved)).toEqual(saved);
+  expect(await project("evm_wallet_decoder_packs_v1", { packs: [saved] })).toEqual({ packs: [saved] });
+  expect(await project("evm_wallet_decoder_packs_v1", { packs: [] })).toEqual({ packs: [] });
+  expect(await project("evm_wallet_decoder_remove_v1", true)).toBe(true);
+  expect(await project("evm_wallet_decoder_remove_v1", false)).toBe(false);
 });
 test("browser preparation and recovery arguments round trip through the generated closed Candid schemas", async () => {
   const artifact = generateAppMethodSchemaArtifact(await manifest(), await source());
@@ -336,13 +374,178 @@ test("Curve presentation preserves the exact released 113 Wallet roots and linea
   }
 });
 
-test("release 114 initializes cleanly and preserves published 101 and 107 roots with additive browser methods", async () => {
+test("Aave presentation preserves the exact released 114 Wallet backend, roots and lineage", async () => {
+  const previous = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.14.neutron", import.meta.url)));
+  const current = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.15.neutron", import.meta.url)));
+  const old = JSON.parse(new TextDecoder().decode(previous["neutron.json"]!));
+  const next = JSON.parse(new TextDecoder().decode(current["neutron.json"]!));
+  expect(next.memory).toEqual(old.memory);
+  expect(current["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
+  const modules = Object.keys(previous).filter(path => path.startsWith("mo/")).sort();
+  expect(Object.keys(current).filter(path => path.startsWith("mo/")).sort()).toEqual(modules);
+  for (const path of modules) expect(current[path]).toEqual(previous[path]);
+  const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
+  const migration = planMemoryMigrations({ kernel, evm_wallet: old }, { kernel, evm_wallet: next });
+  expect(migration.upgrades).toEqual(expect.arrayContaining([
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_wallet", version: 1 },
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_evidence", version: 1 },
+  ]));
+  expect(migration.upgrades).toHaveLength(2);
+  expect(migration.destructiveMemoryRoots).toEqual([]);
+});
+
+test("release 116 adds independent decoder memory while preserving exact production roots, closure bytes, lineage, and method contracts", async () => {
+  const previousBytes = await readFile(new URL("../evm_wallet.v0.1.15.neutron", import.meta.url));
+  // Published Aave Wallet receipt: never rebuild an old release for this test.
+  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe("6f654022a25a83c8b58a83abddb6223a0ec9970f2af6b2931be0c2f14c34c6ce");
+  const previous = unpackNeutronPackage(previousBytes);
+  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.16.neutron", import.meta.url)));
+  const prepared = preparePackageInstall(files);
+  expect(prepared.manifest).toMatchObject({ id: "evm_wallet", version: 116 });
+  const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+  const old = JSON.parse(decode(previous["neutron.json"]!));
+  const next = JSON.parse(decode(files["neutron.json"]!));
+  expect(Object.keys(next.memory).sort()).toEqual(["evm_decoders", "evm_evidence", "evm_wallet"]);
+  expect(next.memory.evm_decoders).toMatchObject({ version: 1, schemas: { "1": { src: "memory/evm_decoders/v1.mo" } }, migrations: [] });
+  const oldLock = JSON.parse(decode(previous["neutron.lock.json"]!));
+  const nextLock = JSON.parse(decode(files["neutron.lock.json"]!));
+  expect(nextLock.format).toBe(oldLock.format);
+  expect(nextLock.app).toBe(oldLock.app);
+  expect(Object.keys(nextLock.memory).sort()).toEqual(["evm_decoders", "evm_evidence", "evm_wallet"]);
+  expect(nextLock.memory.evm_decoders).toEqual({
+    schemas: { "1": { hash: next.memory.evm_decoders.schemas["1"].hash, entry: next.memory.evm_decoders.schemas["1"].entry } },
+    migrations: {},
+  });
+  const checkedModules = new Set<string>();
+  function assertRetainedModuleClosure(entry: string) {
+    if (checkedModules.has(entry)) return;
+    checkedModules.add(entry);
+    const path = `mo/${entry}.mo`;
+    expect(previous[path]).toBeDefined();
+    expect(files[path]).toEqual(previous[path]);
+    for (const match of decode(previous[path]!).matchAll(/^\s*import\s+\w+\s+"([a-f0-9]{64})"\s*;/gm)) {
+      assertRetainedModuleClosure(match[1]!);
+    }
+  }
+  for (const root of ["evm_wallet", "evm_evidence"]) {
+    expect(next.memory[root]).toEqual(old.memory[root]);
+    expect(nextLock.memory[root]).toEqual(oldLock.memory[root]);
+    for (const schema of Object.values(old.memory[root].schemas) as { entry: string }[]) {
+      assertRetainedModuleClosure(schema.entry);
+    }
+  }
+  expect(checkedModules.size).toBeGreaterThan(2);
+  const currentSchema = JSON.parse(decode(files["schema.json"]!));
+  const priorSchema = JSON.parse(decode(previous["schema.json"]!));
+  // This transition is immutable history; compare its schema with its own backend.
+  expect(currentSchema).toEqual(generateAppMethodSchemaArtifact(next, decode(files[`mo/${next.entry}.mo`]!)));
+  expect(currentSchema.$schema).toBe(priorSchema.$schema);
+  expect(currentSchema.version).toBe(priorSchema.version);
+  expect(currentSchema.app).toEqual({ ...priorSchema.app, version: 116 });
+  for (const [name, method] of Object.entries(priorSchema.methods)) expect(currentSchema.methods[name]).toEqual(method);
+  expect(Object.keys(currentSchema.methods).filter(name => !Object.hasOwn(priorSchema.methods, name)).sort()).toEqual([...decoderBackendMethods].sort());
+  expect(Object.keys(files)).toEqual(expect.arrayContaining([
+    "web/index.html", "web/main.js", "web/main.css", "web/service.html", "web/service.js", "web/static/icon.svg", "schema.json",
+  ]));
+
+  const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
+  const clean = planMemoryMigrations({ kernel }, { kernel, evm_wallet: next });
+  expect(clean.upgrades).toHaveLength(3);
+  expect(clean.upgrades).toEqual(expect.arrayContaining([
+    { kind: "initialize", owner: "evm_wallet", memoryId: "evm_wallet", to: 1 },
+    { kind: "initialize", owner: "evm_wallet", memoryId: "evm_evidence", to: 1 },
+    { kind: "initialize", owner: "evm_wallet", memoryId: "evm_decoders", to: 1 },
+  ]));
+  expect(clean.destructiveMemoryRoots).toEqual([]);
+  const upgraded = planMemoryMigrations({ kernel, evm_wallet: old }, { kernel, evm_wallet: next });
+  expect(upgraded.upgrades).toHaveLength(3);
+  expect(upgraded.upgrades).toEqual(expect.arrayContaining([
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_wallet", version: 1 },
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_evidence", version: 1 },
+    { kind: "initialize", owner: "evm_wallet", memoryId: "evm_decoders", to: 1 },
+  ]));
+  expect(upgraded.destructiveMemoryRoots).toEqual([]);
+  const restored = planMemoryMigrations({ kernel, evm_wallet: next }, { kernel, evm_wallet: next });
+  expect(restored.upgrades).toHaveLength(3);
+  expect(restored.upgrades).toEqual(expect.arrayContaining([
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_wallet", version: 1 },
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_evidence", version: 1 },
+    { kind: "keep", owner: "evm_wallet", memoryId: "evm_decoders", version: 1 },
+  ]));
+  expect(restored.destructiveMemoryRoots).toEqual([]);
+  // Direct skipped upgrades must restore every installed root, too. Release
+  // 101 predates evidence; later production releases carry both legacy roots.
+  for (const version of [101, 107, 112, 113, 114]) {
+    const release = `0.1.${version - 100}`;
+    const earlierFiles = unpackNeutronPackage(await readFile(new URL(`../evm_wallet.v${release}.neutron`, import.meta.url)));
+    const earlier = JSON.parse(decode(earlierFiles["neutron.json"]!));
+    const earlierLock = JSON.parse(decode(earlierFiles["neutron.lock.json"]!));
+    for (const root of Object.keys(earlier.memory)) {
+      expect(next.memory[root]).toEqual(earlier.memory[root]);
+      expect(nextLock.memory[root]).toEqual(earlierLock.memory[root]);
+    }
+    const direct = planMemoryMigrations({ kernel, evm_wallet: earlier }, { kernel, evm_wallet: next });
+    expect(direct.upgrades).toHaveLength(3);
+    expect(direct.upgrades).toEqual(expect.arrayContaining(Object.keys(next.memory).map(memoryId =>
+      Object.hasOwn(earlier.memory, memoryId)
+        ? { kind: "keep", owner: "evm_wallet", memoryId, version: 1 }
+        : { kind: "initialize", owner: "evm_wallet", memoryId, to: 1 },
+    )));
+    expect(direct.destructiveMemoryRoots).toEqual([]);
+  }
+});
+
+test("release 117 keeps every production root, decoder pack and method contract from 116", async () => {
+  const previousBytes = await readFile(new URL("../evm_wallet.v0.1.16.neutron", import.meta.url));
+  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe("2215a49968bef622ccd5fc314841c0e787d84963a257beec96e97af280cf05d2");
+  const previous = unpackNeutronPackage(previousBytes);
+  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.17.neutron", import.meta.url)));
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 117 });
+  const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+  const old = JSON.parse(decode(previous["neutron.json"]!));
+  const next = JSON.parse(decode(files["neutron.json"]!));
+  expect(old.version).toBe(116);
+  expect(next.memory).toEqual(old.memory);
+  expect(Object.keys(next.memory).sort()).toEqual(["evm_decoders", "evm_evidence", "evm_wallet"]);
+  expect(files["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
+  expect(JSON.parse(decode(files["neutron.lock.json"]!))).toEqual(JSON.parse(await readFile(new URL("../neutron.lock.json", import.meta.url), "utf8")));
+  const checked = new Set<string>();
+  function retain(entry: string) {
+    if (checked.has(entry)) return;
+    checked.add(entry);
+    const path = `mo/${entry}.mo`;
+    expect(previous[path]).toBeDefined();
+    expect(files[path]).toEqual(previous[path]);
+    for (const match of decode(previous[path]!).matchAll(/^\s*import\s+\w+\s+"([a-f0-9]{64})"\s*;/gm)) retain(match[1]!);
+  }
+  for (const root of Object.values(old.memory) as { schemas: Record<string, { entry: string }> }[]) {
+    for (const schema of Object.values(root.schemas)) retain(schema.entry);
+  }
+  expect(checked.size).toBeGreaterThan(3);
+  const schema = JSON.parse(decode(files["schema.json"]!));
+  const priorSchema = JSON.parse(decode(previous["schema.json"]!));
+  expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 117 } });
+  const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
+  const roots = ["evm_wallet", "evm_evidence", "evm_decoders"];
+  const clean = planMemoryMigrations({ kernel }, { kernel, evm_wallet: next });
+  expect(clean.upgrades).toHaveLength(roots.length);
+  expect(clean.upgrades).toEqual(expect.arrayContaining(roots.map(memoryId => ({ kind: "initialize", owner: "evm_wallet", memoryId, to: 1 }))));
+  expect(clean.destructiveMemoryRoots).toEqual([]);
+  const upgraded = planMemoryMigrations({ kernel, evm_wallet: old }, { kernel, evm_wallet: next });
+  expect(upgraded.upgrades).toHaveLength(roots.length);
+  expect(upgraded.upgrades).toEqual(expect.arrayContaining(roots.map(memoryId => ({ kind: "keep", owner: "evm_wallet", memoryId, version: 1 }))));
+  expect(upgraded.destructiveMemoryRoots).toEqual([]);
+  expect(planMemoryMigrations({ kernel, evm_wallet: next }, { kernel, evm_wallet: next })).toEqual(upgraded);
+});
+
+test("release 115 initializes cleanly and preserves published 101 and 107 roots with additive browser methods", async () => {
   const files = unpackNeutronPackage(
-    await readFile(new URL("../evm_wallet.v0.1.14.neutron", import.meta.url)),
+    await readFile(new URL("../evm_wallet.v0.1.15.neutron", import.meta.url)),
   );
   const prepared = preparePackageInstall(files);
   expect(prepared.manifest.id).toBe("evm_wallet");
-  expect(prepared.manifest.version).toBe(114);
+  expect(prepared.manifest.version).toBe(115);
   expect(Object.keys(files)).toEqual(
     expect.arrayContaining([
       "web/index.html",
@@ -438,11 +641,13 @@ test("release 114 initializes cleanly and preserves published 101 and 107 roots 
   const priorSchema = JSON.parse(new TextDecoder().decode(candidate103Files["schema.json"]!));
   // Released inputs and closed outputs remain identical; this release adds
   // explicit browser observation methods alongside that retained wire history.
-  expect(currentSchema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
+  // Release 115 is immutable history. Validate its artifact against its own
+  // archived backend rather than a later release that adds independent roots.
+  expect(currentSchema).toEqual(generateAppMethodSchemaArtifact(compiled, new TextDecoder().decode(files[`mo/${compiled.entry}.mo`])));
   function assertRetainedMethods(previous: typeof priorSchema) {
     expect(currentSchema.$schema).toBe(previous.$schema);
     expect(currentSchema.version).toBe(previous.version);
-    expect(currentSchema.app).toEqual({ ...previous.app, version: 114 });
+    expect(currentSchema.app).toEqual({ ...previous.app, version: 115 });
     for (const [name, method] of Object.entries(previous.methods)) expect(currentSchema.methods[name]).toEqual(method);
     expect(Object.keys(currentSchema.methods).filter(name => !Object.hasOwn(previous.methods, name)).sort()).toEqual([...browserBackendMethods].sort());
   }

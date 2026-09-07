@@ -29,7 +29,8 @@ const QUOTER='0x61ffe014ba17989e743c5f6cb21bf9697530b21e', FACTORY='0x1f98431c8a
 const quoteAbi=parseAbi(['function quoteExactInputSingle((address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96) params) returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)']);
 const factoryAbi=parseAbi(['function getPool(address tokenA,address tokenB,uint24 fee) view returns (address pool)']);
 const poolAbi=parseAbi(['function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)']);
-const tokenAbi=parseAbi(['function allowance(address owner,address spender) view returns (uint256)','function approve(address spender,uint256 amount) returns (bool)']);
+const tokenAbi=parseAbi(['function allowance(address owner,address spender) view returns (uint256)','function approve(address spender,uint256 amount) returns (bool)','function decimals() view returns (uint8)','function symbol() view returns (string)']);
+const CUSTOM_TOKEN='0x4444444444444444444444444444444444444444';
 const V4_QUOTER='0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203', V4_STATE='0x7ffe42c4a5deea5b0fec41c94c136cf115597227', V4_MANAGER='0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e';
 const V3_MANAGER='0xc36442b4a4522e871399cd717abdd847ab11fe88', PERMIT2='0x000000000022d473030f116ddee9f6b43ac78ba3';
 const ZERO='0x'+'00'.repeat(20), USDC='0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
@@ -62,6 +63,7 @@ function pageOf(source,input,summary=(row)=>row){
 const selfQueryMetadataLimit=65_536;
 let nextApproval='confirm', nextSwap='confirm', blockedStatusRequest=null, allowanceAtoms=0n, delayedReads=null, releaseReads=null;
 let feeMultiplier=1n, swapFeeUnavailable=false, delayedFees=null, releaseFees=null;
+let customMetadataWait=null, customMetadataObserved=null;
 const ns=()=>String(BigInt(Date.now())*1_000_000n);
 function receipt(){return {blockNumber:'21000000',blockHash:'0x'+'44'.repeat(32),status:'success',gasUsed:'90000',effectiveGasPriceWei:'1000000000',logs:[],finality:'included',observedAtNs:ns()};}
 async function transport(kind,args){
@@ -158,6 +160,13 @@ async function fixtureTransport(kind,args){
       }
       else if(request.to.toLowerCase()===FACTORY)result=encodeFunctionResult({abi:factoryAbi,functionName:'getPool',result:POOL});
       else if(request.to.toLowerCase()===POOL)result=encodeFunctionResult({abi:poolAbi,functionName:'slot0',result:[(2n**96n*22_360_679_774_997_896n)/1_000_000_000_000n,0,0,1,1,0,true]});
+      else if(request.to.toLowerCase()===CUSTOM_TOKEN){
+        customMetadataObserved?.();
+        if(customMetadataWait)await customMetadataWait;
+        const {functionName}=decodeFunctionData({abi:tokenAbi,data:request.data});
+        assert(['decimals','symbol'].includes(functionName));
+        result=encodeFunctionResult({abi:tokenAbi,functionName,result:functionName==='decimals'?6:'CUSTOM'});
+      }
       else {assert.equal(decodeFunctionData({abi:tokenAbi,data:request.data}).functionName,'allowance');result=encodeFunctionResult({abi:tokenAbi,functionName:'allowance',result:allowanceAtoms});}
       return {accountId:request.accountId,chainId:request.chainId,to:request.to,data:request.data,address:account.address,result,blockNumber:'21000000',observedAtNs:ns()};
     }
@@ -396,6 +405,33 @@ try{
  assert.notEqual(sends().at(-1).args[0].arguments.requestId,swapRequest.requestId);
  assert.equal(sends().at(-1).args[0].arguments.to.toLowerCase(),firstState.steps.at(-1).request.to.toLowerCase());
  pass('Released legacy approved swap survives reload and refreshes into a newly reviewed swap using its existing allowance');
+ toolOverrides.set('evm_balances_v1',request=>({...request,address:'0x9999999999999999999999999999999999999999',nativeBalanceWei:'150000000000000000000',tokens:request.tokens.map(address=>({address,balanceAtoms:'120000000',decimals:'6',symbol:'TOKEN',error:null})),blockNumber:'21000000',observedAtNs:ns(),completeness:'requested_only'}));
+ await page.reload();
+ await page.getByText('Updates delayed · retrying automatically',{exact:true}).waitFor();
+ await page.locator('.uni-token-values > .uni-muted').filter({hasText:/^Balance: — ETH/}).waitFor();
+ assert.equal(await page.getByLabel('Input token balance in USD: $300,000.00',{exact:true}).count(),0);
+ toolOverrides.delete('evm_balances_v1');
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await page.locator('.uni-token-values > .uni-muted').filter({hasText:/^Balance: 5 ETH/}).waitFor();
+ pass('Balance replies from a changed Wallet address remain unavailable until account and balance observations agree');
+ await page.getByRole('button',{name:'Liquidity',exact:true}).click();
+ await page.getByRole('button',{name:'+ New position',exact:true}).click();
+ await page.locator('.uni-liquidity-editor > details > summary').click();
+ await page.getByLabel('Add token by contract',{exact:true}).fill(CUSTOM_TOKEN);
+ let releaseMetadata;
+ customMetadataWait=new Promise(resolve=>{releaseMetadata=resolve;});
+ const metadataStarted=new Promise(resolve=>{customMetadataObserved=resolve;});
+ await page.getByRole('button',{name:'Add token',exact:true}).click();
+ await metadataStarted;
+ await page.getByRole('combobox',{name:'Network',exact:true}).selectOption('42161');
+ releaseMetadata();customMetadataWait=null;customMetadataObserved=null;
+ await page.getByRole('button',{name:'+ New position',exact:true}).click();
+ await page.getByRole('button',{name:'Liquidity token A',exact:true}).click();
+ await page.getByRole('textbox',{name:'Liquidity token A search',exact:true}).fill('CUSTOM');
+ await page.getByText('No matching tokens. Add a contract in swap settings.',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'Select CUSTOM',exact:true}).count(),0);
+ await page.getByRole('button',{name:'Close token list',exact:true}).click();
+ pass('A custom token read started on Ethereum cannot add that contract to the Arbitrum token menu after a network switch');
  assert(!calls.some(c=>c.kind==='callTool'&&c.args[0].target==='kernel'));
  assert.deepEqual(externalRequests,[]);assert.deepEqual(metadataRejections,[]);assert.deepEqual(errors,[]);
  await writeFile(resolve(artifacts,'report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],actions:[...actions.values()],trackedPositions:[...trackedPositions.values()],indexRequests,metadataRejections,errors},null,2));

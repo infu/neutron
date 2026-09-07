@@ -15,7 +15,7 @@
     "watch": "bun build.ts watch",
     "test": "npm run package && bun test && npm run test:memory && npm run test:browser",
     "test:browser": "node test/browser/sandbox.mjs",
-    "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo"
+    "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo test/decoder_memory.test.mo"
   },
   "author": "",
   "license": "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",

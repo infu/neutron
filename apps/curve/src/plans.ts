@@ -62,14 +62,23 @@ export function swapRoute(chainId: ChainId, tokenIn: Address | null, tokenOut: A
     if (!((tokenIn === null && tokenOut === network.weth) || (tokenOut === null && tokenIn === network.weth))) throw new Error("No pool was supplied for this pair.");
     hop(network.weth, tokenOut ?? NATIVE, [0n, 0n, 8n, 0n, 0n]);
   } else {
-    const mapToken = (token: Address | null) => pool.coins.findIndex((coin) => coin.address === token || (token === null && coin.address === network.weth));
+    // Prefer a pool's exact coin, then bridge ETH/WETH in either direction.
+    // Legacy ETH pools need an unwrap before spending WETH, or a wrap before
+    // delivering WETH; NG WETH pools need the opposite conversion for ETH.
+    const mapToken = (token: Address | null) => {
+      const exact = pool.coins.findIndex((coin) => coin.address === token);
+      return exact >= 0 ? exact : pool.coins.findIndex((coin) =>
+        (token === null && coin.address === network.weth) || (token === network.weth && coin.address === null));
+    };
     const i = mapToken(tokenIn), j = mapToken(tokenOut);
     if (i < 0 || j < 0 || i === j) throw new Error("This pool does not exchange the selected assets.");
     const currencyIn = pool.coins[i]!.address, currencyOut = pool.coins[j]!.address;
     if (tokenIn === null && currencyIn === network.weth) hop(network.weth, network.weth, [0n, 0n, 8n, 0n, 0n]);
+    if (tokenIn === network.weth && currencyIn === null) hop(network.weth, NATIVE, [0n, 0n, 8n, 0n, 0n]);
     const poolType = pool.family.startsWith("legacy") ? 1n : pool.family.startsWith("stable") ? 10n : pool.family === "twocrypto-ng" ? 20n : 30n;
     hop(pool.address, currencyOut ?? NATIVE, [BigInt(i), BigInt(j), 1n, poolType, BigInt(pool.coins.length)]);
     if (tokenOut === null && currencyOut === network.weth) hop(network.weth, NATIVE, [0n, 0n, 8n, 0n, 0n]);
+    if (tokenOut === network.weth && currencyOut === null) hop(network.weth, network.weth, [0n, 0n, 8n, 0n, 0n]);
   }
   while (route.length < 11) route.push(ZERO);
   while (params.length < 5) params.push([0n, 0n, 0n, 0n, 0n]);

@@ -119,7 +119,7 @@ test("an expired approved 3 USDC quote creates one immutable successor and resum
   expect([...f.records.keys()]).toEqual([input.swapId, successorId]);
   const predecessor = f.records.get(input.swapId)!, successor = f.records.get(successorId)!;
   expect(savedIntent(predecessor).quote).toEqual(f.prepared[0]!.quote);
-  expect(predecessor.swap_operation_json).toBeNull(); expect(predecessor.phase).toBe("approval_confirmed");
+  expect(predecessor.swap_operation_json).toBeNull(); expect(predecessor.phase).toBe("swap_superseded");
   expect(successor.approval_request_id).toBeNull(); expect(successor.swap_request_id).not.toBe(predecessor.swap_request_id);
   expect(savedIntent(successor).providerFlow?.attempt).toBe("1");
   expect(f.allowanceReads).toEqual([0n, 3_000_000n]); expect(f.sends.map(f.stage)).toEqual(["approval", "swap"]);
@@ -194,6 +194,86 @@ test("a lost retry after prepared review cannot renew an expired flow using stal
   expect(f.sends[1]).toEqual(f.sends[0]);
   f.operations.set(reviewed.swap_request_id, { ...submitted, status: "confirmed", receipt });
   expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(2);
+});
+
+test("a stale prepared status poll preserves an unresolved retry through quote expiry", async () => {
+  const f = fixture(3_000_000n);
+  f.sendWith(async (request) => f.operation(request, "prepared"));
+  expect((await f.run()).state).toBe("review");
+  const saved = structuredClone(f.records.get(input.swapId)!);
+  // The operation-status query can retain the earlier prepared observation
+  // while the second Wallet review is in flight and its send reply is lost.
+  f.sendWith(async () => { throw new Error("Reply lost during the second Wallet review"); });
+  expect((await f.run()).state).toBe("pending");
+  expect(f.records.get(input.swapId)!.phase).toBe("swap_requested");
+  f.advance(1_300_000);
+  expect((await f.run()).state).toBe("pending");
+  expect(f.records.get(input.swapId)!.phase).toBe("swap_requested");
+  expect(f.records.size).toBe(1); expect(f.prepared).toHaveLength(1); expect(f.sends).toHaveLength(2);
+  f.operations.set(saved.swap_request_id, f.operation(f.sends[1]!, "confirmed"));
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends).toHaveLength(2);
+});
+
+test("provider cancellation after saving a dispatch stops before opening Wallet review", async () => {
+  const f = fixture(3_000_000n), cancel = new AbortController();
+  await expect(runProviderSwap(f.wallet, f.store, input, caller, true, {
+    ...f.options, signal: cancel.signal,
+    onRecord(record) { if (record.phase === "swap_requested") cancel.abort(new Error("Provider cancelled")); },
+  })).rejects.toThrow("Provider cancelled");
+  expect(f.sends).toHaveLength(0);
+  const originalRequest = f.records.get(input.swapId)!.swap_request_json;
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends).toEqual([JSON.parse(originalRequest)]);
+});
+
+test("an expired stale continuation cannot renew while another invocation dispatches its predecessor", async () => {
+  const f = fixture(3_000_000n), seed = new AbortController();
+  await expect(runProviderSwap(f.wallet, f.store, input, caller, true, {
+    ...f.options, signal: seed.signal,
+    onRecord() { seed.abort(new Error("Intent saved")); },
+  })).rejects.toThrow("Intent saved");
+  const originalRequestId = f.records.get(input.swapId)!.swap_request_id;
+  let releaseRead!: () => void, readEntered!: () => void, releaseSend!: () => void, sendEntered!: () => void;
+  const readGate = new Promise<void>((resolve) => { releaseRead = resolve; });
+  const firstRead = new Promise<void>((resolve) => { readEntered = resolve; });
+  const sendGate = new Promise<void>((resolve) => { releaseSend = resolve; });
+  const firstSend = new Promise<void>((resolve) => { sendEntered = resolve; });
+  const operationStatus = f.wallet.operationStatus.bind(f.wallet);
+  let pauseRead = true;
+  f.wallet.operationStatus = async (request, options) => {
+    const observed = await operationStatus(request, options);
+    if (pauseRead) { pauseRead = false; readEntered(); await readGate; }
+    return observed;
+  };
+  f.sendWith(async (request) => {
+    if (request.requestId === originalRequestId) { sendEntered(); await sendGate; }
+    return f.operation(request, "confirmed");
+  });
+  const stale = f.run().then((result) => ({ result, error: null }), (error: unknown) => ({ result: null, error }));
+  await firstRead;
+  const active = f.run(); await firstSend;
+  f.advance(1_300_000); releaseRead();
+  const outcome = await stale;
+  releaseSend(); expect((await active).state).toBe("complete");
+  expect(String(outcome.error)).toContain("revision conflict");
+  expect(f.records.size).toBe(1); expect(f.prepared).toHaveLength(1); expect(f.sends).toHaveLength(1);
+});
+
+test("a frozen predecessor resumes the same successor after quote preparation fails", async () => {
+  const f = fixture(3_000_000n);
+  f.sendWith(async (request) => f.operation(request, "prepared"));
+  expect((await f.run()).state).toBe("review");
+  f.advance(1_300_000);
+  await expect(f.run({ prepare: async () => { throw new Error("Quote RPC unavailable"); } })).rejects.toThrow("Quote RPC unavailable");
+  expect(f.records.get(input.swapId)!.phase).toBe("swap_superseded");
+  expect(f.records.size).toBe(1); expect(f.sends).toHaveLength(1);
+  f.sendWith(async (request) => f.operation(request, "confirmed"));
+  const result = await f.run();
+  expect(result.state).toBe("complete"); expect(result.swapId).toBe(providerAttemptId(input.swapId, "1"));
+  expect(f.records.size).toBe(2); expect(f.sends).toHaveLength(2);
+  expect(f.sends[1]!.requestId).not.toBe(f.sends[0]!.requestId);
+  expect(f.records.get(input.swapId)!.phase).toBe("swap_superseded");
 });
 
 test("flow ownership and changed arguments reject before any Wallet read, new preparation or effect", async () => {

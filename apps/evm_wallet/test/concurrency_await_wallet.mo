@@ -1,3 +1,4 @@
+import DecoderMemory "../backend/memory/evm_decoders/v1";
 import Array "mo:core/Array";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
@@ -80,7 +81,7 @@ persistent actor class Wallet(gateId : Principal) {
       assert false; #err(#invalid_request);
     };
   };
-  transient let service = Main.Init({ stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init() }; capabilities = { wallet_custody_signing = signing } });
+  transient let service = Main.Init({ stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init(); evm_decoders = DecoderMemory.init() }; capabilities = { wallet_custody_signing = signing } });
 
   public func prepare(identity : Memory.Identity, chainId : Nat, value : Text, message : Bool) : async Result {
     let tx : Memory.TransactionRequest = {

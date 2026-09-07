@@ -2,4 +2,5 @@
 core = "https://github.com/dfinity/motoko-core#v2.6.0"
 base = "0.16.0"
 json = "1.4.0"
+sha2 = "0.0.2"
 neutron-capabilities = "../../packages/neutron-motoko-capabilities"

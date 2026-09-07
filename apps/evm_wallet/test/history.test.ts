@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { IDL } from "@dfinity/candid";
 import { extractPublicTypeAliases, motokoTypeToIdl } from "neutron-scripts/src/method_schema.js";
 import { encodeSelfCallResult, normalizeSelfCallResult, preflightSelfCallReply, SELF_CALL_METADATA_MAX_BYTES } from "neutron-kernel/src/self_calls.ts";
-import { queryHistoryPage } from "../src/history.ts";
+import { queryHistoryPage, queryHistoryWindow } from "../src/history.ts";
 import type { SelfCallValue } from "neutron-tools/app";
 
 const fixture = JSON.parse(await readFile(new URL("./fixtures/history-25-operations.json", import.meta.url), "utf8")) as {
@@ -124,4 +124,82 @@ test("a single oversized operation remains an explicit error at the same offset"
   });
   await expect(result).rejects.toThrow("Self-call result exceeds the metadata byte limit");
   expect(calls).toEqual([40, 20, 10, 5, 2, 1].map(limit => ({ offset: "7", limit: String(limit) })));
+});
+
+function capturedRows(count: number): Array<Record<string, unknown> & { operation_id: string; request_id: string }> {
+  return Array.from({ length: count }, (_, index) => ({
+    ...structuredClone(fixture.normalized.operations[index % fixture.normalized.operations.length]),
+    operation_id: String(count - index),
+    request_id: (count - index).toString(16).padStart(32, "0"),
+  }));
+}
+
+function capturedQuery(rows: () => ReturnType<typeof capturedRows>, calls: PageArgs[] = []) {
+  return async (_method: string, args: SelfCallValue[]) => {
+    const request = pageArgs(args);
+    calls.push(request);
+    const current = rows();
+    const page = { total: String(current.length), operations: current.slice(Number(request.offset), Number(request.offset) + Number(request.limit)) };
+    encodeSelfCallResult(page);
+    return page;
+  };
+}
+
+test("refreshing the loaded window updates an older operation beyond the adaptive first page", async () => {
+  const rows = capturedRows(95);
+  const query = capturedQuery(() => rows);
+  const initial = await queryHistoryWindow(0, query);
+  expect(initial.operations.length).toBeLessThan(40);
+  const loaded = await queryHistoryWindow(initial.operations.length + 40, query);
+  const olderIndex = loaded.operations.length - 1;
+  expect(olderIndex).toBeGreaterThan(initial.operations.length);
+  rows[olderIndex] = { ...rows[olderIndex]!, status: "confirmed", finality: "finalized" };
+  const refreshed = await queryHistoryWindow(loaded.operations.length, query);
+  expect(refreshed.operations.map((operation) => operation.operationId)).toEqual(loaded.operations.map((operation) => operation.operationId));
+  expect(refreshed.operations[olderIndex]!.status).toBe("confirmed");
+  expect(refreshed.operations[olderIndex]!.finality).toBe("finalized");
+});
+
+test("refresh and Load more retain a contiguous window after more than a page of new requests", async () => {
+  let rows = capturedRows(95);
+  const query = capturedQuery(() => rows);
+  const loaded = await queryHistoryWindow(40, query);
+  rows = [...capturedRows(140).slice(0, 45), ...rows];
+  const refreshed = await queryHistoryWindow(loaded.operations.length, query);
+  expect(refreshed.operations.map((operation) => operation.operationId)).toEqual(rows.slice(0, refreshed.operations.length).map((operation) => operation.operation_id));
+  const extended = await queryHistoryWindow(refreshed.operations.length + 40, query);
+  expect(extended.operations.map((operation) => operation.operationId)).toEqual(rows.slice(0, extended.operations.length).map((operation) => operation.operation_id));
+  const complete = await queryHistoryWindow(rows.length, query);
+  expect(complete.operations.map((operation) => operation.operationId)).toEqual(rows.map((operation) => operation.operation_id));
+  expect(new Set(complete.operations.map((operation) => operation.operationId)).size).toBe(140);
+});
+
+test("an insertion between history pages restarts the prefix instead of accepting shifted offsets", async () => {
+  let rows = capturedRows(95);
+  let inserted = false;
+  const calls: PageArgs[] = [];
+  const read = capturedQuery(() => rows, calls);
+  const result = await queryHistoryWindow(60, async (method, args) => {
+    if (!inserted && Number(pageArgs(args).offset) > 0) {
+      inserted = true;
+      rows = [...capturedRows(140).slice(0, 45), ...rows];
+    }
+    return read(method, args);
+  });
+  expect(result.total).toBe("140");
+  expect(result.operations.map((operation) => operation.operationId)).toEqual(rows.slice(0, result.operations.length).map((operation) => operation.operation_id));
+  const secondPage = calls.findIndex((request) => Number(request.offset) > 0);
+  expect(calls.slice(secondPage + 1).some((request) => request.offset === "0")).toBe(true);
+});
+
+test("invalid history windows fail explicitly without looping over missing or duplicated records", async () => {
+  const sample = capturedRows(1)[0]!;
+  for (const operations of [[], [sample]]) {
+    let queries = 0;
+    await expect(queryHistoryWindow(2, async () => {
+      queries++;
+      return { total: "2", operations: queries === 1 ? [sample] : operations };
+    })).rejects.toThrow(operations.length ? "duplicate operations" : "incomplete page");
+    expect(queries).toBe(2);
+  }
 });

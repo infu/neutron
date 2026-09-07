@@ -77,6 +77,10 @@
     {
       "id": "hullshift",
       "directory": "../../apps/hullshift"
+    },
+    {
+      "id": "aave",
+      "directory": "../../apps/aave"
     }
   ]
 }

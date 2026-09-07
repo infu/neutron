@@ -5,6 +5,7 @@ import { evmPriceWatcher } from "neutron-tools/src/evm_price_watch.js";
 import { evmPriceAssetKey, formatUsd, usdPriceTitle, usdValue } from "neutron-tools/src/evm_prices.js";
 import { formatUnits, parseUnits } from "viem";
 import type { Token } from "./contracts.ts";
+import type { LiquidityInput } from "./plans.ts";
 
 export const wallet = createEvmWalletClient({ callTool });
 export const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -15,6 +16,15 @@ export async function invoke<T>(name: string, args: object, signal?: AbortSignal
 export function atoms(value: string, decimals: number): string {
   if (!/^(?:\d+\.?\d*|\.\d+)$/.test(value) || (value.split(".")[1]?.length ?? 0) > decimals) throw new Error(`Enter an amount with at most ${decimals} decimal places.`);
   return parseUnits(value, decimals).toString();
+}
+/** Keep inactive form drafts out of the operation being reviewed. */
+export function liquidityDraftAmounts(mode: LiquidityInput["kind"], amounts: readonly string[], coins: readonly Pick<Token, "decimals">[], lp: string, lpDecimals: number): Pick<LiquidityInput, "amounts" | "lpAmount"> | null {
+  if (mode === "deposit") {
+    const parsed = amounts.map((amount, i) => amount ? atoms(amount, coins[i]!.decimals) : "0");
+    return parsed.some((amount) => BigInt(amount) > 0n) ? { amounts: parsed, lpAmount: "0" } : null;
+  }
+  const lpAmount = lp ? atoms(lp, lpDecimals) : "0";
+  return BigInt(lpAmount) > 0n ? { amounts: [], lpAmount } : null;
 }
 export function display(value: string, decimals: number, digits = 7): string {
   const exact = formatUnits(BigInt(value), decimals), [whole, fraction] = exact.split(".");

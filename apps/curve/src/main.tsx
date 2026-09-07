@@ -7,7 +7,7 @@ import { parseInput, type Fee, type Input, type Plan } from "./plans.ts";
 import type { Result } from "./workflow.ts";
 import { stable } from "./store.ts";
 import { describeToken, type TokenOption } from "./tokens.ts";
-import { atoms, balanceFor, display, ErrorNote, invoke, message, short, Spinner, TokenMark, Usd, usePrices, useRead, wallet } from "./ui.tsx";
+import { atoms, balanceFor, display, ErrorNote, invoke, liquidityDraftAmounts, message, short, Spinner, TokenMark, Usd, usePrices, useRead, wallet } from "./ui.tsx";
 import "./style.scss";
 
 type Activity = { id: string; created_at: string; result: Result; input: Input; humanOwned: boolean };
@@ -140,7 +140,8 @@ function PoolEditor({ pool, close, account, busy, execute, refresh }: { pool: Ve
   const balances = useRead(`${poolKey(pool)}:${account?.address}:tokens`, (signal) => wallet.balances({ accountId: "main", chainId: pool.chainId, tokens: pool.coins.flatMap((token) => token.address ? [token.address] : []) }, { signal }), refresh + tick);
   let input: Input | null = null, error = "";
   try {
-    if (mode === "deposit" ? amounts.some((amount, i) => amount && BigInt(atoms(amount, coins[i]!.decimals)) > 0n) : lp && BigInt(atoms(lp, pool.lpDecimals)) > 0n) input = parseInput({ ...common(pool.chainId, slippage, recipient), kind: mode, pool: refOf(pool), amounts: amounts.map((amount, i) => amount ? atoms(amount, coins[i]!.decimals) : "0"), lpAmount: lp ? atoms(lp, pool.lpDecimals) : "0", coinIndex, useNative });
+    const budget = liquidityDraftAmounts(mode, amounts, coins, lp, pool.lpDecimals);
+    if (budget) input = parseInput({ ...common(pool.chainId, slippage, recipient), kind: mode, pool: refOf(pool), ...budget, coinIndex, useNative });
   } catch (reason) { error = message(reason); }
   const preview = useRead(input && account && !busy ? JSON.stringify(input) : null, async (signal) => JSON.parse((await invoke<{ planJson: string }>("curve_quote_v1", input!, signal)).planJson) as Plan, tick, 450);
   const insufficient = input && input.kind !== "swap" && (input.kind === "deposit" ? input.amounts.some((amount, i) => { const balance = balanceFor(balances.data, coins[i]!); return balance !== null && BigInt(amount) > BigInt(balance); }) : position.data && BigInt(input.lpAmount) > BigInt(position.data.lpBalance));

@@ -16,7 +16,7 @@ import {
   savedIntent, storedOperation, validateOperation, verifyAgentResult, walletReader, walletRequest,
   type SavedIntent, type Store, type SwapRecord,
 } from "../src/controller.ts";
-import { swapTransaction, type Quote, type Transaction } from "../src/swap.ts";
+import { rebuildHistoricalSwapTransaction, swapTransaction, type Quote, type Transaction } from "../src/swap.ts";
 
 const ACCOUNT = getAddress("0x1111111111111111111111111111111111111111");
 const RECIPIENT = getAddress("0x2222222222222222222222222222222222222222");
@@ -292,6 +292,59 @@ test("a missing status after a lost reply retries exactly the saved wallet reque
   const resumed = await executeStep(wallet, journal.store, journal.current(), "swap");
   expect(sends).toHaveLength(2); expect(sends[0]).toEqual(sends[1]);
   expect(sends[1]).toEqual(JSON.parse(initial.swap_request_json)); expect(resumed.phase).toBe("swap_submitted");
+});
+
+test("pausing during the durable dispatch save does not open Wallet review and keeps the request resumable", async () => {
+  const journal = memoryStore(record()), cancel = new AbortController();
+  const { wallet, sends } = walletMock();
+  const pausedStore: Store = { ...journal.store, async update(saved, stage, phase, result) {
+    const next = await journal.store.update(saved, stage, phase, result);
+    if (phase === "swap_requested") cancel.abort(new Error("Tracking paused"));
+    return next;
+  } };
+  await expect(executeStep(wallet, pausedStore, journal.current(), "swap", { signal: cancel.signal })).rejects.toThrow("Tracking paused");
+  expect(sends).toHaveLength(0);
+  expect(journal.current().phase).toBe("swap_requested");
+  const request = JSON.parse(journal.current().swap_request_json);
+  await executeStep(wallet, journal.store, journal.current(), "swap");
+  expect(sends).toEqual([request]);
+});
+
+test("released recipient-alias records remain readable and reconcilable while new dispatch is rejected", async () => {
+  for (const alias of ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"] as const) {
+    const historical = intent(); historical.quote.recipient = getAddress(alias);
+    historical.swap = rebuildHistoricalSwapTransaction(historical.quote);
+    const saved = record(historical), journal = memoryStore(saved);
+    expect(savedIntent(saved)).toEqual(historical);
+    const unresolved = walletMock();
+    await expect(executeStep(unresolved.wallet, journal.store, saved, "swap")).rejects.toThrow("recipient");
+    expect(unresolved.sends).toHaveLength(0); expect(journal.current()).toEqual(saved);
+    const submitted = walletMock({ status: () => confirmed() });
+    const reconciled = await reconcileStep(submitted.wallet, journal.store, saved, "swap");
+    expect(effectiveOperation(reconciled, "swap")?.status).toBe("confirmed");
+    expect(reconciled.swap_request_json).toBe(saved.swap_request_json);
+    expect(reconciled.quote_json).toBe(saved.quote_json);
+    expect(submitted.sends).toHaveLength(0);
+  }
+});
+
+test("Wallet reads and an active review receive the continuation's abort signal", async () => {
+  const journal = memoryStore(record()), cancel = new AbortController();
+  const { wallet } = walletMock();
+  const originalAccounts = wallet.accounts.bind(wallet), originalStatus = wallet.operationStatus.bind(wallet);
+  const signals: (AbortSignal | undefined)[] = [];
+  wallet.accounts = async (options) => { signals.push(options?.signal); return originalAccounts(options); };
+  wallet.operationStatus = async (request, options) => { signals.push(options?.signal); return originalStatus(request, options); };
+  wallet.sendTransaction = async (_request, options) => {
+    signals.push(options?.signal);
+    cancel.abort(new Error("Active review cancelled"));
+    options?.signal?.throwIfAborted();
+    throw new Error("Review must receive its cancellation signal");
+  };
+  await expect(executeStep(wallet, journal.store, journal.current(), "swap", { signal: cancel.signal })).rejects.toThrow("Active review cancelled");
+  expect(signals).toHaveLength(4);
+  expect(signals.every((signal) => signal === cancel.signal)).toBe(true);
+  expect(journal.current().phase).toBe("swap_requested");
 });
 
 test.each([

@@ -5,7 +5,7 @@ import { Pool as V4Pool, Position as V4Position, V4PositionManager } from "@unis
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, getAddress, parseAbi, parseAbiParameters, type Hex } from "viem";
 import { mergeEvmAssets } from "neutron-tools/src/evm_assets.js";
 import type { Operation } from "../src/data.ts";
-import { presentPermit2Approval, presentUniswapLiquidity } from "../src/liquidity_presentation.ts";
+import { presentPermit2Approval, presentUniswapLiquidity } from "../src/decoders/adapters/liquidity_presentation.ts";
 import { presentOperation } from "../src/presentation.ts";
 
 const owner = "0x4444444444444444444444444444444444444444";

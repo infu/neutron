@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "aave",
+  "memory": {
+    "aave": {
+      "schemas": {
+        "1": {
+          "hash": "4fb8e209d82c340d6a795996d94a8c0113f1f5f398df88fdee96aff614c7b07f",
+          "entry": "1059a7d50935130499e77feee241000f961b6f0cdfd0800b74bd8bcbdd3fd0d2"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

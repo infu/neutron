@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { preparePackageInstall, unpackNeutronPackage } from "neutron-compiler/src/install.ts";
 import { planMemoryMigrations } from "neutron-compiler/src/memory_migrations.ts";
 import { generateAppMethodSchemaArtifact, validateAppMethodArgs } from "neutron-scripts/src/method_schema.js";
@@ -7,12 +8,12 @@ import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 
 const manifest = async () => JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
-const archive = async () => unpackNeutronPackage(await readFile(new URL("../uniswap.v0.1.10.neutron", import.meta.url)));
+const archive = async () => unpackNeutronPackage(await readFile(new URL("../uniswap.v0.1.11.neutron", import.meta.url)));
 
 test("Uniswap owns its managed journal and declares exact public Wallet access", async () => {
   const value = await manifest();
   expect(validate_neutron_conf(value).errors).toEqual([]);
-  expect(value).toMatchObject({ id: "uniswap", version: 110, update_source: "233tv-xiaaa-aaaay-aacta-cai", memory: {
+  expect(value).toMatchObject({ id: "uniswap", version: 111, update_source: "233tv-xiaaa-aaaay-aacta-cai", memory: {
     uniswap: { version: 1, schemas: { "1": { src: "memory/uniswap/v1.mo" } }, migrations: [] },
     uniswap_actions: { version: 1, schemas: { "1": { src: "memory/uniswap_actions/v1.mo" } }, migrations: [] },
   } });
@@ -30,7 +31,7 @@ test("the packaged tile, resident service and managed-memory root are installabl
   expect(Object.keys(files)).toEqual(expect.arrayContaining(["neutron.json", "schema.json", "web/index.html", "web/main.css", "web/main.js", "web/service.html", "web/service.js", "web/static/icon.svg"]));
   const prepared = preparePackageInstall(files);
   expect(prepared.manifest.id).toBe("uniswap");
-  expect(prepared.manifest.version).toBe(110);
+  expect(prepared.manifest.version).toBe(111);
   const compiled = JSON.parse(new TextDecoder().decode(files["neutron.json"]!));
   const lock = JSON.parse(await readFile(new URL("../neutron.lock.json", import.meta.url), "utf8"));
   expect(compiled.memory.uniswap.schemas["1"]).toMatchObject(lock.memory.uniswap.schemas["1"]);
@@ -76,6 +77,34 @@ test("the packaged tile, resident service and managed-memory root are installabl
     ]);
     expect(upgrade.destructiveMemoryRoots).toEqual([]);
   }
+});
+
+test("release 111 preserves the production 110 backend and both root dependency closures", async () => {
+  const previousBytes = await readFile(new URL("../uniswap.v0.1.10.neutron", import.meta.url));
+  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe("5973ffc69dc0ee99f8cc2d32046595827448eb3b7ca5879ea6a943d98acd6c37");
+  const previous = unpackNeutronPackage(previousBytes), files = await archive();
+  const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+  const old = JSON.parse(decode(previous["neutron.json"]!)), next = JSON.parse(decode(files["neutron.json"]!));
+  expect(old.version).toBe(110);
+  expect(next.version).toBe(111);
+  expect(next.memory).toEqual(old.memory);
+  expect(files["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
+  // The protocol fix is frontend-only: equality of every backend module also
+  // covers every schema's transitive dependency closure.
+  expect(next.entry).toBe(old.entry);
+  const modules = Object.keys(previous).filter(path => path.startsWith("mo/")).sort();
+  expect(Object.keys(files).filter(path => path.startsWith("mo/")).sort()).toEqual(modules);
+  for (const path of modules) expect(files[path]).toEqual(previous[path]);
+  const schema = JSON.parse(decode(files["schema.json"]!)), priorSchema = JSON.parse(decode(previous["schema.json"]!));
+  expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await readFile(new URL("../backend/main.mo", import.meta.url), "utf8")));
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 111 } });
+  const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
+  const upgraded = planMemoryMigrations({ kernel, uniswap: old }, { kernel, uniswap: next });
+  expect(upgraded.upgrades).toEqual([
+    { kind: "keep", owner: "uniswap", memoryId: "uniswap", version: 1 },
+    { kind: "keep", owner: "uniswap", memoryId: "uniswap_actions", version: 1 },
+  ]);
+  expect(upgraded.destructiveMemoryRoots).toEqual([]);
 });
 
 test("journal methods emit schemas that preserve typed identity and optional operation evidence", async () => {

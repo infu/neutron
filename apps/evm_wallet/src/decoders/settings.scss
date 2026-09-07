@@ -1,0 +1,193 @@
+@layer app {
+  .evm-app .evm-decoder-settings {
+    display: grid;
+    gap: 16px;
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding: 20px 0;
+    box-shadow: inset 0 1px var(--nt-line-subtle), inset 0 -1px var(--nt-line-subtle);
+    color: var(--nt-text);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: 0;
+
+    :where(h2, h3, h4, p, dl, dd, ul) { margin: 0; }
+    :where(h2, h3, h4) { color: var(--nt-text-strong); font-weight: 600; }
+    h2 { font-size: 14px; }
+    h3, h4 { font-size: 13px; }
+    code { font-family: var(--nt-font-mono); font-size: 12px; overflow-wrap: anywhere; }
+    :where(p, h2, h3, h4, dd, button) { overflow-wrap: anywhere; }
+    :where(button, input, textarea, summary) { border-radius: 5px; }
+  }
+
+  .evm-app .evm-decoder-heading,
+  .evm-app .evm-decoder-record-heading,
+  .evm-app .evm-decoder-record-footer,
+  .evm-app .evm-decoder-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .evm-app .evm-decoder-heading > div {
+    flex: 1 1 260px;
+    min-width: 0;
+    p { color: var(--nt-text-muted); margin-top: 4px; }
+  }
+
+  .evm-app .evm-decoder-help,
+  .evm-app .evm-decoder-functions p {
+    color: var(--nt-text-muted);
+    font-size: 12px;
+  }
+
+  .evm-app .evm-decoder-import {
+    background: var(--nt-bg-panel);
+    border-radius: 5px;
+    display: grid;
+    gap: 20px;
+    min-width: 0;
+    padding: 16px;
+  }
+
+  .evm-app .evm-decoder-inputs,
+  .evm-app .evm-decoder-preview,
+  .evm-app .evm-decoder-contents,
+  .evm-app .evm-decoder-installed {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .evm-app .evm-decoder-file,
+  .evm-app .evm-decoder-json {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .evm-app .evm-decoder-file input {
+    box-sizing: border-box;
+    font-size: 12px;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    &::file-selector-button {
+      background: var(--nt-bg-control);
+      border: 0;
+      border-radius: 5px;
+      color: var(--nt-text);
+      cursor: pointer;
+      font: inherit;
+      margin-right: 8px;
+      min-height: 36px;
+      padding: 8px 12px;
+    }
+  }
+
+  .evm-app .evm-decoder-json textarea {
+    box-sizing: border-box;
+    font-family: var(--nt-font-mono);
+    font-size: 12px;
+    min-height: 120px;
+    min-width: 0;
+    resize: vertical;
+    width: 100%;
+  }
+
+  .evm-app .evm-decoder-preview {
+    box-shadow: inset 0 1px var(--nt-line-subtle);
+    padding-top: 16px;
+    h3 { font-size: 15px; }
+    h3:focus-visible { outline: 2px solid var(--nt-line-focus); outline-offset: 4px; }
+  }
+
+  .evm-app .evm-decoder-eyebrow {
+    color: var(--nt-text-faint);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .evm-app .evm-decoder-metadata {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    div { min-width: 0; }
+    dt { color: var(--nt-text-faint); font-size: 12px; }
+    dd { margin-top: 4px; }
+  }
+
+  .evm-app .evm-decoder-targets,
+  .evm-app .evm-decoder-functions {
+    display: grid;
+    gap: 12px;
+    list-style: none;
+    margin-top: 8px;
+    padding: 0;
+    li { display: grid; gap: 4px; min-width: 0; }
+  }
+
+  .evm-app .evm-decoder-targets span { color: var(--nt-text-muted); font-size: 12px; }
+  .evm-app .evm-decoder-functions strong { font-weight: 500; }
+  .evm-app .evm-decoder-targets code,
+  .evm-app .evm-decoder-functions code { color: var(--nt-text-muted); }
+
+  .evm-app .evm-decoder-caution,
+  .evm-app .evm-decoder-error,
+  .evm-app .evm-decoder-notice {
+    border-radius: 5px;
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    font-size: 12px;
+  }
+
+  .evm-app .evm-decoder-caution { background: var(--nt-alert-warning-bg); color: var(--nt-warning); }
+  .evm-app .evm-decoder-error { background: var(--nt-alert-danger-bg); color: var(--nt-danger); }
+  .evm-app .evm-decoder-notice { background: var(--nt-alert-success-bg); color: var(--nt-success); }
+  .evm-app .evm-decoder-actions { justify-content: flex-start; }
+  .evm-app .evm-decoder-progress { align-items: center; color: var(--nt-text-muted); display: flex; font-size: 12px; gap: 8px; }
+
+  .evm-app .evm-decoder-installed > h3 span {
+    color: var(--nt-text-faint);
+    font-size: 12px;
+    font-weight: 400;
+    margin-left: 8px;
+  }
+
+  .evm-app .evm-decoder-record {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 16px 0 0;
+    box-shadow: inset 0 1px var(--nt-line-subtle);
+  }
+
+  .evm-app .evm-decoder-record-heading > div { flex: 1 1 220px; min-width: 0; }
+  .evm-app .evm-decoder-toggle { align-items: center; display: flex; gap: 8px; min-height: 36px; }
+  .evm-app .evm-decoder-record-footer p { flex: 1 1 220px; }
+
+  .evm-app .evm-decoder-details {
+    min-width: 0;
+    summary {
+      color: var(--nt-text-muted);
+      cursor: pointer;
+      min-height: 36px;
+      padding: 8px 0;
+      box-sizing: border-box;
+      width: fit-content;
+      &:hover { color: var(--nt-text-strong); }
+      &:focus-visible { outline: 2px solid var(--nt-line-focus); outline-offset: 4px; }
+    }
+    > .evm-decoder-metadata { margin: 8px 0 16px; }
+  }
+
+  @media (max-width: 400px) {
+    .evm-app .evm-decoder-import { padding: 12px; }
+    .evm-app .evm-decoder-heading > .nt-button { width: 100%; }
+    .evm-app .evm-decoder-actions > .nt-button { flex: 1 1 auto; }
+  }
+}

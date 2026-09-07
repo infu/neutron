@@ -333,9 +333,45 @@ body {
     }
 
     > .evm-row {
+      align-items: flex-start;
       justify-content: space-between;
+
+      > strong { min-width: 0; overflow-wrap: anywhere; }
+      > .evm-status { flex-shrink: 0; }
     }
   }
+
+  .evm-activity-fields {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    min-width: 0;
+
+    > div {
+      align-items: start;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    }
+
+    dt, dd { font-size: 12px; line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
+    dt { color: var(--nt-text-faint); }
+    dd { color: var(--nt-text); margin: 0; font-variant-numeric: tabular-nums; }
+  }
+
+  .evm-operation-message {
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    color: var(--nt-text);
+    display: -webkit-box;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .evm-activity-calldata { max-height: 160px; overflow: auto; }
 
   .evm-status,
   .evm-tag {
@@ -489,7 +525,15 @@ body {
 
   .evm-text-link { color: var(--nt-accent); font-size: 12px; text-decoration: none; }
   .evm-text-link:hover { text-decoration: underline; }
-  .evm-operation-amount { color: var(--nt-text-strong); font-size: 18px; font-weight: 550; }
+  .evm-operation-amount {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+
+    > span { color: var(--nt-text-faint); font-size: 12px; }
+    > strong { color: var(--nt-text-strong); font-size: 18px; font-variant-numeric: tabular-nums; font-weight: 550; }
+  }
 
   .evm-app .nt-button { border-radius: 10px; min-height: 40px; }
   .evm-form > .nt-button { min-height: 46px; }

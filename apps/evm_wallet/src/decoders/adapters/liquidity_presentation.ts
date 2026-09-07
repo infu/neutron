@@ -1,6 +1,6 @@
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, getAddress, parseAbi, parseAbiParameters, type Hex } from "viem";
-import { amount, type Asset, type Operation } from "./data.ts";
-import type { LiquidityPresentation, OperationPresentation, PresentationField } from "./presentation.ts";
+import { amount, type Asset, type Operation } from "../../data.ts";
+import type { LiquidityPresentation, OperationPresentation, PresentationField } from "../../presentation.ts";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const MSG_SENDER = "0x0000000000000000000000000000000000000001";

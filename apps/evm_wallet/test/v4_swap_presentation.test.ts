@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { encodeAbiParameters, encodeFunctionData, getAddress, parseAbi, parseAbiParameters, type Address, type Hex } from "viem";
 import { mergeEvmAssets } from "neutron-tools/src/evm_assets.js";
-import { presentUniswapV4Swap } from "../src/v4_swap_presentation.ts";
+import { presentUniswapV4Swap } from "../src/decoders/adapters/v4_swap_presentation.ts";
 import type { Operation } from "../src/data.ts";
 
 const ROUTERS: Record<string, Address> = {

@@ -39,6 +39,7 @@ The current Applications using the inspection-oriented use license are:
 - `apps/evm_wallet`
 - `apps/uniswap`
 - `apps/curve`
+- `apps/aave`
 
 Previously published ordinary Applications remain under the exact Neutron
 Sovereign Application License, Version 1.0

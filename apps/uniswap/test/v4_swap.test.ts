@@ -177,6 +177,24 @@ test("state read failure preserves a successful quote and reports unavailable pr
   expect(quote.routeWarnings).toContain("Price impact unavailable: Error: Historical block unavailable");
 });
 
+test("an unpinned V4 quote cannot claim price impact from a later pool price", async () => {
+  const fixture = reader();
+  const quote = await quoteV4Swap(async (...args) => ({ ...await fixture.read(...args), blockNumber: null }), input(), NOW);
+  expect(quote).toMatchObject({ amountOut: "2000000", minimumOut: "1990000", priceImpactBps: null });
+  expect(quote.routeWarnings.join(" ")).toContain("quote block is unavailable");
+  expect(fixture.calls.some((call) => call.to === DEPLOYMENTS["1"].state)).toBe(false);
+});
+
+test.each(["21000001", null])("V4 state at block %s cannot be compared with another quote block", async (blockNumber) => {
+  const fixture = reader();
+  const quote = await quoteV4Swap(async (...args) => {
+    const response = await fixture.read(...args);
+    return args[1] === DEPLOYMENTS["1"].state ? { ...response, blockNumber } : response;
+  }, input(), NOW);
+  expect(quote).toMatchObject({ amountOut: "2000000", minimumOut: "1990000", blockNumber: "21000000", priceImpactBps: null });
+  expect(quote.routeWarnings.join(" ")).toContain("different or unknown block");
+});
+
 test("price impact removes the direction-specific protocol fee before comparing pool output", async () => {
   const fixture = reader({ outputs: { 500: 998_900n }, protocolFees: 500 | (1000 << 12) });
   const forward = await quoteV4Swap(fixture.read, input(), NOW);
@@ -205,6 +223,17 @@ test("expired or mismatched serialized quote fails before approval reads", async
   const noReads: Reader = async () => { reads += 1; throw new Error("Unexpected read"); };
   for (const value of changed) await expect(prepareV4Swap(noReads, value as typeof quote, NOW)).rejects.toThrow();
   expect(reads).toBe(0);
+});
+
+test.each([1n, 2n])("V4 rejects mapped router recipient %s for native and token output", async (alias) => {
+  const recipient = getAddress(`0x${alias.toString(16).padStart(40, "0")}`);
+  for (const nativeInput of [true, false]) {
+    const fixture = reader();
+    await expect(quoteV4Swap(fixture.read, { ...input("1", nativeInput), recipient }, NOW)).rejects.toThrow("router alias");
+    expect(fixture.calls).toHaveLength(0);
+    const quote = await quoteV4Swap(fixture.read, input("1", nativeInput), NOW);
+    expect(() => v4SwapTransaction({ ...quote, recipient }, NOW)).toThrow("router alias");
+  }
 });
 
 test("pool validation follows V4 protocol bounds and exact currency ordering", async () => {

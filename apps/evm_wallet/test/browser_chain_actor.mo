@@ -1,3 +1,4 @@
+import DecoderMemory "../backend/memory/evm_decoders/v1";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Runtime "mo:core/Runtime";
@@ -55,7 +56,7 @@ persistent actor {
     };
   };
   transient let env : Main.AppBackendEnvironment = {
-    stable_memory = { evm_wallet = mem; evm_evidence = evidenceMem };
+    stable_memory = { evm_wallet = mem; evm_evidence = evidenceMem; evm_decoders = DecoderMemory.init() };
     capabilities = { wallet_custody_signing = signing };
   };
   transient var service = Main.Init(env);
