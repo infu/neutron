@@ -82,6 +82,8 @@ import { presentOperation, operationStatusLabel, operationStatusMessage, present
 import { useWalletRefresh } from "./use_wallet_refresh.ts";
 import { evmTokenIcon, evmTokenInitials } from "neutron-tools/src/evm_token_icons.js";
 import { curatedEvmTokens } from "neutron-tools/src/evm_assets.js";
+import { formatUsd, usdPriceTitle, usdValue, type EvmUsdPrice } from "neutron-tools/src/evm_prices.js";
+import { useEvmPrices } from "./use_usd_prices.ts";
 import "./style.scss";
 
 function tileRuntime(): boolean {
@@ -164,6 +166,26 @@ export function EvmWalletApp() {
   reviewActiveRef.current = reviewActive;
   const account = snapshot?.accounts[0],
     network = snapshot?.networks.find((n) => n.chainId === chainId);
+  const { priceFor } = useEvmPrices([
+    { chainId, address: null },
+    ...(snapshot?.assets ?? []).filter((asset) => asset.chainId === chainId),
+  ]);
+  // A network/account change renders before the balance refresh effect runs.
+  const shownBalance = balance?.chainId === chainId && balance.address.toLowerCase() === account?.address.toLowerCase() ? balance : null;
+  const nativePrice = priceFor({ chainId, address: null });
+  const holdings = shownBalance ? [
+    { atoms: shownBalance.nativeBalance, decimals: 18, price: nativePrice },
+    ...(snapshot?.assets ?? []).filter((asset) => asset.chainId === chainId).map((asset) => {
+      const token = shownBalance.tokens.find((entry) => entry.address.toLowerCase() === asset.address.toLowerCase());
+      return { atoms: token?.balance ?? null, decimals: token?.decimals ?? null, price: priceFor(asset) };
+    }),
+  ] : [];
+  const values = holdings.map((holding) => holding.atoms !== null && BigInt(holding.atoms) === 0n ? 0
+    : holding.atoms === null || holding.decimals === null ? null : usdValue(holding.atoms, holding.decimals, holding.price));
+  const pricedValues = values.filter((value): value is number => value !== null);
+  const trackedUsd = pricedValues.length ? pricedValues.reduce((sum, value) => sum + value, 0) : null;
+  const partialUsd = values.some((value) => value === null);
+  const trackedUsdTitle = `Estimated value of the tokens tracked on this network.${partialUsd ? " Some balances or prices are unavailable; only priced balances are included." : ""}\n${[...new Set(holdings.filter((holding) => holding.atoms !== null && BigInt(holding.atoms) !== 0n).map((holding) => usdPriceTitle(holding.price)))].join("\n")}`;
   const loadInFlight = useRef<Promise<void> | null>(null);
   const load = useCallback(() => {
     if (loadInFlight.current) return loadInFlight.current;
@@ -347,9 +369,10 @@ export function EvmWalletApp() {
           </span>
         </div>
         <strong className="evm-account-balance">
-          {balance ? amount(balance.nativeBalance) : "—"}{" "}
+          {shownBalance ? amount(shownBalance.nativeBalance) : "—"}{" "}
           <span className="evm-muted">{network?.nativeSymbol ?? "ETH"}</span>
         </strong>
+        <UsdEstimate atoms={shownBalance?.nativeBalance ?? null} decimals={18} price={nativePrice} testId="evm-native-usd" />
         <div className="evm-account-address" data-testid="evm-account-address">
           {account?.address ?? "Loading chain-key account…"}
         </div>
@@ -385,16 +408,21 @@ export function EvmWalletApp() {
       {tab === "Assets" && (
         <section className="evm-card">
           <div className="evm-row evm-section-heading"><h2 className="evm-card-title">Tokens</h2><IconButton icon="plus" label="Add a token" onClick={() => setTab("Settings")} /></div>
-
+          <p className="evm-tracked-usd evm-muted" title={trackedUsdTitle} data-testid="evm-tracked-usd">
+            {partialUsd ? "Priced token total" : "Tracked token total"} <strong>{trackedUsd !== null && Number.isFinite(trackedUsd) ? `≈ ${formatUsd(trackedUsd)}` : "—"}</strong>
+          </p>
           <div className="evm-asset-list">
             <AssetRow
               chainId={chainId}
               tokenAddress={null}
               symbol={network?.nativeSymbol ?? "ETH"}
               name={network?.name ?? "Ethereum"}
-              value={balance ? amount(balance.nativeBalance) : "Unavailable"}
+              value={shownBalance ? amount(shownBalance.nativeBalance) : "Unavailable"}
+              atoms={shownBalance?.nativeBalance ?? null}
+              decimals={18}
+              price={nativePrice}
             />
-            {balance?.tokens.map((token) => (
+            {shownBalance?.tokens.map((token) => (
               <AssetRow
                 key={token.address}
                 chainId={chainId}
@@ -406,6 +434,9 @@ export function EvmWalletApp() {
                     ? "Unavailable"
                     : amount(token.balance, token.decimals)
                 }
+                atoms={token.balance}
+                decimals={token.decimals}
+                price={priceFor({ chainId, address: token.address })}
                 error={token.error}
               />
             ))}
@@ -419,6 +450,7 @@ export function EvmWalletApp() {
           chainId={chainId}
           snapshot={snapshot!}
           history={history}
+          priceFor={priceFor}
           onResult={() => void refresh()}
         />
       )}
@@ -571,12 +603,26 @@ function TokenIcon({ chainId, address, symbol }: { chainId: string; address: str
   const src = evmTokenIcon(chainId, address);
   return <span className="evm-asset-icon" aria-hidden="true">{src ? <img src={src} alt="" /> : evmTokenInitials(symbol)}</span>;
 }
+function UsdEstimate({ atoms, decimals, price, testId }: {
+  atoms: string | null;
+  decimals: number | null;
+  price: EvmUsdPrice | undefined;
+  testId?: string;
+}) {
+  const value = atoms === null || decimals === null ? null : usdValue(atoms, decimals, price);
+  return <span className="evm-usd" data-testid={testId} title={usdPriceTitle(price)} aria-label={value === null ? "USD value unavailable" : undefined}>
+    {value === null ? "—" : `≈ ${formatUsd(value)}${price?.status === "stale" ? " · outdated" : ""}`}
+  </span>;
+}
 function AssetRow({
   chainId,
   tokenAddress,
   symbol,
   name,
   value,
+  atoms,
+  decimals,
+  price,
   error,
 }: {
   chainId: string;
@@ -584,6 +630,9 @@ function AssetRow({
   symbol: string;
   name: string;
   value: string;
+  atoms: string | null;
+  decimals: number | null;
+  price: EvmUsdPrice | undefined;
   error?: string | null;
 }) {
   return (
@@ -594,7 +643,7 @@ function AssetRow({
         <p className="evm-muted evm-address">{name}</p>
         {error && <p className="evm-error">{error}</p>}
       </div>
-      <strong className="evm-asset-value">{value}</strong>
+      <div className="evm-asset-value"><strong>{value}</strong><UsdEstimate atoms={atoms} decimals={decimals} price={price} /></div>
     </div>
   );
 }
@@ -618,12 +667,14 @@ function SendForm({
   chainId,
   snapshot,
   history,
+  priceFor,
   onResult,
 }: {
   accountAddress: string;
   chainId: string;
   snapshot: Snapshot;
   history: Operation[];
+  priceFor: ReturnType<typeof useEvmPrices>["priceFor"];
   onResult: () => void;
 }) {
   const [to, setTo] = useState(""),
@@ -637,6 +688,12 @@ function SendForm({
     [saved, setSaved] = useState<LocalIntent | null>(null),
     [lastOperationId, setLastOperationId] = useState<string | null>(null);
   const tokens = snapshot.assets.filter((t) => t.chainId === chainId);
+  const selectedToken = tokens.find((entry) => entry.address.toLowerCase() === token.toLowerCase());
+  const sendDecimals = token === "native" ? 18 : selectedToken?.decimals ?? null;
+  let sendAtoms: string | null = null;
+  if (sendDecimals !== null && value.trim()) {
+    try { sendAtoms = atomicAmount(value, sendDecimals); } catch { /* Incomplete input has no USD estimate. */ }
+  }
   const sending = useRef(false);
   useEffect(() => {
     setToken("native");
@@ -817,6 +874,7 @@ function SendForm({
             placeholder="0.0"
             required
           />
+          <UsdEstimate atoms={sendAtoms} decimals={sendDecimals} price={priceFor({ chainId, address: token === "native" ? null : token })} testId="evm-send-usd" />
         </Field>
         {token === "native" && (
           <details className="evm-pro-details">
@@ -989,6 +1047,18 @@ function ReviewDialog({
     decoded = tx ? decodeKnownCall(tx.data) : null;
   const presentation = presentOperation(operation, assets, network);
   const typedData = operation.intent.typedDataJson ? presentTypedData(operation.intent.typedDataJson) : null;
+  const { priceFor } = useEvmPrices([
+    { chainId: operation.chainId, address: null },
+    ...assets.filter((asset) => asset.chainId === operation.chainId),
+    ...(presentation.tokenAddress ? [{ chainId: operation.chainId, address: presentation.tokenAddress }] : []),
+  ]);
+  const reviewAsset = presentation.tokenAddress ? assets.find((asset) => asset.chainId === operation.chainId && asset.address.toLowerCase() === presentation.tokenAddress?.toLowerCase()) : null;
+  const reviewDecimals = presentation.tokenAddress ? reviewAsset?.decimals ?? null : 18;
+  const reviewAtoms = presentation.swap?.amountIn ?? presentation.permit2Approval?.amount
+    ?? decoded?.details.find(([label]) => label === "Allowance (atomic units)" || label === "Amount (atomic units)")?.[1]
+    ?? tx?.value ?? null;
+  const reviewPrice = priceFor({ chainId: operation.chainId, address: presentation.tokenAddress ?? null });
+  const nativePrice = priceFor({ chainId: operation.chainId, address: null });
   let messageText: string | null = null;
   if (operation.intent.messageHex)
     try {
@@ -1015,12 +1085,13 @@ function ReviewDialog({
           <p className="evm-muted">{operation.caller.appId === "evm_wallet" ? "Your wallet" : `Requested by ${operation.caller.appId}`}</p>
         </div>
         {presentation.amount && <div className="evm-review-amount"><span>{presentation.amountLabel}</span><div>{presentation.tokenAddress !== undefined && <TokenIcon chainId={operation.chainId} address={presentation.tokenAddress} symbol={presentation.tokenSymbol ?? network?.nativeSymbol ?? "ETH"} />}<strong>{presentation.amount}</strong></div></div>}
+        {presentation.amount && !presentation.unlimitedApproval && !presentation.liquidity && <UsdEstimate atoms={reviewAtoms} decimals={reviewDecimals} price={reviewPrice} testId="evm-review-usd" />}
         {presentation.description && <p className={presentation.unlimitedApproval ? "evm-notice" : "evm-muted"}>{presentation.description}</p>}
         <dl className="evm-review-details evm-review-overview">
           {presentation.parties.map((party) => <div className="evm-review-detail-pair" key={party.label}><dt>{party.label}</dt><dd title={party.value}>{/^0x[0-9a-f]{40}$/i.test(party.value) ? shortAddress(party.value) : party.value}</dd></div>)}
           <dt>Network</dt><dd>{network?.name ?? `Chain ${operation.chainId}`}</dd>
-          {fee && <><dt>Maximum network fee</dt><dd>{amount(maxFee(fee))} {network?.nativeSymbol ?? "ETH"}</dd></>}
-          {presentation.nativeValue && <><dt>Also sending</dt><dd>{presentation.nativeValue}</dd></>}
+          {fee && <><dt>Maximum network fee</dt><dd>{amount(maxFee(fee))} {network?.nativeSymbol ?? "ETH"}<UsdEstimate atoms={maxFee(fee)} decimals={18} price={nativePrice} testId="evm-review-fee-usd" /></dd></>}
+          {presentation.nativeValue && <><dt>Also sending</dt><dd>{presentation.nativeValue}<UsdEstimate atoms={tx?.value ?? null} decimals={18} price={nativePrice} /></dd></>}
         </dl>
         {operation.intent.messageHex !== undefined && <>
           <p className="evm-notice">Only sign if you recognize this app and understand the message.</p>

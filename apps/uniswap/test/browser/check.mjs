@@ -18,7 +18,7 @@ const schema = JSON.parse(await readFile(resolve(app,'dist/schema.json'),'utf8')
 const artifacts = process.env.UNISWAP_BROWSER_ARTIFACTS || '/tmp/neutron-uniswap-browser';
 await mkdir(artifacts, {recursive: true});
 const mock = `export const callTool = (...args) => window.fixtureCall('callTool', args); export const querySelf = (...args) => window.fixtureCall('querySelf', args); export const updateSelf = (...args) => window.fixtureCall('updateSelf', args);`;
-const result = await build({absWorkingDir:app,entryPoints:['src/main.tsx'],bundle:true,write:false,format:'iife',jsx:'automatic',outdir:resolve(artifacts,'build'),plugins:[{name:'kernel-transport',setup(b){b.onResolve({filter:/^neutron-tools\/app$/},()=>({path:'mock',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:mock,loader:'js'}));}},sassPlugin()]});
+const result = await build({absWorkingDir:app,entryPoints:['src/main.tsx'],bundle:true,write:false,format:'iife',jsx:'automatic',outdir:resolve(artifacts,'build'),plugins:[{name:'kernel-transport',setup(b){b.onResolve({filter:/^(?:neutron-tools\/app|\.{1,2}\/app_entry\.ts)$/},()=>({path:'mock',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:mock,loader:'js'}));}},sassPlugin()]});
 const scripts = {'/main.js': result.outputFiles.find(f=>f.path.endsWith('.js')).text, '/main.css': result.outputFiles.find(f=>f.path.endsWith('.css')).text};
 const server=createServer((req,res)=>{const script=scripts[req.url];res.setHeader('Content-Type',req.url.endsWith('.css')?'text/css':script?'text/javascript':'text/html');res.end(script??'<link rel="stylesheet" href="/main.css"><div id="root"></div><script src="/main.js"></script>');});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -124,6 +124,11 @@ async function fixtureTransport(kind,args){
     assert.equal(call.target,'app:evm_wallet:background');
     if(toolOverrides.has(call.name))return toolOverrides.get(call.name)(request);
     if(call.name==='evm_accounts_v1')return {accounts:[account]};
+    if(call.name==='evm_wallet_prices_v1')return {source:'defillama',prices:request.assets.map(asset=>{
+      const wrapped=['0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2','0x82af49447d8a07e3bd95bd0d56f35241523fbab1'].includes(asset.address?.toLowerCase());
+      const native=asset.address===null||wrapped;
+      return {...asset,priceUsd:native?2000:1,observedAtMs:Date.now(),fetchedAtMs:Date.now(),status:'available',basis:wrapped?'wrapped_underlying':'market',sourceId:native?'coingecko:ethereum':`${asset.chainId==='1'?'ethereum':'arbitrum'}:${asset.address}`,error:null};
+    })};
     if(call.name==='evm_balances_v1')return {...request,address:account.address,nativeBalanceWei:request.chainId==='1'?'5000000000000000000':'2000000000000000000',tokens:request.tokens.map(address=>({address,balanceAtoms:'120000000',decimals:address.toLowerCase().startsWith('0xa0b')||address.toLowerCase().startsWith('0xaf88')?'6':'18',symbol:'TOKEN',error:null})),blockNumber:'21000000',observedAtNs:ns(),completeness:'requested_only'};
     if(call.name==='evm_call_contract_v1'){
       if(delayedReads)await delayedReads;
@@ -232,7 +237,8 @@ try{
  assert.equal(await page.getByRole('button',{name:/Connect|Reconnect/i}).count(),0);
  toolOverrides.delete('evm_accounts_v1');
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
- await page.getByText('Balance: 5 ETH',{exact:true}).waitFor();
+ await page.locator('.uni-token-values > .uni-muted').filter({hasText:/^Balance: 5 ETH/}).waitFor();
+ await page.getByLabel('Input token balance in USD: $10,000.00',{exact:true}).waitFor();
  pass('Temporary Wallet startup failure recovers automatically on focus without a permission request');
  assert.equal(await page.getByRole('button',{name:/Connect|Reconnect|Refresh wallet|Refresh history|Get quote/i}).count(),0);
  await page.getByRole('button',{name:'Input token',exact:true}).click();

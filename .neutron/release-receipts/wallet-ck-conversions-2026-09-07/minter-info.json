@@ -1,0 +1,172 @@
+{
+  "cketh_ledger_id": [
+    "ss2fx-dyaaa-aaaar-qacoq-cai"
+  ],
+  "deposit_with_subaccount_helper_contract_address": [
+    "0x18901044688D3756C35Ed2b36D93e6a5B8e00E68"
+  ],
+  "erc20_balances": [
+    [
+      {
+        "balance": "1_759_726_007_109",
+        "erc20_contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      },
+      {
+        "balance": "2_988_605_537_236_444_141_778",
+        "erc20_contract_address": "0x514910771AF9Ca656af840dff83E8264EcF986CA"
+      },
+      {
+        "balance": "477_028_082_076_468_179_639_041_806",
+        "erc20_contract_address": "0x6982508145454Ce325dDbE47a25d4ec3d2311933"
+      },
+      {
+        "balance": "2_439_214_995_819_484_751_217_645",
+        "erc20_contract_address": "0xF5cFBC74057C610c8EF151A439252680AC68c6DC"
+      },
+      {
+        "balance": "54_076_021_853_810_997_076_781_216",
+        "erc20_contract_address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"
+      },
+      {
+        "balance": "17_091",
+        "erc20_contract_address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+      },
+      {
+        "balance": "2_221_322_270_608",
+        "erc20_contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+      },
+      {
+        "balance": "1_391_118_529_432_606",
+        "erc20_contract_address": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+      },
+      {
+        "balance": "11_859_089_069_280_501_154",
+        "erc20_contract_address": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
+      },
+      {
+        "balance": "58_338_064",
+        "erc20_contract_address": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c"
+      },
+      {
+        "balance": "2_502_275",
+        "erc20_contract_address": "0x68749665FF8D2d112Fa859AA293F07A622782F38"
+      },
+      {
+        "balance": "710_000_000_000_000_000_000",
+        "erc20_contract_address": "0x0D8775F648430679A709E98d2b0Cb6250d2887EF"
+      }
+    ]
+  ],
+  "erc20_helper_contract_address": [
+    "0x6abDA0438307733FC299e9C229FD3cc074bD8cC0"
+  ],
+  "eth_balance": [
+    "843_585_482_258_365_288_211"
+  ],
+  "eth_helper_contract_address": [
+    "0x7574eB42cA208A4f6960ECCAfDF186D627dCC175"
+  ],
+  "ethereum_block_height": [
+    {
+      "Finalized": null
+    }
+  ],
+  "evm_rpc_id": [
+    "7hfb6-caaaa-aaaar-qadga-cai"
+  ],
+  "last_deposit_with_subaccount_scraped_block_number": [
+    "25_921_707"
+  ],
+  "last_erc20_scraped_block_number": [
+    "25_921_707"
+  ],
+  "last_eth_scraped_block_number": [
+    "25_921_707"
+  ],
+  "last_gas_fee_estimate": [
+    {
+      "max_fee_per_gas": "1_588_543_278",
+      "max_priority_fee_per_gas": "1_500_000_000",
+      "timestamp": "1788739407868291105"
+    }
+  ],
+  "last_observed_block_number": [
+    "25_921_707"
+  ],
+  "minimum_deposit_amounts": [],
+  "minimum_withdrawal_amount": [
+    "5_000_000_000_000_000"
+  ],
+  "minter_address": [
+    "0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80"
+  ],
+  "smart_contract_address": [
+    "0x7574eB42cA208A4f6960ECCAfDF186D627dCC175"
+  ],
+  "supported_ckerc20_tokens": [
+    [
+      {
+        "ckerc20_token_symbol": "ckUSDC",
+        "erc20_contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "ledger_canister_id": "xevnm-gaaaa-aaaar-qafnq-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckLINK",
+        "erc20_contract_address": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+        "ledger_canister_id": "g4tto-rqaaa-aaaar-qageq-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckPEPE",
+        "erc20_contract_address": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "ledger_canister_id": "etik7-oiaaa-aaaar-qagia-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckOCT",
+        "erc20_contract_address": "0xF5cFBC74057C610c8EF151A439252680AC68c6DC",
+        "ledger_canister_id": "ebo5g-cyaaa-aaaar-qagla-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckSHIB",
+        "erc20_contract_address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+        "ledger_canister_id": "fxffn-xiaaa-aaaar-qagoa-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckWBTC",
+        "erc20_contract_address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "ledger_canister_id": "bptq2-faaaa-aaaar-qagxq-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckUSDT",
+        "erc20_contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "ledger_canister_id": "cngnf-vqaaa-aaaar-qag4q-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckWSTETH",
+        "erc20_contract_address": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+        "ledger_canister_id": "j2tuh-yqaaa-aaaar-qahcq-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckUNI",
+        "erc20_contract_address": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "ledger_canister_id": "ilzky-ayaaa-aaaar-qahha-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckEURC",
+        "erc20_contract_address": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+        "ledger_canister_id": "pe5t5-diaaa-aaaar-qahwa-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckXAUT",
+        "erc20_contract_address": "0x68749665FF8D2d112Fa859AA293F07A622782F38",
+        "ledger_canister_id": "nza5v-qaaaa-aaaar-qahzq-cai"
+      },
+      {
+        "ckerc20_token_symbol": "ckBAT",
+        "erc20_contract_address": "0x0D8775F648430679A709E98d2b0Cb6250d2887EF",
+        "ledger_canister_id": "j7x7x-syaaa-aaaar-qcbea-cai"
+      }
+    ]
+  ],
+  "sweeper_address": [],
+  "sweeper_contract_address": []
+}

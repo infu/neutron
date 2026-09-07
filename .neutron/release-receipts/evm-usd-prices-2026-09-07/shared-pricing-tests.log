@@ -1,0 +1,75 @@
+bun test v1.2.13 (64ed68c9)
+
+packages/neutron-tools/test/evm_price_watch.test.ts:
+(pass) USD polling starts only in an active app, batches subscribers and stops on blur or last unsubscribe [3.00ms]
+(pass) price read failure preserves known values as stale and retries only on the next minute [2.00ms]
+(pass) hidden app accepts an already running price response without starting another poll
+
+packages/neutron-tools/test/evm_prices.test.ts:
+(pass) USD quotes cache successful reads for 60 seconds and refresh at the boundary [2.00ms]
+(pass) missing quotes and provider failures have the same 60 second retry cache
+(pass) ETH and canonical WETH share a provider quote while retaining each requested asset identity [1.00ms]
+(pass) token lookup uses chain and contract, and unsupported networks never fetch
+(pass) overlapping requests share pending provider IDs and independently fetch only missing IDs [1.00ms]
+(pass) one caller cancelling does not abort a shared fetch or prevent another caller's result
+(pass) a provider timeout returns unavailable and clears the pending request for a later retry [12.00ms]
+(pass) failed refresh retains the last good quote as stale and a later success replaces it [1.00ms]
+(pass) staleness follows provider observation age even when the cached fetch is recent
+(pass) malformed provider entries fail individually without hiding valid quotes [3.00ms]
+(pass) USD helpers preserve missing prices, reject invalid quantities, and explain quote provenance [5.00ms]
+(pass) price SDK requests normalize contract addresses and reject malformed or extra input fields
+(pass) price SDK responses bind exact ordered assets and require coherent numeric quote evidence [2.00ms]
+(pass) wallet prices client validates before transport and rejects responses for a different asset [1.00ms]
+
+packages/neutron-tools/test/evm_wallet.test.ts:
+(pass) lightweight contract calls forward the exact requested block and reject mismatched observations [1.00ms]
+(pass) every exported wallet schema registers under the existing Kernel descriptor rules [14.00ms]
+(pass) EVM requests are closed objects and cannot supply caller identity or signing authority [4.00ms]
+(pass) atomic quantities and chain IDs preserve uint256 precision and reject ambiguous decimal strings [2.00ms]
+(pass) transaction fee modes, addresses and access lists are checked before transport [1.00ms]
+(pass) replacement requests identify the original operation and require an explicit boolean cancellation decision [1.00ms]
+(pass) replacement operation IDs and fees remain exact decimal values and reject inconsistent fee settings
+(pass) typed data carries original JSON bytes beyond Number precision without parse-and-reserialize [1.00ms]
+(pass) typed-data serializer requires exact integer values and keeps bigint as decimal text
+(pass) account and network discovery rejects ambiguous or untrusted result metadata [1.00ms]
+(pass) balances are scoped to the exact requested token set and preserve partial errors [1.00ms]
+(pass) contract-read responses bind account, network, destination and exact calldata
+(pass) transaction estimates accept only an exact read request, without transaction authority or fee authorization [2.00ms]
+(pass) Ethereum estimates distinguish base-plus-tip prices, raw gas price fallback, and maximum fee without adding value
+(pass) Arbitrum total-gas estimates include posting once and prefer raw gas price over base fee [1.00ms]
+(pass) unavailable estimates retain partial observations and reasons without pretending a total exists
+(pass) estimate amounts keep arbitrary-precision products and reject missing or inconsistent arithmetic evidence [2.00ms]
+(pass) estimate calls snapshot the exact invocation and stay on their read tool even when transport fails [1.00ms]
+(pass) new evidence tools do not loosen previously released closed schemas [1.00ms]
+(pass) public transaction evidence cannot mix networks, hashes, pending transactions or receipts from different blocks [1.00ms]
+(pass) transaction journal references use closed identities with canonical installation UIDs [1.00ms]
+(pass) journal binding results distinguish a checked mismatch from an unrequested lookup [1.00ms]
+(pass) transaction lookup forwards a snapshotted journal reference without giving it caller authority
+(pass) replacement journal proof requests are closed, normalized references rather than authority or replacement effects [1.00ms]
+(pass) replacement proofs bind every echoed command field and distinguish mismatch from inclusion or execution success
+(pass) replacement journal proof lookup preserves its original reference and never forwards authority or invokes an effect [1.00ms]
+(pass) operation results require consistent transaction evidence and cannot cross request identity [1.00ms]
+(pass) replaced operations require distinct replacement evidence and cannot claim the original transaction succeeded [1.00ms]
+(pass) pending or mined replacements reconcile without resubmitting the original intent [1.00ms]
+(pass) message and typed-data results cannot claim success without a signature or borrow transaction status
+(pass) wallet caller identity requires a Kernel installation UID and root effects require audience attestation [1.00ms]
+(pass) public and root SDK methods choose distinct tools while leaving authority to the injected transport [1.00ms]
+(pass) SDK forwards cancellation and progress options without retrying malformed inputs or mismatched responses
+(pass) consumer call options cannot replace the injected invocation authority
+(pass) speed-up and cancellation use distinct public and root replacement tools without inventing authority
+(pass) replacement responses bind the new request identity and transaction kind without retrying effects [1.00ms]
+(pass) discovery and scoped read methods use their public tools with checked arguments [1.00ms]
+(pass) intent preparation snapshots input before discovery and waits for durable storage before returning [1.00ms]
+(pass) failed durable storage cannot progress to a wallet effect
+(pass) lost submission reply is reconciled from the saved identity without allocating or resending an effect [1.00ms]
+(pass) uncertain operation status is not permission to submit again
+(pass) wallet replacement blocks replay before status lookup or signing even when only the fingerprint changed
+(pass) saved intents reject known-operation address and kind substitution without fresh effects [1.00ms]
+(pass) a definitive not-found resumes the same stored message or typed-data request through human tools [1.00ms]
+(pass) concurrent Ethereum and Arbitrum intents retain independent scopes with out-of-order replies [1.00ms]
+(pass) request ID generation retains all 128 random bits and effect dispatch rejects an unknown kind
+
+ 63 pass
+ 0 fail
+ 933 expect() calls
+Ran 63 tests across 3 files. [403.00ms]

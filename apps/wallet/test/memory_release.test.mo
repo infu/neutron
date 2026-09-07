@@ -10,6 +10,8 @@ import Memory "../backend/memory/wallet/v1";
 import CommandMemory "../backend/memory/wallet_commands/v1";
 import BridgeMemory "../backend/memory/wallet_bridge/v1";
 import ReplacementMemory "../backend/memory/wallet_bridge_replacements/v1";
+import BridgeActivityMemory "../backend/memory/wallet_bridge_activity/v1";
+import BridgeProviderMemory "../backend/memory/wallet_bridge_provider/v1";
 import TransferMemory "../backend/memory/wallet_transfers/v1";
 import BridgeJournal "../backend/bridge/Journal";
 import TransferJournal "../backend/transfers/Journal";
@@ -28,6 +30,17 @@ assert not fresh.configured;
 // The independent command journal starts empty without rewriting Wallet v1.
 let freshCommands = CommandMemory.init();
 assert (Map.size(freshCommands.commands) == 0);
+let freshProviders = BridgeProviderMemory.init();
+assert (Map.size(freshProviders.bindings) == 0);
+let providerId = Blob.fromArray(Array.repeat<Nat8>(0x7c, 16));
+let providerEntry : BridgeProviderMemory.Entry = {
+    binding = { app_id = "agent"; installation_uid = "51"; agent_mode = true;
+        key_fingerprint = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; namespace_version = "1" };
+    intent = Blob.fromArray([0x44, 0x49, 0x44, 0x4c]);
+};
+Map.add(freshProviders.bindings, Blob.compare, providerId, providerEntry);
+let restoredProviders = freshProviders;
+assert (Map.get(restoredProviders.bindings, Blob.compare, providerId) == ?providerEntry);
 
 func compareCommandKeys(
     left : CommandMemory.CommandKey,
@@ -414,3 +427,22 @@ let restoredAllocator : TransferMemory.Mem = allocatorMemory;
 assert restoredAllocator.last_funding_created_at == 1_800_000_000_000_000_012;
 restoredAllocator.last_funding_created_at += 1;
 assert allocatorMemory.last_funding_created_at == 1_800_000_000_000_000_013;
+
+// The independent activity root starts empty on upgrade. Dismissal markers
+// survive restoration without rewriting the released bridge journal or hashes.
+let freshActivity = BridgeActivityMemory.init();
+assert (Map.size(freshActivity.dismissed) == 0);
+let exactBridgeBeforeDismissal = Map.get(freshBridges.intents, Blob.compare, bridgeId);
+let exactAgentBridgeBeforeDismissal = Map.get(freshBridges.intents, Blob.compare, evmBridgeId);
+Map.add(freshActivity.dismissed, Blob.compare, bridgeId, 50_000 : Int);
+Map.add(freshActivity.dismissed, Blob.compare, evmBridgeId, 50_100 : Int);
+let retainedActivity : BridgeActivityMemory.Mem = freshActivity;
+assert (Map.get(retainedActivity.dismissed, Blob.compare, bridgeId) == ?50_000);
+assert (Map.get(retainedActivity.dismissed, Blob.compare, evmBridgeId) == ?50_100);
+assert (Map.get(freshBridges.intents, Blob.compare, bridgeId) == exactBridgeBeforeDismissal);
+assert (Map.get(freshBridges.intents, Blob.compare, evmBridgeId) == exactAgentBridgeBeforeDismissal);
+Map.remove(retainedActivity.dismissed, Blob.compare, bridgeId);
+assert (Map.get(freshActivity.dismissed, Blob.compare, bridgeId) == null);
+assert (Map.get(freshActivity.dismissed, Blob.compare, evmBridgeId) == ?50_100);
+assert (Map.get(freshBridges.intents, Blob.compare, bridgeId) == exactBridgeBeforeDismissal);
+assert (Map.size(BridgeActivityMemory.init().dismissed) == 0);

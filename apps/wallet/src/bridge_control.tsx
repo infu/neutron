@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { connectEthereumProvider, createMsgBusClient } from "neutron-tools/app";
 import { createEvmWalletClient, createEvmRequestId } from "neutron-tools/evm_wallet";
-import { IoArrowBack, IoArrowForward, IoCheckmark, IoChevronForward, IoClose, IoOpenOutline, IoRefresh, IoTimeOutline, IoWalletOutline } from "react-icons/io5";
+import { IoArrowBack, IoArrowForward, IoCheckmark, IoChevronForward, IoClose, IoOpenOutline, IoRefresh, IoTimeOutline, IoWalletOutline, IoReturnUpBackOutline } from "react-icons/io5";
 import { bridgeComplete, bridgeLabel, createBridgeClient, executeBridgeDeposit, type BridgeIntent } from "./bridge.ts";
 import { attachExternalBridgeTransaction, connectEvmBridge, connectEvmBridgeReads } from "./evm_bridge.ts";
 import { TokenMark } from "./token_mark.tsx";
@@ -14,6 +14,10 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
   const bridge = useMemo(() => createBridgeClient(), []);
   const evm = useMemo(() => createEvmWalletClient(createMsgBusClient()), []);
   const [records, setRecords] = useState<BridgeIntent[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
+  const [activityBusy, setActivityBusy] = useState<string | null>(null);
+  const activityBusyRef = useRef(false);
+  const activityEpoch = useRef(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [source, setSource] = useState<"evm" | "external">("evm");
@@ -30,7 +34,9 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
   const ledgerRef = useRef(ledger);
   ledgerRef.current = ledger;
   const [effectiveHashes, setEffectiveHashes] = useState<Record<string, string>>({});
-  const current = records.find((record) => record.id === selectedId) ?? null;
+  const current = records.find((record) => record.id === selectedId && !dismissedIds.has(record.id)) ?? null;
+  const visibleRecords = records.filter((record) => !dismissedIds.has(record.id));
+  const dismissedRecords = records.filter((record) => dismissedIds.has(record.id));
   const nativeSymbol = symbol.startsWith("ck") ? symbol.slice(2) : symbol;
   const mergeRecord = useCallback((intent: BridgeIntent) => {
     if (intent.quote.ledger !== ledgerRef.current) return;
@@ -50,14 +56,18 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
     if (intent.quote.ledger === ledgerRef.current) setSelectedId(intent.id);
   }, [mergeRecord]);
   const reload = useCallback(async () => {
-    const saved = await bridge.list(ledger);
+    const epoch = activityEpoch.current;
+    const [saved, dismissed] = await Promise.all([bridge.list(ledger), bridge.dismissed(ledger)]);
     saved.sort((a, b) => BigInt(a.createdAt) > BigInt(b.createdAt) ? -1 : 1);
-    if (ledger === ledgerRef.current) setRecords(saved);
+    if (ledger === ledgerRef.current) {
+      setRecords(saved);
+      if (activityEpoch.current === epoch) setDismissedIds(new Set(dismissed));
+    }
     return saved;
   }, [bridge, ledger]);
   useEffect(() => {
     let active = true;
-    setLoading(true); setLoaded(false); setError(null); setSelectedId(null); setRecords([]); setAmount(""); setActivityOpen(false); setDetailsOpen(false);
+    setLoading(true); setLoaded(false); setError(null); setSelectedId(null); setRecords([]); setDismissedIds(new Set()); setAmount(""); setActivityOpen(false); setDetailsOpen(false);
     void reload().then(() => { if (active) setLoaded(true); }).catch((reason) => { if (active) setError(message(reason)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [reload]);
@@ -67,18 +77,20 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
     if (bridgeComplete(next)) onRefresh();
     return next;
   }, [bridge, onRefresh, remember]);
-  const refreshState = useRef({ records, mergeRecord, onRefresh });
-  refreshState.current = { records, mergeRecord, onRefresh };
+  const refreshState = useRef({ records, dismissedIds, mergeRecord, onRefresh });
+  refreshState.current = { records, dismissedIds, mergeRecord, onRefresh };
   useEffect(() => {
     let active = true;
     const run = async () => {
       if (!active || document.visibilityState === "hidden" || busyRef.current || refreshRef.current) return;
       const pending = refreshState.current.records.filter((record) => !bridgeComplete(record)
+        && !refreshState.current.dismissedIds.has(record.id)
         && !record.steps.some((step) => step.state === "failed")
         && record.steps.some((step) => step.kind === "deposit" && step.transactionHash));
       const work = (async () => {
         for (const record of pending) {
           if (!active || busyRef.current) break;
+          if (refreshState.current.dismissedIds.has(record.id)) continue;
           try {
             const next = await bridge.refresh(record.id);
             if (!active) break;
@@ -98,7 +110,7 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
     return () => { active = false; globalThis.clearInterval(timer); globalThis.removeEventListener("focus", visible); document.removeEventListener("visibilitychange", visible); };
   }, [bridge, ledger, loaded]);
   const submit = async () => {
-    if (busyRef.current || loading || !loaded) return;
+    if (busyRef.current || activityBusyRef.current || loading || !loaded) return;
     busyRef.current = true;
     setBusy(true); setError(null); setPhase("connecting");
     let external: Awaited<ReturnType<typeof connectEthereumProvider>> | null = null;
@@ -159,6 +171,33 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
   };
 
   const choose = (id: string | null) => { setDetailsOpen(false); setSelectedId(id); setError(null); setPhase(null); setRecoveryHash(""); };
+  const setDismissed = async (record: BridgeIntent, dismissed: boolean) => {
+    if (busyRef.current || activityBusyRef.current) return;
+    activityBusyRef.current = true;
+    activityEpoch.current += 1;
+    setActivityBusy(record.id); setError(null);
+    try {
+      // Dismissal is a local presentation change. In particular, do not wait
+      // for refreshRef or contact Ethereum before removing an old reminder.
+      await bridge.dismiss(record.id, dismissed);
+      if (record.quote.ledger !== ledgerRef.current) return;
+      setDismissedIds((old) => {
+        const next = new Set(old);
+        if (dismissed) next.add(record.id); else next.delete(record.id);
+        return next;
+      });
+      if (dismissed) { if (selectedId === record.id) { choose(null); setAmount(""); } }
+      else { choose(record.id); setActivityOpen(false); }
+    } catch (reason) {
+      setError(message(reason));
+      // A lost canister reply can still have saved the preference. Reloading
+      // only this local state is safe, and the same action is idempotent.
+      try { const ids = await bridge.dismissed(record.quote.ledger); if (record.quote.ledger === ledgerRef.current) setDismissedIds(new Set(ids)); } catch { /* Keep the row available for the same dismissal retry. */ }
+    } finally {
+      activityEpoch.current += 1;
+      activityBusyRef.current = false; setActivityBusy(null);
+    }
+  };
   const complete = current !== null && bridgeComplete(current);
   const failed = current?.steps.some((step) => step.state === "failed") ?? false;
   const deposit = current?.steps.find((step) => step.kind === "deposit");
@@ -166,9 +205,9 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
   const agentOwned = current !== null && typeof current.source !== "string";
   const problem = complete ? null : error ?? (!busy ? current?.error : null);
   const waiting = current !== null && !failed && !complete && (deposited || Boolean(deposit?.transactionHash));
-  const attention = records.filter((record) => !bridgeComplete(record) && !record.steps.some((step) => step.state === "failed")
+  const attention = visibleRecords.filter((record) => !bridgeComplete(record) && !record.steps.some((step) => step.state === "failed")
     && !record.steps.some((step) => step.kind === "deposit" && step.transactionHash));
-  const inProgress = records.filter((record) => !bridgeComplete(record) && !record.steps.some((step) => step.state === "failed")
+  const inProgress = visibleRecords.filter((record) => !bridgeComplete(record) && !record.steps.some((step) => step.state === "failed")
     && record.steps.some((step) => step.kind === "deposit" && step.transactionHash));
   const activeSource = current?.source ?? source;
   const sourceName = typeof activeSource !== "string" ? "Agent" : activeSource === "evm" ? "EVM Wallet" : "browser wallet";
@@ -202,14 +241,16 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
       </>}
       {problem ? <p className="wallet-bridge-problem" role="alert">{friendlyError(problem, current)}</p> : null}
       {failed && !problem ? <p className="wallet-bridge-problem" role="alert">{current?.steps.some((step) => step.error?.includes("declined")) ? "The wallet request was declined. You can start a new deposit when you’re ready." : "This deposit could not complete. See Details for the transaction result."}</p> : null}
-      <button className="nt-button wallet-bridge-primary" type="button" disabled={busy || loading || !loaded || (!current && !amount.trim()) || Boolean(unresolvedBrowserStep)} onClick={() => complete || failed ? resetForm() : void submit()}>{busy ? <span className="wallet-spinner" /> : complete ? <IoCheckmark /> : current && (agentOwned || deposited) ? <IoRefresh /> : null}{primaryText}</button>
+      <button className="nt-button wallet-bridge-primary" type="button" disabled={busy || activityBusy !== null || loading || !loaded || (!current && !amount.trim()) || Boolean(unresolvedBrowserStep)} onClick={() => complete || failed ? resetForm() : void submit()}>{busy ? <span className="wallet-spinner" /> : complete ? <IoCheckmark /> : current && (agentOwned || deposited) ? <IoRefresh /> : null}{primaryText}</button>
+      {current && !dismissedIds.has(current.id) ? <div className="wallet-bridge-dismiss"><button type="button" className="nt-button nt-button--secondary nt-button--sm" disabled={busy || activityBusy !== null} title="Hide this saved deposit from reminders and Activity" onClick={() => void setDismissed(current, true)}><IoClose />{activityBusy === current.id ? "Dismissing…" : "Dismiss"}</button><small>Hides this request. Ethereum approvals and any submitted transactions stay unchanged.</small></div> : null}
       {busy ? <p className="wallet-bridge-hint" role="status">{current ? "Approve each request in your wallet. The next step opens automatically." : "Connecting your wallet and preparing the deposit…"}</p> : null}
       {unresolvedBrowserStep ? <div className="wallet-bridge-recovery"><strong>Find your transaction</strong><p>The browser wallet did not return its result. Paste its transaction hash to check what happened and continue the same deposit.</p><input className="nt-input" aria-label="Existing browser transaction hash" placeholder="Transaction hash · 0x…" value={recoveryHash} disabled={busy} onChange={(event) => setRecoveryHash(event.target.value)} /><button className="nt-button nt-button--secondary nt-button--sm" type="button" disabled={busy || !/^0x[0-9a-fA-F]{64}$/.test(recoveryHash.trim())} onClick={() => void recoverBrowserHash()}>Check transaction</button></div> : null}
       {!loaded && !loading ? <button className="nt-button nt-button--secondary nt-button--sm" type="button" onClick={() => { setLoading(true); void reload().then(() => { setLoaded(true); setError(null); }).catch((reason) => setError(message(reason))).finally(() => setLoading(false)); }}><IoRefresh /> Try again</button> : null}
       {current || error ? <details className="wallet-bridge-details" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}><summary>Details</summary><div>{current ? <><dl><div><dt>Source account</dt><dd><code>{current.account}</code></dd></div><div><dt>Network</dt><dd>Ethereum Mainnet</dd></div><div><dt>Deposit contract</dt><dd><code>{current.quote.helperAddress}</code></dd></div>{current.quote.tokenAddress ? <div><dt>Token contract</dt><dd><code>{current.quote.tokenAddress}</code></dd></div> : null}<div><dt>IC recipient</dt><dd><code>{current.quote.recipient}</code></dd></div><div><dt>Deposit ID</dt><dd><code>{current.id}</code></dd></div><div><dt>Status</dt><dd>{bridgeLabel(current)}</dd></div></dl>{current.steps.filter((step) => step.transactionHash).map((step) => <div className="wallet-bridge-transaction" key={step.kind}><small>{step.kind === "reset_approval" ? "Allowance reset" : step.kind === "approval" ? "Token approval" : "Ethereum deposit"}</small><a href={`https://etherscan.io/tx/${step.transactionHash}`} target="_blank" rel="noopener noreferrer" title="View transaction on Etherscan"><code>{step.transactionHash}</code><IoOpenOutline aria-hidden="true" /></a>{effectiveHashes[step.kind] && effectiveHashes[step.kind] !== step.transactionHash ? <><small>Replacement transaction</small><a href={`https://etherscan.io/tx/${effectiveHashes[step.kind]}`} target="_blank" rel="noopener noreferrer"><code>{effectiveHashes[step.kind]}</code><IoOpenOutline aria-hidden="true" /></a></> : null}</div>)}</> : null}{problem ? <p className="wallet-bridge-technical-error">{problem}</p> : null}<p>Arbitrum assets must be bridged to Ethereum before wrapping into ck-tokens.</p></div></details> : null}
       {!current && attention.length > 0 ? <button className="wallet-bridge-attention" type="button" disabled={busy} onClick={() => choose(attention[0]!.id)}><IoTimeOutline aria-hidden="true" /><span>{attention.length === 1 ? "1 deposit to continue" : `${attention.length} deposits to continue`}</span><IoChevronForward aria-hidden="true" /></button> : null}
       {!current && attention.length === 0 && inProgress.length > 0 ? <button className="wallet-bridge-attention" type="button" disabled={busy} onClick={() => choose(inProgress[0]!.id)}><IoTimeOutline aria-hidden="true" /><span>{inProgress.length === 1 ? "1 deposit in progress" : `${inProgress.length} deposits in progress`}</span><IoChevronForward aria-hidden="true" /></button> : null}
-      {records.length > 0 ? <details className="wallet-bridge-activity" open={activityOpen} onToggle={(event) => setActivityOpen(event.currentTarget.open)}><summary>Activity <span>{records.length}</span></summary><div>{records.map((record) => <button key={record.id} type="button" className={`wallet-bridge-history-row${record.id === current?.id ? " is-selected" : ""}`} disabled={busy} onClick={() => { choose(record.id); setActivityOpen(false); }}><span className={`wallet-bridge-history-mark${bridgeComplete(record) ? " is-complete" : ""}`}>{bridgeComplete(record) ? <IoCheckmark /> : record.steps.some((step) => step.state === "failed") ? <IoClose /> : <IoTimeOutline />}</span><span><strong>{displayAmount(record.amount, decimals)} {symbol}</strong><small>{historyStatus(record)} · {depositDate(record.createdAt)}</small></span><IoChevronForward aria-hidden="true" /></button>)}</div></details> : null}
+      {visibleRecords.length > 0 ? <details className="wallet-bridge-activity" open={activityOpen} onToggle={(event) => setActivityOpen(event.currentTarget.open)}><summary>Activity <span>{visibleRecords.length}</span></summary><div>{visibleRecords.map((record) => <div className="wallet-bridge-history-item" key={record.id}><button type="button" className={`wallet-bridge-history-row${record.id === current?.id ? " is-selected" : ""}`} disabled={busy || activityBusy !== null} onClick={() => { choose(record.id); setActivityOpen(false); }}><span className={`wallet-bridge-history-mark${bridgeComplete(record) ? " is-complete" : ""}`}>{bridgeComplete(record) ? <IoCheckmark /> : record.steps.some((step) => step.state === "failed") ? <IoClose /> : <IoTimeOutline />}</span><span><strong>{displayAmount(record.amount, decimals)} {symbol}</strong><small>{historyStatus(record)} · {depositDate(record.createdAt)}</small></span><IoChevronForward aria-hidden="true" /></button><button type="button" className="nt-icon-button" title="Dismiss saved deposit" aria-label={`Dismiss ${displayAmount(record.amount, decimals)} ${symbol} deposit`} disabled={busy || activityBusy !== null} onClick={() => void setDismissed(record, true)}><IoClose /></button></div>)}</div></details> : null}
+      {dismissedRecords.length > 0 ? <details className="wallet-bridge-activity wallet-bridge-dismissed"><summary>Dismissed <span>{dismissedRecords.length}</span></summary><p className="wallet-bridge-hint">Saved for recovery. Dismissing does not revoke token approvals or cancel transactions already sent.</p><div>{dismissedRecords.map((record) => <div className="wallet-bridge-history-item" key={record.id}><div className="wallet-bridge-history-row"><span><strong>{displayAmount(record.amount, decimals)} {symbol}</strong><small>{depositDate(record.createdAt)}</small></span></div><button type="button" className="nt-icon-button" title="Restore saved deposit" aria-label={`Restore ${displayAmount(record.amount, decimals)} ${symbol} deposit`} disabled={busy || activityBusy !== null} onClick={() => void setDismissed(record, false)}><IoReturnUpBackOutline /></button></div>)}</div></details> : null}
     </>}
   </div>;
 }
@@ -226,7 +267,7 @@ function historyStatus(intent: BridgeIntent): string {
 function friendlyError(error: string, intent: BridgeIntent | null): string {
   if (/header not found|RPC|network|fetch|timeout|timed out/i.test(error)) {
     if (intent?.steps.some((step) => step.kind === "deposit" && step.state === "confirmed")) return "Your Ethereum deposit is confirmed. We couldn’t check the received tokens yet; progress will update automatically.";
-    if (intent?.steps.some((step) => step.kind === "approval" && step.state === "confirmed")) return "Could not check Ethereum. Your token approval is saved; continue to check this deposit and pick up where it stopped.";
+    if (intent?.steps.some((step) => step.kind === "approval" && step.state === "confirmed")) return "Could not check Ethereum. Your token approval is saved. Try again, or dismiss this deposit if you no longer want the reminder.";
     return intent ? "Could not check Ethereum. Your deposit progress is saved. Continue to try again." : "Could not connect to Ethereum. Please try again.";
   }
   if (/declined|reject|denied/i.test(error)) return "The wallet request was declined. Your progress is saved.";

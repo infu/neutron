@@ -1,0 +1,331 @@
+[
+  {
+    "lane": "query",
+    "method": "wallet_bridge_list_v1",
+    "args": [
+      {
+        "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+        "limit": "40"
+      }
+    ]
+  },
+  {
+    "lane": "query",
+    "method": "wallet_bridge_activity_v1",
+    "args": [
+      {
+        "ledger": "xevnm-gaaaa-aaaar-qafnq-cai"
+      }
+    ]
+  },
+  {
+    "lane": "update",
+    "method": "wallet_bridge_refresh_v1",
+    "args": [
+      {
+        "id": {
+          "0": 0,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 0,
+          "7": 0,
+          "8": 0,
+          "9": 0,
+          "10": 0,
+          "11": 0,
+          "12": 0,
+          "13": 0,
+          "14": 0,
+          "15": 3
+        },
+        "event_page_length": "100"
+      }
+    ]
+  },
+  {
+    "lane": "kernel",
+    "method": "permissions.request",
+    "args": [
+      {
+        "target": "kernel",
+        "name": "permissions.request",
+        "arguments": {
+          "target": "evm_wallet",
+          "tools": [
+            "evm_accounts_v1",
+            "evm_call_contract_v1",
+            "evm_read_contract_v1",
+            "evm_operation_status_v1",
+            "evm_transaction_v1"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "lane": "evm",
+    "method": "accounts",
+    "args": []
+  },
+  {
+    "lane": "query",
+    "method": "wallet_bridge_status_v1",
+    "args": [
+      {
+        "0": 0,
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+        "6": 0,
+        "7": 0,
+        "8": 0,
+        "9": 0,
+        "10": 0,
+        "11": 0,
+        "12": 0,
+        "13": 0,
+        "14": 0,
+        "15": 1
+      }
+    ]
+  },
+  {
+    "lane": "evm",
+    "method": "accounts",
+    "args": []
+  },
+  {
+    "lane": "evm",
+    "method": "accounts",
+    "args": []
+  },
+  {
+    "lane": "ethereum",
+    "method": "readContract",
+    "args": [
+      {
+        "accountId": "main",
+        "chainId": "1",
+        "to": "0x2222222222222222222222222222222222222222",
+        "data": "0x93e5d42a"
+      }
+    ]
+  },
+  {
+    "lane": "query",
+    "method": "wallet_bridge_list_v1",
+    "args": [
+      {
+        "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+        "limit": "40"
+      }
+    ]
+  },
+  {
+    "lane": "query",
+    "method": "wallet_bridge_activity_v1",
+    "args": [
+      {
+        "ledger": "xevnm-gaaaa-aaaar-qafnq-cai"
+      }
+    ]
+  },
+  {
+    "lane": "update",
+    "method": "wallet_bridge_step_v2",
+    "args": [
+      {
+        "dismiss": {
+          "id": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0,
+            "7": 0,
+            "8": 0,
+            "9": 0,
+            "10": 0,
+            "11": 0,
+            "12": 0,
+            "13": 0,
+            "14": 0,
+            "15": 1
+          },
+          "dismissed": true
+        }
+      }
+    ]
+  },
+  {
+    "lane": "update",
+    "method": "wallet_bridge_step_v2",
+    "args": [
+      {
+        "dismiss": {
+          "id": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0,
+            "7": 0,
+            "8": 0,
+            "9": 0,
+            "10": 0,
+            "11": 0,
+            "12": 0,
+            "13": 0,
+            "14": 0,
+            "15": 2
+          },
+          "dismissed": true
+        }
+      }
+    ]
+  },
+  {
+    "lane": "update",
+    "method": "wallet_bridge_refresh_v1",
+    "args": [
+      {
+        "id": {
+          "0": 0,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 0,
+          "7": 0,
+          "8": 0,
+          "9": 0,
+          "10": 0,
+          "11": 0,
+          "12": 0,
+          "13": 0,
+          "14": 0,
+          "15": 3
+        },
+        "event_page_length": "100"
+      }
+    ]
+  },
+  {
+    "lane": "update",
+    "method": "wallet_bridge_step_v2",
+    "args": [
+      {
+        "dismiss": {
+          "id": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0,
+            "7": 0,
+            "8": 0,
+            "9": 0,
+            "10": 0,
+            "11": 0,
+            "12": 0,
+            "13": 0,
+            "14": 0,
+            "15": 3
+          },
+          "dismissed": true
+        }
+      }
+    ]
+  },
+  {
+    "lane": "query",
+    "method": "wallet_bridge_list_v1",
+    "args": [
+      {
+        "ledger": "xevnm-gaaaa-aaaar-qafnq-cai",
+        "limit": "40"
+      }
+    ]
+  },
+  {
+    "lane": "query",
+    "method": "wallet_bridge_activity_v1",
+    "args": [
+      {
+        "ledger": "xevnm-gaaaa-aaaar-qafnq-cai"
+      }
+    ]
+  },
+  {
+    "lane": "update",
+    "method": "wallet_bridge_step_v2",
+    "args": [
+      {
+        "dismiss": {
+          "id": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0,
+            "7": 0,
+            "8": 0,
+            "9": 0,
+            "10": 0,
+            "11": 0,
+            "12": 0,
+            "13": 0,
+            "14": 0,
+            "15": 2
+          },
+          "dismissed": false
+        }
+      }
+    ]
+  },
+  {
+    "lane": "update",
+    "method": "wallet_bridge_replacement_v1",
+    "args": [
+      {
+        "lookup": {
+          "id": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0,
+            "7": 0,
+            "8": 0,
+            "9": 0,
+            "10": 0,
+            "11": 0,
+            "12": 0,
+            "13": 0,
+            "14": 0,
+            "15": 2
+          },
+          "step": {
+            "approval": null
+          }
+        }
+      }
+    ]
+  }
+]

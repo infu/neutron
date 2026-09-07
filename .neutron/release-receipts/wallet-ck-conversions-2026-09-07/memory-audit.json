@@ -1,0 +1,42 @@
+{
+  "releasedRoots": [
+    {
+      "root": "wallet",
+      "version": 1,
+      "file": "apps/wallet/backend/memory/wallet/v1.mo",
+      "sha256": "4820233f164de0b765626d61610e92aaa83c22b02d577150c88027e2c87d2c4d",
+      "releasedSourceUnchanged": true
+    },
+    {
+      "root": "wallet_commands",
+      "version": 1,
+      "file": "apps/wallet/backend/memory/wallet_commands/v1.mo",
+      "sha256": "7a79040770f54b78dd3a0be0555f5814d42bf5eb7e7333e39aee80e3ecf5ee51",
+      "releasedSourceUnchanged": true
+    },
+    {
+      "root": "wallet_bridge",
+      "version": 1,
+      "file": "apps/wallet/backend/memory/wallet_bridge/v1.mo",
+      "sha256": "3c19bbc8d0f3b1a7fe3285848350aa3ba2db4016f0bb238ef0c61ed8b4ff6a26",
+      "releasedSourceUnchanged": true
+    },
+    {
+      "root": "wallet_transfers",
+      "version": 1,
+      "file": "apps/wallet/backend/memory/wallet_transfers/v1.mo",
+      "sha256": "495605389ef3af1d18be5bcea81ab6afb7d409c308ec5188742f523931e5213f",
+      "releasedSourceUnchanged": true
+    },
+    {
+      "root": "wallet_bridge_replacements",
+      "version": 1,
+      "file": "apps/wallet/backend/memory/wallet_bridge_replacements/v1.mo",
+      "sha256": "cc6b90fff1e74fd72bc099679ef39a36186028df64cf01359fecc25059a107bf",
+      "releasedSourceUnchanged": true
+    }
+  ],
+  "addedRoot": "wallet_bridge_provider@1",
+  "existingRootMigrations": [],
+  "directWithdrawalContext": "Additive optional Candid destination_binding within existing opaque resolved bytes; released schemas unchanged."
+}

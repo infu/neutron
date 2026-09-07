@@ -1,0 +1,349 @@
+{
+  "cycles_management": {
+    "cycles_for_archive_creation": "50_000_000_000_000",
+    "cycles_for_index_creation": "100_000_000_000_000",
+    "cycles_for_ledger_creation": "150_000_000_000_000",
+    "cycles_top_up_increment": "10_000_000_000_000"
+  },
+  "ledger_suite_version": [
+    {
+      "archive_compressed_wasm_hash": "47c385eda3cfa2816e9da29b570ce69beda49770916a7745c7a3cfda0ccdc2f3",
+      "index_compressed_wasm_hash": "b9f248fed399250f17bd3c00386c251bdff5479001bedde341aeccc632a74253",
+      "ledger_compressed_wasm_hash": "390e22377640748f5a63fc35d50680d27a05d3e9a05c1c25c4061cacebda4c56"
+    }
+  ],
+  "managed_canisters": [
+    {
+      "archives": [],
+      "ckerc20_token_symbol": "ckBAT",
+      "erc20_contract": {
+        "address": "0x0D8775F648430679A709E98d2b0Cb6250d2887EF",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "jywzd-7aaaa-aaaar-qcbeq-cai",
+            "installed_wasm_hash": "b9f248fed399250f17bd3c00386c251bdff5479001bedde341aeccc632a74253"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "j7x7x-syaaa-aaaar-qcbea-cai",
+            "installed_wasm_hash": "390e22377640748f5a63fc35d50680d27a05d3e9a05c1c25c4061cacebda4c56"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [],
+      "ckerc20_token_symbol": "ckEURC",
+      "erc20_contract": {
+        "address": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "pd4vj-oqaaa-aaaar-qahwq-cai",
+            "installed_wasm_hash": "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "pe5t5-diaaa-aaaar-qahwa-cai",
+            "installed_wasm_hash": "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [],
+      "ckerc20_token_symbol": "ckUNI",
+      "erc20_contract": {
+        "address": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "imymm-naaaa-aaaar-qahhq-cai",
+            "installed_wasm_hash": "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "ilzky-ayaaa-aaaar-qahha-cai",
+            "installed_wasm_hash": "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [],
+      "ckerc20_token_symbol": "ckWBTC",
+      "erc20_contract": {
+        "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "dso6s-wiaaa-aaaar-qagya-cai",
+            "installed_wasm_hash": "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "bptq2-faaaa-aaaar-qagxq-cai",
+            "installed_wasm_hash": "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [
+        "zk2nf-eaaaa-aaaar-qaiaq-cai"
+      ],
+      "ckerc20_token_symbol": "ckLINK",
+      "erc20_contract": {
+        "address": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "gvqys-hyaaa-aaaar-qagfa-cai",
+            "installed_wasm_hash": "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "g4tto-rqaaa-aaaar-qageq-cai",
+            "installed_wasm_hash": "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [],
+      "ckerc20_token_symbol": "ckXAUT",
+      "erc20_contract": {
+        "address": "0x68749665FF8D2d112Fa859AA293F07A622782F38",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "nmhmy-riaaa-aaaar-qah2a-cai",
+            "installed_wasm_hash": "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "nza5v-qaaaa-aaaar-qahzq-cai",
+            "installed_wasm_hash": "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [
+        "3qgfz-2qaaa-aaaar-qaipq-cai"
+      ],
+      "ckerc20_token_symbol": "ckPEPE",
+      "erc20_contract": {
+        "address": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "eujml-dqaaa-aaaar-qagiq-cai",
+            "installed_wasm_hash": "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "etik7-oiaaa-aaaar-qagia-cai",
+            "installed_wasm_hash": "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [],
+      "ckerc20_token_symbol": "ckWSTETH",
+      "erc20_contract": {
+        "address": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "jtq73-oyaaa-aaaar-qahda-cai",
+            "installed_wasm_hash": "12612d5b2565b018a01fa5007c1de54c750c74dbd485f1ef31d71d689177fa86"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "j2tuh-yqaaa-aaaar-qahcq-cai",
+            "installed_wasm_hash": "9495d67c6e9ab4cec3740d68fa0a103dbcfd788d978f4cb58308d847d59e635b"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [
+        "et4ks-piaaa-aaaar-qb4iq-cai"
+      ],
+      "ckerc20_token_symbol": "ckSHIB",
+      "erc20_contract": {
+        "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "fqedz-2qaaa-aaaar-qagoq-cai",
+            "installed_wasm_hash": "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "fxffn-xiaaa-aaaar-qagoa-cai",
+            "installed_wasm_hash": "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [
+        "t4dy3-uiaaa-aaaar-qafua-cai"
+      ],
+      "ckerc20_token_symbol": "ckUSDC",
+      "erc20_contract": {
+        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "xrs4b-hiaaa-aaaar-qafoa-cai",
+            "installed_wasm_hash": "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "xevnm-gaaaa-aaaar-qafnq-cai",
+            "installed_wasm_hash": "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [
+        "yhujl-liaaa-aaaar-qaiha-cai"
+      ],
+      "ckerc20_token_symbol": "ckUSDT",
+      "erc20_contract": {
+        "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "cefgz-dyaaa-aaaar-qag5a-cai",
+            "installed_wasm_hash": "12612d5b2565b018a01fa5007c1de54c750c74dbd485f1ef31d71d689177fa86"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "cngnf-vqaaa-aaaar-qag4q-cai",
+            "installed_wasm_hash": "9495d67c6e9ab4cec3740d68fa0a103dbcfd788d978f4cb58308d847d59e635b"
+          }
+        }
+      ]
+    },
+    {
+      "archives": [
+        "jhaso-6yaaa-aaaar-qamrq-cai"
+      ],
+      "ckerc20_token_symbol": "ckOCT",
+      "erc20_contract": {
+        "address": "0xF5cFBC74057C610c8EF151A439252680AC68c6DC",
+        "chain_id": "1"
+      },
+      "index": [
+        {
+          "Installed": {
+            "canister_id": "egp3s-paaaa-aaaar-qaglq-cai",
+            "installed_wasm_hash": "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"
+          }
+        }
+      ],
+      "ledger": [
+        {
+          "Installed": {
+            "canister_id": "ebo5g-cyaaa-aaaar-qagla-cai",
+            "installed_wasm_hash": "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"
+          }
+        }
+      ]
+    }
+  ],
+  "managed_pre_existing_ledger_suites": [
+    [
+      {
+        "archives": [
+          "xob7s-iqaaa-aaaar-qacra-cai"
+        ],
+        "index": [
+          {
+            "Installed": {
+              "canister_id": "s3zol-vqaaa-aaaar-qacpa-cai",
+              "installed_wasm_hash": "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a"
+            }
+          }
+        ],
+        "ledger": [
+          {
+            "Installed": {
+              "canister_id": "ss2fx-dyaaa-aaaar-qacoq-cai",
+              "installed_wasm_hash": "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6"
+            }
+          }
+        ],
+        "token_symbol": "ckETH"
+      }
+    ]
+  ],
+  "minter_id": [
+    "sv3dd-oaaaa-aaaar-qacoa-cai"
+  ],
+  "more_controller_ids": [
+    "r7inp-6aaaa-aaaaa-aaabq-cai"
+  ]
+}

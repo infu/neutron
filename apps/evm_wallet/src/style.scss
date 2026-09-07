@@ -130,6 +130,30 @@ body {
     }
   }
 
+  .evm-usd {
+    color: var(--nt-text-faint);
+    display: block;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.5;
+  }
+
+  .evm-account > .evm-usd {
+    font-size: 14px;
+    margin-top: -4px;
+  }
+
+  .evm-tracked-usd {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    justify-content: space-between;
+    margin-top: 0;
+    strong { color: var(--nt-text); font-variant-numeric: tabular-nums; font-weight: 500; }
+  }
+
   .evm-tabs {
     border-bottom: 1px solid var(--nt-line-subtle);
     display: flex;
@@ -291,6 +315,8 @@ body {
   }
 
   .evm-asset-value {
+    display: grid;
+    gap: 3px;
     font-variant-numeric: tabular-nums;
     margin-left: auto;
     text-align: right;

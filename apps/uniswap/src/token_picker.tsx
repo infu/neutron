@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { evmTokenIcon, evmTokenInitials } from "neutron-tools/src/evm_token_icons.js";
 import type { Token } from "./swap.ts";
+import { UsdAmount, type PriceFor } from "./usd_amount.tsx";
 const keyOf = (token: Token) => token.address?.toLowerCase() ?? "native";
 
 export function TokenIcon({ token }: { token: Token }) {
@@ -8,7 +9,7 @@ export function TokenIcon({ token }: { token: Token }) {
   return source ? <img className="uni-token-icon" src={source} alt=""/> : <span className="uni-token-icon uni-token-initials" aria-hidden="true">{evmTokenInitials(token.symbol)}</span>;
 }
 
-export function TokenPicker({ label, tokens, value, disabled, onChange }: { label: string; tokens: Token[]; value: string; disabled: boolean; onChange: (value: string) => void }) {
+export function TokenPicker({ label, tokens, value, disabled, onChange, balance, balanceAtoms, priceFor }: { label: string; tokens: Token[]; value: string; disabled: boolean; onChange: (value: string) => void; balance?: (token: Token) => string; balanceAtoms?: (token: Token) => string | null; priceFor?: PriceFor }) {
   const [open, setOpen] = useState(false), [search, setSearch] = useState("");
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const selected = tokens.find((token) => keyOf(token) === value)!;
@@ -27,7 +28,7 @@ export function TokenPicker({ label, tokens, value, disabled, onChange }: { labe
     {open && <div className="uni-token-menu" role="dialog" aria-label={`Choose ${label.toLowerCase()}`}>
       <div className="uni-picker-header"><strong>Select a token</strong><button className="uni-icon-button" title="Close token list" aria-label="Close token list" onClick={() => { setOpen(false); trigger.current?.focus(); }}>×</button></div>
       <input autoFocus aria-label={`${label} search`} placeholder="Search name or address" value={search} onChange={(event) => setSearch(event.target.value)}/>
-      <div className="uni-token-options">{matches.map((token) => <button type="button" key={keyOf(token)} className="uni-token-option" aria-label={`Select ${token.symbol}`} aria-pressed={value === keyOf(token)} title={token.address ?? "Native ETH"} onClick={() => { onChange(keyOf(token)); setOpen(false); trigger.current?.focus(); }}><TokenIcon token={token}/><span><strong>{token.symbol}</strong><small>{token.name ?? (token.address ? `${token.address.slice(0, 6)}…${token.address.slice(-4)}` : "Ethereum")}</small></span>{value === keyOf(token) && <span className="uni-token-check" aria-hidden="true">✓</span>}</button>)}{matches.length === 0 && <p className="uni-muted uni-picker-empty">No matching tokens. Add a contract in swap settings.</p>}</div>
+      <div className="uni-token-options">{matches.map((token) => <button type="button" key={keyOf(token)} className="uni-token-option" aria-label={`Select ${token.symbol}`} aria-pressed={value === keyOf(token)} title={token.address ?? "Native ETH"} onClick={() => { onChange(keyOf(token)); setOpen(false); trigger.current?.focus(); }}><TokenIcon token={token}/><span className="uni-token-identity"><strong>{token.symbol}</strong><small>{token.name ?? (token.address ? `${token.address.slice(0, 6)}…${token.address.slice(-4)}` : "Ethereum")}</small></span>{balance && <span className="uni-picker-balance"><strong>{balance(token)}</strong>{priceFor && <UsdAmount atoms={balanceAtoms?.(token) ?? null} decimals={token.decimals} price={priceFor(token)} label={`${token.symbol} balance in USD`}/>}</span>}{value === keyOf(token) && <span className="uni-token-check" aria-hidden="true">✓</span>}</button>)}{matches.length === 0 && <p className="uni-muted uni-picker-empty">No matching tokens. Add a contract in swap settings.</p>}</div>
     </div>}
   </div>;
 }

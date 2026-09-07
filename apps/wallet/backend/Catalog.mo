@@ -105,6 +105,136 @@ module {
                 cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
             });
         },
+        // Ethereum counterparts already listed in EVM Wallet and Uniswap.
+        // Ledger/contract pairs, indexes, and ledger metadata were checked
+        // against the live ckETH minter and ledger suite orchestrator on
+        // 2026-09-07. Fees and decimals are still read from each ledger.
+        {
+            principal = "pe5t5-diaaa-aaaar-qahwa-cai";
+            index = ?"pd4vj-oqaaa-aaaar-qahwq-cai";
+            history_kind = #icrc;
+            name = "Chain-key EURC";
+            symbol = "ckEURC";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
+        {
+            principal = "bptq2-faaaa-aaaar-qagxq-cai";
+            index = ?"dso6s-wiaaa-aaaar-qagya-cai";
+            history_kind = #icrc;
+            name = "Chain-key WBTC";
+            symbol = "ckWBTC";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
+        {
+            principal = "j2tuh-yqaaa-aaaar-qahcq-cai";
+            index = ?"jtq73-oyaaa-aaaar-qahda-cai";
+            history_kind = #icrc;
+            name = "Chain-key WSTETH";
+            symbol = "ckWSTETH";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
+        {
+            principal = "g4tto-rqaaa-aaaar-qageq-cai";
+            index = ?"gvqys-hyaaa-aaaar-qagfa-cai";
+            history_kind = #icrc;
+            name = "Chain-key LINK";
+            symbol = "ckLINK";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0x514910771AF9Ca656af840dff83E8264EcF986CA";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
+        {
+            principal = "ilzky-ayaaa-aaaar-qahha-cai";
+            index = ?"imymm-naaaa-aaaar-qahhq-cai";
+            history_kind = #icrc;
+            name = "Chain-key UNI";
+            symbol = "ckUNI";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
+        {
+            principal = "fxffn-xiaaa-aaaar-qagoa-cai";
+            index = ?"fqedz-2qaaa-aaaar-qagoq-cai";
+            history_kind = #icrc;
+            name = "Chain-key SHIB";
+            symbol = "ckSHIB";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
+        {
+            principal = "etik7-oiaaa-aaaar-qagia-cai";
+            index = ?"eujml-dqaaa-aaaar-qagiq-cai";
+            history_kind = #icrc;
+            name = "Chain-key PEPE";
+            symbol = "ckPEPE";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0x6982508145454Ce325dDbE47a25d4ec3d2311933";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
+        {
+            principal = "nza5v-qaaaa-aaaar-qahzq-cai";
+            index = ?"nmhmy-riaaa-aaaar-qah2a-cai";
+            history_kind = #icrc;
+            name = "Chain-key XAUT";
+            symbol = "ckXAUT";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0x68749665FF8D2d112Fa859AA293F07A622782F38";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
+        {
+            principal = "ebo5g-cyaaa-aaaar-qagla-cai";
+            index = ?"egp3s-paaaa-aaaar-qaglq-cai";
+            history_kind = #icrc;
+            name = "Chain-key OCT";
+            symbol = "ckOCT";
+            price_asset = null;
+            networks = [#internet_computer, #ethereum_mainnet];
+            native_route = ?#ckerc20({
+                minter = "sv3dd-oaaaa-aaaar-qacoa-cai";
+                contract = "0xF5cFBC74057C610c8EF151A439252680AC68c6DC";
+                cketh_ledger = "ss2fx-dyaaa-aaaar-qacoq-cai";
+            });
+        },
         {
             principal = "efmc5-wyaaa-aaaar-qb3wa-cai";
             index = ?"ecnej-3aaaa-aaaar-qb3wq-cai";

@@ -1,0 +1,6 @@
+{
+  "passed": true,
+  "checks": 25,
+  "output": "/tmp/neutron-evm-wallet-usd-full-browser",
+  "failure": null
+}

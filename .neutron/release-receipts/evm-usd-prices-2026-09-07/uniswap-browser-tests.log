@@ -1,0 +1,21 @@
+
+> neutron-uniswap@1.0.0 test:browser
+> node test/browser/check.mjs
+
+PASS Temporary Wallet startup failure recovers automatically on focus without a permission request
+PASS Debounced Auto quote compares actual V3 and V4 calldata, with local token icons and details collapsed
+PASS One Swap action persists intent then automatically verifies approval and final swap receipts before refreshing balances
+PASS Lost final reply survives reload and Continue reconciles the original transaction without another signature
+PASS Focus refreshes accounts, balances and both current and legacy history automatically
+PASS Agent-owned current activity is visible but human auto-refresh neither opens nor resumes its intent
+PASS Explicit V4 runs exact token approval, Permit2 authorization and the router transaction from one Swap click
+PASS Compact swap and token picker fit 375px
+PASS Compact swap and token picker fit 320px
+PASS Liquidity tab discovers V4 NFT IDs in the browser and verifies ownership and pool state through Wallet reads
+PASS Manual position import verifies ownership and retains a durable discovery reference
+PASS Liquidity position cards fit 375px
+PASS Liquidity position cards fit 320px
+PASS New V4 position prepares full-range liquidity at the selected fee and tick spacing without exposing advanced settings
+PASS Add, percentage removal and fee collection each prepare ABI-backed previews with compact collapsed details
+PASS Collect runs the final position-manager transaction and refreshes portfolio and durable activity automatically
+PASS Released legacy approved swap survives reload and refreshes into a newly reviewed swap using its existing allowance

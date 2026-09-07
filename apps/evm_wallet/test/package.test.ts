@@ -101,7 +101,7 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 112,
+    version: 113,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -325,13 +325,13 @@ test("released estimate output and active replacement proof retain Candid option
     originalWalletRequest: { callerAppId: "wallet", callerInstallationUid: "9007199254740993", requestId: request.requestId },
   }, ctx)).toMatchObject({ walletReplacementMatches: false, originalWalletRequest: { callerInstallationUid: "9007199254740993" } });
 });
-test("release 112 initializes cleanly and preserves published 101 and 107 roots with additive browser methods", async () => {
+test("release 113 initializes cleanly and preserves published 101 and 107 roots with additive browser methods", async () => {
   const files = unpackNeutronPackage(
-    await readFile(new URL("../evm_wallet.v0.1.12.neutron", import.meta.url)),
+    await readFile(new URL("../evm_wallet.v0.1.13.neutron", import.meta.url)),
   );
   const prepared = preparePackageInstall(files);
   expect(prepared.manifest.id).toBe("evm_wallet");
-  expect(prepared.manifest.version).toBe(112);
+  expect(prepared.manifest.version).toBe(113);
   expect(Object.keys(files)).toEqual(
     expect.arrayContaining([
       "web/index.html",
@@ -368,6 +368,15 @@ test("release 112 initializes cleanly and preserves published 101 and 107 roots 
     { kind: "keep", owner: "evm_wallet", memoryId: "evm_evidence", version: 1 },
   ]));
   expect(restored.destructiveMemoryRoots).toEqual([]);
+  const published112Files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.12.neutron", import.meta.url)));
+  const published112 = JSON.parse(new TextDecoder().decode(published112Files["neutron.json"]!));
+  expect(published112.version).toBe(112);
+  expect(compiled.memory).toEqual(published112.memory);
+  expect(files["neutron.lock.json"]).toEqual(published112Files["neutron.lock.json"]);
+  for (const root of Object.values(published112.memory) as Array<{ schemas: Record<string, { entry: string }> }>) {
+    for (const schema of Object.values(root.schemas)) expect(files[`mo/${schema.entry}.mo`]).toEqual(published112Files[`mo/${schema.entry}.mo`]);
+  }
+  expect(planMemoryMigrations({ kernel, evm_wallet: published112 }, { kernel, evm_wallet: compiled })).toEqual(restored);
   // Release 101 is immutable production history. The original wallet root and
   // all of its lock entries must survive the independent evidence-root addition.
   const baselineBytes = await readFile(
@@ -422,7 +431,7 @@ test("release 112 initializes cleanly and preserves published 101 and 107 roots 
   function assertRetainedMethods(previous: typeof priorSchema) {
     expect(currentSchema.$schema).toBe(previous.$schema);
     expect(currentSchema.version).toBe(previous.version);
-    expect(currentSchema.app).toEqual({ ...previous.app, version: 112 });
+    expect(currentSchema.app).toEqual({ ...previous.app, version: 113 });
     for (const [name, method] of Object.entries(previous.methods)) expect(currentSchema.methods[name]).toEqual(method);
     expect(Object.keys(currentSchema.methods).filter(name => !Object.hasOwn(previous.methods, name)).sort()).toEqual([...browserBackendMethods].sort());
   }

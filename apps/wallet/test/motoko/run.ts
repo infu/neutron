@@ -19,7 +19,10 @@ const compiledIcTests = [
   "transfer_journal_test.mo",
   "bridge_test.mo",
   "bridge_replacements_test.mo",
+  "bridge_provider_test.mo",
+  "bridge_activity_main_test.mo",
   "transfer_main_test.mo",
+  "direct_withdrawal_main_test.mo",
   "funding_main_test.mo",
   "settlement_test.mo",
   "native_settlement_main_test.mo",
@@ -27,6 +30,7 @@ const compiledIcTests = [
   "erc20_refund_main_test.mo",
 ];
 const availableTests = [
+  "catalog_test.mo",
   "allowances_test.mo",
   "funding_test.mo",
   "history_test.mo",

@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "375: legacy confirmed approval and ready deposit reproduce Ethereum failure; enabled Dismiss is visible",
+    "375: selected Dismiss makes one local canister write, clears reminder and preserves approval bytes",
+    "375: row Dismiss hides unknown deposit without reconciling, resending or clearing its request ID",
+    "375: submitted deposit dismisses immediately even while Ethereum progress request is stuck",
+    "375: dismissed preferences survive reload; hidden deposits generate no Ethereum refresh or reminder",
+    "375: Restore returns original saved deposit and approval hash without sending funds or duplicating work",
+    "700: legacy confirmed approval and ready deposit reproduce Ethereum failure; enabled Dismiss is visible",
+    "700: selected Dismiss makes one local canister write, clears reminder and preserves approval bytes",
+    "700: row Dismiss hides unknown deposit without reconciling, resending or clearing its request ID",
+    "700: submitted deposit dismisses immediately even while Ethereum progress request is stuck",
+    "700: dismissed preferences survive reload; hidden deposits generate no Ethereum refresh or reminder",
+    "700: Restore returns original saved deposit and approval hash without sending funds or duplicating work"
+  ],
+  "errors": [],
+  "boundaries": "Real WalletBridgeDeposit, bridge client, execution and EVM bridge code. Mock local canister persistence and EVM tool boundary; Ethereum RPC is unavailable. No production mutations or real funds."
+}

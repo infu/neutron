@@ -28,7 +28,6 @@ import {
 } from "react-icons/io5";
 import {
   copyToClipboard,
-  createMsgBusClient,
   dismissTray,
   exposeTool,
   isJsonObject,
@@ -116,8 +115,9 @@ import {
   depositOutpoint,
   type WalletDepositIssueKind,
 } from "./deposit_progress.ts";
-import { createEvmWalletClient } from "neutron-tools/evm_wallet";
 import { WalletBridgeDeposit } from "./bridge_control.tsx";
+import { EthereumDestinationTabs, WalletEthereumWithdrawal, type EthereumDestinationMode } from "./ethereum_withdrawal.tsx";
+import { refreshSubmittedWithdrawals } from "./ethereum_withdrawal_controller.ts";
 import {
   destinationLabels,
   parseWalletContactDestinations,
@@ -900,6 +900,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const [contactsBusy, setContactsBusy] = useState(false);
   const [destinationNetwork, setDestinationNetwork] =
     useState<CatalogNetwork>("internet_computer");
+  const [ethereumMode, setEthereumMode] = useState<EthereumDestinationMode>("evm");
   const [transferCandidate, setTransferCandidate] =
     useState<WalletContactDestination | null>(null);
   const [transferAmount, setTransferAmount] = useState("");
@@ -1651,8 +1652,12 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     snapshot?.owner,
   ]);
 
+  const destinationView = useRef("");
+  destinationView.current = `${destinationLedgerId}:${destinationNetwork}:${ethereumMode}:${destinationQuery}`;
   const loadDestinations = useCallback(async () => {
     if (!destinationLedgerId) return;
+    if (destinationNetwork === "ethereum_mainnet" && ethereumMode !== "contacts") { setDestinationBusy(false); return; }
+    const requestedView = destinationView.current;
     setDestinationBusy(true);
     try {
       const value = await querySelf("wallet_contact_destinations", [
@@ -1665,16 +1670,16 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
         },
       ]);
       const next = parseWalletContactDestinations(value);
-      if (next.ledger === destinationLedgerId) {
+      if (next.ledger === destinationLedgerId && requestedView === destinationView.current) {
         setDestinationPage(next);
         setError(null);
       }
     } catch (reason) {
-      setError(errorMessage(reason));
+      if (requestedView === destinationView.current) setError(errorMessage(reason));
     } finally {
-      setDestinationBusy(false);
+      if (requestedView === destinationView.current) setDestinationBusy(false);
     }
-  }, [destinationLedgerId, destinationNetwork, destinationQuery]);
+  }, [destinationLedgerId, destinationNetwork, destinationQuery, ethereumMode]);
 
   useEffect(() => {
     if (!destinationLedgerId) return;
@@ -1688,6 +1693,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setDestinationQuery("");
     setDestinationPage(null);
     setDestinationNetwork("internet_computer");
+    setEthereumMode("evm");
     setTransferCandidate(null);
     setTransferAmount("");
     setTransferReceipt(null);
@@ -1714,6 +1720,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setDestinationQuery("");
     setDestinationPage(null);
     setDestinationNetwork("internet_computer");
+    setEthereumMode("evm");
     setTransferCandidate(null);
     setTransferAmount("");
     setTransferReceipt(null);
@@ -1784,6 +1791,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     setDestinationQuery("");
     setDestinationPage(null);
     setDestinationNetwork("internet_computer");
+    setEthereumMode("evm");
     setTransferCandidate(null);
     setTransferAmount("");
     setTransferReceipt(null);
@@ -1792,6 +1800,8 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
 
   const chooseDestinationNetwork = (network: CatalogNetwork) => {
     setDestinationNetwork(network);
+    setEthereumMode("evm");
+    setError(null);
     setDestinationPage(null);
     setTransferCandidate(null);
     setTransferAmount("");
@@ -1930,6 +1940,50 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       setTransferBusy(false);
     }
   };
+
+  const transferPollState = useRef({ busy: transferBusy, owner: snapshot?.owner });
+  transferPollState.current = { busy: transferBusy, owner: snapshot?.owner };
+  useEffect(() => {
+    const owner = snapshot?.owner;
+    if (!owner || surface === "tray") return;
+    let active = true;
+    let running = false;
+    const poll = async () => {
+      if (!active || running || transferPollState.current.busy || document.visibilityState === "hidden") return;
+      running = true;
+      try {
+        const result = await querySelf("wallet_transfers_pending_v2", [null]);
+        if (!Array.isArray(result)) throw new Error("Invalid Wallet pending transfers");
+        const previous = result.map(parseTransferOperation);
+        const refreshed = await refreshSubmittedWithdrawals(previous, updateSelf);
+        if (!active || transferPollState.current.owner !== owner) return;
+        const cache = readSavedWalletTransfersForRecovery(owner);
+        const local = cache.transfers.map(localTransferOperation);
+        const merged = new Map(local.map((entry) => [entry.requestId, entry]));
+        for (const entry of refreshed) merged.set(entry.requestId, entry);
+        setPendingTransfers([...merged.values()]);
+        const terminal = refreshed.filter((entry) => entry.native && (entry.status === "rejected" || entry.settlement?.status === "confirmed" || entry.settlement?.status === "failed"));
+        if (terminal.length > 0) {
+          // Acknowledge only a visible terminal receipt; never execute a new
+          // transfer or an approval from automatic progress tracking.
+          for (const entry of terminal) {
+            await updateSelf("wallet_transfer_acknowledge_v2", [transferIdBytes(entry.requestId)]);
+            if (cache.warning === null) finishSavedWalletTransfer(owner, entry.requestId);
+          }
+          const balances = await updateSelf("wallet_refresh_balances", [null]);
+          if (active) setSnapshot(parseWalletSnapshotResult(balances));
+          publishWalletInvalidation();
+        }
+      } catch { /* Durable commands stay available; explicit Continue reports errors. */ }
+      finally { running = false; }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 15_000);
+    const visible = () => { if (document.visibilityState !== "hidden") void poll(); };
+    window.addEventListener("focus", visible);
+    document.addEventListener("visibilitychange", visible);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", visible); document.removeEventListener("visibilitychange", visible); };
+  }, [snapshot?.owner, surface]);
 
   if (!snapshot) {
     return (
@@ -2301,8 +2355,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
         {transferCacheWarning ? <WalletNotice message={transferCacheWarning} /> : null}
 
         {pendingTransfers.length > 0 ? (
-          <section className="wallet-empty wallet-saved-transfers" aria-label="Saved transfers awaiting recovery">
-            <strong>Saved transfers</strong>
+          <details className="wallet-transfer-progress-list">
+            <summary>{pendingTransfers.length} transfer{pendingTransfers.length === 1 ? "" : "s"} to check</summary>
+            <div className="wallet-saved-transfers">
             {pendingTransfers.map((operation) => {
               const ledger = snapshot.ledgers.find((item) => item.principal === operation.ledger);
               const amount = ledger?.decimals == null ? `${operation.amount} atoms` : `${formatTokenAmount(operation.amount, ledger.decimals)} ${ledger.symbol ?? ""}`;
@@ -2317,7 +2372,8 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
                 </div>
               );
             })}
-          </section>
+            </div>
+          </details>
         ) : null}
 
         {view === "activity" ? (
@@ -2364,6 +2420,8 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             contactsBusy={contactsBusy}
             ledger={destinationLedger}
             network={destinationNetwork}
+            ethereumMode={ethereumMode}
+            onEthereumMode={(mode) => { setEthereumMode(mode); setError(null); setDestinationQuery(""); }}
             onBack={closeDestinations}
             onCancelTransfer={cancelTransfer}
             onContacts={() => void openContacts()}
@@ -2379,6 +2437,14 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             transferCandidate={transferCandidate}
             transferReceipt={transferReceipt}
             onTransferAmount={setTransferAmount}
+            operations={pendingTransfers}
+            onOperation={(operation) => {
+              setPendingTransfers((current) => [...current.filter((entry) => entry.requestId !== operation.requestId), operation]);
+              if (operation.status === "succeeded") {
+                void updateSelf("wallet_refresh_balances", [null]).then((value) => setSnapshot(parseWalletSnapshotResult(value))).catch(() => undefined);
+                publishWalletInvalidation();
+              }
+            }}
           />
         ) : (
           <section className="wallet-ledgers" aria-label="Tokens">
@@ -3741,7 +3807,7 @@ function formatDepositTime(value: string): string {
 function EthereumDepositControl({ ledger, onRefresh }: { ledger: WalletLedger; onRefresh: () => void }) {
   const { openInTile, surface } = useWalletSurface();
   const fallbackView = useContext(WalletFallbackViewContext);
-  return <WalletBridgeDeposit ledger={ledger.principal} symbol={ledger.symbol ?? "token"} decimals={ledger.decimals} logo={ledger.logo} onRefresh={onRefresh} tray={surface === "tray"} openInTile={() => openInTile(fallbackView)} />;
+  return <WalletBridgeDeposit key={ledger.principal} ledger={ledger.principal} symbol={ledger.symbol ?? "token"} decimals={ledger.decimals} logo={ledger.logo} onRefresh={onRefresh} tray={surface === "tray"} openInTile={() => openInTile(fallbackView)} />;
 }
 
 function CopyValue({ label, value }: { label: string; value: string }) {
@@ -3780,6 +3846,8 @@ function WalletDestinations({
   contactsBusy,
   ledger,
   network,
+  ethereumMode,
+  onEthereumMode,
   onBack,
   onCancelTransfer,
   onContacts,
@@ -3795,12 +3863,16 @@ function WalletDestinations({
   transferBusy,
   transferCandidate,
   transferReceipt,
+  operations,
+  onOperation,
 }: {
   busy: boolean;
   catalog: CatalogLedger | null;
   contactsBusy: boolean;
   ledger: WalletLedger;
   network: CatalogNetwork;
+  ethereumMode: EthereumDestinationMode;
+  onEthereumMode: (mode: EthereumDestinationMode) => void;
   onBack: () => void;
   onCancelTransfer: () => void;
   onContacts: () => void;
@@ -3816,8 +3888,13 @@ function WalletDestinations({
   transferBusy: boolean;
   transferCandidate: WalletContactDestination | null;
   transferReceipt: WalletTransferReceipt | null;
+  operations: WalletTransferOperation[];
+  onOperation: (operation: WalletTransferOperation) => void;
 }) {
   const fallbackView = walletTileView("send", ledger.id);
+  if (network === "ethereum_mainnet" && ethereumMode !== "contacts" && !transferCandidate) return <WalletFallbackViewContext.Provider value={fallbackView}>
+    <WalletEthereumWithdrawal key={ledger.principal} ledger={ledger} mode={ethereumMode} onMode={onEthereumMode} onBack={onBack} onNetwork={() => onNetwork("internet_computer")} operations={operations} onOperation={onOperation} />
+  </WalletFallbackViewContext.Provider>;
   if (transferCandidate) {
     return (
       <WalletFallbackViewContext.Provider value={fallbackView}>
@@ -3887,7 +3964,7 @@ function WalletDestinations({
           <IoRefresh />
         </IconButton>
       </header>
-      {network === "ethereum_mainnet" ? <EvmWithdrawalDestination onFind={onQuery} onContacts={onContacts} /> : null}
+      {network === "ethereum_mainnet" ? <EthereumDestinationTabs mode="contacts" onMode={onEthereumMode} /> : null}
       <label className="wallet-destination-search">
         <IoSearchOutline aria-hidden="true" />
         <input
@@ -3914,27 +3991,6 @@ function WalletDestinations({
       </section>
     </WalletFallbackViewContext.Provider>
   );
-}
-
-function EvmWithdrawalDestination({ onFind, onContacts }: { onFind: (address: string) => void; onContacts: () => void }) {
-  const [address, setAddress] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const load = async () => {
-    setBusy(true); setError(null);
-    try {
-      const accounts = await createEvmWalletClient(createMsgBusClient()).accounts();
-      const account = accounts.accounts.find((entry) => entry.accountId === "main");
-      if (!account) throw new Error("EVM Wallet has no available account");
-      setAddress(account.address); onFind(account.address);
-    } catch (reason) { setError(errorMessage(reason)); }
-    finally { setBusy(false); }
-  };
-  return <div className="wallet-evm-redemption">
-    <button className="nt-button nt-button--secondary nt-button--sm" disabled={busy} type="button" onClick={() => void load()}>{busy ? <span className="wallet-spinner" /> : <IoWalletOutline />} Use EVM Wallet address</button>
-    {address ? <><CopyValue label="Copy EVM Wallet redemption address" value={address} /><small>Withdrawals arrive on Ethereum Mainnet. Select the matching contact below. If it is missing, save this address in Contacts as an Ethereum destination first.</small><button className="nt-button nt-button--secondary nt-button--sm" type="button" onClick={onContacts}>Open Contacts</button></> : null}
-    {error ? <small role="alert">{error}</small> : null}
-  </div>;
 }
 
 function DestinationGroup({
@@ -4138,21 +4194,20 @@ function WalletTransfer({
                 <dd>{erc20 ? "Paid in ckETH" : "From amount"}</dd>
               </div>
             ) : null}
-            {requiresGasReview && quote?.gas ? <>
-              <div className="wallet-withdrawal-cost"><dt>Ethereum gas budget</dt><dd>{formatTokenAmount(quote.gas.budget, 18)} ckETH <small>({quote.gas.budget} atoms)</small></dd></div>
-              <div className="wallet-withdrawal-cost"><dt>ckETH approval fee</dt><dd>{formatTokenAmount(quote.gas.ledgerFee, 18)} ckETH <small>({quote.gas.ledgerFee} atoms)</small></dd></div>
-              <div className="wallet-withdrawal-cost"><dt>ckETH allowance</dt><dd>{quote.gas.allowance} atoms</dd></div>
-              <div className="wallet-withdrawal-cost"><dt>Maximum ckETH debit</dt><dd>{formatTokenAmount(quote.gas.totalDebit, 18)} ckETH <small>({quote.gas.totalDebit} atoms)</small></dd></div>
-              <div className="wallet-withdrawal-cost"><dt>Available ckETH</dt><dd>{formatTokenAmount(quote.gas.balance, 18)} ckETH</dd></div>
-            </> : null}
+            {requiresGasReview && quote?.gas ? <div className="wallet-withdrawal-cost"><dt>Maximum Ethereum gas cost</dt><dd>{formatTokenAmount(quote.gas.totalDebit, 18)} ckETH</dd></div> : null}
           </dl>
           {requiresGasReview ? <div aria-live="polite">
             {quoteBusy ? <p>Checking the current ckETH gas budget and balance…</p> : null}
             {quoteError ? <p role="alert">Gas quote unavailable: {quoteError}</p> : null}
             {quote?.gas && !quote.gas.sufficient ? <p role="alert">Add ckETH to cover the quoted gas budget and approval fee.</p> : null}
             {!quoteAssetSufficient ? <p role="alert">The withdrawal and approval fee exceed the quoted token balance.</p> : null}
-            {quote ? <small>Quoted {new Date(Number(BigInt(quote.observedAtNs) / 1_000_000n)).toLocaleTimeString()}. Costs are checked again before approvals. A changed quote requires another review.</small> : null}
-            <button className="nt-button nt-button--secondary nt-button--sm" disabled={quoteBusy || busy || receipt !== null} type="button" onClick={() => setQuoteRevision((value) => value + 1)}>Refresh gas quote</button>
+            {quote?.gas ? <details className="wallet-withdrawal-advanced"><summary>Details</summary><dl className="wallet-transfer-details">
+              <div><dt>Ethereum gas budget</dt><dd>{formatTokenAmount(quote.gas.budget, 18)} ckETH</dd></div>
+              <div><dt>ckETH approval fee</dt><dd>{formatTokenAmount(quote.gas.ledgerFee, 18)} ckETH</dd></div>
+              <div><dt>ckETH allowance</dt><dd>{quote.gas.allowance} atomic units</dd></div>
+              <div><dt>Available ckETH</dt><dd>{formatTokenAmount(quote.gas.balance, 18)} ckETH</dd></div>
+            </dl><small>Quoted {new Date(Number(BigInt(quote.observedAtNs) / 1_000_000n)).toLocaleTimeString()}. Costs are checked again before approvals. A changed quote requires another review.</small></details> : null}
+            <button className="nt-icon-button" title="Refresh gas quote" aria-label="Refresh gas quote" disabled={quoteBusy || busy || receipt !== null} type="button" onClick={() => setQuoteRevision((value) => value + 1)}><IoRefresh /></button>
           </div> : null}
         </div>
 

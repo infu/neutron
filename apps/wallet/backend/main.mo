@@ -37,6 +37,10 @@ import TransferRefund "./transfers/Refund";
 import BridgeMemory "./memory/wallet_bridge/v1";
 import BridgeReplacementMemory "./memory/wallet_bridge_replacements/v1";
 import Bridge "./bridge/Journal";
+import BridgeProviderMemory "./memory/wallet_bridge_provider/v1";
+import BridgeProvider "./bridge/BridgeProvider";
+import BridgeActivityMemory "./memory/wallet_bridge_activity/v1";
+import BridgeActivity "./bridge/Activity";
 
 module {
     let BATCH_SIZE = 20;
@@ -333,6 +337,18 @@ module {
         transfer : WalletTransferRequest;
         withdrawal_quote : ?WalletWithdrawalAuthorizationV1;
     };
+    public type WalletEthereumWithdrawRequestV1 = {
+        request_id : Blob;
+        ledger : Principal;
+        address : Text;
+        amount : Nat;
+        withdrawal_quote : ?WalletWithdrawalAuthorizationV1;
+    };
+    public type WalletEthereumWithdrawStatusV1 = {
+        request : WalletEthereumWithdrawRequestV1;
+        operation : WalletTransferOperationV2;
+    };
+    public type WalletEthereumWithdrawStatusResultV1 = { #ok : ?WalletEthereumWithdrawStatusV1; #err : Text };
     public type WalletTransferSettlementV2 = {
         checked_at : Int;
         status : {
@@ -400,6 +416,15 @@ module {
         mint : ?WalletBridgeMintV1;
         error : ?Text;
     };
+    public type WalletBridgeProviderBindingV1 = {
+        app_id : Text; installation_uid : Text; agent_mode : Bool;
+        key_fingerprint : Text; namespace_version : Text;
+    };
+    public type WalletBridgeProviderPrepareRequestV1 = {
+        bridge : WalletBridgePrepareRequestV1;
+        binding : WalletBridgeProviderBindingV1;
+    };
+    public type WalletBridgeProviderBindingResultV1 = { binding : ?WalletBridgeProviderBindingV1 };
     public type WalletBridgePrepareRequestV1 = {
         id : Blob;
         ledger : Principal;
@@ -439,6 +464,15 @@ module {
     public type WalletBridgePageV1 = { records : [WalletBridgeIntentV1]; next : ?Blob };
     public type WalletBridgeQuoteResultV1 = { #ok : WalletBridgeQuoteV1; #err : Text };
     public type WalletBridgeIntentResultV1 = { #ok : WalletBridgeIntentV1; #err : Text };
+    public type WalletBridgeActivityRequestV1 = { ledger : ?Principal };
+    public type WalletBridgeActivityEntryV1 = { id : Blob; dismissed_at : Int };
+    public type WalletBridgeActivityResultV1 = { records : [WalletBridgeActivityEntryV1] };
+    public type WalletBridgeDismissRequestV1 = { id : Blob; dismissed : Bool };
+    public type WalletBridgeStepActionV2 = {
+        #claim : WalletBridgeClaimRequestV1;
+        #record : WalletBridgeRecordStepRequestV1;
+        #dismiss : WalletBridgeDismissRequestV1;
+    };
 
     public type WalletFundingCallerV1 = {
         endpoint : Text;
@@ -813,10 +847,15 @@ module {
 
     type RefundCursor = { start : Nat64; tail : Nat64; backwards : Bool; latest_evidence : ?Nat64 };
 
+    // The journal stores this payload as opaque Candid, not as a schema field.
+    // Released records omit destination_binding and decode to null, retaining
+    // their Contacts authorization. Numeric contact IDs never select this mode.
+    type TransferDestinationBinding = { #direct_ethereum : Text };
     type SavedTransferContext = {
         contact : ResolvedTransferDestination;
         route : ?Catalog.NativeRoute;
         withdrawal_quote : ?WalletWithdrawalAuthorizationV1;
+        destination_binding : ?TransferDestinationBinding;
     };
 
     type ParsedMetadata = {
@@ -851,6 +890,8 @@ module {
             wallet_transfers : TransferMemory.Mem;
             wallet_bridge : BridgeMemory.Mem;
             wallet_bridge_replacements : BridgeReplacementMemory.Mem;
+            wallet_bridge_provider : BridgeProviderMemory.Mem;
+            wallet_bridge_activity : BridgeActivityMemory.Mem;
         };
         app_calls : AppCalls;
         capabilities : {
@@ -866,6 +907,8 @@ module {
         let calls = env.capabilities.backend_calls;
         let history = History.Service(mem, calls);
         let bridge = Bridge.ServiceWithReplacements(env.stable_memory.wallet_bridge, env.stable_memory.wallet_bridge_replacements, calls);
+        let bridgeProvider = BridgeProvider.Service(env.stable_memory.wallet_bridge_provider, env.stable_memory.wallet_bridge);
+        let bridgeActivity = BridgeActivity.Service(env.stable_memory.wallet_bridge_activity, env.stable_memory.wallet_bridge);
         var transferInFlight = false;
         let refundCursors = Map.empty<Blob, RefundCursor>();
 
@@ -1040,6 +1083,7 @@ module {
                                                         false,
                                                         null,
                                                         null,
+                                                        null,
                                                     );
                                                 };
                                             };
@@ -1111,6 +1155,7 @@ module {
             minterAlreadyDispatched : Bool,
             memo : ?Blob,
             authorization : ?WalletWithdrawalAuthorizationV1,
+            destinationBinding : ?TransferDestinationBinding,
         ) : async* WalletTransferResult {
             let address = switch (nativeAddress(resolved.destination)) {
                 case (#err(error)) return #err(error);
@@ -1124,7 +1169,7 @@ module {
                 fee,
                 createdAt,
                 executionCalls,
-                func() { if (minterAlreadyDispatched) #ok(()) else validateTransferDestination(request, resolved.destination) },
+                func() { if (minterAlreadyDispatched) #ok(()) else validateSavedTransferDestination(request, resolved.destination, destinationBinding) },
                 memo,
                 authorization,
             );
@@ -1194,12 +1239,46 @@ module {
         // Preparation commits the complete intent without awaiting or moving
         // value. Execution starts only after the UI receives this durable ID.
         public func /*update*/wallet_transfer_prepare_v2(request : WalletTransferRequestV2) : WalletTransferResultV2 {
+            prepareTransfer(request, null);
+        };
+
+        // An explicit Ethereum destination does not need an address-book entry.
+        // The saved binding distinguishes it from every released contact-bound
+        // request, including contacts whose identifiers happen to be zero.
+        public func /*update*/wallet_ethereum_withdraw_prepare_v1(request : WalletEthereumWithdrawRequestV1) : WalletTransferResultV2 {
+            if (not validEthereumAddress(request.address)) return #err("Enter a valid Ethereum address (0x and 40 hexadecimal characters)");
+            let address = Text.toLower(request.address);
+            let transfer : WalletTransferRequest = {
+                ledger = request.ledger;
+                network = #ethereum_mainnet;
+                contact_id = 0;
+                contact_revision = 0;
+                address_id = 0;
+                expected_destination = #ethereum_mainnet(address);
+                amount = request.amount;
+            };
+            prepareTransfer({ request_id = request.request_id; transfer; withdrawal_quote = request.withdrawal_quote }, ?#direct_ethereum(address));
+        };
+
+        public func /*query*/wallet_ethereum_withdraw_status_v1(id : Blob) : WalletEthereumWithdrawStatusResultV1 {
+            let ?command = Map.get(transferMem.commands, Blob.compare, id) else return #ok(null);
+            let ?context : ?SavedTransferContext = from_candid command.resolved else return #err("Invalid saved transfer context");
+            let ?#direct_ethereum(address) = context.destination_binding else return #ok(null);
+            let ?transfer : ?WalletTransferRequest = from_candid command.intent else return #err("Invalid saved transfer intent");
+            #ok(?{
+                request = { request_id = id; ledger = transfer.ledger; address; amount = transfer.amount; withdrawal_quote = context.withdrawal_quote };
+                operation = transferOperation(command);
+            });
+        };
+
+        func prepareTransfer(request : WalletTransferRequestV2, destinationBinding : ?TransferDestinationBinding) : WalletTransferResultV2 {
             if (request.request_id.size() != REQUEST_ID_BYTES) return #err("Invalid transfer request ID");
             let intent = to_candid (request.transfer);
             switch (Map.get(transferMem.commands, Blob.compare, request.request_id)) {
                 case (?saved) {
                     if (saved.intent != intent) return #err("Transfer request ID already belongs to a different intent");
                     let ?savedContext : ?SavedTransferContext = from_candid saved.resolved else return #err("Invalid saved transfer context");
+                    if (savedContext.destination_binding != destinationBinding) return #err("Transfer request ID already belongs to a different destination authorization");
                     if (to_candid (savedContext.withdrawal_quote) != to_candid (request.withdrawal_quote)) return #err("Transfer request ID already belongs to a different withdrawal cost review");
                     return #ok(transferOperation(saved));
                 };
@@ -1207,9 +1286,18 @@ module {
             };
             let transfer = request.transfer;
             if (transfer.amount == 0) return #err("Transfer amount must be greater than zero");
-            let resolved = switch (resolveTransferDestination(transfer)) {
-                case (#err(error)) return #err(error);
-                case (#ok(value)) value;
+            let resolved = switch (destinationBinding) {
+                case null switch (resolveTransferDestination(transfer)) {
+                    case (#err(error)) return #err(error);
+                    case (#ok(value)) value;
+                };
+                case (?#direct_ethereum(address)) {
+                    switch (validateSavedTransferDestination(transfer, transfer.expected_destination, destinationBinding)) {
+                        case (#err(error)) return #err(error);
+                        case (#ok(())) {};
+                    };
+                    { destination = transfer.expected_destination; contact_name = address; address_label = ?"Ethereum" };
+                };
             };
             let catalog = Catalog.find(transfer.ledger);
             switch (preflightTransfer(transfer, catalog)) {
@@ -1250,7 +1338,7 @@ module {
             let command : TransferMemory.Command = {
                 request_id = request.request_id;
                 intent;
-                resolved = to_candid ({ contact = resolved; route; withdrawal_quote = request.withdrawal_quote });
+                resolved = to_candid ({ contact = resolved; route; withdrawal_quote = request.withdrawal_quote; destination_binding = destinationBinding } : SavedTransferContext);
                 created_at = nowNanos();
                 ledger = transfer.ledger;
                 native;
@@ -1458,14 +1546,14 @@ module {
                 case (#ok(fee)) {
                     // Exact already-dispatched transfers can reconcile after a
                     // contact edit. New effects still recheck the contact.
-                    let validation = if ((replay.dispatched() and not command.native) or TransferJournal.minterDispatched(command)) #ok(()) else validateTransferDestination(request, resolved.destination);
+                    let validation = if ((replay.dispatched() and not command.native) or TransferJournal.minterDispatched(command)) #ok(()) else validateSavedTransferDestination(request, resolved.destination, context.destination_binding);
                     switch (validation) {
                         case (#err(error)) #err(error);
                         case (#ok(())) {
                             if (not command.native) {
                                 await* transferIcrc(request, resolved, fee, replay.backend_calls, command.created_at, ?command.request_id);
                             } else switch (context.route) {
-                                case (?route) await* transferNative(request, resolved, route, fee, replay.backend_calls, command.created_at, TransferJournal.minterDispatched(command), ?command.request_id, context.withdrawal_quote);
+                                case (?route) await* transferNative(request, resolved, route, fee, replay.backend_calls, command.created_at, TransferJournal.minterDispatched(command), ?command.request_id, context.withdrawal_quote, context.destination_binding);
                                 case null #err("Saved native route is missing");
                             };
                         };
@@ -1650,9 +1738,25 @@ module {
         };
 
         public func /*update*/wallet_bridge_quote_v1(ledger : Principal) : async* WalletBridgeQuoteResultV1 { await* bridge.quote(ledger) };
-        public func /*update*/wallet_bridge_prepare_v1(request : WalletBridgePrepareRequestV1) : async* WalletBridgeIntentResultV1 { await* bridge.prepare(request) };
+        public func /*update*/wallet_bridge_prepare_v1(request : WalletBridgePrepareRequestV1) : async* WalletBridgeIntentResultV1 {
+            switch (bridgeProvider.requireLegacy(request.id)) { case (#err(error)) return #err(error); case (_) {} };
+            await* bridge.prepare(request);
+        };
+        public func /*query*/wallet_bridge_provider_binding_v1(id : Blob) : WalletBridgeProviderBindingResultV1 { bridgeProvider.lookup(id) };
+        public func /*update*/wallet_bridge_provider_prepare_v1(request : WalletBridgeProviderPrepareRequestV1) : async* WalletBridgeIntentResultV1 {
+            switch (bridgeProvider.reserve(request)) { case (#err(error)) return #err(error); case (_) {} };
+            await* bridge.prepare(request.bridge);
+        };
         public func /*query*/wallet_bridge_list_v1(request : WalletBridgeListRequestV1) : WalletBridgePageV1 { bridge.list(request) };
         public func /*query*/wallet_bridge_status_v1(id : Blob) : WalletBridgeIntentResultV1 { bridge.status(id) };
+        public func /*query*/wallet_bridge_activity_v1(request : WalletBridgeActivityRequestV1) : WalletBridgeActivityResultV1 { bridgeActivity.list(request) };
+        public func /*update*/wallet_bridge_step_v2(request : WalletBridgeStepActionV2) : WalletBridgeIntentResultV1 {
+            switch (request) {
+                case (#claim(value)) bridge.claim(value);
+                case (#record(value)) bridge.recordStep(value);
+                case (#dismiss(value)) bridgeActivity.dismiss(value);
+            };
+        };
         public func /*update*/wallet_bridge_claim_v1(request : WalletBridgeClaimRequestV1) : WalletBridgeIntentResultV1 { bridge.claim(request) };
         public func /*update*/wallet_bridge_record_step_v1(request : WalletBridgeRecordStepRequestV1) : WalletBridgeIntentResultV1 { bridge.recordStep(request) };
         public func /*update*/wallet_bridge_replacement_v1(request : WalletBridgeReplacementActionV1) : WalletBridgeReplacementResultV1 {
@@ -3917,6 +4021,22 @@ module {
             #ok(());
         };
 
+        func validateSavedTransferDestination(
+            request : WalletTransferRequest,
+            expected : DestinationV1,
+            binding : ?TransferDestinationBinding,
+        ) : Withdrawals.Result<()> {
+            switch (binding) {
+                case null validateTransferDestination(request, expected);
+                case (?#direct_ethereum(address)) {
+                    if (not validEthereumAddress(address) or request.network != #ethereum_mainnet or expected != #ethereum_mainnet(address) or request.expected_destination != expected) return #err("Saved Ethereum destination does not match the approved withdrawal");
+                    switch (selectedLedger(request.ledger)) { case (#err(error)) return #err(error); case (_) {} };
+                    if (not supportsNetwork(request.ledger, #ethereum_mainnet)) return #err("Ledger has no Ethereum withdrawal route");
+                    #ok(());
+                };
+            };
+        };
+
         func validateTransferDestination(
             request : WalletTransferRequest,
             expected : DestinationV1,
@@ -4939,6 +5059,16 @@ module {
         };
     };
 
+    func validEthereumAddress(value : Text) : Bool {
+        if (value.size() != 42) return false;
+        let chars = value.chars();
+        if (chars.next() != ?'0' or chars.next() != ?'x') return false;
+        for (char in chars) {
+            if (not (char >= '0' and char <= '9') and not (char >= 'a' and char <= 'f') and not (char >= 'A' and char <= 'F')) return false;
+        };
+        true;
+    };
+
     func supportsNetwork(
         principal : Principal,
         network : DestinationKindV1,
@@ -5123,6 +5253,12 @@ public type wallet_transfer_v2_Output = WalletTransferResultV2;
 public type wallet_transfer_prepare_v2_Input = (request : WalletTransferRequestV2);
 public type wallet_transfer_prepare_v2_Output = WalletTransferResultV2;
 
+public type wallet_ethereum_withdraw_prepare_v1_Input = (request : WalletEthereumWithdrawRequestV1);
+public type wallet_ethereum_withdraw_prepare_v1_Output = WalletTransferResultV2;
+
+public type wallet_ethereum_withdraw_status_v1_Input = (id : Blob);
+public type wallet_ethereum_withdraw_status_v1_Output = WalletEthereumWithdrawStatusResultV1;
+
 public type wallet_transfer_resume_v2_Input = (id : Blob);
 public type wallet_transfer_resume_v2_Output = WalletTransferResultV2;
 
@@ -5144,11 +5280,23 @@ public type wallet_bridge_quote_v1_Output = WalletBridgeQuoteResultV1;
 public type wallet_bridge_prepare_v1_Input = (request : WalletBridgePrepareRequestV1);
 public type wallet_bridge_prepare_v1_Output = WalletBridgeIntentResultV1;
 
+public type wallet_bridge_provider_binding_v1_Input = (id : Blob);
+public type wallet_bridge_provider_binding_v1_Output = WalletBridgeProviderBindingResultV1;
+
+public type wallet_bridge_provider_prepare_v1_Input = (request : WalletBridgeProviderPrepareRequestV1);
+public type wallet_bridge_provider_prepare_v1_Output = WalletBridgeIntentResultV1;
+
 public type wallet_bridge_list_v1_Input = (request : WalletBridgeListRequestV1);
 public type wallet_bridge_list_v1_Output = WalletBridgePageV1;
 
 public type wallet_bridge_status_v1_Input = (id : Blob);
 public type wallet_bridge_status_v1_Output = WalletBridgeIntentResultV1;
+
+public type wallet_bridge_activity_v1_Input = (request : WalletBridgeActivityRequestV1);
+public type wallet_bridge_activity_v1_Output = WalletBridgeActivityResultV1;
+
+public type wallet_bridge_step_v2_Input = (request : WalletBridgeStepActionV2);
+public type wallet_bridge_step_v2_Output = WalletBridgeIntentResultV1;
 
 public type wallet_bridge_claim_v1_Input = (request : WalletBridgeClaimRequestV1);
 public type wallet_bridge_claim_v1_Output = WalletBridgeIntentResultV1;

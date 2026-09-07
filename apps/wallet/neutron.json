@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 317,
+  "version": 319,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Canister-owned ICRC token balances",
   "src": "main.mo",
@@ -43,15 +43,12 @@
         "wallet_refresh_deposits",
         "wallet_history_page",
         "wallet_history_status",
-        "wallet_history_sources",
         "wallet_history_sync",
-        "wallet_transfer",
         "wallet_funding_prepare_v1",
         "wallet_funding_execute_v1",
         "wallet_funding_reject_v1",
         "wallet_allowances_page_v1",
         "wallet_token_info_v1",
-        "wallet_transfer_v2",
         "wallet_transfer_status_v2",
         "wallet_transfers_pending_v2",
         "wallet_transfer_resume_v2",
@@ -59,14 +56,17 @@
         "wallet_bridge_prepare_v1",
         "wallet_bridge_list_v1",
         "wallet_bridge_status_v1",
-        "wallet_bridge_claim_v1",
-        "wallet_bridge_record_step_v1",
         "wallet_bridge_replacement_v1",
         "wallet_bridge_refresh_v1",
         "wallet_transfer_refresh_v2",
         "wallet_transfer_prepare_v2",
         "wallet_transfer_acknowledge_v2",
-        "wallet_withdrawal_quote_v1"
+        "wallet_withdrawal_quote_v1",
+        "wallet_ethereum_withdraw_prepare_v1",
+        "wallet_bridge_provider_prepare_v1",
+        "wallet_bridge_provider_binding_v1",
+        "wallet_bridge_activity_v1",
+        "wallet_bridge_step_v2"
       ]
     },
     "scheduled_tasks": {
@@ -222,7 +222,8 @@
             "evm_read_contract_v1",
             "evm_transaction_v1",
             "evm_operation_status_v1",
-            "evm_send_transaction_v1"
+            "evm_send_transaction_v1",
+            "evm_replacement_transaction_v1"
           ]
         }
       ]
@@ -289,6 +290,14 @@
       "type": "update",
       "async": false
     },
+    "wallet_ethereum_withdraw_prepare_v1": {
+      "type": "update",
+      "async": false
+    },
+    "wallet_ethereum_withdraw_status_v1": {
+      "type": "query",
+      "async": false
+    },
     "wallet_transfer_resume_v2": {
       "type": "update",
       "async": "async*"
@@ -317,12 +326,28 @@
       "type": "update",
       "async": "async*"
     },
+    "wallet_bridge_provider_binding_v1": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_bridge_provider_prepare_v1": {
+      "type": "update",
+      "async": "async*"
+    },
     "wallet_bridge_list_v1": {
       "type": "query",
       "async": false
     },
     "wallet_bridge_status_v1": {
       "type": "query",
+      "async": false
+    },
+    "wallet_bridge_activity_v1": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_bridge_step_v2": {
+      "type": "update",
       "async": false
     },
     "wallet_bridge_claim_v1": {
@@ -420,6 +445,24 @@
       "schemas": {
         "1": {
           "src": "memory/wallet_bridge_replacements/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "wallet_bridge_provider": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/wallet_bridge_provider/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "wallet_bridge_activity": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/wallet_bridge_activity/v1.mo"
         }
       },
       "migrations": []

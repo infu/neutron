@@ -26,6 +26,7 @@ const option = (name) => {
 };
 const historicalSource = option("--source-dir");
 const historyOnly = process.argv.includes("--history-only");
+const pricesOnly = process.argv.includes("--prices-only");
 const output = option("--output-dir") ?? await mkdtemp(join(tmpdir(), "neutron-evm-wallet-sandbox-"));
 await mkdir(output, { recursive: true });
 const mock = await readFile(join(here, "mock_app.ts"), "utf8");
@@ -49,6 +50,7 @@ await build({
     builder.onResolve({ filter: /^sandbox-qualification-entry$/ }, () => ({ path: "entry", namespace: "bootstrap" }));
     builder.onLoad({ filter: /.*/, namespace: "bootstrap" }, () => ({ contents: bootstrap, loader: "js", resolveDir: root }));
     builder.onResolve({ filter: /^neutron-tools\/app$/ }, () => ({ path: "app", namespace: "fixture" }));
+    builder.onResolve({ filter: /app_entry\.ts$/ }, ({ path, resolveDir }) => resolve(resolveDir, path) === join(root, "packages/neutron-tools/src/app_entry.ts") ? { path: "app", namespace: "fixture" } : undefined);
     builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: mock, loader: "ts", resolveDir: here }));
     builder.onLoad({ filter: /\.(ts|tsx)$/ }, async ({ path }) => {
       if (!path.startsWith(source + "/")) return;
@@ -216,7 +218,8 @@ async function runCase(width, form, action) {
     const rejected = await calls(frame, methods.reject);
     assert.equal(rejected.length, 1); assert.equal(rejected[0].args[0].identity.request_id, prepared.args[0].request.identity.request_id);
     assert.equal((await calls(frame, methods.execute)).length, 0, `${label}: decline executed an effect`);
-    assert.equal(await frame.evaluate(() => window.__evmSandbox.toolCalls.filter((call) => !["evm_accounts_v1", "evm_balances_v1", "evm_operation_status_v1"].includes(call.name)).length), 1, `${label}: duplicate public tool invocation`);
+    const effectTools = ["evm_send_transaction_v1", "evm_sign_message_v1", "evm_sign_typed_data_v1", "evm_replace_transaction_v1"];
+    assert.equal(await frame.evaluate((names) => window.__evmSandbox.toolCalls.filter((call) => names.includes(call.name)).length, effectTools), 1, `${label}: duplicate public effect invocation`);
   }
   assert.deepEqual(await frame.locator(".evm-error").allTextContents(), [], `${label}: UI error`);
   const geometry = await frame.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
@@ -348,11 +351,60 @@ async function runHistoryCase(width, rowCount) {
   checks.push({ label, rowCount, firstCount, loadMoreActions, attempts, noDuplicates: true, allRowsDiscoverable: true, accountAndBalanceIntact: true, executedEffects: 0, geometry });
   await page.close(); activePage = null;
 }
+async function runUsdCase(width, available) {
+  const label = `${width}-usd-${available ? "available" : "unavailable"}`;
+  activeLabel = label;
+  const page = await browser.newPage({ viewport: { width, height: 900 } }); activePage = page;
+  page.on("pageerror", (error) => browserErrors.push({ label, error: String(error) }));
+  await page.goto(`http://127.0.0.1:${server.address().port}/?usd=${available ? "available" : "unavailable"}`);
+  const frame = page.frames().find((candidate) => candidate.url().includes("/app?usd="));
+  assert(frame, `${label}: sandbox frame missing`);
+  await frame.getByTestId("evm-account-address").filter({ hasText: "0x2222222222222222222222222222222222222222" }).waitFor();
+  await frame.getByRole("button", { name: "Assets", exact: true }).click();
+  await frame.waitForFunction(() => window.__evmSandbox.toolCalls.some((call) => call.name === "evm_wallet_prices_v1"));
+  await tick(frame);
+  assert.equal((await frame.getByTestId("evm-native-usd").textContent()).trim(), available ? "≈ $3,703.70" : "—");
+  if (available) {
+    assert.match(await frame.getByTestId("evm-native-usd").getAttribute("title"), /defillama/i);
+    assert.match(await frame.getByTestId("evm-tracked-usd").textContent(), /Priced token total/);
+    const usdc = frame.locator(".evm-asset").filter({ hasText: "USDC" }).first();
+    assert.equal((await usdc.locator(".evm-usd").textContent()).trim(), "≈ $99.70");
+    const image = `${label}-assets.png`; await page.screenshot({ path: join(output, image), fullPage: true }); screenshots.push(image);
+    // A network switch must clear the prior account valuation before its
+    // replacement balance arrives, even when the price cache is warm.
+    await frame.evaluate(() => window.__evmSandbox.hold("balances_read"));
+    await frame.getByTestId("evm-network-select").selectOption("42161");
+    assert.equal((await frame.getByTestId("evm-native-usd").textContent()).trim(), "—");
+    assert.match(await frame.locator(".evm-account-balance").textContent(), /—/);
+    await frame.getByTestId("evm-network-select").selectOption("1");
+    await frame.evaluate(() => window.__evmSandbox.release("balances_read"));
+  }
+  await frame.getByRole("button", { name: "Send", exact: true }).last().click();
+  await frame.getByTestId("evm-send-amount").fill("0.001");
+  assert.equal((await frame.getByTestId("evm-send-usd").textContent()).trim(), available ? "≈ $3.00" : "—");
+  await frame.getByTestId("evm-send-asset").selectOption("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+  await frame.getByTestId("evm-send-amount").fill("3");
+  await frame.getByTestId("evm-send-to").fill("0x4444444444444444444444444444444444444444");
+  assert.equal((await frame.getByTestId("evm-send-usd").textContent()).trim(), available ? "≈ $2.99" : "—");
+  await frame.getByTestId("evm-send-review").click();
+  await frame.getByRole("dialog").waitFor();
+  assert.equal((await frame.getByTestId("evm-review-usd").textContent()).trim(), available ? "≈ $2.99" : "—");
+  assert.equal((await frame.getByTestId("evm-review-fee-usd").textContent()).trim(), available ? "≈ $3.90" : "—");
+  assert.equal((await calls(frame, methods.prepare)).length, 1, `${label}: USD availability must not block preparation`);
+  assert.equal((await calls(frame, methods.execute)).length, 0, `${label}: price display must not execute`);
+  const geometry = await frame.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+  assert(geometry.scrollWidth <= geometry.width, `${label}: USD display horizontal overflow`);
+  const image = `${label}-review.png`; await page.screenshot({ path: join(output, image), fullPage: true }); screenshots.push(image);
+  checks.push({ label, nativeAndTokenUsd: available, inputAndReviewUsd: available, feeUsd: available, missingPriceDoesNotBlock: !available, networkChangeClearsValuation: available, executedEffects: 0, geometry });
+  await page.close(); activePage = null;
+}
 let failure = null;
 try {
-  if (!historyOnly) for (const width of [1440, 375]) for (const form of ["send", "sign", "replacement", "token"]) for (const action of ["click", "enter"]) await runCase(width, form, action);
-  if (!historyOnly) for (const width of [1440, 375]) await runDelayedTokenSend(width);
-  for (const width of [1440, 375]) for (const rowCount of [25, 50]) await runHistoryCase(width, rowCount);
+  if (!historyOnly && !pricesOnly) for (const width of [1440, 375]) for (const form of ["send", "sign", "replacement", "token"]) for (const action of ["click", "enter"]) await runCase(width, form, action);
+  if (!historyOnly && !pricesOnly) for (const width of [1440, 375]) await runDelayedTokenSend(width);
+  if (!pricesOnly) for (const width of [1440, 375]) for (const rowCount of [25, 50]) await runHistoryCase(width, rowCount);
+  if (!historyOnly) for (const width of [700, 375]) await runUsdCase(width, true);
+  if (!historyOnly) await runUsdCase(375, false);
   assert.deepEqual(browserErrors, [], "Browser runtime errors");
   assert.equal(consoleMessages.filter((message) => /blocked form submission|allow-forms/i.test(message.text)).length, 0, "Native form submission attempted inside sandbox");
 } catch (error) {

@@ -46,6 +46,24 @@
         }
       },
       "migrations": {}
+    },
+    "wallet_bridge_provider": {
+      "schemas": {
+        "1": {
+          "hash": "4cb2505960641c9b5a7fa25cfccf24a1585ac9fad51eb2a2b13738658d717e4e",
+          "entry": "9b8fb4c8507f5ffef6fd6b896481e345e9155fad7f6e294e5a31489819744afa"
+        }
+      },
+      "migrations": {}
+    },
+    "wallet_bridge_activity": {
+      "schemas": {
+        "1": {
+          "hash": "01e6e08e16054cdd261d39e9db1e6c48c3d2c3042056f288ad92676542d74614",
+          "entry": "65fa1aeec4c7addf6aba1cdf39391097ce337877bb28f0b3dbe06fb5bfab8330"
+        }
+      },
+      "migrations": {}
     }
   }
 }

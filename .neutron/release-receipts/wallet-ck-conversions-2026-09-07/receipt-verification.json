@@ -1,0 +1,11 @@
+{
+  "protocol": "neutron-wallet-conversion-release-verification-v1",
+  "batchId": "59",
+  "postflightBatchId": null,
+  "packages": 18,
+  "changed": [
+    "wallet"
+  ],
+  "verifiedAt": "2026-09-07T00:30:07.341Z",
+  "allLocalBytesMatch": true
+}

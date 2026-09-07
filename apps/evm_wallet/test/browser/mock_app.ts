@@ -1,6 +1,7 @@
 /** Browser fixture: only the Kernel bridge and projected backend replies are mocked. */
 import { Validator } from "jsonschema";
 import { EVM_WALLET_TOOLS } from "neutron-tools/evm_wallet";
+import { curatedEvmTokens } from "neutron-tools/src/evm_assets.js";
 import { normalizeToolDescriptor } from "neutron-tools/protocol";
 import { keccak256, serializeTransaction, type Hex } from "viem";
 import { handleHumanEffect, type ProviderKind } from "../../src/provider.ts";
@@ -12,7 +13,10 @@ const stamp = "1788652800000000000";
 const account = { id: "main", slot: "main", address, public_key: new Uint8Array(33).fill(2), namespace_version: "1" };
 const snapshot = {
   accounts: [account],
-  networks: [{ chain_id: "1", name: "Ethereum", native_symbol: "ETH", explorer_url: "https://etherscan.io", testnet: false, finality_description: "Ethereum finality" }],
+  networks: [
+    { chain_id: "1", name: "Ethereum", native_symbol: "ETH", explorer_url: "https://etherscan.io", testnet: false, finality_description: "Ethereum finality" },
+    { chain_id: "42161", name: "Arbitrum", native_symbol: "ETH", explorer_url: "https://arbiscan.io", testnet: false, finality_description: "Arbitrum finality" },
+  ],
   assets: [{ chain_id: "1", address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", symbol: "USDC", decimals: "6", custom: true }], lifecycle: "active",
 };
 const originalTransaction = {
@@ -182,11 +186,24 @@ function describeContext(context: any) {
 }
 export async function callTool(request: any) {
   toolCalls.push(copy(request));
-  if (request.name === EVM_WALLET_TOOLS.balances) return {
+  if (request.name === EVM_WALLET_TOOLS.prices) {
+    if (new URLSearchParams(location.search).get("usd") === "unavailable") throw new Error("Price provider is unavailable");
+    return { source: "defillama", prices: request.arguments.assets.map((asset: any) => {
+      const priceUsd = asset.address === null ? 3000 : asset.address.toLowerCase() === "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" ? 0.997 : null;
+      return { ...asset, priceUsd, observedAtMs: priceUsd === null ? null : Date.now(), fetchedAtMs: Date.now(), status: priceUsd === null ? "unavailable" : "available", basis: "market", sourceId: priceUsd === null ? null : asset.address === null ? "coingecko:ethereum" : `ethereum:${asset.address.toLowerCase()}`, error: priceUsd === null ? "No market price" : null };
+    }) };
+  }
+  if (request.name === EVM_WALLET_TOOLS.balances) {
+    await gates.get("balances_read")?.wait;
+    return {
     accountId: "main", chainId: request.arguments.chainId, address, nativeBalanceWei: "1234567890123456789",
     blockNumber: "23901234", observedAtNs: stamp, completeness: "requested_only",
-    tokens: request.arguments.tokens.map((token: string) => ({ address: token, symbol: "USDC", decimals: "6", balanceAtoms: "100000000", error: null })),
-  };
+    tokens: request.arguments.tokens.map((token: string) => {
+      const asset = curatedEvmTokens(request.arguments.chainId).find((entry) => entry.address?.toLowerCase() === token.toLowerCase());
+      return { address: token, symbol: asset?.symbol ?? "Token", decimals: String(asset?.decimals ?? 18), balanceAtoms: asset?.symbol === "USDC" ? "100000000" : asset?.symbol === "WBTC" ? "1000000" : "0", error: null };
+    }),
+    };
+  }
   if (request.name === EVM_WALLET_TOOLS.accounts) return { accounts: [{
     accountId: "main", address, publicKey: "0x02" + "22".repeat(32), keyFingerprint: "0x" + "11".repeat(32), namespaceVersion: "1",
   }] };
