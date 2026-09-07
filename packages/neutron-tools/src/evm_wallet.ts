@@ -15,6 +15,7 @@ export const EVM_WALLET_TOOLS = {
   accounts: "evm_accounts_v1",
   networks: "evm_networks_v1",
   balances: "evm_balances_v1",
+  prices: "evm_wallet_prices_v1",
   readContract: "evm_read_contract_v1",
   callContract: "evm_call_contract_v1",
   estimateTransaction: "evm_estimate_transaction_v1",
@@ -55,6 +56,20 @@ export type EvmReplaceTransactionRequest = EvmEffectIdentity & {
 export type EvmSignMessageRequest = EvmEffectIdentity & { messageHex: string };
 export type EvmSignTypedDataRequest = EvmEffectIdentity & { typedDataJson: string };
 export type EvmBalancesRequest = EvmScope & { tokens: string[] };
+/** Public market estimates require no wallet account or signing authority. */
+export type EvmPriceAsset = { chainId: string; address: string | null };
+export type EvmPricesRequest = { assets: EvmPriceAsset[] };
+export type EvmUsdPrice = EvmPriceAsset & {
+  priceUsd: number | null;
+  /** Provider market observation, distinct from when the browser fetched it. */
+  observedAtMs: number | null;
+  fetchedAtMs: number | null;
+  status: "available" | "stale" | "unavailable";
+  basis: "market" | "wrapped_underlying";
+  sourceId: string | null;
+  error: string | null;
+};
+export type EvmPricesResult = { source: "defillama"; prices: EvmUsdPrice[] };
 export type EvmReadContractRequest = EvmScope & { to: string; data: string };
 /** Read return bytes without downloading code; an explicit block pins dependent reads. */
 export type EvmCallContractRequest = EvmReadContractRequest & { blockTag?: string };
@@ -172,6 +187,16 @@ export const evmEmptyInputSchema = closedSchema({});
 export const evmAccountsInputSchema = evmEmptyInputSchema;
 export const evmNetworksInputSchema = evmEmptyInputSchema;
 export const evmBalancesInputSchema = closedSchema({ ...scopeProperties, tokens: array(ADDRESS) });
+const priceAssetProperties = { chainId: POSITIVE_UINT, address: nullable(ADDRESS) };
+const priceTimestamp = nullable({ type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
+export const evmPricesInputSchema = closedSchema({ assets: array(closedSchema(priceAssetProperties)) });
+export const evmPricesOutputSchema = closedSchema({ source: { const: "defillama" }, prices: array(closedSchema({
+  ...priceAssetProperties,
+  priceUsd: nullable({ type: "number", exclusiveMinimum: 0 }),
+  observedAtMs: priceTimestamp, fetchedAtMs: priceTimestamp,
+  status: { enum: ["available", "stale", "unavailable"] },
+  basis: { enum: ["market", "wrapped_underlying"] }, sourceId: nullable(TEXT), error: nullable(TEXT),
+})) });
 export const evmReadContractInputSchema = closedSchema({ ...scopeProperties, to: ADDRESS, data: HEX });
 export const evmCallContractInputSchema = closedSchema({
   ...scopeProperties, to: ADDRESS, data: HEX,
@@ -267,6 +292,13 @@ function shape(value: unknown, schema: JsonObject, path: string): void {
   if (Array.isArray(schema.enum) && !schema.enum.includes(value as JsonValue)) invalid(path);
   if (schema.type === "null") { if (value !== null) invalid(path); return; }
   if (schema.type === "boolean") { if (typeof value !== "boolean") invalid(path); return; }
+  if (schema.type === "number" || schema.type === "integer") {
+    if (typeof value !== "number" || !Number.isFinite(value) || (schema.type === "integer" && !Number.isInteger(value))) invalid(path);
+    if (typeof schema.minimum === "number" && value < schema.minimum) invalid(path);
+    if (typeof schema.maximum === "number" && value > schema.maximum) invalid(path);
+    if (typeof schema.exclusiveMinimum === "number" && value <= schema.exclusiveMinimum) invalid(path);
+    return;
+  }
   if (schema.type === "string") {
     if (typeof value !== "string") invalid(path);
     if (typeof schema.pattern === "string" && new RegExp(schema.pattern, "u").exec(value)?.[0] !== value) invalid(path);
@@ -316,6 +348,35 @@ export function parseEvmBalancesRequest(value: unknown): EvmBalancesRequest {
   scope(request); request.tokens = request.tokens.map(hex);
   if (new Set(request.tokens).size !== request.tokens.length) invalid("duplicate requested token");
   return request;
+}
+export function parseEvmPricesRequest(value: unknown): EvmPricesRequest {
+  const request = parseShape<EvmPricesRequest>(value, evmPricesInputSchema, "price request");
+  for (const asset of request.assets) {
+    uint256(asset.chainId, "price chainId");
+    if (asset.address !== null) asset.address = hex(asset.address);
+  }
+  return request;
+}
+export function parseEvmPricesResult(value: unknown, expected?: EvmPricesRequest): EvmPricesResult {
+  const result = parseShape<EvmPricesResult>(value, evmPricesOutputSchema, "price result");
+  for (const price of result.prices) {
+    uint256(price.chainId, "price chainId");
+    if (price.address !== null) price.address = hex(price.address);
+    if (price.status === "unavailable") {
+      if (price.priceUsd !== null || price.observedAtMs !== null) invalid("unavailable price has a value");
+    } else if (price.priceUsd === null || price.observedAtMs === null || price.fetchedAtMs === null || !price.sourceId) {
+      invalid("price has no observation evidence");
+    }
+    if (price.status === "available" && price.error !== null) invalid("available price has an error");
+  }
+  if (expected) {
+    const request = parseEvmPricesRequest(expected);
+    if (request.assets.length !== result.prices.length || request.assets.some((asset, index) => {
+      const price = result.prices[index]!;
+      return price.chainId !== asset.chainId || price.address !== asset.address;
+    })) invalid("price response assets do not match the request");
+  }
+  return result;
 }
 export function parseEvmReadContractRequest(value: unknown): EvmReadContractRequest {
   const request = parseShape<EvmReadContractRequest>(value, evmReadContractInputSchema, "contract read request");
@@ -577,6 +638,10 @@ export class EvmWalletClient {
   async balances(value: EvmBalancesRequest, options?: EvmWalletCallOptions): Promise<EvmBalancesResult> {
     const request = parseEvmBalancesRequest(value);
     return parseEvmBalancesResult(await this.invoke(EVM_WALLET_TOOLS.balances, request, options), request);
+  }
+  async prices(value: EvmPricesRequest, options?: EvmWalletCallOptions): Promise<EvmPricesResult> {
+    const request = parseEvmPricesRequest(value);
+    return parseEvmPricesResult(await this.invoke(EVM_WALLET_TOOLS.prices, request, options), request);
   }
   async readContract(value: EvmReadContractRequest, options?: EvmWalletCallOptions): Promise<EvmReadContractResult> {
     const request = parseEvmReadContractRequest(value);

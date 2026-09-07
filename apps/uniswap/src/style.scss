@@ -22,6 +22,12 @@
   .uni-token-panel input, .uni-token-panel output { font-size: 36px; font-weight: 450; letter-spacing: -.8px; background: none; border: 0; outline: none; padding: 0; min-width: 0; color: var(--nt-text); overflow-wrap: anywhere; line-height: 1.25; }
   .uni-token-panel select { border-radius: 20px; font-size: 15px; font-weight: 600; padding: 10px 9px; background: #36323e; }
   .uni-token-panel > p { grid-column: 1 / -1; }
+  .uni-usd { color: var(--nt-text-muted); font-size: 11px; font-weight: 400; letter-spacing: 0; line-height: 1.5; white-space: nowrap; }
+  .uni-usd-stale { color: #d2b99a; }
+  .uni-token-values { grid-column: 1 / -1; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
+  .uni-token-values > :last-child { display: grid; text-align: right; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+  .uni-quote-summary .uni-usd, .uni-app dd > .uni-usd, .uni-fees .uni-muted > .uni-usd { display: block; }
+  .uni-usd-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; color: var(--nt-text-muted); font-size: 12px; }
   .uni-token-picker { min-width: 0; }
   .uni-token-trigger { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; padding: 8px 9px; border: 0; border-radius: 24px; background: #36323e; color: var(--nt-text); font-size: 15px; font-weight: 600; cursor: pointer; }
   .uni-token-trigger > span:not(.uni-token-icon) { overflow: hidden; text-overflow: ellipsis; }
@@ -36,9 +42,12 @@
   .uni-token-option { display: flex; align-items: center; gap: 11px; width: 100%; border: 0; border-radius: 10px; padding: 10px; background: transparent; color: var(--nt-text); text-align: left; cursor: pointer; }
   .uni-token-option:hover, .uni-token-option[aria-pressed="true"] { background: #38303d; }
   .uni-token-option > span:not(.uni-token-icon) { display: grid; gap: 4px; min-width: 0; }
+  .uni-token-option .uni-token-identity { flex: 1; }
+  .uni-token-option .uni-picker-balance { flex: 0 1 auto; text-align: right; }
+  .uni-token-option .uni-picker-balance strong { overflow-wrap: anywhere; font-size: 12px; font-weight: 400; }
   .uni-token-option strong { font-size: 13px; }
   .uni-token-option small { color: var(--nt-text-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .uni-token-check { margin-left: auto; color: var(--nt-accent); }
+  .uni-token-check { color: var(--nt-accent); }
   .uni-picker-empty { padding: 16px 8px; }
   .uni-receive { background: #1b1b22; }
   .uni-direction { position: relative; justify-self: center; width: 38px; height: 38px; margin: -28px 0; z-index: 1; border: 5px solid #15151b; border-radius: 12px; background: #33323c; color: #e5d8e5; font-size: 20px; line-height: 22px; cursor: pointer; }
@@ -107,6 +116,9 @@
   .uni-range-status.is-active { color: #a2dec6; background: #21332c; }
   .uni-position-tokens { display: grid; gap: 7px; padding: 8px 0; font-size: 21px; letter-spacing: -.3px; overflow-wrap: anywhere; }
   .uni-position-tokens span { font-size: 14px; font-weight: 400; color: var(--nt-text-muted); }
+  .uni-position-tokens > strong, .uni-liquidity-preview > div > strong { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; }
+  .uni-position-tokens .uni-usd, .uni-liquidity-preview > div .uni-usd { margin-left: auto; font-size: 11px; }
+  .uni-position-tokens .uni-usd-stale { font-size: inherit; color: #d2b99a; }
   .uni-collectible { display: grid; gap: 5px; margin: 0; padding: 12px; background: #212127; border-radius: 11px; font-size: 11px; color: var(--nt-text-muted); }
   .uni-collectible span { font-size: 12px; color: #ddd2df; overflow-wrap: anywhere; }
   .uni-position-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }

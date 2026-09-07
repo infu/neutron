@@ -1,0 +1,20 @@
+{
+  "evm_wallet": {
+    "roots": [
+      "evm_wallet",
+      "evm_evidence"
+    ],
+    "memoryDeclarationSchemaAndLockUnchanged": true,
+    "previousRelease": 112,
+    "release": 113
+  },
+  "uniswap": {
+    "roots": [
+      "uniswap",
+      "uniswap_actions"
+    ],
+    "memoryDeclarationSchemaAndLockUnchanged": true,
+    "previousRelease": 109,
+    "release": 110
+  }
+}

@@ -221,6 +221,36 @@ and lock lineage after release. Installation and publication follow
 [`doc/memory-migrations-and-uninstall.md`](../../doc/memory-migrations-and-uninstall.md).
 The production update source is `233tv-xiaaa-aaaay-aacta-cai`.
 
+## USD estimates
+
+Balances, tracked token totals, send amounts and transaction fees show secondary
+USD estimates. Prices come directly from the browser to DefiLlama's keyless
+`coins.llama.fi` API ([official client](https://github.com/DefiLlama/api-sdk/blob/master/src/client.ts),
+[price endpoint](https://github.com/DefiLlama/api-sdk/blob/master/src/modules/prices.ts)).
+The resident service shares one volatile cache across Wallet, Uniswap and agents;
+it batches contract IDs and reuses observations for about 60 seconds. It sends
+only public asset identifiers, never an account address. No canister HTTP outcall,
+new persistent root or Kernel change is involved.
+
+UI requests run once a minute while the app document is visible and focused,
+waking on focus. Inactive workspace tiles stay mounted, so page visibility alone
+is insufficient. Closing or leaving the app stops its price polling. Agent
+requests refresh on demand and do not start a background timer.
+
+Agents use `evm_wallet_prices_v1({ assets: [{ chainId: "1", address: null }] })`,
+or SDK `client.prices(...)`. Each row carries the unit USD price, provider
+observation and fetch timestamps, status, source ID and any error. Atomic amounts
+retain their token decimals. The existing balance and transaction tool contracts
+are unchanged. Prices are optional display information, never transaction inputs
+or swap quotes; unavailable prices do not block financial actions.
+
+Native ETH and canonical WETH share the ETH price. Every other asset uses its
+exact chain/contract price, including stablecoins and wstETH. A refresh does not
+guarantee a new market observation: older observations remain explicitly stale,
+with source/time in tooltips. Missing values show `—`; a partial portfolio total
+is labeled as containing only priced tokens. Failed refreshes keep the previous
+value with stale status and retry on the next active minute.
+
 This app uses the shared `LICENSE.APP.USE` packaging workflow. Source is offered
 for inspection under those exact terms; see `NOTICE` and the packaged legal
 metadata.

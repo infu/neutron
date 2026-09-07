@@ -7,17 +7,17 @@ import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 
 const manifest = async () => JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
-const archive = async () => unpackNeutronPackage(await readFile(new URL("../uniswap.v0.1.9.neutron", import.meta.url)));
+const archive = async () => unpackNeutronPackage(await readFile(new URL("../uniswap.v0.1.10.neutron", import.meta.url)));
 
 test("Uniswap owns its managed journal and declares exact public Wallet access", async () => {
   const value = await manifest();
   expect(validate_neutron_conf(value).errors).toEqual([]);
-  expect(value).toMatchObject({ id: "uniswap", version: 109, update_source: "233tv-xiaaa-aaaay-aacta-cai", memory: {
+  expect(value).toMatchObject({ id: "uniswap", version: 110, update_source: "233tv-xiaaa-aaaay-aacta-cai", memory: {
     uniswap: { version: 1, schemas: { "1": { src: "memory/uniswap/v1.mo" } }, migrations: [] },
     uniswap_actions: { version: 1, schemas: { "1": { src: "memory/uniswap_actions/v1.mo" } }, migrations: [] },
   } });
   expect(Object.keys(value.capabilities ?? {}).sort()).toEqual(["frontend_tools", "preapproved_self_calls"]);
-  expect(value.capabilities?.frontend_tools).toMatchObject({ api: 1, targets: [{ app: "evm_wallet", tools: expect.arrayContaining(["evm_accounts_v1", "evm_operation_status_v1", "evm_send_transaction_v1"]) }] });
+  expect(value.capabilities?.frontend_tools).toMatchObject({ api: 1, targets: [{ app: "evm_wallet", tools: expect.arrayContaining(["evm_accounts_v1", "evm_wallet_prices_v1", "evm_operation_status_v1", "evm_send_transaction_v1"]) }] });
   expect(value.backend).toBeUndefined();
   expect(value.background?.path).toBe("service.html");
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
@@ -30,7 +30,7 @@ test("the packaged tile, resident service and managed-memory root are installabl
   expect(Object.keys(files)).toEqual(expect.arrayContaining(["neutron.json", "schema.json", "web/index.html", "web/main.css", "web/main.js", "web/service.html", "web/service.js", "web/static/icon.svg"]));
   const prepared = preparePackageInstall(files);
   expect(prepared.manifest.id).toBe("uniswap");
-  expect(prepared.manifest.version).toBe(109);
+  expect(prepared.manifest.version).toBe(110);
   const compiled = JSON.parse(new TextDecoder().decode(files["neutron.json"]!));
   const lock = JSON.parse(await readFile(new URL("../neutron.lock.json", import.meta.url), "utf8"));
   expect(compiled.memory.uniswap.schemas["1"]).toMatchObject(lock.memory.uniswap.schemas["1"]);
@@ -48,6 +48,15 @@ test("the packaged tile, resident service and managed-memory root are installabl
     { kind: "keep", owner: "uniswap", memoryId: "uniswap_actions", version: 1 },
   ]);
   expect(restored.destructiveMemoryRoots).toEqual([]);
+  const published109Files = unpackNeutronPackage(await readFile(new URL("../uniswap.v0.1.9.neutron", import.meta.url)));
+  const published109 = JSON.parse(new TextDecoder().decode(published109Files["neutron.json"]!));
+  expect(published109.version).toBe(109);
+  expect(compiled.memory).toEqual(published109.memory);
+  expect(files["neutron.lock.json"]).toEqual(published109Files["neutron.lock.json"]);
+  for (const root of Object.values(published109.memory) as Array<{ schemas: Record<string, { entry: string }> }>) {
+    for (const schema of Object.values(root.schemas)) expect(files[`mo/${schema.entry}.mo`]).toEqual(published109Files[`mo/${schema.entry}.mo`]);
+  }
+  expect(planMemoryMigrations({ kernel, uniswap: published109 }, { kernel, uniswap: compiled })).toEqual(restored);
   // Production and skipped-release upgrades retain the exact old root and its
   // immutable lock lineage while initializing only the independent new root.
   for (const version of ["0.1.6", "0.1.8"]) {

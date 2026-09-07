@@ -11,6 +11,8 @@ import {
   evmNetworksOutputSchema,
   evmBalancesInputSchema,
   evmBalancesOutputSchema,
+  evmPricesInputSchema,
+  evmPricesOutputSchema,
   evmReadContractInputSchema,
   evmReadContractOutputSchema,
   evmCallContractInputSchema,
@@ -47,6 +49,15 @@ import {
 } from "./provider.ts";
 import { balances, readContract, callContract, estimateTransaction, transaction, replacementTransaction } from "./read_adapters.ts";
 import { readBrowserOperation, reconcileBrowserOperation } from "./browser_operations.ts";
+import { prices } from "./prices.ts";
+
+exposeTool(EVM_WALLET_TOOLS.prices, {
+  title: "EVM token USD prices",
+  description: "Get estimated USD prices for explicit chain IDs and token addresses; null address means native ETH. Browser-direct DefiLlama reads share a 60-second cache across Wallet, Uniswap and agents. The result includes observation times and stale or unavailable status. These public market estimates grant no signing authority and are independent of executable swap quotes. Use alongside balances, swaps and liquidity amounts when USD values are useful.",
+  inputSchema: evmPricesInputSchema,
+  outputSchema: evmPricesOutputSchema,
+  annotations: { "neutron:effects": ["read", "network"] },
+}, prices);
 
 const bytesHex = (bytes: Uint8Array) =>
   `0x${[...bytes].map((x) => x.toString(16).padStart(2, "0")).join("")}`;

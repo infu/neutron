@@ -1,0 +1,20 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/evm_wallet/test/package.test.ts:
+(pass) separate EVM Wallet declares custody and browser observation methods without a canister RPC capability [12.00ms]
+(pass) browser preparation and recovery arguments round trip through the generated closed Candid schemas [585.00ms]
+(pass) actual generated schemas accept provider self-call arguments and reject wrong chains [86.00ms]
+(pass) real Candid self-call projection unwraps Results, keeps bytes and omits absent optionals [34.00ms]
+(pass) published 101 self-call inputs and closed outputs stay unchanged when review evidence is added [141.00ms]
+(pass) released estimate output and active replacement proof retain Candid optional-field compatibility [33.00ms]
+(pass) release 113 initializes cleanly and preserves published 101 and 107 roots with additive browser methods [1035.00ms]
+
+apps/uniswap/test/package.test.ts:
+(pass) Uniswap owns its managed journal and declares exact public Wallet access [13.00ms]
+(pass) the packaged tile, resident service and managed-memory root are installable [528.00ms]
+(pass) journal methods emit schemas that preserve typed identity and optional operation evidence [167.00ms]
+
+ 10 pass
+ 0 fail
+ 390 expect() calls
+Ran 10 tests across 2 files. [3.35s]

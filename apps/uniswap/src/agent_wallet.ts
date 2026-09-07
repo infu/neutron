@@ -7,6 +7,7 @@ import { createEvmWalletClient, EVM_WALLET_TARGET, EVM_WALLET_TOOLS } from "neut
 const installedReads = new Set<string>([
   EVM_WALLET_TOOLS.accounts,
   EVM_WALLET_TOOLS.balances,
+  EVM_WALLET_TOOLS.prices,
   EVM_WALLET_TOOLS.callContract,
   EVM_WALLET_TOOLS.estimateTransaction,
   EVM_WALLET_TOOLS.transaction,

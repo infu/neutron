@@ -301,5 +301,16 @@ pairs. It uses fixture funds only and does not send transactions to public netwo
 Local chain 42161 validates contract semantics and chain binding; it does not
 emulate the Arbitrum sequencer's fee calculation or settlement protocol.
 
+USD estimates accompany swap amounts, balances, minimum output, network fees,
+liquidity deposits/removals and position principal/collectibles. Uniswap uses
+EVM Wallet's install-declared `evm_wallet_prices_v1` read tool, backed by its
+shared keyless browser-to-DefiLlama cache. Focused, visible app use refreshes about
+once a minute; agents can request the same timestamped prices on demand. Price
+failure or an older Wallet without this tool leaves USD unavailable without
+blocking quotes, swaps or liquidity management. Incomplete totals stay unknown,
+and stale estimates are labeled. These values never change transaction amounts,
+slippage, approvals or executable quotes. See [Wallet USD estimates](../evm_wallet/README.md#usd-estimates)
+for the provider, token mapping and refresh lifecycle.
+
 The application uses the repository's `LICENSE.APP.USE` and matching offered
 source workflow. It is independently developed, not an official Uniswap Labs UI.

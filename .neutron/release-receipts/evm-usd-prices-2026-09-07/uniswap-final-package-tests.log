@@ -1,0 +1,11 @@
+bun test v1.2.13 (64ed68c9)
+
+apps/uniswap/test/package.test.ts:
+(pass) Uniswap owns its managed journal and declares exact public Wallet access [18.00ms]
+(pass) the packaged tile, resident service and managed-memory root are installable [701.00ms]
+(pass) journal methods emit schemas that preserve typed identity and optional operation evidence [367.00ms]
+
+ 3 pass
+ 0 fail
+ 46 expect() calls
+Ran 3 tests across 1 files. [1.72s]
