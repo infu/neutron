@@ -1,0 +1,22 @@
+{
+  "result": "passed",
+  "sends": 7,
+  "records": 5,
+  "coverage": [
+    "live automatic quote",
+    "balances and USD",
+    "native swap",
+    "exact sequential approvals and deposit",
+    "single-coin withdrawal",
+    "saved reload after lost reply",
+    "token search and Escape",
+    "duplicate USDC/USDT address ordering and listing",
+    "full contract explorer links",
+    "selected unlisted identity",
+    "custom address remains unlisted",
+    "native versus bridged Arbitrum USDC",
+    "RPC failure",
+    "Arbitrum chain isolation",
+    "360px layout"
+  ]
+}

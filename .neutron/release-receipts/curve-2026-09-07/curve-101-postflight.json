@@ -1,0 +1,23 @@
+{
+  "verified_at": "2026-09-07T12:12:10.743159+00:00",
+  "published_batch": "63",
+  "postflight_batch_id": null,
+  "packages_and_sources_unchanged": 19,
+  "curve": {
+    "id": "curve",
+    "version": 101,
+    "sha256": "a8bda98fe957d33b1057e42c86d7fd902571225663938d4d8f802f7186e8c8b7",
+    "size": 312707,
+    "package_path": "/repo/v1/packages/a8bda98fe957d33b1057e42c86d7fd902571225663938d4d8f802f7186e8c8b7.neutron",
+    "release_path": "/repo/v1/releases/curve.json",
+    "release_digest": "3a3ac084c562a194b856bcaa35a7d0bf8bb50ff2a120845eba113ed76cbc72c6",
+    "status": "unchanged",
+    "source": {
+      "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/a107098b5a18dee469e702eddfc56821f86d35504b5fd7b496a24d85dbbd0ba6.source.v1.msgpack.gz",
+      "path": "/repo/v1/sources/a107098b5a18dee469e702eddfc56821f86d35504b5fd7b496a24d85dbbd0ba6.source.v1.msgpack.gz",
+      "sha256": "a107098b5a18dee469e702eddfc56821f86d35504b5fd7b496a24d85dbbd0ba6",
+      "size": 445400,
+      "status": "unchanged"
+    }
+  }
+}

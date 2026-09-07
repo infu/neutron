@@ -1,0 +1,53 @@
+[
+  {
+    "package": {
+      "file": "apps/curve/curve.v0.1.0.neutron",
+      "protocol": "neutron-repo-v1",
+      "id": "curve",
+      "version": 100,
+      "sha256": "eff079d91d8b328e70933ae5bc4841517274b99a0c1ce41a53ae64770e3f75fd",
+      "size": 309404
+    },
+    "source": {
+      "file": "apps/curve/.neutron/sources/a8f92bf19334e0932ca32e97a4ddf372d1a4b550db1200c49aec46d260e85af0.source.v1.msgpack.gz",
+      "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/a8f92bf19334e0932ca32e97a4ddf372d1a4b550db1200c49aec46d260e85af0.source.v1.msgpack.gz",
+      "path": "/repo/v1/sources/a8f92bf19334e0932ca32e97a4ddf372d1a4b550db1200c49aec46d260e85af0.source.v1.msgpack.gz",
+      "size": 439388,
+      "sha256": "a8f92bf19334e0932ca32e97a4ddf372d1a4b550db1200c49aec46d260e85af0"
+    }
+  },
+  {
+    "package": {
+      "file": "apps/evm_wallet/evm_wallet.v0.1.14.neutron",
+      "protocol": "neutron-repo-v1",
+      "id": "evm_wallet",
+      "version": 114,
+      "sha256": "f17df8f50448492c30b2c7cc3b64c061559b6ba36c0ead31659dd169f1d6ea9c",
+      "size": 602341
+    },
+    "source": {
+      "file": "apps/evm_wallet/.neutron/sources/03e18aeaf061f983e6d4676266fc8cf79a3afdacd8fa15c608661f842e3d33a4.source.v1.msgpack.gz",
+      "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/03e18aeaf061f983e6d4676266fc8cf79a3afdacd8fa15c608661f842e3d33a4.source.v1.msgpack.gz",
+      "path": "/repo/v1/sources/03e18aeaf061f983e6d4676266fc8cf79a3afdacd8fa15c608661f842e3d33a4.source.v1.msgpack.gz",
+      "size": 637893,
+      "sha256": "03e18aeaf061f983e6d4676266fc8cf79a3afdacd8fa15c608661f842e3d33a4"
+    }
+  },
+  {
+    "package": {
+      "file": "apps/curve/curve.v0.1.1.neutron",
+      "protocol": "neutron-repo-v1",
+      "id": "curve",
+      "version": 101,
+      "sha256": "a8bda98fe957d33b1057e42c86d7fd902571225663938d4d8f802f7186e8c8b7",
+      "size": 312707
+    },
+    "source": {
+      "file": "apps/curve/.neutron/sources/a107098b5a18dee469e702eddfc56821f86d35504b5fd7b496a24d85dbbd0ba6.source.v1.msgpack.gz",
+      "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/a107098b5a18dee469e702eddfc56821f86d35504b5fd7b496a24d85dbbd0ba6.source.v1.msgpack.gz",
+      "path": "/repo/v1/sources/a107098b5a18dee469e702eddfc56821f86d35504b5fd7b496a24d85dbbd0ba6.source.v1.msgpack.gz",
+      "size": 445400,
+      "sha256": "a107098b5a18dee469e702eddfc56821f86d35504b5fd7b496a24d85dbbd0ba6"
+    }
+  }
+]

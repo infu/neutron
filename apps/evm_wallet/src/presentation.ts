@@ -2,6 +2,7 @@ import { amount, decodeKnownCall, type Asset, type Network, type Operation } fro
 import { presentUniswapSwap } from "./swap_presentation.ts";
 import { presentUniswapV4Swap } from "./v4_swap_presentation.ts";
 import { presentPermit2Approval, presentUniswapLiquidity } from "./liquidity_presentation.ts";
+import { presentCurve } from "./curve_presentation.ts";
 
 export type PresentationField = { label: string; value: string };
 export type OperationPresentation = {
@@ -104,6 +105,8 @@ export function presentOperation(
   if (swap) return swap;
   const liquidity = presentUniswapLiquidity(operation, assets) ?? presentPermit2Approval(operation, assets);
   if (liquidity) return liquidity;
+  const curve = presentCurve(operation, assets);
+  if (curve) return curve;
   const decoded = decodeKnownCall(tx.data);
   const token = assets.find((asset) => asset.chainId === operation.chainId && asset.address.toLowerCase() === tx.to.toLowerCase());
   if (decoded) {

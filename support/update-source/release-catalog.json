@@ -55,6 +55,10 @@
       "directory": "../../apps/uniswap"
     },
     {
+      "id": "curve",
+      "directory": "../../apps/curve"
+    },
+    {
       "id": "spreadsheet",
       "directory": "../../apps/spreadsheet"
     },

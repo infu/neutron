@@ -38,6 +38,7 @@ The current Applications using the inspection-oriented use license are:
 - `apps/blast`
 - `apps/evm_wallet`
 - `apps/uniswap`
+- `apps/curve`
 
 Previously published ordinary Applications remain under the exact Neutron
 Sovereign Application License, Version 1.0

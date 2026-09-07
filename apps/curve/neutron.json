@@ -1,0 +1,90 @@
+{
+  "format": 3,
+  "id": "curve",
+  "name": "Curve",
+  "version": 101,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Curve swaps, pools and liquidity using EVM Wallet",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Curve quotes, swaps, liquidity and durable activity tools"
+  },
+  "tiles": [
+    {
+      "id": "curve",
+      "title": "Curve",
+      "path": "index.html",
+      "icon": "static/icon.svg"
+    }
+  ],
+  "capabilities": {
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "curve_begin_v1",
+        "curve_get_v1",
+        "curve_page_v1",
+        "curve_update_v1",
+        "curve_track_pool_v1",
+        "curve_tracked_pools_v1"
+      ]
+    },
+    "frontend_tools": {
+      "api": 1,
+      "targets": [
+        {
+          "app": "evm_wallet",
+          "tools": [
+            "evm_accounts_v1",
+            "evm_balances_v1",
+            "evm_wallet_prices_v1",
+            "evm_call_contract_v1",
+            "evm_estimate_transaction_v1",
+            "evm_transaction_v1",
+            "evm_replacement_transaction_v1",
+            "evm_operation_status_v1",
+            "evm_send_transaction_v1"
+          ]
+        }
+      ]
+    }
+  },
+  "func": {
+    "curve_begin_v1": {
+      "type": "update",
+      "async": false
+    },
+    "curve_get_v1": {
+      "type": "query",
+      "async": false
+    },
+    "curve_update_v1": {
+      "type": "update",
+      "async": false
+    },
+    "curve_page_v1": {
+      "type": "query",
+      "async": false
+    },
+    "curve_track_pool_v1": {
+      "type": "update",
+      "async": false
+    },
+    "curve_tracked_pools_v1": {
+      "type": "query",
+      "async": false
+    }
+  },
+  "memory": {
+    "curve": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/curve/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

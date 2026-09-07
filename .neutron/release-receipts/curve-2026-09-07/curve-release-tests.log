@@ -1,0 +1,313 @@
+
+> neutron-curve@1.0.0 test
+> npm run package && bun test && npm run test:memory && npm run test:browser
+
+
+> neutron-curve@1.0.0 package
+> npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts
+
+
+> neutron-curve@1.0.0 validate
+> bun ../../packages/neutron-scripts/src/validate.ts
+
+neutron.json is valid
+
+> neutron-curve@1.0.0 build
+> bun build.ts && npm run mogen
+
+
+> neutron-curve@1.0.0 mogen
+> bun ../../packages/neutron-scripts/src/mogen.ts
+
+
+> neutron-curve@1.0.0 mopack
+> bun ../../packages/neutron-scripts/src/mopack.ts
+
+Processing Motoko package roots...
+Processing /srv/shared/code/neutron/apps/curve/backend/main.mo
+Processing .mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Result.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/internal/SortHelper.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing .mops/_github/core#v2.6.0/src/Int.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing .mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing .mops/_github/core#v2.6.0/src/List.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/pure/List.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Result.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat32.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Int.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing .mops/_github/core#v2.6.0/src/Map.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/pure/Map.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Stack.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/pure/List.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/internal/BTreeHelper.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing .mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Int.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing .mops/_github/core#v2.6.0/src/Text.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Stack.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing .mops/_github/core#v2.6.0/src/Time.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/backend/memory/curve/v1.mo
+Processing .mops/_github/core#v2.6.0/src/Map.mo
+app entry: fa02edda497fd2de26c27ceec4f0bccea49d5b944b26327d6ce526fcc8ca1018
+Processing /srv/shared/code/neutron/apps/curve/backend/memory/curve/v1.mo
+memory curve schema v1: bb75fa56a65f382e4c8316a1db103e4c0b2ca74bd676a701f15328b56d934775
+
+> neutron-curve@1.0.0 schema
+> bun ../../packages/neutron-scripts/src/method_schema.ts
+
+
+> neutron-curve@1.0.0 package:metadata
+> bun ../../packages/neutron-scripts/src/package_metadata.ts
+
+
+Size: 312707
+Writing: curve.v0.1.1.neutron
+bun test v1.2.13 (64ed68c9)
+
+test/package.test.ts:
+(pass) release 101 installs cleanly and keeps the immutable release-100 root [181.00ms]
+
+test/service.test.ts:
+(pass) resident tools register through the actual Neutron descriptor validator [118.00ms]
+(pass) the app declares only its exact public Wallet protocol and durable v1 root
+
+test/workflow.test.ts:
+(pass) all approvals precede the matching final receipt; repeated completion sends nothing [21.00ms]
+(pass) crash after durable dispatch resumes identical ID after reload [4.00ms]
+(pass) lost reply reuses ID and blocks unsigned renewal while dispatch is ambiguous [2.00ms]
+(pass) known unsigned expiry refreshes once and retains the original input and caller [9.00ms]
+(pass) confirmed prerequisites survive expiry and status alone never requests a fresh review [7.00ms]
+(pass) changed caller, inputs or signing identity cannot take over saved work [2.00ms]
+(pass) rejected cannot be reported as completed [1.00ms]
+(pass) failed cannot be reported as completed [1.00ms]
+(pass) reverted cannot be reported as completed [1.00ms]
+(pass) successful receipt with different calldata is a replacement, not completion [1.00ms]
+(pass) same-payload speedup is accepted only through the original operation link [2.00ms]
+(pass) RPC failure retains saved progress without extra sends or false success [1.00ms]
+(pass) concurrent continuations retain one durable identity and Wallet deduplicates it [5.00ms]
+(pass) a reorganization removes prior completion until its transaction is observed again [3.00ms]
+
+test/protocol.test.ts:
+(pass) decimal entry never rounds an atomic budget, including >2^53 amounts [1.00ms]
+(pass) native wrapping hops and pool routing preserve direction and chain
+(pass) stable-ng liquidity encodes exact arrays, receiver and minima against independent ABI [3.00ms]
+(pass) stable-meta-ng liquidity encodes exact arrays, receiver and minima against independent ABI [1.00ms]
+(pass) twocrypto-ng liquidity encodes exact arrays, receiver and minima against independent ABI
+(pass) tricrypto-ng liquidity encodes exact arrays, receiver and minima against independent ABI [1.00ms]
+(pass) legacy-2 liquidity encodes exact arrays, receiver and minima against independent ABI [1.00ms]
+(pass) legacy-3 liquidity encodes exact arrays, receiver and minima against independent ABI
+(pass) exact approvals reuse sufficient allowances and reset mainnet USDT when required [2.00ms]
+(pass) discovery failures stay incomplete; full token address and native identities remain unambiguous [2.00ms]
+(pass) unregistered pools and incorrect metapool ABI selection fail before any effect [1.00ms]
+
+test/tokens.test.ts:
+(pass) symbols, copied metadata and enormous pool TVL cannot confer listing or priority [1.00ms]
+(pass) listing matches the exact chain and contract, independent of symbol and casing
+(pass) Arbitrum native USDC, bridged USDC.e and USDT0 have distinct address-backed names
+(pass) full address searches never match a different contract advertising that address in its symbol
+(pass) search includes listed names and duplicate symbols retain distinct, deterministic addresses
+
+ 33 pass
+ 0 fail
+ 192 expect() calls
+Ran 33 tests across 5 files. [673.00ms]
+
+> neutron-curve@1.0.0 test:memory
+> bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo
+
+Processing /srv/shared/code/neutron/apps/curve/test/memory_release.test.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Map.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/pure/Map.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Result.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/internal/SortHelper.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Stack.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/pure/List.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Result.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/internal/BTreeHelper.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Int.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Runtime.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Text.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Char.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Stack.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/backend/main.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Int.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/List.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/pure/List.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat32.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Iter.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Order.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Array.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Option.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/VarArray.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Map.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Text.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Time.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Types.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Nat.mo
+Processing /srv/shared/code/neutron/apps/curve/backend/memory/curve/v1.mo
+Processing /srv/shared/code/neutron/apps/curve/.mops/_github/core#v2.6.0/src/Map.mo
+Processing /srv/shared/code/neutron/apps/curve/backend/memory/curve/v1.mo
+Browser Motoko test passed: test/memory_release.test.mo
+
+> neutron-curve@1.0.0 test:browser
+> node test/browser/check.mjs
+
+{
+  "result": "passed",
+  "sends": 7,
+  "records": 5,
+  "coverage": [
+    "live automatic quote",
+    "balances and USD",
+    "native swap",
+    "exact sequential approvals and deposit",
+    "single-coin withdrawal",
+    "saved reload after lost reply",
+    "token search and Escape",
+    "duplicate USDC/USDT address ordering and listing",
+    "full contract explorer links",
+    "selected unlisted identity",
+    "custom address remains unlisted",
+    "native versus bridged Arbitrum USDC",
+    "RPC failure",
+    "Arbitrum chain isolation",
+    "360px layout"
+  ]
+}

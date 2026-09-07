@@ -32,6 +32,12 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
   that contains only an NFT ID labels token0/token1 amounts as atomic units; it
   does not invent token identities. Unrecognized call sequences keep the generic
   contract review with complete original bytes.
+  Curve Router calls on Ethereum and Arbitrum show the exact payment, minimum
+  received and recipient, plus the absence of an onchain expiry. Compatible pool
+  liquidity interfaces show indexed token budgets, LP burns, output minima and
+  the receiver from calldata; interface recognition does not assert factory
+  membership. These same details reach Agent review. Both managed Wallet roots
+  retain their released v1 schemas and existing signing identities.
   Known ERC-20 selectors
   are decoded as hints, not proof of the called contract's behavior. Recognized
   `approve`, `transfer` and `transferFrom` calls show the observed token balance
