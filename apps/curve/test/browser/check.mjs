@@ -145,6 +145,15 @@ try {
   assert.equal(sends.length,1,'Native swap needs no token approval');
   await page.getByRole('button',{name:'Liquidity',exact:true}).click();
   await page.getByRole('button',{name:/crvUSD \/ WETH/}).click();
+  await page.getByLabel('Deposit WETH amount').fill('.');
+  await page.getByRole('button',{name:'Remove liquidity',exact:true}).click();
+  await page.getByLabel('LP tokens to remove').fill('1');
+  await page.waitForFunction(()=>document.querySelector('.cv-primary')?.textContent==='Review withdrawal'&&!document.querySelector('.cv-primary').disabled);
+  await page.getByLabel('Withdrawal assets').selectOption('1');
+  await page.waitForFunction(()=>document.querySelector('.cv-primary')?.textContent==='Review withdrawal'&&!document.querySelector('.cv-primary').disabled);
+  await page.getByLabel('LP tokens to remove').fill('.');
+  await page.getByRole('button',{name:'Add liquidity',exact:true}).click();
+  assert.equal(await page.getByLabel('Deposit WETH amount').inputValue(),'.','Switching modes preserves unfinished drafts');
   await page.getByLabel('Deposit WETH amount').fill('0.01');
   await page.getByLabel('Deposit crvUSD amount').fill('30');
   await page.waitForFunction(()=>document.querySelector('.cv-primary')?.textContent==='Review deposit'&&!document.querySelector('.cv-primary').disabled);
@@ -234,7 +243,7 @@ try {
   await page.keyboard.press('Escape');
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Narrow UI overflow');
   assert.deepEqual(errors,[]);
-  const evidence={result:'passed',sends:sends.length,records:records.size,coverage:['live automatic quote','balances and USD','native swap','exact sequential approvals and deposit','single-coin withdrawal','saved reload after lost reply','token search and Escape','duplicate USDC/USDT address ordering and listing','full contract explorer links','selected unlisted identity','custom address remains unlisted','native versus bridged Arbitrum USDC','RPC failure','Arbitrum chain isolation','360px layout']};
+  const evidence={result:'passed',sends:sends.length,records:records.size,coverage:['live automatic quote','balances and USD','native swap','liquidity mode switches ignore and preserve inactive drafts','exact sequential approvals and deposit','single-coin withdrawal','saved reload after lost reply','token search and Escape','duplicate USDC/USDT address ordering and listing','full contract explorer links','selected unlisted identity','custom address remains unlisted','native versus bridged Arbitrum USDC','RPC failure','Arbitrum chain isolation','360px layout']};
   await writeFile(resolve(artifacts,'result.json'),JSON.stringify(evidence,null,2)+'\n');console.log(JSON.stringify(evidence,null,2));
 } catch(error) {
   if(fixturePage){await fixturePage.screenshot({path:resolve(artifacts,'failure.png'),fullPage:true});console.error((await fixturePage.locator('body').innerText()).slice(-4500));console.error(errors);}

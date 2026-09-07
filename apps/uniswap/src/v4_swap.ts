@@ -3,6 +3,7 @@ import type { ActionPlan } from "./action_types.ts";
 import { permit2ApprovalSteps } from "./approval_plan.ts";
 import { validateInput, type Quote, type QuoteInput, type QuoteProgress, type Reader, type Transaction } from "./swap.ts";
 import { V4_DEFAULT_POOLS, V4_STATE_VIEW_ABI, v4Currency, v4Deployment, v4PoolId, validateV4PoolKey, type V4PoolKey } from "./v4_common.ts";
+import { validateLiteralRecipient } from "./recipient.ts";
 
 export type V4QuoteInput = QuoteInput & { poolKey?: V4PoolKey; hookData?: Hex };
 export type V4Quote = Quote & { protocol: "v4"; pool: null; poolKey: V4PoolKey; poolId: Hex; hookData: Hex };
@@ -27,6 +28,7 @@ function inputPool(input: V4QuoteInput, nowMs: number): { poolKey?: V4PoolKey; h
   // V4 supports native ETH itself. Validate common fields using the native
   // zero-address currency so ETH and WETH remain distinct pool currencies.
   validateInput({ ...input, tokenIn: { ...input.tokenIn, address: v4Currency(input.tokenIn) }, tokenOut: { ...input.tokenOut, address: v4Currency(input.tokenOut) } }, nowMs);
+  validateLiteralRecipient(input.recipient);
   for (const token of [input.tokenIn, input.tokenOut]) {
     if (token.address !== null && getAddress(token.address) === zeroAddress) throw new Error("Select ETH as the native currency, not the zero-address token.");
   }
@@ -70,8 +72,10 @@ export async function quoteV4Swap(read: Reader, input: V4QuoteInput, nowMs = Dat
   if (best.poolKey.hooks === zeroAddress) {
     onProgress?.("Reading V4 pool price impact…");
     try {
-      const tag = best.response.blockNumber === null ? undefined : `0x${BigInt(best.response.blockNumber).toString(16)}`;
+      if (best.response.blockNumber === null) throw new Error("The quote block is unavailable; price impact requires matching block observations.");
+      const block = BigInt(best.response.blockNumber), tag = `0x${block.toString(16)}`;
       const state = await read(input.chainId, deployment.stateView, encodeFunctionData({ abi: V4_STATE_VIEW_ABI, functionName: "getSlot0", args: [poolId] }), tag);
+      if (state.blockNumber === null || BigInt(state.blockNumber) !== block) throw new Error("The pool price was observed at a different or unknown block.");
       const [sqrt, , protocolFees, lpFee] = decodeFunctionResult({ abi: V4_STATE_VIEW_ABI, functionName: "getSlot0", data: state.data });
       if (sqrt === 0n) throw new Error("Pool is not initialized.");
       const square = sqrt * sqrt, denominator = 2n ** 192n;

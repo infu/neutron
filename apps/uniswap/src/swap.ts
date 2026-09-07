@@ -1,5 +1,6 @@
 import { decodeFunctionResult, encodeFunctionData, getAddress, isAddress, parseAbi, parseUnits, type Address, type Hex } from "viem";
 import { curatedEvmTokens } from "neutron-tools/src/evm_assets.js";
+import { validateLiteralRecipient } from "./recipient.ts";
 
 export const ROUTER = getAddress("0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45");
 export const QUOTER = getAddress("0x61ffe014ba17989e743c5f6cb21bf9697530b21e");
@@ -78,6 +79,7 @@ export async function customToken(read: Reader, chainId: string, address: string
 }
 export async function quoteSwap(read: Reader, input: QuoteInput, nowMs = Date.now(), onProgress?: QuoteProgress): Promise<Quote> {
   validateInput(input, nowMs);
+  if (input.tokenOut.address !== null) validateLiteralRecipient(input.recipient);
   const tokenIn = tokenAddress(input.tokenIn), tokenOut = tokenAddress(input.tokenOut);
   let completed = 0;
   onProgress?.(`Comparing pools · ${completed}/${FEE_TIERS.length}`);
@@ -103,9 +105,14 @@ export async function quoteSwap(read: Reader, input: QuoteInput, nowMs = Date.no
   let pool: Address | null = null, priceImpactBps: string | null = null;
   onProgress?.("Reading pool price impact…");
   try {
-    const tag = best.response.blockNumber === null ? undefined : `0x${BigInt(best.response.blockNumber).toString(16)}`;
-    pool = decodeFunctionResult({ abi: FACTORY_ABI, functionName: "getPool", data: (await read(input.chainId, FACTORY, encodeFunctionData({ abi: FACTORY_ABI, functionName: "getPool", args: [tokenIn, tokenOut, best.fee] }), tag)).data });
-    const [sqrt] = decodeFunctionResult({ abi: POOL_ABI, functionName: "slot0", data: (await read(input.chainId, pool, encodeFunctionData({ abi: POOL_ABI, functionName: "slot0" }), tag)).data });
+    if (best.response.blockNumber === null) throw new Error("The quote block is unavailable; price impact requires matching block observations.");
+    const block = BigInt(best.response.blockNumber), tag = `0x${block.toString(16)}`;
+    const poolResponse = await read(input.chainId, FACTORY, encodeFunctionData({ abi: FACTORY_ABI, functionName: "getPool", args: [tokenIn, tokenOut, best.fee] }), tag);
+    if (poolResponse.blockNumber === null || BigInt(poolResponse.blockNumber) !== block) throw new Error("The pool lookup was observed at a different or unknown block.");
+    pool = decodeFunctionResult({ abi: FACTORY_ABI, functionName: "getPool", data: poolResponse.data });
+    const state = await read(input.chainId, pool, encodeFunctionData({ abi: POOL_ABI, functionName: "slot0" }), tag);
+    if (state.blockNumber === null || BigInt(state.blockNumber) !== block) throw new Error("The pool price was observed at a different or unknown block.");
+    const [sqrt] = decodeFunctionResult({ abi: POOL_ABI, functionName: "slot0", data: state.data });
     const numerator = sqrt * sqrt, denominator = 2n ** 192n;
     const spotOut = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? BigInt(input.amountIn) * numerator / denominator : BigInt(input.amountIn) * denominator / numerator;
     const afterFee = spotOut * BigInt(1_000_000 - best.fee) / 1_000_000n;
@@ -116,6 +123,16 @@ export async function quoteSwap(read: Reader, input: QuoteInput, nowMs = Date.no
   return { ...input, router: ROUTER, quoter: QUOTER, fee: best.fee, amountOut: best.amountOut.toString(), minimumOut: minimumOut.toString(), gasEstimate: best.gasEstimate.toString(), priceImpactBps, quotedAtMs: best.response.observedAtMs, blockNumber: best.response.blockNumber, pool, routeWarnings };
 }
 export function swapTransaction(quote: Quote, nowMs = Date.now()): Transaction {
+  if (quote.tokenOut.address !== null) validateLiteralRecipient(quote.recipient);
+  return encodeSwapTransaction(quote, nowMs);
+}
+/** Preserve exact validation of released journal bytes, including recipient
+ * aliases older app versions accepted. This never authorizes a new dispatch.
+ */
+export function rebuildHistoricalSwapTransaction(quote: Quote): Transaction {
+  return encodeSwapTransaction(quote, 0);
+}
+function encodeSwapTransaction(quote: Quote, nowMs: number): Transaction {
   validateInput(quote, nowMs);
   if (quote.router !== ROUTER || quote.quoter !== QUOTER || !(FEE_TIERS as readonly number[]).includes(quote.fee)) throw new Error("Quote route does not match a supported deployment.");
   positive(quote.amountOut, "quoted output"); positive(quote.minimumOut, "minimum output");

@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { preparePackageInstall, unpackNeutronPackage } from "neutron-compiler/src/install.ts";
 import { planMemoryMigrations } from "neutron-compiler/src/memory_migrations.ts";
+import { generateAppMethodSchemaArtifact } from "neutron-scripts/src/method_schema.js";
+import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 
 test("release 101 installs cleanly and keeps the immutable release-100 root", async () => {
   const releasedBytes = await readFile(new URL("../curve.v0.1.0.neutron", import.meta.url));
@@ -25,4 +27,41 @@ test("release 101 installs cleanly and keeps the immutable release-100 root", as
   expect(initial.upgrades).toEqual([{ kind: "initialize", owner: "curve", memoryId: "curve", to: 1 }]); expect(initial.destructiveMemoryRoots).toEqual([]);
   const restored = planMemoryMigrations({ kernel, curve: released }, { kernel, curve: compiled });
   expect(restored.upgrades).toEqual([{ kind: "keep", owner: "curve", memoryId: "curve", version: 1 }]); expect(restored.destructiveMemoryRoots).toEqual([]);
+});
+
+
+test("release 102 keeps the production 101 journal, lineage and full backend closure", async () => {
+  const previousBytes = await readFile(new URL("../curve.v0.1.1.neutron", import.meta.url));
+  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe("a8bda98fe957d33b1057e42c86d7fd902571225663938d4d8f802f7186e8c8b7");
+  const previous = unpackNeutronPackage(previousBytes);
+  const files = unpackNeutronPackage(await readFile(new URL("../curve.v0.1.2.neutron", import.meta.url)));
+  const manifest = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8"));
+  expect(validate_neutron_conf(manifest).errors).toEqual([]);
+  expect(manifest).toMatchObject({ id: "curve", version: 102, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "curve", version: 102 });
+  expect(Object.keys(files)).toEqual(expect.arrayContaining(["web/index.html", "web/main.js", "web/main.css", "web/service.html", "web/service.js", "web/static/icon.svg"]));
+  const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+  const old = JSON.parse(decode(previous["neutron.json"]!)), next = JSON.parse(decode(files["neutron.json"]!));
+  expect(old.version).toBe(101);
+  expect(next.memory).toEqual(old.memory);
+  expect(Object.keys(next.memory)).toEqual(["curve"]);
+  expect(files["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
+  expect(JSON.parse(decode(files["neutron.lock.json"]!))).toEqual(JSON.parse(await readFile(new URL("../neutron.lock.json", import.meta.url), "utf8")));
+  // A frontend-only successor retains every backend module, including all
+  // transitive dependencies of its immutable managed-memory schema.
+  expect(next.entry).toBe(old.entry);
+  const modules = Object.keys(previous).filter(path => path.startsWith("mo/")).sort();
+  expect(Object.keys(files).filter(path => path.startsWith("mo/")).sort()).toEqual(modules);
+  for (const path of modules) expect(files[path]).toEqual(previous[path]);
+  const schema = JSON.parse(decode(files["schema.json"]!)), priorSchema = JSON.parse(decode(previous["schema.json"]!));
+  expect(schema).toEqual(generateAppMethodSchemaArtifact(manifest, await readFile(new URL("../backend/main.mo", import.meta.url), "utf8")));
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 102 } });
+  const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
+  const clean = planMemoryMigrations({ kernel }, { kernel, curve: next });
+  expect(clean.upgrades).toEqual([{ kind: "initialize", owner: "curve", memoryId: "curve", to: 1 }]);
+  expect(clean.destructiveMemoryRoots).toEqual([]);
+  const upgraded = planMemoryMigrations({ kernel, curve: old }, { kernel, curve: next });
+  expect(upgraded.upgrades).toEqual([{ kind: "keep", owner: "curve", memoryId: "curve", version: 1 }]);
+  expect(upgraded.destructiveMemoryRoots).toEqual([]);
+  expect(planMemoryMigrations({ kernel, curve: next }, { kernel, curve: next })).toEqual(upgraded);
 });

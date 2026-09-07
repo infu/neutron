@@ -38,7 +38,8 @@ for (const config of configs.filter((item) => !process.env.CURVE_FIXTURE_CHAIN |
   const port = (server.address() as { port: number }).port; await new Promise<void>((resolve) => server.close(() => resolve()));
   const rpcUrl = `http://127.0.0.1:${port}`;
   assert.equal(new URL(rpcUrl).hostname, "127.0.0.1");
-  const child = spawn(anvil, ["--host", "127.0.0.1", "--port", String(port), "--chain-id", config.chainId, "--fork-url", config.chainId === "1" ? "https://ethereum-rpc.publicnode.com" : "https://arb1.arbitrum.io/rpc", "--fork-header", "User-Agent: Mozilla/5.0", "--fork-block-number", String(config.block), "--silent"], { stdio: ["ignore", "ignore", "pipe"] });
+  const forkUrl = process.env.CURVE_FIXTURE_RPC ?? (config.chainId === "1" ? "https://ethereum-rpc.publicnode.com" : "https://arb1.arbitrum.io/rpc");
+  const child = spawn(anvil, ["--host", "127.0.0.1", "--port", String(port), "--chain-id", config.chainId, "--fork-url", forkUrl, "--fork-header", "User-Agent: Mozilla/5.0", "--fork-block-number", String(config.block), "--silent"], { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = ""; child.stderr.on("data", (chunk) => { stderr += chunk; });
   async function rpc<T = string>(method: string, params: unknown[]): Promise<T> {
     const response = await fetch(rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
@@ -141,6 +142,23 @@ for (const config of configs.filter((item) => !process.env.CURVE_FIXTURE_CHAIN |
       const bad = final.data.slice(0, 2 + offset * 2) + impossible + final.data.slice(2 + (offset + 32) * 2);
       await assert.rejects(rpc("eth_call", [{ from: account.address, to: final.to, data: bad, value: toHex(BigInt(final.valueWei)) }, "latest"]));
       console.log("  Router swap: recipient credited; impossible minimum reverted");
+      if (family.startsWith("legacy") && pool.coins.some((token) => token.address === null)) {
+        const ethIndex = pool.coins.findIndex((token) => token.address === null), otherIndex = ethIndex === 0 ? 1 : 0;
+        const weth = CHAINS[config.chainId].weth, other = pool.coins[otherIndex]!.address!;
+        await fund(weth, BigInt(budgets[ethIndex]!) * 100n);
+        const wrappedInput = parseInput({ ...swapInput, tokenIn: weth, tokenOut: other, amountIn: budgets[ethIndex] }) as SwapInput;
+        const wrappedPlan = await quoteSwap(read, account, wrappedInput, { catalog });
+        assert.equal(wrappedPlan.steps.at(-1)!.transaction.valueWei, "0");
+        const otherBefore = await balance(other, receiver);
+        await execute(wrappedPlan);
+        assert(await balance(other, receiver) - otherBefore >= BigInt(wrappedPlan.preview.outputs[0]!.minimum));
+        const wrappedOutput = parseInput({ ...swapInput, tokenIn: other, tokenOut: weth, amountIn: budgets[otherIndex] }) as SwapInput;
+        const outputPlan = await quoteSwap(read, account, wrappedOutput, { catalog });
+        const wethBefore = await balance(weth, receiver);
+        await execute(outputPlan);
+        assert(await balance(weth, receiver) - wethBefore >= BigInt(outputPlan.preview.outputs[0]!.minimum));
+        console.log("  Legacy native pool: WETH input unwrapped and WETH recipient output wrapped");
+      }
       if (family === "tricrypto-ng") {
         const index = pool.coins.findIndex((token) => token.address === CHAINS[config.chainId].weth);
         if (index >= 0) {

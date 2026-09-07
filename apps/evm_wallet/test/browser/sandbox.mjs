@@ -27,6 +27,8 @@ const option = (name) => {
 const historicalSource = option("--source-dir");
 const historyOnly = process.argv.includes("--history-only");
 const pricesOnly = process.argv.includes("--prices-only");
+const decodersOnly = process.argv.includes("--decoders-only");
+const approvalsOnly = process.argv.includes("--approvals-only");
 const output = option("--output-dir") ?? await mkdtemp(join(tmpdir(), "neutron-evm-wallet-sandbox-"));
 await mkdir(output, { recursive: true });
 const mock = await readFile(join(here, "mock_app.ts"), "utf8");
@@ -35,6 +37,9 @@ sourceHashes["test/browser/mock_app.ts"] = createHash("sha256").update(mock).dig
 sourceHashes["test/browser/rpc_fixture.ts"] = createHash("sha256").update(await readFile(join(here, "rpc_fixture.ts"))).digest("hex");
 const historyCapture = JSON.parse(await readFile(join(here, "../fixtures/history-25-operations.json"), "utf8"));
 const normalizedHistory = historyCapture.normalized;
+const backendSchemaJson = await readFile(join(root, "apps/evm_wallet/dist/schema.json"), "utf8");
+const backendSchemas = JSON.parse(backendSchemaJson).methods;
+sourceHashes["dist/schema.json"] = createHash("sha256").update(backendSchemaJson).digest("hex");
 assert(normalizedHistory?.operations?.length === 25, "Captured history fixture must provide 25 normalized operations");
 const kernelCodecPath = join(root, "apps/kernel/src/self_calls.ts");
 sourceHashes["kernel/self_calls.ts"] = createHash("sha256").update(await readFile(kernelCodecPath)).digest("hex");
@@ -42,6 +47,7 @@ const bootstrap = `import { encodeSelfCallResult } from ${JSON.stringify(kernelC
 import ${JSON.stringify(join(here, "rpc_fixture.ts"))};
 window.__evmKernelEncodeSelfCallResult = encodeSelfCallResult;
 window.__evmCapturedHistory = ${JSON.stringify(normalizedHistory)};
+window.__evmBackendSchemas = ${JSON.stringify(backendSchemas)};
 await import(${JSON.stringify(join(source, "main.tsx"))});`;
 await build({
   absWorkingDir: root, entryPoints: ["sandbox-qualification-entry"], outfile: join(output, "main.js"),
@@ -351,6 +357,124 @@ async function runHistoryCase(width, rowCount) {
   checks.push({ label, rowCount, firstCount, loadMoreActions, attempts, noDuplicates: true, allRowsDiscoverable: true, accountAndBalanceIntact: true, executedEffects: 0, geometry });
   await page.close(); activePage = null;
 }
+async function runHistoryRefreshCase(width) {
+  const label = `${width}-history-refresh-95`;
+  activeLabel = label;
+  const page = await browser.newPage({ viewport: { width, height: 900 } }); activePage = page;
+  page.on("pageerror", (error) => browserErrors.push({ label, error: String(error) }));
+  await page.goto(`http://127.0.0.1:${server.address().port}/?history=95`);
+  const frame = page.frames().find((candidate) => candidate.url().includes("/app?history="));
+  assert(frame, `${label}: sandbox frame missing`);
+  await frame.getByTestId("evm-account-address").filter({ hasText: "0x2222222222222222222222222222222222222222" }).waitFor();
+  await frame.locator("nav").getByRole("button", { name: "Activity", exact: true }).click();
+  const rows = frame.locator("[data-testid^=evm-operation-]");
+  await rows.first().waitFor();
+  const firstCount = await rows.count();
+  await frame.getByRole("button", { name: "Load more", exact: true }).click();
+  await frame.waitForFunction((count) => document.querySelectorAll("[data-testid^=evm-operation-]").length > count, firstCount);
+  const loadedCount = await rows.count();
+  assert(loadedCount > firstCount && loadedCount < 95);
+  const older = (await frame.evaluate(() => window.__evmSandbox.historySnapshot())).slice(firstCount, loadedCount).find((row) => row.status === "unknown");
+  assert(older, "Fixture must include an older pending operation");
+  const olderRow = frame.getByTestId(`evm-operation-${older.operation_id}`);
+  assert.match(await olderRow.textContent(), /network result is not confirmed yet/);
+  await frame.evaluate((id) => window.__evmSandbox.setHistoryStatus(id, "confirmed", "finalized"), older.operation_id);
+  await frame.getByRole("button", { name: /Refresh wallet$/ }).click();
+  await olderRow.locator(".evm-status").filter({ hasText: "Confirmed" }).waitFor();
+  assert.equal(await rows.count(), loadedCount, "Refreshing an older operation collapsed the loaded window");
+
+  await frame.evaluate(() => window.__evmSandbox.prependHistory(45));
+  await frame.getByRole("button", { name: /Refresh wallet$/ }).click();
+  await frame.waitForFunction(() => {
+    const expected = window.__evmSandbox.historySnapshot();
+    const visible = [...document.querySelectorAll("[data-testid^=evm-operation-]")].map((element) => element.dataset.testid.slice("evm-operation-".length));
+    return visible.every((id, index) => id === expected[index].operation_id);
+  });
+  assert((await rows.count()) >= loadedCount, "New requests collapsed the loaded window");
+
+  // Capture a Load more reply, then publish another window's update before that
+  // reply completes. The common loader must refresh again before settling.
+  const beforeConcurrent = await rows.count();
+  await frame.evaluate(() => window.__evmSandbox.hold("evm_wallet_history_v1"));
+  const beforeAttempts = (await frame.evaluate(() => window.__evmSandbox.historyAttempts)).length;
+  await frame.getByRole("button", { name: "Load more", exact: true }).click();
+  await frame.waitForFunction((count) => window.__evmSandbox.historyAttempts.length > count, beforeAttempts);
+  await frame.evaluate(async () => {
+    window.__evmSandbox.prependHistory(3);
+    await window.__evmSandbox.publishAppStateChange("evm_wallet", Date.now());
+    window.__evmSandbox.release("evm_wallet_history_v1");
+  });
+  await frame.waitForFunction((count) => {
+    const expected = window.__evmSandbox.historySnapshot();
+    const visible = [...document.querySelectorAll("[data-testid^=evm-operation-]")].map((element) => element.dataset.testid.slice("evm-operation-".length));
+    return visible.length > count && visible.every((id, index) => id === expected[index].operation_id);
+  }, beforeConcurrent);
+  while (await frame.getByRole("button", { name: "Load more", exact: true }).count()) {
+    const previousCount = await rows.count();
+    await frame.getByRole("button", { name: "Load more", exact: true }).click();
+    await frame.waitForFunction((count) => document.querySelectorAll("[data-testid^=evm-operation-]").length > count, previousCount);
+  }
+  const expectedIds = (await frame.evaluate(() => window.__evmSandbox.historySnapshot())).map((row) => row.operation_id);
+  const actualIds = await rows.evaluateAll((elements) => elements.map((element) => element.dataset.testid.slice("evm-operation-".length)));
+  assert.equal(actualIds.length, 143);
+  assert.deepEqual(actualIds, expectedIds, "Refresh and Load more lost, duplicated, or reordered operations");
+  assert.equal(new Set(actualIds).size, 143);
+  assert.equal(await frame.locator(".evm-error").count(), 0);
+  assert.equal((await calls(frame, methods.execute)).length, 0);
+  const geometry = await frame.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+  assert(geometry.scrollWidth <= geometry.width);
+  await frame.evaluate(() => scrollTo(0, 0));
+  const screenshot = `${label}.png`; await page.screenshot({ path: join(output, screenshot), fullPage: true }); screenshots.push(screenshot);
+  checks.push({ label, firstCount, loadedCount, oldPendingStatusUpdated: true, insertedRequests: 48, contiguousRefreshAndLoadMore: true,
+    concurrentRefreshAndLoadMore: true, finalRows: actualIds.length, noDuplicates: true, executedEffects: 0, geometry });
+  await page.close(); activePage = null;
+}
+async function runApprovalsCase(width) {
+  const label = `${width}-approval-revocation`;
+  activeLabel = label;
+  const page = await browser.newPage({ viewport: { width, height: 900 } }); activePage = page;
+  page.on("pageerror", (error) => browserErrors.push({ label, error: String(error) }));
+  await page.goto(`http://127.0.0.1:${server.address().port}/?approvals=1`);
+  const frame = page.frames().find((candidate) => candidate.url().includes("/app?approvals="));
+  assert(frame);
+  await frame.getByTestId("evm-account-address").filter({ hasText: "0x2222222222222222222222222222222222222222" }).waitFor();
+  await frame.locator("nav").getByRole("button", { name: "Settings", exact: true }).click();
+  await frame.getByRole("button", { name: "Manage token approvals", exact: true }).click();
+  await frame.getByRole("heading", { name: "Known token approvals", exact: true }).waitFor();
+  const token = "0x9999999999999999999999999999999999999999";
+  const reviewRevocation = frame.getByRole("button", { name: "Review revocation", exact: true });
+  await reviewRevocation.waitFor();
+  for (const result of [{ error: "Contract has no allowance function" }, "0x", "0x01", `0x${"0".repeat(128)}`]) {
+    await frame.evaluate(({ token, result }) => window.__evmRpcFixture.setAllowanceResult(token, result), { token, result });
+    await reviewRevocation.click();
+    await frame.locator(".evm-error").waitFor();
+    assert.match(await frame.locator(".evm-error").textContent(), /allowance|Contract has no allowance function/);
+    assert.equal((await calls(frame, methods.prepare)).length, 0, "An unsupported allowance opened a transaction request");
+    assert.equal(await frame.getByRole("dialog").count(), 0);
+    assert.equal(await frame.evaluate(() => window.__evmSandbox.toolCalls.filter((call) => call.name === "evm_send_transaction_v1").length), 0);
+  }
+  const allowance = `0x${123n.toString(16).padStart(64, "0")}`;
+  await frame.evaluate(({ token, allowance }) => window.__evmRpcFixture.setAllowanceResult(token, allowance), { token, allowance });
+  await reviewRevocation.click();
+  const dialog = frame.getByRole("dialog");
+  await dialog.getByTestId("evm-review-approve").waitFor();
+  assert.equal(await frame.locator(".evm-error").count(), 0);
+  const prepared = await calls(frame, methods.prepare);
+  assert.equal(prepared.length, 1, "A valid allowance must create exactly one review request");
+  const transaction = prepared[0].args[0].request.intent.operation.transaction;
+  const expectedData = `0x095ea7b3${"0".repeat(24)}${"44".repeat(20)}${"0".repeat(64)}`;
+  assert.equal(transaction.to.toLowerCase(), token);
+  assert.equal(transaction.data.toLowerCase(), expectedData);
+  assert.equal(transaction.value, "0");
+  assert.equal((await calls(frame, methods.execute)).length, 0, "Opening a revocation review signed without owner approval");
+  assert.match(await frame.locator(".evm-operation").textContent(), /Observed allowance: 123 atomic units/);
+  const geometry = await frame.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+  assert(geometry.scrollWidth <= geometry.width);
+  const screenshot = `${label}.png`; await page.screenshot({ path: join(output, screenshot), fullPage: true }); screenshots.push(screenshot);
+  checks.push({ label, unknownContractAllowanceChecked: true, rejectedReplies: 4, unsupportedRepliesNeverPrepare: true,
+    validReplyOpensExactZeroApproval: true, explicitReviewCount: 1, executedEffects: 0, geometry });
+  await page.close(); activePage = null;
+}
 async function runUsdCase(width, available) {
   const label = `${width}-usd-${available ? "available" : "unavailable"}`;
   activeLabel = label;
@@ -398,13 +522,193 @@ async function runUsdCase(width, available) {
   checks.push({ label, nativeAndTokenUsd: available, inputAndReviewUsd: available, feeUsd: available, missingPriceDoesNotBlock: !available, networkChangeClearsValuation: available, executedEffects: 0, geometry });
   await page.close(); activePage = null;
 }
+const decoderPack = {
+  format: 1, id: "qualification-vault", version: "1", name: "Qualification Vault", description: "Deposit into the selected fixture vault.",
+  source: "https://example.invalid/never-fetch-this-source-label",
+  deployments: [{ chainId: "1", address: "0x6666666666666666666666666666666666666666" }],
+  functions: [{ signature: "function deposit(address asset,uint256 amount,address receiver)", title: "Deposit into Qualification Vault", value: "zero",
+    fields: [{ path: "args.1", label: "Deposit amount", format: "tokenAmount", tokenPath: "args.0", role: "amount" }, { path: "args.2", label: "Position beneficiary", format: "address", role: "party" }] }],
+};
+async function runDecoderCase(width) {
+  const label = `${width}-extensible-decoders-readable-activity`;
+  activeLabel = label;
+  const page = await browser.newPage({ viewport: { width, height: 1000 } }); activePage = page;
+  page.on("pageerror", (error) => browserErrors.push({ label, error: String(error) }));
+  await page.goto(`http://127.0.0.1:${server.address().port}/?decoders=1`);
+  let frame = page.frames().find((candidate) => candidate.url().includes("/app?decoders="));
+  assert(frame, `${label}: sandbox frame missing`);
+  const ready = async () => frame.getByTestId("evm-account-address").filter({ hasText: "0x2222222222222222222222222222222222222222" }).waitFor();
+  const nav = async (name) => frame.locator("nav").getByRole("button", { name, exact: true }).click();
+  const row = (id) => frame.getByTestId(`evm-operation-${id}`);
+  const saved = async () => frame.evaluate(() => window.__evmSandbox.decoderSnapshot());
+  const geometry = async (context) => {
+    const size = await frame.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+    assert(size.scrollWidth <= size.width, `${label}: horizontal overflow in ${context}`);
+    return size;
+  };
+  const capture = async (name) => {
+    const image = `${label}-${name}.png`;
+    await page.screenshot({ path: join(output, image), fullPage: true }); screenshots.push(image);
+  };
+  await ready(); await nav("Activity");
+  await row(201).getByText("Contract interaction", { exact: true }).waitFor();
+  const originalHistory = await frame.evaluate(() => window.__evmSandbox.operationSnapshot());
+  const rawHistory = (history) => history.map(({ operation_id, request_id, intent, prepared_transaction }) => ({ operation_id, request_id, intent, prepared_transaction }));
+  await row(204).getByText("7.65432109 NEW", { exact: true }).waitFor();
+  assert.match(await row(205).textContent(), /123456789 atomic units/);
+  assert.match(await row(202).textContent(), /Entire outstanding USDC debt/);
+  assert.equal(await row(203).getByTestId("evm-activity-amount").locator("strong").textContent(), "123456789012345678901234567890123456789012345678901.234567 USDC");
+  assert.equal(await row(203).getByTestId("evm-activity-amount").locator(".evm-address").count(), 0, "A long amount was incorrectly shortened like an address");
+  assert.match(await row(207).textContent(), /Swap tokens/);
+  assert.match(await row(207).textContent(), /Minimum received0\.995 USDC/);
+  assert.match(await row(207).textContent(), /Waiting for the network to confirm|network result is not confirmed yet/);
+  assert.match(await row(208).textContent(), /Swap through Curve/);
+  assert.match(await row(208).textContent(), /Minimum received0\.995 USDC/);
+  assert.match(await row(208).textContent(), /revert|fail|did not complete/i);
+  await row(208).getByText("Details", { exact: true }).click();
+  assert.match(await row(208).textContent(), /0x5555555555555555555555555555555555555555/);
+  assert.match(await row(208).locator(".evm-activity-calldata").textContent(), /^0x/);
+  await geometry("built-in activity");
+  await frame.evaluate(() => scrollTo(0, 0)); await capture("activity-before-import");
+
+  await nav("Settings");
+  await frame.getByRole("button", { name: "Import decoder pack", exact: true }).click();
+  await frame.getByRole("textbox", { name: "Or paste its JSON", exact: true }).fill(JSON.stringify({ ...decoderPack, functions: [{ ...decoderPack.functions[0], fields: [{ path: "args.__proto__", label: "Fake", format: "integer" }] }] }));
+  await frame.getByRole("button", { name: "Preview pack", exact: true }).click();
+  await frame.getByRole("alert").filter({ hasText: "Invalid decoder pack" }).waitFor();
+  assert.deepEqual(await saved(), [], "Malformed pack persisted");
+  assert.equal((await calls(frame, "evm_wallet_decoder_set_v1")).length, 0, "Malformed preview called backend set");
+  const raw = JSON.stringify(decoderPack, null, 2);
+  await frame.getByRole("textbox", { name: "Or paste its JSON", exact: true }).fill(raw);
+  await frame.getByRole("button", { name: "Preview pack", exact: true }).click();
+  const preview = frame.locator(".evm-decoder-preview");
+  await preview.getByRole("heading", { name: decoderPack.name, exact: true }).waitFor();
+  assert.equal(await preview.getByRole("heading", { name: decoderPack.name, exact: true }).evaluate((element) => document.activeElement === element), true, "Preview did not focus its heading");
+  assert.equal((await calls(frame, "evm_wallet_decoder_set_v1")).length, 0, "Preview persisted before owner installed");
+  assert.match(await preview.textContent(), /Chain 1/);
+  assert.match(await preview.textContent(), /0x6666666666666666666666666666666666666666/);
+  assert.equal(await preview.locator("a").count(), 0, "Unverified source became a fetched or active resource");
+  await geometry("pack preview"); await capture("settings-preview");
+  await frame.getByRole("button", { name: "Install decoder pack", exact: true }).click();
+  await frame.getByRole("checkbox", { name: `Enable ${decoderPack.name}`, exact: true }).waitFor();
+  await frame.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Import decoder pack" && !button.disabled));
+  assert.equal((await saved()).length, 1);
+  assert.equal((await saved())[0].document_json, raw);
+  const digest = createHash("sha256").update(raw).digest("hex");
+  assert.equal((await saved())[0].sha256, digest);
+  await frame.locator(".evm-decoder-record").getByText("Pack details", { exact: true }).click();
+  await frame.locator(".evm-decoder-record").getByText(digest, { exact: true }).waitFor({ state: "visible" });
+  assert.match(await frame.locator(".evm-decoder-record").textContent(), new RegExp(digest));
+  await geometry("installed pack"); await capture("settings-installed");
+  await frame.getByRole("button", { name: "Import decoder pack", exact: true }).click();
+  await frame.getByRole("textbox", { name: "Or paste its JSON", exact: true }).fill(JSON.stringify({ ...decoderPack, description: "Changed bytes at the same version" }));
+  await frame.getByRole("button", { name: "Preview pack", exact: true }).click();
+  await frame.locator(".evm-decoder-preview").getByText(/already saved with different JSON content/).waitFor();
+  assert.equal((await calls(frame, "evm_wallet_decoder_set_v1")).length, 1, "Changed same-version preview attempted persistence");
+  await frame.getByRole("button", { name: "Cancel import", exact: true }).click();
+
+  await nav("Activity");
+  await row(201).getByText("Deposit into Qualification Vault", { exact: true }).waitFor();
+  await row(201).getByText("1.23456789 NEW", { exact: true }).waitFor();
+  assert.match(await row(201).getByTestId("evm-decoder-caption").textContent(), /Qualification Vault · v1/);
+  await row(201).getByText("Details", { exact: true }).click();
+  assert.match(await row(201).textContent(), new RegExp(digest));
+  assert.equal(await row(201).locator(".evm-activity-calldata").textContent(), originalHistory.find((operation) => operation.operation_id === "201").prepared_transaction.data);
+  await geometry("decoded existing activity"); await frame.evaluate(() => scrollTo(0, 0)); await capture("activity-imported");
+  await row(209).getByRole("button", { name: "Continue", exact: true }).click();
+  const review = frame.getByRole("dialog");
+  await review.getByRole("heading", { name: "Deposit into Qualification Vault", exact: true }).waitFor();
+  await review.getByText("2.22222222 NEW", { exact: true }).waitFor();
+  assert.equal((await calls(frame, methods.execute)).length, 0);
+  await geometry("imported transaction review"); await capture("review-imported");
+  // Reload reconstructs the UI and decoder cache from the durable backend
+  // fixture's exact records; no localStorage or saved React state is available.
+  const persisted = await saved();
+  await page.addInitScript((packs) => { window.__evmDecoderInitialPacks = packs; }, persisted);
+  await page.reload();
+  frame = page.frames().find((candidate) => candidate.url().includes("/app?decoders="));
+  await ready(); await nav("Activity");
+  await row(201).getByText("1.23456789 NEW", { exact: true }).waitFor();
+  assert.deepEqual(await saved(), persisted, "Reload changed saved decoder definitions");
+
+  // A different Wallet tile changes the same durable pack. The already-open
+  // Activity and Settings must both discard their cached decoder inventory.
+  await frame.evaluate((id) => window.__evmSandbox.setDecoderEnabled(id, false), decoderPack.id);
+  await row(201).getByText("Contract interaction", { exact: true }).waitFor();
+  await nav("Settings");
+  assert.equal(await frame.getByRole("checkbox", { name: `Enable ${decoderPack.name}`, exact: true }).isChecked(), false);
+  await frame.evaluate((id) => window.__evmSandbox.setDecoderEnabled(id, true), decoderPack.id);
+  await frame.waitForFunction(() => document.querySelector('.evm-decoder-record input[type="checkbox"]')?.checked === true);
+
+  await nav("Settings");
+  await frame.getByRole("checkbox", { name: `Enable ${decoderPack.name}`, exact: true }).uncheck();
+  await frame.waitForFunction(() => window.__evmSandbox.decoderSnapshot().every((pack) => !pack.enabled));
+  await nav("Activity");
+  await row(201).getByText("Contract interaction", { exact: true }).waitFor();
+  assert.deepEqual(rawHistory(await frame.evaluate(() => window.__evmSandbox.operationSnapshot())), rawHistory(originalHistory), "Toggling a decoder mutated raw operation history");
+  await nav("Settings");
+  await frame.getByRole("checkbox", { name: `Enable ${decoderPack.name}`, exact: true }).check();
+  await frame.waitForFunction(() => window.__evmSandbox.decoderSnapshot().every((pack) => pack.enabled));
+  // A second independent definition must never silently win by import order.
+  const second = { ...decoderPack, id: "qualification-vault-alternative", name: "Alternative Vault Explanation", functions: [{ ...decoderPack.functions[0], title: "Conflicting deposit title" }] };
+  await frame.getByRole("button", { name: "Import decoder pack", exact: true }).click();
+  await frame.getByLabel("Choose a JSON decoder pack", { exact: true }).setInputFiles({ name: "alternative-decoder.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(second)) });
+  await frame.locator(".evm-decoder-preview").getByRole("heading", { name: second.name, exact: true }).waitFor();
+  assert.equal((await saved()).length, 1, "Selecting a JSON file installed without preview approval");
+  await frame.getByRole("button", { name: "Install decoder pack", exact: true }).click();
+  await frame.getByRole("checkbox", { name: `Enable ${second.name}`, exact: true }).waitFor();
+  await nav("Activity");
+  await row(201).getByTestId("evm-decoder-warning").filter({ hasText: "Multiple enabled decoder packs" }).waitFor();
+  await row(201).getByText("Contract interaction", { exact: true }).waitFor();
+  assert.match(await row(201).getByTestId("evm-decoder-warning").textContent(), /Qualification Vault, Alternative Vault Explanation/);
+  await capture("activity-conflict");
+
+  await nav("Settings");
+  await frame.getByRole("button", { name: `Remove ${second.name}`, exact: true }).click();
+  await frame.getByRole("checkbox", { name: `Enable ${second.name}`, exact: true }).waitFor({ state: "hidden" });
+  const approval = { ...decoderPack, id: "qualification-approval", name: "Misleading Approval Labels", deployments: [{ chainId: "1", address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" }],
+    functions: [{ signature: "function approve(address spender,uint256 amount)", title: "Receive free money", value: "zero", fields: [{ path: "args.1", label: "Claim amount", format: "tokenAmount", tokenAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", role: "amount" }] }] };
+  await frame.getByRole("button", { name: "Import decoder pack", exact: true }).click();
+  await frame.getByRole("textbox", { name: "Or paste its JSON", exact: true }).fill(JSON.stringify(approval));
+  await frame.getByRole("button", { name: "Preview pack", exact: true }).click();
+  await frame.getByRole("button", { name: "Install decoder pack", exact: true }).click();
+  await frame.getByRole("checkbox", { name: `Enable ${approval.name}`, exact: true }).waitFor();
+  await nav("Activity");
+  await row(206).getByText("Approve USDC", { exact: true }).waitFor();
+  assert.equal(await row(206).getByText("Receive free money", { exact: true }).count(), 0, "Imported labels overrode core ERC20 approval meaning");
+  assert.match(await row(206).textContent(), /123 USDC/);
+  await nav("Settings");
+  await frame.getByRole("button", { name: `Remove ${decoderPack.name}`, exact: true }).click();
+  await frame.getByRole("checkbox", { name: `Enable ${decoderPack.name}`, exact: true }).waitFor({ state: "hidden" });
+  await nav("Activity");
+  await row(201).getByText("Contract interaction", { exact: true }).waitFor();
+  assert.deepEqual(rawHistory(await frame.evaluate(() => window.__evmSandbox.operationSnapshot())), rawHistory(originalHistory), "Removing a decoder mutated raw operation history");
+  const rpcCalls = await frame.evaluate(() => window.__evmRpcFixture.calls);
+  const metadata = rpcCalls.filter((call) => call.method === "eth_call" && ["0x313ce567", "0x95d89b41"].includes(call.params[0].data));
+  assert(metadata.some((call) => call.params[0].to.toLowerCase() === "0x7777777777777777777777777777777777777777" && call.params[0].data === "0x313ce567"));
+  assert(metadata.some((call) => call.params[0].to.toLowerCase() === "0x8888888888888888888888888888888888888888" && call.params[0].data === "0x95d89b41"));
+  await frame.evaluate(() => window.__evmRpcFixture.setTokenMetadata("0x8888888888888888888888888888888888888888", 8, "RECOVERED"));
+  await frame.getByRole("button", { name: /Refresh wallet$/ }).click();
+  await row(205).getByText("1.23456789 RECOVERED", { exact: true }).waitFor();
+  assert.equal((await calls(frame, methods.execute)).length, 0);
+  assert.equal((await calls(frame, methods.prepare)).length, 0);
+  assert.equal((await calls(frame, methods.token)).length, 0, "Presentation metadata was persisted as an owned token");
+  checks.push({ label, actualBackendSchemas: true, malformedPackNoPersistence: true, ownerPreviewBeforeInstall: true, importedNewProtocolWithoutWalletCode: true,
+    readableHistoricalTransactions: 9, importedReviewMatchesActivity: true, exactFullRepaymentAndLongAmounts: true, importedProvenanceAndSha256: true,
+    rpcMetadataDecimalsAndSymbol: true, unavailableMetadataRetainsAtomicUnits: true, reloadRestoresPack: true, sameVersionChangeRequiresHigherVersion: true, toggleAndRemovalRetainRawHistory: true,
+    conflictingPacksFallBack: true, importedApprovalCannotOverrideCore: true, pendingAndRevertedKeepMinimumSemantics: true, executedEffects: 0, geometry: await geometry("final history") });
+  await page.close(); activePage = null;
+}
 let failure = null;
 try {
-  if (!historyOnly && !pricesOnly) for (const width of [1440, 375]) for (const form of ["send", "sign", "replacement", "token"]) for (const action of ["click", "enter"]) await runCase(width, form, action);
-  if (!historyOnly && !pricesOnly) for (const width of [1440, 375]) await runDelayedTokenSend(width);
-  if (!pricesOnly) for (const width of [1440, 375]) for (const rowCount of [25, 50]) await runHistoryCase(width, rowCount);
-  if (!historyOnly) for (const width of [700, 375]) await runUsdCase(width, true);
-  if (!historyOnly) await runUsdCase(375, false);
+  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) for (const form of ["send", "sign", "replacement", "token"]) for (const action of ["click", "enter"]) await runCase(width, form, action);
+  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) await runDelayedTokenSend(width);
+  if (!pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) for (const rowCount of [25, 50]) await runHistoryCase(width, rowCount);
+  if (!pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) await runHistoryRefreshCase(width);
+  if (!historyOnly && !decodersOnly && !approvalsOnly) for (const width of [700, 375]) await runUsdCase(width, true);
+  if (!historyOnly && !decodersOnly && !approvalsOnly) await runUsdCase(375, false);
+  if (!historyOnly && !pricesOnly && !approvalsOnly) for (const width of [1440, 360]) await runDecoderCase(width);
+  if (!historyOnly && !pricesOnly && !decodersOnly) for (const width of [1440, 375]) await runApprovalsCase(width);
   assert.deepEqual(browserErrors, [], "Browser runtime errors");
   assert.equal(consoleMessages.filter((message) => /blocked form submission|allow-forms/i.test(message.text)).length, 0, "Native form submission attempted inside sandbox");
 } catch (error) {

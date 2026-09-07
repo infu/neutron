@@ -1,0 +1,6 @@
+{
+  "name": "neutron-aave-contract-fixture",
+  "private": true,
+  "license": "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",
+  "dependencies": { "@foundry-rs/anvil": "1.7.1" }
+}

@@ -7,6 +7,7 @@ import {
   operationReceipt,
   OWNER_REVIEW_TOOLS,
   prepareEffect,
+  agentProviderReview,
 } from "../src/provider.ts";
 import {
   acceptPrompt,
@@ -24,9 +25,12 @@ import { browserEvmRpc } from "../src/browser_rpc.ts";
 import { encodeFunctionData, erc20Abi, parseAbi } from "viem";
 import { mergeEvmAssets } from "neutron-tools/src/evm_assets.js";
 import { presentOperation } from "../src/presentation.ts";
+import { hashContent } from "neutron-tools/src/hash.js";
+import { clearTokenMetadataCache } from "../src/decoders/metadata.ts";
 
 let rpc: ReturnType<typeof spyOn<typeof browserEvmRpc, "request">>;
 beforeEach(() => {
+  clearTokenMetadataCache();
   rpc = spyOn(browserEvmRpc, "request").mockImplementation(async (_chain, method) => {
     throw new Error(`Unexpected browser RPC ${method}`);
   });
@@ -98,6 +102,9 @@ function wire(overrides: Record<string, unknown> = {}) {
   };
 }
 type SelfCall = (method: string, args: unknown[]) => Promise<unknown>;
+function snapshot(assets: unknown[] = []) {
+  return { ok: { accounts: [], networks: [{ chain_id: "1", name: "Ethereum", native_symbol: "ETH", explorer_url: "https://etherscan.io", testnet: false, finality_description: "" }], assets, lifecycle: "active" } };
+}
 function context(
   update: SelfCall,
   extra: Partial<MsgBusToolContext> = {},
@@ -117,6 +124,10 @@ function context(
     audience: "foreground_tile",
     kernel: {
       querySelf: async (method: string, args: unknown[]) => {
+        if (method === "evm_wallet_snapshot_v1" || method === "evm_wallet_decoder_packs_v1") {
+          expect(args).toEqual([null]);
+          return query ? query(method, args) : method === "evm_wallet_snapshot_v1" ? snapshot() : { ok: { packs: [] } };
+        }
         expect(["evm_wallet_operation_v1", "evm_wallet_superseding_v1"]).toContain(method);
         expect(args).toEqual([{ identity }]);
         // These provider tests start from a saved exact review. Fresh RPC
@@ -414,8 +425,8 @@ test("Agent token approval review includes exact spender and observed allowance 
       expect(calls).toEqual(["evm_wallet_prepare_browser_v1", "evm_wallet_review_evidence_v1"]);
       expect(review).toMatchObject({
         transaction: { to: request.to, valueWei: "0", data: tokenRequest.data },
-        decodedTokenCall: { name: "ERC-20 approval", details: [
-          { label: "Spender", value: spender }, { label: "Allowance (atomic units)", value: "3000000" },
+        decodedTokenCall: { name: "Token approval (ERC-20/ERC-721)", details: [
+          { label: "Spender", value: spender }, { label: "Allowance or token ID", value: "3000000" },
         ] },
         tokenEvidence: { contract: request.to, owner: saved.ok.address, spender, amount: "3000000", balance: { value: "7000030" }, allowance: { value: "0" } },
       });
@@ -999,4 +1010,155 @@ test("failed token refresh keeps the saved review available and never executes a
   expect(executions).toBe(0);
   await declinePrompt(prompt);
   expect((await completion).status).toBe("rejected");
+});
+
+function decoderFixture(title = "Supply to example vault", id = "example-vault") {
+  const token = `0x${"77".repeat(20)}` as const;
+  const abi = parseAbi(["function supply(address asset,uint256 amount,address beneficiary)"]);
+  const data = encodeFunctionData({ abi, functionName: "supply", args: [token, 123456789n, wire().ok.address as `0x${string}`] });
+  const transaction = { ...request, valueWei: "0", data };
+  const saved = wire({ intent: effectIntent("transaction", transaction), prepared_transaction: { ...wire().ok.prepared_transaction, value: "0", data } });
+  const document = {
+    format: 1, id, version: "2", name: "Example vault", description: "Describe a vault deposit.", source: "https://example.test/decoder.json",
+    deployments: [{ chainId: "1", address: request.to }],
+    functions: [{ signature: "supply(address asset,uint256 amount,address beneficiary)", title, value: "zero", fields: [
+      { path: "args.1", label: "You supply", format: "tokenAmount", tokenPath: "args.0", role: "amount" },
+      { path: "args.2", label: "Beneficiary", format: "address", role: "party" },
+    ] }],
+  };
+  const documentJson = JSON.stringify(document);
+  const pack = { id, version: "2", name: document.name, document_json: documentJson, sha256: hashContent(documentJson), enabled: true, created_at: "1", updated_at: "2" };
+  const asset = { chain_id: "1", address: token, symbol: "VAULT", decimals: "8" };
+  return { token, transaction, saved, pack, asset };
+}
+
+test("Agent review loads invocation-scoped imported decoders and saved custom token decimals", async () => {
+  const fixture = decoderFixture();
+  const queries: string[] = [], effects: string[] = [];
+  const ctx = context(async (method) => {
+    effects.push(method);
+    expect(method).toBe("evm_wallet_prepare_browser_v1");
+    return fixture.saved;
+  }, {
+    agentMode: true,
+    requestApproval: async (review) => {
+      expect(review).toMatchObject({
+        summary: {
+          title: "Supply to example vault", amount: "1.23456789 VAULT", amountAtoms: "123456789", amountDecimals: 8,
+          tokenAddress: fixture.token, tokenSymbol: "VAULT", decoderWarning: null,
+          decoder: { id: fixture.pack.id, name: "Example vault", version: "2", kind: "imported", sha256: fixture.pack.sha256, source: "https://example.test/decoder.json" },
+          parties: [{ label: "Beneficiary", value: fixture.saved.ok.address }],
+        },
+        caller, transaction: { to: request.to, valueWei: "0", data: fixture.transaction.data },
+      });
+      expect((review.summary as { recognition: string }).recognition).toContain("pack author");
+      expect((review.summary as { recognition: string }).recognition).toContain("does not verify");
+      expect(queries).toEqual(["evm_wallet_operation_v1", "evm_wallet_snapshot_v1", "evm_wallet_decoder_packs_v1"]);
+      expect(rpc).not.toHaveBeenCalled();
+      throw new Error("Imported review inspected");
+    },
+  }, async method => {
+    queries.push(method);
+    if (method === "evm_wallet_snapshot_v1") return snapshot([fixture.asset]);
+    if (method === "evm_wallet_decoder_packs_v1") return { ok: { packs: [fixture.pack] } };
+    return fixture.saved;
+  });
+  await expect(handleHumanEffect("transaction", fixture.transaction, ctx)).rejects.toThrow("Imported review inspected");
+  expect(effects).toEqual(["evm_wallet_prepare_browser_v1"]);
+});
+
+test("Agent invocations read fresh decoder definitions instead of another invocation's cached pack", async () => {
+  for (const title of ["First installed interpretation", "Updated installed interpretation"]) {
+    const fixture = decoderFixture(title);
+    let packReads = 0;
+    const ctx = context(async () => fixture.saved, {
+      agentMode: true,
+      requestApproval: async review => {
+        expect((review.summary as { title: string }).title).toBe(title);
+        expect(packReads).toBe(1);
+        throw new Error("Fresh interpretation inspected");
+      },
+    }, async method => {
+      if (method === "evm_wallet_snapshot_v1") return snapshot([fixture.asset]);
+      if (method === "evm_wallet_decoder_packs_v1") { packReads++; return { ok: { packs: [fixture.pack] } }; }
+      return fixture.saved;
+    });
+    await expect(handleHumanEffect("transaction", fixture.transaction, ctx)).rejects.toThrow("Fresh interpretation inspected");
+  }
+});
+
+test("unavailable token metadata preserves imported recognition and exact atomic amounts", async () => {
+  const fixture = decoderFixture();
+  const ctx = context(async () => fixture.saved, {
+    agentMode: true,
+    requestApproval: async review => {
+      expect(review).toMatchObject({ summary: {
+        title: "Supply to example vault", amount: "123456789 atomic units", amountAtoms: "123456789", amountDecimals: null,
+        tokenSymbol: null, tokenAddress: fixture.token, decoder: { kind: "imported" },
+      }, transaction: { data: fixture.transaction.data, valueWei: "0" } });
+      expect(rpc.mock.calls.some(call => call[1] === "eth_blockNumber")).toBe(true);
+      throw new Error("Raw amount inspected");
+    },
+  }, async method => method === "evm_wallet_snapshot_v1" ? snapshot() : method === "evm_wallet_decoder_packs_v1" ? { ok: { packs: [fixture.pack] } } : fixture.saved);
+  await expect(handleHumanEffect("transaction", fixture.transaction, ctx)).rejects.toThrow("Raw amount inspected");
+});
+
+test("unavailable decoder inventory and saved assets retain the exact candidate with visible fallback", async () => {
+  const fixture = decoderFixture();
+  const ctx = context(async method => {
+    expect(method).toBe("evm_wallet_prepare_browser_v1");
+    return fixture.saved;
+  }, {
+    agentMode: true,
+    requestApproval: async review => {
+      expect(review).toMatchObject({ summary: { title: "Contract interaction", decoder: null }, transaction: { data: fixture.transaction.data, to: request.to, valueWei: "0" } });
+      expect((review.summary as { decoderWarning: string }).decoderWarning).toContain("Saved Wallet assets could not be loaded");
+      expect((review.summary as { decoderWarning: string }).decoderWarning).toContain("Imported decoder definitions could not be loaded");
+      throw new Error("Fallback inspected");
+    },
+  }, async method => {
+    if (method === "evm_wallet_snapshot_v1" || method === "evm_wallet_decoder_packs_v1") throw new Error("State read unavailable");
+    return fixture.saved;
+  });
+  await expect(handleHumanEffect("transaction", fixture.transaction, ctx)).rejects.toThrow("Fallback inspected");
+});
+
+test("disabled or corrupt imported packs cannot override Agent approval text", async () => {
+  for (const corrupt of [false, true]) {
+    const fixture = decoderFixture();
+    const row = corrupt ? { ...fixture.pack, sha256: "00".repeat(32) } : { ...fixture.pack, enabled: false };
+    const ctx = context(async () => fixture.saved, {
+      agentMode: true,
+      requestApproval: async review => {
+        expect(review).toMatchObject({ summary: { title: "Contract interaction", decoder: null }, transaction: { data: fixture.transaction.data } });
+        if (corrupt) expect((review.summary as { decoderWarning: string }).decoderWarning).toContain("invalid and were skipped");
+        else expect((review.summary as { decoderWarning: null }).decoderWarning).toBeNull();
+        throw new Error("Ignored definition inspected");
+      },
+    }, async method => method === "evm_wallet_snapshot_v1" ? snapshot([fixture.asset]) : method === "evm_wallet_decoder_packs_v1" ? { ok: { packs: [row] } } : fixture.saved);
+    await expect(handleHumanEffect("transaction", fixture.transaction, ctx)).rejects.toThrow("Ignored definition inspected");
+  }
+});
+
+test("ambiguous imported matches expose their warning to Agent review without choosing a label", async () => {
+  const fixture = decoderFixture();
+  const second = decoderFixture("Conflicting interpretation", "other-vault");
+  const ctx = context(async () => fixture.saved, {
+    agentMode: true,
+    requestApproval: async review => {
+      expect(review).toMatchObject({ summary: { title: "Contract interaction", decoder: null }, transaction: { data: fixture.transaction.data } });
+      expect((review.summary as { decoderWarning: string }).decoderWarning).toContain("Multiple enabled decoder packs");
+      throw new Error("Ambiguity inspected");
+    },
+  }, async method => method === "evm_wallet_snapshot_v1" ? snapshot([fixture.asset]) : method === "evm_wallet_decoder_packs_v1" ? { ok: { packs: [fixture.pack, second.pack] } } : fixture.saved);
+  await expect(handleHumanEffect("transaction", fixture.transaction, ctx)).rejects.toThrow("Ambiguity inspected");
+});
+
+test("the pure Agent review builder accepts an already resolved presentation without reading state or RPC", async () => {
+  const fixture = decoderFixture();
+  const prepared = await prepareEffect("transaction", fixture.transaction, context(async () => fixture.saved));
+  const summary = { ...presentOperation(prepared.operation), title: "Supplied resolved interpretation", decoderWarning: "Metadata unavailable" };
+  const review = agentProviderReview(prepared, null, summary);
+  expect(review).toMatchObject({ summary: { title: summary.title, decoderWarning: "Metadata unavailable" }, transaction: { data: fixture.transaction.data } });
+  expect(rpc).not.toHaveBeenCalled();
 });

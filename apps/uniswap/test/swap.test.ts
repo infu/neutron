@@ -188,12 +188,33 @@ test("price impact uses token ordering and the pool fee in integer arithmetic", 
 });
 
 test("a missing impact read is visible and does not discard a successful quote", async () => {
-  const { read } = reader({ impactFails: true, blockNumber: null });
+  const { read } = reader({ impactFails: true });
   const quote = await quoteSwap(read, input(), NOW);
   expect(quote.amountOut).toBe("2000000");
   expect(quote.priceImpactBps).toBeNull();
-  expect(quote.blockNumber).toBeNull();
+  expect(quote.blockNumber).toBe("21000000");
   expect(quote.routeWarnings).toContain("Price impact unavailable: Error: Factory unavailable");
+});
+
+test("an unpinned quote cannot claim price impact from a later pool price", async () => {
+  const fixture = reader({ blockNumber: null });
+  const quote = await quoteSwap(fixture.read, input(), NOW);
+  expect(quote.amountOut).toBe("2000000");
+  expect(quote.priceImpactBps).toBeNull();
+  expect(quote.routeWarnings.join(" ")).toContain("quote block is unavailable");
+  expect(fixture.calls.some((call) => call.to === FACTORY || call.to === POOL)).toBe(false);
+});
+
+test.each([FACTORY, POOL])("mismatched or unknown block from %s preserves the swap but not its price impact", async (address) => {
+  for (const blockNumber of ["21000001", null]) {
+    const fixture = reader();
+    const quote = await quoteSwap(async (...args) => {
+      const response = await fixture.read(...args);
+      return args[1] === address ? { ...response, blockNumber } : response;
+    }, input(), NOW);
+    expect(quote).toMatchObject({ amountOut: "2000000", minimumOut: "1990000", blockNumber: "21000000", priceImpactBps: null });
+    expect(quote.routeWarnings.join(" ")).toContain("different or unknown block");
+  }
 });
 
 test("all failed pools or zero-output pools fail before any wallet transaction is prepared", async () => {
@@ -231,6 +252,19 @@ test("a failed allowance read cannot be treated as zero or enough allowance", as
   const quote = await quoteSwap(reader().read, input("1", "token-token"), NOW);
   const unavailable: Reader = async () => { throw new Error("RPC providers disagree about allowance"); };
   await expect(prepareSwap(unavailable, quote, NOW)).rejects.toThrow("RPC providers disagree about allowance");
+});
+
+test.each([1n, 2n])("V3 ERC20 output rejects router recipient alias %s before quoting or approving", async (alias) => {
+  const recipient = getAddress(`0x${alias.toString(16).padStart(40, "0")}`);
+  const fixture = reader();
+  await expect(quoteSwap(fixture.read, { ...input(), recipient }, NOW)).rejects.toThrow("router alias");
+  expect(fixture.calls).toHaveLength(0);
+  const quote = await quoteSwap(fixture.read, input(), NOW);
+  expect(() => swapTransaction({ ...quote, recipient }, NOW)).toThrow("router alias");
+  // Native output uses unwrapWETH9's literal recipient, which has no alias map.
+  const native = await quoteSwap(fixture.read, { ...input("1", "token-native"), recipient }, NOW);
+  const [, calls] = unwrapMulticall(swapTransaction(native, NOW).data);
+  expect(decodeFunctionData({ abi: routerAbi, data: calls[1]! }).args).toEqual([BigInt(native.minimumOut), recipient]);
 });
 
 test("only own supported network IDs and their matching token addresses are accepted", () => {

@@ -1,7 +1,7 @@
 import { querySelf, updateSelf, type JsonValue } from "neutron-tools/app";
-import { createEvmRequestId, parseEvmOperationResult, parseEvmReplacementTransactionResult, parseEvmSendTransactionRequest, parseEvmTransactionResult, type EvmAccount, type EvmAccountId, type EvmOperationResult, type EvmReplacementTransactionResult, type EvmSendTransactionRequest, type EvmTransactionResult, type EvmWalletClient, type EvmWalletCaller } from "neutron-tools/evm_wallet";
+import { createEvmRequestId, parseEvmOperationResult, parseEvmReplacementTransactionResult, parseEvmSendTransactionRequest, parseEvmTransactionResult, type EvmAccount, type EvmAccountId, type EvmOperationResult, type EvmReplacementTransactionResult, type EvmSendTransactionRequest, type EvmTransactionResult, type EvmWalletCallOptions, type EvmWalletClient, type EvmWalletCaller } from "neutron-tools/evm_wallet";
 import { decodeEventLog, getAddress, parseAbi, type Hex } from "viem";
-import { prepareSwap, quoteSwap, swapTransaction, type PreparedSwap, type QuoteInput, type QuoteProgress, type Reader, type Transaction } from "./swap.ts";
+import { prepareSwap, quoteSwap, rebuildHistoricalSwapTransaction, swapTransaction, type PreparedSwap, type QuoteInput, type QuoteProgress, type Reader, type Transaction } from "./swap.ts";
 import type { ProviderFlow } from "./provider_flow.ts";
 
 export type SavedIntent = PreparedSwap & { account: EvmAccount; executionMode: "human" | "agent" | "provider"; walletCaller: EvmWalletCaller | null; providerFlow?: ProviderFlow };
@@ -124,7 +124,7 @@ export function savedIntent(record: SwapRecord): SavedIntent {
   const intent = JSON.parse(record.quote_json) as SavedIntent;
   if (intent.quote.chainId !== record.chain_id || intent.quote.accountId !== record.account_id || intent.quote.recipient.toLowerCase() !== record.recipient.toLowerCase()) throw new Error("Saved swap identity does not match its journal.");
   // Rebuild immutable calldata even after expiry. Expiry is checked again before any new request.
-  const rebuilt = swapTransaction(intent.quote, 0);
+  const rebuilt = rebuildHistoricalSwapTransaction(intent.quote);
   const request = parseEvmSendTransactionRequest(JSON.parse(record.swap_request_json));
   if (request.requestId !== record.swap_request_id || request.data !== rebuilt.data || request.to.toLowerCase() !== rebuilt.to.toLowerCase() || request.valueWei !== rebuilt.value || request.chainId !== rebuilt.chainId || request.accountId !== rebuilt.accountId) throw new Error("Saved swap transaction does not match its quote.");
   return intent;
@@ -190,15 +190,17 @@ export function effectiveOperation(record: SwapRecord, stage: "approval" | "swap
   const operation = storedOperation(record, stage);
   return operation ? operationView(record, stage, operation) : null;
 }
-async function observeHumanReplacement(wallet: EvmWalletClient, record: SwapRecord, stage: "approval" | "swap", operation: EvmOperationResult): Promise<StoredOperation> {
+async function observeHumanReplacement(wallet: EvmWalletClient, record: SwapRecord, stage: "approval" | "swap", operation: EvmOperationResult, options?: EvmWalletCallOptions): Promise<StoredOperation> {
   if (!operation.replacementTransactionHash || operation.receipt !== null) return operation;
   // The authenticated, original operationStatus response supplies this link.
   // A caller-provided replacement hash is never accepted on this path.
-  const replacementEvidence = await wallet.transaction({ chainId: record.chain_id, transactionHash: operation.replacementTransactionHash });
+  const replacementEvidence = await wallet.transaction({ chainId: record.chain_id, transactionHash: operation.replacementTransactionHash }, options);
   return decodeStoredOperation(record, stage, { ...operation, replacementEvidence });
 }
-export async function checkAccount(wallet: EvmWalletClient, intent: SavedIntent): Promise<void> {
-  const account = (await wallet.accounts()).accounts.find((entry) => entry.accountId === intent.account.accountId);
+export async function checkAccount(wallet: EvmWalletClient, intent: SavedIntent, options?: EvmWalletCallOptions): Promise<void> {
+  options?.signal?.throwIfAborted();
+  const account = (await wallet.accounts(options)).accounts.find((entry) => entry.accountId === intent.account.accountId);
+  options?.signal?.throwIfAborted();
   if (!account || account.address.toLowerCase() !== intent.account.address.toLowerCase() || account.keyFingerprint !== intent.account.keyFingerprint || account.namespaceVersion !== intent.account.namespaceVersion) throw new Error("EVM Wallet signing identity changed. This saved request cannot be replayed with a replacement account.");
 }
 export function approvalConfirmed(record: SwapRecord): boolean {
@@ -206,26 +208,39 @@ export function approvalConfirmed(record: SwapRecord): boolean {
   const operation = effectiveOperation(record, "approval");
   return operation?.status === "confirmed" && operation.receipt?.status === "success";
 }
-export async function reconcileStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap"): Promise<SwapRecord> {
+export async function reconcileStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap", options?: EvmWalletCallOptions): Promise<SwapRecord> {
+  // A provider renewal froze this known-unsigned predecessor with CAS. Reads
+  // must not erase that marker and make the old request dispatchable again.
+  if (record.phase === "swap_superseded") return record;
   const requestId = stage === "approval" ? record.approval_request_id : record.swap_request_id;
   if (!requestId) return record;
-  await checkAccount(wallet, savedIntent(record));
-  const result = await wallet.operationStatus({ accountId: record.account_id as EvmAccountId, chainId: record.chain_id, requestId });
+  await checkAccount(wallet, savedIntent(record), options);
+  const result = await wallet.operationStatus({ accountId: record.account_id as EvmAccountId, chainId: record.chain_id, requestId }, options);
+  options?.signal?.throwIfAborted();
   if (result.status === "not_found") return record;
-  const operation = await observeHumanReplacement(wallet, record, stage, validateOperation(record, stage, result));
-  return store.update(record, stage, `${stage}_${operationView(record, stage, operation).status}`, operation);
+  const operation = await observeHumanReplacement(wallet, record, stage, validateOperation(record, stage, result), options);
+  options?.signal?.throwIfAborted();
+  // A status query may still see an earlier prepared revision while another
+  // review of this exact request is in flight. Only the send reply proves that
+  // review ended unsigned; retaining its dispatch marker prevents quote renewal
+  // from creating a second request after a lost reply.
+  const phase = record.phase === `${stage}_requested` && operation.status === "prepared"
+    ? record.phase : `${stage}_${operationView(record, stage, operation).status}`;
+  return store.update(record, stage, phase, operation);
 }
-export async function executeStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap"): Promise<SwapRecord> {
-  return executeOwnedStep(wallet, store, record, stage, "human");
+export async function executeStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap", options?: EvmWalletCallOptions): Promise<SwapRecord> {
+  return executeOwnedStep(wallet, store, record, stage, "human", options);
 }
-export async function executeProviderStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap"): Promise<SwapRecord> {
-  return executeOwnedStep(wallet, store, record, stage, "provider");
+export async function executeProviderStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap", options?: EvmWalletCallOptions): Promise<SwapRecord> {
+  return executeOwnedStep(wallet, store, record, stage, "provider", options);
 }
-async function executeOwnedStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap", mode: "human" | "provider"): Promise<SwapRecord> {
+async function executeOwnedStep(wallet: EvmWalletClient, store: Store, record: SwapRecord, stage: "approval" | "swap", mode: "human" | "provider", options?: EvmWalletCallOptions): Promise<SwapRecord> {
   const intent = savedIntent(record);
   if (intent.executionMode !== mode) throw new Error(mode === "human" && intent.executionMode === "agent" ? "This swap belongs to an Agent workflow. The root agent must call EVM Wallet directly." : "This swap belongs to a different workflow; continue its original saved requests.");
-  await checkAccount(wallet, intent);
-  record = await reconcileStep(wallet, store, record, stage);
+  if (record.phase === "swap_superseded") throw new Error("This expired quote was superseded. Continue its original provider flow to resume the successor request.");
+  await checkAccount(wallet, intent, options);
+  record = await reconcileStep(wallet, store, record, stage, options);
+  options?.signal?.throwIfAborted();
   const recorded = stage === "approval" ? record.approval_operation_json : record.swap_operation_json;
   if (recorded) {
     const operation = storedOperation(record, stage)!;
@@ -242,8 +257,9 @@ async function executeOwnedStep(wallet: EvmWalletClient, store: Store, record: S
     if (JSON.stringify(request) !== JSON.stringify(expected)) throw new Error("Saved approval does not match the exact quoted amount and spender.");
   }
   record = await store.update(record, stage, `${stage}_requested`);
+  options?.signal?.throwIfAborted();
   // A lost reply leaves requested state. Reload reconciles this same request ID first.
-  const operation = await wallet.sendTransaction(request);
+  const operation = await wallet.sendTransaction(request, options);
   validateOperation(record, stage, operation);
   return store.update(record, stage, `${stage}_${operation.status}`, operation);
 }

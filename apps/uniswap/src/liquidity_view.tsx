@@ -254,6 +254,18 @@ export function LiquidityView({ wallet, account, chain, tokens, balance, balance
     } catch (error) { setImportError(errorText(error)); }
     finally { setImporting(false); }
   }
+  async function addCustomToken() {
+    if (!account) return;
+    const address = customTokenAddress, readingScope = scope;
+    try {
+      const token = await customToken(walletReader(wallet, account.accountId), chain, address);
+      if (currentScope.current !== readingScope) return;
+      onTokens(token);
+      setCustomTokenAddress((current) => current === address ? "" : current);
+    } catch (error) {
+      if (currentScope.current === readingScope) setPreviewError(errorText(error));
+    }
+  }
   const title = editor?.operation === "mint" ? "New position" : editor?.operation === "increase" ? "Add liquidity" : editor?.operation === "decrease" ? "Remove liquidity" : editor?.operation === "close" ? "Close position" : "Collect tokens";
   return <>
     {editor ? <section className="nt-panel uni-form uni-liquidity-editor" aria-label={title}>
@@ -273,7 +285,7 @@ export function LiquidityView({ wallet, account, chain, tokens, balance, balance
         {range === "custom" && editor.operation === "mint" && <><div className="uni-row"><label>Lower tick<input inputMode="numeric" value={lower} disabled={actions.busy} onChange={(event) => setLower(event.target.value)}/></label><label>Upper tick<input inputMode="numeric" value={upper} disabled={actions.busy} onChange={(event) => setUpper(event.target.value)}/></label></div><p className="uni-muted">Ticks use the pool’s currency order and must align with its tick spacing. A position earns pool fees while its price is inside this range.</p></>}
         <label>Slippage %<input inputMode="decimal" value={slippage} disabled={actions.busy} onChange={(event) => setSlippage(event.target.value)}/></label>
         {preview && <><dl><dt>Version</dt><dd>{preview.protocol.toUpperCase()}</dd><dt>Pool fee</dt><dd>{preview.pool.fee / 10000}%</dd><dt>Position range</dt><dd>{preview.tickLower} to {preview.tickUpper}</dd><dt>Current tick</dt><dd>{preview.pool.tick}</dd><dt>Range status</dt><dd>{preview.inRange ? "In range" : "Out of range"}</dd><dt>Maximum deposit</dt><dd>{amountText(preview.amount0Max, preview.token0.decimals)} {preview.token0.symbol} + {amountText(preview.amount1Max, preview.token1.decimals)} {preview.token1.symbol}<UsdTotal amounts={[{ token: preview.token0, atoms: preview.amount0Max }, { token: preview.token1, atoms: preview.amount1Max }]} priceFor={priceFor} label="Maximum deposit in USD"/></dd><dt>Minimum withdrawal</dt><dd>{amountText(preview.amount0Min, preview.token0.decimals)} {preview.token0.symbol} + {amountText(preview.amount1Min, preview.token1.decimals)} {preview.token1.symbol}<UsdTotal amounts={[{ token: preview.token0, atoms: preview.amount0Min }, { token: preview.token1, atoms: preview.amount1Min }]} priceFor={priceFor} label="Minimum withdrawal in USD"/></dd></dl>{preview.warnings.map((warning) => <p className="uni-muted" key={warning}>{warning}</p>)}</>}
-        {editor.operation === "mint" && <><label>Add token by contract<input value={customTokenAddress} disabled={disabled || actions.busy} spellCheck={false} onChange={(event) => setCustomTokenAddress(event.target.value)} placeholder="0x…"/></label><button className="uni-text-button" disabled={!account || !customTokenAddress || actions.busy} onClick={() => { if (account) void customToken(walletReader(wallet, account.accountId), chain, customTokenAddress).then((token) => { onTokens(token); setCustomTokenAddress(""); }).catch((error) => setPreviewError(errorText(error))); }}>Add token</button><p className="uni-muted">New positions use existing pools. V3 native ETH is wrapped into WETH in the position. V4 pools distinguish ETH from WETH.</p></>}
+        {editor.operation === "mint" && <><label>Add token by contract<input value={customTokenAddress} disabled={disabled || actions.busy} spellCheck={false} onChange={(event) => setCustomTokenAddress(event.target.value)} placeholder="0x…"/></label><button className="uni-text-button" disabled={disabled || !account || !customTokenAddress || actions.busy} onClick={() => void addCustomToken()}>Add token</button><p className="uni-muted">New positions use existing pools. V3 native ETH is wrapped into WETH in the position. V4 pools distinguish ETH from WETH.</p></>}
       </div></details>
     </section> : <section className="uni-positions" aria-label="Liquidity positions">
       <header className="uni-form-top"><div><h2 className="nt-subtitle">Your positions</h2><p className="uni-muted">V3 & V4 · {NETWORKS[chain].name}</p></div><button className="nt-button uni-new-position" disabled={disabled || !account || actions.busy} onClick={() => open("mint")}>+ New position</button></header>

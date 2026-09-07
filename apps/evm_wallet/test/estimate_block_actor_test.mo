@@ -1,3 +1,4 @@
+import DecoderMemory "../backend/memory/evm_decoders/v1";
 import Runtime "mo:core/Runtime";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
@@ -46,7 +47,7 @@ persistent actor {
         };
         sign_digest = func(_ : Caps.WalletCustodySignDigestRequestV1) : async* Caps.WalletCustodySignatureResultV1 { signatures += 1; assert false; #err(#invalid_request) };
       };
-      let service = Main.Init({ stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init() }; capabilities = { wallet_custody_signing = signing } });
+      let service = Main.Init({ stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init(); evm_decoders = DecoderMemory.init() }; capabilities = { wallet_custody_signing = signing } });
       let observation = { block_number = "0x9b1d"; balance = "1000000000000000000"; pending_nonce = "9"; mined_nonce = "8"; gas_price = "1000000014"; max_priority_fee_per_gas = "1000000000"; base_fee_per_gas = "7" };
       let replacementRequest : Main.WalletPrepareRequest = { identity = identity("00000000000000000000000000000002"); intent = { intent with operation = #replacement({ operation_id = original.id; cancel = false; max_fee_per_gas = "2000000029"; max_priority_fee_per_gas = "2000000001" }) } };
       let candidate = ok(await* service.evm_wallet_prepare_browser_v1({ request = replacementRequest; observation }));

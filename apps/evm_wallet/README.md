@@ -36,8 +36,21 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
   received and recipient, plus the absence of an onchain expiry. Compatible pool
   liquidity interfaces show indexed token budgets, LP burns, output minima and
   the receiver from calldata; interface recognition does not assert factory
-  membership. These same details reach Agent review. Both managed Wallet roots
-  retain their released v1 schemas and existing signing identities.
+  membership. These same details reach Agent review. The existing Wallet and
+  evidence roots retain their released v1 schemas and existing signing identities.
+  Aave V3 Ethereum Core and Arbitrum Pool and Rewards Controller calls show
+  supply, withdrawal, variable borrowing and repayment, repayment with supplied
+  aTokens, collateral settings, efficiency-mode category IDs and reward claims.
+  Reviews distinguish the token recipient from the debt owner and explain
+  whole-position amount sentinels. Current immutable WETH Gateway calls show
+  native supply, withdrawal, borrowing and repayment, with exact ETH payment
+  budgets and refund recipients. aWETH approvals show exact supplied-token limits.
+  WETH variable-debt-token delegations show the
+  borrowing limit, delegatee and responsibility for the resulting debt.
+  Recognition requires the exact network,
+  deployed contract and canonical calldata; unsupported calls retain generic
+  review. The same presentation reaches owner and Agent review, with every
+  asset address, amount, beneficiary and original byte available for inspection.
   Known ERC-20 selectors
   are decoded as hints, not proof of the called contract's behavior. Recognized
   `approve`, `transfer` and `transferFrom` calls show the observed token balance
@@ -46,7 +59,17 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
   changing the transaction's destination, value, calldata, nonce or gas fields.
 - **Activity** includes requests from other apps, message signatures, pending
   outcomes and receipts. It is the Wallet's own journal, not a complete external
-  transaction index. Load older pages when checking older requests.
+  transaction index. Amounts, recipients, protocol explanations and signature
+  previews remain readable; Details retains original calldata and decoder
+  provenance. Matching older transactions benefit from the same decoders as new
+  reviews. Refresh reloads the complete visible history window, including older
+  statuses; loading more reads a contiguous window even when new requests arrive.
+  Load older pages when checking older requests.
+- **Settings → Transaction explanations** imports versioned JSON definitions for
+  additional protocols. Preview their exact networks, contracts and functions
+  before saving; disable, replace or remove them at any time. Imported labels
+  carry their origin and do not constitute contract verification. See the
+  [decoder authoring and architecture guide](./src/decoders/README.md).
 - **Settings → Token approvals** lists spender/token pairs from successful confirmed Wallet
   transactions, including canonical speed-up replacements. Pending or reverted
   replacements do not establish an approval. Read the allowance at the returned
@@ -106,6 +129,10 @@ asks for approval again after estimating and simulating the new candidate.
 It does not silently sign the changed transaction. Send shows preparation
 progress immediately, including the token amount and recipient, then displays
 the exact transaction and an explicit approval button.
+If an unsigned preparation was interrupted before its simulation completed,
+retrying the same request refreshes automatically chosen fees from the current
+head and invalidates the earlier simulation revision. Explicit fee settings and
+already prepared or signed transactions retain their exact reviewed fields.
 An Agent provider call returns `prepared` when its reviewed candidate changes;
 the consumer must call again with the same request ID to obtain a fresh decision.
 The previous approval cannot be reused for the changed candidate.
@@ -226,6 +253,19 @@ and lock lineage after release. Installation and publication follow
 [`doc/package-updates.md`](../../doc/package-updates.md) and
 [`doc/memory-migrations-and-uninstall.md`](../../doc/memory-migrations-and-uninstall.md).
 The production update source is `233tv-xiaaa-aaaay-aacta-cai`.
+
+Release 116 adds the independent `evm_decoders@1` root for imported definitions.
+It keeps the exact released Wallet and evidence roots and initializes the new
+inventory without migrating or rewriting account state or transaction history.
+Decoder, metadata, provider, browser and memory tests cover pack matching,
+ambiguity, unavailable metadata, persistence and retrospective Activity display.
+Generic token and Uniswap V3 decoding checks the complete canonical calldata,
+including nested calls. Shared ERC-20/ERC-721 selectors with unknown token
+metadata show exact allowance-or-token-ID values. The zero-allowance action
+first checks a valid `allowance()` response so it cannot silently interpret an
+unsupported NFT approval as a fungible allowance revocation. These are interface
+hints, not contract verification. Decoder changes also refresh other open Wallet
+windows; an explicit Wallet refresh retries unavailable token metadata.
 
 ## USD estimates
 

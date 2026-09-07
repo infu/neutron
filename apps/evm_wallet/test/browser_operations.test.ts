@@ -62,7 +62,7 @@ type BackendCall = { kind: "query" | "update"; method: string; args: unknown[] }
 const restore: Array<() => void> = [];
 afterEach(() => { for (const reset of restore.splice(0)) reset(); });
 
-function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolean; busyBlocks?: boolean; receiptLogs?: unknown[] } = {}) {
+function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolean; busyBlocks?: boolean; receiptLogs?: unknown[]; refreshPreparation?: boolean; baseFee?: string } = {}) {
   const http: RpcCall[] = [], backend: BackendCall[] = [];
   let saved: Wire | null = null;
   let raw: Hex | null = null;
@@ -81,13 +81,14 @@ function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolea
     let result: unknown;
     switch (method) {
       case "eth_chainId": result = "0x1"; break;
-      case "eth_getBlockByNumber": result = { number: "0x100", hash: BLOCK_HASH, baseFeePerGas: "0x1", transactions: options.busyBlocks ? Array.from({ length: 1600 }, (_, index) => `0x${index.toString(16).padStart(64, "0")}`) : saved?.transaction_hash && accepted ? [saved.transaction_hash] : [] }; break;
+      case "eth_getBlockByNumber": result = { number: "0x100", hash: BLOCK_HASH, baseFeePerGas: options.baseFee ?? "0x1", transactions: options.busyBlocks ? Array.from({ length: 1600 }, (_, index) => `0x${index.toString(16).padStart(64, "0")}`) : saved?.transaction_hash && accepted ? [saved.transaction_hash] : [] }; break;
       case "eth_getTransactionCount": result = "0x0"; break;
       case "eth_getBalance": result = balance; break;
       case "eth_gasPrice": result = "0x2"; break;
       case "eth_maxPriorityFeePerGas": result = "0x1"; break;
       case "eth_estimateGas": {
-        const tx = params[0] as { nonce: string };
+        const tx = params[0] as { nonce: string; maxFeePerGas: string };
+        if (options.baseFee && BigInt(tx.maxFeePerGas) < BigInt(options.baseFee)) throw new Error("max fee per gas less than block base fee");
         result = tx.nonce === "0x0" ? "0x5208" : "0xa410";
         break;
       }
@@ -143,6 +144,12 @@ function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolea
           saved.review.balance = input.observation.balance;
           saved.review.nonce = input.observation.pending_nonce;
           saved.prepared_transaction.nonce = input.observation.pending_nonce;
+        }
+        if (options.refreshPreparation && saved.status === "preparing") {
+          const maximum = (BigInt(input.observation.base_fee_per_gas) * 2n + BigInt(input.observation.max_priority_fee_per_gas)).toString();
+          saved.prepared_transaction.max_fee_per_gas = saved.review.max_fee_per_gas = maximum;
+          saved.prepared_transaction.max_priority_fee_per_gas = saved.review.max_priority_fee_per_gas = input.observation.max_priority_fee_per_gas;
+          saved.review_revision = String(BigInt(saved.review_revision) + 1n);
         }
         return { ok: copy(saved) };
       }
@@ -337,12 +344,28 @@ test("a nonce changed at approval returns a freshly simulated review and require
   expect(app.state().executeCount).toBe(2);
 });
 
-test.each(["preparing", "prepared"])("a changed intent for an existing %s request fails before any RPC", async (status) => {
+test.each(["preparing", "prepared"])("a changed intent for an existing %s request cannot change its candidate or sign", async (status) => {
   const app = fixture();
   app.load({ ...operationWire(), status });
+  const original = app.state().saved;
   const changed: SelfCallObject = { ...intent, operation: { transaction: { to: `0x${"44".repeat(20)}`, value: "7", data: "0x", access_list: [] } } };
   await expect(prepareBrowserOperation(app.kernel, identity, changed)).rejects.toThrow("request_id_conflict");
-  expect(app.http).toHaveLength(0);
+  if (status === "prepared") expect(app.http).toHaveLength(0);
+  expect(app.state().saved).toEqual(original);
+  expect(app.http.some(call => ["eth_estimateGas", "eth_call", "eth_sendRawTransaction"].includes(call.method))).toBe(false);
+  expect(app.state().signatures).toBe(0);
+});
+
+test("resuming an interrupted candidate refreshes real fee observations before estimating against the new head", async () => {
+  const app = fixture({ refreshPreparation: true, baseFee: "0x64" });
+  app.load(operationWire());
+  const result = await prepareBrowserOperation(app.kernel, identity, intent);
+  expect(result.status).toBe("prepared");
+  expect(result.preparedTransaction).toMatchObject({ maxFeePerGas: "201", maxPriorityFeePerGas: "1", gasLimit: "21000", to: TO, value: "7", data: "0x" });
+  const preparations = app.backend.filter(call => call.method === "evm_wallet_prepare_browser_v1");
+  expect(preparations).toHaveLength(1);
+  expect(preparations[0]!.args[0]).toMatchObject({ observation: { block_number: "0x100", base_fee_per_gas: "100", max_priority_fee_per_gas: "1" } });
+  expect(app.http.find(call => call.method === "eth_estimateGas")!.params[0]).toMatchObject({ maxFeePerGas: "0xc9" });
   expect(app.state().signatures).toBe(0);
 });
 

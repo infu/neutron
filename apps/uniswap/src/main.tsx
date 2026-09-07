@@ -109,6 +109,7 @@ export function App() {
     if (!selected) return;
     const scope = `${chain}:${selected.accountId}`;
     const result = await wallet.balances({ accountId: selected.accountId, chainId: chain, tokens: tokens.flatMap((token) => token.address ? [token.address] : []) });
+    if (result.address.toLowerCase() !== selected.address.toLowerCase()) throw new Error("The Wallet address changed during the balance read. Updating your account and balances again.");
     if (balanceScope.current === scope) setBalances(result);
   }
   async function loadAccounts() {
@@ -222,7 +223,7 @@ export function App() {
     else { if (key === inputKey) setInputKey(outputKey); setOutputKey(key); }
   }
   function balanceAtoms(token: Token): string | null {
-    if (!balances || balances.chainId !== token.chainId) return null;
+    if (!balances || !account || balances.chainId !== token.chainId || balances.accountId !== accountId || balances.address.toLowerCase() !== account.address.toLowerCase()) return null;
     if (token.address === null) return balances.nativeBalanceWei;
     const entry = balances.tokens.find((value) => value.address.toLowerCase() === token.address!.toLowerCase());
     return entry?.balanceAtoms ?? null;

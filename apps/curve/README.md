@@ -26,6 +26,8 @@ NG. Legacy adapters cover Ethereum 3pool and ETH/stETH, and Arbitrum 2pool and
 ETH/wstETH. Legacy liquidity overloads pay the signing wallet; they do not
 provide a custom recipient parameter. Tricrypto NG supports optional native ETH
 where WETH is one of its coins. Other NG liquidity uses the listed ERC20 coins.
+Swaps also accept WETH through native ETH pools, unwrapping the input or wrapping
+the output inside the Router transaction.
 
 The interface does not present API liquidity as personal wealth or advertise a
 globally optimal route. Discovery can be partial or unavailable. Selected NG
@@ -157,6 +159,9 @@ identity, replacements, unavailable RPC, concurrent continuation and reorgs.
 Token tests cover duplicate symbols, spoofed list metadata, high-TVL impostors,
 address casing, exact-address search and native/bridged chain separation. Browser
 checks exercise those distinctions and retain the unlisted label after selection.
+Liquidity form regressions cover unfinished drafts while switching between
+deposits, proportional withdrawals and single-coin withdrawals; only the active
+action's amounts enter its preview and transaction input.
 The Motoko test runs clean initialization and restores a populated root with
 pending state, immutable input, revisions, linked attempts and paginated history.
 
@@ -166,7 +171,9 @@ Ethereum block `25922607`, Arbitrum block `502541973`. It checks LP burns/mints,
 recipient token balances, native handling and reverting minima. Only a
 loopback Anvil receives transactions. Fixture account balances are funded locally;
 RPC providers supply read-only fork data. `CURVE_FIXTURE_DEPS` can point to an
-existing isolated Anvil 1.7.1 installation. The browser fixture runs the real
+existing isolated Anvil 1.7.1 installation. For a single-network run, set
+`CURVE_FIXTURE_CHAIN` and optionally `CURVE_FIXTURE_RPC` to a read-only provider
+with the pinned archive state. The browser fixture runs the real
 React tile, resident service, Wallet SDK, tool schemas and generated backend
 schemas, with mock Kernel transport and observations. Its state survives reload;
 screenshots and results go to `/tmp/neutron-curve-browser` by default. These

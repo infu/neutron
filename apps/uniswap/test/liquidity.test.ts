@@ -80,6 +80,21 @@ describe("liquidity contract plans", () => {
     expect(decodeAbiParameters(parseAbiParameters("address,address,address"), decoded.params[1]!)).toEqual([A, B, RECIPIENT]);
     expect(built.approvalTokens).toEqual([]); expect(built.transaction.value).toBe("0");
   });
+  test("V4 protocol recipient aliases cannot silently redirect minted positions or withdrawals", () => {
+    // BaseActionsRouter maps address(1) to msgSender() and address(2) to itself.
+    // Neither calldata value would deliver to the literal recipient in preview.
+    const p = pool();
+    for (const recipient of ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"]) {
+      for (const operation of ["mint", "decrease", "collect", "close"] as const) {
+        expect(() => buildLiquidity(p, operation === "mint" ? null : position(p), ACCOUNT, { ...input(p, operation), recipient }, NOW)).toThrow("router alias");
+      }
+    }
+    // V3's NFT manager does not apply those aliases to its recipient fields.
+    const v3 = pool("v3"), recipient = getAddress("0x0000000000000000000000000000000000000001");
+    const mint = v3Calls(buildLiquidity(v3, null, ACCOUNT, { ...input(v3), recipient }, NOW).transaction.data)[0]!;
+    if (mint.functionName !== "mint") throw new Error("Expected mint");
+    expect(mint.args[0].recipient).toBe(recipient);
+  });
   test("V4 collect leaves liquidity intact; empty close burns NFT", () => {
     const p = pool(), collect = buildLiquidity(p, position(p), ACCOUNT, input(p, "collect"), NOW);
     const decoded = v4Actions(collect.transaction.data);

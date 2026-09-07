@@ -2,6 +2,13 @@ import { address, decodeKnownCall, quantity, type Operation } from "./data.ts";
 
 export type KnownApproval = { key: string; token: string; spender: string };
 
+/** allowance() must return one uint256 word; empty or extra bytes cannot
+ * establish that this shared approve selector exposes fungible allowances. */
+export function parseAllowanceResult(result: string): string {
+  if (!/^0x[0-9a-f]{64}$/i.test(result)) throw new Error("The contract did not return an ERC-20 allowance. A zero approval cannot be treated as an allowance revocation.");
+  return BigInt(result).toString();
+}
+
 function hasSuccessfulReceipt(operation: Operation): boolean {
   if (
     operation.status !== "confirmed" ||

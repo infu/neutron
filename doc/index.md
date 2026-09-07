@@ -160,6 +160,9 @@ compiler, shared-tools, or provisioner source change.
   unresolved design work; it is not a description of current authority.
 - [EVM Wallet And Consumer Apps](./evm-wallet.md) describes the separate wallet,
   custody lifecycle, shared client, IC bridge, Kitchen Sink and Uniswap flows.
+  [Transaction decoder packs](../apps/evm_wallet/src/decoders/README.md) explains
+  extensible protocol presentation, import provenance and readable Activity;
+  the [implementation checklist](./todo.evm-decoders.md) tracks qualification.
   The [research](./evm-wallet-research.md) records design choices; the
   [implementation checklist](./todo.evm-wallet.md) tracks qualification and release.
   [Uniswap V4 and liquidity](./uniswap-v4-liquidity.md) records contract research,
@@ -167,6 +170,9 @@ compiler, shared-tools, or provisioner source change.
 - [Curve swaps and liquidity](../apps/curve/README.md) documents the Ethereum
   Wallet integration, supported pools, durable execution and qualification.
   The [Curve implementation checklist](./todo.curve.md) tracks the release.
+- [Aave lending and borrowing](../apps/aave/README.md) documents market positions,
+  collateral and debt management through EVM Wallet. The
+  [Aave implementation checklist](./todo.aave.md) tracks qualification and release.
 
 ## Repository Map
 

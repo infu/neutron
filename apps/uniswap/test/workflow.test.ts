@@ -100,6 +100,21 @@ test("pausing after approval prevents automatic swap dispatch", async () => {
   expect(sends).toEqual(["approval"]);
 });
 
+test("Continue forwards cancellation into the Wallet reconciliation and execution paths", async () => {
+  const f = fixture({ approval: false }), controller = new AbortController();
+  const signals: (AbortSignal | undefined)[] = [];
+  await expect(continueSwap(f.wallet, f.store, f.current(), {
+    signal: controller.signal,
+    reconcile: async (_wallet, _store, record, _stage, options) => { signals.push(options?.signal); return record; },
+    execute: async (_wallet, _store, record, _stage, options) => {
+      signals.push(options?.signal); controller.abort(new Error("Review paused"));
+      options?.signal?.throwIfAborted(); return record;
+    },
+  })).rejects.toThrow("Review paused");
+  expect(signals).toHaveLength(3);
+  expect(signals.every((signal) => signal === controller.signal)).toBe(true);
+});
+
 test("a declined approval stops and retains the saved swap for an explicit retry", async () => {
   const f = fixture(), sends: string[] = [];
   const result = await continueSwap(f.wallet, f.store, f.current(), {

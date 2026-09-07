@@ -1,6 +1,6 @@
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, getAddress, parseAbi, parseAbiParameters, type Hex } from "viem";
-import { amount, type Asset, type Operation } from "./data.ts";
-import type { OperationPresentation } from "./presentation.ts";
+import { amount, type Asset, type Operation } from "../../data.ts";
+import type { OperationPresentation } from "../../presentation.ts";
 
 // Universal Router 2.1.1 uses the V4 swap tuple with minHopPriceX36. Older
 // deployments have a different tuple and must not be decoded with this ABI.

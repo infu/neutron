@@ -116,6 +116,13 @@ refunds any remainder in the same multicall. Native output goes to the router,
 then `unwrapWETH9(minimum, recipient)` pays the intended recipient. Token output
 is sent directly to that recipient. ETH↔WETH wrapping is not a pool swap.
 
+Recipients are literal receiving addresses. V3 token-output swaps and V4
+swap/liquidity calls reject the protocol's `0x…0001` and `0x…0002` aliases,
+which otherwise redirect the output to the caller or router. Previously saved
+V3 records containing those aliases remain readable with their exact calldata.
+The mapping is defined by [SwapRouter02](https://github.com/Uniswap/swap-router-contracts/blob/550c0f20373a487996fcc957075377b67af9df07/contracts/V3SwapRouter.sol#L74)
+and the [V4 action router](https://github.com/Uniswap/v4-periphery/blob/3231810e39b8c4d569b9d66907fa4ef8cd2cec22/src/base/BaseActionsRouter.sol#L53).
+
 New flows include the required zero-allowance reset for Ethereum USDT when
 replacing an insufficient nonzero allowance. Other ordinary tokens avoid that
 extra transaction; a custom token with different approval behavior may require
@@ -166,6 +173,8 @@ begin result to open Wallet review without requiring a full-history reload.
 Receipt inclusion is shown separately from finality. An included Ethereum or
 Arbitrum receipt can still be reorganized. The interface preserves the wallet's
 reported finality instead of claiming immediate final settlement.
+Continuing a unified action rechecks its final receipt, including actions that
+previously reported completion, so a changed inclusion state remains visible.
 
 For a replacement transaction, the original Wallet request ID and transaction
 hash remain intact. The app follows the Wallet's authenticated replacement link,

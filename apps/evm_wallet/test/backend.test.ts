@@ -11,3 +11,7 @@ test("EVM backend journal, execution and recovery", async () => {
 test("EVM pending replacements retain browser-estimated gas and original nonce", async () => {
   await runActors(["test/estimate_block_actor_test.mo"]);
 }, 120_000);
+
+test("EVM interrupted preparation refreshes implicit fees while preserving exact requests and review revisions", async () => {
+  await runActors(["test/preparation_refresh_actor_test.mo"]);
+}, 120_000);

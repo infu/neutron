@@ -19,6 +19,7 @@ import {
   METHODS,
   identityArgs,
   parseOperation,
+  parseSnapshot,
   hex,
   decodeKnownCall,
   errorMessage,
@@ -27,7 +28,9 @@ import {
 } from "./data.ts";
 import { prepareBrowserOperation, executeBrowserOperation, reconcileBrowserOperation, refreshBrowserEvidence } from "./browser_operations.ts";
 import { mergeEvmAssets } from "neutron-tools/src/evm_assets.js";
-import { presentOperation } from "./presentation.ts";
+import { presentOperation, type OperationPresentation } from "./presentation.ts";
+import { enabledDecoderPacks, readDecoderPacks } from "./decoders/store.ts";
+import { resolveOperationPresentation } from "./decoders/runtime.ts";
 
 export type ProviderKind = EvmEffectKind | "replacement";
 export type ProviderRequest = EvmEffectRequest | EvmReplaceTransactionRequest;
@@ -346,12 +349,15 @@ export async function handleHumanEffect(
 export function agentProviderReview(
   prepared: Prepared,
   evidenceError: string | null = null,
+  presentation?: OperationPresentation,
 ): JsonObject {
   const operation = prepared.operation;
   assertOperationMatches(prepared, operation);
   const tx = operation.preparedTransaction;
   const decoded = tx ? decodeKnownCall(tx.data) : null;
-  const summary = presentOperation(operation, mergeEvmAssets([]));
+  const summary = presentation ?? presentOperation(operation, mergeEvmAssets([]));
+  const sharedTokenSelector = summary.tokenSymbol === null &&
+    (decoded?.name === "ERC-20 approval" || decoded?.name === "ERC-20 transfer from");
   return {
     provider: "EVM Wallet",
     kind: prepared.kind,
@@ -359,6 +365,8 @@ export function agentProviderReview(
       title: summary.title,
       amount: summary.amount,
       amountLabel: summary.amountLabel,
+      amountAtoms: summary.amountAtoms ?? null,
+      amountDecimals: summary.amountDecimals ?? null,
       description: summary.description,
       parties: summary.parties,
       contract: summary.contract,
@@ -370,7 +378,11 @@ export function agentProviderReview(
       liquidity: summary.liquidity ?? null,
       permit2Approval: summary.permit2Approval ?? null,
       advancedDetails: summary.advancedDetails ?? [],
-      recognition: "Transaction labels are inferred from exact calldata and the Wallet token catalog; they do not verify contract behavior",
+      decoder: summary.decoder ?? null,
+      decoderWarning: summary.decoderWarning ?? null,
+      recognition: summary.decoder?.kind === "imported"
+        ? "An owner-installed decoder pack interprets these exact transaction bytes. Its labels and descriptions are supplied by the pack author; installation does not verify contract behavior. Token metadata is resolved independently by Wallet."
+        : "Transaction labels are inferred from exact calldata and Wallet-resolved token metadata; they do not verify contract behavior",
     },
     caller: { ...operation.caller },
     operationId: operation.operationId,
@@ -401,14 +413,47 @@ export function agentProviderReview(
       observedAtNs: operation.review.observedAtNs,
     } : null,
     decodedTokenCall: decoded ? {
-      name: decoded.name,
-      details: decoded.details.map(([label, value]) => ({ label, value })),
-      recognition: "Inferred from calldata; this does not verify contract behavior",
+      name: sharedTokenSelector ? `${decoded.name === "ERC-20 approval" ? "Token approval" : "Token transfer"} (ERC-20/ERC-721)` : decoded.name,
+      details: decoded.details.map(([label, value]) => ({
+        label: sharedTokenSelector && label === "Allowance (atomic units)" ? "Allowance or token ID"
+          : sharedTokenSelector && label === "Amount (atomic units)" ? "Amount or token ID" : label,
+        value,
+      })),
+      recognition: sharedTokenSelector ? "This selector is shared by ERC-20 and ERC-721. The integer can be an allowance, an amount or a token ID; the contract interface is not identified."
+        : "Inferred from calldata; this does not verify contract behavior",
     } : null,
     tokenEvidence: operation.tokenEvidence,
     tokenEvidenceError: evidenceError,
     notice: operation.message,
   };
+}
+
+/** Read this invocation's installed definitions and saved assets. The pure
+ * review builder remains usable without a Kernel or a browser connection. */
+async function agentPresentation(operation: Operation, context: MsgBusToolContext): Promise<OperationPresentation> {
+  const [snapshotResult, packsResult] = await Promise.allSettled([
+    context.kernel.querySelf(METHODS.snapshot, [null]).then(parseSnapshot),
+    readDecoderPacks((method, args) => context.kernel.querySelf(method, args)),
+  ]);
+  context.signal?.throwIfAborted();
+  const warnings: string[] = [];
+  const snapshot = snapshotResult.status === "fulfilled" ? snapshotResult.value : null;
+  if (!snapshot) warnings.push("Saved Wallet assets could not be loaded. Available metadata and exact transaction amounts remain visible.");
+  const stored = packsResult.status === "fulfilled" ? packsResult.value : [];
+  if (packsResult.status === "rejected") warnings.push("Imported decoder definitions could not be loaded. Built-in and exact transaction details remain available.");
+  else if (stored.some(row => row.enabled && row.error)) warnings.push("Some enabled decoder definitions are invalid and were skipped. Exact transaction details remain available.");
+  const packs = enabledDecoderPacks(stored);
+  const assets = snapshot?.assets ?? mergeEvmAssets([]);
+  const network = snapshot?.networks.find(entry => entry.chainId === operation.chainId);
+  let presentation = presentOperation(operation, assets, network, packs);
+  try {
+    presentation = await resolveOperationPresentation(operation, assets, network, { packs, ...(context.signal ? { signal: context.signal } : {}) });
+  } catch {
+    context.signal?.throwIfAborted();
+    warnings.push("Additional token metadata could not be read. Exact amounts and available labels remain visible.");
+  }
+  const warning = [presentation.decoderWarning, ...warnings].filter(Boolean).join(" ");
+  return { ...presentation, ...(warning ? { decoderWarning: warning } : {}) };
 }
 
 async function handleAgentProviderEffect(
@@ -437,7 +482,9 @@ async function handleAgentProviderEffect(
       return operationJson(prepared.operation);
   }
   context.signal?.throwIfAborted();
-  await context.requestApproval(agentProviderReview(prepared, evidenceError));
+  const presentation = await agentPresentation(prepared.operation, context);
+  context.signal?.throwIfAborted();
+  await context.requestApproval(agentProviderReview(prepared, evidenceError, presentation));
   context.signal?.throwIfAborted();
   // executeBrowserOperation binds execution to this review revision. If another
   // transaction changed its nonce, return the new unsigned review; a later call

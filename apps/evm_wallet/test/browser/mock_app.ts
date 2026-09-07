@@ -3,8 +3,9 @@ import { Validator } from "jsonschema";
 import { EVM_WALLET_TOOLS } from "neutron-tools/evm_wallet";
 import { curatedEvmTokens } from "neutron-tools/src/evm_assets.js";
 import { normalizeToolDescriptor } from "neutron-tools/protocol";
-import { keccak256, serializeTransaction, type Hex } from "viem";
+import { encodeFunctionData, keccak256, parseAbi, serializeTransaction, type Hex } from "viem";
 import { handleHumanEffect, type ProviderKind } from "../../src/provider.ts";
+import { callContract as readContractCall } from "../../src/read_adapters.ts";
 
 const validator = new Validator();
 const address = "0x2222222222222222222222222222222222222222";
@@ -40,8 +41,21 @@ const operations = new Map<string, any>([[original.request_id, original]]);
 const signedBytes = new Map<string, Hex>();
 const registrations = new Map<string, any>();
 const gates = new Map<string, { wait: Promise<void>; release: () => void }>();
+const appStateListeners = new Map<string, Set<(event: any) => void>>();
 let sequence = 100;
 const copy = <T,>(value: T): T => structuredClone(value);
+// The projected backend owns these records, independently of React state and
+// the opaque origin's unavailable local storage. Reload tests restore this
+// exact backend snapshot before constructing the next Wallet instance.
+const decoderPacks = new Map<string, any>(((window as any).__evmDecoderInitialPacks ?? []).map((row: any) => [row.id, copy(row)]));
+const backendSchemas = (window as any).__evmBackendSchemas as Record<string, any> | undefined;
+function decoderReply(method: string, args: any[], value: unknown) {
+  const schema = backendSchemas?.[method];
+  if (!schema) throw new Error(`Missing actual generated backend schema: ${method}`);
+  validate(args, { ...schema.input, items: schema.input.prefixItems, additionalItems: false });
+  validate(value, schema.output);
+  return copy(value);
+}
 const historyAttempts: any[] = [];
 const requestedHistoryRows = Number(new URLSearchParams(location.search).get("history") ?? "0");
 const capturedHistory = (window as any).__evmCapturedHistory as { operations: any[]; total: string } | undefined;
@@ -57,13 +71,63 @@ const historyRows = requestedHistoryRows > 0 ? Array.from({ length: requestedHis
   return operation;
 }) : null;
 
+if (new URLSearchParams(location.search).has("decoders")) {
+  operations.clear();
+  const usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+  const unknownToken = "0x7777777777777777777777777777777777777777", unavailableToken = "0x8888888888888888888888888888888888888888";
+  const pool = "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2", protocol = "0x6666666666666666666666666666666666666666";
+  const abi = parseAbi(["function deposit(address,uint256,address)", "function repay(address,uint256,uint256,address)", "function supply(address,uint256,address,uint16)", "function approve(address,uint256)", "function transfer(address,uint256)"]);
+  const add = (id: number, to: string, data: Hex, status = "confirmed", value = "0") => {
+    const row = copy(original);
+    Object.assign(row, { operation_id: String(id), request_id: id.toString(16).padStart(32, "0"), status, finality: status === "confirmed" ? "confirmed" : null,
+      transaction_hash: `0x${id.toString(16).padStart(64, "0")}`, caller: { ...row.caller, app_id: "fixture_protocol" } });
+    row.prepared_transaction = { ...row.prepared_transaction, to, data, value };
+    row.intent = { ...row.intent, operation: { transaction: { to, data, value, access_list: [] } } };
+    operations.set(row.request_id, row);
+  };
+  add(201, protocol, encodeFunctionData({ abi, functionName: "deposit", args: [unknownToken, 123456789n, address] }));
+  add(202, pool, encodeFunctionData({ abi, functionName: "repay", args: [usdc, (1n << 256n) - 1n, 2n, address] }));
+  add(203, pool, encodeFunctionData({ abi, functionName: "supply", args: [usdc, 123456789012345678901234567890123456789012345678901234567n, address, 0] }));
+  add(204, unknownToken, encodeFunctionData({ abi, functionName: "transfer", args: [recipient, 765432109n] }));
+  add(205, unavailableToken, encodeFunctionData({ abi, functionName: "transfer", args: [recipient, 123456789n] }));
+  add(206, usdc, encodeFunctionData({ abi, functionName: "approve", args: [protocol, 123000000n] }));
+  const swapAbi = parseAbi(["function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96) params) payable returns (uint256)", "function multicall(uint256 deadline,bytes[] data) payable returns (bytes[])", "function refundETH() payable"]);
+  const swap = encodeFunctionData({ abi: swapAbi, functionName: "multicall", args: [2_000_000_000n, [encodeFunctionData({ abi: swapAbi, functionName: "exactInputSingle", args: [{ tokenIn: weth, tokenOut: usdc, fee: 3000, recipient, amountIn: 1_000_000_000_000_000n, amountOutMinimum: 995_000n, sqrtPriceLimitX96: 0n }] }), encodeFunctionData({ abi: swapAbi, functionName: "refundETH" })]] });
+  add(207, "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45", swap, "submitted", "1000000000000000");
+  const zero = "0x0000000000000000000000000000000000000000", curvePool = "0x5555555555555555555555555555555555555555";
+  const curve = encodeFunctionData({ abi: parseAbi(["function exchange(address[11],uint256[5][5],uint256,uint256,address[5],address) payable returns (uint256)"]), functionName: "exchange", args: [["0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", weth, weth, curvePool, usdc, zero, zero, zero, zero, zero, zero], [[0n, 0n, 8n, 0n, 0n], [2n, 0n, 1n, 30n, 3n], [0n, 0n, 0n, 0n, 0n], [0n, 0n, 0n, 0n, 0n], [0n, 0n, 0n, 0n, 0n]], 1_000_000_000_000_000n, 995_000n, [zero, zero, zero, zero, zero], recipient] });
+  add(208, "0x45312ea0eff7e09c83cbe249fa1d7598c4c8cd4e", curve, "reverted", "1000000000000000");
+  // A prepared request exercises the same imported explanation in human review.
+  add(209, protocol, encodeFunctionData({ abi, functionName: "deposit", args: [unknownToken, 222222222n, address] }), "prepared");
+  sequence = 209;
+}
+
+if (new URLSearchParams(location.search).has("approvals")) {
+  operations.clear();
+  const row = copy(original);
+  const to = "0x9999999999999999999999999999999999999999";
+  const data = encodeFunctionData({ abi: parseAbi(["function approve(address,uint256)"]), functionName: "approve", args: [recipient, 7n] });
+  Object.assign(row, { status: "confirmed", finality: "finalized", receipt_json: JSON.stringify({ transactionHash: row.transaction_hash, status: "0x1" }) });
+  row.prepared_transaction = { ...row.prepared_transaction, to, data, value: "0" };
+  row.intent = { ...row.intent, operation: { transaction: { to, data, value: "0", access_list: [] } } };
+  operations.set(row.request_id, row);
+}
+
 function validate(value: unknown, schema: any) {
   const result = validator.validate(value, schema);
   if (!result.valid) throw new Error(result.errors.map((error) => error.stack).join("; "));
 }
 export const loadTileContext = () => ({ app: "evm_wallet", tile: "evm_wallet" });
 export const copyToClipboard = async () => undefined;
-export const onAppStateChange = () => () => undefined;
+export function onAppStateChange(topic: string, listener: (event: any) => void) {
+  const listeners = appStateListeners.get(topic) ?? new Set();
+  listeners.add(listener);
+  appStateListeners.set(topic, listeners);
+  return () => { listeners.delete(listener); };
+}
+export async function publishAppStateChange(topic: string, revision: string | number) {
+  for (const listener of appStateListeners.get(topic) ?? []) listener({ topic, revision: String(revision) });
+}
 export function exposeTool(name: string, definition: any, handler: any) {
   // Registration must cross the real SDK descriptor validator. Plain JSON
   // validation alone missed the unsafe-regex startup failure in production.
@@ -72,6 +136,7 @@ export function exposeTool(name: string, definition: any, handler: any) {
 }
 export async function querySelf(method: string, args: any[]) {
   calls.push({ method, args: copy(args) });
+  if (method === "evm_wallet_decoder_packs_v1") return decoderReply(method, args, { packs: [...decoderPacks.values()] });
   if (method === "evm_wallet_snapshot_v1") return { ok: copy(snapshot) };
   if (method === "evm_wallet_operation_v1") {
     const operation = operations.get(args[0].identity.request_id);
@@ -90,6 +155,9 @@ export async function querySelf(method: string, args: any[]) {
     const page = { operations: copy(historyRows.slice(offset, offset + limit)), total: String(historyRows.length) };
     const attempt = { offset, limit, operationIds: page.operations.map(operation => operation.operation_id), metadataBytes: new TextEncoder().encode(JSON.stringify(page)).byteLength, accepted: false };
     historyAttempts.push(attempt);
+    // Hold the captured reply to reproduce an update arriving while an older
+    // history refresh is in flight, rather than changing the reply afterward.
+    await gates.get(method)?.wait;
     // Execute the existing Kernel codec itself. The helper under test must
     // adapt to that transport's exact rejection, not a fixture's invented cap.
     (window as any).__evmKernelEncodeSelfCallResult(page);
@@ -103,6 +171,21 @@ export async function updateSelf(method: string, args: any[]) {
   await gates.get(method)?.wait;
   const outerArg = args[0];
   const arg = method === "evm_wallet_prepare_browser_v1" ? outerArg.request : outerArg;
+  if (method === "evm_wallet_decoder_set_v1") {
+    const previous = decoderPacks.get(arg.id);
+    if (previous && BigInt(arg.version) < BigInt(previous.version)) throw new Error("A decoder pack update must use a higher version");
+    if (previous && arg.version === previous.version && arg.document_json !== previous.document_json) throw new Error("Decoder pack content is immutable at the same id and version");
+    const saved = { ...copy(arg), created_at: decoderPacks.get(arg.id)?.created_at ?? stamp, updated_at: stamp };
+    const response = decoderReply(method, args, saved);
+    decoderPacks.set(arg.id, saved);
+    return response;
+  }
+  if (method === "evm_wallet_decoder_remove_v1") {
+    const exists = decoderPacks.has(arg);
+    const response = decoderReply(method, args, exists);
+    decoderPacks.delete(arg);
+    return response;
+  }
   if (method === "evm_wallet_accounts_v1") return { ok: [copy(account)] };
   if (method === "evm_wallet_balances_v1") return { ok: {
     account_id: "main", chain_id: arg.chain_id, address, native_balance: "1234567890123456789",
@@ -186,6 +269,10 @@ function describeContext(context: any) {
 }
 export async function callTool(request: any) {
   toolCalls.push(copy(request));
+  if (request.name === EVM_WALLET_TOOLS.callContract) return readContractCall(request.arguments, {
+    signal: new AbortController().signal,
+    kernel: { querySelf, updateSelf },
+  } as any);
   if (request.name === EVM_WALLET_TOOLS.prices) {
     if (new URLSearchParams(location.search).get("usd") === "unavailable") throw new Error("Price provider is unavailable");
     return { source: "defillama", prices: request.arguments.assets.map((asset: any) => {
@@ -245,6 +332,31 @@ export async function callTool(request: any) {
 }
 (window as any).__evmSandbox = {
   calls, toolCalls, routing, historyAttempts, expectedHistoryIds: historyRows?.map(operation => operation.operation_id),
+  decoderSnapshot: () => copy([...decoderPacks.values()]),
+  async setDecoderEnabled(id: string, enabled: boolean) {
+    const pack = decoderPacks.get(id);
+    if (!pack) throw new Error(`Unknown decoder pack ${id}`);
+    pack.enabled = enabled;
+    await publishAppStateChange("evm_wallet", Date.now());
+  },
+  operationSnapshot: () => copy([...operations.values()]),
+  historySnapshot: () => copy(historyRows),
+  setHistoryStatus(id: string, status: string, finality: string | null = null) {
+    const operation = historyRows?.find((row) => row.operation_id === id);
+    if (!operation) throw new Error(`Unknown historical operation ${id}`);
+    operation.status = status;
+    operation.finality = finality;
+  },
+  prependHistory(count: number) {
+    if (!historyRows || !capturedHistory) throw new Error("History fixture was not loaded");
+    const newest = Math.max(200000, ...historyRows.map((row) => Number(row.operation_id))) + count;
+    historyRows.unshift(...Array.from({ length: count }, (_, index) => ({
+      ...copy(capturedHistory.operations[0]),
+      operation_id: String(newest - index),
+      request_id: (newest - index).toString(16).padStart(32, "0"),
+    })));
+  },
+  publishAppStateChange,
   hold(method: string) {
     if (gates.has(method)) throw new Error(`Already held: ${method}`);
     let release!: () => void;

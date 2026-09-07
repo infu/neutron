@@ -9,6 +9,7 @@ import { planErc20Approval, permit2ApprovalSteps } from "./approval_plan.ts";
 import { fullRangeTicks, positionWithinBudgets, sdkLiquidityPosition } from "./liquidity_math.ts";
 import { readPool, readPosition, V3_POSITION_MANAGER, type PoolState, type PositionRecord } from "./positions.ts";
 import { v4Deployment } from "./v4_common.ts";
+import { validateLiteralRecipient } from "./recipient.ts";
 
 export type LiquidityOperation = "mint" | "increase" | "decrease" | "collect" | "close";
 export type LiquidityInput = {
@@ -51,6 +52,7 @@ function checkedInput(account: EvmAccount, input: LiquidityInput, nowMs: number)
   if (input.accountId !== account.accountId || !isAddress(account.address)) throw new Error("Liquidity account does not match the selected Wallet account.");
   const owner = getAddress(account.address), recipient = getAddress(input.recipient ?? owner);
   if (same(owner, zeroAddress) || same(recipient, zeroAddress)) throw new Error("Select a nonzero recipient.");
+  if (input.protocol === "v4") validateLiteralRecipient(recipient);
   const slippageBps = input.slippageBps ?? 50, validity = input.quoteValiditySeconds ?? 1200;
   if (!Number.isInteger(slippageBps) || slippageBps < 0 || slippageBps >= 10000) throw new Error("Slippage must be between 0 and 99.99%.");
   if (!Number.isSafeInteger(validity) || validity <= 0 || !Number.isFinite(nowMs)) throw new Error("Quote validity must be a positive number of seconds.");

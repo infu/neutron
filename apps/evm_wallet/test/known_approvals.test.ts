@@ -1,7 +1,15 @@
 import { expect, test } from "bun:test";
 import { encodeFunctionData, erc20Abi } from "viem";
 import { address, type Operation, type TransactionIntent } from "../src/data.ts";
-import { knownApprovals } from "../src/known_approvals.ts";
+import { knownApprovals, parseAllowanceResult } from "../src/known_approvals.ts";
+
+test("only an exact allowance uint256 response can support zero-allowance review", () => {
+  expect(parseAllowanceResult(`0x${"0".repeat(64)}`)).toBe("0");
+  expect(parseAllowanceResult(`0x${"f".repeat(64)}`)).toBe(((1n << 256n) - 1n).toString());
+  for (const malformed of ["0x", "0x1", `0x${"0".repeat(63)}`, `0x${"0".repeat(128)}`, `0x${"z".repeat(64)}`]) {
+    expect(() => parseAllowanceResult(malformed)).toThrow("did not return an ERC-20 allowance");
+  }
+});
 
 const OWNER = `0x${"11".repeat(20)}`;
 const TOKEN = `0x${"ab".repeat(20)}`;

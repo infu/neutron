@@ -80,6 +80,9 @@
     },
     {
       "path": "./apps/curve"
+    },
+    {
+      "path": "./apps/aave"
     }
   ]
 }

@@ -1,0 +1,80 @@
+{
+  "format": 3,
+  "id": "aave",
+  "name": "Aave",
+  "version": 101,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "description": "Supply, borrow and manage Aave positions with EVM Wallet",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Aave positions, risk previews and durable lending operations"
+  },
+  "tiles": [
+    {
+      "id": "aave",
+      "title": "Aave",
+      "path": "index.html",
+      "icon": "static/icon.svg"
+    }
+  ],
+  "capabilities": {
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "aave_begin_v1",
+        "aave_get_v1",
+        "aave_page_v1",
+        "aave_update_v1"
+      ]
+    },
+    "frontend_tools": {
+      "api": 1,
+      "targets": [
+        {
+          "app": "evm_wallet",
+          "tools": [
+            "evm_accounts_v1",
+            "evm_balances_v1",
+            "evm_wallet_prices_v1",
+            "evm_call_contract_v1",
+            "evm_estimate_transaction_v1",
+            "evm_transaction_v1",
+            "evm_replacement_transaction_v1",
+            "evm_operation_status_v1",
+            "evm_send_transaction_v1"
+          ]
+        }
+      ]
+    }
+  },
+  "func": {
+    "aave_begin_v1": {
+      "type": "update",
+      "async": false
+    },
+    "aave_get_v1": {
+      "type": "query",
+      "async": false
+    },
+    "aave_update_v1": {
+      "type": "update",
+      "async": false
+    },
+    "aave_page_v1": {
+      "type": "query",
+      "async": false
+    }
+  },
+  "memory": {
+    "aave": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/aave/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

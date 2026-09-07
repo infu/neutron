@@ -272,11 +272,14 @@ export async function runAction(
       // Observe every dispatched step before renewal, including the final one.
       // This preserves lost replies even if an earlier approval also changes.
       for (let index = state.steps.length - 1; index >= 0; index -= 1) {
-        if (view(intent, state.steps.at(-1)!).status === "confirmed") break;
+        const isFinal = index === state.steps.length - 1;
+        // A previously included receipt can be reorganized. Recheck the final
+        // request before returning cached completion or updated finality.
+        if (!isFinal && view(intent, state.steps.at(-1)!).status === "confirmed") break;
         const step = state.steps[index]!;
         if (!step.dispatched) continue;
         const previous = view(intent, step);
-        if (previous.status === "confirmed") continue;
+        if (!isFinal && previous.status === "confirmed") continue;
         progress(`Checking ${state.plan.steps[index]!.label.toLowerCase()}…`);
         const result = await wallet.operationStatus({ accountId: envelope.accountId, chainId: envelope.chainId, requestId: step.request.requestId }, callOptions);
         abort();

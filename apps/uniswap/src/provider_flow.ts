@@ -93,6 +93,7 @@ export function providerSwapResult(input: ProviderSwapInput, record: SwapRecord 
  */
 export async function runProviderSwap(wallet: EvmWalletClient, store: Store, input: ProviderSwapInput, caller: EvmWalletCaller, agentMode: boolean, options: Options = {}): Promise<ProviderSwapResult> {
   const now = options.now ?? Date.now, prepare = options.prepare ?? prepareProviderIntent, wait = options.wait ?? waitForReceipt;
+  const callOptions = options.signal ? { signal: options.signal } : undefined;
   const abort = () => options.signal?.throwIfAborted();
   let record: SwapRecord | null = await store.get(input.swapId), attempt = "0";
   const update = (next: SwapRecord) => { record = next; options.onRecord?.(next); };
@@ -138,10 +139,17 @@ export async function runProviderSwap(wallet: EvmWalletClient, store: Store, inp
     abort();
     const current = record!;
     assertFlow(current, input, caller, agentMode);
+    if (current.phase === "swap_superseded") {
+      // A lost successor preparation/begin reply must resume the same retained
+      // attempt without reopening the predecessor's Wallet requests.
+      attempt = String(BigInt(attempt) + 1n);
+      update(await create(savedIntent(current).account));
+      continue;
+    }
     // Swap status has priority over approval and deadline: its reply may have
     // been lost after signing or submitting the actual token swap.
     progress("Checking saved swap…");
-    update(await reconcileStep(wallet, journal, current, "swap"));
+    update(await reconcileStep(wallet, journal, current, "swap", callOptions));
     abort();
     const swap = effectiveOperation(record!, "swap");
     if (swap?.status === "confirmed" && swap.receipt?.status === "success") return providerSwapResult(input, record, "complete", "Swap complete: its successful receipt is recorded. Receipt inclusion is separate from final settlement.");
@@ -151,7 +159,7 @@ export async function runProviderSwap(wallet: EvmWalletClient, store: Store, inp
     }
     if (record!.approval_request_id) {
       progress("Checking token approval…");
-      update(await reconcileStep(wallet, journal, record!, "approval"));
+      update(await reconcileStep(wallet, journal, record!, "approval", callOptions));
       abort();
       const approval = effectiveOperation(record!, "approval");
       if (approval && ["rejected", "reverted", "failed", "replaced"].includes(approval.status)) return providerSwapResult(input, record, "stopped", approval.message ?? `Token approval ${approval.status}; the swap did not run.`);
@@ -161,10 +169,13 @@ export async function runProviderSwap(wallet: EvmWalletClient, store: Store, inp
     }
     if (BigInt(savedIntent(record!).quote.deadline) <= BigInt(Math.floor(now() / 1000))) {
       if (missingDispatch(record)) return providerSwapResult(input, record, "pending", "The expired flow retains a dispatched request whose Wallet result is not yet visible. Retry this same flow to reconcile its original request; do not create another intent from an absent or lost reply.");
-      await checkAccount(wallet, savedIntent(record!));
+      await checkAccount(wallet, savedIntent(record!), callOptions);
       abort();
       progress("Approval is resolved and the old swap is unsigned. Updating the price and checking its existing allowance…");
       const previousAccount = savedIntent(record!).account;
+      // Freeze the predecessor before allocating new Wallet request IDs. A
+      // concurrent dispatch advances its revision and makes this CAS fail.
+      update(await journal.update(record!, "swap", "swap_superseded"));
       attempt = String(BigInt(attempt) + 1n);
       update(await create(previousAccount));
       continue;
@@ -174,7 +185,7 @@ export async function runProviderSwap(wallet: EvmWalletClient, store: Store, inp
     if (requested.has(requestId)) return providerSwapResult(input, record, "review", "Wallet refreshed the exact transaction after review. Call uniswap_swap_v1 again with the same original arguments and swapId for a fresh review; do not create another flow.");
     requested.add(requestId);
     progress(stage === "approval" ? "Reviewing exact token approval in EVM Wallet…" : "Reviewing the swap in EVM Wallet…");
-    try { update(await executeProviderStep(wallet, journal, record!, stage)); }
+    try { update(await executeProviderStep(wallet, journal, record!, stage, callOptions)); }
     catch (error) {
       abort();
       if (error instanceof Error && error.message === "Swap deadline has expired. Request a new quote.") continue;

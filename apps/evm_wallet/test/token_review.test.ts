@@ -19,8 +19,8 @@ function wire(patch: Record<string, unknown> = {}) {
     ...patch,
   };
 }
-const render = (evidence: TokenEvidence | null) => renderToStaticMarkup(
-  createElement(TokenReview, { evidence, busy: false, onRefresh() {} }),
+const render = (evidence: TokenEvidence | null, fungible?: boolean) => renderToStaticMarkup(
+  createElement(TokenReview, { evidence, busy: false, onRefresh() {}, ...(fungible !== undefined ? { fungible } : {}) }),
 );
 
 test("ERC20 review preserves exact large balances, allowance change and observed block", () => {
@@ -66,4 +66,40 @@ test("transfer evidence omits inapplicable allowance and malformed observations 
   expect(markup).not.toContain("Requested allowance");
   expect(() => parseTokenEvidence(wire({ balance: {} }))).toThrow("value or an error");
   expect(() => parseTokenEvidence(wire({ balance: { value: "0", error: "failed" } }))).toThrow("value or an error");
+});
+
+test("unknown token ID zero and MAX approval retain exact requested values without asserting allowance changes", () => {
+  for (const amount of ["0", uint256]) {
+    const markup = render(parseTokenEvidence(wire({ amount, balance: { value: "2" }, allowance: { value: "17" } })), false);
+    expect(markup).toContain("Observed balanceOf(owner)");
+    expect(markup).toContain("2 (token units or token count)");
+    expect(markup).toContain("Observed allowance(owner, spender)");
+    expect(markup).toContain("17 (ERC-20 allowance units)");
+    expect(markup).toContain(`<dt>Requested allowance or token ID</dt><dd>${amount}</dd>`);
+    expect(markup).toContain("The token interface is not identified");
+    expect(markup).not.toContain("Requested allowance change");
+    expect(markup).not.toContain("Decrease by");
+    expect(markup).not.toContain("Increase by");
+    expect(markup).not.toContain("Unlimited");
+    expect(markup).not.toContain("Revoke");
+  }
+});
+
+test("unknown token read failures remain explicit method observations without a fabricated zero or delta", () => {
+  const markup = render(parseTokenEvidence(wire({ amount: "0", balance: { error: "Balance RPC unavailable" }, allowance: { error: "Contract has no allowance method" } })), false);
+  expect(markup).toContain("Observed balanceOf(owner)");
+  expect(markup).toContain("Unavailable: Balance RPC unavailable");
+  expect(markup).toContain("Observed allowance(owner, spender)");
+  expect(markup).toContain("Unavailable: Contract has no allowance method");
+  expect(markup).not.toContain("0 atomic units");
+  expect(markup).not.toContain("Decrease by");
+  expect(markup).not.toContain("Unavailable until the allowance read succeeds");
+});
+
+test("unknown transferFrom evidence shows a requested token ID separately from the ERC20 allowance read", () => {
+  const markup = render(parseTokenEvidence(wire({ method: "transferFrom", recipient: owner, amount: uint256 })), false);
+  expect(markup).toContain(`<dt>Requested amount or token ID</dt><dd>${uint256}</dd>`);
+  expect(markup).toContain("Observed allowance(owner, spender)");
+  expect(markup).not.toContain("Requested allowance change");
+  expect(markup).not.toContain(`${uint256} atomic units`);
 });

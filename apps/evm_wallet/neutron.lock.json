@@ -19,6 +19,15 @@
         }
       },
       "migrations": {}
+    },
+    "evm_decoders": {
+      "schemas": {
+        "1": {
+          "hash": "610f8a2a2d524f19319a48fe6663fa5b5b3954095d04504e2e4bc526baf45739",
+          "entry": "ffecca3776fc5e37ffd53ea8b69acd352d83bc497e9c448aba7c0c57203362d5"
+        }
+      },
+      "migrations": {}
     }
   }
 }
