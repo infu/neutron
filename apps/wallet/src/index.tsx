@@ -3807,7 +3807,7 @@ function formatDepositTime(value: string): string {
 function EthereumDepositControl({ ledger, onRefresh }: { ledger: WalletLedger; onRefresh: () => void }) {
   const { openInTile, surface } = useWalletSurface();
   const fallbackView = useContext(WalletFallbackViewContext);
-  return <WalletBridgeDeposit ledger={ledger.principal} symbol={ledger.symbol ?? "token"} decimals={ledger.decimals} logo={ledger.logo} onRefresh={onRefresh} tray={surface === "tray"} openInTile={() => openInTile(fallbackView)} />;
+  return <WalletBridgeDeposit key={ledger.principal} ledger={ledger.principal} symbol={ledger.symbol ?? "token"} decimals={ledger.decimals} logo={ledger.logo} onRefresh={onRefresh} tray={surface === "tray"} openInTile={() => openInTile(fallbackView)} />;
 }
 
 function CopyValue({ label, value }: { label: string; value: string }) {

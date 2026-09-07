@@ -74,11 +74,12 @@ function fixture(native = false) {
       if (state.mint && saved.steps[2]!.state === "confirmed") saved.mint = { ledgerBlockIndex: "123", eventIndex: "2", verifiedLedger: true };
       return wire();
     }
-    if (method === "wallet_bridge_claim_v1" || method === "wallet_bridge_record_step_v1") {
-      const input = values[0] as Record<string, unknown>;
+    if (method === "wallet_bridge_step_v2") {
+      const action = values[0] as Record<string, unknown>;
+      const input = (action.claim ?? action.record) as Record<string, unknown>;
       if (input.revision !== saved.revision) throw new Error("Revision conflict");
       const step = saved.steps.find((step) => step.kind === Object.keys(input.step as object)[0])!;
-      if (method === "wallet_bridge_claim_v1") {
+      if (action.claim !== undefined) {
         if (step.state !== "ready") throw new Error("Already claimed");
         step.state = "unknown"; step.operationId = String(input.operation_id);
       } else {

@@ -39,6 +39,8 @@ import BridgeReplacementMemory "./memory/wallet_bridge_replacements/v1";
 import Bridge "./bridge/Journal";
 import BridgeProviderMemory "./memory/wallet_bridge_provider/v1";
 import BridgeProvider "./bridge/BridgeProvider";
+import BridgeActivityMemory "./memory/wallet_bridge_activity/v1";
+import BridgeActivity "./bridge/Activity";
 
 module {
     let BATCH_SIZE = 20;
@@ -462,6 +464,15 @@ module {
     public type WalletBridgePageV1 = { records : [WalletBridgeIntentV1]; next : ?Blob };
     public type WalletBridgeQuoteResultV1 = { #ok : WalletBridgeQuoteV1; #err : Text };
     public type WalletBridgeIntentResultV1 = { #ok : WalletBridgeIntentV1; #err : Text };
+    public type WalletBridgeActivityRequestV1 = { ledger : ?Principal };
+    public type WalletBridgeActivityEntryV1 = { id : Blob; dismissed_at : Int };
+    public type WalletBridgeActivityResultV1 = { records : [WalletBridgeActivityEntryV1] };
+    public type WalletBridgeDismissRequestV1 = { id : Blob; dismissed : Bool };
+    public type WalletBridgeStepActionV2 = {
+        #claim : WalletBridgeClaimRequestV1;
+        #record : WalletBridgeRecordStepRequestV1;
+        #dismiss : WalletBridgeDismissRequestV1;
+    };
 
     public type WalletFundingCallerV1 = {
         endpoint : Text;
@@ -880,6 +891,7 @@ module {
             wallet_bridge : BridgeMemory.Mem;
             wallet_bridge_replacements : BridgeReplacementMemory.Mem;
             wallet_bridge_provider : BridgeProviderMemory.Mem;
+            wallet_bridge_activity : BridgeActivityMemory.Mem;
         };
         app_calls : AppCalls;
         capabilities : {
@@ -896,6 +908,7 @@ module {
         let history = History.Service(mem, calls);
         let bridge = Bridge.ServiceWithReplacements(env.stable_memory.wallet_bridge, env.stable_memory.wallet_bridge_replacements, calls);
         let bridgeProvider = BridgeProvider.Service(env.stable_memory.wallet_bridge_provider, env.stable_memory.wallet_bridge);
+        let bridgeActivity = BridgeActivity.Service(env.stable_memory.wallet_bridge_activity, env.stable_memory.wallet_bridge);
         var transferInFlight = false;
         let refundCursors = Map.empty<Blob, RefundCursor>();
 
@@ -1736,6 +1749,14 @@ module {
         };
         public func /*query*/wallet_bridge_list_v1(request : WalletBridgeListRequestV1) : WalletBridgePageV1 { bridge.list(request) };
         public func /*query*/wallet_bridge_status_v1(id : Blob) : WalletBridgeIntentResultV1 { bridge.status(id) };
+        public func /*query*/wallet_bridge_activity_v1(request : WalletBridgeActivityRequestV1) : WalletBridgeActivityResultV1 { bridgeActivity.list(request) };
+        public func /*update*/wallet_bridge_step_v2(request : WalletBridgeStepActionV2) : WalletBridgeIntentResultV1 {
+            switch (request) {
+                case (#claim(value)) bridge.claim(value);
+                case (#record(value)) bridge.recordStep(value);
+                case (#dismiss(value)) bridgeActivity.dismiss(value);
+            };
+        };
         public func /*update*/wallet_bridge_claim_v1(request : WalletBridgeClaimRequestV1) : WalletBridgeIntentResultV1 { bridge.claim(request) };
         public func /*update*/wallet_bridge_record_step_v1(request : WalletBridgeRecordStepRequestV1) : WalletBridgeIntentResultV1 { bridge.recordStep(request) };
         public func /*update*/wallet_bridge_replacement_v1(request : WalletBridgeReplacementActionV1) : WalletBridgeReplacementResultV1 {
@@ -5270,6 +5291,12 @@ public type wallet_bridge_list_v1_Output = WalletBridgePageV1;
 
 public type wallet_bridge_status_v1_Input = (id : Blob);
 public type wallet_bridge_status_v1_Output = WalletBridgeIntentResultV1;
+
+public type wallet_bridge_activity_v1_Input = (request : WalletBridgeActivityRequestV1);
+public type wallet_bridge_activity_v1_Output = WalletBridgeActivityResultV1;
+
+public type wallet_bridge_step_v2_Input = (request : WalletBridgeStepActionV2);
+public type wallet_bridge_step_v2_Output = WalletBridgeIntentResultV1;
 
 public type wallet_bridge_claim_v1_Input = (request : WalletBridgeClaimRequestV1);
 public type wallet_bridge_claim_v1_Output = WalletBridgeIntentResultV1;

@@ -53,11 +53,19 @@ export function createBridgeClient(backend: BridgeBackend = selfBackend) {
       return records;
     },
     async status(id: string) { return parseBridgeIntent(await backend.query("wallet_bridge_status_v1", [idWire(id)])); },
+    async dismissed(ledger: string | null): Promise<string[]> {
+      const page = object(await backend.query("wallet_bridge_activity_v1", [{ ...(ledger === null ? {} : { ledger }) }]));
+      if (!Array.isArray(page.records)) throw new Error("Invalid dismissed deposit list");
+      return page.records.map((entry) => bytesToHex(parseFixedBytes(object(entry).id, 16, "dismissed deposit id")));
+    },
+    async dismiss(id: string, dismissed = true) {
+      return parseBridgeIntent(await backend.update("wallet_bridge_step_v2", [{ dismiss: { id: idWire(id), dismissed } }]));
+    },
     async claim(intent: BridgeIntent, step: EthereumDepositStep, operationId: string | null) {
-      return parseBridgeIntent(await backend.update("wallet_bridge_claim_v1", [{ id: idWire(intent.id), revision: intent.revision, step: { [step]: null }, ...(operationId === null ? {} : { operation_id: operationId }) }]));
+      return parseBridgeIntent(await backend.update("wallet_bridge_step_v2", [{ claim: { id: idWire(intent.id), revision: intent.revision, step: { [step]: null }, ...(operationId === null ? {} : { operation_id: operationId }) } }]));
     },
     async record(intent: BridgeIntent, kind: EthereumDepositStep, state: Exclude<BridgeStep["state"], "ready">, hash: Hex | null, error: string | null = null) {
-      return parseBridgeIntent(await backend.update("wallet_bridge_record_step_v1", [{ id: idWire(intent.id), revision: intent.revision, step: { [kind]: null }, state: { [state]: null }, ...(hash === null ? {} : { transaction_hash: hash }), ...(error === null ? {} : { error }) }]));
+      return parseBridgeIntent(await backend.update("wallet_bridge_step_v2", [{ record: { id: idWire(intent.id), revision: intent.revision, step: { [kind]: null }, state: { [state]: null }, ...(hash === null ? {} : { transaction_hash: hash }), ...(error === null ? {} : { error }) } }]));
     },
     async effectiveHash(id: string, kind: EthereumDepositStep): Promise<Hex | null> {
       const value = object(await backend.update("wallet_bridge_replacement_v1", [{ lookup: { id: idWire(id), step: { [kind]: null } } }])).hash;

@@ -118,6 +118,7 @@ function evidence(saved = claimed()): EvmTransactionResult {
 
 function fixture(initial = intent()) {
   let saved = structuredClone(initial);
+  let dismissed = false;
   const calls: MsgBusToolCall[] = [];
   let effectiveHash: string | null = null;
   const selfCalls: Array<{ method: string; args: SelfCallValue[] }> = [];
@@ -134,6 +135,7 @@ function fixture(initial = intent()) {
     selfCalls.push({ method, args: structuredClone(args) });
     if (method === "wallet_bridge_status_v1") return wireIntent(saved);
     if (method === "wallet_bridge_list_v1") return { records: [wireIntent(saved)] };
+    if (method === "wallet_bridge_activity_v1") return { records: dismissed ? [{ id: wireIntent(saved).id, dismissed_at: "1" }] : [] };
     if (method === "wallet_bridge_provider_binding_v1") return {};
     throw new Error(`Unexpected Wallet query ${method}`);
   };
@@ -161,11 +163,17 @@ function fixture(initial = intent()) {
       saved.revision = String(BigInt(saved.revision) + 1n);
       return { intent: wireIntent(saved) };
     }
-    if (method === "wallet_bridge_claim_v1" || method === "wallet_bridge_record_step_v1") {
+    if (method === "wallet_bridge_step_v2") {
+      if (input.dismiss) {
+        dismissed = (input.dismiss as { dismissed: boolean }).dismissed;
+        return wireIntent(saved);
+      }
+      const claim = input.claim !== undefined;
+      input = (input.claim ?? input.record) as Record<string, unknown>;
       if (input.revision !== saved.revision) throw new Error("revision conflict");
       const kind = Object.keys(input.step as object)[0];
       const step = saved.steps.find((candidate) => candidate.kind === kind)!;
-      if (method === "wallet_bridge_claim_v1") {
+      if (claim) {
         if (step.state !== "ready") throw new Error("already claimed");
         step.state = "unknown";
         step.operationId = input.operation_id as string ?? null;
@@ -232,7 +240,7 @@ test("root bridge preparation binds the authenticated installation and returns t
   });
   expect(second.request).toEqual(first.request);
   expect(f.saved().steps[2]!.state).toBe("unknown");
-  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_claim_v1")).toHaveLength(1);
+  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_step_v2" && "claim" in (call.args[0] as object))).toHaveLength(1);
   const allowedReads = new Set<string>([EVM_WALLET_TOOLS.accounts, EVM_WALLET_TOOLS.readContract]);
   expect(f.calls.every((call) => allowedReads.has(call.name))).toBe(true);
 });
@@ -272,7 +280,7 @@ for (const field of ["from", "to", "data", "valueWei", "chainId", "transactionHa
       field === "chainId" || field === "transactionHash" ? "transaction evidence does not match the request" : "transaction does not match this saved bridge step",
     );
     expect(f.saved().steps[2]).toMatchObject({ state: "unknown", transactionHash: null });
-    expect(f.selfCalls.some((call) => call.method === "wallet_bridge_record_step_v1")).toBe(false);
+    expect(f.selfCalls.some((call) => call.method === "wallet_bridge_step_v2" && "record" in (call.args[0] as object))).toBe(false);
   });
 }
 
@@ -299,7 +307,7 @@ test("root bridge attach rejects an otherwise identical transaction belonging to
   f.state.evidence.walletRequestMatches = false;
   await expect(handleBridgeRootAttach({ id: intent().id, step: "deposit", transactionHash: hash }, f.context)).rejects.toThrow("not bound to this exact root caller installation");
   expect(f.saved().steps[2]).toMatchObject({ state: "unknown", transactionHash: null });
-  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_record_step_v1").some((call) => (call.args[0] as Record<string, unknown>).transaction_hash === replacementHash)).toBe(false);
+  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_step_v2" && "record" in (call.args[0] as object)).some((call) => ((call.args[0] as Record<string, Record<string, unknown>>).record!).transaction_hash === replacementHash)).toBe(false);
 });
 
 test("a known root transaction hash remains reconcilable after its helper retires and never yields another executable request", async () => {
@@ -530,6 +538,19 @@ test("every actual bridge client input matches generated method schemas and Kern
   await f.bridge.refresh(saved.id);
   expect(await f.bridge.list(null)).toEqual([saved]);
   expect(await f.bridge.list(saved.quote.ledger)).toEqual([saved]);
+  expect(await f.bridge.dismissed(null)).toEqual([]);
+  expect(await f.bridge.dismiss(saved.id)).toEqual(saved);
+  expect(await f.bridge.dismissed(saved.quote.ledger)).toEqual([saved.id]);
+  expect(await f.bridge.dismiss(saved.id, false)).toEqual(saved);
+  expect(await f.bridge.dismissed(null)).toEqual([]);
+  // The current client combines step writes in v2. Keep validating the
+  // retained v1 backend signatures using those same actual step payloads.
+  for (const call of [...f.selfCalls]) {
+    if (call.method !== "wallet_bridge_step_v2") continue;
+    const action = call.args[0] as Record<string, SelfCallValue>;
+    if (action.claim) f.selfCalls.push({ method: "wallet_bridge_claim_v1", args: [action.claim] });
+    if (action.record) f.selfCalls.push({ method: "wallet_bridge_record_step_v1", args: [action.record] });
+  }
   const exercised = new Set(f.selfCalls.map(({ method }) => method));
   expect([...exercised].sort()).toEqual(Object.keys(idl.artifact.methods).sort());
 
@@ -632,5 +653,5 @@ for (const original of [null, hash]) test(`a reverted exact replacement preserve
   await expect(executeBridgeDeposit({ intent: saved, client: f.bridge, ...connection })).rejects.toThrow("replacement deposit transaction reverted");
   expect(f.saved().steps[2]).toMatchObject({ state: "failed", transactionHash: hash });
   expect(await f.bridge.effectiveHash(saved.id, "deposit")).toBe(replacementHash);
-  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_record_step_v1").some((call) => (call.args[0] as Record<string, unknown>).transaction_hash === replacementHash)).toBe(false);
+  expect(f.selfCalls.filter((call) => call.method === "wallet_bridge_step_v2" && "record" in (call.args[0] as object)).some((call) => ((call.args[0] as Record<string, Record<string, unknown>>).record!).transaction_hash === replacementHash)).toBe(false);
 });

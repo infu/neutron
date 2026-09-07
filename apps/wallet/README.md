@@ -292,6 +292,18 @@ actual sender, destination, value and calldata through EVM Wallet's read-only
 chain adapter before recovering that existing transaction. Choosing
 **New deposit** is a separate explicit action, never an automatic timeout retry.
 
+**Dismiss** hides a saved deposit from reminders, normal Activity and background
+checks immediately, even when Ethereum is unavailable. The collapsed
+**Dismissed** section keeps a **Restore** action for the original request.
+Dismissing only saves a Wallet preference: it does not revoke an Ethereum token
+allowance, cancel a submitted transaction or delete approval and deposit evidence.
+The independent `wallet_bridge_activity` v1 root stores dismissed IDs and
+timestamps; every existing financial memory root remains unchanged. The local
+`wallet_bridge_activity_v1` query reads these preferences. Claim, record and
+dismiss writes share `wallet_bridge_step_v2`, keeping the existing 32-method
+frontend grant count. The original v1 claim and record backend methods remain
+available for compatibility.
+
 Mint completion requires the exact deposit transaction and log to appear in the
 official minter's accepted event, the corresponding asset/amount/recipient mint
 event, and the associated IC ledger mint block. An unrelated incoming transfer

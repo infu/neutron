@@ -55,8 +55,8 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-const allMemoryRoots = ["wallet", "wallet_bridge", "wallet_bridge_provider", "wallet_bridge_replacements", "wallet_commands", "wallet_transfers"] as const;
-const addedMemoryRoots = ["wallet_bridge", "wallet_bridge_provider", "wallet_bridge_replacements", "wallet_transfers"] as const;
+const allMemoryRoots = ["wallet", "wallet_bridge", "wallet_bridge_activity", "wallet_bridge_provider", "wallet_bridge_replacements", "wallet_commands", "wallet_transfers"] as const;
+const addedMemoryRoots = ["wallet_bridge", "wallet_bridge_activity", "wallet_bridge_provider", "wallet_bridge_replacements", "wallet_transfers"] as const;
 
 test("Wallet candidate keeps the original root and initializes independent journals", async () => {
   const [productionBytes, sourceText, lockText] = await Promise.all([
@@ -140,6 +140,7 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     { version: 315, bytes: 753_979, sha256: "1d1156e18ee3116dbda8c8c410f6c4987ba062db345ddf169a822f3d3c20ffcd" },
     { version: 316, bytes: 768_823, sha256: "fd15c2f0a0fa53575f11e3a97ad75f85707f2f8c238c9ed4c5b252a178219d76" },
     { version: 317, bytes: 777_746, sha256: "599dcfdb5a75dc1924b5e0918ad2ef4e0f715317ddbc05d276a093b7b96d4711" },
+    { version: 318, bytes: 800_371, sha256: "b49c0f364ca502ab248c91c92f021b5211f7cbf3c3159d19c31941917dd962e0" },
   ];
   for (const predecessor of predecessors) {
     const bytes = await readFile(new URL(`../${packageArchiveFilename("wallet", predecessor.version)}`, import.meta.url));

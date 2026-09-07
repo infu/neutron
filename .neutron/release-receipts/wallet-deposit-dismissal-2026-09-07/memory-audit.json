@@ -1,0 +1,16 @@
+{
+  "predecessorCommit": "fec2ed64aa372e0878a185039e179c0d7483e54f",
+  "preservedRoots": [
+    "wallet",
+    "wallet_commands",
+    "wallet_bridge",
+    "wallet_transfers",
+    "wallet_bridge_replacements",
+    "wallet_bridge_provider"
+  ],
+  "newRoot": "wallet_bridge_activity@1",
+  "allReleasedSchemaBytesManifestAndLockEntriesUnchanged": true,
+  "financialIntentFieldsChanged": false,
+  "kernelChanges": false,
+  "preapprovedMethodCount": 32
+}

@@ -1,3 +1,4 @@
+import BridgeActivityMemory "../../backend/memory/wallet_bridge_activity/v1";
 import BridgeProviderMemory "../../backend/memory/wallet_bridge_provider/v1";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
@@ -99,7 +100,7 @@ persistent actor Test {
             };
         };
         let env : Main.AppBackendEnvironment = {
-            stable_memory = {
+            stable_memory = { wallet_bridge_activity = BridgeActivityMemory.init();
                 wallet = memory; wallet_commands = CommandMemory.init();
                 wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init(); wallet_bridge_provider = BridgeProviderMemory.init(); wallet_bridge_replacements = BridgeReplacementMemory.init();
             };

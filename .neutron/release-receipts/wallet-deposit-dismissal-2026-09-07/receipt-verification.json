@@ -1,0 +1,11 @@
+{
+  "protocol": "neutron-wallet-dismissal-release-verification-v1",
+  "batchId": "60",
+  "postflightBatchId": null,
+  "packages": 18,
+  "changed": [
+    "wallet"
+  ],
+  "verifiedAt": "2026-09-07T00:56:09.973Z",
+  "allLocalBytesMatch": true
+}

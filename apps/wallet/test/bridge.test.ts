@@ -12,6 +12,7 @@ function intent(): BridgeIntent {
 function store(initial = intent()) {
   let saved = structuredClone(initial);
   const client: BridgeClient = {
+    dismissed: async () => [], dismiss: async () => structuredClone(saved),
     effectiveHash: async () => null, recordReplacement: async () => { throw new Error("External browser fixture cannot prove a replacement"); },
     quote: async () => structuredClone(saved.quote), prepare: async () => structuredClone(saved), list: async () => [structuredClone(saved)], status: async () => structuredClone(saved), refresh: async () => structuredClone(saved),
     async claim(old, kind, operationId) { if (old.revision !== saved.revision) throw new Error("revision conflict"); const step = saved.steps.find((s) => s.kind === kind)!; if (step.state !== "ready") throw new Error("already claimed"); step.state = "unknown"; step.operationId = operationId; saved.revision = String(BigInt(saved.revision) + 1n); return structuredClone(saved); },

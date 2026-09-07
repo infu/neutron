@@ -2358,6 +2358,15 @@ body {
   }
   .wallet-bridge-history-mark { align-items: center; background: #172024; border-radius: 50%; color: var(--nt-text-faint); display: flex; flex: 0 0 28px; height: 28px; justify-content: center; }
   .wallet-bridge-history-mark.is-complete { color: var(--nt-accent); }
+  .wallet-bridge-history-item { align-items: center; display: flex; gap: 4px; }
+  .wallet-bridge-history-item .wallet-bridge-history-row { flex: 1; min-width: 0; }
+  .wallet-bridge-history-item > .nt-icon-button { flex-shrink: 0; }
+  .wallet-bridge-dismiss { align-items: center; display: flex; gap: 10px; margin-top: 10px; }
+  .wallet-bridge-dismiss small { color: var(--nt-text-faint); font-size: 11px; line-height: 1.45; }
+  .wallet-bridge-dismiss > button { flex-shrink: 0; }
+  .wallet-bridge-dismissed { opacity: .85; }
+  .wallet-bridge-dismissed .wallet-bridge-history-row { cursor: default; }
+  .wallet-bridge-dismissed .wallet-bridge-history-row > span { display: grid; gap: 4px; min-width: 0; }
   .wallet-bridge-recovery {
     background: #11191c; border: 1px solid var(--nt-line-subtle); border-radius: 8px; display: grid; gap: 8px; padding: 10px;
     > strong { color: var(--nt-text-muted); font-size: 0.8rem; }

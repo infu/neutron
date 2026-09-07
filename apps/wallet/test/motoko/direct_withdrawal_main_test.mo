@@ -1,3 +1,4 @@
+import BridgeActivityMemory "../../backend/memory/wallet_bridge_activity/v1";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 import Map "mo:core/Map";
@@ -97,7 +98,7 @@ persistent actor {
                 };
             };
             public let env : Main.AppBackendEnvironment = {
-                stable_memory = {
+                stable_memory = { wallet_bridge_activity = BridgeActivityMemory.init();
                     wallet; wallet_transfers = transfers; wallet_commands = CommandMemory.init();
                     wallet_bridge = BridgeMemory.init(); wallet_bridge_replacements = ReplacementMemory.init();
                     wallet_bridge_provider = ProviderMemory.init();

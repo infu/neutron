@@ -1,0 +1,324 @@
+
+> updates:publish
+> npm --workspace neutron-update-source run production:publish
+
+
+> neutron-update-source@0.1.0 production:publish
+> bun scripts/publish-catalog.ts release-catalog.json
+
+{
+  "protocol": "neutron-update-source-publish-v2",
+  "canister_id": "233tv-xiaaa-aaaay-aacta-cai",
+  "origin": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io",
+  "batch_id": "60",
+  "atomic": true,
+  "published_at": "2026-09-07T00:55:09.969Z",
+  "packages": [
+    {
+      "id": "agent",
+      "version": 318,
+      "sha256": "6d02e4098e22abf3089c773abdd0b6c20b876ad7f6c3eab35ddac21bb1527568",
+      "size": 513437,
+      "package_path": "/repo/v1/packages/6d02e4098e22abf3089c773abdd0b6c20b876ad7f6c3eab35ddac21bb1527568.neutron",
+      "release_path": "/repo/v1/releases/agent.json",
+      "release_digest": "65a722857a4f59879cf40279d3f4f9a6f5c5ed32eeffe1e0ca6de7d09a7f8038",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/1a48fa3c672c09c8c89bc600f71e6f32a7a5865644ee448cd166596cb7239bb5.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/1a48fa3c672c09c8c89bc600f71e6f32a7a5865644ee448cd166596cb7239bb5.source.v1.msgpack.gz",
+        "sha256": "1a48fa3c672c09c8c89bc600f71e6f32a7a5865644ee448cd166596cb7239bb5",
+        "size": 453449,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "blast",
+      "version": 102,
+      "sha256": "f49b8fc9f313e985b005f3ede9d111d770e5dd9f6634469d02722337048ca732",
+      "size": 988628,
+      "package_path": "/repo/v1/packages/f49b8fc9f313e985b005f3ede9d111d770e5dd9f6634469d02722337048ca732.neutron",
+      "release_path": "/repo/v1/releases/blast.json",
+      "release_digest": "5ff4ec8fc9052fcc1de0111c9713b32a444603506137b524948e294b1141cd9b",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/1941409795b1ee261bc919399dc8d3e0e42217b5f9492bcefd87557818963896.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/1941409795b1ee261bc919399dc8d3e0e42217b5f9492bcefd87557818963896.source.v1.msgpack.gz",
+        "sha256": "1941409795b1ee261bc919399dc8d3e0e42217b5f9492bcefd87557818963896",
+        "size": 427219,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "chess",
+      "version": 304,
+      "sha256": "4c48a4c89b335bfee147d17104dda3e930cb23aad27091356f6ec0fc01dca3d7",
+      "size": 282702,
+      "package_path": "/repo/v1/packages/4c48a4c89b335bfee147d17104dda3e930cb23aad27091356f6ec0fc01dca3d7.neutron",
+      "release_path": "/repo/v1/releases/chess.json",
+      "release_digest": "6fb4fb5db22235a2297594b9d886e4b8f63e4e865ea13a643805a8e084962873",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/fd76702e36b222ed83c2a2fcca955609458124a8872e2d89968fe5b2b8c8c0af.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/fd76702e36b222ed83c2a2fcca955609458124a8872e2d89968fe5b2b8c8c0af.source.v1.msgpack.gz",
+        "sha256": "fd76702e36b222ed83c2a2fcca955609458124a8872e2d89968fe5b2b8c8c0af",
+        "size": 367597,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "contacts",
+      "version": 306,
+      "sha256": "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f",
+      "size": 298018,
+      "package_path": "/repo/v1/packages/2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f.neutron",
+      "release_path": "/repo/v1/releases/contacts.json",
+      "release_digest": "2ba2219a4370e9e4cbe0f37290e95562505b7209fe8c220e407e185714dd678e",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/c8d5c6295930dd89799335413d2b5383b681cc9d47227714cb14e2c03bf3ebaf.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/c8d5c6295930dd89799335413d2b5383b681cc9d47227714cb14e2c03bf3ebaf.source.v1.msgpack.gz",
+        "sha256": "c8d5c6295930dd89799335413d2b5383b681cc9d47227714cb14e2c03bf3ebaf",
+        "size": 338932,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "evm_wallet",
+      "version": 112,
+      "sha256": "a75822f65310aa8943355d7e15cb4ad9c7b65d1f8e5b7a1803aa754f917402df",
+      "size": 595335,
+      "package_path": "/repo/v1/packages/a75822f65310aa8943355d7e15cb4ad9c7b65d1f8e5b7a1803aa754f917402df.neutron",
+      "release_path": "/repo/v1/releases/evm_wallet.json",
+      "release_digest": "7fc149b5e043e640eeeb85ccf68c6cd55eb10ce2ec099c8b341eeab3edbe6eeb",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/5b71bb4fd4ccb1d9e166d92eae67b29b871b7575d92dc7ccc23fd3124ef7de02.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/5b71bb4fd4ccb1d9e166d92eae67b29b871b7575d92dc7ccc23fd3124ef7de02.source.v1.msgpack.gz",
+        "sha256": "5b71bb4fd4ccb1d9e166d92eae67b29b871b7575d92dc7ccc23fd3124ef7de02",
+        "size": 620504,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "files",
+      "version": 410,
+      "sha256": "26af5451805537000d78cb2df50d9a047cafd62c4212214c17e84b8b18e5baea",
+      "size": 767453,
+      "package_path": "/repo/v1/packages/26af5451805537000d78cb2df50d9a047cafd62c4212214c17e84b8b18e5baea.neutron",
+      "release_path": "/repo/v1/releases/files.json",
+      "release_digest": "82f71263513b8ad878d99b9b8e5ff34d655ec2c69076ee6288b7a2c90d3b0cde",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/bd5366216e17acb722bb6c3cf20d13ee28a621dc1ed1428e7c859b6d2b3dc94f.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/bd5366216e17acb722bb6c3cf20d13ee28a621dc1ed1428e7c859b6d2b3dc94f.source.v1.msgpack.gz",
+        "sha256": "bd5366216e17acb722bb6c3cf20d13ee28a621dc1ed1428e7c859b6d2b3dc94f",
+        "size": 1810142,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "gemma",
+      "version": 204,
+      "sha256": "cf8d6a01c48dd9f3a8d8ca4d0b66c86aca112580701f6b3d26bbb6982c578d3d",
+      "size": 167849,
+      "package_path": "/repo/v1/packages/cf8d6a01c48dd9f3a8d8ca4d0b66c86aca112580701f6b3d26bbb6982c578d3d.neutron",
+      "release_path": "/repo/v1/releases/gemma.json",
+      "release_digest": "22e5f407fb8e4570ebc8e3ce6c98b1cf0a29c4bb2c34b5478770861ae13370ed",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/1138ffd4b01cd3a6dfa9811e4d12420e2d608b329e296a2f5d575edd92f1a916.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/1138ffd4b01cd3a6dfa9811e4d12420e2d608b329e296a2f5d575edd92f1a916.source.v1.msgpack.gz",
+        "sha256": "1138ffd4b01cd3a6dfa9811e4d12420e2d608b329e296a2f5d575edd92f1a916",
+        "size": 289616,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "hello",
+      "version": 204,
+      "sha256": "b7596d3ba8288ac06786b5eda2e68d9327881fdf3aec1aced4cb841b5d597c6b",
+      "size": 213896,
+      "package_path": "/repo/v1/packages/b7596d3ba8288ac06786b5eda2e68d9327881fdf3aec1aced4cb841b5d597c6b.neutron",
+      "release_path": "/repo/v1/releases/hello.json",
+      "release_digest": "32b0273244a24f29d8ee31de8d34c4c35a71543af9c71f29666755353abcd054",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/fa94183e3d38396e6bfbe30db5c1215a2d285518ba10828c03a86808b02503f4.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/fa94183e3d38396e6bfbe30db5c1215a2d285518ba10828c03a86808b02503f4.source.v1.msgpack.gz",
+        "sha256": "fa94183e3d38396e6bfbe30db5c1215a2d285518ba10828c03a86808b02503f4",
+        "size": 356586,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "hullshift",
+      "version": 205,
+      "sha256": "9a6e48d86b6f16a5f6664d6bab9a897ce3c992d1f0a4f528851837bc24d49e88",
+      "size": 436356,
+      "package_path": "/repo/v1/packages/9a6e48d86b6f16a5f6664d6bab9a897ce3c992d1f0a4f528851837bc24d49e88.neutron",
+      "release_path": "/repo/v1/releases/hullshift.json",
+      "release_digest": "67c148788daca84dac6a1c4c81eaa991e5d30a14536e45263a7b810c6fc47f4f",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/6b90dd23eadfee1dbd34e93edbf0b4fd49700198f435dd6deb88d211536d0ce5.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/6b90dd23eadfee1dbd34e93edbf0b4fd49700198f435dd6deb88d211536d0ce5.source.v1.msgpack.gz",
+        "sha256": "6b90dd23eadfee1dbd34e93edbf0b4fd49700198f435dd6deb88d211536d0ce5",
+        "size": 829290,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "jetcreeper",
+      "version": 304,
+      "sha256": "69e19796cff20990bbe326313e04b0b0e4305a9c97720e0b5d383e4048bcfe90",
+      "size": 324874,
+      "package_path": "/repo/v1/packages/69e19796cff20990bbe326313e04b0b0e4305a9c97720e0b5d383e4048bcfe90.neutron",
+      "release_path": "/repo/v1/releases/jetcreeper.json",
+      "release_digest": "ed16b8faf33a1331c5a88aef121190b8614b61b360b7ebcb5a1b77046422c2f3",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/7d9639a1cc39c8dc5e802285a77a50a5f0769fbb7cd181cada00f08b5a2e7213.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/7d9639a1cc39c8dc5e802285a77a50a5f0769fbb7cd181cada00f08b5a2e7213.source.v1.msgpack.gz",
+        "sha256": "7d9639a1cc39c8dc5e802285a77a50a5f0769fbb7cd181cada00f08b5a2e7213",
+        "size": 327411,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "kernel",
+      "version": 344,
+      "sha256": "89fb9872b41460e39942cd33a8e984ad47104c0624fa15102416f6e09c6cec75",
+      "size": 2450651,
+      "package_path": "/repo/v1/packages/89fb9872b41460e39942cd33a8e984ad47104c0624fa15102416f6e09c6cec75.neutron",
+      "release_path": "/repo/v1/releases/kernel.json",
+      "release_digest": "3ac268914079463f3e7104068d06741ab6c492d329693be8440b288d2f88fb7e",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/0a7c916be0ddbbf57e5d99f46747f2abbd50dd725d134413f1219edf644f804c.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/0a7c916be0ddbbf57e5d99f46747f2abbd50dd725d134413f1219edf644f804c.source.v1.msgpack.gz",
+        "sha256": "0a7c916be0ddbbf57e5d99f46747f2abbd50dd725d134413f1219edf644f804c",
+        "size": 3231887,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "kitchensink",
+      "version": 315,
+      "sha256": "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6",
+      "size": 472282,
+      "package_path": "/repo/v1/packages/50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6.neutron",
+      "release_path": "/repo/v1/releases/kitchensink.json",
+      "release_digest": "4f509fda7e736566569294c5bf4d8f1046e97627e695281876f99878a8ecad31",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe.source.v1.msgpack.gz",
+        "sha256": "9a9e9777fa5e5ec95598eefc1d774e7b0177e8b3f0682e0917b9e3be93ea0afe",
+        "size": 462990,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "mail",
+      "version": 305,
+      "sha256": "d82e7251b67ed250e47e730df49cea4e88f27ec9187de3033abe5a923b7ecdd1",
+      "size": 724878,
+      "package_path": "/repo/v1/packages/d82e7251b67ed250e47e730df49cea4e88f27ec9187de3033abe5a923b7ecdd1.neutron",
+      "release_path": "/repo/v1/releases/mail.json",
+      "release_digest": "2e52f8d510c8d2317274eff290dd79493475c05220b8791a14d7bebf7dc1dfd7",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/d2025dcc82bcd7f65716b24b05cc3e7f67c6a28a8ea77356b359d294dafe9069.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/d2025dcc82bcd7f65716b24b05cc3e7f67c6a28a8ea77356b359d294dafe9069.source.v1.msgpack.gz",
+        "sha256": "d2025dcc82bcd7f65716b24b05cc3e7f67c6a28a8ea77356b359d294dafe9069",
+        "size": 639753,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "mysubnet",
+      "version": 304,
+      "sha256": "b69de8f23794b6c1124e31b03f54201174cd5c0af225d5208a97234d43dae4bb",
+      "size": 348464,
+      "package_path": "/repo/v1/packages/b69de8f23794b6c1124e31b03f54201174cd5c0af225d5208a97234d43dae4bb.neutron",
+      "release_path": "/repo/v1/releases/mysubnet.json",
+      "release_digest": "7cca3818546942f25099d9e8db951f13fc60aac94d3cc422db2b0ccfe95f9072",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/44f44f3e09e0152ecedf48007fdd4edb7bcd4a7b5009933af166a1b99d05a1dc.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/44f44f3e09e0152ecedf48007fdd4edb7bcd4a7b5009933af166a1b99d05a1dc.source.v1.msgpack.gz",
+        "sha256": "44f44f3e09e0152ecedf48007fdd4edb7bcd4a7b5009933af166a1b99d05a1dc",
+        "size": 316561,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "spreadsheet",
+      "version": 304,
+      "sha256": "b9e4ebbf87d64a42c519dded7cda87ed24caffb3974fc8245cdf715636ef94d7",
+      "size": 255789,
+      "package_path": "/repo/v1/packages/b9e4ebbf87d64a42c519dded7cda87ed24caffb3974fc8245cdf715636ef94d7.neutron",
+      "release_path": "/repo/v1/releases/spreadsheet.json",
+      "release_digest": "097db3c1e1fc58883d2feb3c282daaf8936ad9101ccb467d794d9c1471433f89",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/072bc1eaa2a5dc888e0af15fe74185523c27ccb82ad9d365aa4969a8d592b33b.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/072bc1eaa2a5dc888e0af15fe74185523c27ccb82ad9d365aa4969a8d592b33b.source.v1.msgpack.gz",
+        "sha256": "072bc1eaa2a5dc888e0af15fe74185523c27ccb82ad9d365aa4969a8d592b33b",
+        "size": 456090,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "uniswap",
+      "version": 109,
+      "sha256": "1bbda1bae1797f73da334b6f9ab29323ac2d43068ebaff6427f8226d649f5b32",
+      "size": 994770,
+      "package_path": "/repo/v1/packages/1bbda1bae1797f73da334b6f9ab29323ac2d43068ebaff6427f8226d649f5b32.neutron",
+      "release_path": "/repo/v1/releases/uniswap.json",
+      "release_digest": "db74a6f6fcb9dbc1670058b980f0e152776c7a622b042b1247f13994ab3e93b1",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/6da57033eb0d71bc0d2d24fa3651f121b4219227d71ab4f91d065760a59da1f0.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/6da57033eb0d71bc0d2d24fa3651f121b4219227d71ab4f91d065760a59da1f0.source.v1.msgpack.gz",
+        "sha256": "6da57033eb0d71bc0d2d24fa3651f121b4219227d71ab4f91d065760a59da1f0",
+        "size": 582906,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "wagyu",
+      "version": 306,
+      "sha256": "dae27b5cc062d703c0d7537a2e582344dc5991e4623ce13f5aa4edee97e61513",
+      "size": 1217326,
+      "package_path": "/repo/v1/packages/dae27b5cc062d703c0d7537a2e582344dc5991e4623ce13f5aa4edee97e61513.neutron",
+      "release_path": "/repo/v1/releases/wagyu.json",
+      "release_digest": "c5f2ab340c39a41d3a2213d60a6296d9130c4616813d8b0c1c57360362edcdd8",
+      "status": "unchanged",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/dc975427e9fee22e3225a4cd2fc9106eda9b7c3231192a150d42e0ee20e643b3.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/dc975427e9fee22e3225a4cd2fc9106eda9b7c3231192a150d42e0ee20e643b3.source.v1.msgpack.gz",
+        "sha256": "dc975427e9fee22e3225a4cd2fc9106eda9b7c3231192a150d42e0ee20e643b3",
+        "size": 1133070,
+        "status": "unchanged"
+      }
+    },
+    {
+      "id": "wallet",
+      "version": 319,
+      "sha256": "dc2bf1557ddc121fb25d38e2075ae8864aea0eba7fe5d55301b0b2bd707517f6",
+      "size": 804495,
+      "package_path": "/repo/v1/packages/dc2bf1557ddc121fb25d38e2075ae8864aea0eba7fe5d55301b0b2bd707517f6.neutron",
+      "release_path": "/repo/v1/releases/wallet.json",
+      "release_digest": "2c037b231dd63c1770bf5cce7aa77eaa1d357129877844d0efec30c6407dc5d4",
+      "status": "published",
+      "source": {
+        "url": "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/27760b61c59a680598ca33f084c5fc494362bd49a364f9254c3301ae0324002a.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/27760b61c59a680598ca33f084c5fc494362bd49a364f9254c3301ae0324002a.source.v1.msgpack.gz",
+        "sha256": "27760b61c59a680598ca33f084c5fc494362bd49a364f9254c3301ae0324002a",
+        "size": 709824,
+        "status": "published"
+      }
+    }
+  ]
+}

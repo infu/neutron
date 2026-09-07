@@ -55,6 +55,15 @@
         }
       },
       "migrations": {}
+    },
+    "wallet_bridge_activity": {
+      "schemas": {
+        "1": {
+          "hash": "01e6e08e16054cdd261d39e9db1e6c48c3d2c3042056f288ad92676542d74614",
+          "entry": "65fa1aeec4c7addf6aba1cdf39391097ce337877bb28f0b3dbe06fb5bfab8330"
+        }
+      },
+      "migrations": {}
     }
   }
 }

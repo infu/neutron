@@ -20,6 +20,7 @@ const compiledIcTests = [
   "bridge_test.mo",
   "bridge_replacements_test.mo",
   "bridge_provider_test.mo",
+  "bridge_activity_main_test.mo",
   "transfer_main_test.mo",
   "direct_withdrawal_main_test.mo",
   "funding_main_test.mo",

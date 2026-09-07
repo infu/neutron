@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.18.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.19.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 318,
+    version: 319,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -111,8 +111,6 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_bridge_prepare_v1",
           "wallet_bridge_list_v1",
           "wallet_bridge_status_v1",
-          "wallet_bridge_claim_v1",
-          "wallet_bridge_record_step_v1",
           "wallet_bridge_replacement_v1",
           "wallet_bridge_refresh_v1",
           "wallet_transfer_refresh_v2",
@@ -122,6 +120,8 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_ethereum_withdraw_prepare_v1",
           "wallet_bridge_provider_prepare_v1",
           "wallet_bridge_provider_binding_v1",
+          "wallet_bridge_activity_v1",
+          "wallet_bridge_step_v2",
         ],
       },
       backend_calls: {
@@ -164,6 +164,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
       wallet_transfers: { version: 1 },
       wallet_bridge_replacements: { version: 1 },
       wallet_bridge_provider: { version: 1 },
+      wallet_bridge_activity: { version: 1 },
     },
   });
   expect(value).not.toHaveProperty("init_arg");
