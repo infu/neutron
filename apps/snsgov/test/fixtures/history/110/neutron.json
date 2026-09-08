@@ -1,0 +1,133 @@
+{
+  "format": 3,
+  "name": "SNS Governance",
+  "id": "snsgov",
+  "version": 110,
+  "description": "Explore, vote, and propose across every SNS on the Internet Computer.",
+  "src": "main.mo",
+  "tiles": [
+    {
+      "id": "main",
+      "title": "SNS Governance",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Browse every SNS, review proposals, and vote with your neurons."
+    }
+  ],
+  "background": {
+    "path": "service.html",
+    "description": "SNS data layer and agent tools"
+  },
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "capabilities": {
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "snsgov_config",
+        "snsgov_sns_upsert",
+        "snsgov_sns_remove",
+        "snsgov_set_max_audit_rows",
+        "snsgov_audit",
+        "snsgov_drafts",
+        "snsgov_draft_save",
+        "snsgov_draft_delete",
+        "snsgov_hotkey",
+        "snsgov_relay",
+        "snsgov_relay_batch"
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Vote and submit proposals on the SNS governance canisters you authorize",
+      "reservation_scopes": [
+        "method"
+      ],
+      "install_reservations": [
+        {
+          "kind": "method",
+          "method": "manage_neuron"
+        }
+      ],
+      "max_concurrency": 20,
+      "max_cycles_per_call": 0,
+      "max_cycles_per_day": 0
+    }
+  },
+  "func": {
+    "snsgov_config": {
+      "type": "query",
+      "async": false
+    },
+    "snsgov_sns_upsert": {
+      "type": "update",
+      "async": false
+    },
+    "snsgov_sns_remove": {
+      "type": "update",
+      "async": false
+    },
+    "snsgov_set_max_audit_rows": {
+      "type": "update",
+      "async": false
+    },
+    "snsgov_allowed": {
+      "type": "internal",
+      "async": false
+    },
+    "snsgov_audit_append": {
+      "type": "internal",
+      "async": false
+    },
+    "snsgov_audit": {
+      "type": "query",
+      "async": false
+    },
+    "snsgov_hotkey": {
+      "type": "query",
+      "async": false
+    },
+    "snsgov_relay": {
+      "type": "update",
+      "async": "async*"
+    },
+    "snsgov_relay_batch": {
+      "type": "update",
+      "async": "async*"
+    },
+    "snsgov_drafts": {
+      "type": "query",
+      "async": false
+    },
+    "snsgov_draft_save": {
+      "type": "update",
+      "async": false
+    },
+    "snsgov_draft_delete": {
+      "type": "update",
+      "async": false
+    }
+  },
+  "memory": {
+    "snsgov": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/snsgov/v1.mo",
+          "hash": "ef5a99931f6b5cede0e629cc6cc8e7f63c707541614182c497114cdb1808c953",
+          "entry": "f2d82e5903e5684a62663c424bd8f0e9044787573c3195a3e774cc7081e7b76c"
+        }
+      },
+      "migrations": []
+    }
+  },
+  "entry": "3b91e2a138282a1963e0105e98d308006a835352795bd38e998e1b26158073d6",
+  "package_features": [
+    "archive-only-legal-v1"
+  ]
+}

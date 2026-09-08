@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      The resident engine is the only surface that reaches the OpenChat network.
+      OpenChat's canisters live on IC mainnet, so we always talk to the mainnet
+      boundary (icp-api.io) regardless of whether this Neutron is local or IC.
+      The kernel-served CSP for app surfaces sets no connect-src, so this
+      author CSP is the one in force; it must therefore allow the boundary and
+      the media hosts. Everything else stays locked down.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; worker-src 'self' blob:; connect-src 'self' https://icp-api.io https://*.icp0.io https://*.raw.icp0.io http://localhost:* http://*.localhost:*; img-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>OpenChat engine</title>
+  </head>
+  <body>
+    <script type="module" src="./service.js"></script>
+  </body>
+</html>

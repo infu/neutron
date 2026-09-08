@@ -1,0 +1,179 @@
+{
+  "format": 3,
+  "name": "Nuance",
+  "id": "nuance",
+  "version": 109,
+  "description": "Read, write, and collaboratively draft Nuance articles",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "background": {
+    "path": "service.html",
+    "description": "Nuance agent tools and collaborative drafting"
+  },
+  "tiles": [
+    {
+      "id": "main",
+      "title": "Nuance",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Browse, read, and write Nuance articles"
+    }
+  ],
+  "capabilities": {
+    "backend_calls": {
+      "api": 1,
+      "description": "Publish, comment, and vote on Nuance as this Neutron",
+      "reservation_scopes": [
+        "principal",
+        "exact"
+      ],
+      "max_concurrency": 8,
+      "max_cycles_per_call": 0,
+      "max_cycles_per_day": 0,
+      "install_reservations": [
+        {
+          "kind": "principal",
+          "principal": "322sd-3iaaa-aaaaf-qakgq-cai"
+        },
+        {
+          "kind": "principal",
+          "principal": "rtqeo-eyaaa-aaaaf-qaana-cai"
+        },
+        {
+          "kind": "principal",
+          "principal": "4hy47-uiaaa-aaaaf-qakuq-cai"
+        },
+        {
+          "kind": "principal",
+          "principal": "434go-diaaa-aaaaf-qakwq-cai"
+        },
+        {
+          "kind": "principal",
+          "principal": "3tzz7-naaaa-aaaaf-qakha-cai"
+        },
+        {
+          "kind": "principal",
+          "principal": "zjfrd-tqaaa-aaaaf-qakia-cai"
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "nuance_register",
+        "nuance_my_posts",
+        "nuance_publish",
+        "nuance_comment",
+        "nuance_vote_comment",
+        "nuance_clap",
+        "nuance_register_bucket",
+        "nuance_draft_list",
+        "nuance_draft_read",
+        "nuance_draft_new",
+        "nuance_draft_create",
+        "nuance_draft_set",
+        "nuance_draft_patch",
+        "nuance_draft_discard",
+        "nuance_bookmarks",
+        "nuance_toggle_bookmark",
+        "nuance_state"
+      ]
+    }
+  },
+  "func": {
+    "nuance_register": {
+      "type": "update",
+      "async": "async*"
+    },
+    "nuance_my_posts": {
+      "type": "update",
+      "async": "async*"
+    },
+    "nuance_comment": {
+      "type": "update",
+      "async": "async*"
+    },
+    "nuance_vote_comment": {
+      "type": "update",
+      "async": "async*"
+    },
+    "nuance_clap": {
+      "type": "update",
+      "async": "async*"
+    },
+    "nuance_publish": {
+      "type": "update",
+      "async": "async*"
+    },
+    "nuance_register_bucket": {
+      "type": "update",
+      "async": false
+    },
+    "nuance_draft_list": {
+      "type": "query",
+      "async": false
+    },
+    "nuance_draft_read": {
+      "type": "query",
+      "async": false
+    },
+    "nuance_draft_new": {
+      "type": "update",
+      "async": false
+    },
+    "nuance_draft_create": {
+      "type": "update",
+      "async": false
+    },
+    "nuance_draft_discard": {
+      "type": "update",
+      "async": false
+    },
+    "nuance_draft_set": {
+      "type": "update",
+      "async": false
+    },
+    "nuance_draft_patch": {
+      "type": "update",
+      "async": false
+    },
+    "nuance_bookmarks": {
+      "type": "query",
+      "async": false
+    },
+    "nuance_toggle_bookmark": {
+      "type": "update",
+      "async": false
+    },
+    "nuance_state": {
+      "type": "query",
+      "async": false
+    }
+  },
+  "memory": {
+    "nuance": {
+      "version": 2,
+      "schemas": {
+        "1": {
+          "src": "memory/nuance/v1.mo"
+        },
+        "2": {
+          "src": "memory/nuance/v2.mo"
+        }
+      },
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "src": "memory/nuance/v1_to_v2.mo"
+        }
+      ]
+    }
+  }
+}

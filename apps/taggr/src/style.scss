@@ -1,0 +1,512 @@
+@use "neutron-design-system/styles.scss";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+// Everything below composes the shared system. No kernel class is restyled and
+// no shared `nt-*` rule is overridden — only app-scoped layout and the few
+// element kinds the design system does not ship (feed rows, reaction chips).
+@layer app {
+  .nt-app.taggr-app {
+    --nt-accent: #7fb2e6;
+    --nt-accent-muted: #16273a;
+    --taggr-row-gap: var(--nt-gap-2);
+    container-type: inline-size;
+    min-height: 100dvh;
+    padding: var(--nt-pad-3);
+  }
+
+  .taggr-shell {
+    margin: 0 auto;
+    gap: var(--nt-gap-3);
+    align-content: start;
+    min-width: 0;
+    max-width: 760px;
+    min-height: calc(100dvh - (var(--nt-pad-3) * 2));
+    width: 100%;
+  }
+
+  .taggr-spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* ---------------- command bar ---------------- */
+
+  .taggr-bar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-2);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--nt-bg);
+    box-shadow: var(--nt-shadow-hairline);
+    padding-block: var(--nt-pad-2);
+  }
+
+  .taggr-title {
+    font-size: var(--nt-font-size-subtitle);
+    max-width: 40cqw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .taggr-nav {
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-1);
+    justify-content: flex-end;
+  }
+
+  .taggr-icon-button {
+    color: var(--nt-text-muted);
+  }
+
+  .taggr-icon-button--active {
+    background: var(--nt-bg-control-active);
+    color: var(--nt-accent);
+  }
+
+  .taggr-icon-button--danger {
+    color: var(--nt-danger);
+  }
+
+  .taggr-main {
+    display: grid;
+    gap: var(--nt-gap-3);
+    min-width: 0;
+  }
+
+  .taggr-flash {
+    margin: 0;
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-2);
+  }
+
+  /* ---------------- feed ---------------- */
+
+  .taggr-feed {
+    display: grid;
+    gap: var(--nt-gap-2);
+    min-width: 0;
+  }
+
+  .taggr-post {
+    background: var(--nt-bg-panel);
+    border-radius: var(--nt-radius-2);
+    display: grid;
+    gap: var(--taggr-row-gap);
+    min-width: 0;
+    padding: var(--nt-pad-3);
+  }
+
+  .taggr-post--highlight {
+    background: var(--nt-bg-elevated);
+    box-shadow: inset 2px 0 0 0 var(--nt-accent);
+  }
+
+  .taggr-post-head,
+  .taggr-post-foot {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-2);
+    min-width: 0;
+  }
+
+  .taggr-post-foot {
+    gap: var(--nt-gap-1);
+  }
+
+  .taggr-author {
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    background: none;
+    border: 0;
+    display: inline-flex;
+    color: var(--nt-text-strong);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    padding: 0;
+  }
+
+  .taggr-author-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .taggr-author:hover {
+    color: var(--nt-accent);
+  }
+
+  .taggr-meta,
+  .taggr-post-id {
+    color: var(--nt-text-faint);
+    font-size: var(--nt-font-size-meta);
+  }
+
+  .taggr-realm-chip {
+    background: none;
+    cursor: pointer;
+  }
+
+  .taggr-post-body {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .taggr-note-inline {
+    margin-block: var(--nt-gap-1) 0;
+  }
+
+  .taggr-linkish {
+    background: none;
+    border: 0;
+    color: var(--nt-accent);
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+  }
+
+  /* ---------------- reactions ---------------- */
+
+  .taggr-reaction {
+    align-items: center;
+    background: var(--nt-bg-control);
+    border: 0;
+    border-radius: var(--nt-radius-1);
+    color: var(--nt-text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: var(--nt-font-size-meta);
+    gap: var(--nt-gap-1);
+    height: var(--nt-control-sm);
+    padding-inline: var(--nt-pad-2);
+  }
+
+  .taggr-reaction:hover:not(:disabled) {
+    background: var(--nt-bg-control-hover);
+    color: var(--nt-text);
+  }
+
+  .taggr-reaction:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .taggr-reaction--down {
+    color: var(--nt-danger);
+  }
+
+  .taggr-palette {
+    align-items: center;
+    background: var(--nt-bg-control);
+    border-radius: var(--nt-radius-1);
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-1);
+    padding: var(--nt-pad-1);
+  }
+
+  .taggr-palette-button {
+    background: none;
+    border: 0;
+    border-radius: var(--nt-radius-1);
+    cursor: pointer;
+    font-size: var(--nt-font-size-body);
+    height: var(--nt-control-sm);
+    min-width: var(--nt-control-sm);
+    padding: 0;
+  }
+
+  .taggr-palette-button:hover {
+    background: var(--nt-bg-control-hover);
+  }
+
+  /* ---------------- media ---------------- */
+
+  .taggr-image {
+    background: var(--nt-bg-control);
+    border-radius: var(--nt-radius-1);
+    display: block;
+    height: auto;
+    // Taggr posts carry arbitrary image dimensions; cap the height so one photo
+    // cannot push the rest of the feed off screen.
+    max-height: 32rem;
+    max-width: 100%;
+    object-fit: contain;
+    width: auto;
+  }
+
+  .taggr-attachments {
+    display: grid;
+    gap: var(--nt-gap-2);
+    grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+    margin-top: var(--nt-gap-2);
+    min-width: 0;
+  }
+
+  .taggr-missing-image {
+    background: var(--nt-bg-control);
+    color: var(--nt-text-faint);
+  }
+
+  .taggr-avatar {
+    align-items: center;
+    // Taggr has no avatars; the hue is derived from the handle so the same
+    // person keeps the same colour across the feed.
+    background: hsl(var(--taggr-avatar-hue, 210) 40% 24%);
+    border-radius: var(--nt-radius-1);
+    color: hsl(var(--taggr-avatar-hue, 210) 70% 82%);
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: var(--nt-font-size-meta);
+    font-weight: 600;
+    height: 1.25rem;
+    justify-content: center;
+    margin-inline-end: var(--nt-gap-1);
+    width: 1.25rem;
+  }
+
+  .taggr-realm-logo {
+    object-fit: cover;
+  }
+
+  .taggr-realm-fallback {
+    align-items: center;
+    background: var(--nt-bg-control);
+    color: var(--nt-text-muted);
+    display: inline-flex;
+    font-size: var(--nt-font-size-meta);
+    justify-content: center;
+  }
+
+  /* ---------------- markdown ---------------- */
+
+  .taggr-markdown {
+    display: grid;
+    gap: var(--nt-gap-2);
+    min-width: 0;
+  }
+
+  .taggr-paragraph,
+  .taggr-heading {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .taggr-heading {
+    color: var(--nt-text-strong);
+    font-weight: 600;
+  }
+
+  .taggr-heading--1 {
+    font-size: var(--nt-font-size-subtitle);
+  }
+
+  .taggr-quote {
+    border-inline-start: 2px solid var(--nt-line);
+    color: var(--nt-text-muted);
+    margin: 0;
+    padding-inline-start: var(--nt-pad-3);
+  }
+
+  .taggr-list {
+    margin: 0;
+    padding-inline-start: var(--nt-pad-5);
+  }
+
+  .taggr-code {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .taggr-token {
+    background: none;
+    border: 0;
+    color: var(--nt-accent);
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+  }
+
+  // External links cannot navigate from a sandboxed tile, so they are marked
+  // rather than styled as working links. The destination is in the tooltip.
+  .taggr-link {
+    color: var(--nt-info);
+    cursor: help;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
+
+  /* ---------------- views ---------------- */
+
+  .taggr-tags {
+    gap: var(--nt-gap-1);
+  }
+
+  .taggr-tag {
+    background: var(--nt-bg-control);
+    cursor: pointer;
+  }
+
+  .taggr-tag:hover {
+    color: var(--nt-accent);
+  }
+
+  .taggr-inline-tag {
+    margin-inline-start: var(--nt-gap-2);
+  }
+
+  .taggr-state {
+    text-align: center;
+  }
+
+  .taggr-more {
+    justify-self: center;
+  }
+
+  .taggr-compose {
+    display: grid;
+    gap: var(--nt-gap-2);
+  }
+
+  .taggr-compose-head,
+  .taggr-compose-foot {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-2);
+  }
+
+  .taggr-compose-input {
+    font-family: var(--nt-font-copy);
+    min-height: 8rem;
+    resize: vertical;
+    width: 100%;
+  }
+
+  .taggr-search-form {
+    align-items: end;
+    display: flex;
+    gap: var(--nt-gap-2);
+  }
+
+  .taggr-filter {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .taggr-result {
+    cursor: pointer;
+    text-align: start;
+    width: 100%;
+  }
+
+  .taggr-realms,
+  .taggr-search,
+  .taggr-settings {
+    display: grid;
+    gap: var(--nt-gap-3);
+    min-width: 0;
+  }
+
+  .taggr-realm-row {
+    align-items: center;
+  }
+
+  .taggr-profile {
+    gap: var(--nt-gap-2);
+  }
+
+  .taggr-register-routes {
+    display: grid;
+    gap: var(--nt-gap-3);
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  }
+
+  .taggr-register-route {
+    background: var(--nt-bg-panel);
+    border-radius: var(--nt-radius-2);
+    gap: var(--nt-gap-2);
+    padding: var(--nt-pad-3);
+  }
+
+  .taggr-register-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-2);
+    margin-top: auto;
+  }
+
+  .taggr-reservations {
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-2);
+    padding-block: var(--nt-gap-1);
+  }
+
+  .taggr-note {
+    color: var(--nt-text-muted);
+    font-size: var(--nt-font-size-meta);
+  }
+
+  .taggr-inline-copy {
+    margin-inline-start: var(--nt-gap-1);
+    vertical-align: middle;
+  }
+
+  /* ---------------- narrow tiles ---------------- */
+
+  @container (max-width: 520px) {
+    .taggr-title {
+      max-width: 100%;
+    }
+
+    .taggr-nav {
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    .taggr-post {
+      padding: var(--nt-pad-2);
+    }
+  }
+
+  @container (max-width: 360px) {
+    .taggr-nav { gap: 2px; }
+  }
+
+  // A container query cannot resize its own container; use the tile viewport.
+  @media (max-width: 360px) {
+    .nt-app.taggr-app {
+      padding: var(--nt-pad-2);
+    }
+  }
+}
+
+/* A post the active domain suppresses: Taggr's own front ends replace it with
+   a notice, so the reader can tell something is there and why it is hidden. */
+.taggr-suppressed {
+  align-items: center;
+  background: var(--nt-surface-sunken, rgba(127, 127, 127, 0.08));
+  border-radius: var(--nt-radius-sm, 4px);
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.taggr-suppressed-text {
+  color: var(--nt-text-muted, #6b7280);
+  flex: 1;
+  font-size: 0.78rem;
+}

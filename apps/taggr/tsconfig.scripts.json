@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.bun.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "build.ts",
+    "scripts/**/*.ts",
+    "src/format.ts",
+    "src/domain.ts",
+    "src/identity.ts",
+    "src/identity_sync.ts",
+    "src/identity_store.ts",
+    "src/markdown_source.ts",
+    "src/methods.ts",
+    "src/model.ts",
+    "src/network.ts",
+    "src/registration_store.ts",
+    "src/service.ts",
+    "src/taggr_api.ts",
+    "src/taggr_client.ts",
+    "src/wallet.ts",
+    "../wallet/src/funding.ts",
+    "../wallet/src/icrc_account.ts",
+    "test/**/*.ts",
+    "types/**/*.d.ts"
+  ]
+}

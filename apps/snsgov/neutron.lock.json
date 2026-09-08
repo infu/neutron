@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "snsgov",
+  "memory": {
+    "snsgov": {
+      "schemas": {
+        "1": {
+          "hash": "ef5a99931f6b5cede0e629cc6cc8e7f63c707541614182c497114cdb1808c953",
+          "entry": "f2d82e5903e5684a62663c424bd8f0e9044787573c3195a3e774cc7081e7b76c"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}
