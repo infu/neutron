@@ -30,6 +30,7 @@ const pricesOnly = process.argv.includes("--prices-only");
 const decodersOnly = process.argv.includes("--decoders-only");
 const approvalsOnly = process.argv.includes("--approvals-only");
 const custodyOnly = process.argv.includes("--custody-only");
+const recoveryOnly = process.argv.includes("--recovery-only");
 const output = option("--output-dir") ?? await mkdtemp(join(tmpdir(), "neutron-evm-wallet-sandbox-"));
 await mkdir(output, { recursive: true });
 const mock = await readFile(join(here, "mock_app.ts"), "utf8");
@@ -830,18 +831,141 @@ async function runCustodyCase(width, kernelVersion, namespaceVersion) {
     failedRecheckRemovesGuarantee: true, localDataDeletionDisclosed: true, geometry });
   await page.close(); activePage = null;
 }
+async function runInterruptedPreparationCase(width, replacement) {
+  const label = `${width}-interrupted-${replacement ? "replacement" : "transaction"}-activity-recovery`;
+  activeLabel = label;
+  let page = await browser.newPage({ viewport: { width, height: 900 } }); activePage = page;
+  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  let frame = page.frames().find(candidate => candidate.url().endsWith("/app"));
+  await frame.getByTestId("evm-account-address").waitFor();
+  await frame.evaluate(() => window.__evmRpcFixture.hold("eth_estimateGas"));
+  await frame.locator("nav").getByRole("button", { name: replacement ? "Activity" : "Send", exact: true }).click();
+  if (replacement) {
+    const original = frame.getByTestId("evm-operation-100");
+    await original.locator("summary").filter({ hasText: "Speed up or cancel" }).click();
+    await original.getByRole("button", { name: "Review replacement", exact: true }).click();
+  } else {
+    await frame.getByTestId("evm-send-to").fill("0x4444444444444444444444444444444444444444");
+    await frame.getByTestId("evm-send-amount").fill("0.001");
+    await frame.getByTestId("evm-send-review").click();
+  }
+  await frame.waitForFunction(() => window.__evmSandbox.operationSnapshot().some(operation => operation.operation_id === "101" && operation.status === "preparing"));
+  const saved = await frame.evaluate(() => window.__evmSandbox.operationSnapshot());
+  const original = saved.find(operation => operation.operation_id === "101");
+  assert.equal((await calls(frame, methods.execute)).length, 0);
+  await page.close();
+  page = await browser.newPage({ viewport: { width, height: 900 } }); activePage = page;
+  await page.addInitScript(saved => { window.__evmWalletInitialOperations = saved; }, saved);
+  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  frame = page.frames().find(candidate => candidate.url().endsWith("/app"));
+  await frame.getByTestId("evm-account-address").waitFor();
+  await frame.locator("nav").getByRole("button", { name: "Activity", exact: true }).click();
+  const row = frame.getByTestId("evm-operation-101");
+  await row.getByRole("button", { name: "Continue", exact: true }).click();
+  await frame.getByTestId("evm-review-approve").waitFor({ state: "visible" });
+  await frame.waitForFunction(() => !document.querySelector('[data-testid="evm-review-approve"]').disabled);
+  assert.equal((await calls(frame, methods.execute)).length, 0, "Activity resume signed before the new approval");
+  const prepared = await calls(frame, methods.prepare);
+  assert.equal(prepared.length, 1);
+  assert.deepEqual(prepared[0].args[0].request, { identity: { caller: original.caller, request_id: original.request_id }, intent: original.intent });
+  assert.equal((await calls(frame, "evm_wallet_finish_prepare_browser_v1")).length, 1);
+  await frame.getByTestId("evm-review-approve").click();
+  await frame.getByTestId("evm-review").waitFor({ state: "hidden" });
+  assert.equal((await calls(frame, methods.execute)).length, 1);
+  const recovered = (await frame.evaluate(() => window.__evmSandbox.operationSnapshot())).find(operation => operation.operation_id === "101");
+  assert.equal(recovered.request_id, original.request_id); assert.deepEqual(recovered.intent, original.intent); assert.deepEqual(recovered.caller, original.caller);
+  assert.equal(recovered.status, "submitted");
+  checks.push({ label, actualPreparationInterruptedBeforeSimulation: true, reloadRestoresOriginalCallerRequestAndIntent: true, explicitApprovalAfterResume: true, executedEffects: 1 });
+  await page.close(); activePage = null;
+}
+async function runReplacementRetryCase(width) {
+  const label = `${width}-replacement-decline-and-interrupted-retry`;
+  activeLabel = label;
+  const page = await browser.newPage({ viewport: { width, height: 900 } }); activePage = page;
+  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  const frame = page.frames().find(candidate => candidate.url().endsWith("/app"));
+  await frame.getByTestId("evm-account-address").waitFor();
+  await frame.locator("nav").getByRole("button", { name: "Activity", exact: true }).click();
+  const row = frame.getByTestId("evm-operation-100");
+  await row.locator("summary").filter({ hasText: "Speed up or cancel" }).click();
+  await row.getByRole("button", { name: "Review replacement", exact: true }).click();
+  await frame.getByTestId("evm-review-decline").click();
+  await frame.getByTestId("evm-review").waitFor({ state: "hidden" });
+  await row.locator("select").selectOption("cancel");
+  // The next attempt is definitely interrupted after the Wallet saved its
+  // unsigned request, before estimation and before any approval exists.
+  await frame.evaluate(() => window.__evmRpcFixture.failNext("eth_estimateGas", "Temporary estimate failure"));
+  await row.getByRole("button", { name: "Review replacement", exact: true }).click();
+  await row.getByText(/Temporary estimate failure/).waitFor();
+  const before = await calls(frame, methods.prepare);
+  assert.equal(before.length, 2);
+  assert.notEqual(before[0].args[0].request.identity.request_id, before[1].args[0].request.identity.request_id);
+  assert.equal(before[1].args[0].request.intent.operation.replacement.cancel, true);
+  assert.equal(await row.locator("select").isDisabled(), true);
+  assert.equal(await row.locator("input").first().isDisabled(), true);
+  assert.equal((await calls(frame, methods.execute)).length, 0);
+  await row.getByRole("button", { name: "Continue replacement", exact: true }).click();
+  await frame.getByTestId("evm-review-approve").waitFor();
+  const after = await calls(frame, methods.prepare);
+  assert.equal(after.length, 3);
+  assert.deepEqual(after[2].args[0].request, before[1].args[0].request);
+  assert.equal((await calls(frame, methods.execute)).length, 0);
+  const operations = await frame.evaluate(() => window.__evmSandbox.operationSnapshot());
+  const cancelled = operations.find(operation => operation.operation_id === "102");
+  assert.equal(cancelled.intent.operation.replacement.cancel, true);
+  assert.equal(cancelled.prepared_transaction.to, "0x2222222222222222222222222222222222222222");
+  assert.equal(cancelled.prepared_transaction.value, "0");
+  await frame.getByTestId("evm-review-approve").click();
+  await frame.getByTestId("evm-review").waitFor({ state: "hidden" });
+  assert.equal((await calls(frame, methods.execute)).length, 1);
+  assert.equal(await row.locator("select").isDisabled(), true, "Submitted request must keep its reviewed action fixed");
+  checks.push({ label, declinedUnsignedReplacementAllowsNewExactIntent: true, interruptedPreparationResumesOriginalId: true, retainedInputsStayFixed: true, approvalCount: 1, executedEffects: 1 });
+  await page.close(); activePage = null;
+}
+async function runHyperEvmNativeCase(width) {
+  const label = `${width}-hyperevm-native-symbols`;
+  activeLabel = label;
+  const page = await browser.newPage({ viewport: { width, height: 900 } }); activePage = page;
+  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  const frame = page.frames().find(candidate => candidate.url().endsWith("/app"));
+  await frame.getByTestId("evm-account-address").waitFor();
+  await frame.getByTestId("evm-network-select").selectOption("999");
+  await frame.locator("nav").getByRole("button", { name: "Send", exact: true }).click();
+  assert.equal(await frame.locator('option[value="native"]').textContent(), "HYPE");
+  await frame.getByTestId("evm-send-to").fill("0x4444444444444444444444444444444444444444");
+  await frame.getByTestId("evm-send-amount").fill("0.001");
+  await frame.getByTestId("evm-send-review").click();
+  await frame.getByTestId("evm-review-approve").waitFor();
+  assert.match(await frame.getByTestId("evm-intent-details").textContent(), /0.001 HYPE/);
+  const details = frame.getByTestId("evm-review-pro-details");
+  await details.locator("summary").first().click();
+  const text = await details.textContent();
+  assert.match(text, /HyperEVM · 999/); assert.match(text, /0.001 HYPE/); assert.match(text, /1.234567890123456789 HYPE/); assert.match(text, /0.0013 HYPE/); assert.doesNotMatch(text, /\bETH\b/);
+  const file = `${label}.png`; await page.screenshot({ path: join(output, file), fullPage: true }); screenshots.push(file);
+  await frame.getByTestId("evm-review-decline").click();
+  assert.equal((await calls(frame, methods.execute)).length, 0);
+  checks.push({ label, sendAssetAndSavedIntentUseHype: true, nativeValueBalanceAndFeeUseHype: true, executedEffects: 0 });
+  await page.close(); activePage = null;
+}
 let failure = null;
 try {
-  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) for (const form of ["send", "sign", "replacement", "token"]) for (const action of ["click", "enter"]) await runCase(width, form, action);
-  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) await runDelayedTokenSend(width);
-  if (!pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) for (const rowCount of [25, 50]) await runHistoryCase(width, rowCount);
-  if (!pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) await runHistoryRefreshCase(width);
-  if (!historyOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [700, 375]) await runUsdCase(width, true);
-  if (!historyOnly && !decodersOnly && !approvalsOnly && !custodyOnly) await runUsdCase(375, false);
-  if (!historyOnly && !pricesOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 360]) await runDecoderCase(width);
-  if (!historyOnly && !pricesOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 360]) for (const withdraw of [false, true]) await runHyperliquidReview(width, withdraw);
-  if (!historyOnly && !pricesOnly && !decodersOnly && !custodyOnly) for (const width of [1440, 375]) await runApprovalsCase(width);
-  if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) for (const [kernelVersion, namespaceVersion] of [["344", "1"], ["346", "1"], ["346", "2"], ["unknown", "1"], ["unknown", "2"], ["malformed", "1"]]) await runCustodyCase(width, kernelVersion, namespaceVersion);
+  if (!recoveryOnly && !historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) for (const form of ["send", "sign", "replacement", "token"]) for (const action of ["click", "enter"]) await runCase(width, form, action);
+  if (!recoveryOnly && !historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) await runDelayedTokenSend(width);
+  if (!recoveryOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) for (const rowCount of [25, 50]) await runHistoryCase(width, rowCount);
+  if (!recoveryOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 375]) await runHistoryRefreshCase(width);
+  if (!recoveryOnly && !historyOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [700, 375]) await runUsdCase(width, true);
+  if (!recoveryOnly && !historyOnly && !decodersOnly && !approvalsOnly && !custodyOnly) await runUsdCase(375, false);
+  if (!recoveryOnly && !historyOnly && !pricesOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 360]) await runDecoderCase(width);
+  if (!recoveryOnly && !historyOnly && !pricesOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 360]) for (const withdraw of [false, true]) await runHyperliquidReview(width, withdraw);
+  if (!recoveryOnly && !historyOnly && !pricesOnly && !decodersOnly && !custodyOnly) for (const width of [1440, 375]) await runApprovalsCase(width);
+  if (!recoveryOnly && !historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) for (const [kernelVersion, namespaceVersion] of [["344", "1"], ["346", "1"], ["346", "2"], ["unknown", "1"], ["unknown", "2"], ["malformed", "1"]]) await runCustodyCase(width, kernelVersion, namespaceVersion);
+  if (recoveryOnly || (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly && !custodyOnly)) {
+    for (const width of [700, 375]) {
+      for (const replacement of [false, true]) await runInterruptedPreparationCase(width, replacement);
+      await runHyperEvmNativeCase(width);
+      await runReplacementRetryCase(width);
+    }
+  }
   assert.deepEqual(browserErrors, [], "Browser runtime errors");
   assert.equal(consoleMessages.filter((message) => /blocked form submission|allow-forms/i.test(message.text)).length, 0, "Native form submission attempted inside sandbox");
 } catch (error) {

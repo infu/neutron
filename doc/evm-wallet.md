@@ -69,12 +69,14 @@ and [fresh-start checklist](./todo.wallet-fresh-start.md).
 
 ## Networks, Balances And Costs
 
-The initial networks are Ethereum (`1`), Arbitrum One (`42161`) and Sepolia
-(`11155111`). An account has the same EVM address across them. Balances, tokens,
-nonces and operation records always carry the explicit chain ID. UI selection
+The configured networks are Ethereum (`1`), Arbitrum One (`42161`), HyperEVM
+(`999`) and Sepolia (`11155111`). An account has the same EVM address across
+them. Balances, tokens, nonces and operation records always carry the explicit
+chain ID. UI selection
 never changes the chain of another app's saved request.
 
-Fund the selected network's address with ETH for gas. The Neutron also needs IC
+Fund the selected network's address with its native gas token: HYPE on HyperEVM,
+ETH on Ethereum, Arbitrum or Sepolia. The Neutron also needs IC
 cycles for chain-key signing and durable wallet updates. Browser RPC requests do
 not consume this Neutron's outcall cycles. These are separate resources.
 Token identity is the chain plus full contract address; symbols and manually
@@ -82,9 +84,10 @@ configured display decimals are not proof of identity. Balances cover requested
 or selected tokens, history covers recorded wallet activity, and known approvals
 cover locally observed spenders. None is an exhaustive portfolio index.
 
-All Ethereum JSON-RPC requests go directly from Wallet's browser client to one
-PublicNode endpoint for the selected chain. This includes balances, contract
-reads, Uniswap quotes, fees, simulation, submission and receipt checks. The
+All EVM JSON-RPC requests go directly from Wallet's browser client to one
+endpoint for the selected chain: dRPC for HyperEVM and PublicNode for Ethereum,
+Arbitrum or Sepolia. This includes balances, contract reads, Uniswap quotes,
+fees, simulation, submission and receipt checks. The
 client validates the endpoint's chain ID and uses CORS without browser-wallet
 extensions or embedded API keys. It does not use the EVM RPC canister, replicated
 HTTP outcalls, or a Kernel HTTP proxy. A single provider supplies observations;

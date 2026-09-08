@@ -4,7 +4,8 @@ import { EVM_WALLET_TOOLS } from "neutron-tools/evm_wallet";
 import { curatedEvmTokens } from "neutron-tools/src/evm_assets.js";
 import { normalizeToolDescriptor } from "neutron-tools/protocol";
 import { encodeFunctionData, keccak256, parseAbi, serializeTransaction, type Hex } from "viem";
-import { handleHumanEffect, type ProviderKind } from "../../src/provider.ts";
+import { handleHumanEffect, operationJson, type ProviderKind } from "../../src/provider.ts";
+import { parseOperation } from "../../src/data.ts";
 import { callContract as readContractCall } from "../../src/read_adapters.ts";
 
 const validator = new Validator();
@@ -17,6 +18,7 @@ const snapshot = {
   networks: [
     { chain_id: "1", name: "Ethereum", native_symbol: "ETH", explorer_url: "https://etherscan.io", testnet: false, finality_description: "Ethereum finality" },
     { chain_id: "42161", name: "Arbitrum", native_symbol: "ETH", explorer_url: "https://arbiscan.io", testnet: false, finality_description: "Arbitrum finality" },
+    { chain_id: "999", name: "HyperEVM", native_symbol: "HYPE", explorer_url: "https://hyperevmscan.io", testnet: false, finality_description: "HyperBFT finality" },
   ],
   assets: [{ chain_id: "1", address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", symbol: "USDC", decimals: "6", custom: true }], lifecycle: "active",
 };
@@ -37,7 +39,8 @@ const toolCalls: any[] = [];
 const routing: any[] = [];
 const tileEndpoint = "app:evm_wallet:tile:evm_wallet:instance:browser-qualification";
 const residentEndpoint = "app:evm_wallet:background";
-const operations = new Map<string, any>([[original.request_id, original]]);
+const restoredOperations = (window as any).__evmWalletInitialOperations as any[] | undefined;
+const operations = new Map<string, any>(restoredOperations ? restoredOperations.map(row => [row.request_id, structuredClone(row)]) : [[original.request_id, original]]);
 const signedBytes = new Map<string, Hex>();
 const registrations = new Map<string, any>();
 const gates = new Map<string, { wait: Promise<void>; release: () => void }>();
@@ -206,7 +209,10 @@ export async function updateSelf(method: string, args: any[]) {
   if (method === "evm_wallet_asset_set_v1") return { ok: null };
   if (method === "evm_wallet_prepare_browser_v1") {
     const saved = operations.get(arg.identity.request_id);
-    if (saved) return { ok: copy(saved) };
+    if (saved) {
+      if (JSON.stringify(arg.intent) !== JSON.stringify(saved.intent) || JSON.stringify(arg.identity.caller) !== JSON.stringify(saved.caller)) throw new Error("Restored preparation changed its original intent or caller");
+      return { ok: copy(saved) };
+    }
     const intent = copy(arg.intent), variant = intent.operation;
     const transaction = variant.transaction ?? (variant.replacement ? {
       ...originalTransaction,
@@ -306,9 +312,10 @@ export async function callTool(request: any) {
   if (request.name === EVM_WALLET_TOOLS.accounts) return { accounts: [{
     accountId: "main", address, publicKey: "0x02" + "22".repeat(32), keyFingerprint: "0x" + "11".repeat(32), namespaceVersion: account.namespace_version,
   }] };
-  if (request.name === EVM_WALLET_TOOLS.operationStatus) return {
-    ...request.arguments, status: "not_found",
-  };
+  if (request.name === EVM_WALLET_TOOLS.operationStatus) {
+    const operation = operations.get(request.arguments.requestId);
+    return operation ? operationJson(parseOperation({ ok: copy(operation) })) : { ...request.arguments, status: "not_found" };
+  }
   const kind = publicTools[request.name];
   if (!kind) throw new Error(`Unexpected tool ${request.name}`);
   if (request.target !== residentEndpoint) throw new Error("Own Wallet effect must first call its resident service");

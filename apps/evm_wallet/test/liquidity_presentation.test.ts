@@ -33,6 +33,8 @@ const V3_ABI = parseAbi([
   "function collect((uint256 tokenId,address recipient,uint128 amount0Max,uint128 amount1Max) params) payable",
   "function burn(uint256 tokenId) payable",
   "function refundETH() payable",
+  "function unwrapWETH9(uint256 amountMinimum,address recipient) payable",
+  "function sweepToken(address token,uint256 amountMinimum,address recipient) payable",
 ]);
 const V4_ABI = parseAbi(["function modifyLiquidities(bytes unlockData,uint256 deadline) payable"]);
 const UNLOCK = parseAbiParameters("bytes actions,bytes[] params");
@@ -115,6 +117,42 @@ test("fee collection and empty V3 closure never claim an invented withdrawal or 
   expect(summary.liquidity!.amount0Min).toBeUndefined();
 });
 
+test("V3 manager collection shows exact forwarding assets and minima without inferring the NFT's pair", () => {
+  const dai = getAddress("0x6b175474e89094c44da98b954eedeac495271d0f");
+  const encoded = NonfungiblePositionManager.removeCallParameters(v3Position, {
+    ...common, tokenId: "42", liquidityPercentage: new Percent(50, 100),
+    collectOptions: { recipient: receiver, expectedCurrencyOwed0: CurrencyAmount.fromRawAmount(usdc, 0), expectedCurrencyOwed1: CurrencyAmount.fromRawAmount(native, 0) },
+  });
+  const outer = decodeFunctionData({ abi: V3_ABI, data: encoded.calldata as Hex });
+  if (outer.functionName !== "multicall") throw new Error("Expected the SDK's native withdrawal multicall");
+  expect(decodeFunctionData({ abi: V3_ABI, data: outer.args[0].at(-2)! }).functionName).toBe("unwrapWETH9");
+  expect(decodeFunctionData({ abi: V3_ABI, data: outer.args[0].at(-1)! }).functionName).toBe("sweepToken");
+  for (const [nativeMinimum, tokenMinimum] of [[0n, 0n], [17n, 23n]]) {
+    // The SDK position is USDC/WETH, but the explicit sweep names DAI.
+    // Calldata alone cannot establish that these payouts exhaust the NFT's proceeds.
+    const calls = [...outer.args[0].slice(0, -2),
+      encodeFunctionData({ abi: V3_ABI, functionName: "unwrapWETH9", args: [nativeMinimum!, receiver] }),
+      encodeFunctionData({ abi: V3_ABI, functionName: "sweepToken", args: [dai, tokenMinimum!, receiver] }),
+    ];
+    const op = operation(v3Manager, { value: "0", calldata: encodeFunctionData({ abi: V3_ABI, functionName: "multicall", args: [calls] }) });
+    const summary = presentUniswapLiquidity(op, assets)!;
+    expect(summary.title).toBe("Remove liquidity");
+    expect(summary.liquidity).toMatchObject({ collectionRecipient: getAddress(v3Manager), recipient: receiver, nativePayoutMin: nativeMinimum!.toString(), sweptToken: dai, tokenPayoutMin: tokenMinimum!.toString() });
+    expect(summary.liquidity!.token0).toBeUndefined();
+    expect(summary.liquidity!.token1).toBeUndefined();
+    expect(summary.parties).toContainEqual({ label: "Collection destination", value: getAddress(v3Manager) });
+    expect(summary.parties).toContainEqual({ label: "Forwarding recipient", value: receiver });
+    expect(summary.parties).toContainEqual({ label: "Token swept from manager", value: dai });
+    expect(summary.parties).toContainEqual({ label: "Minimum ETH forwarded", value: nativeMinimum === 0n ? "0 ETH" : "0.000000000000000017 ETH" });
+    expect(summary.parties).toContainEqual({ label: "Minimum swept token forwarded", value: `${tokenMinimum} atomic units · ${dai}` });
+    expect(summary.parties.some((party) => party.label === "Recipient")).toBe(false);
+    expect(summary.description).toContain("other collected tokens may remain in the manager");
+    expect(summary.tokenAddresses).toContain(dai);
+    // Liquidity withdrawal minima remain distinct from forwarding minima.
+    expect(BigInt(summary.liquidity!.amount0Min!)).toBeGreaterThan(0n);
+  }
+});
+
 test("extra commands, altered settlement, wrong NFT and noncanonical calldata fall back to full contract review", () => {
   const mint = operation(v4Manager, V4PositionManager.addCallParameters(v4Position, { ...common, recipient: owner }));
   const [unlock, deadline] = decodeFunctionData({ abi: V4_ABI, data: mint.preparedTransaction!.data as Hex }).args;
@@ -145,7 +183,19 @@ test("Permit2 approval shows the actual token, amount, spender and expiry withou
   expect(summary.permit2Approval).toMatchObject({ token: usdc.address, spender: "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e", amount: "3000000", expiration: "2000000000" });
   expect(summary.parties).toContainEqual({ label: "Expires", value: "2033-05-18T03:33:20 UTC" });
   const expired = operation(permit2, { value: "0", calldata: encodeFunctionData({ abi, functionName: "approve", args: [getAddress(usdc.address), v4Manager, 0n, 0] }) });
-  expect(presentPermit2Approval(expired, assets)?.parties).toContainEqual({ label: "Expires", value: "Immediately expired" });
+  expect(presentPermit2Approval(expired, assets)?.parties).toContainEqual({ label: "Expires", value: "Approval block timestamp" });
+  expect(presentPermit2Approval(expired, assets)?.description).toBe("Remove this spender's Permit2 token allowance.");
   op.preparedTransaction!.value = "1";
   expect(presentPermit2Approval(op, assets)).toBeNull();
+});
+
+test("a nonzero Permit2 approval with zero expiry remains usable at the approval block timestamp", () => {
+  const abi = parseAbi(["function approve(address token,address spender,uint160 amount,uint48 expiration)"]);
+  const op = operation(permit2, { value: "0", calldata: encodeFunctionData({ abi, functionName: "approve", args: [getAddress(usdc.address), v4Manager, 3_000_000n, 0] }) });
+  const summary = presentOperation(op, assets);
+  expect(summary.amount).toBe("3 USDC");
+  expect(summary.title).toBe("Approve USDC spending");
+  expect(summary.parties).toContainEqual({ label: "Expires", value: "Approval block timestamp" });
+  expect(summary.description).toContain("Spending is allowed at the approval block's timestamp and expires once the block timestamp advances.");
+  expect(summary.permit2Approval).toMatchObject({ amount: "3000000", expiration: "0" });
 });
