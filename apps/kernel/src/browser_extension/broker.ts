@@ -344,7 +344,7 @@ function parseGrant(raw: string | null): ExtensionRouteGrant | null {
 
 function readRequestId(payload: JsonValue, keys: string[]): string {
   if (!isJsonObject(payload) || Object.keys(payload).some((key) => !keys.includes(key)) ||
-      typeof payload.requestId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(payload.requestId)) {
+      typeof payload.requestId !== "string" || payload.requestId.length === 0) {
     throw new Error("Invalid browser extension request identifier");
   }
   return payload.requestId;

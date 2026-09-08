@@ -92,7 +92,7 @@ export function ProviderConnection({
               {needsExtension && (
                 <div className="ora-connect-actions">
                   <a
-                    href="https://github.com/infu/neutron/tree/main/support/extension#readme"
+                    href="https://github.com/infu/neutron/tree/9533775de12c9bde245a16dcb051c40aeecc8e9c/support/extension#readme"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
