@@ -275,7 +275,14 @@ function App() {
   }
   const visible = history.filter((row) => row.input.chainId === chainId), pending = visible.filter((row) => !["complete", "stopped"].includes(row.result.state));
   function show(selection: Selection) { setSelection(selection); setError(""); }
-  return <main className="nt-app av-app"><div className="av-shell"><header className="av-header"><div className="av-brand"><img src="static/icon.svg" alt="" /><div><h1>Aave</h1><p>Supply & borrow</p></div></div><label className="av-network"><span className="av-sr-only">Network</span><select aria-label="Network" value={chainId} disabled={busy} onChange={(event) => { setChainId(event.target.value as ChainId); setSelection(null); setActive(null); setError(""); }}>{Object.entries(CHAINS).map(([id, chain]) => <option key={id} value={id}>{chain.marketName}</option>)}</select></label></header>
+  return <main className="nt-app av-app"><div className="av-shell">
+    <header className="nt-app-header">
+      <div className="nt-app-header-main">
+        <img className="nt-app-header-icon" src="static/icon.svg" alt="" />
+        <div className="nt-app-header-copy"><h1 className="nt-app-header-title">via Aave</h1><p className="nt-app-header-subtitle">Supply & borrow</p></div>
+      </div>
+      <div className="nt-app-header-actions"><select className="nt-select nt-app-header-control" aria-label="Network" value={chainId} disabled={busy} onChange={(event) => { setChainId(event.target.value as ChainId); setSelection(null); setActive(null); setError(""); }}>{Object.entries(CHAINS).map(([id, chain]) => <option key={id} value={id}>{chain.marketName}</option>)}</select></div>
+    </header>
     <div className="av-wallet"><span className={`av-wallet-dot ${account ? "" : "av-disconnected"}`} /><span>{account ? <a href={`${explorer(chainId)}/address/${account.address}`} target="_blank" rel="noreferrer" title={account.address}>{short(account.address)} ↗</a> : accountRead.loading ? "Connecting to EVM Wallet…" : "EVM Wallet unavailable"}</span><span className="av-right">{balances.data ? `${display(balances.data.nativeBalanceWei, 18, 5)} ETH` : "—"}</span><button type="button" className="av-text" aria-label="Refresh wallet and markets" disabled={busy} onClick={() => setRefresh((value) => value + 1)}>↻</button></div>
     <ErrorNote error={accountRead.error || balances.error} />{!account && !accountRead.loading && <div className="av-empty"><h3>Connect your EVM Wallet</h3><p>Install and open EVM Wallet to use your Ethereum account with Aave, then refresh this view.</p><button type="button" className="av-secondary" onClick={() => setRefresh((value) => value + 1)}>Refresh connection</button></div>}
     <nav className="av-tabs" aria-label="Aave sections">{(["position", "markets", "activity"] as const).map((value) => <button type="button" key={value} aria-current={tab === value ? "page" : undefined} onClick={() => setTab(value)}>{value === "position" ? "Your position" : value === "markets" ? "Markets" : `Activity${pending.length ? ` · ${pending.length}` : ""}`}</button>)}</nav>

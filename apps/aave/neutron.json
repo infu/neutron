@@ -1,8 +1,8 @@
 {
   "format": 3,
   "id": "aave",
-  "name": "Aave",
-  "version": 102,
+  "name": "via Aave",
+  "version": 103,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Supply, borrow and manage Aave positions with EVM Wallet",
   "src": "main.mo",
@@ -13,7 +13,7 @@
   "tiles": [
     {
       "id": "aave",
-      "title": "Aave",
+      "title": "via Aave",
       "path": "index.html",
       "icon": "static/icon.svg"
     }

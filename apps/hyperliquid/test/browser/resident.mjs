@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { sassPlugin } from "esbuild-sass-plugin";
 import { chromium } from "playwright";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -294,6 +294,7 @@ async function launch() {
         if (url.pathname.endsWith("service.js")) return route.fulfill({ status: 200, contentType: "text/javascript", body: serviceJs });
         if (url.pathname.endsWith("main.js")) return route.fulfill({ status: 200, contentType: "text/javascript", body: uiJs });
         if (url.pathname.endsWith("main.css")) return route.fulfill({ status: 200, contentType: "text/css", body: uiCss });
+        if (url.pathname === "/app/hyperliquid/static/icon.svg") return route.fulfill({ status: 200, contentType: "image/svg+xml", body: await readFile(new URL("../../public/static/icon.svg", import.meta.url), "utf8") });
         if (url.href === tileUrl) return route.fulfill({ status: 200, contentType: "text/html", body: '<!doctype html><html><head><link rel="stylesheet" href="./main.css"></head><body><div id="root"></div><script type="module" src="./main.js"></script></body></html>' });
         assert.equal(url.href, residentUrl);
         return route.fulfill({ status: 200, contentType: "text/html", body: '<!doctype html><html><body><script type="module" src="./service.js"></script></body></html>' });

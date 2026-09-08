@@ -256,7 +256,13 @@ function App() {
   }
   const visible = history.filter((row) => row.input.chainId === chainId), pending = visible.filter((row) => row.result.state !== "complete" && row.result.state !== "stopped");
   return <main className="nt-app cv-app"><div className={`cv-shell ${tab === "pools" ? "cv-shell-wide" : ""}`}>
-    <header className="cv-header"><div className="cv-brand"><img src="static/icon.svg" alt="" /><div><h1>Curve</h1><span>Swaps & liquidity</span></div></div><label className="cv-network"><span className="nt-sr-only">Network</span><select aria-label="Network" value={chainId} disabled={busy} onChange={(event) => { setChainId(event.target.value as ChainId); setActive(null); setError(""); }}>{Object.entries(CHAINS).map(([id, chain]) => <option key={id} value={id}>{chain.name}</option>)}</select></label></header>
+    <header className="nt-app-header">
+      <div className="nt-app-header-main">
+        <img className="nt-app-header-icon" src="static/icon.svg" alt="" />
+        <div className="nt-app-header-copy"><h1 className="nt-app-header-title">via Curve</h1><p className="nt-app-header-subtitle">Swaps & pools</p></div>
+      </div>
+      <div className="nt-app-header-actions"><select className="nt-select nt-app-header-control" aria-label="Network" value={chainId} disabled={busy} onChange={(event) => { setChainId(event.target.value as ChainId); setActive(null); setError(""); }}>{Object.entries(CHAINS).map(([id, chain]) => <option key={id} value={id}>{chain.name}</option>)}</select></div>
+    </header>
     <div className="cv-wallet"><span className="cv-wallet-dot" /><span>{account ? short(account.address) : accountRead.loading ? "Connecting to EVM Wallet…" : "Ethereum Wallet unavailable"}</span><span className="cv-right">{walletBalances ? `${display(walletBalances.nativeBalanceWei, 18, 5)} ETH` : "—"}</span><button type="button" className="cv-text" aria-label="Refresh wallet" onClick={() => setRefresh((value) => value + 1)} disabled={busy}>↻</button></div>
     <ErrorNote error={accountRead.error || balances.error} />
     {!account && !accountRead.loading && <p className="cv-muted">Install and open EVM Wallet to connect your Ethereum account, then refresh this view.</p>}

@@ -1,0 +1,137 @@
+.nt-app :where(.nt-app-header) {
+  align-items: center;
+  box-sizing: border-box;
+  container-name: nt-app-header;
+  container-type: inline-size;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nt-gap-2);
+  min-height: 48px;
+  min-width: 0;
+  padding-block: var(--nt-pad-2);
+}
+
+.nt-app :where(.nt-app-header-main) {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--nt-gap-2);
+  max-width: 100%;
+  min-height: 32px;
+  min-width: 0;
+}
+
+.nt-app :where(.nt-app-header-icon) {
+  align-items: center;
+  border-radius: var(--nt-radius-control);
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 32px;
+  height: 32px;
+  justify-content: center;
+  object-fit: contain;
+  width: 32px;
+}
+
+.nt-app :where(.nt-app-header-icon > img) {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.nt-app :where(.nt-app-header-icon > svg) {
+  height: 20px;
+  width: 20px;
+}
+
+.nt-app :where(.nt-app-header-copy) {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nt-gap-1) var(--nt-gap-2);
+  min-width: 0;
+}
+
+.nt-app :where(.nt-app-header-title) {
+  color: var(--nt-text-strong);
+  font-family: var(--nt-font-ui);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 20px;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nt-app :where(.nt-app-header-subtitle) {
+  color: var(--nt-text-muted);
+  font-family: var(--nt-font-ui);
+  font-size: var(--nt-font-size-meta);
+  font-weight: 400;
+  line-height: 16px;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nt-app :where(.nt-app-header-actions) {
+  align-items: center;
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: var(--nt-gap-1);
+  justify-content: flex-end;
+  margin-inline-start: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.nt-app :where(.nt-app-header-control) {
+  flex: 0 0 auto;
+  font-family: var(--nt-font-ui);
+  font-size: var(--nt-font-size-label);
+  font-weight: 500;
+  line-height: 20px;
+  max-width: 100%;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 6px 8px;
+  width: auto;
+}
+
+.nt-app :where(.nt-app-header-control > svg, .nt-app-header-icon-button > svg) {
+  flex-shrink: 0;
+  height: var(--nt-icon-md);
+  width: var(--nt-icon-md);
+}
+
+.nt-app :where(select.nt-app-header-control) {
+  padding-inline-end: 28px;
+}
+
+.nt-app :where(.nt-app-header-icon-button) {
+  flex: 0 0 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  width: 32px;
+}
+
+@container nt-app-header (width < 480px) {
+  .nt-app :where(.nt-app-header-subtitle, .nt-app-header-action-label) {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .nt-app :where(.nt-app-header-control) {
+    min-height: var(--nt-control-lg);
+  }
+
+  .nt-app :where(.nt-app-header-icon-button) {
+    flex-basis: var(--nt-control-lg);
+    height: var(--nt-control-lg);
+    min-width: var(--nt-control-lg);
+    width: var(--nt-control-lg);
+  }
+}

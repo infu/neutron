@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { formatUnits, parseUnits } from "viem";
 import Decimal from "decimal.js";
+import { IoSwapHorizontalOutline, IoCheckmarkOutline, IoRefreshOutline } from "react-icons/io5";
 import type { AccountSnapshot, MarketsSnapshot, PerpMarket, Position, OpenOrder as Order, Candle, BookSnapshot } from "./market.ts";
 import type { TradingSessionStatus as Setup } from "./trading_key.ts";
 import type { FundingQuote, FundingResult } from "./funding.ts";
@@ -202,7 +203,18 @@ function App() {
   const chooseMarket = (value: string) => { setCoin(value); setSelectedPrice(null); setTab("trade"); };
   const title = execution?.result?.summary ?? (execution?.kind === "funding" ? "USDC transfer" : "Trading operation");
   const keyReady = setup.data?.state === "active", keyPending = setup.data && ["approval_pending", "revocation_pending", "unknown"].includes(setup.data.state);
-  return <main className="nt-app hl-app"><div className="hl-shell"><header className="hl-header"><div className="hl-brand"><svg width="27" height="27" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 17c4-12 6 12 10 0S19 5 21 15s5 8 8-5" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></svg><h1>Hyperliquid</h1></div><div className="hl-header-actions"><button className="hl-fund" aria-label="Transfer USDC" onClick={() => setModal("funding")}>⇄ <span>Transfer</span></button>{keyReady && <button className="hl-icon-button hl-access-ready" aria-label="Trading access enabled" title="Trading access enabled" onClick={() => setModal("setup")}>✓</button>}<button className="hl-icon-button" aria-label="Refresh market and account" onClick={() => { setActivityCursor(null); setRefresh((value) => value + 1); }} title="Refresh">↻</button></div></header>
+  return <main className="nt-app hl-app"><div className="hl-shell">
+    <header className="nt-app-header">
+      <div className="nt-app-header-main">
+        <span className="nt-app-header-icon" aria-hidden="true"><img src="static/icon.svg" alt="" /></span>
+        <div className="nt-app-header-copy"><h1 className="nt-app-header-title">via Hyperliquid</h1><p className="nt-app-header-subtitle">Perps</p></div>
+      </div>
+      <div className="nt-app-header-actions">
+        <button type="button" className="nt-button nt-button--secondary nt-app-header-control" aria-label="Transfer USDC" title="Transfer USDC" onClick={() => setModal("funding")}><IoSwapHorizontalOutline aria-hidden="true" /><span className="nt-app-header-action-label">Transfer</span></button>
+        {keyReady && <button type="button" className="nt-icon-button nt-app-header-control nt-app-header-icon-button hl-access-ready" aria-label="Trading access enabled" title="Trading access enabled" onClick={() => setModal("setup")}><IoCheckmarkOutline aria-hidden="true" /></button>}
+        <button type="button" className="nt-icon-button nt-app-header-control nt-app-header-icon-button" aria-label="Refresh market and account" onClick={() => { setActivityCursor(null); setRefresh((value) => value + 1); }} title="Refresh"><IoRefreshOutline aria-hidden="true" /></button>
+      </div>
+    </header>
     {!keyReady && <button className="hl-enable-trading" disabled={busy || setup.loading && !setup.data} onClick={() => setModal("setup")}><span aria-hidden="true">{keyPending ? "↻" : "+"}</span>{setup.loading && !setup.data ? "Checking trading access…" : keyPending ? "Continue trading setup" : "Enable browser trading"}<span aria-hidden="true">→</span></button>}
     <div className="hl-account-bar"><div className="hl-overview"><Stat label={account.data?.balanceSource === "unified" ? "Shared USDC" : "Perps equity"} value={account.data?.balanceSource === "unified" ? overviewUsdc(account.data.sharedUsdc) : overviewMoney(account.data?.accountValue)} hint={account.data?.balanceSource === "unified" ? account.data.sharedUsdc === undefined ? "Shared USDC balance unavailable" : `${account.data.sharedUsdc} USDC` : money(account.data?.accountValue)} /><Stat label="Unrealized P&L" value={overviewMoney(pnl)} hint={money(pnl)} className={color(pnl)} /><Stat label="Withdrawable" value={overviewMoney(account.data?.withdrawable)} hint={money(account.data?.withdrawable)} /></div></div>
     <ErrorNote error={accountError ? `${account.error && account.data ? "Showing previous account data. " : ""}${accountError}` : ""} />

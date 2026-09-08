@@ -285,7 +285,13 @@ export function App() {
   const swapButton = walletLoading ? "Loading wallet…" : !account || walletError ? "Wallet unavailable" : !amount || Number(amount) === 0 ? "Enter an amount" : quoting ? "Comparing pools…" : !validQuote ? "Swap unavailable" : "Swap";
 
   return <main className="nt-app uni-app"><div className="uni-shell">
-    <header className="uni-header"><div><p className="nt-eyebrow">Uniswap</p><h1 className="nt-title">{tab === "swap" ? "Swap tokens" : "Manage liquidity"}</h1></div>{account && !walletError ? <span className="uni-connected" title={account.address}><span/> {short(account.address)}</span> : <span className="uni-muted" role="status">{walletLoading ? "Loading wallet…" : "Wallet unavailable"}</span>}</header>
+    <header className="nt-app-header">
+      <div className="nt-app-header-main">
+        <span className="nt-app-header-icon" aria-hidden="true"><img src="static/icon.svg" alt="" /></span>
+        <div className="nt-app-header-copy"><h1 className="nt-app-header-title">via Uniswap</h1><p className="nt-app-header-subtitle">Swaps & liquidity</p></div>
+      </div>
+      <div className="nt-app-header-actions">{account && !walletError ? <span className="uni-connected" title={account.address}><span aria-hidden="true" /> {short(account.address)}</span> : <span className="uni-muted" role="status">{walletLoading ? "Loading wallet…" : "Wallet unavailable"}</span>}</div>
+    </header>
     <nav className="uni-tabs" aria-label="Uniswap views"><button aria-current={tab === "swap" ? "page" : undefined} disabled={locked} onClick={() => setTab("swap")}>Swap</button><button aria-current={tab === "liquidity" ? "page" : undefined} disabled={locked} onClick={() => setTab("liquidity")}>Liquidity</button></nav>
     {actions.error && <div role="alert" className="uni-alert"><strong>We couldn’t complete that step.</strong><p>{actions.progress ? "Your request is saved in activity. Continue the same action to check its status." : "Review the details and try again. Activity below shows any saved requests."}</p><details><summary>Show details</summary><p>{actions.error}</p></details></div>}
     {actions.notice && actions.currentEnvelope?.kind === tab && actions.currentEnvelope.chainId === chain && <p role="status" className="uni-notice">{actions.notice}</p>}
