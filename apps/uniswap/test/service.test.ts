@@ -22,7 +22,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
     ], { cwd: new URL("..", import.meta.url).pathname });
     expect(stderr).toBe("");
     expect(JSON.parse(stdout).sort()).toEqual([
-      "uniswap_action_status_v1", "uniswap_actions_page_v1", "uniswap_import_position_v1",
+      "uniswap_action_status_v1", "uniswap_action_input_v1", "uniswap_action_reconcile_v1", "uniswap_actions_page_v1", "uniswap_import_position_v1",
       "uniswap_liquidity_quote_v1",
       "uniswap_list_page_v1", "uniswap_list_v1", "uniswap_next_action_v1", "uniswap_prepare_v1",
       "uniswap_manage_liquidity_v1", "uniswap_pool_v1", "uniswap_position_v1", "uniswap_positions_v1",
@@ -137,7 +137,7 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
     const kernel = {
       async querySelf(method: string, args: JsonValue[]) {
         validateInput(method, args); queries.push({ method, args: structuredClone(args) });
-        if (method === "uniswap_get_v1") return validateOutput(method, rows.get(String(args[0])) ?? null);
+        if (method === "uniswap_get_v1" || method === "uniswap_action_get_v1") return validateOutput(method, rows.get(String(args[0])) ?? null);
         if (method === "uniswap_list_v1") return validateOutput(method, [...rows.values()]);
         if (method === "uniswap_history_v1") {
           const input = args[0] as { cursor?: string; limit: string };
@@ -151,6 +151,12 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       async updateSelf(method: string, args: JsonValue[]) {
         validateInput(method, args); mutations.push({ method, args: structuredClone(args) });
         const input = args[0] as WireRecord, id = String(input.id);
+        if (method === "uniswap_action_update_v1") {
+          const saved = rows.get(id);
+          if (!saved || saved.revision !== input.expected_revision) throw new Error("Action revision conflict");
+          const next = { ...saved, state_json: input.state_json!, phase: input.phase!, revision: String(BigInt(String(saved.revision)) + 1n), updated_at: "200" };
+          rows.set(id, next); return validateOutput(method, next);
+        }
         if (method === "uniswap_begin_v1") {
           if (rows.has(id)) throw new Error("Unexpected repeated immutable begin");
           const saved = { ...input, phase: "queued", revision: "0", created_at: "100", updated_at: "100" };
@@ -246,16 +252,54 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       const claim: EvmOperationResult = { requestId: request.requestId, accountId: request.accountId, chainId: request.chainId, operationId: "1", kind: "transaction", status: "confirmed", address: ACCOUNT, transactionHash: HASH, signature: null, message: "Caller says successful", reviewRevision: "1", receipt: { ...receipt(), gasUsed: "1", finality: "finalized" } };
       return { claim, evidence: chainEvidence };
     }
-    return { rows, walletCalls, mutations, queries, context, invoke, quote, prepared, configureEvidence };
+    return { rows, walletCalls, mutations, queries, context, invoke, quote, prepared, configureEvidence, evidence(value: EvmTransactionResult) { chainEvidence = value; } };
   }
 
   describe("resident service", () => {
     test("exposes quote, prepare, status, list and independently verified result handlers", () => {
       expect([...handlers.keys()].sort()).toEqual([
         "uniswap_swap_v1", "uniswap_quote_v1", "uniswap_prepare_v1", "uniswap_next_action_v1", "uniswap_status_v1", "uniswap_list_v1", "uniswap_list_page_v1", "uniswap_record_result_v1",
-        "uniswap_quote_v2", "uniswap_swap_v2", "uniswap_liquidity_quote_v1", "uniswap_manage_liquidity_v1", "uniswap_action_status_v1", "uniswap_actions_page_v1", "uniswap_positions_v1", "uniswap_position_v1", "uniswap_import_position_v1", "uniswap_pool_v1",
+        "uniswap_quote_v2", "uniswap_swap_v2", "uniswap_liquidity_quote_v1", "uniswap_manage_liquidity_v1", "uniswap_action_status_v1", "uniswap_action_input_v1", "uniswap_action_reconcile_v1", "uniswap_actions_page_v1", "uniswap_positions_v1", "uniswap_position_v1", "uniswap_import_position_v1", "uniswap_pool_v1",
       ].sort());
       expect(handlers.get("uniswap_quote_v1")!.descriptor.annotations?.["neutron:effects"]).toEqual(["read", "network"]);
+    });
+
+    test("saved invocation and receipt-only recovery satisfy closed tool schemas without a Wallet effect", async () => {
+      const { actionRequestId } = await import("../src/action_workflow.ts");
+      const app = fixture(), manager = "0xc36442b4a4522e871399cd717abdd847ab11fe88";
+      const input = { operation: "increase", protocol: "v3", chainId: "1", accountId: "main", tokenId: "1362740", maxAmountA: "300000", maxAmountB: "120000000000000", slippageBps: 50, quoteValiditySeconds: 1200 };
+      const request = { requestId: actionRequestId(SWAP_ID, 0), accountId: "main", chainId: "1", to: manager, valueWei: "0", data: "0x219f5d17", gasLimit: "331999" };
+      const gasEstimate = { version: 1, gasLimit: "331999", additionalGas: "100000", observation: { source: "evm_rpc", blockNumber: "25934514", gasLimit: "231999" } };
+      const state = { version: 1, successor: null,
+        plan: { chainId: "1", accountId: "main", accountAddress: ACCOUNT, deadline: "1800000000", summary: "Add liquidity", details: { gasEstimate }, steps: [{ kind: "transaction", label: "Add liquidity", transaction: { chainId: "1", accountId: "main", to: manager, value: "0", data: request.data, gasLimit: request.gasLimit } }] },
+        steps: [{ request, dispatched: true, unresolvedDispatch: false,
+          operation: { requestId: request.requestId, accountId: "main", chainId: "1", operationId: "1", kind: "transaction", status: "submitted", address: ACCOUNT, transactionHash: HASH, signature: null, reviewRevision: "1", message: null, receipt: null },
+          evidence: null, receiptLogsFiltered: true, operationReceiptLogsOmitted: 0, evidenceReceiptLogsOmitted: 0,
+        }],
+      };
+      app.rows.set(SWAP_ID, { id: SWAP_ID, revision: "0", created_at: "100", updated_at: "100", phase: "step_0_submitted",
+        summary: JSON.stringify({ title: "Add liquidity", kind: "liquidity", operationId: SWAP_ID, chainId: "1", accountId: "main", humanOwned: false }),
+        input_json: JSON.stringify({ version: 1, attempt: "0", envelope: { operationId: SWAP_ID, kind: "liquidity", chainId: "1", accountId: "main", input }, account, caller: { appId: "agent", installationUid: "17" }, agentMode: true }), state_json: JSON.stringify(state),
+      });
+      const saved = await app.invoke("uniswap_action_input_v1", { operationId: SWAP_ID });
+      const invocation = saved.invocation as JsonObject;
+      expect(invocation.toolName).toBe("uniswap_manage_liquidity_v1");
+      expect(JSON.parse(String(invocation.argumentsJson))).toEqual({ ...input, operationId: SWAP_ID });
+      validateToolArguments(handlers.get(String(invocation.toolName))!.descriptor, JSON.parse(String(invocation.argumentsJson)));
+      expect(JSON.parse(String(invocation.gasEstimateJson))).toEqual(gasEstimate);
+      expect(app.walletCalls).toEqual([]); expect(app.mutations).toEqual([]);
+      app.evidence({ chainId: "1", transactionHash: HASH, walletRequestMatches: null, transaction: { from: ACCOUNT, to: manager, data: request.data, valueWei: "0", nonce: "7", blockNumber: "21000001", blockHash: BLOCK_HASH }, receipt: { ...receipt(), finality: "finalized" }, observedAtNs: "1800000000000000000", source: "evm_rpc" });
+      const reconciled = await app.invoke("uniswap_action_reconcile_v1", { operationId: SWAP_ID });
+      expect(reconciled.action).toMatchObject({ state: "complete", phase: "complete", steps: [{ requestId: request.requestId, checked: true, receipt: { status: "success", finality: "finalized" } }] });
+      expect(app.walletCalls.map(call => call.name)).toEqual(["evm_transaction_v1"]);
+      expect(app.mutations.map(call => call.method)).toEqual(["uniswap_action_update_v1"]);
+      expect((await app.invoke("uniswap_action_status_v1", { operationId: SWAP_ID })).action).toMatchObject({ state: "complete" });
+      const withoutEstimate = JSON.parse(String(app.rows.get(SWAP_ID)!.state_json)); delete withoutEstimate.plan.details.gasEstimate;
+      app.rows.get(SWAP_ID)!.state_json = JSON.stringify(withoutEstimate);
+      expect((await app.invoke("uniswap_action_input_v1", { operationId: SWAP_ID })).invocation).toMatchObject({ gasEstimateJson: null });
+      app.rows.delete(SWAP_ID);
+      expect(await app.invoke("uniswap_action_input_v1", { operationId: SWAP_ID })).toEqual({ invocation: null });
+      expect(await app.invoke("uniswap_action_reconcile_v1", { operationId: SWAP_ID })).toEqual({ action: null });
     });
 
     test("one swap tool handles public Wallet approval and swap, including an interrupted approval reply", async () => {

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { getAddress, keccak256, stringToHex } from "viem";
 import type { EvmAccount, EvmOperationResult, EvmOperationStatusRequest, EvmReceipt, EvmSendTransactionRequest, EvmTransactionResult, EvmWalletClient } from "neutron-tools/evm_wallet";
 import { createActionStore } from "../src/action_store.ts";
-import { actionAttemptId, actionResult, latestAction, parseActionIntent, parseActionState, runAction, type ActionEnvelope, type ActionOptions, type PrepareAction } from "../src/action_workflow.ts";
+import { actionAttemptId, actionInvocation, actionResult, latestAction, parseActionIntent, parseActionState, reconcileAction, runAction, type ActionEnvelope, type ActionOptions, type PrepareAction } from "../src/action_workflow.ts";
 import { V3_POSITION_MANAGER } from "../src/positions.ts";
 
 const address = getAddress("0x1111111111111111111111111111111111111111"), contract = getAddress("0x2222222222222222222222222222222222222222");
@@ -98,6 +98,16 @@ function fixture(approvals = 2, requested = envelope) {
     writeWith(callback: typeof afterWrite) { afterWrite = callback; }, accountWith(value: EvmAccount) { selected = value; },
     run(extra: ActionOptions = {}, origin = caller, agentMode = true) { return runAction(wallet, store, requested, origin, agentMode, prepare, { ...options, ...extra }); },
   };
+}
+
+function increaseFixture(approvals = 0) {
+  const input: ActionEnvelope = { ...envelope, kind: "liquidity", input: { operation: "increase", protocol: "v3", tokenId: "1362740", maxAmountA: "300000", maxAmountB: "120000000000000" } };
+  const f = fixture(approvals, input); let estimates = 0;
+  f.wallet.estimateTransaction = async request => {
+    estimates += 1; f.events.push("wallet:estimate");
+    return { ...request, address, status: "available", gasLimit: "231999", gasPriceWei: "10", baseFeePerGasWei: "9", maxPriorityFeePerGasWei: "1", maxFeePerGasWei: "19", estimatedFeeWei: "2319990", maximumFeeWei: "4407981", blockNumber: "25934514", observedAtNs: "1788890000000000000", feeBasis: "base_fee_plus_priority", postingCosts: "not_applicable", reasons: [], source: "evm_rpc" };
+  };
+  return { ...f, input, estimates: () => estimates };
 }
 
 test("the complete action runs every approval in order and verifies the final transaction receipt", async () => {
@@ -333,4 +343,208 @@ test.each([false, true])("expired preparing observation cannot renew an uncertai
   const request = f.sends[0]!;
   f.operations.set(request.requestId, f.operation(request, "confirmed")); f.transactions.set(f.hash(request), f.evidence(request, true));
   expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(1);
+});
+
+test("receipt-only reconciliation recovers an interrupted mint without invoking Wallet recovery or sending again", async () => {
+  const input: ActionEnvelope = { ...envelope, kind: "liquidity", input: { operation: "mint", protocol: "v3", maxAmountA: "1000000", maxAmountB: "500000000000000" } };
+  const f = fixture(0, input);
+  f.waitWith(async () => { throw new Error("Agent turn interrupted"); });
+  await expect(f.run()).rejects.toThrow("Agent turn interrupted");
+  const request = f.sends[0]!, before = (await f.store.get(input.operationId))!;
+  expect(actionResult(before).steps[0]!.status).toBe("submitted");
+  const evidence = f.evidence(request, true);
+  evidence.receipt = { ...receipt, finality: "finalized", logs: [
+    { address: V3_POSITION_MANAGER, data: "0x", logIndex: "0", topics: [keccak256(stringToHex("Transfer(address,address,uint256)")), `0x${"0".repeat(64)}`, `0x${address.slice(2).padStart(64, "0")}`, `0x${(1362740n).toString(16).padStart(64, "0")}`] },
+    { address: contract, data: `0x${"ab".repeat(40000)}`, logIndex: "1", topics: [] },
+  ] };
+  f.transactions.set(f.hash(request), evidence);
+  const eventsBefore = f.events.length;
+  const result = await reconcileAction({ transaction: f.wallet.transaction }, f.store, input.operationId);
+  expect(result?.state).toBe("complete"); expect(result?.phase).toBe("complete");
+  expect(result?.positionTokenIds).toEqual(["1362740"]);
+  expect(result?.steps[0]).toMatchObject({ requestId: request.requestId, checked: true, receipt: { status: "success", blockNumber: receipt.blockNumber, finality: "finalized" } });
+  expect(f.events.slice(eventsBefore)).toEqual(["wallet:transaction", "persist:complete"]);
+  expect(f.sends).toHaveLength(1); expect(f.preparations()).toBe(1); expect(f.tracked).toHaveLength(0);
+  const saved = (await f.store.get(input.operationId))!;
+  expect(saved.input_json).toBe(before.input_json);
+  expect(parseActionState(saved).steps[0]!.evidenceReceiptLogsOmitted).toBe(1);
+  expect(actionResult(saved).positionTokenIds).toEqual(["1362740"]);
+});
+
+test("receipt reconciliation stops after confirming approval and never starts a queued transaction", async () => {
+  const f = fixture(1);
+  f.waitWith(async () => { throw new Error("Paused after approval submission"); });
+  await expect(f.run()).rejects.toThrow("Paused after approval submission");
+  await f.confirm();
+  const result = await reconcileAction({ transaction: f.wallet.transaction }, f.store, envelope.operationId);
+  expect(result?.state).toBe("pending"); expect(result?.phase).toBe("step_0_confirmed");
+  expect(result?.steps.map((step) => [step.status, step.checked])).toEqual([["confirmed", true], ["queued", false]]);
+  expect(result?.message).toContain("did not approve, send or renew");
+  expect(f.sends).toHaveLength(1); expect(f.preparations()).toBe(1);
+});
+
+test("a lost dispatch with no saved hash stays unknown through receipt-only reconciliation, even after expiry", async () => {
+  const f = fixture(0);
+  f.sendWith(async () => { throw new Error("Reply lost"); });
+  expect((await f.run()).state).toBe("pending"); f.advance(1_300_000);
+  const before = (await f.store.get(envelope.operationId))!, eventsBefore = f.events.length;
+  const result = await reconcileAction({ transaction: f.wallet.transaction }, f.store, envelope.operationId);
+  expect(result?.state).toBe("pending"); expect(result?.steps[0]).toMatchObject({ status: "unknown", transactionHash: null, checked: false, receipt: null });
+  expect(result?.message).toContain("no saved transaction hash");
+  expect(f.events.slice(eventsBefore).every((event) => event.startsWith("persist:"))).toBe(true);
+  expect(parseActionState((await f.store.get(envelope.operationId))!).steps).toEqual(parseActionState(before).steps);
+  expect(f.sends).toHaveLength(1); expect(f.rows.size).toBe(1); expect(f.preparations()).toBe(1);
+});
+
+test("receipt reconciliation clears stale completion when its transaction disappears in a reorganization", async () => {
+  const f = fixture(0); await f.run();
+  const request = f.sends[0]!, evidence = f.evidence(request);
+  evidence.transaction = null; f.transactions.set(f.hash(request), evidence);
+  const result = await reconcileAction({ transaction: f.wallet.transaction }, f.store, envelope.operationId);
+  expect(result?.state).toBe("pending"); expect(result?.phase).toBe("step_0_unknown");
+  expect(result?.steps[0]).toMatchObject({ status: "unknown", checked: true, receipt: null });
+  expect(actionResult((await f.store.get(envelope.operationId))!).state).toBe("pending");
+  expect(f.sends).toHaveLength(1);
+});
+
+test("receipt reconciliation exposes a finalized revert without contradictory pending prose", async () => {
+  const f = fixture(0);
+  f.waitWith(async () => { throw new Error("Tracking paused"); });
+  await expect(f.run()).rejects.toThrow("Tracking paused");
+  const request = f.sends[0]!, evidence = f.evidence(request, true);
+  evidence.receipt = { ...receipt, status: "reverted", finality: "finalized" }; f.transactions.set(f.hash(request), evidence);
+  const result = await reconcileAction({ transaction: f.wallet.transaction }, f.store, envelope.operationId);
+  expect(result?.state).toBe("stopped"); expect(result?.phase).toBe("step_0_reverted");
+  expect(result?.steps[0]?.receipt).toEqual({ status: "reverted", blockNumber: receipt.blockNumber, finality: "finalized" });
+  expect(result?.message).toContain("reverted"); expect(result?.message).toContain("finalized"); expect(result?.message).not.toContain("awaiting");
+  expect(f.sends).toHaveLength(1);
+});
+
+test.each([true, false])("receipt-only reconciliation verifies saved replacement execution, matching=%s", async (matching) => {
+  const f = fixture(0), replacementHash = `0x${"88".repeat(32)}`;
+  f.sendWith(async (request) => {
+    const evidence = f.evidence(request); evidence.transactionHash = replacementHash;
+    f.transactions.set(replacementHash, evidence);
+    return { ...f.operation(request), status: "replaced", replacementTransactionHash: replacementHash };
+  });
+  f.waitWith(async () => { throw new Error("Tracking paused"); });
+  await expect(f.run()).rejects.toThrow("Tracking paused");
+  const evidence = f.transactions.get(replacementHash)!;
+  evidence.receipt = receipt;
+  evidence.transaction!.blockNumber = receipt.blockNumber; evidence.transaction!.blockHash = receipt.blockHash;
+  if (!matching) evidence.transaction!.data = "0xdead";
+  const result = await reconcileAction({ transaction: f.wallet.transaction }, f.store, envelope.operationId);
+  expect(result?.state).toBe(matching ? "complete" : "stopped");
+  expect(result?.steps[0]!.status).toBe(matching ? "confirmed" : "replaced");
+  expect(result?.transactionHash).toBe(replacementHash); expect(f.sends).toHaveLength(1);
+});
+
+test("saved invocation and receipt reconciliation follow renewal while preserving original identity and inputs", async () => {
+  const f = fixture(1); f.validity(10);
+  f.waitWith(async () => { await f.confirm(); f.advance(20_000); f.validity(1200); });
+  await f.run();
+  const record = (await latestAction(f.store, envelope.operationId))!;
+  const invocation = actionInvocation(record);
+  expect(invocation).toMatchObject({ operationId: envelope.operationId, recordId: actionAttemptId(envelope.operationId, "1"), toolName: "uniswap_swap_v2", caller, agentMode: true, humanOwned: false });
+  expect(JSON.parse(invocation.argumentsJson)).toEqual({ ...envelope.input, operationId: envelope.operationId, chainId: envelope.chainId, accountId: envelope.accountId });
+  const result = await reconcileAction({ transaction: f.wallet.transaction }, f.store, envelope.operationId);
+  expect(result?.recordId).toBe(invocation.recordId); expect(result?.state).toBe("complete");
+  expect(f.sends).toHaveLength(2); expect(f.rows.size).toBe(2);
+  await expect(runAction(f.wallet, f.store, envelope, { ...caller, installationUid: "18" }, true, f.prepare)).rejects.toThrow("another caller");
+});
+
+test("receipt reconciliation preserves progress written by a concurrent continuation", async () => {
+  const f = fixture(0); await f.run();
+  let reads = 0;
+  const transaction: EvmWalletClient["transaction"] = async (...args) => {
+    if (reads++ === 0) {
+      const record = (await f.store.get(envelope.operationId))!, state = parseActionState(record);
+      state.plan.details.concurrentObservation = "preserve me";
+      await f.store.update(record, state, record.phase);
+    }
+    return f.wallet.transaction(...args);
+  };
+  const result = await reconcileAction({ transaction }, f.store, envelope.operationId);
+  expect(result?.state).toBe("complete"); expect(reads).toBe(2);
+  expect(parseActionState((await f.store.get(envelope.operationId))!).plan.details.concurrentObservation).toBe("preserve me");
+  expect(f.sends).toHaveLength(1);
+});
+
+test("receipt reconciliation does not present cached completion as a successful live read when RPC fails", async () => {
+  const f = fixture(0); await f.run(); const before = (await f.store.get(envelope.operationId))!;
+  await expect(reconcileAction({ transaction: async () => { throw new Error("RPC unavailable"); } }, f.store, envelope.operationId)).rejects.toThrow("RPC unavailable");
+  expect(await f.store.get(envelope.operationId)).toEqual(before); expect(f.sends).toHaveLength(1);
+});
+
+test("reconciling an absent operation performs no Wallet call or journal creation", async () => {
+  const f = fixture(0);
+  expect(await reconcileAction({ transaction: f.wallet.transaction }, f.store, envelope.operationId)).toBeNull();
+  expect(f.events).toEqual([]); expect(f.rows.size).toBe(0);
+});
+
+test("V3 increase estimates after its approvals and journals the exact gas cap before first dispatch", async () => {
+  const f = increaseFixture(1);
+  f.sendWith(async request => {
+    if (request.data === "0x03") {
+      const state = parseActionState((await f.store.get(f.input.operationId))!);
+      expect(state.steps[1]!.request).toEqual(request);
+      expect(state.steps[1]!.dispatched).toBe(true); expect(state.steps[1]!.unresolvedDispatch).toBe(true);
+      expect(state.plan.steps[1]!.transaction.gasLimit).toBe("331999");
+      expect(state.plan.details.gasEstimate).toMatchObject({ gasLimit: "331999", additionalGas: "100000", observation: { gasLimit: "231999", blockNumber: "25934514", source: "evm_rpc" } });
+    } else expect(request.gasLimit).toBeUndefined();
+    return f.operation(request);
+  });
+  expect((await f.run()).state).toBe("complete");
+  expect(f.estimates()).toBe(1);
+  expect(f.events.indexOf("persist:step_0_confirmed")).toBeLessThan(f.events.indexOf("wallet:estimate"));
+  expect(f.events.indexOf("wallet:estimate")).toBeLessThan(f.events.indexOf("persist:step_1_requested"));
+  expect(f.sends[1]!.gasLimit).toBe("331999");
+  const invocation = actionInvocation((await f.store.get(f.input.operationId))!);
+  expect(invocation.toolName).toBe("uniswap_manage_liquidity_v1");
+  expect(JSON.parse(invocation.gasEstimateJson!)).toMatchObject({ gasLimit: "331999", observation: { blockNumber: "25934514" } });
+});
+
+test("an interrupted V3 increase retains its exact gas cap and request on every explicit continuation", async () => {
+  const f = increaseFixture(); f.sendWith(async () => { throw new Error("Reply lost after dispatch"); });
+  expect((await f.run()).state).toBe("pending");
+  const first = structuredClone(f.sends[0]!);
+  expect(first.gasLimit).toBe("331999");
+  f.wallet.estimateTransaction = async () => { throw new Error("A dispatched request must never be re-estimated"); };
+  expect((await f.run()).state).toBe("pending");
+  expect(f.sends[1]).toEqual(first); expect(f.estimates()).toBe(1);
+  f.operations.set(first.requestId, f.operation(first, "confirmed")); f.transactions.set(f.hash(first), f.evidence(first, true));
+  expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(2); expect(f.preparations()).toBe(1);
+});
+
+test("an unavailable increase estimate leaves the final step undispatched after confirmed approval", async () => {
+  const f = increaseFixture(1);
+  f.wallet.estimateTransaction = async () => { throw new Error("RPC estimate unavailable"); };
+  await expect(f.run()).rejects.toThrow("RPC estimate unavailable");
+  const saved = (await f.store.get(f.input.operationId))!, state = parseActionState(saved);
+  expect(actionResult(saved).steps.map(step => step.status)).toEqual(["confirmed", "queued"]);
+  expect(state.steps[1]!.dispatched).toBe(false); expect(state.steps[1]!.request.gasLimit).toBeUndefined();
+  expect(state.plan.details.gasEstimate).toBeUndefined();
+  expect(f.sends).toHaveLength(1); expect(f.rows.size).toBe(1);
+});
+
+test("a released already-dispatched increase keeps its original request without introducing an explicit gas cap", async () => {
+  const f = increaseFixture(), cancellation = new AbortController();
+  f.writeWith(row => { if (row.phase === "ready") cancellation.abort(new Error("Saved legacy plan")); });
+  await expect(f.run({ signal: cancellation.signal })).rejects.toThrow("Saved legacy plan");
+  const row = f.rows.get(f.input.operationId)!, state = JSON.parse(row.state_json!);
+  state.steps[0].dispatched = true; state.steps[0].unresolvedDispatch = true;
+  row.state_json = JSON.stringify(state); row.phase = "step_0_requested";
+  f.writeWith(() => {});
+  f.wallet.estimateTransaction = async () => { throw new Error("Legacy dispatched request must stay identical"); };
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends[0]).toEqual(state.steps[0].request); expect(f.sends[0]!.gasLimit).toBeUndefined();
+  expect(f.estimates()).toBe(0); expect(f.preparations()).toBe(1);
+});
+
+test("saved gas cap changes cannot bypass consistency with the exact planned request", async () => {
+  const f = increaseFixture(); await f.run();
+  const record = (await f.store.get(f.input.operationId))!, state = JSON.parse(record.state_json);
+  state.steps[0].request.gasLimit = "999999";
+  expect(() => parseActionState({ ...record, state_json: JSON.stringify(state) })).toThrow("transaction or dispatch identity changed");
 });

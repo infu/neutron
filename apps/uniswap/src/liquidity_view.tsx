@@ -288,7 +288,7 @@ export function LiquidityView({ wallet, account, chain, tokens, balance, balance
       if (currentScope.current === readingScope) setPreviewError(errorText(error));
     }
   }
-  const title = editor?.operation === "mint" ? "New position" : editor?.operation === "increase" ? "Add liquidity" : editor?.operation === "decrease" ? "Remove liquidity" : editor?.operation === "close" ? "Close position" : "Collect tokens";
+  const title = editor?.operation === "mint" ? "New position" : editor?.operation === "increase" ? "Add liquidity" : editor?.operation === "decrease" ? "Remove liquidity" : editor?.operation === "close" ? "Close position" : "Collect available amounts";
   return <>
     {editor ? <section className="nt-panel uni-form uni-liquidity-editor" aria-label={title}>
       <div className="uni-form-top"><h2 className="nt-subtitle">{title}</h2><button className="uni-icon-button" title="Back to positions" aria-label="Back to positions" disabled={actions.busy} onClick={() => setEditor(null)}>×</button></div>

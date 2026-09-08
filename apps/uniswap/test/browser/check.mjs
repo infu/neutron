@@ -372,10 +372,10 @@ try{
  await page.getByRole('button',{name:'Back to positions',exact:true}).click();
  await card().getByRole('button',{name:'Collect',exact:true}).click();
  await page.locator('.uni-liquidity-preview').waitFor();
- assert(!(await page.getByRole('button',{name:'Collect tokens',exact:true}).isDisabled()));
+ assert(!(await page.getByRole('button',{name:'Collect available amounts',exact:true}).isDisabled()));
  pass('Add, percentage removal and fee collection each prepare ABI-backed previews with compact collapsed details');
  const beforeCollect=sends().length;
- await page.getByRole('button',{name:'Collect tokens',exact:true}).click();
+ await page.getByRole('button',{name:'Collect available amounts',exact:true}).click();
  await page.locator('.uni-position-card').filter({hasText:'#42'}).waitFor();
  await page.locator('.uni-saved-complete').waitFor();
  assert.equal(sends().length,beforeCollect+1);assert.equal(sends().at(-1).args[0].arguments.to.toLowerCase(),V4_MANAGER);

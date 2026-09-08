@@ -16,12 +16,18 @@ See [the integration research and design](../../doc/uniswap-v4-liquidity.md)
 for deployments, SDK pins, Permit2 and browser discovery.
 
 The **Liquidity** tab lists V3 and V4 positions and supports minting in an
-initialized pool, adding, removing, collecting fees and closing a position.
+initialized pool, adding, removing, collecting available amounts and closing a position.
 Amounts are maximum deposit budgets. The preview fits liquidity and slippage
 maxima within them. Approvals and the final action advance in one resumable
 flow; approval alone is never completion. Pool, range, hook and raw transaction
 details remain expandable. Creating a new pool with an initial price is not
 part of minting a position in this release.
+
+Collection is not a profit calculation. Position reads separate fresh fee accrual
+from stored owed amounts, which in V3 can contain previously withdrawn principal.
+The current position state cannot attribute that stored total between principal
+and fees. V3 removal in this app already collects the withdrawn tokens in the same
+transaction; standalone collection also supports amounts left owed by other clients.
 
 V3 compares **direct, single-pool V3 routes** across the 0.01%,
 0.05%, 0.3%, and 1% fee tiers. It uses `QuoterV2.quoteExactInputSingle` through
@@ -181,6 +187,24 @@ successful or reverted receipt.
 Continuing a unified action rechecks its final receipt, including actions that
 previously reported completion, so a changed inclusion state remains visible.
 
+`uniswap_action_input_v1` retrieves the saved invocation and original operation ID.
+`uniswap_action_reconcile_v1` refreshes already-linked transaction hashes and updates
+the local journal without approving, signing, broadcasting, renewing a quote or
+continuing an approval into a trade. It returns receipt outcome and finality for
+each checked step. A dispatched request with no saved hash remains explicitly
+unknown; use the original invocation for an explicit continuation. The compact
+status tool remains a stored observation and does not itself refresh receipts.
+
+Before the first dispatch of a V3 increase, after any approvals have confirmed,
+the app requests a fresh full-transaction Wallet gas estimate and adds 100,000 gas
+to Wallet's proposed limit. Fee accrual and pool storage changes can exceed a
+percentage-only margin between estimation and inclusion. The exact limit and its
+observation are retained in the existing action journal and reused on every retry.
+Wallet still independently estimates, simulates at that cap and reviews the maximum
+fee before signing. Unused gas is not charged; this reserve does not guarantee
+that every future state change will fit. Already-dispatched requests keep their
+original limits and IDs.
+
 For a replacement transaction, the original Wallet request ID and transaction
 hash remain intact. The app follows the Wallet's authenticated replacement link,
 independently checks the replacement sender, destination, calldata and value,
@@ -199,7 +223,8 @@ Use `uniswap_swap_v2` for new Auto/V3/V4 swaps and
 flows. Keep the same `operationId` and original inputs on every retry.
 `uniswap_quote_v2`, `uniswap_positions_v1`, `uniswap_position_v1`,
 `uniswap_pool_v1` and `uniswap_liquidity_quote_v1` perform reads and previews.
-`uniswap_action_status_v1` and `uniswap_actions_page_v1` show durable progress.
+`uniswap_action_status_v1` and `uniswap_actions_page_v1` show stored durable progress.
+Use `uniswap_action_input_v1` and `uniswap_action_reconcile_v1` for interrupted actions.
 Reads use installation-approved Wallet tools; each effect still receives the
 Wallet's exact human or Agent provider review.
 

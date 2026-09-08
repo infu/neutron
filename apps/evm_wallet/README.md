@@ -36,6 +36,9 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
   V3 collections through the NFT manager show that collection destination and
   each forwarded asset's exact minimum separately; they do not assume those
   assets include every token collected from the position.
+  Collection is labeled **Collect available amounts**: V3 proceeds can include
+  previously withdrawn principal as well as fees, so the review does not label
+  the entire payout as income.
   Curve Router calls on Ethereum and Arbitrum show the exact payment, minimum
   received and recipient, plus the absence of an onchain expiry. Compatible pool
   liquidity interfaces show indexed token budgets, LP burns, output minima and
