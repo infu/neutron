@@ -1,0 +1,35 @@
+{
+  "format": 3,
+  "name": "OpenChat",
+  "id": "openchat",
+  "version": 122,
+  "description": "A sovereign client for the OpenChat network",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "OpenChat client engine: holds the account session and talks to the OpenChat network"
+  },
+  "tiles": [
+    {
+      "id": "chats",
+      "title": "OpenChat",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Read and send OpenChat direct messages, groups, and channels"
+    },
+    {
+      "id": "browse",
+      "title": "Browse OpenChat",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Find and join public OpenChat groups and communities"
+    }
+  ],
+  "func": {},
+  "capabilities": {
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    }
+  }
+}

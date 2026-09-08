@@ -1,0 +1,9 @@
+Neutron OpenChat
+
+Copyright 2026 3V Interactive
+Licensed under the Apache License, Version 2.0.
+SPDX-License-Identifier: Apache-2.0
+
+An independent, sovereign Neutron client for the OpenChat network. Not affiliated
+with or endorsed by OpenChat Labs. "OpenChat" refers to the third-party network
+this client connects to.
