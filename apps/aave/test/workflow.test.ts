@@ -88,6 +88,57 @@ test("interrupted preparation retains uncertainty and resumes the exact Wallet r
   expect((await f.run()).state).toBe("complete");
   expect(f.sends).toEqual([original, original]); expect(f.rows.size).toBe(1); expect(f.prepareCount()).toBe(1);
 });
+test("an estimate rejection after approval reports unsigned preparation and retains the same supply request", async () => {
+  const f = fixture(1);
+  f.sendWith(async request => {
+    if (request.data !== "0x03") return f.operation(request, "confirmed");
+    f.operations.set(request.requestId, f.operation(request, "preparing"));
+    throw Error("RPC eth_estimateGas: execution reverted: ERC20: transfer amount exceeds allowance");
+  });
+  const result = await f.run(), original = structuredClone(f.sends[1]!);
+  expect(result.state).toBe("pending"); expect(result.steps.map(step => step.status)).toEqual(["confirmed", "unknown"]);
+  expect(result.message).toContain("Wallet preparation did not complete"); expect(result.message).toContain("unsigned request");
+  expect(result.message).toContain("transfer amount exceeds allowance"); expect(result.message).not.toContain("reply was interrupted");
+  const saved = stateOf((await f.store.get(id))!);
+  expect(saved.steps[1]!.operation?.status).toBe("preparing"); expect(saved.steps[1]!.unresolved).toBe(true);
+  expect((await f.run({ execute: false })).state).toBe("pending"); expect(f.sends).toHaveLength(2);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete"); expect(f.sends).toEqual([f.sends[0]!, original, original]);
+  expect(f.prepareCount()).toBe(1); expect(f.rows.size).toBe(1);
+});
+test.each(["confirmed", "reverted"] as const)("a lost send reply reconciles a %s receipt before returning", async status => {
+  const f = fixture(0);
+  f.sendWith(async request => {
+    const observed = { ...receipt, status: status === "confirmed" ? "success" as const : "reverted" as const };
+    f.operations.set(request.requestId, { ...f.operation(request, status), receipt: observed });
+    f.transactions.set(f.hash(request), { ...f.evidence(request, true), receipt: observed });
+    throw Error("Response transport closed after broadcast");
+  });
+  const result = await f.run();
+  expect(result.state).toBe(status === "confirmed" ? "complete" : "stopped"); expect(result.steps[0]!.status).toBe(status);
+  expect(result.message).not.toContain("unresolved"); expect(result.message).not.toContain("awaits a receipt");
+  if (status === "reverted") { expect(result.message).toContain(`reverted in block ${receipt.blockNumber}`); expect(result.message).toContain("receipt finality: included"); }
+  expect(stateOf((await f.store.get(id))!).steps[0]!.unresolved).toBe(false);
+  expect((await f.run()).state).toBe(result.state); expect(f.sends).toHaveLength(1);
+});
+test("a lost send reply reports an observed submission without re-sending the request", async () => {
+  const f = fixture(0);
+  f.sendWith(async request => {
+    f.operations.set(request.requestId, f.operation(request, "submitted")); f.transactions.set(f.hash(request), f.evidence(request));
+    throw Error("Response transport closed after broadcast");
+  });
+  const result = await f.run();
+  expect(result.state).toBe("pending"); expect(result.steps[0]!.status).toBe("submitted"); expect(result.message).toContain("transaction is submitted");
+  expect(stateOf((await f.store.get(id))!).steps[0]!.unresolved).toBe(false); expect(f.sends).toHaveLength(1);
+});
+test("failed post-error status reads preserve both diagnostics and dispatch uncertainty", async () => {
+  const f = fixture(0);
+  f.sendWith(async () => { f.statusFails("RPC offline"); throw Error("Estimate could not be obtained"); });
+  const result = await f.run();
+  expect(result.state).toBe("pending"); expect(result.steps[0]!.status).toBe("unknown");
+  expect(result.message).toContain("outcome remains unresolved"); expect(result.message).toContain("Estimate could not be obtained"); expect(result.message).toContain("Status check: RPC offline");
+  expect(stateOf((await f.store.get(id))!).steps[0]!.unresolved).toBe(true); expect(f.sends).toHaveLength(1);
+});
 test("an explicit preparing reply yields and can continue without indefinite polling", async () => {
   const f = fixture(0);
   f.sendWith(async request => f.operation(request, "preparing"));
@@ -97,6 +148,14 @@ test("an explicit preparing reply yields and can continue without indefinite pol
   await f.run({ execute: false }); expect(f.sends).toHaveLength(1);
   f.sendWith(async request => f.operation(request, "confirmed"));
   expect((await f.run()).state).toBe("complete"); expect(f.sends[1]).toEqual(f.sends[0]);
+});
+test("a retained Wallet preparation error remains visible in saved status and reconciliation", async () => {
+  const f = fixture(0), message = "RPC eth_estimateGas: execution reverted: ERC20: transfer amount exceeds allowance";
+  f.sendWith(async request => ({ ...f.operation(request, "preparing"), message }));
+  const result = await f.run();
+  expect(result.state).toBe("review"); expect(result.message).toContain("unsigned request"); expect(result.message).toContain(message);
+  expect((await savedResult(f.store, id))!.message).toContain(message);
+  expect((await f.run({ execute: false })).message).toContain(message); expect(f.sends).toHaveLength(1);
 });
 test.each([false, true])("expired preparing retains its original signable request; old cleared marker=%s", async previouslyCleared => {
   const f = fixture(0);

@@ -72,6 +72,7 @@ for (const [chainId, network] of Object.entries(networks)) {
 }
 const records = new Map(), operations = new Map(), transactions = new Map(), allowances = new Map(), delegations = new Map(), calls = [], sends = [];
 let clock = 1n, mode = 'confirm', rpcFails = false, readGate = null, healthFactorOverride = null, nextAccountReadGate = null;
+let lostStatusRequest = null;
 let feeUnavailable = false, maxFeeGate = null, maxFeeObserved = null;
 const ns = () => String(BigInt(Date.now()) * 1000000n);
 const receipt = chainId => ({ blockNumber: chainId === '1' ? '25922608' : '502541974', blockHash: '0x' + '44'.repeat(32), status: 'success', gasUsed: '90000', effectiveGasPriceWei: '1000000000', logs: [], finality: 'included', observedAtNs: ns() });
@@ -290,7 +291,10 @@ async function fixture(kind, [call, args]) {
     if (input.valueWei === String(network.native)) { maxFeeObserved?.(); if (maxFeeGate) await maxFeeGate; }
     return { ...input, address: account.address, status: 'available', gasLimit: '100000', gasPriceWei: '1000000000', baseFeePerGasWei: '900000000', maxPriorityFeePerGasWei: '100000000', maxFeePerGasWei: '2000000000', estimatedFeeWei: '100000000000000', maximumFeeWei: '200000000000000', blockNumber, observedAtNs: ns(), feeBasis: input.chainId === '42161' ? 'arbitrum_total_gas' : 'base_fee_plus_priority', postingCosts: input.chainId === '42161' ? 'included' : 'not_applicable', reasons: [], source: 'evm_rpc' };
   }
-  if (name === 'evm_operation_status_v1') return operations.get(input.requestId) ?? { ...input, status: 'not_found' };
+  if (name === 'evm_operation_status_v1') {
+    if (lostStatusRequest === input.requestId) { lostStatusRequest = null; throw Error('Wallet status observation unavailable after lost reply'); }
+    return operations.get(input.requestId) ?? { ...input, status: 'not_found' };
+  }
   if (name === 'evm_transaction_v1') return transactions.get(input.transactionHash);
   if (name === 'evm_send_transaction_v1') {
     const prior = operations.get(input.requestId); if (prior) return prior;
@@ -301,7 +305,10 @@ async function fixture(kind, [call, args]) {
     operations.set(input.requestId, operation);
     transactions.set(hash, { chainId: input.chainId, transactionHash: hash, walletRequestMatches: null, transaction: { from: account.address, to: input.to, valueWei: input.valueWei, data: input.data, nonce: String(sends.length - 1), blockNumber: mined ? block : null, blockHash: mined ? '0x' + '44'.repeat(32) : null }, receipt: operation.receipt, observedAtNs: ns(), source: 'evm_rpc' });
     if (mined) applyEffect(input);
-    if (mode === 'lost') { mode = 'confirm'; throw Error('Wallet reply lost after broadcast'); }
+    if (mode === 'lost' || mode === 'lost_status') {
+      if (mode === 'lost_status') lostStatusRequest = input.requestId;
+      mode = 'confirm'; throw Error('Wallet reply lost after broadcast');
+    }
     return operation;
   }
   throw Error('Unimplemented Wallet call ' + name);
@@ -549,12 +556,23 @@ try {
   await page.getByText('Confirmed. The final transaction completed successfully.', { exact: true }).waitFor();
   assert.equal(functionOf(sends.at(-1)), 'claimAllRewards'); assert.equal(networks['1'].reward, 0n);
 
-  // The saved request was broadcast, but the transport reply disappears. A
-  // reload must recover the same request and receipt, without another send.
+  // A lost send reply with an available receipt resolves immediately, so the
+  // UI must show completion without asking the owner to continue again.
   await openAction('Supply', 'WETH');
   await dialog().getByLabel('Use native ETH', { exact: true }).check();
   await dialog().getByLabel('Supply amount', { exact: true }).fill('0.01');
+  const beforeLostReply = sends.length;
   mode = 'lost'; await (await waitReview('supply')).click();
+  await page.getByText('Confirmed. The final transaction completed successfully.', { exact: true }).waitFor();
+  assert.equal(sends.length, beforeLostReply + 1, 'Available receipt must resolve a lost reply without another send');
+  assert.equal(await page.getByRole('button', { name: 'Continue in wallet', exact: true }).count(), 0);
+
+  // If both the send reply and its first status observation are unavailable,
+  // reloading still recovers that original request without duplicating it.
+  await openAction('Supply', 'WETH');
+  await dialog().getByLabel('Use native ETH', { exact: true }).check();
+  await dialog().getByLabel('Supply amount', { exact: true }).fill('0.011');
+  mode = 'lost_status'; await (await waitReview('supply')).click();
   await page.getByRole('button', { name: 'Continue in wallet', exact: true }).waitFor();
   const count = sends.length;
   await page.reload();
@@ -595,7 +613,7 @@ try {
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '360px page overflow');
   assert.deepEqual(errors, [], 'No unhandled browser errors');
   const progressCoverage = await runProgressChecks({ app, browser, artifacts });
-  const evidence = { result: 'passed', sends: sends.length, records: records.size, coverage: ['actual service registration and descriptor validation', 'Wallet SDK ABI and response validation', 'durable journal before dispatch', 'loading', 'native ETH supply', 'USDC six-decimal approval and supply', 'variable-rate borrowing', 'native borrow delegation', 'bounded full native repayment', 'aWETH approval and native withdrawal', 'wallet repayment', 'aToken repayment', 'withdrawal', 'health factor and collateral', 'efficiency mode', 'incentive rewards claim', 'lost-reply reload without duplicate send', 'Ethereum and Arbitrum contract separation', 'exact gateway, Pool and recipient identity', 'Escape and restored focus', '360px responsive layout', 'RPC failure disables review', 'missing oracle prices hide borrowing capacity and disable automatic amount presets while retaining manual protocol checks', 'health-factor rounding preserves liquidation threshold', 'completed operations can reconcile reorganized receipts without duplicate sends', 'account refresh race cannot mix wallet balances, positions or quotes', 'periodic refresh detects wallet identity changes and clears old dialogs', 'native Max deducts observed maximum network fee from an empty draft', 'failed Max fee observation retains the manually entered amount', 'stale Max fee reply cannot overwrite a newer manual amount', 'native repayment Max respects both debt and fee-adjusted wallet balance', ...progressCoverage] };
+  const evidence = { result: 'passed', sends: sends.length, records: records.size, coverage: ['actual service registration and descriptor validation', 'Wallet SDK ABI and response validation', 'durable journal before dispatch', 'loading', 'native ETH supply', 'USDC six-decimal approval and supply', 'variable-rate borrowing', 'native borrow delegation', 'bounded full native repayment', 'aWETH approval and native withdrawal', 'wallet repayment', 'aToken repayment', 'withdrawal', 'health factor and collateral', 'efficiency mode', 'incentive rewards claim', 'lost send reply resolves an available receipt immediately without another send', 'lost-reply reload without duplicate send', 'Ethereum and Arbitrum contract separation', 'exact gateway, Pool and recipient identity', 'Escape and restored focus', '360px responsive layout', 'RPC failure disables review', 'missing oracle prices hide borrowing capacity and disable automatic amount presets while retaining manual protocol checks', 'health-factor rounding preserves liquidation threshold', 'completed operations can reconcile reorganized receipts without duplicate sends', 'account refresh race cannot mix wallet balances, positions or quotes', 'periodic refresh detects wallet identity changes and clears old dialogs', 'native Max deducts observed maximum network fee from an empty draft', 'failed Max fee observation retains the manually entered amount', 'stale Max fee reply cannot overwrite a newer manual amount', 'native repayment Max respects both debt and fee-adjusted wallet balance', ...progressCoverage] };
   await writeFile(resolve(artifacts, 'result.json'), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify(evidence, null, 2));
 } catch (error) {

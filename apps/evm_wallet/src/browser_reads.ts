@@ -9,7 +9,9 @@ import {
   type EvmTransactionRequest, type EvmReceipt,
 } from "neutron-tools/evm_wallet";
 import { BrowserEvmRpcError, browserEvmRpc } from "./browser_rpc.ts";
+import { automaticGasLimit } from "./gas.ts";
 import { address as parseAddress, hex, record, errorMessage, type Asset } from "./data.ts";
+import { decodeTokenDecimals, decodeTokenSymbol } from "./token_metadata.ts";
 
 export type BrowserReadRpc = Pick<typeof browserEvmRpc, "request">;
 const uint256Limit = 1n << 256n;
@@ -78,15 +80,28 @@ export async function browserBalances(input: EvmBalancesRequest, address: string
     rpc.request(request.chainId, "eth_getBalance", [from, block]).then((value) => rpcQuantity(value, "native balance").toString()),
     Promise.all(request.tokens.map(async (token) => {
       const known = assets.find((asset) => asset.chainId === request.chainId && asset.address.toLowerCase() === token);
-      const metadata = { address: token, decimals: known ? String(known.decimals) : null, symbol: known?.symbol ?? null };
-      try {
-        const data = `0x70a08231${from.slice(2).toLowerCase().padStart(64, "0")}`;
-        const word = hex(await rpc.request(request.chainId, "eth_call", [{ to: token, data }, block]), "token balance");
-        if (word.length !== 66) throw new Error("ERC20 balanceOf returned an invalid uint256 word");
-        return { ...metadata, balanceAtoms: BigInt(word).toString(), error: null };
-      } catch (error) {
-        return { ...metadata, balanceAtoms: null, error: errorMessage(error) };
-      }
+      const read = async <T>(label: string, data: string, decode: (value: string) => T) => {
+        try {
+          const bytes = hex(await rpc.request(request.chainId, "eth_call", [{ to: token, data }, block]), label);
+          return { value: decode(bytes), error: null };
+        } catch (error) { return { value: null, error: `${label}: ${errorMessage(error)}` }; }
+      };
+      // Optional ERC20 metadata must not discard a successful balance. Read
+      // unknown tokens at the balance's exact block, retaining each field's
+      // independent result. Saved display metadata still wins.
+      const [balance, decimals, symbol] = await Promise.all([
+        read("balanceOf", `0x70a08231${from.slice(2).toLowerCase().padStart(64, "0")}`, (word) => {
+          if (word.length !== 66) throw new Error("ERC20 balanceOf returned an invalid uint256 word");
+          return BigInt(word).toString();
+        }),
+        known ? Promise.resolve({ value: String(known.decimals), error: null })
+          : read("decimals", "0x313ce567", (word) => String(decodeTokenDecimals(word))),
+        known ? Promise.resolve({ value: known.symbol, error: null })
+          : read("symbol", "0x95d89b41", decodeTokenSymbol),
+      ]);
+      const errors = [balance.error, decimals.error, symbol.error].filter((error): error is string => error !== null);
+      return { address: token, balanceAtoms: balance.value, decimals: decimals.value, symbol: symbol.value,
+        error: errors.length === 0 ? null : errors.join("; ") };
     })),
   ]);
   return parseEvmBalancesResult({ accountId: request.accountId, chainId: request.chainId, address: from,
@@ -113,7 +128,7 @@ export async function browserEstimateTransaction(input: EvmEstimateTransactionRe
   const gas = await read("eth_estimateGas", [{ from, to: request.to, value: quantityHex(BigInt(request.valueWei)), data: request.data }, number === null ? "latest" : quantityHex(number)], (value) => {
     const gas = rpcQuantity(value, "gas estimate");
     if (gas === 0n) throw new Error("Returned zero gas for a transaction");
-    return gas;
+    return automaticGasLimit(gas);
   });
   let maximumPrice: bigint | null = null, effectivePrice: bigint | null = null;
   let feeBasis: EvmEstimateTransactionResult["feeBasis"];
@@ -160,6 +175,7 @@ export async function browserTransaction(input: EvmTransactionRequest, walletReq
     if (tx.chainId != null && rpcQuantity(tx.chainId, "transaction chain").toString() !== request.chainId) throw new Error("RPC returned a mismatched transaction chain");
     transaction = { from: parseAddress(tx.from), to: tx.to === null ? null : parseAddress(tx.to),
       data: hex(tx.input), valueWei: rpcQuantity(tx.value, "transaction value").toString(), nonce: rpcQuantity(tx.nonce, "transaction nonce").toString(),
+      ...(request.includeGasLimit ? { gasLimit: rpcQuantity(tx.gas, "transaction gas limit").toString() } : {}),
       blockNumber: tx.blockNumber === null ? null : rpcQuantity(tx.blockNumber, "transaction block").toString(), blockHash: tx.blockHash === null ? null : hash(tx.blockHash, "transaction block hash") };
   }
   if (rawReceipt !== null) {

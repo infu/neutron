@@ -239,8 +239,15 @@ export async function updateSelf(method: string, args: any[]) {
   }
   const operation = operations.get(arg.identity?.request_id);
   if (!operation) throw new Error(`Unknown operation for ${method}`);
+  if (method === "evm_wallet_preparation_error_browser_v1") {
+    if (operation.status === "preparing" && operation.review_revision === arg.review_revision) {
+      operation.message = `Preparation failed before signing during ${arg.stage} at block ${arg.block_number}: ${arg.message}`;
+    }
+    return { ok: copy(operation) };
+  }
   if (method === "evm_wallet_finish_prepare_browser_v1") {
     operation.status = "prepared";
+    operation.message = null;
     operation.prepared_transaction.gas_limit = arg.gas_limit;
     operation.review.gas_limit = arg.gas_limit;
     operation.review.simulation = arg.simulation;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 // SDK contract helpers are a development oracle only; production imports math.
-import { Ether, Percent } from "@uniswap/sdk-core";
-import { NonfungiblePositionManager, Position as V3Position } from "@uniswap/v3-sdk";
+import { Ether, Percent, Token as SdkToken } from "@uniswap/sdk-core";
+import { NonfungiblePositionManager, Pool as V3Pool, Position as V3Position, TickMath } from "@uniswap/v3-sdk";
 import { decodeAbiParameters, decodeFunctionData, getAddress, parseAbi, parseAbiParameters, zeroAddress, type Address, type Hex } from "viem";
 import type { EvmAccount } from "neutron-tools/evm_wallet";
 import { buildLiquidity, type LiquidityInput } from "../src/liquidity.ts";
@@ -135,6 +135,36 @@ describe("liquidity contract plans", () => {
     }
     const p = pool("v3", true), built = buildLiquidity(p, null, ACCOUNT, { ...input(p), tokenA: B, tokenB: null, tickLower: 600, tickUpper: 1200, maxAmountB: "0" }, NOW);
     expect(built.transaction.value).toBe("0"); expect(v3Calls(built.transaction.data).map(c => c.functionName)).toEqual(["mint"]);
+  });
+  test("V3 mixed-decimal narrow ranges match independent SDK amounts, approvals and native encoding", () => {
+    const usdc = getAddress("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), weth = network("1").wrapped;
+    // Batch-1 ranges and budgets. Sample the observed ticks without claiming
+    // these approximations reconstruct the later historical transaction state.
+    for (const [tick, tickLower, tickUpper, maxAmountA, maxAmountB, native] of [
+      [198127, 198030, 198230, "2000000", "800000000000000", true],
+      [198146, 198040, 198240, "700000", "300000000000000", false],
+    ] as const) {
+      const low = BigInt(TickMath.getSqrtRatioAtTick(tick).toString()), high = BigInt(TickMath.getSqrtRatioAtTick(tick + 1).toString());
+      for (const ratio of [low, (low + high) / 2n, high - 1n]) {
+        const p: PoolState = { ...pool("v3"), token0: { chainId: "1", address: usdc, symbol: "USDC", decimals: 6 }, token1: { chainId: "1", address: weth, symbol: "WETH", decimals: 18 },
+          currency0: usdc, currency1: weth, tick, sqrtPriceX96: ratio.toString(), fee: 500, tickSpacing: 10 };
+        const built = buildLiquidity(p, null, ACCOUNT, { ...input(p), tokenA: usdc, tokenB: native ? null : weth, tickLower, tickUpper, maxAmountA, maxAmountB }, NOW);
+        const sdkPool = new V3Pool(new SdkToken(1, usdc, 6), new SdkToken(1, weth, 18), 500, ratio.toString(), p.liquidity, tick);
+        const sdk = V3Position.fromAmounts({ pool: sdkPool, tickLower, tickUpper, amount0: maxAmountA, amount1: maxAmountB, useFullPrecision: false });
+        const expected = NonfungiblePositionManager.addCallParameters(sdk, { slippageTolerance: new Percent(50, 10000), deadline: built.preview.deadline, recipient: OWNER, ...(native ? { useNative: Ether.onChain(1) } : {}) });
+        expect(built.transaction.data).toBe(expected.calldata as Hex);
+        expect(built.transaction.value).toBe(BigInt(expected.value).toString());
+        expect(built.approvalTokens.map(({ address, amount }) => [address, amount])).toEqual(native
+          ? [[usdc, sdk.mintAmounts.amount0.toString()]] : [[usdc, sdk.mintAmounts.amount0.toString()], [weth, sdk.mintAmounts.amount1.toString()]]);
+        // The position manager derives liquidity from the encoded desired
+        // amounts; account for that second round of integer precision too.
+        const actual = V3Position.fromAmounts({ pool: sdkPool, tickLower, tickUpper, amount0: built.preview.amount0, amount1: built.preview.amount1, useFullPrecision: false });
+        for (const [amount, minimum, maximum] of [[actual.mintAmounts.amount0, built.preview.amount0Min, built.preview.amount0Max], [actual.mintAmounts.amount1, built.preview.amount1Min, built.preview.amount1Max]] as const) {
+          expect(BigInt(amount.toString())).toBeGreaterThanOrEqual(BigInt(minimum));
+          expect(BigInt(amount.toString())).toBeLessThanOrEqual(BigInt(maximum));
+        }
+      }
+    }
   });
   test("V3 removal pays principal and fees in one transaction; full close burns after collect", () => {
     const p = pool("v3"), b = buildLiquidity(p, position(p), ACCOUNT, { ...input(p, "decrease"), liquidity: "1234567", recipient: RECIPIENT }, NOW), calls = v3Calls(b.transaction.data);

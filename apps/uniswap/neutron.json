@@ -2,7 +2,7 @@
   "format": 3,
   "id": "uniswap",
   "name": "via Uniswap",
-  "version": 113,
+  "version": 114,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Uniswap V3/V4 swaps and liquidity positions using EVM Wallet",
   "src": "main.mo",

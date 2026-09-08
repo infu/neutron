@@ -114,6 +114,7 @@ function waitForReceipt(signal?: AbortSignal): Promise<void> {
   });
 }
 class ConcurrentUpdate extends Error {}
+class InitialPreparationFailed extends Error {}
 
 export async function runOperation(wallet: EvmWalletClient, store: Store, id: string, raw: Input, caller: EvmWalletCaller | null, agentMode: boolean, options: RunOptions = {}): Promise<Result> {
   operationId(id);
@@ -146,7 +147,16 @@ export async function runOperation(wallet: EvmWalletClient, store: Store, id: st
     const recordId = attemptId(id, attempt), existing = await store.get(recordId);
     if (existing) { owner(existing); return existing; }
     const selected = await account(prior), intent: Intent = { version: 1, operationId: id, attempt, input, caller, agentMode, account: selected };
-    const plan = await (options.prepare ?? preparePlan)(wallet, selected, input, { ...(options.signal ? { signal: options.signal } : {}), ...(options.onProgress ? { onProgress: options.onProgress } : {}), now: now() });
+    let plan: Plan;
+    try {
+      plan = await (options.prepare ?? preparePlan)(wallet, selected, input, { ...(options.signal ? { signal: options.signal } : {}), ...(options.onProgress ? { onProgress: options.onProgress } : {}), now: now() });
+    } catch (error) {
+      abort();
+      // Only initial read-only planning establishes that this attempt never
+      // asked Wallet to send. Store writes and renewal errors remain ambiguous.
+      if (attempt === "0") throw new InitialPreparationFailed(errorMessage(error));
+      throw error;
+    }
     validatePlan(intent, plan); abort();
     const state: State = { version: 1, plan, successor: null, steps: plan.steps.map((step, index) => ({ request: parseEvmSendTransactionRequest({ ...step.transaction, requestId: requestId(recordId, index) }), dispatched: false, unresolved: false, operation: null, evidence: null })) };
     return store.begin({ id: recordId, root_id: id, input_json: stable(intent), summary: stable({ title: plan.summary, chainId: input.chainId, kind: input.kind, humanOwned: caller === null && !agentMode }), state_json: stable(state), phase: "ready" });
@@ -168,7 +178,17 @@ export async function runOperation(wallet: EvmWalletClient, store: Store, id: st
   const first = await store.get(id);
   if (first) owner(first);
   else if (!execute) throw new Error("No saved operation was found.");
-  remember(first ? (await latestRecord(store, id))! : await create("0"));
+  try { remember(first ? (await latestRecord(store, id))! : await create("0")); }
+  catch (error) {
+    if (!(error instanceof InitialPreparationFailed)) throw error;
+    abort();
+    // A concurrent invocation might have saved this ID during discovery. Its
+    // actual journal takes precedence over this invocation's failed preview.
+    const saved = await latestRecord(store, id);
+    if (saved) { owner(saved); return resultOf(saved); }
+    return { operationId: id, recordId: null, summary: "Preparing Curve operation", state: "stopped", phase: "preparation_failed", transactionHash: null, steps: [],
+      message: `Preparation failed before any Wallet transaction was requested. ${error.message} Retry with this same operation ID and original inputs.` };
+  }
   const reviewed = new Set<string>();
   for (;;) {
     abort();

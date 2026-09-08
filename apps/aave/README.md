@@ -77,6 +77,13 @@ explicit continuation while the quote is fresh. A preparing status keeps its
 dispatch uncertainty; expiry does not create a replacement request. Ambiguous
 requests must first be reconciled.
 
+A Wallet error triggers a status check of that same request before Aave reports
+the outcome. Failed preparation, an unsigned review, signing, submission and a
+mined receipt are reported separately; an estimation rejection is not described
+as a lost reply. If the status check also fails, both errors remain visible and
+the saved dispatch stays unresolved. Reverted receipts include their block and
+observed finality. Continuing always retains the original Wallet request ID.
+
 Use **Continue in wallet** to resume a saved human operation. Agent callers
 continue their own operation ID with the same original inputs. Status reads
 report retained journal state; reconciliation reads current receipts and can

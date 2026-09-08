@@ -5,6 +5,8 @@ type ToolHandler = (args: unknown, context: unknown) => Promise<unknown>;
 
 const handlers = new Map<string, ToolHandler>();
 const publications: Array<{ topic: string; revision: number }> = [];
+let querySelfResponse: ((method: string) => unknown) | null = null;
+let updateSelfResponse: ((method: string) => unknown) | null = null;
 const postDispatchError = new Error("post-dispatch cancellation");
 const fundingRequest = {
   requestId: "00112233445566778899aabbccddeeff",
@@ -40,11 +42,13 @@ mock.module("neutron-tools/app", () => ({
     publications.push({ topic, revision });
     throw new Error("projection notification unavailable");
   },
-  querySelf: async (): Promise<never> => {
+  querySelf: async (method: string): Promise<unknown> => {
+    if (querySelfResponse) return querySelfResponse(method);
     throw new Error("Unexpected Wallet query");
   },
   setTrayState: async (): Promise<void> => undefined,
-  updateSelf: async (): Promise<never> => {
+  updateSelf: async (method: string): Promise<unknown> => {
+    if (updateSelfResponse) return updateSelfResponse(method);
     throw new Error("Unexpected Wallet update");
   },
 }));
@@ -53,6 +57,56 @@ await import("../src/service.ts");
 
 afterAll(() => {
   mock.restore();
+});
+
+test("overview and refresh expose compact balances by default and preserve explicit visual requests", async () => {
+  const logo = "data:image/png;base64,AAAA";
+  const snapshot = {
+    owner: "aaaaa-aa",
+    configured: true,
+    ledgers: [{
+      id: "7",
+      principal: fundingRequest.ledger,
+      symbol: "ICP",
+      decimals: "8",
+      balance: "1234567890123456789",
+      fee: "10000",
+      logo,
+    }],
+  };
+  const calls: string[] = [];
+  querySelfResponse = (method) => {
+    if (method === "wallet_snapshot") return snapshot;
+    if (method === "wallet_catalog") return [];
+    if (method === "wallet_history_page") return {
+      records: [], next: null, inspected: "0", has_more: false, warning: null,
+    };
+    throw new Error(`Unexpected Wallet query ${method}`);
+  };
+  updateSelfResponse = (method) => {
+    calls.push(method);
+    if (method === "wallet_refresh_balances") return snapshot;
+    throw new Error(`Unexpected Wallet update ${method}`);
+  };
+  try {
+    for (const name of ["wallet_overview", "wallet_refresh"]) {
+      const handler = handlers.get(name);
+      if (!handler) throw new Error(`${name} was not exposed`);
+      for (const args of [{}, { includeLogos: false }, { includeLogos: true }]) {
+        await expect(handler(args, {})).resolves.toMatchObject({
+          assets: [{
+            balance: snapshot.ledgers[0]!.balance,
+            logo: args.includeLogos === true ? logo : null,
+          }],
+        });
+      }
+    }
+    expect(calls).toEqual(Array(3).fill("wallet_refresh_balances"));
+    expect(snapshot.ledgers[0]?.logo).toBe(logo);
+  } finally {
+    querySelfResponse = null;
+    updateSelfResponse = null;
+  }
 });
 
 test("token information uses one exact Wallet self-call", async () => {

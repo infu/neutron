@@ -17,12 +17,16 @@ persistent actor {
     };
     let mem = Memory.init();
     var signatures = 0;
+    var allowFixtureSignature = false;
     let signing : Caps.WalletCustodySigningV1 = {
       public_key = func(slot : Text) : async* Caps.WalletCustodyPublicKeyResultV1 {
         #ok({ slot; algorithm = #ecdsa_secp256k1; public_key = ok(Hex.decode(Fixtures.publicKey)); key_fingerprint = "fixture"; namespace_version = 1 });
       };
-      sign_digest = func(_ : Caps.WalletCustodySignDigestRequestV1) : async* Caps.WalletCustodySignatureResultV1 {
-        signatures += 1; Runtime.trap("Preparation must never sign");
+      sign_digest = func(request : Caps.WalletCustodySignDigestRequestV1) : async* Caps.WalletCustodySignatureResultV1 {
+        if (not allowFixtureSignature) Runtime.trap("Preparation must never sign");
+        assert Hex.encode(request.digest) == Fixtures.vectors[0].digest;
+        signatures += 1;
+        #ok({ slot = request.slot; algorithm = #ecdsa_secp256k1; digest = request.digest; signature = ok(Hex.decode(Fixtures.vectors[0].signature)) });
       };
     };
     let env : Main.AppBackendEnvironment = { stable_memory = { evm_wallet = mem; evm_evidence = EvidenceMemory.init(); evm_decoders = DecoderMemory.init() }; capabilities = { wallet_custody_signing = signing } };
@@ -41,11 +45,22 @@ persistent actor {
     let matching = ok(await* service.evm_wallet_prepare_browser_v1({ request; observation = old }));
     assert matching.review_revision == first.review_revision;
     assert matching.prepared_transaction == first.prepared_transaction and matching.review == first.review;
+    let failedEstimate : Main.WalletPreparationErrorBrowserRequest = {
+      identity = request.identity; review_revision = first.review_revision;
+      block_number = "0x64"; stage = "eth_estimateGas";
+      message = "execution reverted: ERC20: transfer amount exceeds allowance";
+    };
+    let failure = ok(service.evm_wallet_preparation_error_browser_v1(failedEstimate));
+    assert failure.status == "preparing" and failure.review_revision == first.review_revision;
+    assert failure.message == ?"Preparation failed before signing during eth_estimateGas at block 100: execution reverted: ERC20: transfer amount exceeds allowance";
+    assert failure.prepared_transaction == first.prepared_transaction and failure.transaction_hash == null;
 
     // Simulate a reload after candidate persistence but before gas estimation.
     // The current base fee is now greater than the candidate's old maximum;
     // keeping that maximum would make every retry fail RPC simulation.
     let restored = Main.Init(env);
+    let restoredFailure = ok(restored.evm_wallet_operation_v1({ identity = request.identity }));
+    assert restoredFailure == failure;
     let refreshed = ok(await* restored.evm_wallet_prepare_browser_v1({ request; observation = fresh }));
     let ?refreshedTx = refreshed.prepared_transaction else Runtime.trap("Refreshed candidate missing");
     if (refreshedTx.max_fee_per_gas != ?"203") Runtime.trap("The refreshed unsigned candidate still has its old fee maximum instead of the current 203");
@@ -56,22 +71,45 @@ persistent actor {
     assert refreshedTx.gas_limit == "0";
     let matchingRefresh = ok(await* restored.evm_wallet_prepare_browser_v1({ request; observation = fresh }));
     assert matchingRefresh.review_revision == refreshed.review_revision and matchingRefresh.prepared_transaction == refreshed.prepared_transaction;
-    func finish(revision : Nat) : Main.WalletOperationResult {
-      restored.evm_wallet_finish_prepare_browser_v1({ identity = request.identity; review_revision = revision; balance = fresh.balance; pending_nonce = "0"; mined_nonce = "0"; gas_estimate = "25000"; gas_limit = "25000"; simulation = "0x" });
+    // An older estimate cannot replace a newer candidate's retained details.
+    assert ok(restored.evm_wallet_preparation_error_browser_v1({ failedEstimate with message = "Stale estimate failure" })) == matchingRefresh;
+    func finish(revision : Nat, limit : Text) : Main.WalletOperationResult {
+      restored.evm_wallet_finish_prepare_browser_v1({ identity = request.identity; review_revision = revision; balance = fresh.balance; pending_nonce = "0"; mined_nonce = "0"; gas_estimate = "25001"; gas_limit = limit; simulation = "0x" });
     };
-    switch (finish(first.review_revision)) { case (#err(_)) {}; case (_) Runtime.trap("Stale simulation completed a refreshed candidate") };
-    let prepared = ok(finish(refreshed.review_revision));
-    assert prepared.status == "prepared";
+    switch (finish(first.review_revision, "30002")) { case (#err(_)) {}; case (_) Runtime.trap("Stale simulation completed a refreshed candidate") };
+    switch (finish(refreshed.review_revision, "25001")) { case (#err(_)) {}; case (_) Runtime.trap("Unbuffered automatic gas was accepted") };
+    switch (finish(refreshed.review_revision, "30001")) { case (#err(_)) {}; case (_) Runtime.trap("Fractional headroom was rounded down") };
+    let prepared = ok(finish(refreshed.review_revision, "30002"));
+    let ?preparedTx = prepared.prepared_transaction else Runtime.trap("Prepared transaction missing");
+    let ?preparedReview = prepared.review else Runtime.trap("Prepared review missing");
+    assert prepared.status == "prepared" and prepared.message == null;
+    assert preparedTx.gas_limit == "30002" and preparedReview.gas_limit == "30002";
+    assert prepared.operation_id == first.operation_id and prepared.request_id == first.request_id;
+    // Neither stale nor current-revision error notifications may downgrade a
+    // prepared review to an unsigned failure or restore its previous message.
+    assert ok(restored.evm_wallet_preparation_error_browser_v1({ failedEstimate with review_revision = refreshed.review_revision })) == prepared;
+    assert ok(restored.evm_wallet_preparation_error_browser_v1({ failedEstimate with review_revision = prepared.review_revision })) == prepared;
     let replay = ok(await* restored.evm_wallet_prepare_browser_v1({ request; observation = old }));
     assert replay.review_revision == prepared.review_revision and replay.prepared_transaction == prepared.prepared_transaction;
 
     // Explicit fee choices remain part of the immutable request on recovery.
-    let explicitRequest = { request with identity = identity("00000000000000000000000000000002"); intent = { intent with operation = #transaction({ txRequest with gas_limit = ?"30000"; max_fee_per_gas = ?"500"; max_priority_fee_per_gas = ?"4" }) } };
+    let explicitRequest = { request with identity = identity("00000000000000000000000000000002"); intent = { intent with operation = #transaction({ txRequest with gas_limit = ?"35000"; max_fee_per_gas = ?"500"; max_priority_fee_per_gas = ?"4" }) } };
     let explicit = ok(await* restored.evm_wallet_prepare_browser_v1({ request = explicitRequest; observation = old }));
     let explicitRefreshed = ok(await* restored.evm_wallet_prepare_browser_v1({ request = explicitRequest; observation = fresh }));
     let ?explicitTx = explicitRefreshed.prepared_transaction else Runtime.trap("Explicit candidate missing");
-    assert explicitTx.max_fee_per_gas == ?"500" and explicitTx.max_priority_fee_per_gas == ?"4" and explicitTx.gas_limit == "30000";
+    assert explicitTx.max_fee_per_gas == ?"500" and explicitTx.max_priority_fee_per_gas == ?"4" and explicitTx.gas_limit == "35000";
     assert explicitRefreshed.operation_id == explicit.operation_id;
+    let explicitFinish : Main.WalletFinishPrepareBrowserRequest = {
+      identity = explicitRequest.identity; review_revision = explicitRefreshed.review_revision;
+      balance = fresh.balance; pending_nonce = "0"; mined_nonce = "0";
+      gas_estimate = "25000"; gas_limit = "35000"; simulation = "0x";
+    };
+    switch (restored.evm_wallet_finish_prepare_browser_v1({ explicitFinish with gas_limit = "30000" })) {
+      case (#err(_)) {}; case (_) Runtime.trap("Automatic headroom replaced the explicit gas choice");
+    };
+    let explicitPrepared = ok(restored.evm_wallet_finish_prepare_browser_v1(explicitFinish));
+    let ?explicitPreparedTx = explicitPrepared.prepared_transaction else Runtime.trap("Explicit prepared transaction missing");
+    assert explicitPrepared.status == "prepared" and explicitPreparedTx.gas_limit == "35000";
     let legacyRequest = { request with identity = identity("00000000000000000000000000000003"); intent = { intent with operation = #transaction({ txRequest with transaction_type = ?"legacy" }) } };
     ignore ok(await* restored.evm_wallet_prepare_browser_v1({ request = legacyRequest; observation = old }));
     let legacy = ok(await* restored.evm_wallet_prepare_browser_v1({ request = legacyRequest; observation = fresh }));
@@ -87,6 +125,23 @@ persistent actor {
     let ?recoveredTx = recovered.prepared_transaction else Runtime.trap("Interrupted candidate missing");
     assert recovered.operation_id == interrupted.id and recoveredTx.max_fee_per_gas == ?"203";
     assert Map.size(mem.commands) == 4 and signatures == 0;
-    "Preparing transactions refresh implicit fees after reload, retain exact requests and explicit fees, and invalidate stale simulations without signing";
+
+    // A basic transfer keeps its exact intrinsic estimate. Execute this one
+    // local fixture only so a late preparation error is checked against real
+    // signed state and retained bytes, not a hand-written status marker.
+    let signedRequest = { request with identity = identity("00000000000000000000000000000005"); intent = { intent with operation = #transaction({ txRequest with value = "1"; data = "0x"; max_fee_per_gas = ?"100"; max_priority_fee_per_gas = ?"2"; transaction_type = ?"eip1559" }) } };
+    let signedCandidate = ok(await* restored.evm_wallet_prepare_browser_v1({ request = signedRequest; observation = old }));
+    let signedReview = ok(restored.evm_wallet_finish_prepare_browser_v1({ identity = signedRequest.identity; review_revision = signedCandidate.review_revision; balance = old.balance; pending_nonce = "0"; mined_nonce = "0"; gas_estimate = "21000"; gas_limit = "21000"; simulation = "0x" }));
+    allowFixtureSignature := true;
+    let signed = ok(await* restored.evm_wallet_execute_v1({ identity = signedRequest.identity; review_revision = signedReview.review_revision }));
+    allowFixtureSignature := false;
+    assert signed.status == "signed" and signed.transaction_hash == ?Fixtures.vectors[0].hash and signatures == 1;
+    let submission = ok(restored.evm_wallet_submission_v1({ identity = signedRequest.identity }));
+    assert submission.raw_transaction == Fixtures.vectors[0].raw;
+    assert ok(restored.evm_wallet_preparation_error_browser_v1({ failedEstimate with identity = signedRequest.identity; review_revision = signedCandidate.review_revision })) == signed;
+    assert ok(restored.evm_wallet_preparation_error_browser_v1({ failedEstimate with identity = signedRequest.identity; review_revision = signed.review_revision })) == signed;
+    assert ok(Main.Init(env).evm_wallet_submission_v1({ identity = signedRequest.identity })) == submission;
+    assert signatures == 1 and Map.size(mem.commands) == 5;
+    "Preparing recovery preserves exact requests, implicit headroom, explicit limits and durable errors; stale error reports cannot change newer, prepared or signed operations";
   };
 };

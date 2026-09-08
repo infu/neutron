@@ -1,6 +1,6 @@
 import {
   parseEvmOperationResult, parseEvmSendTransactionRequest, parseEvmTransactionResult,
-  type EvmAccount, type EvmAccountId, type EvmOperationResult, type EvmSendTransactionRequest,
+  type EvmAccount, type EvmAccountId, type EvmOperationResult, type EvmReceipt, type EvmSendTransactionRequest,
   type EvmTransactionResult, type EvmWalletCaller, type EvmWalletClient,
 } from "neutron-tools/evm_wallet";
 import { getAddress, keccak256, stringToHex } from "viem";
@@ -25,10 +25,11 @@ export type ActionJournalStep = {
   receiptLogsFiltered: true; operationReceiptLogsOmitted: number; evidenceReceiptLogsOmitted: number;
 };
 export type ActionState = { version: 1; plan: ActionPlan; steps: ActionJournalStep[]; successor: string | null };
+export type ActionReceipt = Pick<EvmReceipt, "status" | "blockNumber" | "finality">;
 export type ActionResult = {
   operationId: string; recordId: string; state: "complete" | "pending" | "review" | "stopped";
   phase: string; summary: string; transactionHash: string | null; message: string;
-  steps: { label: string; kind: "approval" | "transaction"; status: string; transactionHash: string | null }[];
+  steps: { label: string; kind: "approval" | "transaction"; status: string; transactionHash: string | null; receipt: ActionReceipt | null }[];
   details: Record<string, unknown>; positionTokenIds: string[];
 };
 export type PrepareAction = (context: {
@@ -123,18 +124,23 @@ export function parseActionState(record: ActionRecord): ActionState {
   });
   return state;
 }
-function view(intent: ActionIntent, step: ActionJournalStep): { status: string; transactionHash: string | null; message: string | null } {
-  if (step.unresolvedDispatch) return { status: "unknown", transactionHash: step.operation?.transactionHash ?? null, message: "The Wallet reply is unresolved; retain this exact request." };
+function view(intent: ActionIntent, step: ActionJournalStep): { status: string; transactionHash: string | null; message: string | null; receipt: ActionReceipt | null } {
+  if (step.unresolvedDispatch) return { status: "unknown", transactionHash: step.operation?.transactionHash ?? null, message: "The Wallet reply is unresolved; retain this exact request.", receipt: null };
   const operation = step.operation;
-  if (!operation) return { status: "queued", transactionHash: null, message: null };
+  if (!operation) return { status: "queued", transactionHash: null, message: null, receipt: null };
   const evidence = step.evidence;
   if (evidence) {
-    if (!evidence.transaction) return { status: "unknown", transactionHash: evidence.transactionHash, message: "The transaction is not visible yet." };
-    if (!executionMatches(intent, step, evidence)) return { status: evidence.receipt ? "replaced" : "unknown", transactionHash: evidence.transactionHash, message: "The observed transaction does not execute the saved action. This step remains incomplete." };
-    return { status: evidence.receipt ? evidence.receipt.status === "success" ? "confirmed" : "reverted" : "submitted", transactionHash: evidence.transactionHash, message: operation.message };
+    const receipt = evidence.receipt ? { status: evidence.receipt.status, blockNumber: evidence.receipt.blockNumber, finality: evidence.receipt.finality } : null;
+    if (!evidence.transaction) return { status: "unknown", transactionHash: evidence.transactionHash, message: "The transaction is not visible yet.", receipt };
+    if (!executionMatches(intent, step, evidence)) return { status: receipt ? "replaced" : "unknown", transactionHash: evidence.transactionHash, message: "The observed transaction does not execute the saved action. This step remains incomplete.", receipt };
+    // This independent receipt can be newer than the Wallet operation snapshot.
+    // Its status and prose must agree even when that snapshot still says pending.
+    return { status: receipt ? receipt.status === "success" ? "confirmed" : "reverted" : "submitted", transactionHash: evidence.transactionHash, receipt,
+      message: receipt ? `Transaction ${receipt.status === "success" ? "succeeded" : "reverted"} in block ${receipt.blockNumber}. Receipt finality: ${receipt.finality}.`
+        : "The transaction is visible and awaits a receipt." };
   }
   // Completion always requires independent transaction fields and its receipt.
-  return { status: operation.receipt ? "unknown" : operation.status, transactionHash: operation.transactionHash, message: operation.message };
+  return { status: operation.receipt ? "unknown" : operation.status, transactionHash: operation.transactionHash, message: operation.message, receipt: null };
 }
 const TERMINAL = ["rejected", "reverted", "failed", "replaced"];
 const TRANSFER_TOPIC = keccak256(stringToHex("Transfer(address,address,uint256)"));
@@ -156,10 +162,12 @@ export function actionResult(record: ActionRecord, status?: ActionResult["state"
   const intent = parseActionIntent(record), state = parseActionState(record), views = state.steps.map((step) => view(intent, step));
   const final = views.at(-1)!;
   const derived = final.status === "confirmed" ? "complete" : views.some((step) => TERMINAL.includes(step.status)) ? "stopped" : views.some((step) => ["preparing", "prepared"].includes(step.status)) ? "review" : "pending";
+  const terminal = derived === "complete" || derived === "stopped";
+  const terminalMessage = derived === "complete" ? `Complete: ${final.message}` : views.find((step) => TERMINAL.includes(step.status))?.message ?? "The action stopped before completion.";
   return {
-    operationId: intent.envelope.operationId, recordId: record.id, state: status ?? derived, phase: record.phase, summary: record.summary,
-    transactionHash: final.transactionHash, message: message ?? (derived === "complete" ? "Complete: the final transaction has a successful receipt." : derived === "stopped" ? views.find((step) => TERMINAL.includes(step.status))?.message ?? "The action stopped before completion." : "The saved action can continue with its original operation ID."),
-    steps: views.map((step, index) => ({ label: state.plan.steps[index]!.label, kind: state.plan.steps[index]!.kind, status: step.status, transactionHash: step.transactionHash })),
+    operationId: intent.envelope.operationId, recordId: record.id, state: terminal ? derived : status ?? derived, phase: record.phase, summary: record.summary,
+    transactionHash: final.transactionHash, message: terminal ? terminalMessage : message ?? "The saved action can continue with its original operation ID.",
+    steps: views.map((step, index) => ({ label: state.plan.steps[index]!.label, kind: state.plan.steps[index]!.kind, status: step.status, transactionHash: step.transactionHash, receipt: step.receipt })),
     details: state.plan.details, positionTokenIds: mintedPositions(intent, state),
   };
 }

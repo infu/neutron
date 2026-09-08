@@ -62,7 +62,7 @@ type BackendCall = { kind: "query" | "update"; method: string; args: unknown[] }
 const restore: Array<() => void> = [];
 afterEach(() => { for (const reset of restore.splice(0)) reset(); });
 
-function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolean; busyBlocks?: boolean; receiptLogs?: unknown[]; refreshPreparation?: boolean; baseFee?: string } = {}) {
+function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolean; busyBlocks?: boolean; receiptLogs?: unknown[]; refreshPreparation?: boolean; baseFee?: string; gasEstimate?: string; rpcFailure?: "eth_estimateGas" | "eth_call" } = {}) {
   const http: RpcCall[] = [], backend: BackendCall[] = [];
   let saved: Wire | null = null;
   let raw: Hex | null = null;
@@ -73,11 +73,15 @@ function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolea
   let broadcastFailure: "none" | "after_accept" | "before_accept" = "none";
   let mined = false;
   let balance = "0x3b9aca00";
+  let rpcFailure = options.rpcFailure;
 
   const fetch = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
     const envelope = JSON.parse(String(init.body)) as { id: string; method: string; params: unknown[] };
     const { method, params } = envelope;
     http.push({ url: String(url), init, method, params: copy(params) });
+    if (method === rpcFailure) return Response.json({ jsonrpc: "2.0", id: envelope.id, error: {
+      code: -32000, message: "execution reverted: ERC20: transfer amount exceeds allowance", data: "0x08c379a0",
+    } });
     let result: unknown;
     switch (method) {
       case "eth_chainId": result = "0x1"; break;
@@ -89,7 +93,7 @@ function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolea
       case "eth_estimateGas": {
         const tx = params[0] as { nonce: string; maxFeePerGas: string };
         if (options.baseFee && BigInt(tx.maxFeePerGas) < BigInt(options.baseFee)) throw new Error("max fee per gas less than block base fee");
-        result = tx.nonce === "0x0" ? "0x5208" : "0xa410";
+        result = options.gasEstimate ?? (tx.nonce === "0x0" ? "0x5208" : "0xa410");
         break;
       }
       case "eth_call": result = "0x"; break;
@@ -167,8 +171,16 @@ function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolea
           current().prepared_transaction.gas_limit = input.gas_limit;
           current().review.gas_limit = input.gas_limit;
           current().review.simulation = input.simulation;
+          current().message = null;
           if (input.balance !== undefined) current().review.balance = input.balance;
           current().review_revision = String(BigInt(current().review_revision) + 1n);
+        }
+        return { ok: copy(saved) };
+      }
+      if (method === "evm_wallet_preparation_error_browser_v1") {
+        expect(input.identity).toEqual(identity);
+        if (current().status === "preparing" && current().review_revision === input.review_revision) {
+          current().message = `Preparation failed before signing during ${input.stage} at block ${input.block_number}: ${input.message}`;
         }
         return { ok: copy(saved) };
       }
@@ -220,6 +232,7 @@ function fixture(options: { finishNonceRace?: boolean; executeNonceRace?: boolea
     failBroadcast: (value: typeof broadcastFailure) => { broadcastFailure = value; },
     mine: () => { mined = true; },
     balance: (value: string) => { balance = value; },
+    clearRpcFailure: () => { rpcFailure = undefined; },
   };
 }
 
@@ -248,6 +261,63 @@ test("preparation performs individual direct RPC reads and persists the exact si
   expect(finish.args[0]).toMatchObject({ balance: "1000000000", pending_nonce: "0", mined_nonce: "0", gas_estimate: "21000", gas_limit: "21000", simulation: "0x" });
   expect(app.backend.map(call => call.method)).not.toContain("evm_wallet_prepare_v1");
   expect(app.backend.map(call => call.method)).not.toContain("evm_wallet_read_contract_v1");
+});
+
+test.each([
+  [447735n, 537282n], [206049n, 247259n], [417538n, 501046n],
+])("contract estimate %s is simulated and signed with reviewed gas headroom", async (estimate, limit) => {
+  const app = fixture({ gasEstimate: `0x${estimate.toString(16)}` });
+  const prepared = await prepareBrowserOperation(app.kernel, identity, intent);
+  expect(prepared.review?.gasLimit).toBe(limit.toString());
+  expect(prepared.preparedTransaction?.gasLimit).toBe(limit.toString());
+  const simulation = app.http.find(call => call.method === "eth_call")!;
+  expect((simulation.params[0] as { gas: string }).gas).toBe(`0x${limit.toString(16)}`);
+  expect(app.backend.find(call => call.method === "evm_wallet_finish_prepare_browser_v1")!.args[0]).toMatchObject({
+    gas_estimate: estimate.toString(), gas_limit: limit.toString(),
+  });
+  const sent = await executeBrowserOperation(app.kernel, prepared);
+  expect(sent.preparedTransaction?.gasLimit).toBe(limit.toString());
+  expect(app.state().signatures).toBe(1);
+});
+
+test("an explicit gas limit remains exact and insufficient explicit gas never reaches signing", async () => {
+  const app = fixture({ gasEstimate: "0x65f02" }); // 417538, the batch-1 WETH mint limit.
+  const explicitIntent = { ...intent, operation: { transaction: {
+    ...(intent.operation as SelfCallObject).transaction as SelfCallObject, gas_limit: "500000",
+  } } };
+  const prepared = await prepareBrowserOperation(app.kernel, identity, explicitIntent);
+  expect(prepared.preparedTransaction?.gasLimit).toBe("500000");
+  const other = fixture({ gasEstimate: "0x65f02" });
+  const insufficientIntent = { ...explicitIntent, operation: { transaction: {
+    ...explicitIntent.operation.transaction, gas_limit: "400000",
+  } } };
+  const stopped = await prepareBrowserOperation(other.kernel, identity, insufficientIntent);
+  expect(stopped.status).toBe("preparing");
+  expect(stopped.message).toContain("Requested gas limit is below the live estimate");
+  expect(other.http.some(call => call.method === "eth_call" || call.method === "eth_sendRawTransaction")).toBe(false);
+  expect(other.state().signatures).toBe(0);
+});
+
+test.each(["eth_estimateGas", "eth_call"] as const)("%s failure retains unsigned stage/block diagnostics and can resume the same request", async (rpcFailure) => {
+  const app = fixture({ rpcFailure });
+  const failed = await prepareBrowserOperation(app.kernel, identity, intent);
+  expect(failed.status).toBe("preparing");
+  expect(failed.transactionHash).toBeNull();
+  expect(failed.message).toContain("before signing");
+  expect(failed.message).toContain(rpcFailure === "eth_estimateGas" ? "gas estimation" : "simulation");
+  expect(failed.message).toContain("block 256");
+  expect(failed.message).toContain("transfer amount exceeds allowance");
+  expect(failed.message).toContain("0x08c379a0");
+  expect(app.http.some(call => call.method === "eth_sendRawTransaction")).toBe(false);
+  expect(app.state().signatures).toBe(0);
+  expect((await readBrowserOperation(app.kernel, identity))?.message).toBe(failed.message);
+  app.clearRpcFailure();
+  const resumed = await prepareBrowserOperation(app.kernel, identity, intent);
+  expect(resumed.status).toBe("prepared");
+  expect(resumed.requestId).toBe(failed.requestId);
+  expect(resumed.operationId).toBe(failed.operationId);
+  expect(resumed.message).toBeNull();
+  expect(app.state().signatures).toBe(0);
 });
 
 test("a lost broadcast reply retains the accepted hash without retrying or signing twice", async () => {
@@ -321,8 +391,8 @@ test("a nonce changed during preparation is estimated and simulated again before
   const app = fixture({ finishNonceRace: true });
   const result = await prepareBrowserOperation(app.kernel, identity, intent);
   expect(result.status).toBe("prepared");
-  expect(result.review).toMatchObject({ nonce: "1", gasLimit: "42000" });
-  expect(result.preparedTransaction).toMatchObject({ nonce: "1", gasLimit: "42000" });
+  expect(result.review).toMatchObject({ nonce: "1", gasLimit: "50400" });
+  expect(result.preparedTransaction).toMatchObject({ nonce: "1", gasLimit: "50400" });
   expect(app.http.filter(call => call.method === "eth_estimateGas").map(call => (call.params[0] as { nonce: string }).nonce)).toEqual(["0x0", "0x1"]);
   expect(app.state().signatures).toBe(0);
 });
@@ -333,7 +403,7 @@ test("a nonce changed at approval returns a freshly simulated review and require
   app.balance("0x77359400");
   const changed = await executeBrowserOperation(app.kernel, prepared);
   expect(changed.status).toBe("prepared");
-  expect(changed.review).toMatchObject({ nonce: "1", gasLimit: "42000", balance: "2000000000" });
+  expect(changed.review).toMatchObject({ nonce: "1", gasLimit: "50400", balance: "2000000000" });
   expect(changed.reviewRevision).not.toBe(prepared.reviewRevision);
   expect(app.state().signatures).toBe(0);
   expect(app.state().executeCount).toBe(1);

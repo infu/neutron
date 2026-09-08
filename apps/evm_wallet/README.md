@@ -102,6 +102,33 @@ Ethereum settlement. EVM transactions need native gas on their EVM network;
 chain-key signing and durable wallet updates consume this Neutron's IC cycles.
 Direct browser RPC calls do not incur IC outcall cycles.
 
+Automatic transaction limits include 20% gas headroom, rounded up, when the
+estimate exceeds 21,000 gas. The Wallet simulates that exact limit and includes
+it in the reviewed maximum fee before signing; ordinary 21,000-gas transfers
+remain exact. Explicit caller gas limits are never increased. Read-only fee
+estimates use the same calculation so Max and protocol previews reserve the
+same gas budget. Headroom reduces estimate-related failures but cannot ensure
+that later contract state will still permit execution.
+
+Gas-estimation and simulation failures retain the original unsigned operation,
+review revision, failure stage, observation block and provider diagnostic. They
+return `preparing` with a message that no signing occurred. An explicit retry
+uses the same request ID; completing preparation clears the old error. Late
+diagnostics cannot overwrite a newer review or a signed operation.
+
+`evm_balances_v1` reads optional `decimals()` and `symbol()` for requested tokens
+outside the saved asset list at the same block as their balances. Missing
+metadata never discards a successful `balanceAtoms`; the existing `error` field
+identifies each unavailable `balanceOf`, `decimals` or `symbol` observation.
+Labels remain display hints and are not added to the saved asset list.
+
+`evm_transaction_v1` accepts `includeGasLimit: true` to return the submitted
+transaction's exact `gasLimit` alongside the receipt's actual `gasUsed`. Omit
+this option when calling older installed providers whose input schema does not
+advertise it. Requests without the option retain the original response shape;
+updated consumers also accept older responses without gas evidence. Neither a
+high gas usage nor a failed receipt by itself establishes the revert reason.
+
 ## Review, recovery and replacements
 
 Other apps call the resident service. Effects marked `provider_once` open this

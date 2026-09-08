@@ -1,7 +1,7 @@
-import { decodeAbiParameters, encodeAbiParameters, type Hex } from "viem";
 import { browserCallContract, rpcQuantity, type BrowserReadRpc } from "../browser_reads.ts";
 import { browserEvmRpc } from "../browser_rpc.ts";
 import { address as parseAddress, type Asset } from "../data.ts";
+import { decodeTokenDecimals, decodeTokenSymbol } from "../token_metadata.ts";
 
 export type TokenMetadataOptions = {
   signal?: AbortSignal;
@@ -13,7 +13,6 @@ const zeroAddress = `0x${"00".repeat(20)}`;
 const nativePlaceholder = `0x${"ee".repeat(20)}`;
 const decimalsSelector = "0x313ce567";
 const symbolSelector = "0x95d89b41";
-const symbolOutput = [{ type: "string" }] as const;
 const observed = new Map<string, Readonly<Asset>>();
 const pending = new Map<string, Promise<Readonly<Asset> | null>>();
 let generation = 0;
@@ -41,31 +40,6 @@ function waitFor<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
   });
 }
 
-function decodeDecimals(value: string): number {
-  // decimals() is uint8, including its ABI padding. A uint256-sized value must
-  // not be truncated to a different scale by a permissive ABI decoder.
-  if (value.length !== 66 || BigInt(value) > 255n) throw new Error("Invalid ERC20 decimals return value");
-  return Number(BigInt(value));
-}
-
-function decodeSymbol(value: string): string {
-  if (value.length === 66) {
-    // Some older ERC20 contracts expose symbol() as bytes32. Decode the same
-    // observed result, removing only trailing ABI null padding.
-    const bytes = Uint8Array.from(value.slice(2).match(/../g)!, byte => parseInt(byte, 16));
-    let end = bytes.length;
-    while (end > 0 && bytes[end - 1] === 0) end--;
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, end));
-  }
-  const [symbol] = decodeAbiParameters(symbolOutput, value as Hex);
-  if (encodeAbiParameters(symbolOutput, [symbol]).toLowerCase() !== value.toLowerCase()) {
-    throw new Error("Invalid ERC20 symbol return value");
-  }
-  // This remains an inert text string, including any markup-like characters.
-  // Consumers render it as text; metadata never supplies HTML or executable UI.
-  return symbol;
-}
-
 async function readMetadata(chainId: string, token: string, rpc: BrowserReadRpc, from: string): Promise<Readonly<Asset> | null> {
   try {
     const blockTag = rpcQuantity(await rpc.request(chainId, "eth_blockNumber", []), "block number").toString();
@@ -74,7 +48,7 @@ async function readMetadata(chainId: string, token: string, rpc: BrowserReadRpc,
       browserCallContract({ ...input, data: decimalsSelector }, from, rpc),
       browserCallContract({ ...input, data: symbolSelector }, from, rpc),
     ]);
-    return Object.freeze({ chainId, address: token, decimals: decodeDecimals(decimals.result), symbol: decodeSymbol(symbol.result) });
+    return Object.freeze({ chainId, address: token, decimals: decodeTokenDecimals(decimals.result), symbol: decodeTokenSymbol(symbol.result) });
   } catch {
     // ERC20 metadata is optional. A failed observation is neither zero nor an
     // assumed 18-decimal token, and must not hide other successful results.

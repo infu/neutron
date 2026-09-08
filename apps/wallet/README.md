@@ -227,6 +227,10 @@ the Wallet default-account balance for one selected ICRC ledger, and
 advisory quote; funding reads it again before dispatch. The resident also
 declares the private, direct-root-only `wallet_fund_root_v1` automation tool.
 All use closed schemas and preserve `Nat`/`Int` values as decimal strings.
+Overview and refresh default to compact output: asset and activity `logo` fields
+are `null`, avoiding repeated inline images in agent context. Visual consumers
+can request `{ "includeLogos": true }`; the underlying UI projection and token
+metadata retain their logos.
 Wallet intentionally publishes no tray badge: it has no unread cursor, and
 balance errors are not unread items.
 

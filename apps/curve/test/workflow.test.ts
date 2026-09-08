@@ -61,6 +61,35 @@ test("all approvals precede the matching final receipt; repeated completion send
   expect(f.events.indexOf("step_1_confirmed")).toBeLessThan(f.events.indexOf("send:0x03"));
   expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(3);
 });
+test("initial quote failure reports no Wallet request and the same operation ID can prepare again", async () => {
+  const f = fixture(0);
+  const result = await f.run({ prepare: async () => { throw Error("No executable Curve quote is available"); } });
+  expect(result).toMatchObject({ operationId: id, recordId: null, state: "stopped", phase: "preparation_failed", transactionHash: null, steps: [] });
+  expect(result.message).toContain("before any Wallet transaction was requested");
+  expect(result.message).toContain("same operation ID and original inputs");
+  expect(f.sends).toHaveLength(0); expect(f.rows.size).toBe(0);
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends).toHaveLength(1); expect(f.sends[0]!.requestId).toBe(requestId(id, 0));
+});
+test("an initial failed preview reports a concurrently saved operation's actual result", async () => {
+  const f = fixture(0);
+  const result = await f.run({ prepare: async () => { await f.run(); throw Error("Other preview failed"); } });
+  expect(result.state).toBe("complete"); expect(result.recordId).toBe(id);
+  expect(f.sends).toHaveLength(1);
+});
+test("lost begin replies and renewal errors cannot claim preparation failed before any Wallet request", async () => {
+  const f = fixture(0);
+  f.writeWith(() => { throw Error("Lost durable begin reply"); });
+  await expect(f.run()).rejects.toThrow("Lost durable begin reply");
+  expect(f.rows.size).toBe(1); expect(f.sends).toHaveLength(0);
+  f.writeWith(() => {});
+  f.sendWith(async (request) => f.operation(request, "prepared"));
+  expect((await f.run()).state).toBe("review");
+  f.advance();
+  await expect(f.run({ prepare: async () => { throw Error("Renewed quote unavailable"); } })).rejects.toThrow("Renewed quote unavailable");
+  expect(f.sends).toHaveLength(1); expect(f.rows.size).toBe(1);
+  expect(stateOf((await f.store.get(id))!).successor).toBe(attemptId(id, "1"));
+});
 test("crash after durable dispatch resumes identical ID after reload", async () => {
   const f = fixture(0), abort = new AbortController();
   f.writeWith((row) => { if (row.phase === "step_0_requested") abort.abort(Error("Closed")); });

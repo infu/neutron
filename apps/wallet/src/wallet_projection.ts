@@ -201,11 +201,29 @@ export const walletProjectionSchema: JsonObject = {
   additionalProperties: false,
 };
 
-export const walletProjectionEmptyInputSchema: JsonObject = {
+export const walletProjectionInputSchema: JsonObject = {
   type: "object",
-  properties: {},
+  properties: {
+    includeLogos: {
+      type: "boolean",
+      default: false,
+      description: "Include token image data for a visual consumer. Defaults to false to keep balances and activity compact.",
+    },
+  },
   additionalProperties: false,
 };
+
+export function walletProjectionForTool(
+  projection: WalletProjection,
+  includeLogos = false,
+): WalletProjection {
+  if (includeLogos) return projection;
+  return {
+    ...projection,
+    assets: projection.assets.map((asset) => ({ ...asset, logo: null })),
+    activity: projection.activity.map((record) => ({ ...record, logo: null })),
+  };
+}
 
 export function createWalletProjection(
   revision: number,

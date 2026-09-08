@@ -30,7 +30,8 @@ import {
   WALLET_PROJECTION_TOOLS,
   WALLET_PROJECTION_TOPIC,
   createWalletProjection,
-  walletProjectionEmptyInputSchema,
+  walletProjectionForTool,
+  walletProjectionInputSchema,
   walletProjectionSchema,
   type WalletProjection,
 } from "./wallet_projection.ts";
@@ -74,12 +75,15 @@ exposeTool(
   {
     title: "Read Wallet Overview",
     description:
-      "Read selected assets, exact cached balances, balance freshness, warnings, and the five most recent Wallet activity records. Amounts are decimal strings and no transfer is performed.",
-    inputSchema: walletProjectionEmptyInputSchema,
+      "Read selected assets, exact cached balances, balance freshness, warnings, and the five most recent Wallet activity records. Amounts are decimal strings and no transfer is performed. Token logos are omitted unless includeLogos is true.",
+    inputSchema: walletProjectionInputSchema,
     outputSchema: walletProjectionSchema,
     annotations: { "neutron:effects": ["read"] },
   },
-  async () => asJson(await readProjection()),
+  async (args) => asJson(walletProjectionForTool(
+    await readProjection(),
+    args.includeLogos === true,
+  )),
 );
 
 exposeTool(
@@ -87,12 +91,15 @@ exposeTool(
   {
     title: "Refresh Wallet Balances",
     description:
-      "Refresh all selected ledger balances, then return the same bounded Wallet overview. This never sends tokens or changes the selected assets.",
-    inputSchema: walletProjectionEmptyInputSchema,
+      "Refresh all selected ledger balances, then return the same bounded Wallet overview. This never sends tokens or changes the selected assets. Token logos are omitted unless includeLogos is true.",
+    inputSchema: walletProjectionInputSchema,
     outputSchema: walletProjectionSchema,
     annotations: { "neutron:effects": ["write"] },
   },
-  async () => asJson(await refreshProjection()),
+  async (args) => asJson(walletProjectionForTool(
+    await refreshProjection(),
+    args.includeLogos === true,
+  )),
 );
 
 exposeTool(

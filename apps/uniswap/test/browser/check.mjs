@@ -462,7 +462,7 @@ try{
  const effectsBeforeHistory=sends().length;
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await olderCard.getByText('✓ Complete',{exact:true}).waitFor();
- await olderCard.getByText('Complete: the final transaction has a successful receipt.',{exact:true}).waitFor();
+ await olderCard.getByText('Complete: Transaction succeeded in block 21000000. Receipt finality: included.',{exact:true}).waitFor();
  assert.equal(await olderCard.getByRole('button',{name:'Continue',exact:true}).count(),0);
  assert.equal(await historyCards.count(),64);
  assert.equal(await page.getByText('History review 64',{exact:true}).count(),0);
@@ -476,7 +476,7 @@ try{
  actions.set(changed.id,{...actions.get(changed.id),state_json:JSON.stringify(revertedState),phase:'stopped',revision:'2',updated_at:ns()});
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await olderCard.getByText('stopped',{exact:true}).waitFor();
- await olderCard.getByText('The transaction was reorganized and reverted.',{exact:true}).waitFor();
+ await olderCard.getByText('Transaction reverted in block 21000000. Receipt finality: included.',{exact:true}).waitFor();
  assert.equal(await historyCards.count(),104);
  assert.equal(await page.getByText('History review 64',{exact:true}).count(),0);
  assert.equal(sends().length,effectsBeforeHistory);
