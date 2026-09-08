@@ -11,7 +11,7 @@ import { prepareV4Swap, quoteV4Swap, v4SwapTransaction } from "../../src/v4_swap
 import { v4Deployment, type V4PoolKey } from "../../src/v4_common.ts";
 import { FACTORY, NETWORKS, QUOTER, ROUTER, TOKEN_ABI, prepareSwap, quoteSwap, type Reader, type Token, type Transaction } from "../../src/swap.ts";
 import type { ActionPlan } from "../../src/action_types.ts";
-import { v3IncreaseGasLimit } from "../../src/liquidity_gas.ts";
+import { v3IncreaseGasLimit, v4CollectGasLimit } from "../../src/liquidity_gas.ts";
 import { loadV4Artifacts } from "./v4_artifacts.ts";
 
 const dependencyRoot = process.env.NEUTRON_UNISWAP_FIXTURE_DEPS;
@@ -164,8 +164,46 @@ for (const chainId of ["1", "42161"] as const) {
       const partial = await readPosition(read, positionInput);
       assert.equal(BigInt(partial.liquidity), BigInt(increased.liquidity) - BigInt(increased.liquidity) / 4n);
       assert.ok(await balance(token0.address, recipient) > before0 && await balance(token1.address, recipient) > before1, "Removal collects both currencies to recipient");
-      await runPlan(await prepareLiquidity(read, account, { ...remove, operation: "collect", liquidityBps: undefined }, await now()));
-      assert.equal((await readPosition(read, positionInput)).liquidity, partial.liquidity, "Fee collection preserves liquidity");
+      const collect = await prepareLiquidity(read, account, { ...remove, operation: "collect", liquidityBps: undefined }, await now());
+      const collectTx = collect.steps.at(-1)!.transaction;
+      const collectCall = { account: owner, to: collectTx.to, data: collectTx.data, value: BigInt(collectTx.value) };
+      const estimateWithoutFees = await client.estimateGas(collectCall);
+      const oldCollectGasLimit = estimateWithoutFees + (estimateWithoutFees + 4n) / 5n;
+      const bufferedCollectGasLimit = v4CollectGasLimit(oldCollectGasLimit);
+      assert.equal(partial.claimable0, "0"); assert.equal(partial.claimable1, "0");
+      await client.call({ ...collectCall, gas: oldCollectGasLimit });
+      await submit(collectTx, "success", oldCollectGasLimit);
+      // A zero-fee collect is valid and skips both transfers. New swap fees can
+      // add one or two transfers after estimation without changing calldata.
+      // Exercise real gas limits here: the fixture's default 20M limit would
+      // hide this failure, including nested OOG with gasUsed below gasLimit.
+      for (const directions of [[[token0, token1]], [[token0, token1], [token1, token0]]] as const) {
+        for (const [tokenIn, tokenOut] of directions) {
+          const quote = await quoteV4Swap(read, { chainId, accountId: account.accountId, accountAddress: owner, recipient, tokenIn, tokenOut,
+            amountIn: (10n ** 16n).toString(), slippageBps: 50, deadline: String(BigInt(await now()) / 1000n + 600n) }, await now());
+          await runPlan(await prepareV4Swap(read, quote, await now()));
+        }
+        const collectible = await readPosition(read, positionInput);
+        assert.ok(BigInt(collectible.fees0) > 0n);
+        assert.equal(BigInt(collectible.fees1) > 0n, directions.length === 2);
+        // A single native transfer can still fit this fixture's old cap;
+        // both transfers, or its ERC-20-only fee transfer, cannot.
+        const exceedsOldCap = directions.length === 2 || token0.address !== null;
+        if (exceedsOldCap) await assert.rejects(() => client.call({ ...collectCall, gas: oldCollectGasLimit }), "New fee transfers exceed the previously valid empty collect gas cap");
+        else await client.call({ ...collectCall, gas: oldCollectGasLimit });
+        const reverted = exceedsOldCap ? await submit(collectTx, "reverted", oldCollectGasLimit) : null;
+        assert.equal((await readPosition(read, positionInput)).claimable0, collectible.claimable0, "Failed collect retains accrued fees");
+        await client.call({ ...collectCall, gas: bufferedCollectGasLimit });
+        const beforeCollect0 = await balance(token0.address, recipient), beforeCollect1 = await balance(token1.address, recipient);
+        const collected = await submit(collectTx, "success", bufferedCollectGasLimit);
+        assert.equal(await balance(token0.address, recipient) - beforeCollect0, BigInt(collectible.claimable0));
+        assert.equal(await balance(token1.address, recipient) - beforeCollect1, BigInt(collectible.claimable1));
+        const afterCollect = await readPosition(read, positionInput);
+        assert.equal(afterCollect.liquidity, partial.liquidity, "Collection preserves liquidity");
+        assert.equal(afterCollect.claimable0, "0"); assert.equal(afterCollect.claimable1, "0");
+        assert.equal(await client.getBalance({ address: deployment.positionManager }), 0n, "Collection leaves no native currency in the position manager");
+        console.log(`${chainId}: V4 ${token0.symbol}/${token1.symbol} collect ${directions.length} fee currencies: empty estimate ${estimateWithoutFees}, old cap ${oldCollectGasLimit}, reverted use ${reverted?.gasUsed ?? "fits"}, buffered cap ${bufferedCollectGasLimit}, success use ${collected.gasUsed}`);
+      }
       await runPlan(await prepareLiquidity(read, account, { ...remove, operation: "close", liquidityBps: undefined }, await now()));
       await assert.rejects(() => readPosition(read, positionInput), "Closing burns the NFT after collecting principal and fees");
       console.log(`${chainId}: V4 ${token0.symbol}/${token1.symbol}: mint, exact-budget approvals, both swap directions, slippage/deadline reverts, fee-credit increase, partial remove, collect and close passed`);
