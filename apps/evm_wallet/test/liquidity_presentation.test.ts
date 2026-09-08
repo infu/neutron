@@ -101,14 +101,22 @@ test("official SDK withdrawal/close sequences show enforced minima, matching NFT
   }
 });
 
-test("fee collection and empty V3 closure never claim an invented withdrawal or NFT burn", () => {
+test("collection and empty V3 closure preserve payout bounds without attributing owed principal to fees", () => {
   const v3 = operation(v3Manager, NonfungiblePositionManager.collectCallParameters({ tokenId: "42", recipient: receiver, expectedCurrencyOwed0: CurrencyAmount.fromRawAmount(usdc, 0), expectedCurrencyOwed1: CurrencyAmount.fromRawAmount(weth, 0) }));
+  const v3Native = operation(v3Manager, NonfungiblePositionManager.collectCallParameters({ tokenId: "42", recipient: receiver, expectedCurrencyOwed0: CurrencyAmount.fromRawAmount(usdc, 0), expectedCurrencyOwed1: CurrencyAmount.fromRawAmount(native, 0) }));
   const v4 = operation(v4Manager, V4PositionManager.collectCallParameters(v4Position, { ...common, tokenId: "42", recipient: receiver, hookData: "0x" }));
-  for (const op of [v3, v4]) {
+  for (const op of [v3, v3Native, v4]) {
     const summary = presentUniswapLiquidity(op, assets)!;
-    expect(summary.title).toBe("Collect position fees");
+    expect(summary.title).toBe("Collect available amounts");
+    expect(summary.amount).toBeNull();
     expect(summary.liquidity).toMatchObject({ action: "collect", tokenId: "42", recipient: receiver });
-    expect(summary.parties.some(party => party.label.startsWith("Minimum"))).toBe(false);
+    expect(summary.parties.some(party => /^Minimum token [01]$/.test(party.label))).toBe(false);
+    if (summary.liquidity!.protocol === "v3") {
+      expect(summary.description).toContain("accrued fees and previously withdrawn principal");
+      expect(summary.liquidity).toMatchObject({ collect0Max: (2n ** 128n - 1n).toString(), collect1Max: (2n ** 128n - 1n).toString() });
+      expect(summary.liquidity!.amount0Min).toBeUndefined();
+      expect(summary.liquidity!.amount1Min).toBeUndefined();
+    }
   }
   const closed = operation(v3Manager, { value: "0", calldata: encodeFunctionData({ abi: V3_ABI, functionName: "multicall", args: [[v3.preparedTransaction!.data as Hex, encodeFunctionData({ abi: V3_ABI, functionName: "burn", args: [42n] })]] }) });
   const summary = presentUniswapLiquidity(closed, assets)!;

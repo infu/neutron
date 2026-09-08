@@ -179,6 +179,7 @@ describe("liquidity contract plans", () => {
     const p = pool("v3"), existing = { ...position(p, "0"), fees0: "0", fees1: "0", owed0: "1200000", owed1: "3400000", claimable0: "1200000", claimable1: "3400000" };
     const built = buildLiquidity(p, existing, ACCOUNT, input(p, "collect"), NOW);
     expect([built.preview.amount0, built.preview.amount1]).toEqual(["1200000", "3400000"]);
+    expect(built.preview.warnings).toContain("Available amounts include fresh fees and stored owed tokens. Stored owed tokens may include withdrawn principal; their principal/fee split is not available from the current position state.");
     expect(built.preview.liquidity).toBe("0"); expect(built.approvalTokens).toEqual([]);
     const calls = v3Calls(built.transaction.data);
     expect(calls.map(c => c.functionName)).toEqual(["collect"]);

@@ -7,6 +7,7 @@ import { getAddress, keccak256, stringToHex } from "viem";
 import type { ActionPlan } from "./action_types.ts";
 import type { ActionRecord, ActionStore } from "./action_store.ts";
 import { positionManager } from "./positions.ts";
+import { prepareLiquidityGas } from "./liquidity_gas.ts";
 
 export type ActionEnvelope = {
   operationId: string; kind: string; chainId: string; accountId: EvmAccountId; input: Record<string, unknown>;
@@ -31,6 +32,13 @@ export type ActionResult = {
   phase: string; summary: string; transactionHash: string | null; message: string;
   steps: { label: string; kind: "approval" | "transaction"; status: string; transactionHash: string | null; receipt: ActionReceipt | null }[];
   details: Record<string, unknown>; positionTokenIds: string[];
+};
+export type ActionInvocation = {
+  operationId: string; recordId: string; toolName: "uniswap_swap_v2" | "uniswap_manage_liquidity_v1";
+  argumentsJson: string; gasEstimateJson: string | null; caller: EvmWalletCaller | null; agentMode: boolean; humanOwned: boolean;
+};
+export type ReconciledAction = Omit<ActionResult, "steps"> & {
+  steps: (ActionResult["steps"][number] & { requestId: string; checked: boolean })[];
 };
 export type PrepareAction = (context: {
   wallet: EvmWalletClient; envelope: ActionEnvelope; account: EvmAccount;
@@ -87,7 +95,7 @@ function checkedPlan(plan: ActionPlan, intent: ActionIntent): ActionPlan {
     if (typeof step.label !== "string" || !["approval", "transaction"].includes(step.kind)) throw new Error("Invalid prepared action step.");
     const tx = step.transaction;
     if (tx.accountId !== plan.accountId || tx.chainId !== plan.chainId) throw new Error("An action step changed the selected account or network.");
-    parseEvmSendTransactionRequest({ requestId: "0".repeat(32), accountId: tx.accountId, chainId: tx.chainId, to: tx.to, valueWei: tx.value, data: tx.data });
+    parseEvmSendTransactionRequest({ requestId: "0".repeat(32), accountId: tx.accountId, chainId: tx.chainId, to: tx.to, valueWei: tx.value, data: tx.data, ...(tx.gasLimit === undefined ? {} : { gasLimit: tx.gasLimit }) });
   }
   return JSON.parse(stable(plan)) as ActionPlan;
 }
@@ -110,7 +118,7 @@ export function parseActionState(record: ActionRecord): ActionState {
   if (state.steps.length !== state.plan.steps.length) throw new Error("Saved action step count changed.");
   state.steps.forEach((step, index) => {
     const tx = state.plan.steps[index]!.transaction;
-    const expected = parseEvmSendTransactionRequest({ requestId: actionRequestId(record.id, index), accountId: tx.accountId, chainId: tx.chainId, to: tx.to, valueWei: tx.value, data: tx.data });
+    const expected = parseEvmSendTransactionRequest({ requestId: actionRequestId(record.id, index), accountId: tx.accountId, chainId: tx.chainId, to: tx.to, valueWei: tx.value, data: tx.data, ...(tx.gasLimit === undefined ? {} : { gasLimit: tx.gasLimit }) });
     if (stable(parseEvmSendTransactionRequest(step.request)) !== stable(expected) || typeof step.dispatched !== "boolean" || typeof step.unresolvedDispatch !== "boolean" || (step.unresolvedDispatch && !step.dispatched)
         || step.receiptLogsFiltered !== true || !Number.isSafeInteger(step.operationReceiptLogsOmitted) || step.operationReceiptLogsOmitted < 0
         || !Number.isSafeInteger(step.evidenceReceiptLogsOmitted) || step.evidenceReceiptLogsOmitted < 0) throw new Error("Saved action transaction or dispatch identity changed.");
@@ -184,6 +192,86 @@ export async function latestAction(store: ActionStore, operationId: string): Pro
   }
   return null;
 }
+
+/** The persisted, canonical inputs are sufficient to continue the original
+ * invocation. Reading them grants no authority to execute it: runAction still
+ * checks the original caller, execution mode and signing account. */
+export function actionInvocation(record: ActionRecord): ActionInvocation {
+  const intent = parseActionIntent(record), { envelope } = intent, gasEstimate = parseActionState(record).plan.details.gasEstimate;
+  if (!["swap", "liquidity"].includes(envelope.kind)) throw new Error("This saved action has no supported continuation tool.");
+  return {
+    operationId: envelope.operationId, recordId: record.id,
+    toolName: envelope.kind === "swap" ? "uniswap_swap_v2" : "uniswap_manage_liquidity_v1",
+    argumentsJson: stable({ ...envelope.input, operationId: envelope.operationId, chainId: envelope.chainId, accountId: envelope.accountId }),
+    gasEstimateJson: gasEstimate === undefined ? null : stable(gasEstimate),
+    caller: intent.caller, agentMode: intent.agentMode, humanOwned: record.humanOwned,
+  };
+}
+
+function retainedEvidence(intent: ActionIntent, step: ActionJournalStep, evidence: EvmTransactionResult | null): ActionJournalStep {
+  const fullLogCount = evidence?.receipt?.logs.length ?? 0;
+  if (evidence?.receipt) evidence.receipt = { ...evidence.receipt, logs: evidence.receipt.logs.filter((log) =>
+    intent.envelope.kind === "liquidity" && intent.envelope.input.operation === "mint"
+    && log.address.toLowerCase() === step.request.to.toLowerCase() && log.topics.length === 4
+    && log.topics[0]?.toLowerCase() === TRANSFER_TOPIC && BigInt(log.topics[1]!) === 0n && log.data === "0x") };
+  return { ...step, evidence, receiptLogsFiltered: true, evidenceReceiptLogsOmitted: fullLogCount - (evidence?.receipt?.logs.length ?? 0) };
+}
+
+/** Refresh only transaction hashes already linked to authenticated Wallet
+ * observations in this journal. operationStatus intentionally is not available:
+ * that Wallet tool can rebroadcast signed bytes. A dispatch with no saved hash
+ * therefore remains unknown until explicit recovery through the original tool.
+ * Only journal observations change; no request, quote or position is created. */
+export async function reconcileAction(
+  wallet: Pick<EvmWalletClient, "transaction">, store: ActionStore, operationId: string,
+  options: Pick<ActionOptions, "signal" | "onProgress"> = {},
+): Promise<ReconciledAction | null> {
+  if (!/^[0-9a-f]{32}$/.test(operationId)) throw new Error("operationId must be 32 lowercase hexadecimal characters.");
+  const callOptions = options.signal ? { signal: options.signal } : undefined;
+  for (;;) {
+    options.signal?.throwIfAborted();
+    let record = await latestAction(store, operationId);
+    if (!record) return null;
+    const intent = parseActionIntent(record), state = parseActionState(record), checked = new Set<string>();
+    try {
+      for (let index = state.steps.length - 1; index >= 0; index -= 1) {
+        const step = state.steps[index]!, operation = step.operation;
+        if (!step.dispatched || !operation) continue;
+        const hash = operation.receipt ? operation.transactionHash : operation.replacementTransactionHash ?? operation.transactionHash;
+        if (!hash) continue;
+        options.onProgress?.(`Checking ${state.plan.steps[index]!.label.toLowerCase()}…`, actionResult(record));
+        const request = { chainId: intent.envelope.chainId, transactionHash: hash };
+        const evidence = parseEvmTransactionResult(await wallet.transaction(request, callOptions), request);
+        options.signal?.throwIfAborted();
+        state.steps[index] = retainedEvidence(intent, { ...step, unresolvedDispatch: evidence.transaction === null && step.unresolvedDispatch }, evidence);
+        checked.add(step.request.requestId);
+      }
+      const views = state.steps.map((step) => view(intent, step));
+      let lastDispatched = state.steps.length - 1;
+      while (lastDispatched >= 0 && !state.steps[lastDispatched]!.dispatched) lastDispatched -= 1;
+      const phase = state.successor ? record.phase : views.at(-1)!.status === "confirmed" ? "complete"
+        : lastDispatched < 0 ? record.phase : `step_${lastDispatched}_${views[lastDispatched]!.status}`;
+      options.signal?.throwIfAborted();
+      try { record = await store.update(record, state, phase); }
+      catch (error) {
+        const latest = await store.get(record.id);
+        if (latest && latest.revision !== record.revision) throw new ConcurrentActionUpdate();
+        throw error;
+      }
+      const missingHash = state.steps.some((step) => step.dispatched && !step.operation?.transactionHash && !step.operation?.replacementTransactionHash
+        && (step.unresolvedDispatch || !step.operation || !["preparing", "prepared", ...TERMINAL].includes(step.operation.status)));
+      const message = missingHash
+        ? "A dispatched request has no saved transaction hash; its outcome remains unknown. This check did not send or renew anything. Retrieve the saved invocation for explicit recovery with the same operation ID."
+        : "Existing transaction evidence was refreshed. This check did not approve, send or renew anything. Retrieve the saved invocation before explicitly continuing any remaining steps with the same operation ID.";
+      const result = actionResult(record, undefined, message);
+      return { ...result, steps: result.steps.map((step, index) => ({ ...step, requestId: state.steps[index]!.request.requestId, checked: checked.has(state.steps[index]!.request.requestId) })) };
+    } catch (error) {
+      if (!(error instanceof ConcurrentActionUpdate)) throw error;
+      // A continuation may have advanced or renewed the journal during these
+      // reads. Reload it instead of overwriting that progress with our snapshot.
+    }
+  }
+}
 function receiptWait(signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted();
@@ -234,7 +322,7 @@ export async function runAction(
     const plan = checkedPlan(await prepare({ wallet, envelope: structuredClone(envelope), account: structuredClone(selected), onProgress: progress, now }), intent);
     abort();
     const state: ActionState = { version: 1, plan, successor: null, steps: plan.steps.map((step, index) => ({
-      request: parseEvmSendTransactionRequest({ requestId: actionRequestId(id, index), accountId: step.transaction.accountId, chainId: step.transaction.chainId, to: step.transaction.to, valueWei: step.transaction.value, data: step.transaction.data }),
+      request: parseEvmSendTransactionRequest({ requestId: actionRequestId(id, index), accountId: step.transaction.accountId, chainId: step.transaction.chainId, to: step.transaction.to, valueWei: step.transaction.value, data: step.transaction.data, ...(step.transaction.gasLimit === undefined ? {} : { gasLimit: step.transaction.gasLimit }) }),
       dispatched: false, unresolvedDispatch: false, operation: null, evidence: null,
       receiptLogsFiltered: true, operationReceiptLogsOmitted: 0, evidenceReceiptLogsOmitted: 0,
     })) };
@@ -249,17 +337,11 @@ export async function runAction(
     const evidence = hash ? parseEvmTransactionResult(await wallet.transaction({ chainId: envelope.chainId, transactionHash: hash }, callOptions), { chainId: envelope.chainId, transactionHash: hash }) : null;
     const operationReceiptLogsOmitted = observed.receipt?.logs.length ?? 0;
     const operation = { ...observed, receipt: observed.receipt ? { ...observed.receipt, logs: [] } : null };
-    const fullEvidenceLogCount = evidence?.receipt?.logs.length ?? 0;
-    if (evidence?.receipt) evidence.receipt = { ...evidence.receipt, logs: evidence.receipt.logs.filter((log) =>
-      intent.envelope.kind === "liquidity" && intent.envelope.input.operation === "mint"
-      && log.address.toLowerCase() === step.request.to.toLowerCase() && log.topics.length === 4
-      && log.topics[0]?.toLowerCase() === TRANSFER_TOPIC && BigInt(log.topics[1]!) === 0n && log.data === "0x") };
     // A poll can see an older unsigned revision while the dispatched Wallet
     // call is still running. Only its reply resolves that dispatch; preparing
     // and prepared polls must retain the original ambiguity through expiry.
     const unresolvedDispatch = step.unresolvedDispatch && ["preparing", "prepared"].includes(operation.status) && !reply;
-    return { ...step, operation, evidence, unresolvedDispatch, receiptLogsFiltered: true,
-      operationReceiptLogsOmitted, evidenceReceiptLogsOmitted: fullEvidenceLogCount - (evidence?.receipt?.logs.length ?? 0) };
+    return retainedEvidence(intent, { ...step, operation, unresolvedDispatch, operationReceiptLogsOmitted }, evidence);
   };
   const requested = new Set<string>();
   abort();
@@ -327,8 +409,18 @@ export async function runAction(
         await persist(record!, state, "superseded");
         update(await create(String(BigInt(intent.attempt) + 1n), intent.account)); continue;
       }
-      const index = views.findIndex((step) => step.status !== "confirmed"), step = state.steps[index]!;
+      const index = views.findIndex((step) => step.status !== "confirmed");
+      let step = state.steps[index]!;
       if (requested.has(step.request.requestId)) return actionResult(record!, "review", "Wallet refreshed the exact transaction for review. Continue this same operationId for its updated review.");
+      if (!step.dispatched) {
+        const gas = await prepareLiquidityGas(wallet, { kind: envelope.kind, input: envelope.input, stepKind: state.plan.steps[index]!.kind, accountAddress: intent.account.address, request: step.request }, callOptions);
+        abort();
+        if (gas) {
+          step = { ...step, request: gas.request };
+          state.plan.steps[index]!.transaction = { ...state.plan.steps[index]!.transaction, gasLimit: gas.request.gasLimit! };
+          state.plan.details.gasEstimate = gas.diagnostics;
+        }
+      }
       requested.add(step.request.requestId);
       progress(`Step ${index + 1} of ${state.steps.length}: ${state.plan.steps[index]!.label}`);
       state.steps[index] = { ...step, dispatched: true, unresolvedDispatch: true };

@@ -12,7 +12,7 @@ change, external wallet extension, API credential or IC HTTP outcall is needed.
 
 The interface offers Swap and Liquidity tabs. Liquidity management covers V3 and
 V4 positions on Ethereum and Arbitrum: mint in an initialized pool, inspect, add,
-remove, collect fees, and close. Creating an uninitialized pool is a separate
+remove, collect available amounts, and close. Creating an uninitialized pool is a separate
 operation requiring an explicit initial price; it is not inferred from deposit
 amounts. Changing a position's range requires removing liquidity and minting a
 new position. Existing V3 positions are not migrated into V4.

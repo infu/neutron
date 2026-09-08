@@ -3,7 +3,7 @@ import { requireEvmWalletCaller } from "neutron-tools/evm_wallet";
 import { getAddress } from "viem";
 import { createServiceWallet } from "./agent_wallet.ts";
 import { createActionStore, type ActionRecord } from "./action_store.ts";
-import { actionResult, latestAction, runAction, type ActionEnvelope, type ActionResult } from "./action_workflow.ts";
+import { actionInvocation, actionResult, latestAction, reconcileAction, runAction, type ActionEnvelope, type ActionResult } from "./action_workflow.ts";
 import { walletReader } from "./controller.ts";
 import { prepareLiquidity, type LiquidityInput, type LiquidityPreview } from "./liquidity.ts";
 import type { ActionPlan } from "./action_types.ts";
@@ -117,7 +117,7 @@ function compactPlan(plan: ActionPlan) {
 export function registerLiquidityTools() {
   exposeTool("uniswap_liquidity_quote_v1", {
     title: "Preview a Uniswap liquidity action",
-    description: "Read and prepare a V3 or V4 position action without signing or sending anything. mint creates a position in an existing pool; increase adds within its existing range; decrease withdraws exact liquidity or liquidityBps; collect collects available amounts; close withdraws all, collects and burns the NFT. maxAmountA/B are hard atomic token budgets. Null token means native ETH. For existing positions tokenA/B optionally orient budgets, otherwise pool currency0/1. Defaults: main account, own recipient, 50 slippage bps, 1200 seconds, mint fee 3000 and full range. Pool/range fields on existing positions must match on-chain state; V4 hooks and hookData are explicit advanced inputs. Use uniswap_manage_liquidity_v1 for the complete action.",
+    description: "Read and prepare a V3 or V4 position action without signing or sending anything. mint creates a position in an existing pool; increase adds within its existing range; decrease withdraws exact liquidity or liquidityBps; collect collects available amounts; close withdraws all, collects and burns the NFT. Collected stored owed amounts can include withdrawn principal as well as fees; do not count the entire collection as profit. Position reads separate freshly accrued fees from stored owed amounts. maxAmountA/B are hard atomic token budgets. Null token means native ETH. For existing positions tokenA/B optionally orient budgets, otherwise pool currency0/1. Defaults: main account, own recipient, 50 slippage bps, 1200 seconds, mint fee 3000 and full range. Pool/range fields on existing positions must match on-chain state; V4 hooks and hookData are explicit advanced inputs. Use uniswap_manage_liquidity_v1 for the complete action.",
     inputSchema: toolSchema(liquidityProperties, ["operation", "protocol", "chainId"]),
     outputSchema: toolSchema({ summary: toolText, chainId: toolText, accountId: toolText, deadline: toolText, steps: { type: "array", items: toolSchema({ label: toolText, kind: toolText }) }, preview: { oneOf: [liquidityPreviewSchema, { type: "null" }] } }),
     annotations: { "neutron:effects": ["read", "network"], "neutron:longRunning": true },
@@ -129,7 +129,7 @@ export function registerLiquidityTools() {
 
   exposeTool("uniswap_manage_liquidity_v1", {
     title: "Manage Uniswap liquidity through approval and confirmation",
-    description: "Complete a V3 or V4 mint, increase, decrease, collect or close action, including every required allowance, Wallet review and final confirmed transaction. Use one stable 32-hex operationId; after pending, review or a lost reply call again with identical original arguments. Continue until complete; approval alone is never completion. Serialize effectful swap and liquidity flows within one Agent run; independent reads can run in parallel. Amounts are hard maximum atomic budgets; withdrawals use exact liquidity or liquidityBps (10000 = all). The Wallet presents exact effects to the human or current Agent judge using the owner's existing instructions. Defaults and pool/range semantics match uniswap_liquidity_quote_v1. A minted position ID is reported only from the confirmed NFT Transfer receipt.",
+    description: "Complete a V3 or V4 mint, increase, decrease, collect or close action, including every required allowance, Wallet review and final confirmed transaction. Use one stable 32-hex operationId; after pending, review or a lost reply call again with identical original arguments. Continue until complete; approval alone is never completion. Serialize effectful swap and liquidity flows within one Agent run; independent reads can run in parallel. Amounts are hard maximum atomic budgets; withdrawals use exact liquidity or liquidityBps (10000 = all). Collect transfers available amounts, which may include withdrawn principal and fees; it is not entirely profit. Position reads separately report fresh fees and stored owed amounts. The Wallet presents exact effects to the human or current Agent judge using the owner's existing instructions. Defaults and pool/range semantics match uniswap_liquidity_quote_v1. A minted position ID is reported only from the confirmed NFT Transfer receipt.",
     inputSchema: toolSchema({ operationId: toolOperationId, ...liquidityProperties }, ["operationId", "operation", "protocol", "chainId"]),
     outputSchema: actionOutputSchema, annotations: { "neutron:effects": ["read", "write", "network", "user_visible_ui"], "neutron:longRunning": true },
   }, (args, context) => {
@@ -139,11 +139,35 @@ export function registerLiquidityTools() {
 
   exposeTool("uniswap_action_status_v1", {
     title: "Read saved Uniswap action progress",
-    description: "Read compact durable progress for a V2 swap or liquidity action, following quote-renewal attempts. This read does not sign, send or claim pending transactions succeeded. To reconcile live Wallet status and continue, repeat the original swap/manage tool with identical inputs and operationId.",
+    description: "Read compact durable progress for a V2 swap or liquidity action, following quote-renewal attempts. This reads the journal, not live receipts. Use uniswap_action_reconcile_v1 to refresh known transaction evidence without sending, or uniswap_action_input_v1 to recover the saved invocation before explicitly continuing the same operation.",
     inputSchema: toolSchema({ operationId: toolOperationId }), outputSchema: toolSchema({ action: { oneOf: [actionOutputSchema, { type: "null" }] } }), annotations: { "neutron:effects": ["read"] },
   }, async (args, context) => {
     const record = await latestAction(createActionStore(context.kernel), String(args.operationId));
     return toolJson({ action: record ? compactActionResult(actionResult(record)) : null });
+  });
+
+  exposeTool("uniswap_action_input_v1", {
+    title: "Recover the saved Uniswap invocation",
+    description: "Read the canonical saved arguments, original operationId, continuation tool and caller ownership for a V2 swap or liquidity action, following quote renewals. argumentsJson includes saved defaults and can be used unchanged with the returned toolName for explicit continuation. gasEstimateJson contains any retained pre-dispatch gas observation, block and chosen limit; null means none was saved. Reading does not authorize execution: the original caller installation, Agent mode and signing identity still apply. Check uniswap_action_reconcile_v1 first; never replay a completed mint as a new operation. No Wallet or network call is made.",
+    inputSchema: toolSchema({ operationId: toolOperationId }),
+    outputSchema: toolSchema({ invocation: { oneOf: [toolSchema({ operationId: toolText, recordId: toolText, toolName: { enum: ["uniswap_swap_v2", "uniswap_manage_liquidity_v1"] }, argumentsJson: toolText, gasEstimateJson: toolNullableText, caller: { oneOf: [toolSchema({ appId: toolText, installationUid: toolText }), { type: "null" }] }, agentMode: { type: "boolean" }, humanOwned: { type: "boolean" } }), { type: "null" }] } }),
+    annotations: { "neutron:effects": ["read"] },
+  }, async (args, context) => {
+    const record = await latestAction(createActionStore(context.kernel), String(args.operationId));
+    return toolJson({ invocation: record ? actionInvocation(record) : null });
+  });
+
+  exposeTool("uniswap_action_reconcile_v1", {
+    title: "Refresh saved Uniswap transaction receipts",
+    description: "Refresh public transaction fields and receipts for hashes already linked to saved Wallet requests, following quote renewals. Updates only the Uniswap journal; never signs, broadcasts, opens a review, creates a quote or continues a queued step. Each step reports its exact requestId, whether it was checked live, and receipt status/block/finality. A disappeared receipt becomes pending/unknown; success is verified against saved sender, destination, calldata and value. A dispatched request with no saved hash stays unknown: retrieve uniswap_action_input_v1 for explicit recovery through the original invocation. Successful mint IDs come from the matching receipt and must not be reminted.",
+    inputSchema: toolSchema({ operationId: toolOperationId }),
+    outputSchema: toolSchema({ action: { oneOf: [toolSchema({ ...(actionOutputSchema.properties as JsonObject), steps: { type: "array", items: toolSchema({ label: toolText, kind: toolText, status: toolText, transactionHash: toolNullableText, requestId: toolText, checked: { type: "boolean" }, receipt: { oneOf: [toolSchema({ status: { enum: ["success", "reverted"] }, blockNumber: toolText, finality: { enum: ["included", "safe", "finalized"] } }), { type: "null" }] } }) } }), { type: "null" }] } }),
+    annotations: { "neutron:effects": ["read", "write", "network"], "neutron:longRunning": true },
+  }, async (args, context) => {
+    const result = await reconcileAction(createServiceWallet(context), createActionStore(context.kernel), String(args.operationId), {
+      ...(context.signal ? { signal: context.signal } : {}), onProgress: (phase) => context.reportProgress({ phase }),
+    });
+    return toolJson({ action: result ? { ...compactActionResult(result), steps: result.steps } : null });
   });
 
   exposeTool("uniswap_actions_page_v1", {

@@ -11,6 +11,7 @@ import { prepareV4Swap, quoteV4Swap, v4SwapTransaction } from "../../src/v4_swap
 import { v4Deployment, type V4PoolKey } from "../../src/v4_common.ts";
 import { FACTORY, NETWORKS, QUOTER, ROUTER, TOKEN_ABI, prepareSwap, quoteSwap, type Reader, type Token, type Transaction } from "../../src/swap.ts";
 import type { ActionPlan } from "../../src/action_types.ts";
+import { v3IncreaseGasLimit } from "../../src/liquidity_gas.ts";
 import { loadV4Artifacts } from "./v4_artifacts.ts";
 
 const dependencyRoot = process.env.NEUTRON_UNISWAP_FIXTURE_DEPS;
@@ -78,9 +79,9 @@ for (const chainId of ["1", "42161"] as const) {
       assert.equal(result.status, status, `${chainId}: local transaction ${hash}`);
       return result;
     };
-    const submit = (request: Transaction, status = "success") => {
+    const submit = (request: Transaction, status = "success", gas = 20_000_000n) => {
       assert.equal(request.chainId, chainId); assert.equal(request.accountId, account.accountId);
-      return wallet.sendTransaction({ account: owner, chain: null, to: request.to, data: request.data, value: BigInt(request.value), gas: 20_000_000n }).then(hash => receipt(hash, status));
+      return wallet.sendTransaction({ account: owner, chain: null, to: request.to, data: request.data, value: BigInt(request.value), gas }).then(hash => receipt(hash, status));
     };
     const write = (address: Address, abi: any, functionName: string, args: unknown[] = []) => wallet.writeContract({ account: owner, chain: null, address, abi, functionName, args, gas: 20_000_000n }).then(hash => receipt(hash));
     const installAt = async (address: Address, artifact: { abi: any; bytecode: string }, args: unknown[] = []) => {
@@ -183,13 +184,32 @@ for (const chainId of ["1", "42161"] as const) {
       const positionInput = { chainId, accountId: account.accountId, owner, protocol: "v3" as const, tokenId };
       const minted = await readPosition(read, positionInput); assert.ok(BigInt(minted.liquidity) > 0n);
       assert.equal(await client.getBalance({ address: V3_POSITION_MANAGER }), 0n, "V3 mint refunds unused ETH budget");
+      const increase = await prepareLiquidity(read, account, { ...input, operation: "increase", tokenId, maxAmountA: "1000000000000000", maxAmountB: "1000000000000000" }, await now());
+      for (const step of increase.steps.filter(step => step.kind === "approval")) await submit(step.transaction);
+      const increaseTx = increase.steps.at(-1)!.transaction;
+      const increaseCall = { account: owner, to: increaseTx.to, data: increaseTx.data, value: BigInt(increaseTx.value) };
+      const estimateBeforeFees = await client.estimateGas(increaseCall);
+      const oldGasLimit = estimateBeforeFees + (estimateBeforeFees + 4n) / 5n;
+      const bufferedGasLimit = v3IncreaseGasLimit(oldGasLimit);
+      await client.call({ ...increaseCall, gas: oldGasLimit });
       const quote = await quoteSwap(read, { chainId, accountId: account.accountId, accountAddress: owner, recipient,
         tokenIn: tokenAInput, tokenOut: tokenBInput, amountIn: (10n ** 16n).toString(), slippageBps: 50, deadline: String(BigInt(await now()) / 1000n + 600n) }, await now());
       const swap = await prepareSwap(read, quote, await now());
       if (swap.approval) await submit(swap.approval);
       await submit(swap.swap);
+      // Fees in both currencies initialize additional pool/position storage.
+      // This changes gas after a successful estimate without changing calldata,
+      // allowance, recipient, budgets or slippage. All effects are local only.
+      const reverse = await prepareSwap(read, await quoteSwap(read, { chainId, accountId: account.accountId, accountAddress: owner, recipient,
+        tokenIn: tokenBInput, tokenOut: tokenAInput, amountIn: (10n ** 16n).toString(), slippageBps: 50, deadline: String(BigInt(await now()) / 1000n + 600n) }, await now()), await now());
+      if (reverse.approval) await submit(reverse.approval);
+      await submit(reverse.swap);
       const accrued = await readPosition(read, positionInput); assert.ok(BigInt(accrued.fees0) + BigInt(accrued.fees1) > 0n);
-      await runPlan(await prepareLiquidity(read, account, { ...input, operation: "increase", tokenId, maxAmountA: "1000000000000000", maxAmountB: "1000000000000000" }, await now()));
+      await assert.rejects(() => client.call({ ...increaseCall, gas: oldGasLimit }), "Previously simulated 20% cap cannot cover the new storage costs");
+      await client.call({ ...increaseCall, gas: bufferedGasLimit });
+      const increasedReceipt = await submit(increaseTx, "success", bufferedGasLimit);
+      assert.ok(increasedReceipt.gasUsed < bufferedGasLimit);
+      console.log(`${chainId}: V3 increase gas: estimate ${estimateBeforeFees}, old cap ${oldGasLimit}, buffered cap ${bufferedGasLimit}, used ${increasedReceipt.gasUsed}`);
       const increased = await readPosition(read, positionInput); assert.ok(BigInt(increased.liquidity) > BigInt(minted.liquidity));
       const removal: LiquidityInput = { operation: "decrease", protocol: "v3", chainId, accountId: account.accountId, tokenId,
         tokenA: tokenAInput.address, tokenB: tokenBInput.address, liquidityBps: 2500, recipient };

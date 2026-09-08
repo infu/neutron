@@ -86,6 +86,11 @@ For both Ethereum and Arbitrum configurations, the app's `prepareLiquidity`,
   position; closing transfers remaining assets and burns its NFT.
 - The same V3 liquidity lifecycle, including app-generated mint/increase,
   swap-accrued fees, remove-and-collect, ETH unwrapping and NFT burn.
+- V3 increase gas estimation before swaps accrue fees in both currencies:
+  the original 20% cap simulates successfully before the storage changes and
+  fails afterward. The app's additional reserve succeeds with identical
+  calldata for ERC20 and native funding. These are unforked local chains;
+  the chain-42161 run does not model Nitro posting costs.
 
 The V4 cases use initialized pools without hooks. The fixture does not claim
 coverage of arbitrary hook contracts, live routing liquidity, wallet signing,

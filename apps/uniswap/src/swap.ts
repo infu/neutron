@@ -37,7 +37,7 @@ export type Reader = (chainId: string, address: Address, data: Hex, blockTag?: s
 export type QuoteProgress = (message: string) => void;
 export type QuoteInput = { chainId: string; accountId: string; accountAddress: Address; tokenIn: Token; tokenOut: Token; amountIn: string; slippageBps: number; recipient: Address; deadline: string };
 export type Quote = QuoteInput & { router: Address; quoter: Address; fee: number; amountOut: string; minimumOut: string; gasEstimate: string; priceImpactBps: string | null; quotedAtMs: number; blockNumber: string | null; pool: Address | null; routeWarnings: string[]; networkFees?: import("./fees.ts").SwapFeeEstimates };
-export type Transaction = { chainId: string; accountId: string; to: Address; value: string; data: Hex };
+export type Transaction = { chainId: string; accountId: string; to: Address; value: string; data: Hex; gasLimit?: string };
 export type PreparedSwap = { quote: Quote; approval: Transaction | null; swap: Transaction; allowance: string | null };
 
 export function network(chainId: string) {

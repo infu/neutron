@@ -185,6 +185,7 @@ export function buildLiquidity(pool: PoolState, position: PositionRecord | null,
   if (!same(pool.hooks, zeroAddress)) warnings.push("This pool has a hook. Its contract can change fees, token accounting or requirements for adding and removing liquidity.");
   if (pool.tick < ticks.tickLower || pool.tick >= ticks.tickUpper) warnings.push("This position is outside the current price range and will not earn swap fees until the price enters it.");
   if (input.operation === "decrease" || input.operation === "close") warnings.push("Outputs include any collected fees in addition to the principal estimate shown.");
+  if (input.operation === "collect" && input.protocol === "v3") warnings.push("Available amounts include fresh fees and stored owed tokens. Stored owed tokens may include withdrawn principal; their principal/fee split is not available from the current position state.");
   return { preview: { operation: input.operation, protocol: input.protocol, tokenId: input.tokenId ?? null, token0: pool.token0, token1: pool.token1, ...ticks, liquidity, amount0, amount1, amount0Max: max0, amount1Max: max1, amount0Min: min0, amount1Min: min1, recipient, deadline, inRange: pool.tick >= ticks.tickLower && pool.tick < ticks.tickUpper, pool, warnings },
     transaction: { chainId: input.chainId, accountId: input.accountId, to: manager, data: data as Hex, value }, approvalTokens };
 }
@@ -199,7 +200,7 @@ export async function prepareLiquidity(read: Reader, account: EvmAccount, input:
   const built = buildLiquidity(pool, position, account, input, nowMs);
   const steps = input.protocol === "v4" ? await permit2ApprovalSteps(read, { chainId: input.chainId, accountId: input.accountId, accountAddress: checked.owner, spender: built.transaction.to, deadline: built.preview.deadline, tokens: built.approvalTokens, nowSeconds: Math.floor(nowMs / 1000).toString() }) : [];
   if (input.protocol === "v3") for (const token of built.approvalTokens) steps.push(...await planErc20Approval(read, { chainId: input.chainId, accountId: input.accountId, owner: checked.owner, token: token.address, spender: built.transaction.to, amount: token.amount, symbol: token.symbol }));
-  const labels: Record<LiquidityOperation, string> = { mint: "Create liquidity position", increase: "Add liquidity", decrease: "Remove liquidity", collect: "Collect fees", close: "Close liquidity position" };
+  const labels: Record<LiquidityOperation, string> = { mint: "Create liquidity position", increase: "Add liquidity", decrease: "Remove liquidity", collect: "Collect available amounts", close: "Close liquidity position" };
   const summary = `${labels[input.operation]} · ${built.preview.token0.symbol}/${built.preview.token1.symbol} · ${input.protocol.toUpperCase()}`;
   steps.push({ label: labels[input.operation], kind: "transaction", transaction: built.transaction });
   return { chainId: input.chainId, accountId: input.accountId, accountAddress: checked.owner, deadline: built.preview.deadline, summary, steps, details: { kind: "liquidity", input, preview: built.preview } };

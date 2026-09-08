@@ -102,15 +102,18 @@ function presentation(operation: Operation, assets: readonly Asset[], details: L
   const intermediaryDescription = details.collectionRecipient
     ? `${collecting ? "Collect" : details.action === "close" && details.amount0Min === undefined ? "Collect the empty position's remaining tokens" : "Withdraw liquidity and collect"} into the NFT manager, then forward its WETH as ETH and the listed token.${details.action === "close" ? " Burn the emptied position NFT afterward." : ""} The forwarding currencies are not verified against this NFT; other collected tokens may remain in the manager.`
     : null;
+  const collectionNote = collecting && details.protocol === "v3"
+    ? " Collected amounts can include accrued fees and previously withdrawn principal."
+    : "";
   return {
-    title: mint ? "Create liquidity position" : adding ? "Add liquidity" : collecting ? "Collect position fees" : details.action === "close" ? "Close liquidity position" : "Remove liquidity",
+    title: mint ? "Create liquidity position" : adding ? "Add liquidity" : collecting ? "Collect available amounts" : details.action === "close" ? "Close liquidity position" : "Remove liquidity",
     amount: amountText,
     amountLabel: "Maximum deposit",
-    description: intermediaryDescription ?? (mint ? "Deposit tokens into a Uniswap liquidity position. The position NFT goes to the listed owner."
+    description: (intermediaryDescription ?? (mint ? "Deposit tokens into a Uniswap liquidity position. The position NFT goes to the listed owner."
       : adding ? "Add tokens to this position within the transaction's limits. Amounts use the position's on-chain token order."
-      : collecting ? "Collect the position's accrued tokens. The received amounts depend on its on-chain balances."
+      : collecting ? "Collect the position's available tokens. The received amounts depend on its on-chain balances."
       : details.action === "close" ? details.amount0Min !== undefined ? "Withdraw and collect this position's tokens, then burn its NFT. The transaction enforces the withdrawal minima." : "Collect the empty position's remaining tokens, then burn its NFT."
-      : "Withdraw liquidity and collect tokens in this transaction. The transaction enforces the withdrawal minima."),
+      : "Withdraw liquidity and collect tokens in this transaction. The transaction enforces the withdrawal minima.")) + collectionNote,
     parties, contract: tx.to,
     nativeValue: null,
     unlimitedApproval: false, tokenSymbol: null, advancedDetails, liquidity: details,
