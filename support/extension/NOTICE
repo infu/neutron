@@ -1,0 +1,10 @@
+Neutron Browser Extension
+Copyright 2026 3V Interactive
+
+Licensed under the Neutron Public License, Version 1.0.
+SPDX-License-Identifier: LicenseRef-Neutron-Public-License-1.0
+See the LICENSE file distributed with this work.
+
+This extension is an optional browser control-plane component of Neutron.
+Its runtime has no bundled third-party dependencies. The source in this
+directory and the build script constitute the extension's complete source.

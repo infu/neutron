@@ -36,6 +36,8 @@ const snapshotSchema: JsonObject = {
   properties: {
     ready: { type: "boolean" },
     connected: { type: "boolean" },
+    provider: { type: "string", enum: ["openrouter", "chatgpt"] },
+    chatgpt: { type: "object" },
     webToolsAvailable: { type: "boolean" },
     selectedModelId: { type: ["string", "null"] },
     models: { type: "array" },
@@ -143,6 +145,65 @@ exposeTool(
     );
   }
 );
+
+exposeTool("agent_select_provider", {
+  title: "Select Agent Connection",
+  description: "Choose OpenRouter or a ChatGPT subscription for this tile. Existing conversation history is retained.",
+  inputSchema: {
+    type: "object", required: ["provider"], additionalProperties: false,
+    properties: { provider: { type: "string", enum: ["openrouter", "chatgpt"] } },
+  },
+  outputSchema: snapshotSchema,
+  annotations: { "neutron:effects": ["write"] },
+}, async (args, context) => {
+  if (args.provider !== "openrouter" && args.provider !== "chatgpt") throw new Error("Unknown Agent connection provider");
+  const provider = args.provider;
+  return asJson(await mutate(context, (runtime, historyId) => runtime.selectProvider(historyId, provider, context.signal)));
+});
+
+exposeTool("chatgpt_connect", {
+  title: "Connect ChatGPT Subscription",
+  description: "Enable the optional browser extension route if needed, then show a ChatGPT device code. Saved route permission does not expire; it is revocable in Kernel Settings.",
+  inputSchema: emptyInput,
+  outputSchema: snapshotSchema,
+  annotations: { "neutron:effects": ["network", "user_visible_ui"] },
+}, async (_args, context) => asJson(await mutate(context, (runtime, historyId) =>
+  runtime.connectChatGpt(historyId, async () => {
+    broadcastConnectionChanged();
+    await publishStateChange();
+  }, context.signal))));
+
+exposeTool("chatgpt_cancel_login", {
+  title: "Cancel ChatGPT Login",
+  description: "Cancel the pending device-code login without changing the saved extension route permission.",
+  inputSchema: emptyInput, outputSchema: snapshotSchema,
+  annotations: { "neutron:effects": ["write"] },
+}, async (_args, context) => asJson(await mutate(context, (runtime, historyId) => runtime.cancelChatGptLogin(historyId))));
+
+exposeTool("chatgpt_disconnect", {
+  title: "Disconnect ChatGPT",
+  description: "Remove the ChatGPT subscription credential from this browser. The optional extension route grant remains controlled by Kernel Settings.",
+  inputSchema: emptyInput, outputSchema: snapshotSchema,
+  annotations: { "neutron:effects": ["write"] },
+}, async (_args, context) => asJson(await mutate(context, (runtime, historyId) =>
+  runtime.disconnectChatGpt(historyId, broadcastConnectionChanged, context.signal))));
+
+exposeTool("agent_models", {
+  title: "Agent Models", description: "Return or refresh tool-capable models from this tile's selected connection provider.",
+  inputSchema: { type: "object", additionalProperties: false, properties: { refresh: { type: "boolean" } } },
+  outputSchema: snapshotSchema,
+  annotations: { "neutron:effects": ["read", "network"] },
+}, async (args, context) => asJson(args.refresh === true
+  ? await mutate(context, (runtime, historyId) => runtime.refreshModels(historyId, context.signal))
+  : await withOwnTile(context, (runtime, historyId) => runtime.status(historyId))));
+
+exposeTool("agent_select_model", {
+  title: "Select Agent Model", description: "Select a current tool-capable model from this tile's connection provider.",
+  inputSchema: { type: "object", required: ["modelId"], additionalProperties: false, properties: { modelId: { type: "string", minLength: 1, maxLength: 240 } } },
+  outputSchema: snapshotSchema,
+  annotations: { "neutron:effects": ["write"] },
+}, async (args, context) => asJson(await mutate(context, (runtime, historyId) =>
+  runtime.selectModel(historyId, requiredString(args.modelId), context.signal))));
 
 exposeTool(
   "openrouter_models",
@@ -311,9 +372,9 @@ exposeTool(
 exposeTool(
   "openrouter_reset_chat",
   {
-    title: "Reset OpenRouter Chat",
+    title: "Reset Agent Chat",
     description:
-      "Clear only this calling tile's conversation without disconnecting OpenRouter.",
+      "Clear only this calling tile's conversation while keeping its connection provider and model.",
     inputSchema: {
       type: "object",
       properties: {
@@ -344,9 +405,9 @@ exposeTool(
 exposeTool(
   "openrouter_reset_all_chats",
   {
-    title: "Reset All OpenRouter Chats",
+    title: "Reset All Agent Chats",
     description:
-      "Clear conversation history for every Agent tile without disconnecting OpenRouter.",
+      "Clear conversation history for every Agent tile while keeping model connections and preferences.",
     inputSchema: emptyInput,
     outputSchema: snapshotSchema,
     annotations: { "neutron:effects": ["write"] },

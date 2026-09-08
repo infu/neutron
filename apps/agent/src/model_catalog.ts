@@ -3,6 +3,7 @@ import type { OpenRouterModel } from "./chat_types.ts";
 // Pure catalog helpers stay independent from the React picker for fast tests.
 
 const AUTHOR_LABELS: Record<string, string> = {
+  chatgpt: "OpenAI",
   ai21: "AI21",
   amazon: "Amazon",
   anthropic: "Anthropic",

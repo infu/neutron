@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
+  IoCheckmark,
   IoLogOutOutline,
   IoSettingsOutline,
   IoTrashOutline,
 } from "react-icons/io5";
 
 export function ToolbarMenu({
+  provider = "openrouter",
+  accountLabel,
+  onSelectProvider,
   anyGenerating,
   busy,
   conversationGenerating,
@@ -14,6 +18,9 @@ export function ToolbarMenu({
   onClearAll,
   onDisconnect,
 }: {
+  provider?: "openrouter" | "chatgpt";
+  accountLabel?: string | undefined;
+  onSelectProvider?: (provider: "openrouter" | "chatgpt") => void;
   anyGenerating: boolean;
   busy: boolean;
   conversationGenerating: boolean;
@@ -41,7 +48,7 @@ export function ToolbarMenu({
   const enabledItems = () =>
     Array.from(
       menuRef.current?.querySelectorAll<HTMLButtonElement>(
-        '[role="menuitem"]:not(:disabled)',
+        '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)',
       ) ?? [],
     );
 
@@ -131,6 +138,28 @@ export function ToolbarMenu({
           ref={menuRef}
           role="menu"
         >
+          {onSelectProvider && (
+            <div className="ora-toolbar-provider" role="group" aria-label="Model provider">
+              <div className="ora-toolbar-provider-label">Model provider</div>
+              {(["openrouter", "chatgpt"] as const).map((option) => (
+                <button
+                  key={option}
+                  role="menuitemradio"
+                  aria-checked={provider === option}
+                  disabled={anyGenerating || busy}
+                  onClick={() => {
+                    close(true);
+                    if (option !== provider) onSelectProvider(option);
+                  }}
+                  type="button"
+                >
+                  <span>{option === "chatgpt" ? "ChatGPT subscription" : "OpenRouter"}</span>
+                  {provider === option && <IoCheckmark aria-hidden="true" />}
+                </button>
+              ))}
+              {accountLabel && <div className="ora-toolbar-account" title={accountLabel}>{accountLabel}</div>}
+            </div>
+          )}
           <button
             disabled={conversationGenerating || busy || !hasMessages}
             onClick={() => {
@@ -186,7 +215,7 @@ export function ToolbarMenu({
           >
             <IoLogOutOutline aria-hidden="true" />
             <span>
-              <strong>Disconnect OpenRouter</strong>
+              <strong>Disconnect {provider === "chatgpt" ? "ChatGPT" : "OpenRouter"}</strong>
               <small>Remove the active credential connection</small>
             </span>
           </button>

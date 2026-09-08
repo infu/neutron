@@ -10,7 +10,6 @@ import {
   IoArrowDown,
   IoArrowUp,
   IoGlobeOutline,
-  IoLink,
   IoSparklesOutline,
   IoStop,
 } from "react-icons/io5";
@@ -44,6 +43,7 @@ import {
 } from "./development.ts";
 import { MarkdownMessage } from "./markdown_message.tsx";
 import { ModelPicker } from "./model_picker.tsx";
+import { ProviderConnection } from "./provider_connection.tsx";
 import { ToolbarMenu } from "./toolbar_menu.tsx";
 import { parseAgentCommand } from "./agent_work.ts";
 import "./style.scss";
@@ -198,7 +198,7 @@ function App() {
     try {
       const result = await bus.callTool(
         { target: TARGET, name, arguments: arguments_ },
-        name === "openrouter_connect" || name === "openrouter_disconnect"
+        name === "openrouter_connect" || name === "openrouter_disconnect" || name === "chatgpt_connect"
           ? CONNECTION_DIALOG_TIMEOUT_SECONDS
           : undefined,
       );
@@ -338,22 +338,14 @@ function App() {
   if (!snapshot.connected) {
     return (
       <main className="nt-app ora-app ora-disconnected">
-        <div className="ora-connect">
-          <IoLink aria-hidden="true" />
-          <button
-            type="button"
-            className="nt-button nt-button--primary"
-            disabled={busy}
-            onClick={() => void run("openrouter_connect")}
-          >
-            {busy ? "Connecting" : "Connect to OpenRouter"}
-          </button>
-          <p>
-            Prompts and selected tool results are sent to OpenRouter and its
-            downstream model provider.
-          </p>
-          {snapshot.error && <ErrorNotice text={snapshot.error} />}
-        </div>
+        <ProviderConnection
+          snapshot={snapshot}
+          busy={busy || chatPending}
+          onSelectProvider={(provider) => void run("agent_select_provider", { provider })}
+          onConnect={() => void run(snapshot.provider === "chatgpt" ? "chatgpt_connect" : "openrouter_connect")}
+          onCancelLogin={() => void run("chatgpt_cancel_login")}
+          onRefresh={() => void refreshStatus()}
+        />
       </main>
     );
   }
@@ -467,11 +459,13 @@ function App() {
           />
           <div className="ora-composer-footer">
             <ModelPicker
+              key={snapshot.provider ?? "openrouter"}
+              provider={snapshot.provider ?? "openrouter"}
               loading={snapshot.modelsLoading}
               models={snapshot.models}
-              onRefresh={() => run("openrouter_models", { refresh: true })}
+              onRefresh={() => run("agent_models", { refresh: true })}
               onSelect={(modelId) =>
-                run("openrouter_select_model", { modelId })
+                run("agent_select_model", { modelId })
               }
               selectedModelId={snapshot.selectedModelId}
               selectionLocked={generationActive || busy}
@@ -547,6 +541,9 @@ function App() {
                 </IconButton>
               )}
               <ToolbarMenu
+                provider={snapshot.provider ?? "openrouter"}
+                accountLabel={snapshot.provider === "chatgpt" ? snapshot.chatgpt?.email : undefined}
+                onSelectProvider={(provider) => void run("agent_select_provider", { provider })}
                 anyGenerating={anyGenerationActive}
                 busy={busy}
                 conversationGenerating={generationActive}
@@ -559,7 +556,7 @@ function App() {
                   })
                 }
                 onClearAll={() => void run("openrouter_reset_all_chats")}
-                onDisconnect={() => void run("openrouter_disconnect")}
+                onDisconnect={() => void run(snapshot.provider === "chatgpt" ? "chatgpt_disconnect" : "openrouter_disconnect")}
               />
             </div>
           </div>

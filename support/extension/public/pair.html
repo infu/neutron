@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect Neutron</title><link rel="stylesheet" href="ui.css"></head>
+<body><main>
+  <div class="brand"><span class="mark" aria-hidden="true">N</span><span>Neutron Browser Bridge</span></div>
+  <h1>Connect your Neutron</h1>
+  <p>This Neutron will manage which apps can send requests through your browser.</p>
+  <div class="origin" id="origin">Loading connection…</div>
+  <p class="muted">Connect once. Access stays available until you revoke it in Settings.</p>
+  <p id="error" class="error" role="alert" hidden></p>
+  <div class="actions"><button id="deny" class="secondary">Cancel</button><button id="approve" disabled>Connect Neutron</button></div>
+</main><script src="pair.js" type="module"></script></body></html>

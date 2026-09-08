@@ -1,6 +1,8 @@
 import type { ModelMessage } from "ai";
 import { normalizeAgentWork } from "./agent_work.ts";
+import type { ChatGptCredentials } from "./chatgpt_auth.ts";
 import type {
+  AgentProvider,
   AgentChatTileEndpointId,
   AgentWorkState,
   AgentWorkerRecord,
@@ -34,6 +36,11 @@ const WORK_PREFIX = "conversation-work:";
 // Earlier residents rewrite work and conversation keys. Worker histories have
 // their own key so an old frame's final save cannot erase them during upgrade.
 const WORKERS_PREFIX = "conversation-workers:";
+// Separate additive keys preserve released shared/conversation records and
+// cannot be erased by an older resident's final history write during upgrade.
+const PROVIDER_PREFIX = "conversation-provider:";
+const CHATGPT_CREDENTIALS = "chatgpt-credentials";
+const CHATGPT_LOGIN_REVISION = "chatgpt-login-revision";
 const MAX_MESSAGES = 160;
 const MAX_MODELS = 600;
 const MAX_TEXT = 64_000;
@@ -72,6 +79,77 @@ export class AgentStorage {
       }
     });
     return new AgentStorage(await requestResult(request));
+  }
+
+  async loadProvider(historyId: AgentChatTileEndpointId): Promise<AgentProvider | null> {
+    const transaction = this.database.transaction(STORE, "readonly");
+    const value = await requestResult(transaction.objectStore(STORE)
+      .get(`${PROVIDER_PREFIX}${requireAgentChatTileEndpoint(historyId)}`));
+    return value === "openrouter" || value === "chatgpt" ? value : null;
+  }
+
+  async saveProvider(historyId: AgentChatTileEndpointId, provider: AgentProvider): Promise<void> {
+    const transaction = this.database.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).put(provider, `${PROVIDER_PREFIX}${requireAgentChatTileEndpoint(historyId)}`);
+    await transactionDone(transaction);
+  }
+
+  async loadChatGptCredentials(): Promise<ChatGptCredentials | null> {
+    const transaction = this.database.transaction(STORE, "readonly");
+    const value = await requestResult(transaction.objectStore(STORE).get(CHATGPT_CREDENTIALS));
+    if (!isRecord(value) || typeof value.accessToken !== "string" ||
+      typeof value.refreshToken !== "string" || typeof value.accountId !== "string" ||
+      !(value.expiresAt === null || typeof value.expiresAt === "number" && Number.isFinite(value.expiresAt))) return null;
+    return value as unknown as ChatGptCredentials;
+  }
+
+  async saveChatGptCredentials(value: ChatGptCredentials | null): Promise<void> {
+    const transaction = this.database.transaction(STORE, "readwrite");
+    if (value) transaction.objectStore(STORE).put(value, CHATGPT_CREDENTIALS);
+    else transaction.objectStore(STORE).delete(CHATGPT_CREDENTIALS);
+    await transactionDone(transaction);
+  }
+
+  async beginChatGptLogin(): Promise<string> {
+    const revision = randomId();
+    const transaction = this.database.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).put(revision, CHATGPT_LOGIN_REVISION);
+    await transactionDone(transaction);
+    return revision;
+  }
+
+  async completeChatGptLogin(revision: string, value: ChatGptCredentials): Promise<boolean> {
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    if (await requestResult(store.get(CHATGPT_LOGIN_REVISION)) !== revision) {
+      await transactionDone(transaction);
+      return false;
+    }
+    store.put(value, CHATGPT_CREDENTIALS);
+    store.delete(CHATGPT_LOGIN_REVISION);
+    await transactionDone(transaction);
+    return true;
+  }
+
+  async clearChatGptConnection(): Promise<void> {
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    store.delete(CHATGPT_CREDENTIALS);
+    store.delete(CHATGPT_LOGIN_REVISION);
+    await transactionDone(transaction);
+  }
+
+  async replaceChatGptCredentials(previous: ChatGptCredentials, value: ChatGptCredentials): Promise<boolean> {
+    const transaction = this.database.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const current = await requestResult(store.get(CHATGPT_CREDENTIALS));
+    if (!isRecord(current) || current.refreshToken !== previous.refreshToken || current.accountId !== previous.accountId) {
+      await transactionDone(transaction);
+      return false;
+    }
+    store.put(value, CHATGPT_CREDENTIALS);
+    await transactionDone(transaction);
+    return true;
   }
 
   async loadWork(historyId: AgentChatTileEndpointId): Promise<AgentWorkState> {
@@ -325,6 +403,7 @@ export class AgentStorage {
     store.delete(conversationModelKey(id));
     store.delete(`${WORK_PREFIX}${id}`);
     store.delete(`${WORKERS_PREFIX}${id}`);
+    store.delete(`${PROVIDER_PREFIX}${id}`);
     await transactionDone(transaction);
   }
 

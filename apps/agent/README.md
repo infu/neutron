@@ -1,16 +1,44 @@
 # Agent
 
-Resident OpenRouter chat agent for Neutron. The kernel owns authorization and
-durable credentials; the app background process receives its declared key in
-memory and uses the Vercel AI SDK to stream model requests directly.
+Resident chat agent for Neutron with OpenRouter and ChatGPT subscription
+connections. The app uses the Vercel AI SDK for streamed model requests and
+the Kernel's existing authority for app tools. OpenRouter requests go directly
+from the resident browser process; the Kernel owns that connection's durable
+credential and supplies it to the declared app in memory.
+
+ChatGPT subscription requests use the optional
+[Neutron Chrome extension](../../support/extension/README.md). Select
+**ChatGPT subscription**, connect the extension to this Neutron once, and grant
+Agent access to its route. Both pairing and the app route grant remain saved
+without a session expiry; the app grant can be revoked in Kernel Settings.
+Subsequent model and authentication requests do not request permission again.
+No inference traffic is proxied through a Neutron canister. The extension is
+unnecessary for OpenRouter or ordinary Neutron features.
+
+Agent displays an OpenAI device code and sign-in link, then polls in the resident
+while the owner authorizes the code. Access and refresh tokens are stored only
+in Agent's isolated resident-origin IndexedDB, never in tile snapshots, model
+context, or tool responses. Normal access-token expiry is handled with refresh;
+this does not expire the extension permission. **Disconnect ChatGPT** clears
+those browser credentials and cancels pending login. Login revisions and
+conditional refresh commits prevent delayed responses from reconnecting a
+disconnected account or replacing a newer account. Device codes are temporary
+OpenAI credentials; cancelling or replacing one invalidates that pending login.
+Closing the entire browser stops pending login and active model work.
+
+The subscription adapter uses the Codex device-auth, model catalog, and streamed
+Responses protocol, independently of OpenRouter and the separately billed OpenAI
+API. Available models come from the connected account's catalog; no API fallback
+or guessed model list can spend credits on a different provider. Real account
+availability remains subject to OpenAI's device-login and subscription service.
 
 Each Agent tile has its own visible transcript, hidden model turns, reset
 boundary, and state-change recovery journal. The resident derives that scope
 from the kernel-authenticated tile endpoint; the tile cannot select or read
 another tile's conversation. A tile keeps its history across reloads and
 workspace moves because its instance id is durable, while a newly opened tile
-starts empty. The OpenRouter connection and model catalog stay shared in the
-resident process. Model selection belongs to each tile; changing it also sets
+starts empty. Connections and model catalogs stay shared in the resident
+process. Connection provider and model selection belong to each tile; changing a model also sets
 the initial model for future tiles without changing any existing tile. Kernel Agent Mode permits one active root across tiles. Each tile remains
 limited to one turn across all of its open browser tabs; ordinary chat outside
 Agent Mode can run in different tiles concurrently. Shared connection changes and
@@ -39,7 +67,8 @@ challenge to the resident runtime. Frontend, backend, connection, and workspace
 challenges exclude raw tool arguments. A v2 external signed-call challenge is
 the deliberate exception: it includes the complete canonical prepared argument
 array shown for approval. The runtime makes one separate `generateText` request
-with the selected OpenRouter model and one forced `permission_decision` tool.
+with the selected model through the same connection provider and one forced
+`permission_decision` tool.
 It receives the retained owner messages in order (or the active goal and its
 steering instructions) and those permission facts. Ordinary follow-ups such as
 "try again" retain the original request, while later cancellations and narrower
@@ -133,9 +162,9 @@ loads as an empty journal in the same database and store. The most recent
 recovery record is always retained in the next model request even when ordinary
 history is trimmed to the model budget.
 
-The main agent uses strict OpenRouter compatibility, sequential tool calls,
-and requires the model to choose a real tool on the first step of every turn.
-Each tile also has a default-off Web control in its composer. Enabling it makes
+The main agent uses sequential app-tool calls and requires the model to choose
+a real tool on the first step of every turn. OpenRouter uses strict compatibility.
+An OpenRouter tile also has a default-off Web control in its composer. Enabling it makes
 bounded OpenRouter server-side search and public-page or PDF extraction
 available for that tile's turns until the tile reloads or the owner turns it
 off. The browser still connects only to OpenRouter; target-site CORS does not
@@ -147,7 +176,9 @@ summarize them. Search queries and fetched content cross an additional
 third-party boundary. The system prompt forbids placing private workspace data
 in them and treats every result as untrusted input, but this is a model
 instruction rather than a browser-enforced separation. Enable Web only when
-the prompt and retained conversation context are suitable to share.
+the prompt and retained conversation context are suitable to share. The Web
+control is unavailable for ChatGPT subscription connections; OpenRouter's
+server-side search tools are never forwarded to the subscription endpoint.
 
 Use `/goal <objective>` to start durable goal work. `/goal` shows its state;
 `/goal pause`, `/goal resume`, and `/goal clear` control it. Stop also pauses an
@@ -172,7 +203,14 @@ them when saving their older conversation shape.
 
 In **Agent Mode**, the main agent can delegate independent tasks to parallel
 workers inside the same tile. `spawn_agent` starts a worker with a separate
-context and the current model, or an explicit available `modelId`.
+context and the current model by default. An explicit alternative `modelId`
+must use the same connection provider and have both known input and output
+token rates no greater than the parent's. A lower input price cannot offset a
+higher output price. Unpriced models, including subscription models, inherit
+the exact parent model. The tool lists only eligible alternatives and execution
+checks current catalog prices again. A saved worker whose previous model is
+no longer eligible resumes with the current parent model, retaining its tool
+evidence and conversation. This controls model choice, not total task usage.
 `send_message` steers a worker or resumes its saved context; `wait_agents`
 waits without model requests; `stop_agent` cancels one worker with a recorded
 reason. `list_agents`

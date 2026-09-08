@@ -9,6 +9,11 @@
     "build.ts",
     "src/agent_work.ts",
     "src/agent_workers.ts",
+    "src/worker_model_cost.ts",
+    "src/chatgpt_auth.ts",
+    "src/chatgpt_provider.ts",
+    "src/provider_connection.tsx",
+    "src/markdown_message.tsx",
     "src/agent_step.ts",
     "src/agent_context.ts",
     "src/chat_progress.ts",
@@ -20,6 +25,7 @@
     "src/agent_runtime.ts",
     "src/storage.ts",
     "test/**/*.ts",
+    "test/**/*.tsx",
     "types/**/*.d.ts"
   ]
 }
