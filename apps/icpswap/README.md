@@ -51,6 +51,10 @@ JavaScript's safe integer range are decimal strings.
 | `icpswap_continue_v1`, `icpswap_status_v1`, `icpswap_reconcile_v1`, `icpswap_history_v1` | Continue or inspect an existing operation and refresh recovery evidence |
 | `icpswap_recover_deposit_v1` | Credit an already transferred direct deposit without sending Wallet funds again |
 
+Agents can add and remove watchlist tokens through the existing Kernel
+permissions. Root agents need no click; normal agents use the existing approval
+flow. These tools update the saved ICPSwap market list without moving funds.
+
 New action calls require a stable 32-character hexadecimal `operationId`.
 Normal agents receive an app review before dispatch, and Wallet reviews each
 new funding request. Root agents can perform the same flow without a click.
@@ -142,13 +146,14 @@ All persistent state stays app-local:
 | --- | --- | --- |
 | `icpswap` | 1, preserved | Watchlist, local history, quotes, decimals and refresh bookkeeping |
 | `icpswap_swap` | 1, preserved | Released swap records, funding details, order, settings and completion count |
-| `icpswap_actions` | 1, new | Immutable action plans, Wallet request identities, protocol dispatches and recovery evidence |
+| `icpswap_actions` | 1, preserved | Immutable action plans, Wallet request identities, protocol dispatches and recovery evidence |
 
-The two production v1 schemas and their lock entries are retained exactly.
+All three production v1 schemas and their lock entries are retained exactly.
 The imported draft's additional fee cache is transient; it does not replace the
 released swap schema. Wallet fee observations refresh that cache, including a
-valid zero fee. Existing installations keep both original roots and initialize
-only the new actions root. No fake migration, reinstall or reset is required.
+valid zero fee. Release 201 installations keep all three roots. Upgrades from
+release 200 keep both original roots and initialize only the actions root.
+No fake migration, reinstall or reset is required.
 Historical public schema assets are pinned in `test/fixtures/history/200` for
 compatibility tests; they are not a reconstructed release archive.
 
@@ -156,6 +161,7 @@ compatibility tests; they are not a reconstructed release archive.
 npm --workspace neutron-icpswap run package
 npm --workspace neutron-icpswap test
 npm --workspace neutron-icpswap run test:chart
+npm --workspace neutron-icpswap run test:browser
 ```
 
 The test command packages the app, runs its TypeScript tests and then runs the

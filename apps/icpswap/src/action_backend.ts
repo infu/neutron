@@ -72,10 +72,11 @@ function list<T>(value: unknown, path: string, parse: (value: unknown, path: str
   return value.map((item, index) => parse(item, `${path}[${index}]`));
 }
 
-/** Self calls expose optional values as null/value. Accept Candid's raw []/[T]
- * form too, without mistaking ordinary vectors for optional values. */
+/** Self calls omit absent optional record fields and expose present values
+ * directly. Accept explicit null and Candid's raw []/[T] form as well, without
+ * mistaking ordinary vectors for optional values. */
 function optional<T>(value: unknown, path: string, parse: (value: unknown, path: string) => T): T | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (Array.isArray(value)) {
     if (value.length === 0) return null;
     if (value.length !== 1) return invalid(path, "optional value");

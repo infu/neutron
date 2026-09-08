@@ -1,9 +1,9 @@
 // Tools this app exposes on the kernel message bus.
 //
 // They are registered by the resident background so they stay callable while no
-// tile is open. Read tools are safe for cross-app discovery; the two watchlist
-// mutations are marked same-app so another app cannot silently reshape the
-// owner's watchlist, and they still pass the kernel's own consent path.
+// tile is open. Market reads and watchlist tools are available to agents through
+// the kernel's existing cross-app permissions. Watchlist changes use the live
+// invocation's scoped backend transport, just like other tool calls.
 //
 // Every result carries `source` and `as_of` so an agent can reason about
 // staleness, plus an explicit note that this is third-party market data.
@@ -721,7 +721,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     {
       title: "Add a token to the watchlist",
       description:
-        "Add one token to the owner's ICPSwap watchlist so it appears in the market table and is sampled on the app's schedule.",
+        "Add one token to the owner's ICPSwap watchlist so it appears in the market table and is sampled on the app's schedule. Updates saved market preferences without moving funds.",
       inputSchema: {
         type: "object",
         properties: {
@@ -735,7 +735,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
         additionalProperties: false,
       },
       outputSchema: { type: "object" },
-      annotations: { "neutron:visibility": "same_app" },
+      annotations: { readOnlyHint: false },
     },
     async (args, context): Promise<JsonValue> => {
       const ledgerId = requiredLedgerId(args);
@@ -762,7 +762,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     {
       title: "Remove a token from the watchlist",
       description:
-        "Remove one token from the owner's ICPSwap watchlist. Recorded history for that token is kept.",
+        "Remove one token from the owner's ICPSwap watchlist. Recorded history for that token is kept. Updates saved market preferences without moving funds.",
       inputSchema: {
         type: "object",
         properties: {
@@ -776,7 +776,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
         additionalProperties: false,
       },
       outputSchema: { type: "object" },
-      annotations: { "neutron:visibility": "same_app" },
+      annotations: { readOnlyHint: false },
     },
     async (args, context): Promise<JsonValue> => {
       const ledgerId = requiredLedgerId(args);

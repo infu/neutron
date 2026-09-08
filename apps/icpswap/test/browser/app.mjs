@@ -28,6 +28,7 @@ const fixture = `
   import {Principal} from '@icp-sdk/core/principal';
   import {getSqrtRatioAtTick} from '${root}/apps/icpswap/src/liquidity_math.ts';
   import {createDirectFundingRequest} from '${root}/apps/icpswap/src/funding.ts';
+  import {createActionBackend} from '${root}/apps/icpswap/src/action_backend.ts';
   export {isJsonObject, isMsgBusInstallationUid} from '${root}/packages/neutron-tools/src/protocol.ts';
   const rows=${JSON.stringify(rows)}, status=${JSON.stringify(status)}, owner='3rurp-vyaaa-aaaay-aacua-cai';
   const pool='aaaaa-aa', retainedPool='2vxsx-fae', index='rrkah-fqaaa-aaaaa-aaaaq-cai';
@@ -59,7 +60,7 @@ const fixture = `
       const row=rows.find(row=>row.address===args.ledger); if(!row)throw Error('Unknown fixture ledger');
       return {ledger:row.address,account:owner,name:row.name,symbol:row.symbol,decimals:row.decimals,feeAtoms:'10000',balanceAtoms:(13n*10n**BigInt(row.decimals)).toString(),observedAtNs:'1788880800000000000'};
     }
-    if(name==='icpswap_history_v1'){const items=[...durable.history].reverse().map(summary);state.lastHistory=structuredClone(items);return {items,nextCursor:null};}
+    if(name==='icpswap_history_v1'){const page=await createActionBackend({querySelf,updateSelf}).actionPage({cursor:args.cursor??null,limit:args.limit??20});state.lastHistory=structuredClone(page.items);return page;}
     if(name==='icpswap_reconcile_v1'){
       const operation=durable.history.find(row=>row.id===args.operationId);if(!operation)throw Error('Unknown saved operation');
       state.queries.push({canister:JSON.parse(operation.input_json).input.pool||pool,method:'fixture-status-fresh-pool-observation'});
@@ -88,6 +89,14 @@ const fixture = `
     throw Error('Unexpected fixture tool '+name);
   }
   export async function querySelf(name,args){
+    if(name==='icpswap_action_page'){
+      const all=[...durable.history].reverse().map(summary), {cursor,limit}=args[0];
+      const start=cursor==null?0:all.findIndex(item=>item.id===cursor)+1, items=all.slice(start,start+Number(limit));
+      // The Kernel omits absent optional record fields, including the final
+      // cursor and completion timestamps of pending protocol effects.
+      const projected=items.map(item=>({...item,effects:item.effects.map(({completed_at,...effect})=>completed_at==null?effect:{...effect,completed_at})}));
+      return start+items.length<all.length?{items:projected,next_cursor:items.at(-1).id}:{items:projected};
+    }
     if(name==='icpswap_market')return {rows,status};
     if(name==='icpswap_token')return {row:rows.find(row=>row.address===args[0]),profile:null,pools:[],pool_count:0,history:[],status};
     if(name==='icpswap_swap_journal')return {entries:[],slippage:500,total:0,completed:0};
@@ -187,6 +196,7 @@ try {
     await page.screenshot({ path: join(out, `detail-${width}.png`) });
     await showPositions();
     assert.equal(await page.getByText("Pool data incomplete", { exact: true }).count(), 0, "healthy transport fixture has complete pool data");
+    assert.equal(await page.getByText("Some liquidity data is unavailable", { exact: true }).count(), 0, "omitted history cursor must not break saved pool discovery");
     await noOverflow(`liquidity-${width}`);
     await page.screenshot({ path: join(out, `liquidity-${width}.png`) });
     await navigate("Activity");
@@ -195,6 +205,7 @@ try {
     await page.screenshot({ path: join(out, `activity-${width}.png`) });
   }
   checks.push("All four views and token detail fit 320/360/480/960/1200px tiles; charts remain above the initial fold; Wallet balance and exact fee-adjusted Max work.");
+  checks.push("Activity and Liquidity decode backend history with omitted optional cursors and completion timestamps through the real action backend.");
 
   await page.setViewportSize({ width: 360, height: 900 });
   await navigate("Swap");

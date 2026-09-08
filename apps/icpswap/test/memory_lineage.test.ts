@@ -42,6 +42,28 @@ async function successor() {
   };
 }
 
+test("the frontend update preserves all three release-201 roots and exact backend modules", async () => {
+  const bytes = await readFile(new URL("icpswap.v0.2.1.neutron", app));
+  expect(sha256(bytes)).toBe("ccd9e6d4144785049c333c850da55797ad466e3ab471db54b0e264751909ea97");
+  const previousFiles = unpackNeutronPackage(bytes);
+  const previous = JSON.parse(decode(previousFiles["neutron.json"]!)) as PackagedNeutronManifest;
+  const { files, manifest } = await successor();
+  expect(manifest.version).toBeGreaterThan(previous.version);
+  expect(manifest.memory).toEqual(previous.memory);
+  expect(manifest.entry).toBe(previous.entry);
+  expect(manifest.func).toEqual(previous.func);
+  expect(files["neutron.lock.json"]).toEqual(previousFiles["neutron.lock.json"]);
+  const modules = Object.keys(previousFiles).filter(path => path.startsWith("mo/")).sort();
+  expect(Object.keys(files).filter(path => path.startsWith("mo/")).sort()).toEqual(modules);
+  for (const path of modules) expect(files[path]).toEqual(previousFiles[path]);
+  const upgrade = planMemoryMigrations({ kernel, icpswap: previous }, { kernel, icpswap: manifest });
+  expect(upgrade.destructiveMemoryRoots).toEqual([]);
+  expect(upgrade.upgrades).toHaveLength(3);
+  for (const memoryId of ["icpswap", "icpswap_swap", "icpswap_actions"]) {
+    expect(upgrade.upgrades).toContainEqual({ kind: "keep", owner: "icpswap", memoryId, version: 1 });
+  }
+});
+
 test("the imported app retains both deployed v1 source identities and immutable lock records", async () => {
   const previous = await predecessor();
   expect(previous).toMatchObject({ id: "icpswap", version: 200 });

@@ -103,6 +103,19 @@ describe("durable action transport", () => {
     expect(parseLiquidityPlan(plan).tick).toBe("-13");
   });
 
+  test("omitted optional operation and liquidity fields remain absent rather than inventing amounts", () => {
+    const parsed = parseActionOperation({ ...operation, effects: [{
+      key: "mint", canister: "pool-a", method: "mint", state: "uncertain", error: "Lost reply",
+      dispatched_at: "1788890400000000000",
+    }] });
+    expect(parsed.effects[0]).toMatchObject({ completed_at: null, result_nat: null, result_amount0: null, result_amount1: null });
+    const { position_id: _positionId, ...withoutPositionId } = liquidityRequest;
+    expect((parseLiquidityPlan({ ...plan, request: withoutPositionId }).request as Record<string, unknown>).position_id).toBeNull();
+    for (const bad of [false, {}, ["1", "2"], [undefined]]) {
+      expect(() => parseLiquidityPlan({ ...plan, request: { ...liquidityRequest, position_id: bad } })).toThrow("request.position_id");
+    }
+  });
+
   test("reads saved plans directly, handles absent operations, and propagates backend failures", async () => {
     const backend = createActionBackend(transport((_kind, method, args) => {
       if (args[0] === "missing") return null;
