@@ -17,6 +17,9 @@ const SOURCES: Record<string, { name: string; usdc: string }> = {
   "42161": { name: "Arbitrum mainnet", usdc: "0xaf88d065e77c8cc2239327c5edb3a432268e5831" },
 };
 const FORWARDER = "0xb21d281dedb17ae5b501f6aa8256fe38c4e45757";
+const TRANSMITTER = "0x81d40f21f12a8f0e3252bccb954d722d4c464b64";
+const CORE_DEPOSIT = "0x6b9e773128f453f5c2c60935ee2de2cbc5390a24";
+const HYPER_USDC = "0xb88339cb7199b77e23db6e890353e22632ba630f";
 const FORWARDER_BYTES32 = `0x${"0".repeat(24)}${FORWARDER.slice(2)}`;
 const HOOK_HEADER = "636374702d666f7277617264".padEnd(48, "0") + "0000000000000018";
 const DEPOSIT_ABI = parseAbi([
@@ -25,6 +28,7 @@ const DEPOSIT_ABI = parseAbi([
 type Struct = readonly (readonly [string, string])[];
 const DOMAIN: Struct = [["name", "string"], ["version", "string"], ["chainId", "uint256"], ["verifyingContract", "address"]];
 const APPROVE: Struct = [["hyperliquidChain", "string"], ["agentAddress", "address"], ["agentName", "string"], ["nonce", "uint64"]];
+const CASH_TO_PERPS: Struct = [["hyperliquidChain", "string"], ["amount", "string"], ["toPerp", "bool"], ["nonce", "uint64"]];
 const WITHDRAW: Struct = [
   ["hyperliquidChain", "string"], ["token", "string"], ["amount", "string"], ["sourceDex", "string"],
   ["destinationRecipient", "string"], ["addressEncoding", "string"], ["destinationChainId", "uint32"],
@@ -59,14 +63,25 @@ export function presentHyperliquidAuthorization(operation: Operation): Operation
       !keys(domain, DOMAIN.map(([name]) => name)) || domain.name !== "HyperliquidSignTransaction" || domain.version !== "1" ||
       uint(domain.chainId, 256) !== 42161n || domain.verifyingContract !== ZERO || !schema(types.EIP712Domain, DOMAIN)) return null;
     const approval = parsed.primaryType === "HyperliquidTransaction:ApproveAgent";
-    if (!approval && parsed.primaryType !== "HyperliquidTransaction:SendToEvmWithData") return null;
-    const primaryType = parsed.primaryType as string, expected = approval ? APPROVE : WITHDRAW;
+    const cashToPerps = parsed.primaryType === "HyperliquidTransaction:UsdClassTransfer";
+    if (!approval && !cashToPerps && parsed.primaryType !== "HyperliquidTransaction:SendToEvmWithData") return null;
+    const primaryType = parsed.primaryType as string, expected = approval ? APPROVE : cashToPerps ? CASH_TO_PERPS : WITHDRAW;
     if (!keys(types, ["EIP712Domain", primaryType]) || !schema(types[primaryType], expected)) return null;
     const messageFields = expected.map(([name]) => name);
     const nonce = uint(message.nonce, 64);
     if (!keys(message, messageFields) || nonce === null || !["Mainnet", "Testnet"].includes(String(message.hyperliquidChain)) || !address(operation.address)) return null;
     const environment = `Hyperliquid ${message.hyperliquidChain}`;
     const advanced = [field("Signing domain", "HyperliquidSignTransaction v1"), field("Signature type", primaryType), field("Signing chain", "Arbitrum (42161)"), field("Nonce (milliseconds)", nonce)];
+    if (cashToPerps) {
+      if (message.toPerp !== true || typeof message.amount !== "string" || !/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(message.amount)) return null;
+      const atoms = atomicAmount(message.amount, 6);
+      if (BigInt(atoms) <= 0n) return null;
+      return { ...base(), title: "Move Hyperliquid cash to perpetuals", amount: `${message.amount} USDC`, amountLabel: "USDC to move", amountAtoms: atoms, amountDecimals: 6, tokenSymbol: "USDC",
+        description: "Move this account's existing Hyperliquid USDC cash balance into its perpetuals balance. This does not place a trade or bridge additional funds from your EVM wallet.",
+        parties: [field("Account", getAddress(operation.address)), field("From balance", "Hyperliquid cash"), field("To balance", "Hyperliquid perpetuals"), field("Network", environment)],
+        advancedDetails: advanced,
+      };
+    }
     if (approval) {
       if (!address(message.agentAddress) || typeof message.agentName !== "string") return null;
       const revoke = message.agentAddress === ZERO;
@@ -111,6 +126,64 @@ export function presentHyperliquidDeposit(operation: Operation): OperationPresen
       description: `Burn ${source.name} USDC for CCTP forwarding into the beneficiary's Hyperliquid perpetuals balance. Protocol and forwarding fees reduce the credited amount. A source transaction receipt confirms the burn; HyperCore credit must also be confirmed.`,
       parties: [field("Paid by", getAddress(operation.address)), field("HyperCore beneficiary", beneficiary), field("Source network", source.name), field("Destination balance", "Hyperliquid mainnet perpetuals"), field("Maximum CCTP fee", `${amount(maxFee.toString(), 6)} USDC`)],
       advancedDetails: [field("Function", "depositForBurnWithHook"), field("Token", getAddress(source.usdc)), field("CCTP destination domain", "19 (HyperEVM)"), field("Mint recipient", getAddress(FORWARDER)), field("Destination caller", getAddress(FORWARDER)), field("Minimum finality", finality === 1000 ? "Fast (1000)" : "Standard (2000)"), field("Amount (USDC atomic units)", atomic), field("Maximum fee (USDC atomic units)", maxFee), field("Hook data", hookData), field("HyperCore destination DEX", "0 (perpetuals)")],
+    };
+  } catch { return null; }
+}
+
+const RECOVERY_ABI = parseAbi([
+  "function mintAndForward(bytes message,bytes attestation)",
+  "function receiveMessage(bytes message,bytes attestation) returns (bool)",
+]);
+const word = (value: string) => `0x${value.slice(2).padStart(64, "0")}`;
+
+/** Independently interpret the exact CCTP V2 bytes. The destination contract
+ * verifies the attestation and single-use nonce; a presentation match does not
+ * claim that a signature is valid or that the transfer has already completed.
+ * https://github.com/circlefin/hyperevm-circle-contracts/blob/master/src/CctpForwarder.sol
+ * https://developers.circle.com/cctp/references/technical-guide */
+export function presentHyperliquidRecovery(operation: Operation): OperationPresentation | null {
+  const tx = operation.preparedTransaction ?? operation.intent.transaction;
+  if (operation.kind !== "transaction" || !tx || tx.value !== "0") return null;
+  const deposit = operation.chainId === "999" && tx.to.toLowerCase() === FORWARDER;
+  const destination = SOURCES[operation.chainId];
+  if (!deposit && (!destination || tx.to.toLowerCase() !== TRANSMITTER)) return null;
+  try {
+    const decoded = decodeFunctionData({ abi: RECOVERY_ABI, data: tx.data as Hex });
+    if (decoded.functionName !== (deposit ? "mintAndForward" : "receiveMessage") || encodeFunctionData({ abi: RECOVERY_ABI, ...decoded }).toLowerCase() !== tx.data.toLowerCase()) return null;
+    const [rawMessage, attestation] = decoded.args;
+    const message = rawMessage.toLowerCase();
+    if (message.length < 754 || attestation.length < 132 || ((attestation.length - 2) / 2) % 65 !== 0) return null;
+    const at = (offset: number, bytes: number) => `0x${message.slice(2 + offset * 2, 2 + (offset + bytes) * 2)}`;
+    const n = (offset: number, bytes: number) => BigInt(at(offset, bytes));
+    const accountAt = (offset: number) => {
+      const bytes = at(offset, 32);
+      if (bytes.slice(2, 26) !== "0".repeat(24)) throw new Error("Not an EVM address word");
+      return getAddress(`0x${bytes.slice(26)}`);
+    };
+    if (n(0, 4) !== 1n || n(148, 4) !== 1n || at(44, 32) !== word(MESSENGER) || at(76, 32) !== word(MESSENGER)) return null;
+    const sourceDomain = n(4, 4), destinationDomain = n(8, 4), atomic = n(216, 32), maxFee = n(280, 32), executedFee = n(312, 32);
+    if (atomic <= executedFee || executedFee > maxFee || ![1000n, 2000n].includes(n(140, 4)) || n(144, 4) < n(140, 4)) return null;
+    const hook = message.slice(754);
+    let beneficiary: string, sourceName: string;
+    if (deposit) {
+      const source = sourceDomain === 0n ? SOURCES["1"] : sourceDomain === 3n ? SOURCES["42161"] : undefined;
+      if (!source || destinationDomain !== 19n || at(152, 32) !== word(source.usdc) || at(184, 32) !== FORWARDER_BYTES32 || at(108, 32) !== FORWARDER_BYTES32 || hook.length !== 112 || hook.slice(0, 64) !== HOOK_HEADER || hook.slice(104) !== "00000000") return null;
+      beneficiary = getAddress(`0x${hook.slice(64, 104)}`);
+      sourceName = source.name;
+    } else {
+      if (sourceDomain !== 19n || destinationDomain !== (operation.chainId === "1" ? 0n : 3n) || at(152, 32) !== word(HYPER_USDC) || at(108, 32) !== word(ZERO) || at(248, 32) !== word(CORE_DEPOSIT) || hook.length !== 120 || hook.slice(0, 64) !== HOOK_HEADER.slice(0, -2) + "1c") return null;
+      beneficiary = accountAt(184);
+      if (hook.slice(64, 104) !== beneficiary.slice(2).toLowerCase()) return null;
+      sourceName = "Hyperliquid mainnet";
+    }
+    const received = (atomic - executedFee).toString();
+    return { ...base(), title: deposit ? "Complete Hyperliquid deposit" : `Complete Hyperliquid withdrawal to ${destination!.name.replace(" mainnet", "")}`,
+      amount: `${amount(received, 6)} USDC`, amountLabel: "USDC after CCTP fees", amountAtoms: received, amountDecimals: 6, tokenSymbol: "USDC", tokenAddress: deposit ? HYPER_USDC : destination!.usdc, contract: tx.to,
+      description: deposit
+        ? "Submit the existing CCTP message to mint USDC and forward it into Hyperliquid. No additional USDC is burned or approved. Only HYPE gas is paid on HyperEVM; a new HyperCore account may also incur its activation fee. HyperCore credit is checked separately after EVM forwarding."
+        : "Submit the existing CCTP message to mint the withdrawn USDC at its original recipient. No additional USDC leaves Hyperliquid. Only destination-network gas is paid.",
+      parties: [field("Gas paid by", getAddress(operation.address)), field(deposit ? "HyperCore beneficiary" : "Recipient", beneficiary), field("Source network", sourceName), field("Destination", deposit ? "Hyperliquid mainnet perpetuals" : destination!.name), field("Gas token", deposit ? "HYPE (HyperEVM)" : "ETH")],
+      advancedDetails: [field("Function", decoded.functionName), field("CCTP nonce", at(12, 32)), field("Source domain", sourceDomain), field("Destination domain", destinationDomain), field("Original burn amount (USDC)", amount(atomic.toString(), 6)), field("Executed CCTP fee (USDC)", amount(executedFee.toString(), 6)), field("Original message sender", accountAt(248)), field("Mint recipient", accountAt(184)), field("Destination caller", accountAt(108)), field("Message", rawMessage), field("Attestation", attestation)],
     };
   } catch { return null; }
 }

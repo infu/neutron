@@ -23,6 +23,7 @@ test("Ethereum burn binds both destination authorities to Circle's forwarder", (
 test("fee math rounds fractional bps up in USDC atoms and rejects malformed tiers", () => {
   const row = { finalityThreshold: 1000, minimumFee: 1.4, forwardFee: { low: 200000, med: 210000, high: 220000 } };
   expect(depositFees([row], 1_000_001n, "fast")).toMatchObject({ protocolFeeAtoms: "141", estimatedFeeAtoms: "210141", maxFeeAtoms: "220141" });
+  expect(depositFees([{ ...row, forwardFee: { low: 200000, medium: 210000, high: 220000 } }], 1_000_001n, "fast")).toEqual(depositFees([row], 1_000_001n, "fast"));
   expect(() => depositFees([{ ...row, forwardFee: { low: 300000, med: 200000, high: 100000 } }], 1_000_001n, "fast")).toThrow("inconsistent");
   expect(() => depositFees([{ ...row, forwardFee: { low: 1, med: 2, high: Number.MAX_SAFE_INTEGER + 1 } }], 1_000_001n, "fast")).toThrow("invalid");
 });

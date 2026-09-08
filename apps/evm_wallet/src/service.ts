@@ -151,6 +151,9 @@ exposeTool(
         nativeDecimals: "18",
         explorerUrl: n.explorerUrl,
         feeModel: "eip1559",
+        // The v1 label describes Ethereum-style safe/finalized RPC evidence.
+        // HyperEVM (999) uses this mechanism with HyperBFT consensus, not
+        // Ethereum settlement. Keep the released v1 output enum compatible.
         finalityKind: n.chainId === "42161" ? "arbitrum" : "ethereum",
       })),
     }) as unknown as JsonObject;

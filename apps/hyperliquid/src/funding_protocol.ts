@@ -23,6 +23,11 @@ export type FundingChainId = keyof typeof FUNDING_CHAINS;
 export type FundingInput = { environment: "mainnet"; direction: "deposit" | "withdraw"; chainId: FundingChainId; amount: string; speed?: "fast" | "standard"; sourceBalance?: "perps" | "unified" };
 export type NormalizedFundingInput = Omit<Required<FundingInput>, "sourceBalance"> & Pick<FundingInput, "sourceBalance">;
 export const TOKEN_MESSENGER_ABI = parseAbi(["function depositForBurnWithHook(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken,bytes32 destinationCaller,uint256 maxFee,uint32 minFinalityThreshold,bytes hookData)"]);
+export const CCTP_RECOVERY_ABI = parseAbi([
+  "function mintAndForward(bytes message,bytes attestation)",
+  "function receiveMessage(bytes message,bytes attestation) returns (bool)",
+  "function usedNonces(bytes32 nonce) view returns (uint256)",
+]);
 export const USDC_ABI = parseAbi(["function approve(address spender,uint256 amount) returns (bool)", "function allowance(address owner,address spender) view returns (uint256)"]);
 export const CORE_DEPOSIT_ABI = parseAbi([
   "function calculateCrossChainWithdrawalFee(bool shouldForward,uint32 destinationChainId) view returns (uint256)",
@@ -93,7 +98,9 @@ export function depositFees(raw: unknown, amount: bigint, speed: "fast" | "stand
     if (typeof value === "number" && (!Number.isSafeInteger(value) || value < 0)) throw new Error("Circle returned an invalid forwarding fee.");
     return unsignedAtoms(String(value));
   };
-  const medium = atomic(entry.forwardFee.med), high = atomic(entry.forwardFee.high), low = atomic(entry.forwardFee.low);
+  // The live endpoint and Circle's how-to use `med`; its API schema also
+  // documents `medium`. Both identify the same recommended forwarding tier.
+  const medium = atomic(entry.forwardFee.med ?? entry.forwardFee.medium), high = atomic(entry.forwardFee.high), low = atomic(entry.forwardFee.low);
   if (high < medium || medium < low) throw new Error("Circle forwarding fee tiers are inconsistent.");
   return { protocolFeeAtoms: protocolFee.toString(), forwardingFeeAtoms: medium.toString(), estimatedFeeAtoms: (protocolFee + medium).toString(), maxFeeAtoms: (protocolFee + high).toString(), finalityThreshold: finality };
 }

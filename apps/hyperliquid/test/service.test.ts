@@ -26,6 +26,7 @@ const examples: Record<string, JsonObject> = {
   hl_fills_v1: {},
   hl_funding_rates_v1: { coin: "ETH", startTime: 1 },
   hl_preview_order_v1: { coin: "ETH", side: "buy", orderType: "market", size: "0.01" },
+  hl_order_capacity_v1: { coin: "ETH", side: "buy", orderType: "market", slippageBps: 50 },
   hl_place_order_v1: { operationId, coin: "ETH", side: "buy", orderType: "market", size: "0.01", slippageBps: 50 },
   hl_close_position_v1: { operationId, coin: "ETH" },
   hl_cancel_order_v1: { operationId, coin: "ETH", oid: 42 },
@@ -35,7 +36,9 @@ const examples: Record<string, JsonObject> = {
   hl_leverage_v1: { operationId, coin: "ETH", leverage: 3, isCross: true },
   hl_isolated_margin_v1: { operationId, coin: "ETH", amountUsdc: "-1.25" },
   hl_funding_quote_v1: { direction: "deposit", chainId: "1", amount: "100" },
+  hl_funding_capacity_v1: { direction: "deposit", chainId: "1" },
   hl_funding_execute_v1: { operationId, direction: "withdraw", chainId: "1", amount: "100" },
+  hl_funding_recover_v1: { operationId, method: "wallet" },
   hl_reconcile_v1: { operationId, kind: "trade" },
   hl_retry_trade_v1: { operationId },
   hl_activity_v1: {},
@@ -75,7 +78,7 @@ test("exact trade authority is declared on effects while analysis requires no pr
     expect(descriptor.annotations!["neutron:effects"]).toEqual(expect.arrayContaining(["write", "network", "user_visible_ui"]));
     expect(descriptor.inputSchema.required).toContain("operationId");
   }
-  for (const name of ["hl_markets_v1", "hl_market_v1", "hl_chart_v1", "hl_orderbook_v1", "hl_account_v1", "hl_fills_v1", "hl_funding_rates_v1", "hl_preview_order_v1", "hl_funding_quote_v1"]) {
+  for (const name of ["hl_markets_v1", "hl_market_v1", "hl_chart_v1", "hl_orderbook_v1", "hl_account_v1", "hl_fills_v1", "hl_funding_rates_v1", "hl_preview_order_v1", "hl_order_capacity_v1", "hl_funding_quote_v1", "hl_funding_capacity_v1"]) {
     const descriptor = registered.find((entry) => entry.name === name)!;
     expect(descriptor.annotations!["neutron:consent"]).toBeUndefined();
     expect(descriptor.annotations!["neutron:effects"]).toEqual(["read", "network"]);
@@ -100,4 +103,9 @@ test("perps tools reject spot and HIP-3 symbol forms and unsupported transfer ne
   const funding = registered.find((entry) => entry.name === "hl_funding_execute_v1")!;
   for (const chainId of ["1337", "421614", "999"]) expect(() => validateToolArguments(funding, { ...examples[funding.name]!, chainId })).toThrow();
   expect(() => validateToolArguments(funding, { ...examples[funding.name]!, chainId: "42161" })).not.toThrow();
+  const recovery = registered.find((entry) => entry.name === "hl_funding_recover_v1")!;
+  for (const method of ["circle", "wallet", "perps"]) expect(() => validateToolArguments(recovery, { operationId, method })).not.toThrow();
+  for (const untrusted of [{ amount: "100" }, { recipient: `0x${"11".repeat(20)}` }, { message: "0x1234", attestation: "0x5678" }]) {
+    expect(() => validateToolArguments(recovery, { operationId, method: "wallet", ...untrusted })).toThrow();
+  }
 });

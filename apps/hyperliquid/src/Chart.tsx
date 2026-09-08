@@ -208,10 +208,12 @@ export default function PriceChart({ candles, coin, interval, setInterval, loadi
 
   const change = selected ? (selected.close - selected.open) / selected.open * 100 : 0;
   return <section className="hl-candles" aria-label={`${coin} chart`}>
-    <header className="hl-candles-heading"><div><h2>Price chart</h2><span>{coin} <span aria-hidden="true">/</span> USD</span></div><span className="hl-candles-kind"><svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M3.5 1v11M9.5 0v10" stroke="currentColor" /><path d="M2 4h3v5H2zM8 2h3v4H8z" fill="currentColor" /></svg>Candles</span></header>
+    <div className="hl-candles-topbar">
+    <header className="hl-candles-heading"><div><h2>Price chart</h2><span>{coin} <span aria-hidden="true">/</span> USD</span></div></header>
     <div className="hl-candles-toolbar">
       <div className="hl-candles-intervals" aria-label="Candle interval">{PRIMARY_INTERVALS.map(value => <button type="button" key={value} aria-pressed={interval === value} onClick={() => setInterval(value)}>{value}</button>)}<select aria-label="More candle intervals" value={OTHER_INTERVALS.includes(interval) ? interval : ""} onChange={event => { if (event.target.value) setInterval(event.target.value); }}><option value="" disabled>···</option>{OTHER_INTERVALS.map(value => <option key={value} value={value}>{value}</option>)}</select></div>
       <button type="button" className="hl-candles-icon" aria-label="Fit all candles" title="Fit all candles · Home" onClick={resetView} disabled={!bars.length}><ChartIcon kind="reset" /></button>
+    </div>
     </div>
     <div className="hl-candles-legend" aria-live="off" data-selected-time={selected?.time}>
       <div className="hl-candles-ohlc">{([['O', selected?.open], ['H', selected?.high], ['L', selected?.low], ['C', selected?.close]] as const).map(([label, value]) => <span key={label}><span>{label}</span><b className={label === "C" && selected ? selected.close >= selected.open ? "hl-candles-up" : "hl-candles-down" : ""}>{value === undefined ? "—" : priceFormat.format(value)}</b></span>)}</div>
@@ -224,8 +226,8 @@ export default function PriceChart({ candles, coin, interval, setInterval, loadi
         <div className="hl-candles-navigation"><button type="button" className="hl-candles-icon" aria-label="Zoom out chart" title="Zoom out · −" onClick={() => zoom(1.4)}><ChartIcon kind="minus" /></button><button type="button" className="hl-candles-icon" aria-label="Zoom in chart" title="Zoom in · +" onClick={() => zoom(0.7)}><ChartIcon kind="plus" /></button>{!atLatest && <button type="button" className="hl-candles-icon" aria-label="Go to latest candle" title="Latest candle · End" onClick={() => instance.current?.chart.timeScale().scrollToRealTime()}><ChartIcon kind="end" /></button>}</div>
       </>}
     </div>
-    <footer className="hl-candles-footer"><span>Volume ({coin}) <span aria-hidden="true">·</span> UTC</span>{levelCount > 0 && <button type="button" aria-pressed={levelsVisible} onClick={() => setLevelsVisible(value => !value)} title="Show position entries, liquidation levels and open orders">Position & orders</button>}</footer>
-    <p className="hl-candles-help" id={helpId}><span className="hl-candles-pointer-help">Scroll to zoom · Drag to pan</span><span className="hl-candles-touch-help">Hold to inspect · Pinch to zoom</span><span className="hl-candles-sr">. Keyboard: left and right arrows inspect candles, plus and minus zoom, Home fits all candles, End returns to the latest candle.</span></p>
+    <footer className="hl-candles-footer"><span>Volume ({coin}) <span aria-hidden="true">·</span> UTC</span><div>{levelCount > 0 && <button type="button" aria-pressed={levelsVisible} onClick={() => setLevelsVisible(value => !value)} title="Show position entries, liquidation levels and open orders">Position & orders</button>}</div></footer>
+    <p className="hl-candles-sr" id={helpId}>Scroll to zoom. Drag to pan. On touchscreens, hold to inspect and pinch to zoom. Keyboard: left and right arrows inspect candles, plus and minus zoom, Home fits all candles, End returns to the latest candle.</p>
     <span className="hl-candles-sr" aria-live="polite">{keyboardDescription}</span>
     {error && <p className="hl-candles-error" role="status">{bars.length ? "Showing the previous observation. " : ""}{error}</p>}
     {invalid > 0 && <p className="hl-candles-error" role="status">{invalid} malformed candle{invalid === 1 ? " was" : "s were"} omitted.</p>}

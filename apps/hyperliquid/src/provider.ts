@@ -2,8 +2,11 @@ import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
 import { requireEvmWalletCaller } from "neutron-tools/evm_wallet";
 
 /** The resident retains the exact prepared action. UI approval only answers the
- * review; it cannot replace the action or provide a signature. Agent approval
- * is bound by the Kernel to this provider invocation, as in EVM Wallet. */
+ * review; it cannot replace the action or provide a signature. `agentMode`
+ * means a Kernel-authenticated Root invocation (including nested calls), not
+ * merely a caller whose app is Agent. Root's permission judge receives the exact
+ * review without opening a tile; Normal Agent follows the owner review path.
+ * Approval is bound to this provider invocation, as in EVM Wallet. */
 export async function authorizeTrade(context: MsgBusToolContext, review: JsonObject): Promise<void> {
   context.signal?.throwIfAborted();
   const caller = requireEvmWalletCaller(context);

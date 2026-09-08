@@ -92,8 +92,10 @@ export const useReviews = () => useSyncExternalStore((listener) => { listeners.a
 function queueReview(args: JsonObject, context: MsgBusToolContext, owner: boolean): Promise<JsonObject> {
   context.signal?.throwIfAborted();
   const caller = requireEvmWalletCaller(context);
-  if (context.agentMode || caller.appId !== "hyperliquid") throw new Error("Hyperliquid owner review requires the authenticated Hyperliquid app.");
-  if (owner ? context.caller?.role !== "background" || context.caller?.endpoint !== "app:hyperliquid:background" : context.audience !== "foreground_tile") throw new Error("Hyperliquid review requires its authenticated resident service or Kernel foreground attestation.");
+  if (context.agentMode) throw new Error("Root Agent actions use the exact Kernel approval callback.");
+  // Kernel foreground presentation preserves the original requester (including
+  // Normal Agent). Only the private same-app route is called by our resident.
+  if (owner ? caller.appId !== "hyperliquid" || context.caller?.role !== "background" || context.caller?.endpoint !== "app:hyperliquid:background" : context.audience !== "foreground_tile") throw new Error("Hyperliquid review requires its authenticated resident service or Kernel foreground attestation.");
   const review: unknown = JSON.parse(String(args.reviewJson));
   if (!review || typeof review !== "object" || Array.isArray(review)) throw new Error("The prepared review is invalid.");
   return new Promise((resolve, reject) => {
@@ -108,7 +110,7 @@ function queueReview(args: JsonObject, context: MsgBusToolContext, owner: boolea
 }
 for (const owner of [false, true]) exposeTool(owner ? "hl_owner_review_v1" : "hl_review_v1", {
   title: "Review Hyperliquid action",
-  description: "Review the exact prepared Hyperliquid action in the owner's tile. Only the authenticated Hyperliquid service can request this presentation.",
+  description: "Review the exact prepared Hyperliquid action in the owner's tile through the resident service or Kernel-attested foreground presentation.",
   inputSchema: { type: "object", properties: { reviewJson: { type: "string" } }, required: ["reviewJson"], additionalProperties: false },
   outputSchema: { type: "object", properties: { approved: { type: "boolean" } }, required: ["approved"], additionalProperties: false },
   annotations: { "neutron:effects": ["read", "user_visible_ui"], "neutron:visibility": "same_app", ...(owner ? {} : { "neutron:audience": "foreground_tile" }) },

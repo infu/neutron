@@ -164,3 +164,93 @@ test("Agent receives the same signed-action interpretation and the complete type
     expect(review.typedDataJson).toBe(op.intent.typedDataJson);
   }
 });
+
+function cashTransfer() {
+  const data = authorization();
+  data.primaryType = "HyperliquidTransaction:UsdClassTransfer";
+  data.types = { EIP712Domain: structuredClone(domain), [data.primaryType]: [
+    { name: "hyperliquidChain", type: "string" }, { name: "amount", type: "string" },
+    { name: "toPerp", type: "bool" }, { name: "nonce", type: "uint64" },
+  ] };
+  data.message = { hyperliquidChain: "Mainnet", amount: "9.753421", toPerp: true, nonce: "1800000000000" };
+  return data;
+}
+test("recovery cash transfer reviews same-account USDC to perps without implying spot trading or another bridge", () => {
+  const shown = presentOperation(signing(cashTransfer()));
+  expect(shown).toMatchObject({ title: "Move Hyperliquid cash to perpetuals", amount: "9.753421 USDC", amountAtoms: "9753421", tokenSymbol: "USDC" });
+  expect(value(shown, "Account")).toBe(owner);
+  expect(value(shown, "From balance")).toBe("Hyperliquid cash");
+  expect(shown.description).toContain("does not place a trade or bridge additional funds");
+  for (const change of [{ toPerp: false }, { toPerp: "true" }, { amount: "0" }, { amount: "0.0000001" }, { amount: "1e3" }, { other: "unsigned" }]) {
+    const data = cashTransfer(); Object.assign(data.message, change);
+    expect(presentOperation(signing(data)).title).toBe("Sign typed data");
+  }
+  const invalid = cashTransfer(); invalid.types[invalid.primaryType]![2]!.type = "uint8";
+  expect(presentOperation(signing(invalid)).title).toBe("Sign typed data");
+});
+
+const transmitter = "0x81d40f21f12a8f0e3252bccb954d722d4c464b64";
+const coreDeposit = "0x6b9e773128f453f5c2c60935ee2de2cbc5390a24";
+const hyperUsdc = "0xb88339cb7199b77e23db6e890353e22632ba630f";
+const recoveryAbi = parseAbi(["function mintAndForward(bytes message,bytes attestation)", "function receiveMessage(bytes message,bytes attestation) returns(bool)"]);
+const u = (value: number | bigint, bytes: number) => BigInt(value).toString(16).padStart(bytes * 2, "0");
+const a = (value: string) => value.slice(2).padStart(64, "0");
+// Independently assembled Circle V2 wire layout, including its 148-byte header
+// and 228-byte burn body. Do not import the Hyperliquid implementation parser.
+function cctpMessage(deposit = true, chain = "1"): Hex {
+  const domainId = chain === "1" ? 0 : 3;
+  const withdrawalHook = `${hook.slice(2, 64)}1c${beneficiary.slice(2)}${u(1800000000000n, 8)}`;
+  return `0x${[
+    u(1, 4), u(deposit ? domainId : 19, 4), u(deposit ? 19 : domainId, 4), "42".repeat(32),
+    a(messenger), a(messenger), a(deposit ? forwarder : zero), u(1000, 4), u(2000, 4),
+    u(1, 4), a(deposit ? chain === "1" ? usdc : arbUsdc : hyperUsdc), a(deposit ? forwarder : beneficiary),
+    u(10000000, 32), a(deposit ? owner : coreDeposit), u(250000, 32), u(100001, 32), u(999999999, 32),
+    deposit ? hook.slice(2) : withdrawalHook,
+  ].join("")}`;
+}
+function recovery(message = cctpMessage(), chainId = "999", to = chainId === "999" ? forwarder : transmitter, attestation = `0x${"01".repeat(65)}` as Hex): Operation {
+  return { kind: "transaction", chainId, address: owner, intent: { transaction: { to, value: "0", data: encodeFunctionData({ abi: recoveryAbi, functionName: chainId === "999" ? "mintAndForward" : "receiveMessage", args: [message, attestation] }) } } } as Operation;
+}
+const replaceBytes = (message: Hex, offset: number, replacement: string): Hex => `0x${message.slice(2, 2 + offset * 2)}${replacement}${message.slice(2 + offset * 2 + replacement.length)}`;
+
+test("deposit recovery shows the original CCTP beneficiary, net USDC, nonce and HYPE gas with no new burn", () => {
+  for (const chain of ["1", "42161"]) {
+    const operation = recovery(cctpMessage(true, chain)), before = JSON.stringify(operation);
+    const shown = presentOperation(operation);
+    expect(shown).toMatchObject({ title: "Complete Hyperliquid deposit", amount: "9.899999 USDC", amountAtoms: "9899999", tokenAddress: hyperUsdc });
+    expect(shown.decoder?.id).toBe("hyperliquid-cctp-recovery");
+    expect(value(shown, "HyperCore beneficiary")).toBe(beneficiary);
+    expect(value(shown, "Gas token")).toBe("HYPE (HyperEVM)");
+    expect(value(shown, "CCTP nonce")).toBe(`0x${"42".repeat(32)}`);
+    expect(shown.description).toContain("No additional USDC is burned or approved");
+    expect(shown.description).toContain("HyperCore credit is checked separately");
+    expect(JSON.stringify(operation)).toBe(before);
+  }
+});
+
+test("withdrawal recovery shows the original Ethereum or Arbitrum recipient and destination gas", () => {
+  for (const [chain, name, token] of [["1", "Ethereum", usdc], ["42161", "Arbitrum", arbUsdc]]) {
+    const shown = presentOperation(recovery(cctpMessage(false, chain), chain));
+    expect(shown).toMatchObject({ title: `Complete Hyperliquid withdrawal to ${name}`, amountAtoms: "9899999", tokenAddress: token });
+    expect(value(shown, "Recipient")).toBe(beneficiary);
+    expect(value(shown, "Gas token")).toBe("ETH");
+    expect(shown.description).toContain("No additional USDC leaves Hyperliquid");
+  }
+});
+
+test("recovery recognition requires the exact message domains, contracts, asset, canonical bytes and perpetuals hook", () => {
+  const message = cctpMessage();
+  const changes: [number, string][] = [
+    [0, u(0, 4)], [4, u(19, 4)], [8, u(0, 4)], [44, a(key)], [76, a(key)],
+    [108, a(zero)], [148, u(0, 4)], [152, a(arbUsdc)], [184, a(beneficiary)],
+    [312, u(250001, 32)], [140, u(2000, 4) + u(1000, 4)], [376, "00"],
+    [428, u(1, 4)],
+  ];
+  for (const [offset, replacement] of changes) expect(presentOperation(recovery(replaceBytes(message, offset, replacement))).decoder).toBeUndefined();
+  for (const changed of [recovery(message, "998"), recovery(message, "999", key), recovery(message, "999", forwarder, "0x"), recovery(`${message}00`)]) expect(presentOperation(changed).decoder).toBeUndefined();
+  const trailing = recovery(); trailing.intent.transaction!.data += "00";
+  const payment = recovery(); payment.intent.transaction!.value = "1";
+  for (const changed of [trailing, payment]) expect(presentOperation(changed).decoder).toBeUndefined();
+  const withdraw = cctpMessage(false);
+  for (const [offset, replacement] of [[4, u(0, 4)], [108, a(forwarder)], [248, a(owner)], [408, owner.slice(2)]] as [number, string][]) expect(presentOperation(recovery(replaceBytes(withdraw, offset, replacement), "1")).decoder).toBeUndefined();
+});

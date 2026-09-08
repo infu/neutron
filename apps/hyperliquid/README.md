@@ -1,13 +1,15 @@
 # Hyperliquid
 
 Trade default Hyperliquid perpetual markets with the Neutron UI or Agent.
-EVM Wallet **0.1.20 or newer** is required for trading-key approval and USDC
-withdrawal signatures. This is an independent integration, not an official
+EVM Wallet **0.1.21 or newer** is required for the complete integration, including
+HyperEVM bridge recovery. This is an independent integration, not an official
 Hyperliquid application.
 
 Market data, WebSockets, ordinary order signing/submission and Circle status
 reads run directly in the browser. The master account stays in EVM Wallet.
 The app has no canister HTTP outcalls or threshold-signing step per trade.
+The trading UI uses mainnet. Explicit testnet parameters remain available to
+tools and automated tests; there is no network selector in the trading tile.
 Spot trading, HIP-3 markets, vaults and account-abstraction changes are outside
 this app. Existing unified collateral is read without changing its mode.
 
@@ -28,10 +30,21 @@ indicator windows, excludes unfinished candles, and reports missing data.
 Orderbook analysis walks displayed liquidity and reports unfilled size. These
 observations are descriptive estimates, not execution or prediction guarantees.
 
+The compact header keeps browser trading access visible above the chart.
+Sizing sliders and percentage/Max controls use current account-specific venue
+capacity, configured leverage, fees and order prices; they round down to the
+market's size precision. They do not change leverage or reserve liquidity.
+Reduce-only sizing uses the remaining position. Transfer Max uses the gross
+available native-USDC amount; the fee quote shows the net amount received.
+
 Every effect uses the same resident implementation for UI and Agent. New trades
 receive exact owner or Agent provider review. An Agent uses the existing
 invocation-scoped Kernel approval callback; the app does not introduce Kernel
 trading quotas or cooldowns.
+Root-mode Agent calls carry their existing authority through nested Wallet
+signing and funding calls, so setup and execution can finish without a tile
+click. Normal-mode Agent effects require owner approval through the existing
+provider review flow.
 
 ## Browser trading key
 
@@ -66,6 +79,9 @@ HyperCore's default-perps collateral route. The source Wallet reviews any exact
 USDC approval and the burn-with-hook transaction. Circle forwards through
 HyperEVM; the user does not need a separate Arbitrum hop for Ethereum deposits.
 Source-chain ETH gas and current USDC forwarding fees are shown separately.
+Before the first burn request reaches Wallet, the app refreshes the fee quote
+and presents the resulting exact fee cap in Wallet review. A retained request
+that has already reached Wallet keeps its original bytes through recovery.
 
 Withdrawals use the Wallet's master `sendToEvmWithData` signature and Circle
 forwarding to the same account on Ethereum or Arbitrum. The app reads current
@@ -83,6 +99,29 @@ report CCTP forwarding into the Core deposit queue and observed HyperCore credit
 public ledger observations do not expose an exact EVM transaction-hash link.
 Never repeat a burn merely because forwarding or the browser reply is delayed.
 
+Dismissing a transfer notice only hides its presentation. The original transfer
+stays in Activity, and a late response does not reopen a dismissed notice. Once
+the source burn is confirmed, Circle's attestation and forwarding run outside
+the browser. If the tile or browser closes before a remaining Wallet approval
+or withdrawal submission, reopen Activity and continue the same operation.
+Network or forwarding-service delays can still postpone delivery; reopening
+never substitutes a second burn for a pending transfer.
+
+CCTP has no automatic source refund after a successful burn. Activity exposes
+recovery for the original message: refresh an eligible Circle attestation or
+complete the destination mint using Wallet. Inbound recovery invokes the
+HyperEVM forwarder and requires HYPE gas; outbound recovery invokes the original
+destination's message transmitter and requires ETH gas. The original recipient,
+amount, hook and fee cap come from saved transfer evidence, not new tool inputs.
+An already consumed message is reconciled instead of minted again.
+
+If forwarding settings change during a deposit and the confirmed transfer lands
+in HyperCore USDC cash, recovery can move that original credited amount into the
+same account's perps balance. This does not trade spot markets or change account
+mode. A successful EVM forwarding queue with no observed Core credit requires
+continued protocol investigation; submitting the mint again cannot replay a
+CoreWriter action.
+
 ## Agent tools
 
 All tools default to mainnet unless `environment: "testnet"` is supplied.
@@ -96,12 +135,15 @@ inputs when continuing. Complex read results use `dataJson`; effects use
 | `hl_chart_v1`, `hl_orderbook_v1` | Analyze candles and executable displayed depth |
 | `hl_account_v1`, `hl_fills_v1`, `hl_funding_rates_v1` | Positions, account mode, actual fees, executions and funding |
 | `hl_preview_order_v1`, `hl_place_order_v1` | Preview and execute market/limit orders |
+| `hl_order_capacity_v1` | Estimate available order size for the selected side and current account settings |
 | `hl_close_position_v1` | Reduce-only partial/full closes |
 | `hl_cancel_order_v1`, `hl_cancel_orders_v1`, `hl_modify_order_v1` | Manage working orders |
 | `hl_protect_position_v1` | Independent reduce-only take-profit/stop-loss orders |
 | `hl_leverage_v1`, `hl_isolated_margin_v1` | Market leverage and isolated collateral |
 | `hl_setup_status_v1`, `hl_setup_v1` | Browser-key approval, status and revocation |
 | `hl_funding_quote_v1`, `hl_funding_execute_v1` | Quote and complete native-USDC transfers |
+| `hl_funding_capacity_v1` | Read available gross native USDC for deposit or withdrawal |
+| `hl_funding_recover_v1` | Complete the original CCTP message or move a proven cash fallback into perps |
 | `hl_activity_v1`, `hl_reconcile_v1`, `hl_retry_trade_v1` | Retained operations, evidence and exact-request recovery |
 
 Read account state, market precision and relevant book/candle observations

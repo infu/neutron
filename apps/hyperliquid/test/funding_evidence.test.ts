@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { concatHex, encodeAbiParameters, encodeEventTopics, numberToHex, parseAbi, stringToHex, type Hex } from "viem";
 import {
   decodeCctpMessage, destinationMintFilter, destinationMintHashes, evidenceAddressWord, findWithdrawalBurn, observedCoreCredits,
-  selectCctpMessage, verifyCoreForwardReceipt, verifyDestinationReceipt, withdrawalBurnFilter, withdrawalHook,
+  matchReceiptCctpMessage, selectCctpMessage, verifyCoreCashReceipt, verifyCoreForwardReceipt, verifyDestinationReceipt, withdrawalBurnFilter, withdrawalHook,
   type CctpEvidenceIntent, type MatchedCctpMessage,
 } from "../src/funding_evidence.ts";
 
@@ -17,12 +17,12 @@ const expectation = (changes: Partial<CctpEvidenceIntent> = {}): CctpEvidenceInt
   destinationCaller: zero, burnToken: token, mintRecipient: owner, messageSender: core,
   amountAtoms: "100000000", maxFeeAtoms: "200000", minFinalityThreshold: 1000, hookData: withdrawalHook(owner, nonce), ...changes,
 });
-function wire(expected = expectation(), overrides: { fee?: bigint; nonce?: Hex } = {}): Hex {
+function wire(expected = expectation(), overrides: { fee?: bigint; nonce?: Hex; finality?: number; expiration?: number } = {}): Hex {
   return concatHex([
     number(1, 4), number(expected.sourceDomain, 4), number(expected.destinationDomain, 4), overrides.nonce ?? cctpNonce,
-    w(expected.sender), w(expected.recipient), w(expected.destinationCaller), number(expected.minFinalityThreshold ?? 1000, 4), number(1000, 4),
+    w(expected.sender), w(expected.recipient), w(expected.destinationCaller), number(expected.minFinalityThreshold ?? 1000, 4), number(overrides.finality ?? 1000, 4),
     number(1, 4), w(expected.burnToken), w(expected.mintRecipient), number(BigInt(expected.amountAtoms), 32), w(expected.messageSender),
-    number(BigInt(expected.maxFeeAtoms ?? "200000"), 32), number(overrides.fee ?? 200000n, 32), number(12345678, 32), expected.hookData as Hex,
+    number(BigInt(expected.maxFeeAtoms ?? "200000"), 32), number(overrides.fee ?? 200000n, 32), number(overrides.expiration ?? 12345678, 32), expected.hookData as Hex,
   ]);
 }
 function circle(message = wire()) {
@@ -127,6 +127,44 @@ test("an explicitly discovered manual mint can supersede Circle's stale forwardi
   expect(verifyCoreForwardReceipt(forwarded, deposit, { ...coreInput, allowDiscoveredReceipt: true })?.transactionHash).toBe(sourceHash);
 });
 
+test("re-attestation does not hide a successful mint of the older message and its original executed fee", () => {
+  const expected = expectation(), old = matched(expected);
+  const current = selectCctpMessage(circle(wire(expected, { fee: 100000n, finality: 2000, expiration: 22345678 })), expected)!;
+  const oldReceipt = receipt([received(old), transfer(zero, owner, 99800000n)]);
+  const options = { messageTransmitter: transmitter };
+  expect(verifyDestinationReceipt(oldReceipt, current, { ...options, usdc: token, recipient: owner })).toBeNull();
+  expect(destinationMintHashes(oldReceipt.logs, current, options)).toEqual([]);
+  expect(destinationMintFilter(current, { ...options, fromBlock: "256", allowReattestation: true }).topics).toEqual([received(old).topics[0], null, cctpNonce, null]);
+  expect(destinationMintHashes(oldReceipt.logs, current, { ...options, intent: expected })).toEqual([destinationHash]);
+  const consumed = matchReceiptCctpMessage(oldReceipt, current, expected, options)!;
+  expect(consumed.raw).toBe(old.raw); expect(consumed.attestation).toBeNull(); expect(consumed.attestationStatus).toBe("consumed");
+  expect(verifyDestinationReceipt(oldReceipt, consumed, { ...options, usdc: token, recipient: owner })?.deliveredAtoms).toBe("99800000");
+  expect(matchReceiptCctpMessage({ ...oldReceipt, status: "0x0" }, current, expected, options)).toBeNull();
+  const anotherSubmitter = { ...oldReceipt, transactionHash: sourceHash, logs: oldReceipt.logs.map(entry => ({ ...entry as Record<string, unknown>, transactionHash: sourceHash })) };
+  expect(matchReceiptCctpMessage(anotherSubmitter, current, expected, options)).toBeNull();
+  expect(matchReceiptCctpMessage(anotherSubmitter, current, expected, { ...options, allowDiscoveredReceipt: true })?.forwardTxHash).toBe(sourceHash);
+});
+
+test("re-attested mint discovery still binds the complete original burn intent", () => {
+  const expected = expectation(), message = matched(expected), options = { messageTransmitter: transmitter, intent: expected };
+  const altered = [
+    { mintRecipient: other }, { messageSender: owner }, { burnToken: other }, { amountAtoms: "100000001" },
+    { maxFeeAtoms: "300000" }, { hookData: withdrawalHook(owner, nonce + 1) },
+  ];
+  for (const changes of altered) {
+    const candidate = { ...message, ...decodeCctpMessage(wire(expectation(changes))) };
+    expect(destinationMintHashes([received(candidate)], message, options)).toEqual([]);
+    expect(matchReceiptCctpMessage(receipt([received(candidate)]), message, expected, options)).toBeNull();
+  }
+  for (const changes of [{ nonce: sourceHash }, { sender: w(other) }, { sourceDomain: 3 }, { finalityThresholdExecuted: 999 }, { messageBody: "0x1234" as Hex }]) {
+    expect(destinationMintHashes([received({ ...message, ...changes })], message, options)).toEqual([]);
+  }
+  expect(destinationMintHashes([received(message)], message, { ...options, intent: expectation({ destinationCaller: other }) })).toEqual([]);
+  expect(destinationMintHashes([received(message)], message, { ...options, intent: expectation({ sourceTxHash: destinationHash }) })).toEqual([]);
+  expect(destinationMintHashes([{ ...received(message), removed: true }], message, options)).toEqual([]);
+  expect(destinationMintHashes([{ ...received(message), address: other }], message, options)).toEqual([]);
+});
+
 test("deposit proof reports Core forwarding without claiming subsequent CoreWriter success", () => {
   const message = matched(expectation({ sourceDomain: 0, destinationDomain: 19, mintRecipient: forwarder, destinationCaller: forwarder }));
   const input = { messageTransmitter: transmitter, usdc: token, forwarder, coreDepositWallet: core, owner };
@@ -138,6 +176,25 @@ test("deposit proof reports Core forwarding without claiming subsequent CoreWrit
   expect(verifyCoreForwardReceipt(receipt([...beforeSend, sent(9880000000n)]), message, input)).toBeNull();
   const fee = log("event NewCoreAccountFeeApplied(address indexed coreRecipient, uint64 newCoreAccountFee, uint256 evmDepositAmount, uint64 coreSentAmount)", { coreRecipient: owner }, ["uint64", "uint256", "uint64"], [100000000n, 99800000n, 9880000000n], core);
   expect(verifyCoreForwardReceipt(receipt([...beforeSend, fee, sent(9880000000n)]), message, input)?.coreAmountAtoms).toBe("9880000000");
+});
+
+test("disabled perps forwarding proves owner cash routing without mistaking it for another mint to retry", () => {
+  const expected = expectation({ sourceDomain: 0, destinationDomain: 19, mintRecipient: forwarder, destinationCaller: forwarder });
+  const message = matched(expected), system = "0x2000000000000000000000000000000000000000";
+  const input = { messageTransmitter: transmitter, usdc: token, forwarder, coreDepositWallet: core, owner };
+  const minted = [received(message), transfer(zero, forwarder, 99800000n), transfer(forwarder, core, 99800000n)];
+  const fallback = receipt([...minted, transfer(owner, system, 99800000n, core)]);
+  expect(verifyCoreForwardReceipt(fallback, message, input)).toBeNull();
+  expect(verifyCoreCashReceipt(fallback, message, input)).toEqual({ transactionHash: destinationHash, blockNumber: "291", deliveredAtoms: "99800000", nonce: cctpNonce, finality: "included", phase: "forwarded_to_core_cash", recipient: owner, coreAmountAtoms: "9980000000", coreExecutionProven: false });
+  for (const event of [transfer(other, system, 99800000n, core), transfer(owner, system, 99800000n), transfer(owner, other, 99800000n, core), transfer(owner, system, 99799999n, core)]) expect(verifyCoreCashReceipt(receipt([...minted, event]), message, input)).toBeNull();
+  expect(verifyCoreCashReceipt(receipt([minted[0], minted[1], transfer(owner, system, 99800000n, core)]), message, input)).toBeNull();
+  expect(verifyCoreCashReceipt(receipt([...fallback.logs, sent()]), message, input)).toBeNull();
+  expect(verifyCoreCashReceipt(receipt([...fallback.logs, transfer(owner, system, 99800000n, core)]), message, input)).toBeNull();
+  expect(verifyCoreCashReceipt({ ...fallback, status: "0x0" }, message, input)).toBeNull();
+  expect(verifyCoreCashReceipt(receipt([...minted, sent()]), message, input)).toBeNull();
+  const recovered = { ...fallback, transactionHash: sourceHash, logs: fallback.logs.map(entry => ({ ...entry as Record<string, unknown>, transactionHash: sourceHash })) };
+  expect(verifyCoreCashReceipt(recovered, message, input)).toBeNull();
+  expect(verifyCoreCashReceipt(recovered, message, { ...input, allowDiscoveredReceipt: true })?.transactionHash).toBe(sourceHash);
 });
 
 test("matching Core ledger entries stay explicitly contextual and exclude already observed credits", () => {

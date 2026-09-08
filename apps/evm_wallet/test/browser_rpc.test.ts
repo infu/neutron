@@ -45,7 +45,8 @@ test("browser RPC endpoints can be configured without extensions or API keys", a
   expect(calls.every((call) => call.url === "http://127.0.0.1:8545")).toBe(true);
   expect(rpc.endpoint(42161)).toBe("https://arbitrum-one-rpc.publicnode.com");
   expect(rpc.endpoint(11155111)).toBe("https://ethereum-sepolia-rpc.publicnode.com");
-  expect(() => rpc.endpoint("999")).toThrow("No browser RPC endpoint");
+  expect(rpc.endpoint("999")).toBe("https://hyperliquid.drpc.org");
+  expect(() => rpc.endpoint("998")).toThrow("No browser RPC endpoint");
   expect(() => rpc.endpoint(Number.MAX_SAFE_INTEGER + 1)).toThrow("exact integer");
 });
 

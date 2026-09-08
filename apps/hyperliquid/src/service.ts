@@ -5,8 +5,10 @@ import { analyzeCandles, analyzeBook } from "./analysis.ts";
 import { authorizeTrade } from "./provider.ts";
 import { createStore } from "./store.ts";
 import { createTradingEngine, type TradeIntent } from "./trading.ts";
-import { quoteFunding, runFunding, fundingResult, fundingIntent } from "./funding.ts";
-import type { FundingInput } from "./funding_protocol.ts";
+import { quoteFunding, runFunding, recoverFunding, fundingResult, fundingIntent } from "./funding.ts";
+import { recoverCoreFunding } from "./funding_core.ts";
+import { FUNDING_CHAINS, type FundingInput, type FundingChainId } from "./funding_protocol.ts";
+import { calculateOrderCapacity, calculateFundingCapacity } from "./sizing.ts";
 import { approveTradingSession, revokeTradingSession, getTradingSession, DefinitiveMasterSigningError, type MasterTypedDataSigner } from "./trading_key.ts";
 import { nextTradingMasterNonce } from "./trading_store.ts";
 
@@ -173,16 +175,30 @@ exposeTool("hl_funding_rates_v1", {
 }, async (args, context) => data(await source(environment(args)).funding(String(args.coin), Number(args.startTime), args.endTime === undefined ? undefined : Number(args.endTime), context.signal)));
 
 const orderProperties: JsonObject = { coin, side, orderType: { enum: ["market", "limit"] }, size: decimal, price: decimal, slippageBps, reduceOnly: bool, postOnly: bool };
+exposeTool("hl_order_capacity_v1", {
+  title: "Read available perpetual order size", description: "Estimate the maximum base-asset size for this side using the venue's current account-specific trading capacity, configured leverage, fees and exact order price. Market estimates use the current book and requested slippage; limit estimates use price. Reduce-only capacity uses the position remaining on the closing side. Returns null with a reason when observations are unavailable. Capacity can change before execution; this read grants no authority and changes no leverage.",
+  inputSchema: input({ coin, side, orderType: { enum: ["market", "limit"] }, price: decimal, slippageBps, reduceOnly: bool }, ["coin", "side", "orderType"]), outputSchema: dataOutput, annotations: reads,
+}, async (args, context) => {
+  const api = source(environment(args)), selected = await account(context), symbol = String(args.coin);
+  const [catalog, activeAsset, snapshot, book] = await Promise.all([
+    api.markets(context.signal), args.reduceOnly === true ? Promise.resolve(null) : api.activeAsset(selected.address, symbol, context.signal), api.account(selected.address, context.signal),
+    args.orderType === "market" && args.reduceOnly !== true ? api.book(symbol, context.signal) : Promise.resolve(undefined),
+  ]);
+  const market = catalog.markets.find((entry) => entry.name === symbol);
+  if (!market) throw new Error("This symbol is not a default Hyperliquid perpetual market.");
+  return data(calculateOrderCapacity({ coin: symbol, side: args.side as "buy" | "sell", orderType: args.orderType as "market" | "limit", ...(args.price !== undefined ? { price: String(args.price) } : {}), slippageBps: Number(args.slippageBps ?? 50), reduceOnly: args.reduceOnly === true }, { market, activeAsset, account: snapshot, ...(book ? { book } : {}) }));
+});
+
 function orderIntent(args: JsonObject): TradeIntent {
   return { kind: "order", coin: String(args.coin), side: args.side as "buy" | "sell", orderType: args.orderType as "market" | "limit", size: String(args.size), ...(args.price !== undefined ? { price: String(args.price) } : {}), ...(args.slippageBps !== undefined ? { slippageBps: Number(args.slippageBps) } : {}), ...(args.reduceOnly !== undefined ? { reduceOnly: args.reduceOnly === true } : {}), ...(args.postOnly !== undefined ? { postOnly: args.postOnly === true } : {}) };
 }
 exposeTool("hl_preview_order_v1", {
-  title: "Preview a perpetual order", description: "Prepare an exact perps order with current metadata, book and account context without signing. Size is a decimal base-asset quantity. Market orders are IOC limits with explicit slippage bounds and can partially fill. Limit orders use GTC or post-only. Execution obtains a fresh exact review; a preview grants no trading authority.",
+  title: "Preview a perpetual order without execution", description: "Read an exact perps order estimate with current metadata, book and account context. This read-only tool does not save an executable order or open an approval dialog. To carry out a requested trade, call hl_place_order_v1: Normal mode opens the owner's exact review dialog; Root mode uses its existing permission judge and needs no user click. Size is a decimal base-asset quantity. Market orders are IOC limits with explicit slippage bounds and can partially fill. Limit orders use GTC or post-only. A preview grants no trading authority.",
   inputSchema: input(orderProperties, ["coin", "side", "orderType", "size"]), outputSchema: dataOutput, annotations: reads,
 }, async (args, context) => data(await (await engine(context, environment(args))).preview(orderIntent(args))));
 
 function tradeTool(name: string, title: string, description: string, properties: JsonObject, required: string[], intent: (args: JsonObject) => TradeIntent) {
-  exposeTool(name, { title, description: `${description} Environment defaults to mainnet. Reuse the same 32-hex operationId and identical inputs after interruption. Every new action receives exact owner or Agent review. Signed envelopes are retained before direct browser dispatch; uncertain outcomes require reconciliation, not a fresh operation ID.`, inputSchema: input({ operationId, ...properties }, ["operationId", ...required]), outputSchema: resultOutput, annotations: tradeEffects },
+  exposeTool(name, { title, description: `${description} This executes the action: Normal Agent mode opens the owner's exact approval dialog; Root mode and its delegated invocations use the existing permission judge without requiring a user click. Environment defaults to mainnet. Reuse the same 32-hex operationId and identical inputs after interruption, including a saved prepared order whose review was interrupted. Do not stop at a read-only preview when asked to trade. Signed envelopes are retained before direct browser dispatch; uncertain outcomes require reconciliation, not a fresh operation ID.`, inputSchema: input({ operationId, ...properties }, ["operationId", ...required]), outputSchema: resultOutput, annotations: tradeEffects },
     (args, context) => effect(context, async () => result(await (await engine(context, environment(args))).execute({ operationId: String(args.operationId), intent: intent(args) }))));
 }
 tradeTool("hl_place_order_v1", "Place a perpetual market or limit order", "Trade a default perp using a decimal base-asset size. Market orders use bounded IOC execution and can partially fill. Limit orders use GTC; postOnly selects ALO. Set reduceOnly to prevent increasing exposure. The exact price bound, quantity, fees and account observations are part of review.", orderProperties, ["coin", "side", "orderType", "size"], orderIntent);
@@ -208,6 +224,22 @@ function fundingCaller(context: MsgBusToolContext) {
   const caller = requireEvmWalletCaller(context);
   return !context.agentMode && caller.appId === "hyperliquid" && context.caller?.role === "tile" ? null : caller;
 }
+exposeTool("hl_funding_capacity_v1", {
+  title: "Read available USDC for a Hyperliquid transfer", description: "Read the maximum gross native-USDC amount for an Ethereum/Arbitrum deposit or HyperCore withdrawal to the same Wallet. Deposit capacity is the exact source-chain native USDC balance; source gas is paid separately in ETH. Withdrawal capacity accounts for balance holds and maintenance availability. Bridge fees are deducted from the transfer amount and appear in the separate quote. Unknown collateral mode or unavailable observations return an explicit reason rather than a guessed balance. Mainnet funding only.",
+  inputSchema: input({ direction: { enum: ["deposit", "withdraw"] }, chainId: { enum: ["1", "42161"] }, sourceBalance: { enum: ["perps", "unified"] } }, ["direction", "chainId"]), outputSchema: dataOutput, annotations: reads,
+}, async (args, context) => {
+  if (environment(args) !== "mainnet") throw new Error("USDC funding is available on mainnet only.");
+  const selected = await account(context), direction = args.direction as "deposit" | "withdraw";
+  if (direction === "withdraw") {
+    return data(calculateFundingCapacity({ direction, ...(args.sourceBalance ? { sourceBalance: args.sourceBalance as "perps" | "unified" } : {}) }, { account: await source("mainnet").account(selected.address, context.signal) }));
+  }
+  const chainId = args.chainId as FundingChainId, tokenAddress = FUNDING_CHAINS[chainId].usdc;
+  const balances = await wallet(context).balances({ accountId: "main", chainId, tokens: [tokenAddress] });
+  if (balances.address.toLowerCase() !== selected.address.toLowerCase()) throw new Error("Wallet account changed while reading available USDC. Refresh before transferring.");
+  const token = balances.tokens.find((entry) => entry.address.toLowerCase() === tokenAddress);
+  const available = token?.error || token?.decimals !== "6" ? null : token.balanceAtoms;
+  return data(calculateFundingCapacity({ direction }, { nativeUsdcAtoms: available ?? null, observedAt: Number(BigInt(balances.observedAtNs) / 1_000_000n) }));
+});
 exposeTool("hl_funding_quote_v1", {
   title: "Quote a USDC transfer to or from Hyperliquid", description: "Quote native USDC between the same EVM Wallet and HyperCore default perps using current Circle CCTP fees. Mainnet Ethereum chain1 or Arbitrum42161. amount is decimal USDC, not atomic units. Deposits can need USDC allowance and source ETH gas; withdrawals use a master-wallet signature. Quotes do not transfer funds. Circle domain IDs and EVM chain IDs are distinct.",
   inputSchema: input(fundingProperties, ["direction", "chainId", "amount"]), outputSchema: dataOutput, annotations: reads,
@@ -218,6 +250,18 @@ exposeTool("hl_funding_execute_v1", {
 }, (args, context) => effect(context, async () => {
   const selected = await account(context, true);
   return result(await runFunding(wallet(context), createStore(context.kernel), String(args.operationId), fundingInput(args), fundingCaller(context), !!context.agentMode, { execute: true, nextNonce: () => nextTradingMasterNonce({ walletAddress: selected.address, environment: "mainnet" }), ...(context.signal ? { signal: context.signal } : {}), onProgress: (phase: string) => context.reportProgress({ phase }) }));
+}));
+
+exposeTool("hl_funding_recover_v1", {
+  title: "Complete a saved USDC bridge transfer", description: "Recover the original saved transfer after source burn; never create a new deposit or burn. Read hl_reconcile_v1 first for available recovery actions. method=wallet submits the original verified CCTP message and attestation to the destination mint/forward contract using EVM Wallet: HyperEVM/HYPE gas and EVM Wallet 0.1.21+ for a deposit, or destination Ethereum/Arbitrum ETH gas for a withdrawal. method=circle requests a fresh attestation when supported; it is not a refund or a generic relay retry. method=perps moves only a proven deposit cash fallback to the same account's perps balance, using a master Wallet signature; it does not trade spot or change account mode. Only operationId and method are accepted; recipients, amounts and signed requests come from retained evidence. Unknown recovery outcomes retain their exact request IDs for continuation. Root Agent authority propagates through Wallet; Normal mode uses owner review.",
+  inputSchema: input({ operationId, method: { enum: ["circle", "wallet", "perps"] } }, ["operationId", "method"]), outputSchema: resultOutput, annotations: effects,
+}, (args, context) => effect(context, async () => {
+  if (environment(args) !== "mainnet") throw new Error("USDC recovery is available on mainnet only.");
+  const selected = await account(context, true), options = { execute: true, nextNonce: () => nextTradingMasterNonce({ walletAddress: selected.address, environment: "mainnet" }), ...(context.signal ? { signal: context.signal } : {}), onProgress: (phase: string) => context.reportProgress({ phase }) };
+  const client = wallet(context), store = createStore(context.kernel), id = String(args.operationId), caller = fundingCaller(context);
+  return result(args.method === "perps"
+    ? await recoverCoreFunding(client, store, id, caller, !!context.agentMode, options)
+    : await recoverFunding(client, store, id, caller, !!context.agentMode, { ...options, method: args.method as "circle" | "wallet" }));
 }));
 
 exposeTool("hl_reconcile_v1", {

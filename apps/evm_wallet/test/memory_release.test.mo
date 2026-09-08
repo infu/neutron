@@ -11,8 +11,8 @@ assert Map.size(fresh.commands) == 0;
 assert Map.size(fresh.nonce_next) == 0;
 assert fresh.next_operation_id == 1;
 Config.initialize(fresh);
-assert Map.size(fresh.networks) == 3;
-assert Map.size(fresh.assets) == 2;
+assert Map.size(fresh.networks) == 4;
+assert Map.size(fresh.assets) == 3;
 
 // Published wallet v1 keeps its existing object. The additive evidence root
 // initializes independently and never replaces installed commands or nonce state.
@@ -46,6 +46,20 @@ Config.initialize(restored);
 assert Map.get(restored.accounts, Text.compare, "main") == ?account;
 assert Map.get(restored.networks, Nat.compare, 1) == ?network;
 assert Map.get(restored.assets, Text.compare, "token-key") == ?asset;
+assert Map.size(restored.networks) == 2;
+assert Map.size(restored.assets) == 2;
+let ?hyperNetwork = Map.get(restored.networks, Nat.compare, 999) else { assert false; loop {} };
+assert hyperNetwork.native_symbol == "HYPE";
+let hyperAssetKey = Config.assetKey(999, "0xb88339cb7199b77e23db6e890353e22632ba630f");
+let ?hyperAsset = Map.get(restored.assets, Text.compare, hyperAssetKey) else { assert false; loop {} };
+assert hyperAsset.decimals == 6 and hyperAsset.symbol == "USDC";
+let renamedHyper = { hyperNetwork with name = "owner-hyper-name" };
+let renamedUsdc = { hyperAsset with symbol = "owner-usdc-name" };
+Map.add(restored.networks, Nat.compare, 999, renamedHyper);
+Map.add(restored.assets, Text.compare, hyperAssetKey, renamedUsdc);
+Config.initialize(restored);
+assert Map.get(restored.networks, Nat.compare, 999) == ?renamedHyper;
+assert Map.get(restored.assets, Text.compare, hyperAssetKey) == ?renamedUsdc;
 assert Map.get(restored.nonce_next, Text.compare, "main-chain-key") == ?17;
 assert restored.next_operation_id == 43;
 let ?pending = Map.get(restored.commands, Text.compare, "caller-installation-request-key") else { assert false; loop {} };

@@ -106,7 +106,7 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 120,
+    version: 121,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -543,13 +543,14 @@ test("release 117 keeps every production root, decoder pack and method contract 
 for (const [previousVersion, previousDigest] of [
   [117, "fc299ca5292761bd6b300b9fd3205843788972594a37c4376f4a6a9f16f37b4c"],
   [119, "c0ce9338a4c1f6538066cf100b2d6a649d1d6312450ec91a63b77a8b7b74abd2"],
-] as const) test(`release 120 retains every production root, closure, lineage and method contract from ${previousVersion}`, async () => {
+  [120, "dcdfffcf0a1fc536ee2046e8ed435a30ccee12faec342a0831fbf9b97e08a7a4"],
+] as const) test(`release 121 retains every production root, closure, lineage and method contract from ${previousVersion}`, async () => {
   const previousBytes = await readFile(new URL(`../evm_wallet.v0.1.${previousVersion - 100}.neutron`, import.meta.url));
   // The published predecessor is immutable; this code-only release adds no Wallet migration.
   expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(previousDigest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.20.neutron", import.meta.url)));
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 120 });
+  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.21.neutron", import.meta.url)));
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 121 });
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!));
   const next = JSON.parse(decode(files["neutron.json"]!));
@@ -576,7 +577,7 @@ for (const [previousVersion, previousDigest] of [
   const schema = JSON.parse(decode(files["schema.json"]!));
   const priorSchema = JSON.parse(decode(previous["schema.json"]!));
   expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 120 } });
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 121 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 346, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, evm_wallet: next });
   expect(clean.upgrades).toHaveLength(roots.length);

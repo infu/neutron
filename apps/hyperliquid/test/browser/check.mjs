@@ -137,6 +137,10 @@ function account(environment) {
     clearinghouseState: { assetPositions: positions.map(position => ({ type: "oneWay", position })), marginSummary, crossMarginSummary: marginSummary, crossMaintenanceMarginUsed: "324.6", withdrawable: "12984.27", time: now() },
     positions, openOrders, fees: { userCrossRate: "0.00045", userAddRate: "0.00015", activeReferralDiscount: "0" },
   };
+  if (accountMode === "empty") {
+    const emptyMargin = Object.fromEntries(Object.keys(marginSummary).map(key => [key, "0"]));
+    return { ...snapshot, abstraction: "default", balanceSource: "unknown", positions: [], openOrders: [], balances: { balances: [] }, clearinghouseState: { ...snapshot.clearinghouseState, assetPositions: [], marginSummary: emptyMargin, crossMarginSummary: emptyMargin, crossMaintenanceMarginUsed: "0", withdrawable: "0" }, warnings: ["The account balance mode is not resolved. Perps and token balances must not be added together or treated as available collateral."] };
+  }
   if (accountMode === "perps") return snapshot;
   const balances = { balances: [{ coin: "USDC", token: 0, total: "9876.543210", hold: "160.25", entryNtl: "9876.543210" }, { coin: "HYPE", token: 150, total: "25", hold: "0", entryNtl: "725" }] };
   if (accountMode === "unknown") return { ...snapshot, abstraction: null, balanceSource: "unknown", balances, warnings: ["The account balance mode is not resolved. Perps and token balances must not be added together or treated as available collateral."] };
@@ -195,7 +199,8 @@ const calls = [], effects = [], reviewOutcomes = [], forbiddenNetwork = [];
 const savedTrades = new Map([["5".repeat(32), tradeOperation("5".repeat(32), { kind: "order", coin: "BTC", side: "buy", orderType: "market", size: "0.01", slippageBps: 50 }, "uncertain")]]);
 const savedFunding = new Map();
 let failingReads = false, incompleteAccount = false, missingKey = false, readGate = null, nextEffectState = null;
-let accountMode = "perps", wholeAccountFailure = false;
+let fundingEffectGate = null;
+let accountMode = "perps", wholeAccountFailure = false, unavailableCapacity = false, pendingKey = false;
 const encodeData = value => ({ dataJson: JSON.stringify(value) });
 const encodeResult = value => ({ resultJson: JSON.stringify(value) });
 const tradeIntent = (name, args) => {
@@ -229,7 +234,9 @@ async function fixture(kind, [call, outcome]) {
       return encodeData({ environment, observedAt: time, market: marketRows.find(row => row.name === args.coin), book: { ...depth, time, observedAt: time }, candles: chart.candles, chart, analysis: {} });
     }
     case "hl_account_v1": return encodeData({ ...account(environment), wallet: fundingQuote({ environment: "mainnet", direction: "deposit", chainId: "1", amount: "1" }).account, ...(incompleteAccount ? { complete: false, positions: null, openOrders: null, clearinghouseState: null, errors: [{ source: "clearinghouseState", message: "Account provider did not return positions or orders." }] } : {}) });
-    case "hl_setup_status_v1": return encodeData(session(missingKey ? "missing" : "active"));
+    case "hl_setup_status_v1": return encodeData(session(pendingKey ? "approval_pending" : missingKey ? "missing" : "active"));
+    case "hl_order_capacity_v1": return encodeData({ maxSize: unavailableCapacity ? null : args.reduceOnly ? args.side === "sell" ? "0.12345" : "0" : args.side === "buy" ? "0.12345" : "0.08765", availableMarginUsdc: unavailableCapacity ? null : "432.123456", leverage: 5, marginMode: "cross", observedAt: now(), ...(unavailableCapacity ? { reason: "Available margin is unavailable. Refresh to try again." } : {}) });
+    case "hl_funding_capacity_v1": return encodeData({ maxAmountUsdc: unavailableCapacity ? null : args.direction === "withdraw" ? "42.987654" : args.chainId === "1" ? "250.123456" : "77.123456", observedAt: now(), ...(unavailableCapacity ? { reason: "USDC balance is unavailable. Refresh to try again." } : {}) });
     case "hl_preview_order_v1": return encodeData(tradePreview(tradeIntent(call.name, args), environment));
     case "hl_place_order_v1": case "hl_close_position_v1": case "hl_cancel_order_v1": case "hl_leverage_v1": case "hl_modify_order_v1": case "hl_protect_position_v1": case "hl_isolated_margin_v1": {
       assert.match(args.operationId, /^[0-9a-f]{32}$/);
@@ -244,7 +251,17 @@ async function fixture(kind, [call, outcome]) {
       assert.match(args.operationId, /^[0-9a-f]{32}$/);
       effects.push(structuredClone(call));
       const result = fundingOperation(args.operationId, args); savedFunding.set(args.operationId, result);
+      if (fundingEffectGate) await fundingEffectGate;
       return encodeResult(result);
+    }
+    case "hl_funding_recover_v1": {
+      assert.deepEqual(Object.keys(args).sort(), ["environment", "method", "operationId"], "Recovery supplies only the saved operation ID and chosen method");
+      const saved = savedFunding.get(args.operationId); assert(saved?.recovery, "Recovery must refer to an existing attested transfer");
+      assert(saved.recovery.methods.includes(args.method), "Fixture recovery method must be currently offered");
+      effects.push(structuredClone(call));
+      const recovery = { ...saved.recovery, ...(args.method === "perps" ? { status: "complete", methods: [], message: "Your original deposit is now available in perps." } : args.method === "circle" ? { status: "ready", methods: ["wallet"], message: "The renewed attestation is ready to submit.", walletStatus: null } : saved.recovery.status === "pending" ? { status: "complete", methods: [], transactionHash: "0x" + "c".repeat(64), walletStatus: "confirmed", message: "Original transfer completed." } : { status: "pending", methods: ["wallet"], walletStatus: "submitted", message: "The destination transaction is awaiting confirmation." }) };
+      const result = { ...saved, recovery, state: recovery.status === "complete" ? "complete" : "pending" };
+      savedFunding.set(args.operationId, result); return encodeResult(result);
     }
     case "hl_activity_v1": return encodeData({ environment, trades: [...savedTrades.values()], funding: [...savedFunding.values()].map(result => ({ id: result.operationId, summary: result.summary, phase: result.phase, revision: "1", created_at: String(BigInt(now() - 1000) * 1000000n), updated_at: String(BigInt(now()) * 1000000n), result })), nextCursor: null });
     case "hl_reconcile_v1": {
@@ -302,12 +319,13 @@ try {
   let releaseReads;
   readGate = new Promise(resolve => { releaseReads = resolve; });
   await page.goto(url);
-  await page.getByText("Connecting EVM Wallet…", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Checking trading access…", exact: true }).waitFor();
   await page.screenshot({ path: resolve(artifacts, "loading-desktop.png"), fullPage: true });
   readGate = null; releaseReads();
   await page.getByText("Perps equity", { exact: true }).waitFor();
   await page.locator(".hl-overview").getByText("$18,467.38", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Key ready", exact: false }).waitFor();
+  await page.getByRole("button", { name: "Trading access enabled", exact: true }).waitFor();
+  assert.equal(await page.locator(".hl-candles-kind").count(), 0, "Redundant candle icon and Candles label are removed at every width");
   coverage.push("actual React bundle and public resident response contracts", "loading, connected account equity and ready trading key");
 
   const dialog = () => page.locator("dialog[open]");
@@ -337,6 +355,10 @@ try {
       assert(await chart.locator("canvas").first().evaluate(canvas => canvas.width > 0 && canvas.height > 0), "Canvas is sized for the tile");
     }
     const box = await chart.boundingBox(); assert(box && box.width > 200 && box.height > 100, "Chart remains usable in this tile shape");
+    const plotTop = await chart.evaluate(element => element.getBoundingClientRect().top + scrollY);
+    assert(plotTop <= 360, `Candlestick plot starts high in the tile at ${viewport.width}px: ${plotTop}px`);
+    assert.equal(await page.locator(".hl-candles-help, .hl-data-status, .hl-account-info").count(), 0, "Routine tips, healthy live timestamp, and account popup trigger are absent at every tile size");
+    assert.equal(await page.getByText("Select a price to set a limit order.", { exact: true }).count(), 0, "Orderbook tip is removed");
     await screenshot(`trade-chart-${viewport.width}x${viewport.height}`);
     await panel("Book");
     await page.getByRole("heading", { name: "Order book", exact: true }).waitFor();
@@ -357,7 +379,7 @@ try {
   await page.getByRole("button", { name: "Fit all candles", exact: true }).click();
   const levels = page.getByRole("button", { name: "Position & orders", exact: true });
   await levels.click(); assert.equal(await levels.getAttribute("aria-pressed"), "false"); await levels.click();
-  coverage.push("interactive chart zoom, fit and keyboard candle inspection", "position and order chart overlays can be toggled");
+  coverage.push("no redundant chart tips, orderbook hint, healthy live status row or account-details popup", "interactive chart zoom, fit and keyboard candle inspection", "position and order chart overlays can be toggled");
 
   const liveDepth = book("BTC", "mainnet");
   liveDepth.levels = liveDepth.levels.map(side => side.map(level => ({ ...level, px: String(Number(level.px) + 3) })));
@@ -405,6 +427,18 @@ try {
   await page.getByRole("button", { name: "Use limit price 108431", exact: true }).click();
   await page.getByLabel("Limit price", { exact: true }).waitFor();
   assert.equal(await page.getByLabel("Limit price", { exact: true }).inputValue(), "108431");
+  await waitEnabled(page, page.locator(".hl-ticket").getByRole("button", { name: "Max", exact: true }));
+  await page.locator(".hl-ticket").getByRole("button", { name: "Max", exact: true }).click();
+  assert.equal(await page.getByLabel("Size", { exact: true }).inputValue(), "0.12345", "Max uses the current venue capacity, not withdrawable collateral or maximum market leverage");
+  await page.locator(".hl-ticket").getByRole("button", { name: "25%", exact: true }).click();
+  assert.equal(await page.getByLabel("Size", { exact: true }).inputValue(), "0.03086", "Percentage sizes round down to market precision");
+  await page.getByRole("slider", { name: "Order allocation", exact: true }).fill("50");
+  assert.equal(await page.getByLabel("Size", { exact: true }).inputValue(), "0.06172");
+  unavailableCapacity = true; await refresh();
+  await page.waitForFunction(() => document.querySelector(".hl-allocation-slider")?.disabled);
+  assert(await page.locator(".hl-ticket").getByRole("button", { name: "Max", exact: true }).isDisabled(), "Missing capacity never produces an invented Max");
+  unavailableCapacity = false; await refresh();
+  coverage.push("venue-based exact Max, percentage presets and accessible allocation slider", "missing capacity disables allocation without preventing manually entered sizing");
   await page.getByLabel("Size", { exact: true }).fill("0.00501");
   await page.getByLabel("Post only", { exact: true }).check();
   const reviewLong = page.getByRole("button", { name: "Review long", exact: true });
@@ -423,6 +457,11 @@ try {
   coverage.push("book price selects limit order", "decimal size and limit price reach exact owner review", "declined review dispatches no effect", "post-only limit order submission");
 
   await page.getByRole("button", { name: "Market", exact: true }).click();
+  const marketHelp = page.getByLabel("About market orders", { exact: true });
+  assert.equal(await marketHelp.locator("..").getAttribute("open"), null, "Order explanation starts collapsed behind an information icon");
+  await marketHelp.focus(); await page.keyboard.press("Enter");
+  await page.getByRole("note").filter({ hasText: "Any unfilled quantity" }).waitFor();
+  await marketHelp.press("Enter");
   await page.getByRole("button", { name: "Short", exact: true }).click();
   await page.getByLabel("Size", { exact: true }).fill("0.01234");
   await page.getByLabel("Maximum slippage percent", { exact: true }).fill("0.75");
@@ -480,6 +519,18 @@ try {
 
   const transfer = () => page.getByRole("button", { name: /Transfer USDC/ }).first().click();
   await transfer();
+  await waitEnabled(page, dialog().getByRole("button", { name: "Max", exact: true }));
+  await dialog().getByRole("button", { name: "Max", exact: true }).click();
+  assert.equal(await dialog().getByLabel("USDC amount", { exact: true }).inputValue(), "250.123456", "Deposit Max preserves the whole source USDC balance to six decimals");
+  await dialog().getByRole("slider", { name: "Transfer allocation", exact: true }).fill("75");
+  assert.equal(await dialog().getByLabel("USDC amount", { exact: true }).inputValue(), "187.592592");
+  await dialog().getByLabel("Transfer network", { exact: true }).selectOption("42161");
+  assert.equal(await dialog().getByLabel("USDC amount", { exact: true }).inputValue(), "", "Switching source networks clears the previous allocation");
+  await waitEnabled(page, dialog().getByRole("button", { name: "Max", exact: true }));
+  await dialog().getByRole("button", { name: "Max", exact: true }).click();
+  assert.equal(await dialog().getByLabel("USDC amount", { exact: true }).inputValue(), "77.123456");
+  await dialog().getByLabel("Transfer network", { exact: true }).selectOption("1");
+  coverage.push("deposit allocation uses the selected source network balance and clears stale amounts on route changes");
   await dialog().getByLabel("USDC amount", { exact: true }).fill("125.123456");
   await waitEnabled(page, dialog().getByRole("button", { name: "Review deposit", exact: true }));
   await dialog().getByText("125.123456 USDC", { exact: true }).waitFor();
@@ -491,6 +542,9 @@ try {
   assert.equal(effects.at(-1).arguments.amount, "125.123456"); assert.equal(effects.at(-1).arguments.chainId, "1");
   assert.equal(effects.at(-1).arguments.direction, "deposit");
   await transfer(); await dialog().getByRole("button", { name: "Withdraw", exact: true }).click();
+  await waitEnabled(page, dialog().getByRole("button", { name: "Max", exact: true }));
+  await dialog().getByRole("button", { name: "Max", exact: true }).click();
+  assert.equal(await dialog().getByLabel("USDC amount", { exact: true }).inputValue(), "42.987654", "Withdrawal Max uses the independently observed funding capacity");
   await dialog().getByLabel("USDC amount", { exact: true }).fill("50.000001");
   await waitEnabled(page, dialog().getByRole("button", { name: "Review withdraw", exact: true }));
   await screenshot("withdraw-preview-narrow");
@@ -500,6 +554,26 @@ try {
   assert.equal(effects.at(-1).arguments.direction, "withdraw"); assert.equal(effects.at(-1).arguments.chainId, "1");
   assert.equal(effects.at(-1).arguments.amount, "50.000001");
   coverage.push("Ethereum deposit and withdrawal previews", "six-decimal USDC inputs", "source confirmation remains pending destination credit");
+  let releaseFunding;
+  fundingEffectGate = new Promise(resolve => { releaseFunding = resolve; });
+  const effectsBeforePending = effects.length;
+  await transfer(); await dialog().getByLabel("USDC amount", { exact: true }).fill("10");
+  await waitEnabled(page, dialog().getByRole("button", { name: "Review deposit", exact: true }));
+  await dialog().getByRole("button", { name: "Review deposit", exact: true }).click();
+  await page.getByText("You can close this. Follow it in Activity.", { exact: true }).waitFor();
+  assert.equal(effects.length, effectsBeforePending + 1);
+  await page.getByRole("button", { name: "Dismiss operation status", exact: true }).click();
+  assert.equal(await page.locator(".hl-execution").count(), 0, "A pending transfer notification is dismissible");
+  await nav("Activity").click();
+  await page.locator(".hl-activity").filter({ hasText: "Deposit 10 USDC" }).waitFor();
+  assert.equal(effects.length, effectsBeforePending + 1, "Dismissal and Activity navigation do not dispatch another transfer");
+  const resultCount = await page.evaluate(() => window.fixtureToolResults.hl_funding_execute_v1 ?? 0);
+  fundingEffectGate = null; releaseFunding();
+  await page.waitForFunction(count => (window.fixtureToolResults.hl_funding_execute_v1 ?? 0) > count, resultCount);
+  assert.equal(await page.locator(".hl-execution").count(), 0, "A dismissed transfer notice stays dismissed after its pending request completes");
+  assert.equal(effects.length, effectsBeforePending + 1, "A transfer keeps the same effect after its notice is closed");
+  coverage.push("pending transfer notification can close without canceling or replaying funding", "in-flight transfer remains visible in Activity and late completion does not reopen dismissed notice");
+
 
   await nav("Activity").click();
   await page.getByText("Activity & recovery", { exact: true }).waitFor();
@@ -523,15 +597,67 @@ try {
   assert.equal(effects.at(-1).arguments.operationId, [...savedFunding.keys()][0], "Continuing transfer retains its original burn operation");
   coverage.push("saved trade and funding activity", "uncertain order reconciliation retains operation ID", "reload reads saved status without replay");
   coverage.push("explicit saved-trade retry and funding continuation reuse their original operation IDs");
+  const recoveryDepositId = [...savedFunding.keys()][0], recoveryWithdrawId = [...savedFunding.keys()][1];
+  const depositForRecovery = savedFunding.get(recoveryDepositId);
+  const recoveryBase = { status: "ready", methods: ["wallet"], chainId: "999", gasSymbol: "HYPE", transactionHash: null, walletStatus: null, message: "The attested transfer can be completed on its destination network." };
+  savedFunding.set(recoveryDepositId, { ...depositForRecovery, recovery: recoveryBase });
+  await refresh();
+  const depositRecoveryRow = page.locator(".hl-activity").filter({ hasText: "Deposit 125.123456 USDC" });
+  await depositRecoveryRow.getByRole("button", { name: "Complete transfer", exact: true }).waitFor();
+  await depositRecoveryRow.getByText(/HyperEVM transaction fees are paid in HYPE/).waitFor();
+  assert.equal(await depositRecoveryRow.getByRole("button", { name: "Continue transfer", exact: true }).count(), 0, "An attested recovery presents one completion path instead of another deposit continuation");
+  const depositCallsBeforeRecovery = effects.filter(call => call.name === "hl_funding_execute_v1").length;
+  await depositRecoveryRow.getByRole("button", { name: "Complete transfer", exact: true }).click();
+  await page.locator(".hl-execution").getByRole("button", { name: "Continue recovery", exact: true }).waitFor();
+  assert.equal(effects.at(-1).name, "hl_funding_recover_v1");
+  assert.equal(effects.at(-1).arguments.operationId, recoveryDepositId);
+  assert.equal(effects.at(-1).arguments.method, "wallet");
+  await page.locator(".hl-execution").getByRole("button", { name: "Continue recovery", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector(".hl-execution")?.textContent.includes("Complete"));
+  assert.equal(effects.at(-1).arguments.operationId, recoveryDepositId, "Continuing destination recovery retains the original source transfer ID");
+  assert.equal(effects.filter(call => call.name === "hl_funding_execute_v1").length, depositCallsBeforeRecovery, "Destination recovery never requests another source deposit");
+  await refresh();
+  assert.equal(await depositRecoveryRow.getByRole("button", { name: "Complete transfer", exact: true }).count(), 0, "A completed transfer offers no new mint action");
+  const withdrawalForRecovery = savedFunding.get(recoveryWithdrawId);
+  savedFunding.set(recoveryWithdrawId, { ...withdrawalForRecovery, recovery: { ...recoveryBase, status: "waiting_attestation", methods: ["circle"], chainId: "1", gasSymbol: "ETH", message: "This expired attestation can be refreshed for the original transfer." } });
+  await refresh();
+  const withdrawRecoveryRow = page.locator(".hl-activity").filter({ hasText: "Withdraw 50.000001 USDC" });
+  await withdrawRecoveryRow.getByRole("button", { name: "Refresh attestation", exact: true }).waitFor();
+  assert.equal(await withdrawRecoveryRow.getByRole("button", { name: "Complete transfer", exact: true }).count(), 0, "An expired attestation cannot be submitted before renewal");
+  await withdrawRecoveryRow.getByRole("button", { name: "Refresh attestation", exact: true }).click();
+  await page.locator(".hl-execution").getByRole("button", { name: "Complete transfer", exact: true }).waitFor();
+  assert.equal(effects.at(-1).arguments.operationId, recoveryWithdrawId);
+  assert.equal(effects.at(-1).arguments.method, "circle");
+  await page.locator(".hl-execution").getByText(/Ethereum transaction fees are paid in ETH/).waitFor();
+  savedFunding.set(recoveryWithdrawId, { ...savedFunding.get(recoveryWithdrawId), recovery: { ...recoveryBase, status: "forwarded", methods: ["circle", "wallet"] } });
+  await refresh();
+  await page.waitForFunction(() => [...document.querySelectorAll(".hl-activity")].some(element => element.textContent.includes("Withdraw 50.000001 USDC") && !element.textContent.includes("Complete transfer") && !element.textContent.includes("Refresh attestation")));
+  await screenshot("destination-recovery-narrow");
+  const cashRecoveryId = [...savedFunding.keys()][2];
+  savedFunding.set(cashRecoveryId, { ...savedFunding.get(cashRecoveryId), phase: "forwarded_to_core_cash", recovery: { ...recoveryBase, status: "ready", methods: ["perps"], message: "Your original deposit arrived in your Hyperliquid cash balance. Move it into perps to trade." } });
+  await refresh();
+  const cashRecoveryRow = page.locator(".hl-activity").filter({ hasText: "Deposit 10 USDC" });
+  await cashRecoveryRow.getByRole("button", { name: "Move to perps", exact: true }).waitFor();
+  assert.equal(await cashRecoveryRow.getByText(/transaction fees are paid in/).count(), 0, "Moving proven cash fallback into perps does not claim a native-network gas cost");
+  assert.equal(await cashRecoveryRow.getByRole("button", { name: "Complete transfer", exact: true }).count(), 0, "Already-minted cash fallback cannot be re-minted");
+  await cashRecoveryRow.getByRole("button", { name: "Move to perps", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector(".hl-execution")?.textContent.includes("Complete"));
+  assert.equal(effects.at(-1).name, "hl_funding_recover_v1");
+  assert.equal(effects.at(-1).arguments.operationId, cashRecoveryId);
+  assert.equal(effects.at(-1).arguments.method, "perps");
+  assert.equal(effects.filter(call => call.name === "hl_funding_execute_v1").length, depositCallsBeforeRecovery);
+  coverage.push("proven cash-balance fallback offers Move to perps using the original deposit ID and no new deposit or mint");
+  coverage.push("attested destination completion and exact-request continuation use only original transfer ID and method", "destination recovery never starts a new source deposit", "HyperEVM recovery explains HYPE gas and Ethereum recovery explains ETH gas", "Circle attestation renewal is offered only for an eligible attestation status", "completed and already-forwarded transfers offer no remint action");
+
 
   await nav("Trade").click(); await panel("Order");
   missingKey = true; await refresh();
-  await page.getByRole("button", { name: "Set up trading", exact: false }).waitFor();
-  await page.getByRole("button", { name: "Set up trading", exact: false }).click();
+  await page.locator(".hl-enable-trading").waitFor();
+  await page.locator(".hl-enable-trading").click();
   await dialog().getByRole("button", { name: "Enable trading", exact: true }).waitFor();
   await screenshot("trading-setup-narrow");
   await page.keyboard.press("Escape"); await dialog().waitFor({ state: "hidden" });
-  assert(await page.getByRole("button", { name: "Set up trading", exact: false }).evaluate(element => element === document.activeElement), "Escape restores focus to setup trigger");
+  assert(await page.locator(".hl-enable-trading").evaluate(element => element === document.activeElement), "Escape restores focus to setup trigger");
   const rejectedCaller = await page.evaluate(async () => {
     try { await window.fixtureRequestReview({ title: "Untrusted review" }, { caller: { appId: "another-app", installationUid: "2", role: "background", endpoint: "app:another-app:background" } }); return false; }
     catch { return true; }
@@ -539,15 +665,15 @@ try {
   assert.equal(rejectedCaller, true, "Review handler rejects a caller outside the Hyperliquid app");
   coverage.push("missing trading-key setup", "Escape closes modal and restores focus", "actual owner-review handler rejects untrusted caller");
 
-  await page.getByLabel("Hyperliquid network", { exact: true }).selectOption("testnet");
-  await transfer(); await dialog().getByLabel("USDC amount", { exact: true }).fill("1");
-  await dialog().getByText(/USDC transfers are available on mainnet/).waitFor();
-  assert(await dialog().getByRole("button", { name: "Review deposit", exact: true }).isDisabled());
-  await screenshot("testnet-funding-unavailable-narrow");
-  await page.keyboard.press("Escape");
-  await page.getByLabel("Hyperliquid network", { exact: true }).selectOption("mainnet");
-  missingKey = false; await refresh();
-  coverage.push("testnet trading scope keeps mainnet funding unavailable");
+  assert.equal(await page.getByLabel("Hyperliquid network", { exact: true }).count(), 0, "The production UI has no environment selector");
+  assert(calls.every(entry => !entry.call.arguments?.environment || entry.call.arguments.environment === "mainnet"), "All UI requests use mainnet");
+  pendingKey = true; await refresh();
+  await page.getByRole("button", { name: "Continue trading setup", exact: true }).waitFor();
+  const setupTop = await page.locator(".hl-enable-trading").evaluate(element => element.getBoundingClientRect().top + scrollY);
+  assert(setupTop < 70, `Trading access remains prominent at the top: ${setupTop}px`);
+  pendingKey = false; missingKey = false; await refresh();
+  await page.getByRole("button", { name: "Trading access enabled", exact: true }).waitFor();
+  coverage.push("mainnet-only production UI", "prominent top-level enable trading and pending-setup recovery actions");
 
   const overviewStat = label => page.locator(".hl-overview .hl-stat").filter({ hasText: label }).locator("strong");
   const waitOverview = (label, value) => page.waitForFunction(([label, value]) => [...document.querySelectorAll(".hl-overview .hl-stat")].some(element => element.querySelector(":scope > span")?.textContent === label && element.querySelector("strong")?.textContent === value), [label, value]);
@@ -564,11 +690,24 @@ try {
   assert.equal(await page.locator(".hl-overview").getByText("Shared USDC", { exact: true }).count(), 0, "Unknown account mode cannot present a shared-collateral total");
   assert.equal(await overviewStat("Withdrawable").innerText(), "—", "Unknown account mode does not imply zero or known withdrawable collateral");
   await screenshot("unknown-account-mode-narrow");
+  accountMode = "empty"; missingKey = true;
+  await page.setViewportSize({ width: 320, height: 900 }); await page.reload();
+  await waitOverview("Perps equity", "$0.00");
+  assert.equal(await overviewStat("Withdrawable").innerText(), "$0.00", "A fully observed empty account can show zero withdrawable without guessing its balance mode");
+  await page.locator(".hl-enable-trading").waitFor();
+  const initialChart = page.getByRole("img", { name: /^BTC candlestick price chart/ });
+  await initialChart.waitFor();
+  assert(await initialChart.evaluate(element => element.getBoundingClientRect().top + scrollY <= 405), "A new account starts on a visible chart with the setup action above it");
+  assert.equal(await page.getByText(/The account balance mode is not resolved/).count(), 0, "An unfunded account does not show internal balance-mode warnings");
+  assert.equal(await page.getByRole("button", { name: "Account balance details", exact: true }).count(), 0, "The account-details popup is removed while the balance bar remains");
+  await screenshot("empty-account-chart-first-narrow");
+  missingKey = false;
+  coverage.push("unfunded account starts on chart with visible top trading-access action", "unfunded account keeps its balances without an account popup or technical balance-mode warnings");
   accountMode = "perps"; await refresh(); await waitOverview("Withdrawable", "$12,984.27");
   coverage.push("unified account shows raw shared USDC with exact precision in its title, without adding perps P&L or other tokens", "missing shared balances stay unavailable while a successful empty balance shows zero", "unknown account mode labels only perps equity and leaves withdrawal capacity unavailable");
 
   wholeAccountFailure = true;
-  await page.getByLabel("Hyperliquid network", { exact: true }).selectOption("testnet");
+  await page.reload();
   await nav("Positions").click(); await page.getByRole("heading", { name: "Positions unavailable", exact: true }).waitFor();
   assert.equal(await page.getByRole("heading", { name: "No open positions", exact: true }).count(), 0, "A failed initial account request is not an empty portfolio");
   assert.equal(await overviewStat("Perps equity").innerText(), "—");
@@ -577,7 +716,7 @@ try {
   assert.equal(await page.getByRole("heading", { name: "No open orders", exact: true }).count(), 0);
   await screenshot("whole-account-request-failure-narrow");
   wholeAccountFailure = false;
-  await page.getByLabel("Hyperliquid network", { exact: true }).selectOption("mainnet");
+  await refresh();
   await waitOverview("Perps equity", "$18,467.38");
   coverage.push("whole account request failures with no cached data show unavailable positions and orders rather than empty balances");
 
@@ -597,7 +736,7 @@ try {
   await page.getByRole("alert").filter({ hasText: "fixture provider disconnected" }).first().waitFor();
   assert(await page.getByRole("button", { name: "Review long", exact: true }).isDisabled(), "Failed order preview cannot enable review");
   await panel("Chart");
-  await page.getByText(/Market (?:data|refresh) unavailable.*Previous observation shown/).waitFor();
+  await page.locator(".hl-candles-error").filter({ hasText: "Showing the previous observation." }).waitFor();
   await screenshot("provider-error-stale-chart-narrow");
   coverage.push("provider failure retains a labeled previous observation", "failed preview disables order review");
 

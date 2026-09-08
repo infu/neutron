@@ -145,3 +145,133 @@ release artifacts under
 The published app still needs installation into an existing Neutron; Wallet
 0.1.20 must be selected for this integration. No existing canister was
 reinstalled, and the Dispenser starter was not changed.
+
+## UX and funding follow-up
+
+- [x] Remove the mainnet/testnet selector from the user interface; retain explicit
+  testnet tools and fixtures for development.
+- [x] Compact the header, balances and market statistics so the chart is visible
+  near the top of narrow tiles, and make browser trading access a prominent action.
+- [x] Move secondary order explanations behind accessible info controls and
+  describe an observed empty account without a technical balance-mode warning.
+- [x] Add precise percentage sliders and Max controls for orders and USDC
+  transfers using actual venue capacity, configured leverage and source balances.
+- [x] Refresh changing deposit fees before the initial Wallet burn review;
+  preserve already-dispatched requests and continuation of released journal rows.
+- [x] Prove Root-mode setup, trading and funding require no user clicks and
+  Normal-mode effects retain user approval through the existing permission flow.
+- [x] Verify dismissal, tile/browser closure and delayed destination evidence
+  retain a recoverable transfer in Activity without another burn.
+- [x] Complete stalled post-burn transfers with original-message destination
+  recovery, attestation refresh and proven cash-to-perps fallback; add Wallet
+  HyperEVM gas/signing support while preserving all released memory roots.
+- [x] Fix Normal Agent foreground-review identity so prepared orders open the
+  real approval dialog; verify the same retained order resumes and Root keeps
+  its existing permission-judge path without user clicks.
+- [x] Remove the redundant candle icon and Candles badge in every chart layout.
+- [x] Remove visible chart navigation tips, the orderbook hint, routine live
+  timestamps and the redundant Account details popup; retain the main balances
+  and meaningful unavailable/stale-data states.
+- [x] Qualify the state-preserving successor, publish its exact package/source,
+  verify the identical-byte no-op, and update PR #30.
+
+
+### Revision implementation
+
+Normal Agent review now accepts the original requester carried by Kernel's
+foreground attestation. The previous same-app check rejected that legitimate
+handoff after saving a prepared order. The private owner-review route still
+requires the authenticated Hyperliquid resident; Root invocations retain the
+existing exact permission-judge review. Tool descriptions distinguish a
+read-only preview from execution and explain resuming the original prepared ID.
+
+Destination recovery persists original messages, attestations, Wallet request
+IDs and attempted transactions before dispatch. It checks consumed CCTP nonces
+and exact source/destination evidence, retains uncertain signed requests, and
+allows an expired unsigned review to advance only after protocol expiry is
+observed. Temporary RPC receipt absence cannot erase the original withdrawal
+source identity. Recovery does not create another burn or change the recipient,
+amount or fee cap. A proven Core cash fallback can use a same-account master
+Wallet cash-to-perps signature without spot trading or an account-mode change.
+
+Wallet adds HyperEVM chain 999, native HYPE gas and canonical USDC configuration
+only where absent. Its browser RPC supports explicit historical block reads;
+recovery decoders explain exact mint/forward and cash-transfer actions. Wallet's
+three v1 memory roots and Hyperliquid's v1 root retain released schema and lock
+lineage. No Kernel policy or restriction is introduced.
+
+CCTP does not refund the source after a successful burn. Destination mint
+recovery requires HYPE gas for deposits or destination-chain ETH for withdrawals,
+and valid Circle attestation evidence. A successful EVM CoreWriter queue with
+no observed Core credit still needs protocol investigation: repeating a mint
+cannot replay that queued Core action. External chain, Circle and venue outages
+can delay delivery; the application preserves the evidence needed to continue.
+
+
+### Successor qualification — 2026-09-08
+
+- Hyperliquid 101 / 0.1.1: complete workspace package command and release suite
+  passed: **169 tests, 1,591 assertions**, memory initialization/restoration,
+  four responsive browser viewports, 18 UI fixture effects and 11 owner reviews.
+  Actual resident/SDK/React integration passed all seven checkpoints with 27
+  resident tools (26 public tools and private identity), four Wallet signatures
+  and 13 direct exchange requests.
+- Normal Agent's real review dialog approves exactly one order or declines
+  without dispatch; the saved prepared operation resumes with its original
+  cloid. Restoring the old guard in a temporary build reproduces the failure.
+  Root setup, trades, funding and revocation complete without a foreground tile.
+- Funding coverage includes **69 tests / 538 assertions** across protocol,
+  evidence, recovery and Core cash handling. Tests cover fee movement, closed
+  notifications/browser sessions, lost replies, concurrent recovery, expired
+  unsigned review replacement, re-attestation and consumed message variants,
+  and retained completion after ordinary reconciliation.
+- Wallet 121 / 0.1.21: full workspace test command passed **271 tests / 2,734
+  assertions**, both memory programs and 47 browser checks. Final repack and
+  successor package tests passed **15 tests / 779 assertions**, including the
+  exact published Wallet 120 predecessor and all three retained memory roots.
+- Live read-only qualification: **22 Hyperliquid/Circle/contract checks** and
+  **eight HyperEVM Wallet browser checks** passed with normal Chromium web
+  security. No funded transaction, signature or exchange request was sent.
+- Both app and shared build/publisher TypeScript, license boundaries, security
+  checks and diff checks passed. Released memory sources, locks and prior
+  100/120 archives are unchanged. Every current app file in the offered source
+  matches the working tree (54 Hyperliquid files, 138 Wallet files).
+- All 21 catalog archives and offered-source objects passed local inspection.
+  Public release-pointer comparison found only Hyperliquid 100 → 101 and
+  Wallet 120 → 121 changed; the other 19 packages matched exactly.
+
+### Successor artifacts
+
+- `apps/hyperliquid/hyperliquid.v0.1.1.neutron`: 463,404 bytes; SHA-256
+  `2663e454e603cdad6e299c8821f41adefaa8a61bc3483004c9def61034ea4d23`.
+  Offered source: 573,736 bytes; SHA-256
+  `01834e544be253c84b7c0d5e2261b335f81eaea3008f03c563774052da3f6cef`.
+- `apps/evm_wallet/evm_wallet.v0.1.21.neutron`: 643,462 bytes; SHA-256
+  `b873d917802af4b7e6eb88943fefba0f3e6d9c197623216702794b33d8112633`.
+  Offered source: 723,213 bytes; SHA-256
+  `6cdbacf242080e2e6cb2f0db52905fffcc263c9be8c6e71b3012ff29a19424c8`.
+
+Detailed revision research and evidence remain outside repository documentation:
+`/tmp/neutron-hl-revision-release-tests-final.log`,
+`/tmp/neutron-hl-revision-wallet-release.log`,
+`/tmp/neutron-hl-revision-wallet-final-package-tests.log`,
+`/tmp/neutron-hyperliquid-browser/`,
+`/tmp/neutron-hyperliquid-revision-live-evidence.json`,
+`/tmp/neutron-wallet-hyperevm-live-evidence.json`, and
+`/tmp/neutron-hl-revision-release-preflight.json`.
+
+
+### Successor publication completed
+
+Canonical `npm run updates:publish` published Hyperliquid 101 and Wallet 121,
+including both offered-source objects, atomically in **batch 70**. The other
+19 catalog packages were unchanged. The identical-byte repeat returned
+receipt-v2 **`batch_id: null`**, with all **21 packages and 21 offered sources**
+`unchanged`. Every version, URL/path, size and SHA-256 matched the reviewed
+inventory, and all local archive/source bytes were rehashed unchanged afterward.
+
+Receipts, verification and reviewed inventory are retained under
+`.neutron/publications/2026-09-08-hyperliquid-0.1.1-wallet-0.1.21/` and in `/tmp`.
+PR #30 carries these successor archives and implementation. Existing Neutrons
+need to update Hyperliquid and EVM Wallet to receive the changes. No canister
+was reinstalled and the Dispenser starter remains unchanged.

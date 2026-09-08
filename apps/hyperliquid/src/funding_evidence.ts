@@ -119,6 +119,13 @@ export type CctpEvidenceIntent = {
 export type MatchedCctpMessage = CctpMessage & {
   sourceTxHash: string; attestationStatus: string; attestation: string | null; forwardState: string | null; forwardTxHash: string | null;
 };
+function matchesCctpIntent(message: CctpMessage, expected: CctpEvidenceIntent): boolean {
+  if (message.sourceDomain !== expected.sourceDomain || message.destinationDomain !== expected.destinationDomain || uint(message.amountAtoms) !== uint(expected.amountAtoms) || !same(message.hookData, hex(expected.hookData))) return false;
+  if ((["sender", "recipient", "destinationCaller", "burnToken", "mintRecipient", "messageSender"] as const).some((key) => !same(message[key], evidenceAddressWord(expected[key])))) return false;
+  if (expected.maxFeeAtoms !== undefined && uint(message.maxFeeAtoms) !== uint(expected.maxFeeAtoms)) return false;
+  if (expected.minFinalityThreshold !== undefined && message.minFinalityThreshold !== expected.minFinalityThreshold) return false;
+  return true;
+}
 export function selectCctpMessage(raw: unknown, expected: CctpEvidenceIntent): MatchedCctpMessage | null {
   const response = obj(raw);
   if (!response || !Array.isArray(response.messages)) throw new Error("Invalid Circle message response.");
@@ -131,10 +138,7 @@ export function selectCctpMessage(raw: unknown, expected: CctpEvidenceIntent): M
     if (!row || row.cctpVersion !== 2 || typeof row.message !== "string" || row.message === "0x") continue;
     let message: CctpMessage;
     try { message = decodeCctpMessage(row.message); } catch { continue; }
-    if (message.sourceDomain !== expected.sourceDomain || message.destinationDomain !== expected.destinationDomain || uint(message.amountAtoms) !== uint(expected.amountAtoms) || !same(message.hookData, hex(expected.hookData))) continue;
-    if ((["sender", "recipient", "destinationCaller", "burnToken", "mintRecipient", "messageSender"] as const).some((key) => !same(message[key], evidenceAddressWord(expected[key])))) continue;
-    if (expected.maxFeeAtoms !== undefined && uint(message.maxFeeAtoms) !== uint(expected.maxFeeAtoms)) continue;
-    if (expected.minFinalityThreshold !== undefined && message.minFinalityThreshold !== expected.minFinalityThreshold) continue;
+    if (!matchesCctpIntent(message, expected)) continue;
     const attestation = typeof row.attestation === "string" && HEX.test(row.attestation) && row.attestation !== "0x" ? row.attestation : null;
     found.push({ ...message, sourceTxHash: hex(expected.sourceTxHash, 32), attestationStatus: typeof row.status === "string" ? row.status : "unknown", attestation, forwardState: typeof row.forwardState === "string" ? row.forwardState : null, forwardTxHash: typeof row.forwardTxHash === "string" && HASH.test(row.forwardTxHash) ? row.forwardTxHash : null });
   }
@@ -146,24 +150,50 @@ function matchesMessageReceived(log: unknown, message: MatchedCctpMessage, trans
   const event = decoded(log, transmitter, "MessageReceived");
   return !!event && uint(event.sourceDomain) === BigInt(message.sourceDomain) && same(event.nonce, message.nonce) && same(event.sender, message.sender) && uint(event.finalityThresholdExecuted) === BigInt(message.finalityThresholdExecuted) && same(event.messageBody, message.messageBody);
 }
+/** A re-attestation can change executed fee, expiry and finality, but not the burn intent. */
+function messageReceivedVariant(log: unknown, current: MatchedCctpMessage, expected: CctpEvidenceIntent, transmitter: string): MatchedCctpMessage | null {
+  const event = decoded(log, transmitter, "MessageReceived");
+  if (!event || !matchesCctpIntent(current, expected) || !same(current.sourceTxHash, expected.sourceTxHash) || uint(event.sourceDomain) !== BigInt(current.sourceDomain) || !same(event.nonce, current.nonce) || !same(event.sender, current.sender)) return null;
+  try {
+    const finality = uint(event.finalityThresholdExecuted);
+    if (finality > 0xffffffffn || finality < BigInt(current.minFinalityThreshold)) return null;
+    // MessageReceived exposes the attested body and executed finality. Reuse
+    // only the immutable header from the matched burn; validate its reconstructed
+    // body against that same operation before accepting a prior attestation.
+    const body = hex(event.messageBody);
+    const raw = `${current.raw.slice(0, 2 + 144 * 2)}${finality.toString(16).padStart(8, "0")}${body.slice(2)}` as Hex;
+    const message = decodeCctpMessage(raw);
+    if (!matchesCctpIntent(message, expected)) return null;
+    // The current API signature may not sign this already-consumed variant.
+    return { ...current, ...message, attestation: null, attestationStatus: "consumed" };
+  } catch { return null; }
+}
 /** Read-only discovery for a manual mint or an outdated Circle forward hash. */
-export function destinationMintFilter(message: MatchedCctpMessage, input: { messageTransmitter: string; fromBlock: string; toBlock?: string }) {
+export function destinationMintFilter(message: MatchedCctpMessage, input: { messageTransmitter: string; fromBlock: string; toBlock?: string; allowReattestation?: boolean }) {
   return {
     address: hex(input.messageTransmitter, 20), fromBlock: `0x${uint(input.fromBlock).toString(16)}`,
     toBlock: input.toBlock === undefined ? "latest" : `0x${uint(input.toBlock).toString(16)}`,
-    topics: encodeEventTopics({ abi: events, eventName: "MessageReceived", args: { nonce: hex(message.nonce, 32), finalityThresholdExecuted: message.finalityThresholdExecuted } }),
+    topics: encodeEventTopics({ abi: events, eventName: "MessageReceived", args: { nonce: hex(message.nonce, 32), ...(input.allowReattestation ? {} : { finalityThresholdExecuted: message.finalityThresholdExecuted }) } }),
   };
 }
 /** A matching log is a candidate; still verify its complete canonical receipt. */
-export function destinationMintHashes(raw: unknown, message: MatchedCctpMessage, input: { messageTransmitter: string }): string[] {
+export function destinationMintHashes(raw: unknown, message: MatchedCctpMessage, input: { messageTransmitter: string; intent?: CctpEvidenceIntent }): string[] {
   if (!Array.isArray(raw)) throw new Error("Invalid destination CCTP log response.");
   const hashes = new Set<string>();
   for (const item of raw) {
-    if (!matchesMessageReceived(item, message, input.messageTransmitter)) continue;
+    if (!(input.intent ? messageReceivedVariant(item, message, input.intent, input.messageTransmitter) : matchesMessageReceived(item, message, input.messageTransmitter))) continue;
     const hash = obj(item)?.transactionHash;
     if (typeof hash === "string" && HASH.test(hash)) hashes.add(hash.toLowerCase());
   }
   return [...hashes];
+}
+/** Bind a canonical receipt to the original burn even after Circle re-attests it. */
+export function matchReceiptCctpMessage(raw: unknown, current: MatchedCctpMessage, expected: CctpEvidenceIntent, input: { messageTransmitter: string; allowDiscoveredReceipt?: boolean }): MatchedCctpMessage | null {
+  const value = receipt(raw, input.allowDiscoveredReceipt ? undefined : current.forwardTxHash ?? undefined);
+  if (!value) return null;
+  const variants = (value.logs as unknown[]).map((log) => messageReceivedVariant(log, current, expected, input.messageTransmitter)).filter((message): message is MatchedCctpMessage => message !== null);
+  const match = unique(variants, (message) => message.raw);
+  return match ? { ...match, forwardTxHash: value.transactionHash as string } : null;
 }
 function provesMessageReceived(value: Obj, message: MatchedCctpMessage, transmitter: string): boolean {
   return (value.logs as unknown[]).some((log) => matchesMessageReceived(log, message, transmitter));
@@ -197,6 +227,23 @@ export function verifyCoreForwardReceipt(raw: unknown, message: MatchedCctpMessa
     return event && same(event.coreRecipient, input.owner) && uint(event.evmDepositAmount) === uint(mint.deliveredAtoms) && uint(event.coreSentAmount) === coreAmount && uint(event.newCoreAccountFee) === scaled - coreAmount;
   })) return null;
   return { ...mint, phase: "forwarded_to_core", coreAmountAtoms: coreAmount.toString(), coreExecutionProven: false };
+}
+
+export type CoreCashEvidence = DestinationMintEvidence & { phase: "forwarded_to_core_cash"; recipient: string; coreAmountAtoms: string; coreExecutionProven: false };
+/** Disabled perps forwarding deposits the same mint into the recipient's Core cash. */
+export function verifyCoreCashReceipt(raw: unknown, message: MatchedCctpMessage, input: { messageTransmitter: string; usdc: string; forwarder: string; coreDepositWallet: string; owner: string; tokenSystemAddress?: string; allowDiscoveredReceipt?: boolean }): CoreCashEvidence | null {
+  const mint = verifyDestinationReceipt(raw, message, { ...input, recipient: input.forwarder });
+  const value = receipt(raw, input.allowDiscoveredReceipt ? undefined : message.forwardTxHash ?? undefined);
+  if (!mint || !value || !hasTransfer(value, input.usdc, input.forwarder, input.coreDepositWallet, uint(mint.deliveredAtoms))) return null;
+  // USDC is Core token index 0. This is the linked CoreDepositWallet's event,
+  // not a native-USDC transfer to a similarly shaped address.
+  const system = input.tokenSystemAddress ?? "0x2000000000000000000000000000000000000000";
+  const cashTransfers = (value.logs as unknown[]).map((log) => decoded(log, input.coreDepositWallet, "Transfer")).filter((event): event is Obj => !!event && same(event.from, input.owner) && same(event.to, system) && uint(event.value) === uint(mint.deliveredAtoms));
+  if (cashTransfers.length !== 1 || (value.logs as unknown[]).some((log) => {
+    const event = decoded(log, input.coreDepositWallet, "SendAsset");
+    return event && same(event.coreRecipient, input.owner);
+  })) return null;
+  return { ...mint, phase: "forwarded_to_core_cash", recipient: hex(input.owner, 20), coreAmountAtoms: (uint(mint.deliveredAtoms) * 100n).toString(), coreExecutionProven: false };
 }
 
 export type ObservedCoreCredit = { hash: string; time: number; amount: string; nonce: string; inferredLinkage: true };

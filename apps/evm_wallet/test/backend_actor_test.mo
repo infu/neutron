@@ -169,7 +169,7 @@ persistent actor {
     let toReject = await* prepare(restored, { identity = rejectId; intent });
     assert ok(restored.evm_wallet_reject_v1({ identity = rejectId })).status == "rejected";
     assert ok(await* restored.evm_wallet_execute_v1({ identity = rejectId; review_revision = toReject.review_revision })).status == "rejected";
-    assert ok(restored.evm_wallet_snapshot_v1(())).networks.size() == 3;
+    assert ok(restored.evm_wallet_snapshot_v1(())).networks.size() == 4;
     // Legacy RPC endpoints fail promptly instead of falling back to a costly
     // backend outcall. Browser reads are covered in the actual browser client.
     let beforeReads = (Map.size(mem.commands), Map.size(mem.nonce_next), signAttempts);
