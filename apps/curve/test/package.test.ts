@@ -30,19 +30,23 @@ test("release 101 installs cleanly and keeps the immutable release-100 root", as
 });
 
 
-test("release 102 keeps the production 101 journal, lineage and full backend closure", async () => {
-  const previousBytes = await readFile(new URL("../curve.v0.1.1.neutron", import.meta.url));
-  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe("a8bda98fe957d33b1057e42c86d7fd902571225663938d4d8f802f7186e8c8b7");
+test.each([
+  [100, "0.1.0", "eff079d91d8b328e70933ae5bc4841517274b99a0c1ce41a53ae64770e3f75fd"],
+  [101, "0.1.1", "a8bda98fe957d33b1057e42c86d7fd902571225663938d4d8f802f7186e8c8b7"],
+  [102, "0.1.2", "686b2a06eb91f60e27ad22a222c9cda636aca79093245e36444ab0d8408fe1bf"],
+] as const)("release 103 keeps production %s journal, lineage and full backend closure", async (version, release, digest) => {
+  const previousBytes = await readFile(new URL(`../curve.v${release}.neutron`, import.meta.url));
+  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(digest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../curve.v0.1.2.neutron", import.meta.url)));
+  const files = unpackNeutronPackage(await readFile(new URL("../curve.v0.1.3.neutron", import.meta.url)));
   const manifest = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8"));
   expect(validate_neutron_conf(manifest).errors).toEqual([]);
-  expect(manifest).toMatchObject({ id: "curve", version: 102, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "curve", version: 102 });
+  expect(manifest).toMatchObject({ id: "curve", version: 103, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "curve", version: 103 });
   expect(Object.keys(files)).toEqual(expect.arrayContaining(["web/index.html", "web/main.js", "web/main.css", "web/service.html", "web/service.js", "web/static/icon.svg"]));
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!)), next = JSON.parse(decode(files["neutron.json"]!));
-  expect(old.version).toBe(101);
+  expect(old.version).toBe(version);
   expect(next.memory).toEqual(old.memory);
   expect(Object.keys(next.memory)).toEqual(["curve"]);
   expect(files["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
@@ -55,7 +59,7 @@ test("release 102 keeps the production 101 journal, lineage and full backend clo
   for (const path of modules) expect(files[path]).toEqual(previous[path]);
   const schema = JSON.parse(decode(files["schema.json"]!)), priorSchema = JSON.parse(decode(previous["schema.json"]!));
   expect(schema).toEqual(generateAppMethodSchemaArtifact(manifest, await readFile(new URL("../backend/main.mo", import.meta.url), "utf8")));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 102 } });
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 103 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, curve: next });
   expect(clean.upgrades).toEqual([{ kind: "initialize", owner: "curve", memoryId: "curve", to: 1 }]);

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { callTool, type JsonObject, type JsonValue } from "neutron-tools/app";
-import { createEvmWalletClient, type EvmBalancesResult, type EvmPriceAsset, type EvmUsdPrice } from "neutron-tools/evm_wallet";
+import { createEvmWalletClient, type EvmAccount, type EvmBalancesResult, type EvmPriceAsset, type EvmUsdPrice } from "neutron-tools/evm_wallet";
 import { evmPriceWatcher } from "neutron-tools/src/evm_price_watch.js";
 import { evmPriceAssetKey, formatUsd, usdPriceTitle, usdValue } from "neutron-tools/src/evm_prices.js";
 import { formatUnits, parseUnits } from "viem";
@@ -32,9 +32,32 @@ export function display(value: string, decimals: number, digits = 7): string {
   if (BigInt(value) > 0n && Number(exact) < 10 ** -digits) return `< ${10 ** -digits}`;
   return `${whole}.${fraction.slice(0, digits).replace(/0+$/, "")}`.replace(/\.$/, "");
 }
-export function balanceFor(balances: EvmBalancesResult | null, token: Token): string | null {
+export function accountScope(account: EvmAccount | null): string | null {
+  return account === null ? null : JSON.stringify([account.accountId, account.address.toLowerCase(), account.keyFingerprint.toLowerCase(), account.namespaceVersion]);
+}
+export function accountBalances(balances: EvmBalancesResult | null, account: EvmAccount | null): EvmBalancesResult | null {
+  return balances && account && balances.accountId === account.accountId && balances.address.toLowerCase() === account.address.toLowerCase() ? balances : null;
+}
+export function balanceFor(snapshot: EvmBalancesResult | null, token: Token, account: EvmAccount | null): string | null {
+  const balances = accountBalances(snapshot, account);
   if (!balances || balances.chainId !== token.chainId) return null;
   return token.address === null ? balances.nativeBalanceWei : balances.tokens.find((row) => row.address.toLowerCase() === token.address!.toLowerCase())?.balanceAtoms ?? null;
+}
+/** An observation from a different signer invalidates its displayed values and
+ * prompts one account refresh. Missing reads do not restart that refresh loop. */
+export function useObservedAccount(ownerAddress: string | null, account: EvmAccount | null, onAccountChanged: () => void): boolean {
+  const currentCallback = useRef(onAccountChanged); currentCallback.current = onAccountChanged;
+  const notified = useRef(new Set<string>()), scope = accountScope(account), owner = ownerAddress?.toLowerCase() ?? null;
+  const matches = account !== null && owner !== null && owner === account.address.toLowerCase();
+  const mismatch = scope !== null && owner !== null && !matches ? JSON.stringify([scope, owner]) : null;
+  useEffect(() => {
+    if (matches) { notified.current.clear(); return; }
+    if (mismatch !== null && !notified.current.has(mismatch)) {
+      notified.current.add(mismatch);
+      currentCallback.current();
+    }
+  }, [matches, mismatch]);
+  return matches;
 }
 /** Clear stale scope immediately, cancel superseded reads and retain useful
  * data during same-scope refreshes. Missing values never masquerade as zero. */

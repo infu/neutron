@@ -25,10 +25,18 @@ export async function callTool(call,options) {
     const tool=registered.get(call.name); if(!tool) throw Error('Tool missing: '+call.name);
     validateToolArguments(tool.spec,call.arguments);
     const context={caller:{appId:'curve',installationUid:'1',role:'tile'},agentMode:false,signal:options?.signal,reportProgress:()=>{},kernel:{callTool,querySelf,updateSelf}};
-    const result=await tool.handler(call.arguments,context); validateToolResult(tool.spec,result); return result;
+    const result=await tool.handler(call.arguments,context);
+    if(window.fixtureReadOwner && ['curve_quote_v1','curve_position_v1'].includes(call.name)) {
+      const field=call.name==='curve_quote_v1'?'planJson':'positionJson', value=JSON.parse(result[field]);
+      result[field]=JSON.stringify({...value,accountAddress:window.fixtureReadOwner});
+      window.fixtureForeignReads=(window.fixtureForeignReads??0)+1;
+    }
+    validateToolResult(tool.spec,result); return result;
   }
   return window.fixture('callTool',[call]);
-}`;
+}
+window.fixtureCurveCall=(name,args)=>callTool({target:'app:curve:background',name,arguments:args});
+`;
 const bundle = await build({absWorkingDir:app,stdin:{contents:'import "./src/service.ts"; import "./src/main.tsx";',resolveDir:app,loader:'ts'},bundle:true,write:false,format:'iife',jsx:'automatic',outdir:resolve(artifacts,'build'),plugins:[{name:'transport',setup(b){b.onResolve({filter:/^(?:neutron-tools\/app|\.{1,2}\/app_entry\.ts)$/},()=>({path:'mock',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:mock,loader:'js',resolveDir:app}));}},sassPlugin()]});
 const scripts={'/main.js':bundle.outputFiles.find(f=>f.path.endsWith('.js')).text,'/main.css':bundle.outputFiles.find(f=>f.path.endsWith('.css')).text,'/static/icon.svg':await readFile(resolve(app,'public/static/icon.svg'),'utf8')};
 const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url.endsWith('.css')?'text/css':req.url.endsWith('.svg')?'image/svg+xml':req.url.endsWith('.js')?'text/javascript':'text/html');res.end(scripts[req.url]??'<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/main.css"><div id="root"></div><script src="/main.js"></script>');});
@@ -41,7 +49,7 @@ const ARBUSDC='0xaf88d065e77c8cc2239327c5edb3a432268e5831', BRIDGED_USDC='0xff97
 const views=parseAbi(['function get_coins(address) view returns (address[])','function is_meta(address) view returns (bool)','function coins(uint256) view returns (address)','function balances(uint256) view returns (uint256)','function totalSupply() view returns (uint256)','function decimals() view returns (uint8)','function symbol() view returns (string)','function balanceOf(address) view returns (uint256)','function allowance(address,address) view returns (uint256)','function get_dy(address[11],uint256[5][5],uint256,address[5]) view returns (uint256)','function calc_token_amount(uint256[],bool) view returns (uint256)','function calc_withdraw_one_coin(uint256,int128) view returns (uint256)','function remove_liquidity(uint256,uint256[],address) returns (uint256[])','function remove_liquidity_one_coin(uint256,int128,uint256,address) returns (uint256)']);
 const effects=parseAbi(['function approve(address,uint256) returns (bool)','function exchange(address[11],uint256[5][5],uint256,uint256,address[5],address) payable returns (uint256)','function add_liquidity(uint256[],uint256,address) payable','function remove_liquidity(uint256,uint256[],address)','function remove_liquidity_one_coin(uint256,int128,uint256,address)']);
 const records=new Map(), tracked=new Map(), operations=new Map(), transactions=new Map(), allowances=new Map(), calls=[], sends=[];
-let lpBalance=10n**20n, clock=1n, mode='confirm', discoveryFails=false, rpcFails=false;
+let lpBalance=10n**20n, clock=1n, mode='confirm', discoveryFails=false, rpcFails=false, balanceOwner=null;
 const ns=()=>String(BigInt(Date.now())*1000000n);
 const receipt=()=>({blockNumber:'25922608',blockHash:'0x'+'44'.repeat(32),status:'success',gasUsed:'90000',effectiveGasPriceWei:'1000000000',logs:[],finality:'included',observedAtNs:ns()});
 const normalize=(a)=>a.toLowerCase();
@@ -77,7 +85,7 @@ async function fixture(kind,[call,args]) {
     const decimals=[USDC,USDT,FAKE_USDC,FAKE_USDT,ARBUSDC,BRIDGED_USDC].includes(normalize(address))?'6':'18';
     const symbol=[WETH,ARBWETH].includes(normalize(address))?'WETH':decimals==='6'?[USDT,FAKE_USDT].includes(normalize(address))?'USDT':'USDC':'crvUSD';
     return {address,balanceAtoms:String(100n*10n**BigInt(decimals)),decimals,symbol,error:null};
-  }),address:account.address,nativeBalanceWei:'2000000000000000000',blockNumber:'25922607',observedAtNs:ns(),completeness:'requested_only'};
+  }),address:balanceOwner??account.address,nativeBalanceWei:'2000000000000000000',blockNumber:'25922607',observedAtNs:ns(),completeness:'requested_only'};
   if(name==='evm_call_contract_v1') {
     if(rpcFails)throw Error('RPC is temporarily unavailable. Try again.');
     const decoded=decodeFunctionData({abi:views,data:input.data}), a=decoded.args, symbol=[WETH,ARBWETH].includes(normalize(input.to))?'WETH':input.to.toLowerCase()===POOL?'Curve LP':'crvUSD';let value;
@@ -242,8 +250,64 @@ try {
   await page.screenshot({path:resolve(artifacts,'arbitrum-usdc-narrow.png'),fullPage:true});
   await page.keyboard.press('Escape');
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Narrow UI overflow');
+  const beforeIdentitySends=sends.length, originalOwner=account.address, changedOwner='0x9999999999999999999999999999999999999999';
+  balanceOwner=changedOwner;
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('.cv-wallet')?.textContent.includes('0x1111…1111')&&document.querySelector('.cv-wallet .cv-right')?.textContent==='—');
+  await page.getByRole('button',{name:'Select token, currently ETH',exact:true}).click();
+  await picker.getByLabel('Search tokens').fill('WETH');
+  await options.first().waitFor();
+  assert.equal(await options.locator('.cv-token-balance').allTextContents().then(rows=>rows.every(value=>value==='—')),true);
+  await options.first().click();
+  await page.getByLabel('You pay amount').fill('1');
+  await page.waitForFunction(()=>document.querySelector('.cv-primary')?.textContent==='Review swap'&&!document.querySelector('.cv-primary').disabled);
+  assert.equal(await page.locator('.cv-amount').first().getByRole('button',{name:'Max',exact:true}).count(),0);
+  assert.equal(await page.locator('.cv-wallet .cv-right').textContent(),'—');
+  await page.getByRole('button',{name:'Liquidity',exact:true}).click();
+  await page.getByRole('button',{name:/crvUSD \/ WETH/}).click();
+  await page.getByLabel('Deposit WETH amount').fill('0.01');
+  await page.waitForFunction(()=>document.querySelector('.cv-primary')?.textContent==='Review deposit'&&!document.querySelector('.cv-primary').disabled);
+  assert.equal(await page.locator('.cv-amount').getByRole('button',{name:'Max',exact:true}).count(),0);
+  // The account can also change between the resident account lookup and its reply.
+  await page.evaluate(owner=>{window.fixtureReadOwner=owner;},changedOwner);
+  await page.getByLabel('Deposit WETH amount').fill('0.02');
+  await page.getByRole('button',{name:'Refresh wallet',exact:true}).click();
+  await page.waitForFunction(()=>window.fixtureForeignReads>=2&&document.querySelector('.cv-position strong')?.textContent==='Unavailable');
+  assert.equal(await page.locator('.cv-preview').count(),0);
+  assert(await page.locator('.cv-primary').isDisabled());
+  await page.getByRole('button',{name:'Remove liquidity',exact:true}).click();
+  assert(await page.getByRole('button',{name:'Max',exact:true}).isDisabled());
+  await page.evaluate(()=>{window.fixtureReadOwner=null;});
+  balanceOwner=null;account.address=changedOwner;
+  await page.getByRole('button',{name:'Refresh wallet',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.cv-wallet')?.textContent.includes('0x9999…9999')&&document.querySelector('.cv-position strong')?.textContent.includes('LP'));
+  await page.getByLabel('LP tokens to remove').fill('1');
+  await page.waitForFunction(()=>document.querySelector('.cv-preview dd[title]')?.title==='0x9999999999999999999999999999999999999999'&&!document.querySelector('.cv-primary').disabled);
+  await page.getByRole('button',{name:'Swap',exact:true}).click();
+  await page.getByLabel('You pay amount').fill('0.01');
+  await page.waitForFunction(()=>document.querySelector('.cv-preview dd[title]')?.title==='0x9999999999999999999999999999999999999999'&&!document.querySelector('.cv-primary').disabled);
+  account.address=originalOwner;
+  await page.getByRole('button',{name:'Refresh wallet',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.cv-wallet')?.textContent.includes('0x1111…1111')&&document.querySelector('.cv-preview dd[title]')?.title==='0x1111111111111111111111111111111111111111'&&!document.querySelector('.cv-primary').disabled);
+  assert.equal(sends.length,beforeIdentitySends,'Refreshing signer observations cannot dispatch an effect');
+  // A completed external continuation must replace the tile's cached pending result.
+  mode='lost';
+  await page.getByLabel('You pay amount').fill('0.015');
+  await page.waitForFunction(()=>document.querySelector('.cv-primary')?.textContent==='Review swap'&&!document.querySelector('.cv-primary').disabled);
+  await page.getByRole('button',{name:'Review swap',exact:true}).click();
+  await page.getByRole('button',{name:'Continue in wallet',exact:true}).waitFor();
+  const externalRecord=[...records.values()].sort((a,b)=>BigInt(a.created_at)>BigInt(b.created_at)?-1:1)[0];
+  const effectsBeforeExternal=sends.length;
+  const reconciled=await page.evaluate(id=>window.fixtureCurveCall('curve_reconcile_v1',{operationId:id}),externalRecord.root_id);
+  assert.equal(reconciled.state,'complete');
+  await page.getByRole('button',{name:/^Activity/}).click();
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  const refreshed=page.locator('.cv-activity .cv-progress').first();
+  await refreshed.getByText('Confirmed. The final transaction completed successfully.',{exact:true}).waitFor();
+  assert.equal(await refreshed.getByRole('button',{name:'Continue in wallet',exact:true}).count(),0);
+  assert.equal(sends.length,effectsBeforeExternal);
   assert.deepEqual(errors,[]);
-  const evidence={result:'passed',sends:sends.length,records:records.size,coverage:['live automatic quote','balances and USD','native swap','liquidity mode switches ignore and preserve inactive drafts','exact sequential approvals and deposit','single-coin withdrawal','saved reload after lost reply','token search and Escape','duplicate USDC/USDT address ordering and listing','full contract explorer links','selected unlisted identity','custom address remains unlisted','native versus bridged Arbitrum USDC','RPC failure','Arbitrum chain isolation','360px layout']};
+  const evidence={result:'passed',sends:sends.length,records:records.size,coverage:['live automatic quote','balances and USD','native swap','liquidity mode switches ignore and preserve inactive drafts','exact sequential approvals and deposit','single-coin withdrawal','saved reload after lost reply','token search and Escape','duplicate USDC/USDT address ordering and listing','full contract explorer links','selected unlisted identity','custom address remains unlisted','native versus bridged Arbitrum USDC','RPC failure','Arbitrum chain isolation','360px layout','signer-bound native, token-picker and liquidity balances and Max','foreign owner quote and LP responses stay unavailable','swap and liquidity previews refresh after Wallet identity changes','fresh history replaces cached active pending results without effects']};
   await writeFile(resolve(artifacts,'result.json'),JSON.stringify(evidence,null,2)+'\n');console.log(JSON.stringify(evidence,null,2));
 } catch(error) {
   if(fixturePage){await fixturePage.screenshot({path:resolve(artifacts,'failure.png'),fullPage:true});console.error((await fixturePage.locator('body').innerText()).slice(-4500));console.error(errors);}

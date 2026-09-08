@@ -108,7 +108,7 @@ exposeTool("curve_position_v1", {
   inputSchema: schema({ pool: poolSchema }), outputSchema: schema({ positionJson: text }), annotations: readAnnotations,
 }, async (args, context) => {
   const connection = await account(context), pool = await findPool(connection.read, poolRef(args.pool), context.signal ? { signal: context.signal } : {});
-  return { positionJson: JSON.stringify(await poolPosition(connection.read, connection.account, pool)) };
+  return { positionJson: JSON.stringify({ ...await poolPosition(connection.read, connection.account, pool), accountAddress: connection.account.address }) };
 });
 
 exposeTool("curve_tracked_pools_v1", {

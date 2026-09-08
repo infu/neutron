@@ -119,3 +119,57 @@ test("a reorganization removes prior completion until its transaction is observe
   const f = fixture(0); await f.run(); const request = f.sends[0]!; f.operations.set(request.requestId, f.operation(request)); f.transactions.set(f.hash(request), f.evidence(request));
   expect((await f.run({ execute: false })).state).toBe("pending"); expect(f.sends).toHaveLength(1);
 });
+
+
+test.each([0, 1])("interrupted Wallet preparation with %i approvals resumes the same exact request", async approvals => {
+  const f = fixture(approvals);
+  f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw Error("Wallet simulation reply lost"); });
+  expect((await f.run()).state).toBe("pending");
+  const first = structuredClone(f.sends[0]!);
+  expect(stateOf((await f.store.get(id))!).steps[0]!.unresolved).toBe(true);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends[1]).toEqual(first); expect(f.sends).toHaveLength(approvals + 2);
+  expect(f.prepareCount()).toBe(1); expect(f.rows.size).toBe(1);
+});
+
+test("a returned preparing request yields continuation without polling or another review", async () => {
+  const f = fixture(0);
+  f.sendWith(async request => f.operation(request, "preparing"));
+  expect((await f.run()).state).toBe("review"); expect(f.sends).toHaveLength(1);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(2);
+  expect(f.sends[1]).toEqual(f.sends[0]); expect(f.prepareCount()).toBe(1);
+});
+
+test("read-only reconciliation retains a stale preparing poll without resuming Wallet preparation", async () => {
+  const f = fixture(0);
+  f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw Error("Wallet reply interrupted"); });
+  expect((await f.run()).state).toBe("pending");
+  expect((await f.run({ execute: false })).state).toBe("pending");
+  expect(stateOf((await f.store.get(id))!).steps[0]!.unresolved).toBe(true);
+  expect(f.sends).toHaveLength(1); expect(f.prepareCount()).toBe(1);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends).toHaveLength(2); expect(f.sends[1]).toEqual(f.sends[0]);
+});
+
+test.each([false, true])("expired preparing requests keep the original attempt, released marker cleared=%s", async releasedMarkerCleared => {
+  const f = fixture(0);
+  f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw Error("Lost Wallet response"); });
+  expect((await f.run()).state).toBe("pending");
+  if (releasedMarkerCleared) {
+    const row = f.rows.get(id)!, state = JSON.parse(row.state_json);
+    state.steps[0].unresolved = false; state.steps[0].operation = f.operation(f.sends[0]!, "preparing");
+    row.state_json = JSON.stringify(state); row.phase = "step_0_preparing";
+  }
+  f.advance();
+  await f.run({ execute: false });
+  expect((await f.run()).state).toBe("pending");
+  expect(f.sends).toHaveLength(1); expect(f.prepareCount()).toBe(1); expect(f.rows.size).toBe(1);
+  const saved = stateOf((await f.store.get(id))!);
+  expect(saved.steps[0]!.unresolved).toBe(!releasedMarkerCleared); expect(saved.successor).toBeNull();
+  const request = f.sends[0]!;
+  f.operations.set(request.requestId, f.operation(request, "confirmed")); f.transactions.set(f.hash(request), f.evidence(request, true));
+  expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(1);
+});

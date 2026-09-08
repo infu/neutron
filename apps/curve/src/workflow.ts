@@ -87,7 +87,7 @@ function stepView(intent: Intent, step: JournalStep) {
 const stopped = ["rejected", "reverted", "failed", "replaced"];
 export function resultOf(record: RecordRow, override?: Result["state"], message?: string): Result {
   const intent = intentOf(record), saved = stateOf(record), views = saved.steps.map((step) => stepView(intent, step)), final = views.at(-1)!;
-  const state = override ?? (final.status === "confirmed" ? "complete" : views.some((step) => stopped.includes(step.status)) ? "stopped" : views.some((step) => step.status === "prepared") ? "review" : "pending");
+  const state = override ?? (final.status === "confirmed" ? "complete" : views.some((step) => stopped.includes(step.status)) ? "stopped" : views.some((step) => ["preparing", "prepared"].includes(step.status)) ? "review" : "pending");
   return { operationId: intent.operationId, recordId: record.id, summary: saved.plan.summary, state, phase: record.phase, transactionHash: final.transactionHash,
     message: message ?? (state === "complete" ? "Confirmed. The final transaction completed successfully." : state === "stopped" ? "The operation stopped before completion. Token approval alone does not complete it." : state === "review" ? "Continue to review the updated transaction in your wallet." : "Progress is saved. Continue with this operation ID to reconcile and finish."),
     steps: views.map((view, i) => ({ ...view, label: saved.plan.steps[i]!.label })) };
@@ -159,7 +159,10 @@ export async function runOperation(wallet: EvmWalletClient, store: Store, id: st
     // receipt logs; this consumer does not duplicate them in every journal.
     if (operation.receipt) operation.receipt = { ...operation.receipt, logs: [] };
     if (evidence?.receipt) evidence.receipt = { ...evidence.receipt, logs: [] };
-    return { ...step, operation, evidence, unresolved: step.unresolved && operation.status === "prepared" && !reply };
+    // Status can see an older unsigned revision while the dispatched Wallet
+    // call is still running. Only its reply resolves that dispatch; neither
+    // preparing nor prepared polls establish that an expired plan can renew.
+    return { ...step, operation, evidence, unresolved: step.unresolved && ["preparing", "prepared"].includes(operation.status) && !reply };
   };
   abort();
   const first = await store.get(id);
@@ -192,7 +195,7 @@ export async function runOperation(wallet: EvmWalletClient, store: Store, id: st
           continue;
         }
         state.steps[i] = await observe(intent, step, operation, false);
-        if (state.steps[i]!.unresolved && operation.status === "prepared") retrySame.add(step.request.requestId);
+        if (state.steps[i]!.unresolved && ["preparing", "prepared"].includes(operation.status)) retrySame.add(step.request.requestId);
         await persist(row!, state, `step_${i}_${stepView(intent, state.steps[i]!).status}`);
       }
       const views = state.steps.map((step) => stepView(intent, step));
@@ -209,7 +212,10 @@ export async function runOperation(wallet: EvmWalletClient, store: Store, id: st
       if (!execute) return resultOf(row!);
       const expired = BigInt(state.plan.validUntil) <= BigInt(Math.floor(now() / 1000));
       if (state.steps.some((step) => step.unresolved && (expired || !retrySame.has(step.request.requestId)))) return resultOf(row!, "pending", "The Wallet reply remains unresolved. Continue this same operation to check its original request.");
-      if (views.some((view, index) => !["queued", "prepared", "confirmed"].includes(view.status) && !retrySame.has(state.steps[index]!.request.requestId))) {
+      // Released rows may already have lost their ambiguity marker when
+      // polling interrupted preparation. Keep their original expired request.
+      if (expired && state.steps.some((step) => step.operation?.status === "preparing")) return resultOf(row!, "pending", "The original Wallet preparation is unresolved and its quote has expired. Reconcile that same request; no new attempt was created.");
+      if (views.some((view, index) => !["queued", "preparing", "prepared", "confirmed"].includes(view.status) && !retrySame.has(state.steps[index]!.request.requestId))) {
         options.onProgress?.("Waiting for confirmation. The next step follows automatically…");
         await (options.wait ?? waitForReceipt)(options.signal); continue;
       }
@@ -233,7 +239,7 @@ export async function runOperation(wallet: EvmWalletClient, store: Store, id: st
         if (error instanceof ConcurrentUpdate) throw error;
         return resultOf(row!, "pending", `The Wallet reply was interrupted. Keep this saved operation and check its status. ${errorMessage(error)}`);
       }
-      if (state.steps[index]!.operation?.status === "prepared") return resultOf(row!, "review");
+      if (["preparing", "prepared"].includes(state.steps[index]!.operation?.status ?? "")) return resultOf(row!, "review");
     } catch (error) { if (!(error instanceof ConcurrentUpdate)) throw error; }
   }
 }
