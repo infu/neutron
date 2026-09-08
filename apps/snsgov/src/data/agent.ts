@@ -1,0 +1,150 @@
+/**
+ * The anonymous IC agent used for every read in this app.
+ *
+ * All SNS reads are anonymous queries. They cost the Neutron owner nothing,
+ * need no manifest capability, no backend-call reservation, and no owner
+ * dialog. `apps/mysubnet` establishes this pattern in production with an empty
+ * `capabilities` block.
+ *
+ * In the browser the agent talks to the page's own origin, which is already an
+ * IC boundary node (`i<nonce>--<canister>.icp0.io`) or the local PocketIC
+ * gateway — so there is no cross-origin request and no CORS involved at all.
+ */
+
+import { Actor, HttpAgent, isV2ResponseBody, polling, type ActorSubclass } from "@dfinity/agent";
+import type { IDL } from "@dfinity/candid";
+import { Principal } from "@dfinity/principal";
+import { classifyError } from "./errors";
+
+/** Fallback host for non-browser contexts (tests, tooling). */
+const DEFAULT_HOST = "https://icp-api.io";
+
+export interface AgentOptions {
+  /** Override the boundary node. Defaults to the page origin in a browser. */
+  host?: string;
+  /** Force local-network behaviour (root key fetch). Auto-detected otherwise. */
+  local?: boolean;
+}
+
+let cached: Promise<HttpAgent> | undefined;
+let cachedKey = "";
+
+/**
+ * A process-wide anonymous agent. Shared deliberately: agent construction does
+ * a root-key fetch on local networks, and every caller wants the same one.
+ */
+export async function getAgent(options: AgentOptions = {}): Promise<HttpAgent> {
+  const host = options.host ?? defaultHost();
+  const local = options.local ?? isLocalHost(host);
+  const key = `${host}|${local}`;
+  if (cached && cachedKey === key) return cached;
+
+  cachedKey = key;
+  cached = (async () => {
+    const agent = await HttpAgent.create({ host });
+    if (local) {
+      // A local replica signs with a per-instance key the agent cannot know.
+      await agent.fetchRootKey();
+    }
+    return agent;
+  })();
+
+  try {
+    return await cached;
+  } catch (error) {
+    cached = undefined;
+    cachedKey = "";
+    throw classifyError(error);
+  }
+}
+
+/** Drop the shared agent, e.g. after an authority change. */
+export function resetAgent(): void {
+  cached = undefined;
+  cachedKey = "";
+}
+
+function defaultHost(): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    // The app's own origin is a boundary node, so this is same-origin.
+    return window.location.origin;
+  }
+  return DEFAULT_HOST;
+}
+
+function isLocalHost(host: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(host).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  );
+}
+
+export type IdlFactory = IDL.InterfaceFactory;
+
+/** Build a read-only actor for a canister. */
+export async function actorFor<T>(
+  idlFactory: IdlFactory,
+  canisterId: string | Principal,
+  options: AgentOptions = {},
+): Promise<ActorSubclass<T>> {
+  const agent = await getAgent(options);
+  return Actor.createActor<T>(idlFactory, {
+    agent,
+    canisterId: typeof canisterId === "string" ? Principal.fromText(canisterId) : canisterId,
+  });
+}
+
+/**
+ * Send raw Candid bytes to a canister method and return the raw reply.
+ *
+ * Used for the generic-proposal validator pre-flight, where governance itself
+ * passes the payload through verbatim and we want to reproduce that exactly.
+ * Tries `query` first and falls back to an update, because a validator may
+ * legally be declared either way and governance constrains neither.
+ */
+export async function callRaw(
+  canisterId: string | Principal,
+  methodName: string,
+  arg: Uint8Array,
+  options: AgentOptions = {},
+): Promise<Uint8Array> {
+  const agent = await getAgent(options);
+  const target = typeof canisterId === "string" ? Principal.fromText(canisterId) : canisterId;
+
+  try {
+    const response = await agent.query(target, { methodName, arg });
+    if (response.status === "replied") {
+      return new Uint8Array(response.reply.arg);
+    }
+    throw new Error(`query rejected: ${JSON.stringify(response).slice(0, 200)}`);
+  } catch {
+    try {
+      // HttpAgent.call returns submission metadata, not the method's reply.
+      // Request the asynchronous endpoint so the SDK can retrieve and verify
+      // the raw reply using the returned request ID without knowing its IDL.
+      const { requestId, response } = await agent.call(target, { methodName, arg, callSync: false });
+      if (isV2ResponseBody(response.body)) {
+        throw new Error(
+          `update rejected (${response.body.reject_code}): ${response.body.reject_message}`,
+        );
+      }
+      if (response.status !== 202) {
+        throw new Error(`update submission failed: ${response.status} ${response.statusText}`);
+      }
+      const { reply } = await polling.pollForResponse(agent, target, requestId);
+      return new Uint8Array(reply);
+    } catch (updateError) {
+      throw classifyError(updateError);
+    }
+  }
+}
