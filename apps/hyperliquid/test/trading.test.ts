@@ -131,6 +131,16 @@ describe("Durable dispatch and recovery", () => {
     expect(result.review.account).toMatchObject({ abstraction: "unifiedAccount", balanceSource: "unified", marginSummary: { accountValue: "500" }, sharedBalances: observed.balances });
     expect(result.review.fees).toEqual({ takerRate: "0.00045", makerRate: "0.00015", observedAt: 1234 });
   });
+  test("order review estimates include the observed referral discount without changing raw fees", async () => {
+    const state = fixture();
+    const fees = { userCrossRate: "0.00045", userAddRate: "0.00015", activeReferralDiscount: "0.04" };
+    const observed = { environment: "testnet", observedAt: 1234, complete: true, errors: [], warnings: [], abstraction: "disabled", balanceSource: "perps", clearinghouseState: null, positions: [], balances: null, fees };
+    const engine = state.make({ data: { info: state.info, account: async () => observed } });
+    const result = await engine.preview({ kind: "order", coin: "ETH", side: "buy", orderType: "limit", size: "1", price: "2000" });
+    expect(result.review.estimatedFeesUsdc).toEqual({ taker: "0.864", maker: "0.288" });
+    expect(result.review.fees).toEqual({ takerRate: "0.000432", makerRate: "0.000144", activeReferralDiscount: "0.04", observedAt: 1234 });
+    expect(fees).toEqual({ userCrossRate: "0.00045", userAddRate: "0.00015", activeReferralDiscount: "0.04" });
+  });
   test("timeout + reload never generates a fresh signed request; explicit retry preserves bytes", async () => {
     let requests = 0;
     const state = fixture({ response: async () => { requests++; if (requests === 1) throw new TypeError("Network response lost"); return Response.json({ status: "err", response: "Duplicate nonce" }); } });
