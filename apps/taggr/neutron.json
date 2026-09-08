@@ -1,0 +1,70 @@
+{
+  "format": 3,
+  "id": "taggr",
+  "name": "Taggr",
+  "version": 106,
+  "description": "Read, browse, discover, and post on the Taggr network",
+  "src": "main.mo",
+  "background": {
+    "path": "service.html",
+    "description": "Taggr identity, network client, and agent tools"
+  },
+  "capabilities": {
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "taggr_state_read",
+        "taggr_identity_initialize",
+        "taggr_identity_write",
+        "taggr_identity_clear",
+        "taggr_settings_write"
+      ]
+    }
+  },
+  "tiles": [
+    {
+      "id": "taggr",
+      "title": "Taggr",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Browse and post on the Taggr network"
+    }
+  ],
+  "func": {
+    "taggr_state_read": {
+      "type": "query",
+      "async": false
+    },
+    "taggr_identity_initialize": {
+      "type": "update",
+      "async": false
+    },
+    "taggr_identity_write": {
+      "type": "update",
+      "async": false
+    },
+    "taggr_identity_clear": {
+      "type": "update",
+      "async": false
+    },
+    "taggr_settings_write": {
+      "type": "update",
+      "async": false
+    }
+  },
+  "memory": {
+    "identity": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/identity/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

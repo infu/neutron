@@ -1,0 +1,46 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-taggr",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
+    "watch": "bun build.ts watch",
+    "local:taggr": "bun scripts/local_taggr.ts",
+    "test": "npm run package && bun test && npm run test:motoko && npm run test:browser",
+    "test:browser": "node test/browser/ui.mjs",
+    "verify:contract": "bun scripts/verify_contract.ts",
+    "verify:mainnet": "bun scripts/verify_mainnet.ts",
+    "test:motoko": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/backend.test.mo && bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo"
+  },
+  "author": "",
+  "license": "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",
+  "description": "Read, browse, discover, and post on the Taggr network from a Neutron",
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/candid": "^3.4.3",
+    "@dfinity/identity": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "@icp-sdk/core": "^5.4.0",
+    "neutron-design-system": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-icons": "^5.7.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "neutron-scripts": "^1.1.0"
+  }
+}
