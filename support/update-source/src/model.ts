@@ -44,6 +44,7 @@ export const SOURCE_MAX_AGE_SECONDS = PACKAGE_MAX_AGE_SECONDS;
 export const RELEASE_MAX_AGE_SECONDS = 0n;
 export const UPLOAD_CHUNK_BYTES = 1_800_000;
 export const UPLOAD_CONCURRENCY = 4;
+// Bound the atomic mutation, not the inventory inspected for unchanged releases.
 export const MAX_PACKAGES_PER_PUBLICATION = 20;
 export const MAX_PUBLICATION_BYTES = 128 * 1024 * 1024;
 export const SOURCE_UNCOMPRESSED_MAX_BYTES =
@@ -154,11 +155,6 @@ export async function inspectPackageFiles(
   } = {},
 ): Promise<InspectedUpdatePackage[]> {
   if (files.length < 1) throw new Error("At least one .neutron file is required");
-  if (files.length > MAX_PACKAGES_PER_PUBLICATION) {
-    throw new Error(
-      `One publication may contain at most ${MAX_PACKAGES_PER_PUBLICATION} packages`,
-    );
-  }
   const read = options.read ?? readBytes;
   const readSource =
     options.readSource ??

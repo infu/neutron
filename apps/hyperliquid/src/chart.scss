@@ -1,0 +1,74 @@
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+@layer app {
+  .hl-app {
+  .hl-candles { min-width: 0; width: 100%; container-type: inline-size; color: #dce1e5; font-variant-numeric: tabular-nums; }
+  .hl-candles-topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 16px; padding-bottom: 5px; border-bottom: 1px solid #242a30; }
+  .hl-candles-heading { display: flex; flex: 1 0 auto; align-items: center; justify-content: space-between; gap: 12px; min-height: 25px; }
+  .hl-candles-heading > div { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+  .hl-candles-heading h2 { font-size: 12px; font-weight: 550; white-space: nowrap; }
+  .hl-candles-heading > div > span { color: #89939e; font-size: 10px; white-space: nowrap; }
+  .hl-candles-heading > div > span > span { color: #52606a; margin-inline: 2px; }
+  .hl-candles-toolbar { display: flex; flex: 1 0 auto; justify-content: space-between; align-items: center; gap: 8px; }
+  .hl-candles-intervals { display: flex; align-items: center; gap: 3px; min-width: 0; }
+  .hl-candles-intervals > button { background: transparent; color: #8a949d; padding: 5px 8px; border-radius: 4px; line-height: 1.5; font-size: 10px; white-space: nowrap; }
+  .hl-candles-intervals > button:hover { color: #ced9de; background: #222a2f; }
+  .hl-candles-intervals > button[aria-pressed="true"] { color: #a9e9d4; background: #223630; }
+  .hl-candles-intervals > select { width: 29px; min-width: 29px; max-width: 35px; padding: 5px 1px; height: 25px; border: 0; border-radius: 4px; background: #20262b; color: #9ca8b1; font-size: 10px; cursor: pointer; text-align: center; appearance: none; }
+  .hl-candles-intervals > select:has(option:checked:not([value=""])) { background: #223630; color: #a9e9d4; }
+  .hl-candles-icon { width: 26px; height: 26px; min-width: 26px; display: inline-grid; place-items: center; padding: 0; border-radius: 4px; background: transparent; color: #82909a; flex-shrink: 0; }
+  .hl-candles-icon:hover:not(:disabled) { background: #2b333a; color: #dce6ec; }
+  .hl-candles-legend { padding-block: 7px 6px; display: grid; align-content: start; gap: 5px; line-height: 1.3; }
+  .hl-candles-ohlc { display: flex; flex-wrap: wrap; gap: 5px 14px; color: #707d88; font-size: 9px; }
+  .hl-candles-ohlc > span { display: inline-flex; gap: 5px; align-items: baseline; white-space: nowrap; }
+  .hl-candles-ohlc b { font-weight: 450; color: #c0cbd3; }
+  .hl-candles .hl-candles-up { color: #8adcc1; }
+  .hl-candles .hl-candles-down { color: #e992a1; }
+  .hl-candles-observation { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 13px; font-size: 9px; color: #76838e; min-width: 0; }
+  .hl-candles-observation > span { display: inline-flex; gap: 5px; white-space: nowrap; }
+  .hl-candles-observation b { color: #a3b0ba; font-weight: 400; }
+  .hl-candles-observation small { font-size: 9px; color: #667681; line-height: inherit; }
+  .hl-candles-observation time { font-size: 8px; margin-left: auto; white-space: nowrap; }
+  .hl-candles-viewport { position: relative; min-width: 0; height: clamp(260px, 33dvh, 420px); width: 100%; border-radius: 3px; }
+  .hl-candles-viewport:focus-visible { outline: 1px solid #749d90; outline-offset: 3px; }
+  .hl-candles-canvas { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
+  .hl-candles-empty { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; color: #75818c; background: #11161ce6; padding: 25px; }
+  .hl-candles-empty > svg { color: #4e6464; margin-bottom: 3px; }
+  .hl-candles-empty strong { color: #abb9c3; font-size: 12px; font-weight: 500; }
+  .hl-candles-empty > span:not(.hl-candles-loader) { font-size: 10px; line-height: 1.7; max-width: 260px; overflow-wrap: anywhere; }
+  .hl-candles-loader { height: 17px; width: 17px; border: 1px solid #344942; border-top-color: #8adcc1; border-radius: 50%; animation: hl-candles-spin 1s linear infinite; }
+  .hl-candles-refresh { position: absolute; top: 5px; left: 2px; z-index: 1; color: #95a6b2; font-size: 9px; background: #172026e6; padding: 4px 7px; border-radius: 3px; pointer-events: none; }
+  .hl-candles-navigation { position: absolute; z-index: 2; display: flex; align-items: center; gap: 2px; bottom: 34px; left: 50%; transform: translateX(-50%); border-radius: 5px; padding: 2px; background: #1d252de6; border: 1px solid #3f4b5544; opacity: 0; transition: opacity .15s ease; }
+  .hl-candles-viewport:hover .hl-candles-navigation, .hl-candles-viewport:focus-within .hl-candles-navigation { opacity: 1; }
+  .hl-candles-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px; color: #788691; font-size: 9px; margin-top: 5px; min-height: 20px; }
+  .hl-candles-footer > span > span { margin-inline: 4px; color: #50636c; }
+  .hl-candles-footer > div { display: flex; align-items: center; gap: 10px; }
+  .hl-candles-footer button { font-size: 9px; padding: 2px 0; background: transparent; color: #71828b; }
+  .hl-candles-footer button[aria-pressed="true"] { color: #a0c8bb; }
+  .hl-candles-footer button[aria-pressed="true"]::before { content: ""; display: inline-block; width: 4px; height: 4px; background: #8adcc1; border-radius: 50%; margin: 0 5px 1px 0; }
+  .hl-candles-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  .hl-candles-error { font-size: 10px; line-height: 1.6; color: #d3b1a3; background: #322b2866; border-radius: 4px; padding: 9px 10px; margin-top: 10px !important; overflow-wrap: anywhere; }
+  @container (max-width: 370px) {
+    .hl-candles-heading, .hl-candles-toolbar { flex-basis: 100%; }
+    .hl-candles-intervals { gap: 2px; }
+    .hl-candles-intervals > button { padding-inline: 6px; }
+    .hl-candles-legend { gap: 5px; }
+    .hl-candles-ohlc { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 3px 12px; }
+    .hl-candles-ohlc > span { gap: 7px; }
+    .hl-candles-ohlc b { font-size: 10px; }
+    .hl-candles-observation { gap: 5px 9px; }
+    .hl-candles-observation time { font-size: 8px; }
+    .hl-candles-observation small { display: none; }
+    .hl-candles-viewport { height: clamp(260px, 32dvh, 360px); }
+  }
+  @container (max-width: 280px) {
+    .hl-candles-intervals > button { padding-inline: 4px; font-size: 9px; }
+    .hl-candles-intervals > select { min-width: 24px; width: 24px; }
+    .hl-candles-observation time { margin-left: 0; }
+  }
+  @media (hover: none) {
+    .hl-candles-navigation { opacity: 1; }
+  }
+  @keyframes hl-candles-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .hl-candles-loader { animation: none; } .hl-candles-navigation { transition: none; } }
+  }
+}

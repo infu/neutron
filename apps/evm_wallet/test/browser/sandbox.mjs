@@ -100,6 +100,22 @@ const browser = await chromium.launch({ ...(executablePath ? { executablePath } 
 const checks = [], screenshots = [], browserErrors = [], consoleMessages = [];
 const methods = { prepare: "evm_wallet_prepare_browser_v1", reject: "evm_wallet_reject_v1", execute: "evm_wallet_execute_v1", token: "evm_wallet_asset_set_v1" };
 const typedJson = '{"types":{"EIP712Domain":[],"Permit":[{"name":"amount","type":"uint256"}]},"primaryType":"Permit","domain":{},"message":{"amount":9007199254740993}}';
+const hyperliquidTypedData = (withdraw) => {
+  const fields = (entries) => entries.map(([name, type]) => ({ name, type }));
+  const primaryType = `HyperliquidTransaction:${withdraw ? "SendToEvmWithData" : "ApproveAgent"}`;
+  return JSON.stringify({
+    types: {
+      EIP712Domain: fields([["name", "string"], ["version", "string"], ["chainId", "uint256"], ["verifyingContract", "address"]]),
+      [primaryType]: fields(withdraw
+        ? [["hyperliquidChain", "string"], ["token", "string"], ["amount", "string"], ["sourceDex", "string"], ["destinationRecipient", "string"], ["addressEncoding", "string"], ["destinationChainId", "uint32"], ["gasLimit", "uint64"], ["data", "bytes"], ["nonce", "uint64"]]
+        : [["hyperliquidChain", "string"], ["agentAddress", "address"], ["agentName", "string"], ["nonce", "uint64"]]),
+    }, primaryType,
+    domain: { name: "HyperliquidSignTransaction", version: "1", chainId: 42161, verifyingContract: `0x${"0".repeat(40)}` },
+    message: withdraw
+      ? { hyperliquidChain: "Mainnet", token: "USDC", amount: "12.345678", sourceDex: "", destinationRecipient: `0x${"44".repeat(20)}`, addressEncoding: "hex", destinationChainId: 0, gasLimit: 200000, data: "0x", nonce: 1788820000001 }
+      : { hyperliquidChain: "Mainnet", agentAddress: `0x${"11".repeat(20)}`, agentName: "neutron-hyperliquid", nonce: 1788820000000 },
+  });
+};
 let activePage, activeLabel;
 const tick = (frame) => frame.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
 const calls = (frame, method) => frame.evaluate((method) => window.__evmSandbox.calls.filter((call) => call.method === method), method);
@@ -301,6 +317,54 @@ async function runDelayedTokenSend(width) {
   const geometry = await frame.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
   assert(geometry.scrollWidth <= geometry.width);
   checks.push({ label, preparationImmediatelyVisible: true, tokenAmountAndRecipient: true, reviewVisibleBeforeSavedEvidenceCompletes: true, approvalRequired: true, approvalVisibleWithoutScrolling: true, sameRequestAndReviewRevision: true, explicitExecuteCount: 1, duplicateExecuteCount: 0, browserRpcMethods: rpcCalls.map((call) => call.method), broadcastCount: 1, legacyOutcallMethods: 0, geometry });
+  await page.close(); activePage = null;
+}
+async function runHyperliquidReview(width, withdraw) {
+  const label = `${width}-hyperliquid-${withdraw ? "withdraw" : "authorize"}-review`;
+  activeLabel = label;
+  const page = await browser.newPage({ viewport: { width, height: 900 } });
+  activePage = page;
+  page.on("pageerror", (error) => browserErrors.push({ label, error: String(error) }));
+  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  const frame = page.frames().find((candidate) => candidate.url().endsWith("/app"));
+  assert(frame, `${label}: sandbox frame missing`);
+  await frame.getByTestId("evm-account-address").filter({ hasText: "0x2222222222222222222222222222222222222222" }).waitFor();
+  await frame.getByTestId("evm-network-select").selectOption("42161");
+  await frame.locator("nav").getByRole("button", { name: "Settings", exact: true }).click();
+  await frame.getByRole("button", { name: "Sign a message", exact: true }).click();
+  await frame.getByTestId("evm-sign-mode").selectOption("typed_data");
+  const typedData = hyperliquidTypedData(withdraw);
+  await frame.getByTestId("evm-sign-content").fill(typedData);
+  await frame.getByTestId("evm-sign-review").click();
+  const dialog = frame.getByRole("dialog");
+  await dialog.waitFor();
+  const text = await dialog.textContent();
+  assert(text.includes(withdraw ? "Withdraw Hyperliquid USDC to Ethereum" : "Authorize Hyperliquid trading key"), `${label}: missing protocol title`);
+  assert(text.includes("Hyperliquid Mainnet"), `${label}: missing venue environment`);
+  if (withdraw) {
+    assert(text.includes("12.345678 USDC"), `${label}: exact withdrawal amount missing`);
+    assert(text.includes("0x4444444444444444444444444444444444444444"), `${label}: recipient missing`);
+    assert(text.includes("Perpetuals"), `${label}: source collateral missing`);
+    assert.equal(await frame.getByTestId("evm-review-usd").count(), 0, `${label}: off-chain USDC amount was valued as signing-network ETH`);
+  } else {
+    assert(text.includes("0x1111111111111111111111111111111111111111"), `${label}: trading key missing`);
+    assert(text.includes("neutron-hyperliquid"), `${label}: key name missing`);
+    assert(text.includes("cannot withdraw"), `${label}: trading key authority missing`);
+  }
+  assert.equal(await dialog.locator("pre").textContent(), typedData, `${label}: exact signed JSON changed`);
+  assert.equal((await calls(frame, methods.execute)).length, 0, `${label}: signed before approval`);
+  const prepared = (await calls(frame, methods.prepare))[0];
+  assert.equal(prepared.args[0].request.intent.chain_id, "42161");
+  assert.equal(prepared.args[0].request.intent.operation.typed_data.json, typedData);
+  const geometry = await frame.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+  assert(geometry.scrollWidth <= geometry.width, `${label}: horizontal overflow`);
+  const screenshot = `${label}.png`;
+  await page.screenshot({ path: join(output, screenshot), fullPage: true }); screenshots.push(screenshot);
+  await frame.getByTestId("evm-review-decline").click();
+  await dialog.waitFor({ state: "hidden" });
+  assert.equal((await calls(frame, methods.reject)).length, 1);
+  assert.equal((await calls(frame, methods.execute)).length, 0, `${label}: decline signed an effect`);
+  checks.push({ label, exactTypedData: true, signingChain: "42161", readableProtocolReview: true, executedEffects: 0, geometry });
   await page.close(); activePage = null;
 }
 async function runHistoryCase(width, rowCount) {
@@ -775,6 +839,7 @@ try {
   if (!historyOnly && !decodersOnly && !approvalsOnly && !custodyOnly) for (const width of [700, 375]) await runUsdCase(width, true);
   if (!historyOnly && !decodersOnly && !approvalsOnly && !custodyOnly) await runUsdCase(375, false);
   if (!historyOnly && !pricesOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 360]) await runDecoderCase(width);
+  if (!historyOnly && !pricesOnly && !approvalsOnly && !custodyOnly) for (const width of [1440, 360]) for (const withdraw of [false, true]) await runHyperliquidReview(width, withdraw);
   if (!historyOnly && !pricesOnly && !decodersOnly && !custodyOnly) for (const width of [1440, 375]) await runApprovalsCase(width);
   if (!historyOnly && !pricesOnly && !decodersOnly && !approvalsOnly) for (const width of [1440, 375]) for (const [kernelVersion, namespaceVersion] of [["344", "1"], ["346", "1"], ["346", "2"], ["unknown", "1"], ["unknown", "2"], ["malformed", "1"]]) await runCustodyCase(width, kernelVersion, namespaceVersion);
   assert.deepEqual(browserErrors, [], "Browser runtime errors");

@@ -2,7 +2,7 @@
   "format": 3,
   "id": "evm_wallet",
   "name": "EVM Wallet",
-  "version": 119,
+  "version": 121,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Chain-key accounts, transactions and signatures across EVM networks",
   "src": "main.mo",

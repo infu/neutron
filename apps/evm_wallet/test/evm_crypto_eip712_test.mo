@@ -126,6 +126,21 @@ valid("A chain-neutral EIP-712 domain hashes without inventing a chain",
     "0x31b0d18101a99e8fb5e5aff7bd78af91cdec88476f02ef8723467eb12675ab50",
 );
 
+valid("Hyperliquid approved trading signer with exact qualified primary type",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"HyperliquidTransaction:ApproveAgent\":[{\"name\":\"hyperliquidChain\",\"type\":\"string\"},{\"name\":\"agentAddress\",\"type\":\"address\"},{\"name\":\"agentName\",\"type\":\"string\"},{\"name\":\"nonce\",\"type\":\"uint64\"}]},\"primaryType\":\"HyperliquidTransaction:ApproveAgent\",\"domain\":{\"name\":\"HyperliquidSignTransaction\",\"version\":\"1\",\"chainId\":42161,\"verifyingContract\":\"0x0000000000000000000000000000000000000000\"},\"message\":{\"hyperliquidChain\":\"Testnet\",\"agentAddress\":\"0x1111111111111111111111111111111111111111\",\"agentName\":\"neutron-research\",\"nonce\":1788820000000}}",
+    "0x80742b882ad5ba923c11dc9c2b320213d317ee149e25cf8959178dfecece9bd9",
+);
+
+valid("Hyperliquid mainnet approval has a different environment digest",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"HyperliquidTransaction:ApproveAgent\":[{\"name\":\"hyperliquidChain\",\"type\":\"string\"},{\"name\":\"agentAddress\",\"type\":\"address\"},{\"name\":\"agentName\",\"type\":\"string\"},{\"name\":\"nonce\",\"type\":\"uint64\"}]},\"primaryType\":\"HyperliquidTransaction:ApproveAgent\",\"domain\":{\"name\":\"HyperliquidSignTransaction\",\"version\":\"1\",\"chainId\":42161,\"verifyingContract\":\"0x0000000000000000000000000000000000000000\"},\"message\":{\"hyperliquidChain\":\"Mainnet\",\"agentAddress\":\"0x1111111111111111111111111111111111111111\",\"agentName\":\"neutron-research\",\"nonce\":1788820000000}}",
+    "0xb6eb65eda606d530cef8161f5d381929eb38d8fa65d8e6102de5b0fb98e7dcb9",
+);
+
+valid("HyperCore perps USDC withdrawal to Ethereum",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"HyperliquidTransaction:SendToEvmWithData\":[{\"name\":\"hyperliquidChain\",\"type\":\"string\"},{\"name\":\"token\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"string\"},{\"name\":\"sourceDex\",\"type\":\"string\"},{\"name\":\"destinationRecipient\",\"type\":\"string\"},{\"name\":\"addressEncoding\",\"type\":\"string\"},{\"name\":\"destinationChainId\",\"type\":\"uint32\"},{\"name\":\"gasLimit\",\"type\":\"uint64\"},{\"name\":\"data\",\"type\":\"bytes\"},{\"name\":\"nonce\",\"type\":\"uint64\"}]},\"primaryType\":\"HyperliquidTransaction:SendToEvmWithData\",\"domain\":{\"name\":\"HyperliquidSignTransaction\",\"version\":\"1\",\"chainId\":42161,\"verifyingContract\":\"0x0000000000000000000000000000000000000000\"},\"message\":{\"hyperliquidChain\":\"Mainnet\",\"token\":\"USDC\",\"amount\":\"12.345678\",\"sourceDex\":\"\",\"destinationRecipient\":\"0x1234567890123456789012345678901234567890\",\"addressEncoding\":\"hex\",\"destinationChainId\":0,\"gasLimit\":\"200000\",\"data\":\"0x\",\"nonce\":\"1788820000001\"}}",
+    "0xdb453b024e00c7080003ec48309ee9602cbb6104cf8331d475b7467fd82efb0a",
+);
+
 invalid("Duplicate top-level JSON key",
     "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Value\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\"Value\",\"primaryType\":\"Value\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
 );
@@ -220,6 +235,42 @@ invalid("An invalid type identifier",
 
 invalid("An invalid member identifier",
     "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Value\":[{\"name\":\"bad-name\",\"type\":\"uint8\"}]},\"primaryType\":\"Value\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"bad-name\":1}}",
+);
+
+invalid("Qualified names are not accepted as field names",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Value\":[{\"name\":\"scope:value\",\"type\":\"uint8\"}]},\"primaryType\":\"Value\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"scope:value\":1}}",
+);
+
+invalid("Invalid qualified struct name :Value",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\":Value\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\":Value\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
+);
+
+invalid("Invalid qualified struct name Value:",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Value:\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\"Value:\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
+);
+
+invalid("Invalid qualified struct name Protocol::Value",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Protocol::Value\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\"Protocol::Value\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
+);
+
+invalid("Invalid qualified struct name Protocol:9Value",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Protocol:9Value\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\"Protocol:9Value\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
+);
+
+invalid("Invalid qualified struct name Protocol:Bad-Name",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Protocol:Bad-Name\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\"Protocol:Bad-Name\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
+);
+
+invalid("Invalid qualified struct name Protocol:Value(uint256)",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Protocol:Value(uint256)\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\"Protocol:Value(uint256)\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
+);
+
+invalid("Invalid qualified struct name Protocol:Value,Other",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Protocol:Value,Other\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\"Protocol:Value,Other\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
+);
+
+invalid("Invalid qualified struct name Protocol: Value",
+    "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"}],\"Protocol: Value\":[{\"name\":\"value\",\"type\":\"uint8\"}]},\"primaryType\":\"Protocol: Value\",\"domain\":{\"name\":\"Neutron EIP-712 vectors\",\"chainId\":42161},\"message\":{\"value\":1}}",
 );
 
 invalid("Invalid uint8 value -1",
@@ -423,6 +474,22 @@ invalid("Malformed Unicode escape \\u123",
 );
 
 // The wallet-selected chain must agree with the chain actually signed.
+switch (Eip712.hashForChain("{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"HyperliquidTransaction:ApproveAgent\":[{\"name\":\"hyperliquidChain\",\"type\":\"string\"},{\"name\":\"agentAddress\",\"type\":\"address\"},{\"name\":\"agentName\",\"type\":\"string\"},{\"name\":\"nonce\",\"type\":\"uint64\"}]},\"primaryType\":\"HyperliquidTransaction:ApproveAgent\",\"domain\":{\"name\":\"HyperliquidSignTransaction\",\"version\":\"1\",\"chainId\":42161,\"verifyingContract\":\"0x0000000000000000000000000000000000000000\"},\"message\":{\"hyperliquidChain\":\"Testnet\",\"agentAddress\":\"0x1111111111111111111111111111111111111111\",\"agentName\":\"neutron-research\",\"nonce\":1788820000000}}", 42161)) {
+    case (#ok(value)) assert (Hex.encode(value) == "0x80742b882ad5ba923c11dc9c2b320213d317ee149e25cf8959178dfecece9bd9");
+    case (#err(reason)) Runtime.trap("Rejected Hyperliquid signing on supported Arbitrum context: " # reason);
+};
+switch (Eip712.hashForChain("{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"HyperliquidTransaction:ApproveAgent\":[{\"name\":\"hyperliquidChain\",\"type\":\"string\"},{\"name\":\"agentAddress\",\"type\":\"address\"},{\"name\":\"agentName\",\"type\":\"string\"},{\"name\":\"nonce\",\"type\":\"uint64\"}]},\"primaryType\":\"HyperliquidTransaction:ApproveAgent\",\"domain\":{\"name\":\"HyperliquidSignTransaction\",\"version\":\"1\",\"chainId\":42161,\"verifyingContract\":\"0x0000000000000000000000000000000000000000\"},\"message\":{\"hyperliquidChain\":\"Testnet\",\"agentAddress\":\"0x1111111111111111111111111111111111111111\",\"agentName\":\"neutron-research\",\"nonce\":1788820000000}}", 1)) {
+    case (#err(_)) {};
+    case (#ok(_)) Runtime.trap("Qualified types bypassed selected-chain binding");
+};
+switch (Eip712.hashForChain("{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"HyperliquidTransaction:SendToEvmWithData\":[{\"name\":\"hyperliquidChain\",\"type\":\"string\"},{\"name\":\"token\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"string\"},{\"name\":\"sourceDex\",\"type\":\"string\"},{\"name\":\"destinationRecipient\",\"type\":\"string\"},{\"name\":\"addressEncoding\",\"type\":\"string\"},{\"name\":\"destinationChainId\",\"type\":\"uint32\"},{\"name\":\"gasLimit\",\"type\":\"uint64\"},{\"name\":\"data\",\"type\":\"bytes\"},{\"name\":\"nonce\",\"type\":\"uint64\"}]},\"primaryType\":\"HyperliquidTransaction:SendToEvmWithData\",\"domain\":{\"name\":\"HyperliquidSignTransaction\",\"version\":\"1\",\"chainId\":42161,\"verifyingContract\":\"0x0000000000000000000000000000000000000000\"},\"message\":{\"hyperliquidChain\":\"Mainnet\",\"token\":\"USDC\",\"amount\":\"12.345678\",\"sourceDex\":\"\",\"destinationRecipient\":\"0x1234567890123456789012345678901234567890\",\"addressEncoding\":\"hex\",\"destinationChainId\":0,\"gasLimit\":\"200000\",\"data\":\"0x\",\"nonce\":\"1788820000001\"}}", 42161)) {
+    case (#ok(value)) assert (Hex.encode(value) == "0xdb453b024e00c7080003ec48309ee9602cbb6104cf8331d475b7467fd82efb0a");
+    case (#err(reason)) Runtime.trap("Rejected Hyperliquid signing on supported Arbitrum context: " # reason);
+};
+switch (Eip712.hashForChain("{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"HyperliquidTransaction:SendToEvmWithData\":[{\"name\":\"hyperliquidChain\",\"type\":\"string\"},{\"name\":\"token\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"string\"},{\"name\":\"sourceDex\",\"type\":\"string\"},{\"name\":\"destinationRecipient\",\"type\":\"string\"},{\"name\":\"addressEncoding\",\"type\":\"string\"},{\"name\":\"destinationChainId\",\"type\":\"uint32\"},{\"name\":\"gasLimit\",\"type\":\"uint64\"},{\"name\":\"data\",\"type\":\"bytes\"},{\"name\":\"nonce\",\"type\":\"uint64\"}]},\"primaryType\":\"HyperliquidTransaction:SendToEvmWithData\",\"domain\":{\"name\":\"HyperliquidSignTransaction\",\"version\":\"1\",\"chainId\":42161,\"verifyingContract\":\"0x0000000000000000000000000000000000000000\"},\"message\":{\"hyperliquidChain\":\"Mainnet\",\"token\":\"USDC\",\"amount\":\"12.345678\",\"sourceDex\":\"\",\"destinationRecipient\":\"0x1234567890123456789012345678901234567890\",\"addressEncoding\":\"hex\",\"destinationChainId\":0,\"gasLimit\":\"200000\",\"data\":\"0x\",\"nonce\":\"1788820000001\"}}", 1)) {
+    case (#err(_)) {};
+    case (#ok(_)) Runtime.trap("Qualified types bypassed selected-chain binding");
+};
 let mail = "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"Person\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"wallet\",\"type\":\"address\"}],\"Mail\":[{\"name\":\"from\",\"type\":\"Person\"},{\"name\":\"to\",\"type\":\"Person\"},{\"name\":\"contents\",\"type\":\"string\"}]},\"primaryType\":\"Mail\",\"domain\":{\"name\":\"Ether Mail\",\"version\":\"1\",\"chainId\":1,\"verifyingContract\":\"0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC\"},\"message\":{\"from\":{\"name\":\"Cow\",\"wallet\":\"0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826\"},\"to\":{\"name\":\"Bob\",\"wallet\":\"0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB\"},\"contents\":\"Hello, Bob!\"}}";
 switch (Eip712.hashForChain(mail, 1)) {
     case (#ok(value)) assert (Hex.encode(value) == "0xbe609aee343fb3c4b28e1df9e632fca64fcfaede20f02e86244efddf30957bd2");

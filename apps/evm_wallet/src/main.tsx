@@ -1181,12 +1181,12 @@ function ReviewDialog({
           {presentation.decoder?.kind === "imported" && <p className="evm-muted" data-testid="evm-decoder-caption">Decoded by {presentation.decoder.name} · v{presentation.decoder.version}</p>}
         </div>
         {presentation.amount && <div className="evm-review-amount"><span>{presentation.amountLabel}</span><div>{presentation.tokenAddress !== undefined && <TokenIcon chainId={operation.chainId} address={presentation.tokenAddress} symbol={presentation.tokenSymbol ?? network?.nativeSymbol ?? "ETH"} />}<strong>{presentation.amount}</strong></div></div>}
-        {presentation.amount && reviewAtoms !== null && !presentation.unlimitedApproval && !presentation.liquidity && <UsdEstimate atoms={reviewAtoms} decimals={reviewDecimals} price={reviewPrice} testId="evm-review-usd" />}
+        {presentation.amount && reviewAtoms !== null && (tx || presentation.tokenAddress !== undefined) && !presentation.unlimitedApproval && !presentation.liquidity && <UsdEstimate atoms={reviewAtoms} decimals={reviewDecimals} price={reviewPrice} testId="evm-review-usd" />}
         {presentation.description && <p className={presentation.unlimitedApproval ? "evm-notice" : "evm-muted"}>{presentation.description}</p>}
         {presentation.decoderWarning && <p className="evm-notice" data-testid="evm-decoder-warning">{presentation.decoderWarning}</p>}
         <dl className="evm-review-details evm-review-overview">
           {presentation.parties.map((party, index) => <div className="evm-review-detail-pair" key={`${party.label}:${index}`}><dt>{party.label}</dt><dd><PresentationValue value={party.value} /></dd></div>)}
-          <dt>Network</dt><dd>{network?.name ?? `Chain ${operation.chainId}`}</dd>
+          <dt>{operation.kind === "typed_data" ? "Signing network" : "Network"}</dt><dd>{network?.name ?? `Chain ${operation.chainId}`}</dd>
           {fee && <><dt>Maximum network fee</dt><dd>{amount(maxFee(fee))} {network?.nativeSymbol ?? "ETH"}<UsdEstimate atoms={maxFee(fee)} decimals={18} price={nativePrice} testId="evm-review-fee-usd" /></dd></>}
           {presentation.nativeValue && <><dt>Also sending</dt><dd>{presentation.nativeValue}<UsdEstimate atoms={tx?.value ?? null} decimals={18} price={nativePrice} /></dd></>}
         </dl>

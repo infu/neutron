@@ -2,7 +2,7 @@
 
 EVM Wallet is a separate Neutron app for a chain-key Ethereum account. It is not
 an extension of the IC Wallet app. The same `main` account works on Ethereum,
-Arbitrum and the configured Ethereum test network; every request includes an
+Arbitrum, HyperEVM and the configured Ethereum test network; every request includes an
 explicit chain ID. Network balances, gas and nonces stay separate.
 
 The backend owns the account, selected assets, prepared requests, nonce
@@ -11,14 +11,15 @@ journal in Activity, including pending signatures and replacements. Ordinary
 tiles need no persistent browser storage grant. Neither the tile nor consumer apps receive a private
 key or a Kernel signing capability.
 
-All EVM JSON-RPC calls use the browser's direct CORS connection to one PublicNode
-endpoint per network. No MetaMask or API key is required. Balances, contract
+All EVM JSON-RPC calls use the browser's direct CORS connection to one public
+endpoint per network: PublicNode for Ethereum/Arbitrum and dRPC for HyperEVM.
+No MetaMask or API key is required. Balances, contract
 reads, fees, simulation, broadcast and receipt checks do not pass through an IC
 HTTP outcall. The backend preserves wallet state and performs chain-key signing.
 
 ## Using the wallet
 
-- **Assets** shows native ETH and preloaded/selected ERC-20 balances at the returned block.
+- **Assets** shows the network's native gas token (ETH or HYPE) and preloaded/selected ERC-20 balances at the returned block.
   This view is not exhaustive token discovery. A selected token's label is a
   display hint; its identity is the network and contract address.
 - **Send** prepares an exact native transfer, selected ERC-20 transfer or contract
@@ -274,6 +275,39 @@ and lock lineage after release. Installation and publication follow
 [`doc/package-updates.md`](../../doc/package-updates.md) and
 [`doc/memory-migrations-and-uninstall.md`](../../doc/memory-migrations-and-uninstall.md).
 The production update source is `233tv-xiaaa-aaaay-aacta-cai`.
+
+Release 120 supports Hyperliquid's qualified EIP-712 struct names, including
+`HyperliquidTransaction:ApproveAgent` and `HyperliquidTransaction:SendToEvmWithData`.
+The exact type names are signed; ordinary field validation and the selected
+signing-chain check remain unchanged. Hyperliquid callers use Arbitrum (42161)
+as the signing context and include only the declared signed message fields.
+The release retains all three version-1 memory roots and their exact lineage.
+
+Release 121 adds HyperEVM mainnet (chain 999, native HYPE with 18 decimals) for
+completing stalled CCTP deposits with the original message and attestation.
+The existing v1 network and asset maps receive the missing HyperEVM entries;
+existing settings, balances, account identity, nonce reservations and command
+history remain intact. All three schemas and their released lock lineage remain
+unchanged. dRPC supplies genuine explicit-block state reads, unlike the default
+HyperEVM RPC, which substitutes latest state for numeric block tags. HyperEVM
+shares HyperBFT consensus with HyperCore; the existing v1 `finalityKind` label
+`ethereum` describes the same safe/finalized JSON-RPC observation mechanism,
+not Ethereum settlement.
+
+Exact recovery reviews cover `CctpForwarder.mintAndForward` on HyperEVM and
+`MessageTransmitterV2.receiveMessage` on Ethereum or Arbitrum. They display the
+original beneficiary, message nonce, net USDC and gas token, and explain that
+recovery does not burn more USDC. The destination contract validates the
+attestation and its single-use nonce. The Wallet also interprets the exact
+Hyperliquid `UsdClassTransfer` master signature for moving recovered same-account
+cash into perpetuals; it does not place a spot trade. This recovery support adds
+no custody restrictions and no new persistent schema.
+
+Network and recovery references:
+[HyperEVM](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm),
+[official RPC provider list](https://hyperliquid.gitbook.io/hyperliquid-docs/builder-tools/hyperevm-tools),
+[Circle recovery](https://developers.circle.com/cctp/howtos/retry-failed-mint),
+[CctpForwarder](https://github.com/circlefin/hyperevm-circle-contracts/blob/master/src/CctpForwarder.sol).
 
 Release 116 adds the independent `evm_decoders@1` root for imported definitions.
 It keeps the exact released Wallet and evidence roots and initializes the new

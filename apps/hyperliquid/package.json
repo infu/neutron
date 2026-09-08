@@ -1,0 +1,48 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-hyperliquid",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
+    "watch": "bun build.ts watch",
+    "test": "npm run package && npm run test:release",
+    "test:release": "bun test && npm run test:memory && npm run test:browser && npm run test:resident",
+    "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo",
+    "test:browser": "node test/browser/check.mjs",
+    "test:resident": "node test/browser/resident.mjs",
+    "test:live": "node test/browser/live_reads.mjs"
+  },
+  "author": "",
+  "license": "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",
+  "description": "Hyperliquid perpetual futures trading and USDC funding through Neutron EVM Wallet",
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "@nktkas/hyperliquid": "0.33.3",
+    "decimal.js": "10.6.0",
+    "lightweight-charts": "5.2.1",
+    "neutron-design-system": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-icons": "^5.7.0",
+    "viem": "2.55.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "fake-indexeddb": "6.2.5",
+    "neutron-scripts": "^1.1.0"
+  }
+}

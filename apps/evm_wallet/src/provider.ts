@@ -382,6 +382,8 @@ export function agentProviderReview(
       decoderWarning: summary.decoderWarning ?? null,
       recognition: summary.decoder?.kind === "imported"
         ? "An owner-installed decoder pack interprets these exact transaction bytes. Its labels and descriptions are supplied by the pack author; installation does not verify contract behavior. Token metadata is resolved independently by Wallet."
+        : operation.kind === "typed_data"
+          ? "Signature labels are inferred from the exact signing domain, signed type definitions, and message fields; the original typed data remains part of this review."
         : "Transaction labels are inferred from exact calldata and Wallet-resolved token metadata; they do not verify contract behavior",
     },
     caller: { ...operation.caller },

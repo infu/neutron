@@ -9,11 +9,15 @@ export type BrowserEvmRpcConfig = {
   timeoutMs?: number;
 };
 
-// PublicNode's published HTTP endpoints support requests from the app's opaque
-// sandbox origin. They do not require a browser extension or a private API key.
+// Published HTTP endpoints support the app's opaque sandbox origin without an
+// extension or private API key. Hyperliquid lists dRPC in its developer tools:
+// https://hyperliquid.gitbook.io/hyperliquid-docs/builder-tools/hyperevm-tools
+// Its archive endpoint preserves explicit-block reads. The default HyperEVM
+// RPC silently substitutes latest state for numeric block tags.
 export const DEFAULT_EVM_RPC_ENDPOINTS: Readonly<Record<string, string>> = Object.freeze({
   "1": "https://ethereum-rpc.publicnode.com",
   "42161": "https://arbitrum-one-rpc.publicnode.com",
+  "999": "https://hyperliquid.drpc.org",
   "11155111": "https://ethereum-sepolia-rpc.publicnode.com",
 });
 export const DEFAULT_EVM_RPC_TIMEOUT_MS = 120_000;

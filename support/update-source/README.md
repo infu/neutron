@@ -307,7 +307,8 @@ npm run publish -- \
   ../../apps/mail/mail.v0.3.5.neutron
 ```
 
-One command may publish up to 20 packages:
+One command may change up to 20 packages in one atomic transaction. It may
+inspect a larger inventory containing unchanged releases:
 
 ```sh
 npm run publish -- \
@@ -473,7 +474,11 @@ different bytes at the same version.
 
 Record `icp canister status <canister-id> --json` under the administrative
 identity and alert on low cycle runway or abnormal memory growth. The limits of
-20 packages and 128 MiB apply to one publication, not to the source's lifetime.
+20 changed packages and 128 MiB apply to one publication, not to the source's
+lifetime. The byte bound still covers every inspected package and unique source,
+including unchanged releases. Every selected catalog entry is checked before
+mutation and verified again before its receipt is returned; unchanged entries
+do not consume mutation slots. The catalog itself retains its 256 KiB byte bound.
 Each new digest-addressed package and source is retained, so estimate logical
 retained bytes by summing each unique `sha256` and `size` once across archived
 receipts, then compare that trend with canister memory and cycles. Set
