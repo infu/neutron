@@ -136,11 +136,12 @@ export function SwapPanel({
   useEffect(() => {
     if (!wantsWalletInfo) return;
     let cancelled = false;
+    const controller = new AbortController();
     setPayInfoError(null);
     void (async () => {
       const client = createMsgBusClient();
       try {
-        const info = await readTokenInfo(client, input.address);
+        const info = await readTokenInfo(client, input.address, controller.signal);
         if (cancelled || !mounted.current) return;
         setPayInfo(info);
         await setTokenInfo(input.address, info.decimals, info.feeAtoms);
@@ -154,7 +155,7 @@ export function SwapPanel({
       // but the panel itself never needs them.
       if (!output) return;
       try {
-        const info = await readTokenInfo(client, output.address);
+        const info = await readTokenInfo(client, output.address, controller.signal);
         if (cancelled || !mounted.current) return;
         await setTokenInfo(output.address, info.decimals, info.feeAtoms);
         if (!cancelled && mounted.current) setTokenInfoRevision((value) => value + 1);
@@ -165,6 +166,7 @@ export function SwapPanel({
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [input.address, output, wantsWalletInfo, balanceRead]);
 

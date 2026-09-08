@@ -64,4 +64,60 @@ describe("parseTokenInfo", () => {
   test("accepts a missing name", () => {
     expect(parseTokenInfo({ ...REPLY, name: null }).name).toBeNull();
   });
+
+  test("pair reads share one owner-request slot even through different clients", async () => {
+    let active = false;
+    const calls: string[] = [];
+    const callTool = async (call: { arguments: { ledger: string } }) => {
+      if (active) throw new Error("Another app request is active");
+      active = true;
+      calls.push(call.arguments.ledger);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return { ...REPLY, ledger: call.arguments.ledger };
+      } finally { active = false; }
+    };
+    const ledgers = [REPLY.ledger, "xevnm-gaaaa-aaaar-qafnq-cai"];
+    const infos = await Promise.all(ledgers.map((ledger) => readTokenInfo({ callTool } as never, ledger)));
+    expect(infos.map((info) => info.ledger)).toEqual(ledgers);
+    expect(calls).toEqual(ledgers);
+  });
+
+  test("a rejected Wallet read does not block a later token or retry the failed one", async () => {
+    const calls: string[] = [];
+    const client = { callTool: async (call: { arguments: { ledger: string } }) => {
+      calls.push(call.arguments.ledger);
+      if (call.arguments.ledger === REPLY.ledger) throw new Error("Owner declined access");
+      return { ...REPLY, ledger: call.arguments.ledger };
+    } };
+    const results = await Promise.allSettled([
+      readTokenInfo(client as never, REPLY.ledger),
+      readTokenInfo(client as never, "xevnm-gaaaa-aaaar-qafnq-cai"),
+    ]);
+    expect(results[0]).toMatchObject({ status: "rejected", reason: new Error("Owner declined access") });
+    expect(results[1]).toMatchObject({ status: "fulfilled", value: { ledger: "xevnm-gaaaa-aaaar-qafnq-cai" } });
+    expect(calls).toEqual([REPLY.ledger, "xevnm-gaaaa-aaaar-qafnq-cai"]);
+  });
+
+  test("leaving the view skips queued reads but lets a dispatched request finish", async () => {
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const controller = new AbortController();
+    const calls: string[] = [];
+    const client = { callTool: async (call: { arguments: { ledger: string } }) => {
+      calls.push(call.arguments.ledger);
+      started.resolve();
+      await release.promise;
+      return { ...REPLY, ledger: call.arguments.ledger };
+    } };
+    const first = readTokenInfo(client as never, REPLY.ledger, controller.signal);
+    await started.promise;
+    const stale = readTokenInfo(client as never, "xevnm-gaaaa-aaaar-qafnq-cai", controller.signal);
+    controller.abort();
+    release.resolve();
+    const results = await Promise.allSettled([first, stale]);
+    expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected"]);
+    expect(calls).toEqual([REPLY.ledger]);
+    await expect(readTokenInfo(client as never, REPLY.ledger)).resolves.toMatchObject({ ledger: REPLY.ledger });
+  });
 });

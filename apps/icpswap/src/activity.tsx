@@ -47,7 +47,7 @@ export function canContinueSavedAction(action: Pick<SavedAction, "input_json" | 
   } catch { return false; }
 }
 const actionLabels: Record<string, string> = { mint: "New liquidity position", increase: "Add liquidity", decrease: "Remove liquidity", close: "Close liquidity position", claim: "Collect fees", withdraw: "Withdraw unused funds", swap: "Swap", recover_deposit: "Recover funded deposit" };
-const stateLabels: Record<string, string> = { prepared: "Ready to review", funding_requested: "Funding", funding_required: "Funding", funded: "Funded", execution_requested: "In progress", complete: "Completed", completed: "Completed", stopped: "Stopped", uncertain: "Needs reconciliation", ambiguous: "Needs reconciliation", pending: "In progress" };
+const stateLabels: Record<string, string> = { prepared: "Ready to review", funding_requested: "Funding", funding_required: "Funding", funded: "Funded", execution_requested: "In progress", protocol_complete: "Protocol completed", settlement_pending: "Payout unverified", complete: "Completed", completed: "Completed", stopped: "Stopped", uncertain: "Needs reconciliation", ambiguous: "Needs reconciliation", pending: "In progress" };
 export function actionTitle(action: Pick<SavedAction, "input_json">): string {
   const input = savedActionInput(action);
   const kind = typeof input?.kind === "string" ? input.kind : input?.from_ledger_id ? "swap" : input?.sourceOperationId ? "recover_deposit" : "";

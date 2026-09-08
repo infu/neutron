@@ -17,7 +17,9 @@ larger workspaces. It is not an official ICPSwap application.
 - **Liquidity:** discover a verified pool, choose an aligned price range and
   token maxima, and create a position. Existing positions support increasing,
   partially decreasing, closing and claiming fees. Pool-unused tokens remain
-  visible and can be withdrawn separately when the protocol permits it.
+  visible and can be withdrawn separately when the protocol permits it. Position
+  cards show token holdings, estimated USD value, current uncollected fees and
+  the current price within the chosen range.
 - **Activity:** inspect saved requests, funding, protocol results and recovery
   details. Continue the original operation after an interrupted reply.
 
@@ -29,6 +31,16 @@ minima, deadlines or caller-supplied idempotency keys. Desired amounts bound
 spending but do not provide protocol-enforced slippage protection. Ordinary swaps
 have an output minimum; their slippage unit is thousandths of one percent
 (`500` means `0.5%`).
+
+Position P&L estimates use complete paginated ICPSwap analytics history: actual
+additions and gross outputs valued at their historical prices, plus current
+holdings and uncollected fees. The estimate is before ledger and network fees,
+and protocol outputs do not prove Wallet settlement. Missing original additions,
+ownership transfers, incomplete liquidity history, or unavailable fees/prices
+leave P&L unavailable. A matching analytics history can still lag recent claims;
+this is an estimate, not an audited account return. Holdings remain usable while
+history loads. Token-detail reads share an app-local queue so opening a pool does
+not launch competing Wallet permission dialogs.
 
 ## Agent tools and approval
 
@@ -107,6 +119,21 @@ ICPSwap's own queues. Closing the tile or dismissing a notification does not
 cancel a protocol payout or delete the app's saved operation. A flow paused
 between app-controlled steps can be continued from Activity or the tools.
 
+A confirmed claim returning zero in both tokens is complete with no payout
+required. Status derives that result from the saved reply; reconciliation also
+repairs older journals that recorded it as settlement pending. Other successful
+actions retain unverified payout status until operation-linked receipt evidence
+exists. The pool removes completed transactions from its active list, and its
+liquidity replies do not identify the outgoing ledger blocks. Empty queues and
+matching Wallet balances cannot establish which operation paid them.
+
+The populated `plan` in action responses is decoded from the durable Candid
+`plan_blob`; an empty legacy `operation.plan_json` does not mean the plan was
+lost. Liquidity receipts expose known position IDs and gross protocol outputs.
+Actual mint/increase token use, refunds and ledger payout links remain unavailable
+where the retained protocol reply does not supply them. Estimates and input
+budgets are not substituted for those actual amounts.
+
 The journal records a protocol dispatch before awaiting its reply. An unknown
 reply is retained as uncertain and is never automatically sent again. Empty
 queues, missing protocol transaction records or an unrelated balance change do
@@ -130,6 +157,10 @@ presentation. Backend calls are used for protocol writes, durable operations and
 scheduled local market observations. Browser reads avoid canister HTTP-outcall
 costs.
 
+Backend pool snapshots identify stored fee amounts as not current and explain
+the missing refresh. Position reads and liquidity previews obtain the protocol's
+current fee estimate; failed reads remain unavailable instead of becoming zero.
+
 The integration was checked against
 [ICPSwap v3.7.0, commit `94eeb92`](https://github.com/ICPSwap-Labs/icpswap-v3-service/tree/94eeb92ad6ecc2713d38fd3bef48cd4f328a3513)
 and production Candid interfaces on 2026-09-08. Factory discovery determines
@@ -151,7 +182,7 @@ All persistent state stays app-local:
 All three production v1 schemas and their lock entries are retained exactly.
 The imported draft's additional fee cache is transient; it does not replace the
 released swap schema. Wallet fee observations refresh that cache, including a
-valid zero fee. Release 201 installations keep all three roots. Upgrades from
+valid zero fee. Release 201 and 202 installations keep all three roots. Upgrades from
 release 200 keep both original roots and initialize only the actions root.
 No fake migration, reinstall or reset is required.
 Historical public schema assets are pinned in `test/fixtures/history/200` for

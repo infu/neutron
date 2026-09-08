@@ -510,7 +510,7 @@ export function App() {
             </details>
           ) : null}
 
-          {view.kind === "liquidity" ? <LiquidityView tokens={tradeTokens} /> : view.kind === "activity" ? <ActivityView /> : loading ? (
+          {view.kind === "liquidity" ? <LiquidityView tokens={tradeTokens} prices={liveError ? [] : universe} /> : view.kind === "activity" ? <ActivityView /> : loading ? (
             <div className="nt-state nt-state--loading">Loading market…</div>
           ) : view.kind === "token" ? (
             <TokenDetailView
