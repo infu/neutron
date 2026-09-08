@@ -4,6 +4,7 @@
 import { build } from 'esbuild';
 import { sassPlugin } from 'esbuild-sass-plugin';
 import { chromium } from 'playwright';
+import { runProgressChecks } from './progress.mjs';
 import { createServer } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -71,6 +72,7 @@ for (const [chainId, network] of Object.entries(networks)) {
 }
 const records = new Map(), operations = new Map(), transactions = new Map(), allowances = new Map(), delegations = new Map(), calls = [], sends = [];
 let clock = 1n, mode = 'confirm', rpcFails = false, readGate = null, healthFactorOverride = null, nextAccountReadGate = null;
+let feeUnavailable = false, maxFeeGate = null, maxFeeObserved = null;
 const ns = () => String(BigInt(Date.now()) * 1000000n);
 const receipt = chainId => ({ blockNumber: chainId === '1' ? '25922608' : '502541974', blockHash: '0x' + '44'.repeat(32), status: 'success', gasUsed: '90000', effectiveGasPriceWei: '1000000000', logs: [], finality: 'included', observedAtNs: ns() });
 const assetFor = (chainId, address) => {
@@ -283,7 +285,11 @@ async function fixture(kind, [call, args]) {
     } else result = observe(input.chainId, input.to, input.data);
     return { ...request, address: account.address, result, blockNumber, observedAtNs: ns() };
   }
-  if (name === 'evm_estimate_transaction_v1') return { ...input, address: account.address, status: 'available', gasLimit: '100000', gasPriceWei: '1000000000', baseFeePerGasWei: '900000000', maxPriorityFeePerGasWei: '100000000', maxFeePerGasWei: '2000000000', estimatedFeeWei: '100000000000000', maximumFeeWei: '200000000000000', blockNumber, observedAtNs: ns(), feeBasis: input.chainId === '42161' ? 'arbitrum_total_gas' : 'base_fee_plus_priority', postingCosts: input.chainId === '42161' ? 'included' : 'not_applicable', reasons: [], source: 'evm_rpc' };
+  if (name === 'evm_estimate_transaction_v1') {
+    if (feeUnavailable) throw Error('Fixture fee observation unavailable');
+    if (input.valueWei === String(network.native)) { maxFeeObserved?.(); if (maxFeeGate) await maxFeeGate; }
+    return { ...input, address: account.address, status: 'available', gasLimit: '100000', gasPriceWei: '1000000000', baseFeePerGasWei: '900000000', maxPriorityFeePerGasWei: '100000000', maxFeePerGasWei: '2000000000', estimatedFeeWei: '100000000000000', maximumFeeWei: '200000000000000', blockNumber, observedAtNs: ns(), feeBasis: input.chainId === '42161' ? 'arbitrum_total_gas' : 'base_fee_plus_priority', postingCosts: input.chainId === '42161' ? 'included' : 'not_applicable', reasons: [], source: 'evm_rpc' };
+  }
   if (name === 'evm_operation_status_v1') return operations.get(input.requestId) ?? { ...input, status: 'not_found' };
   if (name === 'evm_transaction_v1') return transactions.get(input.transactionHash);
   if (name === 'evm_send_transaction_v1') {
@@ -411,6 +417,32 @@ try {
   await page.getByText('42.00', { exact: true }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Supply USDC', exact: true }).first().waitFor();
 
+  // Native Max sizes an exact read-only candidate from an empty draft and
+  // retains the maximum observed signing fee, not the lower estimated fee.
+  await openAction('Supply', 'WETH');
+  await dialog().getByLabel('Use native ETH', { exact: true }).check();
+  await dialog().getByRole('button', { name: 'Max', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('input[aria-label="Supply amount"]').value === '1.9998');
+  await waitReview('supply');
+  assert.equal(sends.length, 0, 'Choosing Max is read-only');
+  feeUnavailable = true;
+  await dialog().getByLabel('Supply amount', { exact: true }).fill('0.123');
+  await dialog().getByRole('button', { name: 'Max', exact: true }).click();
+  await dialog().getByRole('alert').filter({ hasText: 'Max unavailable.' }).waitFor();
+  assert.equal(await dialog().getByLabel('Supply amount', { exact: true }).inputValue(), '0.123', 'Failed Max estimate preserves a manually entered amount');
+  feeUnavailable = false;
+  let releaseMaxFee;
+  maxFeeGate = new Promise(resolve => { releaseMaxFee = resolve; });
+  const maxFeeStarted = new Promise(resolve => { maxFeeObserved = resolve; });
+  await dialog().getByRole('button', { name: 'Max', exact: true }).click();
+  await maxFeeStarted;
+  await dialog().getByLabel('Supply amount', { exact: true }).fill('0.456');
+  releaseMaxFee(); maxFeeGate = null; maxFeeObserved = null;
+  await dialog().getByRole('button', { name: 'Max', exact: true }).waitFor();
+  assert.equal(await dialog().getByLabel('Supply amount', { exact: true }).inputValue(), '0.456', 'A stale Max reply cannot overwrite a newer manual amount');
+  assert.equal(sends.length, 0, 'Max estimation never dispatches a transaction');
+  await page.keyboard.press('Escape');
+
   // Native ETH supply consumes no ERC20 approval, while six-decimal USDC
   // supply persists and confirms the exact allowance before its lending call.
   await openAction('Supply', 'WETH');
@@ -461,6 +493,17 @@ try {
   await page.getByRole('button', { name: 'Your position', exact: true }).click();
   await openAction('Repay', 'WETH');
   await dialog().getByLabel('Use native ETH', { exact: true }).check();
+  await dialog().getByRole('button', { name: 'Max', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('input[aria-label="Repay amount"]').value === '0.02');
+  const nativeBeforeRepay = networks['1'].native;
+  networks['1'].native = assetFor('1', networks['1'].weth).debt;
+  await page.getByRole('button', { name: 'Refresh wallet and markets', exact: true }).evaluate(element => element.click());
+  await page.waitForFunction(() => document.querySelector('.av-wallet .av-right').textContent.trim() === '0.02 ETH');
+  await dialog().getByRole('button', { name: 'Max', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('input[aria-label="Repay amount"]').value === '0.0198');
+  networks['1'].native = nativeBeforeRepay;
+  await page.getByRole('button', { name: 'Refresh wallet and markets', exact: true }).evaluate(element => element.click());
+  await page.waitForFunction(() => document.querySelector('.av-wallet .av-right').textContent.trim() === '1.92 ETH');
   await dialog().getByLabel('Repay full debt', { exact: true }).check();
   assert.equal(await dialog().getByLabel('Maximum payment', { exact: true }).inputValue(), '0.02002');
   start = sends.length; await finish('repay');
@@ -551,7 +594,8 @@ try {
   await page.keyboard.press('Escape');
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '360px page overflow');
   assert.deepEqual(errors, [], 'No unhandled browser errors');
-  const evidence = { result: 'passed', sends: sends.length, records: records.size, coverage: ['actual service registration and descriptor validation', 'Wallet SDK ABI and response validation', 'durable journal before dispatch', 'loading', 'native ETH supply', 'USDC six-decimal approval and supply', 'variable-rate borrowing', 'native borrow delegation', 'bounded full native repayment', 'aWETH approval and native withdrawal', 'wallet repayment', 'aToken repayment', 'withdrawal', 'health factor and collateral', 'efficiency mode', 'incentive rewards claim', 'lost-reply reload without duplicate send', 'Ethereum and Arbitrum contract separation', 'exact gateway, Pool and recipient identity', 'Escape and restored focus', '360px responsive layout', 'RPC failure disables review', 'missing oracle prices hide borrowing capacity and disable automatic amount presets while retaining manual protocol checks', 'health-factor rounding preserves liquidation threshold', 'completed operations can reconcile reorganized receipts without duplicate sends', 'account refresh race cannot mix wallet balances, positions or quotes', 'periodic refresh detects wallet identity changes and clears old dialogs'] };
+  const progressCoverage = await runProgressChecks({ app, browser, artifacts });
+  const evidence = { result: 'passed', sends: sends.length, records: records.size, coverage: ['actual service registration and descriptor validation', 'Wallet SDK ABI and response validation', 'durable journal before dispatch', 'loading', 'native ETH supply', 'USDC six-decimal approval and supply', 'variable-rate borrowing', 'native borrow delegation', 'bounded full native repayment', 'aWETH approval and native withdrawal', 'wallet repayment', 'aToken repayment', 'withdrawal', 'health factor and collateral', 'efficiency mode', 'incentive rewards claim', 'lost-reply reload without duplicate send', 'Ethereum and Arbitrum contract separation', 'exact gateway, Pool and recipient identity', 'Escape and restored focus', '360px responsive layout', 'RPC failure disables review', 'missing oracle prices hide borrowing capacity and disable automatic amount presets while retaining manual protocol checks', 'health-factor rounding preserves liquidation threshold', 'completed operations can reconcile reorganized receipts without duplicate sends', 'account refresh race cannot mix wallet balances, positions or quotes', 'periodic refresh detects wallet identity changes and clears old dialogs', 'native Max deducts observed maximum network fee from an empty draft', 'failed Max fee observation retains the manually entered amount', 'stale Max fee reply cannot overwrite a newer manual amount', 'native repayment Max respects both debt and fee-adjusted wallet balance', ...progressCoverage] };
   await writeFile(resolve(artifacts, 'result.json'), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify(evidence, null, 2));
 } catch (error) {

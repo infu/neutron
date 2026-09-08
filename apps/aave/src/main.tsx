@@ -93,7 +93,11 @@ function ActionDialog({ selection, market, nativeBalance, busy, execute, close, 
   const available = kind === "supply" ? walletBalance : kind === "withdraw" ? min(BigInt(asset.supplied), BigInt(asset.availableLiquidity)).toString() : kind === "borrow" ? availableBorrow(market, asset) : useATokens ? min(BigInt(asset.supplied), BigInt(asset.variableDebt)).toString() : walletBalance === null ? null : min(BigInt(walletBalance), BigInt(asset.variableDebt)).toString();
   const symbol = useNative ? "ETH" : asset.symbol;
   const capRequired = all && ((kind === "repay" && !useATokens) || (kind === "withdraw" && useNative));
-  const [tick, setTick] = useState(0);
+  const [tick, setTick] = useState(0), [maxLoading, setMaxLoading] = useState(false), [maxError, setMaxError] = useState("");
+  const maxRequest = useRef<AbortController | null>(null);
+  const maxScope = stable({ account: market.accountAddress, chainId: market.chainId, asset: asset.address, kind, useNative, useATokens, amount, all, maximum, nativeBalance, debt: asset.variableDebt, block: market.blockNumber });
+  const currentMaxScope = useRef(maxScope); currentMaxScope.current = maxScope;
+  useEffect(() => { setMaxError(""); return () => { maxRequest.current?.abort(); }; }, [maxScope]);
   useEffect(() => { const timer = setInterval(() => { if (!busy && document.visibilityState === "visible") setTick((value) => value + 1); }, 30000); return () => clearInterval(timer); }, [busy]);
   function chooseAll(enabled: boolean) {
     setAll(enabled);
@@ -109,12 +113,40 @@ function ActionDialog({ selection, market, nativeBalance, busy, execute, close, 
   } catch (reason) { error = message(reason); }
   const inputKey = input ? stable(input) : null;
   const quote = useRead(input && !busy ? `${market.accountAddress}:${inputKey}` : null, (signal) => readQuote(input!, market, signal), tick + refresh, 350);
+  async function chooseMax() {
+    if (available === null || maxRequest.current) return;
+    if (!useNative || useATokens || (kind !== "supply" && kind !== "repay")) {
+      setAmount(formatUnits(BigInt(available), asset.decimals)); setAll(false); return;
+    }
+    const controller = new AbortController(), scope = currentMaxScope.current;
+    maxRequest.current = controller; setMaxLoading(true); setMaxError("");
+    try {
+      const balance = BigInt(nativeBalance!);
+      const candidate = kind === "repay" ? min(balance, BigInt(asset.variableDebt)) : balance;
+      if (candidate === 0n) throw new Error("No ETH is available for this payment.");
+      const candidateInput = parseInput({ ...baseInput(market.chainId, kind, asset.address), amount: candidate.toString(), useNative: true });
+      const plan = quote.data && !quote.loading && !quote.error && stable(candidateInput) === inputKey ? quote.data : await readQuote(candidateInput, market, controller.signal);
+      const fees = JSON.parse((await invoke<{ feesJson: string }>("aave_fees_v1", { planJson: JSON.stringify(plan) }, controller.signal)).feesJson) as Fee[];
+      if (fees.length !== plan.steps.length || fees.some((fee) => fee.estimate?.status !== "available" || fee.estimate.maximumFeeWei === null)) throw new Error("A current network fee could not be estimated.");
+      const maximumFee = fees.reduce((total, fee) => total + BigInt(fee.estimate!.maximumFeeWei!), 0n);
+      if (balance <= maximumFee) throw new Error("No ETH remains after the observed network fee.");
+      const maximumAmount = kind === "repay" ? min(balance - maximumFee, BigInt(asset.variableDebt)) : balance - maximumFee;
+      controller.signal.throwIfAborted();
+      if (currentMaxScope.current !== scope) return;
+      setAmount(formatUnits(maximumAmount, asset.decimals)); setAll(false);
+    } catch (error) {
+      if (!controller.signal.aborted && currentMaxScope.current === scope) setMaxError(`Max unavailable. ${message(error)}`);
+    } finally {
+      if (maxRequest.current === controller) { maxRequest.current = null; setMaxLoading(false); }
+    }
+  }
   const amountUsd = (() => { try { return amount ? usdAsset(market, asset, atoms(amount, asset.decimals)) : null; } catch { return null; } })();
   const canSubmit = !busy && !!input && !!quote.data && !quote.loading && !quote.error && !error;
   return <Dialog title={`${title} ${asset.symbol}`} subtitle={`${CHAINS[market.chainId].marketName} · Aave V3`} close={close} footer={<><button type="button" className="av-primary" disabled={!canSubmit} onClick={() => { if (input && canSubmit) { execute(input); close(); } }}>{busy ? "Following wallet…" : quote.loading ? "Checking position…" : !amount ? "Enter an amount" : `Review ${kind}`}</button><p className="av-help">You review and sign each transaction in EVM Wallet.</p></>}>
     {kind === "borrow" && <p className="av-muted">Borrow against your supplied collateral. Interest accrues at a variable rate until you repay.</p>}
     <div className="av-amount"><div className="av-row"><span>{kind === "borrow" ? "Amount to borrow" : kind === "withdraw" ? "Amount to withdraw" : kind === "repay" ? "Amount to repay" : "Amount to supply"}</span><span>{all ? "Full balance" : "Amount"}</span></div><div className="av-amount-main"><input aria-label={`${title} amount`} placeholder="0" inputMode="decimal" autoComplete="off" spellCheck={false} autoFocus value={amount} onChange={(event) => { setAmount(event.target.value); setAll(false); }} disabled={busy} /><span className="av-asset"><AssetMark symbol={symbol} address={asset.address} /><strong>{symbol}</strong></span></div><div className="av-row"><span>{money(amountUsd)}</span><span>{kind === "borrow" ? "Available" : kind === "withdraw" ? "Withdrawable liquidity" : useATokens ? "Supplied to repay" : "Wallet"}: {available === null ? kind === "borrow" ? "Unavailable" : "—" : display(available, asset.decimals, 5)}</span></div></div>
-    <div className="av-presets">{[25, 50, 75].map((portion) => <button type="button" className="av-quiet" key={portion} disabled={busy || available === null} onClick={() => { if (available !== null) { setAmount(formatUnits(BigInt(available) * BigInt(portion) / 100n, asset.decimals)); setAll(false); } }}>{portion}%</button>)}<button type="button" className="av-quiet" disabled={busy || available === null} onClick={() => { if (available !== null) { setAmount(formatUnits(BigInt(available), asset.decimals)); setAll(false); } }}>Max</button></div>
+    <div className="av-presets">{[25, 50, 75].map((portion) => <button type="button" className="av-quiet" key={portion} disabled={busy || available === null} onClick={() => { if (available !== null) { setAmount(formatUnits(BigInt(available) * BigInt(portion) / 100n, asset.decimals)); setAll(false); } }}>{portion}%</button>)}<button type="button" className="av-quiet" disabled={busy || maxLoading || available === null} onClick={() => { void chooseMax(); }}>{maxLoading ? "Estimating…" : "Max"}</button></div>
+    <ErrorNote error={maxError} />
     {kind === "borrow" && available === null && <p className="av-muted">Borrowing capacity is unavailable because a position asset or this reserve has no current oracle price. Enter an amount to check it against Aave.</p>}
     {nativeAvailable && !useATokens && <label className="av-checkbox"><input type="checkbox" checked={useNative} onChange={(event) => { setUseNative(event.target.checked); setAmount(""); setAll(false); }} disabled={busy} />Use native ETH</label>}
     {kind === "repay" && BigInt(asset.supplied) > 0n && <label className="av-checkbox"><input type="checkbox" checked={useATokens} onChange={(event) => { setUseATokens(event.target.checked); setUseNative(false); setAmount(""); setAll(false); }} disabled={busy} />Use supplied aTokens</label>}
@@ -182,6 +214,7 @@ function App() {
   const [chainId, setChainId] = useState<ChainId>("1"), [tab, setTab] = useState<"position" | "markets" | "activity">("position"), [refresh, setRefresh] = useState(0), [tick, setTick] = useState(0);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [active, setActive] = useState<Execution | null>(null), [selection, setSelection] = useState<Selection | null>(null);
   const activeRef = useRef(active); activeRef.current = active;
+  const executing = useRef(false), executionScope = useRef(0);
   const accountRead = useRead("main", async (signal) => (await wallet.accounts({ signal })).accounts.find((account) => account.accountId === "main") ?? null, refresh + tick);
   const account = accountRead.data;
   const accountIdentity = account ? stable(account) : null;
@@ -201,11 +234,16 @@ function App() {
   const [history, setHistory] = useState<Activity[]>([]), [nextCursor, setNextCursor] = useState<string | null>(null), [historyError, setHistoryError] = useState(""), [historyLoading, setHistoryLoading] = useState(false);
   const historyScope = useRef(0);
   async function loadHistory(cursor: string | null = null) {
-    const sequence = ++historyScope.current; setHistoryLoading(true); setHistoryError("");
+    const sequence = ++historyScope.current, execution = executionScope.current; setHistoryLoading(true); setHistoryError("");
     try {
       const result = await invoke<{ rowsJson: string; nextCursor: string | null }>("aave_history_v1", { cursor });
       if (sequence !== historyScope.current) return;
       const rows = JSON.parse(result.rowsJson) as Activity[];
+      if (!executing.current && execution === executionScope.current) setActive((old) => {
+        if (!old || executing.current || execution !== executionScope.current) return old;
+        const current = rows.find((row) => row.result.operationId === old.result.operationId);
+        return current ? { result: current.result, input: current.input, humanOwned: current.humanOwned } : old;
+      });
       setHistory((old) => cursor ? [...old, ...rows.filter((row) => !old.some((existing) => existing.id === row.id))] : rows); setNextCursor(result.nextCursor);
     } catch (reason) { if (sequence === historyScope.current) setHistoryError(message(reason)); }
     finally { if (sequence === historyScope.current) setHistoryLoading(false); }
@@ -215,11 +253,13 @@ function App() {
   useEffect(() => {
     if (!busy || !active) return;
     let alive = true;
-    const timer = setInterval(() => { void invoke<{ result: Result | null }>("aave_status_v1", { operationId: active.result.operationId }).then(({ result }) => { if (alive && result) setActive((old) => old && old.result.operationId === result.operationId ? { ...old, result } : old); }).catch(() => {}); }, 1800);
+    const execution = executionScope.current;
+    const timer = setInterval(() => { void invoke<{ result: Result | null }>("aave_status_v1", { operationId: active.result.operationId }).then(({ result }) => { if (alive && executing.current && execution === executionScope.current && result) setActive((old) => old && old.result.operationId === result.operationId ? { ...old, result } : old); }).catch(() => {}); }, 1800);
     return () => { alive = false; clearInterval(timer); };
   }, [busy, active?.result.operationId]);
   async function execute(input: Input, existing?: Result, check = false) {
-    if (busy) return;
+    if (executing.current) return;
+    executing.current = true; executionScope.current++;
     const retained = activeRef.current;
     if (!existing && retained?.humanOwned && ["pending", "review"].includes(retained.result.state) && stable(retained.input) === stable(input)) existing = retained.result;
     const id = existing?.operationId ?? crypto.randomUUID().replaceAll("-", "");
@@ -231,7 +271,7 @@ function App() {
     } catch (reason) {
       setError(message(reason));
       try { const saved = await invoke<{ result: Result | null }>("aave_status_v1", { operationId: id }); if (saved.result) setActive({ input, result: saved.result, humanOwned: true }); } catch { /* Keep the original intent available after an ambiguous reply. */ }
-    } finally { setBusy(false); setRefresh((value) => value + 1); }
+    } finally { executing.current = false; executionScope.current++; setBusy(false); setRefresh((value) => value + 1); }
   }
   const visible = history.filter((row) => row.input.chainId === chainId), pending = visible.filter((row) => !["complete", "stopped"].includes(row.result.state));
   function show(selection: Selection) { setSelection(selection); setError(""); }
