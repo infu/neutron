@@ -65,6 +65,12 @@ EVM asset catalog. No remote token-list response assigns badges at runtime.
 
 ## Quote behavior
 
+Agent requests queue nested Wallet reads within the Kernel's existing four-call
+child capacity. Route comparisons and pool verification share that queue;
+every supported candidate is still checked, and one failed read does not stop
+the remaining candidates. Queued calls retain the original invocation and
+cancellation signal. No new Kernel policy or pool-count limit is introduced.
+
 NG withdrawal previews simulate the actual zero-minimum overload. This includes
 admin-fee claims, LP supply changes and rounding before deriving user minima;
 the standalone Twocrypto withdrawal view can overestimate the executable output.
@@ -106,6 +112,12 @@ Quote renewal creates a linked attempt only after the previous plan is known to
 be unsigned. Reloading reads the journal and exposes saved progress without
 starting a new transaction.
 Completed approvals are retained and current allowances are reread on renewal.
+An initial quote failure returns `stopped` / `preparation_failed`, with no
+record or transaction ID and an explicit statement that no Wallet transaction
+was requested. Retry with the same operation ID and original inputs. Failed
+previews are not executable journal entries; a lost save reply or failed quote
+renewal retains its existing recovery semantics and must not be treated as a
+fresh, safely discarded operation.
 
 The managed `curve@1` root retains its released schema and lock lineage.
 Release tests cover clean initialization, populated-root restoration and

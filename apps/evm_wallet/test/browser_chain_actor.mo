@@ -87,6 +87,9 @@ persistent actor {
   public func evm_wallet_finish_prepare_browser_v1(request : Main.WalletFinishPrepareBrowserRequest) : async Main.WalletOperationResult {
     service.evm_wallet_finish_prepare_browser_v1(request);
   };
+  public func evm_wallet_preparation_error_browser_v1(request : Main.WalletPreparationErrorBrowserRequest) : async Main.WalletOperationResult {
+    service.evm_wallet_preparation_error_browser_v1(request);
+  };
   public func evm_wallet_execute_v1(request : Main.WalletExecuteRequest) : async Main.WalletOperationResult {
     await* service.evm_wallet_execute_v1(request);
   };

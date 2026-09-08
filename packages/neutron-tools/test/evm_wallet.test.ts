@@ -446,6 +446,24 @@ test("public transaction evidence cannot mix networks, hashes, pending transacti
   }
 });
 
+test("submitted gas diagnostics are opt-in and older provider transaction responses remain parseable", async () => {
+  const request = { chainId: "1", transactionHash: HASH, includeGasLimit: true };
+  expect(parseEvmTransactionRequest(request)).toEqual(request);
+  const old = chainEvidence();
+  expect(parseEvmTransactionResult(old, request)).toEqual(old);
+  const result = { ...old, transaction: { ...old.transaction!, gasLimit: "9007199254740993" } };
+  expect(parseEvmTransactionResult(result, request).transaction?.gasLimit).toBe("9007199254740993");
+  const mock = transport(() => result);
+  expect((await mock.client.transaction(request)).transaction?.gasLimit).toBe("9007199254740993");
+  expect(mock.calls[0]?.call.arguments).toEqual(request);
+  for (const gasLimit of [null, "0", "-1", 21000, OVER_UINT256]) {
+    expect(() => parseEvmTransactionResult({ ...old, transaction: { ...old.transaction!, gasLimit } })).toThrow(EvmWalletProtocolError);
+  }
+  for (const includeGasLimit of [null, "true", 1]) {
+    expect(() => parseEvmTransactionRequest({ ...request, includeGasLimit })).toThrow(EvmWalletProtocolError);
+  }
+});
+
 test("transaction journal references use closed identities with canonical installation UIDs", () => {
   const reference = { callerAppId: "wallet", callerInstallationUid: "18446744073709551615", requestId: IDENTITY.requestId };
   const request = { chainId: "1", transactionHash: `0x${"AB".repeat(32)}`, walletRequest: reference };

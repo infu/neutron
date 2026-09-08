@@ -144,6 +144,7 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     { version: 317, bytes: 777_746, sha256: "599dcfdb5a75dc1924b5e0918ad2ef4e0f715317ddbc05d276a093b7b96d4711" },
     { version: 318, bytes: 800_371, sha256: "b49c0f364ca502ab248c91c92f021b5211f7cbf3c3159d19c31941917dd962e0" },
     { version: 319, bytes: 804_495, sha256: "dc2bf1557ddc121fb25d38e2075ae8864aea0eba7fe5d55301b0b2bd707517f6" },
+    { version: 320, bytes: 806_428, sha256: "88769f296095a1a9c5ebd4200e8890fbc8640f6097e0f19fdeafe14d3afdf56f" },
   ];
   for (const predecessor of predecessors) {
     const bytes = await readFile(new URL(`../${packageArchiveFilename("wallet", predecessor.version)}`, import.meta.url));
@@ -160,8 +161,8 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
       expect(requiredMemory(candidate, memoryId)).toEqual(memory);
       expect(lock.memory[memoryId]).toEqual(createMemoryLock(production).memory[memoryId]);
     }
-    if (predecessor.version === 319) {
-      // Browser connection retries preserve the entire released backend,
+    if (predecessor.version === 319 || predecessor.version === 320) {
+      // Frontend updates preserve the entire released backend,
       // including the original bridge identities and unresolved transfers.
       const productionFiles = unpackNeutronPackage(bytes);
       expect(candidate.entry).toBe(production.entry);

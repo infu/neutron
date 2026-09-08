@@ -89,8 +89,17 @@ const openReviewMessage = "This quote expired while its original request is stil
 export function resultOf(record: RecordRow, override?: Result["state"], message?: string): Result {
   const intent = intentOf(record), saved = stateOf(record), views = saved.steps.map((step) => stepView(intent, step)), final = views.at(-1)!;
   const state = override ?? (final.status === "confirmed" ? "complete" : views.some((step) => stopped.includes(step.status)) ? "stopped" : views.some((step) => ["preparing", "prepared"].includes(step.status)) ? "review" : "pending");
+  const revertedIndex = views.findIndex(view => view.status === "reverted"), reverted = saved.steps[revertedIndex]?.evidence?.receipt;
+  const preparation = saved.steps.find(step => step.operation?.status === "preparing" && step.operation.message)?.operation;
+  let description = "Progress is saved. Continue with this operation ID to reconcile and finish.";
+  if (state === "complete") description = "Confirmed. The final transaction completed successfully.";
+  else if (state === "stopped") description = reverted
+    ? `${saved.plan.steps[revertedIndex]!.label} reverted in block ${reverted.blockNumber} (receipt finality: ${reverted.finality}). The operation did not complete. Token approval alone does not complete it.`
+    : "The operation stopped before completion. Token approval alone does not complete it.";
+  else if (preparation) description = `Wallet preparation did not complete. Wallet currently reports an unsigned request. Continue with this same operation ID. Wallet error: ${preparation.message}`;
+  else if (state === "review") description = "Continue to review the updated transaction in your wallet.";
   return { operationId: intent.operationId, recordId: record.id, summary: saved.plan.summary, state, phase: record.phase, transactionHash: final.transactionHash,
-    message: message ?? (state === "complete" ? "Confirmed. The final transaction completed successfully." : state === "stopped" ? "The operation stopped before completion. Token approval alone does not complete it." : state === "review" ? "Continue to review the updated transaction in your wallet." : "Progress is saved. Continue with this operation ID to reconcile and finish."),
+    message: message ?? description,
     steps: views.map((view, i) => ({ ...view, label: saved.plan.steps[i]!.label })) };
 }
 export async function latestRecord(store: Store, id: string): Promise<RecordRow | null> {
@@ -278,7 +287,32 @@ export async function runOperation(wallet: EvmWalletClient, store: Store, id: st
       } catch (error) {
         abort();
         if (error instanceof ConcurrentUpdate) throw error;
-        return resultOf(row!, "pending", `The Wallet reply was interrupted. Keep this saved operation and check its status. ${errorMessage(error)}`);
+        // A rejected estimate is an ordinary Wallet error, while a lost reply
+        // may already have signed or submitted a transaction. Reconcile the
+        // original request instead of guessing from the exception's wording.
+        let observationError: unknown;
+        try {
+          const operation = await wallet.operationStatus({ requestId: step.request.requestId, chainId: step.request.chainId, accountId: step.request.accountId }, callOptions); abort();
+          if (operation.status !== "not_found") {
+            state.steps[index] = await observe(intent, state.steps[index]!, operation, false);
+            await persist(row!, state, `step_${index}_${stepView(intent, state.steps[index]!).status}`);
+            const observed = resultOf(row!);
+            if (observed.state === "complete" || observed.state === "stopped") return observed;
+            const status = state.steps[index]!.operation!.status;
+            const detail = status === "preparing" ? "Wallet preparation did not complete. Wallet currently reports an unsigned request."
+              : status === "prepared" ? "Wallet currently reports an unsigned request awaiting review."
+              : status === "signing" ? "Wallet is signing the original request; its outcome is not yet resolved."
+              : status === "signed" ? "Wallet has signed the original request; submission is not yet confirmed."
+              : status === "submitted" ? "The original transaction is submitted; a matching receipt is not yet confirmed."
+              : "The original Wallet request is saved, but its transaction outcome is not yet resolved.";
+            return resultOf(row!, "pending", `${detail} Continue with this same operation ID. Wallet error: ${errorMessage(error)}`);
+          }
+        } catch (cause) {
+          abort();
+          if (cause instanceof ConcurrentUpdate) throw cause;
+          observationError = cause;
+        }
+        return resultOf(row!, "pending", `The Wallet request could not be completed and its outcome remains unresolved. Keep this same operation ID and reconcile before continuing. Wallet error: ${errorMessage(error)}${observationError === undefined ? "" : ` Status check: ${errorMessage(observationError)}`}`);
       }
       if (["preparing", "prepared"].includes(state.steps[index]!.operation?.status ?? "")) return resultOf(row!, "review");
     } catch (error) { if (!(error instanceof ConcurrentUpdate)) throw error; }

@@ -164,7 +164,7 @@ exposeTool(
   {
     title: "EVM Wallet balances",
     description:
-      "Read native and explicitly requested ERC-20 balances at one observed block. Token discovery is not exhaustive.",
+      "Read native and explicitly requested ERC-20 balances at one observed block, including optional token decimals and symbol. Each token's error identifies unavailable fields; a metadata error does not discard its successful balanceAtoms. Token discovery is not exhaustive.",
     inputSchema: evmBalancesInputSchema,
     outputSchema: evmBalancesOutputSchema,
     annotations: { "neutron:effects": ["read", "network"] },
@@ -294,7 +294,7 @@ exposeTool(
   {
     title: "Read EVM transaction evidence",
     description:
-      "Read public transaction fields and its canonical receipt by exact network and hash, independently of the app that submitted it.",
+      "Read public transaction fields and its canonical receipt by exact network and hash, independently of the app that submitted it. Set includeGasLimit:true to include submitted transaction.gasLimit alongside receipt.gasUsed; gas usage alone does not establish why a transaction reverted.",
     inputSchema: evmTransactionInputSchema,
     outputSchema: evmTransactionOutputSchema,
     annotations: { "neutron:effects": ["read", "network"] },

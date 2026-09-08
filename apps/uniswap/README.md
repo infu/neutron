@@ -173,6 +173,11 @@ begin result to open Wallet review without requiring a full-history reload.
 Receipt inclusion is shown separately from finality. An included Ethereum or
 Arbitrum receipt can still be reorganized. The interface preserves the wallet's
 reported finality instead of claiming immediate final settlement.
+Unified action results derive their status and human message from the same
+independently observed receipt. The terminal message includes its outcome, block
+number and finality while preserving the published tool response shape. A stale
+pending Wallet message or interrupted tracking call cannot override a saved
+successful or reverted receipt.
 Continuing a unified action rechecks its final receipt, including actions that
 previously reported completion, so a changed inclusion state remains visible.
 
@@ -266,9 +271,11 @@ count as progress. Uniswap never forwards a nested call as root or grants its
 consumer a signer.
 
 Installation-approved pool, token-metadata and fee reads can run concurrently
-for both Agent tools and the tile. Within each Agent tool invocation, effectful
-and unlisted Wallet calls use a cancellation-aware queue because they can need
-a permission decision. Install-declared read access removes repeated prompts
+for both Agent tools and the tile. Agent reads wait when the Kernel's existing
+four-child-call capacity is occupied, so Auto's combined V3/V4 quote fan-out does
+not discard candidates with a parallel-call error. Within each Agent tool
+invocation, effectful and unlisted Wallet calls use a cancellation-aware queue
+because they can need a permission decision. Install-declared read access removes repeated prompts
 while every effect retains exact provider review. Quote and continuation tools
 report progress and use the Agent's existing long-running-tool annotation.
 

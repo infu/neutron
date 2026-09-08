@@ -5,7 +5,8 @@ import type { HistoryRecord } from "../src/history.ts";
 import {
   createWalletProjection,
   parseWalletProjection,
-  walletProjectionEmptyInputSchema,
+  walletProjectionForTool,
+  walletProjectionInputSchema,
   walletProjectionSchema,
   walletTileView,
 } from "../src/wallet_projection.ts";
@@ -95,10 +96,32 @@ test("Wallet projection schemas pass shared tool hardening", () => {
   expect(() =>
     normalizeToolDescriptor({
       name: "wallet_overview",
-      inputSchema: walletProjectionEmptyInputSchema,
+      inputSchema: walletProjectionInputSchema,
       outputSchema: walletProjectionSchema,
     }),
   ).not.toThrow();
+});
+
+test("Wallet tool projections omit repeated images without changing balances, activity, or visual projections", () => {
+  const logo = `data:image/png;base64,${"A".repeat(20_000)}`;
+  const projection = createWalletProjection(
+    3,
+    { ...snapshot, ledgers: snapshot.ledgers.map((ledger) => ({ ...ledger, logo })) },
+    catalog,
+    [{ ...activity, logo }],
+    { capturedAt: 1_700_000_000_000 },
+  );
+  const compact = walletProjectionForTool(projection);
+  expect(compact.assets[0]?.logo).toBeNull();
+  expect(compact.activity[0]?.logo).toBeNull();
+  expect(parseWalletProjection(compact)).toEqual(compact);
+  expect(compact.assets[0]).toEqual({ ...projection.assets[0]!, logo: null });
+  expect(compact.activity[0]).toEqual({ ...projection.activity[0]!, logo: null });
+  expect(JSON.stringify(compact).length).toBeLessThan(JSON.stringify(projection).length - 39_000);
+  expect(walletProjectionForTool(projection, false)).toEqual(compact);
+  expect(walletProjectionForTool(projection, true)).toEqual(projection);
+  expect(projection.assets[0]?.logo).toBe(logo);
+  expect(projection.activity[0]?.logo).toBe(logo);
 });
 
 test("Wallet tile views are bounded navigation, not financial commands", () => {

@@ -23,6 +23,7 @@ import Personal "./evm/Personal";
 import Eip712 "./evm/Eip712";
 import Secp256k1 "./evm/Secp256k1";
 import Transaction "./evm/Transaction";
+import Gas "./evm/Gas";
 
 module {
   // PUBLIC WIRE TYPES BEGIN
@@ -106,6 +107,10 @@ module {
   public type WalletFinishPrepareBrowserRequest = {
     identity : WalletIdentity; review_revision : Nat; balance : Text; pending_nonce : Text; mined_nonce : Text;
     gas_estimate : Text; gas_limit : Text; simulation : Text;
+  };
+  public type WalletPreparationErrorBrowserRequest = {
+    identity : WalletIdentity; review_revision : Nat;
+    block_number : Text; stage : Text; message : Text;
   };
   public type WalletSubmission = { chain_id : Nat; transaction_hash : Text; raw_transaction : Text };
   public type WalletSubmissionResult = { #ok : WalletSubmission; #err : Text };
@@ -314,6 +319,16 @@ module {
       };
       #ok(view(command));
     };
+    public func /*update*/evm_wallet_preparation_error_browser_v1(request : WalletPreparationErrorBrowserRequest) : WalletOperationResult {
+      let command = switch (journal.find(request.identity)) { case null return #err("not_found"); case (?value) value };
+      // A late failed read cannot overwrite a newer simulation, approval or
+      // signed operation. Keeping preparing allows an explicit same-ID retry.
+      if (Set.contains(running, Nat.compare, command.id) or command.status != "preparing" or command.review_revision != request.review_revision) return #ok(view(command));
+      let block = switch (uint(request.block_number)) { case (#err(e)) return #err(e); case (#ok(value)) value };
+      command.message := ?("Preparation failed before signing during " # request.stage # " at block " # Nat.toText(block) # ": " # request.message);
+      command.updated_at := Time.now();
+      #ok(view(command));
+    };
     public func /*update*/evm_wallet_finish_prepare_browser_v1(request : WalletFinishPrepareBrowserRequest) : WalletOperationResult {
       let command = switch (journal.find(request.identity)) { case null return #err("not_found"); case (?value) value };
       if (Set.contains(running, Nat.compare, command.id)) return #ok(view(command));
@@ -344,9 +359,9 @@ module {
       switch (command.intent.operation) {
         case (#transaction(intent)) switch (intent.gas_limit) {
           case (?expected) switch (uint(expected)) { case (#err(e)) return #err(e); case (#ok(value)) if (gasLimit != value) return #err("Gas limit differs from the original request") };
-          case null if (gasLimit != estimate) return #err("Gas limit must equal the observed estimate when no explicit limit was requested");
+          case null if (gasLimit != Gas.automaticLimit(estimate)) return #err("Gas limit must equal the observed estimate plus automatic headroom when no explicit limit was requested");
         };
-        case (#replacement(_)) if (gasLimit != estimate) return #err("Replacement gas limit must equal the observed estimate");
+        case (#replacement(_)) if (gasLimit != Gas.automaticLimit(estimate)) return #err("Replacement gas limit must equal the observed estimate plus automatic headroom");
         case (_) return #err("Only transactions need gas simulation");
       };
       switch (Hex.decode(request.simulation)) { case (#err(e)) return #err("Invalid simulation bytes: " # e); case (_) {} };
@@ -677,6 +692,9 @@ public type evm_wallet_observe_browser_v1_Output = WalletOperationResult;
 
 public type evm_wallet_prepare_browser_v1_Input = (input : WalletPrepareBrowserRequest);
 public type evm_wallet_prepare_browser_v1_Output = WalletOperationResult;
+
+public type evm_wallet_preparation_error_browser_v1_Input = (request : WalletPreparationErrorBrowserRequest);
+public type evm_wallet_preparation_error_browser_v1_Output = WalletOperationResult;
 
 public type evm_wallet_finish_prepare_browser_v1_Input = (request : WalletFinishPrepareBrowserRequest);
 public type evm_wallet_finish_prepare_browser_v1_Output = WalletOperationResult;

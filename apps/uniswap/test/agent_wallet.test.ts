@@ -39,6 +39,29 @@ test("Agent account and position contract reads dispatch together using their in
   await Promise.all([accounts, position]);
 });
 
+test("Agent auto-route read fanout waits for available nested-call slots", async () => {
+  // Auto compares four V3 tiers and four V4 pool candidates. The Kernel already
+  // accepts four active child calls, including installation-approved reads.
+  const held = barrier(), entered = barrier();
+  let active = 0, maximum = 0, calls = 0;
+  const wallet = createServiceWallet(context(async (call) => {
+    active += 1; calls += 1; maximum = Math.max(maximum, active);
+    if (active === 4) entered.release();
+    try {
+      if (active > 4) throw new Error("Too many parallel agent calls");
+      await held.promise;
+      return { ...call.arguments, address, result: "0x", blockNumber: "200", observedAtNs: "1000" };
+    } finally { active -= 1; }
+  }));
+  const results = Promise.all(Array.from({ length: 8 }, () => wallet.callContract({ accountId: "main", chainId: "1", to: address, data: "0x" }))).catch((error: Error) => error);
+  await entered.promise;
+  expect(calls).toBe(4);
+  held.release();
+  expect(await results).toHaveLength(8);
+  expect(maximum).toBe(4);
+  expect(calls).toBe(8);
+});
+
 test("Agent provider effects serialize while installed reads continue, and a rejected effect releases the queue", async () => {
   const held = barrier(), entered = barrier(), calls: MsgBusToolCall[] = [];
   const wallet = createServiceWallet(context(async (call) => {

@@ -58,10 +58,10 @@ persistent actor {
       switch (lower) { case (#err(_)) {}; case (#ok(value)) { assert value.status != "prepared" } };
       assert signatures == 0;
       let refreshedCandidate = ok(await* service.evm_wallet_prepare_browser_v1({ request = replacementRequest; observation }));
-      let replacement = ok(service.evm_wallet_finish_prepare_browser_v1({ identity = replacementRequest.identity; review_revision = refreshedCandidate.review_revision; balance = "1000000000000000000"; pending_nonce = "9"; mined_nonce = "8"; gas_estimate = "44322"; gas_limit = "44322"; simulation = Hex.encode(ok(Hex.word(1))) }));
+      let replacement = ok(service.evm_wallet_finish_prepare_browser_v1({ identity = replacementRequest.identity; review_revision = refreshedCandidate.review_revision; balance = "1000000000000000000"; pending_nonce = "9"; mined_nonce = "8"; gas_estimate = "44322"; gas_limit = "53187"; simulation = Hex.encode(ok(Hex.word(1))) }));
       assert replacement.status == "prepared";
       let ?prepared = replacement.prepared_transaction else { assert false; loop {} };
-      assert prepared.gas_limit == "44322" and prepared.nonce == "8";
+      assert prepared.gas_limit == "53187" and prepared.nonce == "8";
       assert prepared.to == ?token and prepared.data == approval;
       assert prepared.max_fee_per_gas == ?"2000000029" and prepared.max_priority_fee_per_gas == ?"2000000001";
       assert signatures == 0;
@@ -80,12 +80,12 @@ persistent actor {
       let fresh = ok(await* service.evm_wallet_prepare_browser_v1({ request = freshRequest; observation }));
       let ?freshTx = fresh.prepared_transaction else { assert false; loop {} };
       assert freshTx.nonce == "9";
-      let updated = ok(service.evm_wallet_finish_prepare_browser_v1({ identity = freshRequest.identity; review_revision = fresh.review_revision; balance = "1000000000000000000"; pending_nonce = "10"; mined_nonce = "10"; gas_estimate = "44322"; gas_limit = "44322"; simulation = "0x" }));
+      let updated = ok(service.evm_wallet_finish_prepare_browser_v1({ identity = freshRequest.identity; review_revision = fresh.review_revision; balance = "1000000000000000000"; pending_nonce = "10"; mined_nonce = "10"; gas_estimate = "44322"; gas_limit = "53187"; simulation = "0x" }));
       assert updated.status == "preparing" and updated.review_revision == fresh.review_revision + 1;
       let ?updatedTx = updated.prepared_transaction else { assert false; loop {} };
       assert updatedTx.nonce == "10";
-      switch (service.evm_wallet_finish_prepare_browser_v1({ identity = freshRequest.identity; review_revision = updated.review_revision; balance = "0"; pending_nonce = "10"; mined_nonce = "10"; gas_estimate = "44322"; gas_limit = "44322"; simulation = "0x" })) { case (#err(_)) {}; case (_) assert false };
-      let finalReview = ok(service.evm_wallet_finish_prepare_browser_v1({ identity = freshRequest.identity; review_revision = updated.review_revision; balance = "1000000000000000000"; pending_nonce = "10"; mined_nonce = "10"; gas_estimate = "44322"; gas_limit = "44322"; simulation = "0x" }));
+      switch (service.evm_wallet_finish_prepare_browser_v1({ identity = freshRequest.identity; review_revision = updated.review_revision; balance = "0"; pending_nonce = "10"; mined_nonce = "10"; gas_estimate = "44322"; gas_limit = "53187"; simulation = "0x" })) { case (#err(_)) {}; case (_) assert false };
+      let finalReview = ok(service.evm_wallet_finish_prepare_browser_v1({ identity = freshRequest.identity; review_revision = updated.review_revision; balance = "1000000000000000000"; pending_nonce = "10"; mined_nonce = "10"; gas_estimate = "44322"; gas_limit = "53187"; simulation = "0x" }));
       assert finalReview.status == "prepared";
       assert signatures == 0;
     };

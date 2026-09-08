@@ -9,6 +9,7 @@
 import {
   isMsgBusInstallationUid, type JsonObject, type JsonValue, type MsgBusCallOptions, type MsgBusClient, type MsgBusToolContext,
 } from "./protocol.ts";
+import { createQueuedInvocationToolClient } from "./invocation_tool_queue.ts";
 
 export const EVM_WALLET_TARGET = "app:evm_wallet:background" as const;
 export const EVM_WALLET_TOOLS = {
@@ -97,6 +98,7 @@ export type EvmNetwork = {
   finalityKind: "ethereum" | "arbitrum";
 };
 export type EvmNetworksResult = { networks: EvmNetwork[] };
+/** error identifies unavailable balanceOf, decimals or symbol fields; successful fields remain populated. */
 export type EvmTokenBalance = { address: string; balanceAtoms: string | null; decimals: string | null; symbol: string | null; error: string | null };
 export type EvmBalancesResult = EvmScope & {
   address: string;
@@ -703,6 +705,23 @@ export function createEvmWalletClient(kernel: Pick<MsgBusClient, "callTool">, op
   return new EvmWalletClient(kernel, options);
 }
 
+/** Use an invocation's shared child-call queue for nested Wallet work. List only
+ * the read tools covered by the consuming app's installation grants. Those
+ * reads can overlap within the Kernel's existing capacity; all other calls
+ * serialize to preserve provider-review ordering. Ordinary UI clients retain
+ * direct dispatch, and neither path changes the injected client's authority.
+ */
+export function createEvmWalletInvocationClient(
+  context: Pick<MsgBusToolContext, "kernel" | "signal" | "agentMode">,
+  options: { parallelReadTools: readonly string[]; callOptions?: EvmWalletCallOptions },
+): EvmWalletClient {
+  const parallelReads = new Set(options.parallelReadTools);
+  const kernel = createQueuedInvocationToolClient(context,
+    (call) => call.target === EVM_WALLET_TARGET && parallelReads.has(call.name));
+  const callOptions = { ...(context.signal ? { signal: context.signal } : {}), ...options.callOptions };
+  return createEvmWalletClient(kernel, { callOptions });
+}
+
 /** A completed on-chain receipt can still be reorganized; consult its finality. */
 export function evmOperationIsTerminal(result: EvmOperationStatusResult): boolean {
   if (result.status === "not_found") return false;
@@ -776,13 +795,19 @@ export async function resumeEvmWalletIntent(client: EvmWalletClient, value: EvmW
 
 /** Public chain evidence, independent of the installation that submitted it. */
 export type EvmWalletRequestReference = { callerAppId: string; callerInstallationUid: string; requestId: string };
-export type EvmTransactionRequest = { chainId: string; transactionHash: string; walletRequest?: EvmWalletRequestReference };
+export type EvmTransactionRequest = {
+  chainId: string; transactionHash: string; walletRequest?: EvmWalletRequestReference;
+  /** Opt into submitted gas evidence after checking the installed tool's input schema supports it. */
+  includeGasLimit?: boolean;
+};
 export type EvmTransaction = {
   from: string;
   to: string | null;
   data: string;
   valueWei: string;
   nonce: string;
+  /** Submitted RPC transaction.gas, not the receipt's gasUsed. Older providers omit this field. */
+  gasLimit?: string;
   blockNumber: string | null;
   blockHash: string | null;
 };
@@ -800,13 +825,16 @@ export const evmWalletRequestReferenceSchema = closedSchema({
   callerAppId: TEXT, callerInstallationUid: POSITIVE_UINT,
   requestId: { type: "string", pattern: "^[0-9a-f]{32}$" },
 });
-export const evmTransactionInputSchema = closedSchema({ chainId: POSITIVE_UINT, transactionHash: HASH, walletRequest: evmWalletRequestReferenceSchema }, ["walletRequest"]);
+export const evmTransactionInputSchema = closedSchema({
+  chainId: POSITIVE_UINT, transactionHash: HASH, walletRequest: evmWalletRequestReferenceSchema,
+  includeGasLimit: { type: "boolean", description: "Return transaction.gasLimit from the submitted transaction. Omit for the original v1 response shape." },
+}, ["walletRequest", "includeGasLimit"]);
 export const evmTransactionOutputSchema = closedSchema({
   chainId: POSITIVE_UINT, transactionHash: HASH,
   transaction: nullable(closedSchema({
-    from: ADDRESS, to: nullable(ADDRESS), data: HEX, valueWei: UINT, nonce: UINT,
+    from: ADDRESS, to: nullable(ADDRESS), data: HEX, valueWei: UINT, nonce: UINT, gasLimit: POSITIVE_UINT,
     blockNumber: nullable(UINT), blockHash: nullable(HASH),
-  })),
+  }, ["gasLimit"])),
   receipt: nullable(evmReceiptSchema), observedAtNs: UINT, source: { const: "evm_rpc" },
   walletRequestMatches: nullable({ type: "boolean" }),
 });
@@ -824,6 +852,7 @@ export function parseEvmTransactionResult(value: unknown, expected?: EvmTransact
     transaction.from = hex(transaction.from); transaction.to = transaction.to === null ? null : hex(transaction.to);
     transaction.data = hex(transaction.data); transaction.blockHash = transaction.blockHash === null ? null : hex(transaction.blockHash);
     uint256(transaction.valueWei, "transaction value"); uint256(transaction.nonce, "transaction nonce");
+    optionalUint256(transaction.gasLimit, "transaction gas limit");
     if ((transaction.blockNumber === null) !== (transaction.blockHash === null)) invalid("transaction inclusion fields disagree");
   }
   if (result.receipt !== null) {

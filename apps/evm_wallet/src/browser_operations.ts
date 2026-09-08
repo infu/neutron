@@ -1,6 +1,7 @@
 import type { MsgBusToolContext, SelfCallObject } from "neutron-tools/app";
 import { decodeFunctionData, encodeFunctionData, erc20Abi, keccak256, type Hex } from "viem";
-import { browserEvmRpc } from "./browser_rpc.ts";
+import { browserEvmRpc, BrowserEvmRpcError } from "./browser_rpc.ts";
+import { automaticGasLimit } from "./gas.ts";
 import { METHODS, identityArgs, parseAccounts, parseOperation, parseReviewEvidence, record, unwrap, errorMessage, type Operation } from "./data.ts";
 
 /** Only the installed Wallet supplies observations. The backend owns the exact
@@ -77,17 +78,34 @@ async function finishBrowserCandidate(kernel: OperationKernel, candidate: Operat
   let operation = candidate;
   while (operation.status === "preparing") {
     options.signal?.throwIfAborted();
-    const estimate = decimal(await rpc<string>(operation.chainId, "eth_estimateGas", [candidateCall(operation), blockNumber], options));
-    const explicit = operation.intent.transaction?.gasLimit;
-    const gas = explicit ?? estimate;
-    if (BigInt(gas) < BigInt(estimate)) throw new Error("Requested gas limit is below the live estimate");
-    const simulation = await rpc<string>(operation.chainId, "eth_call", [candidateCall(operation, gas), blockNumber], options);
-    const [pending, mined] = await Promise.all([
-      rpc<string>(operation.chainId, "eth_getTransactionCount", [operation.address, "pending"], options),
-      rpc<string>(operation.chainId, "eth_getTransactionCount", [operation.address, blockNumber], options),
-    ]);
-    options.signal?.throwIfAborted();
-    operation = parseOperation(await kernel.updateSelf("evm_wallet_finish_prepare_browser_v1", [{ identity: identityOf(operation), review_revision: operation.reviewRevision, balance, pending_nonce: decimal(pending), mined_nonce: decimal(mined), gas_estimate: estimate, gas_limit: gas, simulation }], 120));
+    let stage = "gas estimation";
+    try {
+      const estimate = decimal(await rpc<string>(operation.chainId, "eth_estimateGas", [candidateCall(operation), blockNumber], options));
+      const explicit = operation.intent.transaction?.gasLimit;
+      const gas = explicit ?? automaticGasLimit(BigInt(estimate)).toString();
+      if (BigInt(gas) < BigInt(estimate)) throw new Error("Requested gas limit is below the live estimate");
+      stage = "simulation";
+      const simulation = await rpc<string>(operation.chainId, "eth_call", [candidateCall(operation, gas), blockNumber], options);
+      stage = "nonce observation";
+      const [pending, mined] = await Promise.all([
+        rpc<string>(operation.chainId, "eth_getTransactionCount", [operation.address, "pending"], options),
+        rpc<string>(operation.chainId, "eth_getTransactionCount", [operation.address, blockNumber], options),
+      ]);
+      options.signal?.throwIfAborted();
+      stage = "saving the simulation";
+      operation = parseOperation(await kernel.updateSelf("evm_wallet_finish_prepare_browser_v1", [{ identity: identityOf(operation), review_revision: operation.reviewRevision, balance, pending_nonce: decimal(pending), mined_nonce: decimal(mined), gas_estimate: estimate, gas_limit: gas, simulation }], 120));
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      const rpcData = error instanceof BrowserEvmRpcError && error.data !== undefined
+        ? `; RPC data: ${JSON.stringify(error.data)}` : "";
+      // This only records diagnostics for this unsigned review revision. The
+      // backend returns any newer saved state without overwriting it. A failed
+      // observation never becomes a signature, broadcast, or automatic retry.
+      return parseOperation(await kernel.updateSelf("evm_wallet_preparation_error_browser_v1", [{
+        identity: identityOf(operation), review_revision: operation.reviewRevision,
+        block_number: decimal(blockNumber), stage, message: `${errorMessage(error)}${rpcData}`,
+      }], 120));
+    }
   }
   return operation;
 }

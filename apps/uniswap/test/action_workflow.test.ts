@@ -196,6 +196,32 @@ test("successful approval alone cannot complete an action whose final transactio
   expect(result.transactionHash).toBeNull(); expect(f.sends).toHaveLength(2);
 });
 
+test.each(["success", "reverted"] as const)("an independently observed %s receipt overrides stale pending prose and tracking state", async (outcome) => {
+  const f = fixture(1);
+  f.sendWith(async (request) => {
+    if (request.data !== "0x03") return f.operation(request);
+    const evidence = f.evidence(request, true);
+    evidence.receipt = { ...receipt, status: outcome, finality: "safe" };
+    f.transactions.set(f.hash(request), evidence);
+    return { ...f.operation(request), message: "Transaction is known to the provider and awaits a receipt." };
+  });
+  const result = await f.run();
+  expect(result.state).toBe(outcome === "success" ? "complete" : "stopped");
+  expect(result.steps.map((step) => step.status)).toEqual(["confirmed", outcome === "success" ? "confirmed" : "reverted"]);
+  expect(result.steps[1]?.receipt).toEqual({ status: outcome, blockNumber: receipt.blockNumber, finality: "safe" });
+  expect(result.message).toContain(outcome === "success" ? "succeeded" : "reverted");
+  expect(result.message).toContain(receipt.blockNumber);
+  expect(result.message).toContain("safe");
+  expect(result.message).not.toContain("awaits a receipt");
+  // Cancellation can race the persist that first observed a terminal receipt.
+  // The same saved evidence must not become pending in that catch path or history.
+  const saved = (await f.store.get(envelope.operationId))!;
+  expect(actionResult(saved, "pending", "Tracking paused")).toEqual(result);
+  expect(actionResult(saved)).toEqual(result);
+  expect(f.sends).toHaveLength(2);
+  expect(result.positionTokenIds).toEqual([]);
+});
+
 test("a claimed successful receipt with different transaction calldata stays incomplete", async () => {
   const f = fixture(0);
   f.sendWith(async (request) => {

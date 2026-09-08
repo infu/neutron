@@ -32,8 +32,8 @@ export const actionOutputSchema = toolSchema({
   positionTokenIds: { type: "array", items: toolText }, message: toolText,
 });
 
-/** Wallet receipts and calldata remain in the durable journal. Returning only
- * progress keeps normal continuation responses out of the metadata size limit. */
+/** Preserve the published closed tool response shape. Full receipts and calldata
+ * remain in the journal; terminal prose includes the receipt's block/finality. */
 export function compactActionResult(result: ActionResult) {
   return { operationId: result.operationId, recordId: result.recordId, state: result.state, phase: result.phase, summary: result.summary, transactionHash: result.transactionHash, steps: result.steps.map(({ label, kind, status, transactionHash }) => ({ label, kind, status, transactionHash })), positionTokenIds: result.positionTokenIds, message: result.message };
 }

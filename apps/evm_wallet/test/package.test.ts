@@ -34,7 +34,7 @@ const manifest = async () =>
   ) as NeutronManifest;
 const source = () =>
   readFile(new URL("../backend/main.mo", import.meta.url), "utf8");
-const browserBackendMethods = [
+const released115BrowserBackendMethods = [
   "evm_wallet_prepare_browser_v1",
   "evm_wallet_finish_prepare_browser_v1",
   "evm_wallet_operation_v1",
@@ -44,6 +44,7 @@ const browserBackendMethods = [
   "evm_wallet_observe_evidence_browser_v1",
   "evm_wallet_transaction_request_matches_v1",
 ] as const;
+const browserBackendMethods = [...released115BrowserBackendMethods, "evm_wallet_preparation_error_browser_v1"] as const;
 const decoderBackendMethods = [
   "evm_wallet_decoder_packs_v1",
   "evm_wallet_decoder_set_v1",
@@ -106,7 +107,7 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 122,
+    version: 123,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -545,13 +546,14 @@ for (const [previousVersion, previousDigest] of [
   [119, "c0ce9338a4c1f6538066cf100b2d6a649d1d6312450ec91a63b77a8b7b74abd2"],
   [120, "dcdfffcf0a1fc536ee2046e8ed435a30ccee12faec342a0831fbf9b97e08a7a4"],
   [121, "b873d917802af4b7e6eb88943fefba0f3e6d9c197623216702794b33d8112633"],
-] as const) test(`release 122 retains every production root, closure, lineage and method contract from ${previousVersion}`, async () => {
+  [122, "912483c56c7d3a53bd21d443cc281e50d6ba7ac596b035731687b77f790d6094"],
+] as const) test(`release 123 retains every production root, schema closure, lineage and existing method contract from ${previousVersion}`, async () => {
   const previousBytes = await readFile(new URL(`../evm_wallet.v0.1.${previousVersion - 100}.neutron`, import.meta.url));
   // The published predecessor is immutable; this code-only release adds no Wallet migration.
   expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(previousDigest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.22.neutron", import.meta.url)));
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 122 });
+  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.23.neutron", import.meta.url)));
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 123 });
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!));
   const next = JSON.parse(decode(files["neutron.json"]!));
@@ -578,7 +580,9 @@ for (const [previousVersion, previousDigest] of [
   const schema = JSON.parse(decode(files["schema.json"]!));
   const priorSchema = JSON.parse(decode(previous["schema.json"]!));
   expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 122 } });
+  const { evm_wallet_preparation_error_browser_v1: preparationError, ...retainedMethods } = schema.methods;
+  expect(preparationError).toBeDefined();
+  expect({ ...schema, methods: retainedMethods }).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 123 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 346, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, evm_wallet: next });
   expect(clean.upgrades).toHaveLength(roots.length);
@@ -701,7 +705,7 @@ test("release 115 initializes cleanly and preserves published 101 and 107 roots 
     expect(currentSchema.version).toBe(previous.version);
     expect(currentSchema.app).toEqual({ ...previous.app, version: 115 });
     for (const [name, method] of Object.entries(previous.methods)) expect(currentSchema.methods[name]).toEqual(method);
-    expect(Object.keys(currentSchema.methods).filter(name => !Object.hasOwn(previous.methods, name)).sort()).toEqual([...browserBackendMethods].sort());
+    expect(Object.keys(currentSchema.methods).filter(name => !Object.hasOwn(previous.methods, name)).sort()).toEqual([...released115BrowserBackendMethods].sort());
   }
   assertRetainedMethods(priorSchema);
   // Private candidate 104 isolates the owner-review UI fix: all 80 backend

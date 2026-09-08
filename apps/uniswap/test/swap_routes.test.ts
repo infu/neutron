@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
+import { validate, type Schema } from "jsonschema";
 import { decodeFunctionData, encodeFunctionResult, getAddress, parseAbi, zeroAddress, type Hex } from "viem";
 import { parseUnifiedSwapInput, prepareUnifiedSwap, quoteUnifiedSwap } from "../src/swap_routes.ts";
-import { compactActionResult, parseLiquidityToolInput } from "../src/liquidity_tools.ts";
+import { actionOutputSchema, compactActionResult, parseLiquidityToolInput } from "../src/liquidity_tools.ts";
 import type { ActionResult } from "../src/action_workflow.ts";
 import type { Reader } from "../src/swap.ts";
 
@@ -84,11 +85,24 @@ test("liquidity tool canonicalization preserves zero hard budgets and original r
   expect(parseLiquidityToolInput({ operationId: "aa".repeat(16), operation: "mint", protocol: "v4", chainId: "1", tokenA: null, tokenB: USDC.toLowerCase(), maxAmountA: "0", maxAmountB: "3000000", tickLower: -100, tickUpper: 100 })).toEqual({ operation: "mint", protocol: "v4", chainId: "1", accountId: "main", tokenA: null, tokenB: USDC, maxAmountA: "0", maxAmountB: "3000000", tickLower: -100, tickUpper: 100, slippageBps: 50, quoteValiditySeconds: 1200 });
 });
 
-test("tool continuation omits full receipts and calldata even from a large saved action", () => {
-  const large: ActionResult = { operationId: "aa".repeat(16), recordId: "bb".repeat(16), state: "pending", phase: "transaction_requested", summary: "Add USDC / ETH liquidity", transactionHash: null, message: "Continue the original action", steps: [{ label: "Approve USDC", kind: "approval", status: "confirmed", transactionHash: `0x${"cc".repeat(32)}` }, { label: "Add liquidity", kind: "transaction", status: "pending", transactionHash: null }], positionTokenIds: [], details: { receipt: "x".repeat(100_000), calldata: `0x${"dd".repeat(40_000)}` } };
+test("tool continuation preserves the published closed response shape and omits receipt payloads", () => {
+  const large: ActionResult = { operationId: "aa".repeat(16), recordId: "bb".repeat(16), state: "pending", phase: "transaction_requested", summary: "Add USDC / ETH liquidity", transactionHash: null, message: "Continue the original action", steps: [{ label: "Approve USDC", kind: "approval", status: "confirmed", transactionHash: `0x${"cc".repeat(32)}`, receipt: { status: "success", blockNumber: "21000001", finality: "included" } }, { label: "Add liquidity", kind: "transaction", status: "pending", transactionHash: null, receipt: null }], positionTokenIds: [], details: { receipt: "x".repeat(100_000), calldata: `0x${"dd".repeat(40_000)}` } };
   const output = compactActionResult(large);
   expect(JSON.stringify(output).length).toBeLessThan(1500);
   expect(output).not.toHaveProperty("details");
-  expect(output.steps).toEqual(large.steps);
+  // Already-installed callers validate these four step fields with a closed
+  // schema. Internal receipt summaries must not silently extend that contract.
+  const publishedStepSchema: Schema = { type: "object", additionalProperties: false, required: ["label", "kind", "status", "transactionHash"], properties: {
+    label: { type: "string" }, kind: { type: "string" }, status: { type: "string" }, transactionHash: { oneOf: [{ type: "string" }, { type: "null" }] },
+  } };
+  expect(output.steps).toEqual([
+    { label: "Approve USDC", kind: "approval", status: "confirmed", transactionHash: `0x${"cc".repeat(32)}` },
+    { label: "Add liquidity", kind: "transaction", status: "pending", transactionHash: null },
+  ]);
+  for (const step of output.steps) expect(validate(step, publishedStepSchema).errors).toEqual([]);
+  expect(Object.keys(output).sort()).toEqual(["operationId", "recordId", "state", "phase", "summary", "transactionHash", "steps", "positionTokenIds", "message"].sort());
+  expect(validate(output, actionOutputSchema as Schema).errors).toEqual([]);
+  const properties = actionOutputSchema.properties as Record<string, unknown>;
+  expect(properties.steps).toEqual({ type: "array", items: publishedStepSchema });
   expect(output.operationId).toBe(large.operationId);
 });

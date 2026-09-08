@@ -1,5 +1,5 @@
 import { exposeTool, type JsonObject, type JsonValue, type MsgBusToolContext } from "neutron-tools/app";
-import { createEvmWalletClient, requireEvmWalletCaller } from "neutron-tools/evm_wallet";
+import { requireEvmWalletCaller } from "neutron-tools/evm_wallet";
 import { getAddress } from "viem";
 import { chain, FAMILIES, poolKey, poolRef, walletReader, type PoolRef } from "./contracts.ts";
 import { catalogTokens, fetchPools, findPool, readToken } from "./pools.ts";
@@ -7,6 +7,7 @@ import { describeToken, searchTokens } from "./tokens.ts";
 import { estimateFees, parseInput, poolPosition, preparePlan, type Input, type Plan } from "./plans.ts";
 import { createStore, type RecordRow } from "./store.ts";
 import { intentOf, latestRecord, operationId, resultOf, runOperation, type Result } from "./workflow.ts";
+import { createServiceWallet } from "./agent_wallet.ts";
 
 const text = { type: "string" }, nullableText = { oneOf: [text, { type: "null" }] };
 const address = { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" }, nullableAddress = { oneOf: [address, { type: "null" }] };
@@ -34,7 +35,7 @@ function caller(context: MsgBusToolContext) {
   return !context.agentMode && authenticated.appId === "curve" && context.caller?.role === "tile" ? null : authenticated;
 }
 async function account(context: MsgBusToolContext) {
-  const wallet = createEvmWalletClient(context.kernel, context.signal ? { callOptions: { signal: context.signal } } : {});
+  const wallet = createServiceWallet(context);
   const selected = (await wallet.accounts()).accounts.find((account) => account.accountId === "main");
   if (!selected) throw new Error("Install EVM Wallet to use your Ethereum account in Curve.");
   return { wallet, account: selected, read: walletReader(wallet, context.signal) };
@@ -52,7 +53,7 @@ async function execute(context: MsgBusToolContext, id: string, input: Input, eff
   const key = `${owner?.appId ?? "human"}:${owner?.installationUid ?? "tile"}:${id}`;
   let latest: RecordRow | null = null;
   const task = Promise.resolve(calls.get(key)).catch(() => undefined).then(() => runOperation(
-    createEvmWalletClient(context.kernel, { callOptions: { signal: controller.signal } }), store, id, input, owner, !!context.agentMode,
+    createServiceWallet({ ...context, signal: controller.signal }), store, id, input, owner, !!context.agentMode,
     { execute: effects, signal: controller.signal, onRecord: (record) => { latest = record; }, onProgress: (message) => context.reportProgress({ phase: message, operationId: id }) },
   ));
   calls.set(key, task);
@@ -136,10 +137,10 @@ exposeTool("curve_quote_v1", {
 exposeTool("curve_fees_v1", {
   title: "Estimate Curve network fees", description: "Read EVM Wallet fee estimates for a preview's exact transactions. Estimates do not create Wallet commands or reserve nonces. A final call may not simulate until approval is mined; missing estimates remain unavailable. Arbitrum gas includes posting once. Wallet reviews current fees separately before signing.",
   inputSchema: schema({ planJson: text }), outputSchema: schema({ feesJson: text }), annotations: readAnnotations,
-}, async (args, context) => ({ feesJson: JSON.stringify(await estimateFees(createEvmWalletClient(context.kernel), JSON.parse(String(args.planJson)) as Plan, context.signal)) }));
+}, async (args, context) => ({ feesJson: JSON.stringify(await estimateFees(createServiceWallet(context), JSON.parse(String(args.planJson)) as Plan, context.signal)) }));
 
 exposeTool("curve_execute_v1", {
-  title: "Complete a Curve swap or liquidity operation", description: "Persist original inputs and exact Wallet request IDs, obtain each exact human or Agent Wallet review, wait for necessary approvals, send the final transaction and verify its successful receipt. Never stop at approval. Reuse one 32-hex operationId and identical original inputs after pending/review or a lost reply. Quote renewal only replaces known-unsigned plans and reuses sufficient allowances; ambiguous requests retain their IDs. Every effect uses EVM Wallet's public provider tool under the owner's current instructions. Serialize effectful flows within one Agent run. Defaults and contract semantics match curve_quote_v1.",
+  title: "Complete a Curve swap or liquidity operation", description: "Persist original inputs and exact Wallet request IDs, obtain each exact human or Agent Wallet review, wait for necessary approvals, send the final transaction and verify its successful receipt. Never stop at approval. Reuse one 32-hex operationId and identical original inputs after pending/review or a lost reply. Initial quote failure returns stopped/preparation_failed with no record or Wallet transaction; retry the same ID and inputs. Quote renewal only replaces known-unsigned plans and reuses sufficient allowances; ambiguous requests retain their IDs. Every effect uses EVM Wallet's public provider tool under the owner's current instructions. Serialize effectful flows within one Agent run. Defaults and contract semantics match curve_quote_v1.",
   inputSchema: schema({ operationId: idSchema, ...inputProperties }, ["operationId", "kind", "chainId"]), outputSchema: resultSchema, annotations: effectAnnotations,
 }, (args, context) => execute(context, String(args.operationId), parseInput(args), true));
 

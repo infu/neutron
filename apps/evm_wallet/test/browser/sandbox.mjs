@@ -579,7 +579,8 @@ async function runUsdCase(width, available) {
   await frame.getByTestId("evm-send-review").click();
   await frame.getByRole("dialog").waitFor();
   assert.equal((await frame.getByTestId("evm-review-usd").textContent()).trim(), available ? "≈ $2.99" : "—");
-  assert.equal((await frame.getByTestId("evm-review-fee-usd").textContent()).trim(), available ? "≈ $3.90" : "—");
+  // The contract's automatic gas budget includes the reviewed 20% headroom.
+  assert.equal((await frame.getByTestId("evm-review-fee-usd").textContent()).trim(), available ? "≈ $4.68" : "—");
   assert.equal((await calls(frame, methods.prepare)).length, 1, `${label}: USD availability must not block preparation`);
   assert.equal((await calls(frame, methods.execute)).length, 0, `${label}: price display must not execute`);
   const geometry = await frame.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
@@ -940,7 +941,7 @@ async function runHyperEvmNativeCase(width) {
   const details = frame.getByTestId("evm-review-pro-details");
   await details.locator("summary").first().click();
   const text = await details.textContent();
-  assert.match(text, /HyperEVM · 999/); assert.match(text, /0.001 HYPE/); assert.match(text, /1.234567890123456789 HYPE/); assert.match(text, /0.0013 HYPE/); assert.doesNotMatch(text, /\bETH\b/);
+  assert.match(text, /HyperEVM · 999/); assert.match(text, /0.001 HYPE/); assert.match(text, /1.234567890123456789 HYPE/); assert.match(text, /0.00156 HYPE/); assert.doesNotMatch(text, /\bETH\b/);
   const file = `${label}.png`; await page.screenshot({ path: join(output, file), fullPage: true }); screenshots.push(file);
   await frame.getByTestId("evm-review-decline").click();
   assert.equal((await calls(frame, methods.execute)).length, 0);

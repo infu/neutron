@@ -121,15 +121,15 @@ test("balances keep one block, selected metadata and independent token failures"
   expect(await balances({ accountId: "main", chainId: "1", tokens: [request.to, other] }, context().ctx)).toMatchObject({
     nativeBalanceWei: "9007199254740993", blockNumber: "85", completeness: "requested_only",
     tokens: [{ address: request.to, balanceAtoms: "20000000", decimals: "6", symbol: "USDC", error: null },
-      { address: other, balanceAtoms: null, decimals: null, symbol: null, error: "ERC20 balanceOf returned an invalid uint256 word" }],
+      { address: other, balanceAtoms: null, decimals: null, symbol: null, error: expect.stringContaining("balanceOf: ERC20 balanceOf returned an invalid uint256 word; decimals:") }],
   });
   expect(rpc.calls.filter(({ method }) => method !== "eth_blockNumber").every(({ params, chain }) => params[1] === "0x55" && chain === "1")).toBe(true);
 });
 
-test("browser fee estimates preserve exact totals and pin simulation", async () => {
+test("browser fee estimates include gas headroom with exact integer totals and pin simulation", async () => {
   const rpc = rpcFixture(), { ctx, calls } = context();
-  expect(await estimateTransaction(request, ctx)).toMatchObject({ address, gasLimit: "9007199254740993", blockNumber: "85",
-    estimatedFeeWei: "108086391056891916", maximumFeeWei: "198158383604301846", source: "evm_rpc" });
+  expect(await estimateTransaction(request, ctx)).toMatchObject({ address, gasLimit: "10808639105689192", blockNumber: "85",
+    estimatedFeeWei: "129703669268270304", maximumFeeWei: "237790060325162224", source: "evm_rpc" });
   expect(rpc.calls.find(({ method }) => method === "eth_estimateGas")?.params).toEqual([{ from: address, to: request.to, value: "0x7", data: "0x" }, "0x55"]);
   expect(calls).toEqual([{ method: "evm_wallet_snapshot_v1", args: [null] }]);
 });
@@ -142,7 +142,7 @@ test("failed simulation retains fee observations without invented zero gas", asy
 
 test("missing block and pricing retain partials without claiming a pinned observation", async () => {
   const rpc = rpcFixture({ eth_getBlockByNumber: new Error("block unavailable"), eth_gasPrice: new Error("price unavailable"), eth_maxPriorityFeePerGas: new Error("tip unavailable") });
-  expect(await estimateTransaction(request, context().ctx)).toMatchObject({ status: "unavailable", gasLimit: "9007199254740993", blockNumber: null, baseFeePerGasWei: null, estimatedFeeWei: null });
+  expect(await estimateTransaction(request, context().ctx)).toMatchObject({ status: "unavailable", gasLimit: "10808639105689192", blockNumber: null, baseFeePerGasWei: null, estimatedFeeWei: null });
   expect(rpc.calls.find(({ method }) => method === "eth_estimateGas")?.params[1]).toBe("latest");
 });
 
@@ -158,7 +158,7 @@ test("explicit cancellation is not returned as an unavailable fee estimate", asy
 
 test("Arbitrum uses total gas once and does not request a priority tip", async () => {
   const rpc = rpcFixture();
-  expect(await estimateTransaction({ ...request, chainId: "42161" }, context("42161").ctx)).toMatchObject({ feeBasis: "arbitrum_total_gas", postingCosts: "included", maxPriorityFeePerGasWei: "0", estimatedFeeWei: "108086391056891916" });
+  expect(await estimateTransaction({ ...request, chainId: "42161" }, context("42161").ctx)).toMatchObject({ feeBasis: "arbitrum_total_gas", postingCosts: "included", maxPriorityFeePerGasWei: "0", estimatedFeeWei: "129703669268270304" });
   expect(rpc.calls.every(({ chain, method }) => chain === "42161" && method !== "eth_maxPriorityFeePerGas")).toBe(true);
 });
 

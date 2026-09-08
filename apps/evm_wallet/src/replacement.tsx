@@ -94,7 +94,7 @@ export function ReplacementForm({
         "transaction",
       );
       setNotice(
-        `Replacement operation ${result.operationId}: ${result.status}`,
+        `Replacement operation ${result.operationId}: ${result.status}${result.message ? `. ${result.message}` : ""}`,
       );
       if (unsignedFailure(result)) setSaved(null);
       onResult();
