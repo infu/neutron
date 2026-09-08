@@ -1,0 +1,237 @@
+{
+  "format": 3,
+  "name": "ICPSwap Market",
+  "id": "icpswap",
+  "version": 200,
+  "description": "ICPSwap market data: token watchlist, live market table, pools, and charts.",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "tiles": [
+    {
+      "id": "main",
+      "title": "ICPSwap Market",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Watchlist market table, token analytics, pools, and charts"
+    }
+  ],
+  "background": {
+    "path": "service.html",
+    "description": "Keeps market data fresh and exposes ICPSwap research tools"
+  },
+  "capabilities": {
+    "backend_calls": {
+      "api": 1,
+      "description": "Read the ICPSwap pool registry, live pool state, curated token list and token decimals; price swaps and instruct a pool to execute one against an allowance the Wallet granted",
+      "reservation_scopes": [
+        "exact",
+        "method"
+      ],
+      "install_reservations": [
+        {
+          "kind": "exact",
+          "principal": "4mmnk-kiaaa-aaaag-qbllq-cai",
+          "method": "getPools"
+        },
+        {
+          "kind": "exact",
+          "principal": "k37c6-riaaa-aaaag-qcyza-cai",
+          "method": "getList"
+        },
+        {
+          "kind": "method",
+          "method": "metadata"
+        },
+        {
+          "kind": "method",
+          "method": "icrc1_decimals"
+        },
+        {
+          "kind": "method",
+          "method": "quote"
+        },
+        {
+          "kind": "method",
+          "method": "getPool"
+        },
+        {
+          "kind": "method",
+          "method": "getCachedTokenFee"
+        },
+        {
+          "kind": "method",
+          "method": "getAvailabilityState"
+        },
+        {
+          "kind": "method",
+          "method": "depositFromAndSwap"
+        },
+        {
+          "kind": "method",
+          "method": "getUserUnusedBalance"
+        },
+        {
+          "kind": "method",
+          "method": "icrc1_fee"
+        },
+        {
+          "kind": "method",
+          "method": "icrc1_balance_of"
+        },
+        {
+          "kind": "method",
+          "method": "icrc2_allowance"
+        }
+      ],
+      "max_concurrency": 20,
+      "max_cycles_per_call": 0,
+      "max_cycles_per_day": 0
+    },
+    "scheduled_tasks": {
+      "api": 1,
+      "tasks": [
+        {
+          "id": "market_snapshot",
+          "method": "icpswap_snapshot_tick",
+          "interval_seconds": 21600,
+          "run_on_start": true,
+          "max_backend_calls": 100
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "icpswap_status",
+        "icpswap_market",
+        "icpswap_search",
+        "icpswap_token",
+        "icpswap_history",
+        "icpswap_refresh",
+        "icpswap_add",
+        "icpswap_remove",
+        "icpswap_forget",
+        "icpswap_set_pinned",
+        "icpswap_set_note",
+        "icpswap_swap_quote",
+        "icpswap_swap_execute",
+        "icpswap_swap_journal",
+        "icpswap_set_slippage",
+        "icpswap_swap_recover"
+      ]
+    },
+    "agent_entrypoints": {
+      "api": 1,
+      "entrypoints": [
+        "icpswap_agent_swap"
+      ]
+    }
+  },
+  "func": {
+    "icpswap_status": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_market": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_search": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_token": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_history": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_refresh": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_add": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_remove": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_forget": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_set_pinned": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_set_note": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_swap_quote": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_swap_execute": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_swap_journal": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_set_slippage": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_swap_recover": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_snapshot_tick": {
+      "type": "internal",
+      "async": "async*",
+      "arg": [
+        "task_capabilities"
+      ]
+    }
+  },
+  "memory": {
+    "icpswap": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/icpswap/v1.mo",
+          "hash": "d9ff67ea63f1884ed7f333bf66196e308aa50d247f316524a853286987ccf19d",
+          "entry": "26bfb18b757b96c7b5075ccba7a1e481b9e9d5023cbedc14168b755558500577"
+        }
+      },
+      "migrations": []
+    },
+    "icpswap_swap": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/icpswap_swap/v1.mo",
+          "hash": "81a8159a411fa9b018d7ba6a30d625105cb35bca15934b5bd342acb2bab42759",
+          "entry": "c50c9efc3125b1943a1c5ed5f30244fa5ac082990f095b45d837dfa0edb7c0e9"
+        }
+      },
+      "migrations": []
+    }
+  },
+  "entry": "7dba1448fd524ecd1ae5e931e1af9d565ccfe3b81f0be24436552de9ca9587cd",
+  "package_features": [
+    "archive-only-legal-v1"
+  ]
+}

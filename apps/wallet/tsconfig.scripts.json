@@ -50,6 +50,7 @@
     "src/conversion_tools.ts",
     "src/deposit_tools.ts",
     "src/ethereum_withdrawal.tsx",
-    "src/ethereum_withdrawal_controller.ts"
+    "src/ethereum_withdrawal_controller.ts",
+    "src/ledger_tools.ts"
   ]
 }

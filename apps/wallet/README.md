@@ -17,6 +17,31 @@ owner-trusted apps and live agents, not a cold-storage boundary against the
 installed Wallet package. Installing or updating Wallet is therefore a
 consequential trust decision.
 
+## Agent token selection
+
+`wallet_add_ledger_v1({ ledger })` adds one catalog or custom ICRC ledger at
+`app:wallet:background`, retaining every existing selected token. In Normal
+mode, the provider opens Wallet and the existing Kernel access dialog reviews
+that exact ledger selection together with any additional ledger calls it needs.
+Root calls use the active agent permission judge without an owner click. The
+explicit `wallet_add_ledger_root_v1` variant is available only to the active
+root agent, matching the existing root funding contract.
+
+Adding a ledger does not transfer tokens or create a spending allowance. Its
+`selected` result confirms durable Wallet configuration. `tokenInfo` contains
+live exact metadata, fee, and default-account balance; if that read fails,
+`metadataError` explains the missing observation and `tokenInfo` is null. The
+selection remains saved and the same ledger can be retried safely after a lost
+reply or reload. No token logos enter the tool response. Apps such as ICPSwap
+can request selection before using `wallet_token_info_v1` or Wallet funding.
+
+Selection and its backend access use the existing combined reservation and
+post-grant self-call transport. The scoped SDK helper preserves the invoking
+agent and cancellation; no extra Kernel permission rule or preapproved-method
+slot is required. The additive backend method reads the current enabled set at
+execution, so another token selected while approval is open is retained. All
+existing Wallet memory roots and schema versions are unchanged.
+
 ## App Funding Contract
 
 The resident keeps the versioned `wallet_fund_v1` tool at the exact

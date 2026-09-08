@@ -1,0 +1,336 @@
+{
+  "format": 3,
+  "name": "via ICPSwap",
+  "id": "icpswap",
+  "version": 201,
+  "description": "Independent ICPSwap integration for swaps, concentrated liquidity, positions, market research and agent tools.",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "tiles": [
+    {
+      "id": "main",
+      "title": "via ICPSwap",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Trade tokens and manage ICPSwap liquidity"
+    }
+  ],
+  "background": {
+    "path": "service.html",
+    "description": "ICPSwap research, reviewed trading and durable liquidity recovery tools"
+  },
+  "capabilities": {
+    "backend_calls": {
+      "api": 1,
+      "description": "Read verified ICPSwap pool state and execute saved swap, liquidity, deposit and withdrawal plans as this Neutron. Wallet handles all token-ledger reads and funding.",
+      "reservation_scopes": [
+        "exact",
+        "method"
+      ],
+      "install_reservations": [
+        {
+          "kind": "exact",
+          "principal": "4mmnk-kiaaa-aaaag-qbllq-cai",
+          "method": "getPools"
+        },
+        {
+          "kind": "exact",
+          "principal": "k37c6-riaaa-aaaag-qcyza-cai",
+          "method": "getList"
+        },
+        {
+          "kind": "method",
+          "method": "metadata"
+        },
+        {
+          "kind": "method",
+          "method": "quote"
+        },
+        {
+          "kind": "method",
+          "method": "getPool"
+        },
+        {
+          "kind": "method",
+          "method": "getCachedTokenFee"
+        },
+        {
+          "kind": "method",
+          "method": "getAvailabilityState"
+        },
+        {
+          "kind": "method",
+          "method": "depositFromAndSwap"
+        },
+        {
+          "kind": "method",
+          "method": "getUserUnusedBalance"
+        },
+        {
+          "kind": "method",
+          "method": "getUserPositionsByPrincipal"
+        },
+        {
+          "kind": "method",
+          "method": "getUserPosition"
+        },
+        {
+          "kind": "method",
+          "method": "getUserWithdrawQueue"
+        },
+        {
+          "kind": "method",
+          "method": "getTransactionsByOwner"
+        },
+        {
+          "kind": "method",
+          "method": "mint"
+        },
+        {
+          "kind": "method",
+          "method": "increaseLiquidity"
+        },
+        {
+          "kind": "method",
+          "method": "decreaseLiquidity"
+        },
+        {
+          "kind": "method",
+          "method": "claim"
+        },
+        {
+          "kind": "method",
+          "method": "deposit"
+        },
+        {
+          "kind": "method",
+          "method": "depositFrom"
+        },
+        {
+          "kind": "method",
+          "method": "withdraw"
+        }
+      ],
+      "max_concurrency": 20,
+      "max_cycles_per_call": 0,
+      "max_cycles_per_day": 0
+    },
+    "scheduled_tasks": {
+      "api": 1,
+      "tasks": [
+        {
+          "id": "market_snapshot",
+          "method": "icpswap_snapshot_tick",
+          "interval_seconds": 21600,
+          "run_on_start": true,
+          "max_backend_calls": 100
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "icpswap_status",
+        "icpswap_market",
+        "icpswap_search",
+        "icpswap_token",
+        "icpswap_history",
+        "icpswap_refresh",
+        "icpswap_add",
+        "icpswap_remove",
+        "icpswap_forget",
+        "icpswap_set_pinned",
+        "icpswap_set_note",
+        "icpswap_swap_quote",
+        "icpswap_swap_execute",
+        "icpswap_swap_journal",
+        "icpswap_set_slippage",
+        "icpswap_swap_recover",
+        "icpswap_set_token_info",
+        "icpswap_account",
+        "icpswap_action_get",
+        "icpswap_action_update",
+        "icpswap_liquidity_pool",
+        "icpswap_liquidity_preview",
+        "icpswap_liquidity_prepare",
+        "icpswap_liquidity_execute",
+        "icpswap_liquidity_reconcile",
+        "icpswap_swap_prepare_v1",
+        "icpswap_swap_execute_v1",
+        "icpswap_liquidity_recover_prepare",
+        "icpswap_liquidity_recover_execute",
+        "icpswap_action_page",
+        "icpswap_action_status"
+      ]
+    }
+  },
+  "func": {
+    "icpswap_swap_prepare_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_swap_execute_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_liquidity_recover_prepare": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_liquidity_recover_execute": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_action_status": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_account": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_action_page": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_action_get": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_action_update": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_liquidity_pool": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_liquidity_preview": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_liquidity_prepare": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_liquidity_execute": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_liquidity_reconcile": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_status": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_market": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_search": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_token": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_history": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_refresh": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_add": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_remove": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_forget": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_set_pinned": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_set_note": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_swap_quote": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_swap_execute": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_set_token_info": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_swap_journal": {
+      "type": "query",
+      "async": false
+    },
+    "icpswap_set_slippage": {
+      "type": "update",
+      "async": false
+    },
+    "icpswap_swap_recover": {
+      "type": "update",
+      "async": "async*"
+    },
+    "icpswap_snapshot_tick": {
+      "type": "internal",
+      "async": "async*",
+      "arg": [
+        "task_capabilities"
+      ]
+    }
+  },
+  "memory": {
+    "icpswap": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/icpswap/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "icpswap_swap": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/icpswap_swap/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "icpswap_actions": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/icpswap_actions/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  },
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai"
+}

@@ -1,0 +1,980 @@
+@use "neutron-design-system/styles.scss";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+@layer app {
+  .nt-app.ics-app {
+    --nt-accent: #91d7e8;
+
+    --ics-up: var(--nt-success);
+    --ics-down: var(--nt-danger);
+    --ics-flat: var(--nt-text-faint);
+
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100dvh;
+    container-type: inline-size;
+    overflow: hidden;
+  }
+
+  /* ---------------------------------------------------------------- shell */
+
+  .ics-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    gap: 0;
+  }
+
+  .ics-app-header { padding-inline: 16px; flex: none; }
+  .ics-navigation { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-inline: 16px; border-bottom: 1px solid var(--nt-line-subtle); flex: none; }
+  .ics-tabs { display: flex; min-width: 0; gap: 18px; }
+  .ics-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--nt-text-muted); padding: 10px 0; cursor: pointer; font-size: 13px; }
+  .ics-tab[aria-current="page"] { border-color: var(--nt-accent); color: var(--nt-text-strong); }
+  .ics-tab:focus-visible { outline: 2px solid var(--nt-line-focus); outline-offset: 2px; }
+  .ics-status {
+    align-items: center;
+    color: var(--nt-text-faint);
+    display: inline-flex;
+    font-size: var(--nt-font-size-meta);
+    gap: var(--nt-gap-1);
+    white-space: nowrap;
+  }
+
+  .ics-status--stale {
+    color: var(--nt-warning);
+  }
+
+  .ics-status--error {
+    color: var(--nt-danger);
+  }
+
+  .ics-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    /* A sideways swipe inside the tile must never reach the browser's
+       back/forward gesture. */
+    overscroll-behavior-x: none;
+    overflow: auto;
+    padding: 16px;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  /* --------------------------------------------------------------- search */
+
+  .ics-search {
+    flex: 1 1 220px;
+    max-width: 340px;
+    min-width: 140px;
+  }
+
+  /* ------------------------------------------------------------ market kpi */
+
+  .ics-kpi-row {
+    display: grid;
+    gap: var(--nt-gap-3);
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  /* -------------------------------------------------------------- table */
+
+  /* ------------------------------------------------------------------ swap */
+
+  .ics-swap-slippage {
+    flex: none;
+  }
+
+  /* A swap is a decision about two numbers, so the controls are held to a
+     readable column instead of stretching to the width of a market table. */
+  .ics-swap-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--nt-gap-3);
+    max-width: 460px;
+  }
+
+  /* The two legs read as one object: joined by the arrow sitting on their
+     seam, rather than separated into two unrelated fields. */
+  .ics-swap-legs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--nt-gap-2);
+    position: relative;
+  }
+
+  .ics-swap-leg {
+    background: var(--nt-bg-control);
+    border-radius: var(--nt-radius-2);
+    box-shadow: var(--nt-shadow-hairline);
+    display: flex;
+    flex-direction: column;
+    gap: var(--nt-gap-1);
+    padding: var(--nt-pad-3);
+  }
+
+  /* The whole leg takes the focus ring, so a focused amount does not draw a
+     box around the empty space beside it. */
+  .ics-swap-leg:focus-within {
+    box-shadow: inset 0 0 0 1px var(--nt-line-focus);
+  }
+
+  .ics-swap-leg-label {
+    color: var(--nt-text-faint);
+    font-size: var(--nt-font-size-meta);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .ics-swap-leg-body {
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-3);
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .ics-swap-leg-foot {
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-2);
+    justify-content: space-between;
+    min-height: 22px;
+  }
+
+  /* Absolute, so it overlaps the seam without collapsing the gap between the
+     legs. Both legs are the same height, so 50% is the seam. */
+  .ics-swap-arrow {
+    align-items: center;
+    background: var(--nt-bg-panel);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px var(--nt-bg-panel);
+    color: var(--nt-text-muted);
+    display: inline-flex;
+    font-size: 11px;
+    height: 22px;
+    justify-content: center;
+    left: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 22px;
+    z-index: 1;
+  }
+
+  .ics-swap-chip {
+    align-items: center;
+    display: flex;
+    flex: none;
+    gap: var(--nt-gap-2);
+    min-width: 0;
+  }
+
+  .ics-swap-chip-symbol {
+    color: var(--nt-text-strong);
+    font-weight: 600;
+  }
+
+  /* Keeps the receive leg the same height before a token is chosen. */
+  .ics-swap-chip-empty {
+    background: var(--nt-bg-panel);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px var(--nt-line-subtle);
+    flex: none;
+    height: 26px;
+    width: 26px;
+  }
+
+  /* A bare select: the chip is the control, so the field furniture would only
+     compete with the amount beside it. */
+  .ics-swap-select {
+    appearance: none;
+    background: none;
+    border: 0;
+    color: var(--nt-text-strong);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    max-width: 12ch;
+    padding: 0;
+  }
+
+  .ics-swap-select:focus-visible {
+    outline: 2px solid var(--nt-line-focus);
+    outline-offset: 2px;
+  }
+
+  .ics-swap-select:disabled {
+    cursor: default;
+  }
+
+  /* The amount is the largest thing in the panel because it is the number the
+     owner is actually deciding about. Tabular figures so digits do not shift
+     as a quote refreshes. */
+  .ics-swap-amount {
+    background: none;
+    border: 0;
+    color: var(--nt-text-strong);
+    flex: 1 1 auto;
+    font-family: var(--nt-font-mono);
+    font-size: 24px;
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+    padding: 0;
+    text-align: right;
+  }
+
+  .ics-swap-amount:focus-visible {
+    outline: none;
+  }
+
+  .ics-swap-amount--readonly {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ics-swap-amount--muted {
+    color: var(--nt-text-faint);
+  }
+
+  .ics-swap-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0;
+  }
+
+  .ics-swap-fact {
+    align-items: baseline;
+    display: flex;
+    gap: var(--nt-gap-3);
+    justify-content: space-between;
+    padding: 3px 0;
+  }
+
+  .ics-swap-fact dt {
+    color: var(--nt-text-muted);
+    font-size: var(--nt-font-size-meta);
+  }
+
+  .ics-swap-fact dd {
+    color: var(--nt-text-strong);
+    font-family: var(--nt-font-mono);
+    font-size: var(--nt-font-size-meta);
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+    text-align: right;
+  }
+
+  .ics-swap-actions {
+    display: flex;
+    gap: var(--nt-gap-2);
+  }
+
+  .ics-swap-submit {
+    flex: 1 1 auto;
+  }
+
+  .ics-pager {
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-3);
+    justify-content: flex-end;
+    padding-top: var(--nt-pad-2);
+  }
+
+  .ics-table-wrap {
+    background: var(--nt-bg-panel);
+    border-radius: var(--nt-radius-2);
+    box-shadow: var(--nt-shadow-hairline);
+    overflow-x: auto;
+    /* The wrap scrolls sideways only. It is still a scroll container on the
+       block axis, so `overscroll-behavior-y` has to stay `auto` or a vertical
+       swipe over a table is swallowed here instead of scrolling the tile. */
+    overflow-y: hidden;
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: auto;
+  }
+
+  table.ics-table {
+    border-collapse: collapse;
+    min-width: 900px;
+    width: 100%;
+  }
+
+  .ics-table th,
+  .ics-table td {
+    padding: var(--nt-pad-2) var(--nt-pad-3);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .ics-table th {
+    color: var(--nt-text-faint);
+    font-size: var(--nt-font-size-meta);
+    font-weight: 500;
+    position: sticky;
+    top: 0;
+    background: var(--nt-bg-panel);
+    box-shadow: inset 0 -1px 0 var(--nt-line-subtle);
+    z-index: 1;
+  }
+
+  .ics-table th.ics-col-sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .ics-table th.ics-col-sortable:hover {
+    color: var(--nt-text);
+  }
+
+  .ics-sort-caret {
+    color: var(--nt-accent);
+    margin-left: 3px;
+  }
+
+  .ics-table th.ics-col-rank,
+  .ics-table td.ics-col-rank,
+  .ics-table th.ics-col-name,
+  .ics-table td.ics-col-name {
+    text-align: left;
+  }
+
+  .ics-table th.ics-col-rank,
+  .ics-table td.ics-col-rank {
+    color: var(--nt-text-faint);
+    font-variant-numeric: tabular-nums;
+    width: 44px;
+  }
+
+  .ics-table th.ics-col-actions,
+  .ics-table td.ics-col-actions {
+    text-align: right;
+    width: 76px;
+  }
+
+  .ics-col-actions .ics-inline-actions {
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
+
+  .ics-table tbody tr {
+    box-shadow: inset 0 -1px 0 var(--nt-line-subtle);
+    cursor: pointer;
+  }
+
+  .ics-table tbody tr:hover {
+    background: var(--nt-bg-control-hover);
+  }
+
+  .ics-table tbody tr:last-child {
+    box-shadow: none;
+  }
+
+  .ics-table td {
+    color: var(--nt-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ics-token-cell {
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-2);
+    min-width: 0;
+  }
+
+  .ics-token-logo {
+    align-items: center;
+    background: var(--nt-bg-control);
+    border-radius: 50%;
+    color: var(--nt-text-muted);
+    display: inline-flex;
+    flex: none;
+    font-size: 10px;
+    font-weight: 600;
+    height: 26px;
+    justify-content: center;
+    letter-spacing: 0;
+    overflow: hidden;
+    width: 26px;
+  }
+
+  .ics-token-logo img {
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .ics-token-names {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .ics-token-symbol {
+    color: var(--nt-text-strong);
+    font-weight: 600;
+    line-height: var(--nt-line-height-tight);
+  }
+
+  .ics-token-name {
+    color: var(--nt-text-faint);
+    font-size: var(--nt-font-size-meta);
+    line-height: var(--nt-line-height-tight);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ics-change {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ics-change--up {
+    color: var(--ics-up);
+  }
+
+  .ics-change--down {
+    color: var(--ics-down);
+  }
+
+  .ics-change--flat {
+    color: var(--ics-flat);
+  }
+
+  .ics-sparkline {
+    color: var(--ics-flat);
+    display: block;
+  }
+
+  .ics-sparkline--up {
+    color: var(--ics-up);
+  }
+
+  .ics-sparkline--down {
+    color: var(--ics-down);
+  }
+
+  .ics-sparkline--empty {
+    color: var(--nt-line);
+  }
+
+  .ics-row-action {
+    color: var(--nt-text-faint);
+  }
+
+  /* --------------------------------------------------------------- detail */
+
+  .ics-detail-header {
+    align-items: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-4);
+    justify-content: space-between;
+  }
+
+  .ics-detail-identity {
+    align-items: flex-start;
+    display: flex;
+    gap: var(--nt-gap-3);
+    min-width: 0;
+  }
+
+  .ics-detail-logo {
+    height: 44px;
+    margin-top: 2px;
+    width: 44px;
+  }
+
+  details.nt-alert summary {
+    cursor: pointer;
+  }
+
+  details.nt-alert > p {
+    margin: var(--nt-gap-2) 0 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ics-detail-price {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-2);
+  }
+
+  .ics-detail-price-value {
+    color: var(--nt-text-strong);
+    font-size: var(--nt-font-size-title);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: var(--nt-line-height-tight);
+  }
+
+  .ics-chart-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-3);
+    justify-content: space-between;
+  }
+
+  .ics-detail-columns {
+    display: grid;
+    gap: var(--nt-gap-4);
+    grid-template-columns: 1fr;
+  }
+
+  @container (min-width: 900px) {
+    .ics-detail-columns--split {
+      grid-template-columns: 3fr 2fr;
+    }
+  }
+
+  /* ---------------------------------------------------------------- chart */
+
+  .ics-chart {
+    position: relative;
+    width: 100%;
+  }
+
+  .ics-chart--empty {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+  }
+
+  .ics-chart-canvas {
+    display: block;
+    touch-action: pan-y pinch-zoom;
+    width: 100%;
+  }
+
+  .ics-chart-grid {
+    stroke: var(--nt-line-subtle);
+    stroke-width: 1;
+  }
+
+  .ics-chart-axis-label {
+    fill: var(--nt-text-faint);
+    font-family: var(--nt-font-mono);
+    font-size: 10px;
+  }
+
+  .ics-chart-offscale {
+    fill: var(--nt-text-muted);
+  }
+
+  .ics-chart-area {
+    fill: var(--nt-accent);
+    opacity: 0.1;
+  }
+
+  .ics-chart-line {
+    fill: none;
+    stroke: var(--nt-accent);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.75;
+  }
+
+  .ics-candle-wick {
+    stroke: currentColor;
+    stroke-width: 1;
+  }
+
+  .ics-candle-body {
+    fill: currentColor;
+  }
+
+  .ics-candle--up {
+    color: var(--ics-up);
+  }
+
+  .ics-candle--down {
+    color: var(--ics-down);
+  }
+
+  .ics-chart-bar {
+    fill: var(--nt-text-faint);
+    opacity: 0.45;
+  }
+
+  .ics-chart-crosshair {
+    stroke: var(--nt-line-strong);
+    stroke-dasharray: 2 3;
+    stroke-width: 1;
+  }
+
+  .ics-chart-marker {
+    fill: var(--nt-accent);
+    stroke: var(--nt-bg-panel);
+    stroke-width: 2;
+  }
+
+  .ics-chart-tooltip {
+    background: var(--nt-bg-elevated);
+    text-transform: none;
+    border-radius: var(--nt-radius-1);
+    box-shadow: var(--nt-shadow-raised);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--nt-pad-2);
+    pointer-events: none;
+    position: absolute;
+    top: 6px;
+    width: 148px;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  .ics-chart-tooltip-time {
+    color: var(--nt-text-faint);
+    font-size: var(--nt-font-size-meta);
+  }
+
+  .ics-chart-tooltip-row {
+    display: flex;
+    gap: var(--nt-gap-2);
+    justify-content: space-between;
+  }
+
+  .ics-chart-tooltip-key {
+    color: var(--nt-text-muted);
+    font-size: var(--nt-font-size-meta);
+  }
+
+  .ics-chart-tooltip-value {
+    color: var(--nt-text-strong);
+    font-size: var(--nt-font-size-meta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --------------------------------------------------------------- picker */
+
+  .ics-overlay {
+    align-items: flex-start;
+    background: rgb(4 6 9 / 72%);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: var(--nt-pad-4);
+    position: fixed;
+    z-index: 20;
+  }
+
+  .ics-picker-dialog { border: 0; margin: 0; width: 100%; height: 100%; max-width: none; max-height: none; box-sizing: border-box; color: inherit; }
+  .ics-picker-dialog::backdrop { background: transparent; }
+
+  .ics-picker {
+    background: var(--nt-bg-panel);
+    border-radius: var(--nt-radius-2);
+    box-shadow: var(--nt-shadow-raised);
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    max-width: 720px;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .ics-picker-header {
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-2);
+    padding: var(--nt-pad-3);
+    box-shadow: inset 0 -1px 0 var(--nt-line-subtle);
+  }
+
+  .ics-picker-search {
+    flex: 1 1 auto;
+  }
+
+  .ics-picker-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .ics-picker-row {
+    align-items: center;
+    background: none;
+    border: 0;
+    box-shadow: inset 0 -1px 0 var(--nt-line-subtle);
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    gap: var(--nt-gap-3);
+    padding: var(--nt-pad-2) var(--nt-pad-3);
+    text-align: left;
+    width: 100%;
+  }
+
+  .ics-picker-row:hover:not(:disabled) {
+    background: var(--nt-bg-control-hover);
+  }
+
+  .ics-picker-row:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .ics-picker-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ics-picker-canister {
+    color: var(--nt-text-faint);
+    font-family: var(--nt-font-mono);
+    font-size: var(--nt-font-size-meta);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ics-picker-stats {
+    align-items: flex-end;
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ics-picker-footer {
+    align-items: center;
+    box-shadow: inset 0 1px 0 var(--nt-line-subtle);
+    color: var(--nt-text-faint);
+    display: flex;
+    font-size: var(--nt-font-size-meta);
+    gap: var(--nt-gap-2);
+    justify-content: space-between;
+    padding: var(--nt-pad-2) var(--nt-pad-3);
+  }
+
+  /* ---------------------------------------------------------------- misc */
+
+  .ics-inline-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nt-gap-2);
+  }
+
+  .ics-mono {
+    font-family: var(--nt-font-mono);
+    font-size: var(--nt-font-size-mono);
+  }
+
+  .ics-breadcrumb {
+    align-items: center;
+    color: var(--nt-text-faint);
+    display: flex;
+    font-size: var(--nt-font-size-meta);
+    gap: var(--nt-gap-2);
+  }
+
+  .ics-empty-block {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: var(--nt-gap-3);
+    padding: var(--nt-pad-6) var(--nt-pad-4);
+    text-align: center;
+  }
+  .ics-body > * { flex-shrink: 0; }
+  .ics-trade-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 24px; min-width: 0; }
+  .ics-trade-layout > .ics-swap { margin: 0; width: 100%; max-width: 480px; }
+  .ics-trade-markets { min-width: 0; }
+  .ics-swap { min-width: 0; }
+  .ics-swap > .nt-section-header { margin-bottom: 4px; justify-content: space-between; }
+  .ics-swap-form { max-width: none; min-width: 0; }
+  .ics-swap-legs, .ics-swap-leg { min-width: 0; }
+  .ics-swap-arrow { position: relative; top: auto; left: auto; transform: none; margin: -15px auto; flex: none; }
+  .ics-swap-settings { position: relative; font-size: 12px; color: var(--nt-text-muted); }
+  .ics-swap-settings > summary { cursor: pointer; list-style: none; padding: 5px 0 5px 8px; }
+  .ics-swap-settings > summary::-webkit-details-marker { display: none; }
+  .ics-swap-settings[open] > summary { color: var(--nt-text-strong); }
+  .ics-swap-settings .ics-swap-slippage { position: absolute; right: 0; top: calc(100% + 4px); padding: 8px; background: var(--nt-bg-elevated); border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-control); z-index: 3; }
+  .ics-swap-select { appearance: auto; padding-right: 1px; }
+  .ics-swap-select option { color: var(--nt-text); background: var(--nt-bg-panel); }
+  .ics-amount-allocation { display: grid; gap: 2px; margin-top: 6px; }
+  .ics-amount-allocation input { width: 100%; min-width: 0; height: 16px; margin: 0; accent-color: var(--nt-accent); }
+  .ics-amount-allocation > div { display: flex; justify-content: space-between; }
+  .ics-amount-allocation button { font-size: 11px; color: var(--nt-text-muted); background: none; border: none; cursor: pointer; padding: 4px 0; }
+  .ics-inline-note { font-size: 12px; color: var(--nt-text-muted); }
+  .ics-inline-note summary { cursor: pointer; }
+  .ics-inline-note p { margin: 8px 0 0; }
+  .ics-market-toolbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .ics-market-toolbar .nt-input { min-width: 0; flex: 1; }
+  .ics-market-sort { flex: 0 1 130px; min-width: 0; }
+  .ics-market-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--nt-line-subtle); }
+  .ics-market-summary article { display: grid; gap: 4px; }
+  .ics-market-summary strong { display: flex; gap: 12px; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .ics-market-cards { display: none; }
+  .ics-market-card { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; border: 0; border-bottom: 1px solid var(--nt-line-subtle); background: transparent; color: inherit; padding: 12px 0; text-align: left; cursor: pointer; }
+  .ics-market-card:hover { background: var(--nt-bg-control-hover); }
+  .ics-market-card .ics-token-names { flex: 1; }
+  .ics-market-card-values { display: grid; justify-items: end; gap: 3px; font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+  .ics-market-card-values strong { color: var(--nt-text-strong); font-weight: 500; font-size: 13px; }
+  .ics-sort-button { border: 0; background: none; padding: 0; color: inherit; cursor: pointer; font: inherit; }
+  .ics-market-table--compact .ics-market-cards { display: block; }
+  .ics-market-table--compact > .ics-table-wrap { display: none; }
+  .ics-detail { gap: 16px; }
+  .ics-detail-header { gap: 12px; align-items: center; }
+  .ics-detail-identity { align-items: center; gap: 10px; }
+  .ics-detail-identity .nt-muted { margin: 0; font-size: 12px; }
+  .ics-token-title { color: var(--nt-text-strong); font-size: 18px; line-height: 24px; margin: 0; font-weight: 500; }
+  .ics-detail-price-value { font-size: 20px; font-weight: 500; }
+  .ics-detail-logo { width: 32px; height: 32px; margin: 0; }
+  .ics-ledger-copy { background: none; border: 0; padding: 0; color: var(--nt-text-faint); font-family: var(--nt-font-mono); font-size: 11px; text-align: right; cursor: pointer; }
+  .ics-chart-stage { min-height: 300px; }
+  .ics-chart-stage > .nt-state { display: grid; place-content: center; min-height: 300px; box-sizing: border-box; }
+  .ics-chart-panel { padding-top: 6px; min-width: 0; gap: 8px; }
+  .ics-chart-toolbar { gap: 8px; }
+  .ics-chart-toolbar .nt-segmented { gap: 2px; }
+  .ics-chart-toolbar .nt-button--sm { padding-inline: 9px; min-height: 28px; }
+  .ics-disclosure > summary { cursor: pointer; color: var(--nt-text-strong); font-weight: 500; font-size: 13px; padding: 10px 0; }
+  .ics-disclosure[open] > summary { margin-bottom: 8px; }
+  .ics-kpi-row { grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 12px; }
+  .ics-kpi-row .nt-metric { padding: 12px; }
+  .ics-kpi-row .nt-metric-value { font-size: 18px; }
+  .ics-chart-canvas:focus-visible { outline: 1px solid var(--nt-line-focus); outline-offset: 2px; }
+  .ics-chart-latest > line { stroke: currentColor; stroke-width: 1; stroke-dasharray: 2 4; opacity: .7; }
+  .ics-chart-latest--up { color: var(--ics-up); }
+  .ics-chart-latest--down { color: var(--ics-down); }
+  .ics-chart-latest-label-bg { fill: currentColor; }
+  .ics-chart-latest-label { fill: var(--nt-bg-panel); font-family: var(--nt-font-mono); font-size: 10px; }
+  .ics-chart-inspection-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  @container (min-width: 800px) {
+    .ics-trade-layout { grid-template-columns: minmax(300px, 460px) minmax(240px, 1fr); gap: 32px; }
+  }
+  @container (max-width: 699px) {
+    .ics-market-table .ics-market-cards { display: block; }
+    .ics-market-table > .ics-table-wrap { display: none; }
+    .ics-picker-header { flex-wrap: wrap; gap: 10px; }
+    .ics-picker-header h2 { flex: 1; }
+    .ics-picker-search { order: 2; flex-basis: 100%; }
+    .ics-picker-row { gap: 8px; padding: 10px 12px; }
+    .ics-picker-row > .nt-tag { display: none; }
+    .ics-picker-stats .nt-meta { display: none; }
+    .ics-picker-canister { max-width: 200px; }
+  }
+  @container (max-width: 380px) {
+    .ics-app-header, .ics-navigation { padding-inline: 12px; }
+    .ics-body { padding: 12px; }
+    .ics-tabs { gap: 10px; }
+    .ics-tab { font-size: 12px; white-space: nowrap; flex: none; }
+    .ics-navigation > .nt-button { flex: none; white-space: nowrap; padding-inline: 0; min-width: 0; }
+    .ics-market-sort { flex-basis: 105px; }
+    .ics-detail-header > .nt-stack { flex: 1 1 100%; }
+    .ics-detail-header .ics-inline-actions { margin-left: auto; }
+    .ics-detail-price { gap: 8px; }
+    .ics-detail-header > .nt-stack { display: flex; flex-wrap: wrap; align-items: center; }
+    .ics-ledger-copy { flex-basis: 100%; }
+    .ics-overlay { padding: 8px; }
+    .ics-swap-amount { font-size: 21px; }
+    .ics-market-summary strong { gap: 8px; font-size: 14px; }
+  }
+
+  .ics-review-dialog { color: var(--nt-text); background: var(--nt-bg-panel); border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-panel); padding: 0; width: min(560px, calc(100% - 24px)); max-width: calc(100% - 24px); max-height: calc(100dvh - 24px); box-sizing: border-box; }
+  .ics-review-dialog::backdrop { background: rgb(0 0 0 / 72%); }
+  .ics-review-layout { display: flex; flex-direction: column; max-height: calc(100dvh - 26px); min-height: 0; }
+  .ics-review-layout > header { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 16px; flex: none; border-bottom: 1px solid var(--nt-line-subtle); }
+  .ics-review-content { padding: 16px; min-height: 0; overflow: auto; }
+  .ics-review-fields { display: grid; gap: 12px; margin: 0; }
+  .ics-review-fields > div { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(0, 2fr); gap: 10px; font-size: 12px; }
+  .ics-review-fields dt { color: var(--nt-text-muted); }
+  .ics-review-fields dd { margin: 0; color: var(--nt-text-strong); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .ics-review-structured { white-space: pre-wrap; font-family: var(--nt-font-mono); }
+  .ics-review-notes { margin: 16px 0; padding-left: 18px; color: var(--nt-text-muted); font-size: 12px; display: grid; gap: 8px; }
+  .ics-review-raw { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+  .ics-review-layout > footer { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid var(--nt-line-subtle); flex: none; }
+
+  .ics-section-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+  .ics-section-top h3 { font-size: 13px; font-weight: 500; margin: 0; }
+  .ics-liquidity, .ics-activity { min-width: 0; }
+  .ics-pool-list { display: grid; gap: 0; }
+  .ics-pool-option { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--nt-line-subtle); padding: 12px 0; color: var(--nt-text); cursor: pointer; }
+  .ics-pool-option:hover { background: var(--nt-bg-control-hover); }
+  .ics-pool-option .ics-token-names { flex: 1; gap: 4px; }
+  .ics-pool-option strong { font-size: 13px; font-weight: 500; }
+  .ics-pool-option small { color: var(--nt-text-muted); font-size: 11px; }
+  .ics-pair-marks { display: flex; align-items: center; flex: none; padding-right: 4px; }
+  .ics-pair-marks .ics-token-logo + .ics-token-logo { margin-left: -5px; box-shadow: 0 0 0 2px var(--nt-bg); }
+  .ics-pair-heading { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+  .ics-pair-heading strong { font-size: 14px; font-weight: 500; }
+  .ics-fee-tier { background: var(--nt-bg-control); color: var(--nt-text-muted); padding: 3px 6px; border-radius: 4px; font-size: 11px; white-space: nowrap; }
+  .ics-owned-pool { min-width: 0; gap: 12px; }
+  .ics-position-card { padding: 14px; border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-panel); display: grid; gap: 12px; min-width: 0; }
+  .ics-position-card > header, .ics-action-card > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .ics-position-card strong, .ics-action-card strong { font-weight: 500; }
+  .ics-range-state, .ics-action-state { font-size: 11px; white-space: nowrap; }
+  .ics-position-range { color: var(--nt-text-muted); font-size: 12px; margin: 0; font-variant-numeric: tabular-nums; }
+  .ics-position-range small { color: var(--nt-text-faint); font-size: 11px; }
+  .ics-position-amounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+  .ics-position-amounts > div { display: grid; gap: 4px; min-width: 0; }
+  .ics-position-amounts dt { color: var(--nt-text-muted); font-size: 11px; }
+  .ics-position-amounts dd { color: var(--nt-text-strong); font-size: 13px; margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .ics-position-actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; }
+  .ics-unused-funds { background: var(--nt-bg-control); padding: 12px; border-radius: var(--nt-radius-control); display: grid; gap: 6px; font-size: 12px; }
+  .ics-unused-funds > strong { font-weight: 500; }
+  .ics-unused-funds > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .ics-liquidity-editor { width: 100%; max-width: 620px; gap: 16px; min-width: 0; }
+  .ics-liquidity-editor > .ics-pair-heading { padding-bottom: 4px; }
+  .ics-range-editor { display: grid; gap: 12px; min-width: 0; }
+  .ics-range-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ics-range-presets > button { flex: 1; white-space: nowrap; }
+  .ics-range-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .ics-range-inputs label { display: grid; gap: 6px; min-width: 0; color: var(--nt-text-muted); font-size: 12px; }
+  .ics-range-inputs input { width: 100%; min-width: 0; box-sizing: border-box; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .ics-range-observation { display: flex; flex-wrap: wrap; gap: 6px; justify-content: space-between; font-size: 11px; color: var(--nt-text-muted); }
+  .ics-liquidity-deposits { display: grid; gap: 8px; }
+  .ics-liquidity-amount { background: var(--nt-bg-control); padding: 12px; border-radius: var(--nt-radius-panel); display: grid; gap: 10px; min-width: 0; }
+  .ics-liquidity-amount > label { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+  .ics-liquidity-amount > input { text-align: left; width: 100%; min-width: 0; }
+  .ics-remove-allocation { display: grid; gap: 14px; }
+  .ics-remove-allocation > label { display: flex; justify-content: space-between; color: var(--nt-text-muted); }
+  .ics-remove-allocation > label strong { color: var(--nt-text-strong); font-size: 20px; }
+  .ics-remove-allocation input { width: 100%; min-width: 0; margin: 0; }
+  .ics-withdraw-input { display: grid; gap: 8px; font-size: 12px; }
+  .ics-withdraw-input .ics-inline-actions { flex-wrap: nowrap; }
+  .ics-withdraw-input input { min-width: 0; flex: 1; }
+  .ics-action-card { border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-panel); padding: 14px; display: grid; gap: 10px; min-width: 0; }
+  .ics-action-card > p { margin: 0; font-size: 12px; color: var(--nt-text-muted); overflow-wrap: anywhere; }
+  .ics-action-state--complete, .ics-action-state--completed { color: var(--ics-up); }
+  .ics-action-state--stopped, .ics-action-state--uncertain, .ics-action-state--ambiguous { color: var(--nt-warning); }
+  .ics-action-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--nt-text-faint); justify-content: space-between; }
+  .ics-action-details { color: var(--nt-text-muted); font-size: 11px; min-width: 0; }
+  .ics-action-details summary { cursor: pointer; padding: 4px; }
+  .ics-action-details[open] { flex-basis: 100%; }
+  .ics-action-details dl { display: grid; gap: 8px; }
+  .ics-action-details dl > div { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(0, 2fr); gap: 8px; }
+  .ics-action-details dd { margin: 0; overflow-wrap: anywhere; font-family: var(--nt-font-mono); }
+  @container (min-width: 700px) {
+    .ics-liquidity-deposits { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  .ics-review-values { list-style: none; display: grid; gap: 10px; margin: 0; padding: 0; }
+  .ics-review-nested { display: grid; gap: 6px; margin: 0; }
+  .ics-review-nested > div { display: grid; gap: 2px; }
+  .ics-review-nested dt { font-size: 11px; }
+  .ics-review-nested dd { font-size: 12px; }
+  .ics-protocol-transactions, .ics-pool-recovery { display: grid; gap: 8px; font-size: 12px; min-width: 0; }
+  .ics-protocol-transactions p, .ics-pool-recovery p { margin: 0; }
+
+  .ics-deposit-recovery { display: grid; gap: 8px; padding: 12px; background: var(--nt-bg-control); border-radius: var(--nt-radius-control); font-size: 12px; }
+  .ics-deposit-recovery p { margin: 0; }
+
+}

@@ -1,4 +1,10 @@
 import {
+  WALLET_ADD_LEDGER_PRESENT_TOOL,
+  handleWalletAddLedgerPresentation,
+  walletAddLedgerInputSchema,
+  walletAddLedgerOutputSchema,
+} from "./ledger_tools.ts";
+import {
   IoAlertCircleOutline,
   IoAdd,
   IoArrowBack,
@@ -521,6 +527,17 @@ function isWalletTileRuntime(): boolean {
 }
 
 if (isWalletTileRuntime()) {
+  exposeTool(WALLET_ADD_LEDGER_PRESENT_TOOL, {
+    title: "Add a token in Wallet",
+    description: "Review exact ledger access and add this token without replacing any other selection.",
+    inputSchema: walletAddLedgerInputSchema,
+    outputSchema: walletAddLedgerOutputSchema,
+    annotations: {
+      "neutron:audience": "foreground_tile",
+      "neutron:visibility": "same_app",
+      "neutron:effects": ["persistent_permission", "write", "network", "user_visible_ui"],
+    },
+  }, handleWalletAddLedgerPresentation);
   exposeTool(
     WALLET_FUNDING_PRESENT_TOOL,
     {

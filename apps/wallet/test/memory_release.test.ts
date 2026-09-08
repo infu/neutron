@@ -145,6 +145,7 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     { version: 318, bytes: 800_371, sha256: "b49c0f364ca502ab248c91c92f021b5211f7cbf3c3159d19c31941917dd962e0" },
     { version: 319, bytes: 804_495, sha256: "dc2bf1557ddc121fb25d38e2075ae8864aea0eba7fe5d55301b0b2bd707517f6" },
     { version: 320, bytes: 806_428, sha256: "88769f296095a1a9c5ebd4200e8890fbc8640f6097e0f19fdeafe14d3afdf56f" },
+    { version: 321, bytes: 810_689, sha256: "12e17e9cb83a65b2e4c1cce81a3c0ba88db27a7b64c9de363868c83698375b84" },
   ];
   for (const predecessor of predecessors) {
     const bytes = await readFile(new URL(`../${packageArchiveFilename("wallet", predecessor.version)}`, import.meta.url));
@@ -161,11 +162,11 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
       expect(requiredMemory(candidate, memoryId)).toEqual(memory);
       expect(lock.memory[memoryId]).toEqual(createMemoryLock(production).memory[memoryId]);
     }
-    if (predecessor.version === 319 || predecessor.version === 320) {
-      // Frontend updates preserve the entire released backend,
-      // including the original bridge identities and unresolved transfers.
+    if (predecessor.version >= 319) {
+      // Code releases may change the backend entry (322 adds ledger selection),
+      // while every released schema and its full dependency closure remain
+      // immutable, including bridge identities and unresolved transfers.
       const productionFiles = unpackNeutronPackage(bytes);
-      expect(candidate.entry).toBe(production.entry);
       expect(candidateFiles["neutron.lock.json"]).toEqual(productionFiles["neutron.lock.json"]);
       const checkedModules = new Set<string>();
       function preserveModuleClosure(entry: string): void {
@@ -178,7 +179,6 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
           preserveModuleClosure(match[1]!);
         }
       }
-      preserveModuleClosure(production.entry);
       for (const memory of Object.values(production.memory ?? {})) {
         for (const schema of Object.values(memory.schemas ?? {})) {
           if (schema.entry === undefined) throw new Error("Published schema entry is missing");

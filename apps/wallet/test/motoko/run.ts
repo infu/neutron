@@ -24,6 +24,7 @@ const compiledIcTests = [
   "transfer_main_test.mo",
   "direct_withdrawal_main_test.mo",
   "funding_main_test.mo",
+  "ledger_selection_main_test.mo",
   "settlement_test.mo",
   "native_settlement_main_test.mo",
   "refund_test.mo",
