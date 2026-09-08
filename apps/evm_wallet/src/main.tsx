@@ -53,7 +53,7 @@ import {
   type Operation,
   type Snapshot,
 } from "./data.ts";
-import { OWNER_REVIEW_TOOLS, PRESENT_TOOLS } from "./provider.ts";
+import { effectIntent, parseEffect, OWNER_REVIEW_TOOLS, PRESENT_TOOLS } from "./provider.ts";
 import {
   acceptPrompt,
   checkPrompt,
@@ -78,7 +78,7 @@ import { knownApprovals, parseAllowanceResult } from "./known_approvals.ts";
 import { TokenReview } from "./token_review.tsx";
 import { onFormActionKeyDown, runFormAction } from "./form_actions.ts";
 import { queryHistoryWindow } from "./history.ts";
-import { executeBrowserOperation, reconcileBrowserOperation, refreshBrowserEvidence } from "./browser_operations.ts";
+import { executeBrowserOperation, prepareBrowserOperation, reconcileBrowserOperation, refreshBrowserEvidence } from "./browser_operations.ts";
 import { operationStatusLabel, operationStatusMessage, presentTypedData, type OperationPresentation } from "./presentation.ts";
 import { useOperationPresentation } from "./decoders/use_presentation.ts";
 import { DecoderSettings } from "./decoders/DecoderSettings.tsx";
@@ -328,6 +328,44 @@ export function EvmWalletApp() {
       setBusy(false);
     }
   }
+  async function openManualReview(operation: Operation) {
+    if (reviewBusy) return;
+    setManualReview(operation);
+    setReviewBusy(true);
+    setReviewError(null);
+    try {
+      let current = operation;
+      if (current.status === "preparing") {
+        // Activity restores the original journaled request, including its caller.
+        // Resume only unsigned preparation; signing still needs Confirm below.
+        const common = { requestId: current.requestId, accountId: current.accountId, chainId: current.chainId };
+        const replacement = current.intent.replacement;
+        const tx = current.intent.transaction;
+        if (!replacement && !tx) throw new Error("The saved operation has no transaction intent to prepare");
+        const intent = replacement ? effectIntent("replacement", parseEffect("replacement", {
+          ...common, operationId: replacement.operationId, cancel: replacement.cancel,
+          maxFeePerGasWei: replacement.maxFeePerGas, maxPriorityFeePerGasWei: replacement.maxPriorityFeePerGas,
+        })) : effectIntent("transaction", parseEffect("transaction", {
+          ...common, to: tx!.to, valueWei: tx!.value, data: tx!.data, accessList: tx!.accessList,
+          ...(tx!.transactionType === null ? {} : { transactionType: tx!.transactionType }),
+          ...(tx!.gasLimit === null ? {} : { gasLimit: tx!.gasLimit }),
+          ...(tx!.maxFeePerGas === null ? {} : { maxFeePerGasWei: tx!.maxFeePerGas }),
+          ...(tx!.maxPriorityFeePerGas === null ? {} : { maxPriorityFeePerGasWei: tx!.maxPriorityFeePerGas }),
+          ...(tx!.gasPrice === null ? {} : { gasPriceWei: tx!.gasPrice }),
+        }));
+        current = await prepareBrowserOperation({ querySelf, updateSelf }, identityArgs(current.caller, current.requestId), intent);
+      }
+      setManualReview(current.status === "prepared" ? current : null);
+      const tx = current.preparedTransaction ?? current.intent.transaction;
+      if (current.status === "prepared" && tx && decodeKnownCall(tx.data)) await refreshManualEvidence(false, current, true);
+      if (operation.status === "preparing") await load();
+    } catch (e) {
+      setManualReview(null);
+      setError(`The saved request could not be prepared. Continue it in Activity to retry. ${errorMessage(e)}`);
+    } finally {
+      setReviewBusy(false);
+    }
+  }
   async function continueOperation(accept: boolean) {
     if (!manualReview || reviewBusy) return;
     setReviewBusy(true);
@@ -529,12 +567,7 @@ export function EvmWalletApp() {
                   assets={snapshot?.assets ?? []}
                   busy={busy}
                   onRefresh={() => void refreshOperation(operation)}
-                  onReview={() => {
-                    setReviewError(null);
-                    setManualReview(operation);
-                    const tx = operation.preparedTransaction ?? operation.intent.transaction;
-                    if (tx && decodeKnownCall(tx.data)) void refreshManualEvidence(false, operation);
-                  }}
+                  onReview={() => void openManualReview(operation)}
                 />
               ))
             )}
@@ -631,6 +664,7 @@ export function EvmWalletApp() {
           assets={snapshot?.assets ?? []}
           error={reviewError}
           busy={reviewBusy}
+          progress={manualReview.status === "preparing" ? "Checking the saved transaction and network fee…" : null}
           uncertain={reviewError?.startsWith("Outcome unresolved") ?? false}
           onApprove={() => void continueOperation(true)}
           onRefreshEvidence={() => void refreshManualEvidence()}
@@ -744,6 +778,7 @@ function SendForm({
     [saved, setSaved] = useState<LocalIntent | null>(null),
     [lastOperationId, setLastOperationId] = useState<string | null>(null);
   const tokens = snapshot.assets.filter((t) => t.chainId === chainId);
+  const nativeSymbol = snapshot.networks.find((network) => network.chainId === chainId)?.nativeSymbol ?? "ETH";
   const selectedToken = tokens.find((entry) => entry.address.toLowerCase() === token.toLowerCase());
   const sendDecimals = token === "native" ? 18 : selectedToken?.decimals ?? null;
   let sendAtoms: string | null = null;
@@ -894,14 +929,14 @@ function SendForm({
         onKeyDown={(e) => onFormActionKeyDown(e, busy || saved !== null, () => void send())}
       >
         <Field label="Asset">
-          <div className="evm-token-select"><TokenIcon chainId={chainId} address={token === "native" ? null : token} symbol={token === "native" ? "ETH" : tokens.find((entry) => entry.address === token)?.symbol ?? "Token"} />
+          <div className="evm-token-select"><TokenIcon chainId={chainId} address={token === "native" ? null : token} symbol={token === "native" ? nativeSymbol : tokens.find((entry) => entry.address === token)?.symbol ?? "Token"} />
           <select
             className="nt-select"
             data-testid="evm-send-asset"
             value={token}
             onChange={(e) => setToken(e.target.value)}
           >
-            <option value="native">ETH</option>
+            <option value="native">{nativeSymbol}</option>
             {tokens.map((t) => (
               <option key={t.address} value={t.address}>
                 {t.symbol}
@@ -1018,7 +1053,7 @@ function OperationRow({ operation, networks, assets, busy, onRefresh, onReview }
       {messageText && <p className="evm-operation-message" data-testid="evm-activity-message">{messageText}</p>}
       {!["confirmed", "finalized"].includes(operation.status) && <p className={operation.status === "failed" || operation.status === "reverted" ? "evm-error" : "evm-muted"}>{operationStatusMessage(operation.status, operation.kind)}</p>}
       <div className="evm-actions">
-        {operation.status === "prepared" && <button className="nt-button" disabled={busy} onClick={onReview}>Continue</button>}
+        {["preparing", "prepared"].includes(operation.status) && <button className="nt-button" disabled={busy} onClick={onReview}>Continue</button>}
         {pending && <IconButton icon="refresh" label={busy ? "Checking transaction…" : "Refresh transaction status"} disabled={busy} onClick={onRefresh} />}
         {operation.transactionHash && network && <a className="evm-icon-button evm-text-link" title="View on explorer" aria-label="View on explorer" href={`${network.explorerUrl}/tx/${operation.transactionHash}`} target="_blank" rel="noreferrer"><WalletIcon name="external" /></a>}
       </div>
@@ -1072,6 +1107,7 @@ function TransactionIntentDetails({ request, snapshot }: {
   snapshot: Snapshot | null;
 }) {
   const decoded = decodeKnownCall(request.data);
+  const network = snapshot?.networks.find((entry) => entry.chainId === request.chainId);
   const asset = snapshot?.assets.find((entry) => entry.chainId === request.chainId && entry.address.toLowerCase() === request.to.toLowerCase());
   const transferred = decoded?.details.find(([label]) => label === "Amount (atomic units)")?.[1];
   const allowance = decoded?.details.find(([label]) => label === "Allowance (atomic units)")?.[1];
@@ -1082,12 +1118,12 @@ function TransactionIntentDetails({ request, snapshot }: {
       {transferred && recipient ? <>
         <p>{asset ? `${amount(transferred, asset.decimals)} ${asset.symbol}` : decoded?.name === "ERC-20 transfer from" ? `${transferred} (amount or token ID)` : `${transferred} token atomic units`} to {recipient}</p>
 
-        {request.valueWei !== "0" && <p>Native value: {amount(request.valueWei)} ETH</p>}
+        {request.valueWei !== "0" && <p>Native value: {amount(request.valueWei)} {network?.nativeSymbol ?? "ETH"}</p>}
       </> : allowance && spender ? <>
         <p>{asset && allowance === "0" ? "Revoke" : "Approve"} {asset ? `${amount(allowance, asset.decimals)} ${asset.symbol}` : `${allowance} (allowance or token ID)`}</p>
         <p className="evm-muted">Spender: {spender}</p>
-        {request.valueWei !== "0" && <p>Native value: {amount(request.valueWei)} ETH</p>}
-      </> : <p>{request.data === "0x" || request.valueWei !== "0" ? `${amount(request.valueWei)} ETH · ` : "Contract interaction · "}{request.to}</p>}
+        {request.valueWei !== "0" && <p>Native value: {amount(request.valueWei)} {network?.nativeSymbol ?? "ETH"}</p>}
+      </> : <p>{request.data === "0x" || request.valueWei !== "0" ? `${amount(request.valueWei)} ${network?.nativeSymbol ?? "ETH"} · ` : "Contract interaction · "}{request.to}</p>}
     </div>
   );
 }
@@ -1227,7 +1263,7 @@ function ReviewDialog({
               <dd>{tx.to}</dd>
               <dt>Native value</dt>
               <dd>
-                {amount(tx.value)} ETH ({tx.value} wei)
+                {amount(tx.value)} {network?.nativeSymbol ?? "ETH"} ({tx.value} wei)
               </dd>
               {decoded?.details.map(([label, value]) => (
                 <div className="evm-review-detail-pair" key={label}>
@@ -1241,14 +1277,14 @@ function ReviewDialog({
             <>
               <dt>Observed native balance</dt>
               <dd>
-                {amount(fee.balance)} ETH ({fee.balance} wei)
+                {amount(fee.balance)} {network?.nativeSymbol ?? "ETH"} ({fee.balance} wei)
               </dd>
               <dt>Nonce</dt>
               <dd>{fee.nonce}</dd>
               <dt>Gas limit</dt>
               <dd>{fee.gasLimit}</dd>
               <dt>Maximum network fee</dt>
-              <dd>{amount(maxFee(fee))} ETH</dd>
+              <dd>{amount(maxFee(fee))} {network?.nativeSymbol ?? "ETH"}</dd>
               {fee.maxFeePerGas && (
                 <>
                   <dt>Max fee per gas</dt>

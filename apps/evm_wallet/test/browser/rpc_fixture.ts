@@ -4,6 +4,7 @@ import { encodeAbiParameters, keccak256, parseTransaction, type Hex } from "viem
 
 const calls: Array<{ method: string; params: unknown[]; url: string }> = [];
 const gates = new Map<string, { wait: Promise<void>; release: () => void }>();
+const nextErrors = new Map<string, string>();
 const transactions = new Map<string, Record<string, unknown>>();
 const allowanceResults = new Map<string, string | { error: string }>();
 const tokenMetadata = new Map<string, { decimals: number; symbol: string }>();
@@ -13,14 +14,19 @@ const blockNumber = "0x16cbeb2";
 const blockHash = `0x${"ee".repeat(32)}`;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
-  if (!url.includes("-rpc.publicnode.com")) throw new Error(`Unexpected browser RPC URL: ${url}`);
+  if (!url.includes("-rpc.publicnode.com") && url !== "https://hyperliquid.drpc.org") throw new Error(`Unexpected browser RPC URL: ${url}`);
   const body = JSON.parse(String(init?.body));
   const method = String(body.method), params = body.params as unknown[];
   calls.push({ method, params: structuredClone(params), url });
   await gates.get(method)?.wait;
+  const nextError = nextErrors.get(method);
+  if (nextError !== undefined) {
+    nextErrors.delete(method);
+    return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32000, message: nextError } });
+  }
   let result: unknown;
   switch (method) {
-    case "eth_chainId": result = "0x1"; break;
+    case "eth_chainId": result = url === "https://hyperliquid.drpc.org" ? "0x3e7" : url.includes("arbitrum") ? "0xa4b1" : "0x1"; break;
     case "eth_blockNumber": result = blockNumber; break;
     case "eth_getBlockByNumber": result = { number: blockNumber, hash: blockHash, baseFeePerGas: "0x2363e7f00" }; break;
     case "eth_getBalance": result = "0x112210f47de98115"; break;
@@ -58,6 +64,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 }) as typeof globalThis.fetch;
 (window as any).__evmRpcFixture = {
   calls,
+  failNext(method: string, message: string) { nextErrors.set(method, message); },
   setAllowanceResult(to: string, result: string | { error: string }) { allowanceResults.set(to.toLowerCase(), result); },
   setTokenMetadata(to: string, decimals: number, symbol: string) { tokenMetadata.set(to.toLowerCase(), { decimals, symbol }); },
   hold(method: string) {

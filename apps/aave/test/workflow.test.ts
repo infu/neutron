@@ -75,6 +75,45 @@ test("lost reply reuses ID and blocks unsigned renewal while dispatch is ambiguo
   const sent = f.sends[0]!; f.operations.set(sent.requestId, f.operation(sent, "confirmed")); f.transactions.set(f.hash(sent), f.evidence(sent, true));
   expect((await f.run()).state).toBe("complete");
 });
+test("interrupted preparation retains uncertainty and resumes the exact Wallet request", async () => {
+  const f = fixture(0);
+  f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw Error("Browser closed during simulation"); });
+  expect((await f.run()).state).toBe("pending");
+  const original = structuredClone(f.sends[0]!);
+  expect((await f.run({ execute: false })).state).toBe("pending");
+  expect(stateOf((await f.store.get(id))!).steps[0]!.unresolved).toBe(true);
+  expect(f.sends).toHaveLength(1);
+  f.waitWith(async () => { throw Error("Unsigned preparation cannot complete by polling"); });
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends).toEqual([original, original]); expect(f.rows.size).toBe(1); expect(f.prepareCount()).toBe(1);
+});
+test("an explicit preparing reply yields and can continue without indefinite polling", async () => {
+  const f = fixture(0);
+  f.sendWith(async request => f.operation(request, "preparing"));
+  f.waitWith(async () => { throw Error("Unsigned preparation cannot complete by polling"); });
+  expect((await f.run()).state).toBe("review");
+  expect(stateOf((await f.store.get(id))!).steps[0]!.unresolved).toBe(false);
+  await f.run({ execute: false }); expect(f.sends).toHaveLength(1);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete"); expect(f.sends[1]).toEqual(f.sends[0]);
+});
+test.each([false, true])("expired preparing retains its original signable request; old cleared marker=%s", async previouslyCleared => {
+  const f = fixture(0);
+  f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw Error("Lost reply"); });
+  await f.run();
+  if (previouslyCleared) {
+    const row = (await f.store.get(id))!, state = stateOf(row);
+    state.steps[0]!.unresolved = false; state.steps[0]!.operation = f.operation(f.sends[0]!, "preparing");
+    await f.store.update(row, state, "step_0_preparing");
+  }
+  f.advance(); f.waitWith(async () => { throw Error("Expired preparation cannot complete by polling"); });
+  const result = await f.run();
+  expect(result.state).toBe(previouslyCleared ? "review" : "pending");
+  expect(result.message).toContain(previouslyCleared ? "Wallet Activity" : "unresolved");
+  expect(stateOf((await f.store.get(id))!).steps[0]!.unresolved).toBe(!previouslyCleared);
+  expect(f.rows.size).toBe(1); expect(f.prepareCount()).toBe(1); expect(f.sends).toHaveLength(1);
+});
 test("an expired undispatched quote refreshes and retains the original input and caller", async () => {
   const f = fixture(1), abort = new AbortController();
   f.writeWith((row) => { if (row.phase === "ready") abort.abort(Error("Closed before dispatch")); });

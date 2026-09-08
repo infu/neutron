@@ -903,6 +903,23 @@ Agent Mode are rejected. The resulting random session is source-, owner-, and
 app-version-bound, short lived, concurrency bounded, and method validated. It is never
 listed as a kernel tool or delivered as a provider object to the iframe.
 
+The optional browser extension uses private `browser_extension.status`,
+`request`, `upload`, `fetch`, `read`, and `cancel` actions. The Kernel talks to
+the extension through one top-level browser channel and derives app identity
+from the verified endpoint. Route grants are browser-local, owner- and
+installation-bound, survive app versions and frontend sessions, and have no
+expiry. They are requested on demand and revoked in Settings. Existing root
+authority can approve an app's first grant; ordinary first use requires the
+owner's consent. The extension separately remembers the owner's one-time
+acceptance of the exact Neutron origin.
+
+Each in-flight request belongs to its endpoint session. Uploads and response
+reads split bodies across the existing message-bus envelopes, with pull-based
+response delivery and explicit cancellation. Revocation and endpoint removal
+cancel their active requests. A missing extension disables only the feature
+that needs it; it is not an installation prerequisite or a canister proxy.
+See the [app SDK guide](./app-developer-guide.md#route-http-through-the-optional-browser-extension).
+
 Apps do not provide Candid text or package-provided schemas. For calls to the
 Neutron canister, the kernel reads the certified live interface and uses
 ICBlast to derive method JSON Schema and validate arguments. The previous

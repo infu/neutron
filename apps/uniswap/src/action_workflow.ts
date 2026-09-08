@@ -155,7 +155,7 @@ function mintedPositions(intent: ActionIntent, state: ActionState): string[] {
 export function actionResult(record: ActionRecord, status?: ActionResult["state"], message?: string): ActionResult {
   const intent = parseActionIntent(record), state = parseActionState(record), views = state.steps.map((step) => view(intent, step));
   const final = views.at(-1)!;
-  const derived = final.status === "confirmed" ? "complete" : views.some((step) => TERMINAL.includes(step.status)) ? "stopped" : views.some((step) => step.status === "prepared") ? "review" : "pending";
+  const derived = final.status === "confirmed" ? "complete" : views.some((step) => TERMINAL.includes(step.status)) ? "stopped" : views.some((step) => ["preparing", "prepared"].includes(step.status)) ? "review" : "pending";
   return {
     operationId: intent.envelope.operationId, recordId: record.id, state: status ?? derived, phase: record.phase, summary: record.summary,
     transactionHash: final.transactionHash, message: message ?? (derived === "complete" ? "Complete: the final transaction has a successful receipt." : derived === "stopped" ? views.find((step) => TERMINAL.includes(step.status))?.message ?? "The action stopped before completion." : "The saved action can continue with its original operation ID."),
@@ -246,10 +246,10 @@ export async function runAction(
       intent.envelope.kind === "liquidity" && intent.envelope.input.operation === "mint"
       && log.address.toLowerCase() === step.request.to.toLowerCase() && log.topics.length === 4
       && log.topics[0]?.toLowerCase() === TRANSFER_TOPIC && BigInt(log.topics[1]!) === 0n && log.data === "0x") };
-    // A poll can see an older prepared revision while a dispatched review is
-    // still running. Only that send call returning prepared proves it ended
-    // unsigned. Never erase the dispatch marker from a prepared status poll.
-    const unresolvedDispatch = step.unresolvedDispatch && operation.status === "prepared" && !reply;
+    // A poll can see an older unsigned revision while the dispatched Wallet
+    // call is still running. Only its reply resolves that dispatch; preparing
+    // and prepared polls must retain the original ambiguity through expiry.
+    const unresolvedDispatch = step.unresolvedDispatch && ["preparing", "prepared"].includes(operation.status) && !reply;
     return { ...step, operation, evidence, unresolvedDispatch, receiptLogsFiltered: true,
       operationReceiptLogsOmitted, evidenceReceiptLogsOmitted: fullEvidenceLogCount - (evidence?.receipt?.logs.length ?? 0) };
   };
@@ -285,7 +285,7 @@ export async function runAction(
         abort();
         if (result.status === "not_found") { if (step.unresolvedDispatch) retrySameRequest.add(step.request.requestId); continue; }
         state.steps[index] = await observe(intent, step, result);
-        if (state.steps[index]!.unresolvedDispatch && result.status === "prepared") retrySameRequest.add(step.request.requestId);
+        if (state.steps[index]!.unresolvedDispatch && ["preparing", "prepared"].includes(result.status)) retrySameRequest.add(step.request.requestId);
         await persist(record!, state, `step_${index}_${view(intent, state.steps[index]!).status}`);
       }
       const views = state.steps.map((step) => view(intent, step)), final = views.at(-1)!;
@@ -305,7 +305,10 @@ export async function runAction(
       const expired = BigInt(state.plan.deadline) <= BigInt(Math.floor(now() / 1000));
       if (state.steps.some((step) => step.unresolvedDispatch && (expired || !retrySameRequest.has(step.request.requestId)))) return actionResult(record!, "pending", "The Wallet reply is unresolved. Continue with this same operationId to reconcile its original request before any further transaction.");
 
-      const pending = views.some((step, index) => !["queued", "prepared", "confirmed"].includes(step.status) && !retrySameRequest.has(state.steps[index]!.request.requestId));
+      // Released rows may have lost the dispatch marker when polling an
+      // interrupted preparation. Do not renew their expired exact requests.
+      if (expired && state.steps.some((step) => step.operation?.status === "preparing")) return actionResult(record!, "pending", "The original Wallet preparation is still unresolved and its quote has expired. Reconcile that same request; no new attempt was created.");
+      const pending = views.some((step, index) => !["queued", "preparing", "prepared", "confirmed"].includes(step.status) && !retrySameRequest.has(state.steps[index]!.request.requestId));
       if (pending) { progress("Waiting for transaction confirmation. The next step follows automatically…"); await wait(options.signal); continue; }
 
       if (expired) {
@@ -334,7 +337,7 @@ export async function runAction(
         if (["AGENT_CONSENT_DENIED", "AGENT_MODE_REVOKED"].includes(code)) return actionResult(record!, "stopped", `Wallet authorization was declined or revoked. The saved request is retained. ${error instanceof Error ? error.message : String(error)}`);
         return actionResult(record!, "pending", `The Wallet call did not return complete evidence. Continue this same operationId to reconcile its exact request. ${error instanceof Error ? error.message : String(error)}`);
       }
-      if (view(intent, state.steps[index]!).status === "prepared") return actionResult(record!, "review", "Wallet refreshed the exact transaction for review. Continue this same operationId for its updated review.");
+      if (["preparing", "prepared"].includes(view(intent, state.steps[index]!).status)) return actionResult(record!, "review", "Wallet refreshed the exact transaction for review. Continue this same operationId for its updated review.");
     } catch (error) {
       if (!(error instanceof ConcurrentActionUpdate)) throw error;
       // A concurrent continuation or a lost CAS reply advanced this same flow.

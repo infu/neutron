@@ -20,35 +20,40 @@ is validated against the packaged `dist/schema.json` using the same icblast
 schema validator as the release tooling. Mock optional record fields are omitted
 on the wire, and successful Candid results are unwrapped like Kernel self calls.
 The fixture rejects self-query JSON exceeding 65,536 bytes with the real metadata
-limit error; pagination must adapt without weakening the transport or dropping
-retained records.
+limit error. The current browser scenarios remain below that boundary; adaptive
+history pagination and oversized-record handling are covered separately by
+`test/history.test.ts` and `test/memory_release.test.mo`.
 
 Checks cover:
 
-- Missing and incompatible provider errors, followed by successful reconnection.
-- Account discovery and balances through the real SDK response validators.
-- Four QuoterV2 fee tiers and selection of the greatest output.
-- Separate numeric approval/swap fee observations and their total, including a
-  refreshed observation with changed prices.
-- An unavailable swap estimate before allowance without replacing it with
-  Quoter gas or hiding the provider reason.
-- Arbitrum posting costs included once in the observed RPC gas estimate.
-- Refreshing fees for a saved, approved swap using its frozen transaction and
-  request IDs, without repeating the approval or requesting a signature.
-- Expired quote presentation and disabled submission, using a controlled clock.
-- Open settings and quote review at 1440, 375, and 320 pixels without overflow.
-- Quote invalidation after editing and while amount/recipient reads are pending.
-- Approval decline, receipt-gated swap submission, and intent persistence.
-- A lost swap reply followed by reload and status reconciliation using the same
-  request ID, with no duplicate submission.
-- Native-input swaps without approval fields, using the packaged backend schema.
-- Pending replacements: authenticated Wallet linkage, independent matching
-  transaction/receipt evidence, both explorer links, output-token accounting,
-  and reload recovery without submitting the saved request again.
-- History exceeding the 64 KiB self-query metadata budget: real complete saved
-  intents, byte-triggered page-size backoff, every older record accessible, and a
-  new prepared request saved/reloaded/resumed with its original ID and calldata.
-- Clearing Ethereum balances when selecting Arbitrum and requesting scoped data.
+- Automatic recovery from a temporary Wallet startup failure on focus, without
+  a separate connection permission request.
+- Account discovery, balances and USD estimates through the real SDK validators.
+- Debounced Auto quoting across four V3 and four V4 pools, with token artwork
+  present and advanced details collapsed.
+- One Swap action saving its intent before dispatch, then checking approval and
+  final swap receipts before completing and refreshing balances.
+- A lost final reply followed by reload and Continue, reconciling the original
+  request without another send.
+- Focus refreshing account, balance and both current and legacy history reads.
+- Agent-owned activity remaining visible without the human tile loading or
+  resuming that Agent's intent.
+- Explicit V4 selection completing exact token approval, Permit2 authorization
+  and the router transaction from one Swap click.
+- Swap forms, token pickers and liquidity position cards fitting at 375 and
+  320 pixels; liquidity editors are also checked at 320 pixels.
+- Browser V4 position discovery followed by onchain ownership and pool checks,
+  plus manual import retaining a durable position reference.
+- Previews for minting a full-range position, increasing liquidity, percentage
+  removal and fee collection, with advanced details collapsed.
+- Collection submitting the position-manager transaction and refreshing the
+  portfolio and saved activity.
+- A released legacy approved swap surviving reload, retaining its old request
+  and refreshing into a newly reviewed swap that reuses existing allowance.
+- A mismatched Wallet balance address remaining unavailable until account and
+  balance observations agree.
+- An Ethereum custom-token read completing after a network switch without
+  adding the contract to the Arbitrum token menu.
 
 Artifacts default to `/tmp/neutron-uniswap-browser`; override using
 `UNISWAP_BROWSER_ARTIFACTS`. `CHROMIUM_PATH` overrides the default Nix Chromium

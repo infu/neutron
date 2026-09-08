@@ -146,8 +146,8 @@ test("a lost swap reply returns a recoverable same-ID flow and retry reconciles 
   expect(f.records.get(input.swapId)!.swap_request_id).toBe(saved.swap_request_id); expect(f.prepared).toHaveLength(1);
 });
 
-test("cancellation while a swap is unknown or preparing preserves its original request through quote expiry", async () => {
-  for (const status of ["unknown", "preparing"] as const) {
+test("cancellation while a swap is unknown preserves its original request through quote expiry", async () => {
+  for (const status of ["unknown"] as const) {
     const f = fixture(3_000_000n), cancel = new AbortController();
     f.sendWith(async (request) => f.operation(request, status));
     f.waitWith(async () => { cancel.abort(new Error("Tracking cancelled")); cancel.signal.throwIfAborted(); });
@@ -290,4 +290,39 @@ test("flow ownership and changed arguments reject before any Wallet read, new pr
   expect(f.events).toEqual([]); expect(f.sends).toHaveLength(1); expect(f.prepared).toHaveLength(1); expect(f.records.size).toBe(1);
   expect(() => parseProviderSwapInput({ ...input, swapId: "new-id-on-each-retry" })).toThrow("reuse it for every retry");
   expect(parseProviderSwapInput(input)).toEqual(input);
+});
+
+
+test.each(["approval", "swap"] as const)("interrupted provider %s preparation resumes exactly the original request", async stage => {
+  const f = fixture(stage === "swap" ? 3_000_000n : 0n);
+  f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw new Error("Lost Wallet simulation reply"); });
+  expect((await f.run()).state).toBe("pending");
+  expect(f.records.get(input.swapId)!.phase).toBe(`${stage}_requested`);
+  const first = structuredClone(f.sends[0]!);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends[1]).toEqual(first); expect(f.sends).toHaveLength(stage === "swap" ? 2 : 3);
+  expect(f.prepared).toHaveLength(1); expect(f.records.size).toBe(1);
+});
+
+test("a provider preparing reply returns a same-ID continuation instead of polling", async () => {
+  const f = fixture(3_000_000n);
+  f.sendWith(async request => f.operation(request, "preparing"));
+  expect((await f.run()).state).toBe("review"); expect(f.sends).toHaveLength(1);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(2);
+  expect(f.sends[1]).toEqual(f.sends[0]); expect(f.prepared).toHaveLength(1);
+});
+
+test.each(["approval", "swap"] as const)("expired provider %s preparation never renews a possibly in-flight request", async stage => {
+  for (const releasedMarkerCleared of [false, true]) {
+    const f = fixture(stage === "swap" ? 3_000_000n : 0n);
+    f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw new Error("Lost Wallet reply"); });
+    expect((await f.run()).state).toBe("pending");
+    if (releasedMarkerCleared) f.records.get(input.swapId)!.phase = `${stage}_preparing`;
+    f.advance(1_300_000);
+    expect((await f.run()).state).toBe("pending");
+    expect(f.records.get(input.swapId)!.phase).toBe(`${stage}_${releasedMarkerCleared ? "preparing" : "requested"}`);
+    expect(f.sends).toHaveLength(1); expect(f.prepared).toHaveLength(1); expect(f.records.size).toBe(1);
+  }
 });

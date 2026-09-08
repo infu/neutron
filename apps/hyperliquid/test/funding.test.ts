@@ -23,7 +23,7 @@ function fixture(direction: "deposit" | "withdraw" = "deposit", approval = false
   const hash = (request: EvmEffectRequest) => keccak256(stringToHex(request.requestId));
   const operation = (request: EvmEffectRequest, status: EvmOperationResult["status"] = "confirmed"): EvmOperationResult => {
     const signature = "typedDataJson" in request && status === "signed" ? `0x${"11".repeat(32)}${"22".repeat(32)}1b` : null;
-    return { ...{ accountId: request.accountId, chainId: request.chainId, requestId: request.requestId }, operationId: "1", kind: "typedDataJson" in request ? "typed_data" : "transaction", status, address: owner, transactionHash: "typedDataJson" in request || ["prepared", "failed", "rejected"].includes(status) ? null : hash(request), signature, message: null, reviewRevision: "1", receipt: status === "confirmed" ? receipt : null };
+    return { ...{ accountId: request.accountId, chainId: request.chainId, requestId: request.requestId }, operationId: "1", kind: "typedDataJson" in request ? "typed_data" : "transaction", status, address: owner, transactionHash: "typedDataJson" in request || ["preparing", "prepared", "failed", "rejected"].includes(status) ? null : hash(request), signature, message: null, reviewRevision: "1", receipt: status === "confirmed" ? receipt : null };
   };
   const evidence = (request: EvmSendTransactionRequest, success = true): EvmTransactionResult => ({ chainId: request.chainId, transactionHash: hash(request), walletRequestMatches: null, transaction: { from: owner, to: request.to, data: request.data, valueWei: "0", nonce: "0", blockNumber: success ? "123" : null, blockHash: success ? receipt.blockHash : null }, receipt: success ? receipt : null, observedAtNs: receipt.observedAtNs, source: "evm_rpc" });
   let send = async (request: EvmEffectRequest) => operation(request, "typedDataJson" in request ? "signed" : "confirmed");
@@ -107,6 +107,21 @@ test("lost Wallet reply retries only its exact original request and never create
   const request = f.sends[0] as EvmSendTransactionRequest;
   f.operations.set(request.requestId, f.operation(request)); f.transactions.set(f.hash(request), f.evidence(request));
   expect((await f.run()).phase).toBe("waiting_attestation"); expect(f.sends).toHaveLength(2);
+});
+for (const approval of [false, true]) test(`interrupted ${approval ? "approval" : "burn"} preparation resumes its exact Wallet request`, async () => {
+  const f = fixture("deposit", approval);
+  f.setSend(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw Error("Tile closed during Wallet simulation"); });
+  await f.run(); const original = structuredClone(f.sends[0]!);
+  f.rows.set(id, structuredClone(f.rows.get(id)!));
+  const observed = await f.run({ execute: false });
+  expect(observed.steps[0]!.status).toBe("preparing"); expect(f.sends).toHaveLength(1);
+  f.setFee("500000"); f.setSend(async request => f.operation(request));
+  const result = await f.run();
+  expect(f.sends[1]).toEqual(original); expect(result.phase).toBe("waiting_attestation");
+  expect(f.rows.size).toBe(1); expect(f.sends).toHaveLength(approval ? 3 : 2);
+  // Only a never-dispatched burn can adopt current fees after its approval.
+  expect(result.quote.maxFeeAtoms).toBe(approval ? "500000" : "200000");
+  await f.run(); expect(f.sends).toHaveLength(approval ? 3 : 2);
 });
 test("closing after the burn was accepted restores its Wallet request and observes independent forwarding without another approval or burn", async () => {
   const f = fixture("deposit", true), controller = new AbortController(), forwarder = independentForwarder(f);
@@ -215,6 +230,27 @@ test("an expired prepared Wallet recovery can be superseded by fresh attestation
   const history = fundingState(f.rows.get(id)!).recoverySteps!;
   expect(history).toHaveLength(2); expect(history[0]!.request).toEqual(original);
   expect(history[1]!.request.requestId).not.toBe(original.requestId);
+});
+test("expired destination preparation resumes with fresh attestation for the original CCTP nonce", async () => {
+  const f = fixture(), forwarder = independentForwarder(f); await f.run(); forwarder.advance("forwarding"); forwarder.setExpiration(1000);
+  f.setSend(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw Error("Closed during destination simulation"); });
+  const options = { method: "wallet" as const, transport: forwarder.transport };
+  await recoverFunding(f.wallet, f.store, id, caller, true, options);
+  const source = structuredClone(f.sends[0]!), original = structuredClone(f.sends.at(-1)!);
+  forwarder.setBlock(2000);
+  const observed = await f.run({ execute: false, transport: forwarder.transport, observe: observeFunding });
+  expect(observed.recovery?.methods).toEqual(["circle"]); expect(f.sends).toHaveLength(2);
+  await recoverFunding(f.wallet, f.store, id, caller, true, { ...options, method: "circle" });
+  forwarder.setExpiration(1000000);
+  f.setSend(async request => { forwarder.completeManually(f.hash(request)); return f.operation(request); });
+  const result = await recoverFunding(f.wallet, f.store, id, caller, true, options);
+  expect(result.receivedUsdc).toBe("9.8"); expect(f.sends).toHaveLength(3); expect(f.posts).toHaveLength(0);
+  const history = fundingState(f.rows.get(id)!).recoverySteps!;
+  expect(history).toHaveLength(2); expect(history[0]!.request).toEqual(original);
+  expect(history[1]!.request.requestId).not.toBe(original.requestId);
+  expect(decodeCctpMessage(history[1]!.message).nonce).toBe(decodeCctpMessage(history[0]!.message).nonce);
+  expect(f.sends[0]).toEqual(source); expect(f.sends.filter(request => "to" in request && request.to === CCTP.tokenMessenger)).toHaveLength(1);
+  await recoverFunding(f.wallet, f.store, id, caller, true, options); expect(f.sends).toHaveLength(3);
 });
 test("lost destination Wallet reply preserves exact recovery bytes across refreshed Circle observations", async () => {
   const f = fixture(), forwarder = independentForwarder(f); await f.run(); forwarder.advance("forwarding");

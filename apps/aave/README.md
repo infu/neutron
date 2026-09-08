@@ -42,6 +42,10 @@ a new reviewed operation rather than an implicit unlimited allowance. Native
 repayment refunds excess ETH according to the gateway contract. Repayment with
 supplied aTokens is capped by both supply and debt and may leave remaining debt.
 
+For native ETH supply and repayment, **Max** subtracts the Wallet's observed
+maximum network fee from the balance. If fees are unavailable, the entered
+amount stays unchanged. Fees are checked again by Wallet before signing.
+
 APYs and prices are observations that can change. Health factor depends on
 collateral prices, debt and liquidation thresholds; there is no universal safe
 health factor. Protocol eligibility and transaction validation remain based on
@@ -68,7 +72,10 @@ retain their IDs. Quotes with no outstanding Wallet request may be renewed
 against current protocol state. A transaction already prepared in Wallet keeps
 its original request ID after the quote expires: Aave calls have no transaction
 deadline, so the owner must finish or reject that review before starting a fresh
-operation. Ambiguous requests must first be reconciled.
+operation. An interrupted Wallet preparation can resume the same request through
+explicit continuation while the quote is fresh. A preparing status keeps its
+dispatch uncertainty; expiry does not create a replacement request. Ambiguous
+requests must first be reconciled.
 
 Use **Continue in wallet** to resume a saved human operation. Agent callers
 continue their own operation ID with the same original inputs. Status reads
@@ -77,10 +84,12 @@ recover already approved signed transactions through Wallet. It does not request
 a new approval or signature. Reorganizations and transaction replacements remain
 observable.
 
-`aave@1` is a new root containing the operation journal. Both released EVM Wallet
-v1 roots and their lock lineage remain unchanged. The app uses the checked
-state-preserving Neutron install transaction; a clean reinstall is not an upgrade
-path.
+The managed `aave@1` operation journal retains its released schema and lock
+lineage. Release tests cover clean initialization, populated-root restoration
+and non-destructive upgrade plans from published predecessor archives. EVM
+Wallet's released `evm_wallet@1`, `evm_evidence@1` and `evm_decoders@1` roots remain
+unchanged. The app uses the checked state-preserving Neutron install transaction;
+a clean reinstall is not an upgrade path.
 
 ## Tools
 
@@ -118,7 +127,7 @@ validators with synthetic Kernel transport and chain observations. Contract
 fixtures execute generated plans on pinned local forks of the official deployed
 code with local fixture funds; production endpoints supply read-only data.
 
-Build through `npm --workspace neutron-aave run package`. Aave release 100 uses
+Build through `npm --workspace neutron-aave run package`. Aave uses
 the shared `LICENSE.APP.USE`, application notice and offered-source workflow.
 Publish and verify according to [package updates](../../doc/package-updates.md).
 The [implementation checklist](../../doc/todo.aave.md) records completed

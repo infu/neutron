@@ -15,7 +15,7 @@ tools complete the same operations for Agent callers.
 | --- | --- |
 | Swap | Exact input through Curve Router; compare supported direct pools, with ETH/WETH wrapping hops when needed |
 | Add liquidity | Exact per-coin budgets; preview LP minted and enforce a minimum |
-| Remove liquidity | Proportional withdrawal of pool assets, or one selected pool coin; enforce minima |
+| Remove liquidity | Proportional withdrawal of pool assets, or one selected pool coin; submit requested minima, with the crypto-pool exception below |
 | Positions | Current LP token balance and proportional underlying amounts in the signing wallet |
 | My pools | Durable references saved explicitly or after a completed liquidity action |
 | Activity | Paginated original operations, approvals, final receipts and explicit continuation |
@@ -68,7 +68,12 @@ EVM asset catalog. No remote token-list response assigns badges at runtime.
 NG withdrawal previews simulate the actual zero-minimum overload. This includes
 admin-fee claims, LP supply changes and rounding before deriving user minima;
 the standalone Twocrypto withdrawal view can overestimate the executable output.
-Curve enforces minimum output **without an onchain deadline**. Quote freshness
+Curve transactions include minimum amounts **without an onchain deadline**.
+The reviewed Twocrypto NG and Tricrypto NG contracts skip minimum checks when a
+proportional withdrawal burns the pool's entire LP supply. Those previews report
+this exception to both the tile and Agent; the encoded minima remain unchanged.
+Partial proportional withdrawals and single-coin withdrawals check their minima.
+Quote freshness
 defaults to 20 minutes and slippage to 0.5%; a fresh unsigned plan needs fresh
 wallet review. Staking, gauge rewards, lending, underlying metapool zaps and
 exhaustive portfolio indexing are outside this release. Trading fees accrue in
@@ -94,17 +99,20 @@ does not count as completion. Status reconciliation can detect a reorganization.
 
 After an interrupted reply, use **Continue in wallet**, or continue with the same
 operation ID from the originating Agent. Checking status never starts a new
-approval. Ambiguous requests retain their IDs; quote renewal creates a linked
-attempt only after the previous plan is known to be unsigned. Reloading reads
-the journal and exposes saved progress without starting a new transaction.
+approval. If Wallet preparation was interrupted while the quote is still fresh,
+Continue resumes the same exact request. An expired quote with unresolved Wallet
+status remains attached to that request; expiry alone cannot create a successor.
+Quote renewal creates a linked attempt only after the previous plan is known to
+be unsigned. Reloading reads the journal and exposes saved progress without
+starting a new transaction.
 Completed approvals are retained and current allowances are reread on renewal.
 
-`curve@1` was introduced in release 100 and is retained unchanged in release 101,
-including its exact schema and lock lineage. The release test plans a clean
-initialization and a non-destructive upgrade from the released 100 archive.
-EVM Wallet's released `evm_wallet@1` and
-`evm_evidence@1` roots remain unchanged. Existing installations upgrade through
-Neutron's checked install transaction; clean reinstall is not an upgrade path.
+The managed `curve@1` root retains its released schema and lock lineage.
+Release tests cover clean initialization, populated-root restoration and
+non-destructive upgrade plans from published predecessor archives. EVM Wallet's
+released `evm_wallet@1`, `evm_evidence@1` and `evm_decoders@1` roots remain
+unchanged. Existing installations upgrade through Neutron's checked install
+transaction; clean reinstall is not an upgrade path.
 
 ## Tools
 
@@ -180,7 +188,7 @@ screenshots and results go to `/tmp/neutron-curve-browser` by default. These
 fixtures do not claim a funded production transaction or a deployed canister UI.
 
 Build the complete workspace package with `npm --workspace neutron-curve run
-package`. Release 101 uses the shared `LICENSE.APP.USE` and offered-source
+package`. Curve uses the shared `LICENSE.APP.USE` and offered-source
 packaging workflow. Publish and verify the catalog transaction as described in
 [package updates](../../doc/package-updates.md); publishing does not install
 Curve into existing Neutrons or alter the Dispenser starter.

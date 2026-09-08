@@ -199,7 +199,7 @@ const calls = [], effects = [], reviewOutcomes = [], forbiddenNetwork = [];
 const savedTrades = new Map([["5".repeat(32), tradeOperation("5".repeat(32), { kind: "order", coin: "BTC", side: "buy", orderType: "market", size: "0.01", slippageBps: 50 }, "uncertain")]]);
 const savedFunding = new Map();
 let failingReads = false, incompleteAccount = false, missingKey = false, readGate = null, nextEffectState = null;
-let fundingEffectGate = null;
+let fundingEffectGate = null, fundingPageSize = null;
 let accountMode = "perps", wholeAccountFailure = false, unavailableCapacity = false, pendingKey = false;
 const encodeData = value => ({ dataJson: JSON.stringify(value) });
 const encodeResult = value => ({ resultJson: JSON.stringify(value) });
@@ -263,7 +263,10 @@ async function fixture(kind, [call, outcome]) {
       const result = { ...saved, recovery, state: recovery.status === "complete" ? "complete" : "pending" };
       savedFunding.set(args.operationId, result); return encodeResult(result);
     }
-    case "hl_activity_v1": return encodeData({ environment, trades: [...savedTrades.values()], funding: [...savedFunding.values()].map(result => ({ id: result.operationId, summary: result.summary, phase: result.phase, revision: "1", created_at: String(BigInt(now() - 1000) * 1000000n), updated_at: String(BigInt(now()) * 1000000n), result })), nextCursor: null });
+    case "hl_activity_v1": {
+      const rows = [...savedFunding.values()].reverse(), offset = Number(args.cursor ?? 0), count = fundingPageSize ?? rows.length;
+      return encodeData({ environment, trades: [...savedTrades.values()], funding: rows.slice(offset, offset + count).map(result => ({ id: result.operationId, summary: result.summary, phase: result.phase, revision: "1", created_at: String(BigInt(now() - 1000) * 1000000n), updated_at: String(BigInt(now()) * 1000000n), result })), nextCursor: offset + count < rows.length ? String(offset + count) : null });
+    }
     case "hl_reconcile_v1": {
       const saved = args.kind === "funding" ? savedFunding.get(args.operationId) : savedTrades.get(args.operationId);
       assert(saved, "Status check retains an existing operation ID");
@@ -341,6 +344,18 @@ try {
     await dialog().waitFor({ state: "hidden" });
     await page.waitForFunction(() => !document.querySelector(".hl-execution")?.textContent.includes("Following your request"));
   };
+  await page.getByRole("button", { name: "Select perpetual market, BTC selected", exact: true }).click();
+  await dialog().locator(".hl-market-option").filter({ hasText: "SOL" }).click();
+  await page.getByRole("button", { name: "5× cross · Configure", exact: true }).waitFor();
+  await page.getByRole("button", { name: "5× cross · Configure", exact: true }).click();
+  assert.equal(await dialog().getByLabel("Leverage", { exact: true }).inputValue(), "5", "Configured leverage remains visible even without an open position");
+  assert.equal(await dialog().getByLabel("Margin mode", { exact: true }).inputValue(), "cross");
+  await dialog().getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Select perpetual market, SOL selected", exact: true }).click();
+  await dialog().locator(".hl-market-option").filter({ hasText: "BTC" }).click();
+  await page.waitForFunction(() => Number(document.querySelector(".hl-candles-viewport")?.getAttribute("data-candle-count")) > 0);
+  coverage.push("leverage dialog starts from venue-observed settings for a market without an open position");
+
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await nav("Trade").click(); await panel("Order");
@@ -399,6 +414,21 @@ try {
   assert.equal(await candleCount(interactiveChart), 97, "Repeated streaming candle updates replace the same timestamp");
   coverage.push("actual market-stream parser updates book and mark directly", "stream subscription excludes a different coin");
   coverage.push("live candles append once and replace matching timestamps");
+  const nextLiveBar = { ...liveBar, t: liveBar.t + 3600000, T: liveBar.T + 3600000, o: "108441", h: "108449", c: "108442", v: "3", n: 2 };
+  await page.evaluate(payload => window.fixtureStream(payload), { channel: "candle", data: nextLiveBar });
+  await page.waitForFunction(() => document.querySelector(".hl-candles-viewport")?.getAttribute("data-candle-count") === "98");
+  await chartControls.focus(); await page.keyboard.press("Escape"); await page.keyboard.press("ArrowLeft");
+  assert.equal(Number(await page.locator(".hl-candles-legend").getAttribute("data-selected-time")), liveBar.t / 1000, "After rollover, keyboard inspection retains the just-completed streamed candle");
+  assert((await page.locator(".hl-candles-ohlc").innerText()).includes("108,441"), "The completed streamed revision does not revert to an older REST observation");
+  const latestBeforeReconnect = await page.evaluate(() => window.fixtureSockets.length);
+  await page.evaluate(() => window.fixtureSockets.filter(socket => socket.readyState === 1).forEach(socket => socket.close()));
+  assert.equal(await candleCount(interactiveChart), 98, "A stream disconnect retains already observed candle history");
+  await page.waitForFunction(previous => window.fixtureSockets.length > previous && window.fixtureSockets.some(socket => socket.readyState === 1), latestBeforeReconnect);
+  await refresh();
+  await page.getByRole("button", { name: "5× cross · Configure", exact: true }).waitFor();
+  assert.equal(await candleCount(interactiveChart), 98, "Reconnect REST snapshots that trail the stream cannot discard completed streamed candles");
+  coverage.push("live rollover retains completed candles and their final revision", "disconnect and reconnect preserve observed candles until REST catches up");
+
 
   await page.getByRole("button", { name: "Select perpetual market, BTC selected", exact: true }).click();
   await dialog().getByLabel("Search perpetual markets", { exact: true }).fill("ETH");
@@ -597,6 +627,35 @@ try {
   assert.equal(effects.at(-1).arguments.operationId, [...savedFunding.keys()][0], "Continuing transfer retains its original burn operation");
   coverage.push("saved trade and funding activity", "uncertain order reconciliation retains operation ID", "reload reads saved status without replay");
   coverage.push("explicit saved-trade retry and funding continuation reuse their original operation IDs");
+  for (const [state, id, intent] of [
+    ["prepared", "8".repeat(32), { kind: "order", coin: "BTC", side: "buy", orderType: "limit", size: "0.01001", price: "90000", reduceOnly: false, postOnly: true }],
+    ["signed", "9".repeat(32), { kind: "close", coin: "ETH", size: "0.15", slippageBps: 75 }],
+  ]) {
+    const message = `Interrupted ${state} owner trade`;
+    savedTrades.set(id, { ...tradeOperation(id, intent, state), ownedByCaller: true, message });
+    await refresh();
+    const row = page.locator(".hl-activity").filter({ hasText: message });
+    await row.getByRole("button", { name: "Continue saved trade", exact: true }).click();
+    await dialog().getByRole("button", { name: "Approve action", exact: true }).waitFor();
+    const beforeApprove = effects.length;
+    await dialog().getByRole("button", { name: "Decline", exact: true }).click();
+    await dialog().waitFor({ state: "hidden" });
+    await page.waitForFunction(() => !document.querySelector(".hl-execution")?.textContent.includes("Following your request"));
+    assert.equal(effects.length, beforeApprove, "Continuing a saved trade still requires owner approval");
+    await row.getByRole("button", { name: "Continue saved trade", exact: true }).click();
+    await approve();
+    const { kind, ...args } = intent;
+    assert.equal(effects.at(-1).name, kind === "order" ? "hl_place_order_v1" : "hl_close_position_v1");
+    assert.deepEqual(effects.at(-1).arguments, { ...args, environment: "mainnet", operationId: id }, "Activity resumes the exact original ID and intent through its existing effect tool");
+  }
+  const otherId = "a".repeat(32);
+  savedTrades.set(otherId, { ...tradeOperation(otherId, { kind: "order", coin: "SOL", side: "buy", orderType: "limit", size: "1", price: "100" }, "prepared"), ownedByCaller: false, caller: { appId: "agent", installationUid: "2", role: "background" }, message: "Prepared Agent-owned trade" });
+  await refresh();
+  const agentRow = page.locator(".hl-activity").filter({ hasText: "Prepared Agent-owned trade" });
+  await agentRow.waitFor();
+  assert.equal(await agentRow.getByRole("button", { name: "Continue saved trade", exact: true }).count(), 0, "The owner tile cannot adopt an Agent's prepared trade identity");
+  coverage.push("prepared and signed owner trades resume their exact IDs and inputs through fresh owner review", "declining saved-trade review sends no effect", "Agent-owned trades cannot be continued as the human tile");
+
   const recoveryDepositId = [...savedFunding.keys()][0], recoveryWithdrawId = [...savedFunding.keys()][1];
   const depositForRecovery = savedFunding.get(recoveryDepositId);
   const recoveryBase = { status: "ready", methods: ["wallet"], chainId: "999", gasSymbol: "HYPE", transactionHash: null, walletStatus: null, message: "The attested transfer can be completed on its destination network." };
@@ -649,6 +708,26 @@ try {
   coverage.push("proven cash-balance fallback offers Move to perps using the original deposit ID and no new deposit or mint");
   coverage.push("attested destination completion and exact-request continuation use only original transfer ID and method", "destination recovery never starts a new source deposit", "HyperEVM recovery explains HYPE gas and Ethereum recovery explains ETH gas", "Circle attestation renewal is offered only for an eligible attestation status", "completed and already-forwarded transfers offer no remint action");
 
+
+  fundingPageSize = 2;
+  await refresh();
+  await page.getByRole("button", { name: "Load older transfers", exact: true }).click();
+  await page.waitForFunction(() => ![...document.querySelectorAll("button")].some(button => button.textContent === "Loading activity…"));
+  await refresh();
+  await page.getByRole("button", { name: "Load older transfers", exact: true }).waitFor();
+  assert.equal(calls.filter(entry => entry.call.name === "hl_activity_v1").at(-1).call.arguments.cursor, undefined, "Explicit refresh returns to the newest Activity page");
+  await page.getByRole("button", { name: "Load older transfers", exact: true }).click();
+  await page.waitForFunction(() => ![...document.querySelectorAll("button")].some(button => button.textContent === "Loading activity…"));
+  await transfer(); await dialog().getByLabel("USDC amount", { exact: true }).fill("99");
+  await waitEnabled(page, dialog().getByRole("button", { name: "Review deposit", exact: true }));
+  await dialog().getByRole("button", { name: "Review deposit", exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector(".hl-execution")?.textContent.includes("Following your request"));
+  await page.getByRole("button", { name: "Dismiss operation status", exact: true }).click();
+  await page.locator(".hl-activity").filter({ hasText: "Deposit 99 USDC" }).waitFor();
+  assert.equal(calls.filter(entry => entry.call.name === "hl_activity_v1").at(-1).call.arguments.cursor, undefined, "A newly saved transfer refreshes newest Activity even after browsing older pages");
+  fundingPageSize = null;
+  await refresh();
+  coverage.push("explicit refresh and local effect completion return Activity to the newest saved transfers after pagination");
 
   await nav("Trade").click(); await panel("Order");
   missingKey = true; await refresh();
@@ -705,6 +784,17 @@ try {
   coverage.push("unfunded account starts on chart with visible top trading-access action", "unfunded account keeps its balances without an account popup or technical balance-mode warnings");
   accountMode = "perps"; await refresh(); await waitOverview("Withdrawable", "$12,984.27");
   coverage.push("unified account shows raw shared USDC with exact precision in its title, without adding perps P&L or other tokens", "missing shared balances stay unavailable while a successful empty balance shows zero", "unknown account mode labels only perps equity and leaves withdrawal capacity unavailable");
+
+  wholeAccountFailure = true;
+  await refresh();
+  await page.getByRole("alert").filter({ hasText: "Showing previous account data." }).waitFor();
+  await nav("Positions").click();
+  assert.equal(await page.locator(".hl-position").count(), positions.length, "Previous positions remain available with an explicit stale observation label");
+  assert.equal(await overviewStat("Perps equity").innerText(), "$18,467.38");
+  await screenshot("cached-account-refresh-failure-narrow");
+  wholeAccountFailure = false; await refresh();
+  await page.getByRole("alert").filter({ hasText: "Showing previous account data." }).waitFor({ state: "hidden" });
+  coverage.push("failed account refresh visibly labels cached balances and positions until fresh observations recover");
 
   wholeAccountFailure = true;
   await page.reload();

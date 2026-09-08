@@ -154,7 +154,8 @@ export async function runProviderSwap(wallet: EvmWalletClient, store: Store, inp
     const swap = effectiveOperation(record!, "swap");
     if (swap?.status === "confirmed" && swap.receipt?.status === "success") return providerSwapResult(input, record, "complete", "Swap complete: its successful receipt is recorded. Receipt inclusion is separate from final settlement.");
     if (swap && ["rejected", "reverted", "failed", "replaced"].includes(swap.status)) return providerSwapResult(input, record, "stopped", swap.message ?? `Swap ${swap.status}. Keep this saved flow; do not report approval alone as a swap.`);
-    if (swap && swap.status !== "prepared") {
+    if (swap?.status === "preparing" && BigInt(savedIntent(record!).quote.deadline) <= BigInt(Math.floor(now() / 1000))) return providerSwapResult(input, record, "pending", "The original Wallet swap preparation is unresolved and its quote has expired. Reconcile the same request; no successor was created.");
+    if (swap && !["preparing", "prepared"].includes(swap.status)) {
       progress("Swap is pending. Waiting for its receipt…"); await wait(options.signal); continue;
     }
     if (record!.approval_request_id) {
@@ -163,7 +164,8 @@ export async function runProviderSwap(wallet: EvmWalletClient, store: Store, inp
       abort();
       const approval = effectiveOperation(record!, "approval");
       if (approval && ["rejected", "reverted", "failed", "replaced"].includes(approval.status)) return providerSwapResult(input, record, "stopped", approval.message ?? `Token approval ${approval.status}; the swap did not run.`);
-      if (approval && !["prepared", "confirmed"].includes(approval.status)) {
+      if (approval?.status === "preparing" && BigInt(savedIntent(record!).quote.deadline) <= BigInt(Math.floor(now() / 1000))) return providerSwapResult(input, record, "pending", "The original Wallet approval preparation is unresolved and its quote has expired. Reconcile the same request; no successor was created.");
+      if (approval && !["preparing", "prepared", "confirmed"].includes(approval.status)) {
         progress("Waiting for token approval. The swap follows automatically…"); await wait(options.signal); continue;
       }
     }
@@ -198,6 +200,6 @@ export async function runProviderSwap(wallet: EvmWalletClient, store: Store, inp
       }
       throw error;
     }
-    if (effectiveOperation(record!, stage)?.status === "prepared") return providerSwapResult(input, record, "review", "Wallet refreshed the exact transaction after review. Call uniswap_swap_v1 again with the same original arguments and swapId for a fresh review; do not create another flow.");
+    if (["preparing", "prepared"].includes(effectiveOperation(record!, stage)?.status ?? "")) return providerSwapResult(input, record, "review", "Wallet refreshed the exact transaction after review. Call uniswap_swap_v1 again with the same original arguments and swapId for a fresh review; do not create another flow.");
   }
 }

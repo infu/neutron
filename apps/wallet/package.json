@@ -13,7 +13,8 @@
     "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
     "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "watch": "bun build.ts watch",
-    "test": "npm run package && bun test && npm run test:motoko && npm run test:memory",
+    "test": "npm run package && bun test && npm run test:motoko && npm run test:memory && npm run test:browser",
+    "test:browser": "node test/browser/bridge_connection.mjs",
     "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo",
     "test:motoko": "bun test/motoko/run.ts"
   },

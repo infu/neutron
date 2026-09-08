@@ -1,4 +1,5 @@
 import { Principal } from "@dfinity/principal";
+import { createBrowserExtensionClient, type BrowserExtensionClient } from "./browser_extension.ts";
 import {
   canisterIdFromUrl,
   kernelParentOriginFromAppWindow,
@@ -173,6 +174,7 @@ const localRequestControllers = new WeakMap<
   MessagePort,
   Map<number, AbortController>
 >();
+const toolExtensionClients = new WeakMap<ScopedKernelClient, BrowserExtensionClient>();
 
 function getWindow(): Window {
   if (typeof window === "undefined") {
@@ -1352,6 +1354,14 @@ export function createMsgBusClient(): ScopedKernelClient {
   };
 }
 
+/** Preserve the tool's private invocation and cancellation when asking for a
+ * durable extension-route permission or performing its HTTP requests. */
+export function browserExtensionForTool(context: Pick<MsgBusToolContext, "kernel">): BrowserExtensionClient {
+  const client = toolExtensionClients.get(context.kernel);
+  if (!client) throw new Error("Browser extension tool access requires the current tool context");
+  return client;
+}
+
 function createRequestMsgBusClient(
   invocation?: MsgBusInvocationMetadata,
   signal?: AbortSignal,
@@ -1374,7 +1384,7 @@ function createRequestMsgBusClient(
       signal,
     );
 
-  return {
+  const client: ScopedKernelClient = {
     listApps: (timeout = MSG_BUS_DEFAULT_DISCOVERY_TIMEOUT_SECONDS) =>
       scopedCallTool(
         { target: "kernel", name: "apps.list", arguments: {} },
@@ -1426,6 +1436,10 @@ function createRequestMsgBusClient(
         signal,
       ),
   };
+  toolExtensionClients.set(client, createBrowserExtensionClient((action, payload, requestSignal) =>
+    execWithTransportContext(action, payload, requestSignal ? { signal: requestSignal } : {}, transportContext, signal),
+  ));
+  return client;
 }
 
 function execWithTransportContext<T extends JsonValue = JsonValue>(

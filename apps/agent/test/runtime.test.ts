@@ -1019,7 +1019,10 @@ test("a removed Kernel connection is rejected before model work", async () => {
     bus: {},
     fetcher: fetch,
     connectionLister: async () => [],
-    storage: {},
+    storage: {
+      loadShared: async () => ({ selectedModelId: null, models: [], modelsFetchedAt: 0 }),
+      loadConversation: async () => emptyConversation,
+    },
     persisted: { selectedModelId: null, models: [], modelsFetchedAt: 0 },
     conversations: new Map([[historyId, emptyConversation]]),
     conversationLoads: new Map(),

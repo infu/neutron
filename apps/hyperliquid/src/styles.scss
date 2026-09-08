@@ -4,15 +4,14 @@
   html, body { margin: 0; background: #101718; }
   .nt-app.hl-app { --nt-accent: #9ee5c6; --nt-accent-muted: #203c33; min-height: 100dvh; padding: 12px 16px; color: #e2eae7; background: #101718; font-size: 12px; }
   .hl-app *, .hl-app *::before, .hl-app *::after { box-sizing: border-box; }
-  .hl-shell { max-width: 1520px; min-width: 0; margin: 0 auto; display: grid; gap: 9px; }
+  .hl-shell { max-width: 1520px; min-width: 0; margin: 0 auto; display: grid; gap: 8px; }
   .hl-app :is(h1,h2,h3,p) { margin: 0; letter-spacing: 0; }
-  .hl-app h1 { font-size: 18px; font-weight: 620; }
   .hl-app h2 { font-size: 14px; font-weight: 580; }
   .hl-app h3 { font-size: 14px; font-weight: 550; }
-  .hl-app :is(button,input,select) { font: inherit; letter-spacing: 0; }
+  .hl-app :is(button,input,select):not(:where(.nt-app-header-control)) { font: inherit; letter-spacing: 0; }
   .hl-app button { cursor: pointer; border: 0; }
   .hl-app button:disabled { opacity: .45; cursor: default; }
-  .hl-app :is(button,input,select,a,summary):focus-visible { outline: 2px solid #9ce5c6; outline-offset: 3px; }
+  .hl-app :is(button,input,select,a,summary):not(:where(.nt-app-header-control)):focus-visible { outline: 2px solid #9ce5c6; outline-offset: 3px; }
   .hl-app :is(input,select) { min-width: 0; width: 100%; border: 1px solid #2b3837; border-radius: 6px; background: #172221; color: #e2eae7; padding: 12px; }
   .hl-app input::placeholder { color: #677d76; }
   .hl-app a { color: #9edbc0; text-decoration: none; }
@@ -24,12 +23,9 @@
   .hl-positive { color: #97dec0 !important; }
   .hl-negative { color: #eb929f !important; }
   .hl-stack { display: grid; gap: 16px; min-width: 0; }
-  .hl-row, .hl-header, .hl-header-actions, .hl-brand, .hl-panel-heading, .hl-market-header, .hl-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
-  .hl-brand { justify-content: flex-start; gap: 9px; color: #a9efcf; }
-  .hl-header-actions { gap: 5px; }
+  .hl-row, .hl-panel-heading, .hl-market-header, .hl-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
   .hl-icon-button { color: #9bb6a8; background: transparent; border-radius: 5px; font-size: 23px !important; width: 32px; height: 32px; padding: 0; flex-shrink: 0; line-height: 1; }
   .hl-icon-button:hover { background: #23342e; color: #d0eadc; }
-  .hl-fund { display: flex; align-items: center; gap: 6px; background: #23392f; color: #b2e1c9; padding: 8px 10px; border-radius: 5px; font-size: 11px !important; white-space: nowrap; }
   .hl-overview { display: grid; grid-template-columns: 1.2fr 1fr 1fr; flex: 1; min-width: 0; gap: 12px; }
   .hl-stat { display: grid; align-content: start; gap: 3px; min-width: 0; font-variant-numeric: tabular-nums; }
   .hl-stat > span { font-size: 10px; line-height: 1.4; color: #8a9e95; }
@@ -179,11 +175,10 @@
   .hl-presets button { flex: 1; min-width: 0; padding: 6px 5px; font-size: 11px !important; }
   .hl-presets button[aria-pressed="true"] { background: #42644b; color: #d5eadb; }
   .hl-setup-icon { width: 50px; height: 50px; display: grid; place-items: center; border-radius: 10px; background: #284831; color: #b4eac2; font-size: 35px; }
-  .hl-header { min-height: 31px; }
   .hl-enable-trading { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 34px; padding: 8px 11px; border-radius: 5px; background: #a4e0b9; color: #143222; font-size: 11px !important; font-weight: 600; text-align: left; }
   .hl-enable-trading > span:last-child { margin-left: auto; }
   .hl-enable-trading:hover:not(:disabled) { background: #beeecd; }
-  .hl-access-ready { font-size: 15px !important; color: #9eddbb; }
+  .hl-access-ready { color: #9eddbb; }
   .hl-account-bar { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 6px 0 8px; border-bottom: 1px solid #26362e; }
   .hl-info > summary { display: inline-grid; place-items: center; width: 16px; height: 16px; padding: 0; border: 1px solid #71877b !important; border-radius: 50%; background: transparent; color: #9db6a8; font: 10px Georgia, serif !important; line-height: 1; flex-shrink: 0; }
   .hl-info { position: relative; display: inline-block; vertical-align: middle; text-align: left; }
@@ -213,8 +208,8 @@
     .hl-book-panel .hl-book-side { display: block; }
   }
   @media (max-width: 700px) {
-    .nt-app.hl-app { padding: 10px 12px; }
-    .hl-shell { gap: 8px; }
+    .nt-app.hl-app { padding: 12px; }
+    .hl-shell { gap: 4px; }
     .hl-overview .hl-stat > strong { font-size: 16px; }
     .hl-tabs { gap: 0; justify-content: space-between; }
     .hl-tabs > button { font-size: 11px; padding-bottom: 8px; }
@@ -244,12 +239,7 @@
     .hl-section-heading h2 { font-size: 16px; }
   }
   @media (max-width: 380px) {
-    .nt-app.hl-app { padding: 8px 10px; }
-    .hl-shell { gap: 7px; }
-    .hl-brand h1 { font-size: 16px; }
-    .hl-brand > svg { width: 25px; height: 25px; }
-    .hl-header-actions { gap: 2px; }
-    .hl-fund { font-size: 10px !important; padding: 7px 8px; }
+    .nt-app.hl-app { padding: 12px; }
     .hl-overview { grid-template-columns: 1.1fr 1fr 1fr; gap: 7px; }
     .hl-overview .hl-stat > strong { font-size: 14px; }
     .hl-overview .hl-stat > span { font-size: 9px; }

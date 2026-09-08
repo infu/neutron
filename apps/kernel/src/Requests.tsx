@@ -43,10 +43,52 @@ import {
 import type { KernelUiMode } from "./ui_mode.ts";
 import { formatCycles } from "./settings/format.ts";
 import { getNeutronId } from "./config.ts";
+import { useBrowserExtensionStore, type ExtensionConsent } from "./browser_extension/consent.ts";
 
 const { toState } = icblast as unknown as {
   toState(value: unknown): unknown;
 };
+
+export function BrowserExtensionRequest({ request }: { request: ExtensionConsent }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const rejectRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { focusConsentControl(rejectRef.current); }, [request]);
+  return <>
+    <div className="backdrop" onClick={request.reject} />
+    <div
+      aria-describedby="extension-access-description"
+      aria-labelledby="extension-access-title"
+      aria-modal="true"
+      className="dialog dialog-warning"
+      data-tid="browser-extension-permission-dialog"
+      onKeyDown={(event) => {
+        if (dismissOnEscape(event, request.reject)) return;
+        trapDialogFocus(event, dialogRef.current);
+      }}
+      ref={dialogRef}
+      role="alertdialog"
+    >
+      <div className="title" id="extension-access-title">
+        Allow {request.grant.appName} to use the browser extension?
+      </div>
+      <div className="call">
+        <p id="extension-access-description">
+          This app can send HTTP requests through your browser extension.
+          Access stays enabled until you revoke it in Settings.
+        </p>
+        {request.reason ? <p>{request.reason}</p> : null}
+        <div className="btn-actions">
+          <button className="btn btn-warning" data-tid="browser-extension-permission-approve" onClick={request.approve} type="button">
+            Allow extension access
+          </button>
+          <button className="btn btn-sec" data-tid="browser-extension-permission-reject" onClick={request.reject} ref={rejectRef} type="button">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </>;
+}
 
 function ToAddress({ address }: { address: string }) {
   return (
@@ -63,6 +105,7 @@ export function Requests() {
   const calls = useRequestStore((state) => state.calls);
   const toolRequests = useMsgBusPermissionStore((state) => state.requests);
   const backendRequests = useBackendCallConsentStore((state) => state.requests);
+  const extensionRequest = useBrowserExtensionStore((state) => state.dialog);
   const callDialogRef = useRef<HTMLDivElement>(null);
   const callRejectRef = useRef<HTMLButtonElement>(null);
   const backendId = Object.keys(backendRequests)[0];
@@ -70,9 +113,11 @@ export function Requests() {
   const cid = Object.keys(calls)[0];
 
   useEffect(() => {
-    if (backendId || toolCid || !cid) return;
+    if (extensionRequest || backendId || toolCid || !cid) return;
     focusConsentControl(callRejectRef.current);
-  }, [backendId, cid, toolCid]);
+  }, [backendId, cid, toolCid, extensionRequest]);
+
+  if (extensionRequest) return <BrowserExtensionRequest request={extensionRequest} />;
 
   if (backendId) {
     const request = backendRequests[Number(backendId)];

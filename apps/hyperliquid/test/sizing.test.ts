@@ -41,6 +41,13 @@ test("Max reserves actual trading fees without counting maker rebates as collate
   expect(result.maxSize).toBe("90.9"); expect(result.feeRate).toBe("0.01"); expect(result.venueMaxSize).toBe("100");
   expect(result.reason).toContain("estimate");
 });
+test("Max applies the observed referral discount to its fee reserve", () => {
+  const proof = evidence(); proof.account!.fees = { userCrossRate: "0.01", userAddRate: "-0.02", activeReferralDiscount: "0.1" };
+  const result = calculateOrderCapacity(request, proof);
+  // 100 USDC / (1 USDC initial margin + 0.09 USDC discounted fee per ETH).
+  expect(result.maxSize).toBe("91.74"); expect(result.feeRate).toBe("0.009");
+  expect(proof.account!.fees.userCrossRate).toBe("0.01");
+});
 test("market Max uses the real book side and selected slippage, with adverse mark-price cost", () => {
   const proof = evidence(); proof.account!.fees = { userCrossRate: "0.01", userAddRate: "0" };
   const buy = calculateOrderCapacity({ ...request, slippageBps: 1000 }, proof);

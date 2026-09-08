@@ -112,7 +112,8 @@ export async function nextAgentSwapAction(
       return status(stage, true, `The supplied ${stage} status conflicts with a transaction already retained in the saved journal. Reconcile the same original request from its owning Agent installation; do not create a replacement intent.`);
     }
     if (latest.status === "rejected") return result("stopped", stage, `The ${stage} request was declined. Keep the saved request; do not turn that decision into another transaction.`);
-    if (!["not_found", "prepared", "failed"].includes(latest.status)) {
+    if (latest.status === "preparing" && quoteExpired()) return status(stage, true, `The original ${stage} preparation is unresolved and its quote has expired. Reconcile the same Wallet request before considering a new intent.`);
+    if (!["not_found", "preparing", "prepared", "failed"].includes(latest.status)) {
       return status(stage, true, `The saved ${stage} may already be signing or have an uncertain effect. Reconcile that same root Wallet request and pass its result back before continuing.`);
     }
     if (latest.status === "failed" && !quoteExpired()) return result("stopped", stage, `The saved ${stage} failed before a transaction hash was available. Inspect the Wallet error before another attempt: ${latest.message ?? "No additional error detail."}`);

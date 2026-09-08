@@ -64,6 +64,7 @@ plugins: [sassPlugin()];
 | --- | --- | --- | --- | --- |
 | `nt-button` | Native `button` | Visible text | `disabled`, `aria-busy` on related region | Native Enter/Space, visible focus |
 | `nt-icon-button` | Native `button` | `aria-label` or hidden text | `disabled` | Stable square target |
+| `nt-app-header` | Native `header` with a heading | Visible app title; named native action controls | Native state on controls | Actions retain visible focus and wrap within the tile |
 | `nt-field` + `nt-input` | Label + native input | Visible label | `aria-invalid`, `aria-describedby`, `readonly` | Native field behavior |
 | `nt-form-grid` | Grid wrapper | Native field labels | None | Keeps compact field rows responsive |
 | `nt-checkbox` / `nt-radio` | Native input | Associated label | `checked`, `disabled` | Space toggles |
@@ -82,6 +83,8 @@ trusted approval, install, authorization, or signature dialogs.
 ## Recipes
 
 - App root: `nt-app nt-app--fill` plus an app-prefixed class.
+- App heading: use `nt-app-header` for a consistent icon, title, optional
+  subtitle, and app-specific actions; see the compact header recipe below.
 - Method call forms: use `nt-form-grid nt-form-grid--two` for compact field
   pairs, validate locally, show a request preview, then use
   `neutron-tools/app` and wording such as `Review in kernel`.
@@ -102,3 +105,58 @@ trusted approval, install, authorization, or signature dialogs.
   in that existing surface—never add a loading card.
 - Destructive flows: use warning, danger, or critical severity with explicit
   consequence text; kernel approval remains kernel-owned.
+
+### Compact App Header
+
+```html
+<header class="nt-app-header">
+  <div class="nt-app-header-main">
+    <img class="nt-app-header-icon" src="./icon.svg" alt="" />
+    <div class="nt-app-header-copy">
+      <h1 class="nt-app-header-title">My app</h1>
+      <p class="nt-app-header-subtitle">Short description</p>
+    </div>
+  </div>
+  <div class="nt-app-header-actions">
+    <select class="nt-select nt-app-header-control" aria-label="Network">
+      <option>Ethereum</option>
+      <option>Arbitrum</option>
+    </select>
+    <button
+      type="button"
+      class="nt-icon-button nt-app-header-icon-button"
+      aria-label="Refresh"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24"><!-- Refresh icon --></svg>
+    </button>
+  </div>
+</header>
+```
+
+Place the header inside `.nt-app`. Its default row is at least 48px tall:
+32px content with 8px vertical padding. The icon slot is 32px; an image fills
+the slot, while an inline SVG inside a decorative `nt-app-header-icon` span
+is 20px. Titles use 16px medium text with a 20px line height. Subtitles use
+11px muted text beside the title and disappear when the header's own width
+is below 480px, including when a tile becomes narrow in a wide workspace.
+Keep the subtitle supplementary; required account or trading state belongs
+in visible content or controls.
+
+Use `nt-app-header-control` with an existing `nt-button`, `nt-select`, or
+`nt-input` class. Use `nt-app-header-icon-button` with `nt-icon-button` for
+square actions. Controls are 32px tall by default and retain the shared
+larger targets for coarse pointers. Actions wrap when they need another row;
+the header has no fixed height or clipping. Keep action groups short.
+
+An icon-and-text action may put its optional caption in
+`nt-app-header-action-label` to hide that caption below 480px. Give the button
+a persistent accessible name such as `aria-label="Refresh"` before hiding
+visible text. Decorative icons need `alt=""` or `aria-hidden="true"`.
+Keep native control semantics and choose the heading level appropriate to
+the app's document.
+
+Remove obsolete app-local header layout rules when adopting this recipe.
+Exclude the shared title, subtitle, and control classes from broad app-local
+`h1`, `p`, `button`, `select`, or `input` overrides so their sizes remain
+consistent. Compose app-prefixed classes for behavior such as sticky
+positioning rather than restyling the shared typography and spacing.

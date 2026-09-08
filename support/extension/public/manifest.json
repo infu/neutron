@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Neutron Browser Bridge",
+  "description": "Connect your Neutron to services directly from your browser. Neutron controls which apps can use the connection.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "offscreen"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [{
+    "matches": ["https://*/*", "http://*/*"],
+    "js": ["content.js"],
+    "all_frames": false,
+    "run_at": "document_start",
+    "world": "ISOLATED"
+  }],
+  "action": { "default_title": "Neutron Browser Bridge", "default_popup": "settings.html" },
+  "options_ui": { "page": "settings.html", "open_in_tab": true },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; connect-src http: https:; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+  }
+}

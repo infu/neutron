@@ -1,6 +1,26 @@
 import type { JsonObject } from "neutron-tools/app";
 import type { ModelMessage } from "ai";
 
+export type AgentProvider = "openrouter" | "chatgpt";
+
+export type AgentChatGptStatus = JsonObject & {
+  connected: boolean;
+  extension: (JsonObject & {
+    available: boolean;
+    paired: boolean;
+    granted: boolean;
+    extensionVersion?: string;
+    incompatible?: boolean;
+  }) | null;
+  email?: string;
+  planType?: string;
+  login?: (JsonObject & {
+    verificationUrl: string;
+    userCode: string;
+    expiresAt: number;
+  }) | null;
+};
+
 export type OpenRouterModel = JsonObject & {
   id: string;
   name: string;
@@ -26,6 +46,8 @@ export type AgentToolActivity = JsonObject & {
 
 export type AgentSnapshot = JsonObject & {
   ready: boolean;
+  provider?: AgentProvider;
+  chatgpt?: AgentChatGptStatus;
   connected: boolean;
   webToolsAvailable: boolean;
   selectedModelId: string | null;

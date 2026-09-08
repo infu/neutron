@@ -33,6 +33,9 @@ HTTP outcall. The backend preserves wallet state and performs chain-key signing.
   that contains only an NFT ID labels token0/token1 amounts as atomic units; it
   does not invent token identities. Unrecognized call sequences keep the generic
   contract review with complete original bytes.
+  V3 collections through the NFT manager show that collection destination and
+  each forwarded asset's exact minimum separately; they do not assume those
+  assets include every token collected from the position.
   Curve Router calls on Ethereum and Arbitrum show the exact payment, minimum
   received and recipient, plus the absence of an onchain expiry. Compatible pool
   liquidity interfaces show indexed token budgets, LP burns, output minima and

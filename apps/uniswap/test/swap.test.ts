@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { CurrencyAmount, Fraction, Token as SdkToken, computePriceImpact } from "@uniswap/sdk-core";
+import { Pool as SdkPool, TickMath, encodeSqrtRatioX96 } from "@uniswap/v3-sdk";
 import { decodeFunctionData, encodeFunctionResult, getAddress, parseAbi, type Address, type Hex } from "viem";
 import {
   amountAtoms, customToken, defaultTokens, network, prepareSwap, quoteSwap,
@@ -138,6 +140,26 @@ describe.each(["1", "42161"] as const)("Uniswap deployment on chain %s", (chainI
   });
 });
 
+test("fresh legacy Ethereum USDT preparation directs required allowance resets to the unified flow", async () => {
+  const tokenIn = { chainId: "1", address: getAddress("0xdac17f958d2ee523a2206206994597c13d831ec7"), decimals: 6, symbol: "USDT" };
+  const quote = await quoteSwap(reader().read, { ...input("1", "token-native"), tokenIn, amountIn: "3000000" }, NOW);
+  await expect(prepareSwap(reader({ allowance: 1_000_000n }).read, quote, NOW)).rejects.toThrow("uniswap_swap_v2");
+  const zero = await prepareSwap(reader({ allowance: 0n }).read, quote, NOW);
+  expect(decodeFunctionData({ abi: tokenAbi, data: zero.approval!.data })).toMatchObject({ functionName: "approve", args: [ROUTER, 3_000_000n] });
+  for (const allowance of [3_000_000n, 4_000_000n]) expect((await prepareSwap(reader({ allowance }).read, quote, NOW)).approval).toBeNull();
+  // Old quote-derived calldata remains valid; the guard affects preparation,
+  // not the immutable requests in previously saved legacy records.
+  expect(swapTransaction(quote, NOW)).toEqual(zero.swap);
+});
+
+test("legacy reset guidance is scoped to the Ethereum contract, not a USDT symbol", async () => {
+  for (const [chainId, address] of [["1", CUSTOM], ["42161", getAddress("0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9")]] as const) {
+    const quote = await quoteSwap(reader().read, { ...input(chainId, "token-native"), tokenIn: { chainId, address, decimals: 6, symbol: "USDT" }, amountIn: "3000000" }, NOW);
+    const prepared = await prepareSwap(reader({ allowance: 1_000_000n }).read, quote, NOW);
+    expect(decodeFunctionData({ abi: tokenAbi, data: prepared.approval!.data })).toMatchObject({ functionName: "approve", args: [ROUTER, 3_000_000n] });
+  }
+});
+
 test("quotes choose the greatest output, break ties by fee, and retain failed-pool warnings", async () => {
   const { read, calls } = reader({ outputs: { 100: new Error("missing pool"), 500: 1_500n, 3000: 2_001n, 10000: 2_001n } });
   const quote = await quoteSwap(read, input(), NOW);
@@ -185,6 +207,27 @@ test("price impact uses token ordering and the pool fee in integer arithmetic", 
   const reverse = await quoteSwap(reader({ outputs: { 500: 245_000n }, sqrtPriceX96: 2n ** 97n }).read, input("1", "native-token"), NOW);
   expect(direct.priceImpactBps).toBe("245");
   expect(reverse.priceImpactBps).toBe("195");
+});
+
+test.each([false, true])("low-output V3 impact preserves fractional spot value, reverse=%s", async (reverse) => {
+  const token0 = new SdkToken(1, "0x0000000000000000000000000000000000000010", reverse ? 0 : 6, "AAA");
+  const token1 = new SdkToken(1, "0x0000000000000000000000000000000000000020", reverse ? 6 : 0, "BBB");
+  const sqrt = encodeSqrtRatioX96(reverse ? 100000000 : 1051, reverse ? 1051 : 100000000);
+  const liquidity = "1000000000000000000000000";
+  const sdkPool = new SdkPool(token0, token1, 500, sqrt, liquidity, TickMath.getTickAtSqrtRatio(sqrt), [
+    { index: -887270, liquidityGross: liquidity, liquidityNet: liquidity },
+    { index: 887270, liquidityGross: liquidity, liquidityNet: `-${liquidity}` },
+  ]);
+  const tokenIn = reverse ? token1 : token0, tokenOut = reverse ? token0 : token1;
+  const amount = CurrencyAmount.fromRawAmount(tokenIn, "1000000"), [output] = await sdkPool.getOutputAmount(amount);
+  const token = (value: SdkToken) => ({ chainId: "1", address: getAddress(value.address), symbol: value.symbol!, decimals: value.decimals });
+  const quote = await quoteSwap(reader({ outputs: { 500: BigInt(output.quotient.toString()) }, sqrtPriceX96: BigInt(sqrt.toString()) }).read,
+    { ...input(), tokenIn: token(tokenIn), tokenOut: token(tokenOut) }, NOW);
+  // The independent SDK retains fractional currency amounts. Output rounding
+  // costs value here; flooring the reference first used to report -1111 bps.
+  const expected = computePriceImpact(sdkPool.priceOf(tokenIn), amount.multiply(new Fraction(999500, 1000000)), output).multiply(10000).quotient.toString();
+  expect(quote.amountOut).toBe("10"); expect(quote.minimumOut).toBe("9");
+  expect(expected).toBe("480"); expect(quote.priceImpactBps).toBe(expected);
 });
 
 test("a missing impact read is visible and does not discard a successful quote", async () => {
