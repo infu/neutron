@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "taggr",
+  "memory": {
+    "identity": {
+      "schemas": {
+        "1": {
+          "hash": "3821244ed0c6d76479cf623b44e1332e54e09fab87e246e5ebdb036d68774575",
+          "entry": "3821244ed0c6d76479cf623b44e1332e54e09fab87e246e5ebdb036d68774575"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

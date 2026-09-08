@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Nuance">
+  <rect width="32" height="32" rx="5" fill="#10161f"/>
+  <path d="M9 23V9h2.6l7.2 9.7V9H21v14h-2.6L11.2 13.3V23H9z" fill="#7fb0ff"/>
+  <circle cx="23.5" cy="10.5" r="1.8" fill="#7fb0ff" opacity="0.85"/>
+</svg>

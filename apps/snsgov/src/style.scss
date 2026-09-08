@@ -1,0 +1,814 @@
+@use "neutron-design-system/styles.scss";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+@layer app {
+  .nt-app.snsgov-app {
+    --nt-accent: #8adf9d;
+
+    // The tile is the whole viewport, so the app owns its own gutter. Without
+    // this, everything sits flush against the frame edge.
+    --snsgov-gutter: 16px;
+  }
+
+  // ---- Page frame ---------------------------------------------------------
+
+  .snsgov-app .nt-page {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    min-width: 0;
+  }
+
+  .snsgov-app .nt-page-header {
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    padding: var(--snsgov-gutter) var(--snsgov-gutter) 12px;
+  }
+
+  .snsgov-app .nt-page-main {
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 var(--snsgov-gutter) var(--snsgov-gutter);
+    // This is a grid, and `normal` resolves to `stretch`: with few rows — which
+    // is exactly the loading state — the spare height is shared out between
+    // them, so the tab strip drifts to the middle of the tile and snaps back up
+    // when the content arrives. Pack the rows to the top instead.
+    align-content: start;
+  }
+
+  // ---- Toolbar ------------------------------------------------------------
+
+  .snsgov-toolbar {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+  }
+
+  .snsgov-toolbar-actions {
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+
+  .snsgov-search {
+    align-items: center;
+    display: flex;
+    flex: 1 1 auto;
+    gap: 8px;
+    max-width: 22rem;
+    min-width: 0;
+    position: relative;
+
+    .nt-input {
+      padding-left: 2rem;
+      width: 100%;
+    }
+  }
+
+  .snsgov-search-icon {
+    color: var(--nt-text-faint, #6d7d8c);
+    left: 0.6rem;
+    pointer-events: none;
+    position: absolute;
+  }
+
+  .snsgov-icon-button {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+  }
+
+  .snsgov-detail-title {
+    font-size: 1rem;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .snsgov-spacer {
+    flex: 1 1 auto;
+  }
+
+  // ---- Tables -------------------------------------------------------------
+  //
+  // The wrapper scrolls horizontally ONLY, and only when the table genuinely
+  // overflows. A wrapper with `overflow: auto` on both axes swallows the wheel,
+  // so the page cannot be scrolled while the pointer is over the table — which
+  // is most of the page.
+
+  .snsgov-app .nt-table-wrap {
+    max-width: 100%;
+    // No scroll container on either axis. A horizontal one is enough to break
+    // vertical scrolling on a trackpad: a two-finger gesture carries both a
+    // deltaX and a deltaY, and the browser latches the whole gesture to the
+    // horizontal scroller under the pointer, so the page never moves. A mouse
+    // wheel sends deltaY only, which is why this survived a wheel-only test.
+    // Columns compress and ellipsize instead — see the width modifiers below.
+    overflow: visible;
+  }
+
+  .snsgov-table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+
+    th,
+    td {
+      // The cell must not paint its own background: the design system gives
+      // `td` one, which sits on top of the row's hover colour and leaves a
+      // visible seam where the first cell ends.
+      background: transparent;
+      overflow: hidden;
+      padding: 8px 10px;
+      text-overflow: ellipsis;
+      vertical-align: middle;
+      // Cells wrap by default; columns that must stay on one line opt in below.
+      // Blanket nowrap is what made text spill across its neighbours.
+      white-space: normal;
+      word-break: normal;
+    }
+
+    // Column labels are scaffolding, not content: quiet, small, and clearly
+    // separated from the first row so the eye starts on the data.
+    thead th {
+      color: var(--nt-text-faint, #6d7d8c);
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      padding-bottom: 6px;
+      padding-top: 0;
+      text-transform: uppercase;
+    }
+
+    thead tr {
+      box-shadow: inset 0 -1px 0 var(--nt-line, #25313d);
+    }
+
+    tbody tr {
+      // One hairline, drawn as an inset shadow so row height never shifts.
+      box-shadow: inset 0 -1px 0 var(--nt-line-subtle, #18222b);
+    }
+
+    // The last hairline sits directly above the footnote and reads as a stray
+    // rule under the table.
+    tbody tr:last-child {
+      box-shadow: none;
+    }
+
+    // The design system renders a row header as a small monospace label, which
+    // suits an identifier but not a name: our row header is the SNS name, the
+    // proposal title, the draft title — the most important text in the row, and
+    // it was rendering as the smallest and oddest. One font, two sizes.
+    th[scope="row"] {
+      color: var(--nt-text-strong, #e6edf3);
+      font-family: var(--nt-font-ui, Inter, system-ui, sans-serif);
+      font-size: var(--nt-font-size-body, 0.8125rem);
+      font-weight: 500;
+      // The design system uppercases every `th`, which is right for a column
+      // label and wrong for a row header: these carry names — "Cecil The Lion
+      // DAO", "Manage nervous system parameters" — and hex neuron ids, which
+      // were being shown uppercase while `toHex` emits lowercase, so what was
+      // on screen did not match what copied.
+      text-transform: none;
+    }
+
+    // Column labels share the UI font too; uppercase and letter-spacing carry
+    // the "this is a label" signal without a second typeface.
+    thead th {
+      font-family: var(--nt-font-ui, Inter, system-ui, sans-serif);
+    }
+  }
+
+  // ---- Logos --------------------------------------------------------------
+  //
+  // Every SNS ships one in its governance metadata as an inline data URI, so
+  // these cost no network request. A DAO with none gets its initials rather
+  // than a gap, so the name column stays aligned.
+
+  .snsgov-logo {
+    border-radius: var(--nt-radius-1, 4px);
+    flex: 0 0 auto;
+    object-fit: contain;
+  }
+
+  .snsgov-logo--fallback {
+    align-items: center;
+    background: var(--nt-bg-control, #131a21);
+    color: var(--nt-text-faint, #6d7d8c);
+    display: inline-flex;
+    font-weight: 600;
+    justify-content: center;
+    letter-spacing: 0.02em;
+  }
+
+  .snsgov-name {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+
+    .snsgov-link {
+      min-width: 0;
+    }
+  }
+
+  // ---- Clickable rows -----------------------------------------------------
+  //
+  // The row is the target, not the 14px of text in its first cell. The name
+  // keeps its own button for keyboard and screen-reader users; this is the
+  // mouse affordance the row already looked like it had.
+
+  .snsgov-table .snsgov-row {
+    cursor: pointer;
+    transition:
+      background-color var(--nt-duration-fast, 120ms) var(--nt-ease-standard, ease),
+      box-shadow var(--nt-duration-fast, 120ms) var(--nt-ease-standard, ease);
+  }
+
+  .snsgov-table .snsgov-row:hover {
+    background: var(--nt-bg-control-hover, #151d25);
+  }
+
+  .snsgov-table .snsgov-row:active {
+    background: var(--nt-bg-control-active, #1a242e);
+  }
+
+  // The whole row lights up when the control inside it takes keyboard focus,
+  // so tabbing through shows the same target the mouse gets.
+  .snsgov-table .snsgov-row:has(:focus-visible) {
+    background: var(--nt-bg-control-hover, #151d25);
+    box-shadow:
+      inset 2px 0 0 var(--nt-accent, #8adf9d),
+      inset 0 -1px 0 var(--nt-line-subtle, #18222b);
+  }
+
+  .snsgov-table .snsgov-row:hover .snsgov-link {
+    color: var(--nt-accent, #8adf9d);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .snsgov-table .snsgov-row {
+      transition: none;
+    }
+  }
+
+  // These must out-specify `.snsgov-table th, td { white-space: normal }` above,
+  // which is (0,2,1) — an unscoped `.snsgov-num` (0,1,0) silently loses to it and
+  // the numbers wrap mid-value ("150.55" / "ALICE" on two lines).
+  .snsgov-table .snsgov-num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .snsgov-table .snsgov-nowrap {
+    white-space: nowrap;
+  }
+
+  .snsgov-table .snsgov-row-actions {
+    padding-right: 0;
+    text-align: right;
+    white-space: nowrap;
+    width: 1%;
+  }
+
+  // ---- Column widths ------------------------------------------------------
+  //
+  // `table-layout: fixed` needs explicit widths, otherwise one long name steals
+  // the row and the numeric columns collapse into each other.
+
+  // Name first and widest — it is what the eye scans for. Every cell is a
+  // single line: a wrapped description turns a 40-row list into a wall.
+  .snsgov-table--snses {
+    th:nth-child(1) { width: 34%; }
+    th:nth-child(2) { width: 12%; }
+    th:nth-child(3) { width: 54%; }
+
+    th,
+    td {
+      white-space: nowrap;
+    }
+  }
+
+  .snsgov-desc {
+    color: var(--nt-text-muted, #9fb0bf);
+  }
+
+  .snsgov-table--proposals {
+    th:nth-child(1) { width: 8%; }
+    th:nth-child(2) { width: 42%; }
+    th:nth-child(3) { width: 22%; }
+    th:nth-child(4) { width: 14%; }
+    th:nth-child(5) { width: 14%; }
+  }
+
+  .snsgov-table--neurons {
+    th:nth-child(1) { width: 24%; }
+    th:nth-child(2) { width: 18%; }
+    th:nth-child(3) { width: 18%; }
+    th:nth-child(4) { width: 32%; }
+    th:nth-child(5) { width: 8%; }
+  }
+
+  .snsgov-table--allowlist {
+
+    th:nth-child(1) { width: 48%; }
+    th:nth-child(2) { width: 18%; }
+    th:nth-child(3) { width: 22%; }
+    th:nth-child(4) { width: 12%; }
+  }
+
+  .snsgov-table--canisters {
+    th:nth-child(1) { width: 38%; }
+    th:nth-child(2) { width: 14%; }
+    th:nth-child(3) { width: 18%; }
+    th:nth-child(4) { width: 16%; }
+    th:nth-child(5) { width: 14%; }
+  }
+
+  .snsgov-table--scan {
+
+    th:nth-child(1) { width: 42%; }
+    th:nth-child(2) { width: 16%; }
+    th:nth-child(3) { width: 14%; }
+    th:nth-child(4) { width: 28%; }
+  }
+
+  .snsgov-table--functions {
+    th:nth-child(1) { width: 34%; }
+    th:nth-child(2) { width: 12%; }
+    th:nth-child(3) { width: 34%; }
+    th:nth-child(4) { width: 20%; }
+  }
+
+  // ---- States -------------------------------------------------------------
+  //
+  // A loading placeholder is a quiet line, not a large filled panel. The stock
+  // state block painted a big tinted box that dominated the tile.
+
+  // No content yet: one spinner, out of flow, so the content that replaces it
+  // is not pushed down and snapped back.
+  .snsgov-pending {
+    align-items: flex-start;
+    display: flex;
+    justify-content: center;
+    left: 0;
+    padding-top: 28px;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: 0;
+  }
+
+  .snsgov-empty {
+    color: var(--nt-text-faint, #6d7d8c);
+    font-size: 0.8rem;
+    margin: 0;
+    padding: 6px 0;
+  }
+
+  // Anything that hosts a `.snsgov-pending` has to be its positioning context.
+  .snsgov-app .nt-page-main,
+  .snsgov-app .nt-section,
+  .snsgov-panel {
+    position: relative;
+  }
+
+  .snsgov-spinner {
+    animation: snsgov-spin 800ms linear infinite;
+    border: 1.5px solid var(--nt-line, #25313d);
+    border-radius: 50%;
+    border-top-color: var(--nt-accent, #8adf9d);
+    display: inline-block;
+    flex: 0 0 auto;
+    height: 14px;
+    width: 14px;
+  }
+
+  @keyframes snsgov-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .snsgov-spinner {
+      animation-duration: 3s;
+    }
+  }
+
+  .snsgov-app .nt-alert {
+    padding: 10px 12px;
+  }
+
+  .snsgov-alert {
+    align-items: flex-start;
+    display: flex;
+    gap: 8px;
+
+    svg {
+      flex: 0 0 auto;
+      margin-top: 0.15rem;
+    }
+  }
+
+  // ---- Content ------------------------------------------------------------
+
+  .snsgov-link {
+    background: none;
+    border: 0;
+    color: var(--nt-text-strong, #e6edf3);
+    cursor: pointer;
+    display: block;
+    font: inherit;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 0;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover {
+      color: var(--nt-accent, #8adf9d);
+    }
+  }
+
+  .snsgov-badge {
+    margin-left: 8px;
+  }
+
+  .snsgov-description {
+    color: var(--nt-text-muted, #9fb0bf);
+    margin: 0 0 16px;
+    max-width: 68ch;
+  }
+
+  .snsgov-canister {
+    align-items: center;
+    display: flex;
+    gap: 4px;
+    justify-content: space-between;
+    min-width: 0;
+
+    code {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .snsgov-footnote {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .snsgov-tabs {
+    margin-bottom: 16px;
+  }
+
+  .snsgov-filter {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+
+    .nt-input,
+    .nt-select {
+      // `flex-basis: 16rem` with room to grow, but capped: a select that eats
+      // the whole row leaves its own button one character wide, which then
+      // wraps its label onto three lines.
+      flex: 1 1 16rem;
+      max-width: 26rem;
+      min-width: 0;
+    }
+
+    // Controls beside a field never shrink. This is the actual fix for the
+    // three-line "Add" button.
+    .nt-button,
+    .nt-icon-button,
+    .snsgov-icon-button {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+  }
+
+  // ---- Sections -----------------------------------------------------------
+  //
+  // The stock section rhythm leaves ~70px between blocks, which reads as three
+  // unrelated screens rather than one. Tighter, and the header's action sits at
+  // the right edge where every other action in the app lives.
+
+  .snsgov-app .nt-section {
+    // `.nt-page-main` is a grid with its own 20px gap; a margin here is added to
+    // that gap, not merged with it, which is what made the screen read as three
+    // unrelated pages.
+    margin: 0;
+    // The section is itself a grid, and the page stretches it to fill the tile.
+    // With the default `align-content: stretch` that slack is shared out across
+    // every row, so a one-line heading rendered 83px tall. Pack the rows.
+    align-content: start;
+  }
+
+  .snsgov-app .nt-section-header {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    // `.nt-section` is itself a grid with an 8px row gap — a margin here is
+    // added to it rather than merged.
+    margin-bottom: 0;
+  }
+
+  .snsgov-app .nt-section-heading {
+    margin: 0;
+  }
+
+  .snsgov-app .nt-section-count {
+    // Sits with the heading, not pushed to the far edge by the flex row.
+    margin-right: auto;
+  }
+
+  // Same reasoning: the section grid already separates rows, so a trailing
+  // margin here only pads the bottom of the section.
+  .snsgov-app .snsgov-description {
+    margin: 0;
+  }
+
+  // ---- Registration -------------------------------------------------------
+
+  .snsgov-count {
+    align-items: center;
+    display: inline-flex;
+    gap: 5px;
+  }
+
+  .snsgov-count-text {
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  // A count on the header icon is the only thing that tells the owner an agent
+  // left work for them, so it must read at a glance without shouting.
+  .snsgov-badge-count {
+    background: var(--nt-accent, #8adf9d);
+    border-radius: 999px;
+    color: #04120a;
+    font-size: 0.62rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: 1;
+    padding: 2px 4px;
+    text-align: center;
+  }
+
+  // ---- Draft review -------------------------------------------------------
+
+  .snsgov-table--drafts {
+
+    th:nth-child(1) { width: 44%; }
+    th:nth-child(2) { width: 20%; }
+    th:nth-child(3) { width: 12%; }
+    th:nth-child(4) { width: 16%; }
+    th:nth-child(5) { width: 8%; }
+  }
+
+  .snsgov-proposal {
+    border: 1px solid var(--nt-line, #25313d);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    max-width: 72ch;
+    padding: 16px;
+  }
+
+  .snsgov-proposal-title {
+    font-size: 1.05rem;
+    margin: 0 0 12px;
+  }
+
+  .snsgov-proposal-body {
+    margin: 0 0 12px;
+    // Agent prose arrives with real newlines; collapsing them loses the shape
+    // the reviewer is meant to read.
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .snsgov-review .nt-pre {
+    max-height: 18rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .snsgov-anchor {
+    display: inline-flex;
+    position: relative;
+  }
+
+  .snsgov-panel {
+    background: var(--nt-bg-elevated, #10171e);
+    border: 1px solid var(--nt-line, #25313d);
+    border-radius: var(--nt-radius-2, 6px);
+    box-shadow: var(--nt-shadow-raised, 0 8px 24px rgb(0 0 0 / 45%));
+    margin-bottom: 0;
+    padding: 12px;
+    position: absolute;
+    right: 0;
+    text-align: left;
+    top: calc(100% + 8px);
+    // Wide enough to read, never wider than the tile.
+    width: min(28rem, calc(100vw - 2 * var(--snsgov-gutter)));
+    z-index: 20;
+
+    p {
+      margin: 0 0 8px;
+    }
+  }
+
+  .snsgov-panel-head {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  // A definition-style pair used by the Setup summary rows.
+  .snsgov-facts {
+    display: grid;
+    gap: 4px 16px;
+    grid-template-columns: auto 1fr;
+    margin: 0 0 16px;
+
+    dt {
+      color: var(--nt-text-muted, #9fb0bf);
+    }
+
+    dd {
+      margin: 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .snsgov-principals {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    li {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    li + li {
+      margin-top: 2px;
+    }
+  }
+
+  .snsgov-more {
+    margin-top: 12px;
+  }
+
+  .snsgov-prose {
+    margin-top: 16px;
+    max-width: 72ch;
+
+    .nt-pre {
+      max-height: 22rem;
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+  }
+
+  .snsgov-tally {
+    margin: 12px 0;
+    max-width: 30rem;
+  }
+
+  .snsgov-tally-bar {
+    background: var(--nt-bg-control, #131a21);
+    border-radius: 2px;
+    display: flex;
+    height: 6px;
+    overflow: hidden;
+  }
+
+  .snsgov-tally-yes {
+    background: var(--nt-success, #8adf9d);
+  }
+
+  .snsgov-tally-no {
+    background: var(--nt-danger, #e08a8a);
+  }
+
+  .snsgov-copyfield {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    max-width: 34rem;
+
+    .nt-input {
+      flex: 1 1 auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      min-width: 0;
+    }
+  }
+
+  .snsgov-recipe {
+    margin-top: 16px;
+    max-width: 72ch;
+
+    ol {
+      margin: 8px 0;
+      padding-left: 1.2rem;
+    }
+
+    li + li {
+      margin-top: 8px;
+    }
+
+    code {
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .snsgov-toggle {
+    margin: 0;
+  }
+
+  // These tables have no row detail screen. In a narrow tile, ellipsizing a
+  // stake or cycle balance makes the data inaccessible, so each row becomes a
+  // compact labelled group while the copy control stays beside its identifier.
+  @media (max-width: 480px) {
+    .snsgov-app .snsgov-table--neurons,
+    .snsgov-app .snsgov-table--canisters {
+      display: block;
+
+      thead {
+        clip-path: inset(50%);
+        height: 1px;
+        overflow: hidden;
+        position: absolute;
+        width: 1px;
+      }
+
+      tbody {
+        display: block;
+      }
+
+      tbody tr {
+        display: grid;
+        gap: 6px 12px;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+        padding: 10px 0;
+      }
+
+      tbody th,
+      tbody td {
+        border-bottom: 0;
+        min-width: 0;
+        overflow: visible;
+        padding: 0;
+        text-align: left;
+        white-space: normal;
+        width: auto;
+        overflow-wrap: anywhere;
+      }
+
+      tbody th[scope="row"] {
+        grid-column: 1 / 3;
+        grid-row: 1;
+      }
+
+      .snsgov-row-actions {
+        grid-column: 3;
+        grid-row: 1;
+        text-align: right;
+      }
+
+      td[data-label]::before {
+        color: var(--nt-text-muted, #9fb0bf);
+        content: attr(data-label);
+        display: block;
+        font-size: 0.7rem;
+        margin-bottom: 2px;
+      }
+
+      .snsgov-principals li {
+        white-space: normal;
+      }
+
+      td:nth-child(4) {
+        grid-column: 1 / -1;
+      }
+    }
+  }
+}
