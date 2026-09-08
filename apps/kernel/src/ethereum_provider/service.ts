@@ -43,10 +43,6 @@ type EthereumProviderSession = {
   capabilityFingerprint: string;
   accounts: Set<string>;
   expiresAt: number;
-  requestCount: number;
-  accountRequestCount: number;
-  chainSwitchCount: number;
-  transactionCount: number;
   inFlightCount: number;
 };
 
@@ -69,9 +65,7 @@ type RequestOptions = {
 
 const SESSION_TTL_MS = 20 * 60 * 1_000;
 const MAX_SESSIONS = 32;
-const MAX_REQUESTS_PER_SESSION = 512;
 export const ETHEREUM_PROVIDER_MAX_IN_FLIGHT = 8;
-const MAX_TRANSACTIONS_PER_SESSION = 4;
 const MAX_RPC_RESULT_BYTES = 256 * 1024;
 const MAX_CALL_DATA_HEX_LENGTH = 256 * 1024 + 2;
 const knownMethods = new Set<string>(ETHEREUM_PROVIDER_METHODS);
@@ -151,10 +145,6 @@ export async function beginEthereumProviderForEndpoint(
     capabilityFingerprint: app.capability_plan_fingerprint,
     accounts: new Set(),
     expiresAt: now + SESSION_TTL_MS,
-    requestCount: 0,
-    accountRequestCount: 0,
-    chainSwitchCount: 0,
-    transactionCount: 0,
     inFlightCount: 0,
   };
   sessions.set(sessionId, session);
@@ -192,7 +182,6 @@ export async function requestEthereumProviderForEndpoint(
   const params = validateMethodParams(method, request.params, session);
   const release = reserveRequest(session);
   try {
-    admitRequest(session, method);
     if (method === "eth_sendTransaction") {
       await requireAllowedCurrentChain(session);
     }
@@ -311,46 +300,6 @@ function requireSession(
     throw new Error("Ethereum provider session expired or was revoked");
   }
   return session;
-}
-
-function admitRequest(
-  session: EthereumProviderSession,
-  method: NeutronEthereumProviderMethod,
-): void {
-  if (session.requestCount >= MAX_REQUESTS_PER_SESSION) {
-    throw new KernelPolicyError(
-      "REQUEST_EXPIRED",
-      "Ethereum wallet session budget is exhausted; start a new session",
-    );
-  }
-  if (method === "eth_requestAccounts") {
-    if (session.accountRequestCount >= 1) {
-      throw new KernelPolicyError(
-        "REQUEST_EXPIRED",
-        "Ethereum account access was already requested; start a new session to ask again",
-      );
-    }
-    session.accountRequestCount += 1;
-  }
-  if (method === "wallet_switchEthereumChain") {
-    if (session.chainSwitchCount >= 1) {
-      throw new KernelPolicyError(
-        "REQUEST_EXPIRED",
-        "Ethereum network switching was already requested; start a new session to ask again",
-      );
-    }
-    session.chainSwitchCount += 1;
-  }
-  if (method === "eth_sendTransaction") {
-    if (session.transactionCount >= MAX_TRANSACTIONS_PER_SESSION) {
-      throw new KernelPolicyError(
-        "REQUEST_EXPIRED",
-        "Ethereum transaction consent budget is exhausted; start a new session",
-      );
-    }
-    session.transactionCount += 1;
-  }
-  session.requestCount += 1;
 }
 
 function reserveRequest(session: EthereumProviderSession): () => void {

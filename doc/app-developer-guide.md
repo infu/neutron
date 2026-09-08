@@ -932,7 +932,8 @@ Declare the exact chains and EIP-1193 methods the tile needs instead:
 ```
 
 Start the connection directly from a user click in the focused tile, then use
-the returned provider-shaped proxy:
+the returned provider-shaped proxy. Begin before awaiting quotes or other slow
+network work so the click's transient activation is still available:
 
 ```ts
 import { connectEthereumProvider } from "neutron-tools/app";
@@ -958,6 +959,12 @@ methods, and selected provider. Do not store the session or proxy. Background
 processes and Agent Mode cannot use it, and starting it outside a focused,
 transiently activated click fails closed. The selected wallet remains
 responsible for account and transaction confirmation.
+
+While the session is active, apps may repeat account checks, retry network
+switches, request transactions, and poll receipts without cumulative call or
+prompt quotas. Requests still use the declared methods and chains, and
+in-flight concurrency remains bounded. A rejected wallet prompt does not
+consume a one-time Kernel permission.
 
 ## Add A Resident Background Process
 
