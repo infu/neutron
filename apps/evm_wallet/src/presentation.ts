@@ -53,6 +53,10 @@ export type LiquidityPresentation = {
   collect0Max?: string;
   collect1Max?: string;
   recipient?: string;
+  collectionRecipient?: string;
+  nativePayoutMin?: string;
+  sweptToken?: string;
+  tokenPayoutMin?: string;
   deadline?: string;
   tickLower?: string;
   tickUpper?: string;

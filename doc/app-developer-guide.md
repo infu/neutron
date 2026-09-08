@@ -908,6 +908,59 @@ contact-bound `wallet_transfer` method so its own Send confirmation can call
 must instead call Wallet's declared provider tool; Wallet alone may turn the
 approved request into its preapproved backend update.
 
+### Route HTTP Through The Optional Browser Extension
+
+An app can use the optional [Neutron extension](../support/extension/README.md)
+when a service does not accept requests from the app's browser origin. The
+request travels through browser-local Kernel code to the extension, then
+directly to the service. It does not use a canister HTTP outcall.
+
+```ts
+import { browserExtension } from "neutron-tools/app";
+
+let route = await browserExtension.status();
+if (!route.available) {
+  // Show the extension install instructions for this feature.
+} else {
+  if (!route.paired || !route.granted) {
+    route = await browserExtension.request({
+      reason: "Connect to the selected model provider",
+    });
+  }
+  if (route.paired && route.granted) {
+    const response = await browserExtension.fetch(serviceUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      signal: abortController.signal,
+    });
+    // Standard Response: status, headers, json(), or streamed body reads.
+  }
+}
+```
+
+There is no manifest declaration or install-time dependency. Request the route
+when the owner enables a feature that needs it. The extension remembers the
+accepted Neutron origin; the Kernel remembers each app's route grant in this
+browser. Neither has an expiry, and app updates do not invalidate the grant.
+The owner revokes app access in Kernel Settings and accepted Neutron origins
+in the extension's settings. Browser-profile deletion or uninstalling the
+extension also removes its local data.
+
+`fetch()` never requests permission implicitly. It uses the app's existing
+grant, supports cancellation and response streaming, and sends explicit
+authorization headers when provided. The extension omits ambient browser
+cookies. Large bodies cross the existing message bus in chunks. The Kernel
+derives the requesting app from its registered private endpoint; apps cannot
+claim another app's grant. Normal frontend and resident endpoints can use the
+route. Tool and Agent Mode approvals retain their existing authority rules.
+
+Inside an exposed tool handler, use `browserExtensionForTool(context)` from
+`neutron-tools/app`. It has the same methods and preserves that tool's private
+invocation authority and cancellation. This lets the existing root/normal
+permission policy decide a first route grant without passing agent credentials
+through app arguments.
+
 ### Use A Browser Ethereum Provider
 
 Browser extensions do not reliably inject providers into Neutron's isolated
@@ -932,7 +985,8 @@ Declare the exact chains and EIP-1193 methods the tile needs instead:
 ```
 
 Start the connection directly from a user click in the focused tile, then use
-the returned provider-shaped proxy:
+the returned provider-shaped proxy. Begin before awaiting quotes or other slow
+network work so the click's transient activation is still available:
 
 ```ts
 import { connectEthereumProvider } from "neutron-tools/app";
@@ -958,6 +1012,12 @@ methods, and selected provider. Do not store the session or proxy. Background
 processes and Agent Mode cannot use it, and starting it outside a focused,
 transiently activated click fails closed. The selected wallet remains
 responsible for account and transaction confirmation.
+
+While the session is active, apps may repeat account checks, retry network
+switches, request transactions, and poll receipts without cumulative call or
+prompt quotas. Requests still use the declared methods and chains, and
+in-flight concurrency remains bounded. A rejected wallet prompt does not
+consume a one-time Kernel permission.
 
 ## Add A Resident Background Process
 

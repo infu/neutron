@@ -17,6 +17,7 @@ The control-plane package boundary is:
 - `packages/neutron-compiler`
 - `packages/neutron-provision`
 - `packages/neutron-security`
+- `support/extension`
 
 ## Neutron Application license choices
 

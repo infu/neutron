@@ -7,9 +7,13 @@ import {
   parseEvmOperationResult,
   parseEvmOperationStatusResult,
   type EvmReplaceTransactionRequest,
+  type EvmOperationStatusResult,
 } from "neutron-tools/evm_wallet";
 import { errorMessage, requestId, type Operation } from "./data.ts";
 import { onFormActionKeyDown, runFormAction } from "./form_actions.ts";
+function unsignedFailure(result: EvmOperationStatusResult): boolean {
+  return result.status !== "not_found" && ["rejected", "failed"].includes(result.status) && result.transactionHash === null && result.signature === null;
+}
 export function ReplacementForm({
   operation,
   onResult,
@@ -53,7 +57,15 @@ export function ReplacementForm({
           }),
           request,
         );
-        if (status.status !== "not_found" && status.status !== "prepared") {
+        if (unsignedFailure(status)) {
+          // A definite unsigned refusal permits a newly reviewed attempt. An
+          // uncertain/signed request always retains its original ID and fields.
+          setSaved(null);
+          setNotice(`The previous replacement was ${status.status}. Review your next replacement.`);
+          onResult();
+          return;
+        }
+        if (status.status !== "not_found" && status.status !== "preparing" && status.status !== "prepared") {
           setNotice(
             `Replacement operation ${status.operationId}: ${status.status}`,
           );
@@ -84,6 +96,7 @@ export function ReplacementForm({
       setNotice(
         `Replacement operation ${result.operationId}: ${result.status}`,
       );
+      if (unsignedFailure(result)) setSaved(null);
       onResult();
     } catch (e) {
       setError(
@@ -111,6 +124,7 @@ export function ReplacementForm({
           Action
           <select
             className="nt-select"
+            disabled={busy || saved !== null}
             value={cancel ? "cancel" : "speed"}
             onChange={(e) => setCancel(e.target.value === "cancel")}
           >
@@ -124,6 +138,7 @@ export function ReplacementForm({
           Maximum fee per gas
           <input
             className="nt-input"
+            disabled={busy || saved !== null}
             value={maxFee}
             onChange={(e) => setMaxFee(e.target.value)}
             inputMode="numeric"
@@ -133,6 +148,7 @@ export function ReplacementForm({
           Priority fee per gas
           <input
             className="nt-input"
+            disabled={busy || saved !== null}
             value={priority}
             onChange={(e) => setPriority(e.target.value)}
             inputMode="numeric"
@@ -146,7 +162,7 @@ export function ReplacementForm({
           disabled={busy}
           onClick={(e) => runFormAction(e.currentTarget.form, busy, () => void review())}
         >
-          {busy ? "Working…" : "Review replacement"}
+          {busy ? "Working…" : saved ? "Continue replacement" : "Review replacement"}
         </button>
       </form>
     </details>

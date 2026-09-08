@@ -170,3 +170,15 @@ test("a declined request stays stopped and an unneeded approval is never invente
   expect(swap.state).toBe("send"); expect(swap.stage).toBe("swap");
   expect(f.reads).toEqual(["account"]); expect(f.writes).toEqual([]);
 });
+
+
+test.each(["approval", "swap"] as const)("unexpired root %s preparation returns the exact saved request for continuation", async stage => {
+  const f = fixture({ approval: stage === "approval" });
+  const result = stage === "approval"
+    ? await f.next(f.missing("swap"), f.operation("approval", "preparing"))
+    : await f.next(f.operation("swap", "preparing"));
+  expect(result.state).toBe("send"); expect(result.stage).toBe(stage);
+  expect(result.nextCall?.tool).toBe(EVM_WALLET_TOOLS.sendTransactionRoot);
+  expect(JSON.parse(result.nextCall!.argsJson)).toEqual(JSON.parse((stage === "approval" ? f.current().approval_request_json : f.current().swap_request_json)!));
+  expect(f.writes).toEqual([]);
+});

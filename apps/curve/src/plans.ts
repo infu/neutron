@@ -185,6 +185,12 @@ export async function quoteLiquidity(read: Reader, account: EvmAccount, raw: Liq
       transaction = { chainId: pool.chainId, accountId: "main", to: pool.address, valueWei: "0", data: encode(sig.withdrawOne, [burn, BigInt(input.coinIndex), minimum(output, input.slippageBps), ...tail]) };
     } else {
       let outputs: bigint[];
+      if (pool.family === "twocrypto-ng" || pool.family === "tricrypto-ng") {
+        // These contracts skip min_amounts checks in the full-supply branch.
+        // Supply can change after quoting, so disclose the exception for every
+        // proportional withdrawal rather than only an observed full exit.
+        preview.warnings.push("This pool can skip minimum-amount checks when a proportional withdrawal burns its entire LP supply. The requested minima are not guaranteed for that full-pool exit.");
+      }
       // NG methods return their actual withdrawal amounts. Simulating the zero-
       // minimum call includes current admin-fee minting and integer rounding.
       const simulated = await read(pool.chainId, pool.address, encode(sig.withdraw, [burn, coins.map(() => 0n), ...tail]), pool.blockNumber);

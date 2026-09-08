@@ -85,6 +85,7 @@ import {
 } from "../repository/provenance.ts";
 import { KernelUiModeSettings } from "./KernelUiModeSettings.tsx";
 import { ThemeSettings } from "./ThemeSettings.tsx";
+import { BrowserExtensionSettings } from "./BrowserExtensionSettings.tsx";
 import { useKernelUiModeStore } from "../ui_mode.ts";
 import { checkAppUpdates } from "../updates/service.ts";
 import { useUpdateCheckStore } from "../updates/store.ts";
@@ -1059,6 +1060,8 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
         <KernelUiModeSettings />
 
         <ThemeSettings />
+
+        <BrowserExtensionSettings />
 
         <SettingsDisclosure
           description="Compiler, deployment, and memory details"

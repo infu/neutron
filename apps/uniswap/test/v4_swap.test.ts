@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Actions, URVersion, V4Planner } from "@uniswap/v4-sdk";
+import { CurrencyAmount, Fraction, Token as SdkToken, computePriceImpact } from "@uniswap/sdk-core";
+import { TickMath, encodeSqrtRatioX96 } from "@uniswap/v3-sdk";
+import { Actions, Pool as SdkPool, URVersion, V4Planner } from "@uniswap/v4-sdk";
 import { decodeAbiParameters, decodeFunctionData, encodeFunctionResult, getAddress, parseAbi, parseAbiParameters, zeroAddress, type Address, type Hex } from "viem";
 import { prepareV4Swap, quoteV4Swap, v4SwapTransaction, type V4QuoteInput } from "../src/v4_swap.ts";
 import { v4PoolId, validateV4PoolKey, type V4PoolKey } from "../src/v4_common.ts";
@@ -42,7 +44,7 @@ function input(chainId: keyof typeof DEPLOYMENTS = "1", nativeInput = true): V4Q
 }
 
 type Call = { chainId: string; to: Address; data: Hex; blockTag: string | undefined };
-function reader(options: { outputs?: Record<number, bigint | Error>; ercAllowance?: bigint; permitAllowance?: bigint; permitExpiration?: number; stateFails?: boolean; protocolFees?: number } = {}) {
+function reader(options: { outputs?: Record<number, bigint | Error>; ercAllowance?: bigint; permitAllowance?: bigint; permitExpiration?: number; stateFails?: boolean; protocolFees?: number; sqrtPriceX96?: bigint } = {}) {
   const calls: Call[] = [];
   const read: Reader = async (chainId, to, data, blockTag) => {
     calls.push({ chainId, to, data, blockTag });
@@ -57,7 +59,7 @@ function reader(options: { outputs?: Record<number, bigint | Error>; ercAllowanc
     }
     if (to === deployment.state) {
       if (options.stateFails) throw new Error("Historical block unavailable");
-      return result(encodeFunctionResult({ abi: SLOT_ABI, functionName: "getSlot0", result: [2n ** 96n, 0, options.protocolFees ?? 0, 500] }));
+      return result(encodeFunctionResult({ abi: SLOT_ABI, functionName: "getSlot0", result: [options.sqrtPriceX96 ?? 2n ** 96n, 0, options.protocolFees ?? 0, 500] }));
     }
     if (to === PERMIT2) {
       expect(decodeFunctionData({ abi: PERMIT_ABI, data })).toMatchObject({ functionName: "allowance", args: [ACCOUNT, deployment.usdc, deployment.router] });
@@ -203,6 +205,28 @@ test("price impact removes the direction-specific protocol fee before comparing 
   // protocol + LP yields 0.15%. Their packed fee halves must not be mixed.
   expect(forward.priceImpactBps).toBe("1");
   expect(reverse.priceImpactBps).toBe("-4");
+});
+
+test.each([
+  [false, 0, 500, "3329"], [true, 0, 500, "3329"],
+  [false, 500 | (1000 << 12), 1000, "3326"], [true, 500 | (1000 << 12), 1500, "3323"],
+] as const)("low-output V4 impact keeps fractional value, reverse=%s protocolFees=%s", async (reverse, protocolFees, totalFee, expectedBps) => {
+  const token0 = new SdkToken(1, "0x0000000000000000000000000000000000000010", 0, "AAA");
+  const token1 = new SdkToken(1, "0x0000000000000000000000000000000000000020", 0, "BBB");
+  const sqrt = encodeSqrtRatioX96(reverse ? 5000 : 3, reverse ? 3 : 5000), liquidity = "1000000000000000000000000";
+  // The SDK's swap fee models the combined directional protocol/LP fee.
+  const sdkPool = new SdkPool(token0, token1, totalFee, 10, zeroAddress, sqrt, liquidity, TickMath.getTickAtSqrtRatio(sqrt), [
+    { index: -887270, liquidityGross: liquidity, liquidityNet: liquidity },
+    { index: 887270, liquidityGross: liquidity, liquidityNet: `-${liquidity}` },
+  ]);
+  const tokenIn = reverse ? token1 : token0, tokenOut = reverse ? token0 : token1;
+  const amount = CurrencyAmount.fromRawAmount(tokenIn, "5000"), [output] = await sdkPool.getOutputAmount(amount);
+  const token = (value: SdkToken) => ({ chainId: "1", address: getAddress(value.address), symbol: value.symbol!, decimals: value.decimals });
+  const quote = await quoteV4Swap(reader({ outputs: { 500: BigInt(output.quotient.toString()) }, protocolFees, sqrtPriceX96: BigInt(sqrt.toString()) }).read,
+    { ...input(), amountIn: "5000", tokenIn: token(tokenIn), tokenOut: token(tokenOut) }, NOW);
+  const expected = computePriceImpact(sdkPool.priceOf(tokenIn), amount.multiply(new Fraction(1000000 - totalFee, 1000000)), output).multiply(10000).quotient.toString();
+  expect(quote.amountOut).toBe("2"); expect(quote.minimumOut).toBe("1");
+  expect(expected).toBe(expectedBps); expect(quote.priceImpactBps).toBe(expected);
 });
 
 test("empty pools and zero or overflowing output cannot produce an executable quote", async () => {

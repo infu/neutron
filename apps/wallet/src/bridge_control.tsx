@@ -115,13 +115,17 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
     setBusy(true); setError(null); setPhase("connecting");
     let external: Awaited<ReturnType<typeof connectEthereumProvider>> | null = null;
     try {
+      const selectedSource = current?.source ?? source;
+      const refreshOnly = current && (bridgeComplete(current) || current.steps.find((step) => step.kind === "deposit")?.state === "confirmed" || typeof current.source !== "string");
+      // Open the browser session while this click still has user activation.
+      // An IC quote or background refresh can outlast that activation.
+      if (!tray && !refreshOnly && selectedSource === "external") external = await connectEthereumProvider();
       await refreshRef.current;
       if (tray) { await openInTile(); return; }
-      if (current && (bridgeComplete(current) || current.steps.find((step) => step.kind === "deposit")?.state === "confirmed" || typeof current.source !== "string")) { await refresh(current); return; }
+      if (current && refreshOnly) { await refresh(current); return; }
       let intent = current;
       if (!intent && decimals === null) throw new Error("Token decimals are unavailable");
       const units = intent?.amount ?? parseTokenAmount(amount, decimals!);
-      const selectedSource = intent?.source ?? source;
       const quote = intent?.quote ?? await bridge.quote(ledger);
       let connection: Awaited<ReturnType<typeof connectEvmBridge>> | null = null;
       let account: string;
@@ -130,7 +134,7 @@ export function WalletBridgeDeposit({ ledger, symbol, decimals, onRefresh, tray,
         connection = await connectEvmBridge(evm, quote.helperAddress, quote.tokenAddress, intent?.account);
         account = connection.account.address;
       } else {
-        external = await connectEthereumProvider();
+        if (!external) throw new Error("The browser wallet connection is unavailable");
         const accounts = await external.provider.request({ method: "eth_requestAccounts" });
         if (!Array.isArray(accounts) || typeof accounts[0] !== "string") throw new Error("The browser wallet returned no Ethereum account");
         account = accounts[0];
@@ -274,7 +278,7 @@ function friendlyError(error: string, intent: BridgeIntent | null): string {
   if (/amount|decimal/i.test(error) && !intent) return error;
   if (/source account/i.test(error)) return "Connect the same wallet account you used to start this deposit.";
   if (/browser wallet.*lost|unresolved.*browser|browser.*unresolved/i.test(error)) return "Check the transaction in your browser wallet to continue this deposit.";
-  return intent ? "The deposit paused. Your progress is saved; check Details or continue to try again." : "Could not prepare the deposit. Check Details and try again.";
+  return error;
 }
 function busyLabel(intent: BridgeIntent | null, sourceName: string, phase: string | null): string {
   if (!intent) return "Connecting…";

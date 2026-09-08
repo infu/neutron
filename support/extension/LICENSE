@@ -1,0 +1,674 @@
+# Neutron Public License
+
+Version 1.0, 15 August 2026
+
+License reference: LicenseRef-Neutron-Public-License-1.0
+
+The SPDX identifier NPL-1.0 belongs to the Netscape Public License. Do not use it for this
+License.
+
+## License category
+
+This is a custom reciprocal source and user-sovereignty license. Its deployment and
+Kernel-neutrality conditions may make it incompatible with licenses that prohibit further
+restrictions. It is not represented as an OSI-approved Open Source license, a Free Software
+license, or compatible with the GNU GPL.
+
+## Preamble
+
+Neutron is a personal cloud computer assembled as software inside a canister. Its user should be
+able to inspect source packages, choose private or public packages, compile a personal system in
+the browser, install a modified system, and keep control without a maintainer, registry, provider,
+or governance body having a veto.
+
+Neutron also separates infrastructure from products. The Kernel supplies neutral security and
+computing Capabilities. Applications supply products. Similarly Situated Applications should be
+eligible for each Capability under materially equal, documented rules.
+
+This License protects those freedoms through copyleft, Complete Corresponding Source,
+installation information, direct downstream rights, user-sovereignty conditions, and
+Kernel-neutrality conditions. The Preamble and License Category explain purpose and
+classification; the numbered sections state the operative terms.
+
+## Table of contents
+
+0. Scope, acceptance, and construction
+1. Definitions
+2. Copyright and patent grants; private use
+3. Providing copies, source, executables, and network access
+4. Non-production development
+5. User Deployments and the User Upgrade Path
+6. Package governance and Daoization
+7. Kernel neutrality and Application equality
+8. Applications, Combined Forms, and the assembly exception
+9. Downstream rights and prohibited additional restrictions
+10. Patents
+11. Compliance, cure, termination, and enforcement
+12. Warranty and liability
+13. Versions and miscellaneous terms
+14. Application notice
+
+## 0. Scope, acceptance, and construction
+
+### 0.1 Covered Software
+
+This License applies to Source Form carrying the notice in section 14, every Executable Form of
+that Source Form, and every Modification. Each is **Covered Software**.
+
+A Modification includes a work based on or containing a copyrightable portion of Covered
+Software. Merely placing separate works in an aggregate does not make them Covered Software.
+Compilation, static linking, or one-actor assembly does not by itself prove independence; the
+specific Application Assembly Exception is in section 8.
+
+Compiler output is Covered Software only to the extent it contains copyrightable Covered
+Software, including covered templates or generated adapters.
+
+### 0.2 Operational profile
+
+Sections 2 through 4 and 9 through 13 apply to all Covered Software. Sections 5 through 8 also apply
+to a Deployment Component and any party that distributes it or provisions or administers it for
+another person. Ancillary libraries and tools retain copyleft without deployment duties they cannot practically control.
+
+Practical function controls this profile. Relabeling a Kernel, installer, provisioner, or
+deployment-control component as a tool does not avoid sections 5 through 8.
+
+### 0.3 Offer, acceptance, and Licensor covenant
+
+Each Licensor offers the permissions in this License to every person and legal entity. You accept
+its conditions when You exercise a permission that would otherwise require authorization. The
+conditions limit the grants and, where law recognizes them, are promises exchanged for those
+grants. Do not exercise a permission if You cannot satisfy its conditions.
+
+Merely receiving or running an unmodified copy does not require acceptance where law already
+permits that conduct. Nothing reduces fair use, fair dealing, exhaustion, or a comparable legal
+right.
+
+A Licensor that Conveys its own Contributor Version, and every person that Operates Covered Software
+for another, covenants directly to affected Recipients to satisfy the conditions applicable to that
+conduct. No signature, registry, or per-installation acceptance record is required. Deployment-specific
+authority may pass to a successor only after the successor is bound. Managing only Your own User
+Deployment is not Operating.
+
+### 0.4 Construction
+
+Definitions apply in singular and plural, and a defined verb includes its ordinary grammatical
+forms. “Including” is not limiting. “Must” states a condition; “may” states permission. A specific
+rule controls a conflicting general rule. Headings do not limit the text.
+
+## 1. Definitions
+
+**Application** means separately identifiable software whose practical principal purpose is an
+end-user product or service. It remains an Application regardless of its interface, package,
+publisher, default status, or compilation into the Kernel's Wasm.
+
+**Application Package** means a package intended for assembly or installation that contains or
+identifies an Application's code, assets, manifest, schemas, migrations, dependencies, and other
+material. It need not contain every license or source record within its own archive.
+
+**Capability** means a documented general-purpose facility through which the Kernel mediates an
+Application's access to computation, storage, networking, identity, cryptography, user
+interaction, another Application, or another protected resource.
+
+**Complete Corresponding Source** means the preferred form for understanding and modifying
+Covered Software, plus ordinary non-secret material reasonably necessary to build, test, package,
+install, and run the Executable Form being Provided. As applicable, it includes:
+
+1. backend and frontend source corresponding to generated, bundled, transpiled, or minified code;
+2. interfaces, manifests, Capability declarations, dependency locks, and third-party notices;
+3. managed-memory declarations, supported released schemas, migration modules, and lineage;
+4. build, test, package, compiler, generation, and installation scripts and configuration;
+5. an ordinary dependency manifest or lock file and acquisition information for material inputs;
+   and
+6. Installation Information.
+
+It excludes a standard platform component or generally available tool used unmodified and
+available without charge on nondiscriminatory terms, if exact acquisition information is given.
+It also excludes private keys, authentication secrets, private content, unrelated User Data, and
+shared infrastructure credentials. If an independent install method requires a credential, the
+provider must supply a deployment-specific credential or an equivalent path rather than disclose
+a shared secret.
+
+**Controller Authority** means a platform-level controller principal, credential, canister, contract,
+multisignature, recovery arrangement, or practical power independent of Kernel-mediated User
+Authorization that can replace or delete complete Wasm or change platform controller configuration.
+
+**Self-Controller** means the User Deployment's canister principal acting as Controller Authority through the Kernel.
+
+**User Authorization** means Kernel-level authority to approve administrative operations, including asking
+the Self-Controller to act; it is not Controller Authority. Multiple User Authorizations representing the
+same Sovereign User are not third-party authorities.
+
+**Convey** means to transfer a copy or enable another party to make or receive one.
+
+**Operate** means knowingly to provision or administer Covered Software in a User Deployment for
+another person while possessing practical control or deployment-specific authority sufficient to
+perform the applicable duties. Control or authority held by Your affiliate, agent, contractor, or
+party acting in concert with You for the deployment is attributed to You; dividing coordinated
+functions does not avoid this definition. Supplying a neutral Underlying Platform Service is not
+Operating.
+
+**Provide** means to Convey or Operate Covered Software.
+
+**Recipient** means a person or entity that receives a copy from You, or a natural person for
+whom You Operate Covered Software. An employee or contractor is excluded only while making or
+running copies exclusively for You, under Your direction, without ordinary personal use or an
+independent right to the copy.
+
+A remote contact or protocol counterparty is not a Recipient merely because they exchange data
+with an Application through the Sovereign User's environment. They become a Recipient if You give
+them an independent account, tenant, personal environment, administrative domain, or deployment
+managed for their benefit.
+
+**Contributor** means a copyright holder that intentionally places an original contribution
+under this License. That contribution is its **Contributor Version**. **Licensor** means a
+Contributor for rights that Contributor can license.
+
+**Source Form** means the form preferred for understanding and modification. **Executable Form**
+means any other form, including WebAssembly (“Wasm”), generated JavaScript, bundled assets, or an
+archive containing executable material. **Modification** has the meaning in section 0.1.
+
+**Deployment Component** means Covered Software whose practical function is a Kernel,
+whole-system compiler or installer, provisioner, update mechanism, or other component that
+selects, assembles, installs, or controls software or deployment-specific authority for a
+deployed personal software environment.
+
+**Distribution** means a selected Kernel and any Applications, packages, assets, installer,
+configuration, or services offered together for a User Deployment.
+
+**Governance Body** means a person, entity, committee, decentralized autonomous organization
+(“DAO”), network nervous system, service nervous system, token-governed body, governance canister,
+on-chain voting arrangement, or similar decision process.
+
+**Installation Information** means documented methods, formats, procedures, and
+deployment-specific authorization material reasonably necessary to build and install a modified
+Executable Form in an equivalent deployment.
+
+**Kernel** means the trusted control plane that supplies security boundaries, User
+Authorization, Application lifecycle, Capability mediation, whole-system assembly or
+installation, recovery, or equivalent infrastructure.
+
+**Kernel Administrative Component** means a narrow part of the Kernel needed to inspect, secure,
+configure, repair, recover, compile, update, or replace the Kernel; manage Applications,
+permissions, controllers, or workspaces; or provide the User Upgrade Path. It does not include an
+ordinary product merely because that product is useful, bundled, or labeled a system component.
+
+**Package Information** means ordinary package-linked information identifying the work and version,
+license and notices, Complete Corresponding Source or its no-charge location, dependencies, and
+supported state schemas or migrations.
+
+**Similarly Situated** Applications meet the same necessary, proportionate, published, app-independent
+technical, security, privacy, resource, compatibility, and user-consent conditions relevant to a
+Capability. Authorship, publisher, funding, sponsorship, signature source, registry listing,
+governance, affiliation, and competition do not alone make Applications differently situated.
+Identity may support neutral consent, integrity, isolation, resource ownership, routing,
+dependencies, interfaces, state, and migrations, but not act as a proxy for favoritism.
+
+**Sovereign User** means the one natural person for whose primary personal benefit a User
+Deployment operates. Multiple keys, principals, devices, agents, User Authorizations, or
+Controller Authorities may represent or assist that person.
+
+**Underlying Platform Service** means neutral network, consensus, compute, storage, gateway,
+routing, or transmission infrastructure applying uniform rules without choosing, withholding, or
+overriding deployment-specific software or authority. Neutral enforcement of a controller
+configuration selected for a deployment and general platform governance are part of that service.
+
+**User Data** means information supplied by, produced for, or lawfully controlled by a Sovereign
+User, including installed state reasonably necessary for continued use.
+
+**User Deployment** means a deployed personal software environment intended primarily for one
+natural person's data, Applications, and general-purpose personal computing functions. A
+**Managed Deployment** is a User Deployment that You Operate for another person.
+
+**You** means the person or legal entity exercising permissions. A legal entity includes entities
+it controls, is controlled by, or is under common control with, where control means power to
+direct management or ownership of more than half of voting or beneficial interests.
+
+## 2. Copyright and patent grants; private use
+
+Subject to this License, each Licensor grants You, for the duration of the applicable right, a
+worldwide, royalty-free, non-exclusive license under copyright and copyright-like rights to run,
+study, reproduce, modify, adapt, make derivative works of, display, perform, Convey, Provide, and
+otherwise exercise those rights in its Contributor Version.
+
+Each Contributor also grants a worldwide, royalty-free, non-exclusive patent license to make,
+have made, use, offer, sell, import, run, modify, Convey, and Provide its Contributor Version
+under Essential Patent Claims it controls now or later. An **Essential Patent Claim** is a claim
+necessarily infringed by a licensed exercise of that Contributor Version, alone or in a
+combination that Contributor supplied or designed or documented the Contributor Version to
+support. It excludes claims infringed only by Your later Modification or unrelated combination.
+
+The grants are irrevocable except as expressly provided in sections 10 and 11. Each downstream
+Recipient receives rights directly under section 9; sublicensing is neither granted nor needed.
+
+To the extent law permits, each Licensor agrees not to assert moral or similar rights solely to
+prevent licensed conduct. No trademark, service mark, trade name, logo, publicity, or endorsement
+right is granted, except accurate reproduction of required notices.
+
+You may run, study, copy, and modify Covered Software without sections 3 through 9 while You do
+not Provide it. You may engage agents acting only for You if they cannot use or disclose the work
+independently.
+
+A Sovereign User does not Convey, Provide, or Operate Covered Software merely by receiving public
+or private packages or causing that user's browser, Kernel, controller, or other tool to compile,
+assemble, install, store, run, or privately modify them for that User Deployment. That user need
+not publish source or modifications; use a public repository; publish or retain package lists or
+combined Wasm; calculate, verify, register, or disclose hashes or deployment records; investigate
+another party's compliance; or operate a source service. This paragraph does not cover Providing
+the work to another person or coordinated evasion. Communicating or exchanging User Data is not
+Providing the software. Automated availability of runtime or package assets incidental to the
+personal deployment is not Conveying unless the user affirmatively acts to distribute Covered Software.
+
+## 3. Providing copies, source, executables, and network access
+
+### 3.1 Duties for every copy
+
+When You Convey Covered Software, You must provide it under this License, preserve accurate
+copyright, authorship, patent, license, and warranty notices, supply this License and required
+third-party notices, and identify any Modification with a reasonable description and date.
+
+Every Modification and the work based on Covered Software as a whole must remain under this
+License, subject only to true aggregates and section 8. You may charge for a copy or service, but
+must not charge a Recipient again merely to exercise rights already granted.
+
+### 3.2 Source and Executable Forms
+
+When You Convey Source Form, it must include Complete Corresponding Source or a functioning
+no-charge link to it.
+
+When You Convey Executable Form, You must supply either:
+
+1. Complete Corresponding Source with it; or
+2. durable, no-charge, unrestricted network access to copy that source.
+
+Network access must last while You Provide that version and for at least three years after the
+last time You Provide it. A third-party host does not relieve Your responsibility. If You merge,
+subdivide, or transfer substantially all relevant assets, You must transfer the source obligation
+and use reasonable efforts to transfer all relevant source You hold. A successor that Provides the
+affected version must honor that obligation and use reasonable efforts to obtain source held by
+its predecessor.
+
+A person that only forwards an intact package may pass through its included source or upstream
+source offer without a separate hosting duty, unless that person knows the offer is materially false
+or unavailable. After actual knowledge, stop Conveying, supply the source, or restore the offer. This
+does not relieve the person whose own conduct created or controls the offer.
+
+Covered Software in the source must be under this License; each independent component remains
+under its own license. Source access must require no broader identification, contract, or payment
+than executable access and must be reasonably usable with the supplied instructions. Functionally
+equivalent builds need not be byte-identical, and a user's package selection, deployment identity,
+prior state, or other personal context need not be disclosed.
+
+### 3.3 Packages and browser assembly
+
+When You Convey a package containing Covered Software, supply its Package Information. A packaging
+tool may generate or supplement that information automatically.
+
+A browser compiler or installer that You Provide must show the user the selected packages and
+material compatibility or data-loss warnings before installation, but this License does not require
+a package digest, compiler-output digest, installation-payload digest, installed-module hash, build
+record, public registry, content-addressed store, or persistent on-canister record.
+
+### 3.4 Installation and network operation
+
+Complete Corresponding Source must include Installation Information. You need not reveal user or
+shared infrastructure secrets, but if You cannot give a deployment-specific credential or an
+equivalent independent install method, You may not Convey that Executable Form for a User
+Deployment or represent the deployment as sovereign.
+
+When You Operate Covered Software for a Recipient, that Recipient must have a prominent,
+convenient, no-charge way to obtain the exact Complete Corresponding Source, this License,
+third-party notices, and Your Modification notice throughout operation and for at least three
+years afterward.
+
+Source for installed or running code may not be embargoed. Exploit instructions, unpublished
+vulnerability analysis, private keys, and unrelated security material are not Complete
+Corresponding Source and may be handled through coordinated disclosure.
+
+### 3.5 Structural deployment duty
+
+Each Executable Form of a Deployment Component intended for User Deployments must implement the
+part of the User Upgrade Path within its practical function and control, interoperate with the
+documented remaining components, and introduce no deployment-specific third-party veto. Together,
+the supplied components must support establishment of the complete path in section 5. These
+conditions apply when the component is Conveyed even if the publisher never administers a
+particular deployment.
+
+## 4. Non-production development
+
+You may Convey incomplete source or test builds of a Deployment Component that do not yet satisfy
+sections 5 through 8 when they are conspicuously marked non-production, carry this License and
+Complete Corresponding Source, and are supplied only for development, review, testing, archival
+preservation, or good-faith security research.
+
+This exception does not permit ordinary User Data, ordinary end-user operation, or a production
+service. It covers work on the Covered Software itself and does not authorize offering its
+ordinary functionality as a development, teaching, archival, or security product or service.
+
+## 5. User Deployments and the User Upgrade Path
+
+### 5.1 Personal scope
+
+A User Deployment is for one Sovereign User. Guests, contacts, collaborators, and remote
+counterparties may interact with Applications but must not receive a second independent tenant,
+personal environment, administrative domain, or ownership interest inside that deployment.
+
+The Sovereign User may use multiple personal profiles and may delegate limited actions without
+creating another Sovereign User.
+
+### 5.2 User Upgrade Path
+
+A **User Upgrade Path** is a documented, effective sequence through the User Deployment or
+Controller Authority under the Sovereign User's control that lets the user:
+
+1. inspect the installed Kernel, packages, versions, licenses, available source, known User
+   Authorizations, and Controller Authorities;
+2. select a complete package set, including a Kernel package and any selected Application
+   Packages, or complete Wasm satisfying the neutral Underlying Platform Service's documented
+   module-validity requirements, chosen or built by the user, including modified, unsigned,
+   unlisted, private, and differently governed inputs;
+3. inspect material state-compatibility or data-loss warnings;
+4. compile when needed and install or replace the complete Wasm without a deployment-specific
+   third-party approval or secret; and
+5. when desired, use the disclosed Self-Controller to establish a directly user-controlled
+   external platform Controller Authority, and thereafter use documented platform tooling to add,
+   remove, or reconfigure controllers without deployment-specific third-party approval.
+
+A path may satisfy complete-Wasm replacement by compiling a complete package set under the user's
+control. A separate raw-Wasm upload interface is not required if modified and unofficial package
+sets can produce and install the complete Wasm without third-party approval. The provider need not
+know or predetermine the resulting Wasm. Integrity checks and local build information are permitted
+as product features but are not conditions of this License.
+
+The safe in-product upgrade path may objectively enforce stable-memory compatibility, schema and migration
+lineage, predecessor identity, checked journals, monotonic versions, dependency consistency, archive safety,
+resource bounds, integrity, and authentic user approval. Rules must be app-independent and need no official
+endorsement. A separately warned controller-level replacement may handle incompatible or destructive Wasm.
+
+The User Upgrade Path must be documented and reasonably usable. Differences intrinsic to obtaining,
+preparing, compiling, reviewing, or troubleshooting unofficial inputs do not violate this rule. The
+Kernel or provider must not add a burden whose purpose or practical effect is to favor official inputs
+and must not knowingly add, remove, substitute, or materially change software the user selected without
+that user's informed authorization.
+
+### 5.3 Readiness, activation, and handoff
+
+A party must not enable ordinary use or storage of ordinary User Data in a Managed Deployment
+until the Sovereign User has a User Upgrade Path.
+
+A one-time activation credential may complete handoff if its holder can redeem it without further
+provider action, redemption supplies the authority needed for the path, and the provider has
+already retired every hidden or mandatory authority. Marketing labels such as preview,
+provisioned, or complete do not delay this rule after ordinary use or storage begins.
+
+Temporary bootstrap authority is permitted for creation, funding, installation, and
+initialization. Any authority remaining after handoff must satisfy section 5.4.
+
+### 5.4 Controllers and authority
+
+The User Upgrade Path must provide a documented way to inspect Controller Authorities and User
+Authorizations known or reasonably knowable to the party Providing the Deployment Component,
+including indirect authority that party created, procured, used, arranged, or shares with an
+affiliate or coordinated actor.
+
+A Self-Controller is permitted while it acts only through user-authorized Kernel operations and
+is not a third-party veto. The ordinary UI need not remove a Self-Controller required for the
+checked self-upgrade path if it clearly explains that fact and lets the user add a directly
+controlled external controller for platform-level management.
+
+A third-party Controller Authority, or third-party User Authorization able to replace complete Wasm or alter
+controllers, is permitted after specific, affirmative, default-off consent and a warning matched to its power.
+Explain that a platform controller may replace Wasm or remove user authority and that full User Authorization
+may direct the Kernel to do the same. After handoff, each must remain affirmatively retained and removable or
+revocable through the User Upgrade Path. “Retained” does not require periodic reconfirmation.
+
+Such a third-party authority present before this License applied may remain if it is disclosed,
+warned about at the first reasonable interactive opportunity, and removable or revocable through
+the User Upgrade Path. If the user declines it, remove or revoke it. No historical consent registry
+or periodic reconfirmation is required.
+
+A provider must not design or operate an authority it supplies, controls, coordinates, or requires to
+remove, override, or materially impair the User Upgrade Path, even when the user selected it. An
+exception applies on a contemporaneous authenticated user request or to the minimum necessary during
+a documented active compromise, for the shortest feasible period and no more than seventy-two hours
+without fresh, specific, freely given user authorization, followed by prompt notice and restoration.
+
+You must not hide or require an authority, withhold a unique deployment gate, prevent the user
+from establishing a direct Controller Authority or using it to remove or reconfigure another
+authority, or make replacement depend on another controller's cooperation. This does not require
+ordinary-interface removal of the disclosed Self-Controller allowed above.
+
+### 5.5 Data, external dependencies, and user changes
+
+Disclose any provider-controlled external service or credential essential to Kernel function and
+the consequences of replacement. For provider-controlled state essential to continued Kernel
+use, supply user-controlled credentials or a documented export or migration path.
+
+Before a known destructive replacement, give a clear warning and a reasonable opportunity to use
+any available backup or export. This License does not promise state compatibility with arbitrary
+Wasm or require a backup facility that Covered Software does not otherwise provide.
+
+No upstream party violates this License solely because the Sovereign User later changes
+software, controllers, recovery, Applications, or configuration without that party's direction
+or control. No Sovereign User loses private-use rights solely because of such a change.
+
+## 6. Package governance and Daoization
+
+A Governance Body may create, vote on, sign, publish, recommend, sell, support, or discontinue
+its own Kernel, Application, package, repository, or Distribution. Its package governance does
+not grant authority over a deployed user's computer.
+
+**Daoization** occurs when a Governance Body or coordinated party imposes a deployment-specific
+proposal, vote, signature, allowlist, co-signature, secret, or continuing service without which
+the Sovereign User cannot use the User Upgrade Path. It also occurs when that party removes the
+User Upgrade Path and substitutes governance-controlled whole-Wasm or controller decisions.
+
+General governance of an Underlying Platform Service, optional reliance on recommendations, and
+a user-selected additional controller are not Daoization while the User Upgrade Path remains
+usable for current and future changes. Voluntarily asking for a vote does not make it required.
+
+No permission is granted to Provide Covered Software in a Daoized Managed Deployment. Accurate
+labeling does not create an exception. This rule covers anyone acting alone or together to cause,
+procure, coordinate, or knowingly participate in the gated arrangement.
+
+## 7. Kernel neutrality and Application equality
+
+### 7.1 Capability equality
+
+The Kernel must act as neutral infrastructure. General app-facing functions must be documented
+Capabilities or narrow Kernel Administrative Components. A generally useful function for
+Applications must be available to independently developed Similarly Situated Applications under
+materially equal eligibility, interfaces, review, documentation, fees, admission rules, and
+procedural burden.
+
+Conditions must be necessary and proportionate to a documented app-independent constraint or
+risk. They may meter resources, isolate code, reject unsafe behavior, require integrity and user
+consent, and support bounded protocols or providers. They must not use identity as a proxy for
+authorship, publisher, sponsor, signature source, registry listing, affiliation, governance, or
+competition.
+
+Equal terms do not guarantee simultaneous allocation of an exclusive or exhausted resource,
+identical user consent, credentials, performance, or outcome. Scarcity must be handled through
+published app-independent rules.
+
+Registries, signatures, recommendations, and documented provider catalogs are permitted. A catalog
+may use neutral security, privacy, and compatibility rules; an Application's maintainer listing,
+signature, or affiliation must not gate an admitted general Capability. A discriminatory trust
+policy is permitted only through informed user selection and must remain inspectable and changeable.
+
+### 7.2 Ordinary and bundled Applications
+
+Ordinary product functionality must remain in a separately identifiable Application, not the
+Kernel. The Kernel Administrative Component exception is narrow and cannot absorb substantial
+ordinary functionality or a material competing feature.
+
+A Distribution may recommend or preinstall Applications. An Application selected during an
+interactive install must be rejectable before activation. A starter Application installed before
+handoff must be disclosed and removable, subject only to genuine, documented, technically
+necessary, non-circular dependency order and data warnings, promptly after activation and before
+it is required for ordinary use.
+
+Bundled and maintainer-authored Applications must receive no hidden privilege or identity-based favoritism.
+If the Kernel or Distribution gives an Application a default or exclusive role, that role must be
+defined, inspectable, user-selectable, and replaceable by a compatible Similarly Situated Application;
+omission of a role name cannot defeat replacement.
+
+### 7.3 No Sherlocking or evasion
+
+A Licensor of a Kernel may compete through an ordinary Application using the same rules. The
+Kernel must not absorb a favored product or material competing feature, reserve a Capability, or
+relabel product functionality as infrastructure.
+
+Practical function and coordinated control govern. A helper, plugin, service, canister, library,
+undocumented interface, or nominal Application remains subject to these duties only to the extent
+it performs, receives, reserves, or gates a Kernel-level privilege or general app-facing function
+in concert with a Kernel or Distribution maintainer. This limits Providing the combined system;
+it does not claim copyright in independent code.
+
+## 8. Applications, Combined Forms, and the assembly exception
+
+**Combined Form** means an executable, package set, or Distribution containing Covered Software
+and one or more separately identifiable Applications.
+
+An independent Application does not become Covered Software solely because a Kernel reads its
+manifest or documented interfaces; validates, compiles, links, wraps, stores, serves, or installs
+it; generates neutral adapters; mediates Capabilities; or assembles it into one Combined Form.
+The Application may keep its own license.
+
+This **Application Assembly Exception** does not cover a Modification, Covered Software code or
+templates copied into generated output, a Kernel Administrative Component, app-facing
+infrastructure, or a nominal Application used to evade section 7.
+
+When You Provide a Combined Form, preserve the available legal identity, notices, and licenses of
+its components. Byte-level segmentation, prevention of compiler inlining, a reproducible component
+mapping, and publication of a user's package selection or combined Wasm are not required. Supply
+Complete Corresponding Source for Covered Software and source required by each independent
+component's own license.
+
+A restriction that applies solely to separately identified Application material is not an
+additional restriction on rights in Covered Software. This exception grants no right under the
+Application's license and does not make an otherwise incompatible combination lawful.
+
+## 9. Downstream rights and prohibited additional restrictions
+
+Each time You Provide Covered Software, every Recipient automatically receives the section 2
+grants directly from every Licensor. You are responsible for Your conduct, not policing
+independent Recipients.
+
+You must not impose a license term, royalty for exercising granted rights, technical restriction,
+withheld authorization, or other measure that limits a Recipient's licensed rights. You may
+charge for copies, support, hosting, privacy-protecting services, indemnity, or warranty on Your
+own behalf if the terms do not restrict source, the User Upgrade Path, or Kernel neutrality.
+
+You may not invoke anti-circumvention law or a technological-protection claim to prevent licensed
+installation, operation, inspection, or modification. To the extent You hold such power, You
+waive it for those acts.
+
+Independent contracts may govern unrelated services or grant more rights, but an ordinary
+distributor cannot reduce rights under this License. A grant of additional permission by all
+relevant Licensors remains allowed.
+
+## 10. Patents
+
+If You initiate a patent claim alleging that a licensed exercise of Covered Software infringes,
+the section 2 patent grants to You terminate when the claim is filed. This does not apply where
+the allegation is confined solely to Your additions, or to a defensive counterclaim, a request
+for non-infringement or invalidity, participation required by law, or enforcement of this
+License.
+
+You may not knowingly Provide in reliance on a patent arrangement protecting only some
+Recipients. Before Providing, extend equivalent protection automatically to all downstream
+Recipients, obtain another lawful basis, or refrain from Providing.
+
+If You knowingly Provide Covered Software whose licensed exercise necessarily depends on a
+specific third-party patent not covered here, give the Recipient a prominent informational notice
+identifying the claim and available licensing information.
+
+## 11. Compliance, cure, termination, and enforcement
+
+A **Material Violation** is a failure that materially denies source, downstream rights, the User
+Upgrade Path, Kernel neutrality, required notices, or another condition of a grant. An
+inadvertent immaterial defect promptly corrected is not a Material Violation.
+
+For a first non-deliberate Material Violation, permissions continue during a thirty-day cure
+period beginning when You receive written notice or obtain actual knowledge, whichever occurs
+first. Cure restores full compliance and prevents termination.
+
+A deliberate, concealed, repeated, or uncured Material Violation suspends permissions from the
+affected Licensor for the affected Covered Software. When You cure, permissions are provisionally
+reinstated. Reinstatement becomes permanent unless the Licensor gives final written termination
+within sixty days after cure. A finally terminated party cannot obtain a new automatic license
+for the same material without written reinstatement.
+
+A temporary outage, active security incident, or platform-wide failure is not a Material
+Violation for up to thirty days while You did not design or repeat it to deny rights, take prompt
+reasonable steps to restore compliance, preserve every available independent fallback, and
+accurately notify affected users. A provider-controlled condition beyond thirty days is not
+protected. A genuine platform-wide impossibility outside Your control remains protected only
+while You document restoration efforts and notify affected users at least every thirty days.
+It never excuses source delivery, an intentional or repeated veto, or provider action past section 5.4's 72-hour limit.
+
+During that protected period, sections 5 and 6 treat an otherwise compliant deployment as
+retaining its User Upgrade Path solely for determining permissions under this License.
+
+Termination never ends a license already received by a compliant downstream Recipient. You must
+not use Your violation to disable or reclaim a Recipient's deployment or User Data.
+
+Every affected Sovereign User and direct package Recipient is an intended beneficiary of source,
+notice, installation, and sovereignty duties. An Application author materially denied equal
+eligibility is an intended beneficiary of section 7. To the extent law permits, each may seek an
+order for source, Installation Information, disclosure, restoration of the User Upgrade Path, or
+equal access. This gives no ownership of another person's intellectual property, infrastructure,
+secrets, or private data and creates no damages unavailable under law.
+
+A Licensor's delay or failure to enforce is not a waiver.
+
+## 12. Warranty and liability
+
+“Protected Party” means a Licensor, Contributor, or compliant redistributor or operator that has
+not separately assumed the relevant obligation in writing.
+
+TO THE FULLEST EXTENT THE LAW PERMITS, COVERED SOFTWARE IS PROVIDED AS AVAILABLE AND WITH ALL
+FAULTS. NO PROTECTED PARTY MAKES A WARRANTY, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING TITLE,
+NON-INFRINGEMENT, MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, SECURITY, ACCURACY, OR
+UNINTERRUPTED OPERATION. YOU BEAR THE RISK OF USING, MODIFYING, INSTALLING, OR PROVIDING IT.
+
+TO THE FULLEST EXTENT THE LAW PERMITS, NO PROTECTED PARTY IS LIABLE UNDER ANY LEGAL THEORY FOR
+LOST DATA, LOST PROFITS, BUSINESS INTERRUPTION, OR INDIRECT, SPECIAL, INCIDENTAL, EXEMPLARY,
+PUNITIVE, OR CONSEQUENTIAL DAMAGE ARISING FROM COVERED SOFTWARE OR THIS LICENSE, EVEN IF ADVISED
+THAT THE DAMAGE WAS POSSIBLE.
+
+Where law forbids a disclaimer or exclusion, it applies only to the maximum lawful extent. A
+separate written warranty or service obligation binds only its provider.
+
+## 13. Versions and miscellaneous terms
+
+Each version of this License is distinct. Covered Software may use a later version only if its
+application notice expressly permits later versions and names the license steward and official
+publication location authorized to issue them. A new version never changes rights already received
+under an earlier one.
+
+You may reproduce this License exactly. You may adapt its text only if the changed license uses a
+name and identifier that are not confusingly similar, states that it is unofficial, and does not
+imply endorsement.
+
+If a provision is invalid, a court should reform it only as much as needed while preserving its
+purpose; if that is unavailable, sever it and enforce the remainder. An external agreement or
+order does not excuse noncompliance. If obligations conflict, stop exercising the licensed right
+to the extent of conflict.
+
+This License is the complete license from each Licensor except for a separate additional grant.
+It selects no governing law, venue, or jurisdiction. Applicable law controls unless relevant
+parties separately agree without restricting downstream rights.
+
+## 14. Application notice
+
+To apply this License, place this notice in source or a prominent file distributed with the work:
+
+    Copyright [year] [copyright holder]
+    Licensed under the Neutron Public License, Version 1.0.
+    SPDX-License-Identifier: LicenseRef-Neutron-Public-License-1.0
+    See the LICENSE file distributed with this work.
+
+If the work may use later versions, add a separate notice naming the authorized license steward,
+official publication location, and permitted version or range. Do not imply that permission unless
+the copyright holder intentionally grants it.

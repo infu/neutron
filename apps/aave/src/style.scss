@@ -2,17 +2,16 @@
 @layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
 @layer app {
   html, body { margin: 0; background: #101214; }
-  .nt-app.av-app { --nt-accent: #bdb4f5; --nt-accent-muted: #312b49; min-height: 100dvh; padding: 28px 24px 32px; color: #e7e8ee; }
+  .nt-app.av-app { --nt-accent: #bdb4f5; --nt-accent-muted: #312b49; min-height: 100dvh; padding: 12px 24px 32px; color: #e7e8ee; }
   .av-shell { max-width: 960px; margin: 0 auto; display: grid; gap: 24px; min-width: 0; }
-  .av-app h1, .av-app h2, .av-app h3, .av-app p { margin: 0; letter-spacing: 0; }
-  .av-app h1 { font-size: 24px; font-weight: 600; }
+  .av-app h2, .av-app h3, .av-app p:not(:where(.nt-app-header-subtitle)) { margin: 0; letter-spacing: 0; }
   .av-app h2 { font-size: 18px; font-weight: 550; }
   .av-app h3 { font-size: 14px; font-weight: 550; }
-  .av-app button, .av-app input, .av-app select { font: inherit; letter-spacing: 0; box-sizing: border-box; }
+  .av-app :is(button, input, select):not(:where(.nt-app-header-control)) { font: inherit; letter-spacing: 0; box-sizing: border-box; }
   .av-app button { cursor: pointer; }
   .av-app button:disabled { cursor: default; opacity: .45; }
-  .av-app :is(button, input, select, a, summary):focus-visible { outline: 2px solid var(--nt-line-focus, #72d5df); outline-offset: 3px; }
-  .av-app :is(input, select) { width: 100%; min-width: 0; border: 0; border-radius: 5px; padding: 12px; background: #222329; color: #e7e8ee; font-size: 12px; }
+  .av-app :is(button, input, select, a, summary):not(:where(.nt-app-header-control)):focus-visible { outline: 2px solid var(--nt-line-focus, #72d5df); outline-offset: 3px; }
+  .av-app :is(input, select):not(:where(.nt-app-header-control)) { width: 100%; min-width: 0; border: 0; border-radius: 5px; padding: 12px; background: #222329; color: #e7e8ee; font-size: 12px; }
   .av-app input::placeholder { color: #858791; }
   .av-app input:focus { outline: none; }
   .av-app input:focus-visible { outline: 2px solid var(--nt-line-focus, #72d5df); }
@@ -20,12 +19,7 @@
   .av-app a { color: #c3bcec; text-decoration: none; }
   .av-app a:hover { text-decoration: underline; }
   .av-app small { font-size: 10px; line-height: 1.6; }
-  .av-header, .av-brand, .av-row, .av-wallet, .av-section-heading, .av-asset, .av-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
-  .av-brand { gap: 12px; justify-content: flex-start; }
-  .av-brand img { width: 44px; height: 44px; }
-  .av-brand p { margin-top: 4px; font-size: 11px; color: #9d9ba9; }
-  .av-network { max-width: 200px; }
-  .av-network select { padding: 12px; background: #24212d; color: #d2cdeb; font-size: 12px; }
+  .av-row, .av-wallet, .av-section-heading, .av-asset, .av-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
   .av-wallet { gap: 8px; font-size: 11px; color: #a3a2ad; }
   .av-wallet-dot { width: 5px; height: 5px; background: #99d4bb; border-radius: 5px; flex-shrink: 0; }
   .av-wallet-dot.av-disconnected { background: #85858f; }
@@ -184,7 +178,7 @@
     .av-market-head > :nth-child(5), .av-market-row > :nth-child(5) { display: none; }
   }
   @media (max-width: 660px) {
-    .nt-app.av-app { padding: 24px 20px 28px; }
+    .nt-app.av-app { padding: 12px 20px 28px; }
     .av-shell { gap: 20px; }
     .av-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
     .av-positions { grid-template-columns: minmax(0, 1fr); gap: 24px; }
@@ -203,14 +197,7 @@
     .av-market-row .av-button-pair button { padding: 12px 8px; }
   }
   @media (max-width: 420px) {
-    .nt-app.av-app { padding: 20px 12px 24px; }
-    .av-header { gap: 8px; }
-    .av-brand { gap: 8px; }
-    .av-brand img { width: 36px; height: 36px; }
-    .av-brand h1 { font-size: 22px; }
-    .av-brand p { font-size: 10px; }
-    .av-network { max-width: 160px; }
-    .av-network select { padding: 10px 8px; font-size: 11px; }
+    .nt-app.av-app { padding: 12px 12px 24px; }
     .av-tabs { gap: 24px; }
     .av-tabs button { font-size: 12px; }
     .av-net-worth > strong { font-size: 32px; }

@@ -310,7 +310,9 @@ export async function runFunding(wallet: EvmWalletClient, store: Store, id: stri
     const status = stepStatus(intent, step);
     if (["rejected", "reverted", "failed", "replaced"].includes(status)) return fundingResult(row!);
     if (status === "confirmed" || (step.kind === "typed_data" && status === "signed")) continue;
-    if (options.execute === false || !["queued", "prepared", "unknown"].includes(status) || (status === "unknown" && step.operation !== null)) return pending();
+    // A closed browser can leave Wallet's unsigned simulation in preparing.
+    // Re-enter that same request to finish it; status reads cannot advance it.
+    if (options.execute === false || !["queued", "preparing", "prepared", "unknown"].includes(status) || (status === "unknown" && step.operation !== null)) return pending();
     options.onProgress?.(step.label);
     // The initial fee estimate can move while an approval confirms. Refresh the
     // not-yet-dispatched burn before its first exact Wallet review, instead of
@@ -449,7 +451,7 @@ export async function recoverFunding(wallet: EvmWalletClient, store: Store, id: 
   // An expired unsigned Wallet review cannot mint in a future block. Preserve
   // its exact bytes as history, but allow a fresh attestation/request without
   // requiring a manual decline. Signed/submitted outcomes above still reconcile.
-  const expiredUnsigned = step && (status === "prepared" || status === "queued" || status === "unknown" && step.operation === null) && decodeCctpMessage(step.message).expirationBlock !== "0" && BigInt(decodeCctpMessage(step.message).expirationBlock) <= destination.block;
+  const expiredUnsigned = step && (status === "preparing" || status === "prepared" || status === "queued" || status === "unknown" && step.operation === null) && decodeCctpMessage(step.message).expirationBlock !== "0" && BigInt(decodeCctpMessage(step.message).expirationBlock) <= destination.block;
   if (!step || expiredUnsigned || status && ["rejected", "reverted", "failed", "replaced"].includes(status)) {
     if (destination.expired || message.attestationStatus !== "complete" || !message.attestation) return observe();
     state.recoverySteps ??= [];

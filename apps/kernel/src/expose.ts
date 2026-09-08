@@ -129,6 +129,7 @@ import {
   requestEthereumProviderForEndpoint,
 } from "./ethereum_provider/service.ts";
 import { clipboardService } from "./clipboard/service.ts";
+import { browserExtensionBroker } from "./browser_extension/service.ts";
 import {
   acquireAttachmentCapacity,
   attachmentBytes,
@@ -4889,6 +4890,45 @@ expose("ethereum_provider.request", (payload, context) => {
 
 expose("ethereum_provider.end", (payload, context) =>
   endEthereumProviderForEndpoint(payload, verifiedEndpoint(context)),
+);
+
+// The optional extension is a browser-local route. Its durable app grant is
+// independent of app releases; each operation remains bound to the live app
+// installation, endpoint session and authenticated owner.
+expose("browser_extension.status", (payload, context) => {
+  if (!isJsonObject(payload) || Object.keys(payload).length !== 0) {
+    throw new Error("Invalid browser extension status request");
+  }
+  return browserExtensionBroker.status(verifiedEndpoint(context));
+});
+
+expose("browser_extension.request", (payload, context) => {
+  const endpoint = verifiedEndpoint(context);
+  const invocation = resolveInvocation(endpoint, context.invocation);
+  return browserExtensionBroker.request(payload, endpoint, {
+    ...(context.signal ? { signal: context.signal } : {}),
+    ...(invocation ? {
+      authorize: () => authorizeAgentPermission(endpoint, invocation, {
+        kind: "connection",
+        persistence: "durable",
+        risk: "high",
+        action: { route: "browser_extension", appId: endpoint.context.appId },
+      }, context.signal),
+    } : {}),
+  });
+});
+
+expose("browser_extension.upload", (payload, context) =>
+  browserExtensionBroker.upload(payload, verifiedEndpoint(context), context.signal),
+);
+expose("browser_extension.fetch", (payload, context) =>
+  browserExtensionBroker.fetch(payload, verifiedEndpoint(context), context.signal),
+);
+expose("browser_extension.read", (payload, context) =>
+  browserExtensionBroker.read(payload, verifiedEndpoint(context), context.signal),
+);
+expose("browser_extension.cancel", (payload, context) =>
+  browserExtensionBroker.cancel(payload, verifiedEndpoint(context)),
 );
 
 // Connections are private source-bound actions. They are deliberately absent

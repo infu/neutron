@@ -1,0 +1,15 @@
+{
+  "name": "neutron-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "package": "bun scripts/package.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test test/unit.test.ts test/package.test.ts",
+    "test:browser": "bun test test/browser.test.ts",
+    "check": "npm run typecheck && npm test && npm run build && npm run test:browser"
+  }
+}

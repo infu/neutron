@@ -2,24 +2,19 @@
 @layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
 @layer app {
   html, body { margin: 0; background: #101214; }
-  .cv-app { --nt-accent: #99e5c0; --nt-accent-muted: #243e32; padding: 30px 20px 36px; min-height: 100dvh; color: #ecefed; }
+  .cv-app { --nt-accent: #99e5c0; --nt-accent-muted: #243e32; padding: 12px 20px 36px; min-height: 100dvh; color: #ecefed; }
   .cv-shell { max-width: 520px; margin: 0 auto; display: grid; gap: 20px; min-width: 0; }
   .cv-shell-wide { max-width: 660px; }
-  .cv-app h1, .cv-app h2, .cv-app h3, .cv-app p { margin: 0; }
+  .cv-app h2, .cv-app h3, .cv-app p:not(:where(.nt-app-header-subtitle)) { margin: 0; }
   .cv-app h2 { font-size: 19px; letter-spacing: -.3px; line-height: 1.45; }
-  .cv-header, .cv-brand, .cv-row, .cv-wallet, .cv-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
-  .cv-brand { gap: 11px; justify-content: flex-start; }
-  .cv-brand img { width: 42px; height: 42px; }
-  .cv-brand h1 { font-size: 26px; letter-spacing: -.7px; }
-  .cv-brand span { font-size: 11px; color: #8b9991; }
-  .cv-app button, .cv-app input, .cv-app select { font: inherit; box-sizing: border-box; }
+  .cv-row, .cv-wallet, .cv-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+  .cv-app :is(button, input, select):not(:where(.nt-app-header-control)) { font: inherit; box-sizing: border-box; }
   .cv-app button { cursor: pointer; }
   .cv-app button:disabled { cursor: default; opacity: .45; }
-  .cv-app button:focus-visible, .cv-app input:focus-visible, .cv-app select:focus-visible, .cv-app summary:focus-visible, .cv-app a:focus-visible { outline: 2px solid #99e5c0; outline-offset: 3px; }
-  .cv-app input, .cv-app select { border: 1px solid #3a423e; background: #191e1b; color: #ecefed; border-radius: 5px; padding: 12px; width: 100%; min-width: 0; outline: none; font-size: 13px; }
+  .cv-app :is(button, input, select, summary, a):not(:where(.nt-app-header-control)):focus-visible { outline: 2px solid #99e5c0; outline-offset: 3px; }
+  .cv-app :is(input, select):not(:where(.nt-app-header-control)) { border: 1px solid #3a423e; background: #191e1b; color: #ecefed; border-radius: 5px; padding: 12px; width: 100%; min-width: 0; outline: none; font-size: 13px; }
   .cv-app input::placeholder { color: #758078; }
   .cv-app label { display: grid; gap: 9px; min-width: 0; font-size: 12px; color: #a7b1aa; }
-  .cv-network select { background: #1c231e; border: 0; font-size: 12px; padding: 10px; }
   .cv-wallet { gap: 8px; font-size: 11px; color: #a7b1aa; padding: 0 2px; }
   .cv-wallet-dot { width: 5px; height: 5px; border-radius: 50%; background: #99e5c0; }
   .cv-right { margin-left: auto; text-align: right; }
@@ -132,7 +127,6 @@
   .cv-resume-banner { display: grid; gap: 7px; padding: 15px; border: 0; border-radius: 5px; background: #23352a; color: #a8d4b8; font-size: 12px; text-align: left; }
   .cv-resume-banner span { color: #c8ead5; font-size: 11px; }
   .cv-shell > footer { font-size: 10px; text-align: center; color: #6f8a78; padding: 5px 0; }
-  .cv-app .nt-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
-  @media (max-width: 420px) { .cv-app { padding: 20px 12px 30px; } .cv-shell { gap: 17px; } .cv-amount { padding: 15px 12px; } .cv-amount-main { grid-template-columns: minmax(0, 1fr) 121px; } .cv-amount-main > input, .cv-amount-main > output { font-size: 28px; } .cv-token-button { font-size: 13px; gap: 5px; } .cv-pool-row { gap: 10px; } .cv-pool-assets { display: none; } .cv-editor-heading > .cv-badge { display: none; } .cv-app h2 { font-size: 18px; } .cv-progress .cv-row { flex-wrap: wrap; } }
+  @media (max-width: 420px) { .cv-app { padding: 12px 12px 30px; } .cv-shell { gap: 17px; } .cv-amount { padding: 15px 12px; } .cv-amount-main { grid-template-columns: minmax(0, 1fr) 121px; } .cv-amount-main > input, .cv-amount-main > output { font-size: 28px; } .cv-token-button { font-size: 13px; gap: 5px; } .cv-pool-row { gap: 10px; } .cv-pool-assets { display: none; } .cv-editor-heading > .cv-badge { display: none; } .cv-app h2 { font-size: 18px; } .cv-progress .cv-row { flex-wrap: wrap; } }
   @media (prefers-reduced-motion: reduce) { .cv-spinner { animation: none; } }
 }

@@ -34,6 +34,7 @@ const MODEL_ROW_OVERSCAN = 4;
 const DEFAULT_LIST_HEIGHT = 320;
 
 export function ModelPicker({
+  provider = "openrouter",
   models,
   selectedModelId,
   loading,
@@ -42,6 +43,7 @@ export function ModelPicker({
   onRefresh,
   onSelect,
 }: {
+  provider?: "openrouter" | "chatgpt";
   models: OpenRouterModel[];
   selectedModelId: string | null;
   loading: boolean;
@@ -498,7 +500,7 @@ export function ModelPicker({
                     >
                       Reasoning
                     </button>
-                    <button
+                    {provider !== "chatgpt" && <button
                       aria-pressed={freeOnly}
                       className={freeOnly ? "is-active" : undefined}
                       onClick={() => {
@@ -509,7 +511,7 @@ export function ModelPicker({
                       type="button"
                     >
                       Free
-                    </button>
+                    </button>}
                   </>
                 ) : null}
                 {selectionLocked || actionError ? (
@@ -528,7 +530,7 @@ export function ModelPicker({
           <div
             aria-label={
               family === null
-                ? "All OpenRouter models"
+                ? provider === "chatgpt" ? "ChatGPT subscription models" : "All OpenRouter models"
                 : `${family.label} models`
             }
             aria-busy={refreshing || loading}
@@ -562,9 +564,9 @@ export function ModelPicker({
                     aria-disabled={selectionLocked || pendingId !== null}
                     aria-label={`${modelDisplayName(model)}. ${modelAuthorLabel(model)}. ${
                       formatModelContext(model.contextLength)
-                    }. Input ${formatModelPrice(model.promptPrice)}. Output ${formatModelPrice(
+                    }. ${provider === "chatgpt" ? "Subscription" : `Input ${formatModelPrice(model.promptPrice)}. Output ${formatModelPrice(
                       model.completionPrice,
-                    )}${model.supportsReasoning ? ". Reasoning supported" : ""}`}
+                    )}`}${model.supportsReasoning ? ". Reasoning supported" : ""}`}
                     aria-posinset={index + 1}
                     aria-selected={selected}
                     aria-setsize={result.items.length}
@@ -587,13 +589,15 @@ export function ModelPicker({
                         <strong>{modelDisplayName(model)}</strong>
                       </span>
                       <span className="ora-model-option-stats">
-                        <span>{modelAuthorLabel(model)}</span>
+                        <span>{provider === "chatgpt" ? "OpenAI" : modelAuthorLabel(model)}</span>
                         <i aria-hidden="true">·</i>
                         <span>{formatModelContext(model.contextLength)}</span>
                         <i aria-hidden="true">·</i>
-                        <span><b>In</b> {formatModelPrice(model.promptPrice)}</span>
-                        <i aria-hidden="true">·</i>
-                        <span><b>Out</b> {formatModelPrice(model.completionPrice)}</span>
+                        {provider === "chatgpt" ? <span>Subscription</span> : <>
+                          <span><b>In</b> {formatModelPrice(model.promptPrice)}</span>
+                          <i aria-hidden="true">·</i>
+                          <span><b>Out</b> {formatModelPrice(model.completionPrice)}</span>
+                        </>}
                       </span>
                     </span>
                     <span className="ora-model-option-state">

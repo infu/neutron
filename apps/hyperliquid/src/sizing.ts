@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 import type { AccountSnapshot, ActiveAsset, OrderBook, PerpMarket, Snapshot } from "./market";
 import { boundedMarketPrice, validatePerpPrice } from "./trading";
+import { calculatePerpFeeRates } from "./fees";
 
 const D = Decimal.clone({ precision: 80, toExpNeg: -100, toExpPos: 100 });
 const decimal = (value: unknown): Decimal | null => typeof value === "string" && /^-?\d+(?:\.\d+)?$/.test(value) ? new D(value) : null;
@@ -73,10 +74,10 @@ export function calculateOrderCapacity(input: OrderCapacityInput, evidence: Orde
   if (!venueMax || !mark) return unavailable("Hyperliquid has not reported a valid maximum trading size.");
   base.venueMaxSize = down(venueMax, market.szDecimals);
   if (venueMax.isZero()) return { ...base, maxSize: "0", reason: isEmptyTradingAccount(account) ? "Deposit USDC to start trading." : "No margin is currently available for this side." };
-  const taker = decimal(account.fees?.userCrossRate), maker = decimal(account.fees?.userAddRate);
-  if (!taker || !maker) return unavailable("Your current trading fees are unavailable. Refresh to calculate Max.");
+  const fees = calculatePerpFeeRates(account.fees);
+  if (!fees) return unavailable("Your current trading fees are unavailable. Refresh to calculate Max.");
   // A normal limit can execute as taker. Never count a maker rebate as collateral.
-  const feeRate = D.max(0, taker, maker);
+  const feeRate = D.max(0, fees.takerRate, fees.makerRate);
   let worstPrice: string;
   try {
     if (input.orderType === "limit") {

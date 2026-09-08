@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { callTool, exposeTool, type JsonObject, type JsonValue, type MsgBusToolContext } from "neutron-tools/app";
 import { requireEvmWalletCaller } from "neutron-tools/evm_wallet";
 import { HyperliquidMarketStream, parseBook, type Candle, type CandleInterval, type MarketContext, type MarketStreamStatus, type OrderBook } from "./market.ts";
+import { mergeCandleHistory } from "./candle_history.ts";
 
 export type Environment = "mainnet" | "testnet";
 export const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -56,23 +57,29 @@ export function useClock(milliseconds: number) {
 
 /** Public market updates go directly to Hyperliquid. Scope checks also prevent
  * an old socket from showing another market or environment after tile changes. */
-export function useMarketStream(environment: Environment, coin: string, interval: string, reconcile: () => void) {
+type LiveMarket = { key: string; book: OrderBook | null; candles: Candle[]; context: MarketContext | null; status: MarketStreamStatus | null };
+const emptyMarket = (key: string): LiveMarket => ({ key, book: null, candles: [], context: null, status: null });
+export function useMarketStream(environment: Environment, coin: string, interval: string, reconcile: () => void, snapshot?: Candle[]) {
   const key = `${environment}:${coin}:${interval}`;
-  const [live, setLive] = useState<{ key: string; book: OrderBook | null; candle: Candle | null; context: MarketContext | null; status: MarketStreamStatus | null }>({ key, book: null, candle: null, context: null, status: null });
+  const [live, setLive] = useState<LiveMarket>(() => emptyMarket(key));
   useEffect(() => {
     let disposed = false, refreshQueued = false;
     const stream = new HyperliquidMarketStream(environment);
-    const update = (patch: Partial<typeof live>) => { if (!disposed) setLive((old) => ({ key, book: old.key === key ? old.book : null, candle: old.key === key ? old.candle : null, context: old.key === key ? old.context : null, status: old.key === key ? old.status : null, ...patch })); };
+    const update = (patch: Partial<LiveMarket> | ((old: LiveMarket) => Partial<LiveMarket>)) => {
+      if (!disposed) setLive((old) => { const scoped = old.key === key ? old : emptyMarket(key); return { ...scoped, ...(typeof patch === "function" ? patch(scoped) : patch) }; });
+    };
     const refresh = () => { if (disposed || refreshQueued) return; refreshQueued = true; queueMicrotask(() => { refreshQueued = false; if (!disposed) reconcile(); }); };
     const unsubscribe = [
-      stream.onStatus((status) => update({ status, ...(status.state === "connected" ? {} : { book: null, candle: null, context: null }) })),
+      stream.onStatus((status) => update({ status, ...(status.state === "connected" ? {} : { book: null, context: null }) })),
       stream.subscribe({ type: "l2Book", coin }, (event) => { try { update({ book: parseBook(event.data, coin) }); } catch { refresh(); } }, refresh),
       stream.subscribe({ type: "candle", coin, interval: interval as CandleInterval }, (event) => {
-        const raw = Array.isArray(event.data) ? event.data.at(-1) : event.data;
-        if (!raw || typeof raw !== "object") return;
-        const candle = raw as Candle;
-        if (candle.s !== coin || candle.i !== interval || !Number.isSafeInteger(candle.t) || [candle.o, candle.h, candle.l, candle.c, candle.v].some((value) => typeof value !== "string" || numeric(value) === null)) return;
-        update({ candle });
+        const candles = (Array.isArray(event.data) ? event.data : [event.data]).filter((raw): raw is Candle => {
+          if (!raw || typeof raw !== "object") return false;
+          const candle = raw as Candle;
+          return candle.s === coin && candle.i === interval && Number.isSafeInteger(candle.t) && Number.isSafeInteger(candle.n) && candle.n >= 0
+            && [candle.o, candle.h, candle.l, candle.c, candle.v].every((value) => typeof value === "string" && numeric(value) !== null);
+        });
+        if (candles.length) update((old) => ({ candles: mergeCandleHistory(old.candles, candles) }));
       }, refresh),
       stream.subscribe({ type: "activeAssetCtx", coin }, (event) => {
         const raw = event.data as { coin?: string; ctx?: MarketContext };
@@ -81,7 +88,12 @@ export function useMarketStream(environment: Environment, coin: string, interval
     ];
     return () => { disposed = true; for (const stop of unsubscribe) stop(); stream.close(); };
   }, [key]);
-  return live.key === key ? live : { key, book: null, candle: null, context: null, status: null };
+  useEffect(() => {
+    if (!snapshot) return;
+    const scopedSnapshot = snapshot.filter((candle) => candle.s === coin && candle.i === interval);
+    setLive((old) => { const scoped = old.key === key ? old : emptyMarket(key); return { ...scoped, candles: mergeCandleHistory(scoped.candles, scopedSnapshot, true) }; });
+  }, [key, snapshot]);
+  return live.key === key ? live : emptyMarket(key);
 }
 
 export type ReviewPrompt = { id: string; review: Record<string, unknown>; finish: (approved: boolean) => void };

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Environment, OpenOrder, Position } from "./market.ts";
+import type { OrderCapacity } from "./sizing.ts";
 
 type Controls = {
   environment: Environment;
@@ -41,16 +42,17 @@ function Actions({ close, submit, disabled, label }: { close: () => void; submit
   return <div className="hl-button-pair"><button type="button" className="hl-secondary" onClick={close}>Cancel</button><button type="button" className="hl-primary" disabled={disabled} onClick={submit}>{label}</button></div>;
 }
 
-export function LeverageDialog({ environment, coin, maxLeverage, onlyIsolated = false, position, close, execute, busy }: Controls & { coin: string; maxLeverage: number; onlyIsolated?: boolean; position?: Position }) {
-  const [leverage, setLeverage] = useState(String(position?.leverage.value ?? 1));
-  const [isCross, setCross] = useState(!onlyIsolated && position?.leverage.type !== "isolated");
-  const value = Number(leverage), valid = /^\d+$/.test(leverage) && Number.isSafeInteger(value) && value >= 1 && value <= maxLeverage;
+export function LeverageDialog({ environment, coin, maxLeverage, onlyIsolated = false, position, settings, close, execute, busy }: Controls & { coin: string; maxLeverage: number; onlyIsolated?: boolean; position?: Position; settings: Pick<OrderCapacity, "leverage" | "marginMode"> | null }) {
+  const [leverage, setLeverage] = useState(String(settings?.leverage ?? position?.leverage.value ?? ""));
+  const [marginMode, setMarginMode] = useState<"cross" | "isolated" | "">(onlyIsolated ? "isolated" : settings?.marginMode ?? position?.leverage.type ?? "");
+  const isCross = marginMode === "cross";
+  const value = Number(leverage), valid = /^\d+$/.test(leverage) && Number.isSafeInteger(value) && value >= 1 && value <= maxLeverage && marginMode !== "";
   return <Dialog title={`${coin} leverage & margin`} subtitle={`${environment === "mainnet" ? "Mainnet" : "Testnet"} perpetual`} close={close} footer={<Actions close={close} disabled={busy || !valid} label="Review leverage" submit={() => { if (!valid) return; close(); void execute("hl_leverage_v1", { environment, coin, leverage: value, isCross }); }} />}>
     <label>Leverage<div className="hl-input-unit"><input aria-label="Leverage" inputMode="numeric" autoComplete="off" value={leverage} onChange={(event) => setLeverage(event.target.value)} disabled={busy} autoFocus /><span>×</span></div></label>
     <p className="hl-help">This market supports 1–{maxLeverage}× leverage. Position size and margin tiers can lower the available maximum.</p>
-    <label>Margin mode<select aria-label="Margin mode" value={isCross ? "cross" : "isolated"} onChange={(event) => setCross(event.target.value === "cross")} disabled={busy || onlyIsolated}><option value="cross" disabled={onlyIsolated}>Cross</option><option value="isolated">Isolated</option></select></label>
+    <label>Margin mode<select aria-label="Margin mode" value={marginMode} onChange={(event) => setMarginMode(event.target.value as "cross" | "isolated")} disabled={busy || onlyIsolated}><option value="" disabled>Select margin mode</option><option value="cross" disabled={onlyIsolated}>Cross</option><option value="isolated">Isolated</option></select></label>
     {onlyIsolated && <p className="hl-notice">This market supports isolated margin only.</p>}
-    <p className="hl-muted">{isCross ? "Cross margin shares available collateral with your other cross positions. Losses can put that collateral at risk." : "Isolated margin assigns collateral to this position. Its liquidation exposure depends on the margin allocated to it."}</p>
+    {marginMode && <p className="hl-muted">{isCross ? "Cross margin shares available collateral with your other cross positions. Losses can put that collateral at risk." : "Isolated margin assigns collateral to this position. Its liquidation exposure depends on the margin allocated to it."}</p>}
     <p className="hl-notice">Higher leverage leaves less room for adverse price moves. Changing leverage or margin mode can change an existing position's liquidation exposure; it does not place an order.</p>
   </Dialog>;
 }

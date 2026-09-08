@@ -81,7 +81,15 @@ function presentation(operation: Operation, assets: readonly Asset[], details: L
     parties.push({ label: "Minimum token 0", value: display(details.amount0Min!, details.token0, operation, assets) });
     parties.push({ label: "Minimum token 1", value: display(details.amount1Min!, details.token1, operation, assets) });
   }
-  if (details.recipient) parties.push({ label: mint ? "Position owner" : "Recipient", value: details.recipient });
+  if (details.collectionRecipient) {
+    parties.push(
+      { label: "Collection destination", value: details.collectionRecipient },
+      { label: "Minimum ETH forwarded", value: `${amount(details.nativePayoutMin!)} ETH` },
+      { label: "Token swept from manager", value: details.sweptToken! },
+      { label: "Minimum swept token forwarded", value: display(details.tokenPayoutMin!, details.sweptToken, operation, assets, false) },
+    );
+  }
+  if (details.recipient) parties.push({ label: mint ? "Position owner" : details.collectionRecipient ? "Forwarding recipient" : "Recipient", value: details.recipient });
   if (adding && !mint && BigInt(tx.value) !== 0n) parties.push({ label: "Native funding", value: `${amount(tx.value)} ETH · excess refunded` });
   const advancedDetails: PresentationField[] = [
     { label: "Protocol", value: `Uniswap ${details.protocol.toUpperCase()}` },
@@ -91,18 +99,22 @@ function presentation(operation: Operation, assets: readonly Asset[], details: L
   const wrapped = NETWORKS[operation.chainId]?.wrapped;
   const inputCurrency = (token: string | undefined) => mint && details.protocol === "v3" && BigInt(tx.value) !== 0n && token && wrapped && equal(token, wrapped) ? ZERO : token;
   const amountText = adding ? [display(details.amount0Max!, inputCurrency(details.token0), operation, assets), display(details.amount1Max!, inputCurrency(details.token1), operation, assets)].join(" + ") : null;
+  const intermediaryDescription = details.collectionRecipient
+    ? `${collecting ? "Collect" : details.action === "close" && details.amount0Min === undefined ? "Collect the empty position's remaining tokens" : "Withdraw liquidity and collect"} into the NFT manager, then forward its WETH as ETH and the listed token.${details.action === "close" ? " Burn the emptied position NFT afterward." : ""} The forwarding currencies are not verified against this NFT; other collected tokens may remain in the manager.`
+    : null;
   return {
     title: mint ? "Create liquidity position" : adding ? "Add liquidity" : collecting ? "Collect position fees" : details.action === "close" ? "Close liquidity position" : "Remove liquidity",
     amount: amountText,
     amountLabel: "Maximum deposit",
-    description: mint ? "Deposit tokens into a Uniswap liquidity position. The position NFT goes to the listed owner."
+    description: intermediaryDescription ?? (mint ? "Deposit tokens into a Uniswap liquidity position. The position NFT goes to the listed owner."
       : adding ? "Add tokens to this position within the transaction's limits. Amounts use the position's on-chain token order."
       : collecting ? "Collect the position's accrued tokens. The received amounts depend on its on-chain balances."
       : details.action === "close" ? details.amount0Min !== undefined ? "Withdraw and collect this position's tokens, then burn its NFT. The transaction enforces the withdrawal minima." : "Collect the empty position's remaining tokens, then burn its NFT."
-      : "Withdraw liquidity and collect tokens in this transaction. The transaction enforces the withdrawal minima.",
+      : "Withdraw liquidity and collect tokens in this transaction. The transaction enforces the withdrawal minima."),
     parties, contract: tx.to,
     nativeValue: null,
     unlimitedApproval: false, tokenSymbol: null, advancedDetails, liquidity: details,
+    ...(details.sweptToken ? { tokenAddresses: [details.sweptToken] } : {}),
   };
 }
 
@@ -165,6 +177,10 @@ function v3Details(operation: Operation): LiquidityPresentation | null {
     const unwrap = calls[cursor++], sweep = calls[cursor++];
     if (unwrap?.functionName !== "unwrapWETH9" || sweep?.functionName !== "sweepToken" || !equal(unwrap.args[1], sweep.args[2]) || equal(sweep.args[0], network.wrapped) || equal(unwrap.args[1], ZERO) || equal(unwrap.args[1], tx.to)) return null;
     details.recipient = unwrap.args[1];
+    details.collectionRecipient = getAddress(tx.to);
+    details.nativePayoutMin = unwrap.args[0].toString();
+    details.sweptToken = getAddress(sweep.args[0]);
+    details.tokenPayoutMin = sweep.args[1].toString();
     details.settlementCurrencies = [network.wrapped, sweep.args[0]];
   } else if (equal(c.recipient, tx.to)) return null;
   const burn = calls[cursor];
@@ -265,7 +281,9 @@ export function presentPermit2Approval(operation: Operation, assets: readonly As
     const [token, spender, limit, expiration] = call.args;
     const asset = assets.find(asset => asset.chainId === operation.chainId && equal(asset.address, token));
     const unlimitedApproval = limit === MAX_UINT160;
-    const expiry = expiration === 0 ? "Immediately expired" : (() => {
+    // Permit2 stores the approval block's timestamp for zero, and permits
+    // spending until a later timestamp (including later blocks sharing it).
+    const expiry = expiration === 0 ? "Approval block timestamp" : (() => {
       const ms = Number(expiration) * 1000;
       return Number.isFinite(ms) && ms <= 8.64e15 ? new Date(ms).toISOString().replace(".000Z", " UTC") : `${expiration} Unix seconds`;
     })();
@@ -273,7 +291,7 @@ export function presentPermit2Approval(operation: Operation, assets: readonly As
       title: limit === 0n ? `Revoke ${asset?.symbol ?? "token"} allowance` : `Approve ${asset?.symbol ?? "token"} spending`,
       amount: unlimitedApproval ? `Unlimited ${asset?.symbol ?? "tokens"}` : display(limit.toString(), token, operation, assets, false),
       amountLabel: "Permit2 spending limit",
-      description: limit === 0n ? "Remove this spender's Permit2 token allowance." : "Allow the listed spender to use this token through Permit2 until expiry. This approval does not perform a swap or deposit liquidity.",
+      description: limit === 0n ? "Remove this spender's Permit2 token allowance." : `Allow the listed spender to use this token through Permit2 until expiry.${expiration === 0 ? " Spending is allowed at the approval block's timestamp and expires once the block timestamp advances." : ""} This approval does not perform a swap or deposit liquidity.`,
       parties: [{ label: "Spender", value: spender }, { label: "Expires", value: expiry }],
       contract: tx.to, nativeValue: null, unlimitedApproval, tokenSymbol: asset?.symbol ?? null, tokenAddress: token,
       permit2Approval: { token, spender, amount: limit.toString(), expiration: expiration.toString() },

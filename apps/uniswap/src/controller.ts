@@ -220,11 +220,11 @@ export async function reconcileStep(wallet: EvmWalletClient, store: Store, recor
   if (result.status === "not_found") return record;
   const operation = await observeHumanReplacement(wallet, record, stage, validateOperation(record, stage, result), options);
   options?.signal?.throwIfAborted();
-  // A status query may still see an earlier prepared revision while another
+  // A status query may still see an earlier unsigned revision while another
   // review of this exact request is in flight. Only the send reply proves that
   // review ended unsigned; retaining its dispatch marker prevents quote renewal
   // from creating a second request after a lost reply.
-  const phase = record.phase === `${stage}_requested` && operation.status === "prepared"
+  const phase = record.phase === `${stage}_requested` && ["preparing", "prepared"].includes(operation.status)
     ? record.phase : `${stage}_${operationView(record, stage, operation).status}`;
   return store.update(record, stage, phase, operation);
 }

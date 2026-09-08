@@ -19,8 +19,8 @@ const artifacts = process.env.UNISWAP_BROWSER_ARTIFACTS || '/tmp/neutron-uniswap
 await mkdir(artifacts, {recursive: true});
 const mock = `export const callTool = (...args) => window.fixtureCall('callTool', args); export const querySelf = (...args) => window.fixtureCall('querySelf', args); export const updateSelf = (...args) => window.fixtureCall('updateSelf', args);`;
 const result = await build({absWorkingDir:app,entryPoints:['src/main.tsx'],bundle:true,write:false,format:'iife',jsx:'automatic',outdir:resolve(artifacts,'build'),plugins:[{name:'kernel-transport',setup(b){b.onResolve({filter:/^(?:neutron-tools\/app|\.{1,2}\/app_entry\.ts)$/},()=>({path:'mock',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:mock,loader:'js'}));}},sassPlugin()]});
-const scripts = {'/main.js': result.outputFiles.find(f=>f.path.endsWith('.js')).text, '/main.css': result.outputFiles.find(f=>f.path.endsWith('.css')).text};
-const server=createServer((req,res)=>{const script=scripts[req.url];res.setHeader('Content-Type',req.url.endsWith('.css')?'text/css':script?'text/javascript':'text/html');res.end(script??'<link rel="stylesheet" href="/main.css"><div id="root"></div><script src="/main.js"></script>');});
+const scripts = {'/main.js': result.outputFiles.find(f=>f.path.endsWith('.js')).text, '/main.css': result.outputFiles.find(f=>f.path.endsWith('.css')).text, '/static/icon.svg': await readFile(resolve(app,'public/static/icon.svg'),'utf8')};
+const server=createServer((req,res)=>{const script=scripts[req.url];res.setHeader('Content-Type',req.url.endsWith('.css')?'text/css':req.url.endsWith('.svg')?'image/svg+xml':script?'text/javascript':'text/html');res.end(script??'<link rel="stylesheet" href="/main.css"><div id="root"></div><script src="/main.js"></script>');});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url='http://127.0.0.1:'+server.address().port;
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH || '/run/current-system/sw/bin/google-chrome-stable'});
@@ -432,6 +432,59 @@ try{
  assert.equal(await page.getByRole('button',{name:'Select CUSTOM',exact:true}).count(),0);
  await page.getByRole('button',{name:'Close token list',exact:true}).click();
  pass('A custom token read started on Ethereum cannot add that contract to the Arbitrum token menu after a network switch');
+ // Loaded current history must reflect another tile or Agent's saved progress.
+ // Keep an unrequested tail so a normal refresh cannot load every older record.
+ const historyStart=BigInt(ns())+10_000n;
+ function historyRow(index,createdAt){
+  const id=(1_000_000n+BigInt(index)).toString(16).padStart(32,'0');
+  const intent=JSON.parse(first.input_json), state=JSON.parse(first.state_json);
+  intent.envelope.operationId=id;
+  state.steps=state.steps.map((step,stepIndex)=>({...step,request:{...step.request,requestId:keccak256(stringToHex(`neutron:uniswap-action-step:v1:${id}:${stepIndex}`)).slice(2,34)},dispatched:false,unresolvedDispatch:false,operation:null,evidence:null}));
+  const summary={...JSON.parse(first.summary),operationId:id,title:`History review ${index}`};
+  return {...first,id,input_json:JSON.stringify(intent),state_json:JSON.stringify(state),summary:JSON.stringify(summary),phase:'prepared',revision:'0',created_at:String(createdAt),updated_at:String(createdAt)};
+ }
+ const retained=Array.from({length:80},(_,index)=>historyRow(index,historyStart-BigInt(index)));
+ for(const row of retained)actions.set(row.id,row);
+ await page.reload();
+ const historyCards=page.locator('.uni-saved').filter({hasText:/History review \d+/});
+ await page.waitForFunction(()=>[...document.querySelectorAll('.uni-saved')].filter(row=>/History review \d+/.test(row.textContent)).length===32);
+ await page.getByRole('button',{name:'Load older activity',exact:true}).click();
+ await page.waitForFunction(()=>[...document.querySelectorAll('.uni-saved')].filter(row=>/History review \d+/.test(row.textContent)).length===64);
+ const olderCard=page.locator('.uni-saved').filter({has:page.getByText('History review 40',{exact:true})});
+ await olderCard.getByText('Transaction details',{exact:true}).click();
+ await olderCard.getByText('The saved action can continue with its original operation ID.',{exact:true}).waitFor();
+ const changed=retained[40], completedState=JSON.parse(first.state_json);
+ completedState.steps=completedState.steps.map((step,index)=>{
+  const requestId=keccak256(stringToHex(`neutron:uniswap-action-step:v1:${changed.id}:${index}`)).slice(2,34);
+  return {...step,request:{...step.request,requestId},operation:{...step.operation,requestId}};
+ });
+ actions.set(changed.id,{...changed,state_json:JSON.stringify(completedState),phase:'complete',revision:'1',updated_at:ns()});
+ const effectsBeforeHistory=sends().length;
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await olderCard.getByText('✓ Complete',{exact:true}).waitFor();
+ await olderCard.getByText('Complete: the final transaction has a successful receipt.',{exact:true}).waitFor();
+ assert.equal(await olderCard.getByRole('button',{name:'Continue',exact:true}).count(),0);
+ assert.equal(await historyCards.count(),64);
+ assert.equal(await page.getByText('History review 64',{exact:true}).count(),0);
+ // A burst larger than a page must not hide the gap or leave the loaded tail stale.
+ for(let index=80;index<120;index++){
+  const row=historyRow(index,historyStart+BigInt(index));actions.set(row.id,row);
+ }
+ const revertedState=structuredClone(completedState), finalStep=revertedState.steps.at(-1);
+ finalStep.evidence.receipt.status='reverted';
+ finalStep.operation.receipt.status='reverted';finalStep.operation.status='reverted';finalStep.operation.message='The transaction was reorganized and reverted.';
+ actions.set(changed.id,{...actions.get(changed.id),state_json:JSON.stringify(revertedState),phase:'stopped',revision:'2',updated_at:ns()});
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await olderCard.getByText('stopped',{exact:true}).waitFor();
+ await olderCard.getByText('The transaction was reorganized and reverted.',{exact:true}).waitFor();
+ assert.equal(await historyCards.count(),104);
+ assert.equal(await page.getByText('History review 64',{exact:true}).count(),0);
+ assert.equal(sends().length,effectsBeforeHistory);
+ await page.getByRole('button',{name:'Load older activity',exact:true}).click();
+ await page.getByText('History review 79',{exact:true}).waitFor();
+ const displayedHistory=await historyCards.locator('.uni-saved-title > strong').allTextContents();
+ assert.equal(displayedHistory.length,120);assert.equal(new Set(displayedHistory).size,120);
+ pass('Focus refresh updates loaded older action summaries and open receipt details, fills burst gaps, and leaves unrequested history behind Load older');
  assert(!calls.some(c=>c.kind==='callTool'&&c.args[0].target==='kernel'));
  assert.deepEqual(externalRequests,[]);assert.deepEqual(metadataRejections,[]);assert.deepEqual(errors,[]);
  await writeFile(resolve(artifacts,'report.json'),JSON.stringify({checks:report,calls,records:[...records.values()],actions:[...actions.values()],trackedPositions:[...trackedPositions.values()],indexRequests,metadataRejections,errors},null,2));

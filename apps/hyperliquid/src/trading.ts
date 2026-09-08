@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 import { getWalletAddress, signL1Action, type AbstractWallet, type Signature } from "@nktkas/hyperliquid/signing";
 import { HyperliquidData, type AccountSnapshot } from "./market";
+import { calculatePerpFeeRates } from "./fees";
 import { getTradingSigner } from "./trading_key";
 import { IndexedTradingStore, tradingCallerFromScope, tradingScope, withTradingLock, type JournalRecord, type TradingBinding, type TradingCaller, type TradingStore } from "./trading_store";
 
@@ -306,14 +307,15 @@ export function createTradingEngine(dependencies: TradingDependencies) {
         positions: account.positions?.filter(entry => !intent.coin || entry.coin === intent.coin) ?? null,
         sharedBalances: account.balanceSource === "unified" ? account.balances : null,
       };
-      review.fees = account.fees ? { takerRate: account.fees.userCrossRate, makerRate: account.fees.userAddRate, observedAt: account.observedAt } : null;
-      if (account.fees && typeof review.estimatedNotionalUsdc === "string") {
+      const fees = calculatePerpFeeRates(account.fees);
+      review.fees = fees ? { ...fees, observedAt: account.observedAt } : null;
+      if (fees && typeof review.estimatedNotionalUsdc === "string") {
         const notional = positive(review.estimatedNotionalUsdc, "Estimated notional");
-        review.estimatedFeesUsdc = { taker: notional.mul(decimal(account.fees.userCrossRate, "Taker fee rate", true)).toFixed(), maker: notional.mul(decimal(account.fees.userAddRate, "Maker fee rate", true)).toFixed() };
+        review.estimatedFeesUsdc = { taker: notional.mul(fees.takerRate).toFixed(), maker: notional.mul(fees.makerRate).toFixed() };
       }
       warnings.push(...account.warnings);
       if (!account.complete) warnings.push("Some account observations are unavailable. The review identifies missing sources; no balance or fee is assumed.");
-      if (!account.fees) warnings.push("The account's current fee rates are unavailable.");
+      if (!fees) warnings.push("The account's current fee rates are unavailable.");
     } else {
       review.account = null; review.fees = null;
       warnings.push(`Account and fee observations unavailable: ${accountResult.error}`);

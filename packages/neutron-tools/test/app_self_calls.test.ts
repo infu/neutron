@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import {
   SELF_CALL_BINARY_MAX_COUNT,
   callCanisterDialog,
+  browserExtensionForTool,
   callSelfDialog,
   decodeSelfCallValue,
   disconnectMsgBus,
@@ -423,6 +424,51 @@ test("scoped kernel self calls carry hidden invocation metadata", async () => {
     id: 900,
     ok: { stored: true },
   });
+  channel.port2.close();
+});
+
+test("extension permission inside a tool carries its private agent authority", async () => {
+  const fake = installFakeWindow();
+  const channel = new MessageChannel();
+  const invocation = {
+    id: "invocation-id-000000000002",
+    rootId: "invocation-root-000000002",
+    capability: "e".repeat(48),
+  };
+  exposeTool("test.scoped_extension", {
+    inputSchema: { type: "object", additionalProperties: false },
+  }, async (_args, context) => {
+    const route = browserExtensionForTool(context);
+    const status = await route.request({ reason: "Read the requested service" });
+    return { granted: status.granted };
+  });
+  const result = new Promise<Record<string, unknown>>((resolve, reject) => {
+    channel.port2.addEventListener("message", (event) => {
+      const message = event.data as Record<string, any>;
+      if (message.type === "exec") {
+        try {
+          expect(message.payload.action).toBe("browser_extension.request");
+          expect(message.payload.context).toEqual({ invocation });
+          expect(message.payload.payload).toEqual({ reason: "Read the requested service" });
+          channel.port2.postMessage({
+            type: "response", id: message.id,
+            ok: { available: true, paired: true, granted: true },
+          });
+        } catch (error) { reject(error); }
+      } else if (message.type === "response" && message.id === 902) resolve(message);
+    });
+  });
+  channel.port2.start();
+  fake.dispatch(channel.port1);
+  channel.port2.postMessage({
+    type: "exec", id: 902,
+    payload: {
+      action: "__neutron_msgbus_tools_call",
+      payload: { name: "test.scoped_extension", arguments: {} },
+      context: { invocation },
+    },
+  });
+  await expect(result).resolves.toMatchObject({ id: 902, ok: { granted: true } });
   channel.port2.close();
 });
 

@@ -21,8 +21,9 @@ reduce-only full or partial closes, leverage/cross-isolated settings, isolated
 margin adjustments and independent reduce-only stop-loss/take-profit triggers.
 Protection orders are not an OCO pair. Sizes are exact decimal strings in the
 base asset; USDC transfer amounts are decimal USDC. Metadata supplies asset IDs,
-size precision and leverage parameters. Actual account fee rates and missing
-observations remain visible in review.
+size precision and leverage parameters. Fee estimates and Max apply an observed
+account referral discount to taker fees and positive maker fees; maker rebates
+remain unchanged. Missing fee observations remain explicit in review.
 
 The chart includes candlesticks, volume, timeframe selection and interactive
 inspection. Price/book observations carry timestamps. Chart analysis names its
@@ -69,6 +70,11 @@ only the same signed envelope after fresh review. A nonce rejection does not
 prove the original request failed. Browser-profile loss can lose this local
 intent history; venue positions, orders and recent fills remain queryable.
 
+Activity offers **Continue saved trade** for owner-started trading actions whose
+review or initial signed submission was interrupted. It reuses the original
+operation ID and intent. Agent-owned operations remain with their original
+caller and resume through the same tool and inputs.
+
 Accepted venue orders remain active after Neutron closes. Agent strategies and
 browser subscriptions run only while the authorized Neutron browser is open.
 
@@ -98,6 +104,8 @@ requires matching destination native-USDC mint evidence. Deposits separately
 report CCTP forwarding into the Core deposit queue and observed HyperCore credit;
 public ledger observations do not expose an exact EVM transaction-hash link.
 Never repeat a burn merely because forwarding or the browser reply is delayed.
+An interrupted Wallet preparation resumes its exact original request through
+explicit continuation; status checks alone do not dispatch it.
 
 Dismissing a transfer notice only hides its presentation. The original transfer
 stays in Activity, and a late response does not reopen a dismissed notice. Once
@@ -114,6 +122,9 @@ HyperEVM forwarder and requires HYPE gas; outbound recovery invokes the original
 destination's message transmitter and requires ETH gas. The original recipient,
 amount, hook and fee cap come from saved transfer evidence, not new tool inputs.
 An already consumed message is reconciled instead of minted again.
+If an unsigned destination recovery is still preparing when its attestation
+expires, recovery can retain that attempt and use a refreshed attestation for
+the original CCTP nonce. Signed or submitted outcomes must first be reconciled.
 
 If forwarding settings change during a deposit and the confirmed transfer lands
 in HyperCore USDC cash, recovery can move that original credited amount into the

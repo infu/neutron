@@ -64,6 +64,7 @@ const expectedLicenses = new Map<string, string>([
   ["packages/neutron-security", "SEE LICENSE IN LICENSE"],
   ["packages/neutron-tools", "Apache-2.0"],
   ["support/dispenser", "Apache-2.0"],
+  ["support/extension", "SEE LICENSE IN LICENSE"],
   ["support/repository", "Apache-2.0"],
   ["support/update-source", "Apache-2.0"],
 ]);
@@ -73,6 +74,7 @@ const nplPackages = [
   "packages/neutron-compiler",
   "packages/neutron-provision",
   "packages/neutron-security",
+  "support/extension",
 ];
 
 const apachePackages = [

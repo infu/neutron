@@ -3,6 +3,7 @@ import type { AgentStorage } from "./storage.ts";
 import { emptyConversationState } from "./storage.ts";
 import { checkpointModelTurn, compactModelContext, excerpt } from "./agent_context.ts";
 import { MAX_TOOL_RESULT_BYTES } from "./neutron_agent_tools.ts";
+import { isWorkerModelAllowed } from "./worker_model_cost.ts";
 import type {
   AgentChatTileEndpointId, AgentWorkerRecord, AgentWorkerSnapshot,
   AgentWorkersSnapshot, OpenRouterModel, PersistedConversationState,
@@ -95,17 +96,19 @@ export class AgentWorkers {
   tools() {
     return {
       spawn_agent: tool({
-        description: "Start an independent worker inside this tile and return its id immediately. Include the complete subtask and relevant context. It uses the root's existing permission judge; delegation grants no additional authority. Its model defaults to yours.",
+        description: "Start an independent worker inside this tile and return its id immediately. Include the complete subtask and relevant context. It uses the root's existing permission judge; delegation grants no additional authority. Its model defaults to yours. A different model must use the same provider and have known input and output token prices no higher than yours; omit modelId to inherit yours.",
         inputSchema: jsonSchema<{ task: string; modelId?: string }>({
           type: "object", additionalProperties: false, required: ["task"], properties: {
             task: { type: "string", minLength: 1, maxLength: 16_000 },
-            modelId: { type: "string", minLength: 1, maxLength: 240 },
+            modelId: { type: "string", minLength: 1, maxLength: 240,
+              enum: this.options.models.filter((model) => isWorkerModelAllowed(this.options.modelId, model, this.options.models)).map((model) => model.id),
+            },
           },
         }),
         execute: async ({ task, modelId }) => this.spawn(task, modelId),
       }),
       send_message: tool({
-        description: "Send instructions to a worker at its next safe step, waking sleep. A finished, stopped, or paused worker resumes with its saved context. This is delegated work, not new owner authority.",
+        description: "Send instructions to a worker at its next safe step, waking sleep. A finished, stopped, or paused worker resumes with its saved context. If its previous model is unavailable or no longer within your current model's prices and provider, it resumes using your model. This is delegated work, not new owner authority.",
         inputSchema: jsonSchema<{ id: string; message: string }>({
           type: "object", additionalProperties: false, required: ["id", "message"], properties: {
             id: { type: "string" }, message: { type: "string", minLength: 1, maxLength: 16_000 },
@@ -151,7 +154,11 @@ export class AgentWorkers {
   private async spawn(task: string, modelId = this.options.modelId) {
     this.options.signal.throwIfAborted();
     if (!task.trim() || task.length > 16_000) throw new Error("Invalid worker task");
-    if (!this.options.models.some((model) => model.id === modelId)) throw new Error("Worker model is unavailable with tool support");
+    const model = this.options.models.find((candidate) => candidate.id === modelId);
+    if (!model) throw new Error("Worker model is unavailable with tool support");
+    if (!isWorkerModelAllowed(this.options.modelId, model, this.options.models)) {
+      throw new Error("Worker model must use the same provider and have known input and output token prices no higher than the parent model. Omit modelId to use the parent model.");
+    }
     const record: AgentWorkerRecord = {
       id: crypto.randomUUID(), task, modelId, status: "running", result: "", error: null,
       messages: [], conversation: emptyConversationState(modelId),
@@ -173,11 +180,16 @@ export class AgentWorkers {
     const live = this.live.get(id);
     if (live) live.wake.abort();
     else this.start(record);
-    return { id, status: record.status };
+    return { id, modelId: record.modelId, status: record.status };
   }
 
   private start(record: AgentWorkerRecord): void {
     this.options.signal.throwIfAborted();
+    const model = this.options.models.find((candidate) => candidate.id === record.modelId);
+    if (!model || !isWorkerModelAllowed(this.options.modelId, model, this.options.models)) {
+      record.modelId = this.options.modelId;
+      record.conversation.selectedModelId = this.options.modelId;
+    }
     if (record.status === "error" || record.status === "stopped" || record.status === "paused") {
       record.lastRecovery = {
         from: record.status,

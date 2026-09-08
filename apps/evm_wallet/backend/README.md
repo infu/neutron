@@ -2,7 +2,7 @@
 
 The wallet owns the `main` custody slot. Its public key, address and key
 fingerprint are cached in the `evm_wallet` v1 managed root. Ethereum, Arbitrum
-One and Sepolia share that address and keep separate nonce reservations.
+One, HyperEVM and Sepolia share that address and keep separate nonce reservations.
 Kernel 0.3.46 always derives the namespace-v2 account from the Neutron canister,
 app ID `evm_wallet`, slot `main`, algorithm and trusted key name. After a fresh
 start, compatible upgrades and Wallet uninstall/reinstall recover that same

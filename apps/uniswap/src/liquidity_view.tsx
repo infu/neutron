@@ -38,11 +38,26 @@ export function useActionController(onComplete: () => Promise<void>) {
     if (refreshing.current || document.visibilityState === "hidden") return;
     refreshing.current = true;
     try {
-      const page = await actionStore.page(older ? cursor : null);
-      setHistory((previous) => [...new Map([...previous, ...page.rows].map((row) => [row.id, row])).values()].sort((a, b) => BigInt(a.created_at) === BigInt(b.created_at) ? b.id.localeCompare(a.id) : BigInt(a.created_at) > BigInt(b.created_at) ? -1 : 1));
-      // Preserve an already loaded tail when a fresh first page overlaps it.
-      // If a burst of new activity creates a gap, expose that page's cursor.
-      if (older || page.nextCursor === null || !history.some((row) => row.id === page.nextCursor)) setCursor(page.nextCursor);
+      const boundary = older ? null : history.at(-1)?.id ?? null;
+      const rows: typeof history = [];
+      let page = await actionStore.page(older ? cursor : null), nextCursor = page.nextCursor;
+      // Refresh the whole retained range so an action completed elsewhere also
+      // updates after it has moved off the first page. Stop at the loaded tail;
+      // older records remain behind the explicit pagination control.
+      for (;;) {
+        const boundaryIndex = boundary === null ? -1 : page.rows.findIndex((row) => row.id === boundary);
+        if (boundary !== null && boundaryIndex >= 0) {
+          rows.push(...page.rows.slice(0, boundaryIndex + 1));
+          nextCursor = boundaryIndex + 1 < page.rows.length || page.nextCursor !== null ? boundary : null;
+          break;
+        }
+        rows.push(...page.rows);
+        nextCursor = page.nextCursor;
+        if (older || boundary === null || nextCursor === null) break;
+        page = await actionStore.page(nextCursor);
+      }
+      setHistory((previous) => [...new Map([...previous, ...rows].map((row) => [row.id, row])).values()].sort((a, b) => BigInt(a.created_at) === BigInt(b.created_at) ? b.id.localeCompare(a.id) : BigInt(a.created_at) > BigInt(b.created_at) ? -1 : 1));
+      setCursor(nextCursor);
       setRefreshError("");
     } catch (error) { setRefreshError(errorText(error)); }
     finally { refreshing.current = false; }
@@ -110,21 +125,28 @@ export function ActionProgress({ actions }: { actions: ActionController }) {
   </div>;
 }
 
-function ActionHistoryRow({ id, summary, humanOwned, phase, actions }: { id: string; summary: string; humanOwned: boolean; phase: string; actions: ActionController }) {
-  const [record, setRecord] = useState<ActionRecord | null>(null), [error, setError] = useState("");
+function ActionHistoryRow({ id, summary, humanOwned, phase, revision, actions }: { id: string; summary: string; humanOwned: boolean; phase: string; revision: string; actions: ActionController }) {
+  const [record, setRecord] = useState<ActionRecord | null>(null), [error, setError] = useState(""), [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!expanded) return;
+    let active = true;
+    setRecord(null); setError("");
+    void actionStore.get(id).then((next) => { if (active) setRecord(next); }).catch((error) => { if (active) setError(errorText(error)); });
+    return () => { active = false; };
+  }, [id, phase, revision, expanded]);
   const detail = record ? actionResult(record) : null;
   return <article className={`nt-panel uni-saved${phase === "complete" ? " uni-saved-complete" : ""}`}>
     <div className="uni-saved-title"><strong>{summary}</strong><span className="uni-status">{phase === "complete" ? "✓ Complete" : phase.replaceAll("_", " ")}</span></div>
     {!humanOwned && <p className="uni-muted">Managed by your agent or the requesting app.</p>}
     {humanOwned && !["complete", "superseded"].includes(phase) && <button className="nt-button uni-continue" disabled={actions.busy} onClick={() => void actions.resume(id)}>Continue</button>}
-    <details className="uni-details" onToggle={(event) => { if (event.currentTarget.open) void actionStore.get(id).then(setRecord).catch((error) => setError(errorText(error))); }}><summary>Transaction details</summary><div className="uni-settings">{error && <p>{error}</p>}{detail ? <>{detail.steps.map((step, index) => <div key={index}><p>{step.label} · {step.status}</p>{step.transactionHash && <a href={`${NETWORKS[parseActionIntent(record!).envelope.chainId as Chain].explorer}${step.transactionHash}`} target="_blank" rel="noreferrer">View transaction ↗</a>}</div>)}<p>{detail.message}</p><pre>{JSON.stringify(detail.details, null, 2)}</pre></> : !error && <p className="uni-muted">Loading details…</p>}</div></details>
+    <details className="uni-details" onToggle={(event) => setExpanded(event.currentTarget.open)}><summary>Transaction details</summary><div className="uni-settings">{error && <p>{error}</p>}{detail ? <>{detail.steps.map((step, index) => <div key={index}><p>{step.label} · {step.status}</p>{step.transactionHash && <a href={`${NETWORKS[parseActionIntent(record!).envelope.chainId as Chain].explorer}${step.transactionHash}`} target="_blank" rel="noreferrer">View transaction ↗</a>}</div>)}<p>{detail.message}</p><pre>{JSON.stringify(detail.details, null, 2)}</pre></> : !error && <p className="uni-muted">Loading details…</p>}</div></details>
   </article>;
 }
 
 export function ActionHistory({ actions, kind, chain, accountId }: { actions: ActionController; kind: "swap" | "liquidity"; chain: Chain; accountId: string }) {
   const records = actions.history.filter((row) => row.kind === kind && row.chainId === chain && row.accountId === accountId && row.phase !== "superseded");
   return <section className="uni-activity"><header><h2 className="nt-subtitle">{kind === "swap" ? "Recent swaps" : "Recent activity"}</h2><span className="uni-muted" title="History updates automatically" aria-label="Updates automatically">↻</span></header>
-    {records.map((row) => <ActionHistoryRow key={row.id} id={row.id} summary={row.summary} phase={row.phase} humanOwned={row.humanOwned} actions={actions}/>)}
+    {records.map((row) => <ActionHistoryRow key={row.id} id={row.id} summary={row.summary} phase={row.phase} revision={row.revision} humanOwned={row.humanOwned} actions={actions}/>)}
     {actions.refreshError && <details className="uni-quote-error"><summary>Activity updates delayed · retrying automatically</summary><p>{actions.refreshError}</p></details>}
     {!records.length && !actions.refreshError && <p className="uni-empty">Your {kind === "swap" ? "swaps" : "liquidity activity"} will appear here.</p>}
     {actions.cursor !== null && <button className="uni-text-button" disabled={actions.busy} onClick={() => void actions.refresh(true)}>Load older activity</button>}

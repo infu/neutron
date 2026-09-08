@@ -25,19 +25,23 @@ test("Aave release initializes its new journal and restores it without resetting
 });
 
 
-test("release 101 keeps the production 100 journal, lineage and full backend closure", async () => {
-  const previousBytes = await readFile(new URL("../aave.v0.1.0.neutron", import.meta.url));
-  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe("9c04143f8e3f212b6c39647e2f704d7a613d6375871908ab32e1ec5afba19c65");
+test.each([
+  ["0.1.0", 100, "9c04143f8e3f212b6c39647e2f704d7a613d6375871908ab32e1ec5afba19c65"],
+  ["0.1.1", 101, "198a457acceb60c0f710635f7df29b65a53e9d9f2cbde188e5b18ead30297130"],
+  ["0.1.2", 102, "7152ac8ea66148365ddee7f9f4a365420aa3aa05f0e92b2228bc33b945e45bfa"],
+] as const)("release 103 keeps production %s journal, lineage and full backend closure", async (version, packedVersion, digest) => {
+  const previousBytes = await readFile(new URL(`../aave.v${version}.neutron`, import.meta.url));
+  expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(digest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../aave.v0.1.1.neutron", import.meta.url)));
+  const files = unpackNeutronPackage(await readFile(new URL("../aave.v0.1.3.neutron", import.meta.url)));
   const manifest = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8"));
   expect(validate_neutron_conf(manifest).errors).toEqual([]);
-  expect(manifest).toMatchObject({ id: "aave", version: 101, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "aave", version: 101 });
+  expect(manifest).toMatchObject({ id: "aave", version: 103, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "aave", version: 103 });
   expect(Object.keys(files)).toEqual(expect.arrayContaining(["web/index.html", "web/main.js", "web/main.css", "web/service.html", "web/service.js", "web/static/icon.svg"]));
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!)), next = JSON.parse(decode(files["neutron.json"]!));
-  expect(old.version).toBe(100);
+  expect(old.version).toBe(packedVersion);
   expect(next.memory).toEqual(old.memory);
   expect(Object.keys(next.memory)).toEqual(["aave"]);
   expect(files["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
@@ -50,7 +54,7 @@ test("release 101 keeps the production 100 journal, lineage and full backend clo
   for (const path of modules) expect(files[path]).toEqual(previous[path]);
   const schema = JSON.parse(decode(files["schema.json"]!)), priorSchema = JSON.parse(decode(previous["schema.json"]!));
   expect(schema).toEqual(generateAppMethodSchemaArtifact(manifest, await readFile(new URL("../backend/main.mo", import.meta.url), "utf8")));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 101 } });
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Aave", version: 103 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, aave: next });
   expect(clean.upgrades).toEqual([{ kind: "initialize", owner: "aave", memoryId: "aave", to: 1 }]);

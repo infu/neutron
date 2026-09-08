@@ -9,6 +9,7 @@ import {
 } from "ai";
 import {
   acquireConnectionCredential,
+  browserExtension,
   createMsgBusClient,
   disconnectConnection,
   listConnections,
@@ -22,6 +23,8 @@ import {
 } from "neutron-tools/app";
 import type {
   AgentChatTileEndpointId,
+  AgentProvider,
+  AgentChatGptStatus,
   AgentProgress,
   AgentSnapshot,
   AgentToolActivity,
@@ -57,6 +60,14 @@ import { checkpointModelTurn, compactModelContext, contextCharacterBudget, owner
 import { MSG_BUS_MAX_PROGRESS_BYTES } from "neutron-tools/protocol";
 import { agentClockTools, interruptedWait, readAgentStep, AGENT_OUTPUT_LIMIT_NOTICE, AGENT_OUTPUT_LIMIT_CONTINUATION, type AgentStreamRunner } from "./agent_step.ts";
 import { AgentWorkers, AGENT_COORDINATOR_PROMPT, workersSnapshot, type WorkerExecution } from "./agent_workers.ts";
+import { isWorkerModelAllowed } from "./worker_model_cost.ts";
+import { createChatGptProvider } from "./chatgpt_provider.ts";
+import {
+  startChatGptDeviceLogin,
+  completeChatGptDeviceLogin,
+  type ChatGptCredentials,
+  type ChatGptDeviceLogin,
+} from "./chatgpt_auth.ts";
 
 const MODELS_URL =
   "https://openrouter.ai/api/v1/models?supported_parameters=tools";
@@ -136,6 +147,11 @@ export class AgentRuntime {
   >();
   private readonly errors = new Map<AgentChatTileEndpointId, string>();
   private provider: ReturnType<typeof createOpenRouter> | null = null;
+  private chatGptProvider: ReturnType<typeof createChatGptProvider> | null = null;
+  private chatGptCredentials: ChatGptCredentials | null = null;
+  private chatGptExtension: AgentChatGptStatus["extension"] = null;
+  private chatGptLogin: { login: ChatGptDeviceLogin; abort: AbortController } | null = null;
+  private providerPreferences = new Map<AgentChatTileEndpointId, AgentProvider>();
   private connection: ConnectionSummary | null = null;
   private modelCatalogRequestsInFlight = 0;
   private mutationActive = false;
@@ -183,6 +199,7 @@ export class AgentRuntime {
       connectionLister,
     });
     await runtime.restoreConnection();
+    await runtime.restoreChatGpt();
     return runtime;
   }
 
@@ -214,12 +231,17 @@ export class AgentRuntime {
     this.conversationLoads.set(historyId, load);
     try {
       await load;
+      if (typeof this.storage.loadProvider === "function") {
+        const provider = await this.storage.loadProvider(historyId);
+        if (provider) (this.providerPreferences ??= new Map()).set(historyId, provider);
+      }
     } finally {
       this.conversationLoads.delete(historyId);
     }
   }
 
   async status(historyId: AgentChatTileEndpointId): Promise<AgentSnapshot> {
+    if (this.providerFor(historyId) === "chatgpt") await this.refreshChatGptStatus();
     const activity = await agentTurnActivity(historyId);
     const work = await this.storage.loadWork(historyId);
     // A closed browser cannot retain invocation authority. Display interrupted
@@ -257,15 +279,20 @@ export class AgentRuntime {
       new TextEncoder().encode(JSON.stringify({ work, workers })).byteLength);
     const selectedModelId = availableConversationModelId(
       conversation,
-      this.persisted.models,
+      this.modelsFor(this.providerFor(historyId)),
     );
+    const provider = this.providerFor(historyId);
     return {
       ready: true,
-      connected: this.provider !== null && this.connection !== null,
-      webToolsAvailable: true,
+      provider,
+      connected: provider === "chatgpt"
+        ? !!this.chatGptCredentials && this.chatGptExtension?.granted === true && this.chatGptExtension?.paired === true && this.chatGptExtension?.available === true
+        : this.provider !== null && this.connection !== null,
+      webToolsAvailable: provider === "openrouter",
+      ...(provider === "chatgpt" ? { chatgpt: this.chatGptStatus() } : {}),
       selectedModelId,
       models: boundModelCatalog(
-        this.persisted.models,
+        this.modelsFor(provider),
         selectedModelId,
       ),
       modelsLoading: this.modelCatalogRequestsInFlight > 0,
@@ -282,6 +309,180 @@ export class AgentRuntime {
     };
   }
 
+  private providerFor(historyId: AgentChatTileEndpointId): AgentProvider {
+    return this.providerPreferences?.get(historyId) ?? modelProvider(this.conversation(historyId).selectedModelId);
+  }
+
+  private modelsFor(provider: AgentProvider): OpenRouterModel[] {
+    return this.persisted.models.filter((model) => modelProvider(model.id) === provider);
+  }
+
+  async selectProvider(historyId: AgentChatTileEndpointId, provider: AgentProvider, signal?: AbortSignal): Promise<AgentSnapshot> {
+    return this.runTileOperationForTile(historyId, () => runWithAgentTileOperationLock(historyId, async () => {
+      assertAgentRequestActive(signal);
+      await this.reloadConversation(historyId);
+      await this.runQueuedMutation(async () => {
+        await this.reloadShared();
+        assertAgentRequestActive(signal);
+        await this.storage.saveProvider(historyId, provider);
+        (this.providerPreferences ??= new Map()).set(historyId, provider);
+        const current = this.conversation(historyId).selectedModelId;
+        const models = this.modelsFor(provider);
+        const modelId = models.find((model) => model.id === current)?.id ??
+          models.find((model) => model.id === this.persisted.selectedModelId)?.id ?? models[0]?.id;
+        if (modelId) {
+          this.persisted.selectedModelId = modelId;
+          this.conversations.set(historyId, await this.storage.saveModelSelection(historyId, modelId, this.persisted));
+        }
+      });
+      if (provider === "chatgpt") await this.refreshChatGptStatus();
+      this.clearError(historyId);
+      return this.snapshot(historyId);
+    }));
+  }
+
+  private chatGptStatus(): AgentChatGptStatus {
+    const credentials = this.chatGptCredentials;
+    const login = this.chatGptLogin?.login;
+    return {
+      connected: !!credentials,
+      extension: this.chatGptExtension ?? null,
+      ...(credentials?.email ? { email: credentials.email } : {}),
+      ...(credentials?.planType ? { planType: credentials.planType } : {}),
+      login: login ? { verificationUrl: login.verificationUrl, userCode: login.userCode, expiresAt: login.expiresAt } : null,
+    };
+  }
+
+  private async refreshChatGptStatus(): Promise<void> {
+    try { this.chatGptExtension = await browserExtension.status(); }
+    catch { this.chatGptExtension = null; }
+    this.chatGptCredentials = await this.storage.loadChatGptCredentials();
+    if (this.chatGptCredentials && !this.chatGptProvider) this.acquireChatGpt();
+    if (!this.chatGptCredentials) this.chatGptProvider = null;
+  }
+
+  private async restoreChatGpt(): Promise<void> {
+    this.chatGptCredentials = await this.storage.loadChatGptCredentials();
+    if (this.chatGptCredentials) {
+      this.acquireChatGpt();
+      try { this.chatGptExtension = await browserExtension.status(); }
+      catch { this.chatGptExtension = null; }
+    } else {
+      this.chatGptProvider?.dispose();
+      this.chatGptProvider = null;
+    }
+  }
+
+  private acquireChatGpt(): void {
+    this.chatGptProvider?.dispose();
+    let previous = this.chatGptCredentials;
+    this.chatGptProvider = createChatGptProvider({
+      fetch: browserExtension.fetch as typeof fetch,
+      credentials: async () => {
+        const current = await this.storage.loadChatGptCredentials();
+        if (!current) throw new Error("ChatGPT was disconnected; reconnect");
+        previous = current;
+        this.chatGptCredentials = current;
+        return current;
+      },
+      saveCredentials: async (value) => {
+        if (!previous || !await this.storage.replaceChatGptCredentials(previous, value)) {
+          throw new Error("ChatGPT connection changed while refreshing; retry with the current connection");
+        }
+        previous = value;
+        this.chatGptCredentials = value;
+      },
+    });
+  }
+
+  async connectChatGpt(historyId: AgentChatTileEndpointId, onChanged: () => void | Promise<void>, signal?: AbortSignal): Promise<AgentSnapshot> {
+    return this.runGlobalOperationForTile(historyId, async () => {
+      assertAgentRequestActive(signal);
+      this.clearError(historyId);
+      await this.refreshChatGptStatus();
+      if (!this.chatGptExtension?.available || !this.chatGptExtension.paired || !this.chatGptExtension.granted) {
+        this.chatGptExtension = await browserExtension.request({ reason: "Connect your ChatGPT subscription and send Agent requests directly through your browser." });
+      }
+      assertAgentRequestActive(signal);
+      if (this.chatGptCredentials) {
+        await this.refreshChatGptModels(historyId, signal, true);
+        return this.snapshot(historyId);
+      }
+      this.chatGptLogin?.abort.abort(new Error("Replaced by a new ChatGPT login"));
+      const abort = new AbortController();
+      const login = await startChatGptDeviceLogin({ fetch: browserExtension.fetch as typeof fetch, signal });
+      const revision = await this.storage.beginChatGptLogin();
+      const pending = { login, abort };
+      this.chatGptLogin = pending;
+      // The device code is returned immediately. A resident-owned flow survives
+      // tile navigation; cancelling the code or disconnecting invalidates its
+      // stored revision so a late response cannot reconnect the account.
+      void completeChatGptDeviceLogin(login, { fetch: browserExtension.fetch as typeof fetch, signal: abort.signal })
+        .then(async (credentials) => {
+          if (this.chatGptLogin !== pending || abort.signal.aborted) return;
+          if (!await this.storage.completeChatGptLogin(revision, credentials)) return;
+          this.chatGptCredentials = credentials;
+          this.acquireChatGpt();
+          await this.refreshChatGptModels(historyId);
+        })
+        .catch((error) => {
+          if (this.chatGptLogin === pending && !abort.signal.aborted) this.setError(historyId, error);
+        })
+        .finally(async () => {
+          if (this.chatGptLogin === pending) this.chatGptLogin = null;
+          try { await onChanged(); } catch { /* Status polling recovers a missed invalidation. */ }
+        });
+      return this.snapshot(historyId);
+    });
+  }
+
+  async cancelChatGptLogin(historyId: AgentChatTileEndpointId): Promise<AgentSnapshot> {
+    this.chatGptLogin?.abort.abort(new Error("ChatGPT login cancelled"));
+    this.chatGptLogin = null;
+    // Invalidate only pending authentication; an established connection stays.
+    await this.storage.beginChatGptLogin();
+    this.clearError(historyId);
+    return this.snapshot(historyId);
+  }
+
+  async disconnectChatGpt(historyId: AgentChatTileEndpointId, onChanged?: () => void | Promise<void>, signal?: AbortSignal): Promise<AgentSnapshot> {
+    return this.runGlobalOperationForTile(historyId, async () => {
+      assertAgentRequestActive(signal);
+      this.chatGptLogin?.abort.abort(new Error("ChatGPT disconnected"));
+      this.chatGptLogin = null;
+      await this.storage.clearChatGptConnection();
+      this.chatGptCredentials = null;
+      this.chatGptProvider?.dispose();
+      this.chatGptProvider = null;
+      this.clearError(historyId);
+      await onChanged?.();
+      return this.snapshot(historyId);
+    });
+  }
+
+  private async refreshChatGptModels(historyId?: AgentChatTileEndpointId, signal?: AbortSignal, mutationHeld = false): Promise<void> {
+    if (!this.chatGptProvider) throw new Error("Connect your ChatGPT subscription first");
+    this.modelCatalogRequestsInFlight += 1;
+    try {
+      const models = await this.chatGptProvider.listModels(signal);
+      if (!models.length) throw new Error("No Agent-compatible models were returned by your ChatGPT connection");
+      const commit = async () => {
+        await this.reloadShared();
+        assertAgentRequestActive(signal);
+        this.persisted.models = [...models, ...this.modelsFor("openrouter")];
+        this.persisted.modelsFetchedAt = Date.now();
+        await this.persistShared();
+        if (historyId && this.providerFor(historyId) === "chatgpt" && !models.some((model) => model.id === this.conversation(historyId).selectedModelId)) {
+          this.persisted.selectedModelId = models[0]!.id;
+          this.conversations.set(historyId, await this.storage.saveModelSelection(historyId, models[0]!.id, this.persisted));
+        }
+      };
+      if (mutationHeld) await commit(); else await this.runQueuedMutation(commit);
+    } finally {
+      this.modelCatalogRequestsInFlight = Math.max(0, this.modelCatalogRequestsInFlight - 1);
+    }
+  }
+
   async connect(
     historyId: AgentChatTileEndpointId,
     onConnectionChanged?: () => void | Promise<void>,
@@ -295,8 +496,8 @@ export class AgentRuntime {
       await this.acquire(summary);
       await onConnectionChanged?.();
       if (
-        this.persisted.models.length === 0 ||
-        this.persisted.models.some((model) => !model.supportsToolChoice)
+        this.modelsFor("openrouter").length === 0 ||
+        this.modelsFor("openrouter").some((model) => !model.supportsToolChoice)
       ) {
         await this.refreshModelCatalog(historyId, requestSignal, true);
       }
@@ -309,7 +510,11 @@ export class AgentRuntime {
     requestSignal?: AbortSignal,
   ): Promise<AgentSnapshot> {
     return this.runTileOperationForTile(historyId, async () => {
-      await this.refreshModelCatalog(historyId, requestSignal);
+      if (this.providerFor(historyId) === "chatgpt") {
+        await this.refreshChatGptModels(historyId, requestSignal);
+      } else {
+        await this.refreshModelCatalog(historyId, requestSignal);
+      }
       return this.snapshot(historyId);
     });
   }
@@ -350,11 +555,11 @@ export class AgentRuntime {
         if (models.length === 0) {
           throw new Error("No agent-capable OpenRouter models are available");
         }
-        this.persisted.models = models;
+        this.persisted.models = [...this.modelsFor("chatgpt"), ...models];
         this.persisted.modelsFetchedAt = Date.now();
         if (
           this.persisted.selectedModelId &&
-          !models.some((model) => model.id === this.persisted.selectedModelId)
+          !this.persisted.models.some((model) => model.id === this.persisted.selectedModelId)
         ) {
           this.persisted.selectedModelId = null;
         }
@@ -394,6 +599,9 @@ export class AgentRuntime {
             throw new Error(
               "Selected model is not available with tool support",
             );
+          }
+          if (modelProvider(modelId) !== this.providerFor(historyId)) {
+            throw new Error("Choose this model's connection provider first");
           }
           // This remains the default only for tiles that have not been opened yet.
           this.persisted.selectedModelId = modelId;
@@ -504,15 +712,23 @@ export class AgentRuntime {
       if (abortController.signal.aborted) {
         throw new Error("Agent turn was stopped before it started");
       }
-      await this.verifyLiveConnection(requestSignal);
       await this.reloadShared();
       const currentConversation = await this.reloadConversation(historyId);
       conversation = currentConversation;
+      if (this.providerFor(historyId) === "openrouter") await this.verifyLiveConnection(requestSignal);
       const modelId = availableConversationModelId(
         currentConversation,
-        this.persisted.models,
+        this.modelsFor(this.providerFor(historyId)),
       );
-      if (!modelId) throw new Error("Select an OpenRouter model first");
+      if (!modelId) throw new Error("Select a model first");
+      if (modelProvider(modelId) === "chatgpt") {
+        await this.refreshChatGptStatus();
+        if (!this.chatGptCredentials) throw new Error("ChatGPT was disconnected; reconnect");
+        if (!this.chatGptExtension?.granted || !this.chatGptExtension.paired || !this.chatGptExtension.available) {
+          throw new Error("Enable the Neutron extension connection to use your ChatGPT subscription");
+        }
+        webEnabled = false;
+      }
       if (expectedModelId !== undefined && expectedModelId !== modelId) {
         throw new Error(
           "The selected model changed in this tile; review it and send again",
@@ -597,10 +813,12 @@ export class AgentRuntime {
       }
       const scheduleCall = createAgentCallScheduler();
       if (agentConsent) {
+        const currentModels = () => this.modelsFor(modelProvider(modelId));
         workers = new AgentWorkers({
           historyId, storage: this.storage, records: await this.storage.loadWorkers(historyId),
-          signal: abortController.signal, modelId, models: this.persisted.models,
+          signal: abortController.signal, modelId, get models() { return currentModels(); },
           run: (worker) => this.runWorker(worker, {
+            parentModelId: modelId,
             historyId, bus, scheduleCall, ownerInstructions: () => ownerInstructions,
             webEnabled,
             onUsage: async (inputTokens, outputTokens) => {
@@ -864,6 +1082,7 @@ export class AgentRuntime {
   }
 
   private async runWorker(worker: WorkerExecution, options: {
+    parentModelId: string;
     historyId: AgentChatTileEndpointId;
     bus: MsgBusClient;
     scheduleCall: AgentCallScheduler;
@@ -872,6 +1091,15 @@ export class AgentRuntime {
     onUsage: (inputTokens: number, outputTokens: number) => Promise<void>;
   }): Promise<void> {
     const { record, signal } = worker;
+    // Saving a newly spawned/resumed worker yields. Another tile may refresh
+    // prices during that save, so check again at the model execution boundary.
+    const candidate = this.persisted.models.find((entry) => entry.id === record.modelId);
+    if (!candidate || !isWorkerModelAllowed(options.parentModelId, candidate, this.persisted.models)) {
+      record.modelId = options.parentModelId;
+      record.conversation.selectedModelId = options.parentModelId;
+      await worker.save();
+      worker.changed();
+    }
     const model = this.persisted.models.find((entry) => entry.id === record.modelId);
     if (!model) throw new Error("Worker model is no longer available");
     let turn = record.conversation.modelTurns.flat();
@@ -1052,7 +1280,7 @@ export class AgentRuntime {
     abortSignal: AbortSignal,
     historyId?: AgentChatTileEndpointId,
   ): Promise<AgentConsentDecision> {
-    if (!this.provider) {
+    if (modelProvider(model.id) === "chatgpt" ? !this.chatGptProvider : !this.provider) {
       return { decision: "deny", reason: "Agent model is unavailable" };
     }
     const id = `permission-${challenge.id}`;
@@ -1250,6 +1478,7 @@ export class AgentRuntime {
 
   async applyExternalConnectionChange(): Promise<void> {
     await this.runQueuedGlobalMutation(async () => {
+      if (typeof this.storage.loadChatGptCredentials === "function") await this.restoreChatGpt();
       try {
         const live = (await this.connectionLister())[0];
         if (!live) {
@@ -1302,8 +1531,8 @@ export class AgentRuntime {
       await this.acquire(connection);
       await this.reloadShared();
       if (
-        this.persisted.models.length === 0 ||
-        this.persisted.models.some((model) => !model.supportsToolChoice)
+        this.modelsFor("openrouter").length === 0 ||
+        this.modelsFor("openrouter").some((model) => !model.supportsToolChoice)
       ) {
         try {
           await this.runMutation(async () => {
@@ -1388,6 +1617,10 @@ export class AgentRuntime {
   }
 
   private chatModel(model: OpenRouterModel) {
+    if (modelProvider(model.id) === "chatgpt") {
+      if (!this.chatGptProvider) throw new Error("ChatGPT is not connected");
+      return this.chatGptProvider.chat(model.id);
+    }
     if (!this.provider) throw new Error("OpenRouter is not connected");
     return this.provider.chat(model.id, agentModelOptions(model));
   }
@@ -1410,6 +1643,10 @@ export class AgentRuntime {
   ): Promise<PersistedConversationState> {
     const conversation = await this.loadConversation(historyId);
     this.conversations.set(historyId, conversation);
+    if (typeof this.storage.loadProvider === "function") {
+      const provider = await this.storage.loadProvider(historyId);
+      if (provider) (this.providerPreferences ??= new Map()).set(historyId, provider);
+    }
     return conversation;
   }
 
@@ -2257,6 +2494,10 @@ function conversationRevision(state: PersistedConversationState): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function modelProvider(modelId: string | null): AgentProvider {
+  return modelId?.startsWith("chatgpt/") ? "chatgpt" : "openrouter";
 }
 
 function safeError(error: unknown): string {
