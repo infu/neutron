@@ -1,0 +1,21 @@
+{
+  "format": 2,
+  "app": "nuance",
+  "memory": {
+    "nuance": {
+      "schemas": {
+        "1": {
+          "hash": "d6e05b198cc93289c36a5a2cff5d65330a35b2fd5ba0bd48e993ce17fec1f07f",
+          "entry": "d6e05b198cc93289c36a5a2cff5d65330a35b2fd5ba0bd48e993ce17fec1f07f"
+        },
+        "2": {
+          "hash": "fbfad45abcabc8194d73dbdc1746dbac12cc670e0b4feb02acf540d1ebd3f258",
+          "entry": "fbfad45abcabc8194d73dbdc1746dbac12cc670e0b4feb02acf540d1ebd3f258"
+        }
+      },
+      "migrations": {
+        "1->2": "33b9a8b62505a0a139ea0221e8c88b5990774b9798010f42916377892667755f"
+      }
+    }
+  }
+}

@@ -1,0 +1,499 @@
+@use "neutron-design-system/styles.scss";
+
+@layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
+
+// App-local composition only. Kernel workspace classes are never targeted, and
+// the shared visual policy is respected throughout: dark only, no gradients,
+// radius capped at 5px, hairlines instead of component borders, letter-spacing 0,
+// and no type that scales with the viewport.
+@layer app {
+  .nt-app.nuance-app {
+    --nt-accent: #7fb0ff;
+
+    display: flex;
+    min-height: 100%;
+  }
+
+  .nuance-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    min-width: 0;
+    width: 100%;
+  }
+
+  // ------------------------------------------------------------------ rail
+
+  .nuance-rail {
+    align-items: center;
+    box-shadow: inset 0 -1px 0 var(--nt-line-subtle);
+    display: flex;
+    gap: var(--nt-gap-2, 8px);
+    justify-content: space-between;
+    padding: var(--nt-pad-2, 8px) var(--nt-pad-3, 12px);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--nt-bg);
+  }
+
+  .nuance-rail-group {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nuance-rail-title {
+    color: var(--nt-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nuance-icon {
+    position: relative;
+  }
+
+  .nuance-icon.is-active {
+    background: var(--nt-bg-elevated);
+    color: var(--nt-text-strong);
+  }
+
+  .nuance-icon--accent {
+    color: var(--nt-accent);
+  }
+
+  .nuance-icon--danger {
+    color: var(--nt-danger);
+  }
+
+  .nuance-icon-glyph {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .nuance-icon-badge {
+    background: var(--nt-bg-control);
+    border-radius: 5px;
+    color: var(--nt-text-muted);
+    font-size: 9px;
+    line-height: 1;
+    padding: 1px 3px;
+    position: absolute;
+    right: -2px;
+    top: -2px;
+  }
+
+  // --------------------------------------------------------------- content
+
+  .nuance-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    padding: var(--nt-pad-3, 12px);
+  }
+
+  .nuance-status {
+    background: var(--nt-bg);
+    box-shadow: inset 0 1px 0 var(--nt-line-subtle);
+    padding: 6px var(--nt-pad-3, 12px);
+    position: sticky;
+    bottom: 0;
+  }
+
+  .nuance-status-text {
+    display: block;
+    font-size: 11px;
+  }
+
+  .nuance-notice {
+    align-items: flex-start;
+    display: flex;
+    font-size: 11px;
+    gap: var(--nt-gap-2, 8px);
+    justify-content: space-between;
+    margin-bottom: var(--nt-gap-2, 8px);
+  }
+
+  .nuance-notice-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 4px;
+  }
+
+  .nuance-state {
+    font-size: 12px;
+    margin: var(--nt-gap-2, 8px) 0;
+  }
+
+  // ------------------------------------------------------------------ feed
+
+  .nuance-feed {
+    display: flex;
+    flex-direction: column;
+    gap: var(--nt-gap-2, 8px);
+    min-width: 0;
+  }
+
+  .nuance-search {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nuance-search-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .nuance-sources {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nuance-rows {
+    display: flex;
+    flex-direction: column;
+    // The browser's default `ul` inset is 40px, which the design system does not
+    // reset. On a 320px tile that is an eighth of the width given to nothing.
+    list-style: none;
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .nuance-row {
+    align-items: flex-start;
+    display: flex;
+    gap: var(--nt-gap-2, 8px);
+    min-width: 0;
+    padding: var(--nt-pad-2, 8px) 0;
+  }
+
+  // Always present so a row without a cover, or one whose image 404s, keeps its
+  // text aligned with every other row.
+  .nuance-row-thumb {
+    // Transparent, not a tinted box: an empty slot should read as whitespace,
+    // not as an image that failed to load.
+    background: transparent;
+    border-radius: 4px;
+    flex: none;
+    height: 40px;
+    overflow: hidden;
+    width: 40px;
+  }
+
+  .nuance-row-thumb-img {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .nuance-row-main {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .nuance-row-main:focus-visible {
+    outline: 1px solid var(--nt-line-focus);
+    outline-offset: 2px;
+  }
+
+  .nuance-row-title {
+    color: var(--nt-text-strong);
+    font-size: 13px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .nuance-row-meta {
+    color: var(--nt-text-faint);
+    font-size: 11px;
+  }
+
+  .nuance-tags {
+    margin-top: 2px;
+  }
+
+  // ---------------------------------------------------------------- reader
+
+  .nuance-reader {
+    display: flex;
+    flex-direction: column;
+    gap: var(--nt-gap-2, 8px);
+    min-width: 0;
+  }
+
+  .nuance-reader-bar {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    gap: var(--nt-gap-2, 8px);
+  }
+
+  .nuance-reader-actions {
+    display: flex;
+    gap: 2px;
+  }
+
+  .nuance-article {
+    min-width: 0;
+  }
+
+  // Nearly every Nuance article has a cover. It is cropped rather than squashed,
+  // and capped against the tile's own height as well as an absolute ceiling: on
+  // a short tile a fixed 160px would be most of what the reader can see.
+  .nuance-cover {
+    border-radius: 5px;
+    display: block;
+    margin: 0 0 8px;
+    max-height: min(160px, 26vh);
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .nuance-article-title {
+    font-size: 17px;
+    line-height: 1.3;
+    margin: 0 0 4px;
+    overflow-wrap: anywhere;
+  }
+
+  .nuance-byline {
+    margin: 0 0 4px;
+  }
+
+  .nuance-standfirst {
+    color: var(--nt-text-muted);
+    font-size: 12px;
+    margin: 8px 0 0;
+  }
+
+  .nuance-body {
+    font-size: 13px;
+    line-height: 1.55;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .nuance-heading {
+    font-size: 14px;
+    margin: 16px 0 4px;
+  }
+
+  .nuance-para {
+    margin: 0 0 10px;
+  }
+
+  .nuance-list {
+    margin: 0 0 10px;
+    padding-inline-start: 18px;
+  }
+
+  .nuance-quote {
+    box-shadow: inset 2px 0 0 var(--nt-line);
+    color: var(--nt-text-muted);
+    margin: 0 0 10px;
+    padding-inline-start: 10px;
+  }
+
+  .nuance-rule {
+    border: 0;
+    box-shadow: inset 0 1px 0 var(--nt-line-subtle);
+    height: 1px;
+    margin: 14px 0;
+  }
+
+  .nuance-image {
+    border-radius: 5px;
+    display: block;
+    height: auto;
+    margin: 0 0 10px;
+    max-width: 100%;
+  }
+
+  .nuance-image-blocked {
+    color: var(--nt-text-faint);
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .nuance-link {
+    align-items: baseline;
+    color: var(--nt-accent);
+    display: inline;
+  }
+
+  .nuance-inline-button {
+    height: 16px;
+    min-height: 16px;
+    min-width: 16px;
+    vertical-align: baseline;
+    width: 16px;
+  }
+
+  .nuance-linklike {
+    all: unset;
+    color: var(--nt-accent);
+    cursor: pointer;
+  }
+
+  // -------------------------------------------------------------- comments
+
+  .nuance-comments {
+    box-shadow: inset 0 1px 0 var(--nt-line-subtle);
+    padding-top: var(--nt-pad-2, 8px);
+  }
+
+  .nuance-comment-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nuance-comment {
+    box-shadow: inset 0 -1px 0 var(--nt-line-subtle);
+    padding: 6px 0;
+  }
+
+  .nuance-comment-meta {
+    margin: 0;
+  }
+
+  .nuance-comment-body {
+    font-size: 12px;
+    margin: 2px 0 4px;
+    overflow-wrap: anywhere;
+  }
+
+  .nuance-comment-actions {
+    display: flex;
+    gap: 2px;
+  }
+
+  .nuance-comment-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: var(--nt-pad-2, 8px);
+  }
+
+  .nuance-comment-submit {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  // ---------------------------------------------------------------- editor
+
+  .nuance-editor {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--nt-gap-2, 8px);
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .nuance-field {
+    min-width: 0;
+  }
+
+  .nuance-field--grow {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 160px;
+  }
+
+  .nuance-body-input {
+    flex: 1;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 160px;
+    resize: vertical;
+  }
+
+  .nuance-tag-picker {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .nuance-tag-select {
+    max-width: 140px;
+  }
+
+  .nuance-tag-remove {
+    all: unset;
+    cursor: pointer;
+    margin-inline-start: 4px;
+    opacity: 0.7;
+  }
+
+  .nuance-tag-remove:hover,
+  .nuance-tag-remove:focus-visible {
+    opacity: 1;
+  }
+
+  .nuance-editor-footer {
+    align-items: center;
+    display: flex;
+    gap: var(--nt-gap-2, 8px);
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .nuance-editor-status {
+    font-size: 11px;
+  }
+
+  .nuance-editor-actions {
+    display: flex;
+    gap: 2px;
+  }
+
+  .nuance-publish-hint {
+    margin: 0;
+  }
+
+  // --------------------------------------------------------------- account
+
+  .nuance-account {
+    display: flex;
+    flex-direction: column;
+    gap: var(--nt-gap-3, 12px);
+    min-width: 0;
+  }
+
+  .nuance-principal {
+    align-items: center;
+    display: flex;
+    gap: 4px;
+    font-size: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .nuance-account-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: var(--nt-gap-2, 8px);
+  }
+
+  .nuance-register {
+    margin-top: var(--nt-gap-2, 8px);
+  }
+}
