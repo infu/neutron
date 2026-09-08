@@ -175,6 +175,13 @@ const localRequestControllers = new WeakMap<
   Map<number, AbortController>
 >();
 const toolExtensionClients = new WeakMap<ScopedKernelClient, BrowserExtensionClient>();
+type ScopedBackendCallReservations = <T extends SelfCallValue = JsonValue>(
+  request: BackendCallReservationsRequest,
+) => Promise<T>;
+const toolBackendCallReservations = new WeakMap<
+  ScopedKernelClient,
+  ScopedBackendCallReservations
+>();
 
 function getWindow(): Window {
   if (typeof window === "undefined") {
@@ -1362,6 +1369,21 @@ export function browserExtensionForTool(context: Pick<MsgBusToolContext, "kernel
   return client;
 }
 
+/** Request reservations and an optional reviewed self call with the current
+ * tool's private invocation and cancellation. Pass context.kernel directly. */
+export async function requestBackendCallReservationsForTool<
+  T extends SelfCallValue = JsonValue,
+>(
+  kernel: ScopedKernelClient,
+  request: BackendCallReservationsRequest,
+): Promise<T> {
+  const scopedRequest = toolBackendCallReservations.get(kernel);
+  if (!scopedRequest) {
+    throw new Error("Backend call reservations require the current tool context");
+  }
+  return scopedRequest<T>(request);
+}
+
 function createRequestMsgBusClient(
   invocation?: MsgBusInvocationMetadata,
   signal?: AbortSignal,
@@ -1439,6 +1461,23 @@ function createRequestMsgBusClient(
   toolExtensionClients.set(client, createBrowserExtensionClient((action, payload, requestSignal) =>
     execWithTransportContext(action, payload, requestSignal ? { signal: requestSignal } : {}, transportContext, signal),
   ));
+  toolBackendCallReservations.set(client, <T extends SelfCallValue = JsonValue>(
+    request: BackendCallReservationsRequest,
+  ): Promise<T> => request.call
+    ? execSelfCall<T>(
+        "backend_calls.request",
+        request.call.method,
+        request.call.args ?? [],
+        0,
+        boundInvocation,
+        signal,
+        request.actions,
+      )
+    : scopedCallTool<JsonValue>({
+        target: "kernel",
+        name: "backend_calls.request",
+        arguments: { actions: request.actions },
+      }, 0) as Promise<T>);
   return client;
 }
 

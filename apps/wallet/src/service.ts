@@ -1,3 +1,4 @@
+import { registerLedgerTools } from "./ledger_tools.ts";
 import {
   WALLET_WITHDRAWAL_QUOTE_TOOL,
   handleWalletWithdrawalQuote,
@@ -51,6 +52,7 @@ import {
   walletTokenInfoRequest,
 } from "./token_info.ts";
 
+registerLedgerTools();
 registerBridgeTools();
 registerConversionTools();
 registerDepositTools();

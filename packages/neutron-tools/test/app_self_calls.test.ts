@@ -4,14 +4,18 @@ import {
   callCanisterDialog,
   browserExtensionForTool,
   callSelfDialog,
+  createMsgBusClient,
   decodeSelfCallValue,
   disconnectMsgBus,
   encodeSelfCallValues,
   exposeTool,
   installMessageListener,
   requestBackendCallReservations,
+  requestBackendCallReservationsForTool,
+  removeExposedTool,
   updateSelf,
 } from "../src/app.ts";
+import type { MsgBusToolContext } from "../src/app.ts";
 
 const originalWindow = globalThis.window;
 const canisterId = "4caro-hl777-77775-aaaba-cai";
@@ -470,6 +474,207 @@ test("extension permission inside a tool carries its private agent authority", a
   });
   await expect(result).resolves.toMatchObject({ id: 902, ok: { granted: true } });
   channel.port2.close();
+});
+
+function reservationPortFixture() {
+  const fake = installFakeWindow();
+  const channel = new MessageChannel();
+  const messages: Record<string, any>[] = [];
+  const observers = new Set<() => void>();
+  channel.port2.addEventListener("message", (event) => {
+    messages.push(event.data);
+    for (const observer of [...observers]) observer();
+  });
+  channel.port2.start();
+  fake.dispatch(channel.port1);
+  return {
+    messages,
+    send: (message: unknown) => channel.port2.postMessage(message),
+    waitFor: (matches: (message: Record<string, any>) => boolean) =>
+      new Promise<Record<string, any>>((resolve) => {
+        const observe = () => {
+          const message = messages.find(matches);
+          if (!message) return;
+          observers.delete(observe);
+          resolve(message);
+        };
+        observers.add(observe);
+        observe();
+      }),
+    close: () => {
+      disconnectMsgBus();
+      channel.port2.close();
+    },
+  };
+}
+
+test("parallel reservation tools keep their own invocation and binary self-call results", async () => {
+  const port = reservationPortFixture();
+  const name = "test.scoped_reservations_parallel";
+  const invocations = [0, 1].map((index) => ({
+    id: `reservation-invocation-000${index}`,
+    rootId: `reservation-root-00000000${index}`,
+    capability: String(index + 1).repeat(48),
+  }));
+  const contexts: MsgBusToolContext[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let ready!: () => void;
+  const bothReady = new Promise<void>((resolve) => { ready = resolve; });
+  exposeTool(name, {
+    inputSchema: { type: "object", properties: { index: { type: "integer" } }, required: ["index"], additionalProperties: false },
+  }, async (args, context) => {
+    const index = (args as { index: number }).index;
+    contexts[index] = context;
+    if (contexts.filter(Boolean).length === 2) ready();
+    await gate;
+    const bytes = new Uint8Array([index, 10 + index]);
+    const pending = requestBackendCallReservationsForTool<{ receipt: Uint8Array }>(context.kernel, {
+      actions: [{ kind: "reserve", scope: { kind: "method", method: `deliver_${index}` } }],
+      call: { method: "configure", args: [{ bytes }] },
+    });
+    bytes.fill(99);
+    const stored = await pending;
+    const reserved = await requestBackendCallReservationsForTool<{ granted: boolean }>(context.kernel, {
+      actions: [{ kind: "reserve", scope: { kind: "method", method: `read_${index}` } }],
+    });
+    return { receipt: [...stored.receipt], granted: reserved.granted };
+  });
+  try {
+    for (const index of [0, 1]) port.send({
+      type: "exec", id: 920 + index,
+      payload: {
+        action: "__neutron_msgbus_tools_call",
+        payload: { name, arguments: { index } },
+        context: { invocation: invocations[index] },
+      },
+    });
+    await bothReady;
+    // A fresh global client cannot borrow either concurrently active authority.
+    await expect(requestBackendCallReservationsForTool(createMsgBusClient(), { actions: [] }))
+      .rejects.toThrow("current tool context");
+    await expect(requestBackendCallReservationsForTool({ ...contexts[0]!.kernel }, { actions: [] }))
+      .rejects.toThrow("current tool context");
+    release();
+    const calls = await Promise.all(invocations.map((invocation) => port.waitFor((message) =>
+      message.type === "neutron:self-call:exec" && message.context?.invocation?.id === invocation.id,
+    )));
+    for (const index of [1, 0]) {
+      const call = calls[index]!;
+      expect(call).toMatchObject({
+        tool: "backend_calls.request", method: "configure",
+        context: { invocation: invocations[index] }, args: [{ bytes: null }],
+        actions: [{ kind: "reserve", scope: { kind: "method", method: `deliver_${index}` } }],
+      });
+      expect(call.blobs.map((blob: any) => blob.path)).toEqual([[0, "bytes"]]);
+      expect([...new Uint8Array(call.blobs[0].data)]).toEqual([index, 10 + index]);
+      const receipt = new Uint8Array([30 + index]).buffer;
+      port.send({
+        type: "neutron:self-call:response", version: 1, id: call.id, ok: { receipt: null },
+        blobs: [{ path: ["receipt"], byteLength: 1, data: receipt }],
+      });
+    }
+    const reservations = await Promise.all(invocations.map((invocation) => port.waitFor((message) =>
+      message.type === "exec" && message.payload?.context?.invocation?.id === invocation.id,
+    )));
+    for (const index of [1, 0]) {
+      const request = reservations[index]!;
+      expect(request.payload).toEqual({
+        action: "tools.call",
+        payload: { target: "kernel", name: "backend_calls.request", arguments: {
+          actions: [{ kind: "reserve", scope: { kind: "method", method: `read_${index}` } }],
+        } },
+        context: { invocation: invocations[index] },
+      });
+      port.send({ type: "response", id: request.id, ok: { granted: true } });
+    }
+    for (const index of [0, 1]) {
+      expect(await port.waitFor((message) => message.type === "response" && message.id === 920 + index))
+        .toMatchObject({ ok: { receipt: [30 + index], granted: true } });
+    }
+    expect(port.messages.filter((message) => message.type === "neutron:self-call:exec")).toHaveLength(2);
+    expect(port.messages.filter((message) => message.type === "exec")).toHaveLength(2);
+  } finally {
+    removeExposedTool(name);
+    port.close();
+  }
+});
+
+for (const withCall of [false, true]) {
+  test(`reservation tools forward cancellation${withCall ? " and preserve the post-grant outcome" : " without a post-grant call"}`, async () => {
+    const port = reservationPortFixture();
+    const name = `test.scoped_reservations_cancel_${withCall}`;
+    let wasAborted = false;
+    exposeTool(name, { inputSchema: { type: "object", additionalProperties: false } }, async (_args, context) => {
+      context.signal!.addEventListener("abort", () => { wasAborted = true; });
+      await requestBackendCallReservationsForTool(context.kernel, {
+        actions: [{ kind: "reserve", scope: { kind: "method", method: "deliver" } }],
+        ...(withCall ? { call: { method: "configure", args: [] } } : {}),
+      });
+      return {};
+    });
+    try {
+      port.send({
+        type: "exec", id: 930,
+        payload: { action: "__neutron_msgbus_tools_call", payload: { name, arguments: {} } },
+      });
+      const request = await port.waitFor((message) =>
+        message.type === (withCall ? "neutron:self-call:exec" : "exec"),
+      );
+      // Ordinary tool invocations also get scoped clients, without Root metadata.
+      expect(withCall ? request.context : request.payload.context).toBeUndefined();
+      port.send({ type: "neutron:msgbus:cancel", version: 1, id: 930 });
+      await port.waitFor((message) => message.type === "neutron:msgbus:cancel" && message.id === request.id);
+      expect(wasAborted).toBe(true);
+      if (withCall) {
+        expect(port.messages.some((message) => message.type === "response" && message.id === 930)).toBe(false);
+        port.send({
+          type: "neutron:self-call:response", version: 1, id: request.id,
+          error: {
+            name: "KernelPolicyError", code: "REQUEST_CANCELLED",
+            message: "Canister call outcome is unknown after cancellation",
+          },
+        });
+      }
+      expect(await port.waitFor((message) => message.type === "response" && message.id === 930))
+        .toMatchObject({ error: { ...(withCall ? { code: "REQUEST_CANCELLED", message: expect.stringContaining("outcome is unknown") } : {}) } });
+    } finally {
+      removeExposedTool(name);
+      port.close();
+    }
+  });
+}
+
+test("an already-cancelled reservation tool never sends either request route", async () => {
+  const port = reservationPortFixture();
+  const name = "test.scoped_reservations_pre_cancel";
+  let entered!: () => void;
+  const ready = new Promise<void>((resolve) => { entered = resolve; });
+  let observed!: () => void;
+  const aborted = new Promise<void>((resolve) => { observed = resolve; });
+  exposeTool(name, { inputSchema: { type: "object", additionalProperties: false } }, async (_args, context) => {
+    context.signal!.addEventListener("abort", observed);
+    entered();
+    await aborted;
+    const outcomes = await Promise.allSettled([
+      requestBackendCallReservationsForTool(context.kernel, { actions: [] }),
+      requestBackendCallReservationsForTool(context.kernel, { actions: [], call: { method: "configure" } }),
+    ]);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(["rejected", "rejected"]);
+    return {};
+  });
+  try {
+    port.send({ type: "exec", id: 940, payload: {
+      action: "__neutron_msgbus_tools_call", payload: { name, arguments: {} },
+    } });
+    await ready;
+    port.send({ type: "neutron:msgbus:cancel", version: 1, id: 940 });
+    await port.waitFor((message) => message.type === "response" && message.id === 940);
+    expect(port.messages.filter((message) => message.type === "exec" || message.type === "neutron:self-call:exec")).toHaveLength(0);
+  } finally {
+    removeExposedTool(name);
+    port.close();
+  }
 });
 
 test("binary leaf count is 512 per direction and supports zero-byte leaves", () => {

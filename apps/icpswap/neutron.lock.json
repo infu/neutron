@@ -1,0 +1,33 @@
+{
+  "format": 2,
+  "app": "icpswap",
+  "memory": {
+    "icpswap": {
+      "schemas": {
+        "1": {
+          "hash": "d9ff67ea63f1884ed7f333bf66196e308aa50d247f316524a853286987ccf19d",
+          "entry": "26bfb18b757b96c7b5075ccba7a1e481b9e9d5023cbedc14168b755558500577"
+        }
+      },
+      "migrations": {}
+    },
+    "icpswap_swap": {
+      "schemas": {
+        "1": {
+          "hash": "81a8159a411fa9b018d7ba6a30d625105cb35bca15934b5bd342acb2bab42759",
+          "entry": "c50c9efc3125b1943a1c5ed5f30244fa5ac082990f095b45d837dfa0edb7c0e9"
+        }
+      },
+      "migrations": {}
+    },
+    "icpswap_actions": {
+      "schemas": {
+        "1": {
+          "hash": "b4a5cc992047c8563a33305297e3cd63e74eb1c3d4f2d1e7a610fc1238bdc176",
+          "entry": "6cd6f69cb59b9643f03832b432657d0a8bdc3afd3cdffc61d7449ec4a3a055da"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

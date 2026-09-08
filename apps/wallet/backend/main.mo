@@ -3797,6 +3797,22 @@ module {
             };
         };
 
+        public func /*update*/wallet_add_ledger_v1(
+            principal : Principal,
+        ) : async* WalletSnapshot {
+            switch (Map.get(mem.ledgers, Principal.compare, principal)) {
+                case (?ledger) if (ledger.enabled) return snapshot();
+                case (_) {};
+            };
+            // Build the additive selection in the backend so callers cannot
+            // replace another caller's selections with a stale snapshot.
+            let principals = Array.map<Memory.Ledger, Principal>(
+                enabledLedgers(),
+                func(ledger) { ledger.principal },
+            );
+            await* wallet_set_ledgers(Array.concat(principals, [principal]));
+        };
+
         public func /*update*/wallet_set_ledgers(
             principals : [Principal],
         ) : async* WalletSnapshot {
@@ -5324,6 +5340,9 @@ public type wallet_allowances_page_v1_Output = WalletAllowancesPageResultV1;
 
 public type wallet_token_info_v1_Input = (request : WalletTokenInfoRequestV1,);
 public type wallet_token_info_v1_Output = WalletTokenInfoResultV1;
+
+public type wallet_add_ledger_v1_Input = (principal : Principal,);
+public type wallet_add_ledger_v1_Output = WalletSnapshot;
 
 public type wallet_set_ledgers_Input = (principals : [Principal],);
 public type wallet_set_ledgers_Output = WalletSnapshot;

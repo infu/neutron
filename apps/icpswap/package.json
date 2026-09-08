@@ -1,0 +1,49 @@
+{
+  "main": "dist/index.js",
+  "packages": {},
+  "name": "neutron-icpswap",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
+    "watch": "bun build.ts watch",
+    "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo test/market_logic.test.mo test/swap_logic.test.mo test/liquidity_math.test.mo test/actions_logic.test.mo test/history_paging.test.mo test/protocol_reply.test.mo",
+    "test": "npm run package && bun test && npm run test:memory",
+    "test:chart": "node test/browser/chart.mjs",
+    "test:browser": "node test/browser/app.mjs"
+  },
+  "author": "",
+  "license": "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",
+  "description": "Independent ICPSwap client: swaps, concentrated liquidity, market research and agent tools.",
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "neutron-design-system": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "@dfinity/candid": "^3.4.3",
+    "@icp-sdk/core": "5.4.0",
+    "@icp-sdk/canisters": "3.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "icblast": "^4.3.0",
+    "neutron-scripts": "^1.1.0",
+    "@uniswap/v3-sdk": "3.31.3",
+    "@uniswap/sdk-core": "7.19.2",
+    "jsbi": "^3.2.5",
+    "neutron-motoko-wasm": "^1.1.0",
+    "neutron-provision": "^0.1.0",
+    "@dfinity/principal": "^3.4.3"
+  }
+}

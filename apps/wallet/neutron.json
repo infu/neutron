@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 321,
+  "version": 322,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Canister-owned ICRC token balances",
   "src": "main.mo",
@@ -383,6 +383,10 @@
       "async": "async*"
     },
     "wallet_token_info_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_add_ledger_v1": {
       "type": "update",
       "async": "async*"
     },

@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.21.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.22.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 321,
+    version: 322,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: {
       path: "service.html",
@@ -170,6 +170,8 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).not.toHaveProperty("init_arg");
   expect(value.func).toHaveProperty("wallet_catalog");
   expect(value.func).toHaveProperty("wallet_set_ledgers");
+  expect(value.func?.wallet_add_ledger_v1).toEqual({ type: "update", async: "async*" });
+  expect(value.capabilities?.preapproved_self_calls?.methods).not.toContain("wallet_add_ledger_v1");
   expect(value.func).toHaveProperty("wallet_contact_destinations");
   expect(value.func).toHaveProperty("wallet_transfer");
   expect(value.func).toHaveProperty("wallet_funding_prepare_v1");

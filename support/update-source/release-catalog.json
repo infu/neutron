@@ -85,6 +85,10 @@
     {
       "id": "hyperliquid",
       "directory": "../../apps/hyperliquid"
+    },
+    {
+      "id": "icpswap",
+      "directory": "../../apps/icpswap"
     }
   ]
 }
