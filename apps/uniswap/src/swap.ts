@@ -6,6 +6,11 @@ export const ROUTER = getAddress("0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45");
 export const QUOTER = getAddress("0x61ffe014ba17989e743c5f6cb21bf9697530b21e");
 export const FACTORY = getAddress("0x1f98431c8ad98523631ae4a59f267346ea31f984");
 export const FEE_TIERS = [100, 500, 3000, 10000] as const;
+/** The deployed Ethereum USDT requires zero before replacing an allowance.
+ * Token symbols and the separate Arbitrum USDT0 do not identify this behavior. */
+export function tokenRequiresApprovalReset(chainId: string, token: Address): boolean {
+  return chainId === "1" && token.toLowerCase() === "0xdac17f958d2ee523a2206206994597c13d831ec7";
+}
 export type Token = { chainId: string; address: Address | null; symbol: string; decimals: number; name?: string };
 export const NETWORKS = {
   "1": { name: "Ethereum", wrapped: getAddress("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"), usdc: getAddress("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), explorer: "https://etherscan.io/tx/" },
@@ -113,10 +118,13 @@ export async function quoteSwap(read: Reader, input: QuoteInput, nowMs = Date.no
     const state = await read(input.chainId, pool, encodeFunctionData({ abi: POOL_ABI, functionName: "slot0" }), tag);
     if (state.blockNumber === null || BigInt(state.blockNumber) !== block) throw new Error("The pool price was observed at a different or unknown block.");
     const [sqrt] = decodeFunctionResult({ abi: POOL_ABI, functionName: "slot0", data: state.data });
-    const numerator = sqrt * sqrt, denominator = 2n ** 192n;
-    const spotOut = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? BigInt(input.amountIn) * numerator / denominator : BigInt(input.amountIn) * denominator / numerator;
-    const afterFee = spotOut * BigInt(1_000_000 - best.fee) / 1_000_000n;
-    if (afterFee > 0n) priceImpactBps = ((afterFee - best.amountOut) * 10000n / afterFee).toString();
+    const square = sqrt * sqrt, q192 = 2n ** 192n;
+    const zeroForOne = tokenIn.toLowerCase() < tokenOut.toLowerCase();
+    // Preserve the fractional spot output through fee adjustment. Flooring it
+    // first can make an ordinary low-output trade appear to improve the price.
+    const numerator = BigInt(input.amountIn) * (zeroForOne ? square : q192) * BigInt(1_000_000 - best.fee);
+    const denominator = (zeroForOne ? q192 : square) * 1_000_000n;
+    if (numerator > 0n && denominator > 0n) priceImpactBps = ((numerator - best.amountOut * denominator) * 10000n / numerator).toString();
   } catch (error) { routeWarnings.push(`Price impact unavailable: ${String(error)}`); }
   const minimumOut = best.amountOut * BigInt(10000 - input.slippageBps) / 10000n;
   if (minimumOut === 0n) throw new Error("Minimum received rounds to zero; change amount or slippage.");
@@ -147,6 +155,11 @@ export async function prepareSwap(read: Reader, quote: Quote, nowMs = Date.now()
   const swap = swapTransaction(quote, nowMs);
   if (quote.tokenIn.address === null) return { quote, approval: null, swap, allowance: null };
   const allowance = decodeFunctionResult({ abi: TOKEN_ABI, functionName: "allowance", data: (await read(quote.chainId, quote.tokenIn.address, encodeFunctionData({ abi: TOKEN_ABI, functionName: "allowance", args: [quote.accountAddress, ROUTER] }))).data });
+  // The deployed Ethereum USDT rejects replacing a nonzero allowance. The
+  // legacy journal has one approval step; unified swaps retain the reset too.
+  if (tokenRequiresApprovalReset(quote.chainId, quote.tokenIn.address) && allowance > 0n && allowance < BigInt(quote.amountIn)) {
+    throw new Error("Ethereum USDT requires resetting this allowance before approval. Use uniswap_swap_v2 for new swaps; it completes the reset, exact approval and swap. This legacy preparation did not create a new request.");
+  }
   const approval: Transaction | null = allowance >= BigInt(quote.amountIn) ? null : { chainId: quote.chainId, accountId: quote.accountId, to: quote.tokenIn.address, value: "0", data: encodeFunctionData({ abi: TOKEN_ABI, functionName: "approve", args: [ROUTER, BigInt(quote.amountIn)] }) };
   return { quote, approval, swap, allowance: allowance.toString() };
 }

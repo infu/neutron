@@ -123,7 +123,7 @@ V3 records containing those aliases remain readable with their exact calldata.
 The mapping is defined by [SwapRouter02](https://github.com/Uniswap/swap-router-contracts/blob/550c0f20373a487996fcc957075377b67af9df07/contracts/V3SwapRouter.sol#L74)
 and the [V4 action router](https://github.com/Uniswap/v4-periphery/blob/3231810e39b8c4d569b9d66907fa4ef8cd2cec22/src/base/BaseActionsRouter.sol#L53).
 
-New flows include the required zero-allowance reset for Ethereum USDT when
+Unified flows include the required zero-allowance reset for Ethereum USDT when
 replacing an insufficient nonzero allowance. Other ordinary tokens avoid that
 extra transaction; a custom token with different approval behavior may require
 an explicit revoke in EVM Wallet. Every planned approval receives Wallet review. Fee-on-transfer/rebasing tokens can fail standard V3
@@ -198,7 +198,12 @@ flows. Keep the same `operationId` and original inputs on every retry.
 Reads use installation-approved Wallet tools; each effect still receives the
 Wallet's exact human or Agent provider review.
 
-The v1 swap tools remain compatible with previously saved intents:
+The v1 swap tools remain compatible with previously saved intents. A fresh
+legacy preparation cannot represent Ethereum USDT's required reset followed by
+a new approval when the existing allowance is nonzero but insufficient. It stops
+before saving that plan and directs the caller to `uniswap_swap_v2`, which
+performs both approvals. Zero or sufficient allowances remain supported, and
+existing v1 records retain their original requests and bytes.
 
 | Tool | Behavior |
 | --- | --- |
@@ -211,8 +216,9 @@ The v1 swap tools remain compatible with previously saved intents:
 | `uniswap_record_result_v1` | Bind a supplied wallet result to the saved request, then independently verify public transaction fields and receipt |
 | `uniswap_next_action_v1` | Reconcile supplied root Wallet observations and return the next exact tool call for a saved Agent swap |
 
-For the compatible V3-only tool flow, call `uniswap_swap_v1` once with one 32-hex `swapId`,
-chain, input/output token addresses (`null` for ETH), and atomic input amount.
+Continue a saved V3-only provider flow with `uniswap_swap_v1`, its original
+32-hex `swapId`, chain, input/output token addresses (`null` for ETH), and atomic
+input amount. Use `uniswap_swap_v2` for new swaps.
 Optional defaults are the main account, the Wallet's own receiving address,
 50 slippage basis points, and a 1200-second quote validity window. The tool
 quotes, checks allowance, obtains an exact Wallet approval when needed, waits
@@ -245,6 +251,11 @@ never create another swap merely because tracking paused. There is no attempt
 limit or transaction expiry introduced by this tracking window. Every fresh
 Wallet review still checks the owner's current instructions.
 
+Interrupted Wallet preparation resumes with the original request ID while its
+quote remains valid. A status poll showing `preparing` cannot erase an unresolved
+dispatch or authorize a new quote after expiry; the original request remains
+available for reconciliation. This applies to unified actions and legacy flows.
+
 The earlier root-owned workflow remains available for installed 0.1.7 and older
 intents and approvals. The root Agent obtains a quote and prepared requests, then uses
 `uniswap_next_action_v1` to determine which saved Wallet request to check or
@@ -254,13 +265,12 @@ through the existing public transaction and journal-binding checks before they
 count as progress. Uniswap never forwards a nested call as root or grants its
 consumer a signer.
 
-Agent tool invocations serialize their nested Wallet calls so independent pool,
-token-metadata and fee reads cannot compete for the same Kernel permission
-decision. The queue is scoped to that tool invocation and honors cancellation;
-the tile still performs independent reads concurrently. Install-declared tool
-access removes repeated read prompts while preserving exact provider review.
-Quote and continuation tools report progress and use the Agent's existing
-long-running-tool annotation.
+Installation-approved pool, token-metadata and fee reads can run concurrently
+for both Agent tools and the tile. Within each Agent tool invocation, effectful
+and unlisted Wallet calls use a cancellation-aware queue because they can need
+a permission decision. Install-declared read access removes repeated prompts
+while every effect retains exact provider review. Quote and continuation tools
+report progress and use the Agent's existing long-running-tool annotation.
 
 Continuation preserves ambiguous signed/submitted request IDs and asks for
 their status even after the quote deadline. It checks the swap before initiating

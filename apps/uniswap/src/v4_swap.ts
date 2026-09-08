@@ -78,14 +78,16 @@ export async function quoteV4Swap(read: Reader, input: V4QuoteInput, nowMs = Dat
       if (state.blockNumber === null || BigInt(state.blockNumber) !== block) throw new Error("The pool price was observed at a different or unknown block.");
       const [sqrt, , protocolFees, lpFee] = decodeFunctionResult({ abi: V4_STATE_VIEW_ABI, functionName: "getSlot0", data: state.data });
       if (sqrt === 0n) throw new Error("Pool is not initialized.");
-      const square = sqrt * sqrt, denominator = 2n ** 192n;
-      const spotOut = zeroForOne ? BigInt(input.amountIn) * square / denominator : BigInt(input.amountIn) * denominator / square;
+      const square = sqrt * sqrt, q192 = 2n ** 192n;
       // Protocol fees are direction-specific packed uint12 values. PoolManager
       // takes that fee first, then charges the LP fee on the remaining input.
       const protocolFee = zeroForOne ? protocolFees & 0xfff : protocolFees >> 12;
       const swapFee = protocolFee + lpFee - Math.floor(protocolFee * lpFee / 1_000_000);
-      const afterFee = spotOut * BigInt(1_000_000 - swapFee) / 1_000_000n;
-      if (afterFee > 0n) priceImpactBps = ((afterFee - best.amountOut) * 10000n / afterFee).toString();
+      // Keep the spot quote rational until the final basis-point division;
+      // rounding token atoms before fees can produce a false negative impact.
+      const numerator = BigInt(input.amountIn) * (zeroForOne ? square : q192) * BigInt(1_000_000 - swapFee);
+      const denominator = (zeroForOne ? q192 : square) * 1_000_000n;
+      if (numerator > 0n) priceImpactBps = ((numerator - best.amountOut * denominator) * 10000n / numerator).toString();
     } catch (error) { routeWarnings.push(`Price impact unavailable: ${String(error)}`); }
   } else {
     routeWarnings.push("Price impact is unavailable for this hook pool; the quote includes its custom behavior.");

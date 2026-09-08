@@ -265,3 +265,46 @@ test("receipt observations explicitly omit unrelated log payloads instead of dup
   expect(saved.operation?.receipt?.logs).toEqual([]); expect(saved.evidence?.receipt?.logs).toEqual([]);
   expect(record.state_json).not.toContain(largeData);
 });
+
+
+test.each([0, 1])("interrupted Wallet preparation with %i approvals resumes its exact request before expiry", async approvals => {
+  const f = fixture(approvals);
+  f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw new Error("Reply lost during Wallet simulation"); });
+  expect((await f.run()).state).toBe("pending");
+  const first = structuredClone(f.sends[0]!);
+  expect(parseActionState((await f.store.get(envelope.operationId))!).steps[0]!.unresolvedDispatch).toBe(true);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends[1]).toEqual(first); expect(f.sends).toHaveLength(approvals + 2);
+  expect(f.preparations()).toBe(1); expect(f.rows.size).toBe(1);
+});
+
+test("a returned preparing operation yields continuation and resumes the same Wallet request", async () => {
+  const f = fixture(0);
+  f.sendWith(async request => f.operation(request, "preparing"));
+  expect((await f.run()).state).toBe("review"); expect(f.sends).toHaveLength(1);
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(2);
+  expect(f.sends[1]).toEqual(f.sends[0]); expect(f.preparations()).toBe(1);
+});
+
+test.each([false, true])("expired preparing observation cannot renew an uncertain action, released marker cleared=%s", async releasedMarkerCleared => {
+  const f = fixture(0);
+  f.sendWith(async request => { f.operations.set(request.requestId, f.operation(request, "preparing")); throw new Error("Wallet response lost"); });
+  expect((await f.run()).state).toBe("pending");
+  if (releasedMarkerCleared) {
+    const row = f.rows.get(envelope.operationId)!;
+    const state = JSON.parse(row.state_json!);
+    state.steps[0].unresolvedDispatch = false; state.steps[0].operation = f.operation(f.sends[0]!, "preparing");
+    row.state_json = JSON.stringify(state); row.phase = "step_0_preparing";
+  }
+  f.advance(1_300_000);
+  expect((await f.run()).state).toBe("pending");
+  expect(f.sends).toHaveLength(1); expect(f.preparations()).toBe(1); expect(f.rows.size).toBe(1);
+  const state = parseActionState((await f.store.get(envelope.operationId))!);
+  expect(state.steps[0]!.unresolvedDispatch).toBe(!releasedMarkerCleared);
+  expect(state.successor).toBeNull();
+  const request = f.sends[0]!;
+  f.operations.set(request.requestId, f.operation(request, "confirmed")); f.transactions.set(f.hash(request), f.evidence(request, true));
+  expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(1);
+});

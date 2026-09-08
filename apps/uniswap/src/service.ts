@@ -27,7 +27,7 @@ registerV4Tools();
 
 exposeTool("uniswap_swap_v1", {
   title: "Continue a Uniswap V3 swap through approval and confirmation",
-  description: "Complete a swap: quote, check allowance, approve if needed, wait, swap, and record its receipt. Wallet's public provider tool shows a human modal or sends exact review to the active Agent judge. Null token means ETH; amountIn is atomic units. Keep one 32-hex swapId. After pending, review or a lost reply, retry this tool with identical original arguments; never create another flow or stop at approval. Expired unsigned quotes renew with the same inputs and live allowance; ambiguous submitted requests retain their IDs. Defaults: main account, own recipient, 50 slippage basis points, 1200 seconds per quote. Every effect needs exact Wallet review within current owner instructions. Legacy root-owned intents use uniswap_next_action_v1.",
+  description: "Continue a saved V3 provider swap through allowance, approval, swap and receipt. Use uniswap_swap_v2 for new swaps, including Ethereum USDT allowance resets. Wallet's public provider tool shows a human modal or sends exact review to the active Agent judge. Null token means ETH; amountIn is atomic units. Keep the original 32-hex swapId. After pending, review or a lost reply, retry this tool with identical original arguments; never create another flow or stop at approval. Expired unsigned quotes renew with the same inputs and live allowance; ambiguous submitted requests retain their IDs. Defaults: main account, own recipient, 50 slippage basis points, 1200 seconds per quote. Every effect needs exact Wallet review within current owner instructions. Legacy root-owned intents use uniswap_next_action_v1.",
   inputSchema: {
     type: "object", properties: {
       swapId: { type: "string", pattern: "^[0-9a-f]{32}$" }, chainId: { enum: ["1", "42161"] }, accountId: { const: "main" },
@@ -84,7 +84,7 @@ exposeTool("uniswap_swap_v1", {
 
 exposeTool("uniswap_quote_v1", {
   title: "Quote a Uniswap V3 swap",
-  description: "Read live direct-pool exact-input quotes on Ethereum or Arbitrum through EVM Wallet. tokenIn/tokenOut null means native ETH; amountIn is atomic units. Compare available V3 fee tiers and check live allowance, including approvals from earlier expired quotes. No transaction or signature is requested. For a new complete swap use uniswap_swap_v1. The prepare/next_action tools remain available for existing legacy root-owned workflows.",
+  description: "Read compatible V3 direct-pool exact-input quotes on Ethereum or Arbitrum through EVM Wallet. tokenIn/tokenOut null means native ETH; amountIn is atomic units. Compare available V3 fee tiers and check live allowance, including approvals from earlier expired quotes. No transaction or signature is requested. For new quotes and complete swaps use uniswap_quote_v2 and uniswap_swap_v2, which support required allowance resets. The prepare/next_action tools remain available for existing legacy root-owned workflows.",
   inputSchema: quoteSchema, outputSchema: schema({ quoteJson: text }), annotations: { "neutron:effects": ["read", "network"], "neutron:longRunning": true },
 }, async (args, context) => {
   context.reportProgress({ phase: "Checking EVM Wallet account" });

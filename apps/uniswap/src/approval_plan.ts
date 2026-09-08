@@ -1,9 +1,8 @@
 import { decodeFunctionResult, encodeFunctionData, getAddress, parseAbi, type Address } from "viem";
 import type { ActionPlan } from "./action_types.ts";
-import { TOKEN_ABI, type Reader } from "./swap.ts";
+import { TOKEN_ABI, tokenRequiresApprovalReset, type Reader } from "./swap.ts";
 
 export const PERMIT2 = getAddress("0x000000000022d473030f116ddee9f6b43ac78ba3");
-const ETHEREUM_USDT = getAddress("0xdac17f958d2ee523a2206206994597c13d831ec7");
 
 const PERMIT2_ABI = parseAbi([
   "function allowance(address owner,address token,address spender) view returns (uint160 amount,uint48 expiration,uint48 nonce)",
@@ -46,7 +45,7 @@ export async function planErc20Approval(read: Reader, input: ApprovalInput): Pro
   // Ordinary ERC20s can replace it directly; symbols do not identify behavior.
   // Arbitrum USDT0 is different: ArbitrumExtensionV2 inherits the direct OZ
   // allowance assignment (verified implementation 0x3263cd783823d04a6b9819517e0e6840d37ca3f4).
-  const requiresReset = input.chainId === "1" && token === ETHEREUM_USDT;
+  const requiresReset = tokenRequiresApprovalReset(input.chainId, token);
   return [
     ...(requiresReset && allowance > 0n ? [step(0n, `Reset ${label} approval`)] : []),
     step(amount, `Approve ${label}`),

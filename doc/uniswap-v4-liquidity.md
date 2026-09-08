@@ -110,9 +110,10 @@ from the notice inventory; unknown package versions or changed outputs require
 fresh evidence. Missing standalone MIT files in actual SDK dependencies use
 exact audited upstream text or installed README material, never a guessed license.
 
-Release validation includes clean initialization, restoration of both installed
-Wallet roots and legacy Uniswap data, action recovery, SDK calldata checks,
-local contract execution and browser flows. Public network probes are read-only;
+Uniswap release validation includes clean initialization, restoration of both
+Uniswap roots with legacy swap data and saved actions, action recovery, SDK
+calldata checks, local contract execution and browser flows. Wallet's own release
+tests cover its three managed roots. Public network probes are read-only;
 local execution uses fixture funds. Publication follows the
 [production package workflow](./package-updates.md) and its required identical
 second no-op receipt.
