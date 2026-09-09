@@ -37,35 +37,54 @@ export const AGENT_OUTPUT_LIMIT_CONTINUATION = "Continue the unfinished response
  * still use the existing uncertain-write recovery path. Waiting happens after
  * this function returns, outside the model request deadline. */
 export async function readAgentStep(result: ReturnType<AgentStreamRunner>, signal: AbortSignal) {
+  signal.throwIfAborted();
   let text = "";
   let finishReason: string | undefined;
   let inputTokens = 0;
   let outputTokens = 0;
   const waits: AgentWaitRequest[] = [];
-  for await (const part of result.fullStream) {
-    if (part.type === "error") throw part.error;
-    if (part.type === "abort") throw new Error(part.reason ?? "Model stream was interrupted");
-    if (part.type === "text-delta") text += part.text;
-    if (part.type === "tool-call" && part.toolName === "sleep") {
-      const seconds = (part.input as { seconds?: unknown }).seconds;
-      if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) throw new Error("Invalid sleep duration");
-      waits.push({ toolCallId: part.toolCallId, name: "sleep", seconds });
+  const iterator = result.fullStream[Symbol.asyncIterator]();
+  let streamFinished = false;
+  try {
+    while (true) {
+      // A provider or an SDK branch can remain pending after cancellation.
+      // Stop must still reach the runtime's journal and invocation cleanup.
+      const next = await interruptibleStepRead(iterator.next(), signal);
+      if (next.done) { streamFinished = true; break; }
+      const part = next.value;
+      if (part.type === "error") throw part.error;
+      if (part.type === "abort") throw new Error(part.reason ?? "Model stream was interrupted");
+      if (part.type === "text-delta") text += part.text;
+      if (part.type === "tool-call" && part.toolName === "sleep") {
+        const seconds = (part.input as { seconds?: unknown }).seconds;
+        if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) throw new Error("Invalid sleep duration");
+        waits.push({ toolCallId: part.toolCallId, name: "sleep", seconds });
+      }
+      if (part.type === "tool-call" && part.toolName === "wait_agents") {
+        const ids = (part.input as { ids?: string[] }).ids;
+        waits.push({ toolCallId: part.toolCallId, name: "wait_agents", ...(ids ? { ids } : {}) });
+      }
+      if (part.type === "finish") {
+        finishReason = part.finishReason;
+        inputTokens = part.totalUsage.inputTokens ?? 0;
+        outputTokens = part.totalUsage.outputTokens ?? 0;
+      }
     }
-    if (part.type === "tool-call" && part.toolName === "wait_agents") {
-      const ids = (part.input as { ids?: string[] }).ids;
-      waits.push({ toolCallId: part.toolCallId, name: "wait_agents", ...(ids ? { ids } : {}) });
-    }
-    if (part.type === "finish") {
-      finishReason = part.finishReason;
-      inputTokens = part.totalUsage.inputTokens ?? 0;
-      outputTokens = part.totalUsage.outputTokens ?? 0;
+  } finally {
+    if (!streamFinished) {
+      // SDK streams are tee'd. Waiting for return()/cancel() here can wait on
+      // their other branch indefinitely, preventing runtime cancellation from
+      // ever reaching the tools. Request cleanup and observe its rejection,
+      // but let the owning runtime abort the invocation immediately.
+      try { void Promise.resolve(iterator.return?.()).catch(() => undefined); }
+      catch { /* Cleanup must not replace the original stream/abort error. */ }
     }
   }
   signal.throwIfAborted();
   if (finishReason !== "stop" && finishReason !== "tool-calls" && finishReason !== "length") {
     throw new Error(`Model response ended before completion (${finishReason ?? "missing finish event"}). Resume to continue from saved progress.`);
   }
-  const messages = await result.responseMessages;
+  const messages = await interruptibleStepRead(result.responseMessages, signal);
   signal.throwIfAborted();
   return {
     text, finishReason, inputTokens, outputTokens, waits,
@@ -73,6 +92,19 @@ export async function readAgentStep(result: ReturnType<AgentStreamRunner>, signa
       ? [...messages, { role: "assistant", content: AGENT_OUTPUT_LIMIT_NOTICE } satisfies ModelMessage]
       : messages,
   };
+}
+
+function interruptibleStepRead<T>(pending: PromiseLike<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => { cleanup(); reject(signal.reason ?? new Error("Agent stopped")); };
+    const cleanup = () => signal.removeEventListener("abort", abort);
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve(pending).then(
+      (value) => { cleanup(); resolve(value); },
+      (error) => { cleanup(); reject(error); },
+    );
+    if (signal.aborted) abort();
+  });
 }
 
 export function interruptedWait(request: AgentWaitRequest): ModelMessage {

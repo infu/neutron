@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createMsgBusClient, type JsonObject, type MsgBusToolContext, type ProviderPresentationRequest } from "neutron-tools/app";
-import { authorizeAction } from "../src/provider.ts";
+import { ActionReviewDeclinedError, authorizeAction } from "../src/provider.ts";
 
 const owner = { appId: "icpswap", installationUid: "17", role: "tile", endpoint: "app:icpswap:tile:main:instance:owner-1" };
 const external = { appId: "kitchensink", installationUid: "23", role: "tile", endpoint: "app:kitchensink:tile:main:instance:external-1" };
@@ -93,15 +93,38 @@ test("same-app background, wrong tile and non-instance endpoints cannot request 
   for (const caller of callers) await expect(authorizeAction(context({ caller }), review)).rejects.toThrow("originating ICPSwap tile");
 });
 
-test("human decline and malformed approval responses cannot authorize a trade", async () => {
-  for (const outcome of [{ approved: false }, {}, { approved: "true" }, null]) {
+test("only an explicit human decline emits the local no-approval decision", async () => {
+  for (const own of [true, false]) {
+    const ctx = context({ caller: own ? owner : external });
+    ctx.kernel.callTool = async <T>() => ({ approved: false }) as T;
+    ctx.presentUserInterface = async <T>() => ({ approved: false }) as T;
+    await expect(authorizeAction(ctx, review)).rejects.toBeInstanceOf(ActionReviewDeclinedError);
+  }
+});
+
+test("malformed human decisions remain errors, not an explicit declined operation", async () => {
+  for (const outcome of [{}, { approved: "true" }, { approved: "false" }, null]) {
     for (const own of [true, false]) {
       const ctx = context({ caller: own ? owner : external });
       ctx.kernel.callTool = async <T>() => outcome as T;
       ctx.presentUserInterface = async <T>() => outcome as T;
-      await expect(authorizeAction(ctx, review)).rejects.toThrow("action review declined");
+      try { await authorizeAction(ctx, review); throw new Error("Malformed decision unexpectedly passed"); }
+      catch (error) {
+        expect(error).not.toBeInstanceOf(ActionReviewDeclinedError);
+        expect((error as Error).message).toContain("invalid decision");
+      }
     }
   }
+});
+
+test("an interrupted owner review cannot masquerade as an explicit local decline", async () => {
+  const interrupted = new Error("ICPSwap action review declined: reply lost");
+  const ctx = context(); ctx.kernel.callTool = async () => { throw interrupted; };
+  await expect(authorizeAction(ctx, review)).rejects.toBe(interrupted);
+  const abort = new AbortController(), cancelled = new Error("Review was cancelled");
+  ctx.signal = abort.signal;
+  ctx.kernel.callTool = async <T>() => { abort.abort(cancelled); return { approved: false } as T; };
+  await expect(authorizeAction(ctx, review)).rejects.toBe(cancelled);
 });
 
 test("cancellation before or during human review is preserved on both routes", async () => {

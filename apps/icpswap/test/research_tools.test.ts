@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { type JsonObject, type MsgBusToolContext, type MsgBusToolHandler, normalizeToolDescriptor } from "neutron-tools/app";
+import { type JsonObject, type MsgBusToolContext, type MsgBusToolHandler, normalizeToolDescriptor, validateToolArguments, validateToolResult } from "neutron-tools/app";
 import { calculateLiquidityRange, registerTools, retainedPoolsFromOperations, type ResearchToolDependencies } from "../src/tools.ts";
 import { type BrowserPoolView, type PoolIdentity } from "../src/liquidity_reads.ts";
 import { Q96 } from "../src/liquidity_math.ts";
@@ -44,6 +44,41 @@ function fixture(overrides: Partial<ResearchToolDependencies> = {}) {
 }
 
 describe("ICPSwap research registration", () => {
+  test("pool tools preserve both exact reported quantities without extra reads or inflated TVL claims", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = (async (url) => {
+      calls.push(String(url));
+      return Response.json({ code: 200, data: [
+        { poolId: "f3cfb-liaaa-aaaar-qcaja-cai", poolFee: 3000, token0LedgerId: USDC, token0Symbol: "AETH", token0LiquidityAmount: "9.00000138", token1LedgerId: ICP, token1Symbol: "ICP", token1LiquidityAmount: "0.09449168", tvlUSD: "210364157" },
+        { poolId: "p3va5-zyaaa-aaaag-qjumq-cai", poolFee: 3000, token0LedgerId: USDC, token0Symbol: "ICPENGU", token0LiquidityAmount: "99822760.50857113", token1LedgerId: ICP, token1Symbol: "ICP", token1LiquidityAmount: "0.00000016", tvlUSD: "130710517" },
+        { poolId: POOL, token0LedgerId: USDC, token0Symbol: "UNKNOWN", token1LedgerId: ICP, token1Symbol: "ICP", token1LiquidityAmount: "0" },
+      ] });
+    }) as typeof fetch;
+    const { run, descriptors } = fixture({ accountFor: async () => { throw new Error("Analytics must not read the backend account"); } });
+    const result = await run("icpswap_token_pools", { ledger_id: ICP });
+    expect(() => validateToolResult(descriptors.get("icpswap_token_pools")!, result)).not.toThrow();
+    expect(calls).toEqual([`https://api.icpswap.com/info/token/${ICP}/pool`]);
+    const pools = result.pools as JsonObject[];
+    const first = pools[0]!.composition as JsonObject;
+    const second = pools[1]!.composition as JsonObject;
+    const unknown = pools[2]!.composition as JsonObject;
+    expect((first.token0 as JsonObject).amount_tokens).toBe("9.00000138");
+    expect((first.token1 as JsonObject).amount_tokens).toBe("0.09449168");
+    expect(first.reported_tvl_usd).toBe("210364157");
+    expect(first.snapshot_time).toBeNull();
+    expect(first.amount_semantics).toBe("reported_pool_liquidity");
+    expect((second.token0 as JsonObject).amount_tokens).toBe("99822760.50857113");
+    expect((second.token1 as JsonObject).amount_tokens).toBe("0.00000016");
+    expect((unknown.token0 as JsonObject).amount_tokens).toBeNull();
+    expect((unknown.token0 as JsonObject).amount_available).toBe(false);
+    expect((unknown.token1 as JsonObject).amount_tokens).toBe("0");
+    expect((unknown.token1 as JsonObject).amount_available).toBe(true);
+    expect((pools[2]!.token0 as JsonObject).liquidity_amount).toBeNull();
+    expect((pools[2]!.token1 as JsonObject).liquidity_amount).toBe(0);
+    expect(result.note).toContain("inflated");
+    expect(first.note).toContain("not verified custody balances or executable trade depth");
+  });
+
   test.each(["icpswap_liquidity_pool_v1", "icpswap_positions_v1"])("%s uses the generated one-unit account signature through its actual backend helper", async (name) => {
     const source = readFileSync(new URL("../backend/main.mo", import.meta.url), "utf8");
     const manifest = JSON.parse(readFileSync(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
@@ -165,6 +200,47 @@ describe("ICPSwap research registration", () => {
     events.length = 0;
     await expect(fixture({ ...deps, tokenInfoFor: async () => { throw new Error("live fee unavailable"); } }).run("icpswap_quote_swap", args)).rejects.toThrow("live fee unavailable");
     expect(events).toEqual(["prepare-pair"]);
+  });
+
+  test.each([1.5, 0.5, 49999.5, 0, -1, 50001, "500", null, true])("quote rejects invalid slippage %j before any Wallet or pool reads", async (slippage) => {
+    const calls: string[] = [];
+    const unexpected = async () => { calls.push("unexpected read"); throw new Error("Slippage validation must precede I/O"); };
+    const f = fixture({ tokenInfoFor: unexpected, quotes: { preparePair: unexpected, quote: unexpected } });
+    const args = { from_ledger_id: ICP, to_ledger_id: USDC, amount: "10000000", slippage };
+    expect(() => validateToolArguments(f.descriptors.get("icpswap_quote_swap")!, args)).toThrow();
+    await expect(f.run("icpswap_quote_swap", args)).rejects.toThrow("slippage must be an integer from 1 to 50000");
+    expect(calls).toEqual([]);
+  });
+
+  test.each([undefined, 1, 500, 50000])("quote preserves exact slippage units %s and the documented gross/net minimum", async (slippage) => {
+    const effective = slippage ?? 500;
+    const gross = 287307n, fee = 10000n;
+    const minimum = gross * 100000n / (100000n + BigInt(effective));
+    const f = fixture({
+      tokenInfoFor: async (_context, ledger) => ({ ledger, account: OWNER, name: null, symbol: ledger === ICP ? "ICP" : "ckUSDC",
+        decimals: ledger === ICP ? 8 : 6, feeAtoms: fee, balanceAtoms: 0n, observedAtNs: 1n }),
+      quotes: {
+        preparePair: async () => undefined,
+        quote: async (request) => {
+          expect(request.slippage).toBe(effective);
+          return { pool: POOL, poolKey: pool.key, feeTier: 3000, inputAddress: ICP, outputAddress: USDC,
+            decimalsIn: 8, decimalsOut: 6, zeroForOne: true, amountIn: request.amountIn, quotedOut: gross,
+            amountOutMinimum: minimum, expectedOut: gross - fee, tokenInFee: fee, tokenOutFee: fee,
+            fundingAmount: request.amountIn, totalDebit: request.amountIn + 2n * fee, priceImpact: 0.003,
+            warn: false, slippage: request.slippage, fundingLedger: ICP, fundingSpender: POOL,
+            at: 1788956580, contextAt: 1788956580 };
+        },
+      },
+    });
+    const descriptor = f.descriptors.get("icpswap_quote_swap")!;
+    const args = { from_ledger_id: ICP, to_ledger_id: USDC, amount: "10000000", ...(slippage === undefined ? {} : { slippage }) };
+    expect(() => validateToolArguments(descriptor, args)).not.toThrow();
+    const result = await f.run("icpswap_quote_swap", args);
+    expect(() => validateToolResult(descriptor, result)).not.toThrow();
+    expect(result.slippage_thousandths_percent).toBe(effective);
+    expect(result.minimum_out_gross).toBe(minimum.toString());
+    expect(result.minimum_out_net_estimate).toBe((minimum - fee).toString());
+    if (effective === 50000) expect(result).toMatchObject({ expected_out: "277307", minimum_out_gross: "191538", minimum_out_net_estimate: "181538" });
   });
 
   test("pool reads derive the real account and preserve unknown fields and errors", async () => {

@@ -521,9 +521,9 @@ owner interaction and have no separate cooldown or focus model.
 
 Moving a tile to another workspace does not select it. Selecting another
 workspace directly, or focusing or expanding one of its tiles, applies the
-inactive-workspace lifecycle: tile frames remain mounted. Kernel keeps the
-exact originating tile of a live Agent root connected while hidden; other
-inactive tile endpoints disconnect. Closing or replacing the source tile still
+inactive-workspace lifecycle: started tile frames remain mounted and retain
+their private Kernel connections while hidden. Switching visibility does not
+change their existing capability or session grants. Closing or replacing the source tile still
 retires its port and cancels the root. Roots have no total runtime or call
 quota; one root, per-operation deadlines, and authority revocation remain.
 

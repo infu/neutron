@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { normalizeToolDescriptor, type JsonObject, type MsgBusToolContext } from "neutron-tools/app";
+import { normalizeToolDescriptor, type JsonObject, type JsonValue, type MsgBusToolContext } from "neutron-tools/app";
 import { createActionHandlers, registerActionTools } from "../src/action_tools.ts";
 import type { ActionBackend, ActionOperation, ActionPrepared, LiquidityWire, SwapWire } from "../src/action_backend.ts";
 import { createFundingRequest } from "../src/funding.ts";
+import { ActionReviewDeclinedError, authorizeAction } from "../src/provider.ts";
 import type { BrowserPoolView } from "../src/liquidity_reads.ts";
 
 const OWNER = "3rurp-vyaaa-aaaay-aacua-cai", POOL = "mohjv-bqaaa-aaaag-qjyia-cai", ICP = "ryjl3-tyaaa-aaaaa-aaaba-cai", USDC = "xevnm-gaaaa-aaaar-qafnq-cai";
@@ -234,4 +235,100 @@ test("generic status and continuation route saved recoveries without replaying d
   expect((await f.handlers.continue({ operationId: ID }, f.context)).state).toBe("protocol_complete");
   expect((await f.handlers.reconcile({ operationId: ID }, f.context)).pool).toBeDefined();
   expect(f.executes()).toBe(0); expect(f.approvals).toHaveLength(0);
+});
+
+
+/** Uses the production review provider, so an explicit owner decision remains
+ * distinct from transport errors before the action handler interprets it. */
+function ownerReviewedFixture() {
+  const f = fixture();
+  let approve = false;
+  let onReview: (() => void) | null = null;
+  const originalCall = f.context.kernel.callTool.bind(f.context.kernel);
+  f.context.kernel.callTool = async <T extends JsonValue>(call: Parameters<MsgBusToolContext["kernel"]["callTool"]>[0], options?: Parameters<MsgBusToolContext["kernel"]["callTool"]>[1]) => {
+    if (call.name === "icpswap_owner_review_v1") {
+      f.events.push("owner review"); onReview?.();
+      return { approved: approve } as unknown as T;
+    }
+    return originalCall<T>(call, options);
+  };
+  const handlers = createActionHandlers({ ...f.dependencies, authorize: authorizeAction });
+  return { ...f, handlers, approve: () => { approve = true; }, onReview: (callback: () => void) => { onReview = callback; } };
+}
+
+test("explicit owner decline returns review_declined only for an undispatched prepared swap and preserves same-ID continuation", async () => {
+  const f = ownerReviewedFixture();
+  const declined = await f.handlers.swap(swapArgs, f.context);
+  expect(declined.state).toBe("review_declined");
+  expect(declined.operationId).toBe(ID);
+  expect(declined.message).toContain("No funds were sent");
+  expect(declined.fundingInstructions).toEqual([]);
+  expect((declined.operation as JsonObject).state).toBe("prepared");
+  const retained = structuredClone(f.records.get(ID)!);
+  expect(retained.operation.funding_json).toBe("");
+  expect(retained.operation.effects).toEqual([]);
+  expect(f.events).not.toContain("wallet"); expect(f.executes()).toBe(0);
+  const status = await f.handlers.status({ operationId: ID }, f.context);
+  expect(status.state).toBe("prepared");
+  expect(f.records.get(ID)).toEqual(retained);
+  f.approve();
+  const continued = await f.handlers.continue({ operationId: ID }, f.context);
+  expect(continued.state).toBe("settlement_pending"); expect(f.executes()).toBe(1);
+  expect(f.events.filter((event) => event === "prepare")).toHaveLength(1);
+  expect(f.records.get(ID)!.operation.input_json).toBe(retained.operation.input_json);
+});
+
+test.each(["funding_requested", "funded", "execution_requested"])("owner decline of an existing %s swap cannot free the form as undispatched", async (state) => {
+  const f = ownerReviewedFixture(); await f.handlers.swap(swapArgs, f.context);
+  const saved = f.records.get(ID)!;
+  saved.operation.state = state;
+  saved.operation.funding_json = JSON.stringify([createFundingRequest({ requestId: "b2".repeat(16), ledger: ICP, spender: POOL, amountAtoms: "1000000", nowMs: Date.now() })]);
+  const before = structuredClone(saved);
+  await expect(f.handlers.continue({ operationId: ID }, f.context)).rejects.toBeInstanceOf(ActionReviewDeclinedError);
+  expect(f.records.get(ID)).toEqual(before);
+  expect(f.events).not.toContain("wallet"); expect(f.executes()).toBe(0);
+});
+
+test.each(["funding_record", "malformed_funding", "results", "protocol_effect", "malformed_effects"])("prepared-state %s evidence prevents an unsafe no-dispatch declaration", async (evidence) => {
+  const f = ownerReviewedFixture(); await f.handlers.swap(swapArgs, f.context);
+  const saved = f.records.get(ID)!;
+  if (evidence === "funding_record") saved.operation.funding_json = JSON.stringify([createFundingRequest({ requestId: "b2".repeat(16), ledger: ICP, spender: POOL, amountAtoms: "1000000", nowMs: Date.now() })]);
+  if (evidence === "malformed_funding") saved.operation.funding_json = "{";
+  if (evidence === "results") saved.operation.result_json = JSON.stringify({ kind: "wallet_funding_v1", results: [{ requestId: "b2".repeat(16) }] });
+  if (evidence === "protocol_effect") saved.operation.effects = [{ key: "swap", state: "succeeded", dispatched_at: "123" }];
+  if (evidence === "malformed_effects") saved.operation.effects = undefined as unknown as JsonObject[];
+  const before = structuredClone(saved);
+  await expect(f.handlers.continue({ operationId: ID }, f.context)).rejects.toBeInstanceOf(ActionReviewDeclinedError);
+  expect(f.records.get(ID)).toEqual(before);
+  expect(f.events).not.toContain("wallet"); expect(f.executes()).toBe(0);
+});
+
+test("fresh journal changes during the owner dialog prevent a stale no-dispatch result", async () => {
+  const f = ownerReviewedFixture();
+  f.onReview(() => {
+    const saved = f.records.get(ID)!;
+    saved.operation.state = "funding_requested";
+    saved.operation.funding_json = JSON.stringify([createFundingRequest({ requestId: "b2".repeat(16), ledger: ICP, spender: POOL, amountAtoms: "1000000", nowMs: Date.now() })]);
+  });
+  await expect(f.handlers.swap(swapArgs, f.context)).rejects.toBeInstanceOf(ActionReviewDeclinedError);
+  expect(f.records.get(ID)!.operation.state).toBe("funding_requested");
+  expect(f.executes()).toBe(0);
+});
+
+test("failed post-decline journal read preserves the explicit error rather than freeing the form", async () => {
+  const f = ownerReviewedFixture();
+  const backend = f.dependencies.backendFor(f.context.kernel);
+  f.onReview(() => { backend.actionGet = async () => { throw new Error("Journal unavailable"); }; });
+  await expect(f.handlers.swap(swapArgs, f.context)).rejects.toBeInstanceOf(ActionReviewDeclinedError);
+  expect(f.records.get(ID)!.operation.state).toBe("prepared");
+  expect(f.executes()).toBe(0);
+});
+
+test("a same-worded transport failure is not an explicit safe decline", async () => {
+  const f = ownerReviewedFixture();
+  const interrupted = new Error("ICPSwap action review declined: reply lost");
+  f.onReview(() => { throw interrupted; });
+  await expect(f.handlers.swap(swapArgs, f.context)).rejects.toBe(interrupted);
+  expect(f.records.get(ID)!.operation.state).toBe("prepared");
+  expect(f.events).not.toContain("wallet"); expect(f.executes()).toBe(0);
 });

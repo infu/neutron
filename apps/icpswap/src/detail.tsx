@@ -35,6 +35,8 @@ import {
 import { isPlausibleExtreme } from "./scale.ts";
 import { SwapPanel, type SwapToken } from "./swap.tsx";
 import { TokenMark } from "./token_mark.tsx";
+import type { PickerCandidate } from "./picker.tsx";
+import { formatPoolAmount } from "./pool_composition.ts";
 
 type RangeKey = "24H" | "7D" | "30D" | "90D" | "1Y";
 type MetricKey = "price" | "volume" | "tvl";
@@ -128,6 +130,9 @@ export type TokenDetailViewProps = {
   /** Watched tokens the owner can swap into, excluding this one. */
   swapChoices: SwapToken[];
   swapSlippage: number;
+  pickerCandidates: PickerCandidate[];
+  pickerSource: "live" | "on-chain";
+  pickerError: string | null;
 };
 
 export function TokenDetailView({
@@ -143,6 +148,9 @@ export function TokenDetailView({
   busy,
   swapChoices,
   swapSlippage,
+  pickerCandidates,
+  pickerSource,
+  pickerError,
 }: TokenDetailViewProps) {
   const [swapOpen, setSwapOpen] = useState(false);
   const [swapOutput, setSwapOutput] = useState<string>("");
@@ -413,6 +421,9 @@ export function TokenDetailView({
       {swapOpen ? (
         <SwapPanel
           choices={swapChoices}
+          pickerCandidates={pickerCandidates}
+          pickerSource={pickerSource}
+          pickerError={pickerError}
           initialSlippage={swapSlippage}
           input={{
             address,
@@ -607,9 +618,9 @@ export function TokenDetailView({
             <table className="ics-table">
               <thead>
                 <tr>
-                  <th className="ics-col-name" scope="col">Pair</th>
+                  <th className="ics-col-name" scope="col">Pair / token amounts</th>
                   <th scope="col">Fee</th>
-                  <th scope="col">TVL</th>
+                  <th scope="col" title="Reported dollar value can be inflated by illiquid token prices. Compare both token amounts.">Reported TVL</th>
                   <th scope="col">Volume 24h</th>
                   <th scope="col">Volume 7d</th>
                   <th scope="col">Fees 24h</th>
@@ -621,10 +632,24 @@ export function TokenDetailView({
                 {orderedPools.slice(0, 25).map((pool) => (
                   <tr key={pool.poolId}>
                     <td className="ics-col-name">
-                      {pool.token0Symbol} / {pool.token1Symbol}
+                      <strong className="ics-pool-pair">{pool.token0Symbol} / {pool.token1Symbol}</strong>
+                      <dl className="ics-pool-composition" aria-label="Reported pool token amounts">
+                        {[pool.composition.token0, pool.composition.token1].map((token, side) => (
+                          <div
+                            className="ics-pool-composition__token"
+                            key={side}
+                            title={`${token.amount_tokens ?? "Unavailable"} ${token.symbol || "Token"}`}
+                          >
+                            <dt title={token.ledger_id}>{token.symbol || "Token"}</dt>
+                            <dd>{formatPoolAmount(token.amount_tokens)}</dd>
+                          </div>
+                        ))}
+                      </dl>
                     </td>
                     <td>{formatFeeTier(pool.poolFee)}</td>
-                    <td>{formatUsdCompact(pool.tvlUSD)}</td>
+                    <td title={pool.composition.reported_tvl_usd === null ? "Reported TVL unavailable" : `$${pool.composition.reported_tvl_usd}`}>
+                      {pool.composition.reported_tvl_usd === null ? "Unavailable" : formatUsdCompact(pool.tvlUSD)}
+                    </td>
                     <td>{formatUsdCompact(pool.volumeUSD24H)}</td>
                     <td>{formatUsdCompact(pool.volumeUSD7D)}</td>
                     <td>{formatUsdCompact(pool.feesUSD24H)}</td>
@@ -638,6 +663,11 @@ export function TokenDetailView({
             </table>
           </div>
         )}
+        {orderedPools.length > 0 ? (
+          <p className="nt-meta ics-pool-composition-note">
+            Token prices can inflate reported TVL. Compare both token amounts; they don&rsquo;t guarantee how much you can swap.
+          </p>
+        ) : null}
       </section>
 
       <section className="nt-section">

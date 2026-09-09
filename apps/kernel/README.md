@@ -4,6 +4,11 @@ the canister root, so opening a Neutron opens the trusted Kernel frontend.
 The Kernel hosts declared app browser surfaces in isolated iframes. Headless
 apps have no iframe.
 
+Visited workspaces retain their tile documents and private message-bus
+connections while hidden, so switching workspaces does not interrupt pending
+requests or replace sessions. Unvisited tiles still start lazily. Closing a
+tile, logout, or a change to its installed runtime retires the connection.
+
 It handles app installation.
 
 It assembles all Motoko files and compiles them.

@@ -6535,12 +6535,109 @@ test("install-declared nested Agent tools avoid parallel permission decisions wi
   await expect(routeToolCall({ target: "kernel", name: "permissions.request", arguments: { target, tools: ["accounts", "balances"] } }, requester, undefined, scoped)).resolves.toEqual({ granted: true });
   expect(agent.challenges).toEqual([]);
   expect(useMsgBusPermissionStore.getState().requests).toEqual({});
-  await expect(routeToolCall(calls[0]!, requester)).rejects.toMatchObject({ code: "SCOPED_CONTEXT_REQUIRED" });
+  await expect(routeToolCall(calls[0]!, requester)).resolves.toEqual({ value: "ready" });
+  // Installation authority is already reviewed, while an undeclared call
+  // still requires the active handler's invocation rather than an owner dialog.
+  await expect(routeToolCall({ target, name: "callContract", arguments: { value: "review" } }, requester)).rejects.toMatchObject({ code: "SCOPED_CONTEXT_REQUIRED" });
   await expect(routeToolCall({ target, name: "callContract", arguments: { value: "review" } }, requester, undefined, scoped)).resolves.toEqual({ value: "ready" });
   expect(agent.challenges).toHaveLength(1);
   expect(agent.challenges[0]).toMatchObject({ action: { tool: "callContract" } });
   completeInvocation(child);
   completeInvocation(root);
+});
+
+test("install-declared UI reads stay usable while the same resident handles an Agent invocation", async () => {
+  installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const agent = createAgentConsentEndpoint();
+  const { root } = await beginSignedCallAgentInvocation(agent.source);
+  const target = "app:provider:background" as const;
+  const read = { target, name: "accounts", arguments: { value: "read" } };
+  const provider = createCapturingToolEndpoint(readToolDescriptors[0]!, { value: "ready" });
+  registerScopedBackgroundEndpoint(provider.source, "provider", "950");
+  let requester: RegisteredEndpoint;
+  let residentCalls = 0;
+  const source = {
+    postMessage(message: unknown, _origin: string, transfer: Transferable[] = []) {
+      if (!isJsonObject(message) || message.type !== "neutron:msgbus:connect") return;
+      const port = transfer[0] as MessagePort;
+      port.addEventListener("message", (event) => {
+        const request = event.data as ExecEnvelope;
+        if (request.type !== "exec") return;
+        if (request.payload.action === msgBusLocalActions.toolsList) {
+          port.postMessage({ type: "response", id: request.id, ok: [echoDescriptor] });
+          return;
+        }
+        if (request.payload.action !== msgBusLocalActions.toolsCall) return;
+        residentCalls += 1;
+        // Ordinary context.kernel correctly carries no Agent invocation. The
+        // Aave tile -> resident market reader -> Wallet path uses this shape.
+        void routeToolCall(read, requester, undefined, request.payload.context?.invocation).then(
+          (ok) => port.postMessage({ type: "response", id: request.id, ok }),
+          (error) => port.postMessage({ type: "response", id: request.id, error: { message: error.message, code: error.code } }),
+        );
+      });
+      port.start();
+    },
+  } as unknown as Window;
+  requester = registerScopedBackgroundEndpoint(source, "requester", "951", "main", {
+    frontendTools: [{ app: "provider", tools: ["accounts"] }],
+  });
+  const tile = registerScopedTileEndpoint({} as Window, "requester", "main", "visible", requester.appScope!);
+  const child = createChildInvocation(root, requester, "requester_execute");
+  try {
+    const permission = { target: "kernel" as const, name: "permissions.request", arguments: { target, tools: ["accounts"] } };
+    await expect(Promise.all([
+      routeToolCall(read, tile),
+      routeToolCall({ target: "app:requester:background", name: "echo", arguments: { value: "read" } }, tile),
+      routeToolCall(permission, tile),
+      routeToolCall(permission, requester),
+    ])).resolves.toEqual([{ value: "ready" }, { value: "ready" }, { granted: true }, { granted: true }]);
+    expect(residentCalls).toBe(1);
+    expect(provider.state.calls).toBe(2);
+    expect(resolveInvocation(requester, invocationMetadata(child))).toBe(child);
+    expect(agent.challenges).toEqual([]);
+    expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+    expect(hasFrontendToolGrant({ endpoint: tile.endpointId, appId: "requester", role: "tile" }, tile.sessionId, target, getRegisteredEndpoint(target)!.sessionId, "accounts")).toBe(false);
+  } finally {
+    completeInvocation(child);
+    completeInvocation(root);
+  }
+});
+
+test("install-declared routing cannot drop Agent provenance for provider confirmation or root tools", async () => {
+  const fakeWindow = installFakeWindow();
+  authorizeTestOwner("owner-principal");
+  const agent = createAgentConsentEndpoint();
+  const { root } = await beginSignedCallAgentInvocation(agent.source);
+  const requester = registerScopedBackgroundEndpoint(createToolEndpoint(fakeWindow, echoDescriptor, { value: "unused" }), "requester", "952", "main", {
+    frontendTools: [{ app: "provider", tools: [providerActionDescriptor.name, agentRootActionDescriptor.name] }],
+  });
+  const provider = createProviderToolEndpoint(providerActionDescriptor, { detail: "exact action" }, { receipt: "done" });
+  const endpoint = registerScopedBackgroundEndpoint(provider.source, "provider", "953");
+  const child = createChildInvocation(root, requester, "requester_execute");
+  const call = providerActionCall();
+  try {
+    // A standing route grant never substitutes for the Wallet's exact review.
+    await expect(routeToolCall(call, requester)).rejects.toMatchObject({ code: "SCOPED_CONTEXT_REQUIRED" });
+    expect(provider.state.calls).toBe(0);
+    await expect(routeToolCall(call, requester, undefined, invocationMetadata(child))).resolves.toEqual({ receipt: "done" });
+    expect(provider.state.approvalRequests).toBe(1);
+    expect(agent.challenges).toHaveLength(1);
+    expect(agent.challenges[0]).toMatchObject({ action: { tool: providerActionDescriptor.name } });
+    expect(hasFrontendToolGrant({ endpoint: requester.endpointId, appId: "requester", role: "background" }, requester.sessionId, endpoint.endpointId, endpoint.sessionId, providerActionDescriptor.name)).toBe(false);
+
+    const rootProvider = createCapturingToolEndpoint(agentRootActionDescriptor, { receipt: "never" });
+    registerScopedBackgroundEndpoint(rootProvider.source, "provider", "953");
+    for (const context of [undefined, invocationMetadata(child)]) {
+      await expect(routeToolCall({ target: "app:provider:background", name: agentRootActionDescriptor.name, arguments: { value: "request" } }, requester, undefined, context)).rejects.toThrow(`Unknown tool '${agentRootActionDescriptor.name}'`);
+    }
+    expect(rootProvider.state.calls).toBe(0);
+    expect(useMsgBusPermissionStore.getState().requests).toEqual({});
+  } finally {
+    completeInvocation(child);
+    completeInvocation(root);
+  }
 });
 
 test("install-declared frontend tools preserve private audiences and fresh provider confirmation", async () => {

@@ -4,7 +4,8 @@ import { continueOperationFunding, savedFundingRequests, type FundingOperation }
 import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
 import { createBackendClient } from "./backend.ts";
 import { buildActionReview, sameLiquidityExitTerms } from "./action_review.ts";
-import { buildLiquidityReceipt, buildSwapReceipt, durablePlanSource } from "./action_receipt.ts";
+import { ActionReviewDeclinedError } from "./provider.ts";
+import { buildLiquidityReceipt, buildSwapReceipt, durablePlanSource, liquiditySettlementGuidance } from "./action_receipt.ts";
 import { readPayoutEvidence, type PayoutBlockReference } from "./payout_evidence.ts";
 import { createLiquidityReadClient } from "./liquidity_reads.ts";
 import { browserPoolToWire, previewLiquidity } from "./liquidity_quote.ts";
@@ -93,11 +94,24 @@ function liquidityWire(input: JsonObject): LiquidityWire {
     amount0: String(input.amount0), amount1: String(input.amount1), tick_lower: String(input.tickLower), tick_upper: String(input.tickUpper),
     liquidity: String(input.liquidity), withdraw_token: String(input.token), withdraw_amount: String(input.amount) };
 }
-function response(prepared: ActionPrepared, message = prepared.operation.detail): JsonObject {
-  return asJson({ operationId: prepared.operation.id, state: prepared.operation.state, message,
+function response(prepared: ActionPrepared, message?: string): JsonObject {
+  const liquidityReceipt = buildLiquidityReceipt(prepared);
+  return asJson({ operationId: prepared.operation.id, state: prepared.operation.state,
+    message: message ?? liquiditySettlementGuidance(liquidityReceipt) ?? prepared.operation.detail,
     operation: prepared.operation, plan: prepared.plan, planSource: durablePlanSource,
-    receipt: buildSwapReceipt(prepared) ?? buildLiquidityReceipt(prepared), fundingInstructions: [] }) as JsonObject;
+    receipt: buildSwapReceipt(prepared) ?? liquidityReceipt, fundingInstructions: [] }) as JsonObject;
 }
+/** A declined review only frees the form when the retained operation has
+ * never dispatched anything. Missing/malformed evidence is not an empty log. */
+function noDispatchRequested(operation: ActionOperation): boolean {
+  if (operation.state !== "prepared" || operation.result_json !== "" || !Array.isArray(operation.effects)) return false;
+  try { if (savedFundingRequests(operation).length !== 0) return false; }
+  catch { return false; }
+  return operation.effects.every((effect) => isJsonObject(effect) && effect.state === "not_requested"
+    && effect.dispatched_at === "0" && effect.completed_at === null
+    && effect.result_nat === null && effect.result_amount0 === null && effect.result_amount1 === null);
+}
+
 function pendingEffects(operation: FundingOperation): boolean {
   const effects = (operation as FundingOperation & { effects?: JsonObject[] }).effects ?? [];
   return effects.some((effect) => effect.state === "requested" || effect.state === "uncertain");
@@ -216,7 +230,24 @@ export function createActionHandlers(dependencies: ActionDependencies) {
     if (intent.kind === "recover_deposit") throw new Error("Recovery actions use their retained recovery workflow.");
     if (approvedPreview === null || !sameLiquidityExitTerms(approvedPreview, prepared.plan)) {
       reviewMetadata ??= await displayMetadata(context, metadata);
-      await dependencies.authorize(context, buildActionReview({ operationId, kind: intent.kind, input: intent.input, plan: prepared.plan, metadata: reviewMetadata }));
+      try {
+        await dependencies.authorize(context, buildActionReview({ operationId, kind: intent.kind, input: intent.input, plan: prepared.plan, metadata: reviewMetadata }));
+      } catch (error) {
+        // An explicit owner decline is a successful review outcome, not an
+        // unknown Wallet reply. Re-read after the dialog: another invocation
+        // may have advanced the journal while the owner was deciding.
+        if (intent.kind === "swap" && !context.agentMode && error instanceof ActionReviewDeclinedError && noDispatchRequested(prepared.operation)) {
+          context.signal?.throwIfAborted();
+          let latest: ActionOperation | null;
+          try { latest = await backend.actionGet(operationId); }
+          catch { throw error; }
+          context.signal?.throwIfAborted();
+          if (latest?.id === operationId && latest.input_json === prepared.operation.input_json && noDispatchRequested(latest)) {
+            return { ...response({ ...prepared, operation: latest }, "Swap cancelled. No funds were sent. The prepared action remains in Activity."), state: "review_declined" };
+          }
+        }
+        throw error;
+      }
     }
     context.signal?.throwIfAborted();
     const noFundingExit = intent.kind === "liquidity" && ["decrease", "close", "claim", "withdraw"].includes(String(intent.input.kind))
@@ -340,7 +371,7 @@ export function registerActionTools(dependencies: ActionDependencies, register: 
   register("icpswap_liquidity_v1", { title: "Manage ICPSwap liquidity", description: "Mint/increase a canonical pool position, decrease exact liquidity, close the entire saved position, claim fees, or withdraw gross unused funds. amount0/amount1 are token0/token1 atomic maxima. positionId identifies an owned position. withdraw uses token and gross amount. Liquidity methods have no onchain minimum amounts/deadline. Funding and protocol dispatch remain in one durable operation; payouts/refunds settle asynchronously. Root fundingInstructions must be called directly by the root Agent before continuing.", inputSchema: schema(liquidityProperties, ["operationId", "kind", "pool"]), annotations: effectAnnotations }, handlers.liquidity);
   register("icpswap_recover_deposit_v1", { title: "Recover a funded ICPSwap deposit", description: "Use a NEW recovery operationId with sourceOperationId and canonical tokenIndex (0 or 1) to credit an already-confirmed direct Wallet transfer from the pool's owner deposit subaccount into pool-unused funds. Reviews the original gross amount and current deposit fee. Never requests another Wallet transfer. Unknown original Wallet commands must be reconciled through their exact original caller; Root may supply matching raw fundingResults. An already dispatched or uncertain pool deposit is never repeated. Continue the recovery's own operationId after a lost reply.", inputSchema: schema({ operationId: idSchema, sourceOperationId: idSchema, tokenIndex: { type: "integer", enum: [0, 1] }, fundingResults: { type: "array", items: { type: "object" } } }, ["operationId", "sourceOperationId", "tokenIndex"]), annotations: effectAnnotations }, handlers.recoverDeposit);
   register("icpswap_continue_v1", { title: "Continue a saved ICPSwap action", description: "Continue original intent and exact request identities from the same application and Normal/Root mode. For Root funding, pass the raw Wallet output objects in fundingResults. Unknown protocol effects are never replayed. Human callers cannot take over a Root-funded command by changing its Wallet caller namespace.", inputSchema: schema({ operationId: idSchema, fundingResults: { type: "array", items: { type: "object" } } }, ["operationId"]), annotations: effectAnnotations }, handlers.continue);
-  register("icpswap_status_v1", { title: "Read an ICPSwap action", description: "Read retained typed plan, funding, protocol effects and available protocol receipt for a durable operationId. plan decodes the durable plan_blob even when operation.plan_json is empty. Receipt unknown amounts remain null; successful protocol replies do not verify ledger settlement. This read sends no Wallet request or protocol mutation.", inputSchema: schema({ operationId: idSchema }, ["operationId"]), annotations: { "neutron:effects": ["read"] } }, handlers.status);
+  register("icpswap_status_v1", { title: "Read an ICPSwap action", description: "Read retained typed plan, funding, protocol effects and available protocol receipt for a durable operationId. plan decodes the durable plan_blob even when operation.plan_json is empty. Receipt unknown amounts remain null. Liquidity payoutEstimates separate expected pool credit from Wallet payout using saved fees; neither estimates nor successful protocol replies verify ledger settlement. This read sends no Wallet request or protocol mutation.", inputSchema: schema({ operationId: idSchema }, ["operationId"]), annotations: { "neutron:effects": ["read"] } }, handlers.status);
   register("icpswap_reconcile_v1", { title: "Refresh ICPSwap action recovery", description: "Refresh the saved action and verified pool. By default, read recent incoming pool-to-Wallet transfers for successful effects; walletEvidence=false skips Wallet reads. Optional payoutBlocks inspect exact ledger/blockIndex references, including archives when available. Returned Wallet transfers are contextual evidence, not operation-linked settlement proof; empty queues or pages do not prove a payout is absent. Never repeats a swap, deposit or liquidity mutation.", inputSchema: schema({ operationId: idSchema, walletEvidence: { type: "boolean", description: "Defaults to true. false skips Wallet reads and cannot be combined with nonempty payoutBlocks." }, payoutBlocks: { type: "array", description: "Exact ledger/block references to inspect. Requires walletEvidence=true or omitted. For older account history call Wallet wallet_account_transactions_v1 with beforeBlock from the returned coverage pagination.", items: schema({ ledger: textSchema, blockIndex: natSchema }, ["ledger", "blockIndex"]) } }, ["operationId"]), annotations: readAnnotations }, handlers.reconcile);
   register("icpswap_history_v1", { title: "Read ICPSwap actions", description: "Paginate all retained ICPSwap actions, including pending funding and uncertain protocol calls. Follow nextCursor for older records. Journals remain available after closing the tile.", inputSchema: schema({ cursor: textSchema, limit: { type: "integer", minimum: 1 } }), annotations: { "neutron:effects": ["read"] } }, handlers.history);
   register("icpswap_liquidity_quote_v1", { title: "Preview ICPSwap liquidity", outputSchema: liquidityQuoteOutputSchema, description: "Query ICPSwap directly from the browser for current pool/position state, live amounts, range, fees and funding deficits without moving funds or saving a plan. Preparation revalidates these observations as the Neutron account. Liquidity amounts are estimates; the protocol has no minimum output/deadline protection.", inputSchema: schema(Object.fromEntries(Object.entries(liquidityProperties).filter(([key]) => key !== "operationId")), ["kind", "pool"]), annotations: readAnnotations }, handlers.liquidityQuote);

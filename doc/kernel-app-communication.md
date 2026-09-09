@@ -621,10 +621,12 @@ app endpoints and keeps its active-workspace, exact-reuse behavior. Its optional
 view token and the `open` operation's optional view token share the one
 `neutron:tile:view` delivery path.
 
-Inactive tile frames stay mounted. The exact originating tile of a live Agent
-root keeps its Kernel connection across workspace switches. Closing the tile,
-replacing its endpoint, or losing runtime authority still retires the private
-port and cancels work. Other inactive tiles disconnect from the message bus.
+Inactive tile frames stay mounted and keep their existing Kernel connections
+across workspace switches. Pending requests and session grants survive hiding
+or revealing the workspace, for ordinary callers and Agent roots alike. Closing
+the tile, replacing its endpoint, or losing runtime authority still retires the
+private port and cancels work. An unvisited workspace does not start its tiles
+until first activated.
 
 ## Tray Boundary
 
@@ -676,6 +678,14 @@ metadata, cancellation, and exposes `callTool`, `querySelf`, and `updateSelf`;
 module-level helpers do not inherit the handler context. Attachment handlers
 likewise use their invocation-bound `context.callTool` for nested attachment
 work.
+
+An app's existing install-declared frontend routes remain usable by independent
+ordinary UI calls during an Agent invocation, including UI reads through the
+same resident. An exact `permissions.request` for those installed routes only
+confirms existing authority. These paths create no new grant, do not inherit
+the other invocation, and do not bypass provider-owned confirmation or private
+tool audiences. An Agent handler's scoped client still propagates its own live
+invocation and cancellation.
 
 The scoped client intentionally does not expose `callSelfDialog`. While the
 caller app has any active invocation, an unscoped module-level same-Neutron

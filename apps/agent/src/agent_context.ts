@@ -38,8 +38,9 @@ export function checkpointModelTurn(messages: readonly ModelMessage[]): ModelMes
 export function excerpt(text: string, length: number): string {
   if (text.length <= length) return text;
   const marker = "\n[content omitted; inspect the source again if needed]\n";
+  if (length <= marker.length) return marker.slice(0, Math.max(0, length));
   const half = Math.max(0, Math.floor((length - marker.length) / 2));
-  return text.slice(0, half) + marker + text.slice(-half);
+  return text.slice(0, half) + marker + (half > 0 ? text.slice(-half) : "");
 }
 
 /** Keep the owner request and recent evidence even when one tool result is

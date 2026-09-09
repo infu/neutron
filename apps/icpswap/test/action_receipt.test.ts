@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
-import { buildLiquidityReceipt, buildSwapReceipt } from "../src/action_receipt.ts";
+import { buildLiquidityReceipt, buildSwapReceipt, liquiditySettlementGuidance } from "../src/action_receipt.ts";
 import { createActionHandlers } from "../src/action_tools.ts";
 import type { ActionBackend, ActionPrepared } from "../src/action_backend.ts";
 
@@ -74,6 +74,44 @@ describe("liquidity protocol receipts", () => {
     expect(buildLiquidityReceipt(prepared)?.settlement.status).toBe("unverified");
   });
 
+  test.each(["claim", "decrease", "close"] as const)("%s explains a below-fee positive output without inventing Wallet settlement", (kind) => {
+    const prepared = fixture(kind);
+    prepared.plan.fee0 = "10000"; prepared.plan.fee1 = "10000"; prepared.plan.observed_at = "1788951200000000000";
+    prepared.operation.effects[1]!.result_amount0 = "297";
+    const receipt = buildLiquidityReceipt(prepared)!;
+    expect(receipt.grossOutputAmounts).toEqual({ amount0: "297", amount1: "0" });
+    expect(receipt.settlement).toMatchObject({ status: "unverified", payoutReferences: [], feeBasis: "saved_plan",
+      feeObservedAtNs: "1788951200000000000", payoutEstimates: {
+        token0: { status: "retained_in_pool", grossAtoms: "297", feeAtoms: "10000", expectedNetAtoms: "0", expectedRetainedAtoms: "297" },
+        token1: { status: "no_output", grossAtoms: "0", feeAtoms: "10000", expectedNetAtoms: "0", expectedRetainedAtoms: "0" },
+      } });
+    expect(liquiditySettlementGuidance(receipt)).toContain("no Wallet payout or transfer fee debit is expected");
+    expect(receipt.settlement.reason).toContain("Do not repeat");
+    expect(prepared.operation.state).toBe("settlement_pending");
+  });
+
+  test("mixed outputs retain exact per-token estimates; an equal-to-fee output is pool credit", () => {
+    const prepared = fixture("claim"); prepared.plan.fee0 = "10000"; prepared.plan.fee1 = "10000";
+    prepared.operation.effects[1]!.result_amount0 = "10000";
+    prepared.operation.effects[1]!.result_amount1 = LARGE;
+    const receipt = buildLiquidityReceipt(prepared)!;
+    expect(receipt.settlement.payoutEstimates?.token0.status).toBe("retained_in_pool");
+    expect(receipt.settlement.payoutEstimates?.token1).toMatchObject({ status: "transfer_estimated", grossAtoms: LARGE,
+      expectedNetAtoms: (BigInt(LARGE) - 10000n).toString(), expectedRetainedAtoms: "0" });
+    expect(receipt.settlement.reason).toContain("Other token payouts remain unverified");
+  });
+
+  test("missing or malformed saved fees never imply retained credit or a known net payout", () => {
+    const prepared = fixture("claim"); prepared.operation.effects[1]!.result_amount0 = "297";
+    for (const fee of [undefined, null, "", "-1", "1.5", 10000]) {
+      if (fee === undefined) delete prepared.plan.fee0; else prepared.plan.fee0 = fee;
+      const receipt = buildLiquidityReceipt(prepared)!;
+      expect(receipt.settlement.payoutEstimates?.token0).toEqual({ status: "unavailable", grossAtoms: "297", feeAtoms: null, expectedNetAtoms: null, expectedRetainedAtoms: null });
+      expect(receipt.settlement.feeObservedAtNs).toBeNull();
+      expect(liquiditySettlementGuidance(receipt)).toBeNull();
+    }
+  });
+
   test("unavailable result fields remain null rather than estimates, deposit amounts or position guesses", () => {
     const prepared = fixture(); prepared.operation.effects[1]!.result_nat = null;
     expect(buildLiquidityReceipt(prepared)?.positionId).toBeNull();
@@ -134,6 +172,23 @@ test("status returns typed liquidity receipt and retained plan provenance withou
   expect(result.planSource).toMatchObject({ kind: "durable_candid_plan_blob" });
   expect((result.planSource as JsonObject).note).toContain("legacy JSON slot");
   expect(calls).toEqual(["actionGet", "liquidityStatus"]);
+});
+
+test("historical positive-claim status exposes retained-credit guidance without changing the journal or reading Wallet", async () => {
+  const prepared = fixture("claim"), calls: string[] = [];
+  prepared.plan.fee0 = "10000"; prepared.plan.fee1 = "10000";
+  prepared.operation.effects[1]!.result_amount0 = "297";
+  const saved = JSON.stringify(prepared);
+  const handlers = createActionHandlers({ backendFor: () => ({
+    actionGet: async () => { calls.push("actionGet"); return prepared.operation; },
+    liquidityStatus: async () => { calls.push("liquidityStatus"); return prepared; },
+  } as unknown as ActionBackend), authorize: async () => { throw new Error("Unexpected authorization"); } });
+  const result = await handlers.status({ operationId: ID }, { kernel: {} } as MsgBusToolContext);
+  expect(result.state).toBe("settlement_pending");
+  expect(result.message).toContain("expected to stay in your pool balance");
+  expect(result.fundingInstructions).toEqual([]);
+  expect(calls).toEqual(["actionGet", "liquidityStatus"]);
+  expect(JSON.stringify(prepared)).toBe(saved);
 });
 
 test("historical swap receipt preserves legacy fields while distinguishing unknown payout from zero", async () => {

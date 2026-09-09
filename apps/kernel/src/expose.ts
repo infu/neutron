@@ -1770,7 +1770,8 @@ defineKernelTool(
       (item) => !hasInstalledFrontendToolGrant(caller, targetEndpoint, item.name),
     );
     if (undeclaredTools?.length === 0) {
-      assertScopedContextForActiveAppInvocation(caller, invocation);
+      // This confirms existing installation authority, without creating a new
+      // permission. Independent UI work may share a resident with Agent work.
       return { granted: true };
     }
     const agentApproved = await authorizeAgentPermission(
@@ -4211,7 +4212,10 @@ async function authorizeEndpointAccess(
   const tool = typeof descriptor === "string" ? descriptor : descriptor.name;
   if (caller.context.appId === target.context.appId) return;
   if (hasInstalledFrontendToolGrant(caller, target, tool)) {
-    assertScopedContextForActiveAppInvocation(caller, invocation);
+    // Like a session grant, install-reviewed routing remains available to
+    // ordinary UI requests while the same app serves an Agent invocation.
+    // Invocations that are present still propagate; provider-owned decisions
+    // and private audiences are checked separately before reaching this path.
     assertEndpointDispatchCurrent(callerDispatch);
     assertEndpointDispatchCurrent(targetDispatch);
     return;

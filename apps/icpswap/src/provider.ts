@@ -1,6 +1,16 @@
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
 import { isMsgBusInstallationUid } from "neutron-tools/protocol";
 
+/** A local explicit owner decision, distinct from an interrupted or malformed
+ * review reply. Callers still inspect the durable journal before claiming that
+ * the operation itself has no previously requested effects. */
+export class ActionReviewDeclinedError extends Error {
+  constructor() {
+    super("ICPSwap action review declined. No funding or protocol action was sent by this review. Retain the operation ID if you choose to try again.");
+    this.name = "ActionReviewDeclinedError";
+  }
+}
+
 /** Consent belongs to this invocation and its exact retained plan. The tile
  * returns only a decision; it cannot substitute another protocol action. */
 export async function authorizeAction(context: MsgBusToolContext, review: JsonObject): Promise<void> {
@@ -29,7 +39,9 @@ export async function authorizeAction(context: MsgBusToolContext, review: JsonOb
         tileId: "main", tool: "icpswap_review_v1", arguments: args,
       });
     }
-    if (result?.approved !== true) throw new Error("ICPSwap action review declined. No funding or protocol action was sent by this review. Retain the operation ID if you choose to try again.");
+    context.signal?.throwIfAborted();
+    if (result?.approved === false) throw new ActionReviewDeclinedError();
+    if (result?.approved !== true) throw new Error("ICPSwap action review returned an invalid decision. No funding or protocol action was sent by this review.");
   }
   context.signal?.throwIfAborted();
 }
