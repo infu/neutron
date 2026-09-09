@@ -548,11 +548,13 @@ test("automatic continuation follows the confirmed original approval into one bu
   } });
   expect(result.phase).toBe("waiting_attestation"); expect(f.sends).toHaveLength(2);
 });
-test("quotes read deployed activation/forwarding fees and require a choice for undefined default mode", async () => {
-  let mode = "default";
+test("quotes resolve default account state consistently with saved withdrawal source and retain explicit fallback", async () => {
+  let mode = "default", webData3: unknown = null;
+  const modeQueries: string[] = [];
   const readWallet = { async accounts() { return { accounts: [account] }; }, async callContract() { return { result: encodeAbiParameters([{ type: "uint256" }], [0n]) }; } } as unknown as EvmWalletClient;
   const transport: FundingTransport = {
     async rpc(_url, method, params) {
+      if (method === "eth_blockNumber") return "0x100";
       expect(method).toBe("eth_call");
       const call = params[0] as { to: string; data: `0x${string}` };
       if (call.to === CCTP.coreUserExists) return encodeAbiParameters([{ type: "bool" }], [false]);
@@ -561,16 +563,40 @@ test("quotes read deployed activation/forwarding fees and require a choice for u
       const value = values[decoded.functionName];
       return typeof value === "boolean" ? encodeAbiParameters([{ type: "bool" }], [value]) : encodeAbiParameters([{ type: "uint256" }], [value]);
     },
-    async info() { return mode; },
+    async info(body) { modeQueries.push(String(body.type)); if (body.type === "userAbstraction") return mode; if (body.type === "webData3") return webData3; throw Error("Unexpected account read"); },
     async circle() { return [{ finalityThreshold: 1000, minimumFee: 0, forwardFee: { low: 200000, med: 200000, high: 200000 } }]; },
     async exchange() { throw Error("Quote must not submit"); },
   };
   const deposit = await quoteFunding(readWallet, { environment: "mainnet", direction: "deposit", chainId: "1", amount: "10" }, { transport });
-  expect(deposit.accountMode).toBeNull();
+  expect(deposit.accountMode).toBeNull(); expect(deposit.accountModeResolution).toBeNull(); expect(modeQueries).toEqual([]);
   expect(deposit.activationFeeAtoms).toBe("1000000"); expect(deposit.minimumReceiveAtoms).toBe("8800000"); expect(deposit.allowanceAtoms).toBe("0");
   const withdraw = { environment: "mainnet", direction: "withdraw", chainId: "1", amount: "10" } as const;
   await expect(quoteFunding(readWallet, withdraw, { transport })).rejects.toThrow("sourceBalance");
-  expect((await quoteFunding(readWallet, { ...withdraw, sourceBalance: "perps" }, { transport })).sourceDex).toBe("");
+  const fallback = await quoteFunding(readWallet, { ...withdraw, sourceBalance: "perps" }, { transport });
+  expect(fallback.sourceDex).toBe(""); expect(fallback.accountModeResolution).toMatchObject({ balanceSource: "unknown", source: "webData3", basis: "unavailable" });
+  expect(fallback.warnings.some(warning => warning.includes("could not be verified"))).toBe(true);
+  const sharedFallback = await quoteFunding(readWallet, { ...withdraw, sourceBalance: "unified" }, { transport });
+  expect(sharedFallback.sourceDex).toBe("spot"); expect(sharedFallback.warnings.some(warning => warning.includes("explicitly selected"))).toBe(true);
+  for (const effective of [undefined, "unifiedAccount", "portfolioMargin"]) {
+    webData3 = { userState: { user: owner, serverTime: 1800000000000, ...(effective ? { abstraction: effective } : {}) } };
+    const quote = await quoteFunding(readWallet, withdraw, { transport });
+    expect(quote.accountMode).toBe("default"); expect(quote.sourceDex).toBe(effective ? "spot" : "");
+    expect(quote.accountModeResolution).toMatchObject({ balanceSource: effective ? "unified" : "perps", source: "webData3", effectiveAbstraction: effective ?? "default", serverTime: 1800000000000 });
+    await expect(quoteFunding(readWallet, { ...withdraw, sourceBalance: effective ? "perps" : "unified" }, { transport })).rejects.toThrow("conflicts");
+    const f = fixture("withdraw"); f.setSend(async request => f.operation(request, "prepared"));
+    const result = await f.run({ prepare: quoteFunding, transport });
+    expect(result.quote.sourceDex).toBe(quote.sourceDex);
+    expect(fundingState(f.rows.get(id)!).withdrawal?.sourceDex).toBe(quote.sourceDex);
+    const request = structuredClone(f.sends[0]!); expect(f.posts).toHaveLength(0);
+    // The quote's resolution must never rewrite historical action bytes when
+    // the account subsequently changes mode and the same operation is resumed.
+    webData3 = { userState: { user: owner, serverTime: 1800000001000, abstraction: effective ? "disabled" : "unifiedAccount" } };
+    const before = modeQueries.length;
+    const retained = await f.run({ prepare: quoteFunding, transport, execute: false });
+    expect(modeQueries).toHaveLength(before); expect(retained.quote).toEqual(result.quote);
+    expect(fundingState(f.rows.get(id)!).withdrawal?.sourceDex).toBe(quote.sourceDex);
+    expect(f.sends).toEqual([request]);
+  }
   mode = "unifiedAccount";
   expect((await quoteFunding(readWallet, withdraw, { transport })).sourceDex).toBe("spot");
   await expect(quoteFunding(readWallet, { ...withdraw, sourceBalance: "perps" }, { transport })).rejects.toThrow("conflicts");

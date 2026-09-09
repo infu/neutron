@@ -114,6 +114,28 @@ describe("Modify time-in-force and signed wire compatibility", () => {
 });
 
 describe("Modify original and replacement reconciliation", () => {
+  test("accepted modification follows propagation without a second signature or dispatch", async () => {
+    const state = fixture({ original: "open", replacement: "unknownOid", response: "default" });
+    const first = await state.make().execute({ operationId, intent });
+    expect(first.state).toBe("accepted");
+    expect(first.needsReconciliation).toBe(true);
+    expect(first.canRetryExact).toBe(false);
+    expect(first.message).toContain("order outcome is not confirmed");
+    expect(first.modification).toMatchObject({ originalLive: true, replacementLive: null });
+    expect((await state.make().history())[0]?.needsReconciliation).toBe(true);
+    state.state.original = "canceled";
+    state.state.replacement = "filled";
+    const final = await state.make().reconcile(operationId);
+    expect(final.state).toBe("filled");
+    expect(final.needsReconciliation).toBe(false);
+    expect(final.modification).toMatchObject({ originalLive: false, replacementLive: false });
+    expect(final.message).not.toContain("not confirmed");
+    expect((await state.make().history())[0]?.needsReconciliation).toBe(false);
+    expect(state.sent).toHaveLength(1);
+    expect(state.signed()).toBe(1);
+    expect(state.reviews).toHaveLength(1);
+  });
+
   for (const original of ["open", "canceled", "filled", "unknownOid"] as const) for (const replacement of ["badAloPxRejected", "filled", "open"] as const) {
     test(`original ${original}; replacement ${replacement}`, async () => {
       const state = fixture({ original, replacement, response: "default", fills: [
@@ -130,6 +152,7 @@ describe("Modify original and replacement reconciliation", () => {
         original: { oid: originalOid, state: original === "unknownOid" ? "unknown" : original === "open" ? "resting" : original },
       });
       expect(result.modification?.checkedAt).toBeGreaterThan(0);
+      expect(result.needsReconciliation).toBe(original === "unknownOid");
       expect(result.message).toContain(`Original order ${originalOid}`);
       if (replacement === "filled") expect(result.orders[0]).toMatchObject({ filledSize: "0.1", averagePrice: "2000" });
       else {
@@ -165,6 +188,7 @@ describe("Modify original and replacement reconciliation", () => {
     expect(result.orders[0]).toMatchObject({ oid: replacementOid, filledSize: "0.1", averagePrice: "2000" });
     expect(result.modification).toMatchObject({ originalLive: null, replacementLive: false, original: { oid: originalOid, state: "unknown" } });
     expect(result.modification?.errors).toContain("Original order: Original lookup rate limited");
+    expect(result.needsReconciliation).toBe(true);
     expect(result.message).toContain("could not be verified");
     expect(state.sent).toHaveLength(1);
   });

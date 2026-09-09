@@ -91,6 +91,16 @@ describe("Perpetual price and intent validation", () => {
 });
 
 describe("Durable dispatch and recovery", () => {
+  test("cancel-all with no observed orders finishes without signing, dispatch or tracking", async () => {
+    const state = fixture();
+    const engine = state.make({ data: { info: async <T>(body: Record<string, unknown>): Promise<T> => body.type === "openOrders" ? [] as T : state.info<T>(body) } });
+    const result = await engine.execute({ operationId, intent: { kind: "cancelAll" } });
+    expect(result).toMatchObject({ state: "accepted", orders: [], needsReconciliation: false, canRetryExact: false });
+    expect(result.message).toContain("No matching open perpetual orders");
+    expect((await engine.history())[0]?.needsReconciliation).toBe(false);
+    expect(state.signed()).toBe(0); expect(state.sent).toEqual([]); expect(state.reviews).toEqual([]);
+  });
+
   test("IndexedDB survives store recreation and serializes nonce allocation and conflicting writers", async () => {
     const store = new IndexedTradingStore();
     const scope = `test-${crypto.randomUUID()}`;

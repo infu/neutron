@@ -4,6 +4,7 @@ import { stable, type RecordRow, type Store } from "./store.ts";
 import { indexedWithdrawalMintCandidates } from "./funding_index.ts";
 import { CCTP, CCTP_RECOVERY_ABI, CORE_DEPOSIT_ABI, FUNDING_CHAINS, USDC_ABI, coreUserExistsCalldata, depositCalldata, depositFees, formatUsdc, forwardHook, parseFundingInput, unsignedAtoms, usdcAtoms, withdrawalAction, withdrawalEnvelope, withdrawalTypedData, type FundingInput, type NormalizedFundingInput, type WithdrawalAction } from "./funding_protocol.ts";
 import { decodeCctpMessage, destinationMintFilter, destinationMintHashes, findWithdrawalBurn, matchReceiptCctpMessage, observedCoreCredits, selectCctpMessage, verifyCoreCashReceipt, verifyCoreForwardReceipt, verifyDestinationReceipt, verifyWithdrawalDestinationReceipt, withdrawalBurnFilter, withdrawalDestinationMintFilter, withdrawalDestinationMintHashes, withdrawalHook, type CctpEvidenceIntent, type MatchedCctpMessage, type WithdrawalDestinationEvidence } from "./funding_evidence.ts";
+import { parseAccountAbstraction, resolveAccountMode, unresolvedAccountMode, type AccountModeResolution } from "./account_mode.ts";
 export type { FundingInput } from "./funding_protocol.ts";
 
 export type FundingTransport = {
@@ -44,6 +45,8 @@ export type FundingQuote = {
   amountAtoms: string; estimatedFeeAtoms: string; maxFeeAtoms: string; minimumReceiveAtoms: string;
   protocolFeeAtoms: string; forwardingFeeAtoms: string; activationFeeAtoms: string;
   sourceDex: "" | "spot"; accountMode: string | null; allowanceAtoms: string | null;
+  /** Absent on historical quotes; null when this quote did not read account mode. */
+  accountModeResolution?: AccountModeResolution | null;
   sourceGas: { estimatedFeeWei: string | null; maximumFeeWei: string | null; reason: string | null };
   warnings: string[];
 };
@@ -84,7 +87,7 @@ export async function quoteFunding(wallet: EvmWalletClient, raw: FundingInput, o
   const account = (await wallet.accounts(callOptions)).accounts.find(a => a.accountId === "main");
   if (!account) throw new Error("Initialize the main account in EVM Wallet first.");
   const amount = usdcAtoms(input.amount), recipient = getAddress(account.address).toLowerCase();
-  const quote: FundingQuote = { input, account, recipient, observedAtMs: (options.now ?? Date.now)(), amountAtoms: amount.toString(), estimatedFeeAtoms: "0", maxFeeAtoms: "0", minimumReceiveAtoms: amount.toString(), protocolFeeAtoms: "0", forwardingFeeAtoms: "0", activationFeeAtoms: "0", sourceDex: "", accountMode: null, allowanceAtoms: null, sourceGas: { estimatedFeeWei: null, maximumFeeWei: null, reason: input.direction === "withdraw" ? "Circle forwards the destination transaction; its gas is covered by the forwarding fee." : null }, warnings: [] };
+  const quote: FundingQuote = { input, account, recipient, observedAtMs: (options.now ?? Date.now)(), amountAtoms: amount.toString(), estimatedFeeAtoms: "0", maxFeeAtoms: "0", minimumReceiveAtoms: amount.toString(), protocolFeeAtoms: "0", forwardingFeeAtoms: "0", activationFeeAtoms: "0", sourceDex: "", accountMode: null, accountModeResolution: null, allowanceAtoms: null, sourceGas: { estimatedFeeWei: null, maximumFeeWei: null, reason: input.direction === "withdraw" ? "Circle forwards the destination transaction; its gas is covered by the forwarding fee." : null }, warnings: [] };
   if (input.direction === "deposit") {
     const chain = FUNDING_CHAINS[input.chainId];
     const [fees, allowance, enabled, disabled, newAccountFee, exists] = await Promise.all([
@@ -113,19 +116,27 @@ export async function quoteFunding(wallet: EvmWalletClient, raw: FundingInput, o
     if (BigInt(quote.activationFeeAtoms) > 0n) quote.warnings.push(`The current HyperCore account activation fee deducts another ${formatUsdc(BigInt(quote.activationFeeAtoms))} USDC from this first deposit.`);
   } else {
     const [fee, protocolFee, mode] = await Promise.all([readCore(transport, "calculateCrossChainWithdrawalFee", [true, FUNDING_CHAINS[input.chainId].domain], options.signal), readCore(transport, "cctpMaxFee", [], options.signal), transport.info({ type: "userAbstraction", user: account.address }, options.signal)]);
-    if (typeof mode !== "string" || !["unifiedAccount", "portfolioMargin", "disabled", "default", "dexAbstraction"].includes(mode)) throw new Error("Unable to identify this HyperCore account's collateral mode.");
-    quote.accountMode = mode;
-    if (mode === "default" && !input.sourceBalance) throw new Error("Hyperliquid reports account mode 'default', which does not identify its withdrawal balance. Choose sourceBalance 'perps' for a separate perps balance or 'unified' for shared USDC, as shown in your Hyperliquid account settings.");
-    const unified = mode === "unifiedAccount" || mode === "portfolioMargin";
-    if (mode !== "default" && input.sourceBalance && (input.sourceBalance === "unified") !== unified) throw new Error(`The selected withdrawal balance conflicts with this account's current ${mode} mode.`);
-    quote.sourceDex = mode === "default" ? input.sourceBalance === "unified" ? "spot" : "" : unified ? "spot" : "";
+    const abstraction = parseAccountAbstraction(mode);
+    quote.accountMode = abstraction;
+    let resolution: AccountModeResolution;
+    try {
+      resolution = await resolveAccountMode(abstraction, account.address, (body, signal) => transport.info(body, signal), { ...(options.signal ? { signal: options.signal } : {}), ...(options.now ? { now: options.now } : {}) });
+    } catch (error) {
+      options.signal?.throwIfAborted(); resolution = unresolvedAccountMode("webData3", error, options.now);
+      quote.warnings.push(`The default account's balance source could not be verified: ${resolution.error}`);
+    }
+    quote.accountModeResolution = resolution;
+    if (resolution.balanceSource === "unknown" && !input.sourceBalance) throw new Error(`The default account's withdrawal balance is unavailable: ${resolution.error ?? "No account mode observation"} Choose sourceBalance 'perps' or 'unified' from your account settings, or refresh the quote.`);
+    if (resolution.balanceSource !== "unknown" && input.sourceBalance && input.sourceBalance !== resolution.balanceSource) throw new Error(`The selected withdrawal balance conflicts with this account's current ${quote.accountMode} mode (${resolution.balanceSource}).`);
+    const source = resolution.balanceSource === "unknown" ? input.sourceBalance : resolution.balanceSource;
+    quote.sourceDex = source === "unified" ? "spot" : "";
     if (BigInt(protocolFee) > BigInt(fee)) throw new Error("CoreDepositWallet fee observations changed during this quote. Refresh the withdrawal quote.");
     quote.estimatedFeeAtoms = quote.maxFeeAtoms = BigInt(fee).toString();
     quote.protocolFeeAtoms = BigInt(protocolFee).toString(); quote.forwardingFeeAtoms = (BigInt(fee) - BigInt(protocolFee)).toString();
     if (amount <= BigInt(fee)) throw new Error("Withdrawal amount must exceed the current onchain forwarding fee.");
     quote.minimumReceiveAtoms = (amount - BigInt(fee)).toString();
     quote.warnings.push("This withdrawal reduces collateral. Hyperliquid checks available margin when accepting it. The onchain forwarding fee can change before execution.");
-    if (quote.sourceDex === "spot") quote.warnings.push("This account uses unified collateral; withdrawal reads its shared USDC balance. Its account mode will remain unchanged.");
+    if (quote.sourceDex === "spot") quote.warnings.push(resolution.balanceSource === "unknown" ? "This withdrawal uses your explicitly selected shared USDC balance; the current account mode could not be independently resolved." : "This account uses unified collateral; withdrawal reads its shared USDC balance. Its account mode will remain unchanged.");
   }
   return quote;
 }

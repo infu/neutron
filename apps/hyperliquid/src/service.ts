@@ -265,7 +265,7 @@ exposeTool("hl_funding_recover_v1", {
 }));
 
 exposeTool("hl_reconcile_v1", {
-  title: "Reconcile a saved trade or USDC transfer", description: "Check the original operation's retained envelope, Wallet request IDs and venue/chain evidence. Does not create a fresh order, signature or burn. Trade records are browser-local; funding records are durable in this Neutron. The authenticated caller retains its operation ownership.",
+  title: "Reconcile a saved trade or USDC transfer", description: "Check the original operation's retained envelope, Wallet request IDs and venue/chain evidence. Does not create a fresh order, signature or burn. Trade needsReconciliation=true means its outcome or modification's original-order status remains unresolved; accepted is not proof of a fill. Follow the same operationId. Trade records are browser-local; funding records are durable in this Neutron. The authenticated caller retains its operation ownership.",
   inputSchema: input({ operationId, kind: { enum: ["trade", "funding"] } }, ["operationId", "kind"]), outputSchema: resultOutput, annotations: { "neutron:effects": ["read", "write", "network"], "neutron:longRunning": true },
 }, (args, context) => effect(context, async () => {
   if (args.kind === "trade") return result(await (await engine(context, environment(args))).reconcile(String(args.operationId)));

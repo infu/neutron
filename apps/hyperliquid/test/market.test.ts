@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { HyperliquidData, HyperliquidMarketStream, parseMarkets, type MarketStreamEvent } from "../src/market.ts";
+import { HyperliquidData, HyperliquidMarketStream, parseMarkets, type MarketStreamEvent, type SpotState } from "../src/market.ts";
+import { calculateFundingCapacity } from "../src/sizing.ts";
 
 const address = "0x1111111111111111111111111111111111111111";
 const context = { markPx: "100", midPx: "100", oraclePx: "100", funding: "0.0001", openInterest: "1000", dayNtlVlm: "900000", prevDayPx: "90" };
@@ -8,7 +9,7 @@ const summary = { accountValue: "1000", totalMarginUsed: "40", totalNtlPos: "200
 const clearinghouse = { assetPositions: [], marginSummary: summary, crossMarginSummary: summary, crossMaintenanceMarginUsed: "10", withdrawable: "960", time: 1_700_000_000_000 };
 const order = { coin: "BTC", oid: 101, side: "B", limitPx: "100", sz: "1", origSz: "1", timestamp: 1700000000000, reduceOnly: false, isTrigger: false, isPositionTpsl: false, orderType: "Limit", triggerCondition: "N/A", triggerPx: "0" };
 const fill = { coin: "BTC", oid: 101, tid: 11, time: 1700000000000, px: "100", sz: "1", side: "B", startPosition: "0", dir: "Open Long", closedPnl: "0", hash: `0x${"12".repeat(32)}`, crossed: true, fee: "0.04", feeToken: "USDC" };
-const spot = { balances: [{ coin: "USDC", token: 0, total: "1234", hold: "20", entryNtl: "0" }], tokenToAvailableAfterMaintenance: [[0, "1200"]] };
+const spot: SpotState = { balances: [{ coin: "USDC", token: 0, total: "1234", hold: "20", entryNtl: "0" }], tokenToAvailableAfterMaintenance: [[0, "1200"]] };
 const fees = { userCrossRate: "0.0003", userAddRate: "-0.00001" };
 type Handler = (body: Record<string, unknown>, init: RequestInit) => unknown | Response | Promise<unknown | Response>;
 function fetchFixture(handler: Handler): typeof fetch {
@@ -56,9 +57,36 @@ test.each(["unifiedAccount", "portfolioMargin"])("%s uses shared token collatera
   expect(result.warnings.length).toBe(mode === "portfolioMargin" ? 1 : 0);
 });
 test("unresolved default abstraction retains observed sources with an explicit balance warning", async () => {
-  const result = await new HyperliquidData("mainnet", accountFixture("default")).account(address);
+  const result = await new HyperliquidData("mainnet", accountFixture("default", { webData3: new Response("unavailable", { status: 503 }) })).account(address);
   expect(result.abstraction).toBe("default"); expect(result.balanceSource).toBe("unknown"); expect(result.balances).not.toBeNull();
   expect(result.warnings[0]).toContain("must not be added together");
+  expect(result.complete).toBe(false); expect(result.errors.some(error => error.source === "webData3" && error.status === 503)).toBe(true);
+  expect(result.accountModeResolution).toMatchObject({ balanceSource: "unknown", source: "webData3", basis: "unavailable" });
+  expect(result.accountModeResolution?.error).toContain("503");
+});
+test("validated default account uses perps withdrawal Max without an unnecessary spot query", async () => {
+  const requested: string[] = [];
+  const result = await new HyperliquidData("mainnet", accountFixture("default", { webData3: { userState: { user: address, serverTime: clearinghouse.time } } }, requested)).account(address);
+  expect(result.abstraction).toBe("default"); expect(result.balanceSource).toBe("perps"); expect(result.complete).toBe(true);
+  expect(result.balances).toBeNull(); expect(result.warnings).toEqual([]);
+  expect(result.accountModeResolution).toMatchObject({ source: "webData3", basis: "default_account_state", effectiveAbstraction: "default", serverTime: clearinghouse.time });
+  expect(result.observations.find(item => item.source === "webData3")?.serverTime).toBe(clearinghouse.time);
+  expect(requested).toHaveLength(5); expect(requested).not.toContain("spotClearinghouseState");
+  expect(calculateFundingCapacity({ direction: "withdraw" }, { account: result }).maxAmountUsdc).toBe("960");
+});
+test.each(["unifiedAccount", "portfolioMargin"])("default resolves current %s balances and warnings from account state", async mode => {
+  const result = await new HyperliquidData("mainnet", accountFixture("default", { webData3: { userState: { user: address, serverTime: clearinghouse.time, abstraction: mode } } })).account(address);
+  expect(result.abstraction).toBe("default"); expect(result.balanceSource).toBe("unified"); expect(result.complete).toBe(true);
+  expect(result.accountModeResolution?.effectiveAbstraction).toBe(mode);
+  expect(result.balances).toEqual(spot);
+  expect(result.warnings.length).toBe(mode === "portfolioMargin" ? 1 : 0);
+  expect(calculateFundingCapacity({ direction: "withdraw" }, { account: result }).maxAmountUsdc).toBe("1200");
+});
+test.each([{}, { userState: { user: "0x2222222222222222222222222222222222222222", serverTime: 1 } }, { userState: { user: address, serverTime: 1, abstraction: null } }])("invalid secondary account state stays unknown with diagnostics", async webData3 => {
+  const result = await new HyperliquidData("mainnet", accountFixture("default", { webData3 })).account(address);
+  expect(result.complete).toBe(false); expect(result.balanceSource).toBe("unknown");
+  expect(result.accountModeResolution?.error).toBeString(); expect(result.errors.some(error => error.source === "webData3")).toBe(true);
+  expect(calculateFundingCapacity({ direction: "withdraw" }, { account: result }).maxAmountUsdc).toBeNull();
 });
 test("failed account component remains null, partial observations remain useful", async () => {
   const result = await new HyperliquidData("mainnet", accountFixture("disabled", { clearinghouseState: new Response("down", { status: 503 }), userFees: {} })).account(address);

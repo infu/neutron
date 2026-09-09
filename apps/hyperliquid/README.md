@@ -43,6 +43,14 @@ keeps **Check status** available for these failures. Historical prepared or
 signed actions retain their original review, action, nonce and signature;
 reconciliation never upgrades them to a different always-place action.
 
+Trade results and retained activity expose `needsReconciliation`. An accepted
+order acknowledgement can precede its observable outcome; a filled replacement
+can also precede confirmation that its original order was canceled. Follow
+`hl_reconcile_v1` with the original operation ID while that flag is true. The
+active UI status follows up immediately and on its existing refresh interval,
+without signing or resending. Observed resting orders and successful account
+configuration acknowledgements do not trigger acknowledgement polling.
+
 The chart includes candlesticks, volume, timeframe selection and interactive
 inspection. Price/book observations carry timestamps. Chart analysis names its
 indicator windows, excludes unfinished candles, and reports missing data.
@@ -109,10 +117,15 @@ that has already reached Wallet keeps its original bytes through recovery.
 
 Withdrawals use the Wallet's master `sendToEvmWithData` signature and Circle
 forwarding to the same account on Ethereum or Arbitrum. The app reads current
-onchain fees. For an account reporting ambiguous `default` abstraction, the
-caller explicitly selects perps or unified USDC; the app does not guess or
-change account mode. Testnet trading is separate; these funding routes are
-mainnet-only.
+onchain fees. If `userAbstraction` reports `default`, account reads and new
+withdrawal quotes resolve the balance layout from that wallet's `webData3`
+account state, following Hyperliquid's own app. The raw mode remains `default`;
+`accountModeResolution` records the source, effective mode and timestamps.
+This is one direct browser read, with no inference from balance amounts and no
+account-mode change. If that read is unavailable or invalid, the source remains
+unknown and withdrawal quotes require an explicit perps/unified selection.
+Historical signed withdrawals retain their original source and envelope.
+Testnet trading is separate; these funding routes are mainnet-only.
 
 Deposit quotes report `accountMode: null`: selecting the default-perps deposit
 route does not observe or identify the account's balance mode. Withdrawal quotes

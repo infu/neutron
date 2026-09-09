@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { getWalletAddress, signL1Action, type AbstractWallet, type Signature } from "@nktkas/hyperliquid/signing";
 import { HyperliquidData, type AccountSnapshot } from "./market";
 import { calculatePerpFeeRates } from "./fees";
+import { needsTradeReconciliation } from "./trade_progress";
 import { getTradingSigner } from "./trading_key";
 import { IndexedTradingStore, tradingCallerFromScope, tradingScope, withTradingLock, type JournalRecord, type TradingBinding, type TradingCaller, type TradingStore } from "./trading_store";
 
@@ -64,6 +65,8 @@ export interface PublicTradeOperation {
   reconciliation?: { checkedAt: number; errors: string[]; accountState?: unknown };
   modification?: ModificationEvidence;
   canRetryExact: boolean;
+  /** Derived on read, including for legacy journals. Never authorizes a resend. */
+  needsReconciliation?: boolean;
   caller?: TradingCaller;
   ownedByCaller?: boolean;
 }
@@ -135,7 +138,7 @@ async function cloidFor(scope: string, operationId: string, index: number): Prom
   return `0x${Array.from(new Uint8Array(digest).slice(0, 16), byte => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 function publicRecord(record: TradeRecord): PublicTradeOperation {
-  return structuredClone({ operationId: record.operationId, state: record.state, createdAt: record.createdAt, updatedAt: record.updatedAt, intent: record.intent, review: record.review, orders: record.orders, ...(record.message ? { message: record.message } : {}), ...(record.reconciliation ? { reconciliation: record.reconciliation } : {}), ...(record.modification ? { modification: record.modification } : {}), canRetryExact: record.state === "uncertain" && !!record.envelope });
+  return structuredClone({ operationId: record.operationId, state: record.state, createdAt: record.createdAt, updatedAt: record.updatedAt, intent: record.intent, review: record.review, orders: record.orders, ...(record.message ? { message: record.message } : {}), ...(record.reconciliation ? { reconciliation: record.reconciliation } : {}), ...(record.modification ? { modification: record.modification } : {}), needsReconciliation: needsTradeReconciliation(record), canRetryExact: record.state === "uncertain" && !!record.envelope });
 }
 function aggregate(orders: TradeOrderResult[], fallback: TradeState = "accepted"): TradeState {
   if (!orders.length) return fallback;
@@ -424,7 +427,7 @@ export function createTradingEngine(dependencies: TradingDependencies) {
     // lost cancellation request was accepted. Keep the cancellation recoverable.
     if ((record.intent.kind === "cancel" || record.intent.kind === "cancelAll") && record.state === "uncertain" &&
       orders.some(order => ["resting", "accepted", "prepared", "unknown"].includes(order.state) || (order.state === "partial" && ["open", "triggered"].includes(order.venueStatus ?? "")))) state = "uncertain";
-    let message = state === "uncertain" ? "The venue has not conclusively resolved this request. Inspect its evidence or explicitly retry the retained signed request; do not create a new operation to retry it." : orders.find(order => order.error)?.error ?? (state === "partial" ? "The order partially filled. Inspect the venue status to see whether any remainder is still open." : `Venue status: ${state}.`);
+    let message = state === "uncertain" ? "The venue has not conclusively resolved this request. Inspect its evidence or explicitly retry the retained signed request; do not create a new operation to retry it." : state === "accepted" && orders.length ? "Hyperliquid acknowledged the request, but the order outcome is not confirmed yet. Reconcile this operation ID; do not submit a new request to recover it." : orders.find(order => order.error)?.error ?? (state === "partial" ? "The order partially filled. Inspect the venue status to see whether any remainder is still open." : `Venue status: ${state}.`);
     let modification: ModificationEvidence | undefined;
     if (original && originalId !== undefined) {
       const live = (order: TradeOrderResult): boolean | null => {
