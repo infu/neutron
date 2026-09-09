@@ -232,12 +232,14 @@ function App() {
   const market = marketRead.data;
   const currentSelection = selection?.reserve && market ? { ...selection, reserve: market.reserves.find((asset) => asset.address === selection.reserve!.address) ?? selection.reserve } : selection;
   const [history, setHistory] = useState<Activity[]>([]), [nextCursor, setNextCursor] = useState<string | null>(null), [historyError, setHistoryError] = useState(""), [historyLoading, setHistoryLoading] = useState(false);
-  const historyScope = useRef(0);
+  const historyScope = useRef(0), historyController = useRef<AbortController | null>(null);
   async function loadHistory(cursor: string | null = null) {
+    historyController.current?.abort();
+    const controller = new AbortController(); historyController.current = controller;
     const sequence = ++historyScope.current, execution = executionScope.current; setHistoryLoading(true); setHistoryError("");
     try {
-      const result = await invoke<{ rowsJson: string; nextCursor: string | null }>("aave_history_v1", { cursor });
-      if (sequence !== historyScope.current) return;
+      const result = await invoke<{ rowsJson: string; nextCursor: string | null }>("aave_history_v1", { cursor }, controller.signal);
+      if (controller.signal.aborted || sequence !== historyScope.current) return;
       const rows = JSON.parse(result.rowsJson) as Activity[];
       if (!executing.current && execution === executionScope.current) setActive((old) => {
         if (!old || executing.current || execution !== executionScope.current) return old;
@@ -245,10 +247,16 @@ function App() {
         return current ? { result: current.result, input: current.input, humanOwned: current.humanOwned } : old;
       });
       setHistory((old) => cursor ? [...old, ...rows.filter((row) => !old.some((existing) => existing.id === row.id))] : rows); setNextCursor(result.nextCursor);
-    } catch (reason) { if (sequence === historyScope.current) setHistoryError(message(reason)); }
-    finally { if (sequence === historyScope.current) setHistoryLoading(false); }
+    } catch (reason) { if (!controller.signal.aborted && sequence === historyScope.current) setHistoryError(message(reason)); }
+    finally {
+      if (!controller.signal.aborted && sequence === historyScope.current) setHistoryLoading(false);
+      if (historyController.current === controller) historyController.current = null;
+    }
   }
-  useEffect(() => { void loadHistory(); }, [refresh]);
+  useEffect(() => {
+    void loadHistory();
+    return () => { historyScope.current++; historyController.current?.abort(); historyController.current = null; };
+  }, [refresh]);
   useEffect(() => { const timer = setInterval(() => { if (!busy && document.visibilityState === "visible") setTick((value) => value + 1); }, 30000); return () => clearInterval(timer); }, [busy]);
   useEffect(() => {
     if (!busy || !active) return;

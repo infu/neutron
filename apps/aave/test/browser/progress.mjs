@@ -17,9 +17,9 @@ async function installFixture(page) {
     const complete = { ...pending, state: 'complete', phase: 'complete', transactionHash: '0x' + '55'.repeat(32), steps: [{ label: 'Supply USDC', status: 'confirmed', transactionHash: '0x' + '55'.repeat(32) }], message: 'The final supply transaction completed successfully.' };
     const fixture = window.progressFixture = {
       mode: 'setup', pending, complete, row: { id, created_at: '1', result: pending, input, humanOwned: true },
-      calls: [], historyCount: 0, histories: {}, statuses: [], continuation: null,
+      calls: [], historyCount: 0, histories: {}, historySignals: {}, statuses: [], continuation: null,
     };
-    window.progressCall = ({ name, arguments: args }) => {
+    window.progressCall = ({ name, arguments: args }, options) => {
       fixture.calls.push(name);
       if (name === 'evm_accounts_v1') return Promise.resolve({ accounts: [account] });
       if (name === 'evm_balances_v1') return Promise.resolve({ ...args, address: account.address, nativeBalanceWei: '2000000000000000000', tokens: [], blockNumber: '25922607', observedAtNs: String(BigInt(Date.now()) * 1_000_000n), completeness: 'requested_only' });
@@ -27,6 +27,7 @@ async function installFixture(page) {
       if (name === 'aave_markets_v1') return Promise.reject(new Error('Market observations are temporarily unavailable.'));
       if (name === 'aave_history_v1') {
         const index = ++fixture.historyCount;
+        fixture.historySignals[index] = options?.signal;
         const snapshot = { rowsJson: JSON.stringify([fixture.row]), nextCursor: null };
         if (fixture.mode === 'setup' || fixture.mode === 'external') return Promise.resolve(snapshot);
         return new Promise(resolve => { fixture.histories[index] = { snapshot, resolve }; });
@@ -58,7 +59,7 @@ async function confirmedObservation(page) {
 /** Reuses the caller's browser and returns checkpoint names for its report.
  * Writes progress-report.json under artifacts; always closes owned pages/server. */
 export async function runProgressChecks({ app, browser, artifacts }) {
-  const transport = 'export const callTool = (call) => window.progressCall(call); export const querySelf = () => { throw new Error("Unexpected direct self query"); }; export const updateSelf = () => { throw new Error("Unexpected direct self update"); };';
+  const transport = 'export const callTool = (call, options) => window.progressCall(call, options); export const querySelf = () => { throw new Error("Unexpected direct self query"); }; export const updateSelf = () => { throw new Error("Unexpected direct self update"); };';
   const bundle = await build({
     absWorkingDir: app, entryPoints: ['src/main.tsx'], bundle: true, write: false, format: 'iife', jsx: 'automatic', outdir: resolve(artifacts, 'progress-build'),
     plugins: [{ name: 'progress-transport', setup(b) {
@@ -76,7 +77,7 @@ export async function runProgressChecks({ app, browser, artifacts }) {
   const url = 'http://127.0.0.1:' + server.address().port;
   const checks = [], observations = [];
   try {
-    for (const mode of ['external', 'history', 'status']) {
+    for (const mode of ['external', 'history', 'status', 'cancel_history']) {
       const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
       const errors = [], externalRequests = [];
       page.setDefaultTimeout(15_000);
@@ -89,7 +90,20 @@ export async function runProgressChecks({ app, browser, artifacts }) {
         await installFixture(page);
         await openPendingActivity(page, url);
         await page.evaluate(mode => { window.progressFixture.mode = mode; }, mode);
-        if (mode === 'external') {
+        if (mode === 'cancel_history') {
+          await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+          await page.waitForFunction(() => !!window.progressFixture.histories[3]);
+          await page.evaluate(() => { const fixture = window.progressFixture; fixture.row = { ...fixture.row, result: fixture.complete }; });
+          await page.getByRole('button', { name: 'Refresh wallet and markets', exact: true }).click();
+          await page.waitForFunction(() => !!window.progressFixture.histories[4]);
+          assert.equal(await page.evaluate(() => window.progressFixture.historySignals[3]?.aborted), true, 'Superseded history stops requesting more records');
+          assert.equal(await page.evaluate(() => window.progressFixture.historySignals[4]?.aborted), false, 'The replacement history keeps its own live signal');
+          await page.evaluate(() => { const fixture = window.progressFixture; fixture.histories[4].resolve(fixture.histories[4].snapshot); });
+          await page.getByRole('region', { name: 'Transaction progress', exact: true }).getByText('Confirmed', { exact: true }).waitFor();
+          await page.evaluate(() => { const fixture = window.progressFixture; fixture.histories[3].resolve(fixture.histories[3].snapshot); });
+          assert.equal(await page.evaluate(() => window.progressFixture.calls.some(name => name === 'aave_execute_v1' || name === 'aave_continue_v1')), false, 'Refreshing history performs no financial continuation');
+          checks.push('Replacing a history read aborts its signal and ignores its late result while preserving fresh completed progress');
+        } else if (mode === 'external') {
           await page.evaluate(() => { const fixture = window.progressFixture; fixture.row = { ...fixture.row, result: fixture.complete }; });
           await page.getByRole('button', { name: 'Refresh', exact: true }).click();
           await page.waitForFunction(() => window.progressFixture.historyCount === 3 && !document.querySelector('section[aria-label="Activity"] .av-loading'));

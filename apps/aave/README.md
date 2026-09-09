@@ -99,6 +99,12 @@ recover already approved signed transactions through Wallet. It does not request
 a new approval or signature. Reorganizations and transaction replacements remain
 observable.
 
+Activity reads load saved operations in sequence and reuse each journal record
+within the current page request. This avoids exhausting message-bus attachment
+capacity with simultaneous reads. Refreshing or leaving the app cancels the
+superseded history read; late responses cannot replace newer progress. The full
+requested page and its cursor remain available, including linked attempts.
+
 The managed `aave@1` operation journal retains its released schema and lock
 lineage. Release tests cover clean initialization, populated-root restoration
 and non-destructive upgrade plans from published predecessor archives. EVM

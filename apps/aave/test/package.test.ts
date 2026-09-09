@@ -31,17 +31,19 @@ test.each([
   ["0.1.2", 102, "7152ac8ea66148365ddee7f9f4a365420aa3aa05f0e92b2228bc33b945e45bfa"],
   ["0.1.3", 103, "c285f355e71809ef2639af3c6579dff65b3aef907582866fdbeb3b328b4b9ce6"],
   ["0.1.4", 104, "495ca12c5765f444ccbaa5cc28e7475d549a39740401cc369088d6804e49fbb5"],
-] as const)("release 105 keeps production %s journal, lineage and full backend closure", async (version, packedVersion, digest) => {
+  ["0.1.5", 105, "307f71c9e9ad40afa9fcbc9074244738c23de81669665520da199690b952d50a"],
+] as const)("release 106 keeps production %s journal, lineage and full backend closure", async (version, packedVersion, digest) => {
   const previousBytes = await readFile(new URL(`../aave.v${version}.neutron`, import.meta.url));
   if (packedVersion === 103) expect(previousBytes.byteLength).toBe(312_540);
   if (packedVersion === 104) expect(previousBytes.byteLength).toBe(315_730);
+  if (packedVersion === 105) expect(previousBytes.byteLength).toBe(315_955);
   expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(digest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../aave.v0.1.5.neutron", import.meta.url)));
+  const files = unpackNeutronPackage(await readFile(new URL("../aave.v0.1.6.neutron", import.meta.url)));
   const manifest = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8"));
   expect(validate_neutron_conf(manifest).errors).toEqual([]);
-  expect(manifest).toMatchObject({ id: "aave", version: 105, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "aave", version: 105 });
+  expect(manifest).toMatchObject({ id: "aave", version: 106, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "aave", version: 106 });
   expect(Object.keys(files)).toEqual(expect.arrayContaining(["web/index.html", "web/main.js", "web/main.css", "web/service.html", "web/service.js", "web/static/icon.svg"]));
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!)), next = JSON.parse(decode(files["neutron.json"]!));
@@ -58,7 +60,7 @@ test.each([
   for (const path of modules) expect(files[path]).toEqual(previous[path]);
   const schema = JSON.parse(decode(files["schema.json"]!)), priorSchema = JSON.parse(decode(previous["schema.json"]!));
   expect(schema).toEqual(generateAppMethodSchemaArtifact(manifest, await readFile(new URL("../backend/main.mo", import.meta.url), "utf8")));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Aave", version: 105 } });
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Aave", version: 106 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, aave: next });
   expect(clean.upgrades).toEqual([{ kind: "initialize", owner: "aave", memoryId: "aave", to: 1 }]);
