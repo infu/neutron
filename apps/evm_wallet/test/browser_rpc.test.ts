@@ -18,20 +18,23 @@ function fixture(reply: (call: Call) => unknown | Promise<unknown> = () => "0x20
   return { calls, fetch, rpc: createBrowserEvmRpc({ fetch }) };
 }
 
-test("browser RPC uses one direct provider, verifies its chain once and preserves exact hex quantities", async () => {
+test("browser RPC uses the public Ethereum endpoint without credentials and preserves exact state blocks", async () => {
   const { rpc, calls } = fixture();
   const [first, second] = await Promise.all([
     rpc.request("1", "eth_getBalance", ["0x1234", "0x100"]),
     rpc.request(1n, "eth_getTransactionCount", ["0x1234", "pending"]),
+    rpc.request(1, "eth_call", [{ to: "0x1234", data: "0xab" }, "0x100"]),
   ]);
   expect(first).toBe("0x20000000000001");
   expect(second).toBe("0x20000000000001");
   expect(await rpc.request<string>(1, "eth_chainId")).toBe("0x1");
-  expect(calls.map((call) => call.body.method)).toEqual(["eth_chainId", "eth_getBalance", "eth_getTransactionCount"]);
+  expect(calls.map((call) => call.body.method)).toEqual(["eth_chainId", "eth_getBalance", "eth_getTransactionCount", "eth_call"]);
   expect(calls[1]!.body.params).toEqual(["0x1234", "0x100"]);
+  expect(calls[3]!.body.params).toEqual([{ to: "0x1234", data: "0xab" }, "0x100"]);
   expect(new Set(calls.map((call) => call.body.id)).size).toBe(calls.length);
   for (const call of calls) {
     expect(call.url).toBe(DEFAULT_EVM_RPC_ENDPOINTS["1"]!);
+    expect(call.url).toBe("https://eth.drpc.org");
     expect(call.init).toMatchObject({ method: "POST", mode: "cors", credentials: "omit", headers: { "Content-Type": "application/json" } });
     expect(call.init.signal).toBeInstanceOf(AbortSignal);
     expect(Array.isArray(JSON.parse(String(call.init.body)))).toBe(false);

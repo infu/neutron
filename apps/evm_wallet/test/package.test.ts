@@ -107,7 +107,7 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 124,
+    version: 125,
     update_source: "233tv-xiaaa-aaaay-aacta-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -548,13 +548,14 @@ for (const [previousVersion, previousDigest] of [
   [121, "b873d917802af4b7e6eb88943fefba0f3e6d9c197623216702794b33d8112633"],
   [122, "912483c56c7d3a53bd21d443cc281e50d6ba7ac596b035731687b77f790d6094"],
   [123, "fca86793ba415220f6920cb55072b6a3b8afeeddb787a10a2aea469f1e671b22"],
-] as const) test(`release 124 retains every production root, schema closure, lineage and existing method contract from ${previousVersion}`, async () => {
+  [124, "34f6b07888c87fd0ec90b2b74daf51b2fd9264520e7c526e83b3cb7db88cba96"],
+] as const) test(`release 125 retains every production root, schema closure, lineage and existing method contract from ${previousVersion}`, async () => {
   const previousBytes = await readFile(new URL(`../evm_wallet.v0.1.${previousVersion - 100}.neutron`, import.meta.url));
   // The published predecessor is immutable; this code-only release adds no Wallet migration.
   expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(previousDigest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.24.neutron", import.meta.url)));
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 124 });
+  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.25.neutron", import.meta.url)));
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 125 });
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!));
   const next = JSON.parse(decode(files["neutron.json"]!));
@@ -583,8 +584,8 @@ for (const [previousVersion, previousDigest] of [
   expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
   const { evm_wallet_preparation_error_browser_v1: preparationError, ...retainedMethods } = schema.methods;
   expect(preparationError).toBeDefined();
-  expect({ ...schema, methods: previousVersion >= 123 ? schema.methods : retainedMethods }).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 124 } });
-  if (previousVersion === 123) {
+  expect({ ...schema, methods: previousVersion >= 123 ? schema.methods : retainedMethods }).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 125 } });
+  if (previousVersion >= 123) {
     expect(next.entry).toBe(old.entry);
     for (const path of Object.keys(previous).filter(path => path.startsWith("mo/"))) expect(files[path]).toEqual(previous[path]);
   }
