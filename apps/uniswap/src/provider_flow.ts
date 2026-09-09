@@ -79,6 +79,21 @@ function waitForReceipt(signal?: AbortSignal): Promise<void> {
   });
 }
 export function providerSwapResult(input: ProviderSwapInput, record: SwapRecord | null, state: ProviderSwapResult["state"], message: string): ProviderSwapResult {
+  const swap = record ? effectiveOperation(record, "swap") : null;
+  const approval = record ? effectiveOperation(record, "approval") : null;
+  if (swap?.status === "confirmed" && swap.receipt?.status === "success") {
+    state = "complete";
+    message = `Swap succeeded in block ${swap.receipt.blockNumber}. Receipt finality: ${swap.receipt.finality}.`;
+  } else {
+    // Submitted swap evidence takes precedence over an older approval snapshot.
+    const current = swap && !["preparing", "prepared"].includes(swap.status) ? swap : approval;
+    if (current && ["rejected", "reverted", "failed", "replaced"].includes(current.status)) {
+      state = "stopped";
+      message = current.receipt?.status === "reverted"
+        ? `Transaction reverted in block ${current.receipt.blockNumber}. Receipt finality: ${current.receipt.finality}.`
+        : current.message ?? `The saved Wallet request is ${current.status}. Approval alone does not complete the swap.`;
+    }
+  }
   return {
     flowId: input.swapId, swapId: record?.id ?? null, state, phase: record?.phase ?? "quoting",
     transactionHash: record ? effectiveOperation(record, "swap")?.transactionHash ?? null : null,
@@ -195,7 +210,7 @@ export async function runProviderSwap(wallet: EvmWalletClient, store: Store, inp
       // consumer one recoverable flow, even when the transport returned an error.
       if (record!.phase === `${stage}_requested`) {
         const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
-        if (code === "AGENT_CONSENT_DENIED" || code === "AGENT_MODE_REVOKED") return providerSwapResult(input, record, "stopped", `Wallet authorization was declined or revoked. The saved request remains intact. ${error instanceof Error ? error.message : String(error)}`);
+        if (code === "AGENT_CONSENT_DENIED" || code === "AGENT_MODE_REVOKED") return providerSwapResult(input, record, "pending", `Wallet authorization was declined or revoked (${code}) for request ${requestId}. This does not establish an unsigned or rejected Wallet outcome. The exact dispatch remains unresolved in this legacy journal; reconcile the original request and do not create another swap. ${error instanceof Error ? error.message : String(error)}`);
         return providerSwapResult(input, record, "pending", `The Wallet call did not return a complete result. Retry uniswap_swap_v1 with the same swapId and original arguments to reconcile its exact saved request before any further action. ${error instanceof Error ? error.message : String(error)}`);
       }
       throw error;

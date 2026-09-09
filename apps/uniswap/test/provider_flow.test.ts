@@ -5,7 +5,7 @@ import type {
   EvmSendTransactionRequest, EvmWalletClient,
 } from "neutron-tools/evm_wallet";
 import { createSwapStore, savedIntent, type SavedIntent, type SwapRecord } from "../src/controller.ts";
-import { parseProviderSwapInput, providerAttemptId, runProviderSwap } from "../src/provider_flow.ts";
+import { parseProviderSwapInput, providerAttemptId, providerSwapResult, runProviderSwap } from "../src/provider_flow.ts";
 import { defaultTokens, prepareSwap, QUOTER, ROUTER, TOKEN_ABI, type Quote } from "../src/swap.ts";
 
 const address = getAddress("0x1111111111111111111111111111111111111111");
@@ -108,6 +108,27 @@ test("one provider call persists exact public Wallet approvals and waits for bot
   expect(JSON.parse(record.approval_request_json!)).toEqual(f.sends[0]);
   expect(JSON.parse(record.swap_request_json)).toEqual(f.sends[1]);
   expect(record.phase).toBe("swap_confirmed"); expect(savedIntent(record).executionMode).toBe("provider");
+});
+
+test("legacy tracking-pause summaries preserve successful and reverted receipt outcomes", async () => {
+  const f = fixture(); await f.run();
+  const saved = f.records.get(input.swapId)!;
+  const completed = providerSwapResult(input, saved, "pending", "Tracking paused");
+  expect(completed.state).toBe("complete"); expect(completed.message).toContain(receipt.blockNumber);
+  const failedOperation = { ...JSON.parse(saved.swap_operation_json!), status: "reverted", message: "Awaiting receipt", receipt: { ...receipt, status: "reverted" } };
+  const reverted = providerSwapResult(input, { ...saved, phase: "swap_reverted", swap_operation_json: JSON.stringify(failedOperation) }, "pending", "Tracking paused");
+  expect(reverted.state).toBe("stopped"); expect(reverted.message).toContain("reverted"); expect(reverted.message).not.toContain("Awaiting");
+  const approvalOnly = providerSwapResult(input, { ...saved, phase: "approval_confirmed", swap_operation_json: null }, "pending", "Tracking paused");
+  expect(approvalOnly.state).toBe("pending");
+});
+
+test.each(["AGENT_CONSENT_DENIED", "AGENT_MODE_REVOKED"])("legacy %s errors never invent a rejected Wallet operation", async code => {
+  const f = fixture();
+  f.sendWith(async () => { throw Object.assign(new Error("Review interrupted"), { code }); });
+  const result = await f.run(), saved = f.records.get(input.swapId)!;
+  expect(result.state).toBe("pending"); expect(result.message).toContain("does not establish an unsigned or rejected");
+  expect(result.message).toContain(f.sends[0]!.requestId); expect(saved.phase).toBe("approval_requested");
+  expect(saved.approval_operation_json).toBeNull(); expect(saved.swap_operation_json).toBeNull(); expect(f.sends).toHaveLength(1);
 });
 
 test("an expired approved 3 USDC quote creates one immutable successor and resumes that successor without approving again", async () => {

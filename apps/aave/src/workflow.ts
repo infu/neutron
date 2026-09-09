@@ -102,6 +102,14 @@ export function resultOf(record: RecordRow, override?: Result["state"], message?
     message: message ?? description,
     steps: views.map((view, i) => ({ ...view, label: saved.plan.steps[i]!.label })) };
 }
+/** Tracking can stop after the final observation has already been saved. A
+ * transport deadline does not make a confirmed receipt or rejection pending. */
+export function trackingPausedResult(record: RecordRow): Result {
+  const result = resultOf(record);
+  return result.state === "complete" || result.state === "stopped" ? result : {
+    ...result, state: "pending", message: "Tracking paused. Continue this same operation ID; an interrupted reply does not mean the transaction failed.",
+  };
+}
 export async function latestRecord(store: Store, id: string): Promise<RecordRow | null> {
   let row = await store.get(id);
   while (row) {

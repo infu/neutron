@@ -212,6 +212,83 @@ export function verifyDestinationReceipt(raw: unknown, message: MatchedCctpMessa
   if (!hasTransfer(value, input.usdc, ZERO, input.recipient, net)) return null;
   return { transactionHash: value.transactionHash as string, blockNumber: uint(value.blockNumber).toString(), deliveredAtoms: net.toString(), nonce: message.nonce, finality: "included" };
 }
+
+export type WithdrawalDestinationEvidenceIntent = {
+  messageTransmitter: string; tokenMessenger: string; usdc: string; burnToken: string;
+  coreDepositWallet: string; owner: string; recipient: string; nonce: string | number; amountAtoms: string;
+  transactionHash?: string;
+};
+export type WithdrawalDestinationEvidence = DestinationMintEvidence & {
+  proofKind: "cctp_withdrawal_destination_receipt"; sourceDomain: 19;
+  amountAtoms: string; maxFeeAtoms: string; feeExecutedAtoms: string; coreNonce: string;
+};
+
+/**
+ * Prove a withdrawal from its authenticated destination receipt when HyperEVM
+ * RPC omits the system transaction. MessageReceived authenticates the source
+ * domain/sender and BurnMessageV2 body. CoreDepositWallet puts the exact signed
+ * owner/nonce into that body, independently of the unavailable source hash.
+ * No unobserved CCTP header or source transaction is reconstructed here.
+ */
+export function verifyWithdrawalDestinationReceipt(raw: unknown, input: WithdrawalDestinationEvidenceIntent): WithdrawalDestinationEvidence | null {
+  const value = receipt(raw, input.transactionHash);
+  if (!value) return null;
+  let block: bigint;
+  try {
+    block = uint(value.blockNumber);
+    if ((value.logs as unknown[]).some((item) => {
+      const log = obj(item)!;
+      return log.blockNumber !== undefined && uint(log.blockNumber) !== block
+        || log.blockHash !== undefined && value.blockHash !== undefined && !same(log.blockHash, value.blockHash);
+    })) return null;
+  } catch { return null; }
+  const expectedAmount = uint(input.amountAtoms), expectedHook = withdrawalHook(input.owner, input.nonce);
+  const matches: { proof: WithdrawalDestinationEvidence; identity: string }[] = [];
+  for (const log of value.logs as unknown[]) {
+    const event = decoded(log, input.messageTransmitter, "MessageReceived");
+    if (!event || uint(event.sourceDomain) !== 19n || !same(event.sender, evidenceAddressWord(input.tokenMessenger)) || uint(event.finalityThresholdExecuted) < 2000n) continue;
+    try {
+      // BurnMessageV2 fixed body: version(4), then seven bytes32 fields;
+      // optional hook data follows at byte 228. Read these observed bytes only.
+      const body = hex(event.messageBody);
+      if ((body.length - 2) / 2 < 228) continue;
+      const at = (offset: number, length?: number): Hex => `0x${body.slice(2 + offset * 2, length === undefined ? undefined : 2 + (offset + length) * 2)}`;
+      if (uint(at(0, 4)) !== 1n || !same(at(4, 32), evidenceAddressWord(input.burnToken)) || !same(at(36, 32), evidenceAddressWord(input.recipient)) || !same(at(100, 32), evidenceAddressWord(input.coreDepositWallet)) || !same(at(228), expectedHook)) continue;
+      const amount = uint(at(68, 32)), maxFee = uint(at(132, 32)), fee = uint(at(164, 32));
+      if (amount !== expectedAmount || fee > maxFee || maxFee >= amount) continue;
+      const net = amount - fee;
+      if (!hasTransfer(value, input.usdc, ZERO, input.recipient, net)) continue;
+      const proof: WithdrawalDestinationEvidence = {
+        transactionHash: value.transactionHash as string, blockNumber: block.toString(), deliveredAtoms: net.toString(),
+        nonce: hex(event.nonce, 32), finality: "included", proofKind: "cctp_withdrawal_destination_receipt", sourceDomain: 19,
+        amountAtoms: amount.toString(), maxFeeAtoms: maxFee.toString(), feeExecutedAtoms: fee.toString(), coreNonce: uint(input.nonce).toString(),
+      };
+      matches.push({ proof, identity: `${proof.nonce}:${uint(event.finalityThresholdExecuted)}:${body}` });
+    } catch { /* Malformed or unrelated bodies are not withdrawal evidence. */ }
+  }
+  return unique(matches, (match) => match.identity)?.proof ?? null;
+}
+
+/** Bounded native-USDC mint discovery; these logs are candidates, never proof. */
+export function withdrawalDestinationMintFilter(input: { usdc: string; recipient: string; fromBlock: string; toBlock?: string }) {
+  return {
+    address: hex(input.usdc, 20), fromBlock: `0x${uint(input.fromBlock).toString(16)}`,
+    toBlock: input.toBlock === undefined ? "latest" : `0x${uint(input.toBlock).toString(16)}`,
+    topics: encodeEventTopics({ abi: events, eventName: "Transfer", args: { from: ZERO as Hex, to: hex(input.recipient, 20) } }),
+  };
+}
+/** A fee changes the mint amount; verify the exact authenticated fee afterward. */
+export function withdrawalDestinationMintHashes(raw: unknown, input: { usdc: string; recipient: string; amountAtoms: string }): string[] {
+  if (!Array.isArray(raw)) throw new Error("Invalid withdrawal destination mint log response.");
+  const gross = uint(input.amountAtoms), hashes = new Set<string>();
+  for (const item of raw) {
+    const event = decoded(item, input.usdc, "Transfer");
+    if (!event || !same(event.from, ZERO) || !same(event.to, input.recipient) || uint(event.value) <= 0n || uint(event.value) > gross) continue;
+    const hash = obj(item)?.transactionHash;
+    if (typeof hash === "string" && HASH.test(hash)) hashes.add(hash.toLowerCase());
+  }
+  return [...hashes];
+}
 export type CoreForwardEvidence = DestinationMintEvidence & { phase: "forwarded_to_core"; coreAmountAtoms: string; coreExecutionProven: false };
 /** A successful EVM forward queues CoreWriter; Core execution is a later step. */
 export function verifyCoreForwardReceipt(raw: unknown, message: MatchedCctpMessage, input: { messageTransmitter: string; usdc: string; forwarder: string; coreDepositWallet: string; owner: string; allowDiscoveredReceipt?: boolean }): CoreForwardEvidence | null {

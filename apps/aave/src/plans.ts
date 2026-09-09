@@ -1,4 +1,4 @@
-import { getAddress, type Address } from "viem";
+import { formatUnits, getAddress, type Address } from "viem";
 import type { EvmAccount, EvmEstimateTransactionResult, EvmWalletClient } from "neutron-tools/evm_wallet";
 import { call, chain, CHAINS, EFFECTS, encode, MAX_UINT256, TOKEN_ALLOWANCE, TOKEN_APPROVE, uint, WAD, walletReader, ZERO, type AccountPosition, type ChainId, type EMode, type Market, type Reader, type Reserve, type Token, type Transaction } from "./contracts.ts";
 import { errorMessage, readBatch, readMarket } from "./markets.ts";
@@ -109,7 +109,7 @@ export async function quotePlan(read: Reader, account: EvmAccount, raw: Input, o
     summary = `Supply ${token.symbol}`; inputs.push({ token, amount: amount.toString() });
   } else if (input.kind === "withdraw" && reserve && next && token) {
     amount = input.all ? BigInt(reserve.supplied) : amount;
-    if (!amount || amount > BigInt(reserve.supplied)) throw new Error("Withdraw an amount within your supplied balance.");
+    if (!amount || amount > BigInt(reserve.supplied)) throw new Error(`Withdraw an amount within your supplied balance (currently ${formatUnits(BigInt(reserve.supplied), reserve.decimals)} ${reserve.symbol} at block ${block}). Use the current balance or choose a full withdrawal.`);
     if (amount > BigInt(reserve.availableLiquidity)) throw new Error("This amount exceeds the reserve's currently available liquidity.");
     next.supplied = (BigInt(next.supplied) - amount).toString(); if (next.supplied === "0") next.collateralEnabled = false;
     if (input.useNative) {

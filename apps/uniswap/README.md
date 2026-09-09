@@ -195,6 +195,25 @@ each checked step. A dispatched request with no saved hash remains explicitly
 unknown; use the original invocation for an explicit continuation. The compact
 status tool remains a stored observation and does not itself refresh receipts.
 
+Authorization errors received while the invocation can still save its journal
+are retained separately from Wallet execution evidence in the existing action
+JSON. A denied or revoked review stops automatic continuation
+of a unified swap/liquidity plan, but its step can remain `unknown`: the error alone does not prove
+that another invocation never signed the same request. Execute, status and
+reconciliation retain the same explanation. A later authenticated Wallet or
+chain observation takes precedence for execution status. Set
+`includeAuthorization:true` on `uniswap_action_reconcile_v1` to include each
+step's `authorizationFailure` request ID, code and reason; without the option,
+the published response shape stays unchanged. Historical records that never
+saved the failure, including a whole invocation revoked before it could save,
+cannot recover it from an absent hash or a report: they remain unknown until
+actual Wallet evidence resolves them. Never recreate a declined
+plan or replay a transaction to repair its journal.
+The older `uniswap_swap_v1` journal retains only the unresolved dispatch when no
+Wallet result arrives; its authorization-error response therefore remains
+pending rather than inventing a rejected operation. Its tracking-pause summary
+also preserves any already verified terminal Wallet outcome.
+
 Before the first dispatch of a V3 increase or V4 collect, after any approvals have confirmed,
 the app requests a fresh full-transaction Wallet gas estimate and adds 100,000 gas
 to Wallet's proposed limit. Fee accrual and pool storage changes can exceed a

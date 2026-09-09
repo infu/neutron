@@ -57,7 +57,7 @@ function independentForwarder(f: ReturnType<typeof fixture>) {
   const w = evidenceAddressWord, chain = FUNDING_CHAINS[f.input.chainId], zero = `0x${"0".repeat(40)}`;
   const wire = () => concatHex([
     n(1, 4), n(deposit ? chain.domain : 19, 4), n(deposit ? 19 : chain.domain, 4), nonce,
-    w(CCTP.tokenMessenger), w(CCTP.tokenMessenger), w(deposit ? CCTP.forwarder : zero), n(1000, 4), n(1000, 4),
+    w(CCTP.tokenMessenger), w(CCTP.tokenMessenger), w(deposit ? CCTP.forwarder : zero), n(deposit ? 1000 : 2000, 4), n(deposit ? 1000 : 2000, 4),
     n(1, 4), w(deposit ? chain.usdc : CCTP.hyperEvmUsdc), w(wrongRecipient ? CCTP.coreDepositWallet : deposit ? CCTP.forwarder : owner), n(10000000n, 32), w(deposit ? owner : CCTP.coreDepositWallet),
     n(BigInt(state().quote.maxFeeAtoms), 32), n(200000n, 32), n(expiration, 32), deposit ? forwardHook(owner) : withdrawalHook(owner, state().withdrawal!.nonce),
   ]);
@@ -65,7 +65,7 @@ function independentForwarder(f: ReturnType<typeof fixture>) {
   const burn = () => log("event CrossChainWithdraw(address indexed from, bytes32 indexed to, uint256 value, uint32 destinationDomain, uint64 indexed coreNonce)", { from: owner, to: w(owner), coreNonce: BigInt(state().withdrawal!.nonce) }, ["uint256", "uint32"], [10000000n, chain.domain], CCTP.coreDepositWallet, sourceHash());
   const destinationLogs = () => {
     const decoded = decodeCctpMessage(wire());
-    const received = log("event MessageReceived(address indexed caller, uint32 sourceDomain, bytes32 indexed nonce, bytes32 sender, uint32 indexed finalityThresholdExecuted, bytes messageBody)", { caller: CCTP.forwarder, nonce, finalityThresholdExecuted: 1000 }, ["uint32", "bytes32", "bytes"], [decoded.sourceDomain, decoded.sender, decoded.messageBody], CCTP.messageTransmitter);
+    const received = log("event MessageReceived(address indexed caller, uint32 sourceDomain, bytes32 indexed nonce, bytes32 sender, uint32 indexed finalityThresholdExecuted, bytes messageBody)", { caller: CCTP.forwarder, nonce, finalityThresholdExecuted: deposit ? 1000 : 2000 }, ["uint32", "bytes32", "bytes"], [decoded.sourceDomain, decoded.sender, decoded.messageBody], CCTP.messageTransmitter);
     const minted = log("event Transfer(address indexed from, address indexed to, uint256 value)", { from: zero, to: deposit ? CCTP.forwarder : owner }, ["uint256"], [9800000n], deposit ? CCTP.hyperEvmUsdc : chain.usdc);
     return deposit ? [received, minted,
       log("event Transfer(address indexed from, address indexed to, uint256 value)", { from: CCTP.forwarder, to: CCTP.coreDepositWallet }, ["uint256"], [9800000n], CCTP.hyperEvmUsdc),
@@ -178,8 +178,102 @@ test("browser closure after withdrawal submission reconciles its original burn a
   f.rows.set(id, structuredClone(f.rows.get(id)!)); forwarder.advance("received");
   const result = await f.run({ transport: forwarder.transport, observe: observeFunding });
   expect(result.state).toBe("complete"); expect(result.receivedUsdc).toBe("9.8");
-  expect(result.sourceTransactionHash).toBe(forwarder.sourceHash()); expect(result.destinationTransactionHash).toBe(forwarder.destinationHash);
+  expect(result.sourceTransactionHash).toBeNull(); expect(result.destinationTransactionHash).toBe(forwarder.destinationHash);
   expect(f.posts).toEqual([envelope]); expect(f.sends).toHaveLength(1);
+});
+test("a withdrawal with a lost exchange reply completes from its destination receipt when source system receipts are hidden", async () => {
+  const f = fixture("withdraw"), forwarder = independentForwarder(f);
+  f.setExchange(async () => { throw Error("Exchange reply lost after acceptance"); });
+  await f.run();
+  const signed = structuredClone(fundingState(f.rows.get(id)!).envelope);
+  f.rows.set(id, structuredClone(f.rows.get(id)!));
+  forwarder.advance("received"); forwarder.setSourceVisible(false);
+  const reads: string[] = [];
+  const transport: FundingTransport = { ...forwarder.transport, async rpc(url, method, params, signal) {
+    expect(url).toBe(FUNDING_CHAINS["1"].rpc);
+    reads.push(method);
+    return forwarder.transport.rpc(url, method, params, signal);
+  } };
+  const result = await f.run({ transport, observe: observeFunding });
+  expect(result.state).toBe("complete"); expect(result.receivedUsdc).toBe("9.8"); expect(result.sourceTransactionHash).toBeNull();
+  expect(result.observation?.evidence).toMatchObject({ sourceTransactionHashKnown: false, sourceReceiptRequired: false, destinationDomain: 0, mint: { coreNonce: "1800000000000", proofKind: "cctp_withdrawal_destination_receipt" } });
+  expect(result.message).not.toContain("reply lost");
+  expect(f.posts).toEqual([signed]); expect(f.sends).toHaveLength(1);
+  reads.length = 0;
+  expect((await f.run({ transport, observe: observeFunding })).state).toBe("complete");
+  expect(reads).toEqual(["eth_getTransactionReceipt"]);
+  expect(f.posts).toEqual([signed]); expect(f.sends).toHaveLength(1);
+  const recovered = await recoverFunding(f.wallet, f.store, id, caller, true, { method: "wallet", transport });
+  expect(recovered.state).toBe("complete"); expect(recovered.recovery?.methods).toEqual([]);
+  expect(f.posts).toEqual([signed]); expect(f.sends).toHaveLength(1);
+});
+test("historical log failure uses indexed hashes only as hints and still requires the exact withdrawal receipt", async () => {
+  const f = fixture("withdraw"), forwarder = independentForwarder(f); await f.run(); forwarder.advance("received");
+  let pagesRead = 0;
+  const transport: FundingTransport = { ...forwarder.transport,
+    async rpc(url, method, params, signal) {
+      expect(url).toBe(FUNDING_CHAINS["1"].rpc);
+      if (method === "eth_getLogs") throw Error("Historical logs require archive access");
+      return forwarder.transport.rpc(url, method, params, signal);
+    },
+    async *withdrawalMints(input) {
+      expect(input).toEqual({ chainId: "1", recipient: owner, amountAtoms: "10000000", fromBlock: "0x100" });
+      pagesRead++; yield [`0x${"22".repeat(32)}`]; // RPC fixture returns a different receipt: it cannot be accepted for this hint.
+      pagesRead++; yield [forwarder.destinationHash];
+      throw Error("No more index pages should be needed after exact receipt proof");
+    },
+  };
+  const result = await f.run({ execute: false, transport, observe: observeFunding });
+  expect(result.state).toBe("complete"); expect(result.destinationTransactionHash).toBe(forwarder.destinationHash); expect(pagesRead).toBe(2);
+  expect(f.sends).toHaveLength(1); expect(f.posts).toHaveLength(1);
+});
+test("failed destination discovery remains unavailable rather than asserting a missing burn or resending", async () => {
+  const f = fixture("withdraw"), forwarder = independentForwarder(f);
+  f.setExchange(async () => { throw Error("Lost exchange reply"); }); await f.run();
+  const transport: FundingTransport = { ...forwarder.transport,
+    async rpc(url, method, params, signal) {
+      if (method === "eth_getLogs") throw Error("Funding RPC rate limited");
+      return forwarder.transport.rpc(url, method, params, signal);
+    },
+    async *withdrawalMints() { yield []; },
+  };
+  const result = await f.run({ transport, observe: observeFunding });
+  expect(result.phase).toBe("verification_unavailable"); expect(result.state).toBe("pending");
+  expect(result.message).toContain("rate limited"); expect(result.message).toContain("no new withdrawal");
+  expect(f.posts).toHaveLength(1); expect(f.sends).toHaveLength(1);
+  forwarder.advance("received");
+  const complete = await f.run({ transport: forwarder.transport, observe: observeFunding });
+  expect(complete.state).toBe("complete"); expect(complete.message).not.toContain("rate limited");
+  expect(f.posts).toHaveLength(1); expect(f.sends).toHaveLength(1);
+});
+test("destination history unavailability does not block a retained source burn awaiting Circle attestation", async () => {
+  const f = fixture("withdraw"), forwarder = independentForwarder(f); await f.run();
+  const first = await f.run({ execute: false, transport: forwarder.transport, observe: observeFunding });
+  expect(first.phase).toBe("waiting_attestation");
+  const transport: FundingTransport = { ...forwarder.transport,
+    async rpc(url, method, params, signal) {
+      if (url === FUNDING_CHAINS["1"].rpc && method === "eth_getLogs") throw Error("Destination log history unavailable");
+      return forwarder.transport.rpc(url, method, params, signal);
+    },
+    async *withdrawalMints() { yield []; },
+  };
+  const result = await f.run({ execute: false, transport, observe: observeFunding });
+  expect(result.phase).toBe("waiting_attestation"); expect(result.sourceTransactionHash).toBe(forwarder.sourceHash());
+  expect(f.sends).toHaveLength(1); expect(f.posts).toHaveLength(1);
+});
+test("a completed withdrawal reports a changed fee without inventing a signed fee cap", async () => {
+  const f = fixture("withdraw"), forwarder = independentForwarder(f); f.setFee("300000"); await f.run(); forwarder.advance("received");
+  const result = await f.run({ transport: forwarder.transport, observe: observeFunding });
+  expect(result.state).toBe("complete");
+  expect(result.observation?.evidence).toMatchObject({ feeExecutedAtoms: "200000", quotedFeeAtoms: "300000", feeChangedSinceQuote: true });
+});
+test("legacy deposit quotes do not report an unobserved standard account mode", async () => {
+  const f = fixture(); await f.run();
+  const row = f.rows.get(id)!, state = JSON.parse(row.state_json); state.quote.accountMode = "standard";
+  const historical = { ...row, state_json: stable(state) };
+  expect(fundingResult(historical).quote.accountMode).toBeNull();
+  expect(fundingResult(historical).quote.sourceDex).toBe(""); expect(historical.revision).toBe(row.revision);
+  expect(f.sends).toHaveLength(1);
 });
 for (const direction of ["deposit", "withdraw"] as const) test(`${direction} manual recovery completes only the original destination mint without another source debit`, async () => {
   const f = fixture(direction), forwarder = independentForwarder(f);
@@ -472,6 +566,7 @@ test("quotes read deployed activation/forwarding fees and require a choice for u
     async exchange() { throw Error("Quote must not submit"); },
   };
   const deposit = await quoteFunding(readWallet, { environment: "mainnet", direction: "deposit", chainId: "1", amount: "10" }, { transport });
+  expect(deposit.accountMode).toBeNull();
   expect(deposit.activationFeeAtoms).toBe("1000000"); expect(deposit.minimumReceiveAtoms).toBe("8800000"); expect(deposit.allowanceAtoms).toBe("0");
   const withdraw = { environment: "mainnet", direction: "withdraw", chainId: "1", amount: "10" } as const;
   await expect(quoteFunding(readWallet, withdraw, { transport })).rejects.toThrow("sourceBalance");

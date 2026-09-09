@@ -297,6 +297,17 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       const withoutEstimate = JSON.parse(String(app.rows.get(SWAP_ID)!.state_json)); delete withoutEstimate.plan.details.gasEstimate;
       app.rows.get(SWAP_ID)!.state_json = JSON.stringify(withoutEstimate);
       expect((await app.invoke("uniswap_action_input_v1", { operationId: SWAP_ID })).invocation).toMatchObject({ gasEstimateJson: null });
+      const failure = { requestId: request.requestId, code: "AGENT_CONSENT_DENIED", message: "Full range is outside the owner's instruction" };
+      withoutEstimate.steps[0].authorizationFailure = failure;
+      withoutEstimate.steps[0].operation = null;
+      withoutEstimate.steps[0].evidence = null;
+      withoutEstimate.steps[0].unresolvedDispatch = true;
+      app.rows.get(SWAP_ID)!.state_json = JSON.stringify(withoutEstimate);
+      const failedReview = await app.invoke("uniswap_action_reconcile_v1", { operationId: SWAP_ID, includeAuthorization: true });
+      expect(failedReview.action).toMatchObject({ state: "stopped", phase: "step_0_authorization_denied", steps: [{ status: "unknown", requestId: request.requestId, checked: false, receipt: null, authorizationFailure: failure }] });
+      const compatible = await app.invoke("uniswap_action_reconcile_v1", { operationId: SWAP_ID });
+      expect(compatible.action).toMatchObject({ state: "stopped" });
+      expect(((compatible.action as JsonObject).steps as JsonObject[])[0]).not.toHaveProperty("authorizationFailure");
       app.rows.delete(SWAP_ID);
       expect(await app.invoke("uniswap_action_input_v1", { operationId: SWAP_ID })).toEqual({ invocation: null });
       expect(await app.invoke("uniswap_action_reconcile_v1", { operationId: SWAP_ID })).toEqual({ action: null });

@@ -319,6 +319,21 @@ assert (restoredApp.uniswap_action_get_v1(actionInput.id) == ?actionDispatched);
 assert (restoredApp.uniswap_get_v1(anchorId) == ?updatedAnchor);
 assert (Journal.list(historyRestored) == oldBeforeActions);
 
+// Authorization failure metadata is an additive field in the existing JSON,
+// not a replacement Wallet operation or a new memory schema. A restored app
+// retains both the exact denied request and its unresolved execution marker.
+let deniedInput = { actionInput with id = "authorization-denied" };
+let deniedBegun = actionOk(Actions.begin(actionsRestored, deniedInput, 40_000));
+let deniedJson = "{\"version\":1,\"steps\":[{\"request\":{\"requestId\":\"ac916d4c938a9cb9cc72042bcf3f7b01\"},\"dispatched\":true,\"unresolvedDispatch\":true,\"operation\":null,\"evidence\":null,\"authorizationFailure\":{\"requestId\":\"ac916d4c938a9cb9cc72042bcf3f7b01\",\"code\":\"AGENT_CONSENT_DENIED\",\"message\":\"Full range is outside the owner instruction\"}}]}";
+let denied = actionOk(Actions.update(actionsRestored, {
+    id = deniedInput.id; expected_revision = deniedBegun.revision;
+    state_json = deniedJson; phase = "step_0_authorization_denied";
+}, 40_100));
+let afterDenial = Uniswap.Init({ stable_memory = { uniswap = historyRestored; uniswap_actions = actionsRestored } });
+assert (afterDenial.uniswap_action_get_v1(deniedInput.id) == ?denied);
+assert (denied.state_json == deniedJson and denied.input_json == deniedInput.input_json);
+assert (afterDenial.uniswap_get_v1(anchorId) == ?updatedAnchor);
+
 func positionOk(result : Actions.PositionResult) : ActionMemory.PositionRef {
     switch (result) {
         case (#ok(value)) value;

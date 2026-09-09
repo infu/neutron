@@ -92,6 +92,13 @@ export function resultOf(record: RecordRow, override?: Result["state"], message?
     message: message ?? (state === "complete" ? "Confirmed. The final transaction completed successfully." : state === "stopped" ? "The operation stopped before completion. Token approval alone does not complete it." : state === "review" ? "Continue to review the updated transaction in your wallet." : "Progress is saved. Continue with this operation ID to reconcile and finish."),
     steps: views.map((view, i) => ({ ...view, label: saved.plan.steps[i]!.label })) };
 }
+/** A tracking interruption does not undo a saved final receipt or rejection. */
+export function trackingPausedResult(record: RecordRow): Result {
+  const result = resultOf(record);
+  return result.state === "complete" || result.state === "stopped" ? result : {
+    ...result, state: "pending", message: "Tracking paused. Continue this same operation ID; an interrupted reply does not mean the transaction failed.",
+  };
+}
 export async function latestRecord(store: Store, id: string): Promise<RecordRow | null> {
   let row = await store.get(id);
   while (row) {

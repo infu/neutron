@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { decodeFunctionData, encodeFunctionResult, getAddress, parseAbi } from "viem";
 import { CHAINS, encode, liquiditySignatures, minimum, NATIVE, poolRef, uint, ZERO, type Reader, type VerifiedPool } from "../src/contracts.ts";
 import { approvalSteps, parseInput, swapRoute } from "../src/plans.ts";
-import { catalogTokens, fetchPools, parsePoolCatalog, verifyPool } from "../src/pools.ts";
+import { catalogTokens, fetchPools, parsePoolCatalog, readToken, verifyPool } from "../src/pools.ts";
 import { atoms } from "../src/ui.tsx";
 const address = getAddress("0x1111111111111111111111111111111111111111"), receiver = getAddress("0x2222222222222222222222222222222222222222");
 test("decimal entry never rounds an atomic budget, including >2^53 amounts", () => {
@@ -70,4 +70,50 @@ test("unregistered pools and incorrect metapool ABI selection fail before any ef
   };
   await expect(verifyPool(read, { chainId: "1", address, family: "stable-ng" })).rejects.toThrow("Pool type differs");
   await expect(verifyPool(async () => ({ data: encodeFunctionResult({ abi, functionName: "get_coins", result: [] }), blockNumber: "123" }), { chainId: "1", address, family: "stable-ng" })).rejects.toThrow("not registered");
+});
+
+test("pool discovery uses exact-address labels for native and bridged Arbitrum USDC", () => {
+  const bridged = getAddress("0xff970a61a04b1ca14834a43f5de4533ebddb5cc8");
+  const native = getAddress("0xaf88d065e77c8cc2239327c5edb3a432268e5831");
+  const [pool] = parsePoolCatalog({ success: true, data: { poolData: [{ address, coins: [
+    { address: bridged, symbol: "USDC", decimals: 6 },
+    { address: native, symbol: "USDC.e", decimals: 6 },
+    { address: receiver, symbol: "USDC", decimals: 7 },
+  ] }] } }, "42161", "factory-stable-ng");
+  expect(pool!.coins).toEqual([
+    { chainId: "42161", address: bridged, symbol: "USDC.e", decimals: 6 },
+    { chainId: "42161", address: native, symbol: "USDC", decimals: 6 },
+    { chainId: "42161", address: receiver, symbol: "USDC", decimals: 7 },
+  ]);
+});
+
+test("verified Arbitrum 2pool keeps bridged USDC identity when its contract symbol says USDC", async () => {
+  const poolAddress = getAddress("0x7f90122bf0700f9e7e1f688fe926940e8839f353");
+  const bridged = getAddress("0xff970a61a04b1ca14834a43f5de4533ebddb5cc8");
+  const native = getAddress("0xaf88d065e77c8cc2239327c5edb3a432268e5831");
+  const usdt0 = getAddress("0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9");
+  const abi = parseAbi([
+    "function coins(uint256) view returns (address)", "function balances(uint256) view returns (uint256)",
+    "function totalSupply() view returns (uint256)", "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+  ]);
+  const read: Reader = async (_chain, to, data, block) => {
+    expect(block === undefined || block === "123").toBe(true);
+    const { functionName, args } = decodeFunctionData({ abi, data });
+    const result = functionName === "coins" ? [bridged, usdt0][Number(args![0])] :
+      functionName === "balances" ? [123456n, 654321n][Number(args![0])] :
+      functionName === "totalSupply" ? 1000000000000000000n :
+      functionName === "decimals" ? to === poolAddress ? 18 : to === receiver ? 7 : 6 :
+      to === usdt0 ? "USDT" : "USDC";
+    return { data: encodeFunctionResult({ abi, functionName, result } as Parameters<typeof encodeFunctionResult>[0]), blockNumber: "123" };
+  };
+  const pool = await verifyPool(read, { chainId: "42161", address: poolAddress, family: "legacy-2" });
+  expect(pool.coins).toEqual([
+    { chainId: "42161", address: bridged, symbol: "USDC.e", decimals: 6 },
+    { chainId: "42161", address: usdt0, symbol: "USDT0", decimals: 6 },
+  ]);
+  expect(pool).toMatchObject({ blockNumber: "123", balances: ["123456", "654321"], lpDecimals: 18 });
+  expect(await readToken(read, "42161", native, "123")).toMatchObject({ address: native, symbol: "USDC", decimals: 6 });
+  expect(await readToken(read, "1", bridged, "123")).toMatchObject({ address: bridged, symbol: "USDC", decimals: 6 });
+  expect(await readToken(read, "42161", receiver, "123")).toMatchObject({ address: receiver, symbol: "USDC", decimals: 7 });
 });

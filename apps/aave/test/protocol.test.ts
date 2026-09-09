@@ -68,6 +68,23 @@ test("full repay reduces an existing unlimited grant to the reviewed cap and clo
   await expect(quotePlan(reader(), account, input("repay", { all: true }), { market: snapshot() })).rejects.toThrow("maximum payment");
   await expect(quotePlan(reader(), account, input("repay", { all: true, maxPaymentAmount: "99999999" }), { market: snapshot() })).rejects.toThrow("below");
 });
+test("withdrawal uses the current supplied atoms without changing an explicit amount into a full withdrawal", async () => {
+  const usdt = reserve({ address: getAddress("0xdac17f958d2ee523a2206206994597c13d831ec7"), symbol: "USDT", supplied: "399999", variableDebt: "0" });
+  const market = snapshot([usdt]);
+  const requested = input("withdraw", { asset: usdt.address, amount: "400000" });
+  await expect(quotePlan(reader(), account, requested, { market })).rejects.toThrow("currently 0.399999 USDT at block 123");
+  expect(requested.amount).toBe("400000");
+  expect(requested.all).toBe(false);
+
+  const exact = await quotePlan(reader(), account, input("withdraw", { asset: usdt.address, amount: "399999" }), { market });
+  expect(exact.preview.amount).toBe("399999");
+  expect(decodeFunctionData({ abi: independent, data: exact.steps.at(-1)!.transaction.data }).args).toEqual([usdt.address, 399999n, owner]);
+
+  const all = await quotePlan(reader(), account, input("withdraw", { asset: usdt.address, amount: "400000", all: true }), { market });
+  expect(all.preview.amount).toBe("399999");
+  expect(all.preview.after.totalCollateralBase).toBe("0");
+  expect(decodeFunctionData({ abi: independent, data: all.steps.at(-1)!.transaction.data }).args).toEqual([usdt.address, MAX_UINT256, owner]);
+});
 test("reducing a pre-existing USDT full-repay allowance includes its required zero reset", async () => {
   const usdt = reserve({ address: getAddress("0xdac17f958d2ee523a2206206994597c13d831ec7"), symbol: "USDT" });
   const plan = await quotePlan(reader(MAX_UINT256), account, input("repay", { asset: usdt.address, all: true, maxPaymentAmount: "100100000" }), { market: snapshot([usdt]) });

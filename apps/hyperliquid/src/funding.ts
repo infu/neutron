@@ -1,14 +1,16 @@
 import { decodeFunctionResult, encodeFunctionData, getAddress, keccak256, stringToHex, type Hex } from "viem";
 import { parseEvmOperationResult, parseEvmTransactionResult, type EvmAccount, type EvmEffectRequest, type EvmOperationResult, type EvmSendTransactionRequest, type EvmSignTypedDataRequest, type EvmTransactionResult, type EvmWalletCaller, type EvmWalletClient } from "neutron-tools/evm_wallet";
 import { stable, type RecordRow, type Store } from "./store.ts";
+import { indexedWithdrawalMintCandidates } from "./funding_index.ts";
 import { CCTP, CCTP_RECOVERY_ABI, CORE_DEPOSIT_ABI, FUNDING_CHAINS, USDC_ABI, coreUserExistsCalldata, depositCalldata, depositFees, formatUsdc, forwardHook, parseFundingInput, unsignedAtoms, usdcAtoms, withdrawalAction, withdrawalEnvelope, withdrawalTypedData, type FundingInput, type NormalizedFundingInput, type WithdrawalAction } from "./funding_protocol.ts";
-import { decodeCctpMessage, destinationMintFilter, destinationMintHashes, findWithdrawalBurn, matchReceiptCctpMessage, observedCoreCredits, selectCctpMessage, verifyCoreCashReceipt, verifyCoreForwardReceipt, verifyDestinationReceipt, withdrawalBurnFilter, withdrawalHook, type CctpEvidenceIntent, type MatchedCctpMessage } from "./funding_evidence.ts";
+import { decodeCctpMessage, destinationMintFilter, destinationMintHashes, findWithdrawalBurn, matchReceiptCctpMessage, observedCoreCredits, selectCctpMessage, verifyCoreCashReceipt, verifyCoreForwardReceipt, verifyDestinationReceipt, verifyWithdrawalDestinationReceipt, withdrawalBurnFilter, withdrawalDestinationMintFilter, withdrawalDestinationMintHashes, withdrawalHook, type CctpEvidenceIntent, type MatchedCctpMessage, type WithdrawalDestinationEvidence } from "./funding_evidence.ts";
 export type { FundingInput } from "./funding_protocol.ts";
 
 export type FundingTransport = {
   rpc(url: string, method: string, params: unknown[], signal?: AbortSignal): Promise<unknown>;
   info(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
   circle(path: string, signal?: AbortSignal): Promise<unknown>;
+  withdrawalMints?(input: { chainId: "1" | "42161"; recipient: string; amountAtoms: string; fromBlock: string }, signal?: AbortSignal): AsyncIterable<string[]>;
   reattest?(nonce: string, signal?: AbortSignal): Promise<unknown>;
   exchange(envelope: unknown, signal?: AbortSignal): Promise<unknown>;
 };
@@ -28,6 +30,7 @@ export function createFundingTransport(fetcher: typeof fetch = fetch): FundingTr
     },
     info: (body, signal) => json(`${CCTP.hyperliquidApi}/info`, body, signal),
     circle: (path, signal) => json(`${CCTP.circleApi}${path}`, undefined, signal),
+    withdrawalMints: (input, signal) => indexedWithdrawalMintCandidates(input, fetcher, signal),
     reattest: (nonce, signal) => {
       if (!/^0x[0-9a-fA-F]{64}$/.test(nonce)) throw new Error("Invalid CCTP recovery nonce.");
       return json(`${CCTP.circleApi}/v2/reattest/${nonce}`, {}, signal);
@@ -40,7 +43,7 @@ export type FundingQuote = {
   input: NormalizedFundingInput; account: EvmAccount; recipient: string; observedAtMs: number;
   amountAtoms: string; estimatedFeeAtoms: string; maxFeeAtoms: string; minimumReceiveAtoms: string;
   protocolFeeAtoms: string; forwardingFeeAtoms: string; activationFeeAtoms: string;
-  sourceDex: "" | "spot"; accountMode: string; allowanceAtoms: string | null;
+  sourceDex: "" | "spot"; accountMode: string | null; allowanceAtoms: string | null;
   sourceGas: { estimatedFeeWei: string | null; maximumFeeWei: string | null; reason: string | null };
   warnings: string[];
 };
@@ -81,7 +84,7 @@ export async function quoteFunding(wallet: EvmWalletClient, raw: FundingInput, o
   const account = (await wallet.accounts(callOptions)).accounts.find(a => a.accountId === "main");
   if (!account) throw new Error("Initialize the main account in EVM Wallet first.");
   const amount = usdcAtoms(input.amount), recipient = getAddress(account.address).toLowerCase();
-  const quote: FundingQuote = { input, account, recipient, observedAtMs: (options.now ?? Date.now)(), amountAtoms: amount.toString(), estimatedFeeAtoms: "0", maxFeeAtoms: "0", minimumReceiveAtoms: amount.toString(), protocolFeeAtoms: "0", forwardingFeeAtoms: "0", activationFeeAtoms: "0", sourceDex: "", accountMode: "standard", allowanceAtoms: null, sourceGas: { estimatedFeeWei: null, maximumFeeWei: null, reason: input.direction === "withdraw" ? "Circle forwards the destination transaction; its gas is covered by the forwarding fee." : null }, warnings: [] };
+  const quote: FundingQuote = { input, account, recipient, observedAtMs: (options.now ?? Date.now)(), amountAtoms: amount.toString(), estimatedFeeAtoms: "0", maxFeeAtoms: "0", minimumReceiveAtoms: amount.toString(), protocolFeeAtoms: "0", forwardingFeeAtoms: "0", activationFeeAtoms: "0", sourceDex: "", accountMode: null, allowanceAtoms: null, sourceGas: { estimatedFeeWei: null, maximumFeeWei: null, reason: input.direction === "withdraw" ? "Circle forwards the destination transaction; its gas is covered by the forwarding fee." : null }, warnings: [] };
   if (input.direction === "deposit") {
     const chain = FUNDING_CHAINS[input.chainId];
     const [fees, allowance, enabled, disabled, newAccountFee, exists] = await Promise.all([
@@ -187,6 +190,9 @@ export function fundingIntent(row: RecordRow): FundingIntent {
 export function fundingState(row: RecordRow): FundingState {
   const intent = fundingIntent(row), state = JSON.parse(row.state_json) as FundingState;
   if (state.version !== 1 || !state.quote || stable(state.quote.input) !== stable(intent.input) || !sameAccount(state.quote.account, intent.account) || state.quote.recipient.toLowerCase() !== intent.account.address.toLowerCase() || state.quote.amountAtoms !== usdcAtoms(intent.input.amount).toString()) throw new Error("Saved funding quote changed its recipient or amount.");
+  // Deposits choose the default-perps route; they never read the account mode.
+  // Earlier releases filled this field with "standard" without an observation.
+  if (intent.input.direction === "deposit") state.quote.accountMode = null;
   const expected = expectedSteps(intent, state);
   if (state.withdrawalSourceTransactionHash !== undefined && (!state.withdrawal || !/^0x[0-9a-fA-F]{64}$/.test(state.withdrawalSourceTransactionHash))) throw new Error("Invalid saved withdrawal source identity.");
   if (!Array.isArray(state.steps) || expected.length !== state.steps.length) throw new Error("Invalid saved funding steps.");
@@ -358,9 +364,15 @@ export async function runFunding(wallet: EvmWalletClient, store: Store, id: stri
     state.envelope = withdrawalEnvelope(state.withdrawal, signature); await save("withdrawal_signed");
   }
   if (state.withdrawal && state.exchangeDispatched) {
-    state.observation = await (options.observe ?? observeFunding)(intent, state, transport, options.signal);
+    try {
+      state.observation = await (options.observe ?? observeFunding)(intent, state, transport, options.signal);
+      state.lastError = null;
+    } catch (error) {
+      abort(); state.lastError = `Withdrawal status is temporarily unavailable. Its original signed action remains saved; no new withdrawal was submitted. ${messageOf(error)}`;
+      await save("verification_unavailable"); return fundingResult(row!);
+    }
     await save(state.observation.phase);
-    if (state.observation.sourceTransactionHash || state.exchangeAccepted || options.execute === false) return fundingResult(row!);
+    if (state.observation.phase === "complete" || state.observation.sourceTransactionHash || state.exchangeAccepted || options.execute === false) return fundingResult(row!);
   }
   if (state.withdrawal && !state.exchangeAccepted && options.execute !== false) {
     const priorDispatch = state.exchangeDispatched;
@@ -474,6 +486,52 @@ export async function recoverFunding(wallet: EvmWalletClient, store: Store, id: 
   return observe();
 }
 
+/** HyperCore withdrawals execute as system transactions. The public HyperEVM
+ * RPC can omit their logs and return null for their receipts. A destination
+ * MessageReceived authenticates the original owner/nonce hook and burn intent;
+ * the same receipt's native-USDC mint proves arrival without a source hash. */
+async function observeWithdrawalDestination(intent: FundingIntent, state: FundingState, transport: FundingTransport, signal?: AbortSignal): Promise<WithdrawalDestinationEvidence | null> {
+  const chain = FUNDING_CHAINS[intent.input.chainId];
+  const expected = { messageTransmitter: CCTP.messageTransmitter, tokenMessenger: CCTP.tokenMessenger, usdc: chain.usdc, burnToken: CCTP.hyperEvmUsdc, coreDepositWallet: CCTP.coreDepositWallet, owner: intent.account.address, recipient: intent.account.address, nonce: state.withdrawal!.nonce, amountAtoms: state.quote.amountAtoms };
+  const knownHash = state.observation?.destinationTransactionHash;
+  if (knownHash) {
+    const raw = await transport.rpc(chain.rpc, "eth_getTransactionReceipt", [knownHash], signal);
+    const proof = verifyWithdrawalDestinationReceipt(raw, { ...expected, transactionHash: knownHash });
+    if (proof) return proof;
+  }
+  const latest = blockHex(await transport.rpc(chain.rpc, "eth_blockNumber", [], signal));
+  let hashes: string[];
+  try {
+    const logs = await fundingLogs(transport, chain.rpc, withdrawalDestinationMintFilter({ ...expected, fromBlock: state.destinationFromBlock }), BigInt(state.destinationFromBlock), BigInt(latest), signal);
+    hashes = withdrawalDestinationMintHashes(logs, expected);
+  } catch (error) {
+    signal?.throwIfAborted();
+    if (!transport.withdrawalMints) throw error;
+    // Some public RPCs serve exact old receipts but restrict historical logs.
+    // The index only discovers hashes; receipt verification remains identical.
+    for await (const page of transport.withdrawalMints({ chainId: intent.input.chainId, recipient: expected.recipient, amountAtoms: expected.amountAtoms, fromBlock: state.destinationFromBlock }, signal)) {
+      for (const hash of page) {
+        const raw = await transport.rpc(chain.rpc, "eth_getTransactionReceipt", [hash], signal);
+        const proof = verifyWithdrawalDestinationReceipt(raw, { ...expected, transactionHash: hash });
+        if (proof) return proof;
+      }
+    }
+    // Indexing lag or a missing index entry does not establish absence. Keep
+    // the original RPC failure visible until authoritative reads succeed.
+    throw error;
+  }
+  const proofs: WithdrawalDestinationEvidence[] = [];
+  // Reads are sequential so one account with several incoming mints does not
+  // fan out against the public RPC. Every candidate still needs exact proof.
+  for (const hash of hashes) {
+    const raw = await transport.rpc(chain.rpc, "eth_getTransactionReceipt", [hash], signal);
+    const proof = verifyWithdrawalDestinationReceipt(raw, { ...expected, transactionHash: hash });
+    if (proof) proofs.push(proof);
+  }
+  if (proofs.length > 1) throw new Error("Multiple destination transactions match this withdrawal's exact nonce and mint; canonical receipt verification is unavailable.");
+  return proofs[0] ?? null;
+}
+
 // The evidence adapter below is deliberately separate from execution: Circle
 // messages and chain receipts are observations and grant no signing authority.
 export async function observeFunding(intent: FundingIntent, state: FundingState, transport: FundingTransport, signal?: AbortSignal): Promise<FundingObservation> {
@@ -486,6 +544,18 @@ export async function observeFunding(intent: FundingIntent, state: FundingState,
     sourceHash = step.evidence?.transactionHash ?? null;
   } else {
     if (!state.withdrawal || !state.fromBlock || !state.exchangeDispatched) return result("waiting_source", "The withdrawal has not been submitted to Hyperliquid.");
+    let destinationError: unknown = null;
+    let arrived: WithdrawalDestinationEvidence | null = null;
+    try { arrived = await observeWithdrawalDestination(intent, state, transport, signal); }
+    catch (error) { signal?.throwIfAborted(); destinationError = error; }
+    if (arrived) {
+      sourceHash = state.withdrawalSourceTransactionHash ?? state.observation?.sourceTransactionHash ?? null;
+      return result("complete", `${formatUsdc(BigInt(arrived.deliveredAtoms))} native USDC arrived on ${chain.name}. The destination receipt matches this original signed withdrawal and its USDC mint.`, {
+        destinationTransactionHash: arrived.transactionHash, receivedAtoms: arrived.deliveredAtoms,
+        evidence: { mint: arrived, cctpNonce: arrived.nonce, feeExecutedAtoms: arrived.feeExecutedAtoms, quotedFeeAtoms: state.quote.estimatedFeeAtoms, feeChangedSinceQuote: arrived.feeExecutedAtoms !== state.quote.estimatedFeeAtoms, sourceTransactionHashKnown: sourceHash !== null, sourceReceiptRequired: false, destinationDomain: chain.domain, destinationDomainSource: "executed_destination_message_transmitter", nonceUsed: true },
+        recovery: { ...recoveryBase(intent), status: "complete", message: "The original withdrawal's destination mint is confirmed. No further withdrawal or recovery is needed.", transactionHash: arrived.transactionHash },
+      });
+    }
     const expected = { coreDepositWallet: CCTP.coreDepositWallet, owner: intent.account.address, recipient: intent.account.address, nonce: state.withdrawal.nonce, destinationDomain: chain.domain, amountAtoms: state.quote.amountAtoms };
     const retained = state.withdrawalSourceTransactionHash ?? state.observation?.sourceTransactionHash;
     if (retained) {
@@ -496,7 +566,13 @@ export async function observeFunding(intent: FundingIntent, state: FundingState,
     const latest = blockHex(await transport.rpc(CCTP.hyperEvmRpc, "eth_blockNumber", [], signal));
     // Split only when the upstream RPC reports a range/result-size constraint.
     const burn = findWithdrawalBurn(await fundingLogs(transport, CCTP.hyperEvmRpc, withdrawalBurnFilter({ ...expected, fromBlock: state.fromBlock }), BigInt(state.fromBlock), BigInt(latest), signal), expected);
-    if (!burn) return result("waiting_source", "Waiting for the original signed withdrawal's HyperEVM burn. An exchange acknowledgment alone is not a completed withdrawal.");
+    if (!burn) {
+      // A working source/Circle route may still progress when destination log
+      // history is unavailable. If neither route can establish progress, keep
+      // that availability failure distinct from an absent source transfer.
+      if (destinationError) throw destinationError;
+      return result("waiting_source", "No matching destination mint is visible yet. The HyperEVM public RPC can omit the withdrawal's system transaction; continue checking this original transfer without signing another withdrawal.");
+    }
     const receipt = await transport.rpc(CCTP.hyperEvmRpc, "eth_getTransactionReceipt", [burn.transactionHash], signal) as { status?: unknown; logs?: unknown; transactionHash?: unknown } | null;
     if (!receipt || receipt.status !== "0x1" || receipt.transactionHash !== burn.transactionHash || !findWithdrawalBurn(receipt.logs, expected)) return result("waiting_source", "The withdrawal burn is awaiting a matching canonical receipt.");
     sourceHash = burn.transactionHash;

@@ -45,6 +45,11 @@ supplied aTokens is capped by both supply and debt and may leave remaining debt.
 For native ETH supply and repayment, **Max** subtracts the Wallet's observed
 maximum network fee from the balance. If fees are unavailable, the entered
 amount stays unchanged. Fees are checked again by Wallet before signing.
+Withdrawals use the current supplied balance rather than the original deposit
+amount. **Max** fills the observed amount; **Withdraw full supply**
+selects the protocol's full-withdrawal behavior. If an exact amount exceeds the
+current supply, the quote reports that balance and its observation block without
+silently changing the requested amount.
 
 APYs and prices are observations that can change. Health factor depends on
 collateral prices, debt and liquidation thresholds; there is no universal safe
@@ -83,6 +88,9 @@ mined receipt are reported separately; an estimation rejection is not described
 as a lost reply. If the status check also fails, both errors remain visible and
 the saved dispatch stays unresolved. Reverted receipts include their block and
 observed finality. Continuing always retains the original Wallet request ID.
+A tracking timeout preserves a final confirmation or rejection already saved in
+the journal. A confirmed approval with a queued lending transaction remains
+incomplete and keeps the original continuation identity.
 
 Use **Continue in wallet** to resume a saved human operation. Agent callers
 continue their own operation ID with the same original inputs. Status reads

@@ -96,6 +96,10 @@ caller explicitly selects perps or unified USDC; the app does not guess or
 change account mode. Testnet trading is separate; these funding routes are
 mainnet-only.
 
+Deposit quotes report `accountMode: null`: selecting the default-perps deposit
+route does not observe or identify the account's balance mode. Withdrawal quotes
+retain the mode actually returned by Hyperliquid.
+
 Funding persists in managed `hyperliquid@1` memory, including original input,
 caller, account fingerprint, exact Wallet requests and transfer evidence.
 Continue the same operation ID after interruption. Approval alone, a source burn
@@ -103,6 +107,20 @@ or an API acknowledgement does not complete a transfer. Withdrawal completion
 requires matching destination native-USDC mint evidence. Deposits separately
 report CCTP forwarding into the Core deposit queue and observed HyperCore credit;
 public ledger observations do not expose an exact EVM transaction-hash link.
+HyperEVM's standard RPC can omit withdrawal system transactions and their
+receipts. A withdrawal can therefore complete with an unknown source hash when
+the canonical destination CCTP receipt proves its original owner, signed nonce,
+amount, contracts and native-USDC mint. If historical RPC logs are unavailable,
+the browser uses Blockscout's incoming native-USDC index only to locate candidate
+hashes, then verifies each candidate against the destination RPC receipt. An
+index entry or balance change alone cannot complete a withdrawal. The actual
+CCTP fee and its difference from the quote remain visible; the withdrawal API
+does not sign a fee cap. Read failures remain verification errors and never
+authorize a replacement withdrawal.
+If an unsettled withdrawal's source system receipt is unavailable and no
+destination mint exists yet, automatic attestation discovery and manual mint
+recovery still require locating its original source CCTP message. Keep that
+operation pending and retain its signed nonce; a new withdrawal is not recovery.
 Never repeat a burn merely because forwarding or the browser reply is delayed.
 An interrupted Wallet preparation resumes its exact original request through
 explicit continuation; status checks alone do not dispatch it.

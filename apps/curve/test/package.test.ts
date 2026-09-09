@@ -36,16 +36,18 @@ test.each([
   [102, "0.1.2", "686b2a06eb91f60e27ad22a222c9cda636aca79093245e36444ab0d8408fe1bf"],
   [103, "0.1.3", "b4a7126b920d8dfdd76c5094fa8949533d055a2e9e88bc91ed8b5a4a5c90444b"],
   [104, "0.1.4", "dc7043680d659a9444f79d24add9eab1db9098f76c243a78f7a037ce060b9341"],
-] as const)("release 105 keeps production %s journal, lineage and full backend closure", async (version, release, digest) => {
+  [105, "0.1.5", "d9e35c13c678c2e5d169a574a2eec3c32f0b93d19934a72afd065ad11ed9e5a2"],
+] as const)("release 106 keeps production %s journal, lineage and full backend closure", async (version, release, digest) => {
   const previousBytes = await readFile(new URL(`../curve.v${release}.neutron`, import.meta.url));
   if (version === 104) expect(previousBytes.byteLength).toBe(313_720);
+  if (version === 105) expect(previousBytes.byteLength).toBe(317_186);
   expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(digest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../curve.v0.1.5.neutron", import.meta.url)));
+  const files = unpackNeutronPackage(await readFile(new URL("../curve.v0.1.6.neutron", import.meta.url)));
   const manifest = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8"));
   expect(validate_neutron_conf(manifest).errors).toEqual([]);
-  expect(manifest).toMatchObject({ id: "curve", version: 105, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "curve", version: 105 });
+  expect(manifest).toMatchObject({ id: "curve", version: 106, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "curve", version: 106 });
   expect(Object.keys(files)).toEqual(expect.arrayContaining(["web/index.html", "web/main.js", "web/main.css", "web/service.html", "web/service.js", "web/static/icon.svg"]));
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!)), next = JSON.parse(decode(files["neutron.json"]!));
@@ -62,7 +64,7 @@ test.each([
   for (const path of modules) expect(files[path]).toEqual(previous[path]);
   const schema = JSON.parse(decode(files["schema.json"]!)), priorSchema = JSON.parse(decode(previous["schema.json"]!));
   expect(schema).toEqual(generateAppMethodSchemaArtifact(manifest, await readFile(new URL("../backend/main.mo", import.meta.url), "utf8")));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Curve", version: 105 } });
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Curve", version: 106 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, curve: next });
   expect(clean.upgrades).toEqual([{ kind: "initialize", owner: "curve", memoryId: "curve", to: 1 }]);
