@@ -25,6 +25,24 @@ size precision and leverage parameters. Fee estimates and Max apply an observed
 account referral discount to taker fees and positive maker fees; maker rebates
 remain unchanged. Missing fee observations remain explicit in review.
 
+Non-post-only edits default to Hyperliquid's `alwaysPlace` behavior so the
+replacement honors GTC. This can place the replacement even if canceling the
+original fails; the exact review explains that consequence. Post-only edits
+default to cancel-dependent ALO. Tools can override `alwaysPlace`: false omits
+the action-level `a` flag and the venue applies ALO even to requested GTC;
+true encodes `a:true` while preserving the selected time-in-force and reduce-only
+setting. Never encode `a:false`. See the
+[venue's modify semantics](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#modify-an-order).
+
+Modification results reconcile the original target and replacement separately.
+`orders[]` describes only the replacement; `modification.original` identifies
+the original, while `originalLive` and `replacementLive` are null when live
+status cannot be established. Original-order fills never count as replacement
+fills. A rejected replacement may leave the original canceled, and Activity
+keeps **Check status** available for these failures. Historical prepared or
+signed actions retain their original review, action, nonce and signature;
+reconciliation never upgrades them to a different always-place action.
+
 The chart includes candlesticks, volume, timeframe selection and interactive
 inspection. Price/book observations carry timestamps. Chart analysis names its
 indicator windows, excludes unfinished candles, and reports missing data.

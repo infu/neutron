@@ -66,7 +66,7 @@ export function ModifyOrderDialog({ environment, order, close, execute, busy }: 
     <label>Limit price<div className="hl-input-unit"><input aria-label="Replacement limit price" inputMode="decimal" autoComplete="off" value={price} onChange={(event) => setPrice(event.target.value)} disabled={busy} /><span>USD</span></div></label>
     <div className="hl-checkbox-row"><label><input type="checkbox" checked={postOnly} onChange={(event) => setPostOnly(event.target.checked)} disabled={busy} />Post only</label><label><input type="checkbox" checked={reduceOnly} onChange={(event) => setReduceOnly(event.target.checked)} disabled={busy} />Reduce only</label></div>
     <p className="hl-muted">The submitted size is the replacement order's remaining quantity. Your current order may fill before Hyperliquid processes the change.</p>
-    <p className="hl-help">{postOnly ? "Post-only rejects a replacement that would execute immediately." : "This replacement can execute immediately at your limit price or better."}{reduceOnly ? " Reduce-only prevents the order from increasing or reversing your position." : " This order can increase or reverse a position."}</p>
+    <p className="hl-help">{postOnly ? "Post-only rejects a replacement that would execute immediately." : "This replacement can execute immediately at your limit price or better. It can also be placed if canceling the original order fails."}{reduceOnly ? " Reduce-only prevents the order from increasing or reversing your position." : " This order can increase or reverse a position."}</p>
     {order.isTrigger && <p className="hl-error" role="alert">Trigger orders cannot be edited with this limit-order form. Cancel the trigger and create a new protection order.</p>}
   </Dialog>;
 }

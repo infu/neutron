@@ -70,6 +70,14 @@ test("caller provenance and arbitrary signing payloads cannot enter through tool
   }
 });
 
+test("modification tools expose a typed always-place override and its cancellation semantics", async () => {
+  const descriptor = (await descriptors).find(entry => entry.name === "hl_modify_order_v1")!;
+  for (const alwaysPlace of [true, false]) expect(() => validateToolArguments(descriptor, { ...examples.hl_modify_order_v1!, alwaysPlace })).not.toThrow();
+  expect(() => validateToolArguments(descriptor, { ...examples.hl_modify_order_v1!, alwaysPlace: "true" })).toThrow();
+  expect(descriptor.description).toContain("original cancel fails");
+  expect(descriptor.description).toContain("modification.original");
+});
+
 test("exact trade authority is declared on effects while analysis requires no provider consent", async () => {
   const registered = await descriptors;
   for (const name of trades) {

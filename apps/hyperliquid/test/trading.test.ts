@@ -16,7 +16,7 @@ const caller = { appId: "agent", installationUid: "agent-installation", role: "b
 const operationId = "0123456789abcdef0123456789abcdef";
 const intent: TradeIntent = { kind: "order", coin: "ETH", side: "buy", orderType: "market", size: "0.1", slippageBps: 50 };
 
-function fixture(options: { store?: MemoryTradingStore; response?: (body: string) => Promise<Response>; status?: () => unknown; signal?: AbortSignal; authorize?: () => Promise<void>; fills?: unknown[]; positionSize?: string } = {}) {
+function fixture(options: { store?: MemoryTradingStore; response?: (body: string) => Promise<Response>; status?: (identifier: unknown) => unknown; signal?: AbortSignal; authorize?: () => Promise<void>; fills?: unknown[]; positionSize?: string } = {}) {
   const store = options.store ?? new MemoryTradingStore();
   const sent: string[] = [];
   const reviews: unknown[] = [];
@@ -27,7 +27,7 @@ function fixture(options: { store?: MemoryTradingStore; response?: (body: string
     switch (body.type) {
       case "meta": return { universe: [{ name: "ETH", szDecimals: 4, maxLeverage: 25 }, { name: "BTC", szDecimals: 5, maxLeverage: 40 }] } as T;
       case "l2Book": return { coin: body.coin, time: clock, levels: [[{ px: "1999.5", sz: "20", n: 3 }], [{ px: "2000.5", sz: "20", n: 4 }]] } as T;
-      case "orderStatus": return (options.status?.() ?? { status: "unknownOid" }) as T;
+      case "orderStatus": return (options.status?.(body.oid) ?? { status: "unknownOid" }) as T;
       case "userFillsByTime": return (options.fills ?? []) as T;
       case "clearinghouseState": return { assetPositions: [{ position: { coin: "ETH", szi: options.positionSize ?? "-0.25", leverage: { type: "isolated", value: 3 }, marginUsed: "100" } }] } as T;
       case "openOrders": return [{ coin: "ETH", oid: 1 }, { coin: "xyz:TSLA", oid: 2 }, { coin: "@107", oid: 3 }, { coin: "BTC", oid: 4 }] as T;
@@ -192,18 +192,18 @@ describe("Durable dispatch and recovery", () => {
     expect(state.sent).toHaveLength(0);
   });
   test("a canceled zero-remainder order is not misreported as fully filled", async () => {
-    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: () => ({ status: "order", order: { order: { coin: "ETH", oid: 99, origSz: "0.1", sz: "0" }, status: "canceled", statusTimestamp: 1_780_000_000_000 } }) });
+    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: (cloid) => ({ status: "order", order: { order: { coin: "ETH", oid: 99, cloid, origSz: "0.1", sz: "0" }, status: "canceled", statusTimestamp: 1_780_000_000_000 } }) });
     const result = await state.make().execute({ operationId, intent });
     expect(result.state).toBe("canceled"); expect(result.orders[0]?.filledSize).toBeUndefined();
   });
   test("reconciliation deduplicates fills and reports actual partial quantity", async () => {
     const fill = { oid: 99, tid: 123, hash: "0xabc", coin: "ETH", sz: "0.04", px: "2001" };
-    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: () => ({ status: "order", order: { order: { coin: "ETH", oid: 99, origSz: "0.1", sz: "0" }, status: "filled", statusTimestamp: 1_780_000_000_000 } }), fills: [fill, fill] });
+    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: (cloid) => ({ status: "order", order: { order: { coin: "ETH", oid: 99, cloid, origSz: "0.1", sz: "0" }, status: "filled", statusTimestamp: 1_780_000_000_000 } }), fills: [fill, fill] });
     const result = await state.make().execute({ operationId, intent });
     expect(result.state).toBe("partial"); expect(result.orders[0]).toMatchObject({ filledSize: "0.04", averagePrice: "2001" });
   });
   test("missing fill observations are not represented as zero executed quantity", async () => {
-    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: () => ({ status: "order", order: { order: { coin: "ETH", oid: 99, origSz: "0.1", sz: "0" }, status: "filled", statusTimestamp: 1_780_000_000_000 } }) });
+    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: (cloid) => ({ status: "order", order: { order: { coin: "ETH", oid: 99, cloid, origSz: "0.1", sz: "0" }, status: "filled", statusTimestamp: 1_780_000_000_000 } }) });
     const engine = state.make({ data: { info: async (body: Record<string, unknown>) => { if (body.type === "userFillsByTime") throw new Error("Fills unavailable"); return state.info(body); } } });
     const result = await engine.execute({ operationId, intent });
     expect(result.state).toBe("filled");

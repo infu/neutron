@@ -547,6 +547,33 @@ try {
   coverage.push("partial-close preset rounds to the market's size precision");
   coverage.push("leverage and margin-mode review", "reduce-only stop loss", "exact signed isolated-margin removal", "edit limit order price and remaining size");
 
+  const rejectedModifyId = "d".repeat(32);
+  const rejectedModifyMessage = "Replacement rejected. Original order 42 is canceled and no longer live.";
+  const rejectedModify = tradeOperation(rejectedModifyId, { kind: "modify", coin: "BTC", oid: 42, side: "sell", size: "0.01", price: "108400", reduceOnly: true, postOnly: false }, "rejected");
+  savedTrades.set(rejectedModifyId, {
+    ...rejectedModify, message: rejectedModifyMessage,
+    orders: rejectedModify.orders.map(order => ({ ...order, error: "Replacement could not be placed." })),
+    modification: { checkedAt: now(), original: { coin: "BTC", oid: 42, state: "canceled", venueStatus: "canceled" }, originalLive: false, replacementLive: false, errors: [] },
+  });
+  await nav("Activity").click(); await refresh();
+  const rejectedModifyRow = page.locator(".hl-activity").filter({ hasText: rejectedModifyMessage });
+  await rejectedModifyRow.getByRole("button", { name: "Check status", exact: true }).click();
+  await page.locator(".hl-execution").getByText(rejectedModifyMessage, { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Dismiss operation status", exact: true }).click();
+  assert.equal(await page.locator(".hl-execution").count(), 0, "A rejected modification notice can be dismissed independently of its saved evidence");
+  assert.equal(await rejectedModifyRow.getByRole("button", { name: "Retry saved request", exact: true }).count(), 0, "Read-only status access does not offer retry for a rejected replacement");
+  assert.equal(await rejectedModifyRow.getByRole("button", { name: "Continue saved trade", exact: true }).count(), 0, "A rejected replacement cannot be resumed as a prepared trade");
+  const effectsBeforeModifyCheck = effects.length, reviewsBeforeModifyCheck = reviewOutcomes.length;
+  const modifyChecksBefore = calls.filter(entry => entry.call.name === "hl_reconcile_v1" && entry.call.arguments.operationId === rejectedModifyId).length;
+  await waitEnabled(page, rejectedModifyRow.getByRole("button", { name: "Check status", exact: true }));
+  await rejectedModifyRow.getByRole("button", { name: "Check status", exact: true }).click();
+  await page.locator(".hl-execution").getByText(rejectedModifyMessage, { exact: true }).waitFor();
+  assert.equal(calls.filter(entry => entry.call.name === "hl_reconcile_v1" && entry.call.arguments.operationId === rejectedModifyId).length, modifyChecksBefore + 1, "Activity can refresh both order outcomes after the rejected modification notice is dismissed");
+  assert.equal(effects.length, effectsBeforeModifyCheck, "Checking rejected modification status does not dispatch another effect");
+  assert.equal(reviewOutcomes.length, reviewsBeforeModifyCheck, "Checking rejected modification status does not request another trade approval");
+  await screenshot("rejected-modification-activity-narrow");
+  coverage.push("rejected modification retains original-order cancellation evidence and offers read-only Activity refresh after notice dismissal without retry or continuation");
+
   const transfer = () => page.getByRole("button", { name: /Transfer USDC/ }).first().click();
   await transfer();
   await waitEnabled(page, dialog().getByRole("button", { name: "Max", exact: true }));

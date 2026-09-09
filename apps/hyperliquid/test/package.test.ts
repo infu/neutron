@@ -11,20 +11,21 @@ import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const sourceManifest = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8"));
-const archive = new URL("../hyperliquid.v0.1.4.neutron", import.meta.url);
+const archive = new URL("../hyperliquid.v0.1.5.neutron", import.meta.url);
 const predecessors = [
   ["0.1.0", "90e9c8c8a9cfd125bbf0db4bf04c8697416fd5244bd2aaf399d35232611898f1"],
   ["0.1.1", "2663e454e603cdad6e299c8821f41adefaa8a61bc3483004c9def61034ea4d23"],
   ["0.1.2", "5dcb640a37bbeb66b4e5d87fd5d38bf121c6339b0fec619e8f892fb41b84db24"],
   ["0.1.3", "4e82195fe8fe14e1328108963c0e2c71de45b1dfab0f1bef603e1d736c1069aa"],
+  ["0.1.4", "f1281b1a67dfee2eb400475342f0aee9fcd0fd3733d1c7b6decb4e76e8672399"],
 ] as const;
 
 test("release installs its complete UI, resident service and private journal", async () => {
   expect(validate_neutron_conf(sourceManifest).errors).toEqual([]);
-  expect(sourceManifest).toMatchObject({ id: "hyperliquid", version: 104, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
+  expect(sourceManifest).toMatchObject({ id: "hyperliquid", version: 105, update_source: "233tv-xiaaa-aaaay-aacta-cai" });
   const files = unpackNeutronPackage(await readFile(archive));
   const prepared = preparePackageInstall(files);
-  expect(prepared.manifest).toMatchObject({ id: "hyperliquid", version: 104 });
+  expect(prepared.manifest).toMatchObject({ id: "hyperliquid", version: 105 });
   expect(Object.keys(files)).toEqual(expect.arrayContaining([
     "web/index.html", "web/main.js", "web/main.css", "web/service.html", "web/service.js",
     "web/static/icon.svg", "schema.json", "neutron.lock.json",
@@ -73,7 +74,7 @@ test.each(predecessors)("release %s retains the full backend and memory lineage"
   for (const path of backendPaths) expect(files[path]).toEqual(releasedFiles[path]!);
   const schema = JSON.parse(decode(files["schema.json"]!));
   const priorSchema = JSON.parse(decode(releasedFiles["schema.json"]!));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Hyperliquid", version: 104 } });
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Hyperliquid", version: 105 } });
 });
 
 test("release contains the shared use license and the exact offered source artifact", async () => {
@@ -92,7 +93,7 @@ test("release contains the shared use license and the exact offered source artif
   const bytes = await readFile(new URL(`../.neutron/sources/${filename}`, import.meta.url));
   expect(bytes.byteLength).toBe(source.bytes);
   expect(hash(bytes)).toBe(source.sha256);
-  const snapshot = decodeNeutronAppSourceSnapshot(new Uint8Array(gunzipSync(bytes)), { id: "hyperliquid", version: 104 });
+  const snapshot = decodeNeutronAppSourceSnapshot(new Uint8Array(gunzipSync(bytes)), { id: "hyperliquid", version: 105 });
   assertNeutronAppSourceBuildInputs(snapshot, record.build.inputs);
   for (const path of ["apps/hyperliquid/backend/memory/hyperliquid/v1.mo", "apps/hyperliquid/src/service.ts", "apps/hyperliquid/neutron.lock.json"]) {
     const file = snapshot.files.find((entry) => entry.path === path);
