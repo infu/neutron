@@ -679,6 +679,14 @@ module-level helpers do not inherit the handler context. Attachment handlers
 likewise use their invocation-bound `context.callTool` for nested attachment
 work.
 
+An app's existing install-declared frontend routes remain usable by independent
+ordinary UI calls during an Agent invocation, including UI reads through the
+same resident. An exact `permissions.request` for those installed routes only
+confirms existing authority. These paths create no new grant, do not inherit
+the other invocation, and do not bypass provider-owned confirmation or private
+tool audiences. An Agent handler's scoped client still propagates its own live
+invocation and cancellation.
+
 The scoped client intentionally does not expose `callSelfDialog`. While the
 caller app has any active invocation, an unscoped module-level same-Neutron
 call-dialog request fails with `SCOPED_CONTEXT_REQUIRED` before Candid

@@ -15,6 +15,7 @@
     "src/provider_connection.tsx",
     "src/markdown_message.tsx",
     "src/agent_step.ts",
+    "src/agent_tool_checkpoint.ts",
     "src/agent_context.ts",
     "src/chat_progress.ts",
     "src/chat_types.ts",

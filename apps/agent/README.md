@@ -261,10 +261,24 @@ SDK requests, outside the model-step deadline. Individual app-tool and model
 request deadlines remain; Kernel roots have no total duration, call-count,
 permission-count, or start-rate cap. One root remains active at a time.
 
-Each complete model step is saved, and context compaction retains the owner
-request and recent quoted tool evidence when a single turn exceeds the model
-window. Omitted details are marked, with reconciliation required for uncertain
-mutations. The composer shows sleep and queue status. Completed model
+The main agent and each worker save a tool's call ID and exact arguments before
+dispatch, then save its result or error as soon as it settles. These checkpoints
+survive interruption within a model response, including when an earlier tool
+completed but a later one stalls. An unfinished call has an explicit unknown
+outcome: resume using the saved operation/request ID and the app's status tools,
+without inferring failure or automatically repeating a mutation. A successful
+model step replaces its partial checkpoint with the complete SDK transcript.
+Late results from an abandoned step cannot overwrite a resumed conversation.
+
+Stop and timeout unwind model and worker cleanup even if a provider stream
+ignores cancellation, allowing another prompt without reloading the page. The
+existing model-step and app-tool deadlines remain unchanged. Cancellation does
+not establish whether an already-dispatched financial action completed.
+
+Context compaction retains the owner request and recent quoted tool evidence
+when a single turn exceeds the model window. Omitted details are marked, with
+reconciliation required for uncertain mutations. The composer shows sleep and
+queue status. Completed model
 messages appear while work continues; oversized progress falls back to a fresh
 bounded status response. The periodic status refresh also covers the message
 bus's existing progress-event limit.

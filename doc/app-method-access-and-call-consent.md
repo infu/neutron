@@ -771,6 +771,15 @@ The private `foreground_tile` tool cannot be called through ordinary routing.
 The separate `agent_root` tool is visible and callable only from the active
 depth-zero root.
 
+An existing install-declared route remains available to ordinary UI requests
+while another invocation uses the same app or resident. Checking that exact
+route with `permissions.request` also creates no new grant and needs no new
+decision. Ordinary tile-to-Wallet reads and tile-to-resident-to-Wallet reads
+therefore do not inherit an unrelated Agent invocation or pause behind it.
+Agent handlers still use `context.kernel` to preserve their own invocation and
+cancellation; undeclared access and provider-owned confirmation retain their
+existing decision requirements.
+
 ### Declare Exact App Tools At Installation
 
 `frontend_tools` requires the successor Kernel parser. Kernel 0.3.43 and earlier
@@ -928,11 +937,11 @@ All these handlers use the Kernel-derived caller and invocation-scoped
 Nested handlers must issue invocation-dependent work through the
 `context.kernel` client supplied to their `exposeTool()` handler. It preserves
 private invocation provenance and cancellation. Top-level helpers and clients
-are still correct for ordinary work when the source app has no active
-invocation, but they do not implicitly inherit the invocation of the handler
-that calls them. A generic protected call from an app participating in the
-active turn without that scope fails with `SCOPED_CONTEXT_REQUIRED` rather than
-opening a surprise owner dialog.
+do not implicitly inherit the invocation of the handler that calls them.
+Ordinary requests can continue using existing install-declared routes while
+Agent work is active. A call that needs a fresh protected decision from an app
+participating in the active turn without that scope fails with
+`SCOPED_CONTEXT_REQUIRED` rather than opening a surprise owner dialog.
 
 For backend access, a nested handler can make an action-only reservation request
 through its invocation-scoped Kernel client. The top-level
