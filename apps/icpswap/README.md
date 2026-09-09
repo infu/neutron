@@ -245,6 +245,13 @@ operation did not retain its protocol transaction ID. Neither matching amounts
 nor empty pages change the operation to settled. Wallet failures leave the
 protocol result available, and no reconciliation path repeats financial effects.
 
+After these observations, reconciliation rereads the same operation's typed
+status. `operationRefresh.observationsRevision` identifies the earlier revision
+used to select the observations; they remain contextual even if execution
+completed during the reads. A failed refresh retains that snapshot and the
+observations with an explicit error. The final status read is still a snapshot,
+not an atomic view of the operation, pool and Wallet.
+
 Reconciliation reads one recent index page per relevant ledger. For older pages,
 call Wallet's `wallet_account_transactions_v1` with `{ ledger, beforeBlock,
 limit }`, setting `beforeBlock` to that ledger's

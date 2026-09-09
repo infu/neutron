@@ -201,6 +201,7 @@ const savedTrades = new Map([["5".repeat(32), tradeOperation("5".repeat(32), { k
 const savedFunding = new Map();
 const reconciliationResponses = new Map();
 let failingReads = false, incompleteAccount = false, missingKey = false, readGate = null, nextEffectState = null;
+let nextReviewWarnings = null;
 let fundingEffectGate = null, fundingPageSize = null;
 let nextFundingPhase = null;
 let accountMode = "perps", wholeAccountFailure = false, unavailableCapacity = false, pendingKey = false;
@@ -244,7 +245,9 @@ async function fixture(kind, [call, outcome]) {
     case "hl_preview_order_v1": return encodeData(tradePreview(tradeIntent(call.name, args), environment));
     case "hl_place_order_v1": case "hl_close_position_v1": case "hl_cancel_order_v1": case "hl_leverage_v1": case "hl_modify_order_v1": case "hl_protect_position_v1": case "hl_isolated_margin_v1": {
       assert.match(args.operationId, /^[0-9a-f]{32}$/);
-      return { __review: tradePreview(tradeIntent(call.name, args), environment).review };
+      const review = tradePreview(tradeIntent(call.name, args), environment).review;
+      if (nextReviewWarnings) { review.warnings = nextReviewWarnings; nextReviewWarnings = null; }
+      return { __review: review };
     }
     case "hl_retry_trade_v1": {
       const saved = savedTrades.get(args.operationId); assert(saved && saved.canRetryExact, "Explicit retry requires a retained uncertain operation");
@@ -533,6 +536,25 @@ try {
   await screenshot("stop-loss-narrow");
   await dialog().getByRole("button", { name: "Review protection order", exact: true }).click(); await approve();
   assert.equal(effects.at(-1).name, "hl_protect_position_v1"); assert.equal(effects.at(-1).arguments.side, "sell"); assert.equal(effects.at(-1).arguments.triggerKind, "sl"); assert.equal(effects.at(-1).arguments.size, "0.04");
+  await page.locator(".hl-position").filter({ hasText: "BTC" }).getByRole("button", { name: "TP / SL", exact: true }).click();
+  await dialog().getByLabel("Trigger price", { exact: true }).fill("102000");
+  const flatProtectionWarning = "There is no BTC position to reduce.";
+  const laterPositionWarning = "This order cannot reduce the observed position. If accepted and left resting, it may act on a later position; cancel it when it is no longer intended.";
+  const routineOrderTip = "A market order is a bounded immediate-or-cancel order.";
+  // The live execution review can observe a flat account after the form opened.
+  nextReviewWarnings = [flatProtectionWarning, laterPositionWarning, laterPositionWarning, "Reduce only", routineOrderTip];
+  const beforeFlatProtectionReview = effects.length;
+  await dialog().getByRole("button", { name: "Review protection order", exact: true }).click();
+  await dialog().getByText(flatProtectionWarning, { exact: true }).waitFor();
+  await dialog().getByText(laterPositionWarning, { exact: true }).waitFor();
+  assert.equal(await dialog().getByText(laterPositionWarning, { exact: true }).count(), 1, "Actionable warnings are shown once in the actual owner approval dialog");
+  assert.equal(await dialog().getByText("Reduce only", { exact: true }).count(), 1, "A warning already present in review details is not duplicated");
+  assert.equal(await dialog().getByText(routineOrderTip, { exact: true }).count(), 0, "Routine order education remains outside the actionable warning display");
+  await dialog().getByRole("button", { name: "Decline", exact: true }).click();
+  await dialog().waitFor({ state: "hidden" });
+  await page.waitForFunction(() => !document.querySelector(".hl-execution")?.textContent.includes("Following your request"));
+  assert.equal(effects.length, beforeFlatProtectionReview, "Declining a newly flat protection review submits no trigger or other effect");
+  coverage.push("actual owner approval visibly discloses flat reduce-only exposure and later-position risk, deduplicates warnings and sends no effect when declined");
   await page.locator(".hl-position").filter({ hasText: "ETH" }).getByRole("button", { name: "Adjust isolated margin", exact: true }).click();
   await dialog().getByRole("button", { name: "Remove margin", exact: true }).click();
   await dialog().getByLabel("USDC margin to remove", { exact: true }).fill("10.123456");

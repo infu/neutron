@@ -372,6 +372,16 @@ try {
   assert(Number(orderCapacity.maxSize) > 0 && Number(orderCapacity.maxSize) < 15, "Max must use account leverage and reserve fees/price movement within venue capacity");
   checkpoints.push("Market, chart, book, account-fee and Ethereum/CCTP quote adapters consume real transport responses");
 
+  const beforeProtectionPreview = { exchange: seen.exchange.length, reviews: seen.reviews.length, signatures: seen.walletSignatures.length };
+  const protectionPreview = assertPublic(await invoke(page, "hl_preview_protection_v1", { coin: "ETH", side: "sell", size: "0.1", triggerPrice: "2400", triggerKind: "tp", execution: "market" }));
+  assert.equal(protectionPreview.review.reduction.maxSize, "0");
+  assert(protectionPreview.warnings.some(message => message.includes("no ETH position")));
+  assert(protectionPreview.warnings.some(message => message.includes("later position")));
+  const flatOrderPreview = assertPublic(await invoke(page, "hl_preview_order_v1", { coin: "ETH", side: "sell", size: "0.1", orderType: "limit", price: "2400", reduceOnly: true }));
+  assert.equal(flatOrderPreview.review.reduction.maxSize, protectionPreview.review.reduction.maxSize);
+  assert.deepEqual({ exchange: seen.exchange.length, reviews: seen.reviews.length, signatures: seen.walletSignatures.length }, beforeProtectionPreview);
+  checkpoints.push("Read-only protection and order previews agree on flat reduce-only capacity and warn about later positions without approval or exchange dispatch");
+
   const order = { operationId: id(2), coin: "ETH", side: "buy", orderType: "market", size: "0.1", slippageBps: 50 };
   const { operationId: _previewOperationId, ...previewArgs } = order;
   const preview = assertPublic(await invoke(page, "hl_preview_order_v1", previewArgs)); assert.equal(preview.review.fees.takerRate, "0.00045");

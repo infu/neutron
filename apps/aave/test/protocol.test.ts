@@ -137,6 +137,41 @@ test("actual Pool simulation rejects invalid health changes instead of inventing
   const market = snapshot([reserve({ supplied: "1000000", variableDebt: "100000000" })]);
   const plan = await quotePlan(reader(), account, input("repay"), { market }); expect(plan.preview.after.healthFactor).not.toBeNull();
 });
+test.each([true, false])("unchanged collateral=%s warns without altering the explicit transaction", async enabled => {
+  const plan = await quotePlan(reader(), account, input("collateral", { collateralEnabled: enabled }), { market: snapshot([reserve({ collateralEnabled: enabled })]) });
+  expect(plan.preview.warnings.some(warning => warning.includes(`collateral is already ${enabled ? "enabled" : "disabled"} at block 123`))).toBe(true);
+  expect(plan.preview.warnings.some(warning => warning.includes("still incur a network fee"))).toBe(true);
+  expect(decodeFunctionData({ abi: independent, data: plan.steps.at(-1)!.transaction.data }).args).toEqual([asset, enabled]);
+  const changed = await quotePlan(reader(), account, input("collateral", { collateralEnabled: !enabled }), { market: snapshot([reserve({ collateralEnabled: enabled })]) });
+  expect(changed.preview.warnings.some(warning => warning.includes("repeat the current setting"))).toBe(false);
+});
+test.each([0, 47])("unchanged E-mode %i warns while retaining its exact category", async eModeId => {
+  const market = snapshot([reserve({ variableDebt: "0" })]);
+  market.eModes = [{ id: 47, label: "Isolated assets", ltvBps: 9000, liquidationThresholdBps: 9500, liquidationBonusBps: 10100, collateralBitmap: "8", borrowableBitmap: "8", ltvzeroBitmap: "0", isolated: true }];
+  market.account = calculatePosition(market.reserves, market.eModes, eModeId);
+  const plan = await quotePlan(reader(), account, input("emode", { asset: null, eModeId }), { market });
+  expect(plan.preview.warnings.some(warning => warning.includes("E-mode is already") && warning.includes("repeat the current setting"))).toBe(true);
+  expect(decodeFunctionData({ abi: independent, data: plan.steps.at(-1)!.transaction.data }).args).toEqual([eModeId]);
+  const changed = await quotePlan(reader(), account, input("emode", { asset: null, eModeId: eModeId === 0 ? 47 : 0 }), { market });
+  expect(changed.preview.warnings.some(warning => warning.includes("repeat the current setting"))).toBe(false);
+});
+test.each(["RPC eth_call: execution reverted", "RPC connection unavailable"])("eMode simulation diagnostics retain context and the original error: %s", async message => {
+  const market = snapshot([reserve({ variableDebt: "0" })]);
+  market.eModes = [{ id: 47, label: "Isolated assets", ltvBps: 9000, liquidationThresholdBps: 9500, liquidationBonusBps: 10100, collateralBitmap: "16", borrowableBitmap: "16", ltvzeroBitmap: "0", isolated: true }];
+  const original = new Error(message), requested = input("emode", { asset: null, eModeId: 47 }), reads: unknown[] = [];
+  let failure: unknown;
+  try { await quotePlan(async (...args) => { reads.push(args); throw original; }, account, requested, { market }); } catch (error) { failure = error; }
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).cause).toBe(original);
+  expect((failure as Error).message).toContain("at block 123");
+  expect((failure as Error).message).toContain("Current E-mode: 0; requested: 47 (Isolated assets, isolated)");
+  expect((failure as Error).message).toContain("Enabled collateral: USDC");
+  expect((failure as Error).message).toContain("including accounts with no debt");
+  expect((failure as Error).message).toContain("does not establish which protocol condition failed");
+  expect((failure as Error).message).toContain(message);
+  expect(reads).toEqual([["1", CHAINS["1"].pool, encode(EFFECTS.emode, [47]), "123"]]);
+  expect(requested.eModeId).toBe(47);
+});
 test("reward read failures are unavailable observations, not a zero-reward claim", async () => {
   const market = snapshot();
   market.errors = ["Rewards are unavailable: Contract reverted"];

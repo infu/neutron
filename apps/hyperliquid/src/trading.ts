@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { getWalletAddress, signL1Action, type AbstractWallet, type Signature } from "@nktkas/hyperliquid/signing";
 import { HyperliquidData, type AccountSnapshot } from "./market";
 import { calculatePerpFeeRates } from "./fees";
+import { observeReduction } from "./reduce_only";
 import { needsTradeReconciliation } from "./trade_progress";
 import { getTradingSigner } from "./trading_key";
 import { IndexedTradingStore, tradingCallerFromScope, tradingScope, withTradingLock, type JournalRecord, type TradingBinding, type TradingCaller, type TradingStore } from "./trading_store";
@@ -268,6 +269,17 @@ export function createTradingEngine(dependencies: TradingDependencies) {
         review.positionSize = signedSize.toFixed();
       } else {
         buy = side(intent.side); amount = size(intent.size, market!); reduceOnly = intent.kind === "trigger" ? true : !!intent.reduceOnly;
+      }
+      if (reduceOnly && intent.kind !== "close") {
+        const reduction = observeReduction(market!.name, buy ? "buy" : "sell", market!.szDecimals, accountResult.value?.positions ?? null);
+        review.reduction = { ...reduction, observedAt: accountResult.value?.observedAt ?? null };
+        if (reduction.reason) warnings.push(reduction.reason);
+        if (reduction.maxSize !== null && new D(amount).gt(reduction.maxSize) && reduction.maxSize !== "0") {
+          warnings.push(`Requested size ${amount} ${market!.name} exceeds the currently reducible ${reduction.maxSize}. The fixed order size is unchanged; reduce-only can reduce the fill or prevent execution.`);
+        }
+        if (reduction.maxSize === "0" && (intent.kind === "trigger" || intent.kind === "modify" || intent.orderType === "limit")) {
+          warnings.push("This order cannot reduce the observed position. If accepted and left resting, it may act on a later position; cancel it when it is no longer intended.");
+        }
       }
       const isMarket = intent.kind === "close" || (intent.kind === "order" && intent.orderType === "market") || (intent.kind === "trigger" && intent.execution === "market");
       if (intent.kind === "order" && intent.orderType !== "market" && intent.orderType !== "limit") throw new Error("Order type must be market or limit");

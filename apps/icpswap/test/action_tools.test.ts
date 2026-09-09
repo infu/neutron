@@ -205,6 +205,85 @@ test("failed direct pool reads preserve a retained result without replay or fals
   expect(f.records.get(ID)!.operation.revision).toBe(revision); expect(f.executes()).toBe(1);
 });
 
+test.each([
+  { walletEvidence: false, poolFails: false },
+  { walletEvidence: true, poolFails: false },
+  { walletEvidence: false, poolFails: true },
+])("reconciliation refreshes execution completed during pool reads: %j", async ({ walletEvidence, poolFails }) => {
+  const f = fixture(true); await f.handlers.swap(swapArgs, f.context);
+  const saved = f.records.get(ID)!;
+  saved.operation.state = "execution_requested";
+  const before = structuredClone(saved), calls = f.calls.length, approvals = f.approvals.length;
+  const readPool = f.dependencies.reads.readPool;
+  f.dependencies.reads.readPool = async (...args) => {
+    const observed = await readPool(...args);
+    saved.operation = { ...saved.operation, state: "settlement_pending", detail: "The pool completed the saved swap.",
+      revision: String(BigInt(saved.operation.revision) + 1n), effects: [{ key: "swap", method: "depositFromAndSwap", canister: POOL,
+        state: "succeeded", dispatched_at: "1788884400000000000", completed_at: "1788884401000000000", result_nat: "990000" }] };
+    saved.receipt = { state: "settlement_pending", swapped_out: "990000", received_out: "0" };
+    if (poolFails) throw new Error("Pool observation unavailable after execution completed");
+    return observed;
+  };
+  const result = await f.handlers.reconcile({ operationId: ID, walletEvidence }, f.context);
+  expect(result).toMatchObject({ operationId: ID, state: "settlement_pending", message: saved.operation.detail,
+    operation: saved.operation, receipt: { swapped_out: "990000", netOutputAtoms: null, received_out_verified: false },
+    operationRefresh: { status: "refreshed", observationsRevision: before.operation.revision, revision: saved.operation.revision } });
+  expect(result.pool).toBeDefined();
+  if (poolFails) expect(result.pool).toMatchObject({ complete: false });
+  if (walletEvidence) expect(result.walletEvidence).toMatchObject({ status: "not_applicable", settlementVerified: false, operationLinkVerified: false });
+  else expect(result).not.toHaveProperty("walletEvidence");
+  expect(f.calls).toHaveLength(calls); expect(f.approvals).toHaveLength(approvals); expect(f.executes()).toBe(0);
+  expect(saved.operation.input_json).toBe(before.operation.input_json); expect(saved.plan).toEqual(before.plan);
+});
+
+test.each(["succeeds", "fails", "returns an older revision"])("reconciliation preserves Wallet observations when final refresh %s", async (refresh) => {
+  const f = fixture(); await f.handlers.swap(swapArgs, f.context);
+  const saved = f.records.get(ID)!;
+  saved.operation.effects = [{ key: "swap", method: "depositFromAndSwap", canister: POOL, state: "succeeded",
+    dispatched_at: "1788884400000000000", completed_at: "1788884401000000000", result_nat: "990000" }];
+  const before = structuredClone(saved), calls = f.calls.length, approvals = f.approvals.length;
+  const backend = f.dependencies.backendFor(f.context.kernel), status = backend.swapStatus;
+  backend.swapStatus = async (id) => {
+    if (refresh === "fails" && f.calls.length > calls) throw new Error("Final operation read unavailable");
+    const value = await status(id);
+    if (refresh === "returns an older revision" && f.calls.length > calls && value) value.operation.revision = String(BigInt(before.operation.revision) - 1n);
+    return value;
+  };
+  f.context.kernel.callTool = async <T extends JsonValue>(call: Parameters<MsgBusToolContext["kernel"]["callTool"]>[0]): Promise<T> => {
+    f.calls.push(call);
+    expect(call.name).toBe("wallet_account_transactions_v1");
+    saved.operation = { ...saved.operation, detail: "Newer retained operation detail", revision: String(BigInt(saved.operation.revision) + 1n) };
+    return { version: 1, ledger: USDC, owner: OWNER, available: false, observedAtNs: "1788884402000000000", error: "Wallet index unavailable",
+      source: { kind: "index", canister: null, ledgerVerified: false },
+      pagination: { beforeBlock: null, nextBeforeBlock: null, oldestBlock: null, hasMore: false, completeToOldest: false },
+      observation: { indexedAccountBalanceAtoms: null, newestAccountBlock: null, indexedBlocks: null, indexedBlocksError: null } } as unknown as T;
+  };
+  const result = await f.handlers.reconcile({ operationId: ID }, f.context);
+  expect(result.operationId).toBe(ID); expect(result.pool).toBeDefined();
+  expect(result.walletEvidence).toMatchObject({ status: "unavailable", settlementVerified: false, operationLinkVerified: false,
+    ledgers: [{ ledger: USDC, errors: ["Wallet index unavailable"], coverage: { observedAtNs: "1788884402000000000" } }] });
+  expect(result.operation).toEqual(refresh === "succeeds" ? saved.operation : before.operation);
+  expect(result.operationRefresh).toEqual(refresh === "succeeds"
+    ? { status: "refreshed", observationsRevision: before.operation.revision, revision: saved.operation.revision }
+    : { status: "unavailable", observationsRevision: before.operation.revision, error: refresh === "fails" ? "Final operation read unavailable"
+      : "The operation refresh returned an older revision; the earlier saved snapshot is retained." });
+  expect(f.calls.slice(calls).map((call) => call.name)).toEqual(["wallet_account_transactions_v1"]);
+  expect(f.approvals).toHaveLength(approvals); expect(f.executes()).toBe(1);
+});
+
+test("cancelling final reconciliation refresh propagates cancellation without effect retries", async () => {
+  const f = fixture(true); await f.handlers.swap(swapArgs, f.context);
+  const controller = new AbortController(), backend = f.dependencies.backendFor(f.context.kernel), status = backend.swapStatus;
+  let reads = 0;
+  backend.swapStatus = async (id) => {
+    if (++reads === 2) { controller.abort(new Error("Reconciliation cancelled")); throw controller.signal.reason; }
+    return status(id);
+  };
+  const calls = f.calls.length, approvals = f.approvals.length;
+  await expect(f.handlers.reconcile({ operationId: ID, walletEvidence: false }, { ...f.context, signal: controller.signal })).rejects.toThrow("Reconciliation cancelled");
+  expect(reads).toBe(2); expect(f.calls).toHaveLength(calls); expect(f.approvals).toHaveLength(approvals); expect(f.executes()).toBe(0);
+});
+
 test("liquidity previews query the pool and compute deficits without persisting or funding an intent", async () => {
   const f = fixture();
   const result = await f.handlers.liquidityQuote({ kind: "mint", pool: POOL, tickLower: -60, tickUpper: 60, amount0: "1000000", amount1: "1000000" }, f.context);

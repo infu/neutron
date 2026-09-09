@@ -104,6 +104,20 @@ caller and resume through the same tool and inputs.
 Accepted venue orders remain active after Neutron closes. Agent strategies and
 browser subscriptions run only while the authorized Neutron browser is open.
 
+Reduce-only order reviews and the capacity tool share the same position
+observation logic. `review.reduction` reports current signed exposure, reducible
+size and observation time; missing observations stay unknown. Reviews warn
+about flat accounts, the wrong closing side and sizes above current exposure
+without silently rewriting the requested order. A standalone trigger can rest
+while flat and affect a later position; it is not proof that a current position
+is protected. Cancel protection that is no longer intended.
+
+Use `hl_preview_protection_v1` to inspect the same trigger inputs and execution
+bound as `hl_protect_position_v1` without saving or signing. These are independent
+fixed-size triggers, consistent with the venue's
+[TP/SL documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/take-profit-and-stop-loss-orders-tp-sl),
+and are not automatically linked as an OCO pair.
+
 ## USDC transfers
 
 Ethereum and Arbitrum native USDC deposit through Circle CCTP V2 directly into

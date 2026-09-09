@@ -288,11 +288,15 @@ if (process.env.NEUTRON_UNISWAP_SERVICE_TEST_CHILD !== "1") {
       validateToolArguments(handlers.get(String(invocation.toolName))!.descriptor, JSON.parse(String(invocation.argumentsJson)));
       expect(JSON.parse(String(invocation.gasEstimateJson))).toEqual(gasEstimate);
       expect(app.walletCalls).toEqual([]); expect(app.mutations).toEqual([]);
+      const unavailable = await app.invoke("uniswap_action_reconcile_v1", { operationId: SWAP_ID, includeDiagnostics: true });
+      expect(unavailable.action).toMatchObject({ state: "pending", readComplete: false, steps: [{ requestId: request.requestId, status: "read_unavailable", checked: false, receipt: null, readError: { code: null, message: "No independent chain evidence configured" } }] });
+      app.walletCalls.length = 0; app.mutations.length = 0;
       app.evidence({ chainId: "1", transactionHash: HASH, walletRequestMatches: null, transaction: { from: ACCOUNT, to: manager, data: request.data, valueWei: "0", nonce: "7", blockNumber: "21000001", blockHash: BLOCK_HASH }, receipt: { ...receipt(), finality: "finalized" }, observedAtNs: "1800000000000000000", source: "evm_rpc" });
       const reconciled = await app.invoke("uniswap_action_reconcile_v1", { operationId: SWAP_ID });
       expect(reconciled.action).toMatchObject({ state: "complete", phase: "complete", steps: [{ requestId: request.requestId, checked: true, receipt: { status: "success", finality: "finalized" } }] });
       expect(app.walletCalls.map(call => call.name)).toEqual(["evm_transaction_v1"]);
       expect(app.mutations.map(call => call.method)).toEqual(["uniswap_action_update_v1"]);
+      expect((await app.invoke("uniswap_action_reconcile_v1", { operationId: SWAP_ID, includeDiagnostics: true })).action).toMatchObject({ state: "complete", readComplete: true, steps: [{ readError: null }] });
       expect((await app.invoke("uniswap_action_status_v1", { operationId: SWAP_ID })).action).toMatchObject({ state: "complete" });
       const withoutEstimate = JSON.parse(String(app.rows.get(SWAP_ID)!.state_json)); delete withoutEstimate.plan.details.gasEstimate;
       app.rows.get(SWAP_ID)!.state_json = JSON.stringify(withoutEstimate);

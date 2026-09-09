@@ -26,6 +26,7 @@ const examples: Record<string, JsonObject> = {
   hl_fills_v1: {},
   hl_funding_rates_v1: { coin: "ETH", startTime: 1 },
   hl_preview_order_v1: { coin: "ETH", side: "buy", orderType: "market", size: "0.01" },
+  hl_preview_protection_v1: { coin: "ETH", side: "sell", size: "0.01", triggerPrice: "4000", triggerKind: "sl", execution: "market" },
   hl_order_capacity_v1: { coin: "ETH", side: "buy", orderType: "market", slippageBps: 50 },
   hl_place_order_v1: { operationId, coin: "ETH", side: "buy", orderType: "market", size: "0.01", slippageBps: 50 },
   hl_close_position_v1: { operationId, coin: "ETH" },
@@ -86,7 +87,7 @@ test("exact trade authority is declared on effects while analysis requires no pr
     expect(descriptor.annotations!["neutron:effects"]).toEqual(expect.arrayContaining(["write", "network", "user_visible_ui"]));
     expect(descriptor.inputSchema.required).toContain("operationId");
   }
-  for (const name of ["hl_markets_v1", "hl_market_v1", "hl_chart_v1", "hl_orderbook_v1", "hl_account_v1", "hl_fills_v1", "hl_funding_rates_v1", "hl_preview_order_v1", "hl_order_capacity_v1", "hl_funding_quote_v1", "hl_funding_capacity_v1"]) {
+  for (const name of ["hl_markets_v1", "hl_market_v1", "hl_chart_v1", "hl_orderbook_v1", "hl_account_v1", "hl_fills_v1", "hl_funding_rates_v1", "hl_preview_order_v1", "hl_preview_protection_v1", "hl_order_capacity_v1", "hl_funding_quote_v1", "hl_funding_capacity_v1"]) {
     const descriptor = registered.find((entry) => entry.name === name)!;
     expect(descriptor.annotations!["neutron:consent"]).toBeUndefined();
     expect(descriptor.annotations!["neutron:effects"]).toEqual(["read", "network"]);

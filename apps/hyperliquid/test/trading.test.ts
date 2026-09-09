@@ -91,6 +91,58 @@ describe("Perpetual price and intent validation", () => {
 });
 
 describe("Durable dispatch and recovery", () => {
+  test("reduce-only order and trigger reviews disclose flat exposure before authorization", async () => {
+    const state = fixture({ authorize: async () => { throw new Error("Review only"); } });
+    const observed = { observedAt: 1234, complete: true, errors: [], warnings: [], positions: [], fees: { userCrossRate: "0.00045", userAddRate: "0.00015" } };
+    const engine = state.make({ data: { info: state.info, account: async () => observed } });
+    const requests: TradeIntent[] = [
+      { kind: "order", coin: "ETH", side: "sell", orderType: "limit", size: "0.1", price: "2400", reduceOnly: true },
+      { kind: "trigger", coin: "ETH", side: "sell", size: "0.1", triggerPrice: "2400", triggerKind: "tp", execution: "market" },
+      { kind: "modify", coin: "ETH", oid: 1, side: "sell", size: "0.1", price: "2400", reduceOnly: true },
+    ];
+    for (const request of requests) {
+      const preview = await engine.preview(request);
+      expect(preview.review.reduction).toMatchObject({ positionSize: "0", maxSize: "0", observedAt: 1234 });
+      expect(preview.warnings).toContain("There is no ETH position to reduce.");
+      expect(preview.warnings.some(value => value.includes("later position"))).toBe(true);
+    }
+    await expect(engine.execute({ operationId, intent: requests[1]! })).rejects.toThrow("Review only");
+    expect((state.reviews[0] as any).warnings).toContain("There is no ETH position to reduce.");
+    expect((await engine.history())[0]!.review.reduction).toMatchObject({ maxSize: "0" });
+    expect(state.signed()).toBe(0); expect(state.sent).toEqual([]);
+  });
+
+  test("reduce-only reviews distinguish unavailable, wrong-side and oversized exposure without rewriting orders", async () => {
+    const state = fixture();
+    const request: TradeIntent = { kind: "order", coin: "ETH", side: "sell", orderType: "limit", size: "0.1", price: "2400", reduceOnly: true };
+    for (const [positions, maximum, reason] of [
+      [null, null, "unavailable"],
+      [[{ coin: "ETH", szi: "0" }], "0", "no ETH position"],
+      [[{ coin: "ETH", szi: "-0.2" }], "0", "Choose Buy"],
+      [[{ coin: "ETH", szi: "0.05" }], "0.05", "exceeds the currently reducible"],
+    ] as const) {
+      const observed = { observedAt: 1234, complete: positions !== null, errors: [], warnings: [], positions, fees: null };
+      const preview = await state.make({ data: { info: state.info, account: async () => observed } }).preview(request);
+      expect(preview.review.reduction).toMatchObject({ maxSize: maximum });
+      expect(preview.warnings.some(value => value.includes(reason))).toBe(true);
+      expect((preview.action.orders as any[])[0]).toMatchObject({ s: "0.1", r: true, t: { limit: { tif: "Gtc" } } });
+      if (positions === null) expect(preview.warnings.some(value => value.includes("no ETH position"))).toBe(false);
+    }
+    expect(state.signed()).toBe(0); expect(state.sent).toEqual([]);
+  });
+
+  test("valid long and short protection previews retain exact trigger and size", async () => {
+    for (const [szi, side] of [["0.2", "sell"], ["-0.2", "buy"]] as const) {
+      const state = fixture();
+      const observed = { observedAt: 1234, complete: true, errors: [], warnings: [], positions: [{ coin: "ETH", szi }], fees: { userCrossRate: "0.00045", userAddRate: "0.00015" } };
+      const preview = await state.make({ data: { info: state.info, account: async () => observed } }).preview({ kind: "trigger", coin: "ETH", side, size: "0.1", triggerPrice: "1900", triggerKind: "sl", execution: "limit", price: "1890" });
+      expect(preview.review.reduction).toMatchObject({ positionSize: szi, maxSize: "0.2" });
+      expect(preview.warnings).toEqual([]);
+      expect((preview.action.orders as any[])[0]).toMatchObject({ b: side === "buy", r: true, s: "0.1", p: "1890", t: { trigger: { isMarket: false, triggerPx: "1900", tpsl: "sl" } } });
+      expect(state.signed()).toBe(0);
+    }
+  });
+
   test("cancel-all with no observed orders finishes without signing, dispatch or tracking", async () => {
     const state = fixture();
     const engine = state.make({ data: { info: async <T>(body: Record<string, unknown>): Promise<T> => body.type === "openOrders" ? [] as T : state.info<T>(body) } });

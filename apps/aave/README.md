@@ -51,6 +51,15 @@ selects the protocol's full-withdrawal behavior. If an exact amount exceeds the
 current supply, the quote reports that balance and its observation block without
 silently changing the requested amount.
 
+Collateral and E-mode quotes warn when the requested setting is already active
+at the observed block, including that submitting the same setting still costs
+a network fee. Explicit tool requests keep their original transaction; the UI
+already disables review until the selection changes. Failed simulations retain
+their original Wallet diagnostic and observation block. E-mode failures also
+identify the current and requested category and enabled collateral: Aave checks
+collateral eligibility even when the account has no debt. An opaque RPC revert
+does not identify the exact failed protocol condition.
+
 APYs and prices are observations that can change. Health factor depends on
 collateral prices, debt and liquidation thresholds; there is no universal safe
 health factor. Protocol eligibility and transaction validation remain based on

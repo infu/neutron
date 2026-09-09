@@ -44,7 +44,9 @@ export type ActionInvocation = {
   argumentsJson: string; gasEstimateJson: string | null; caller: EvmWalletCaller | null; agentMode: boolean; humanOwned: boolean;
 };
 export type ReconciledAction = Omit<ActionResult, "steps"> & {
-  steps: (ActionResult["steps"][number] & { requestId: string; checked: boolean; authorizationFailure?: ActionAuthorizationFailure | null })[];
+  /** Completeness of attempted linked-hash reads, not transaction completion. */
+  readComplete?: boolean;
+  steps: (ActionResult["steps"][number] & { requestId: string; checked: boolean; authorizationFailure?: ActionAuthorizationFailure | null; readError?: { code: string | null; message: string } | null })[];
 };
 export type PrepareAction = (context: {
   wallet: EvmWalletClient; envelope: ActionEnvelope; account: EvmAccount;
@@ -253,7 +255,7 @@ function retainedEvidence(intent: ActionIntent, step: ActionJournalStep, evidenc
  * Only journal observations change; no request, quote or position is created. */
 export async function reconcileAction(
   wallet: Pick<EvmWalletClient, "transaction">, store: ActionStore, operationId: string,
-  options: Pick<ActionOptions, "signal" | "onProgress"> & { includeAuthorization?: boolean } = {},
+  options: Pick<ActionOptions, "signal" | "onProgress"> & { includeAuthorization?: boolean; includeDiagnostics?: boolean } = {},
 ): Promise<ReconciledAction | null> {
   if (!/^[0-9a-f]{32}$/.test(operationId)) throw new Error("operationId must be 32 lowercase hexadecimal characters.");
   const callOptions = options.signal ? { signal: options.signal } : undefined;
@@ -262,6 +264,7 @@ export async function reconcileAction(
     let record = await latestAction(store, operationId);
     if (!record) return null;
     const intent = parseActionIntent(record), state = parseActionState(record), checked = new Set<string>();
+    const readErrors = new Map<string, { code: string | null; message: string }>();
     try {
       for (let index = state.steps.length - 1; index >= 0; index -= 1) {
         const step = state.steps[index]!, operation = step.operation;
@@ -270,10 +273,21 @@ export async function reconcileAction(
         if (!hash) continue;
         options.onProgress?.(`Checking ${state.plan.steps[index]!.label.toLowerCase()}…`, actionResult(record));
         const request = { chainId: intent.envelope.chainId, transactionHash: hash };
-        const evidence = parseEvmTransactionResult(await wallet.transaction(request, callOptions), request);
-        options.signal?.throwIfAborted();
-        state.steps[index] = retainedEvidence(intent, { ...step, unresolvedDispatch: evidence.transaction === null && step.unresolvedDispatch }, evidence);
-        checked.add(step.request.requestId);
+        try {
+          const evidence = parseEvmTransactionResult(await wallet.transaction(request, callOptions), request);
+          options.signal?.throwIfAborted();
+          state.steps[index] = retainedEvidence(intent, { ...step, unresolvedDispatch: evidence.transaction === null && step.unresolvedDispatch }, evidence);
+          checked.add(step.request.requestId);
+        } catch (error) {
+          options.signal?.throwIfAborted();
+          // Archive/provider failures for an old approval must not suppress a
+          // different step's receipt or its saved rejection/authorization facts.
+          // Keep prior durable evidence; report this read as unavailable only.
+          readErrors.set(step.request.requestId, {
+            code: typeof error === "object" && error !== null && "code" in error ? String(error.code) : null,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
       const phase = reconciledPhase(intent, state, record.phase);
       options.signal?.throwIfAborted();
@@ -287,9 +301,22 @@ export async function reconcileAction(
         && (step.unresolvedDispatch || !step.operation || !["preparing", "prepared", ...TERMINAL].includes(step.operation.status)));
       const message = missingHash
         ? "A dispatched request has no saved transaction hash; its outcome remains unknown. This check did not send or renew anything. Retrieve the saved invocation for explicit recovery with the same operation ID."
+        : readErrors.size ? "Some saved transaction hashes could not be checked. No unavailable receipt is presented as a current confirmation."
         : "Existing transaction evidence was refreshed. This check did not approve, send or renew anything. Retrieve the saved invocation before explicitly continuing any remaining steps with the same operation ID.";
-      const result = actionResult(record, undefined, message);
-      return { ...result, steps: result.steps.map((step, index) => ({ ...step, requestId: state.steps[index]!.request.requestId, checked: checked.has(state.steps[index]!.request.requestId), ...(options.includeAuthorization ? { authorizationFailure: state.steps[index]!.authorizationFailure ?? null } : {}) })) };
+      // A failed live read cannot certify its cached receipt. Derive only this
+      // response from unresolved evidence without erasing the durable snapshot.
+      const observedState: ActionState = { ...state, steps: state.steps.map(step => {
+        if (!readErrors.has(step.request.requestId)) return step;
+        const { authorizationFailure: _historicalFailure, ...prior } = step;
+        return { ...prior, unresolvedDispatch: true };
+      }) };
+      const observedRecord = readErrors.size ? { ...record, state_json: stable(observedState), phase: reconciledPhase(intent, observedState, record.phase) } : record;
+      const result = actionResult(observedRecord, undefined, message);
+      if (readErrors.size) result.message += ` Some transaction evidence could not be refreshed: ${[...readErrors].map(([requestId, error]) => `request ${requestId}: ${error.message}`).join("; ")}. Unavailable steps are not live confirmations; their prior journal observations were retained. This check did not sign or send anything.`;
+      return { ...result, ...(options.includeDiagnostics ? { readComplete: readErrors.size === 0 } : {}), steps: result.steps.map((step, index) => {
+        const saved = state.steps[index]!, readError = readErrors.get(saved.request.requestId) ?? null;
+        return { ...step, ...(readError ? { status: "read_unavailable", receipt: null } : {}), requestId: saved.request.requestId, checked: checked.has(saved.request.requestId), ...(options.includeAuthorization ? { authorizationFailure: saved.authorizationFailure ?? null } : {}), ...(options.includeDiagnostics ? { readError } : {}) };
+      }) };
     } catch (error) {
       if (!(error instanceof ConcurrentActionUpdate)) throw error;
       // A continuation may have advanced or renewed the journal during these

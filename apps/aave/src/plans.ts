@@ -158,6 +158,7 @@ export async function quotePlan(read: Reader, account: EvmAccount, raw: Input, o
     next.variableDebt = (debt - amount).toString(); inputs.push({ token, amount: amount.toString() });
   } else if (input.kind === "collateral" && reserve && next) {
     if (!BigInt(reserve.supplied)) throw new Error("Supply this reserve before changing its collateral setting.");
+    if (input.collateralEnabled === reserve.collateralEnabled) warnings.push(`${reserve.symbol} collateral is already ${input.collateralEnabled ? "enabled" : "disabled"} at block ${block}. This transaction would repeat the current setting and still incur a network fee if submitted.`);
     if (input.collateralEnabled && collateralParameters(reserve, mode).liquidationThresholdBps === 0) throw new Error("This asset is not eligible as collateral in this mode.");
     if (input.collateralEnabled && !reserve.collateralEnabled) {
       const otherCollateral = market.reserves.filter(r => r.address !== reserve.address && r.collateralEnabled && BigInt(r.supplied) > 0n);
@@ -167,6 +168,7 @@ export async function quotePlan(read: Reader, account: EvmAccount, raw: Input, o
   } else if (input.kind === "emode") {
     const category = market.eModes.find(m => m.id === input.eModeId);
     if (input.eModeId !== 0 && !category) throw new Error("Choose an efficiency mode configured in this Aave market.");
+    if (input.eModeId === market.account.eModeId) warnings.push(`E-mode is already ${category ? `${category.label} (${category.id})` : "disabled (0)"} at block ${block}. This transaction would repeat the current setting and still incur a network fee if submitted.`);
     if (category && market.reserves.some(r => BigInt(r.variableDebt) > 0n && !inBitmap(category.borrowableBitmap, r.id))) throw new Error("Repay assets outside this efficiency mode before switching to it.");
     eModeId = input.eModeId; signature = EFFECTS.emode; args = [eModeId]; summary = category ? `Enable ${category.label} eMode` : "Disable eMode";
     warnings.push("Efficiency mode changes borrowing power for eligible assets; correlated collateral can still lose value and be liquidated.");
@@ -181,7 +183,17 @@ export async function quotePlan(read: Reader, account: EvmAccount, raw: Input, o
   // eMode/LTV constraints and oracle sentinels), using the Wallet caller.
   if (["borrow", "withdraw", "collateral", "emode", "repay_atokens"].includes(input.kind)) {
     const simulation = input.useNative && reserve ? input.kind === "borrow" ? encode(EFFECTS.borrow, [reserve.address, amount, 2n, 0, owner]) : encode(EFFECTS.withdraw, [reserve.address, input.all ? MAX_UINT256 : amount, owner]) : encode(signature, args);
-    const result = await read(input.chainId, network.pool, simulation, block);
+    let result: Awaited<ReturnType<Reader>>;
+    try { result = await read(input.chainId, network.pool, simulation, block); }
+    catch (error) {
+      options.signal?.throwIfAborted();
+      const category = input.kind === "emode" ? market.eModes.find(m => m.id === input.eModeId) : undefined;
+      const enabled = market.reserves.filter(r => r.collateralEnabled && BigInt(r.supplied) > 0n);
+      const modeContext = input.kind === "emode"
+        ? ` Current E-mode: ${market.account.eModeId}; requested: ${input.eModeId}${category ? ` (${category.label}${category.isolated ? ", isolated" : ""})` : ""}. Enabled collateral: ${enabled.map(r => r.symbol).join(", ") || "none"}. Aave checks enabled collateral as well as debt when changing E-mode, including accounts with no debt.`
+        : "";
+      throw new Error(`Could not simulate ${summary} at block ${block}.${modeContext} The failed read does not establish which protocol condition failed. Wallet detail: ${errorMessage(error)}`, { cause: error });
+    }
     if (BigInt(result.blockNumber) !== BigInt(block)) throw new Error("The transaction simulation used a different block. Refresh the preview.");
   }
   const transaction: Transaction = { chainId: input.chainId, accountId: "main", to, valueWei, data: encode(signature, args) };

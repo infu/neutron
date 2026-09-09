@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import type { AccountSnapshot, ActiveAsset, OrderBook, PerpMarket, Snapshot } from "./market";
 import { boundedMarketPrice, validatePerpPrice } from "./trading";
 import { calculatePerpFeeRates } from "./fees";
+import { observeReduction } from "./reduce_only";
 
 const D = Decimal.clone({ precision: 80, toExpNeg: -100, toExpPos: 100 });
 const decimal = (value: unknown): Decimal | null => typeof value === "string" && /^-?\d+(?:\.\d+)?$/.test(value) ? new D(value) : null;
@@ -58,15 +59,11 @@ export function calculateOrderCapacity(input: OrderCapacityInput, evidence: Orde
     base.availableMarginUsdc = nonnegative(activeAsset.availableToTrade[input.side === "buy" ? 0 : 1])?.toFixed() ?? null;
   }
   if (input.reduceOnly) {
-    if (!account?.positions) return unavailable("Your current position is unavailable. Refresh to try again.");
-    const position = account.positions.find(value => value.coin === input.coin);
-    if (!position) return { ...base, maxSize: "0", reason: `There is no ${input.coin} position to reduce.` };
-    const remaining = decimal(position.szi);
-    if (!remaining) return unavailable("Your current position size is unavailable.");
-    base.leverage ??= position.leverage.value;
-    base.marginMode ??= position.leverage.type;
-    const closesPosition = input.side === "buy" ? remaining.lt(0) : remaining.gt(0);
-    return closesPosition ? { ...base, maxSize: down(remaining.abs(), market.szDecimals) } : { ...base, maxSize: "0", reason: `Choose ${remaining.gt(0) ? "Sell" : "Buy"} to reduce this position.` };
+    const position = account?.positions?.find(value => value.coin === input.coin);
+    base.leverage ??= position?.leverage.value ?? null;
+    base.marginMode ??= position?.leverage.type ?? null;
+    const reduction = observeReduction(input.coin, input.side, market.szDecimals, account?.positions ?? null);
+    return { ...base, maxSize: reduction.maxSize, ...(reduction.reason ? { reason: reduction.reason } : {}) };
   }
   if (!activeMatches || !base.leverage || base.availableMarginUsdc === null) return unavailable("Your available trading size is unavailable. Refresh to try again.");
   const venueMax = nonnegative(activeAsset.maxTradeSzs[input.side === "buy" ? 0 : 1]);

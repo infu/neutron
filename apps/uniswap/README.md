@@ -29,6 +29,14 @@ The current position state cannot attribute that stored total between principal
 and fees. V3 removal in this app already collects the withdrawn tokens in the same
 transaction; standalone collection also supports amounts left owed by other clients.
 
+Liquidity slippage is applied to the observed pool price when calculating token
+limits. It is not a percentage limit on each token's amount or on USD value:
+a narrow position's token mix can change by much more than the selected percentage.
+For decrease and close, `amount0`/`amount1` estimate withdrawn principal and
+`amount0Min`/`amount1Min` are its on-chain minimums; collected fees are additional.
+For V3 mint and increase, those minimum fields instead constrain deposited amounts.
+V4 mint and increase enforce maximum deposits through `amount0Max`/`amount1Max`.
+
 V3 compares **direct, single-pool V3 routes** across the 0.01%,
 0.05%, 0.3%, and 1% fee tiers. It uses `QuoterV2.quoteExactInputSingle` through
 EVM Wallet's direct browser-to-RPC `eth_call` path and builds a deadline-protected
@@ -191,7 +199,15 @@ previously reported completion, so a changed inclusion state remains visible.
 `uniswap_action_reconcile_v1` refreshes already-linked transaction hashes and updates
 the local journal without approving, signing, broadcasting, renewing a quote or
 continuing an approval into a trade. It returns receipt outcome and finality for
-each checked step. A dispatched request with no saved hash remains explicitly
+each checked step. Reads are isolated per step: an archive or RPC failure for an
+old approval does not hide the other steps. That step returns `read_unavailable`,
+`checked:false` and `receipt:null`; its last saved journal observation remains
+intact. A cached receipt whose live read failed is not presented as a current
+confirmation. Set `includeDiagnostics:true` for per-step `readError` code/message
+and `readComplete`, which describes attempted linked-hash reads, not execution
+completion. Without the option, the original response fields remain unchanged
+and failures are identified by request ID in the message.
+A dispatched request with no saved hash remains explicitly
 unknown; use the original invocation for an explicit continuation. The compact
 status tool remains a stored observation and does not itself refresh receipts.
 

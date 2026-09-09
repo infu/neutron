@@ -570,9 +570,66 @@ test("receipt reconciliation preserves progress written by a concurrent continua
   expect(f.sends).toHaveLength(1);
 });
 
-test("receipt reconciliation does not present cached completion as a successful live read when RPC fails", async () => {
+test("receipt reconciliation reports failed live reads without presenting cached completion or erasing it", async () => {
   const f = fixture(0); await f.run(); const before = (await f.store.get(envelope.operationId))!;
-  await expect(reconcileAction({ transaction: async () => { throw new Error("RPC unavailable"); } }, f.store, envelope.operationId)).rejects.toThrow("RPC unavailable");
+  const result = await reconcileAction({ transaction: async () => { throw Object.assign(new Error("RPC requires an archive node"), { code: "ARCHIVE_REQUIRED" }); } }, f.store, envelope.operationId, { includeDiagnostics: true });
+  expect(result?.state).toBe("pending"); expect(result?.readComplete).toBe(false);
+  expect(result?.steps[0]).toMatchObject({ status: "read_unavailable", checked: false, receipt: null, readError: { code: "ARCHIVE_REQUIRED", message: "RPC requires an archive node" } });
+  expect(result?.message).toContain("prior journal observations were retained");
+  expect(result?.message).not.toContain("Complete:");
+  expect(await f.store.get(envelope.operationId)).toEqual(before); expect(f.sends).toHaveLength(1);
+});
+
+test("an unavailable old approval cannot hide a different final receipt", async () => {
+  const f = fixture(1);
+  f.sendWith(async request => f.operation(request, request.data === "0x03" ? "submitted" : "confirmed"));
+  f.waitWith(async () => { throw new Error("Tracking interrupted after final submission"); });
+  await expect(f.run()).rejects.toThrow("Tracking interrupted");
+  const [approval, final] = f.sends;
+  f.transactions.set(f.hash(final!), f.evidence(final!, true));
+  const reads: string[] = [];
+  const result = await reconcileAction({ transaction: async (request, options) => {
+    reads.push(request.transactionHash);
+    if (request.transactionHash === f.hash(approval!)) throw new Error("Historical approval requires an archive node");
+    return f.wallet.transaction(request, options);
+  } }, f.store, envelope.operationId, { includeDiagnostics: true });
+  expect(result?.state).toBe("complete"); expect(result?.phase).toBe("complete"); expect(result?.readComplete).toBe(false);
+  expect(result?.steps.map(step => [step.status, step.checked])).toEqual([["read_unavailable", false], ["confirmed", true]]);
+  expect(result?.steps[1]?.readError).toBeNull(); expect(result?.message).toContain(approval!.requestId);
+  expect(reads).toEqual([f.hash(final!), f.hash(approval!)]);
+  const saved = (await f.store.get(envelope.operationId))!;
+  expect(parseActionState(saved).steps[1]?.evidence?.receipt?.status).toBe("success");
+  expect(parseActionState(saved).steps[0]?.evidence?.receipt?.status).toBe("success");
+  expect(f.sends).toHaveLength(2);
+});
+
+test.each(["missing", "authorization_denied", "wallet_rejected"] as const)("old approval archive errors preserve the final step's %s evidence", async kind => {
+  const f = fixture(1);
+  f.sendWith(async request => {
+    if (request.data !== "0x03") return f.operation(request, "confirmed");
+    if (kind === "wallet_rejected") return { ...f.operation(request, "rejected"), message: "Rejected by owner" };
+    throw Object.assign(new Error("Final review did not return a Wallet operation"), kind === "authorization_denied" ? { code: "AGENT_CONSENT_DENIED" } : {});
+  });
+  const initial = await f.run(), before = (await f.store.get(envelope.operationId))!;
+  const reads: string[] = [];
+  const reader = { transaction: async (request: Parameters<EvmWalletClient["transaction"]>[0]) => {
+    reads.push(request.transactionHash); throw new Error("Archive required for old approval");
+  } };
+  const result = await reconcileAction(reader, f.store, envelope.operationId, { includeAuthorization: true, includeDiagnostics: true });
+  expect(result?.state).toBe(initial.state); expect(result?.readComplete).toBe(false);
+  expect(result?.steps[1]).toMatchObject({ status: kind === "wallet_rejected" ? "rejected" : "unknown", checked: false, receipt: null, readError: null });
+  expect(result?.steps[1]?.authorizationFailure?.code ?? null).toBe(kind === "authorization_denied" ? "AGENT_CONSENT_DENIED" : null);
+  expect(reads).toEqual([f.hash(f.sends[0]!)]);
+  expect(result?.message).toContain("Archive required");
+  expect((await f.store.get(envelope.operationId))?.state_json).toBe(before.state_json);
+  const compatible = await reconcileAction(reader, f.store, envelope.operationId);
+  expect(compatible).not.toHaveProperty("readComplete"); expect(compatible?.steps[0]).not.toHaveProperty("readError");
+  expect(f.sends).toHaveLength(2); expect(f.rows.size).toBe(1);
+});
+
+test("cancellation during reconciliation is not mistaken for an archive error", async () => {
+  const f = fixture(0); await f.run(); const before = (await f.store.get(envelope.operationId))!, controller = new AbortController();
+  await expect(reconcileAction({ transaction: async () => { controller.abort(new Error("Owner stopped recovery")); throw new Error("Read aborted"); } }, f.store, envelope.operationId, { signal: controller.signal, includeDiagnostics: true })).rejects.toThrow("Owner stopped recovery");
   expect(await f.store.get(envelope.operationId)).toEqual(before); expect(f.sends).toHaveLength(1);
 });
 
