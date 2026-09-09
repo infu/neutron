@@ -2,10 +2,11 @@ import { exposeTool, type JsonObject, type JsonValue, type MsgBusToolContext } f
 import { createEvmWalletClient, requireEvmWalletCaller } from "neutron-tools/evm_wallet";
 import { getAddress } from "viem";
 import { chain, walletReader } from "./contracts.ts";
+import { readHistory } from "./history.ts";
 import { readMarket } from "./markets.ts";
 import { estimateFees, parseInput, preparePlan, type Input, type Plan } from "./plans.ts";
 import { createStore, type RecordRow } from "./store.ts";
-import { intentOf, latestRecord, operationId, resultOf, runOperation, savedResult, type Result } from "./workflow.ts";
+import { intentOf, latestRecord, operationId, runOperation, savedResult, trackingPausedResult, type Result } from "./workflow.ts";
 
 const text = { type: "string" }, nullableText = { oneOf: [text, { type: "null" }] };
 const address = { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" }, nullableAddress = { oneOf: [address, { type: "null" }] };
@@ -65,7 +66,7 @@ async function execute(context: MsgBusToolContext, id: string, input: Input, eff
   try { return json(await Promise.race([task, interrupted])); }
   catch (error) {
     if (!controller.signal.aborted) throw error;
-    return json(latest ? resultOf(latest, "pending", "Tracking paused. Continue this same operation ID; an interrupted reply does not mean the transaction failed.") : {
+    return json(latest ? trackingPausedResult(latest) : {
       operationId: id, recordId: null, state: "pending", phase: "preparing", summary: "Preparing Aave operation", transactionHash: null, steps: [], message: "Preparation paused. Retry the same operation ID and original inputs to recover any saved intent.",
     });
   } finally { clearTimeout(timer); context.signal?.removeEventListener("abort", cancel); controller.signal.removeEventListener("abort", listener); }
@@ -121,12 +122,10 @@ exposeTool("aave_history_v1", {
   title: "Read Aave activity", description: "Read paginated saved operations with current retained progress. Follow nextCursor for older records. Every renewed quote remains attached to its original operation; history never prunes pending requests. This reads the journal, not live chain finality.",
   inputSchema: schema({ cursor: nullableText, limit: { type: "integer", minimum: 1 } }, []), outputSchema: schema({ rowsJson: text, nextCursor: nullableText }), annotations: { "neutron:effects": ["read"] },
 }, async (args, context) => {
-  const store = createStore(context.kernel), page = await store.page(args.cursor as string | null | undefined, args.limit as number | undefined);
-  const rows = await Promise.all(page.rows.map(async (summary) => {
-    const record = await latestRecord(store, summary.id);
-    if (!record) throw new Error("A saved operation disappeared.");
-    const intent = intentOf(record);
-    return { ...summary, result: await savedResult(store, summary.id, record), input: intent.input, humanOwned: intent.caller === null && !intent.agentMode };
-  }));
-  return { rowsJson: JSON.stringify(rows), nextCursor: page.nextCursor };
+  const page = await readHistory(createStore(context.kernel), {
+    ...(args.cursor === undefined ? {} : { cursor: args.cursor as string | null }),
+    ...(args.limit === undefined ? {} : { limit: args.limit as number }),
+    ...(context.signal ? { signal: context.signal } : {}),
+  });
+  return { rowsJson: JSON.stringify(page.rows), nextCursor: page.nextCursor };
 });

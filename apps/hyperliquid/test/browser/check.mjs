@@ -29,6 +29,7 @@ export async function callTool(call,options) {
   }
   if (options?.signal?.aborted) throw new DOMException("The operation was aborted", "AbortError");
   window.fixtureToolResults??={}; window.fixtureToolResults[call.name]=(window.fixtureToolResults[call.name]??0)+1;
+  if(call.name==="hl_reconcile_v1"){window.fixtureReconcileResults??={};const id=call.arguments.operationId;window.fixtureReconcileResults[id]=(window.fixtureReconcileResults[id]??0)+1;}
   return result;
 }
 window.fixtureRequestReview=async(review,overrides={})=>{
@@ -198,9 +199,13 @@ function fundingOperation(operationId, input, state = "pending") {
 const calls = [], effects = [], reviewOutcomes = [], forbiddenNetwork = [];
 const savedTrades = new Map([["5".repeat(32), tradeOperation("5".repeat(32), { kind: "order", coin: "BTC", side: "buy", orderType: "market", size: "0.01", slippageBps: 50 }, "uncertain")]]);
 const savedFunding = new Map();
+const reconciliationResponses = new Map();
 let failingReads = false, incompleteAccount = false, missingKey = false, readGate = null, nextEffectState = null;
+let nextReviewWarnings = null;
 let fundingEffectGate = null, fundingPageSize = null;
+let nextFundingPhase = null;
 let accountMode = "perps", wholeAccountFailure = false, unavailableCapacity = false, pendingKey = false;
+let failingReconciliationId = null;
 const encodeData = value => ({ dataJson: JSON.stringify(value) });
 const encodeResult = value => ({ resultJson: JSON.stringify(value) });
 const tradeIntent = (name, args) => {
@@ -240,7 +245,9 @@ async function fixture(kind, [call, outcome]) {
     case "hl_preview_order_v1": return encodeData(tradePreview(tradeIntent(call.name, args), environment));
     case "hl_place_order_v1": case "hl_close_position_v1": case "hl_cancel_order_v1": case "hl_leverage_v1": case "hl_modify_order_v1": case "hl_protect_position_v1": case "hl_isolated_margin_v1": {
       assert.match(args.operationId, /^[0-9a-f]{32}$/);
-      return { __review: tradePreview(tradeIntent(call.name, args), environment).review };
+      const review = tradePreview(tradeIntent(call.name, args), environment).review;
+      if (nextReviewWarnings) { review.warnings = nextReviewWarnings; nextReviewWarnings = null; }
+      return { __review: review };
     }
     case "hl_retry_trade_v1": {
       const saved = savedTrades.get(args.operationId); assert(saved && saved.canRetryExact, "Explicit retry requires a retained uncertain operation");
@@ -250,7 +257,13 @@ async function fixture(kind, [call, outcome]) {
     case "hl_funding_execute_v1": {
       assert.match(args.operationId, /^[0-9a-f]{32}$/);
       effects.push(structuredClone(call));
-      const result = fundingOperation(args.operationId, args); savedFunding.set(args.operationId, result);
+      const result = fundingOperation(args.operationId, args);
+      if (nextFundingPhase) {
+        result.phase = nextFundingPhase; nextFundingPhase = null;
+        result.message = "Forwarded to HyperCore. Exact Core credit linkage is not yet available.";
+        result.recovery = { status: "forwarded", methods: [], chainId: "999", gasSymbol: "HYPE", transactionHash: "0x" + "b".repeat(64), walletStatus: null, message: "The original message has already been forwarded." };
+      }
+      savedFunding.set(args.operationId, result);
       if (fundingEffectGate) await fundingEffectGate;
       return encodeResult(result);
     }
@@ -268,6 +281,13 @@ async function fixture(kind, [call, outcome]) {
       return encodeData({ environment, trades: [...savedTrades.values()], funding: rows.slice(offset, offset + count).map(result => ({ id: result.operationId, summary: result.summary, phase: result.phase, revision: "1", created_at: String(BigInt(now() - 1000) * 1000000n), updated_at: String(BigInt(now()) * 1000000n), result })), nextCursor: offset + count < rows.length ? String(offset + count) : null });
     }
     case "hl_reconcile_v1": {
+      if (args.operationId === failingReconciliationId) throw new Error("Temporary venue status read failure.");
+      const queued = reconciliationResponses.get(args.operationId)?.shift();
+      if (queued) {
+        const observed = await (typeof queued === "function" ? queued() : queued);
+        savedTrades.set(args.operationId, observed);
+        return encodeResult(observed);
+      }
       const saved = args.kind === "funding" ? savedFunding.get(args.operationId) : savedTrades.get(args.operationId);
       assert(saved, "Status check retains an existing operation ID");
       return encodeResult(saved);
@@ -516,6 +536,25 @@ try {
   await screenshot("stop-loss-narrow");
   await dialog().getByRole("button", { name: "Review protection order", exact: true }).click(); await approve();
   assert.equal(effects.at(-1).name, "hl_protect_position_v1"); assert.equal(effects.at(-1).arguments.side, "sell"); assert.equal(effects.at(-1).arguments.triggerKind, "sl"); assert.equal(effects.at(-1).arguments.size, "0.04");
+  await page.locator(".hl-position").filter({ hasText: "BTC" }).getByRole("button", { name: "TP / SL", exact: true }).click();
+  await dialog().getByLabel("Trigger price", { exact: true }).fill("102000");
+  const flatProtectionWarning = "There is no BTC position to reduce.";
+  const laterPositionWarning = "This order cannot reduce the observed position. If accepted and left resting, it may act on a later position; cancel it when it is no longer intended.";
+  const routineOrderTip = "A market order is a bounded immediate-or-cancel order.";
+  // The live execution review can observe a flat account after the form opened.
+  nextReviewWarnings = [flatProtectionWarning, laterPositionWarning, laterPositionWarning, "Reduce only", routineOrderTip];
+  const beforeFlatProtectionReview = effects.length;
+  await dialog().getByRole("button", { name: "Review protection order", exact: true }).click();
+  await dialog().getByText(flatProtectionWarning, { exact: true }).waitFor();
+  await dialog().getByText(laterPositionWarning, { exact: true }).waitFor();
+  assert.equal(await dialog().getByText(laterPositionWarning, { exact: true }).count(), 1, "Actionable warnings are shown once in the actual owner approval dialog");
+  assert.equal(await dialog().getByText("Reduce only", { exact: true }).count(), 1, "A warning already present in review details is not duplicated");
+  assert.equal(await dialog().getByText(routineOrderTip, { exact: true }).count(), 0, "Routine order education remains outside the actionable warning display");
+  await dialog().getByRole("button", { name: "Decline", exact: true }).click();
+  await dialog().waitFor({ state: "hidden" });
+  await page.waitForFunction(() => !document.querySelector(".hl-execution")?.textContent.includes("Following your request"));
+  assert.equal(effects.length, beforeFlatProtectionReview, "Declining a newly flat protection review submits no trigger or other effect");
+  coverage.push("actual owner approval visibly discloses flat reduce-only exposure and later-position risk, deduplicates warnings and sends no effect when declined");
   await page.locator(".hl-position").filter({ hasText: "ETH" }).getByRole("button", { name: "Adjust isolated margin", exact: true }).click();
   await dialog().getByRole("button", { name: "Remove margin", exact: true }).click();
   await dialog().getByLabel("USDC margin to remove", { exact: true }).fill("10.123456");
@@ -547,6 +586,104 @@ try {
   coverage.push("partial-close preset rounds to the market's size precision");
   coverage.push("leverage and margin-mode review", "reduce-only stop loss", "exact signed isolated-margin removal", "edit limit order price and remaining size");
 
+  const rejectedModifyId = "d".repeat(32);
+  const rejectedModifyMessage = "Replacement rejected. Original order 42 is canceled and no longer live.";
+  const rejectedModify = tradeOperation(rejectedModifyId, { kind: "modify", coin: "BTC", oid: 42, side: "sell", size: "0.01", price: "108400", reduceOnly: true, postOnly: false }, "rejected");
+  savedTrades.set(rejectedModifyId, {
+    ...rejectedModify, message: rejectedModifyMessage,
+    orders: rejectedModify.orders.map(order => ({ ...order, error: "Replacement could not be placed." })),
+    modification: { checkedAt: now(), original: { coin: "BTC", oid: 42, state: "canceled", venueStatus: "canceled" }, originalLive: false, replacementLive: false, errors: [] },
+  });
+  await nav("Activity").click(); await refresh();
+  const rejectedModifyRow = page.locator(".hl-activity").filter({ hasText: rejectedModifyMessage });
+  await rejectedModifyRow.getByRole("button", { name: "Check status", exact: true }).click();
+  await page.locator(".hl-execution").getByText(rejectedModifyMessage, { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Dismiss operation status", exact: true }).click();
+  assert.equal(await page.locator(".hl-execution").count(), 0, "A rejected modification notice can be dismissed independently of its saved evidence");
+  assert.equal(await rejectedModifyRow.getByRole("button", { name: "Retry saved request", exact: true }).count(), 0, "Read-only status access does not offer retry for a rejected replacement");
+  assert.equal(await rejectedModifyRow.getByRole("button", { name: "Continue saved trade", exact: true }).count(), 0, "A rejected replacement cannot be resumed as a prepared trade");
+  const effectsBeforeModifyCheck = effects.length, reviewsBeforeModifyCheck = reviewOutcomes.length;
+  const modifyChecksBefore = calls.filter(entry => entry.call.name === "hl_reconcile_v1" && entry.call.arguments.operationId === rejectedModifyId).length;
+  await waitEnabled(page, rejectedModifyRow.getByRole("button", { name: "Check status", exact: true }));
+  await rejectedModifyRow.getByRole("button", { name: "Check status", exact: true }).click();
+  await page.locator(".hl-execution").getByText(rejectedModifyMessage, { exact: true }).waitFor();
+  assert.equal(calls.filter(entry => entry.call.name === "hl_reconcile_v1" && entry.call.arguments.operationId === rejectedModifyId).length, modifyChecksBefore + 1, "Activity can refresh both order outcomes after the rejected modification notice is dismissed");
+  assert.equal(effects.length, effectsBeforeModifyCheck, "Checking rejected modification status does not dispatch another effect");
+  assert.equal(reviewOutcomes.length, reviewsBeforeModifyCheck, "Checking rejected modification status does not request another trade approval");
+  await screenshot("rejected-modification-activity-narrow");
+  coverage.push("rejected modification retains original-order cancellation evidence and offers read-only Activity refresh after notice dismissal without retry or continuation");
+
+  const acceptedModifyId = "e".repeat(32);
+  const acceptedModify = tradeOperation(acceptedModifyId, { kind: "modify", coin: "BTC", oid: 43, side: "sell", size: "0.01", price: "108400", reduceOnly: true, postOnly: false }, "accepted");
+  savedTrades.set(acceptedModifyId, { ...acceptedModify, message: "Modification accepted; replacement status is not available yet.", modification: { checkedAt: now(), original: { coin: "BTC", oid: 43, state: "resting", venueStatus: "open" }, originalLive: true, replacementLive: null, errors: [] } });
+  await refresh();
+  const acceptedModifyRow = page.locator(".hl-activity").filter({ hasText: acceptedModifyId });
+  const effectsBeforeFailedCheck = effects.length, reviewsBeforeFailedCheck = reviewOutcomes.length;
+  failingReconciliationId = acceptedModifyId;
+  await acceptedModifyRow.getByRole("button", { name: "Check status", exact: true }).click();
+  await page.locator(".hl-execution-error").getByText("Temporary venue status read failure.", { exact: true }).waitFor();
+  failingReconciliationId = null;
+  const filledModifyMessage = "Replacement filled. Original order 43 is canceled and no longer working.";
+  savedTrades.set(acceptedModifyId, { ...tradeOperation(acceptedModifyId, acceptedModify.intent, "filled"), message: filledModifyMessage, modification: { checkedAt: now(), original: { coin: "BTC", oid: 43, state: "canceled", venueStatus: "canceled" }, originalLive: false, replacementLive: false, errors: [] } });
+  await waitEnabled(page, page.locator(".hl-execution").getByRole("button", { name: "Check status", exact: true }));
+  await page.locator(".hl-execution").getByRole("button", { name: "Check status", exact: true }).click();
+  await page.locator(".hl-execution").getByText(filledModifyMessage, { exact: true }).waitFor();
+  assert.equal(await page.locator(".hl-execution-error").count(), 0, "A successful same-ID status refresh clears the previous read failure styling");
+  assert.equal(await page.locator(".hl-execution").getByText("Temporary venue status read failure.", { exact: true }).count(), 0, "An old read error must not hide newly confirmed order outcomes");
+  assert.equal(effects.length, effectsBeforeFailedCheck, "Recovering a status read does not dispatch another trade");
+  assert.equal(reviewOutcomes.length, reviewsBeforeFailedCheck, "Recovering a status read does not request another approval");
+  coverage.push("a transient modification-status failure clears when same-ID reconciliation confirms filled replacement and canceled original");
+
+  const trackingId = "f".repeat(32), trackingMessage = "Modification accepted; awaiting the replacement order outcome.";
+  const trackingAccepted = { ...acceptedModify, operationId: trackingId, message: trackingMessage, modification: { checkedAt: now(), original: { coin: "BTC", oid: 43, state: "resting", venueStatus: "open" }, originalLive: true, replacementLive: null, errors: [] } };
+  const trackingFilled = { ...tradeOperation(trackingId, acceptedModify.intent, "filled"), message: "Tracked replacement filled; original canceled.", modification: { checkedAt: now(), original: { coin: "BTC", oid: 43, state: "canceled", venueStatus: "canceled" }, originalLive: false, replacementLive: false, errors: [] } };
+  savedTrades.set(trackingId, trackingAccepted);
+  const trackingOriginalUnknown = { ...trackingFilled, message: "Replacement filled; original order status is not available yet.", modification: { ...trackingFilled.modification, originalLive: null } };
+  reconciliationResponses.set(trackingId, [trackingAccepted, trackingAccepted, trackingOriginalUnknown, trackingFilled]);
+  await refresh();
+  const trackingRow = page.locator(".hl-activity").filter({ hasText: trackingId });
+  assert.equal(await trackingRow.locator(".hl-badge.hl-positive").count(), 0, "An unresolved acceptance does not receive completed-outcome styling");
+  const trackingEffects = effects.length, trackingReviews = reviewOutcomes.length;
+  await trackingRow.getByRole("button", { name: "Check status", exact: true }).click();
+  await page.waitForFunction(id => window.fixtureReconcileResults?.[id] >= 2, trackingId);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(calls.filter(entry => entry.call.name === "hl_reconcile_v1" && entry.call.arguments.operationId === trackingId).length, 2, "The immediate follow-up does not loop while acceptance is unchanged");
+  assert.equal(await page.getByRole("button", { name: "Refresh market and account", exact: true }).isEnabled(), true, "Read-only tracking leaves the UI responsive");
+  await page.evaluate(() => window.fixturePoll());
+  await page.locator(".hl-execution").getByText(trackingOriginalUnknown.message, { exact: true }).waitFor();
+  await trackingRow.getByText(trackingOriginalUnknown.message, { exact: true }).waitFor();
+  await trackingRow.getByRole("button", { name: "Check status", exact: true }).waitFor();
+  assert.equal(await trackingRow.getByRole("button", { name: "Continue saved trade", exact: true }).count(), 0, "A filled replacement with unresolved original evidence only offers a read check");
+  assert.equal(await trackingRow.getByRole("button", { name: "Retry saved request", exact: true }).count(), 0, "Missing original-order evidence never authorizes replay of a filled replacement");
+  await page.evaluate(() => window.fixturePoll());
+  await page.locator(".hl-execution").getByText(trackingFilled.message, { exact: true }).waitFor();
+  await trackingRow.getByText(trackingFilled.message, { exact: true }).waitFor();
+  assert.equal(effects.length, trackingEffects, "Automatic status tracking does not dispatch or retry a trade");
+  assert.equal(reviewOutcomes.length, trackingReviews, "Automatic status tracking does not prompt for trade approval");
+  await page.evaluate(() => window.fixturePoll());
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(calls.filter(entry => entry.call.name === "hl_reconcile_v1" && entry.call.arguments.operationId === trackingId).length, 4, "A proven outcome stops automatic tracking");
+
+  const dismissedTrackingId = "c".repeat(32), dismissedAccepted = { ...trackingAccepted, operationId: dismissedTrackingId, message: "Awaiting a delayed order status." };
+  let releaseDelayedStatus, delayedStatusStarted;
+  const delayedStatus = new Promise(resolve => { releaseDelayedStatus = resolve; });
+  const delayedStarted = new Promise(resolve => { delayedStatusStarted = resolve; });
+  savedTrades.set(dismissedTrackingId, dismissedAccepted);
+  reconciliationResponses.set(dismissedTrackingId, [dismissedAccepted, () => { delayedStatusStarted(); return delayedStatus; }]);
+  await refresh();
+  await page.locator(".hl-activity").filter({ hasText: dismissedTrackingId }).getByRole("button", { name: "Check status", exact: true }).click();
+  await delayedStarted;
+  await page.evaluate(() => window.fixturePoll());
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(calls.filter(entry => entry.call.name === "hl_reconcile_v1" && entry.call.arguments.operationId === dismissedTrackingId).length, 2, "A refresh tick does not interrupt or duplicate a slow in-flight status read");
+  await page.getByRole("button", { name: "Dismiss operation status", exact: true }).click();
+  releaseDelayedStatus({ ...trackingFilled, operationId: dismissedTrackingId });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator(".hl-execution").count(), 0, "A late automatic status result cannot reopen a dismissed notice");
+  assert.equal(effects.length, trackingEffects, "Dismissal and late observation do not replay the modification");
+  coverage.push("accepted modifications receive immediate read-only follow-up and existing-clock reconciliation without blocking UI or retrying effects", "settled outcomes stop automatic reads and dismissed notices cannot be reopened by delayed responses");
+
+  await nav("Orders").click();
   const transfer = () => page.getByRole("button", { name: /Transfer USDC/ }).first().click();
   await transfer();
   await waitEnabled(page, dialog().getByRole("button", { name: "Max", exact: true }));
@@ -708,6 +845,21 @@ try {
   coverage.push("proven cash-balance fallback offers Move to perps using the original deposit ID and no new deposit or mint");
   coverage.push("attested destination completion and exact-request continuation use only original transfer ID and method", "destination recovery never starts a new source deposit", "HyperEVM recovery explains HYPE gas and Ethereum recovery explains ETH gas", "Circle attestation renewal is offered only for an eligible attestation status", "completed and already-forwarded transfers offer no remint action");
 
+  nextFundingPhase = "forwarded_to_core";
+  await transfer(); await dialog().getByLabel("USDC amount", { exact: true }).fill("19");
+  await waitEnabled(page, dialog().getByRole("button", { name: "Review deposit", exact: true }));
+  await dialog().getByRole("button", { name: "Review deposit", exact: true }).click();
+  await page.locator(".hl-execution strong").filter({ hasText: "Forwarded" }).waitFor();
+  const forwardedId = effects.at(-1).arguments.operationId;
+  assert.equal(savedFunding.get(forwardedId).state, "pending", "Forwarded display does not pretend exact Core credit linkage is complete");
+  assert.equal(await page.locator(".hl-execution").getByRole("button", { name: "Continue transfer", exact: true }).count(), 0, "A forwarded deposit notice offers no redundant transfer execution");
+  await page.getByRole("button", { name: "Dismiss operation status", exact: true }).click();
+  await nav("Activity").click();
+  const forwardedRow = page.locator(".hl-activity").filter({ hasText: "Deposit 19 USDC" });
+  await forwardedRow.locator(".hl-badge").getByText("Forwarded", { exact: true }).waitFor();
+  assert.equal(await forwardedRow.getByRole("button", { name: "Continue transfer", exact: true }).count(), 0, "A forwarded saved deposit offers tracking instead of another execution");
+  await forwardedRow.getByRole("button", { name: "Check status", exact: true }).waitFor();
+  coverage.push("forwarded Core deposits remain machine-pending but display Forwarded with status checks and no repeat transfer action");
 
   fundingPageSize = 2;
   await refresh();

@@ -16,7 +16,7 @@ const caller = { appId: "agent", installationUid: "agent-installation", role: "b
 const operationId = "0123456789abcdef0123456789abcdef";
 const intent: TradeIntent = { kind: "order", coin: "ETH", side: "buy", orderType: "market", size: "0.1", slippageBps: 50 };
 
-function fixture(options: { store?: MemoryTradingStore; response?: (body: string) => Promise<Response>; status?: () => unknown; signal?: AbortSignal; authorize?: () => Promise<void>; fills?: unknown[]; positionSize?: string } = {}) {
+function fixture(options: { store?: MemoryTradingStore; response?: (body: string) => Promise<Response>; status?: (identifier: unknown) => unknown; signal?: AbortSignal; authorize?: () => Promise<void>; fills?: unknown[]; positionSize?: string } = {}) {
   const store = options.store ?? new MemoryTradingStore();
   const sent: string[] = [];
   const reviews: unknown[] = [];
@@ -27,7 +27,7 @@ function fixture(options: { store?: MemoryTradingStore; response?: (body: string
     switch (body.type) {
       case "meta": return { universe: [{ name: "ETH", szDecimals: 4, maxLeverage: 25 }, { name: "BTC", szDecimals: 5, maxLeverage: 40 }] } as T;
       case "l2Book": return { coin: body.coin, time: clock, levels: [[{ px: "1999.5", sz: "20", n: 3 }], [{ px: "2000.5", sz: "20", n: 4 }]] } as T;
-      case "orderStatus": return (options.status?.() ?? { status: "unknownOid" }) as T;
+      case "orderStatus": return (options.status?.(body.oid) ?? { status: "unknownOid" }) as T;
       case "userFillsByTime": return (options.fills ?? []) as T;
       case "clearinghouseState": return { assetPositions: [{ position: { coin: "ETH", szi: options.positionSize ?? "-0.25", leverage: { type: "isolated", value: 3 }, marginUsed: "100" } }] } as T;
       case "openOrders": return [{ coin: "ETH", oid: 1 }, { coin: "xyz:TSLA", oid: 2 }, { coin: "@107", oid: 3 }, { coin: "BTC", oid: 4 }] as T;
@@ -91,6 +91,68 @@ describe("Perpetual price and intent validation", () => {
 });
 
 describe("Durable dispatch and recovery", () => {
+  test("reduce-only order and trigger reviews disclose flat exposure before authorization", async () => {
+    const state = fixture({ authorize: async () => { throw new Error("Review only"); } });
+    const observed = { observedAt: 1234, complete: true, errors: [], warnings: [], positions: [], fees: { userCrossRate: "0.00045", userAddRate: "0.00015" } };
+    const engine = state.make({ data: { info: state.info, account: async () => observed } });
+    const requests: TradeIntent[] = [
+      { kind: "order", coin: "ETH", side: "sell", orderType: "limit", size: "0.1", price: "2400", reduceOnly: true },
+      { kind: "trigger", coin: "ETH", side: "sell", size: "0.1", triggerPrice: "2400", triggerKind: "tp", execution: "market" },
+      { kind: "modify", coin: "ETH", oid: 1, side: "sell", size: "0.1", price: "2400", reduceOnly: true },
+    ];
+    for (const request of requests) {
+      const preview = await engine.preview(request);
+      expect(preview.review.reduction).toMatchObject({ positionSize: "0", maxSize: "0", observedAt: 1234 });
+      expect(preview.warnings).toContain("There is no ETH position to reduce.");
+      expect(preview.warnings.some(value => value.includes("later position"))).toBe(true);
+    }
+    await expect(engine.execute({ operationId, intent: requests[1]! })).rejects.toThrow("Review only");
+    expect((state.reviews[0] as any).warnings).toContain("There is no ETH position to reduce.");
+    expect((await engine.history())[0]!.review.reduction).toMatchObject({ maxSize: "0" });
+    expect(state.signed()).toBe(0); expect(state.sent).toEqual([]);
+  });
+
+  test("reduce-only reviews distinguish unavailable, wrong-side and oversized exposure without rewriting orders", async () => {
+    const state = fixture();
+    const request: TradeIntent = { kind: "order", coin: "ETH", side: "sell", orderType: "limit", size: "0.1", price: "2400", reduceOnly: true };
+    for (const [positions, maximum, reason] of [
+      [null, null, "unavailable"],
+      [[{ coin: "ETH", szi: "0" }], "0", "no ETH position"],
+      [[{ coin: "ETH", szi: "-0.2" }], "0", "Choose Buy"],
+      [[{ coin: "ETH", szi: "0.05" }], "0.05", "exceeds the currently reducible"],
+    ] as const) {
+      const observed = { observedAt: 1234, complete: positions !== null, errors: [], warnings: [], positions, fees: null };
+      const preview = await state.make({ data: { info: state.info, account: async () => observed } }).preview(request);
+      expect(preview.review.reduction).toMatchObject({ maxSize: maximum });
+      expect(preview.warnings.some(value => value.includes(reason))).toBe(true);
+      expect((preview.action.orders as any[])[0]).toMatchObject({ s: "0.1", r: true, t: { limit: { tif: "Gtc" } } });
+      if (positions === null) expect(preview.warnings.some(value => value.includes("no ETH position"))).toBe(false);
+    }
+    expect(state.signed()).toBe(0); expect(state.sent).toEqual([]);
+  });
+
+  test("valid long and short protection previews retain exact trigger and size", async () => {
+    for (const [szi, side] of [["0.2", "sell"], ["-0.2", "buy"]] as const) {
+      const state = fixture();
+      const observed = { observedAt: 1234, complete: true, errors: [], warnings: [], positions: [{ coin: "ETH", szi }], fees: { userCrossRate: "0.00045", userAddRate: "0.00015" } };
+      const preview = await state.make({ data: { info: state.info, account: async () => observed } }).preview({ kind: "trigger", coin: "ETH", side, size: "0.1", triggerPrice: "1900", triggerKind: "sl", execution: "limit", price: "1890" });
+      expect(preview.review.reduction).toMatchObject({ positionSize: szi, maxSize: "0.2" });
+      expect(preview.warnings).toEqual([]);
+      expect((preview.action.orders as any[])[0]).toMatchObject({ b: side === "buy", r: true, s: "0.1", p: "1890", t: { trigger: { isMarket: false, triggerPx: "1900", tpsl: "sl" } } });
+      expect(state.signed()).toBe(0);
+    }
+  });
+
+  test("cancel-all with no observed orders finishes without signing, dispatch or tracking", async () => {
+    const state = fixture();
+    const engine = state.make({ data: { info: async <T>(body: Record<string, unknown>): Promise<T> => body.type === "openOrders" ? [] as T : state.info<T>(body) } });
+    const result = await engine.execute({ operationId, intent: { kind: "cancelAll" } });
+    expect(result).toMatchObject({ state: "accepted", orders: [], needsReconciliation: false, canRetryExact: false });
+    expect(result.message).toContain("No matching open perpetual orders");
+    expect((await engine.history())[0]?.needsReconciliation).toBe(false);
+    expect(state.signed()).toBe(0); expect(state.sent).toEqual([]); expect(state.reviews).toEqual([]);
+  });
+
   test("IndexedDB survives store recreation and serializes nonce allocation and conflicting writers", async () => {
     const store = new IndexedTradingStore();
     const scope = `test-${crypto.randomUUID()}`;
@@ -192,18 +254,18 @@ describe("Durable dispatch and recovery", () => {
     expect(state.sent).toHaveLength(0);
   });
   test("a canceled zero-remainder order is not misreported as fully filled", async () => {
-    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: () => ({ status: "order", order: { order: { coin: "ETH", oid: 99, origSz: "0.1", sz: "0" }, status: "canceled", statusTimestamp: 1_780_000_000_000 } }) });
+    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: (cloid) => ({ status: "order", order: { order: { coin: "ETH", oid: 99, cloid, origSz: "0.1", sz: "0" }, status: "canceled", statusTimestamp: 1_780_000_000_000 } }) });
     const result = await state.make().execute({ operationId, intent });
     expect(result.state).toBe("canceled"); expect(result.orders[0]?.filledSize).toBeUndefined();
   });
   test("reconciliation deduplicates fills and reports actual partial quantity", async () => {
     const fill = { oid: 99, tid: 123, hash: "0xabc", coin: "ETH", sz: "0.04", px: "2001" };
-    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: () => ({ status: "order", order: { order: { coin: "ETH", oid: 99, origSz: "0.1", sz: "0" }, status: "filled", statusTimestamp: 1_780_000_000_000 } }), fills: [fill, fill] });
+    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: (cloid) => ({ status: "order", order: { order: { coin: "ETH", oid: 99, cloid, origSz: "0.1", sz: "0" }, status: "filled", statusTimestamp: 1_780_000_000_000 } }), fills: [fill, fill] });
     const result = await state.make().execute({ operationId, intent });
     expect(result.state).toBe("partial"); expect(result.orders[0]).toMatchObject({ filledSize: "0.04", averagePrice: "2001" });
   });
   test("missing fill observations are not represented as zero executed quantity", async () => {
-    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: () => ({ status: "order", order: { order: { coin: "ETH", oid: 99, origSz: "0.1", sz: "0" }, status: "filled", statusTimestamp: 1_780_000_000_000 } }) });
+    const state = fixture({ response: async () => { throw new Error("Lost response"); }, status: (cloid) => ({ status: "order", order: { order: { coin: "ETH", oid: 99, cloid, origSz: "0.1", sz: "0" }, status: "filled", statusTimestamp: 1_780_000_000_000 } }) });
     const engine = state.make({ data: { info: async (body: Record<string, unknown>) => { if (body.type === "userFillsByTime") throw new Error("Fills unavailable"); return state.info(body); } } });
     const result = await engine.execute({ operationId, intent });
     expect(result.state).toBe("filled");

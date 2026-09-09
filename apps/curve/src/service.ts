@@ -6,7 +6,7 @@ import { catalogTokens, fetchPools, findPool, readToken } from "./pools.ts";
 import { describeToken, searchTokens } from "./tokens.ts";
 import { estimateFees, parseInput, poolPosition, preparePlan, type Input, type Plan } from "./plans.ts";
 import { createStore, type RecordRow } from "./store.ts";
-import { intentOf, latestRecord, operationId, resultOf, runOperation, type Result } from "./workflow.ts";
+import { intentOf, latestRecord, operationId, resultOf, runOperation, trackingPausedResult, type Result } from "./workflow.ts";
 import { createServiceWallet } from "./agent_wallet.ts";
 
 const text = { type: "string" }, nullableText = { oneOf: [text, { type: "null" }] };
@@ -68,7 +68,7 @@ async function execute(context: MsgBusToolContext, id: string, input: Input, eff
   try { return json(await Promise.race([task, interrupted])); }
   catch (error) {
     if (!controller.signal.aborted) throw error;
-    return json(latest ? resultOf(latest, "pending", "Tracking paused. Continue this same operation ID; an interrupted reply does not mean the transaction failed.") : {
+    return json(latest ? trackingPausedResult(latest) : {
       operationId: id, recordId: null, state: "pending", phase: "preparing", summary: "Preparing Curve operation", transactionHash: null, steps: [], message: "Preparation paused. Retry the same operation ID and original inputs to recover any saved intent.",
     });
   } finally { clearTimeout(timer); context.signal?.removeEventListener("abort", cancel); controller.signal.removeEventListener("abort", listener); }

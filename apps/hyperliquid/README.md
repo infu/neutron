@@ -25,6 +25,32 @@ size precision and leverage parameters. Fee estimates and Max apply an observed
 account referral discount to taker fees and positive maker fees; maker rebates
 remain unchanged. Missing fee observations remain explicit in review.
 
+Non-post-only edits default to Hyperliquid's `alwaysPlace` behavior so the
+replacement honors GTC. This can place the replacement even if canceling the
+original fails; the exact review explains that consequence. Post-only edits
+default to cancel-dependent ALO. Tools can override `alwaysPlace`: false omits
+the action-level `a` flag and the venue applies ALO even to requested GTC;
+true encodes `a:true` while preserving the selected time-in-force and reduce-only
+setting. Never encode `a:false`. See the
+[venue's modify semantics](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#modify-an-order).
+
+Modification results reconcile the original target and replacement separately.
+`orders[]` describes only the replacement; `modification.original` identifies
+the original, while `originalLive` and `replacementLive` are null when live
+status cannot be established. Original-order fills never count as replacement
+fills. A rejected replacement may leave the original canceled, and Activity
+keeps **Check status** available for these failures. Historical prepared or
+signed actions retain their original review, action, nonce and signature;
+reconciliation never upgrades them to a different always-place action.
+
+Trade results and retained activity expose `needsReconciliation`. An accepted
+order acknowledgement can precede its observable outcome; a filled replacement
+can also precede confirmation that its original order was canceled. Follow
+`hl_reconcile_v1` with the original operation ID while that flag is true. The
+active UI status follows up immediately and on its existing refresh interval,
+without signing or resending. Observed resting orders and successful account
+configuration acknowledgements do not trigger acknowledgement polling.
+
 The chart includes candlesticks, volume, timeframe selection and interactive
 inspection. Price/book observations carry timestamps. Chart analysis names its
 indicator windows, excludes unfinished candles, and reports missing data.
@@ -78,6 +104,20 @@ caller and resume through the same tool and inputs.
 Accepted venue orders remain active after Neutron closes. Agent strategies and
 browser subscriptions run only while the authorized Neutron browser is open.
 
+Reduce-only order reviews and the capacity tool share the same position
+observation logic. `review.reduction` reports current signed exposure, reducible
+size and observation time; missing observations stay unknown. Reviews warn
+about flat accounts, the wrong closing side and sizes above current exposure
+without silently rewriting the requested order. A standalone trigger can rest
+while flat and affect a later position; it is not proof that a current position
+is protected. Cancel protection that is no longer intended.
+
+Use `hl_preview_protection_v1` to inspect the same trigger inputs and execution
+bound as `hl_protect_position_v1` without saving or signing. These are independent
+fixed-size triggers, consistent with the venue's
+[TP/SL documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/take-profit-and-stop-loss-orders-tp-sl),
+and are not automatically linked as an OCO pair.
+
 ## USDC transfers
 
 Ethereum and Arbitrum native USDC deposit through Circle CCTP V2 directly into
@@ -91,10 +131,19 @@ that has already reached Wallet keeps its original bytes through recovery.
 
 Withdrawals use the Wallet's master `sendToEvmWithData` signature and Circle
 forwarding to the same account on Ethereum or Arbitrum. The app reads current
-onchain fees. For an account reporting ambiguous `default` abstraction, the
-caller explicitly selects perps or unified USDC; the app does not guess or
-change account mode. Testnet trading is separate; these funding routes are
-mainnet-only.
+onchain fees. If `userAbstraction` reports `default`, account reads and new
+withdrawal quotes resolve the balance layout from that wallet's `webData3`
+account state, following Hyperliquid's own app. The raw mode remains `default`;
+`accountModeResolution` records the source, effective mode and timestamps.
+This is one direct browser read, with no inference from balance amounts and no
+account-mode change. If that read is unavailable or invalid, the source remains
+unknown and withdrawal quotes require an explicit perps/unified selection.
+Historical signed withdrawals retain their original source and envelope.
+Testnet trading is separate; these funding routes are mainnet-only.
+
+Deposit quotes report `accountMode: null`: selecting the default-perps deposit
+route does not observe or identify the account's balance mode. Withdrawal quotes
+retain the mode actually returned by Hyperliquid.
 
 Funding persists in managed `hyperliquid@1` memory, including original input,
 caller, account fingerprint, exact Wallet requests and transfer evidence.
@@ -103,6 +152,20 @@ or an API acknowledgement does not complete a transfer. Withdrawal completion
 requires matching destination native-USDC mint evidence. Deposits separately
 report CCTP forwarding into the Core deposit queue and observed HyperCore credit;
 public ledger observations do not expose an exact EVM transaction-hash link.
+HyperEVM's standard RPC can omit withdrawal system transactions and their
+receipts. A withdrawal can therefore complete with an unknown source hash when
+the canonical destination CCTP receipt proves its original owner, signed nonce,
+amount, contracts and native-USDC mint. If historical RPC logs are unavailable,
+the browser uses Blockscout's incoming native-USDC index only to locate candidate
+hashes, then verifies each candidate against the destination RPC receipt. An
+index entry or balance change alone cannot complete a withdrawal. The actual
+CCTP fee and its difference from the quote remain visible; the withdrawal API
+does not sign a fee cap. Read failures remain verification errors and never
+authorize a replacement withdrawal.
+If an unsettled withdrawal's source system receipt is unavailable and no
+destination mint exists yet, automatic attestation discovery and manual mint
+recovery still require locating its original source CCTP message. Keep that
+operation pending and retain its signed nonce; a new withdrawal is not recovery.
 Never repeat a burn merely because forwarding or the browser reply is delayed.
 An interrupted Wallet preparation resumes its exact original request through
 explicit continuation; status checks alone do not dispatch it.

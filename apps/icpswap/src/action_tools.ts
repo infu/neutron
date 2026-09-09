@@ -327,18 +327,34 @@ export function createActionHandlers(dependencies: ActionDependencies) {
       context.signal?.throwIfAborted();
       pool = { pool: poolId, owner: account, protocol_diagnostics: error instanceof Error ? error.message : String(error), complete: false };
     }
-    const result = { ...response(prepared), pool };
-    if (args.walletEvidence === false) return result;
+    const observations: JsonObject = { pool };
+    if (args.walletEvidence !== false) {
+      try {
+        if (account === null) throw accountError ?? new Error("The Neutron account is unavailable.");
+        observations.walletEvidence = asJson(await readPayoutEvidence({ prepared, kernel: context.kernel, owner: account, payoutBlocks,
+          ...(context.signal ? { signal: context.signal } : {}) }));
+      } catch (error) {
+        observations.walletEvidence = { version: 1, operationId, status: "unavailable",
+          reason: "Wallet evidence could not be read. The retained protocol result remains available; no payout conclusion was made.",
+          settlementVerified: false, operationLinkVerified: false, effect: null, ledgers: [], explicitBlocks: [],
+          errors: [error instanceof Error ? error.message : String(error)] };
+      }
+    }
+    // Pool and Wallet observations can await while the saved effect completes.
+    // Refresh only its original typed status; never rerun execution or reinterpret
+    // observations selected from the earlier revision as settlement proof.
+    const observationsRevision = prepared.operation.revision;
     try {
-      if (account === null) throw accountError ?? new Error("The Neutron account is unavailable.");
-      const walletEvidence = await readPayoutEvidence({ prepared, kernel: context.kernel, owner: account, payoutBlocks,
-        ...(context.signal ? { signal: context.signal } : {}) });
-      return { ...result, walletEvidence: asJson(walletEvidence) };
+      context.signal?.throwIfAborted();
+      const latest = await preparedFor(backend, operation, intent);
+      context.signal?.throwIfAborted();
+      if (BigInt(latest.operation.revision) < BigInt(observationsRevision)) throw new Error("The operation refresh returned an older revision; the earlier saved snapshot is retained.");
+      return { ...response(latest), ...observations,
+        operationRefresh: { status: "refreshed", observationsRevision, revision: latest.operation.revision } };
     } catch (error) {
-      return { ...result, walletEvidence: { version: 1, operationId, status: "unavailable",
-        reason: "Wallet evidence could not be read. The retained protocol result remains available; no payout conclusion was made.",
-        settlementVerified: false, operationLinkVerified: false, effect: null, ledgers: [], explicitBlocks: [],
-        errors: [error instanceof Error ? error.message : String(error)] } };
+      context.signal?.throwIfAborted();
+      return { ...response(prepared), ...observations,
+        operationRefresh: { status: "unavailable", observationsRevision, error: error instanceof Error ? error.message : String(error) } };
     }
   };
   const history = async (args: JsonObject, context: ActionContext): Promise<JsonObject> => {

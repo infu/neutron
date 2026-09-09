@@ -2,7 +2,7 @@
   "format": 3,
   "id": "aave",
   "name": "via Aave",
-  "version": 104,
+  "version": 107,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Supply, borrow and manage Aave positions with EVM Wallet",
   "src": "main.mo",

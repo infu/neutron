@@ -45,6 +45,20 @@ supplied aTokens is capped by both supply and debt and may leave remaining debt.
 For native ETH supply and repayment, **Max** subtracts the Wallet's observed
 maximum network fee from the balance. If fees are unavailable, the entered
 amount stays unchanged. Fees are checked again by Wallet before signing.
+Withdrawals use the current supplied balance rather than the original deposit
+amount. **Max** fills the observed amount; **Withdraw full supply**
+selects the protocol's full-withdrawal behavior. If an exact amount exceeds the
+current supply, the quote reports that balance and its observation block without
+silently changing the requested amount.
+
+Collateral and E-mode quotes warn when the requested setting is already active
+at the observed block, including that submitting the same setting still costs
+a network fee. Explicit tool requests keep their original transaction; the UI
+already disables review until the selection changes. Failed simulations retain
+their original Wallet diagnostic and observation block. E-mode failures also
+identify the current and requested category and enabled collateral: Aave checks
+collateral eligibility even when the account has no debt. An opaque RPC revert
+does not identify the exact failed protocol condition.
 
 APYs and prices are observations that can change. Health factor depends on
 collateral prices, debt and liquidation thresholds; there is no universal safe
@@ -83,6 +97,9 @@ mined receipt are reported separately; an estimation rejection is not described
 as a lost reply. If the status check also fails, both errors remain visible and
 the saved dispatch stays unresolved. Reverted receipts include their block and
 observed finality. Continuing always retains the original Wallet request ID.
+A tracking timeout preserves a final confirmation or rejection already saved in
+the journal. A confirmed approval with a queued lending transaction remains
+incomplete and keeps the original continuation identity.
 
 Use **Continue in wallet** to resume a saved human operation. Agent callers
 continue their own operation ID with the same original inputs. Status reads
@@ -90,6 +107,12 @@ report retained journal state; reconciliation reads current receipts and can
 recover already approved signed transactions through Wallet. It does not request
 a new approval or signature. Reorganizations and transaction replacements remain
 observable.
+
+Activity reads load saved operations in sequence and reuse each journal record
+within the current page request. This avoids exhausting message-bus attachment
+capacity with simultaneous reads. Refreshing or leaving the app cancels the
+superseded history read; late responses cannot replace newer progress. The full
+requested page and its cursor remain available, including linked attempts.
 
 The managed `aave@1` operation journal retains its released schema and lock
 lineage. Release tests cover clean initialization, populated-root restoration

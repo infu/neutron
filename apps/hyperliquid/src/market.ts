@@ -2,6 +2,8 @@
  * Protocol references: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint
  * and /info-endpoint/perpetuals. Amounts remain decimal strings; no signing uses analysis numbers.
  */
+import { parseAccountAbstraction, resolveAccountMode, unresolvedAccountMode, type AccountAbstraction, type AccountModeResolution } from "./account_mode";
+export type { AccountAbstraction } from "./account_mode";
 export type Environment = "mainnet" | "testnet";
 export const API_URLS = {
   mainnet: { http: "https://api.hyperliquid.xyz", ws: "wss://api.hyperliquid.xyz/ws" },
@@ -54,11 +56,12 @@ export type SpotState = {
   balances: { coin: string; token: number; total: string; hold: string; entryNtl: string }[];
   tokenToAvailableAfterMaintenance?: [number, string][];
 };
-export type AccountAbstraction = "unifiedAccount" | "portfolioMargin" | "disabled" | "default" | "dexAbstraction";
 export type AccountSnapshot = Snapshot & {
   address: string; observations: Observation[]; abstraction: AccountAbstraction | null;
   clearinghouseState: ClearinghouseState | null; positions: Position[] | null; openOrders: OpenOrder[] | null;
   fees: UserFees | null; balances: SpotState | null; balanceSource: "perps" | "unified" | "unknown";
+  /** Optional for older consumers/fixtures; current reads always include mode provenance. */
+  accountModeResolution?: AccountModeResolution;
   /** Spot/HIP-3 orders are outside this app and are excluded, not canceled. */
   excludedOrderCount: number | null; warnings: string[];
 };
@@ -259,22 +262,35 @@ export class HyperliquidData {
         observations.push({ source, observedAt: Date.now(), serverTime: time }); return result;
       } catch (error) { signal?.throwIfAborted(); errors.push(readError(source, error)); return null; }
     };
-    const [clearinghouseState, allOrders, fees, abstraction] = await Promise.all([
+    const readMode = async () => {
+      const abstraction = await read("userAbstraction", parseAccountAbstraction);
+      let resolution: AccountModeResolution;
+      try {
+        resolution = await resolveAccountMode(abstraction, address, (body, signal) => this.info(body, signal), { ...(signal ? { signal } : {}) });
+        if (resolution.source === "webData3") observations.push({ source: "webData3", observedAt: resolution.observedAt, serverTime: resolution.serverTime });
+      } catch (error) {
+        signal?.throwIfAborted(); errors.push(readError("webData3", error));
+        resolution = unresolvedAccountMode("webData3", error);
+      }
+      return { abstraction, resolution };
+    };
+    const [clearinghouseState, allOrders, fees, mode] = await Promise.all([
       read("clearinghouseState", parseClearinghouse, { dex: "" }), read("frontendOpenOrders", parseOpenOrders, { dex: "" }),
       read("userFees", (raw): UserFees => { const value = record(raw, "userFees"); decimalFields(value, ["userCrossRate", "userAddRate"], "userFees"); return value as UserFees; }),
-      read("userAbstraction", (raw): AccountAbstraction => { if (!["unifiedAccount", "portfolioMargin", "disabled", "default", "dexAbstraction"].includes(String(raw))) invalid("userAbstraction"); return raw as AccountAbstraction; }),
+      readMode(),
     ]);
-    const balanceSource = abstraction === "unifiedAccount" || abstraction === "portfolioMargin" ? "unified" : abstraction === "disabled" || abstraction === "dexAbstraction" ? "perps" : "unknown";
+    const { abstraction, resolution: accountModeResolution } = mode;
+    const balanceSource = accountModeResolution.balanceSource;
     // Reading shared collateral is necessary even though this app never offers spot trading.
     const balances = balanceSource !== "perps" ? await read("spotClearinghouseState", parseSpotState) : null;
     const warnings: string[] = [];
     if (balanceSource === "unknown") warnings.push("The account balance mode is not resolved. Perps and token balances must not be added together or treated as available collateral.");
-    if (abstraction === "portfolioMargin") warnings.push("Portfolio margin may include collateral and liabilities outside these default perpetual markets. This view does not estimate full-portfolio liquidation health.");
+    if (accountModeResolution.effectiveAbstraction === "portfolioMargin") warnings.push("Portfolio margin may include collateral and liabilities outside these default perpetual markets. This view does not estimate full-portfolio liquidation health.");
     const openOrders = allOrders?.filter((order) => isDefaultPerpCoin(order.coin)) ?? null;
     return {
       ...snapshot(this.environment), complete: errors.length === 0, errors, address, observations, abstraction,
       clearinghouseState, positions: clearinghouseState?.assetPositions.map(({ position }) => position) ?? null,
-      openOrders, fees, balances, balanceSource,
+      openOrders, fees, balances, balanceSource, accountModeResolution,
       excludedOrderCount: allOrders && openOrders ? allOrders.length - openOrders.length : null, warnings,
     };
   }

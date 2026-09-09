@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { getAddress, keccak256, stringToHex } from "viem";
 import type { EvmAccount, EvmOperationResult, EvmOperationStatusRequest, EvmReceipt, EvmSendTransactionRequest, EvmTransactionResult, EvmWalletClient } from "neutron-tools/evm_wallet";
 import { createStore, stable, type RecordRow } from "../src/store.ts";
-import { attemptId, intentOf, latestRecord, requestId, runOperation, savedResult, stateOf, type RunOptions } from "../src/workflow.ts";
+import { attemptId, intentOf, latestRecord, requestId, runOperation, savedResult, stateOf, trackingPausedResult, type RunOptions } from "../src/workflow.ts";
 import { parseInput, type Plan } from "../src/plans.ts";
 const owner = getAddress("0x1111111111111111111111111111111111111111"), contract = getAddress("0x2222222222222222222222222222222222222222");
 const id = "ab".repeat(16), caller = { appId: "agent", installationUid: "17" };
@@ -60,6 +60,36 @@ test("all approvals precede the matching final receipt; repeated completion send
   expect(f.events.indexOf("step_0_requested")).toBeLessThan(f.events.indexOf("send:0x01"));
   expect(f.events.indexOf("step_1_confirmed")).toBeLessThan(f.events.indexOf("send:0x03"));
   expect((await f.run()).state).toBe("complete"); expect(f.sends).toHaveLength(3);
+});
+test.each(["confirmed", "reverted", "rejected"] as const)("tracking interruption preserves the saved final %s outcome", async status => {
+  const f = fixture(1), controller = new AbortController();
+  f.sendWith(async request => {
+    const observed = f.operation(request, request.data === "0x03" ? status : "confirmed");
+    if (request.data === "0x03" && status === "reverted") {
+      observed.receipt = { ...receipt, status: "reverted" };
+      f.transactions.set(f.hash(request), { ...f.evidence(request, true), receipt: observed.receipt });
+    }
+    return observed;
+  });
+  f.writeWith(row => { if (row.phase === `step_1_${status}`) controller.abort(Error("Tracking window ended")); });
+  await expect(f.run({ signal: controller.signal })).rejects.toThrow("Tracking window ended");
+  const saved = (await f.store.get(id))!, result = trackingPausedResult(saved);
+  expect(saved.phase).toBe(`step_1_${status}`);
+  expect(result.state).toBe(status === "confirmed" ? "complete" : "stopped");
+  expect(result.steps.map(step => step.status)).toEqual(["confirmed", status]);
+  expect(result.transactionHash).toBe(status === "rejected" ? null : f.hash(f.sends[1]!));
+  expect(result.message).not.toContain("Tracking paused");
+  expect(result.message).not.toContain("Continue this same");
+  expect(f.sends).toHaveLength(2);
+});
+test("tracking interruption after approval does not complete the queued lending action", async () => {
+  const f = fixture(1), controller = new AbortController();
+  f.sendWith(async request => f.operation(request, "confirmed"));
+  f.writeWith(row => { if (row.phase === "step_0_confirmed") controller.abort(Error("Tracking window ended")); });
+  await expect(f.run({ signal: controller.signal })).rejects.toThrow("Tracking window ended");
+  const result = trackingPausedResult((await f.store.get(id))!);
+  expect(result.state).toBe("pending"); expect(result.steps.map(step => step.status)).toEqual(["confirmed", "queued"]);
+  expect(result.message).toContain("Continue this same operation ID"); expect(f.sends).toHaveLength(1);
 });
 test("crash after durable dispatch resumes identical ID after reload", async () => {
   const f = fixture(0), abort = new AbortController();

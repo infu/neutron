@@ -1,5 +1,5 @@
 import { getAddress, type Address } from "viem";
-import { listedTokens } from "./tokens.ts";
+import { describeToken, listedTokens } from "./tokens.ts";
 import { call, CHAINS, LEGACY_POOLS, NATIVE, ZERO, isLegacy, poolKey, poolRef, tokenKey, type ChainId, type Family, type Pool, type PoolRef, type Reader, type Token, type VerifiedPool } from "./contracts.ts";
 
 export type PoolCatalog = { pools: Pool[]; complete: boolean; errors: string[]; fetchedAtMs: number };
@@ -22,7 +22,8 @@ export function parsePoolCatalog(raw: unknown, chainId: ChainId, apiFamily: type
       const coin = rawCoin as Record<string, unknown>, address = getAddress(String(coin.address));
       const decimals = Number(coin.decimals);
       if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) throw new Error("Invalid token decimals in Curve catalog.");
-      return { chainId, address: address === NATIVE ? null : address, symbol: typeof coin.symbol === "string" ? coin.symbol : short(address), decimals };
+      const token: Token = { chainId, address: address === NATIVE ? null : address, symbol: typeof coin.symbol === "string" ? coin.symbol : short(address), decimals };
+      return { ...token, symbol: describeToken(token).symbol };
     });
     output.push({ chainId, address, family, id: String(row.id), name: legacy?.name ?? String(row.name ?? row.symbol ?? short(address)), coins,
       lpToken: legacy?.lpToken ?? getAddress(String(row.lpTokenAddress ?? row.address)),
@@ -66,7 +67,11 @@ export async function readToken(read: Reader, chainId: ChainId, address: Address
   let symbol: string;
   try { symbol = String((await call(read, chainId, address, "function symbol() view returns (string)", [], blockNumber)).value); }
   catch { symbol = catalogTokens(chainId).find((token) => token.address === address)?.symbol ?? short(address); }
-  return { chainId, address, symbol, decimals };
+  // Contract identity and observed decimals drive execution. Reuse the token
+  // menu's address-backed display label: bridged USDC still reports "USDC"
+  // onchain, which must not turn it into native USDC in pool/quote tools.
+  const token = { chainId, address, symbol, decimals };
+  return { ...token, symbol: describeToken(token).symbol };
 }
 
 /** API data supplies discovery and labels. Factory registration and pool coin

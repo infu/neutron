@@ -55,7 +55,11 @@ contracts are read onchain and remain unlisted.
 
 Arbitrum **USDC** (Circle-issued) and **USDC.e** (bridged from Ethereum) are
 separately named, even if pool metadata reports both as USDC. Arbitrum's Tether
-asset uses the **USDT0** label. Stablecoin addresses were checked on 2026-09-07
+asset uses the **USDT0** label. These exact-address display names also apply to
+pool discovery, verified pool reads and their quote/tool results; `symbol` is a
+display label, not a verbatim ERC20 `symbol()` response. Contract addresses and
+onchain decimals remain the execution identity and amount units.
+Stablecoin addresses were checked on 2026-09-07
 against [Circle's deployments](https://developers.circle.com/stablecoins/usdc-contract-addresses),
 [Circle's native/bridged Arbitrum explanation](https://www.circle.com/blog/usdc-on-arbitrum-now-available),
 [Tether's supported protocols](https://tether.to/en/supported-protocols/) and
@@ -102,6 +106,8 @@ confirmed before the final action. Success requires the matching actual final
 transaction and a successful receipt. A linked speedup is checked for identical
 sender, destination, value and calldata; cancellation or a different replacement
 does not count as completion. Status reconciliation can detect a reorganization.
+A tracking timeout preserves a final success or rejection already saved in the
+journal. A confirmed approval with its final action still queued remains pending.
 
 After an interrupted reply, use **Continue in wallet**, or continue with the same
 operation ID from the originating Agent. Checking status never starts a new

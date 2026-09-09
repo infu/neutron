@@ -2,6 +2,8 @@ import Decimal from "decimal.js";
 import { getWalletAddress, signL1Action, type AbstractWallet, type Signature } from "@nktkas/hyperliquid/signing";
 import { HyperliquidData, type AccountSnapshot } from "./market";
 import { calculatePerpFeeRates } from "./fees";
+import { observeReduction } from "./reduce_only";
+import { needsTradeReconciliation } from "./trade_progress";
 import { getTradingSigner } from "./trading_key";
 import { IndexedTradingStore, tradingCallerFromScope, tradingScope, withTradingLock, type JournalRecord, type TradingBinding, type TradingCaller, type TradingStore } from "./trading_store";
 
@@ -14,7 +16,7 @@ export type TradeIntent =
   | { kind: "trigger"; coin: string; side: Side; size: string; triggerPrice: string; triggerKind: "tp" | "sl"; execution: "market" | "limit"; price?: string; slippageBps?: number }
   | { kind: "cancel"; coin: string; oid: OrderId }
   | { kind: "cancelAll"; coin?: string }
-  | { kind: "modify"; coin: string; oid: OrderId; side: Side; size: string; price: string; postOnly?: boolean; reduceOnly?: boolean }
+  | { kind: "modify"; coin: string; oid: OrderId; side: Side; size: string; price: string; postOnly?: boolean; reduceOnly?: boolean; alwaysPlace?: boolean }
   | { kind: "leverage"; coin: string; leverage: number; isCross: boolean }
   | { kind: "margin"; coin: string; amountUsdc: string };
 export type TradeState = "prepared" | "signed" | "submitting" | "uncertain" | "accepted" | "resting" | "filled" | "partial" | "canceled" | "rejected";
@@ -44,6 +46,14 @@ export interface TradePreview {
   observedAt: number;
   warnings: string[];
 }
+export interface ModificationEvidence {
+  checkedAt: number;
+  /** Original target only. orders[] continues to describe the replacement. */
+  original: TradeOrderResult;
+  originalLive: boolean | null;
+  replacementLive: boolean | null;
+  errors: string[];
+}
 export interface PublicTradeOperation {
   operationId: string;
   state: TradeState;
@@ -54,7 +64,10 @@ export interface PublicTradeOperation {
   orders: TradeOrderResult[];
   message?: string;
   reconciliation?: { checkedAt: number; errors: string[]; accountState?: unknown };
+  modification?: ModificationEvidence;
   canRetryExact: boolean;
+  /** Derived on read, including for legacy journals. Never authorizes a resend. */
+  needsReconciliation?: boolean;
   caller?: TradingCaller;
   ownedByCaller?: boolean;
 }
@@ -126,7 +139,7 @@ async function cloidFor(scope: string, operationId: string, index: number): Prom
   return `0x${Array.from(new Uint8Array(digest).slice(0, 16), byte => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 function publicRecord(record: TradeRecord): PublicTradeOperation {
-  return structuredClone({ operationId: record.operationId, state: record.state, createdAt: record.createdAt, updatedAt: record.updatedAt, intent: record.intent, review: record.review, orders: record.orders, ...(record.message ? { message: record.message } : {}), ...(record.reconciliation ? { reconciliation: record.reconciliation } : {}), canRetryExact: record.state === "uncertain" && !!record.envelope });
+  return structuredClone({ operationId: record.operationId, state: record.state, createdAt: record.createdAt, updatedAt: record.updatedAt, intent: record.intent, review: record.review, orders: record.orders, ...(record.message ? { message: record.message } : {}), ...(record.reconciliation ? { reconciliation: record.reconciliation } : {}), ...(record.modification ? { modification: record.modification } : {}), needsReconciliation: needsTradeReconciliation(record), canRetryExact: record.state === "uncertain" && !!record.envelope });
 }
 function aggregate(orders: TradeOrderResult[], fallback: TradeState = "accepted"): TradeState {
   if (!orders.length) return fallback;
@@ -257,6 +270,17 @@ export function createTradingEngine(dependencies: TradingDependencies) {
       } else {
         buy = side(intent.side); amount = size(intent.size, market!); reduceOnly = intent.kind === "trigger" ? true : !!intent.reduceOnly;
       }
+      if (reduceOnly && intent.kind !== "close") {
+        const reduction = observeReduction(market!.name, buy ? "buy" : "sell", market!.szDecimals, accountResult.value?.positions ?? null);
+        review.reduction = { ...reduction, observedAt: accountResult.value?.observedAt ?? null };
+        if (reduction.reason) warnings.push(reduction.reason);
+        if (reduction.maxSize !== null && new D(amount).gt(reduction.maxSize) && reduction.maxSize !== "0") {
+          warnings.push(`Requested size ${amount} ${market!.name} exceeds the currently reducible ${reduction.maxSize}. The fixed order size is unchanged; reduce-only can reduce the fill or prevent execution.`);
+        }
+        if (reduction.maxSize === "0" && (intent.kind === "trigger" || intent.kind === "modify" || intent.orderType === "limit")) {
+          warnings.push("This order cannot reduce the observed position. If accepted and left resting, it may act on a later position; cancel it when it is no longer intended.");
+        }
+      }
       const isMarket = intent.kind === "close" || (intent.kind === "order" && intent.orderType === "market") || (intent.kind === "trigger" && intent.execution === "market");
       if (intent.kind === "order" && intent.orderType !== "market" && intent.orderType !== "limit") throw new Error("Order type must be market or limit");
       if (intent.kind === "order" && intent.postOnly && isMarket) throw new Error("A market order cannot be post-only");
@@ -286,8 +310,16 @@ export function createTradingEngine(dependencies: TradingDependencies) {
       }
       const wire: WireOrder = { a: market!.asset, b: buy, p: limitPrice, s: amount, r: reduceOnly, t: intent.kind === "trigger" ? { trigger: { isMarket, triggerPx: triggerPrice!, tpsl: intent.triggerKind } } : { limit: { tif: isMarket ? "Ioc" : (("postOnly" in intent && intent.postOnly) ? "Alo" : "Gtc") } } };
       if (intent.kind === "modify") {
-        action = { type: "modify", oid: orderId(intent.oid), order: wire };
-        warnings.push("Modification only replaces a still-open order. The venue applies post-only behavior when always-place is omitted, so a replacement that would execute immediately can be rejected.");
+        const alwaysPlace = intent.alwaysPlace ?? !intent.postOnly;
+        if (typeof alwaysPlace !== "boolean") throw new Error("alwaysPlace must be a boolean");
+        // Hyperliquid's optional action-level `a` preserves GTC; without it the
+        // venue forces ALO. The false value must be omitted from signed bytes.
+        action = { type: "modify", oid: orderId(intent.oid), order: wire, ...(alwaysPlace ? { a: true } : {}) };
+        Object.assign(review, { alwaysPlace, postOnly: !!intent.postOnly || !alwaysPlace });
+        review.details.push(alwaysPlace
+          ? "The replacement can be placed even if canceling the original order fails. Its limit price, size and reduce-only setting still apply."
+          : "The replacement is placed only if canceling the original succeeds. Hyperliquid applies post-only behavior, even when GTC was requested.");
+        warnings.push("A rejected replacement can leave the original order canceled. Check both order outcomes before relying on an existing exit.");
       } else action = { type: "order", orders: [wire], grouping: "na" };
       orders.push({ coin: market!.name, state: "prepared", size: amount });
       Object.assign(review, { title: `${intent.kind === "close" ? "Close" : intent.kind === "modify" ? "Modify" : buy ? "Buy" : "Sell"} ${market!.name} perpetual`, side: buy ? "buy" : "sell", size: amount, limitPrice, reduceOnly, orderType: intent.kind === "trigger" ? "trigger" : isMarket ? "market" : "limit", estimatedNotionalUsdc: new D(limitPrice).mul(amount).toFixed(), ...(triggerPrice ? { triggerPrice, triggerKind: intent.kind === "trigger" ? intent.triggerKind : undefined } : {}), ...(intent.kind === "modify" ? { replacedOrderId: orderId(intent.oid) } : {}) });
@@ -331,8 +363,8 @@ export function createTradingEngine(dependencies: TradingDependencies) {
     if (record.state === "submitting") record = await save(record, { state: "uncertain", orders: record.orders.map(order => order.state === "prepared" ? { ...order, state: "unknown" } : order) });
     const errors: string[] = [];
     let accountState: unknown;
-    const orders = await Promise.all(record.orders.map(async order => {
-      const identifier = order.oid ?? order.cloid;
+    const checked = new Set<OrderId>();
+    const observeOrder = async (order: TradeOrderResult, identifier = order.oid ?? order.cloid, label = "Order"): Promise<TradeOrderResult> => {
       if (identifier === undefined) return order;
       try {
         const result = object(await info({ type: "orderStatus", user: binding.walletAddress, oid: identifier }));
@@ -341,6 +373,9 @@ export function createTradingEngine(dependencies: TradingDependencies) {
         const detail = object(result.order);
         const venueOrder = object(detail.order);
         if (order.coin && venueOrder.coin !== order.coin) throw new Error("Order evidence belongs to another market");
+        if (!Number.isSafeInteger(venueOrder.oid) || venueOrder.oid < 0) throw new Error("Order evidence has an invalid venue order ID");
+        if (typeof identifier === "number" && venueOrder.oid !== identifier) throw new Error("Order evidence has a different venue order ID");
+        if (typeof identifier === "string" && (typeof venueOrder.cloid !== "string" || venueOrder.cloid.toLowerCase() !== identifier.toLowerCase())) throw new Error("Order evidence has a different client order ID");
         if (order.cloid && venueOrder.cloid && venueOrder.cloid.toLowerCase() !== order.cloid) throw new Error("Order evidence has a different client order ID");
         const observedStatus = String(detail.status);
         const terminalEvidence = ["filled", "canceled", "rejected"].includes(order.state) || /(?:filled|cancel(?:ed)?|rejected)$/i.test(order.venueStatus ?? "");
@@ -354,9 +389,20 @@ export function createTradingEngine(dependencies: TradingDependencies) {
         let state = venueStatus === "open" || venueStatus === "triggered" ? "resting" : venueStatus === "filled" ? "filled" : /rejected$/i.test(venueStatus) ? "rejected" : /cancel(ed)?$/i.test(venueStatus) ? "canceled" : "unknown";
         const requested = new D(order.size ?? original);
         if (filled.gt(0)) state = filled.gte(requested) ? "filled" : "partial";
-        return { ...order, oid: Number(venueOrder.oid), state, venueStatus, ...(order.filledSize !== undefined || observedStatus === "open" ? { filledSize: filled.toFixed() } : {}), ...(/rejected$/i.test(venueStatus) ? { error: venueStatus } : {}) };
-      } catch (error) { errors.push(String(error instanceof Error ? error.message : error)); return order; }
-    }));
+        checked.add(identifier); checked.add(venueOrder.oid);
+        const observed = { ...order, oid: venueOrder.oid, size: order.size ?? original.toFixed(), state, venueStatus, ...(order.filledSize !== undefined || observedStatus === "open" ? { filledSize: filled.toFixed() } : {}), ...(/rejected$/i.test(venueStatus) ? { error: venueStatus } : {}) };
+        if (["resting", "filled", "partial", "canceled"].includes(state) && !/rejected$/i.test(venueStatus)) delete observed.error;
+        return observed;
+      } catch (error) { errors.push(`${label}: ${error instanceof Error ? error.message : String(error)}`); return order; }
+    };
+    const originalId = record.intent.kind === "modify" ? orderId(record.intent.oid) : undefined;
+    const originalSeed: TradeOrderResult | null = originalId === undefined ? null : record.modification?.original ?? {
+      ...(record.intent.coin ? { coin: record.intent.coin } : {}), ...(typeof originalId === "number" ? { oid: originalId } : { cloid: originalId }), state: "unknown",
+    };
+    const [orders, original] = await Promise.all([
+      Promise.all(record.orders.map(order => observeOrder(order, undefined, record.intent.kind === "modify" ? "Replacement order" : "Order"))),
+      originalSeed ? observeOrder(originalSeed, originalId, "Original order") : Promise.resolve(null),
+    ]);
     // Fill evidence supplements the order record and captures actual execution prices for partial IOC orders.
     if (orders.some(order => order.oid !== undefined)) {
       try {
@@ -393,8 +439,27 @@ export function createTradingEngine(dependencies: TradingDependencies) {
     // lost cancellation request was accepted. Keep the cancellation recoverable.
     if ((record.intent.kind === "cancel" || record.intent.kind === "cancelAll") && record.state === "uncertain" &&
       orders.some(order => ["resting", "accepted", "prepared", "unknown"].includes(order.state) || (order.state === "partial" && ["open", "triggered"].includes(order.venueStatus ?? "")))) state = "uncertain";
-    const message = state === "uncertain" ? "The venue has not conclusively resolved this request. Inspect its evidence or explicitly retry the retained signed request; do not create a new operation to retry it." : orders.find(order => order.error)?.error ?? (state === "partial" ? "The order partially filled. Inspect the venue status to see whether any remainder is still open." : `Venue status: ${state}.`);
-    return save(record, { orders, state, message, reconciliation: { checkedAt: now(), errors, ...(accountState ? { accountState } : {}) } });
+    let message = state === "uncertain" ? "The venue has not conclusively resolved this request. Inspect its evidence or explicitly retry the retained signed request; do not create a new operation to retry it." : state === "accepted" && orders.length ? "Hyperliquid acknowledged the request, but the order outcome is not confirmed yet. Reconcile this operation ID; do not submit a new request to recover it." : orders.find(order => order.error)?.error ?? (state === "partial" ? "The order partially filled. Inspect the venue status to see whether any remainder is still open." : `Venue status: ${state}.`);
+    let modification: ModificationEvidence | undefined;
+    if (original && originalId !== undefined) {
+      const live = (order: TradeOrderResult): boolean | null => {
+        const status = order.venueStatus ?? order.state;
+        return ["open", "triggered", "waitingForFill", "waitingForTrigger", "resting"].includes(status) ? true
+          : /(?:filled|canceled|cancel|rejected)$/i.test(status) ? false : null;
+      };
+      const replacement = orders[0];
+      modification = {
+        checkedAt: now(), original, originalLive: checked.has(originalId) ? live(original) : null,
+        replacementLive: replacement ? checked.has(replacement.oid ?? replacement.cloid!) ? live(replacement)
+          : ["filled", "canceled", "rejected"].includes(replacement.state) ? false : null : null,
+        errors: [...errors],
+      };
+      const originalStatus = modification.originalLive === true ? "is still working"
+        : modification.originalLive === false ? `is ${original.venueStatus ?? original.state} and is no longer working`
+          : "could not be verified as working or closed";
+      message = `Replacement ${state}: ${message} Original order ${originalId} ${originalStatus}.`;
+    }
+    return save(record, { orders, state, message, ...(modification ? { modification } : {}), reconciliation: { checkedAt: now(), errors, ...(accountState ? { accountState } : {}) } });
   }
 
   async function send(record: TradeRecord): Promise<TradeRecord> {
@@ -410,7 +475,8 @@ export function createTradingEngine(dependencies: TradingDependencies) {
       if (result.status === "err" && typeof result.response === "string") {
         // A duplicate/stale-nonce rejection on a replay does not establish what the original request did.
         if (record.attempts > 1) return reconcileRecord(await save(record, { response: raw, state: "uncertain", message: result.response }));
-        return save(record, { response: raw, state: "rejected", message: result.response, orders: record.orders.map(order => ({ ...order, state: "rejected", error: result.response })) });
+        const rejected = await save(record, { response: raw, state: "rejected", message: result.response, orders: record.orders.map(order => ({ ...order, state: "rejected", error: result.response })) });
+        return record.intent.kind === "modify" ? reconcileRecord(rejected) : rejected;
       }
       if (result.status !== "ok") throw new Error("Unrecognized exchange response; request outcome may be unknown");
       const details = object(result.response);
@@ -427,7 +493,8 @@ export function createTradingEngine(dependencies: TradingDependencies) {
       const orders = statuses.map((status: unknown, index: number) => parseStatus(status, record.orders[index]!));
       if (record.attempts > 1 && orders.some(order => order.state === "rejected")) return reconcileRecord(await save(record, { response: raw, state: "uncertain" }));
       const message = orders.find(order => order.error)?.error;
-      return save(record, { response: raw, orders, state: aggregate(orders), ...(message ? { message } : {}) });
+      const saved = await save(record, { response: raw, orders, state: aggregate(orders), ...(message ? { message } : {}) });
+      return record.intent.kind === "modify" ? reconcileRecord(saved) : saved;
     } catch (error) {
       const uncertain = await save(record, { state: "uncertain", orders: record.orders.map(order => ({ ...order, state: "unknown" })), message: String(error instanceof Error ? error.message : error) });
       return reconcileRecord(uncertain);
