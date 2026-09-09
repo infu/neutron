@@ -17,11 +17,10 @@ import {
   unitRate,
 } from "./amount.ts";
 import {
-  quoteSwap,
   setSlippage as saveSlippage,
-  setTokenInfo,
   type SwapQuote,
 } from "./backend.ts";
+import { swapQuoteReader } from "./swap_quote.ts";
 import { createRequestId } from "./funding.ts";
 import { runSwapAction, type ActionProgress, type SwapActionInput } from "./action_client.ts";
 import { formatNumber, formatTokenAmount } from "./format.ts";
@@ -37,7 +36,7 @@ const MAX_SLIPPAGE = 50_000;
 const QUOTE_REFRESH_MS = 15_000;
 
 /** Debounce typing so a quote is not fired per keystroke. */
-const QUOTE_DEBOUNCE_MS = 450;
+const QUOTE_DEBOUNCE_MS = 200;
 
 export type SwapToken = {
   address: string;
@@ -79,6 +78,7 @@ export function SwapPanel({
   const [quoteState, setQuote] = useState<SwapQuote | null>(null);
   const [quoteKey, setQuoteKey] = useState("");
   const quoteSequence = useRef(0);
+  const quoteController = useRef<AbortController | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -88,7 +88,7 @@ export function SwapPanel({
   // form that could never quote.
   const [balance, setBalance] = useState<{ ledger: string; phase: "loading" | "ready" | "error"; info: WalletTokenInfo | null; error: string | null } | null>(null);
   const [balanceRead, setBalanceRead] = useState(0);
-  const [tokenInfoRevision, setTokenInfoRevision] = useState(0);
+  const [receiveInfo, setReceiveInfo] = useState<WalletTokenInfo | null>(null);
   const [allocation, setAllocation] = useState<{ ledger: string; amount: string; maximum: bigint; percent: number } | null>(null);
   const [walletSetup, setWalletSetup] = useState<{ ledger: string; pending: boolean; error: string | null } | null>(null);
   const walletSetupController = useRef<AbortController | null>(null);
@@ -105,13 +105,17 @@ export function SwapPanel({
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; quoteSequence.current += 1; };
+    return () => { mounted.current = false; quoteSequence.current += 1; quoteController.current?.abort(); };
   }, []);
   useEffect(() => () => walletSetupController.current?.abort(), [input.address]);
 
   // The Wallet is authoritative on precision; the watchlist row is only a
   // fallback for the moment before it answers.
   const payDecimals = payInfo?.decimals ?? input.decimals;
+  const currentReceiveInfo = receiveInfo && receiveInfo.ledger === output?.address ? receiveInfo : null;
+  const receiveDecimals = currentReceiveInfo?.decimals ?? output?.decimals ?? 0;
+  const inputFee = availablePayInfo?.feeAtoms;
+  const outputFee = currentReceiveInfo?.feeAtoms;
 
   const amountIn = useMemo(
     () => toBaseUnits(amount, payDecimals),
@@ -143,10 +147,6 @@ export function SwapPanel({
         const info = await readTokenInfo(createMsgBusClient(), input.address, controller.signal);
         if (controller.signal.aborted || !mounted.current) return;
         setBalance({ ledger: input.address, phase: "ready", info, error: null });
-        // Publishing metadata for quote construction is separate from whether
-        // the live Wallet balance was successfully read.
-        await setTokenInfo(info.ledger, info.decimals, info.feeAtoms).catch(() => undefined);
-        if (!controller.signal.aborted && mounted.current) setTokenInfoRevision((value) => value + 1);
       } catch (error) {
         if (controller.signal.aborted || !mounted.current) return;
         setBalance((previous) => ({ ledger: input.address, phase: "error", info: previous?.ledger === input.address ? previous.info : null, error: error instanceof Error ? error.message : String(error) }));
@@ -160,16 +160,26 @@ export function SwapPanel({
   useEffect(() => {
     if (!output || busy) return;
     const controller = new AbortController();
+    setReceiveInfo(null);
     void (async () => {
       try {
         const info = await readTokenInfo(createMsgBusClient(), output.address, controller.signal);
         if (controller.signal.aborted || !mounted.current) return;
-        await setTokenInfo(info.ledger, info.decimals, info.feeAtoms);
-        if (!controller.signal.aborted && mounted.current) setTokenInfoRevision((value) => value + 1);
+        setReceiveInfo(info);
       } catch { /* Quotes retain their existing unavailable-metadata diagnostic. */ }
     })();
     return () => controller.abort();
   }, [output?.address, busy]);
+
+  // Resolve the selected pair while the user chooses an amount. Subsequent
+  // previews query the pool directly; the saved trade still revalidates in the
+  // backend before Wallet funding.
+  useEffect(() => {
+    if (!output) return;
+    const controller = new AbortController();
+    void swapQuoteReader.preparePair(input.address, output.address, controller.signal).catch(() => undefined);
+    return () => controller.abort();
+  }, [input.address, output?.address]);
 
   // A return from another browser tab refreshes the observation. Explicit
   // refresh and completion of any swap attempt also read the current balance.
@@ -212,6 +222,9 @@ export function SwapPanel({
 
   const refreshQuote = useCallback(async () => {
     const sequence = ++quoteSequence.current;
+    quoteController.current?.abort();
+    const controller = new AbortController();
+    quoteController.current = controller;
     if (!output || amountIn === null) {
       setQuote(null);
       setQuoteError(null);
@@ -219,14 +232,14 @@ export function SwapPanel({
     }
     setQuoting(true);
     try {
-      const next = await quoteSwap({
+      const next = await swapQuoteReader.quote({
         requestId: createRequestId(),
         inputAddress: input.address,
         outputAddress: output.address,
         amountIn,
         slippage,
-      });
-      if (!mounted.current || sequence !== quoteSequence.current) return;
+      }, { decimalsIn: payDecimals, decimalsOut: receiveDecimals, feeIn: inputFee, feeOut: outputFee, signal: controller.signal });
+      if (!mounted.current || controller.signal.aborted || sequence !== quoteSequence.current) return;
       setQuote(next);
       setQuoteKey(quoteInputKey);
       setQuoteError(null);
@@ -237,20 +250,24 @@ export function SwapPanel({
     } finally {
       if (mounted.current && sequence === quoteSequence.current) setQuoting(false);
     }
-  }, [amountIn, input.address, output, quoteInputKey, slippage, tokenInfoRevision]);
+  }, [amountIn, input.address, output?.address, quoteInputKey, slippage, payDecimals, receiveDecimals, inputFee, outputFee]);
 
   // Debounce typing, then keep the quote warm while the panel is open.
   useEffect(() => {
+    quoteSequence.current += 1;
+    quoteController.current?.abort();
+    setQuoteError(null);
+    setQuoting(false);
     if (!output || amountIn === null || busy) return;
     const timer = window.setTimeout(() => void refreshQuote(), QUOTE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [amountIn, busy, output, refreshQuote, slippage]);
+    return () => { window.clearTimeout(timer); quoteController.current?.abort(); quoteSequence.current += 1; };
+  }, [amountIn, busy, output?.address, refreshQuote, slippage]);
 
   useEffect(() => {
     if (!output || amountIn === null || busy) return;
     const timer = window.setInterval(() => void refreshQuote(), QUOTE_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [amountIn, busy, output, refreshQuote]);
+  }, [amountIn, busy, output?.address, refreshQuote]);
 
   const chooseSlippage = useCallback((value: number) => {
     const bounded = Math.max(1, Math.min(MAX_SLIPPAGE, Math.trunc(value)));

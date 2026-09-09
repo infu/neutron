@@ -142,24 +142,29 @@ describe("ICPSwap research registration", () => {
     expect(seen).toEqual([context.kernel, secondContext.kernel]);
   });
 
-  test("swap quotes refresh both ledger fees before pricing and do not hide metadata failures", async () => {
+  test("swap previews read Wallet fees and query pools directly without backend updates", async () => {
     const events: string[] = [];
     const deps: Partial<ResearchToolDependencies> = {
       tokenInfoFor: async (_context, ledger) => {
         events.push(`read:${ledger}`);
         return { ledger, account: OWNER, name: null, symbol: "TOKEN", decimals: 8, feeAtoms: 0n, balanceAtoms: 1000000n, observedAtNs: 1n };
       },
-      backendFor: () => ({
-        setTokenInfo: async (ledger: string, decimals: number, fee: bigint) => { events.push(`cache:${ledger}:${decimals}:${fee}`); },
-        quoteSwap: async () => { events.push("quote"); throw new Error("price marker"); },
-      }) as unknown as ReturnType<NonNullable<ResearchToolDependencies["backendFor"]>>,
+      backendFor: () => { throw new Error("A price preview must not use the backend"); },
+      quotes: {
+        preparePair: async (input, output) => { expect([input, output]).toEqual([ICP, USDC]); events.push("prepare-pair"); },
+        quote: async (request, options) => {
+          expect(request.amountIn).toBe(100000n);
+          expect(options).toMatchObject({ decimalsIn: 8, decimalsOut: 8, feeIn: 0n, feeOut: 0n });
+          events.push("quote"); throw new Error("price marker");
+        },
+      },
     };
     const args = { from_ledger_id: ICP, to_ledger_id: USDC, amount: "100000" };
     await expect(fixture(deps).run("icpswap_quote_swap", args)).rejects.toThrow("price marker");
-    expect(events).toEqual([`read:${ICP}`, `cache:${ICP}:8:0`, `read:${USDC}`, `cache:${USDC}:8:0`, "quote"]);
+    expect(events).toEqual([`read:${ICP}`, `read:${USDC}`, "prepare-pair", "quote"]);
     events.length = 0;
     await expect(fixture({ ...deps, tokenInfoFor: async () => { throw new Error("live fee unavailable"); } }).run("icpswap_quote_swap", args)).rejects.toThrow("live fee unavailable");
-    expect(events).toEqual([]);
+    expect(events).toEqual(["prepare-pair"]);
   });
 
   test("pool reads derive the real account and preserve unknown fields and errors", async () => {

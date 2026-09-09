@@ -6,7 +6,6 @@ import { fromBaseUnits, toBaseUnits } from "./amount.ts";
 import { formatFeeTier, formatTokenAmount, shortPrincipal } from "./format.ts";
 import { createRequestId } from "./funding.ts";
 import { addLedgerToWallet, readTokenInfo, walletSetupRequired, type WalletTokenInfo } from "./wallet.ts";
-import { setTokenInfo } from "./backend.ts";
 import { parseActionProgress, type ActionProgress } from "./action_client.ts";
 import { ActionCard, loadActionHistory, type SavedAction } from "./activity.tsx";
 import { TokenMark } from "./token_mark.tsx";
@@ -233,7 +232,7 @@ function LiquidityEditor({ selection, owner, client, token, onMetadata, onClose 
       const wallet = createMsgBusClient();
       const read = async (address: string) => {
         const info = await readTokenInfo(wallet, address, controller.signal);
-        if (!controller.signal.aborted) { onMetadata(info); await setTokenInfo(info.ledger, info.decimals, info.feeAtoms).catch(() => undefined); }
+        if (!controller.signal.aborted) onMetadata(info);
         return info;
       };
       const results = await Promise.allSettled([read(view.pool.token0.address), read(view.pool.token1.address)]);

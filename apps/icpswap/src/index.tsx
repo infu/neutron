@@ -22,7 +22,6 @@ import {
   getMarket,
   getSwapJournal,
   getToken,
-  refresh as refreshBackend,
   removeToken,
   searchTokens,
   setNote,
@@ -410,8 +409,7 @@ export function App() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refreshBackend(true), loadLive(0)]);
-      await loadBackend();
+      await Promise.all([loadLive(0), loadBackend()]);
       showToast("Market data refreshed");
     } catch (error) {
       showToast(describeError(error));
@@ -432,7 +430,6 @@ export function App() {
           decimals: 0,
         });
       }
-      await refreshBackend(true).catch(() => undefined);
       await loadBackend();
       showToast("Starter tokens added");
     } catch (error) {

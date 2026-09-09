@@ -71,7 +71,7 @@ test("the manifest validates against the shared schema", async () => {
   expect(result.valid).toBe(true);
   expect(manifest.format).toBe(3);
   expect(manifest.id).toBe("icpswap");
-  expect(manifest.version).toBe(204);
+  expect(manifest.version).toBe(205);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
 });
 
@@ -407,7 +407,7 @@ test("ordinary resident tools use the existing invocation and Wallet review cont
 test("the release offers complete source and the shared application license", async () => {
   const unpacked = unpackNeutronPackage(new Uint8Array(await readFile(packageUrl)));
   const record = JSON.parse(decoder.decode(unpacked["legal/package-record.v1.json"]!));
-  expect(record.package).toMatchObject({ id: "icpswap", version: 204 });
+  expect(record.package).toMatchObject({ id: "icpswap", version: 205 });
   expect(record.license.id).toBe("LicenseRef-Neutron-Sovereign-Application-Use-License-1.0");
   expect(unpacked["legal/LICENSE.APP.USE.txt"]).toEqual(new Uint8Array(await readFile(new URL("../../../LICENSE.APP.USE", import.meta.url))));
   expect(record.source.kind).toBe("https");

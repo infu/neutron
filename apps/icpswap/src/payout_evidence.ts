@@ -48,7 +48,7 @@ export type PayoutEvidence = {
 };
 
 const CANDIDATE_REASON = "The transfer is from this pool's default account to this Neutron's default account at or after the retained protocol dispatch. This is contextual evidence; amount, time and memo do not establish linkage to this operation.";
-const OBSERVATION_REASON = "Recent index pages and explicitly requested ledger blocks are observations only. An empty page, equal amount or absent candidate does not prove settlement or a missing payout. Follow nextBeforeBlock for older index records; inspect ledger blocks for verification.";
+const OBSERVATION_REASON = "Recent index pages and explicitly requested ledger blocks are observations only. An empty page, equal amount or absent candidate does not prove settlement or a missing payout. For older records call Wallet wallet_account_transactions_v1 with that ledger and beforeBlock=coverage.pagination.nextBeforeBlock; repeat until nextBeforeBlock is null. Verify discovered blocks with wallet_transaction_v1, or pass them as payoutBlocks to icpswap_reconcile_v1. Reconcile itself has no pagination input.";
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function fail(path: string): never { throw new Error(`Wallet payout evidence has an invalid ${path}.`); }
 function object(value: unknown, path: string): Record<string, unknown> {

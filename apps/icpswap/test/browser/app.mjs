@@ -43,7 +43,7 @@ const fixture = `
   const effect=(key,method,state)=>({key,canister:retainedPool,method,state,error:'',dispatched_at:'1788880900000000000',completed_at:state==='succeeded'?'1788880900000000001':null,result_nat:null,result_amount0:null,result_amount1:null});
   const summary=({plan_json,funding_json,result_json,...value})=>({...value,effects:value.effects.map(({result_nat,result_amount0,result_amount1,...item})=>item)});
   let durable=JSON.parse(localStorage.getItem('icpswap.browser.fixture')||'null')||{history:[initial,recoverySource],positionLiquidity:'1000000000',fees:true,unused0:'100000000',unused1:'1000000',newPosition:false};
-  const state=window.__app={calls:[],queries:[],walletMissing:false,walletUnselected:[],walletInfoActive:false,walletInfoOverlap:0,walletDelay:40,walletBalances:{},walletFees:{},reverseMarkets:false,failQuote:false,failMarket:new URL(location.href).searchParams.has('market-failure'),addHold:false,updates:[],methods,durable};
+  const state=window.__app={calls:[],queries:[],walletMissing:false,walletUnselected:[],quoteQueries:[],holdTokenInfo:true,releaseTokenInfo:[],walletInfoActive:false,walletInfoOverlap:0,walletDelay:40,walletBalances:{},walletFees:{},reverseMarkets:false,failQuote:false,failMarket:new URL(location.href).searchParams.has('market-failure'),addHold:false,updates:[],methods,durable};
   const persist=()=>{localStorage.setItem('icpswap.browser.fixture',JSON.stringify(durable));for(const fn of listeners)fn();};
   const record=(operationId,input,approved)=>({plan_json:'',funding_json:'',result_json:'',revision:'0',id:operationId,input_json:JSON.stringify({version:1,owner:{appId:'icpswap',rootMode:false},input}),state:approved?'complete':'stopped',detail:approved?'Fixture action completed and payout observed.':'Owner declined this prepared action.',created_at:'1788880900000000000',updated_at:'1788880900000000000',effects:[effect(input.kind||'swap',input.kind||'swap',approved?'succeeded':'not_requested')]});
   const progress=(operation)=>({operationId:operation.id,state:operation.state,message:operation.detail,operation});
@@ -125,19 +125,43 @@ const fixture = `
   export async function updateSelf(name,args){
     state.updates.push({name,args});
     if(name==='icpswap_add'&&state.addHold)await new Promise(resolve=>{state.releaseAdd=resolve;});
-    if(name==='icpswap_set_token_info')return true;
+    if(name==='icpswap_set_token_info'){if(state.holdTokenInfo)await new Promise(resolve=>state.releaseTokenInfo.push(resolve));return true;}
     if(name==='icpswap_set_slippage')return args[0];
     if(name==='icpswap_refresh')return {refreshed:true,status,errors:[]};
     if(['icpswap_add','icpswap_remove','icpswap_set_pinned','icpswap_set_note'].includes(name))return {ok:true,message:'Saved',watchlist_size:rows.length};
-    if(name==='icpswap_swap_quote'){
-      if(state.failQuote)throw Error('Fixture route currently unavailable');
-      const r=args[0],first=rows.find(row=>row.address===r.input_address),second=rows.find(row=>row.address===r.output_address);
-      const result=BigInt(Math.floor(Number(r.amount_in)/10**first.decimals*first.price_usd/second.price_usd*10**second.decimals));
-      return {pool,pool_key:'ICP/ckUSDC',fee_tier:3000,...r,decimals_in:first.decimals,decimals_out:second.decimals,zero_for_one:true,quoted_out:result.toString(),amount_out_minimum:(result*995n/1000n).toString(),expected_out:(result-10000n).toString(),token_in_fee:'10000',token_out_fee:'10000',funding_amount:(BigInt(r.amount_in)+10000n).toString(),total_debit:(BigInt(r.amount_in)+20000n).toString(),price_impact:0.0003,warn:false,funding_ledger:first.address,funding_spender:pool,at:1788880800};
-    }
+    if(name==='icpswap_swap_quote')throw Error('Browser quotes must not route through the ICPSwap backend');
     throw Error('Unexpected fixture update '+name);
   }
   export const createMsgBusClient=()=>({callTool,querySelf,updateSelf});
+  const swapPoolIds=['aaaaa-aa','2vxsx-fae','rrkah-fqaaa-aaaaa-aaaaq-cai','r7inp-6aaaa-aaaaa-aaabq-cai','renrk-eyaaa-aaaaa-aaada-cai','rdmx6-jaaaa-aaaaa-aaadq-cai'];
+  const swapPools=[];
+  for(let i=0;i<rows.length;i++)for(let j=i+1;j<rows.length;j++){
+    const first=rows[i],second=rows[j],canisterId=Principal.fromText(swapPoolIds[swapPools.length]);
+    swapPools.push({key:first.address+'/'+second.address+'/3000',token0:{address:first.address,standard:'ICRC2'},token1:{address:second.address,standard:'ICRC2'},fee:3000n,tickSpacing:60n,canisterId});
+  }
+  state.querySwapQuote=async({canister,method,args,signal})=>{
+    signal?.throwIfAborted();
+    state.quoteQueries.push({canister,method,args:structuredClone(args)});
+    if(method==='getPool'){
+      const request=args[0];
+      const found=swapPools.find(pool=>[pool.token0.address,pool.token1.address].includes(request.token0.address)&&[pool.token0.address,pool.token1.address].includes(request.token1.address));
+      return BigInt(request.fee)===3000n&&found?{ok:found}:{err:{CommonError:null}};
+    }
+    const pool=swapPools.find(pool=>pool.canisterId.toText()===canister);if(!pool)throw Error('Unknown fixture quote pool');
+    const token0=rows.find(row=>row.address===pool.token0.address),token1=rows.find(row=>row.address===pool.token1.address);
+    if(method==='metadata'){
+      const tick=Math.floor(Math.log(token0.price_usd/token1.price_usd*10**(token1.decimals-token0.decimals))/Math.log(1.0001));
+      return {ok:{key:pool.key,token0:pool.token0,token1:pool.token1,fee:pool.fee,sqrtPriceX96:getSqrtRatioAtTick(tick),tick:BigInt(tick),liquidity:100000000000000000000n}};
+    }
+    if(method==='getCachedTokenFee')return {token0Fee:10000n,token1Fee:10000n};
+    if(method==='quote'){
+      if(state.failQuote)throw Error('Fixture route currently unavailable');
+      const request=args[0],first=request.zeroForOne?token0:token1,second=request.zeroForOne?token1:token0;
+      const output=BigInt(Math.floor(Number(request.amountIn)/10**first.decimals*first.price_usd/second.price_usd*10**second.decimals*.997));
+      return {ok:output};
+    }
+    throw Error('Unexpected direct swap quote query '+method);
+  };
   state.queryPool=async({canister,method,args,signal})=>{
     signal.throwIfAborted();state.queries.push({canister,method,args:args.map(arg=>typeof arg==='bigint'?arg.toString():arg?.toText?.()||arg)});
     if(method==='getPools')return {ok:[pool,retainedPool].map(id=>({key:id,token0:t0,token1:t1,fee:3000n,tickSpacing:60n,canisterId:Principal.fromText(id)}))};
@@ -158,11 +182,12 @@ const fixture = `
   };
 `;
 const wrapper = `import {createLiquidityReadClient as realClient} from '${root}/apps/icpswap/src/liquidity_reads.ts'; export const createLiquidityReadClient=()=>realClient({query:(request)=>window.__app.queryPool(request)});`;
+const quoteWrapper = `export * from '${root}/apps/icpswap/src/swap_quote.ts'; import {createSwapQuoteReader} from '${root}/apps/icpswap/src/swap_quote.ts'; export const swapQuoteReader=createSwapQuoteReader({query:(request)=>window.__app.querySwapQuote(request)});`;
 const output = await build({
   absWorkingDir: root, entryPoints: ["apps/icpswap/src/index.tsx"], bundle: true, write: false, format: "iife", jsx: "automatic", outdir: out,
   plugins: [{ name: "local-transports", setup(builder) {
-    builder.onResolve({ filter: /^(neutron-tools\/app|\.\/liquidity_reads\.ts|\.\/logos\.ts)$/ }, args => ({ path: args.path, namespace: "local-transports" }));
-    builder.onLoad({ filter: /.*/, namespace: "local-transports" }, args => ({ contents: args.path === "neutron-tools/app" ? fixture : args.path === "./liquidity_reads.ts" ? wrapper : "export const peekLogo=()=>null;export const onLogoResolved=()=>()=>{};export const resolveLogo=async()=>null;export const markLogoBroken=()=>{};", loader: "js", resolveDir: root }));
+    builder.onResolve({ filter: /^(neutron-tools\/app|\.\/liquidity_reads\.ts|\.\/swap_quote\.ts|\.\/logos\.ts)$/ }, args => ({ path: args.path, namespace: "local-transports" }));
+    builder.onLoad({ filter: /.*/, namespace: "local-transports" }, args => ({ contents: args.path === "neutron-tools/app" ? fixture : args.path === "./liquidity_reads.ts" ? wrapper : args.path === "./swap_quote.ts" ? quoteWrapper : "export const peekLogo=()=>null;export const onLogoResolved=()=>()=>{};export const resolveLogo=async()=>null;export const markLogoBroken=()=>{};", loader: "js", resolveDir: root }));
   } }, sassPlugin()], logLevel: "warning",
 });
 const assets = { "/main.js": output.outputFiles.find(file => file.path.endsWith(".js")).text, "/main.css": output.outputFiles.find(file => file.path.endsWith(".css")).text, "/static/icon.svg": await readFile(join(root, "apps/icpswap/public/static/icon.svg")) };
@@ -230,6 +255,18 @@ try {
     assert.equal(await page.getByText("Enter an amount greater than zero.", { exact: true }).count(), 0);
     await page.locator(".ics-allocation-presets").getByRole("button", { name: "Max", exact: true }).click();
     await page.locator(".ics-swap-minimum").waitFor();
+    await page.waitForFunction(() => !window.__app.walletInfoActive);
+    if(width===320){
+      const warmBefore=await page.evaluate(()=>({queries:window.__app.quoteQueries.length,updates:window.__app.updates.length}));
+      await page.getByLabel("You pay",{exact:true}).fill("1");
+      await page.locator(".ics-swap-minimum").waitFor();
+      assert.deepEqual(await page.evaluate(from=>window.__app.quoteQueries.slice(from).map(query=>query.method),warmBefore.queries),["quote"],"warm amount change makes only one direct pool quote query");
+      assert.equal(await page.evaluate(from=>window.__app.updates.slice(from).some(update=>['icpswap_swap_quote','icpswap_set_token_info'].includes(update.name)),warmBefore.updates),false,"amount edits do not wait on backend quote or metadata persistence updates");
+      await page.locator(".ics-allocation-presets").getByRole("button",{name:"Max",exact:true}).click();
+      await page.locator(".ics-swap-minimum").waitFor();
+    }
+    assert.equal(await page.evaluate(()=>window.__app.updates.some(update=>update.name==='icpswap_set_token_info')),false,"a ready browser quote must not require token-info persistence updates");
+    await page.evaluate(()=>{window.__app.holdTokenInfo=false;for(const release of window.__app.releaseTokenInfo)release();window.__app.releaseTokenInfo=[];});
     await noOverflow(`swap-${width}`, ".ics-swap");
     await page.screenshot({ path: join(out, `swap-${width}.png`) });
     await navigate("Markets");
@@ -279,6 +316,7 @@ try {
     await page.screenshot({ path: join(out, `activity-${width}.png`) });
   }
   checks.push("All four views and token detail fit 320/360/480/960/1200px tiles; charts remain above the initial fold; Wallet balance and exact fee-adjusted Max work.");
+  checks.push("Warm amount edits issue only one anonymous direct pool quote query; quote display never calls the ICPSwap backend quote update or waits for token-info persistence.");
   checks.push("Activity and Liquidity decode backend history with omitted optional cursors and completion timestamps through the real action backend.");
   checks.push("Position cards show exact token holdings, principal value excluding uncollected fees, current fee amounts, price range and history-backed estimated P&L at every tile width; information controls fit 320px.");
 
@@ -310,6 +348,7 @@ try {
   await page.waitForFunction(() => document.querySelector('[aria-label="Refresh market data"]') !== null);
   assert.equal(await page.getByLabel("Token to pay").inputValue(), originalPair, "market reordering must not change the selected pay token");
   assert.equal(await payAmount.inputValue(), "6.4999", "market refresh must retain the chosen amount");
+  assert.equal(await page.evaluate(() => window.__app.updates.some(update => update.name === 'icpswap_refresh')), false, "market refresh uses direct reads without a backend refresh update");
   await page.evaluate(() => { window.__app.failMarket = true; });
   await page.getByRole("button", { name: "Refresh market data", exact: true }).click();
   await page.getByText("Saved token data is unavailable", { exact: true }).waitFor();
@@ -387,7 +426,7 @@ try {
   let action = await lastAction();
   assert.deepEqual({ ...action.arguments, operationId: "id" }, { operationId: "id", from_ledger_id: ids[0], to_ledger_id: ids[2], amount: "100000000", slippage: 500 });
   assert.match(await page.locator(".ics-swap").innerText(), /declined/);
-  checks.push("Swap uses the real quote parser and saved action client; exact atomic input reaches the tool and owner decline returns a stopped result.");
+  checks.push("Swap uses the real direct quote reader and saved action client; exact atomic input reaches the tool and owner decline returns a stopped result.");
 
   await showPositions();
   await page.getByRole("button", { name: "+ Position", exact: true }).click();
@@ -412,6 +451,7 @@ try {
   checks.push("Liquidity can add an unselected token through Wallet review, preserving the other entered deposit and keeping funding separate from setup.");
   await page.waitForFunction(() => !document.querySelector('.ics-liquidity-editor')?.textContent.includes('Reading pool'));
   assert.equal(await page.evaluate(() => window.__app.walletInfoOverlap), 0, "opening a pool must not overlap Wallet owner requests");
+  assert.equal(await page.evaluate(() => window.__app.updates.some(update => update.name === 'icpswap_set_token_info')), false, "opening a liquidity editor must not persist Wallet token metadata before showing balances");
   assert.equal(await page.getByText(/Wallet token details unavailable/).count(), 0);
   await page.getByRole("button", { name: "±5%", exact: true }).click();
   const icpDeposit = page.locator('.ics-liquidity-amount').filter({has:page.locator('#ics-liquidity-amount-0')});

@@ -7,7 +7,6 @@
 
 import { exposeTool, publishAppStateChange, type JsonObject } from "neutron-tools/app";
 import { loadTokenRanks, loadTokenUniverse } from "./api.ts";
-import { refresh } from "./backend.ts";
 import { createActionBackend, readAllActionSummaries } from "./action_backend.ts";
 import { registerActionTools } from "./action_tools.ts";
 import { authorizeAction } from "./provider.ts";
@@ -16,8 +15,6 @@ import { registerTools, retainedPoolsFromOperations } from "./tools.ts";
 /** How often the resident re-warms the REST caches while the shell is open. */
 const UNIVERSE_REFRESH_MS = 120_000;
 
-/** How often the resident asks the backend for a fresh on-chain snapshot. */
-const ONCHAIN_REFRESH_MS = 900_000;
 
 const STATE_TOPIC = "market";
 
@@ -38,15 +35,6 @@ async function warmUniverse(): Promise<void> {
   } catch {
     // An upstream outage is expected and non-fatal: the tile falls back to the
     // on-chain snapshot and shows the degraded source.
-  }
-}
-
-async function refreshOnChain(): Promise<void> {
-  try {
-    const report = await refresh(false);
-    if (report.refreshed) announce();
-  } catch {
-    // The backend records its own last_refresh_error; retry on the next tick.
   }
 }
 
@@ -82,12 +70,7 @@ registerTools({
 });
 
 void warmUniverse();
-void refreshOnChain();
 
 setInterval(() => {
   void warmUniverse();
 }, UNIVERSE_REFRESH_MS);
-
-setInterval(() => {
-  void refreshOnChain();
-}, ONCHAIN_REFRESH_MS);

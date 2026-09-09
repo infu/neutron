@@ -46,6 +46,29 @@ this is an estimate, not an audited account return. Holdings remain usable while
 history loads. Token-detail reads share an app-local queue so opening a pool does
 not launch competing Wallet permission dialogs.
 
+## Browser and backend responsibilities
+
+Public ICPSwap observations run directly from the browser: swap quotes, pool
+discovery, positions, liquidity previews, recovery pool reads, analytics and
+charts. Swap pair discovery and pool context are prefetched on selection and
+reused for up to 15 seconds; each amount gets a fresh pool quote. A warm pair
+with one fee tier therefore needs one pool query per amount change. Multiple
+available tiers are compared concurrently. Agent previews use the same reader,
+report the pool-context observation time, and read ledger metadata through
+Wallet without writing it to Neutron's backend.
+
+Opening a liquidity editor does not persist token metadata. Market refresh and
+the resident's market-data timer refresh browser analytics rather than invoking
+the backend's replicated market refresh. The existing six-hour backend task
+still retains local price history when the browser is closed.
+
+The backend owns durable watchlists, preferences, local history and operation
+journals. Preparing and executing a saved action still validates current pool
+state, fees, account access and funding as the Neutron canister. Browser previews
+are advisory and are never accepted as authorization or a saved execution plan.
+Reconciliation reads the saved result and then queries ICPSwap directly; an
+unavailable pool read preserves the known protocol result with a diagnostic.
+
 ## Agent tools and approval
 
 The resident background exposes tools even when no tile is open. Retrieve the
@@ -130,8 +153,8 @@ cancel a protocol payout or delete the app's saved operation. A flow paused
 between app-controlled steps can be continued from Activity or the tools.
 
 A confirmed claim returning zero in both tokens is complete with no payout
-required. Status derives that result from the saved reply; reconciliation also
-repairs older journals that recorded it as settlement pending. Other successful
+required. Status and reconciliation derive that result from the saved reply,
+including older journals that recorded it as settlement pending. Other successful
 actions retain unverified payout status until operation-linked receipt evidence
 exists. The pool removes completed transactions from its active list, and its
 liquidity replies do not identify the outgoing ledger blocks. Empty queues and
@@ -147,7 +170,9 @@ budgets are not substituted for those actual amounts.
 Swap receipts preserve the legacy numeric `received_out` field for compatibility
 but explicitly set `received_out_verified=false` and `netOutputAtoms=null` until
 an operation-linked payout is known. The legacy zero is not an observed Wallet
-credit. This representation also applies when reading older saved swaps.
+credit. New consumers should use `netOutputAtoms` and `received_out_verified`;
+the legacy `received_out` field is deprecated. This representation also applies
+when reading older saved swaps.
 
 `icpswap_reconcile_v1` now includes Wallet evidence for retained successful
 protocol effects: recent pool-to-owner transfers, their exact amounts/memos and
@@ -158,6 +183,15 @@ even a verified ledger transfer remains contextual evidence when the original
 operation did not retain its protocol transaction ID. Neither matching amounts
 nor empty pages change the operation to settled. Wallet failures leave the
 protocol result available, and no reconciliation path repeats financial effects.
+
+Reconciliation reads one recent index page per relevant ledger. For older pages,
+call Wallet's `wallet_account_transactions_v1` with `{ ledger, beforeBlock,
+limit }`, setting `beforeBlock` to that ledger's
+`coverage.pagination.nextBeforeBlock`. Repeat with each returned cursor until
+it is null. Inspect discovered exact blocks with `wallet_transaction_v1` or
+pass them as `payoutBlocks` to reconciliation. The reconciliation tool itself
+has no `beforeBlock` input; nonempty `payoutBlocks` require `walletEvidence`
+to be true or omitted.
 
 The journal records a protocol dispatch before awaiting its reply. An unknown
 reply is retained as uncertain and is never automatically sent again. Empty
@@ -209,7 +243,7 @@ All persistent state stays app-local:
 All three production v1 schemas and their lock entries are retained exactly.
 The imported draft's additional fee cache is transient; it does not replace the
 released swap schema. Wallet fee observations refresh that cache, including a
-valid zero fee. Release 201, 202 and 203 installations keep all three roots. Upgrades from
+valid zero fee. Release 201 through 204 installations keep all three roots. Upgrades from
 release 200 keep both original roots and initialize only the actions root.
 No fake migration, reinstall or reset is required.
 Historical public schema assets are pinned in `test/fixtures/history/200` for

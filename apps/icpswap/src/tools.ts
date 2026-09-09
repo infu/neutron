@@ -20,6 +20,7 @@ import {
   type InfoToken,
 } from "./api.ts";
 import { createBackendClient } from "./backend.ts";
+import { swapQuoteReader } from "./swap_quote.ts";
 import { createRequestId } from "./funding.ts";
 import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
 import { createLiquidityReadClient, type BrowserPoolView } from "./liquidity_reads.ts";
@@ -89,7 +90,7 @@ function describeError(error: unknown): string {
 
 /** Every swap result carries this so an agent cannot mistake it for advice. */
 const SWAP_NOTE =
-  "The pool enforces a gross swap minimum; the output ledger fee reduces the wallet receipt. This quote does not fund or execute the swap.";
+  "Direct browser price preview. The pool enforces a gross swap minimum; the output ledger fee reduces the wallet receipt. Pool context is reused briefly between edits. This quote does not fund or execute the swap; preparation revalidates current state and access as your Neutron account.";
 
 function swapRequestFrom(args: JsonObject) {
   const from = typeof args.from_ledger_id === "string" ? args.from_ledger_id.trim() : "";
@@ -195,13 +196,15 @@ export type ResearchToolDependencies = {
   backendFor?: typeof createBackendClient;
   tokenInfoFor?: (context: MsgBusToolContext, ledger: string) => Promise<WalletTokenInfo>;
   reads?: ReturnType<typeof createLiquidityReadClient>;
+  quotes?: typeof swapQuoteReader;
 };
 
 export function registerTools(dependencies: ResearchToolDependencies): void {
   const register = dependencies.expose ?? exposeTool;
   const backendFor = dependencies.backendFor ?? createBackendClient;
   const reads = dependencies.reads ?? createLiquidityReadClient();
-  const tokenInfoFor = dependencies.tokenInfoFor ?? ((context: MsgBusToolContext, ledger: string) => readTokenInfo(context.kernel, ledger));
+  const quotes = dependencies.quotes ?? swapQuoteReader;
+  const tokenInfoFor = dependencies.tokenInfoFor ?? ((context: MsgBusToolContext, ledger: string) => readTokenInfo(context.kernel, ledger, context.signal));
   register(
     "icpswap_search_tokens",
     {
@@ -796,7 +799,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     {
       title: "Quote an ICPSwap swap",
       description:
-        "Compare available direct ICPSwap pools and report expected net output, the gross pool minimum after slippage, price impact and observed ledger fees. This read does not inspect existing allowances or grant funding. Use icpswap_swap_v1 to prepare and execute a saved, reviewed swap.",
+        "Query ICPSwap directly from the browser to compare direct pools and report expected net output, the gross pool minimum after slippage, price impact and observed ledger fees. This preview does not inspect allowances or establish account access. Use icpswap_swap_v1 to revalidate and execute a saved, reviewed swap.",
       inputSchema: {
         type: "object",
         properties: {
@@ -831,19 +834,24 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     },
     async (args, context): Promise<JsonValue> => {
       const request = swapRequestFrom(args);
-      const backend = backendFor(context.kernel);
-      for (const ledger of [request.inputAddress, request.outputAddress]) {
-        if (context.signal?.aborted) throw context.signal.reason;
-        const metadata = await tokenInfoFor(context, ledger);
-        await backend.setTokenInfo(ledger, metadata.decimals, metadata.feeAtoms);
-      }
+      context.signal?.throwIfAborted();
+      const [input, output] = await Promise.all([
+        tokenInfoFor(context, request.inputAddress),
+        tokenInfoFor(context, request.outputAddress),
+        quotes.preparePair(request.inputAddress, request.outputAddress, context.signal),
+      ]);
       if (context.signal?.aborted) throw context.signal.reason;
-      const quote = await backend.quoteSwap(request);
+      const quote = await quotes.quote(request, {
+        decimalsIn: input.decimals, decimalsOut: output.decimals,
+        feeIn: input.feeAtoms, feeOut: output.feeAtoms, signal: context.signal,
+      });
       return {
         source: "icpswap-pool",
+        transport: "direct-canister-query",
         as_of: nowIso(),
         as_of_kind: "response_time",
         note: SWAP_NOTE,
+        context_as_of: new Date(quote.contextAt * 1000).toISOString(),
         pool: quote.pool,
         pool_key: quote.poolKey,
         fee_tier: quote.feeTier,
