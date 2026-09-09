@@ -25,6 +25,7 @@ import { createRequestId } from "./funding.ts";
 import { runSwapAction, type ActionProgress, type SwapActionInput } from "./action_client.ts";
 import { formatNumber, formatTokenAmount } from "./format.ts";
 import { TokenMark } from "./token_mark.tsx";
+import { TokenPicker, candidatesForSelection, type PickerCandidate } from "./picker.tsx";
 import { amountAtPercent, percentForAmount, spendableBalance } from "./amount_allocation.ts";
 import { addLedgerToWallet, readTokenInfo, walletSetupRequired, type WalletTokenInfo } from "./wallet.ts";
 
@@ -51,6 +52,9 @@ export type SwapPanelProps = {
   onChooseInput?: (address: string) => void;
   output: SwapToken | null;
   choices: SwapToken[];
+  pickerCandidates?: PickerCandidate[];
+  pickerSource?: "live" | "on-chain";
+  pickerError?: string | null;
   initialSlippage: number;
   onChooseOutput: (address: string) => void;
   onDone?: () => void;
@@ -69,11 +73,15 @@ export function SwapPanel({
   onChooseInput,
   output,
   choices,
+  pickerCandidates = [],
+  pickerSource = "on-chain",
+  pickerError = null,
   initialSlippage,
   onChooseOutput,
   onDone,
 }: SwapPanelProps) {
   const [amount, setAmount] = useState("");
+  const [selecting, setSelecting] = useState<"input" | "output" | null>(null);
   const [slippage, setSlippage] = useState(initialSlippage);
   const [quoteState, setQuote] = useState<SwapQuote | null>(null);
   const [quoteKey, setQuoteKey] = useState("");
@@ -123,6 +131,24 @@ export function SwapPanel({
   );
 
   const busy = phase.kind === "funding" || phase.kind === "swapping" || walletSetup?.pending === true;
+  // A retained operation is immutable. Keep its displayed pair and amount in
+  // place until it reaches a known terminal outcome instead of editing a form
+  // whose Continue button would execute different saved terms.
+  const editingLocked = busy || attempt.current !== null;
+  const selectable = useMemo(() => candidatesForSelection(
+    selecting === "input"
+      ? (inputChoices ?? []).filter((token) => token.address !== output?.address)
+      : choices.filter((token) => token.address !== input.address),
+    pickerCandidates,
+  ), [selecting, inputChoices, choices, output?.address, input.address, pickerCandidates]);
+  const chooseToken = (candidate: PickerCandidate) => {
+    if (editingLocked || !selectable.some((token) => token.address === candidate.address)) return;
+    if (selecting === "input") {
+      if (candidate.address !== input.address) { setAmount(""); setAllocation(null); }
+      onChooseInput?.(candidate.address);
+    } else if (selecting === "output") onChooseOutput(candidate.address);
+    setSelecting(null);
+  };
   const quoteInputKey = `${input.address}:${output?.address ?? ""}:${amountIn?.toString() ?? ""}:${slippage}`;
   const quote = quoteKey === quoteInputKey ? quoteState : null;
 
@@ -190,7 +216,7 @@ export function SwapPanel({
   }, [busy]);
 
   const maxSpendable = availablePayInfo ? spendableBalance(availablePayInfo.balanceAtoms, availablePayInfo.feeAtoms) : null;
-  const allocationDisabled = busy || maxSpendable === null || maxSpendable === 0n;
+  const allocationDisabled = editingLocked || maxSpendable === null || maxSpendable === 0n;
   const selectedPercent = allocation?.ledger === input.address && allocation.amount === amount && allocation.maximum === maxSpendable
     ? allocation.percent : percentForAmount(amountIn, maxSpendable);
   const chooseAllocation = (percent: number) => {
@@ -288,7 +314,7 @@ export function SwapPanel({
     try {
       const progress = await runSwapAction(saved);
       if (!mounted.current) return;
-      if (["complete", "protocol_complete", "settlement_pending", "swapped", "stopped", "funding_expired"].includes(progress.state)) {
+      if (["complete", "protocol_complete", "settlement_pending", "swapped", "stopped", "funding_expired", "review_declined"].includes(progress.state)) {
         attempt.current = null;
         if (["complete", "protocol_complete", "settlement_pending", "swapped"].includes(progress.state)) {
           setAmount("");
@@ -335,7 +361,7 @@ export function SwapPanel({
                 "nt-button nt-button--sm",
                 slippage === preset ? null : "nt-button--secondary",
               )}
-              disabled={busy}
+              disabled={editingLocked}
               key={preset}
               onClick={() => chooseSlippage(preset)}
               title={`Accept at most ${slippageLabel(preset)} slippage`}
@@ -355,14 +381,17 @@ export function SwapPanel({
             You pay
           </label>
           <div className="ics-swap-leg-body">
-            <span className="ics-swap-chip">
-              <TokenMark address={input.address} symbol={input.symbol} />
-              {inputChoices && onChooseInput ? <select className="ics-swap-select" aria-label="Token to pay" disabled={busy} onChange={(event) => onChooseInput(event.target.value)} value={input.address}>{inputChoices.map((token) => <option key={token.address} value={token.address}>{token.symbol}</option>)}</select> : <span className="ics-swap-chip-symbol">{input.symbol}</span>}
-            </span>
+            {inputChoices && onChooseInput ? (
+              <button className="ics-swap-chip ics-swap-token-button" aria-label="Token to pay" aria-haspopup="dialog" data-ledger={input.address} disabled={editingLocked} onClick={() => setSelecting("input")} title={`${input.name || input.symbol} · ${input.address}`} type="button">
+                <TokenMark address={input.address} symbol={input.symbol} />
+                <span className="ics-swap-chip-symbol">{input.symbol}</span>
+                <span aria-hidden="true" className="ics-swap-token-chevron">⌄</span>
+              </button>
+            ) : <span className="ics-swap-chip"><TokenMark address={input.address} symbol={input.symbol} /><span className="ics-swap-chip-symbol">{input.symbol}</span></span>}
             <input
               autoComplete="off"
               className="ics-swap-amount"
-              disabled={busy}
+              disabled={editingLocked}
               id="ics-swap-amount"
               inputMode="decimal"
               onChange={(event) => { setAmount(event.target.value); setAllocation(null); }}
@@ -385,36 +414,23 @@ export function SwapPanel({
           </div>
         </div>
 
-        <span aria-hidden="true" className="ics-swap-arrow">
-          ↓
-        </span>
+        {onChooseInput ? <button className="ics-swap-arrow ics-swap-reverse" aria-label="Reverse swap direction" title="Reverse swap direction" disabled={editingLocked || !output} onClick={() => {
+          if (editingLocked || !output) return;
+          setAmount(""); setAllocation(null);
+          onChooseInput(output.address);
+          onChooseOutput(input.address);
+        }} type="button"><span aria-hidden="true">⇅</span></button> : <span aria-hidden="true" className="ics-swap-arrow">↓</span>}
 
         <div className="ics-swap-leg">
           <label className="ics-swap-leg-label" htmlFor="ics-swap-output">
             You receive
           </label>
           <div className="ics-swap-leg-body">
-            <span className="ics-swap-chip">
-              {output ? (
-                <TokenMark address={output.address} symbol={output.symbol} />
-              ) : (
-                <span aria-hidden="true" className="ics-swap-chip-empty" />
-              )}
-              <select
-                className="ics-swap-select"
-                disabled={busy}
-                id="ics-swap-output"
-                onChange={(event) => onChooseOutput(event.target.value)}
-                value={output?.address ?? ""}
-              >
-                <option value="">Choose…</option>
-                {choices.map((token) => (
-                  <option key={token.address} value={token.address}>
-                    {token.symbol}
-                  </option>
-                ))}
-              </select>
-            </span>
+            <button className="ics-swap-chip ics-swap-token-button" aria-label="Token to receive" aria-haspopup="dialog" data-ledger={output?.address ?? ""} disabled={editingLocked} id="ics-swap-output" onClick={() => setSelecting("output")} title={output ? `${output.name || output.symbol} · ${output.address}` : "Choose a token to receive"} type="button">
+              {output ? <TokenMark address={output.address} symbol={output.symbol} /> : <span aria-hidden="true" className="ics-swap-chip-empty" />}
+              <span className="ics-swap-chip-symbol">{output?.symbol || "Choose token"}</span>
+              <span aria-hidden="true" className="ics-swap-token-chevron">⌄</span>
+            </button>
             <span
               className={cx("ics-swap-amount ics-swap-amount--readonly", {
                 "ics-swap-amount--muted": !quote,
@@ -522,6 +538,18 @@ export function SwapPanel({
       </div>
 
       </div>
+      {selecting !== null ? <TokenPicker
+        mode="select"
+        title={selecting === "input" ? "Pay with" : "Receive token"}
+        selectedAddress={selecting === "input" ? input.address : output?.address ?? null}
+        candidates={selectable}
+        source={pickerSource}
+        loading={false}
+        error={pickerError}
+        busyAddress={null}
+        onSelect={chooseToken}
+        onClose={() => setSelecting(null)}
+      /> : null}
     </section>
   );
 }

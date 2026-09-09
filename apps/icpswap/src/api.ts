@@ -10,6 +10,8 @@
 // upstream numerics arrive as decimal strings, and timestamps arrive in
 // milliseconds.
 
+import { parsePoolComposition, type PoolComposition } from "./pool_composition.ts";
+
 const BASE_URL = "https://api.icpswap.com/info";
 
 /** The ICP ledger, used as the denominating reference for the ICP price view. */
@@ -210,12 +212,13 @@ export type InfoPool = {
   token0Name: string;
   token0Symbol: string;
   token0Price: number;
-  token0LiquidityAmount: number;
+  token0LiquidityAmount: number | null;
   token1LedgerId: string;
   token1Name: string;
   token1Symbol: string;
   token1Price: number;
-  token1LiquidityAmount: number;
+  token1LiquidityAmount: number | null;
+  composition: PoolComposition;
   tvlUSD: number;
   tvlUSDChange24H: number;
   txCount24H: number;
@@ -230,6 +233,14 @@ function parseInfoPool(value: unknown): InfoPool | null {
   if (!isRecord(value)) return null;
   const poolId = toText(value.poolId);
   if (poolId === "") return null;
+  const composition = parsePoolComposition(value);
+  // Retain approximate legacy fields; exact decimal quantities and availability
+  // live in composition. Missing amounts must not become reported zeroes.
+  const approximate = (amount: string | null): number | null => {
+    if (amount === null) return null;
+    const number = Number(amount);
+    return Number.isFinite(number) && (number !== 0 || !/[1-9]/u.test(amount)) ? number : null;
+  };
   return {
     poolId,
     poolFee: toNumber(value.poolFee),
@@ -237,12 +248,13 @@ function parseInfoPool(value: unknown): InfoPool | null {
     token0Name: toText(value.token0Name),
     token0Symbol: toText(value.token0Symbol),
     token0Price: toNumber(value.token0Price),
-    token0LiquidityAmount: toNumber(value.token0LiquidityAmount),
+    token0LiquidityAmount: approximate(composition.token0.amount_tokens),
     token1LedgerId: toText(value.token1LedgerId),
     token1Name: toText(value.token1Name),
     token1Symbol: toText(value.token1Symbol),
     token1Price: toNumber(value.token1Price),
-    token1LiquidityAmount: toNumber(value.token1LiquidityAmount),
+    token1LiquidityAmount: approximate(composition.token1.amount_tokens),
+    composition,
     tvlUSD: toNumber(value.tvlUSD),
     tvlUSDChange24H: toNumber(value.tvlUSDChange24H),
     txCount24H: toNumber(value.txCount24H),

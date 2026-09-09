@@ -10,12 +10,22 @@ larger workspaces. It is not an official ICPSwap application.
 - **Markets:** search tokens, maintain a watchlist, inspect pools and recent
   trades, and open price, volume and TVL charts. Candlesticks support crosshair
   inspection by pointer, touch or keyboard; USD/ICP price views retain the
-  observation source.
+  observation source. Pool rows show both reported token quantities alongside
+  reported TVL, so an illiquid token's inflated price cannot hide a tiny amount
+  of the other asset. Compact quantities retain exact values in their titles;
+  missing quantities show as unavailable.
 - **Swap:** select tokens and an amount, inspect the quote, then review the
-  trade. Wallet supplies live token metadata, balances and funding. The 0–100%
+  trade in a dedicated form. Pay/receive selection shares the Add Token picker,
+  with search, identities, price changes and volume; watched tokens remain
+  selectable. Market browsing stays in Markets. Wallet supplies live token
+  metadata, balances and funding. The 0–100%
   slider and shortcuts use exact atomic-unit arithmetic; Max leaves the required
   ledger fees. New tokens can be added to Wallet through its existing review.
   Failed reads keep manual amounts intact and offer retry without sending funds.
+  An explicitly declined swap review unlocks editing only after a fresh journal
+  read confirms no funding or protocol dispatch. Its prepared intent remains in
+  Activity. Interrupted or unknown replies retain the original inputs and ID
+  for continuation.
 - **Liquidity:** discover a verified pool, choose an aligned price range and
   token maxima, and create a position. Existing positions support increasing,
   partially decreasing, closing and claiming fees. Pool-unused tokens remain
@@ -57,6 +67,18 @@ available tiers are compared concurrently. Agent previews use the same reader,
 report the pool-context observation time, and read ledger metadata through
 Wallet without writing it to Neutron's backend.
 
+`icpswap_token_pools` returns a typed version-1 response. Each pool's
+`composition.token0/1.amount_tokens` preserves the analytics feed's exact
+decimal token quantity, not atoms; `amount_available` distinguishes unavailable
+data from a reported zero. Legacy `token0/1.liquidity_amount` values are
+approximate numbers, or null when unavailable or not representable. Composition
+also carries reported prices and TVL, source provenance and an explicitly
+unknown snapshot time. These quantities use the existing browser analytics
+response, without another backend or canister request. They are reported pool
+accounting, not a custody audit or executable swap depth. Token prices may
+inflate TVL; agents should compare both quantities and obtain a fresh execution
+quote before trading.
+
 Swap and liquidity readers share an anonymous query agent, with verified subnet
 keys retained in memory and a fresh nonce on each query. This avoids repeated
 certificate reads without caching application replies or requiring IndexedDB
@@ -67,6 +89,9 @@ is net of the output ledger fee; `minimum_out_gross` is the pool-enforced gross
 minimum. Compare net estimates with `minimum_out_net_estimate`. The legacy
 `minimum_out` field remains a deprecated gross alias for compatibility.
 Slippage uses `floor(gross * 100000 / (100000 + slippage))`, where 500 is 0.5%.
+The public quote and execution tools accept whole-number slippage units from
+1 through 50000 (0.001% through 50%), defaulting to 500 when omitted. Fractional
+values are rejected rather than silently rounded or clamped.
 Liquidity previews distinguish input consumption from gross outputs and report
 net payout estimates separately. Positive outputs at or below their ledger fee
 remain pool credit; they are not expected Wallet transfers or paid ledger fees.
@@ -266,7 +291,7 @@ All persistent state stays app-local:
 All three production v1 schemas and their lock entries are retained exactly.
 The imported draft's additional fee cache is transient; it does not replace the
 released swap schema. Wallet fee observations refresh that cache, including a
-valid zero fee. Release 201 through 205 installations keep all three roots. Upgrades from
+valid zero fee. Release 201 through 206 installations keep all three roots. Upgrades from
 release 200 keep both original roots and initialize only the actions root.
 No fake migration, reinstall or reset is required.
 Historical public schema assets are pinned in `test/fixtures/history/200` for

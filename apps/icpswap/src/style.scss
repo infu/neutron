@@ -166,6 +166,11 @@
     z-index: 1;
   }
 
+  .ics-swap-reverse { border: 1px solid var(--nt-line-subtle); cursor: pointer; font: inherit; }
+  .ics-swap-reverse:hover:not(:disabled) { color: var(--nt-accent); }
+  .ics-swap-reverse:focus-visible { outline: 2px solid var(--nt-line-focus); outline-offset: 2px; }
+  .ics-swap-reverse:disabled { cursor: default; opacity: .5; }
+
   .ics-swap-chip {
     align-items: center;
     display: flex;
@@ -189,28 +194,23 @@
     width: 26px;
   }
 
-  /* A bare select: the chip is the control, so the field furniture would only
-     compete with the amount beside it. */
-  .ics-swap-select {
-    appearance: none;
-    background: none;
-    border: 0;
+  .ics-swap-token-button {
+    background: var(--nt-bg-panel);
+    border: 1px solid var(--nt-line-subtle);
+    border-radius: 999px;
     color: var(--nt-text-strong);
     cursor: pointer;
     font: inherit;
-    font-weight: 600;
-    max-width: 12ch;
-    padding: 0;
+    max-width: 58%;
+    padding: 4px 8px 4px 4px;
+    transition: border-color 120ms, background 120ms;
   }
 
-  .ics-swap-select:focus-visible {
-    outline: 2px solid var(--nt-line-focus);
-    outline-offset: 2px;
-  }
-
-  .ics-swap-select:disabled {
-    cursor: default;
-  }
+  .ics-swap-token-button:hover:not(:disabled) { background: var(--nt-bg-control-hover); border-color: var(--nt-line-focus); }
+  .ics-swap-token-button:focus-visible { outline: 2px solid var(--nt-line-focus); outline-offset: 2px; }
+  .ics-swap-token-button:disabled { cursor: default; opacity: .6; }
+  .ics-swap-token-button .ics-swap-chip-symbol { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ics-swap-token-chevron { flex: none; color: var(--nt-text-muted); font-size: 13px; }
 
   /* The amount is the largest thing in the panel because it is the number the
      owner is actually deciding about. Tabular figures so digits do not shift
@@ -391,6 +391,44 @@
     color: var(--nt-text);
     font-variant-numeric: tabular-nums;
   }
+
+  .ics-pool-pair {
+    display: block;
+    font-weight: 600;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ics-pool-composition {
+    display: grid;
+    gap: 3px;
+    margin: 7px 0 0;
+    width: 12rem;
+    font-size: var(--nt-font-size-meta);
+  }
+
+  .ics-pool-composition__token {
+    align-items: baseline;
+    display: flex;
+    gap: var(--nt-gap-2);
+    justify-content: space-between;
+
+    dt {
+      color: var(--nt-text-faint);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    dd {
+      flex-shrink: 0;
+      margin: 0;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  .ics-pool-composition-note { margin: var(--nt-pad-2) 0 0; }
 
   .ics-token-cell {
     align-items: center;
@@ -804,9 +842,8 @@
     text-align: center;
   }
   .ics-body > * { flex-shrink: 0; }
-  .ics-trade-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 24px; min-width: 0; }
+  .ics-trade-layout { width: 100%; max-width: 480px; min-width: 0; margin-inline: auto; }
   .ics-trade-layout > .ics-swap { margin: 0; width: 100%; max-width: 480px; }
-  .ics-trade-markets { min-width: 0; }
   .ics-swap { min-width: 0; }
   .ics-swap > .nt-section-header { margin-bottom: 4px; justify-content: space-between; }
   .ics-swap-form { max-width: none; min-width: 0; }
@@ -817,8 +854,6 @@
   .ics-swap-settings > summary::-webkit-details-marker { display: none; }
   .ics-swap-settings[open] > summary { color: var(--nt-text-strong); }
   .ics-swap-settings .ics-swap-slippage { position: absolute; right: 0; top: calc(100% + 4px); padding: 8px; background: var(--nt-bg-elevated); border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-control); z-index: 3; }
-  .ics-swap-select { appearance: auto; padding-right: 1px; }
-  .ics-swap-select option { color: var(--nt-text); background: var(--nt-bg-panel); }
   .ics-swap-balance { gap: 8px; min-height: 24px; }
   .ics-swap-balance .nt-meta { min-width: 0; overflow-wrap: anywhere; }
   .ics-swap-balance .nt-meta, .ics-market-summary .nt-meta { font-family: inherit; }
@@ -886,7 +921,6 @@
   .ics-chart-latest-label { fill: var(--nt-bg-panel); font-family: var(--nt-font-mono); font-size: 10px; }
   .ics-chart-inspection-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   @container (min-width: 800px) {
-    .ics-trade-layout { grid-template-columns: minmax(300px, 460px) minmax(240px, 1fr); gap: 32px; }
   }
   @container (max-width: 699px) {
     .ics-market-table .ics-market-cards { display: block; }
@@ -897,7 +931,6 @@
     .ics-picker-row { gap: 8px; padding: 10px 12px; }
     .ics-picker-row > .nt-tag { display: none; }
     .ics-picker-status { display: inline; }
-    .ics-picker-stats .nt-meta { display: none; }
     .ics-picker-canister { max-width: 200px; }
   }
   @container (max-width: 380px) {

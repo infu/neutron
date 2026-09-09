@@ -4,6 +4,7 @@ import { continueOperationFunding, savedFundingRequests, type FundingOperation }
 import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
 import { createBackendClient } from "./backend.ts";
 import { buildActionReview, sameLiquidityExitTerms } from "./action_review.ts";
+import { ActionReviewDeclinedError } from "./provider.ts";
 import { buildLiquidityReceipt, buildSwapReceipt, durablePlanSource } from "./action_receipt.ts";
 import { readPayoutEvidence, type PayoutBlockReference } from "./payout_evidence.ts";
 import { createLiquidityReadClient } from "./liquidity_reads.ts";
@@ -98,6 +99,17 @@ function response(prepared: ActionPrepared, message = prepared.operation.detail)
     operation: prepared.operation, plan: prepared.plan, planSource: durablePlanSource,
     receipt: buildSwapReceipt(prepared) ?? buildLiquidityReceipt(prepared), fundingInstructions: [] }) as JsonObject;
 }
+/** A declined review only frees the form when the retained operation has
+ * never dispatched anything. Missing/malformed evidence is not an empty log. */
+function noDispatchRequested(operation: ActionOperation): boolean {
+  if (operation.state !== "prepared" || operation.result_json !== "" || !Array.isArray(operation.effects)) return false;
+  try { if (savedFundingRequests(operation).length !== 0) return false; }
+  catch { return false; }
+  return operation.effects.every((effect) => isJsonObject(effect) && effect.state === "not_requested"
+    && effect.dispatched_at === "0" && effect.completed_at === null
+    && effect.result_nat === null && effect.result_amount0 === null && effect.result_amount1 === null);
+}
+
 function pendingEffects(operation: FundingOperation): boolean {
   const effects = (operation as FundingOperation & { effects?: JsonObject[] }).effects ?? [];
   return effects.some((effect) => effect.state === "requested" || effect.state === "uncertain");
@@ -216,7 +228,24 @@ export function createActionHandlers(dependencies: ActionDependencies) {
     if (intent.kind === "recover_deposit") throw new Error("Recovery actions use their retained recovery workflow.");
     if (approvedPreview === null || !sameLiquidityExitTerms(approvedPreview, prepared.plan)) {
       reviewMetadata ??= await displayMetadata(context, metadata);
-      await dependencies.authorize(context, buildActionReview({ operationId, kind: intent.kind, input: intent.input, plan: prepared.plan, metadata: reviewMetadata }));
+      try {
+        await dependencies.authorize(context, buildActionReview({ operationId, kind: intent.kind, input: intent.input, plan: prepared.plan, metadata: reviewMetadata }));
+      } catch (error) {
+        // An explicit owner decline is a successful review outcome, not an
+        // unknown Wallet reply. Re-read after the dialog: another invocation
+        // may have advanced the journal while the owner was deciding.
+        if (intent.kind === "swap" && !context.agentMode && error instanceof ActionReviewDeclinedError && noDispatchRequested(prepared.operation)) {
+          context.signal?.throwIfAborted();
+          let latest: ActionOperation | null;
+          try { latest = await backend.actionGet(operationId); }
+          catch { throw error; }
+          context.signal?.throwIfAborted();
+          if (latest?.id === operationId && latest.input_json === prepared.operation.input_json && noDispatchRequested(latest)) {
+            return { ...response({ ...prepared, operation: latest }, "Swap cancelled. No funds were sent. The prepared action remains in Activity."), state: "review_declined" };
+          }
+        }
+        throw error;
+      }
     }
     context.signal?.throwIfAborted();
     const noFundingExit = intent.kind === "liquidity" && ["decrease", "close", "claim", "withdraw"].includes(String(intent.input.kind))

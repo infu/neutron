@@ -1,5 +1,5 @@
-// Add-token overlay: search the whole ICPSwap universe with enough context to
-// pick the right token, not just the right symbol.
+// Shared token search for watchlist additions and swap selection. Both flows
+// show the same token identity and available market information.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cx } from "neutron-design-system";
@@ -104,25 +104,47 @@ export function rankCandidates(
   return matched;
 }
 
-export type TokenPickerProps = {
+/** Selection preserves the caller's token set even when analytics is missing. */
+export function candidatesForSelection(
+  tokens: ReadonlyArray<{ address: string; symbol: string; name: string }>,
+  candidates: readonly PickerCandidate[],
+): PickerCandidate[] {
+  const index = new Map(candidates.map((candidate) => [candidate.address, candidate]));
+  return tokens.map((token) => {
+    const candidate = index.get(token.address);
+    return candidate ?? {
+      address: token.address,
+      symbol: token.symbol || token.address.slice(0, 8),
+      name: token.name,
+      priceUsd: 0,
+      priceChange24H: null,
+      volumeUsd24h: null,
+      volumeUsd7d: 0,
+      tvlUsd: 0,
+      poolCount: null,
+      verified: false,
+      watched: true,
+    };
+  });
+}
+
+type TokenPickerBaseProps = {
   candidates: PickerCandidate[];
   source: "live" | "on-chain";
   loading: boolean;
   error: string | null;
   busyAddress: string | null;
-  onAdd: (candidate: PickerCandidate) => void;
   onClose: () => void;
 };
 
-export function TokenPicker({
-  candidates,
-  source,
-  loading,
-  error,
-  busyAddress,
-  onAdd,
-  onClose,
-}: TokenPickerProps) {
+export type TokenPickerProps = TokenPickerBaseProps & (
+  | { mode?: "add"; onAdd: (candidate: PickerCandidate) => void }
+  | { mode: "select"; title: string; selectedAddress: string | null; onSelect: (candidate: PickerCandidate) => void }
+);
+
+export function TokenPicker(props: TokenPickerProps) {
+  const { candidates, source, loading, error, busyAddress, onClose } = props;
+  const selecting = props.mode === "select";
   const [term, setTerm] = useState("");
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [active, setActive] = useState(0);
@@ -149,14 +171,22 @@ export function TokenPicker({
 
   const commit = useCallback(
     (candidate: PickerCandidate | undefined) => {
-      if (!candidate || candidate.watched || candidate.address === busyAddress) return;
-      onAdd(candidate);
+      if (!candidate || (!selecting && candidate.watched) || candidate.address === busyAddress) return;
+      if (props.mode === "select") props.onSelect(candidate);
+      else props.onAdd(candidate);
     },
-    [busyAddress, onAdd],
+    [busyAddress, props, selecting],
   );
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDialogElement>) => {
+      // Search inputs consume Escape to clear their text before the dialog's
+      // native cancel event. Dismiss consistently from the first key press.
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
       // Native dialog buttons retain their own keyboard behavior. Search
       // arrows and Enter inspect the matching token without stealing a
       // keyboard click on Close or Show more.
@@ -176,7 +206,7 @@ export function TokenPicker({
         commit(shown[active]);
       }
     },
-    [active, commit, shown],
+    [active, commit, onClose, shown],
   );
 
   useEffect(() => {
@@ -202,7 +232,7 @@ export function TokenPicker({
       >
         <header className="ics-picker-header">
           <h2 className="nt-subtitle" id="ics-picker-title">
-            Add token
+            {props.mode === "select" ? props.title : "Add token"}
           </h2>
           <div className="ics-picker-search">
             <label className="nt-sr-only" htmlFor="ics-picker-input">
@@ -244,15 +274,20 @@ export function TokenPicker({
             shown.map((candidate, index) => {
               const tone = trendOf(candidate.priceChange24H ?? 0);
               const busy = busyAddress === candidate.address;
-              const status = candidate.watched ? "Watching" : busy ? "Adding…" : "Add";
+              const selected = props.mode === "select" && props.selectedAddress === candidate.address;
+              const status = selecting
+                ? selected ? "Selected" : candidate.watched ? "Watching" : "Select"
+                : candidate.watched ? "Watching" : busy ? "Adding…" : "Add";
               return (
                 <button
                   className={cx("ics-picker-row", {
                     "nt-tag--selected": index === active,
                   })}
                   data-index={index}
+                  data-address={candidate.address}
                   aria-busy={busy}
-                  disabled={candidate.watched || busy}
+                  aria-pressed={selecting ? selected : undefined}
+                  disabled={(!selecting && candidate.watched) || busy}
                   key={candidate.address}
                   onClick={() => commit(candidate)}
                   onMouseEnter={() => setActive(index)}

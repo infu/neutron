@@ -439,16 +439,16 @@ export function App() {
     }
   }, [loadBackend, showToast]);
 
-  const pickerCandidates = useMemo<PickerCandidate[]>(
-    () =>
-      universe.length > 0
-        ? candidatesFromUniverse(universe, watchedSet, verifiedSet).map((candidate) => liveError ? { ...candidate, priceUsd: 0, priceChange24H: null, volumeUsd24h: null, volumeUsd7d: 0, tvlUsd: 0 } : candidate)
-        : pickerFallback.map((candidate) => ({
-            ...candidate,
-            watched: watchedSet.has(candidate.address),
-          })),
-    [pickerFallback, universe, verifiedSet, watchedSet, liveError],
-  );
+  const pickerCandidates = useMemo<PickerCandidate[]>(() => {
+    // The saved watchlist remains selectable even when the analytics universe
+    // is incomplete or unavailable. Keep its registry identity, but never
+    // present saved prices as a fresh market observation.
+    const saved = candidatesFromBackend((snapshot?.rows ?? []).map((row) => ({ ...row, watched: true })));
+    const discovered = universe.length > 0
+      ? candidatesFromUniverse(universe, watchedSet, verifiedSet).map((candidate) => liveError ? { ...candidate, priceUsd: 0, priceChange24H: null, volumeUsd24h: null, volumeUsd7d: 0, tvlUsd: 0 } : candidate)
+      : pickerFallback.map((candidate) => ({ ...candidate, watched: watchedSet.has(candidate.address) }));
+    return [...new Map([...saved, ...discovered].map((candidate) => [candidate.address, candidate])).values()];
+  }, [snapshot, pickerFallback, universe, verifiedSet, watchedSet, liveError]);
 
   // The on-chain price index is the preferred ICP reference, but the live
   // analytics list carries ICP too, so a cold or failed on-chain refresh does
@@ -535,6 +535,9 @@ export function App() {
               rank={liveError ? undefined : rankMap.get(view.address)}
               swapChoices={detailSwapChoices}
               swapSlippage={swapSlippage}
+              pickerCandidates={pickerCandidates}
+              pickerSource={universe.length > 0 ? "live" : "on-chain"}
+              pickerError={liveError}
             />
           ) : snapshot === null ? (
             <section className="ics-empty-block"><h2 className="nt-subtitle">Your tokens could not be loaded</h2><p className="nt-muted">Refresh to reconnect to your saved watchlist.</p><button className="nt-button" disabled={refreshing} onClick={() => void handleRefresh()} type="button">Refresh tokens</button></section>
@@ -570,13 +573,12 @@ export function App() {
                 onChooseInput={setSwapInput}
                 output={tradeOutput}
                 choices={tradeChoices}
+                pickerCandidates={pickerCandidates}
+                pickerSource={universe.length > 0 ? "live" : "on-chain"}
+                pickerError={liveError}
                 onChooseOutput={setSwapOutput}
                 initialSlippage={swapSlippage}
               />
-              <aside className="ics-trade-markets">
-                <header className="nt-section-header"><h2 className="nt-section-heading">Your markets</h2><button className="nt-button nt-button--ghost nt-button--sm" onClick={() => setView({ kind: "market" })} type="button">View all →</button></header>
-                <MarketTable ascending={ascending} busyAddress={busyAddress} entries={merged} onOpen={(address) => setView({ kind: "token", address })} onRemove={handleRemove} onSort={handleSort} onTogglePin={handleTogglePin} sortKey={sortKey} compact />
-              </aside>
             </div>
           ) : (
             <>

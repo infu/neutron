@@ -22,6 +22,7 @@ import {
 import { createBackendClient } from "./backend.ts";
 import { swapQuoteReader } from "./swap_quote.ts";
 import { swapQuoteOutputSchema } from "./quote_schema.ts";
+import { poolCompositionOutputSchema } from "./pool_composition.ts";
 import { createRequestId } from "./funding.ts";
 import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
 import { createLiquidityReadClient, type BrowserPoolView } from "./liquidity_reads.ts";
@@ -103,6 +104,10 @@ function swapRequestFrom(args: JsonObject) {
   }
   const amountIn = BigInt(raw);
   if (amountIn <= 0n) throw new Error("amount must be greater than zero");
+  const slippage = args.slippage === undefined ? 500 : args.slippage;
+  if (typeof slippage !== "number" || !Number.isSafeInteger(slippage) || slippage < 1 || slippage > 50_000) {
+    throw new Error("slippage must be an integer from 1 to 50000 in thousandths of a percent (500 is 0.5%). Fractional values are not rounded.");
+  }
   return {
     requestId:
       typeof args.request_id === "string" && /^[0-9a-f]{32}$/u.test(args.request_id)
@@ -111,7 +116,7 @@ function swapRequestFrom(args: JsonObject) {
     inputAddress: from,
     outputAddress: to,
     amountIn,
-    slippage: boundedInt(args.slippage, 500, 1, 50_000),
+    slippage,
   };
 }
 
@@ -555,7 +560,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     {
       title: "ICPSwap pools for a token",
       description:
-        "Liquidity pools that trade a token, with fee tier, TVL, 24h volume, 24h fees, and both sides' current price.",
+        "Pools that trade a token, including exact reported quantities of BOTH tokens, reported TVL, volume and fees. Inspect composition.token0/1.amount_tokens (decimal token units, not atoms) to spot pools whose USD valuation is dominated by an illiquid token. Missing quantities are null. Analytics amounts are not verified custody or executable trade depth; use a fresh swap quote for execution.",
       inputSchema: {
         type: "object",
         properties: {
@@ -574,7 +579,50 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
         required: ["ledger_id"],
         additionalProperties: false,
       },
-      outputSchema: { type: "object" },
+      outputSchema: {
+        type: "object",
+        properties: {
+          version: { type: "integer", enum: [1] },
+          source: { type: "string", enum: ["icpswap-info-api"] },
+          as_of: { type: "string", description: "Response time, not the underlying pool snapshot time." },
+          as_of_kind: { type: "string", enum: ["response_time"] },
+          ledger_id: { type: "string" },
+          total_pools: { type: "integer" },
+          pools: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                pool_id: { type: "string" },
+                fee_tier_percent: { type: "number" },
+                ...Object.fromEntries(["token0", "token1"].map((side) => [side, {
+                  type: "object",
+                  properties: {
+                    ledger_id: { type: "string" },
+                    symbol: { type: "string" },
+                    price_usd: { type: "number", description: "Legacy approximate analytics price; composition supplies nullable reported price." },
+                    liquidity_amount: { type: ["number", "null"], description: "Legacy approximate token units, not atoms. Prefer composition's exact amount_tokens. Null when unavailable or not representable." },
+                  },
+                  required: ["ledger_id", "symbol", "price_usd", "liquidity_amount"],
+                  additionalProperties: false,
+                }])),
+                composition: poolCompositionOutputSchema,
+                tvl_usd: { type: "number", description: "Legacy approximate reported valuation. Token pricing can inflate this; compare both token amounts and nullable composition.reported_tvl_usd." },
+                tvl_change_24h_percent: { type: "number" },
+                volume_usd_24h: { type: "number" },
+                volume_usd_7d: { type: "number" },
+                fees_usd_24h: { type: "number" },
+                tx_count_24h: { type: "number" },
+              },
+              required: ["pool_id", "fee_tier_percent", "token0", "token1", "composition", "tvl_usd", "tvl_change_24h_percent", "volume_usd_24h", "volume_usd_7d", "fees_usd_24h", "tx_count_24h"],
+              additionalProperties: false,
+            },
+          },
+          note: { type: "string" },
+        },
+        required: ["version", "source", "as_of", "as_of_kind", "ledger_id", "total_pools", "pools", "note"],
+        additionalProperties: false,
+      },
       annotations: { readOnlyHint: true },
     },
     async (args, context): Promise<JsonValue> => {
@@ -583,6 +631,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
       const pools = await loadTokenPools(ledgerId);
       const ordered = [...pools].sort((left, right) => right.tvlUSD - left.tvlUSD);
       return {
+        version: 1,
         source: "icpswap-info-api",
         as_of: nowIso(),
         as_of_kind: "response_time",
@@ -603,6 +652,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
             price_usd: pool.token1Price,
             liquidity_amount: pool.token1LiquidityAmount,
           },
+          composition: pool.composition,
           tvl_usd: pool.tvlUSD,
           tvl_change_24h_percent: pool.tvlUSDChange24H,
           volume_usd_24h: pool.volumeUSD24H,
@@ -610,7 +660,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
           fees_usd_24h: pool.feesUSD24H,
           tx_count_24h: pool.txCount24H,
         })),
-        note: DISCLAIMER,
+        note: "Reported TVL can be inflated by illiquid token prices. Compare both exact token quantities in composition. Analytics snapshot time is unavailable; response time does not establish freshness. Use a fresh execution quote to assess a trade.",
       };
     },
   );
@@ -822,9 +872,9 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
             maxLength: 40,
           },
           slippage: {
-            type: "number",
+            type: "integer",
             description:
-              "Maximum slippage in thousandths of a percent; 500 is 0.5%. Defaults to 500 (0.5%).",
+              "Whole-number thousandths of a percent; 1 is 0.001%, 500 is 0.5%. Defaults to 500 when omitted. Fractional values are rejected, not rounded.",
             minimum: 1,
             maximum: 50000,
           },
