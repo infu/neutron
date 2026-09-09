@@ -215,6 +215,19 @@ Actual mint/increase token use, refunds and ledger payout links remain unavailab
 where the retained protocol reply does not supply them. Estimates and input
 budgets are not substituted for those actual amounts.
 
+For successful claims, decreases and closes, `receipt.settlement.payoutEstimates`
+compares each exact gross reply with its saved plan fee. It separates
+`expectedRetainedAtoms` (pool credit) from `expectedNetAtoms` (Wallet payout).
+`feeBasis=saved_plan` and `feeObservedAtNs` identify the estimate's source;
+missing fees leave positive-output estimates unavailable. A small positive
+claim can remain in the pool without a Wallet transfer or fee debit. Activity
+and tool messages explain checking and reusing this available credit, or
+withdrawing once it exceeds the transfer fee, instead of repeating the claim.
+These estimates do not establish current credit or operation-linked settlement:
+fees can change, pool balances are aggregate, and positive-output receipts retain
+`settlement.status=unverified`. Historical saved replies receive the same
+guidance without changing or replaying their journals.
+
 Swap receipts preserve the legacy numeric `received_out` field for compatibility
 but explicitly set `received_out_verified=false` and `netOutputAtoms=null` until
 an operation-linked payout is known. The legacy zero is not an observed Wallet

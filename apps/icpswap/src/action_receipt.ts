@@ -1,9 +1,17 @@
 import { isJsonObject, type JsonObject } from "neutron-tools/app";
 import type { ActionPrepared } from "./action_backend.ts";
+import { estimateLiquidityPayout } from "./liquidity_quote.ts";
 
 type LiquidityKind = "mint" | "increase" | "decrease" | "close" | "claim" | "withdraw";
 type Token = { address: string; standard: string };
 type PairAmounts = { amount0: string; amount1: string };
+export type LiquidityPayoutEstimate = {
+  status: "no_output" | "retained_in_pool" | "transfer_estimated" | "unavailable";
+  grossAtoms: string;
+  feeAtoms: string | null;
+  expectedNetAtoms: string | null;
+  expectedRetainedAtoms: string | null;
+};
 
 /** A protocol result is evidence of its exact effect, not a ledger receipt.
  * Decimal strings remain exact; absent actual amounts never become zeros or
@@ -28,6 +36,9 @@ export type LiquidityReceipt = {
   settlement: {
     status: "not_required" | "unverified";
     payoutReferences: [];
+    payoutEstimates: { token0: LiquidityPayoutEstimate; token1: LiquidityPayoutEstimate } | null;
+    feeBasis: "saved_plan";
+    feeObservedAtNs: string | null;
     reason: string;
   };
 };
@@ -42,6 +53,29 @@ function token(value: unknown): Token | null {
   if (!isJsonObject(value)) return null;
   const address = text(value.address), standard = text(value.standard);
   return address && standard ? { address, standard } : null;
+}
+
+function payoutEstimate(grossAtoms: string, savedFee: unknown): LiquidityPayoutEstimate {
+  const feeAtoms = nat(savedFee), gross = BigInt(grossAtoms);
+  if (gross === 0n) return { status: "no_output", grossAtoms, feeAtoms, expectedNetAtoms: "0", expectedRetainedAtoms: "0" };
+  if (feeAtoms === null) return { status: "unavailable", grossAtoms, feeAtoms, expectedNetAtoms: null, expectedRetainedAtoms: null };
+  const estimate = estimateLiquidityPayout(gross, BigInt(feeAtoms));
+  return { status: estimate.status, grossAtoms, feeAtoms, expectedNetAtoms: estimate.net.toString(),
+    expectedRetainedAtoms: estimate.status === "retained_in_pool" ? grossAtoms : "0" };
+}
+
+/** Explain a successful small output without turning saved fees or aggregate
+ * pool balances into operation-linked settlement evidence. */
+export function liquiditySettlementGuidance(receipt: LiquidityReceipt | null): string | null {
+  const estimates = receipt?.settlement.payoutEstimates;
+  if (!estimates) return null;
+  const values = [estimates.token0, estimates.token1];
+  if (!values.some((value) => value.status === "retained_in_pool")) return null;
+  const onlyPoolCredit = values.every((value) => value.status === "retained_in_pool" || value.status === "no_output");
+  return "The pool completed this action. Based on the saved transfer fees, " +
+    (onlyPoolCredit ? "the returned tokens are expected to stay in your pool balance; no Wallet payout or transfer fee debit is expected. "
+      : "the amounts at or below their transfer fee are expected to stay in your pool balance, without a Wallet payout or transfer fee debit for those tokens. Other token payouts remain unverified. ") +
+    "Check Liquidity for your available pool balance. You can reuse it or withdraw once the available amount exceeds the transfer fee. These estimates do not verify current pool credit or payment. Do not repeat this completed action.";
 }
 
 /** Call with the backend's decoded typed plan and full retained effects.
@@ -63,7 +97,7 @@ export function buildLiquidityReceipt({ operation, plan }: ActionPrepared): Liqu
   const amount0 = nat(effect.result_amount0), amount1 = nat(effect.result_amount1);
   const grossOutputAmounts = pairedOutput && amount0 !== null && amount1 !== null ? { amount0, amount1 } : null;
   const noPayout = action === "claim" && grossOutputAmounts?.amount0 === "0" && grossOutputAmounts.amount1 === "0";
-  return {
+  const receipt: LiquidityReceipt = {
     version: 1, kind: "liquidity", operationId: operation.id, action, pool, owner, token0, token1,
     positionId: adding ? nat(effect.result_nat) : action === "withdraw" ? null : nat(plan.request.position_id),
     protocol: { status: "succeeded", effectKey: "liquidity", method: methods[action],
@@ -77,11 +111,18 @@ export function buildLiquidityReceipt({ operation, plan }: ActionPrepared): Liqu
     settlement: {
       status: noPayout ? "not_required" : "unverified",
       payoutReferences: [],
+      payoutEstimates: grossOutputAmounts ? {
+        token0: payoutEstimate(grossOutputAmounts.amount0, plan.fee0),
+        token1: payoutEstimate(grossOutputAmounts.amount1, plan.fee1),
+      } : null,
+      feeBasis: "saved_plan", feeObservedAtNs: nat(plan.observed_at),
       reason: noPayout
         ? "The retained successful claim returned 0/0, so this effect requires no ledger payout."
         : "The retained reply has no operation-linked ledger block, recipient and amount receipts. Empty queues or changed balances do not prove settlement.",
     },
   };
+  receipt.settlement.reason = liquiditySettlementGuidance(receipt) ?? receipt.settlement.reason;
+  return receipt;
 }
 
 export const durablePlanSource: JsonObject = {

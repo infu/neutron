@@ -52,6 +52,8 @@ const fixture = `
   let durable=JSON.parse(localStorage.getItem('icpswap.browser.fixture')||'null')||{history:[initial,recoverySource],positionLiquidity:'1000000000',fees:true,unused0:'100000000',unused1:'1000000',newPosition:false};
   const state=window.__app={calls:[],queries:[],selfQueries:[],protocolDispatches:[],loseSwapReply:false,walletMissing:false,walletUnselected:[],quoteQueries:[],holdTokenInfo:true,releaseTokenInfo:[],walletInfoActive:false,walletInfoOverlap:0,walletDelay:40,walletBalances:{},walletFees:{},reverseMarkets:false,failQuote:false,failMarket:new URL(location.href).searchParams.has('market-failure'),addHold:false,updates:[],methods,durable};
   const persist=()=>{localStorage.setItem('icpswap.browser.fixture',JSON.stringify(durable));for(const fn of listeners)fn();};
+  state.activityEvidence=new Map();
+  state.installActivityEvidence=result=>{state.activityEvidence.set(result.operationId,structuredClone(result));const current=durable.history.find(row=>row.id===result.operationId);if(current)Object.assign(current,result.operation);else durable.history.push(structuredClone(result.operation));persist();};
   const record=(operationId,input,approved)=>({plan_json:'',funding_json:'',result_json:'',revision:'0',id:operationId,input_json:JSON.stringify({version:1,owner:{appId:'icpswap',rootMode:false},input}),state:approved?'complete':'stopped',detail:approved?'Fixture action completed and payout observed.':'Owner declined this prepared action.',created_at:'1788880900000000000',updated_at:'1788880900000000000',effects:[effect(input.kind||'swap',input.kind||'swap',approved?'succeeded':'not_requested')]});
   const progress=(operation)=>({operationId:operation.id,state:operation.state,message:operation.detail,operation});
   export const exposeTool=(name,definition,handler)=>methods.set(name,{definition,handler});
@@ -88,6 +90,7 @@ const fixture = `
     }
     if(name==='icpswap_history_v1'){const page=await createActionBackend({querySelf,updateSelf}).actionPage({cursor:args.cursor??null,limit:args.limit??20});state.lastHistory=structuredClone(page.items);return page;}
     if(name==='icpswap_reconcile_v1'){
+      if(state.activityEvidence.has(args.operationId))return structuredClone(state.activityEvidence.get(args.operationId));
       const operation=durable.history.find(row=>row.id===args.operationId);if(!operation)throw Error('Unknown saved operation');
       state.queries.push({canister:JSON.parse(operation.input_json).input.pool||pool,method:'fixture-status-fresh-pool-observation'});
       if(operation.id===recoverySourceId)return {...progress(structuredClone(operation)),plan:recoverySourcePlan,pool:{unused0:'0',unused1:'500000',queue:[],transactions:[],protocol_diagnostics:''}};
@@ -804,6 +807,53 @@ try {
   await page.getByRole("button", { name: "Refresh tokens", exact: true }).click();
   await page.getByRole("slider", { name: "Percentage of spendable balance", exact: true }).waitFor();
   checks.push("A failed initial watchlist read shows a retry state and restores Swap without pretending saved tokens were removed.");
+
+  await navigate("Activity");
+  const evidenceCallsBefore = await page.evaluate(() => window.__app.calls.length);
+  await page.evaluate(() => {
+    for (const [suffix, positionId, amount1] of [["01", "5097", "0"], ["02", "5098", "46000"]]) {
+      const operationId = "202609090011000000000000000000" + suffix, pool = "mohjv-bqaaa-aaaag-qjyia-cai";
+      const operation = { id: operationId, input_json: JSON.stringify({ kind: "claim", pool, positionId }),
+        plan_json: "", funding_json: "", result_json: "", state: "settlement_pending", detail: "Protocol claim succeeded; payout unverified.",
+        created_at: "1788960000000000000", updated_at: "1788960000000000010", revision: "9",
+        effects: [{ key: "liquidity", canister: pool, method: "claim", state: "succeeded", error: "",
+          dispatched_at: "1788960000000000001", completed_at: "1788960000000000010", result_nat: null, result_amount0: "297", result_amount1: amount1 }] };
+      const plan = { pool, owner: "3rurp-vyaaa-aaaay-aacua-cai", request: { kind: "claim", pool, position_id: positionId },
+        token0: { address: "ryjl3-tyaaa-aaaaa-aaaba-cai", standard: "ICRC2" }, token1: { address: "xevnm-gaaaa-aaaar-qafnq-cai", standard: "ICRC2" },
+        fee0: "10000", fee1: "10000", observed_at: "1788960000000000000" };
+      window.__app.installActivityEvidence({ operationId, state: operation.state, message: operation.detail, operation, plan,
+        pool: { unused0: "297", unused1: "0", reserved0: "0", reserved1: "0", fee0: "10000", fee1: "10000", queue: [], transactions: [] } });
+    }
+  });
+  const claimCard = page.locator(".ics-action-card").filter({ hasText: "Position #5097" });
+  const mixedCard = page.locator(".ics-action-card").filter({ hasText: "Position #5098" });
+  await claimCard.waitFor();
+  assert.match(await claimCard.getByRole("status").innerText(), /Payment to your Wallet has not been verified/, "compact history does not fabricate fee or retained-credit evidence");
+  assert.equal(await page.evaluate(from => window.__app.calls.slice(from).filter(call => call.name === "icpswap_reconcile_v1").length, evidenceCallsBefore), 0, "activity does not automatically poll individual rows");
+  await claimCard.getByRole("button", { name: "Check status", exact: true }).click();
+  await claimCard.getByRole("status").filter({ hasText: "expected to remain as pool credit at the saved fees" }).waitFor();
+  assert.equal(await claimCard.locator(".ics-action-state").innerText(), "Payout unverified");
+  assert.match(await claimCard.getByRole("status").innerText(), /Wallet payouts remain unverified/);
+  assert.match(await claimCard.locator(".ics-pool-recovery").innerText(), /cannot be withdrawn at the observed fee/);
+  assert.equal(await claimCard.getByRole("button", { name: "Continue", exact: true }).count(), 0);
+  await mixedCard.getByRole("button", { name: "Check status", exact: true }).click();
+  await mixedCard.getByRole("status").filter({ hasText: "expected to remain as pool credit at the saved fees" }).waitFor();
+  assert.equal(await mixedCard.locator(".ics-action-state").innerText(), "Payout unverified");
+  await page.setViewportSize({ width: 320, height: 900 });
+  await noOverflow("retained-pool-credit-320");
+  await claimCard.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(out, "retained-pool-credit-320.png") });
+  await page.evaluate(() => {
+    const previous = window.__app.activityEvidence.get("20260909001100000000000000000001");
+    const operation = { ...previous.operation, state: "uncertain", detail: "A newer observation requires reconciliation.", revision: "10", updated_at: "1788960000000000011", effects: [] };
+    window.__app.installActivityEvidence({ ...previous, operation, state: operation.state, message: operation.detail });
+  });
+  await claimCard.getByText("Needs reconciliation", { exact: true }).waitFor();
+  assert.doesNotMatch(await claimCard.getByRole("status").innerText(), /expected to remain|pool completed this action/);
+  const evidenceCalls = await page.evaluate(from => window.__app.calls.slice(from), evidenceCallsBefore);
+  assert.equal(evidenceCalls.filter(call => call.name === "icpswap_reconcile_v1").length, 2);
+  assert(evidenceCalls.every(call => ["icpswap_history_v1", "icpswap_reconcile_v1"].includes(call.name)), "retained-credit guidance only uses explicit status reads and existing history refreshes; no extra Wallet or financial calls");
+  checks.push("Report-10 297-atom claim and mixed payout show fee-aware pool-credit guidance only after explicit status evidence, retain unverified settlement, and make no extra financial/Wallet calls or per-row polling. A newer uncertain history revision discards stale successful guidance.");
   assert.deepEqual(errors, []);
   await writeFile(join(out, "app-results.json"), JSON.stringify({ checks, viewports: [320, 360, 480, 960, 1200], errors }, null, 2));
   console.log(`App browser checks passed; artifacts: ${out}`);

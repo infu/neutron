@@ -2,7 +2,7 @@
   "format": 3,
   "name": "via ICPSwap",
   "id": "icpswap",
-  "version": 207,
+  "version": 208,
   "description": "Independent ICPSwap integration for swaps, concentrated liquidity, positions, market research and agent tools.",
   "src": "main.mo",
   "backend": {
