@@ -102,6 +102,29 @@ test("Wallet projection schemas pass shared tool hardening", () => {
   ).not.toThrow();
 });
 
+test("Wallet projection round-trips index lag and partial synchronization without marking empty activity complete", () => {
+  const checkpoint = { tipExclusive: "90071992547409939999", balance: "123456789000000000", checkedAt: "1800000000000000001" };
+  const projection = createWalletProjection(4, snapshot, catalog, [], {
+    historyStatus: { running: false, ledgers: [{
+      ledger: snapshot.ledgers[0]!.principal, symbol: "ICP", enabled: true,
+      source: "index", index: "qhbym-qaaaa-aaaaa-aaafq-cai", state: "waiting_for_index",
+      checkpoint, lastAttemptAt: "1800000000000000002", lastSuccessAt: checkpoint.checkedAt,
+      lastError: null, transactionCount: "2", adjustmentCount: "0",
+    }] },
+    activitySync: { requested: true, error: null, report: {
+      startedAt: "1800000000000000002", finishedAt: "1800000000000000003", skippedOverlap: false,
+      results: [{ ledger: snapshot.ledgers[0]!.principal, status: "waiting_for_index", recordsAdded: "0", checkpoint, error: null }],
+    } },
+  });
+  expect(parseWalletProjection(projection)).toEqual(projection);
+  expect(projection.activity).toEqual([]);
+  expect(projection.historyError).toBeNull();
+  expect(projection.historyStatus?.ledgers[0]?.state).toBe("waiting_for_index");
+  expect(projection.activitySync.report?.results[0]?.status).toBe("waiting_for_index");
+  const { activitySync: _sync, historyStatus: _status, historyStatusError: _error, ...oldProjection } = projection;
+  expect(parseWalletProjection(oldProjection)).toMatchObject({ historyStatus: null, historyStatusError: null, activitySync: { requested: false, report: null, error: null } });
+});
+
 test("Wallet tool projections omit repeated images without changing balances, activity, or visual projections", () => {
   const logo = `data:image/png;base64,${"A".repeat(20_000)}`;
   const projection = createWalletProjection(

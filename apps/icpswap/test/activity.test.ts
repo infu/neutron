@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { actionTitle, canContinueSavedAction, newestSavedAction, retainedPool, savedActionInput, type SavedAction } from "../src/activity.tsx";
+import { actionExplanation, actionTitle, canContinueSavedAction, newestSavedAction, retainedPool, savedActionInput, type SavedAction } from "../src/activity.tsx";
 const input = { kind: "mint", pool: "mohjv-bqaaa-aaaag-qjyia-cai", amount0: "1000000", amount1: "2500000", tickLower: -60, tickUpper: 60 };
 const record = (owner = { appId: "icpswap", rootMode: false }) => ({ input_json: JSON.stringify({ version: 1, kind: "liquidity", owner, input }), state: "funding_requested" });
 describe("durable liquidity activity", () => {
@@ -20,6 +20,12 @@ describe("durable liquidity activity", () => {
     expect(canContinueSavedAction(record({ appId: "icpswap", rootMode: true }))).toBe(false);
     expect(canContinueSavedAction({ ...record(), state: "uncertain" })).toBe(false);
     expect(canContinueSavedAction({ ...record(), state: "complete" })).toBe(false);
+  });
+  test("explains unverified payout without claiming failure or wallet settlement", () => {
+    expect(actionExplanation("settlement_pending", "Empty queues")).toBe("The pool completed this action. Payment to your Wallet has not been verified yet. Check status to review the saved result.");
+    expect(actionExplanation("uncertain", "Reply lost")).toContain("without sending another payment");
+    expect(actionExplanation("complete", "No payout scheduled: zero claim.")).toBe("No payout scheduled: zero claim.");
+    expect(actionExplanation("stopped", "Insufficient funds")).toBe("Insufficient funds");
   });
 });
 

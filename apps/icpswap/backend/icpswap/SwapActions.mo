@@ -28,6 +28,7 @@ module {
     public type Receipt = {
         request_id : Text; state : Text; pool : Text; input_address : Text; output_address : Text;
         amount_in : Nat; amount_out_minimum : Nat; swapped_out : Nat; received_out : Nat;
+        received_out_verified : Bool;
         detail : Text; needs_funding : Bool; funding_ledger : Text; funding_spender : Text;
         funding_amount : Nat; at : Int;
     };
@@ -67,7 +68,8 @@ module {
                         swapped_out = gross;
                         // The pool's reply only schedules the outgoing transfer.
                         // No ledger observation in this method proves receipt.
-                        received_out = 0; detail = operation.detail; needs_funding = false;
+                        received_out = 0; received_out_verified = false;
+                        detail = operation.detail; needs_funding = false;
                         funding_ledger = plan.quote.funding_ledger; funding_spender = plan.quote.funding_spender;
                         funding_amount = plan.quote.funding_amount;
                         // Existing swap quote/receipt timestamps use seconds;

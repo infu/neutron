@@ -24,6 +24,9 @@
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
     "@dfinity/principal": "^3.4.3",
+    "@dfinity/candid": "^3.4.3",
+    "@icp-sdk/canisters": "3.6.0",
+    "@icp-sdk/core": "5.4.0",
     "neutron-design-system": "^1.1.0",
     "neutron-tools": "^1.1.0",
     "react": "^19.2.7",

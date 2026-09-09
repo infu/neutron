@@ -3,7 +3,12 @@ import { createDirectFundingRequest, createFundingRequest, createRequestId, type
 import { continueOperationFunding, savedFundingRequests, type FundingOperation } from "./funding_workflow.ts";
 import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
 import { createBackendClient } from "./backend.ts";
-import { buildActionReview } from "./action_review.ts";
+import { buildActionReview, sameLiquidityExitTerms } from "./action_review.ts";
+import { buildLiquidityReceipt, buildSwapReceipt, durablePlanSource } from "./action_receipt.ts";
+import { readPayoutEvidence, type PayoutBlockReference } from "./payout_evidence.ts";
+import { createLiquidityReadClient } from "./liquidity_reads.ts";
+import { browserPoolToWire, previewLiquidity } from "./liquidity_quote.ts";
+import { liquidityQuoteOutputSchema } from "./quote_schema.ts";
 import { runDepositRecovery } from "./recovery_workflow.ts";
 import { publishAppStateChange } from "neutron-tools/app";
 import type { ActionBackend, ActionPrepared, ActionOperation, LiquidityWire, SwapWire } from "./action_backend.ts";
@@ -11,6 +16,7 @@ import type { ActionBackend, ActionPrepared, ActionOperation, LiquidityWire, Swa
 export type ActionDependencies = {
   backendFor: (kernel: ScopedKernelClient) => ActionBackend;
   authorize: (context: MsgBusToolContext, review: JsonObject) => Promise<void>;
+  reads?: Pick<ReturnType<typeof createLiquidityReadClient>, "readPool">;
 };
 type Owner = { appId: string; installationUid: string; rootMode: boolean };
 type Intent = { version: 1; kind: "swap" | "liquidity" | "recover_deposit"; owner: Owner; input: JsonObject };
@@ -89,7 +95,8 @@ function liquidityWire(input: JsonObject): LiquidityWire {
 }
 function response(prepared: ActionPrepared, message = prepared.operation.detail): JsonObject {
   return asJson({ operationId: prepared.operation.id, state: prepared.operation.state, message,
-    operation: prepared.operation, plan: prepared.plan, receipt: prepared.receipt ?? null, fundingInstructions: [] }) as JsonObject;
+    operation: prepared.operation, plan: prepared.plan, planSource: durablePlanSource,
+    receipt: buildSwapReceipt(prepared) ?? buildLiquidityReceipt(prepared), fundingInstructions: [] }) as JsonObject;
 }
 function pendingEffects(operation: FundingOperation): boolean {
   const effects = (operation as FundingOperation & { effects?: JsonObject[] }).effects ?? [];
@@ -97,6 +104,7 @@ function pendingEffects(operation: FundingOperation): boolean {
 }
 
 export function createActionHandlers(dependencies: ActionDependencies) {
+  const reads = dependencies.reads ?? createLiquidityReadClient();
   const active = new Map<string, Promise<JsonObject>>();
   const exclusive = (context: ActionContext, operationId: string, run: () => Promise<JsonObject>): Promise<JsonObject> => {
     const key = `${owner(context).appId}:${owner(context).installationUid}:${operationId}`;
@@ -110,6 +118,19 @@ export function createActionHandlers(dependencies: ActionDependencies) {
     const value = intent.kind === "swap" ? await backend.swapStatus(operation.id) : intent.kind === "liquidity" ? await backend.liquidityStatus(operation.id) : await backend.recoveryStatus(operation.id);
     if (!value) throw new Error("The saved operation has no retained protocol plan.");
     return value;
+  };
+  const displayMetadata = async (context: ActionContext, fundingMetadata: ReadonlyMap<string, WalletTokenInfo>) => {
+    const metadata = new Map<string, Pick<WalletTokenInfo, "ledger" | "symbol" | "decimals">>();
+    try {
+      // These are saved display labels, never funding amounts, balances or fee
+      // authority. An exit must not refresh Wallet balances just for formatting.
+      const snapshot = await createBackendClient(context.kernel).getMarket("symbol", true);
+      for (const row of snapshot.rows) if (row.symbol && Number.isInteger(row.decimals) && row.decimals >= 0 && row.decimals <= 255) {
+        metadata.set(row.address, { ledger: row.address, symbol: row.symbol, decimals: row.decimals });
+      }
+    } catch { context.signal?.throwIfAborted(); /* Unknown labels display exact atoms. */ }
+    for (const [ledger, info] of fundingMetadata) metadata.set(ledger, info);
+    return metadata;
   };
 
   async function fundingBuilder(prepared: ActionPrepared, intent: Intent, context: ActionContext, metadata: Map<string, WalletTokenInfo>): Promise<(nowMs: number) => FundingRequest[]> {
@@ -150,6 +171,8 @@ export function createActionHandlers(dependencies: ActionDependencies) {
     const backend = dependencies.backendFor(context.kernel), metadata = new Map<string, WalletTokenInfo>();
     const existing = await backend.actionGet(operationId);
     let intent: Intent, prepared: ActionPrepared;
+    let approvedPreview: JsonObject | null = null;
+    let reviewMetadata: Awaited<ReturnType<typeof displayMetadata>> | null = null;
     if (existing) {
       intent = intentOf(existing); assertOwner(intent, context);
       if (supplied && (supplied.kind !== intent.kind || JSON.stringify(supplied.input) !== JSON.stringify(intent.input))) throw new Error("This operationId already belongs to different original inputs. Continue it without replacing the intent.");
@@ -159,6 +182,15 @@ export function createActionHandlers(dependencies: ActionDependencies) {
       if (!supplied) throw new Error("No saved operation was found. If the original preparation reply was lost, call its original tool with the same operationId and exact original inputs.");
       intent = { version: 1, kind: supplied.kind, owner: owner(context), input: supplied.input };
       const input_json = JSON.stringify(intent);
+      if (!prepareOnly && intent.kind === "liquidity" && ["decrease", "close", "claim", "withdraw"].includes(String(intent.input.kind))) {
+        const [account, labels] = await Promise.all([backend.account(), displayMetadata(context, metadata)]);
+        const preview = await previewLiquidity(liquidityWire(intent.input), account, reads, context.signal);
+        context.signal?.throwIfAborted();
+        await dependencies.authorize(context, buildActionReview({ operationId, kind: "liquidity", input: intent.input, plan: preview, metadata: labels }));
+        context.signal?.throwIfAborted();
+        approvedPreview = preview;
+        reviewMetadata = labels;
+      }
       if (intent.kind === "swap") {
         const tokenCache = createBackendClient(context.kernel);
         for (const ledger of [String(intent.input.from_ledger_id), String(intent.input.to_ledger_id)]) {
@@ -182,17 +214,15 @@ export function createActionHandlers(dependencies: ActionDependencies) {
     context.signal?.throwIfAborted();
     const createRequests = await fundingBuilder(prepared, intent, context, metadata);
     if (intent.kind === "recover_deposit") throw new Error("Recovery actions use their retained recovery workflow.");
-    const reviewLedgers = intent.kind === "swap"
-      ? [prepared.plan.input_address, prepared.plan.output_address]
-      : [isJsonObject(prepared.plan.token0) ? prepared.plan.token0.address : null, isJsonObject(prepared.plan.token1) ? prepared.plan.token1.address : null];
-    for (const ledger of reviewLedgers) {
-      if (typeof ledger !== "string" || metadata.has(ledger)) continue;
-      try { metadata.set(ledger, await readTokenInfo(context.kernel, ledger)); }
-      catch { context.signal?.throwIfAborted(); /* Review shows explicit atoms when display metadata is unavailable. */ }
+    if (approvedPreview === null || !sameLiquidityExitTerms(approvedPreview, prepared.plan)) {
+      reviewMetadata ??= await displayMetadata(context, metadata);
+      await dependencies.authorize(context, buildActionReview({ operationId, kind: intent.kind, input: intent.input, plan: prepared.plan, metadata: reviewMetadata }));
     }
-    await dependencies.authorize(context, buildActionReview({ operationId, kind: intent.kind, input: intent.input, plan: prepared.plan, metadata }));
     context.signal?.throwIfAborted();
-    if (operation.state === "prepared" || operation.state === "funding_requested" || operation.state === "funded") {
+    const noFundingExit = intent.kind === "liquidity" && ["decrease", "close", "claim", "withdraw"].includes(String(intent.input.kind))
+      && prepared.plan.funding0 === "0" && prepared.plan.funding1 === "0"
+      && (operation.state === "prepared" || operation.state === "funded") && savedFundingRequests(operation).length === 0;
+    if (!noFundingExit && (operation.state === "prepared" || operation.state === "funding_requested" || operation.state === "funded")) {
       const progress = await continueOperationFunding({ operation, store: { get: (value) => backend.actionGet(value), update: (value) => backend.actionUpdate(value) }, client: context.kernel,
         rootMode: !!context.agentMode, fundingCallerAppId: context.agentMode ? owner(context).appId : "icpswap", createRequests, ...(fundingResults ? { fundingResults } : {}), ...(context.signal ? { signal: context.signal } : {}) });
       operation = { ...progress.operation, effects: (progress.operation as Partial<ActionOperation>).effects ?? prepared.operation.effects ?? [] };
@@ -240,15 +270,45 @@ export function createActionHandlers(dependencies: ActionDependencies) {
     return response(await preparedFor(backend, operation, intentOf(operation)));
   };
   const reconcile = async (args: JsonObject, context: ActionContext): Promise<JsonObject> => {
+    if (args.walletEvidence !== undefined && typeof args.walletEvidence !== "boolean") throw new Error("walletEvidence must be true or false.");
+    const payoutBlocks: PayoutBlockReference[] = [];
+    if (args.payoutBlocks !== undefined) {
+      if (!Array.isArray(args.payoutBlocks)) throw new Error("payoutBlocks must be a list of ledger and blockIndex references.");
+      for (const value of args.payoutBlocks) {
+        if (!isJsonObject(value) || typeof value.blockIndex !== "string") throw new Error("Each payout block needs a ledger and exact blockIndex string.");
+        payoutBlocks.push({ ledger: requiredText(value.ledger, "Payout ledger"), blockIndex: nat(value.blockIndex, "Payout blockIndex") });
+      }
+      if (args.walletEvidence === false && payoutBlocks.length) throw new Error("Enable walletEvidence to inspect payoutBlocks.");
+    }
     const operationId = id(args.operationId), backend = dependencies.backendFor(context.kernel), operation = await backend.actionGet(operationId);
     if (!operation) return { operationId, state: "not_found", message: "No saved operation found.", operation: null, fundingInstructions: [] };
     const intent = intentOf(operation);
-    if (intent.kind === "liquidity") {
-      const observed = await backend.liquidityReconcile(operationId);
-      return { ...response(observed), pool: observed.pool };
+    const prepared = await preparedFor(backend, operation, intent);
+    const poolId = requiredText(prepared.plan.pool, "Saved pool");
+    let account: string | null = null;
+    let accountError: unknown;
+    let pool: JsonObject;
+    try {
+      try { account = typeof prepared.plan.owner === "string" ? prepared.plan.owner : await backend.account(); }
+      catch (error) { accountError = error; throw error; }
+      pool = browserPoolToWire(await reads.readPool(poolId, account, context.signal));
+    } catch (error) {
+      context.signal?.throwIfAborted();
+      pool = { pool: poolId, owner: account, protocol_diagnostics: error instanceof Error ? error.message : String(error), complete: false };
     }
-    const prepared = await preparedFor(backend, operation, intent), pool = await backend.liquidityPool(requiredText(prepared.plan.pool, "Saved swap pool"));
-    return { ...response(prepared), pool };
+    const result = { ...response(prepared), pool };
+    if (args.walletEvidence === false) return result;
+    try {
+      if (account === null) throw accountError ?? new Error("The Neutron account is unavailable.");
+      const walletEvidence = await readPayoutEvidence({ prepared, kernel: context.kernel, owner: account, payoutBlocks,
+        ...(context.signal ? { signal: context.signal } : {}) });
+      return { ...result, walletEvidence: asJson(walletEvidence) };
+    } catch (error) {
+      return { ...result, walletEvidence: { version: 1, operationId, status: "unavailable",
+        reason: "Wallet evidence could not be read. The retained protocol result remains available; no payout conclusion was made.",
+        settlementVerified: false, operationLinkVerified: false, effect: null, ledgers: [], explicitBlocks: [],
+        errors: [error instanceof Error ? error.message : String(error)] } };
+    }
   };
   const history = async (args: JsonObject, context: ActionContext): Promise<JsonObject> => {
     const cursor = typeof args.cursor === "string" ? args.cursor : null;
@@ -260,7 +320,13 @@ export function createActionHandlers(dependencies: ActionDependencies) {
     const suppliedId = args.request_id ?? args.operationId, operationId = suppliedId === undefined ? createRequestId() : id(suppliedId);
     return exclusive(context, operationId, () => run(context, operationId, { kind: "swap", input: swapInput(args) }, undefined, suppliedId === undefined));
   };
-  return { swap, liquidity, continue: continueSaved, status, reconcile, history, legacySwap, recoverDeposit };
+  const liquidityQuote = async (args: JsonObject, context: ActionContext): Promise<JsonObject> => {
+    const request = liquidityWire(liquidityInput(args));
+    context.signal?.throwIfAborted();
+    const account = await dependencies.backendFor(context.kernel).account();
+    return { version: 1, plan: await previewLiquidity(request, account, reads, context.signal), transport: "direct-canister-query" };
+  };
+  return { swap, liquidity, continue: continueSaved, status, reconcile, history, legacySwap, recoverDeposit, liquidityQuote };
 }
 
 const swapProperties: JsonObject = { operationId: idSchema, from_ledger_id: textSchema, to_ledger_id: textSchema, amount: natSchema,
@@ -274,9 +340,9 @@ export function registerActionTools(dependencies: ActionDependencies, register: 
   register("icpswap_liquidity_v1", { title: "Manage ICPSwap liquidity", description: "Mint/increase a canonical pool position, decrease exact liquidity, close the entire saved position, claim fees, or withdraw gross unused funds. amount0/amount1 are token0/token1 atomic maxima. positionId identifies an owned position. withdraw uses token and gross amount. Liquidity methods have no onchain minimum amounts/deadline. Funding and protocol dispatch remain in one durable operation; payouts/refunds settle asynchronously. Root fundingInstructions must be called directly by the root Agent before continuing.", inputSchema: schema(liquidityProperties, ["operationId", "kind", "pool"]), annotations: effectAnnotations }, handlers.liquidity);
   register("icpswap_recover_deposit_v1", { title: "Recover a funded ICPSwap deposit", description: "Use a NEW recovery operationId with sourceOperationId and canonical tokenIndex (0 or 1) to credit an already-confirmed direct Wallet transfer from the pool's owner deposit subaccount into pool-unused funds. Reviews the original gross amount and current deposit fee. Never requests another Wallet transfer. Unknown original Wallet commands must be reconciled through their exact original caller; Root may supply matching raw fundingResults. An already dispatched or uncertain pool deposit is never repeated. Continue the recovery's own operationId after a lost reply.", inputSchema: schema({ operationId: idSchema, sourceOperationId: idSchema, tokenIndex: { type: "integer", enum: [0, 1] }, fundingResults: { type: "array", items: { type: "object" } } }, ["operationId", "sourceOperationId", "tokenIndex"]), annotations: effectAnnotations }, handlers.recoverDeposit);
   register("icpswap_continue_v1", { title: "Continue a saved ICPSwap action", description: "Continue original intent and exact request identities from the same application and Normal/Root mode. For Root funding, pass the raw Wallet output objects in fundingResults. Unknown protocol effects are never replayed. Human callers cannot take over a Root-funded command by changing its Wallet caller namespace.", inputSchema: schema({ operationId: idSchema, fundingResults: { type: "array", items: { type: "object" } } }, ["operationId"]), annotations: effectAnnotations }, handlers.continue);
-  register("icpswap_status_v1", { title: "Read an ICPSwap action", description: "Read retained plan, funding and protocol effects for a durable operationId. This does not send a Wallet request or protocol mutation; a successful protocol reply is distinct from ledger settlement.", inputSchema: schema({ operationId: idSchema }, ["operationId"]), annotations: { "neutron:effects": ["read"] } }, handlers.status);
-  register("icpswap_reconcile_v1", { title: "Refresh ICPSwap action recovery", description: "Read the retained action and refresh its factory-verified pool, unused funds, positions, withdrawal queue and failed protocol transaction diagnostics. Never repeats an uncertain swap, deposit or liquidity mutation. Queue absence is not a Wallet settlement receipt.", inputSchema: schema({ operationId: idSchema }, ["operationId"]), annotations: readAnnotations }, handlers.reconcile);
+  register("icpswap_status_v1", { title: "Read an ICPSwap action", description: "Read retained typed plan, funding, protocol effects and available protocol receipt for a durable operationId. plan decodes the durable plan_blob even when operation.plan_json is empty. Receipt unknown amounts remain null; successful protocol replies do not verify ledger settlement. This read sends no Wallet request or protocol mutation.", inputSchema: schema({ operationId: idSchema }, ["operationId"]), annotations: { "neutron:effects": ["read"] } }, handlers.status);
+  register("icpswap_reconcile_v1", { title: "Refresh ICPSwap action recovery", description: "Refresh the saved action and verified pool. By default, read recent incoming pool-to-Wallet transfers for successful effects; walletEvidence=false skips Wallet reads. Optional payoutBlocks inspect exact ledger/blockIndex references, including archives when available. Returned Wallet transfers are contextual evidence, not operation-linked settlement proof; empty queues or pages do not prove a payout is absent. Never repeats a swap, deposit or liquidity mutation.", inputSchema: schema({ operationId: idSchema, walletEvidence: { type: "boolean", description: "Defaults to true. false skips Wallet reads and cannot be combined with nonempty payoutBlocks." }, payoutBlocks: { type: "array", description: "Exact ledger/block references to inspect. Requires walletEvidence=true or omitted. For older account history call Wallet wallet_account_transactions_v1 with beforeBlock from the returned coverage pagination.", items: schema({ ledger: textSchema, blockIndex: natSchema }, ["ledger", "blockIndex"]) } }, ["operationId"]), annotations: readAnnotations }, handlers.reconcile);
   register("icpswap_history_v1", { title: "Read ICPSwap actions", description: "Paginate all retained ICPSwap actions, including pending funding and uncertain protocol calls. Follow nextCursor for older records. Journals remain available after closing the tile.", inputSchema: schema({ cursor: textSchema, limit: { type: "integer", minimum: 1 } }), annotations: { "neutron:effects": ["read"] } }, handlers.history);
-  register("icpswap_liquidity_quote_v1", { title: "Preview ICPSwap liquidity", description: "Read exact pool/position state, live amounts, range, fees and funding deficits without moving funds. Liquidity amounts are estimates; the protocol has no minimum output/deadline protection.", inputSchema: schema(Object.fromEntries(Object.entries(liquidityProperties).filter(([key]) => key !== "operationId")), ["kind", "pool"]), annotations: readAnnotations }, async (args, context) => ({ plan: await dependencies.backendFor(context.kernel).liquidityPreview(liquidityWire(liquidityInput(args))) }));
+  register("icpswap_liquidity_quote_v1", { title: "Preview ICPSwap liquidity", outputSchema: liquidityQuoteOutputSchema, description: "Query ICPSwap directly from the browser for current pool/position state, live amounts, range, fees and funding deficits without moving funds or saving a plan. Preparation revalidates these observations as the Neutron account. Liquidity amounts are estimates; the protocol has no minimum output/deadline protection.", inputSchema: schema(Object.fromEntries(Object.entries(liquidityProperties).filter(([key]) => key !== "operationId")), ["kind", "pool"]), annotations: readAnnotations }, handlers.liquidityQuote);
   return handlers;
 }

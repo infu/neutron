@@ -12,14 +12,20 @@ larger workspaces. It is not an official ICPSwap application.
   inspection by pointer, touch or keyboard; USD/ICP price views retain the
   observation source.
 - **Swap:** select tokens and an amount, inspect the quote, then review the
-  trade. Wallet supplies live token metadata, balances and funding. Amounts and
-  fees use exact atomic-unit arithmetic; Max leaves the required ledger fees.
+  trade. Wallet supplies live token metadata, balances and funding. The 0–100%
+  slider and shortcuts use exact atomic-unit arithmetic; Max leaves the required
+  ledger fees. New tokens can be added to Wallet through its existing review.
+  Failed reads keep manual amounts intact and offer retry without sending funds.
 - **Liquidity:** discover a verified pool, choose an aligned price range and
   token maxima, and create a position. Existing positions support increasing,
   partially decreasing, closing and claiming fees. Pool-unused tokens remain
-  visible and can be withdrawn separately when the protocol permits it.
+  visible and can be withdrawn separately when the protocol permits it. Position
+  cards show token holdings, estimated USD value, current uncollected fees and
+  the current price within the chosen range.
 - **Activity:** inspect saved requests, funding, protocol results and recovery
-  details. Continue the original operation after an interrupted reply.
+  details. Plain-language outcomes distinguish pool execution from Wallet payout;
+  technical references stay under Details. Continue the original operation after
+  an interrupted reply.
 
 Liquidity amounts use the factory's canonical token order and tick spacing.
 An out-of-range position may require only one token. Closing removes all of the
@@ -29,6 +35,62 @@ minima, deadlines or caller-supplied idempotency keys. Desired amounts bound
 spending but do not provide protocol-enforced slippage protection. Ordinary swaps
 have an output minimum; their slippage unit is thousandths of one percent
 (`500` means `0.5%`).
+
+Position P&L estimates use complete paginated ICPSwap analytics history: actual
+additions and gross outputs valued at their historical prices, plus current
+holdings and uncollected fees. The estimate is before ledger and network fees,
+and protocol outputs do not prove Wallet settlement. Missing original additions,
+ownership transfers, incomplete liquidity history, or unavailable fees/prices
+leave P&L unavailable. A matching analytics history can still lag recent claims;
+this is an estimate, not an audited account return. Holdings remain usable while
+history loads. Token-detail reads share an app-local queue so opening a pool does
+not launch competing Wallet permission dialogs.
+
+## Browser and backend responsibilities
+
+Public ICPSwap observations run directly from the browser: swap quotes, pool
+discovery, positions, liquidity previews, recovery pool reads, analytics and
+charts. Swap pair discovery and pool context are prefetched on selection and
+reused for up to 15 seconds; each amount gets a fresh pool quote. A warm pair
+with one fee tier therefore needs one pool query per amount change. Multiple
+available tiers are compared concurrently. Agent previews use the same reader,
+report the pool-context observation time, and read ledger metadata through
+Wallet without writing it to Neutron's backend.
+
+Swap and liquidity readers share an anonymous query agent, with verified subnet
+keys retained in memory and a fresh nonce on each query. This avoids repeated
+certificate reads without caching application replies or requiring IndexedDB
+in a sandboxed tile. Query cancellation does not interrupt other readers.
+
+Both public quote tools return a typed version-1 response. Swap `expected_out`
+is net of the output ledger fee; `minimum_out_gross` is the pool-enforced gross
+minimum. Compare net estimates with `minimum_out_net_estimate`. The legacy
+`minimum_out` field remains a deprecated gross alias for compatibility.
+Slippage uses `floor(gross * 100000 / (100000 + slippage))`, where 500 is 0.5%.
+Liquidity previews distinguish input consumption from gross outputs and report
+net payout estimates separately. Positive outputs at or below their ledger fee
+remain pool credit; they are not expected Wallet transfers or paid ledger fees.
+
+Opening a liquidity editor does not persist token metadata. Market refresh and
+the resident's market-data timer refresh browser analytics rather than invoking
+the backend's replicated market refresh. The existing six-hour backend task
+still retains local price history when the browser is closed.
+
+The backend owns durable watchlists, preferences, local history and operation
+journals. Preparing and executing a saved action still validates current pool
+state, fees, account access and funding as the Neutron canister. New removals,
+closes, claims and unused withdrawals show the existing approval dialog using a
+fresh browser observation before any durable preparation update. Saved token
+labels format the review without refreshing Wallet balances. After approval,
+the backend prepares the durable plan; changed request amounts, identities,
+ledger fees or funding requirements require a new review before execution.
+Output estimates and fee growth remain advisory because the protocol provides
+no liquidity price minimum. Existing operations always use their retained plan
+and known outcome. Zero-funding exits skip empty funding-journal writes.
+Backend preparation also batches independent pool reads while keeping the
+reservation observation before the unused balance and all mutations sequential.
+Reconciliation reads the saved result and then queries ICPSwap directly; an
+unavailable pool read preserves the known protocol result with a diagnostic.
 
 ## Agent tools and approval
 
@@ -50,6 +112,16 @@ JavaScript's safe integer range are decimal strings.
 | `icpswap_liquidity_v1` | Prepare and execute `mint`, `increase`, `decrease`, `close`, `claim` or `withdraw` |
 | `icpswap_continue_v1`, `icpswap_status_v1`, `icpswap_reconcile_v1`, `icpswap_history_v1` | Continue or inspect an existing operation and refresh recovery evidence |
 | `icpswap_recover_deposit_v1` | Credit an already transferred direct deposit without sending Wallet funds again |
+
+The manifest declares the Wallet tools ICPSwap calls: `wallet_token_info_v1`,
+`wallet_add_ledger_v1`, `wallet_fund_v1`, `wallet_account_transactions_v1` and
+`wallet_transaction_v1`. Ledger setup uses Wallet's existing additive approval
+flow. Root funding instructions remain direct Agent-to-Wallet calls, preserving
+their authenticated caller; ICPSwap does not call a root-only tool on its behalf.
+
+Agents can add and remove watchlist tokens through the existing Kernel
+permissions. Root agents need no click; normal agents use the existing approval
+flow. These tools update the saved ICPSwap market list without moving funds.
 
 New action calls require a stable 32-character hexadecimal `operationId`.
 Normal agents receive an app review before dispatch, and Wallet reviews each
@@ -103,6 +175,47 @@ ICPSwap's own queues. Closing the tile or dismissing a notification does not
 cancel a protocol payout or delete the app's saved operation. A flow paused
 between app-controlled steps can be continued from Activity or the tools.
 
+A confirmed claim returning zero in both tokens is complete with no payout
+required. Status and reconciliation derive that result from the saved reply,
+including older journals that recorded it as settlement pending. Other successful
+actions retain unverified payout status until operation-linked receipt evidence
+exists. The pool removes completed transactions from its active list, and its
+liquidity replies do not identify the outgoing ledger blocks. Empty queues and
+matching Wallet balances cannot establish which operation paid them.
+
+The populated `plan` in action responses is decoded from the durable Candid
+`plan_blob`; an empty legacy `operation.plan_json` does not mean the plan was
+lost. Liquidity receipts expose known position IDs and gross protocol outputs.
+Actual mint/increase token use, refunds and ledger payout links remain unavailable
+where the retained protocol reply does not supply them. Estimates and input
+budgets are not substituted for those actual amounts.
+
+Swap receipts preserve the legacy numeric `received_out` field for compatibility
+but explicitly set `received_out_verified=false` and `netOutputAtoms=null` until
+an operation-linked payout is known. The legacy zero is not an observed Wallet
+credit. New consumers should use `netOutputAtoms` and `received_out_verified`;
+the legacy `received_out` field is deprecated. This representation also applies
+when reading older saved swaps.
+
+`icpswap_reconcile_v1` now includes Wallet evidence for retained successful
+protocol effects: recent pool-to-owner transfers, their exact amounts/memos and
+index coverage. Set `walletEvidence=false` for a pool-only reconciliation. Pass
+`payoutBlocks: [{ ledger, blockIndex }]` to inspect specific canonical ledger
+blocks, including returned archives. Index fallback is explicitly unverified;
+even a verified ledger transfer remains contextual evidence when the original
+operation did not retain its protocol transaction ID. Neither matching amounts
+nor empty pages change the operation to settled. Wallet failures leave the
+protocol result available, and no reconciliation path repeats financial effects.
+
+Reconciliation reads one recent index page per relevant ledger. For older pages,
+call Wallet's `wallet_account_transactions_v1` with `{ ledger, beforeBlock,
+limit }`, setting `beforeBlock` to that ledger's
+`coverage.pagination.nextBeforeBlock`. Repeat with each returned cursor until
+it is null. Inspect discovered exact blocks with `wallet_transaction_v1` or
+pass them as `payoutBlocks` to reconciliation. The reconciliation tool itself
+has no `beforeBlock` input; nonempty `payoutBlocks` require `walletEvidence`
+to be true or omitted.
+
 The journal records a protocol dispatch before awaiting its reply. An unknown
 reply is retained as uncertain and is never automatically sent again. Empty
 queues, missing protocol transaction records or an unrelated balance change do
@@ -126,9 +239,15 @@ presentation. Backend calls are used for protocol writes, durable operations and
 scheduled local market observations. Browser reads avoid canister HTTP-outcall
 costs.
 
+Backend pool snapshots identify stored fee amounts as not current and explain
+the missing refresh. Position reads and liquidity previews obtain the protocol's
+current fee estimate; failed reads remain unavailable instead of becoming zero.
+
 The integration was checked against
 [ICPSwap v3.7.0, commit `94eeb92`](https://github.com/ICPSwap-Labs/icpswap-v3-service/tree/94eeb92ad6ecc2713d38fd3bef48cd4f328a3513)
-and production Candid interfaces on 2026-09-08. Factory discovery determines
+and production Candid interfaces on 2026-09-09. All 16 checked method type graphs
+match the official source; certified module hashes were also recorded separately.
+This does not establish a byte-identical source-to-Wasm build. Factory discovery determines
 pool identity, token order and spacing. The position index uses the owner's
 legacy ICP account identifier; locally touched pools remain discoverable after
 their last position closes. Current protocol version strings do not establish
@@ -142,13 +261,14 @@ All persistent state stays app-local:
 | --- | --- | --- |
 | `icpswap` | 1, preserved | Watchlist, local history, quotes, decimals and refresh bookkeeping |
 | `icpswap_swap` | 1, preserved | Released swap records, funding details, order, settings and completion count |
-| `icpswap_actions` | 1, new | Immutable action plans, Wallet request identities, protocol dispatches and recovery evidence |
+| `icpswap_actions` | 1, preserved | Immutable action plans, Wallet request identities, protocol dispatches and recovery evidence |
 
-The two production v1 schemas and their lock entries are retained exactly.
+All three production v1 schemas and their lock entries are retained exactly.
 The imported draft's additional fee cache is transient; it does not replace the
 released swap schema. Wallet fee observations refresh that cache, including a
-valid zero fee. Existing installations keep both original roots and initialize
-only the new actions root. No fake migration, reinstall or reset is required.
+valid zero fee. Release 201 through 205 installations keep all three roots. Upgrades from
+release 200 keep both original roots and initialize only the actions root.
+No fake migration, reinstall or reset is required.
 Historical public schema assets are pinned in `test/fixtures/history/200` for
 compatibility tests; they are not a reconstructed release archive.
 
@@ -156,6 +276,7 @@ compatibility tests; they are not a reconstructed release archive.
 npm --workspace neutron-icpswap run package
 npm --workspace neutron-icpswap test
 npm --workspace neutron-icpswap run test:chart
+npm --workspace neutron-icpswap run test:browser
 ```
 
 The test command packages the app, runs its TypeScript tests and then runs the

@@ -84,6 +84,13 @@ For both Ethereum and Arbitrum configurations, the app's `prepareLiquidity`,
   fee deltas and verifies `CLOSE_CURRENCY`, which a plain `SETTLE_PAIR` cannot handle.
 - Partial removal transfers both principal and fees; collection preserves the
   position; closing transfers remaining assets and burns its NFT.
+- V4 collection succeeds with no fresh fees after partial removal. The same
+  calldata is tested after swaps create fees in one or both currencies.
+  ERC-20 settlement and two-currency settlement exceed the previously valid
+  empty-collection gas limit; a single native transfer still fits it locally.
+  The app's additional reserve succeeds, transfers the exact accrued amounts,
+  preserves liquidity and leaves no native currency in the manager. Both ERC-20
+  pairs and native ETH pairs exercise these gas limits.
 - The same V3 liquidity lifecycle, including app-generated mint/increase,
   swap-accrued fees, remove-and-collect, ETH unwrapping and NFT burn.
 - V3 increase gas estimation before swaps accrue fees in both currencies:

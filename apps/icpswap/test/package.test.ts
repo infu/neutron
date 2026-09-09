@@ -71,7 +71,7 @@ test("the manifest validates against the shared schema", async () => {
   expect(result.valid).toBe(true);
   expect(manifest.format).toBe(3);
   expect(manifest.id).toBe("icpswap");
-  expect(manifest.version).toBe(201);
+  expect(manifest.version).toBe(206);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
 });
 
@@ -82,6 +82,19 @@ test("the app declares exactly one tile and one resident background", async () =
   expect(manifest.tiles?.[0]?.path).toBe("index.html");
   expect(manifest.background?.path).toBe("service.html");
   expect(manifest.tray).toBeUndefined();
+});
+
+test("Wallet integration declares only the exact metadata, reviewed funding and account-history tools", async () => {
+  const manifest = await readManifest();
+  const declarations = manifest.capabilities?.frontend_tools;
+  expect(declarations).toEqual({ api: 1, targets: [{ app: "wallet", tools: [
+    "wallet_token_info_v1", "wallet_add_ledger_v1", "wallet_fund_v1", "wallet_account_transactions_v1", "wallet_transaction_v1",
+  ] }] });
+  // Root-only funding remains an instruction for the depth-zero Agent;
+  // declaring routing access must not turn ICPSwap into that caller.
+  expect(declarations?.targets.flatMap((target) => target.tools)).not.toContain("wallet_fund_root_v1");
+  const plan = buildCapabilityPlan(manifest);
+  expect(plan.entries.find((entry) => entry.id === "frontend_tools")).toBeDefined();
 });
 
 test("backend call authority is exactly the declared reservation set", async () => {
@@ -394,7 +407,7 @@ test("ordinary resident tools use the existing invocation and Wallet review cont
 test("the release offers complete source and the shared application license", async () => {
   const unpacked = unpackNeutronPackage(new Uint8Array(await readFile(packageUrl)));
   const record = JSON.parse(decoder.decode(unpacked["legal/package-record.v1.json"]!));
-  expect(record.package).toMatchObject({ id: "icpswap", version: 201 });
+  expect(record.package).toMatchObject({ id: "icpswap", version: 206 });
   expect(record.license.id).toBe("LicenseRef-Neutron-Sovereign-Application-Use-License-1.0");
   expect(unpacked["legal/LICENSE.APP.USE.txt"]).toEqual(new Uint8Array(await readFile(new URL("../../../LICENSE.APP.USE", import.meta.url))));
   expect(record.source.kind).toBe("https");

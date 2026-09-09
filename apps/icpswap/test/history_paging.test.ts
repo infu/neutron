@@ -1,7 +1,28 @@
 import { describe, expect, test } from "bun:test";
+import { IDL } from "@dfinity/candid";
+import { readFileSync } from "node:fs";
+import { extractPublicTypeAliases, motokoTypeToIdl } from "neutron-scripts/src/method_schema.js";
 import { createActionBackend, parseActionSummary, readAllActionSummaries, type ActionSummary } from "../src/action_backend.ts";
 import type { BackendTransport } from "../src/backend.ts";
-import { encodeSelfCallResult, SELF_CALL_METADATA_MAX_BYTES } from "neutron-kernel/src/self_calls.ts";
+import { encodeSelfCallResult, normalizeSelfCallResult, SELF_CALL_METADATA_MAX_BYTES } from "neutron-kernel/src/self_calls.ts";
+
+// Exercise the generated backend contract and actual Kernel projection. Empty
+// Candid option fields disappear from records at this boundary.
+const aliases = extractPublicTypeAliases(readFileSync(new URL("../backend/main.mo", import.meta.url), "utf8"));
+const pageType = motokoTypeToIdl(aliases.icpswap_action_page_Output!, IDL, aliases);
+function candid(type: IDL.Type, value: unknown): unknown {
+  if (type instanceof IDL.OptClass) return value == null ? [] : [candid(type._type, value)];
+  if (type instanceof IDL.VecClass) return (value as unknown[]).map(item => candid(type._type, item));
+  if (type instanceof IDL.RecordClass) return Object.fromEntries(type._fields.map(([name, child]) => [name, candid(child, (value as Record<string, unknown>)[name])]));
+  if (type instanceof IDL.VariantClass) {
+    const row = value as Record<string, unknown>, arm = type._fields.find(([name]) => Object.hasOwn(row, name))!;
+    return { [arm[0]]: candid(arm[1], row[arm[0]]) };
+  }
+  return /^(nat|int)(64)?$/.test(type.display()) ? BigInt(value as string) : value;
+}
+function projectedPage(value: unknown) {
+  return normalizeSelfCallResult(IDL.decode([pageType], IDL.encode([pageType], [candid(pageType, { ok: value })]))[0], pageType) as Record<string, unknown>;
+}
 
 const summary = (id: string): ActionSummary => ({
   id, input_json: JSON.stringify({ version: 1, kind: "liquidity", input: { kind: "claim", pool: "mohjv-bqaaa-aaaag-qjyia-cai" } }),
@@ -12,6 +33,27 @@ const summary = (id: string): ActionSummary => ({
 });
 
 describe("compact backend history", () => {
+  test("empty history and final pages accept omitted Candid cursors and optional effect completion", async () => {
+    const first = summary("first"), last = summary("last");
+    last.effects[0]!.completed_at = "0";
+    const empty = projectedPage({ items: [], next_cursor: null });
+    const pages = [projectedPage({ items: [first], next_cursor: "first" }), projectedPage({ items: [last], next_cursor: null })];
+    expect(empty).toEqual({ items: [] });
+    expect(pages[1]).not.toHaveProperty("next_cursor");
+    expect((pages[0]!.items as ActionSummary[])[0]!.effects[0]).not.toHaveProperty("completed_at");
+    const cursors: unknown[] = [];
+    const backend = createActionBackend({
+      querySelf: async (_method: string, args: Array<{ cursor: string | null }>) => {
+        cursors.push(args[0]!.cursor);
+        return cursors.length === 1 ? empty : pages.shift();
+      },
+      updateSelf: async () => { throw new Error("Reading saved pools must not mutate"); },
+    } as unknown as BackendTransport);
+    expect(await backend.actionPage({ cursor: null, limit: 20 })).toEqual({ items: [], nextCursor: null });
+    expect(await readAllActionSummaries(backend)).toEqual([first, last]);
+    expect(cursors).toEqual([null, null, "first"]);
+  });
+
   test("queries the requested page directly and keeps recovery metadata exact", async () => {
     const calls: unknown[] = [];
     const backend = createActionBackend({

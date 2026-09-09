@@ -7,6 +7,7 @@
 
 import {
   isJsonObject,
+  type JsonObject,
   type JsonValue,
   type MsgBusEndpointId,
   type ScopedKernelClient,
@@ -16,6 +17,10 @@ export const WALLET_TARGET: MsgBusEndpointId = "app:wallet:background";
 export const WALLET_TOKEN_INFO_TOOL = "wallet_token_info_v1" as const;
 
 const TOKEN_INFO_TIMEOUT_SECONDS = 60;
+// Metadata reads can open the Kernel's single owner-consent dialog. Queue
+// ICPSwap's reads across clients and view changes so the second pool token does
+// not race the first. This does not schedule or retry any financial action.
+let walletReadTail: Promise<void> = Promise.resolve();
 
 export type WalletTokenInfo = {
   ledger: string;
@@ -31,6 +36,42 @@ export type WalletTokenInfo = {
 };
 
 type ToolCaller = Pick<ScopedKernelClient, "callTool">;
+
+/** Keep account evidence and token metadata from competing for owner consent.
+ * Financial requests retain their own reviewed execution path.
+ */
+export function readWalletTool(
+  client: ToolCaller,
+  name: "wallet_token_info_v1" | "wallet_account_transactions_v1" | "wallet_transaction_v1",
+  args: JsonObject,
+  signal?: AbortSignal,
+): Promise<JsonValue> {
+  const read = walletReadTail.then(async () => {
+    signal?.throwIfAborted();
+    return client.callTool({ target: WALLET_TARGET, name, arguments: args }, TOKEN_INFO_TIMEOUT_SECONDS);
+  });
+  walletReadTail = read.then(() => undefined, () => undefined);
+  return read;
+}
+
+export function walletSetupRequired(error: string | null | undefined): boolean {
+  return typeof error === "string" && /Ledger is not selected(?: in Wallet)?/iu.test(error);
+}
+
+/** Called only from an explicit setup action. Wallet reviews the additive token
+ * selection; it sends no tokens and leaves every other selection intact.
+ */
+export function addLedgerToWallet(client: ToolCaller, ledger: string, signal?: AbortSignal): Promise<void> {
+  const request = walletReadTail.then(async () => {
+    signal?.throwIfAborted();
+    const value = await client.callTool({ target: WALLET_TARGET, name: "wallet_add_ledger_v1", arguments: { ledger } }, 180);
+    if (!isJsonObject(value) || value.ledger !== ledger || value.selected !== true) {
+      throw new Error("Wallet did not confirm adding this token. Check Wallet and try again.");
+    }
+  });
+  walletReadTail = request.then(() => undefined, () => undefined);
+  return request;
+}
 
 function nat(value: unknown, label: string): bigint {
   if (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/u.test(value)) {
@@ -71,23 +112,14 @@ export function parseTokenInfo(value: JsonValue, expectedLedger?: string): Walle
 /**
  * Read live metadata, fee and balance for one ledger.
  *
- * The ledger must be selected in the owner's Wallet; only the owner can add
- * one, so a failure here is a legitimate answer — that token is not one this
- * Neutron holds — and callers should report it rather than retrying.
+ * The ledger must be selected in Wallet (by its owner or an authorized agent).
+ * Failures are returned without retry. A view can cancel a queued read before
+ * it opens another request; an already dispatched Wallet read still finishes.
  */
 export async function readTokenInfo(
   client: ToolCaller,
   ledger: string,
+  signal?: AbortSignal,
 ): Promise<WalletTokenInfo> {
-  return parseTokenInfo(
-    await client.callTool(
-      {
-        target: WALLET_TARGET,
-        name: WALLET_TOKEN_INFO_TOOL,
-        arguments: { ledger },
-      },
-      TOKEN_INFO_TIMEOUT_SECONDS,
-    ),
-    ledger,
-  );
+  return parseTokenInfo(await readWalletTool(client, WALLET_TOKEN_INFO_TOOL, { ledger }, signal), ledger);
 }

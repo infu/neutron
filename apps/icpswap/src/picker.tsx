@@ -10,6 +10,7 @@ import {
   formatPercent,
   formatPrice,
   formatUsdCompact,
+  shortPrincipal,
   trendOf,
 } from "./format.ts";
 import { TokenMark } from "./token_mark.tsx";
@@ -148,10 +149,10 @@ export function TokenPicker({
 
   const commit = useCallback(
     (candidate: PickerCandidate | undefined) => {
-      if (!candidate || candidate.watched) return;
+      if (!candidate || candidate.watched || candidate.address === busyAddress) return;
       onAdd(candidate);
     },
-    [onAdd],
+    [busyAddress, onAdd],
   );
 
   const handleKeyDown = useCallback(
@@ -175,7 +176,7 @@ export function TokenPicker({
         commit(shown[active]);
       }
     },
-    [active, commit, onClose, shown],
+    [active, commit, shown],
   );
 
   useEffect(() => {
@@ -205,14 +206,14 @@ export function TokenPicker({
           </h2>
           <div className="ics-picker-search">
             <label className="nt-sr-only" htmlFor="ics-picker-input">
-              Search tokens by symbol, name, or ledger id
+              Search by token name, symbol, or address
             </label>
             <input
               autoComplete="off"
               className="nt-input"
               id="ics-picker-input"
               onChange={(event) => setTerm(event.target.value)}
-              placeholder="Search symbol, name, or ledger canister id"
+              placeholder="Search name or token address"
               ref={inputRef}
               spellCheck={false}
               type="search"
@@ -231,9 +232,7 @@ export function TokenPicker({
 
         <div className="ics-picker-body" ref={listRef}>
           {error ? (
-            <div className="nt-alert nt-alert--danger" role="alert">
-              {error}
-            </div>
+            <details className="nt-alert nt-alert--warning"><summary>Some token data is unavailable</summary><p className="nt-meta">{error}</p></details>
           ) : null}
           {loading && candidates.length === 0 ? (
             <div className="nt-state nt-state--loading">Loading token list…</div>
@@ -245,12 +244,14 @@ export function TokenPicker({
             shown.map((candidate, index) => {
               const tone = trendOf(candidate.priceChange24H ?? 0);
               const busy = busyAddress === candidate.address;
+              const status = candidate.watched ? "Watching" : busy ? "Adding…" : "Add";
               return (
                 <button
                   className={cx("ics-picker-row", {
                     "nt-tag--selected": index === active,
                   })}
                   data-index={index}
+                  aria-busy={busy}
                   disabled={candidate.watched || busy}
                   key={candidate.address}
                   onClick={() => commit(candidate)}
@@ -262,17 +263,18 @@ export function TokenPicker({
                     <span className="ics-token-symbol">
                       {candidate.symbol || candidate.address.slice(0, 8)}
                       {candidate.verified ? (
-                        <span className="nt-tag nt-tag--success" style={{ marginLeft: 6 }}>
-                          verified
+                        <span className="nt-tag nt-tag--success" style={{ marginLeft: 6 }} title="Listed in ICPSwap’s verified token registry">
+                          Verified
                         </span>
                       ) : null}
                     </span>
-                    <span className="ics-token-name">{candidate.name || "—"}</span>
-                    <span className="ics-picker-canister">{candidate.address}</span>
+                    {candidate.name && candidate.name !== candidate.symbol ? <span className="ics-token-name">{candidate.name}</span> : null}
+                    <span className="ics-picker-status">{status}</span>
+                    <span className="ics-picker-canister" title={`Token address: ${candidate.address}`}>{shortPrincipal(candidate.address, 5, 5)}</span>
                   </span>
                   <span className="ics-picker-stats">
                     <span>
-                      {candidate.priceUsd > 0 ? formatPrice(candidate.priceUsd) : "-"}
+                      {candidate.priceUsd > 0 ? formatPrice(candidate.priceUsd) : "—"}
                     </span>
                     {candidate.priceChange24H === null ? null : (
                       <span className={`ics-change ics-change--${tone}`}>
@@ -282,22 +284,15 @@ export function TokenPicker({
                     {candidate.volumeUsd24h === null ? (
                       <span className="nt-meta">
                         {candidate.poolCount === null
-                          ? "on-chain listing"
+                          ? "Price unavailable"
                           : `${candidate.poolCount} pool${candidate.poolCount === 1 ? "" : "s"}`}
                       </span>
                     ) : (
-                      <>
-                        <span className="nt-meta">
-                          24h vol {formatUsdCompact(candidate.volumeUsd24h)}
-                        </span>
-                        <span className="nt-meta">
-                          TVL {formatUsdCompact(candidate.tvlUsd)}
-                        </span>
-                      </>
+                      <span className="nt-meta" title="Traded volume over 24 hours">{formatUsdCompact(candidate.volumeUsd24h)} vol</span>
                     )}
                   </span>
                   <span className="nt-tag">
-                    {candidate.watched ? "watching" : busy ? "adding…" : "add"}
+                    {status}
                   </span>
                 </button>
               );
@@ -322,9 +317,9 @@ export function TokenPicker({
             tokens
           </span>
           <span>
-            {source === "live"
-              ? "Live ICPSwap analytics"
-              : "On-chain price index (API unavailable)"}
+            {source === "live" && !error
+              ? "Prices from ICPSwap"
+              : "Market prices unavailable"}
           </span>
         </footer>
       </div>

@@ -72,10 +72,11 @@ function list<T>(value: unknown, path: string, parse: (value: unknown, path: str
   return value.map((item, index) => parse(item, `${path}[${index}]`));
 }
 
-/** Self calls expose optional values as null/value. Accept Candid's raw []/[T]
- * form too, without mistaking ordinary vectors for optional values. */
+/** Self calls omit absent optional record fields and expose present values
+ * directly. Accept explicit null and Candid's raw []/[T] form as well, without
+ * mistaking ordinary vectors for optional values. */
 function optional<T>(value: unknown, path: string, parse: (value: unknown, path: string) => T): T | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (Array.isArray(value)) {
     if (value.length === 0) return null;
     if (value.length !== 1) return invalid(path, "optional value");
@@ -196,12 +197,13 @@ export function parseRecoveryPlan(value: unknown, path = "plan"): JsonObject {
 }
 
 function parseSwapReceipt(value: unknown, path: string): JsonObject {
-  return fields(value, path, {
+  const raw = object(value, path);
+  return { ...fields(raw, path, {
     request_id: text, state: text, pool: text, input_address: text, output_address: text,
     amount_in: nat, amount_out_minimum: nat, swapped_out: nat, received_out: nat,
     detail: text, needs_funding: flag, funding_ledger: text, funding_spender: text,
     funding_amount: nat, at: int,
-  });
+  }), received_out_verified: raw.received_out_verified === undefined ? false : flag(raw.received_out_verified, `${path}.received_out_verified`) };
 }
 
 function prepared(value: unknown, plan: (value: unknown, path: string) => JsonObject): ActionPrepared {
@@ -277,6 +279,6 @@ export function createActionBackend(kernel: BackendTransport): ActionBackend {
     recoveryPrepare: async (request) => recovery(await kernel.updateSelf("icpswap_liquidity_recover_prepare", [request])),
     recoveryExecute: async (request) => recovery(await kernel.updateSelf("icpswap_liquidity_recover_execute", [request])),
     recoveryStatus: (id) => status(id, "recovery", recovery),
-    account: async () => text(await kernel.querySelf("icpswap_account", []), "account"),
+    account: async () => text(await kernel.querySelf("icpswap_account", [null]), "account"),
   };
 }

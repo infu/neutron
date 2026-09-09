@@ -22,7 +22,6 @@ import {
   getMarket,
   getSwapJournal,
   getToken,
-  refresh as refreshBackend,
   removeToken,
   searchTokens,
   setNote,
@@ -118,6 +117,8 @@ export function App() {
   const [detail, setDetail] = useState<TokenDetail | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerFallback, setPickerFallback] = useState<PickerCandidate[]>([]);
+  const [pickerFallbackLoading, setPickerFallbackLoading] = useState(false);
+  const [pickerFallbackError, setPickerFallbackError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<MarketColumn["key"]>("volume24h");
   const [ascending, setAscending] = useState(false);
@@ -126,6 +127,8 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [swapSlippage, setSwapSlippage] = useState(500);
   const mounted = useRef(true);
+  const backendRead = useRef(0);
+  const analyticsRead = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -140,29 +143,31 @@ export function App() {
   }, []);
 
   const loadBackend = useCallback(async () => {
+    const sequence = ++backendRead.current;
     try {
       const next = await getMarket(backendSortFor(sortKey), ascending);
-      if (!mounted.current) return;
+      if (!mounted.current || sequence !== backendRead.current) return;
       setSnapshot(next);
       setBackendError(null);
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current || sequence !== backendRead.current) return;
       setBackendError(describeError(error));
     }
   }, [ascending, sortKey]);
 
   const loadLive = useCallback(async (ttlMs = UNIVERSE_REFRESH_MS) => {
+    const sequence = ++analyticsRead.current;
     try {
       const [tokens, tokenRanks] = await Promise.all([
         loadTokenUniverse(ttlMs),
         loadTokenRanks().catch(() => [] as InfoTokenRank[]),
       ]);
-      if (!mounted.current) return;
+      if (!mounted.current || sequence !== analyticsRead.current) return;
       setUniverse(tokens);
       setRanks(tokenRanks);
       setLiveError(null);
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current || sequence !== analyticsRead.current) return;
       setLiveError(describeError(error));
     }
   }, []);
@@ -261,6 +266,12 @@ export function App() {
   const tradeInput = tradeTokens.find((token) => token.address === swapInput) ?? tradeTokens[0] ?? null;
   const tradeChoices = useMemo(() => tradeTokens.filter((token) => token.address !== tradeInput?.address), [tradeTokens, tradeInput?.address]);
   const tradeOutput = tradeChoices.find((token) => token.address === swapOutput) ?? tradeChoices[0] ?? null;
+  // Persist the initially displayed pair. Backend market ordering can change
+  // during a refresh and must not silently change the asset being priced.
+  useEffect(() => {
+    if (tradeInput && swapInput !== tradeInput.address) setSwapInput(tradeInput.address);
+    if (tradeOutput && swapOutput !== tradeOutput.address) setSwapOutput(tradeOutput.address);
+  }, [tradeInput?.address, tradeOutput?.address, swapInput, swapOutput]);
 
   const merged = useMemo<MergedRow[]>(() => {
     const rows = snapshot?.rows ?? [];
@@ -278,10 +289,10 @@ export function App() {
       })
       .map((row) => ({
         row,
-        live: universeMap.get(row.address),
-        rank: rankMap.get(row.address),
+        live: liveError ? undefined : universeMap.get(row.address),
+        rank: liveError ? undefined : rankMap.get(row.address),
       }));
-  }, [filter, rankMap, snapshot, universeMap]);
+  }, [filter, rankMap, snapshot, universeMap, liveError]);
 
   // Token detail data.
   useEffect(() => {
@@ -306,13 +317,16 @@ export function App() {
   useEffect(() => {
     if (!pickerOpen || universe.length > 0) return;
     let cancelled = false;
+    setPickerFallbackLoading(true);
+    setPickerFallbackError(null);
     void searchTokens("", 0, 50)
       .then((page) => {
         if (!cancelled && mounted.current) {
           setPickerFallback(candidatesFromBackend(page.items));
         }
       })
-      .catch(() => undefined);
+      .catch((error) => { if (!cancelled && mounted.current) setPickerFallbackError(describeError(error)); })
+      .finally(() => { if (!cancelled && mounted.current) setPickerFallbackLoading(false); });
     return () => {
       cancelled = true;
     };
@@ -395,8 +409,7 @@ export function App() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refreshBackend(true), loadLive(0)]);
-      await loadBackend();
+      await Promise.all([loadLive(0), loadBackend()]);
       showToast("Market data refreshed");
     } catch (error) {
       showToast(describeError(error));
@@ -417,7 +430,6 @@ export function App() {
           decimals: 0,
         });
       }
-      await refreshBackend(true).catch(() => undefined);
       await loadBackend();
       showToast("Starter tokens added");
     } catch (error) {
@@ -430,12 +442,12 @@ export function App() {
   const pickerCandidates = useMemo<PickerCandidate[]>(
     () =>
       universe.length > 0
-        ? candidatesFromUniverse(universe, watchedSet, verifiedSet)
+        ? candidatesFromUniverse(universe, watchedSet, verifiedSet).map((candidate) => liveError ? { ...candidate, priceUsd: 0, priceChange24H: null, volumeUsd24h: null, volumeUsd7d: 0, tvlUsd: 0 } : candidate)
         : pickerFallback.map((candidate) => ({
             ...candidate,
             watched: watchedSet.has(candidate.address),
           })),
-    [pickerFallback, universe, verifiedSet, watchedSet],
+    [pickerFallback, universe, verifiedSet, watchedSet, liveError],
   );
 
   // The on-chain price index is the preferred ICP reference, but the live
@@ -444,8 +456,8 @@ export function App() {
   const icpPriceUsd = useMemo(() => {
     const onChain = snapshot?.status.icpPriceUsd ?? 0;
     if (onChain > 0) return onChain;
-    return universeMap.get(ICP_LEDGER_ID)?.price ?? 0;
-  }, [snapshot, universeMap]);
+    return liveError ? 0 : universeMap.get(ICP_LEDGER_ID)?.price ?? 0;
+  }, [snapshot, universeMap, liveError]);
 
   const status = snapshot?.status;
   const freshness = status && status.lastRefreshAt > 0
@@ -488,29 +500,21 @@ export function App() {
 
         <div className="ics-body">
           {backendError ? (
-            <div className="nt-alert nt-alert--danger" role="alert">
-              Backend unavailable: {backendError}
-            </div>
+            <details className="nt-alert nt-alert--warning"><summary>Saved token data is unavailable</summary><p className="nt-meta">{backendError}</p></details>
           ) : null}
           {liveError ? (
-            <div className="nt-alert nt-alert--warning">
-              ICPSwap analytics API unavailable ({liveError}). Showing on-chain
-              price and TVL recorded by this Neutron.
-            </div>
+            <details className="nt-alert nt-alert--warning"><summary>Market data is delayed</summary><p className="nt-meta">Showing saved pool prices where available. {liveError}</p></details>
           ) : null}
           {status?.lastRefreshError ? (
             <details className="nt-alert nt-alert--warning">
               <summary>
-                On-chain pool read incomplete
-                {status.cacheReady
-                  ? " — showing the last prices it derived."
-                  : " — live analytics only."}
+                Some pool prices could not be refreshed
               </summary>
               <p className="nt-meta ics-mono">{status.lastRefreshError}</p>
             </details>
           ) : null}
 
-          {view.kind === "liquidity" ? <LiquidityView tokens={tradeTokens} /> : view.kind === "activity" ? <ActivityView /> : loading ? (
+          {view.kind === "liquidity" ? <LiquidityView tokens={tradeTokens} prices={liveError ? [] : universe} /> : view.kind === "activity" ? <ActivityView /> : loading ? (
             <div className="nt-state nt-state--loading">Loading market…</div>
           ) : view.kind === "token" ? (
             <TokenDetailView
@@ -518,21 +522,23 @@ export function App() {
               address={view.address}
               busy={busyAddress === view.address}
               detail={detail?.row.address === view.address ? detail : null}
-              live={universeMap.get(view.address)}
+              live={liveError ? undefined : universeMap.get(view.address)}
               onBack={() => setView({ kind: "market" })}
               onRemove={() => {
-                if (detail) handleRemove(detail.row);
+                if (detail?.row.address === view.address) handleRemove(detail.row);
               }}
               onSaveNote={(note) => handleSaveNote(view.address, note)}
               onTogglePin={() => {
-                if (detail) handleTogglePin(detail.row);
+                if (detail?.row.address === view.address) handleTogglePin(detail.row);
               }}
               icpPriceUsd={icpPriceUsd}
-              rank={rankMap.get(view.address)}
+              rank={liveError ? undefined : rankMap.get(view.address)}
               swapChoices={detailSwapChoices}
               swapSlippage={swapSlippage}
             />
-          ) : (snapshot?.rows.length ?? 0) === 0 ? (
+          ) : snapshot === null ? (
+            <section className="ics-empty-block"><h2 className="nt-subtitle">Your tokens could not be loaded</h2><p className="nt-muted">Refresh to reconnect to your saved watchlist.</p><button className="nt-button" disabled={refreshing} onClick={() => void handleRefresh()} type="button">Refresh tokens</button></section>
+          ) : snapshot.rows.length === 0 ? (
             <section className="nt-panel ics-empty-block">
               <h2 className="nt-subtitle">Your watchlist is empty</h2>
               <p className="nt-text">
@@ -576,7 +582,7 @@ export function App() {
             <>
               <div className="ics-market-toolbar">
                 <label className="nt-sr-only" htmlFor="ics-filter">Filter your watchlist</label>
-                <input autoComplete="off" className="nt-input" id="ics-filter" onChange={(event) => setFilter(event.target.value)} placeholder="Search your markets" spellCheck={false} type="search" value={filter} />
+                <input autoComplete="off" className="nt-input" id="ics-filter" onChange={(event) => setFilter(event.target.value)} placeholder="Search tokens" spellCheck={false} type="search" value={filter} />
                 <select className="nt-select ics-market-sort" aria-label="Sort markets" value={sortKey} onChange={(event) => handleSort(event.target.value as MarketColumn["key"])}>{MARKET_COLUMNS.map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}</select>
                 <button className="nt-icon-button" aria-label={ascending ? "Sort descending" : "Sort ascending"} title={ascending ? "Ascending" : "Descending"} onClick={() => setAscending((value) => !value)} type="button">{ascending ? "↑" : "↓"}</button>
               </div>
@@ -617,8 +623,8 @@ export function App() {
         <TokenPicker
           busyAddress={busyAddress}
           candidates={pickerCandidates}
-          error={liveError}
-          loading={universe.length === 0 && pickerFallback.length === 0}
+          error={pickerFallbackError ?? liveError}
+          loading={loading || (universe.length === 0 && pickerFallbackLoading)}
           onAdd={(candidate) => {
             handleAdd(candidate);
           }}

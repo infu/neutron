@@ -146,7 +146,7 @@ export function queryTransport(href: string): { host: string; local: boolean } {
   };
 }
 
-async function queryAgent(href: string): Promise<HttpAgent> {
+export async function queryAgent(href: string): Promise<HttpAgent> {
   const transport = queryTransport(href);
   let pending = agents.get(transport.host);
   if (!pending) {

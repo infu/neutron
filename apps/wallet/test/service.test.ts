@@ -81,11 +81,13 @@ test("overview and refresh expose compact balances by default and preserve expli
     if (method === "wallet_history_page") return {
       records: [], next: null, inspected: "0", has_more: false, warning: null,
     };
+    if (method === "wallet_history_status") return { running: false, ledgers: [] };
     throw new Error(`Unexpected Wallet query ${method}`);
   };
   updateSelfResponse = (method) => {
     calls.push(method);
     if (method === "wallet_refresh_balances") return snapshot;
+    if (method === "wallet_history_sync") return { skipped_overlap: false, ledgers: [], started_at: "1", finished_at: "2" };
     throw new Error(`Unexpected Wallet update ${method}`);
   };
   try {
@@ -101,8 +103,135 @@ test("overview and refresh expose compact balances by default and preserve expli
         });
       }
     }
-    expect(calls).toEqual(Array(3).fill("wallet_refresh_balances"));
+    expect(calls).toEqual(Array(3).fill(["wallet_refresh_balances", "wallet_history_sync"]).flat());
     expect(snapshot.ledgers[0]?.logo).toBe(logo);
+  } finally {
+    querySelfResponse = null;
+    updateSelfResponse = null;
+  }
+});
+
+const emptySnapshot = { owner: "aaaaa-aa", configured: true, ledgers: [] };
+const checkpoint = { tip_exclusive: "900719925474099300", balance: "777000001", checked_at: "1800000000000000000" };
+const indexedStatus = {
+  running: false,
+  ledgers: [{
+    ledger: fundingRequest.ledger, symbol: "ICP", enabled: true,
+    source: { index: "qhbym-qaaaa-aaaaa-aaafq-cai" }, state: { waiting_for_index: null },
+    checkpoint, last_attempt_at: "1800000000000000001", last_success_at: "1800000000000000000",
+    last_error: null, transaction_count: "7", adjustment_count: "1",
+  }],
+};
+
+test("overview exposes cached index checkpoints without claiming fresh history or performing updates", async () => {
+  const calls: string[] = [];
+  querySelfResponse = (method) => {
+    calls.push(method);
+    if (method === "wallet_snapshot") return emptySnapshot;
+    if (method === "wallet_catalog") return [];
+    if (method === "wallet_history_page") return { records: [], has_more: false };
+    if (method === "wallet_history_status") return indexedStatus;
+    throw new Error(`Unexpected query ${method}`);
+  };
+  updateSelfResponse = (method) => { calls.push(method); throw new Error("Overview must not update"); };
+  try {
+    await expect(handlers.get("wallet_overview")!({}, {})).resolves.toMatchObject({
+      activity: [], historyError: null, historyStatusError: null,
+      activitySync: { requested: false, report: null, error: null },
+      historyStatus: { ledgers: [{
+        state: "waiting_for_index", index: "qhbym-qaaaa-aaaaa-aaafq-cai",
+        checkpoint: { tipExclusive: checkpoint.tip_exclusive, balance: checkpoint.balance, checkedAt: checkpoint.checked_at },
+        lastAttemptAt: "1800000000000000001",
+      }] },
+    });
+    expect(calls).toEqual(["wallet_snapshot", "wallet_catalog", "wallet_history_page", "wallet_history_status"]);
+  } finally {
+    querySelfResponse = null;
+    updateSelfResponse = null;
+  }
+});
+
+test("refresh synchronizes before reading history and retains partial index results", async () => {
+  const calls: string[] = [];
+  const sync = {
+    started_at: "1800000000000000001", finished_at: "1800000000000000002", skipped_overlap: false,
+    ledgers: [{ ledger: fundingRequest.ledger, status: "waiting_for_index", records_added: "0", checkpoint, error: null }],
+  };
+  updateSelfResponse = (method) => {
+    calls.push(method);
+    if (method === "wallet_refresh_balances") return emptySnapshot;
+    if (method === "wallet_history_sync") return sync;
+    throw new Error(`Unexpected update ${method}`);
+  };
+  querySelfResponse = (method) => {
+    calls.push(method);
+    expect(calls.indexOf("wallet_history_sync")).toBeGreaterThan(0);
+    if (method === "wallet_catalog") return [];
+    if (method === "wallet_history_page") return { records: [], has_more: false };
+    if (method === "wallet_history_status") return indexedStatus;
+    throw new Error(`Unexpected query ${method}`);
+  };
+  try {
+    await expect(handlers.get("wallet_refresh")!({}, {})).resolves.toMatchObject({
+      activitySync: { requested: true, error: null, report: {
+        startedAt: sync.started_at, finishedAt: sync.finished_at, skippedOverlap: false,
+        results: [{ status: "waiting_for_index", recordsAdded: "0" }],
+      } },
+      historyStatus: { ledgers: [{ state: "waiting_for_index" }] },
+    });
+    expect(calls).toEqual(["wallet_refresh_balances", "wallet_history_sync", "wallet_catalog", "wallet_history_page", "wallet_history_status"]);
+  } finally {
+    querySelfResponse = null;
+    updateSelfResponse = null;
+  }
+});
+
+test("history sync and status failures preserve refreshed balances and identify the stale cached activity", async () => {
+  updateSelfResponse = (method) => {
+    if (method === "wallet_refresh_balances") return emptySnapshot;
+    if (method === "wallet_history_sync") throw new Error("Index permission required");
+    throw new Error(`Unexpected update ${method}`);
+  };
+  querySelfResponse = (method) => {
+    if (method === "wallet_catalog") return [];
+    if (method === "wallet_history_page") return { records: [], has_more: false };
+    if (method === "wallet_history_status") throw new Error("History status unavailable");
+    throw new Error(`Unexpected query ${method}`);
+  };
+  try {
+    await expect(handlers.get("wallet_refresh")!({}, {})).resolves.toMatchObject({
+      configured: true, assets: [], activity: [], historyError: null,
+      historyStatus: null, historyStatusError: "History status unavailable",
+      activitySync: { requested: true, report: null, error: "Index permission required" },
+    });
+  } finally {
+    querySelfResponse = null;
+    updateSelfResponse = null;
+  }
+});
+
+test("overlapping refreshes share one sync and preserve skipped-overlap evidence and page failures", async () => {
+  const calls: string[] = [];
+  updateSelfResponse = (method) => {
+    calls.push(method);
+    if (method === "wallet_refresh_balances") return emptySnapshot;
+    if (method === "wallet_history_sync") return { skipped_overlap: true, ledgers: [] };
+    throw new Error(`Unexpected update ${method}`);
+  };
+  querySelfResponse = (method) => {
+    if (method === "wallet_catalog") return [];
+    if (method === "wallet_history_page") throw new Error("History page unavailable");
+    if (method === "wallet_history_status") return { ...indexedStatus, running: true };
+    throw new Error(`Unexpected query ${method}`);
+  };
+  try {
+    const results = await Promise.all([handlers.get("wallet_refresh")!({}, {}), handlers.get("wallet_refresh")!({}, {})]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]).toMatchObject({
+      historyError: "History page unavailable", historyStatus: { running: true },
+      activitySync: { requested: true, error: null, report: { skippedOverlap: true, results: [] } },
+    });
+    expect(calls).toEqual(["wallet_refresh_balances", "wallet_history_sync"]);
   } finally {
     querySelfResponse = null;
     updateSelfResponse = null;

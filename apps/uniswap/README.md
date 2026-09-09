@@ -195,10 +195,13 @@ each checked step. A dispatched request with no saved hash remains explicitly
 unknown; use the original invocation for an explicit continuation. The compact
 status tool remains a stored observation and does not itself refresh receipts.
 
-Before the first dispatch of a V3 increase, after any approvals have confirmed,
+Before the first dispatch of a V3 increase or V4 collect, after any approvals have confirmed,
 the app requests a fresh full-transaction Wallet gas estimate and adds 100,000 gas
 to Wallet's proposed limit. Fee accrual and pool storage changes can exceed a
-percentage-only margin between estimation and inclusion. The exact limit and its
+percentage-only margin between estimation and inclusion. V4 collect can skip
+token payouts in a zero-fee estimate, then require settlement after swaps accrue
+fees. A production collect trace confirmed nested out-of-gas; identical calldata
+at the preceding block succeeds with the additional reserve. The exact limit and its
 observation are retained in the existing action journal and reused on every retry.
 Wallet still independently estimates, simulates at that cap and reviews the maximum
 fee before signing. Unused gas is not charged; this reserve does not guarantee

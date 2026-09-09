@@ -3,7 +3,7 @@ import { getAddress, keccak256, stringToHex } from "viem";
 import type { EvmAccount, EvmOperationResult, EvmOperationStatusRequest, EvmReceipt, EvmSendTransactionRequest, EvmTransactionResult, EvmWalletClient } from "neutron-tools/evm_wallet";
 import { createActionStore } from "../src/action_store.ts";
 import { actionAttemptId, actionInvocation, actionResult, latestAction, parseActionIntent, parseActionState, reconcileAction, runAction, type ActionEnvelope, type ActionOptions, type PrepareAction } from "../src/action_workflow.ts";
-import { V3_POSITION_MANAGER } from "../src/positions.ts";
+import { positionManager, V3_POSITION_MANAGER } from "../src/positions.ts";
 
 const address = getAddress("0x1111111111111111111111111111111111111111"), contract = getAddress("0x2222222222222222222222222222222222222222");
 const caller = { appId: "agent", installationUid: "17" };
@@ -86,7 +86,7 @@ function fixture(approvals = 2, requested = envelope) {
     return { chainId: input.chainId, accountId: input.accountId, accountAddress: pinned.address, deadline: String(Math.floor(clock() / 1000) + validity), summary: "Perform requested action", details: { amountIn: input.input.amountIn ?? "0" },
       steps: [
         ...Array.from({ length: Math.max(0, approvals - approved) }, (_, i) => ({ label: `Token approval ${i + 1}`, kind: "approval" as const, transaction: { chainId: input.chainId, accountId: input.accountId, to: contract, value: "0", data: `0x0${i + 1}` as `0x${string}` } })),
-        { label: "Final action", kind: "transaction", transaction: { chainId: input.chainId, accountId: input.accountId, to: requested.kind === "liquidity" ? V3_POSITION_MANAGER : contract, value: "0", data: "0x03" } },
+        { label: "Final action", kind: "transaction", transaction: { chainId: input.chainId, accountId: input.accountId, to: requested.kind === "liquidity" ? positionManager(requested.chainId, requested.input.protocol === "v4" ? "v4" : "v3") : contract, value: "0", data: "0x03" } },
       ] };
   };
   const options: ActionOptions = { now: () => now, wait: async () => { events.push("wait"); await onWait(); } };
@@ -100,8 +100,8 @@ function fixture(approvals = 2, requested = envelope) {
   };
 }
 
-function increaseFixture(approvals = 0) {
-  const input: ActionEnvelope = { ...envelope, kind: "liquidity", input: { operation: "increase", protocol: "v3", tokenId: "1362740", maxAmountA: "300000", maxAmountB: "120000000000000" } };
+function liquidityGasFixture(approvals = 0, protocol: "v3" | "v4" = "v3") {
+  const input: ActionEnvelope = { ...envelope, kind: "liquidity", input: protocol === "v3" ? { operation: "increase", protocol, tokenId: "1362740", maxAmountA: "300000", maxAmountB: "120000000000000" } : { operation: "collect", protocol, tokenId: "396714" } };
   const f = fixture(approvals, input); let estimates = 0;
   f.wallet.estimateTransaction = async request => {
     estimates += 1; f.events.push("wallet:estimate");
@@ -483,7 +483,7 @@ test("reconciling an absent operation performs no Wallet call or journal creatio
 });
 
 test("V3 increase estimates after its approvals and journals the exact gas cap before first dispatch", async () => {
-  const f = increaseFixture(1);
+  const f = liquidityGasFixture(1);
   f.sendWith(async request => {
     if (request.data === "0x03") {
       const state = parseActionState((await f.store.get(f.input.operationId))!);
@@ -504,8 +504,26 @@ test("V3 increase estimates after its approvals and journals the exact gas cap b
   expect(JSON.parse(invocation.gasEstimateJson!)).toMatchObject({ gasLimit: "331999", observation: { blockNumber: "25934514" } });
 });
 
-test("an interrupted V3 increase retains its exact gas cap and request on every explicit continuation", async () => {
-  const f = increaseFixture(); f.sendWith(async () => { throw new Error("Reply lost after dispatch"); });
+test("V4 collect saves the exact estimate and cap before sending and exposes both for recovery", async () => {
+  const f = liquidityGasFixture(0, "v4");
+  f.sendWith(async request => {
+    const state = parseActionState((await f.store.get(f.input.operationId))!);
+    expect(state.steps[0]!.request).toEqual(request);
+    expect(state.steps[0]!.dispatched).toBe(true);
+    expect(state.plan.steps[0]!.transaction.gasLimit).toBe("331999");
+    expect(state.plan.details.gasEstimate).toMatchObject({ basis: "wallet_estimate_plus_v4_collect_reserve", additionalGas: "100000" });
+    return f.operation(request);
+  });
+  expect((await f.run()).state).toBe("complete");
+  const invocation = actionInvocation((await f.store.get(f.input.operationId))!);
+  expect(JSON.parse(invocation.gasEstimateJson!)).toMatchObject({ gasLimit: "331999", observation: { blockNumber: "25934514" } });
+  expect(f.sends).toHaveLength(1); expect(f.estimates()).toBe(1);
+  expect((await f.run()).state).toBe("complete");
+  expect(f.sends).toHaveLength(1); expect(f.estimates()).toBe(1);
+});
+
+test.each(["v3", "v4"] as const)("an interrupted %s liquidity action retains its exact gas cap and request on every explicit continuation", async (protocol) => {
+  const f = liquidityGasFixture(0, protocol); f.sendWith(async () => { throw new Error("Reply lost after dispatch"); });
   expect((await f.run()).state).toBe("pending");
   const first = structuredClone(f.sends[0]!);
   expect(first.gasLimit).toBe("331999");
@@ -517,7 +535,7 @@ test("an interrupted V3 increase retains its exact gas cap and request on every 
 });
 
 test("an unavailable increase estimate leaves the final step undispatched after confirmed approval", async () => {
-  const f = increaseFixture(1);
+  const f = liquidityGasFixture(1);
   f.wallet.estimateTransaction = async () => { throw new Error("RPC estimate unavailable"); };
   await expect(f.run()).rejects.toThrow("RPC estimate unavailable");
   const saved = (await f.store.get(f.input.operationId))!, state = parseActionState(saved);
@@ -527,8 +545,8 @@ test("an unavailable increase estimate leaves the final step undispatched after 
   expect(f.sends).toHaveLength(1); expect(f.rows.size).toBe(1);
 });
 
-test("a released already-dispatched increase keeps its original request without introducing an explicit gas cap", async () => {
-  const f = increaseFixture(), cancellation = new AbortController();
+test.each(["v3", "v4"] as const)("a released already-dispatched %s liquidity action keeps its original request without introducing an explicit gas cap", async (protocol) => {
+  const f = liquidityGasFixture(0, protocol), cancellation = new AbortController();
   f.writeWith(row => { if (row.phase === "ready") cancellation.abort(new Error("Saved legacy plan")); });
   await expect(f.run({ signal: cancellation.signal })).rejects.toThrow("Saved legacy plan");
   const row = f.rows.get(f.input.operationId)!, state = JSON.parse(row.state_json!);
@@ -543,7 +561,7 @@ test("a released already-dispatched increase keeps its original request without 
 });
 
 test("saved gas cap changes cannot bypass consistency with the exact planned request", async () => {
-  const f = increaseFixture(); await f.run();
+  const f = liquidityGasFixture(); await f.run();
   const record = (await f.store.get(f.input.operationId))!, state = JSON.parse(record.state_json);
   state.steps[0].request.gasLimit = "999999";
   expect(() => parseActionState({ ...record, state_json: JSON.stringify(state) })).toThrow("transaction or dispatch identity changed");

@@ -53,8 +53,10 @@ persistent actor Self {
             public var unused0 = 250000;
             public var unused1 = 500000;
             public var positions : [Wire.PositionWithId] = [position];
+            public var refreshedPosition : ?Wire.Position = null;
             public var loseMethod = "";
             public var loss = "";
+            public var pairAmounts : Wire.Amounts = { amount0 = 444; amount1 = 555 };
             public var requests : [Client.CallRequest] = [];
             public var methods : [Text] = [];
             public var advanceWithdrawal = false;
@@ -62,6 +64,11 @@ persistent actor Self {
             public var overlappingSaved : ?Liquidity.Prepared = null;
             public var reads = 0;
             public var batches = 0;
+            public var batchMethods : [[Text]] = [];
+            public var failReadMethod = "";
+            public var shortReadBatch = false;
+            public var throwReadBatch = false;
+            public var reverseReadCompletion = false;
             var memory = Memory.init();
             var timestamp : Int = 100;
             func now() : Int { timestamp += 1; timestamp };
@@ -75,6 +82,9 @@ persistent actor Self {
             func response(request : Client.CallRequest) : async* Client.CallResult {
                 assert (request.cycles == 0);
                 methods := Array.concat(methods, [request.method]);
+                if (request.method == failReadMethod) {
+                    return #err({ code = "unavailable"; message = "Fixture read unavailable" });
+                };
                 if (request.method == "getPools") {
                     assert (request.canister == Client.swapFactoryPrincipal());
                     reads += 1;
@@ -115,7 +125,7 @@ persistent actor Self {
                         reads += 1;
                         let selected : ?Nat = from_candid(request.args);
                         assert (selected == ?7);
-                        let value = positions[0];
+                        let value = switch (refreshedPosition) { case (?value) value; case null positions[0] };
                         let result : Wire.PoolResult<Wire.Position> = #ok({
                             tickLower = value.tickLower; tickUpper = value.tickUpper; liquidity = value.liquidity;
                             tokensOwed0 = value.tokensOwed0; tokensOwed1 = value.tokensOwed1;
@@ -221,7 +231,7 @@ persistent actor Self {
                 };
                 if (request.method == "depositFrom" or request.method == "deposit" or request.method == "withdraw" or request.method == "increaseLiquidity") return scalar(987);
                 if (request.method == "decreaseLiquidity" or request.method == "claim") {
-                    let result : Wire.PoolResult<Wire.Amounts> = #ok({ amount0 = 444; amount1 = 555 });
+                    let result : Wire.PoolResult<Wire.Amounts> = #ok(pairAmounts);
                     return #ok(to_candid(result));
                 };
                 Runtime.trap("Unexpected protocol method: " # request.method);
@@ -232,8 +242,15 @@ persistent actor Self {
                 call = response;
                 call_batch = func(batch : [Client.CallRequest]) : async* [Client.CallResult] {
                     batches += 1;
-                    assert (batch.size() == 1);
-                    [await* response(batch[0])];
+                    batchMethods := Array.concat(batchMethods, [Array.map<Client.CallRequest, Text>(batch, func(request) { request.method })]);
+                    if (batch.size() == 1) return [await* response(batch[0])];
+                    assert (batch.size() == 6);
+                    if (throwReadBatch) throw Error.reject("Fixture batch unavailable");
+                    let requests = if (reverseReadCompletion) Array.reverse(batch) else batch;
+                    var replies : [Client.CallResult] = [];
+                    for (request in requests.vals()) replies := Array.concat(replies, [await* response(request)]);
+                    if (shortReadBatch) return [];
+                    if (reverseReadCompletion) Array.reverse(replies) else replies;
                 };
             };
             public var service = Liquidity.Service(calls, journal, now);
@@ -272,6 +289,81 @@ persistent actor Self {
         assert (failed(await* identity.service.preview({ mint with kind = "close"; position_id = ?404 })));
         assert (failed(await* identity.service.preview({ mint with tick_lower = -59 })));
         assert (identity.requests.size() == 0);
+
+        // A pool snapshot now takes three dependent rounds: canonical factory,
+        // independent pool reads, then the actual unused balance. The broker
+        // returns replies in request order even if remote completion differs.
+        let batched = Fixture();
+        batched.reverseReadCompletion := true;
+        let batchedPool = ok(await* batched.service.pool(mint.pool));
+        assert (batched.batches == 3 and batched.reads == 8);
+        assert (batched.batchMethods == [
+            ["getPools"],
+            ["metadata", "getCachedTokenFee", "getAvailabilityState", "getUserPositionsByPrincipal", "getUserWithdrawQueue", "getTransactionsByOwner"],
+            ["getUserUnusedBalance"],
+        ]);
+        assert (batchedPool.token0 == token0 and batchedPool.fee0 == 10000);
+        assert (batchedPool.positions[0].id == 7 and batchedPool.unused0 == 250000);
+        assert (batchedPool.protocol_diagnostics == "" and batched.requests.size() == 0);
+        let batchedClose = ok(await* batched.service.preview({ mint with kind = "close"; position_id = ?7 }));
+        assert (batched.batches == 7);
+        assert (batched.batchMethods[6] == ["getUserPosition"]);
+        assert (batchedClose.request.liquidity == position.liquidity);
+        assert (batched.requests.size() == 0);
+
+        // Every required pool read retains its failure semantics. A partial or
+        // lost batch must not produce a plan or reach unused balances/effects.
+        for (method in ["metadata", "getCachedTokenFee", "getAvailabilityState", "getUserPositionsByPrincipal", "getUserWithdrawQueue"].vals()) {
+            let unavailable = Fixture();
+            unavailable.failReadMethod := method;
+            assert (failed(await* unavailable.service.preview(mint)));
+            assert (unavailable.batches == 2 and unavailable.requests.size() == 0);
+            assert (unavailable.journal.list().size() == 0);
+        };
+        let shortBatch = Fixture();
+        shortBatch.shortReadBatch := true;
+        assert (failed(await* shortBatch.service.preview(mint)));
+        assert (shortBatch.batches == 2 and shortBatch.requests.size() == 0);
+        let lostBatch = Fixture();
+        lostBatch.throwReadBatch := true;
+        assert (failed(await* lostBatch.service.preview(mint)));
+        assert (lostBatch.batches == 2 and lostBatch.requests.size() == 0);
+
+        // Optional transaction diagnostics stay partial: queued balances remain
+        // reserved and may not suppress funding when transaction state is lost.
+        let partial = Fixture();
+        partial.advanceWithdrawal := true;
+        partial.unused0 := 100000;
+        partial.failReadMethod := "getTransactionsByOwner";
+        let partialPool = ok(await* partial.service.pool(mint.pool));
+        assert (Text.contains(partialPool.protocol_diagnostics, #text("Fixture read unavailable")));
+        assert (partialPool.reserved0 == 100000 and partialPool.unused0 == 100000);
+        assert (failed(await* partial.service.preview(mint)));
+        let partialClose = ok(await* partial.service.preview({ mint with kind = "close"; position_id = ?7 }));
+        assert (partialClose.request.liquidity == position.liquidity and partial.requests.size() == 0);
+
+        // The owner list stores owed amounts without refreshing fee growth.
+        // Zero stored fees must carry a noncurrent reason, while the existing
+        // selected-position preview exposes its freshly queried fee amounts.
+        let feeObservation = Fixture();
+        feeObservation.positions := [{ position with tokensOwed0 = 0; tokensOwed1 = 0 }];
+        let storedZero = ok(await* feeObservation.service.pool(mint.pool));
+        assert (storedZero.positions[0].fees0 == 0 and storedZero.positions[0].fees1 == 0);
+        assert (not storedZero.positions[0].fees_current);
+        assert (Text.contains(storedZero.positions[0].error, #text("stored owed amounts")));
+        assert (Text.contains(storedZero.positions[0].error, #text("not a current fee estimate")));
+        assert (Array.filter<Text>(feeObservation.methods, func(method) { method == "getUserPosition" }).size() == 0);
+        let currentZero = ok(await* feeObservation.service.preview({ mint with kind = "claim"; position_id = ?7 }));
+        assert (currentZero.expected_amount0 == 0 and currentZero.expected_amount1 == 0);
+        assert (currentZero.baseline_positions[0].fees_current and currentZero.baseline_positions[0].error == "");
+        assert (currentZero.baseline_positions[0].fees0 == 0 and currentZero.baseline_positions[0].fees1 == 0);
+        assert (Array.filter<Text>(feeObservation.methods, func(method) { method == "getUserPosition" }).size() == 1);
+        feeObservation.refreshedPosition := ?position;
+        let earnedFees = ok(await* feeObservation.service.preview({ mint with kind = "claim"; position_id = ?7 }));
+        assert (earnedFees.expected_amount0 == 11 and earnedFees.expected_amount1 == 22);
+        assert (earnedFees.baseline_positions[0].fees_current and earnedFees.baseline_positions[0].error == "");
+        assert (earnedFees.baseline_positions[0].fees0 == 11 and earnedFees.baseline_positions[0].fees1 == 22);
+        assert (feeObservation.requests.size() == 0);
 
         // Reservation and balance queries are separate observations. A payout
         // advancing during the read must not expose its earlier, already spent
@@ -400,6 +492,39 @@ persistent actor Self {
         // broker caller, the same owner asserted by all account observations.
         assert (Blob.equal(withdraw.requests[0].args, to_candid({ token = token0.address; amount = 100000 : Nat; fee = 10000 : Nat })));
         assert (withdrawn.operation.state == "settlement_pending");
+
+        // Only the exact successful 0/0 claim reply proves no transfer was
+        // scheduled. Nonzero replies and empty queues do not prove settlement.
+        for ((amount0, amount1) in [(0, 0), (444, 0), (0, 555)].vals()) {
+            let claim = Fixture();
+            claim.pairAmounts := { amount0; amount1 };
+            let claiming = await* claim.prepare({ mint with kind = "claim"; position_id = ?7 });
+            let claimed = ok(await* claim.service.execute({ id = claim.id; expected_revision = claiming.operation.revision }));
+            let expected = if (amount0 == 0 and amount1 == 0) "complete" else "settlement_pending";
+            assert (claimed.operation.state == expected and claim.requests.size() == 1);
+            assert (present(claim.journal.get(claim.id)).state == expected);
+            assert (claimed.operation.effects[0].result_amount0 == ?amount0 and claimed.operation.effects[0].result_amount1 == ?amount1);
+            // Simulate a release-202 journal and restore with the same typed
+            // plan and reply. Reconciliation fixes its local status, no replay.
+            ignore ok(claim.journal.mark(claim.id, "settlement_pending", "old generic pending detail", ""));
+            claim.restore();
+            let observed = present(claim.service.status(claim.id));
+            assert (observed.operation.state == expected and observed.plan == claiming.plan);
+            let recovered = ok(await* claim.service.reconcile(claim.id));
+            assert (recovered.operation.state == expected and recovered.pool.queue.size() == 0);
+            assert (present(claim.journal.get(claim.id)).state == expected);
+            ignore ok(await* claim.service.execute({ id = claim.id; expected_revision = recovered.operation.revision }));
+            assert (claim.requests.size() == 1);
+        };
+
+        let unknownClaim = Fixture();
+        unknownClaim.pairAmounts := { amount0 = 0; amount1 = 0 };
+        unknownClaim.loseMethod := "claim"; unknownClaim.loss := "throw";
+        let unknownPlan = await* unknownClaim.prepare({ mint with kind = "claim"; position_id = ?7 });
+        let unresolvedClaim = ok(await* unknownClaim.service.execute({ id = unknownClaim.id; expected_revision = unknownPlan.operation.revision }));
+        assert (unresolvedClaim.operation.state == "uncertain");
+        assert ((ok(await* unknownClaim.service.reconcile(unknownClaim.id))).operation.state == "uncertain");
+        assert (unknownClaim.requests.size() == 1);
 
         // Recover a direct-funded pool subaccount after only that Wallet leg
         // succeeded. Recovery credits the exact original gross transfer using

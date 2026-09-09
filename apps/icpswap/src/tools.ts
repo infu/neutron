@@ -1,9 +1,9 @@
 // Tools this app exposes on the kernel message bus.
 //
 // They are registered by the resident background so they stay callable while no
-// tile is open. Read tools are safe for cross-app discovery; the two watchlist
-// mutations are marked same-app so another app cannot silently reshape the
-// owner's watchlist, and they still pass the kernel's own consent path.
+// tile is open. Market reads and watchlist tools are available to agents through
+// the kernel's existing cross-app permissions. Watchlist changes use the live
+// invocation's scoped backend transport, just like other tool calls.
 //
 // Every result carries `source` and `as_of` so an agent can reason about
 // staleness, plus an explicit note that this is third-party market data.
@@ -20,6 +20,8 @@ import {
   type InfoToken,
 } from "./api.ts";
 import { createBackendClient } from "./backend.ts";
+import { swapQuoteReader } from "./swap_quote.ts";
+import { swapQuoteOutputSchema } from "./quote_schema.ts";
 import { createRequestId } from "./funding.ts";
 import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
 import { createLiquidityReadClient, type BrowserPoolView } from "./liquidity_reads.ts";
@@ -89,7 +91,7 @@ function describeError(error: unknown): string {
 
 /** Every swap result carries this so an agent cannot mistake it for advice. */
 const SWAP_NOTE =
-  "The pool enforces a gross swap minimum; the output ledger fee reduces the wallet receipt. This quote does not fund or execute the swap.";
+  "Direct browser price preview. The pool enforces a gross swap minimum; the output ledger fee reduces the wallet receipt. Pool context is reused briefly between edits. This quote does not fund or execute the swap; preparation revalidates current state and access as your Neutron account.";
 
 function swapRequestFrom(args: JsonObject) {
   const from = typeof args.from_ledger_id === "string" ? args.from_ledger_id.trim() : "";
@@ -195,13 +197,15 @@ export type ResearchToolDependencies = {
   backendFor?: typeof createBackendClient;
   tokenInfoFor?: (context: MsgBusToolContext, ledger: string) => Promise<WalletTokenInfo>;
   reads?: ReturnType<typeof createLiquidityReadClient>;
+  quotes?: typeof swapQuoteReader;
 };
 
 export function registerTools(dependencies: ResearchToolDependencies): void {
   const register = dependencies.expose ?? exposeTool;
   const backendFor = dependencies.backendFor ?? createBackendClient;
   const reads = dependencies.reads ?? createLiquidityReadClient();
-  const tokenInfoFor = dependencies.tokenInfoFor ?? ((context: MsgBusToolContext, ledger: string) => readTokenInfo(context.kernel, ledger));
+  const quotes = dependencies.quotes ?? swapQuoteReader;
+  const tokenInfoFor = dependencies.tokenInfoFor ?? ((context: MsgBusToolContext, ledger: string) => readTokenInfo(context.kernel, ledger, context.signal));
   register(
     "icpswap_search_tokens",
     {
@@ -721,7 +725,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     {
       title: "Add a token to the watchlist",
       description:
-        "Add one token to the owner's ICPSwap watchlist so it appears in the market table and is sampled on the app's schedule.",
+        "Add one token to the owner's ICPSwap watchlist so it appears in the market table and is sampled on the app's schedule. Updates saved market preferences without moving funds.",
       inputSchema: {
         type: "object",
         properties: {
@@ -735,7 +739,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
         additionalProperties: false,
       },
       outputSchema: { type: "object" },
-      annotations: { "neutron:visibility": "same_app" },
+      annotations: { readOnlyHint: false },
     },
     async (args, context): Promise<JsonValue> => {
       const ledgerId = requiredLedgerId(args);
@@ -762,7 +766,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     {
       title: "Remove a token from the watchlist",
       description:
-        "Remove one token from the owner's ICPSwap watchlist. Recorded history for that token is kept.",
+        "Remove one token from the owner's ICPSwap watchlist. Recorded history for that token is kept. Updates saved market preferences without moving funds.",
       inputSchema: {
         type: "object",
         properties: {
@@ -776,7 +780,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
         additionalProperties: false,
       },
       outputSchema: { type: "object" },
-      annotations: { "neutron:visibility": "same_app" },
+      annotations: { readOnlyHint: false },
     },
     async (args, context): Promise<JsonValue> => {
       const ledgerId = requiredLedgerId(args);
@@ -795,8 +799,9 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     "icpswap_quote_swap",
     {
       title: "Quote an ICPSwap swap",
+      outputSchema: swapQuoteOutputSchema,
       description:
-        "Compare available direct ICPSwap pools and report expected net output, the gross pool minimum after slippage, price impact and observed ledger fees. This read does not inspect existing allowances or grant funding. Use icpswap_swap_v1 to prepare and execute a saved, reviewed swap.",
+        "Query ICPSwap directly from the browser to compare direct pools and report expected net output, the gross pool minimum after slippage, price impact and observed ledger fees. This preview does not inspect allowances or establish account access. Use icpswap_swap_v1 to revalidate and execute a saved, reviewed swap.",
       inputSchema: {
         type: "object",
         properties: {
@@ -831,19 +836,25 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     },
     async (args, context): Promise<JsonValue> => {
       const request = swapRequestFrom(args);
-      const backend = backendFor(context.kernel);
-      for (const ledger of [request.inputAddress, request.outputAddress]) {
-        if (context.signal?.aborted) throw context.signal.reason;
-        const metadata = await tokenInfoFor(context, ledger);
-        await backend.setTokenInfo(ledger, metadata.decimals, metadata.feeAtoms);
-      }
+      context.signal?.throwIfAborted();
+      const [input, output] = await Promise.all([
+        tokenInfoFor(context, request.inputAddress),
+        tokenInfoFor(context, request.outputAddress),
+        quotes.preparePair(request.inputAddress, request.outputAddress, context.signal),
+      ]);
       if (context.signal?.aborted) throw context.signal.reason;
-      const quote = await backend.quoteSwap(request);
+      const quote = await quotes.quote(request, {
+        decimalsIn: input.decimals, decimalsOut: output.decimals,
+        feeIn: input.feeAtoms, feeOut: output.feeAtoms, signal: context.signal,
+      });
       return {
         source: "icpswap-pool",
+        version: 1,
+        transport: "direct-canister-query",
         as_of: nowIso(),
         as_of_kind: "response_time",
         note: SWAP_NOTE,
+        context_as_of: new Date(quote.contextAt * 1000).toISOString(),
         pool: quote.pool,
         pool_key: quote.poolKey,
         fee_tier: quote.feeTier,

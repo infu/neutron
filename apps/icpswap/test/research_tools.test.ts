@@ -1,8 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { type JsonObject, type MsgBusToolContext, type MsgBusToolHandler, normalizeToolDescriptor } from "neutron-tools/app";
 import { calculateLiquidityRange, registerTools, retainedPoolsFromOperations, type ResearchToolDependencies } from "../src/tools.ts";
 import { type BrowserPoolView, type PoolIdentity } from "../src/liquidity_reads.ts";
 import { Q96 } from "../src/liquidity_math.ts";
+import { invalidateCache } from "../src/api.ts";
+import { IDL } from "@dfinity/candid";
+import { readFileSync } from "node:fs";
+import { extractPublicTypeAliases, motokoTypeToIdl, generateAppMethodSchemaArtifact, validateAppMethodArgs } from "neutron-scripts/src/method_schema.js";
+import { materializeSelfCallArguments, normalizeSelfCallResult } from "neutron-kernel/src/self_calls.ts";
+import { createActionBackend } from "../src/action_backend.ts";
+import { createBackendClient } from "../src/backend.ts";
+import type { NeutronManifest } from "neutron-tools/src/schema.js";
 
 const OWNER = "3rurp-vyaaa-aaaay-aacua-cai";
 const ICP = "ryjl3-tyaaa-aaaaa-aaaba-cai";
@@ -12,9 +20,16 @@ const pool: PoolIdentity = { pool: POOL, key: "ICP_USDC_3000", token0: { address
 const source = { kind: "direct-canister-query" as const, host: "https://icp-api.io", observedAt: "2026-09-08T19:00:00.000Z" };
 const view: BrowserPoolView = { pool, owner: OWNER, metadata: { sqrtPriceX96: Q96.toString(), tick: 0, liquidity: "10000000000" }, positions: [], unused: { balance0: "0", balance1: "0" }, reserved: { balance0: "0", balance1: "0" }, availableUnused: { balance0: "0", balance1: "0" }, cachedFees: { token0Fee: "10000", token1Fee: "10000" }, available: true, withdrawals: [], transactions: [], errors: [], source };
 const context: MsgBusToolContext = { kernel: {} as MsgBusToolContext["kernel"], reportProgress() {} };
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  invalidateCache();
+});
 
 function fixture(overrides: Partial<ResearchToolDependencies> = {}) {
   const handlers = new Map<string, MsgBusToolHandler>();
+  const descriptors = new Map<string, ReturnType<typeof normalizeToolDescriptor>>();
   const reads: ResearchToolDependencies["reads"] = {
     discoverPools: async () => ({ pools: [pool], source }),
     discoverOwnedPools: async (owner, retainedPools = []) => ({ pools: [pool], owner, indexedPools: [POOL], retainedPools, errors: [], source }),
@@ -22,18 +37,94 @@ function fixture(overrides: Partial<ResearchToolDependencies> = {}) {
     invalidate() {},
   };
   registerTools({ accountFor: async () => OWNER, retainedPoolsFor: async () => [], reads, ...overrides, expose: (name, options, handler) => {
-    normalizeToolDescriptor({ name, ...options });
+    descriptors.set(name, normalizeToolDescriptor({ name, ...options }));
     handlers.set(name, handler);
   } });
-  return { handlers, run: async (name: string, args: JsonObject = {}, ctx: MsgBusToolContext = context) => await handlers.get(name)!(args, ctx) as JsonObject };
+  return { handlers, descriptors, run: async (name: string, args: JsonObject = {}, ctx: MsgBusToolContext = context) => await handlers.get(name)!(args, ctx) as JsonObject };
 }
 
 describe("ICPSwap research registration", () => {
+  test.each(["icpswap_liquidity_pool_v1", "icpswap_positions_v1"])("%s uses the generated one-unit account signature through its actual backend helper", async (name) => {
+    const source = readFileSync(new URL("../backend/main.mo", import.meta.url), "utf8");
+    const manifest = JSON.parse(readFileSync(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
+    const aliases = extractPublicTypeAliases(source);
+    const artifact = generateAppMethodSchemaArtifact(manifest, source);
+    const accountInput = motokoTypeToIdl(aliases.icpswap_account_Input!, IDL, aliases);
+    const accountOutput = motokoTypeToIdl(aliases.icpswap_account_Output!, IDL, aliases);
+    expect(validateAppMethodArgs(artifact, "icpswap_account", []).valid).toBe(false);
+    const calls: unknown[] = [];
+    const current = { ...context, kernel: {
+      querySelf: async (method: string, args: unknown[]) => {
+        calls.push({ method, args });
+        expect(method).toBe("icpswap_account");
+        const bound = materializeSelfCallArguments(args, [], [accountInput], { appId: manifest.id, appVersion: manifest.version, method });
+        expect(IDL.decode([accountInput], IDL.encode([accountInput], bound.args)) as unknown[]).toEqual([null]);
+        expect(validateAppMethodArgs(artifact, method, args as never).valid).toBe(true);
+        return normalizeSelfCallResult(IDL.decode([accountOutput], IDL.encode([accountOutput], [OWNER]))[0], accountOutput);
+      },
+      updateSelf: async () => { throw new Error("Account discovery must not mutate"); },
+    } as unknown as MsgBusToolContext["kernel"] };
+    const result = await fixture({ accountFor: (ctx) => createActionBackend(ctx.kernel).account() }).run(name, { pool: POOL }, current);
+    expect(result.owner).toBe(OWNER);
+    expect(result.complete).toBe(true);
+    expect(calls).toEqual([{ method: "icpswap_account", args: [null] }]);
+  });
+
+  test("every no-argument backend wrapper sends the generated Candid unit argument", async () => {
+    const aliases = extractPublicTypeAliases(readFileSync(new URL("../backend/main.mo", import.meta.url), "utf8"));
+    const unitMethods = Object.entries(aliases).filter(([name, type]) => name.endsWith("_Input") && type === "()").map(([name]) => name.slice(0, -6)).sort();
+    expect(unitMethods).toEqual(["icpswap_account", "icpswap_status"]);
+    const calls: string[] = [];
+    const client = { querySelf: async (method: string, args: unknown[]) => {
+      const type = motokoTypeToIdl(aliases[`${method}_Input`]!, IDL, aliases);
+      const bound = materializeSelfCallArguments(args, [], [type]);
+      expect(IDL.decode([type], IDL.encode([type], bound.args)) as unknown[]).toEqual([null]);
+      calls.push(method);
+      return method === "icpswap_account" ? OWNER : {};
+    } } as unknown as MsgBusToolContext["kernel"];
+    await createActionBackend(client).account();
+    await createBackendClient(client).getStatus();
+    expect(calls.sort()).toEqual(unitMethods);
+  });
+
   test("all descriptors validate and no research alias bypasses the saved action workflow", () => {
     const { handlers } = fixture();
     expect(handlers.has("icpswap_liquidity_range_v1")).toBe(true);
     expect(handlers.has("icpswap_execute_swap")).toBe(false);
     expect(handlers.has("icpswap_agent_swap")).toBe(false);
+  });
+
+  test("watchlist tools remain cross-app discoverable under normal Kernel permissions", () => {
+    const { descriptors } = fixture();
+    for (const name of ["icpswap_watchlist_add", "icpswap_watchlist_remove"]) {
+      const descriptor = descriptors.get(name)!;
+      expect(descriptor.annotations?.["neutron:visibility"]).toBeUndefined();
+      expect(descriptor.annotations?.["neutron:audience"]).toBeUndefined();
+      expect(descriptor.annotations?.["neutron:consent"]).toBeUndefined();
+      expect(descriptor.annotations?.readOnlyHint).toBe(false);
+      expect(descriptor.inputSchema.required).toEqual(["ledger_id"]);
+    }
+  });
+
+  test.each([true, false])("watchlist addition uses the calling transport without financial calls (analytics available: %s)", async (analyticsAvailable) => {
+    invalidateCache();
+    globalThis.fetch = (async () => {
+      if (!analyticsAvailable) throw new Error("analytics unavailable");
+      return new Response(JSON.stringify({ code: 200, data: [{ tokenLedgerId: ICP, tokenSymbol: "ICP", tokenName: "Internet Computer" }] }));
+    }) as unknown as typeof fetch;
+    const calls: unknown[] = [];
+    const currentContext = {
+      ...context,
+      kernel: {
+        updateSelf: async (method: string, args: unknown[]) => {
+          calls.push({ method, args });
+          return { ok: true, message: "Added to the watchlist", watchlist_size: "3" };
+        },
+      } as unknown as MsgBusToolContext["kernel"],
+    };
+    const result = await fixture().run("icpswap_watchlist_add", { ledger_id: ICP }, currentContext);
+    expect(calls).toEqual([{ method: "icpswap_add", args: [{ address: ICP, symbol: analyticsAvailable ? "ICP" : "", name: analyticsAvailable ? "Internet Computer" : "", standard: "", decimals: "0" }] }]);
+    expect(result).toEqual({ ok: true, message: "Added to the watchlist", watchlist_size: 3, ledger_id: ICP });
   });
 
   test("watchlist and legacy journal reads use the current invocation transport", async () => {
@@ -51,24 +142,29 @@ describe("ICPSwap research registration", () => {
     expect(seen).toEqual([context.kernel, secondContext.kernel]);
   });
 
-  test("swap quotes refresh both ledger fees before pricing and do not hide metadata failures", async () => {
+  test("swap previews read Wallet fees and query pools directly without backend updates", async () => {
     const events: string[] = [];
     const deps: Partial<ResearchToolDependencies> = {
       tokenInfoFor: async (_context, ledger) => {
         events.push(`read:${ledger}`);
         return { ledger, account: OWNER, name: null, symbol: "TOKEN", decimals: 8, feeAtoms: 0n, balanceAtoms: 1000000n, observedAtNs: 1n };
       },
-      backendFor: () => ({
-        setTokenInfo: async (ledger: string, decimals: number, fee: bigint) => { events.push(`cache:${ledger}:${decimals}:${fee}`); },
-        quoteSwap: async () => { events.push("quote"); throw new Error("price marker"); },
-      }) as unknown as ReturnType<NonNullable<ResearchToolDependencies["backendFor"]>>,
+      backendFor: () => { throw new Error("A price preview must not use the backend"); },
+      quotes: {
+        preparePair: async (input, output) => { expect([input, output]).toEqual([ICP, USDC]); events.push("prepare-pair"); },
+        quote: async (request, options) => {
+          expect(request.amountIn).toBe(100000n);
+          expect(options).toMatchObject({ decimalsIn: 8, decimalsOut: 8, feeIn: 0n, feeOut: 0n });
+          events.push("quote"); throw new Error("price marker");
+        },
+      },
     };
     const args = { from_ledger_id: ICP, to_ledger_id: USDC, amount: "100000" };
     await expect(fixture(deps).run("icpswap_quote_swap", args)).rejects.toThrow("price marker");
-    expect(events).toEqual([`read:${ICP}`, `cache:${ICP}:8:0`, `read:${USDC}`, `cache:${USDC}:8:0`, "quote"]);
+    expect(events).toEqual([`read:${ICP}`, `read:${USDC}`, "prepare-pair", "quote"]);
     events.length = 0;
     await expect(fixture({ ...deps, tokenInfoFor: async () => { throw new Error("live fee unavailable"); } }).run("icpswap_quote_swap", args)).rejects.toThrow("live fee unavailable");
-    expect(events).toEqual([]);
+    expect(events).toEqual(["prepare-pair"]);
   });
 
   test("pool reads derive the real account and preserve unknown fields and errors", async () => {

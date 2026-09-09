@@ -3,8 +3,8 @@ import {
   createEvmWalletClient, type EvmEstimateTransactionRequest,
   type EvmEstimateTransactionResult, type EvmSendTransactionRequest,
 } from "neutron-tools/evm_wallet";
-import { prepareLiquidityGas, v3IncreaseGasLimit } from "../src/liquidity_gas.ts";
-import { V3_POSITION_MANAGER } from "../src/positions.ts";
+import { prepareLiquidityGas, v3IncreaseGasLimit, v4CollectGasLimit } from "../src/liquidity_gas.ts";
+import { positionManager, V3_POSITION_MANAGER } from "../src/positions.ts";
 
 const accountAddress = "0x1111111111111111111111111111111111111111";
 const request: EvmSendTransactionRequest = {
@@ -30,7 +30,7 @@ function fixture(respond: (request: EvmEstimateTransactionRequest) => unknown = 
     expect(call.target).toBe("app:evm_wallet:background");
     expect(call.name).toBe("evm_estimate_transaction_v1");
     const request = call.arguments as EvmEstimateTransactionRequest;
-    calls.push({ request, ...(options?.signal ? { signal: options.signal } : {}) });
+    calls.push({ request, ...(typeof options === "object" && options.signal ? { signal: options.signal } : {}) });
     return respond(request) as never;
   } });
   return { wallet, calls };
@@ -62,6 +62,25 @@ test("other effects and retained explicit gas requests are unchanged and require
     { ...context, request: { ...request, gasLimit: "333333" } },
   ]) expect(await prepareLiquidityGas(app.wallet, changed)).toBeNull();
   expect(app.calls).toEqual([]);
+});
+
+test.each(["1", "42161"])("V4 collection on chain %s retains a block-pinned estimate and fee-accrual reserve", async (chainId) => {
+  const request = { ...context.request, chainId, to: positionManager(chainId, "v4"), data: "0xdd46508f" };
+  const collect = { ...context, input: { protocol: "v4", operation: "collect" }, request };
+  const app = fixture(request => ({ ...observation(request), gasLimit: "99608", estimatedFeeWei: "996080", maximumFeeWei: "1892552", blockNumber: "25935604",
+    feeBasis: chainId === "42161" ? "arbitrum_total_gas" : "base_fee_plus_priority", postingCosts: chainId === "42161" ? "included" : "not_applicable" }));
+  const result = await prepareLiquidityGas(app.wallet, collect);
+  expect(result?.request).toEqual({ ...request, to: request.to.toLowerCase(), gasLimit: "199608" });
+  expect(result?.diagnostics).toMatchObject({
+    basis: "wallet_estimate_plus_v4_collect_reserve", additionalGas: "100000", gasLimit: "199608", maximumFeeWei: "3792552",
+    observation: { blockNumber: "25935604", gasLimit: "99608", data: request.data },
+  });
+  expect(v4CollectGasLimit(99608n)).toBeGreaterThan(113315n + (113315n + 4n) / 5n);
+  expect(v4CollectGasLimit(9007199254740993n)).toBe(9007199254840993n);
+  expect(() => v4CollectGasLimit(0n)).toThrow("positive");
+  expect(await prepareLiquidityGas(app.wallet, { ...collect, request: result!.request })).toBeNull();
+  expect(app.calls).toHaveLength(1);
+  await expect(prepareLiquidityGas(app.wallet, { ...collect, request: { ...request, to: V3_POSITION_MANAGER } })).rejects.toThrow("V4 collect does not target");
 });
 
 test("a failed, unpinned or mismatched estimate cannot become a guessed gas limit", async () => {

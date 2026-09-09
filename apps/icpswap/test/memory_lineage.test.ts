@@ -42,6 +42,44 @@ async function successor() {
   };
 }
 
+test.each([
+  ["0.2.1", "ccd9e6d4144785049c333c850da55797ad466e3ab471db54b0e264751909ea97"],
+  ["0.2.2", "ceba67dcdddf64debb1f205857a27ec714c389078f4dab4377c11777fb296213"],
+  ["0.2.3", "1513aff1bab366becc4e179a3e4e618fce9f445933f2c8426a25e79dd126f90e"],
+  ["0.2.4", "e7929219444bad263d0a31a4687a9acc61730d6b6a6b44cbbea1068df352e69b"],
+  ["0.2.5", "3f96a6ae9c0c487f6e492a15cbb9215e5c567f9fcd6518cee42eccd1355824f6"],
+])("the update preserves all three release-%s roots and their complete schema dependencies", async (release, digest) => {
+  const bytes = await readFile(new URL(`icpswap.v${release}.neutron`, app));
+  expect(sha256(bytes)).toBe(digest);
+  const previousFiles = unpackNeutronPackage(bytes);
+  const previous = JSON.parse(decode(previousFiles["neutron.json"]!)) as PackagedNeutronManifest;
+  const { files, manifest } = await successor();
+  expect(manifest.version).toBeGreaterThan(previous.version);
+  expect(manifest.memory).toEqual(previous.memory);
+  expect(manifest.func).toEqual(previous.func);
+  expect(files["neutron.lock.json"]).toEqual(previousFiles["neutron.lock.json"]);
+  // Runtime code may change; every immutable schema and its transitive imports
+  // must remain byte-identical to the published root's dependency closure.
+  const pending = Object.values(previous.memory!).flatMap(memory => Object.values(memory.schemas!).map(schema => schema.entry!));
+  const checked = new Set<string>();
+  while (pending.length > 0) {
+    const hash = pending.pop()!;
+    if (checked.has(hash)) continue;
+    checked.add(hash);
+    const path = `mo/${hash}.mo`, module = previousFiles[path]!;
+    expect(module).toBeDefined();
+    expect(files[path]).toEqual(module);
+    for (const dependency of decode(module).matchAll(/import\s+\w+\s+"([a-f0-9]{64})"/g)) pending.push(dependency[1]!);
+  }
+  expect(checked.size).toBeGreaterThan(3);
+  const upgrade = planMemoryMigrations({ kernel, icpswap: previous }, { kernel, icpswap: manifest });
+  expect(upgrade.destructiveMemoryRoots).toEqual([]);
+  expect(upgrade.upgrades).toHaveLength(3);
+  for (const memoryId of ["icpswap", "icpswap_swap", "icpswap_actions"]) {
+    expect(upgrade.upgrades).toContainEqual({ kind: "keep", owner: "icpswap", memoryId, version: 1 });
+  }
+});
+
 test("the imported app retains both deployed v1 source identities and immutable lock records", async () => {
   const previous = await predecessor();
   expect(previous).toMatchObject({ id: "icpswap", version: 200 });

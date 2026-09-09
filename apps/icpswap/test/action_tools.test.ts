@@ -3,6 +3,7 @@ import { normalizeToolDescriptor, type JsonObject, type MsgBusToolContext } from
 import { createActionHandlers, registerActionTools } from "../src/action_tools.ts";
 import type { ActionBackend, ActionOperation, ActionPrepared, LiquidityWire, SwapWire } from "../src/action_backend.ts";
 import { createFundingRequest } from "../src/funding.ts";
+import type { BrowserPoolView } from "../src/liquidity_reads.ts";
 
 const OWNER = "3rurp-vyaaa-aaaay-aacua-cai", POOL = "mohjv-bqaaa-aaaag-qjyia-cai", ICP = "ryjl3-tyaaa-aaaaa-aaaba-cai", USDC = "xevnm-gaaaa-aaaar-qafnq-cai";
 const ID = "a1".repeat(16);
@@ -39,7 +40,14 @@ function fixture(rootMode = false) {
     value.operation = { ...value.operation, state: "settlement_pending", detail: "Protocol confirmed; ledger payout pending.", revision: String(BigInt(value.operation.revision) + 1n) };
     return structuredClone(value);
   };
-  const pool: JsonObject = { pool: POOL, protocol_diagnostics: "A payout failed and needs protocol support", transactions: [{ support_required: true }], unused0: "10000", queue: [] };
+  const pool: BrowserPoolView = {
+    pool: { pool: POOL, key: "icp-usdc", token0: { address: ICP, standard: "ICRC2" }, token1: { address: USDC, standard: "ICRC2" }, fee: 3000, tickSpacing: 60 },
+    owner: OWNER, metadata: { sqrtPriceX96: "79228162514264337593543950336", tick: 0, liquidity: "10000" },
+    positions: [], unused: { balance0: "10000", balance1: "0" }, reserved: { balance0: "0", balance1: "0" }, availableUnused: { balance0: "10000", balance1: "0" },
+    cachedFees: { token0Fee: "10000", token1Fee: "10000" }, available: true, withdrawals: [], transactions: [],
+    errors: [{ canister: POOL, method: "getTransactionsByOwner", message: "A payout failed and needs protocol support" }],
+    source: { kind: "direct-canister-query", host: "https://icp-api.io", observedAt: "2026-09-09T00:00:00Z" },
+  };
   const backend: ActionBackend = {
     actionGet: async (id) => structuredClone(records.get(id)?.operation ?? null),
     actionPage: async () => ({ items: [...records.values()].map((value) => structuredClone(value.operation)), nextCursor: null }),
@@ -52,10 +60,10 @@ function fixture(rootMode = false) {
     liquidityPrepare: async (request) => prepare(request, { request: request.request as unknown as JsonObject, pool: POOL, owner: OWNER, token0: { address: ICP, standard: "ICRC2" }, token1: { address: USDC, standard: "ICRC2" }, funding0: "0", funding1: "0", fee0: "10000", fee1: "10000", expected_amount0: "100000", expected_amount1: "100000", expected_liquidity: "10000" }),
     recoveryPrepare: async () => { throw new Error("Recovery fixture not configured"); }, recoveryExecute: execute, recoveryStatus: async (id) => structuredClone(records.get(id) ?? null),
     liquidityExecute: execute, liquidityStatus: async (id) => structuredClone(records.get(id) ?? null),
-    liquidityReconcile: async (id) => ({ ...structuredClone(records.get(id)!), pool }),
-    liquidityPreview: async () => ({}), liquidityPool: async () => { events.push("pool read"); return pool; }, account: async () => OWNER,
+    liquidityReconcile: async () => { throw new Error("Reconciliation must query ICPSwap directly"); },
+    liquidityPreview: async () => { throw new Error("Preview must query ICPSwap directly"); }, liquidityPool: async () => { throw new Error("Pool reads must query ICPSwap directly"); }, account: async () => OWNER,
   };
-  const dependencies = { backendFor: (actual: MsgBusToolContext["kernel"]) => { expect(actual).toBe(kernel); return backend; }, authorize: async (_context: MsgBusToolContext, review: JsonObject) => { approvals.push(review); events.push("review"); if (deny) throw new Error("Declined"); } };
+  const dependencies = { reads: { readPool: async () => { events.push("pool read"); return structuredClone(pool); } } as NonNullable<Parameters<typeof createActionHandlers>[0]["reads"]>, backendFor: (actual: MsgBusToolContext["kernel"]) => { expect(actual).toBe(kernel); return backend; }, authorize: async (_context: MsgBusToolContext, review: JsonObject) => { approvals.push(review); events.push("review"); if (deny) throw new Error("Declined"); } };
   return { context, records, calls, events, approvals, dependencies, handlers: createActionHandlers(dependencies), executes: () => executeCount, deny: () => { deny = true; }, failReads: () => { failRead = true; } };
 }
 
@@ -152,6 +160,63 @@ test("reconciliation refreshes failed payout observations without changing uncer
   const result = await f.handlers.reconcile({ operationId: ID }, f.context);
   expect(result.state).toBe("uncertain"); expect((result.pool as JsonObject).protocol_diagnostics).toContain("support");
   expect(f.events).toContain("pool read"); expect(f.executes()).toBe(0);
+});
+
+test("reconciliation reads Wallet candidates and explicit blocks without replaying a successful swap", async () => {
+  const f = fixture(); await f.handlers.swap(swapArgs, f.context);
+  const saved = f.records.get(ID)!;
+  saved.operation.effects = [{ key: "swap", method: "depositFromAndSwap", canister: POOL, state: "succeeded",
+    dispatched_at: "1788884400000000000", completed_at: "1788884401000000000", result_nat: "990000" }];
+  const before = f.calls.length, revision = saved.operation.revision;
+  const result = await f.handlers.reconcile({ operationId: ID, payoutBlocks: [{ ledger: USDC, blockIndex: "779772" }] }, f.context);
+  expect(result.state).toBe("settlement_pending");
+  expect(result.pool).toBeDefined();
+  expect(result.walletEvidence).toMatchObject({ status: "unavailable", settlementVerified: false });
+  expect(f.calls.slice(before)).toEqual([
+    { target: "app:wallet:background", name: "wallet_account_transactions_v1", arguments: { ledger: USDC, limit: 25 } },
+    { target: "app:wallet:background", name: "wallet_transaction_v1", arguments: { ledger: USDC, blockIndex: "779772", source: "auto" } },
+  ]);
+  expect(f.executes()).toBe(1); expect(saved.operation.revision).toBe(revision);
+  const last = f.calls.length;
+  const withoutWallet = await f.handlers.reconcile({ operationId: ID, walletEvidence: false }, f.context);
+  expect(withoutWallet.pool).toBeDefined(); expect(withoutWallet).not.toHaveProperty("walletEvidence");
+  expect(f.calls).toHaveLength(last);
+});
+
+test("failed account discovery retains reconciliation's protocol result", async () => {
+  const f = fixture(); await f.handlers.swap(swapArgs, f.context);
+  delete f.records.get(ID)!.plan.owner;
+  f.dependencies.backendFor(f.context.kernel).account = async () => { throw new Error("Account reader unavailable"); };
+  const result = await f.handlers.reconcile({ operationId: ID }, f.context);
+  expect(result.state).toBe("settlement_pending"); expect(result.pool).toBeDefined();
+  expect(result.walletEvidence).toMatchObject({ status: "unavailable", errors: ["Account reader unavailable"] });
+  expect(f.executes()).toBe(1);
+});
+
+test("failed direct pool reads preserve a retained result without replay or false empty balances", async () => {
+  const f = fixture(); await f.handlers.swap(swapArgs, f.context);
+  f.dependencies.reads.readPool = async () => { throw new Error("ICPSwap query unavailable"); };
+  const revision = f.records.get(ID)!.operation.revision;
+  const result = await f.handlers.reconcile({ operationId: ID, walletEvidence: false }, f.context);
+  expect(result.state).toBe("settlement_pending");
+  expect(result.pool).toMatchObject({ pool: POOL, owner: OWNER, complete: false, protocol_diagnostics: "ICPSwap query unavailable" });
+  expect(result.pool).not.toHaveProperty("unused0");
+  expect(f.records.get(ID)!.operation.revision).toBe(revision); expect(f.executes()).toBe(1);
+});
+
+test("liquidity previews query the pool and compute deficits without persisting or funding an intent", async () => {
+  const f = fixture();
+  const result = await f.handlers.liquidityQuote({ kind: "mint", pool: POOL, tickLower: -60, tickUpper: 60, amount0: "1000000", amount1: "1000000" }, f.context);
+  expect(result.transport).toBe("direct-canister-query");
+  expect(result.plan).toMatchObject({ pool: POOL, owner: OWNER, funding0: "990000", funding1: "1000000", price_protection: false });
+  expect(f.events).toEqual(["pool read"]); expect(f.records.size).toBe(0);
+  expect(f.calls).toEqual([]); expect(f.approvals).toEqual([]); expect(f.executes()).toBe(0);
+});
+
+test("conflicting payout read options fail before accessing a saved operation", async () => {
+  const f = fixture();
+  await expect(f.handlers.reconcile({ operationId: ID, walletEvidence: false, payoutBlocks: [{ ledger: USDC, blockIndex: "1" }] }, f.context)).rejects.toThrow("Enable walletEvidence");
+  expect(f.events).toEqual([]); expect(f.calls).toEqual([]);
 });
 
 

@@ -2,7 +2,7 @@
   "format": 3,
   "name": "via ICPSwap",
   "id": "icpswap",
-  "version": 201,
+  "version": 206,
   "description": "Independent ICPSwap integration for swaps, concentrated liquidity, positions, market research and agent tools.",
   "src": "main.mo",
   "backend": {
@@ -26,6 +26,21 @@
     "description": "ICPSwap research, reviewed trading and durable liquidity recovery tools"
   },
   "capabilities": {
+    "frontend_tools": {
+      "api": 1,
+      "targets": [
+        {
+          "app": "wallet",
+          "tools": [
+            "wallet_token_info_v1",
+            "wallet_add_ledger_v1",
+            "wallet_fund_v1",
+            "wallet_account_transactions_v1",
+            "wallet_transaction_v1"
+          ]
+        }
+      ]
+    },
     "backend_calls": {
       "api": 1,
       "description": "Read verified ICPSwap pool state and execute saved swap, liquidity, deposit and withdrawal plans as this Neutron. Wallet handles all token-ledger reads and funding.",

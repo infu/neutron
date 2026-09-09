@@ -8,7 +8,13 @@ import { formatTokenAmount } from "./format.ts";
 import {
   historyAddressText,
   historyRecordKey,
+  historyStatusSchema,
+  historySyncReportSchema,
+  parseNormalizedHistoryStatus,
+  parseNormalizedHistorySyncReport,
   type HistoryRecord,
+  type HistoryStatus,
+  type HistorySyncReport,
 } from "./history.ts";
 import { PRICE_ASSETS, type PriceAsset } from "./prices.ts";
 import { safeTokenLogo } from "./logo.ts";
@@ -61,6 +67,15 @@ export type WalletProjection = {
   activity: WalletProjectionActivity[];
   hasMoreActivity: boolean;
   historyError: string | null;
+  historyStatus: HistoryStatus | null;
+  historyStatusError: string | null;
+  activitySync: WalletActivitySync;
+};
+
+export type WalletActivitySync = {
+  requested: boolean;
+  report: HistorySyncReport | null;
+  error: string | null;
 };
 
 const nullableShortStringSchema: JsonObject = {
@@ -170,6 +185,9 @@ export const walletProjectionSchema: JsonObject = {
     "activity",
     "hasMoreActivity",
     "historyError",
+    "historyStatus",
+    "historyStatusError",
+    "activitySync",
   ],
   properties: {
     revision: { type: "string", pattern: "^[1-9][0-9]{0,15}$" },
@@ -197,6 +215,18 @@ export const walletProjectionSchema: JsonObject = {
     },
     hasMoreActivity: { type: "boolean" },
     historyError: nullableShortStringSchema,
+    historyStatus: { oneOf: [historyStatusSchema, { type: "null" }] },
+    historyStatusError: nullableShortStringSchema,
+    activitySync: {
+      type: "object",
+      required: ["requested", "report", "error"],
+      properties: {
+        requested: { type: "boolean" },
+        report: { oneOf: [historySyncReportSchema, { type: "null" }] },
+        error: nullableShortStringSchema,
+      },
+      additionalProperties: false,
+    },
   },
   additionalProperties: false,
 };
@@ -234,6 +264,9 @@ export function createWalletProjection(
     capturedAt?: number;
     hasMoreActivity?: boolean;
     historyError?: string | null;
+    historyStatus?: HistoryStatus | null;
+    historyStatusError?: string | null;
+    activitySync?: WalletActivitySync;
   } = {},
 ): WalletProjection {
   const catalogByPrincipal = new Map(
@@ -257,6 +290,13 @@ export function createWalletProjection(
       Boolean(options.hasMoreActivity) ||
       records.length > WALLET_PROJECTION_ACTIVITY_LIMIT,
     historyError: bounded(options.historyError ?? null, 240),
+    historyStatus: options.historyStatus ?? null,
+    historyStatusError: bounded(options.historyStatusError ?? null, 240),
+    activitySync: {
+      requested: options.activitySync?.requested ?? false,
+      report: options.activitySync?.report ?? null,
+      error: bounded(options.activitySync?.error ?? null, 240),
+    },
   };
 }
 
@@ -305,6 +345,22 @@ export function parseWalletProjection(value: JsonValue): WalletProjection {
     activity,
     hasMoreActivity: value.hasMoreActivity,
     historyError: nullableString(value.historyError, 240),
+    historyStatus: value.historyStatus == null ? null : parseNormalizedHistoryStatus(value.historyStatus),
+    historyStatusError: nullableString(value.historyStatusError ?? null, 240),
+    activitySync: parseActivitySync(value.activitySync),
+  };
+}
+
+function parseActivitySync(value: JsonValue | undefined): WalletActivitySync {
+  // A cached overview from before the upgrade carries no freshness evidence.
+  if (value === undefined) return { requested: false, report: null, error: null };
+  if (!isJsonObject(value) || typeof value.requested !== "boolean") {
+    throw new Error("Invalid Wallet activity sync");
+  }
+  return {
+    requested: value.requested,
+    report: value.report === null ? null : parseNormalizedHistorySyncReport(value.report),
+    error: nullableString(value.error, 240),
   };
 }
 

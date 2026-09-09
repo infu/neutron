@@ -21,13 +21,14 @@ test("Wallet resident registers every bridge, quote, and released tool through t
   expect(stderr).toBe("");
   const descriptors = JSON.parse(stdout) as MsgBusToolDescriptor[];
   expect(descriptors.map(({ name }) => name).sort()).toEqual([
+    "wallet_account_transactions_v1",
     "wallet_add_ledger_root_v1", "wallet_add_ledger_v1",
     "wallet_bridge_attach_replacement_root_v1", "wallet_bridge_attach_root_v1", "wallet_bridge_next_root_v1",
     "wallet_bridge_prepare_root_v1", "wallet_bridge_quote_v1",
     "wallet_bridge_refresh_v1", "wallet_bridge_status_v1",
     "wallet_conversion_routes_v1",
-    "wallet_fund_root_v1", "wallet_fund_v1", "wallet_overview",
-    "wallet_refresh", "wallet_token_info_v1", "wallet_unwrap_root_v1", "wallet_unwrap_status_v1", "wallet_withdrawal_quote_v1",
+    "wallet_fund_root_v1", "wallet_fund_v1", "wallet_history_v1", "wallet_overview",
+    "wallet_refresh", "wallet_token_info_v1", "wallet_transaction_v1", "wallet_unwrap_root_v1", "wallet_unwrap_status_v1", "wallet_withdrawal_quote_v1",
     "wallet_wrap_pending_v1", "wallet_wrap_root_v1", "wallet_wrap_status_v1",
   ]);
   for (const name of ["prepare", "next", "attach"]) {
