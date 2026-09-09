@@ -88,3 +88,21 @@ export const durablePlanSource: JsonObject = {
   kind: "durable_candid_plan_blob",
   note: "plan is decoded from the retained plan_blob. operation.plan_json is the legacy JSON slot and can be empty without losing the typed plan.",
 };
+
+/** The saved swap backend has never established an outgoing ledger receipt.
+ * Retain its legacy numeric field for existing callers, but make the unknown
+ * net amount explicit. Quotes and successful protocol outputs cannot verify it.
+ */
+export function buildSwapReceipt(prepared: ActionPrepared): JsonObject | null {
+  if (!prepared.receipt) return null;
+  return {
+    ...prepared.receipt,
+    version: 1, kind: "swap", operationId: prepared.operation.id,
+    received_out_verified: false,
+    netOutputAtoms: null,
+    settlement: {
+      status: "unverified", payoutReferences: [],
+      reason: "No operation-linked ledger payout has been verified. received_out is a legacy placeholder, not an observed zero; netOutputAtoms remains null until exact payout evidence exists.",
+    },
+  };
+}

@@ -128,6 +128,7 @@ persistent actor {
     let ?receipt = completed.receipt else Runtime.trap("Successful protocol reply lost");
     assert receipt.pool == originalQuote.pool and receipt.amount_out_minimum == originalQuote.amount_out_minimum;
     assert receipt.swapped_out == 990000 and receipt.received_out == 0;
+    assert not receipt.received_out_verified;
     assert receipt.state == "settlement_pending";
     let ?call = success.lastCall else Runtime.trap("Missing dispatched request");
     assert call.canister == pool and call.method == "depositFromAndSwap" and call.cycles == 0;

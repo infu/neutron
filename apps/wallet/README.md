@@ -1,9 +1,11 @@
 # Wallet
 
 Wallet tracks ICRC ledgers, balances, transfers, and per-network deposit routes
-owned by the Neutron canister principal. Ledger calls use owner-approved
-`backend_calls` capabilities injected by the kernel; the app never constructs a
-backend actor directly.
+owned by the Neutron canister principal. Value-moving ledger calls and durable
+history synchronization use owner-approved `backend_calls` capabilities injected
+by the kernel; the app never constructs a backend actor directly. Public
+transaction/index lookup tools use anonymous browser queries, including exact
+ledger-returned archive callbacks, through Wallet's existing IC query transport.
 
 Wallet is also the owner's trusted token-transaction provider for other
 Neutron apps. Kernel authenticates the requesting and Wallet endpoints and
@@ -245,7 +247,8 @@ after the handoff so no draft is discarded. Escape dismisses the popout.
 
 The non-persistent resident retains four released public tools:
 `wallet_overview` reads the bounded wallet projection, `wallet_refresh`
-refreshes selected ledger balances and returns that same projection,
+refreshes selected ledger balances, attempts one history synchronization and
+returns that same projection,
 `wallet_token_info_v1` reads live metadata, the authoritative current fee, and
 the Wallet default-account balance for one selected ICRC ledger, and
 `wallet_fund_v1` performs the human funding flow above. The token-info fee is an
@@ -256,8 +259,41 @@ Overview and refresh default to compact output: asset and activity `logo` fields
 are `null`, avoiding repeated inline images in agent context. Visual consumers
 can request `{ "includeLogos": true }`; the underlying UI projection and token
 metadata retain their logos.
+Activity responses include per-ledger `historyStatus` with index identity,
+checkpoint and last-attempt/success times, plus the explicit `activitySync`
+report. A balance-only unchanged result, an opening baseline, a partial scan or
+an overlapping sync does not establish complete activity. `historyError: null`
+means the local page was readable; it does not mean the index is current.
 Wallet intentionally publishes no tray badge: it has no unread cursor, and
 balance errors are not unread items.
+
+### Cross-app transaction evidence
+
+The resident also exposes three read tools at `app:wallet:background`:
+
+| Tool | Input and result |
+| --- | --- |
+| `wallet_history_v1` | Optional `ledger`, returned `cursor`, `limit` and `refresh`. Pages the durable journal with sync/index diagnostics; refresh runs existing synchronization once. |
+| `wallet_account_transactions_v1` | `ledger`, optional exclusive `beforeBlock` and `limit`. Reads this Wallet default account directly from its canonical index. Follow `pagination.nextBeforeBlock`; `observation.indexedBlocks` is the index's reported processed-block count, not a fresh ledger-tip comparison. |
+| `wallet_transaction_v1` | `ledger`, exact `blockIndex`, optional `source: "auto" \| "ledger" \| "index"`. Queries that ledger block, following only its returned archive callback; auto can fall back to the canonical index. |
+
+Public transaction reads run anonymously in the browser, using Wallet's existing
+IC network transport. They make no transfer, approval or backend-history change.
+Caller input cannot replace the Wallet owner or canonical index. Custom ledgers
+without an index still support exact ICRC-3 block reads; unavailable sources and
+index lag return an explicit error, never an invented zero transfer. Archive
+callbacks execute only as queries and must return the exact requested block.
+
+Transaction amounts and timestamps are decimal strings. Structured ICRC accounts
+retain owners and subaccounts; ICP accounts retain their account identifiers.
+`memoHex` contains the complete memo bytes and `memoComplete` identifies that
+fact. `amountAtoms` is the transaction payload amount; `balanceEffectAtoms` is
+its signed effect on this Wallet account. Responses omit logos. Only an exact
+ledger or ledger-returned archive reply sets `source.ledgerVerified: true`;
+index evidence remains explicitly false. A transfer proves its recorded payer,
+recipient, amount and memo, not the app operation that caused it. Apps such as
+ICPSwap must retain their protocol-operation linkage separately. Neither an
+empty queue nor an absent index/history record proves a payment absent.
 
 Assets show an indicative USD position value and portfolio total using the
 native asset behind each reviewed ledger (`ckBTC` uses BTC, `ckETH` uses ETH,

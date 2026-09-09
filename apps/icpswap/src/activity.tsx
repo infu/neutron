@@ -48,6 +48,15 @@ export function canContinueSavedAction(action: Pick<SavedAction, "input_json" | 
 }
 const actionLabels: Record<string, string> = { mint: "New liquidity position", increase: "Add liquidity", decrease: "Remove liquidity", close: "Close liquidity position", claim: "Collect fees", withdraw: "Withdraw unused funds", swap: "Swap", recover_deposit: "Recover funded deposit" };
 const stateLabels: Record<string, string> = { prepared: "Ready to review", funding_requested: "Funding", funding_required: "Funding", funded: "Funded", execution_requested: "In progress", protocol_complete: "Protocol completed", settlement_pending: "Payout unverified", complete: "Completed", completed: "Completed", stopped: "Stopped", uncertain: "Needs reconciliation", ambiguous: "Needs reconciliation", pending: "In progress" };
+/** Keep a successful pool effect distinct from an observed payment to Wallet. */
+export function actionExplanation(state: string, detail: string): string {
+  if (state === "settlement_pending" || state === "protocol_complete") return "The pool completed this action. Payment to your Wallet has not been verified yet. Check status to review the saved result.";
+  if (state === "uncertain" || state === "ambiguous") return "This action needs a status check before you try again. Its saved request lets you check the result without sending another payment.";
+  if (state === "prepared") return "Your action is saved and ready for review.";
+  if (state === "funding_requested" || state === "funding_required") return "Wallet approval is needed to continue this saved action.";
+  if (state === "funded") return "Funding is ready. Continue this saved action to complete it at the pool.";
+  return detail;
+}
 export function actionTitle(action: Pick<SavedAction, "input_json">): string {
   const input = savedActionInput(action);
   const kind = typeof input?.kind === "string" ? input.kind : input?.from_ledger_id ? "swap" : input?.sourceOperationId ? "recover_deposit" : "";
@@ -69,6 +78,8 @@ export function ActionCard({ action, progress, onChange, onNewAction }: { action
   const recoverable = useMemo(() => preparedEvidence ? eligibleDirectDepositRecoveries(preparedEvidence.operation, preparedEvidence.plan) : [], [preparedEvidence]);
   const latest = observedProgress && typeof action.revision === "string" && BigInt(observedProgress.revision) >= BigInt(action.revision) ? observedProgress : progress;
   const visibleState = latest?.state ?? action.state;
+  const detailedMessage = latest?.message ?? action.detail;
+  const explanation = actionExplanation(visibleState, detailedMessage);
   const canContinue = !["funding_expired", "funding_rejected", "rejected"].includes(visibleState) && canContinueSavedAction(action);
   const check = useCallback(async (resume: boolean) => {
     setBusy(true); setError("");
@@ -99,14 +110,15 @@ export function ActionCard({ action, progress, onChange, onNewAction }: { action
   const pool = retainedPool(action);
   return <article className="ics-action-card">
     <header><strong>{actionTitle(action)}</strong><span className={`ics-action-state ics-action-state--${visibleState}`}>{stateLabels[visibleState] ?? visibleState.replaceAll("_", " ")}</span></header>
-    <p role="status">{latest?.message ?? action.detail}</p>
+    <p role="status">{explanation}</p>
     {!canContinueSavedAction(action) && ["prepared", "funding_requested", "funding_required", "funded"].includes(action.state) ? <p className="nt-meta">Continue in the Agent or app that started this action.</p> : null}
-    <div className="ics-action-meta"><time>{displayTime(action.updated_at)}</time>{pool ? <span title={pool}>Pool {shortPrincipal(pool)}</span> : null}</div>
+    <div className="ics-action-meta"><time>{displayTime(action.updated_at)}</time>{typeof input?.positionId === "string" ? <span>Position #{input.positionId}</span> : null}</div>
     {error ? <p className="nt-alert nt-alert--danger" role="alert">{error}</p> : null}
     {poolObservation ? <PoolRecovery observation={poolObservation} /> : null}
-    {recoverable.length > 0 ? <div className="ics-deposit-recovery"><strong>Transferred funds awaiting pool credit</strong><p className="nt-meta">Recover the existing transfer into your unused pool balance. This does not send tokens from Wallet again.</p>{recoverable.map((candidate) => <button key={candidate.tokenIndex} className="nt-button nt-button--secondary nt-button--sm" disabled={busy} title={candidate.ledger} onClick={() => void recover(candidate)} type="button">Recover deposit · token {candidate.tokenIndex}</button>)}</div> : null}
+    {recoverable.length > 0 ? <div className="ics-deposit-recovery"><strong>Finish crediting your deposit</strong><p className="nt-meta">Your transfer reached the pool but has not been credited to your available balance. Recovering uses that transfer; it does not pay from Wallet again.</p>{recoverable.map((candidate) => <button key={candidate.tokenIndex} className="nt-button nt-button--secondary nt-button--sm" disabled={busy} title={candidate.ledger} onClick={() => void recover(candidate)} type="button">Recover deposit · {shortPrincipal(candidate.ledger)}</button>)}</div> : null}
     {recoveryMessage ? <p className="nt-meta" role="status">{recoveryMessage}</p> : null}
-    <div className="ics-inline-actions">{canContinue ? <button className="nt-button nt-button--sm" disabled={busy} onClick={() => void check(true)} type="button">{busy ? "Following operation…" : "Continue"}</button> : null}<button className="nt-button nt-button--secondary nt-button--sm" disabled={busy} onClick={() => void check(false)} type="button">{busy && !canContinue ? "Checking…" : "Check status"}</button><details className="ics-action-details"><summary>Details</summary><dl><div><dt>Operation</dt><dd>{action.id}</dd></div>{input ? Object.entries(input).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>) : null}</dl>{Array.isArray(action.effects) ? <ul>{action.effects.map((effect, index) => isJsonObject(effect) ? <li key={index}>{String(effect.method)} · {String(effect.state)}{effect.error ? ` · ${String(effect.error)}` : ""}</li> : null)}</ul> : null}</details></div>
+    <div className="ics-inline-actions">{canContinue ? <button className="nt-button nt-button--sm" disabled={busy} onClick={() => void check(true)} type="button">{busy ? "Following operation…" : "Continue"}</button> : null}<button className="nt-button nt-button--secondary nt-button--sm" disabled={busy} onClick={() => void check(false)} type="button">{busy && !canContinue ? "Checking…" : "Check status"}</button></div>
+    <details className="ics-action-details"><summary>Details</summary>{detailedMessage !== explanation ? <p>{detailedMessage}</p> : null}<dl><div><dt>Operation</dt><dd>{action.id}</dd></div>{pool ? <div><dt>Pool</dt><dd>{pool}</dd></div> : null}{input ? Object.entries(input).filter(([key]) => key !== "pool" && key !== "operationId").map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>) : null}</dl>{Array.isArray(action.effects) ? <ul>{action.effects.map((effect, index) => isJsonObject(effect) ? <li key={index}>{String(effect.method)} · {String(effect.state)}{effect.error ? ` · ${String(effect.error)}` : ""}</li> : null)}</ul> : null}</details>
   </article>;
 }
 

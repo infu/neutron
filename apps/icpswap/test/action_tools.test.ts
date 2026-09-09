@@ -154,6 +154,42 @@ test("reconciliation refreshes failed payout observations without changing uncer
   expect(f.events).toContain("pool read"); expect(f.executes()).toBe(0);
 });
 
+test("reconciliation reads Wallet candidates and explicit blocks without replaying a successful swap", async () => {
+  const f = fixture(); await f.handlers.swap(swapArgs, f.context);
+  const saved = f.records.get(ID)!;
+  saved.operation.effects = [{ key: "swap", method: "depositFromAndSwap", canister: POOL, state: "succeeded",
+    dispatched_at: "1788884400000000000", completed_at: "1788884401000000000", result_nat: "990000" }];
+  const before = f.calls.length, revision = saved.operation.revision;
+  const result = await f.handlers.reconcile({ operationId: ID, payoutBlocks: [{ ledger: USDC, blockIndex: "779772" }] }, f.context);
+  expect(result.state).toBe("settlement_pending");
+  expect(result.pool).toBeDefined();
+  expect(result.walletEvidence).toMatchObject({ status: "unavailable", settlementVerified: false });
+  expect(f.calls.slice(before)).toEqual([
+    { target: "app:wallet:background", name: "wallet_account_transactions_v1", arguments: { ledger: USDC, limit: 25 } },
+    { target: "app:wallet:background", name: "wallet_transaction_v1", arguments: { ledger: USDC, blockIndex: "779772", source: "auto" } },
+  ]);
+  expect(f.executes()).toBe(1); expect(saved.operation.revision).toBe(revision);
+  const last = f.calls.length;
+  const withoutWallet = await f.handlers.reconcile({ operationId: ID, walletEvidence: false }, f.context);
+  expect(withoutWallet.pool).toBeDefined(); expect(withoutWallet).not.toHaveProperty("walletEvidence");
+  expect(f.calls).toHaveLength(last);
+});
+
+test("failed account discovery retains reconciliation's protocol result", async () => {
+  const f = fixture(); await f.handlers.swap(swapArgs, f.context);
+  f.dependencies.backendFor(f.context.kernel).account = async () => { throw new Error("Account reader unavailable"); };
+  const result = await f.handlers.reconcile({ operationId: ID }, f.context);
+  expect(result.state).toBe("settlement_pending"); expect(result.pool).toBeDefined();
+  expect(result.walletEvidence).toMatchObject({ status: "unavailable", errors: ["Account reader unavailable"] });
+  expect(f.executes()).toBe(1);
+});
+
+test("conflicting payout read options fail before accessing a saved operation", async () => {
+  const f = fixture();
+  await expect(f.handlers.reconcile({ operationId: ID, walletEvidence: false, payoutBlocks: [{ ledger: USDC, blockIndex: "1" }] }, f.context)).rejects.toThrow("Enable walletEvidence");
+  expect(f.events).toEqual([]); expect(f.calls).toEqual([]);
+});
+
 
 test("Root acknowledgments cannot substitute another Wallet command namespace", async () => {
   const f = fixture(true), first = await f.handlers.swap(swapArgs, f.context);

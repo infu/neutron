@@ -2,7 +2,7 @@
 // owner is tracking, merging live ICPSwap analytics onto the sovereign
 // on-chain row the backend supplies.
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { cx } from "neutron-design-system";
 import type { InfoToken, InfoTokenRank } from "./api.ts";
 import type { MarketRow, SortKey } from "./backend.ts";
@@ -43,9 +43,9 @@ export const MARKET_COLUMNS: MarketColumn[] = [
   { key: "symbol", label: "Token", title: "Symbol and name", backendSort: "symbol", defaultAscending: true },
   { key: "price", label: "Price", title: "Last traded price in USD", backendSort: "price", defaultAscending: false },
   { key: "change24h", label: "24h %", title: "Price change over 24 hours", backendSort: null, defaultAscending: false },
-  { key: "volume24h", label: "Volume 24h", title: "Traded volume over 24 hours", backendSort: null, defaultAscending: false },
-  { key: "volume7d", label: "Volume 7d", title: "Traded volume over 7 days", backendSort: null, defaultAscending: false },
-  { key: "tvl", label: "TVL", title: "Value locked in pools holding this token", backendSort: null, defaultAscending: false },
+  { key: "volume24h", label: "24h volume", title: "Traded volume over 24 hours", backendSort: null, defaultAscending: false },
+  { key: "volume7d", label: "7d volume", title: "Traded volume over 7 days", backendSort: null, defaultAscending: false },
+  { key: "tvl", label: "Liquidity", title: "Value held in pools trading this token", backendSort: null, defaultAscending: false },
   { key: "marketCap", label: "Market cap", title: "Circulating market capitalisation. Only the tokens ICPSwap ranks report one.", backendSort: null, defaultAscending: false },
   { key: "pools", label: "Pools", title: "Pools trading this token, from the on-chain registry", backendSort: "pools", defaultAscending: false },
 ];
@@ -61,6 +61,12 @@ export type MarketTableProps = {
   busyAddress: string | null;
   compact?: boolean;
 };
+
+function MarketPrice({ row, live }: Pick<MergedRow, "row" | "live">) {
+  const price = live?.price ?? row.priceUsd;
+  if (!Number.isFinite(price) || price <= 0) return <span title="Price unavailable">—</span>;
+  return <span title={live ? "Price in USD" : "Last saved price; current price unavailable"}>{formatPrice(price)}{!live ? <span className="nt-sr-only"> (last saved price)</span> : null}</span>;
+}
 
 export function MarketTable({
   entries,
@@ -81,11 +87,14 @@ export function MarketTable({
   return (
     <div className={cx("ics-market-table", compact && "ics-market-table--compact")}>
       <div className="ics-market-cards">
-        {ordered.map(({ row, live }) => <button key={row.address} className="ics-market-card" type="button" onClick={() => onOpen(row.address)}>
+        {ordered.map(({ row, live }) => <div key={row.address} className="ics-market-card-item"><button className="ics-market-card" type="button" onClick={() => onOpen(row.address)}>
           <TokenMark address={row.address} symbol={row.symbol} />
-          <span className="ics-token-names"><strong className="ics-token-symbol">{row.symbol || row.address.slice(0, 8)} {row.pinned ? <span title="Pinned">★</span> : null}</strong><span className="ics-token-name">{live?.name || row.name || row.address}</span></span>
-          <span className="ics-market-card-values"><strong>{formatPrice(live?.price ?? row.priceUsd)}</strong><span className={`ics-change ics-change--${trendOf(live?.priceChange24H)}`}>{live ? formatPercent(live.priceChange24H) : "—"}</span></span>
-        </button>)}
+          <span className="ics-token-names" title={row.address}><strong className="ics-token-symbol">{row.symbol || row.address.slice(0, 8)}</strong><span className="ics-token-name">{live?.name || row.name || row.address}</span></span>
+          <span className="ics-market-card-values"><strong><MarketPrice row={row} live={live} /></strong><span className={`ics-change ics-change--${trendOf(live?.priceChange24H)}`} title="Price change over 24 hours">{live && Number.isFinite(live.priceChange24H) ? formatPercent(live.priceChange24H) : "—"}</span></span>
+        </button><span className="ics-market-card-actions">
+          <button className="nt-icon-button" type="button" aria-label={`${row.pinned ? "Unpin" : "Pin"} ${row.symbol || row.address}`} aria-pressed={row.pinned} title={row.pinned ? "Unpin" : "Pin to top"} disabled={busyAddress === row.address} onClick={() => onTogglePin(row)}>{row.pinned ? "★" : "☆"}</button>
+          <button className="nt-icon-button" type="button" aria-label={`Remove ${row.symbol || row.address} from watchlist`} title="Remove from watchlist" disabled={busyAddress === row.address} onClick={() => onRemove(row)}>✕</button>
+        </span></div>)}
       </div>
       <div className="ics-table-wrap nt-scroll-x"><table className="ics-table">
         <thead>
@@ -147,7 +156,7 @@ export function MarketTable({
                 <td className="ics-col-name">
                   <span className="ics-token-cell">
                     <TokenMark address={row.address} symbol={row.symbol} />
-                    <span className="ics-token-names">
+                    <span className="ics-token-names" title={row.address}>
                       <span className="ics-token-symbol">
                         {row.symbol || row.address.slice(0, 8)}
                         {row.pinned ? (
@@ -160,9 +169,9 @@ export function MarketTable({
                     </span>
                   </span>
                 </td>
-                <td>{formatPrice(live?.price ?? row.priceUsd)}</td>
+                <td><MarketPrice row={row} live={live} /></td>
                 <td className={`ics-change ics-change--${tone}`}>
-                  {change === undefined ? "-" : formatPercent(change)}
+                  {change === undefined || !Number.isFinite(change) ? "—" : formatPercent(change)}
                 </td>
                 <td>
                   {live ? formatUsdCompact(live.volumeUSD24H) : "-"}
@@ -171,7 +180,7 @@ export function MarketTable({
                 <td>{live ? formatUsdCompact(live.tvlUSD) : "-"}</td>
                 <td>{rank ? formatUsdCompact(rank.marketCap) : "-"}</td>
                 <td>
-                  {row.poolCount > 0 ? formatNumber(row.poolCount, 0) : "-"}
+                  {formatNumber(row.poolCount, 0)}
                 </td>
                 <td>
                   <Sparkline
@@ -186,7 +195,8 @@ export function MarketTable({
                 <td className="ics-col-actions">
                   <span className="ics-inline-actions">
                     <button
-                      aria-label={row.pinned ? "Unpin token" : "Pin token"}
+                      aria-label={`${row.pinned ? "Unpin" : "Pin"} ${row.symbol || row.address}`}
+                      aria-pressed={row.pinned}
                       className="nt-icon-button"
                       disabled={busy}
                       onClick={(event) => {
@@ -236,17 +246,20 @@ export function MarketKpis({
   const movers = useMemo(() => {
     let gainers = 0;
     let losers = 0;
+    let available = 0;
     for (const entry of entries) {
-      const change = entry.live?.priceChange24H ?? 0;
+      const change = entry.live?.priceChange24H;
+      if (change === undefined || !Number.isFinite(change)) continue;
+      available += 1;
       if (change > 0) gainers += 1;
       else if (change < 0) losers += 1;
     }
-    return { gainers, losers };
+    return { gainers, losers, available };
   }, [entries]);
 
   return <div className="ics-market-summary">
     <article><span className="nt-meta">ICP</span><strong>{icpPriceUsd > 0 ? formatPrice(icpPriceUsd) : "—"}</strong></article>
-    <article><span className="nt-meta">24h movers</span><strong><span className="ics-change--up">{movers.gainers} ↑</span><span className="ics-change--down">{movers.losers} ↓</span></strong></article>
+    <article><span className="nt-meta">24h movers</span><strong title={movers.available > 0 ? `Price changes available for ${movers.available} of ${entries.length} watched tokens` : "Price changes unavailable"}>{movers.available > 0 ? <><span className="ics-change--up">{movers.gainers} ↑</span><span className="ics-change--down">{movers.losers} ↓</span></> : "—"}</strong></article>
     <article><span className="nt-meta">Watching</span><strong title={`${formatCompact(universeSize, 0)} tokens on ICPSwap`}>{entries.length}</strong></article>
   </div>;
 }

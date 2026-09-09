@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
-import { buildLiquidityReceipt } from "../src/action_receipt.ts";
+import { buildLiquidityReceipt, buildSwapReceipt } from "../src/action_receipt.ts";
 import { createActionHandlers } from "../src/action_tools.ts";
 import type { ActionBackend, ActionPrepared } from "../src/action_backend.ts";
 
@@ -136,11 +136,27 @@ test("status returns typed liquidity receipt and retained plan provenance withou
   expect(calls).toEqual(["actionGet", "liquidityStatus"]);
 });
 
-test("existing swap receipt remains byte-for-byte compatible", async () => {
+test("historical swap receipt preserves legacy fields while distinguishing unknown payout from zero", async () => {
   const prepared = fixture(); prepared.operation.input_json = JSON.stringify({ version: 1, kind: "swap", owner: {}, input: {} });
   prepared.plan = { pool: POOL };
   prepared.receipt = { state: "settlement_pending", quoted_out: LARGE, received_out: "0", detail: "Existing swap evidence" };
   const handlers = createActionHandlers({ backendFor: () => ({ actionGet: async () => prepared.operation, swapStatus: async () => prepared } as unknown as ActionBackend), authorize: async () => {} });
   const result = await handlers.status({ operationId: ID }, { kernel: {} } as MsgBusToolContext);
-  expect(result.receipt).toEqual(prepared.receipt);
+  expect(result.receipt).toMatchObject(prepared.receipt);
+  expect(result.receipt).toMatchObject({ version: 1, kind: "swap", operationId: ID,
+    received_out_verified: false, netOutputAtoms: null,
+    settlement: { status: "unverified", payoutReferences: [] } });
+  expect(((result.receipt as JsonObject).settlement as JsonObject).reason).toContain("not an observed zero");
+  expect(prepared.receipt).not.toHaveProperty("netOutputAtoms");
+});
+
+test.each(["settlement_pending", "uncertain", "complete"])("%s alone cannot establish a swap's actual Wallet credit", (state) => {
+  const prepared = fixture(); prepared.operation.state = state;
+  prepared.receipt = { received_out: LARGE, swapped_out: LARGE, received_out_verified: true };
+  expect(buildSwapReceipt(prepared)).toMatchObject({ received_out: LARGE, received_out_verified: false,
+    netOutputAtoms: null, settlement: { status: "unverified" } });
+});
+
+test("a swap without a retained receipt does not manufacture one from its quote", () => {
+  expect(buildSwapReceipt(fixture())).toBeNull();
 });

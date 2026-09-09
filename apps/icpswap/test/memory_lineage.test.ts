@@ -45,6 +45,7 @@ async function successor() {
 test.each([
   ["0.2.1", "ccd9e6d4144785049c333c850da55797ad466e3ab471db54b0e264751909ea97"],
   ["0.2.2", "ceba67dcdddf64debb1f205857a27ec714c389078f4dab4377c11777fb296213"],
+  ["0.2.3", "1513aff1bab366becc4e179a3e4e618fce9f445933f2c8426a25e79dd126f90e"],
 ])("the update preserves all three release-%s roots and their complete schema dependencies", async (release, digest) => {
   const bytes = await readFile(new URL(`icpswap.v${release}.neutron`, app));
   expect(sha256(bytes)).toBe(digest);

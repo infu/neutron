@@ -9,6 +9,8 @@ import {
   parseHistoryPage,
   parseHistoryStatus,
   parseHistorySyncReport,
+  parseNormalizedHistoryStatus,
+  parseNormalizedHistorySyncReport,
 } from "../src/history.ts";
 
 const ledger = "mxzaz-hqaaa-aaaar-qaada-cai";
@@ -20,6 +22,43 @@ const subaccount = Uint8Array.from([
 const accountWithSubaccount = encodeIcrcAccount({
   owner: decodeIcrcAccount(ledger).owner,
   subaccount,
+});
+
+test("history freshness retains exact checkpoints, index identity, and sync-attempt times", () => {
+  const checkpoint = { tip_exclusive: "9007199254740993123", balance: "12345678901234567890", checked_at: "1800000000000000001" };
+  const status = parseHistoryStatus({
+    running: false,
+    ledgers: [{
+      ledger, enabled: true, source: { index: "n5wcd-faaaa-aaaar-qaaea-cai" }, state: { idle: null },
+      checkpoint, last_attempt_at: "1800000000000000002", last_success_at: checkpoint.checked_at,
+      transaction_count: "7", adjustment_count: "1",
+    }],
+  });
+  expect(status.ledgers[0]).toMatchObject({
+    index: "n5wcd-faaaa-aaaar-qaaea-cai",
+    checkpoint: { tipExclusive: checkpoint.tip_exclusive, balance: checkpoint.balance, checkedAt: checkpoint.checked_at },
+    lastAttemptAt: "1800000000000000002", lastSuccessAt: checkpoint.checked_at,
+  });
+  expect(parseNormalizedHistoryStatus(status)).toEqual(status);
+  const report = parseHistorySyncReport({
+    started_at: "1800000000000000002", finished_at: "1800000000000000003", skipped_overlap: false,
+    ledgers: [{ ledger, status: "unchanged", records_added: "0", checkpoint }],
+  });
+  expect(report).toMatchObject({
+    startedAt: "1800000000000000002", finishedAt: "1800000000000000003",
+    results: [{ status: "unchanged", checkpoint: status.ledgers[0]!.checkpoint }],
+  });
+  expect(parseNormalizedHistorySyncReport(report)).toEqual(report);
+});
+
+test("history freshness distinguishes an omitted checkpoint and rejects malformed present evidence", () => {
+  const status = {
+    running: false, ledgers: [{ ledger, enabled: true, source: { ledger: null }, state: { idle: null }, transaction_count: "0", adjustment_count: "0" }],
+  };
+  expect(parseHistoryStatus(status).ledgers[0]).toMatchObject({ index: null, checkpoint: null, lastAttemptAt: null, lastSuccessAt: null });
+  expect(() => parseHistoryStatus({
+    ...status, ledgers: [{ ...status.ledgers[0], checkpoint: { tip_exclusive: "not-a-block", balance: "0", checked_at: "1" } }],
+  })).toThrow("Invalid history checkpoint tip");
 });
 const accountId = Uint8Array.from(
   { length: 32 },

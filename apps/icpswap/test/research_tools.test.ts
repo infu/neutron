@@ -4,6 +4,13 @@ import { calculateLiquidityRange, registerTools, retainedPoolsFromOperations, ty
 import { type BrowserPoolView, type PoolIdentity } from "../src/liquidity_reads.ts";
 import { Q96 } from "../src/liquidity_math.ts";
 import { invalidateCache } from "../src/api.ts";
+import { IDL } from "@dfinity/candid";
+import { readFileSync } from "node:fs";
+import { extractPublicTypeAliases, motokoTypeToIdl, generateAppMethodSchemaArtifact, validateAppMethodArgs } from "neutron-scripts/src/method_schema.js";
+import { materializeSelfCallArguments, normalizeSelfCallResult } from "neutron-kernel/src/self_calls.ts";
+import { createActionBackend } from "../src/action_backend.ts";
+import { createBackendClient } from "../src/backend.ts";
+import type { NeutronManifest } from "neutron-tools/src/schema.js";
 
 const OWNER = "3rurp-vyaaa-aaaay-aacua-cai";
 const ICP = "ryjl3-tyaaa-aaaaa-aaaba-cai";
@@ -37,6 +44,49 @@ function fixture(overrides: Partial<ResearchToolDependencies> = {}) {
 }
 
 describe("ICPSwap research registration", () => {
+  test.each(["icpswap_liquidity_pool_v1", "icpswap_positions_v1"])("%s uses the generated one-unit account signature through its actual backend helper", async (name) => {
+    const source = readFileSync(new URL("../backend/main.mo", import.meta.url), "utf8");
+    const manifest = JSON.parse(readFileSync(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
+    const aliases = extractPublicTypeAliases(source);
+    const artifact = generateAppMethodSchemaArtifact(manifest, source);
+    const accountInput = motokoTypeToIdl(aliases.icpswap_account_Input!, IDL, aliases);
+    const accountOutput = motokoTypeToIdl(aliases.icpswap_account_Output!, IDL, aliases);
+    expect(validateAppMethodArgs(artifact, "icpswap_account", []).valid).toBe(false);
+    const calls: unknown[] = [];
+    const current = { ...context, kernel: {
+      querySelf: async (method: string, args: unknown[]) => {
+        calls.push({ method, args });
+        expect(method).toBe("icpswap_account");
+        const bound = materializeSelfCallArguments(args, [], [accountInput], { appId: manifest.id, appVersion: manifest.version, method });
+        expect(IDL.decode([accountInput], IDL.encode([accountInput], bound.args)) as unknown[]).toEqual([null]);
+        expect(validateAppMethodArgs(artifact, method, args as never).valid).toBe(true);
+        return normalizeSelfCallResult(IDL.decode([accountOutput], IDL.encode([accountOutput], [OWNER]))[0], accountOutput);
+      },
+      updateSelf: async () => { throw new Error("Account discovery must not mutate"); },
+    } as unknown as MsgBusToolContext["kernel"] };
+    const result = await fixture({ accountFor: (ctx) => createActionBackend(ctx.kernel).account() }).run(name, { pool: POOL }, current);
+    expect(result.owner).toBe(OWNER);
+    expect(result.complete).toBe(true);
+    expect(calls).toEqual([{ method: "icpswap_account", args: [null] }]);
+  });
+
+  test("every no-argument backend wrapper sends the generated Candid unit argument", async () => {
+    const aliases = extractPublicTypeAliases(readFileSync(new URL("../backend/main.mo", import.meta.url), "utf8"));
+    const unitMethods = Object.entries(aliases).filter(([name, type]) => name.endsWith("_Input") && type === "()").map(([name]) => name.slice(0, -6)).sort();
+    expect(unitMethods).toEqual(["icpswap_account", "icpswap_status"]);
+    const calls: string[] = [];
+    const client = { querySelf: async (method: string, args: unknown[]) => {
+      const type = motokoTypeToIdl(aliases[`${method}_Input`]!, IDL, aliases);
+      const bound = materializeSelfCallArguments(args, [], [type]);
+      expect(IDL.decode([type], IDL.encode([type], bound.args)) as unknown[]).toEqual([null]);
+      calls.push(method);
+      return method === "icpswap_account" ? OWNER : {};
+    } } as unknown as MsgBusToolContext["kernel"];
+    await createActionBackend(client).account();
+    await createBackendClient(client).getStatus();
+    expect(calls.sort()).toEqual(unitMethods);
+  });
+
   test("all descriptors validate and no research alias bypasses the saved action workflow", () => {
     const { handlers } = fixture();
     expect(handlers.has("icpswap_liquidity_range_v1")).toBe(true);

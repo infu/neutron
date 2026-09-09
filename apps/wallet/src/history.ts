@@ -107,6 +107,7 @@ export type HistoryLedgerStatus = {
   symbol: string | null;
   enabled: boolean;
   source: "index" | "ledger" | "unavailable";
+  index: string | null;
   state:
     | "idle"
     | "syncing"
@@ -115,9 +116,17 @@ export type HistoryLedgerStatus = {
     | "permission_required"
     | "degraded";
   lastError: string | null;
+  checkpoint: HistoryCheckpoint | null;
+  lastAttemptAt: string | null;
   lastSuccessAt: string | null;
   transactionCount: string;
   adjustmentCount: string;
+};
+
+export type HistoryCheckpoint = {
+  tipExclusive: string;
+  balance: string;
+  checkedAt: string;
 };
 
 export type HistoryStatus = {
@@ -126,13 +135,89 @@ export type HistoryStatus = {
 };
 
 export type HistorySyncReport = {
+  startedAt: string | null;
+  finishedAt: string | null;
   skippedOverlap: boolean;
   results: Array<{
     ledger: string;
     status: string;
     recordsAdded: string;
+    checkpoint: HistoryCheckpoint | null;
     error: string | null;
   }>;
+};
+
+const nullableTextSchema: JsonObject = { oneOf: [{ type: "string" }, { type: "null" }] };
+const natSchema: JsonObject = { type: "string", pattern: "^0$|^[1-9][0-9]{0,79}$" };
+const intSchema: JsonObject = { type: "string", pattern: "^-?0$|^-?[1-9][0-9]{0,79}$" };
+const nullableIntSchema: JsonObject = { oneOf: [intSchema, { type: "null" }] };
+const checkpointSchema: JsonObject = {
+  description: "Last committed reconciliation checkpoint. checkedAt is nanoseconds and can advance after an unchanged-balance check without reading history. For an index, tipExclusive is the newest committed account block plus one; for direct ledger scans it is the captured ledger boundary. It is not proof of complete history or an absent payout.",
+  oneOf: [{ type: "null" }, {
+    type: "object",
+    required: ["tipExclusive", "balance", "checkedAt"],
+    properties: { tipExclusive: natSchema, balance: natSchema, checkedAt: intSchema },
+    additionalProperties: false,
+  }],
+};
+
+export const historyStatusSchema: JsonObject = {
+  type: "object",
+  description: "Cached per-ledger reconciliation status. lastSuccessAt records a successful checkpoint action, including baseline, unchanged-balance, or incomplete scan-limit reconciliation; it does not establish complete or freshly indexed transaction history.",
+  required: ["running", "ledgers"],
+  properties: {
+    running: { type: "boolean" },
+    ledgers: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["ledger", "symbol", "enabled", "source", "index", "state", "checkpoint", "lastAttemptAt", "lastSuccessAt", "lastError", "transactionCount", "adjustmentCount"],
+        properties: {
+          ledger: { type: "string" },
+          symbol: nullableTextSchema,
+          enabled: { type: "boolean" },
+          source: { type: "string", enum: ["index", "ledger", "unavailable"] },
+          index: nullableTextSchema,
+          state: { type: "string", enum: ["idle", "syncing", "catching_up", "waiting_for_index", "permission_required", "degraded"] },
+          checkpoint: checkpointSchema,
+          lastAttemptAt: nullableIntSchema,
+          lastSuccessAt: nullableIntSchema,
+          lastError: nullableTextSchema,
+          transactionCount: natSchema,
+          adjustmentCount: natSchema,
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  additionalProperties: false,
+};
+
+export const historySyncReportSchema: JsonObject = {
+  type: "object",
+  description: "One history synchronization attempt. unchanged means no history-source scan was needed by balance reconciliation; baseline does not backfill prior history. skippedOverlap means another attempt was already running. Inspect each status and error; a finished attempt does not prove complete history.",
+  required: ["startedAt", "finishedAt", "skippedOverlap", "results"],
+  properties: {
+    startedAt: nullableIntSchema,
+    finishedAt: nullableIntSchema,
+    skippedOverlap: { type: "boolean" },
+    results: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["ledger", "status", "recordsAdded", "checkpoint", "error"],
+        properties: {
+          ledger: { type: "string" },
+          status: { type: "string" },
+          recordsAdded: natSchema,
+          checkpoint: checkpointSchema,
+          error: nullableTextSchema,
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  additionalProperties: false,
 };
 
 const operations: HistoryOperation[] = [
@@ -170,6 +255,14 @@ export function parseHistoryPage(value: unknown): HistoryPage {
 }
 
 export function parseHistoryStatus(value: unknown): HistoryStatus {
+  return parseStatus(value, false);
+}
+
+export function parseNormalizedHistoryStatus(value: unknown): HistoryStatus {
+  return parseStatus(value, true);
+}
+
+function parseStatus(value: unknown, normalized: boolean): HistoryStatus {
   const record = requiredObject(value, "history status");
   if (typeof record.running !== "boolean" || !Array.isArray(record.ledgers)) {
     throw new Error("Invalid history status");
@@ -184,17 +277,23 @@ export function parseHistoryStatus(value: unknown): HistoryStatus {
       ) {
         throw new Error("Invalid ledger history status");
       }
+      const source = requiredVariant(
+        normalized ? { [String(ledger.source)]: ledger.index } : ledger.source,
+        ["index", "ledger", "unavailable"],
+        "history source",
+      );
+      const index = source === "index"
+        ? optionalString(normalized ? ledger.index : (ledger.source as JsonObject).index)
+        : null;
+      const field = (wire: string, camel: string): unknown => ledger[normalized ? camel : wire];
       return {
         ledger: ledger.ledger,
         symbol: optionalString(ledger.symbol),
         enabled: ledger.enabled,
-        source: requiredVariant(
-          ledger.source,
-          ["index", "ledger", "unavailable"],
-          "history source",
-        ),
+        source,
+        index,
         state: requiredVariant(
-          ledger.state,
+          normalized ? { [String(ledger.state)]: null } : ledger.state,
           [
             "idle",
             "syncing",
@@ -205,14 +304,16 @@ export function parseHistoryStatus(value: unknown): HistoryStatus {
           ],
           "history state",
         ),
-        lastError: optionalString(ledger.last_error),
-        lastSuccessAt: optionalInt(ledger.last_success_at),
+        checkpoint: parseCheckpoint(ledger.checkpoint, normalized),
+        lastAttemptAt: optionalInt(field("last_attempt_at", "lastAttemptAt")),
+        lastError: optionalString(field("last_error", "lastError")),
+        lastSuccessAt: optionalInt(field("last_success_at", "lastSuccessAt")),
         transactionCount: requiredNat(
-          ledger.transaction_count,
+          field("transaction_count", "transactionCount"),
           "history transaction count",
         ),
         adjustmentCount: requiredNat(
-          ledger.adjustment_count,
+          field("adjustment_count", "adjustmentCount"),
           "history adjustment count",
         ),
       };
@@ -221,16 +322,28 @@ export function parseHistoryStatus(value: unknown): HistoryStatus {
 }
 
 export function parseHistorySyncReport(value: unknown): HistorySyncReport {
+  return parseSyncReport(value, false);
+}
+
+export function parseNormalizedHistorySyncReport(value: unknown): HistorySyncReport {
+  return parseSyncReport(value, true);
+}
+
+function parseSyncReport(value: unknown, normalized: boolean): HistorySyncReport {
   const record = requiredObject(value, "history sync report");
+  const skippedOverlap = record[normalized ? "skippedOverlap" : "skipped_overlap"];
+  const results = record[normalized ? "results" : "ledgers"];
   if (
-    typeof record.skipped_overlap !== "boolean" ||
-    !Array.isArray(record.ledgers)
+    typeof skippedOverlap !== "boolean" ||
+    !Array.isArray(results)
   ) {
     throw new Error("Invalid history sync report");
   }
   return {
-    skippedOverlap: record.skipped_overlap,
-    results: record.ledgers.map((candidate) => {
+    startedAt: optionalInt(record[normalized ? "startedAt" : "started_at"]),
+    finishedAt: optionalInt(record[normalized ? "finishedAt" : "finished_at"]),
+    skippedOverlap,
+    results: results.map((candidate) => {
       const result = requiredObject(candidate, "history sync result");
       if (typeof result.ledger !== "string" || typeof result.status !== "string") {
         throw new Error("Invalid history sync result");
@@ -238,10 +351,21 @@ export function parseHistorySyncReport(value: unknown): HistorySyncReport {
       return {
         ledger: result.ledger,
         status: result.status,
-        recordsAdded: requiredNat(result.records_added, "history records added"),
+        recordsAdded: requiredNat(result[normalized ? "recordsAdded" : "records_added"], "history records added"),
+        checkpoint: parseCheckpoint(result.checkpoint, normalized),
         error: optionalString(result.error),
       };
     }),
+  };
+}
+
+function parseCheckpoint(value: unknown, normalized = false): HistoryCheckpoint | null {
+  if (value == null) return null;
+  const checkpoint = requiredObject(value, "history checkpoint");
+  return {
+    tipExclusive: requiredNat(checkpoint[normalized ? "tipExclusive" : "tip_exclusive"], "history checkpoint tip"),
+    balance: requiredNat(checkpoint.balance, "history checkpoint balance"),
+    checkedAt: requiredInt(checkpoint[normalized ? "checkedAt" : "checked_at"], "history checkpoint time"),
   };
 }
 

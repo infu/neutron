@@ -248,6 +248,17 @@
     gap: 0;
     margin: 0;
   }
+  .ics-swap-quote { display: grid; gap: 9px; }
+  .ics-swap-minimum { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 11px; color: var(--nt-text-muted); }
+  .ics-swap-minimum > span { flex: none; }
+  .ics-swap-minimum small { color: var(--nt-text-faint); font-size: 10px; }
+  .ics-swap-minimum strong { color: var(--nt-text); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+  .ics-swap-quote-details { color: var(--nt-text-faint); font-size: 11px; }
+  .ics-swap-quote-details > summary { cursor: pointer; width: max-content; }
+  .ics-swap-quote-details[open] > summary { margin-bottom: 6px; }
+  .ics-swap-quote-error { display: grid; gap: 8px; }
+  .ics-swap-quote-error > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ics-swap-quote-error strong { font-weight: 500; font-size: 12px; }
 
   .ics-swap-fact {
     align-items: baseline;
@@ -264,7 +275,6 @@
 
   .ics-swap-fact dd {
     color: var(--nt-text-strong);
-    font-family: var(--nt-font-mono);
     font-size: var(--nt-font-size-meta);
     font-variant-numeric: tabular-nums;
     margin: 0;
@@ -809,10 +819,22 @@
   .ics-swap-settings .ics-swap-slippage { position: absolute; right: 0; top: calc(100% + 4px); padding: 8px; background: var(--nt-bg-elevated); border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-control); z-index: 3; }
   .ics-swap-select { appearance: auto; padding-right: 1px; }
   .ics-swap-select option { color: var(--nt-text); background: var(--nt-bg-panel); }
-  .ics-amount-allocation { display: grid; gap: 2px; margin-top: 6px; }
+  .ics-swap-balance { gap: 8px; min-height: 24px; }
+  .ics-swap-balance .nt-meta { min-width: 0; overflow-wrap: anywhere; }
+  .ics-swap-balance .nt-meta, .ics-market-summary .nt-meta { font-family: inherit; }
+  .ics-swap-balance strong { font-weight: 500; color: var(--nt-text); font-variant-numeric: tabular-nums; }
+  .ics-balance-refresh { flex: none; width: 24px; height: 24px; min-height: 24px; font-size: 16px; color: var(--nt-text-muted); }
+  .ics-wallet-setup { display: grid; gap: 6px; }
+  .ics-wallet-setup > p { margin: 0; overflow-wrap: anywhere; }
+  .ics-amount-allocation { display: grid; gap: 5px; margin-top: 8px; }
+  .ics-allocation-label { align-items: center; font-size: 10px; color: var(--nt-text-faint); }
+  .ics-allocation-label output { color: var(--nt-text-muted); font-variant-numeric: tabular-nums; }
   .ics-amount-allocation input { width: 100%; min-width: 0; height: 16px; margin: 0; accent-color: var(--nt-accent); }
   .ics-amount-allocation > div { display: flex; justify-content: space-between; }
-  .ics-amount-allocation button { font-size: 11px; color: var(--nt-text-muted); background: none; border: none; cursor: pointer; padding: 4px 0; }
+  .ics-amount-allocation input:disabled { opacity: .4; }
+  .ics-amount-allocation button { min-width: 30px; font-size: 11px; color: var(--nt-text-muted); background: none; border: none; border-radius: 4px; cursor: pointer; padding: 4px; }
+  .ics-amount-allocation button[aria-pressed="true"] { color: var(--nt-accent); background: color-mix(in srgb, var(--nt-accent) 9%, transparent); }
+  .ics-amount-allocation button:disabled { cursor: default; opacity: .4; }
   .ics-inline-note { font-size: 12px; color: var(--nt-text-muted); }
   .ics-inline-note summary { cursor: pointer; }
   .ics-inline-note p { margin: 8px 0 0; }
@@ -825,6 +847,12 @@
   .ics-market-cards { display: none; }
   .ics-market-card { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; border: 0; border-bottom: 1px solid var(--nt-line-subtle); background: transparent; color: inherit; padding: 12px 0; text-align: left; cursor: pointer; }
   .ics-market-card:hover { background: var(--nt-bg-control-hover); }
+  .ics-market-card-item { display: flex; align-items: center; gap: 6px; min-width: 0; border-bottom: 1px solid var(--nt-line-subtle); }
+  .ics-market-card-item > .ics-market-card { flex: 1; min-width: 0; border-bottom: 0; }
+  .ics-market-card-actions { display: grid; gap: 2px; flex: none; }
+  .ics-market-card-actions .nt-icon-button { width: 24px; height: 24px; min-height: 24px; color: var(--nt-text-faint); font-size: 12px; }
+  .ics-market-card-actions .nt-icon-button:hover, .ics-market-card-actions .nt-icon-button[aria-pressed="true"] { color: var(--nt-accent); }
+  .ics-picker-status { display: none; font-size: 10px; color: var(--nt-text-muted); }
   .ics-market-card .ics-token-names { flex: 1; }
   .ics-market-card-values { display: grid; justify-items: end; gap: 3px; font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
   .ics-market-card-values strong { color: var(--nt-text-strong); font-weight: 500; font-size: 13px; }
@@ -868,6 +896,7 @@
     .ics-picker-search { order: 2; flex-basis: 100%; }
     .ics-picker-row { gap: 8px; padding: 10px 12px; }
     .ics-picker-row > .nt-tag { display: none; }
+    .ics-picker-status { display: inline; }
     .ics-picker-stats .nt-meta { display: none; }
     .ics-picker-canister { max-width: 200px; }
   }
@@ -975,19 +1004,41 @@
   .ics-unused-funds { background: var(--nt-bg-control); padding: 12px; border-radius: var(--nt-radius-control); display: grid; gap: 6px; font-size: 12px; }
   .ics-unused-funds > strong { font-weight: 500; }
   .ics-unused-funds > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .ics-liquidity-editor { width: 100%; max-width: 620px; gap: 16px; min-width: 0; }
-  .ics-liquidity-editor > .ics-pair-heading { padding-bottom: 4px; }
-  .ics-range-editor { display: grid; gap: 12px; min-width: 0; }
+  .ics-liquidity-editor { width: 100%; max-width: 720px; gap: 12px; min-width: 0; margin-inline: auto; }
+  .ics-liquidity-editor .nt-meta, .ics-action-card .nt-meta { font-family: inherit; }
+  .ics-editor-pair { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 0 0 4px; }
+  .ics-editor-price { color: var(--nt-text-muted); font-size: 11px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .ics-range-editor { display: grid; gap: 10px; min-width: 0; border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-panel); padding: 12px; }
+  .ics-range-editor > header { flex-wrap: wrap; gap: 6px; }
+  .ics-range-editor .ics-metric-info > p { left: -66px; }
   .ics-range-presets { display: flex; flex-wrap: wrap; gap: 6px; }
   .ics-range-presets > button { flex: 1; white-space: nowrap; }
+  .ics-range-presets > button[aria-pressed="true"] { background: color-mix(in srgb, var(--nt-accent) 14%, var(--nt-bg-control)); border-color: color-mix(in srgb, var(--nt-accent) 55%, var(--nt-line-subtle)); color: var(--nt-accent); }
+  .ics-editor-range-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; color: var(--nt-text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .ics-editor-range-summary small { font-size: 10px; }
+  .ics-custom-range { font-size: 11px; color: var(--nt-text-muted); }
+  .ics-custom-range > summary { cursor: pointer; padding-block: 2px; }
+  .ics-custom-range[open] > summary { margin-bottom: 10px; }
   .ics-range-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .ics-range-inputs label { display: grid; gap: 6px; min-width: 0; color: var(--nt-text-muted); font-size: 12px; }
   .ics-range-inputs input { width: 100%; min-width: 0; box-sizing: border-box; font-size: 13px; font-variant-numeric: tabular-nums; }
   .ics-range-observation { display: flex; flex-wrap: wrap; gap: 6px; justify-content: space-between; font-size: 11px; color: var(--nt-text-muted); }
   .ics-liquidity-deposits { display: grid; gap: 8px; }
-  .ics-liquidity-amount { background: var(--nt-bg-control); padding: 12px; border-radius: var(--nt-radius-panel); display: grid; gap: 10px; min-width: 0; }
+  .ics-liquidity-amount { background: var(--nt-bg-control); padding: 10px 12px; border-radius: var(--nt-radius-panel); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; min-width: 0; }
   .ics-liquidity-amount > label { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
-  .ics-liquidity-amount > input { text-align: left; width: 100%; min-width: 0; }
+  .ics-liquidity-amount > input { text-align: right; width: 100%; min-width: 0; font-size: 22px; }
+  .ics-liquidity-amount > .ics-swap-leg-foot { grid-column: 1 / -1; min-height: 18px; }
+  .ics-liquidity-amount > .ics-wallet-token-setup { grid-column: 1 / -1; justify-self: start; }
+  .ics-liquidity-amount .ics-amount-allocation { grid-column: 1 / -1; margin-top: 2px; padding-top: 0; gap: 4px; }
+  .ics-liquidity-amount .ics-allocation-label > span { display: inline-flex; align-items: center; gap: 3px; }
+  .ics-liquidity-amount .ics-metric-info > p { left: -67px; }
+  .ics-liquidity-estimate { display: grid; gap: 10px; padding: 12px; background: var(--nt-bg-control); border-radius: var(--nt-radius-control); }
+  .ics-liquidity-estimate h3 { font-size: 11px; color: var(--nt-text-muted); font-weight: 500; margin: 0; }
+  .ics-liquidity-estimate > p { margin: 0; font-size: 11px; }
+  .ics-form-note { font-size: 11px; color: var(--nt-text-muted); line-height: 1.5; margin: 0; }
+  .ics-editor-error { display: grid; justify-items: start; gap: 8px; }
+  .ics-editor-error > p { margin: 0; overflow-wrap: anywhere; }
+  .ics-liquidity-submit { width: 100%; }
   .ics-remove-allocation { display: grid; gap: 14px; }
   .ics-remove-allocation > label { display: flex; justify-content: space-between; color: var(--nt-text-muted); }
   .ics-remove-allocation > label strong { color: var(--nt-text-strong); font-size: 20px; }
@@ -997,11 +1048,16 @@
   .ics-withdraw-input input { min-width: 0; flex: 1; }
   .ics-action-card { border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-panel); padding: 14px; display: grid; gap: 10px; min-width: 0; }
   .ics-action-card > p { margin: 0; font-size: 12px; color: var(--nt-text-muted); overflow-wrap: anywhere; }
+  .ics-action-card > header { align-items: start; flex-wrap: wrap; gap: 6px; }
+  .ics-action-state { padding: 3px 6px; border-radius: 4px; background: var(--nt-bg-control); }
+  .ics-action-state--settlement_pending { color: var(--nt-text-muted); }
   .ics-action-state--complete, .ics-action-state--completed { color: var(--ics-up); }
   .ics-action-state--stopped, .ics-action-state--uncertain, .ics-action-state--ambiguous { color: var(--nt-warning); }
   .ics-action-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--nt-text-faint); justify-content: space-between; }
   .ics-action-details { color: var(--nt-text-muted); font-size: 11px; min-width: 0; }
   .ics-action-details summary { cursor: pointer; padding: 4px; }
+  .ics-action-details { border-top: 1px solid var(--nt-line-subtle); padding-top: 6px; }
+  .ics-action-details p, .ics-action-details li { overflow-wrap: anywhere; line-height: 1.5; }
   .ics-action-details[open] { flex-basis: 100%; }
   .ics-action-details dl { display: grid; gap: 8px; }
   .ics-action-details dl > div { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(0, 2fr); gap: 8px; }

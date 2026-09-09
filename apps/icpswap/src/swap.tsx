@@ -26,7 +26,8 @@ import { createRequestId } from "./funding.ts";
 import { runSwapAction, type ActionProgress, type SwapActionInput } from "./action_client.ts";
 import { formatNumber, formatTokenAmount } from "./format.ts";
 import { TokenMark } from "./token_mark.tsx";
-import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
+import { amountAtPercent, percentForAmount, spendableBalance } from "./amount_allocation.ts";
+import { addLedgerToWallet, readTokenInfo, walletSetupRequired, type WalletTokenInfo } from "./wallet.ts";
 
 /** Slippage presets, in thousandths of a percent, as ICPSwap carries them. */
 const SLIPPAGE_PRESETS = [100, 500, 1000, 5000] as const;
@@ -85,12 +86,18 @@ export function SwapPanel({
   // fee in force, and how much of it this Neutron actually holds. Without this
   // the panel can only guess at precision, which is how it used to render a
   // form that could never quote.
-  const [payInfoState, setPayInfo] = useState<WalletTokenInfo | null>(null);
-  const [payInfoError, setPayInfoError] = useState<string | null>(null);
+  const [balance, setBalance] = useState<{ ledger: string; phase: "loading" | "ready" | "error"; info: WalletTokenInfo | null; error: string | null } | null>(null);
   const [balanceRead, setBalanceRead] = useState(0);
   const [tokenInfoRevision, setTokenInfoRevision] = useState(0);
-  const readBalance = balanceRead > 0;
-  const payInfo = payInfoState?.ledger === input.address ? payInfoState : null;
+  const [allocation, setAllocation] = useState<{ ledger: string; amount: string; maximum: bigint; percent: number } | null>(null);
+  const [walletSetup, setWalletSetup] = useState<{ ledger: string; pending: boolean; error: string | null } | null>(null);
+  const walletSetupController = useRef<AbortController | null>(null);
+  const currentInput = useRef(input.address); currentInput.current = input.address;
+  const currentBalance = balance?.ledger === input.address ? balance : null;
+  const payInfo = currentBalance?.info ?? null;
+  const payInfoError = currentBalance?.error ?? null;
+  const balanceLoading = !currentBalance || currentBalance.phase === "loading";
+  const availablePayInfo = currentBalance?.phase === "ready" ? payInfo : null;
   const mounted = useRef(true);
   // Held across a retry so a resumed attempt is provably the same attempt and
   // the Wallet replays instead of asking the owner twice.
@@ -100,6 +107,7 @@ export function SwapPanel({
     mounted.current = true;
     return () => { mounted.current = false; quoteSequence.current += 1; };
   }, []);
+  useEffect(() => () => walletSetupController.current?.abort(), [input.address]);
 
   // The Wallet is authoritative on precision; the watchlist row is only a
   // fallback for the moment before it answers.
@@ -110,7 +118,7 @@ export function SwapPanel({
     [amount, payDecimals],
   );
 
-  const busy = phase.kind === "funding" || phase.kind === "swapping";
+  const busy = phase.kind === "funding" || phase.kind === "swapping" || walletSetup?.pending === true;
   const quoteInputKey = `${input.address}:${output?.address ?? ""}:${amountIn?.toString() ?? ""}:${slippage}`;
   const quote = quoteKey === quoteInputKey ? quoteState : null;
 
@@ -119,72 +127,85 @@ export function SwapPanel({
   // form, a flow that looks ready, and no quote. This also catches a token
   // whose decimals this Neutron has not read yet, which reports as zero.
   const amountProblem = useMemo(
-    () => describeAmountProblem(amount, payDecimals, input.symbol),
+    () => /^(?:0+(?:\.0*)?|\.0+)$/u.test(amount.trim()) ? null : describeAmountProblem(amount, payDecimals, input.symbol),
     [amount, payDecimals, input.symbol],
   );
 
-  // Reading a token from the Wallet needs the owner's consent, so it is asked
-  // for only once they are actually pricing a swap — a chosen pair and a real
-  // amount. Firing it when the panel merely opens would put a permission
-  // dialog in front of someone who is only looking.
-  //
-  // It is an enhancement, never a requirement: without it the panel falls back
-  // to the decimals ICPSwap's own curated list reports and simply skips the
-  // fee cross-check.
-  const wantsWalletInfo = readBalance || (Boolean(output) && amount.trim() !== "");
-
+  // Read the selected token as soon as the swap opens. The Wallet remains the
+  // authority for its balance and ledger fee; failed refreshes disable sizing
+  // without turning the old observation into a usable current balance.
   useEffect(() => {
-    if (!wantsWalletInfo) return;
-    let cancelled = false;
+    if (busy) return;
     const controller = new AbortController();
-    setPayInfoError(null);
+    setBalance((previous) => ({ ledger: input.address, phase: "loading", info: previous?.ledger === input.address ? previous.info : null, error: null }));
     void (async () => {
-      const client = createMsgBusClient();
       try {
-        const info = await readTokenInfo(client, input.address, controller.signal);
-        if (cancelled || !mounted.current) return;
-        setPayInfo(info);
-        await setTokenInfo(input.address, info.decimals, info.feeAtoms);
-        if (!cancelled && mounted.current) setTokenInfoRevision((value) => value + 1);
+        const info = await readTokenInfo(createMsgBusClient(), input.address, controller.signal);
+        if (controller.signal.aborted || !mounted.current) return;
+        setBalance({ ledger: input.address, phase: "ready", info, error: null });
+        // Publishing metadata for quote construction is separate from whether
+        // the live Wallet balance was successfully read.
+        await setTokenInfo(info.ledger, info.decimals, info.feeAtoms).catch(() => undefined);
+        if (!controller.signal.aborted && mounted.current) setTokenInfoRevision((value) => value + 1);
       } catch (error) {
-        if (cancelled || !mounted.current) return;
-        setPayInfoError(error instanceof Error ? error.message : String(error));
-        return;
-      }
-      // The output token's facts matter to the backend for the same reasons,
-      // but the panel itself never needs them.
-      if (!output) return;
-      try {
-        const info = await readTokenInfo(client, output.address, controller.signal);
-        if (cancelled || !mounted.current) return;
-        await setTokenInfo(output.address, info.decimals, info.feeAtoms);
-        if (!cancelled && mounted.current) setTokenInfoRevision((value) => value + 1);
-      } catch {
-        // A token the owner has not selected in Wallet cannot be funded
-        // either; the quote or the funding call will say so.
+        if (controller.signal.aborted || !mounted.current) return;
+        setBalance((previous) => ({ ledger: input.address, phase: "error", info: previous?.ledger === input.address ? previous.info : null, error: error instanceof Error ? error.message : String(error) }));
       }
     })();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [input.address, output, wantsWalletInfo, balanceRead]);
+    return () => controller.abort();
+  }, [input.address, balanceRead, busy]);
 
-  // A different input token invalidates what we know about the old one.
+  // The receive token's metadata helps quotes, but its read never replaces the
+  // selected pay-token balance. The shared Wallet client queues both reads.
   useEffect(() => {
-    setPayInfo(null);
-    setPayInfoError(null);
-    setBalanceRead(0);
-  }, [input.address]);
+    if (!output || busy) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const info = await readTokenInfo(createMsgBusClient(), output.address, controller.signal);
+        if (controller.signal.aborted || !mounted.current) return;
+        await setTokenInfo(info.ledger, info.decimals, info.feeAtoms);
+        if (!controller.signal.aborted && mounted.current) setTokenInfoRevision((value) => value + 1);
+      } catch { /* Quotes retain their existing unavailable-metadata diagnostic. */ }
+    })();
+    return () => controller.abort();
+  }, [output?.address, busy]);
 
-  /** The most that can be swapped: the balance less the two ledger fees. */
-  const maxSpendable = useMemo(() => {
-    if (!payInfo) return null;
-    const reserved = payInfo.feeAtoms * 2n;
-    return payInfo.balanceAtoms > reserved
-      ? payInfo.balanceAtoms - reserved
-      : 0n;
-  }, [payInfo]);
+  // A return from another browser tab refreshes the observation. Explicit
+  // refresh and completion of any swap attempt also read the current balance.
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === "visible" && !busy) setBalanceRead((value) => value + 1); };
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, [busy]);
+
+  const maxSpendable = availablePayInfo ? spendableBalance(availablePayInfo.balanceAtoms, availablePayInfo.feeAtoms) : null;
+  const allocationDisabled = busy || maxSpendable === null || maxSpendable === 0n;
+  const selectedPercent = allocation?.ledger === input.address && allocation.amount === amount && allocation.maximum === maxSpendable
+    ? allocation.percent : percentForAmount(amountIn, maxSpendable);
+  const chooseAllocation = (percent: number) => {
+    if (allocationDisabled || !availablePayInfo || maxSpendable === null) return;
+    const next = fromBaseUnits(amountAtPercent(maxSpendable, percent), availablePayInfo.decimals);
+    setAmount(next);
+    setAllocation({ ledger: input.address, amount: next, maximum: maxSpendable, percent });
+  };
+
+  const setupWalletToken = async () => {
+    if (busy || !walletSetupRequired(payInfoError)) return;
+    const ledger = input.address, controller = new AbortController();
+    walletSetupController.current = controller;
+    setWalletSetup({ ledger, pending: true, error: null });
+    try {
+      await addLedgerToWallet(createMsgBusClient(), ledger, controller.signal);
+      if (!mounted.current || controller.signal.aborted || currentInput.current !== ledger) return;
+      setBalanceRead((value) => value + 1);
+    } catch (error) {
+      if (!mounted.current || controller.signal.aborted || currentInput.current !== ledger) return;
+      setWalletSetup({ ledger, pending: true, error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (mounted.current && walletSetupController.current === controller) setWalletSetup((previous) => previous?.ledger === ledger ? { ...previous, pending: false } : previous);
+    }
+  };
 
   const overBalance =
     amountIn !== null && maxSpendable !== null && amountIn > maxSpendable;
@@ -327,37 +348,24 @@ export function SwapPanel({
               disabled={busy}
               id="ics-swap-amount"
               inputMode="decimal"
-              onChange={(event) => setAmount(event.target.value)}
+              onChange={(event) => { setAmount(event.target.value); setAllocation(null); }}
               placeholder="0.0"
               spellCheck={false}
               value={amount}
             />
           </div>
-          {payInfo ? (
-            <div className="ics-swap-leg-foot">
-              <span className="nt-meta">
-                Balance {formatTokenAmount(payInfo.balanceAtoms, payInfo.decimals)}{" "}
-                {payInfo.symbol}
-              </span>
-              <button
-                className="nt-button nt-button--ghost nt-button--sm"
-                disabled={busy || maxSpendable === null || maxSpendable === 0n}
-                onClick={() => {
-                  if (maxSpendable !== null) {
-                    setAmount(fromBaseUnits(maxSpendable, payInfo.decimals));
-                  }
-                }}
-                title="Your balance, less the approval fee and the pool's transfer fee"
-                type="button"
-              >
-                Max
-              </button>
-            </div>
-          ) : <div className="ics-swap-leg-foot"><button className="nt-button nt-button--ghost nt-button--sm" disabled={busy || (readBalance && !payInfoError)} onClick={() => setBalanceRead((revision) => revision + 1)} type="button">{readBalance && !payInfoError ? "Reading balance…" : "Show balance"}</button></div>}
-          {payInfo && maxSpendable !== null && maxSpendable > 0n ? <div className="ics-amount-allocation">
-            <input type="range" min="0" max="100" step="1" aria-label="Percentage of spendable balance" disabled={busy} value={Number(((amountIn ?? 0n) * 100n) / maxSpendable) > 100 ? 100 : Number(((amountIn ?? 0n) * 100n) / maxSpendable)} onChange={(event) => setAmount(fromBaseUnits((maxSpendable * BigInt(event.target.value)) / 100n, payInfo.decimals))} />
-            <div>{[25, 50, 75, 100].map((percent) => <button key={percent} type="button" disabled={busy} onClick={() => setAmount(fromBaseUnits((maxSpendable * BigInt(percent)) / 100n, payInfo.decimals))}>{percent === 100 ? "Max" : `${percent}%`}</button>)}</div>
-          </div> : null}
+          <div className="ics-swap-leg-foot ics-swap-balance">
+            <span className="nt-meta" aria-live="polite" title={availablePayInfo ? `Wallet balance ${fromBaseUnits(availablePayInfo.balanceAtoms, availablePayInfo.decimals)} ${availablePayInfo.symbol}` : undefined}>
+              {balanceLoading ? "Reading balance…" : availablePayInfo ? <>Balance <strong>{formatTokenAmount(availablePayInfo.balanceAtoms, availablePayInfo.decimals)} {availablePayInfo.symbol}</strong></> : "Balance unavailable"}
+            </span>
+            <button className="nt-icon-button ics-balance-refresh" type="button" aria-label="Refresh Wallet balance" title="Refresh balance" disabled={busy || balanceLoading} onClick={() => setBalanceRead((value) => value + 1)}>↻</button>
+          </div>
+          {walletSetupRequired(payInfoError) ? <div className="ics-wallet-setup"><button className="nt-button nt-button--secondary nt-button--sm" type="button" disabled={busy} onClick={() => void setupWalletToken()}>{walletSetup?.pending && walletSetup.ledger === input.address ? "Adding to Wallet…" : `Add ${input.symbol} to Wallet`}</button>{walletSetup?.ledger === input.address && walletSetup.error ? <p className="nt-meta" role="status">{walletSetup.error}</p> : null}</div> : null}
+          <div className="ics-amount-allocation" aria-label="Choose swap amount">
+            <div className="ics-allocation-label"><span>{maxSpendable === 0n ? availablePayInfo?.balanceAtoms === 0n ? "No balance to swap" : "Balance reserved for fees" : "Amount to swap"}</span><output aria-label="Selected balance percentage">{selectedPercent}%</output></div>
+            <input type="range" min="0" max="100" step="1" aria-label="Percentage of spendable balance" aria-valuetext={`${selectedPercent}% of the balance after ledger fees`} disabled={allocationDisabled} value={selectedPercent} onChange={(event) => chooseAllocation(Number(event.target.value))} />
+            <div className="ics-allocation-presets">{[0, 25, 50, 75, 100].map((percent) => <button key={percent} type="button" disabled={allocationDisabled} aria-pressed={!allocationDisabled && selectedPercent === percent} onClick={() => chooseAllocation(percent)} title={percent === 100 ? "Your balance, less the approval fee and the pool's transfer fee" : undefined}>{percent === 100 ? "Max" : `${percent}%`}</button>)}</div>
+          </div>
         </div>
 
         <span aria-hidden="true" className="ics-swap-arrow">
@@ -397,28 +405,21 @@ export function SwapPanel({
             >
               {quote
                 ? formatTokenAmount(quote.expectedOut, quote.decimalsOut)
-                : quoting
-                  ? "…"
-                  : "0.0"}
+                : "—"}
             </span>
           </div>
+          {output && amountIn !== null && !quote ? <div className="ics-swap-leg-foot"><span className="nt-meta" role="status">{quoteError ? "Quote unavailable" : quoting ? "Getting quote…" : "Preparing quote…"}</span></div> : null}
         </div>
       </div>
 
-      {quote ? <dl className="ics-swap-facts">
+      {quote ? <div className="ics-swap-quote">
+        <div className="ics-swap-minimum"><span title="Estimated payout after the outgoing ledger fee. The pool enforces a minimum before that fee.">Minimum received <small>est.</small></span><strong>{formatTokenAmount(quote.amountOutMinimum > quote.tokenOutFee ? quote.amountOutMinimum - quote.tokenOutFee : 0n, outputDecimals)} {outputSymbol}</strong></div>
+        <details className="ics-swap-quote-details"><summary>Quote details</summary><dl className="ics-swap-facts">
         <div className="ics-swap-fact">
           <dt>Rate</dt>
           <dd>
             {rate > 0 && output
               ? `1 ${input.symbol} = ${formatNumber(rate, 6)} ${outputSymbol}`
-              : "—"}
-          </dd>
-        </div>
-        <div className="ics-swap-fact">
-          <dt title="Pool minimum less the observed outgoing ledger fee; settlement remains asynchronous.">Minimum net estimate</dt>
-          <dd>
-            {quote
-              ? `${formatTokenAmount(quote.amountOutMinimum > quote.tokenOutFee ? quote.amountOutMinimum - quote.tokenOutFee : 0n, outputDecimals)} ${outputSymbol}`
               : "—"}
           </dd>
         </div>
@@ -438,7 +439,7 @@ export function SwapPanel({
               : "—"}
           </dd>
         </div>
-      </dl> : null}
+      </dl></details></div> : null}
 
       {payInfoError ? (
         <details className="ics-inline-note"><summary>Wallet balance unavailable</summary><p>{payInfoError}</p></details>
@@ -450,15 +451,14 @@ export function SwapPanel({
 
       {overBalance && payInfo ? (
         <div className="nt-alert nt-alert--warning">
-          That is more than you hold once both ledger fees are covered. The most
-          you can swap is{" "}
+          Available after fees:{" "}
           {formatTokenAmount(maxSpendable ?? 0n, payInfo.decimals)}{" "}
           {payInfo.symbol}.
         </div>
       ) : null}
 
       {quoteError ? (
-        <div className="nt-alert nt-alert--warning">{quoteError}</div>
+        <div className="ics-swap-quote-error nt-alert nt-alert--warning"><div><strong>Could not get a price</strong><button className="nt-button nt-button--secondary nt-button--sm" type="button" disabled={busy || quoting || amountIn === null || !output} onClick={() => void refreshQuote()}>Retry quote</button></div><details className="ics-inline-note"><summary>Details</summary><p>{quoteError}</p></details></div>
       ) : null}
 
       {quote?.warn ? (

@@ -5,7 +5,7 @@ import { amountsForLiquidity, getSqrtRatioAtTick, liquidityForAmounts, priceToTi
 import { fromBaseUnits, toBaseUnits } from "./amount.ts";
 import { formatFeeTier, formatTokenAmount, shortPrincipal } from "./format.ts";
 import { createRequestId } from "./funding.ts";
-import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
+import { addLedgerToWallet, readTokenInfo, walletSetupRequired, type WalletTokenInfo } from "./wallet.ts";
 import { setTokenInfo } from "./backend.ts";
 import { parseActionProgress, type ActionProgress } from "./action_client.ts";
 import { ActionCard, loadActionHistory, type SavedAction } from "./activity.tsx";
@@ -15,6 +15,7 @@ import { formatLiquidityAmount, formatLiquidityUsd, liquidityPairValue, liquidit
 import { fetchPositionPerformance, type PositionPerformance } from "./position_performance.ts";
 import type { InfoToken } from "./api.ts";
 import type { SwapToken } from "./swap.tsx";
+import { amountAtPercent, percentForAmount, spendableBalance } from "./amount_allocation.ts";
 
 type LiquidityKind = "mint" | "increase" | "decrease" | "claim" | "withdraw";
 type Selection = { kind: LiquidityKind; pool: string; position?: BrowserPosition; withdrawToken?: string };
@@ -203,14 +204,23 @@ function LiquidityEditor({ selection, owner, client, token, onMetadata, onClose 
   const [busy, setBusy] = useState(false);
   const [amount0, setAmount0] = useState(""); const [amount1, setAmount1] = useState("");
   const [lower, setLower] = useState(""); const [upper, setUpper] = useState("");
+  const [rangePreset, setRangePreset] = useState<number | "full" | "custom">("full");
+  const [allocations, setAllocations] = useState<Record<number, { percent: number; value: string; maximum: string }>>({});
   const [percent, setPercent] = useState(100);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [submitted, setSubmitted] = useState<JsonObject | null>(null);
   const [operation, setOperation] = useState<SavedAction | null>(null);
   const [actionProgress, setActionProgress] = useState<ActionProgress | null>(null);
+  const [readRevision, setReadRevision] = useState(0);
+  const [readFailed, setReadFailed] = useState(false);
+  const [setupRequired, setSetupRequired] = useState<[boolean, boolean]>([false, false]);
+  const [addingLedger, setAddingLedger] = useState<string | null>(null);
+  const setupRequest = useRef<AbortController | null>(null);
   const alive = useRef(true);
+  useEffect(() => () => { setupRequest.current?.abort(); }, []);
   useEffect(() => {
     alive.current = true;
+    setLoading(true); setError(""); setReadFailed(false);
     const controller = new AbortController();
     void (async () => {
       const view = await client.readPool(selection.pool, owner, controller.signal);
@@ -231,19 +241,20 @@ function LiquidityEditor({ selection, owner, client, token, onMetadata, onClose 
       const first = results[0].status === "fulfilled" ? results[0].value : null;
       const second = results[1].status === "fulfilled" ? results[1].value : null;
       setInfos([first, second]);
+      setSetupRequired([results[0].status === "rejected" && walletSetupRequired(message(results[0].reason)), results[1].status === "rejected" && walletSetupRequired(message(results[1].reason))]);
       if (first && second && view.metadata) {
         const range = selection.position ? { lower: selection.position.tickLower, upper: selection.position.tickUpper } : usableTickRange(view.pool.tickSpacing);
-        setLower(tickToPrice(range.lower, first.decimals, second.decimals)); setUpper(tickToPrice(range.upper, first.decimals, second.decimals));
+        setLower((previous) => previous || tickToPrice(range.lower, first.decimals, second.decimals)); setUpper((previous) => previous || tickToPrice(range.upper, first.decimals, second.decimals));
       }
-      const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-      if (failures.length) setError(`Wallet token details unavailable: ${failures.map((result) => message(result.reason)).join("; ")}`);
-    })().catch((cause) => { if (!controller.signal.aborted) setError(message(cause)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected" && !walletSetupRequired(message(result.reason)));
+      if (failures.length) { setReadFailed(true); setError(`Wallet token details unavailable: ${failures.map((result) => message(result.reason)).join("; ")}`); }
+    })().catch((cause) => { if (!controller.signal.aborted) { setReadFailed(true); setError(message(cause)); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { alive.current = false; controller.abort(); };
-  }, [client, owner, selection.pool]);
+  }, [client, owner, selection.pool, readRevision]);
   const token0: TokenMeta | null = pool ? infos[0] ? { address: infos[0].ledger, symbol: infos[0].symbol, decimals: infos[0].decimals } : token(pool.pool.token0.address) : null;
   const token1: TokenMeta | null = pool ? infos[1] ? { address: infos[1].ledger, symbol: infos[1].symbol, decimals: infos[1].decimals } : token(pool.pool.token1.address) : null;
   const position = pool?.positions?.find((item) => item.id === selection.position?.id) ?? null;
-  const lock = busy || submitted !== null;
+  const lock = busy || submitted !== null || addingLedger !== null;
   const adding = selection.kind === "mint" || selection.kind === "increase";
   const preview = useMemo<RangePreview | null>(() => {
     if (!pool?.metadata || !infos[0] || !infos[1]) return null;
@@ -271,6 +282,7 @@ function LiquidityEditor({ selection, owner, client, token, onMetadata, onClose 
     const lo = width === null ? limits.lower : Math.max(limits.lower, Math.floor((pool.metadata.tick + Math.log(1 - width / 100) / Math.log(1.0001)) / spacing) * spacing);
     const hi = width === null ? limits.upper : Math.min(limits.upper, Math.ceil((pool.metadata.tick + Math.log(1 + width / 100) / Math.log(1.0001)) / spacing) * spacing);
     setLower(tickToPrice(lo, infos[0].decimals, infos[1].decimals)); setUpper(tickToPrice(hi, infos[0].decimals, infos[1].decimals));
+    setRangePreset(width ?? "full");
   };
   const buildInput = (): JsonObject => {
     if (!pool) throw new Error("Read the pool first.");
@@ -296,7 +308,7 @@ function LiquidityEditor({ selection, owner, client, token, onMetadata, onClose 
     return { ...common, positionId: position.id };
   };
   const run = async () => {
-    setError("");
+    setError(""); setReadFailed(false);
     let input: JsonObject;
     try { input = submitted ?? buildInput(); } catch (cause) { setError(message(cause)); return; }
     setSubmitted(input); setBusy(true);
@@ -309,26 +321,55 @@ function LiquidityEditor({ selection, owner, client, token, onMetadata, onClose 
     } catch (cause) { if (alive.current) setError(`${message(cause)} Check Activity or continue this exact saved operation before starting another.`); }
     finally { if (alive.current) setBusy(false); }
   };
+  const addToWallet = async (ledger: string) => {
+    const controller = new AbortController();
+    setupRequest.current = controller;
+    setAddingLedger(ledger); setError(""); setReadFailed(false);
+    try {
+      await addLedgerToWallet(createMsgBusClient(), ledger, controller.signal);
+      if (alive.current && !controller.signal.aborted) setReadRevision((value) => value + 1);
+    } catch (cause) { if (alive.current && !controller.signal.aborted) setError(message(cause)); }
+    finally { if (alive.current && !controller.signal.aborted) setAddingLedger(null); }
+  };
   const amountField = (index: 0 | 1) => {
     const info = infos[index], meta = index === 0 ? token0 : token1;
     if (!meta) return null;
     const value = index === 0 ? amount0 : amount1, setValue = index === 0 ? setAmount0 : setAmount1;
-    const max = info ? info.balanceAtoms > info.feeAtoms * 2n ? info.balanceAtoms - info.feeAtoms * 2n : 0n : 0n;
-    return <div className="ics-liquidity-amount"><label htmlFor={`ics-liquidity-amount-${index}`}><span className="ics-swap-chip"><TokenMark address={meta.address} symbol={meta.symbol} /><strong>{meta.symbol}</strong></span><span className="nt-meta">Maximum deposit</span></label><input id={`ics-liquidity-amount-${index}`} className="ics-swap-amount" inputMode="decimal" autoComplete="off" placeholder="0.0" value={value} onChange={(event) => setValue(event.target.value)} disabled={lock || !info} /><div className="ics-swap-leg-foot"><span className="nt-meta">{info ? `Wallet ${formatTokenAmount(info.balanceAtoms, info.decimals)}` : "Wallet balance unavailable"}</span><button className="nt-button nt-button--ghost nt-button--sm" disabled={lock || !info} title="Wallet balance less approval and transfer fees" onClick={() => { if (info) setValue(fromBaseUnits(max, info.decimals)); }} type="button">Max</button></div></div>;
+    const max = info ? spendableBalance(info.balanceAtoms, info.feeAtoms) : 0n;
+    const chosen = allocations[index];
+    const percentage = chosen?.value === value && chosen.maximum === max.toString() ? chosen.percent : percentForAmount(info ? toBaseUnits(value, info.decimals) : null, max);
+    const allocate = (percent: number) => {
+      if (!info) return;
+      const next = fromBaseUnits(amountAtPercent(max, percent), info.decimals);
+      setValue(next); setAllocations((old) => ({ ...old, [index]: { percent, value: next, maximum: max.toString() } }));
+    };
+    return <div className="ics-liquidity-amount"><label htmlFor={`ics-liquidity-amount-${index}`}><span className="ics-swap-chip"><TokenMark address={meta.address} symbol={meta.symbol} /><strong>{meta.symbol}</strong></span></label><input aria-label={`${meta.symbol} deposit maximum`} id={`ics-liquidity-amount-${index}`} className="ics-swap-amount" inputMode="decimal" autoComplete="off" placeholder="0.0" value={value} onChange={(event) => { setValue(event.target.value); setAllocations((old) => { const next = { ...old }; delete next[index]; return next; }); }} disabled={lock || !info} /><div className="ics-swap-leg-foot"><span className="nt-meta">{info ? `Balance ${formatTokenAmount(info.balanceAtoms, info.decimals)} ${info.symbol}` : setupRequired[index] ? "Add this token to read its Wallet balance" : "Wallet balance unavailable"}</span></div>{setupRequired[index] && !info ? <button className="nt-button nt-button--secondary nt-button--sm ics-wallet-token-setup" disabled={lock || loading} onClick={() => void addToWallet(meta.address)} type="button">{addingLedger === meta.address ? "Adding to Wallet…" : `Add ${meta.symbol} to Wallet`}</button> : null}<div className="ics-amount-allocation"><div className="ics-allocation-label"><span>Use balance<MetricInfo label={`About ${meta.symbol} deposit balance`}>Max leaves enough for approval and transfer fees. Your deposit can use less than the chosen maximum, depending on the pool price and range.</MetricInfo></span><strong>{percentage}%</strong></div><input type="range" aria-label={`${meta.symbol} deposit percentage`} min="0" max="100" step="1" value={percentage} disabled={lock || !info} onChange={(event) => allocate(Number(event.target.value))} /><div className="ics-allocation-presets">{[25, 50, 75, 100].map((percent) => <button type="button" key={percent} disabled={lock || !info} aria-pressed={percentage === percent} onClick={() => allocate(percent)}>{percent === 100 ? "Max" : `${percent}%`}</button>)}</div></div></div>;
   };
+  const currentPrice = pool?.metadata && token0?.decimals !== null && token0 && token1?.decimals !== null && token1 ? shortPrice(tickToPrice(pool.metadata.tick, token0.decimals, token1.decimals)) : null;
+  const currentFees = position && !position.feeError ? [position.tokensOwed0, position.tokensOwed1] : [null, null];
+  const removedAmounts = position ? [position.amount0, position.amount1].map((amount) => amount === null ? null : (BigInt(amount) * BigInt(percent) / 100n).toString()) : [null, null];
+  const withdrawalToken = selection.withdrawToken === token0?.address ? token0 : token1;
+  const withdrawalBalance = pool?.availableUnused ? selection.withdrawToken === token0?.address ? pool.availableUnused.balance0 : pool.availableUnused.balance1 : null;
   return <section className="ics-liquidity-editor nt-stack">
-    <header className="ics-section-top"><div className="ics-inline-actions"><button className="nt-icon-button" type="button" aria-label="Back to positions" onClick={onClose}>←</button><h2 className="nt-subtitle">{actionNames[selection.kind]}</h2></div>{pool ? <span className="ics-fee-tier">{formatFeeTier(pool.pool.fee)}</span> : null}</header>
-    {token0 && token1 ? <div className="ics-pair-heading"><span className="ics-pair-marks"><TokenMark address={token0.address} symbol={token0.symbol} /><TokenMark address={token1.address} symbol={token1.symbol} /></span><strong>{token0.symbol} / {token1.symbol}</strong></div> : null}
+    <header className="ics-section-top"><div className="ics-inline-actions"><button className="nt-icon-button" type="button" aria-label="Back to positions" onClick={onClose}>←</button><h2 className="nt-subtitle">{actionNames[selection.kind]}</h2></div></header>
+    {token0 && token1 ? <div className="ics-editor-pair"><div className="ics-pair-heading"><span className="ics-pair-marks"><TokenMark address={token0.address} symbol={token0.symbol} /><TokenMark address={token1.address} symbol={token1.symbol} /></span><strong>{token0.symbol} / {token1.symbol}</strong><span className="ics-fee-tier">{pool ? formatFeeTier(pool.pool.fee) : ""}</span></div>{currentPrice ? <span className="ics-editor-price">1 {token0.symbol} ≈ {currentPrice} {token1.symbol}</span> : null}</div> : null}
     {loading ? <p className="nt-state nt-state--loading" role="status">Reading pool and Wallet…</p> : null}
-    {error ? <p className="nt-alert nt-alert--danger" role="alert">{error}</p> : null}
-    {pool?.errors.length ? <details className="ics-inline-note"><summary>Pool data incomplete</summary><ul>{pool.errors.map((issue, i) => <li key={i}>{issue.method}: {issue.message}</li>)}</ul></details> : null}
-    {selection.kind === "mint" && token0 && token1 ? <section className="ics-range-editor"><header className="ics-section-top"><h3>Price range</h3><span className="nt-meta">{token1.symbol} / {token0.symbol}</span></header><div className="ics-range-presets">{[5, 10, 20].map((width) => <button className="nt-button nt-button--secondary nt-button--sm" disabled={lock || !infos[0] || !infos[1]} key={width} onClick={() => chooseRange(width)} type="button">±{width}%</button>)}<button className="nt-button nt-button--secondary nt-button--sm" disabled={lock || !infos[0] || !infos[1]} onClick={() => chooseRange(null)} type="button">Full range</button></div><div className="ics-range-inputs"><label><span>Lower price</span><input className="nt-input" aria-label="Lower price" inputMode="decimal" value={lower} onChange={(event) => setLower(event.target.value)} disabled={lock} /></label><label><span>Upper price</span><input className="nt-input" aria-label="Upper price" inputMode="decimal" value={upper} onChange={(event) => setUpper(event.target.value)} disabled={lock} /></label></div>{preview?.ok ? <div className="ics-range-observation"><PriceRange position={{ tickLower: preview.tickLower, tickUpper: preview.tickUpper }} token0={token0} token1={token1} /><small className="nt-meta">Ticks {preview.tickLower} → {preview.tickUpper}</small></div> : null}</section> : position && token0 && token1 ? <p className="ics-position-range">Position #{position.id} · <PriceRange position={position} token0={token0} token1={token1} /></p> : null}
-    {adding ? <><div className="ics-liquidity-deposits">{amountField(0)}{amountField(1)}</div>{preview?.ok && preview.liquidity > 0n && token0 && token1 && infos[0] && infos[1] ? <dl className="ics-position-amounts"><div><dt>Estimated {token0.symbol}</dt><dd>{formatTokenAmount(preview.amounts.amount0, infos[0].decimals)}</dd></div><div><dt>Estimated {token1.symbol}</dt><dd>{formatTokenAmount(preview.amounts.amount1, infos[1].decimals)}</dd></div></dl> : null}{preview?.error && (lower || upper) ? <p className="nt-meta">{preview.error}</p> : null}</> : null}
-    {selection.kind === "decrease" && position ? <div className="ics-remove-allocation"><label htmlFor="ics-remove-percent">Remove <strong>{percent}%</strong></label><input id="ics-remove-percent" type="range" aria-label="Percentage of position to remove" min="1" max="100" step="1" value={percent} disabled={lock} onChange={(event) => setPercent(Number(event.target.value))} /><div className="ics-range-presets">{[25, 50, 75, 100].map((value) => <button className="nt-button nt-button--secondary nt-button--sm" disabled={lock} key={value} onClick={() => setPercent(value)} type="button">{value === 100 ? "Max" : `${value}%`}</button>)}</div><p className="nt-meta">{percent === 100 ? "Removes the whole position and collects accrued fees." : "Removes this share of liquidity and collects accrued fees."}</p></div> : null}
-    {selection.kind === "claim" && position && token0 && token1 ? <dl className="ics-position-amounts"><div><dt>{token0.symbol} fees</dt><dd>{shownAmount(position.tokensOwed0, token0)}</dd></div><div><dt>{token1.symbol} fees</dt><dd>{shownAmount(position.tokensOwed1, token1)}</dd></div></dl> : null}
-    {selection.kind === "withdraw" && pool && token0 && token1 ? <div className="ics-withdraw-input"><label htmlFor="ics-unused-amount">Amount{(selection.withdrawToken === token0.address ? token0 : token1).decimals === null ? " (atoms)" : ""} · {selection.withdrawToken === token0.address ? token0.symbol : token1.symbol}</label><div className="ics-inline-actions"><input id="ics-unused-amount" className="nt-input" inputMode="decimal" placeholder="0.0" value={withdrawAmount} disabled={lock} onChange={(event) => setWithdrawAmount(event.target.value)} /><button className="nt-button nt-button--secondary" disabled={lock || !pool.availableUnused} type="button" title="Observed unused balance after pending protocol payouts are reserved" onClick={() => { if (!pool.availableUnused) return; const first = selection.withdrawToken === token0.address; setWithdrawAmount(fromBaseUnits(BigInt(first ? pool.availableUnused.balance0 : pool.availableUnused.balance1), (first ? token0.decimals : token1.decimals) ?? 0)); }}>Max</button></div>{pool.availableUnused ? <p className="nt-meta">Available {shownAmount(selection.withdrawToken === token0.address ? pool.availableUnused.balance0 : pool.availableUnused.balance1, selection.withdrawToken === token0.address ? token0 : token1)} {selection.withdrawToken === token0.address ? token0.symbol : token1.symbol}</p> : <p className="nt-meta">Available unused balance could not be confirmed. Max is unavailable while payout reservations are unknown.</p>}</div> : null}
-    {operation ? <ActionCard key={operation.id} action={operation} {...(actionProgress?.operationId === operation.id ? { progress: actionProgress } : {})} onChange={setOperation} onNewAction={(next) => { setOperation(next); setActionProgress(null); }} /> : <button className="nt-button ics-liquidity-submit" disabled={busy || loading || !pool || (adding && (!infos[0] || !infos[1]))} onClick={() => void run()} type="button">{busy ? "Following operation…" : submitted ? "Continue saved action" : `Review ${actionNames[selection.kind].toLowerCase()}`}</button>}
-    {submitted ? <p className="nt-meta">Operation {String(submitted.operationId)}</p> : null}
-    <details className="ics-disclosure"><summary>Pool &amp; settlement details</summary>{pool ? <dl className="ics-review-fields"><div><dt>Pool</dt><dd>{pool.pool.pool}</dd></div><div><dt>Owner</dt><dd>{owner}</dd></div><div><dt>Token 0</dt><dd>{pool.pool.token0.address}</dd></div><div><dt>Token 1</dt><dd>{pool.pool.token1.address}</dd></div></dl> : null}<p className="nt-meta">Liquidity changes have no protocol-enforced price minimum. Deposit maxima cap token use. Payouts and refunds continue at the pool after this tile closes; Activity keeps the operation and its recovery status.</p></details>
+    {error ? <div className="ics-editor-error nt-alert nt-alert--danger" role="alert"><p>{error}</p>{readFailed && !submitted ? <button className="nt-button nt-button--secondary nt-button--sm" disabled={loading || addingLedger !== null} onClick={() => setReadRevision((value) => value + 1)} type="button">Retry loading</button> : null}</div> : null}
+    {pool?.errors.length ? <details className="ics-inline-note"><summary>Some pool data could not be loaded</summary><ul>{pool.errors.map((issue, i) => <li key={i}>{issue.method}: {issue.message}</li>)}</ul></details> : null}
+    {!operation ? <>
+      {adding ? <div className="ics-liquidity-deposits">{amountField(0)}{amountField(1)}</div> : null}
+      {selection.kind === "mint" && token0 && token1 ? <section className="ics-range-editor">
+        <header className="ics-section-top"><h3 className="ics-metric-label">Price range<MetricInfo label="About liquidity price ranges">Your position earns swap fees while the pool price stays within this range. A narrower range concentrates liquidity but needs more attention as prices move.</MetricInfo></h3><span className="nt-meta">{token1.symbol} per {token0.symbol}</span></header>
+        <div className="ics-range-presets">{[5, 10, 20].map((width) => <button className="nt-button nt-button--secondary nt-button--sm" aria-pressed={rangePreset === width} disabled={lock || !infos[0] || !infos[1]} key={width} onClick={() => chooseRange(width)} type="button">±{width}%</button>)}<button className="nt-button nt-button--secondary nt-button--sm" aria-pressed={rangePreset === "full"} disabled={lock || !infos[0] || !infos[1]} onClick={() => chooseRange(null)} type="button">Full range</button></div>
+        {preview?.ok ? <div className="ics-editor-range-summary"><span>{rangePreset === "full" ? "All supported prices" : <PriceRange position={{ tickLower: preview.tickLower, tickUpper: preview.tickUpper }} token0={token0} token1={token1} />}</span>{pool?.metadata ? <span className={`ics-range-state ${pool.metadata.tick >= preview.tickLower && pool.metadata.tick < preview.tickUpper ? "ics-range-state--active" : "ics-range-state--outside"}`}>{pool.metadata.tick >= preview.tickLower && pool.metadata.tick < preview.tickUpper ? "Includes current price" : "Outside current price"}</span> : null}</div> : null}
+        <details className="ics-custom-range"><summary>Custom prices</summary><div className="ics-range-inputs"><label><span>Lower price</span><input className="nt-input" aria-label="Lower price" inputMode="decimal" value={lower} onChange={(event) => { setLower(event.target.value); setRangePreset("custom"); }} disabled={lock} /></label><label><span>Upper price</span><input className="nt-input" aria-label="Upper price" inputMode="decimal" value={upper} onChange={(event) => { setUpper(event.target.value); setRangePreset("custom"); }} disabled={lock} /></label></div></details>
+      </section> : position && token0 && token1 ? <div className="ics-editor-range-summary"><span>Position range</span><PriceRange position={position} token0={token0} token1={token1} /></div> : null}
+      {adding ? <>{preview?.ok && preview.liquidity > 0n && token0 && token1 && infos[0] && infos[1] ? <section className="ics-liquidity-estimate"><h3>Estimated deposit</h3><dl className="ics-position-amounts"><div><dt>{token0.symbol}</dt><dd>{formatLiquidityAmount(preview.amounts.amount0.toString(), infos[0].decimals)}</dd></div><div><dt>{token1.symbol}</dt><dd>{formatLiquidityAmount(preview.amounts.amount1.toString(), infos[1].decimals)}</dd></div></dl></section> : null}{preview?.error && (lower || upper) ? <p className="nt-meta">{preview.error}</p> : null}<p className="ics-form-note">You won’t spend more than these amounts. The pool price may change before your deposit completes.</p></> : null}
+      {selection.kind === "decrease" && position ? <section className="ics-remove-allocation"><label htmlFor="ics-remove-percent">Amount to remove <strong>{percent}%</strong></label><input id="ics-remove-percent" type="range" aria-label="Percentage of position to remove" min="1" max="100" step="1" value={percent} disabled={lock} onChange={(event) => setPercent(Number(event.target.value))} /><div className="ics-range-presets">{[25, 50, 75, 100].map((value) => <button className="nt-button nt-button--secondary nt-button--sm" aria-pressed={percent === value} disabled={lock} key={value} onClick={() => setPercent(value)} type="button">{value === 100 ? "Max" : `${value}%`}</button>)}</div>{token0 && token1 ? <section className="ics-liquidity-estimate"><h3>Estimated tokens to remove</h3><dl className="ics-position-amounts">{[token0, token1].map((meta, index) => <div key={meta.address}><dt>{meta.symbol}</dt><dd>{formatLiquidityAmount(removedAmounts[index] ?? null, meta.decimals)}</dd></div>)}</dl><p className="nt-meta">Plus any accrued fees, before transfer fees.</p></section> : null}<p className="ics-form-note">{percent === 100 ? "Removes all liquidity from this position. Tokens are returned to your Wallet by the pool." : `Removes ${percent}% of your liquidity. The rest stays invested.`}</p></section> : null}
+      {selection.kind === "claim" && position && token0 && token1 ? <section className="ics-liquidity-estimate"><h3>Available fees</h3><dl className="ics-position-amounts">{[token0, token1].map((meta, index) => <div key={meta.address}><dt>{meta.symbol}</dt><dd>{formatLiquidityAmount(currentFees[index] ?? null, meta.decimals)}</dd></div>)}</dl>{position.feeError ? <details className="ics-inline-note"><summary>Current fee estimate unavailable</summary><p>{position.feeError}</p></details> : currentFees.every((amount) => amount === "0") ? <p className="ics-form-note">No fees were available at the last check. You can still review a collection.</p> : <p className="ics-form-note">The pool sends collected fees to your Wallet, less transfer fees. Your position stays invested.</p>}</section> : null}
+      {selection.kind === "withdraw" && pool && withdrawalToken ? <div className="ics-withdraw-input"><label htmlFor="ics-unused-amount">Withdraw {withdrawalToken.symbol}{withdrawalToken.decimals === null ? " (atoms)" : ""}</label><div className="ics-inline-actions"><input id="ics-unused-amount" className="nt-input" inputMode="decimal" placeholder="0.0" value={withdrawAmount} disabled={lock} onChange={(event) => setWithdrawAmount(event.target.value)} /><button className="nt-button nt-button--secondary" disabled={lock || withdrawalBalance === null} type="button" title="Balance remaining after in-progress payouts are reserved" onClick={() => { if (withdrawalBalance !== null) setWithdrawAmount(fromBaseUnits(BigInt(withdrawalBalance), withdrawalToken.decimals ?? 0)); }}>Max</button></div>{withdrawalBalance !== null ? <p className="nt-meta">Available {shownAmount(withdrawalBalance, withdrawalToken)} {withdrawalToken.symbol}</p> : <p className="nt-meta">Checking how much is available after in-progress payouts.</p>}<p className="ics-form-note">Returns tokens held outside your positions to your Wallet, less the transfer fee.</p></div> : null}
+      <button className="nt-button ics-liquidity-submit" disabled={busy || loading || !pool || (adding && (!infos[0] || !infos[1]))} onClick={() => void run()} type="button">{busy ? "Following operation…" : submitted ? "Continue saved action" : `Review ${actionNames[selection.kind].toLowerCase()}`}</button>
+    </> : <ActionCard key={operation.id} action={operation} {...(actionProgress?.operationId === operation.id ? { progress: actionProgress } : {})} onChange={setOperation} onNewAction={(next) => { setOperation(next); setActionProgress(null); }} />}
+    <details className="ics-disclosure"><summary>Details</summary>{pool ? <dl className="ics-review-fields"><div><dt>Pool</dt><dd>{pool.pool.pool}</dd></div><div><dt>Owner</dt><dd>{owner}</dd></div><div><dt>Token 0</dt><dd>{pool.pool.token0.address}</dd></div><div><dt>Token 1</dt><dd>{pool.pool.token1.address}</dd></div>{position ? <div><dt>Position</dt><dd>{position.id}</dd></div> : null}{preview?.ok ? <div><dt>Range ticks</dt><dd>{preview.tickLower} → {preview.tickUpper}</dd></div> : null}{submitted ? <div><dt>Operation</dt><dd>{String(submitted.operationId)}</dd></div> : null}</dl> : null}<p className="nt-meta">Payouts and refunds continue at the pool after this tile closes. Activity keeps your saved action and its recovery status.</p></details>
   </section>;
 }

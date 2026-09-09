@@ -1,4 +1,5 @@
 import { registerLedgerTools } from "./ledger_tools.ts";
+import { registerHistoryTools } from "./history_tools.ts";
 import {
   WALLET_WITHDRAWAL_QUOTE_TOOL,
   handleWalletWithdrawalQuote,
@@ -16,7 +17,12 @@ import {
   updateSelf,
   type JsonObject,
 } from "neutron-tools/app";
-import { historyPageRequest, parseHistoryPage } from "./history.ts";
+import {
+  historyPageRequest,
+  parseHistoryPage,
+  parseHistoryStatus,
+  parseHistorySyncReport,
+} from "./history.ts";
 import {
   WALLET_FUNDING_ROOT_TOOL,
   WALLET_FUNDING_TOOL,
@@ -35,6 +41,7 @@ import {
   walletProjectionInputSchema,
   walletProjectionSchema,
   type WalletProjection,
+  type WalletActivitySync,
 } from "./wallet_projection.ts";
 import {
   parseWalletCatalog,
@@ -53,6 +60,7 @@ import {
 } from "./token_info.ts";
 
 registerLedgerTools();
+registerHistoryTools();
 registerBridgeTools();
 registerConversionTools();
 registerDepositTools();
@@ -77,7 +85,7 @@ exposeTool(
   {
     title: "Read Wallet Overview",
     description:
-      "Read selected assets, exact cached balances, balance freshness, warnings, and the five most recent Wallet activity records. Amounts are decimal strings and no transfer is performed. Token logos are omitted unless includeLogos is true.",
+      "Read selected assets, exact cached balances, balance freshness, warnings, and five cached Wallet activity records with per-ledger history status and checkpoints. No synchronization or transfer is performed. historyError=null means the page was read, not that history is current or complete. Missing activity does not prove a payout is absent. Token logos are omitted unless includeLogos is true.",
     inputSchema: walletProjectionInputSchema,
     outputSchema: walletProjectionSchema,
     annotations: { "neutron:effects": ["read"] },
@@ -91,12 +99,12 @@ exposeTool(
 exposeTool(
   WALLET_PROJECTION_TOOLS.refresh,
   {
-    title: "Refresh Wallet Balances",
+    title: "Refresh Wallet Balances and Activity",
     description:
-      "Refresh all selected ledger balances, then return the same bounded Wallet overview. This never sends tokens or changes the selected assets. Token logos are omitted unless includeLogos is true.",
+      "Refresh selected ledger balances and attempt history synchronization once, then return the Wallet overview with the sync report, per-ledger index/checkpoint status, and any activity errors. A finished attempt or balance-only unchanged result does not prove complete history; missing activity does not prove no payout. This never sends tokens or changes selected assets. Token logos are omitted unless includeLogos is true.",
     inputSchema: walletProjectionInputSchema,
     outputSchema: walletProjectionSchema,
-    annotations: { "neutron:effects": ["write"] },
+    annotations: { "neutron:effects": ["read", "write", "network"], "neutron:longRunning": true },
   },
   async (args) => asJson(walletProjectionForTool(
     await refreshProjection(),
@@ -207,7 +215,15 @@ function refreshProjection(): Promise<WalletProjection> {
   const task = (async () => {
     if (readInFlight) await readInFlight.catch(() => undefined);
     const refreshed = await updateSelf("wallet_refresh_balances", [null]);
-    const projection = await loadProjection(parseWalletSnapshotResult(refreshed));
+    const snapshot = parseWalletSnapshotResult(refreshed);
+    const activitySync: WalletActivitySync = { requested: true, report: null, error: null };
+    try {
+      activitySync.report = parseHistorySyncReport(await updateSelf("wallet_history_sync", [null], 180));
+    } catch (error) {
+      // Keep refreshed balances and cached activity useful when indexing is unavailable.
+      activitySync.error = errorMessage(error);
+    }
+    const projection = await loadProjection(snapshot, activitySync);
     try {
       await publishAppStateChange(WALLET_PROJECTION_TOPIC, projection.revision);
     } catch {
@@ -223,6 +239,7 @@ function refreshProjection(): Promise<WalletProjection> {
 
 async function loadProjection(
   suppliedSnapshot?: WalletSnapshot,
+  activitySync?: WalletActivitySync,
 ): Promise<WalletProjection> {
   const snapshotPromise = suppliedSnapshot
     ? Promise.resolve(suppliedSnapshot)
@@ -233,13 +250,18 @@ async function loadProjection(
   const historyPromise = querySelf("wallet_history_page", [
     historyPageRequest(null, null, WALLET_PROJECTION_ACTIVITY_LIMIT + 1),
   ]).then(parseHistoryPage);
+  const historyStatusPromise = querySelf("wallet_history_status", [null]).then(parseHistoryStatus);
 
-  const [snapshot, catalog, historyResult] = await Promise.all([
+  const [snapshot, catalog, historyResult, historyStatusResult] = await Promise.all([
     snapshotPromise,
     catalogPromise,
     historyPromise.then(
       (page) => ({ page, error: null as string | null }),
       (error) => ({ page: null, error: errorMessage(error) }),
+    ),
+    historyStatusPromise.then(
+      (status) => ({ status, error: null as string | null }),
+      (error) => ({ status: null, error: errorMessage(error) }),
     ),
   ]);
 
@@ -252,6 +274,9 @@ async function loadProjection(
     {
       hasMoreActivity: historyResult.page?.hasMore ?? false,
       historyError: historyResult.error ?? historyResult.page?.warning ?? null,
+      historyStatus: historyStatusResult.status,
+      historyStatusError: historyStatusResult.error,
+      activitySync: activitySync ?? { requested: false, report: null, error: null },
     },
   );
 }
