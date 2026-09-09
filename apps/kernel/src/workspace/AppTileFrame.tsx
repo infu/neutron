@@ -2,7 +2,6 @@ import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   markFrameEndpointLoaded,
   registerFrameContext,
-  endpointIdForContext,
 } from "../frame_context.ts";
 import {
   appFrameAuthorityCurrent,
@@ -18,7 +17,6 @@ import {
 import type { TileInstance, WorkspaceId } from "./types.ts";
 import { nextStartedTileRuntime } from "./tile_frame_lifecycle.ts";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
-import { useAgentModeStore } from "../ui_attention/agent.ts";
 
 export const AppTileFrame = memo(function AppTileFrame({
   active,
@@ -30,10 +28,6 @@ export const AppTileFrame = memo(function AppTileFrame({
   workspaceId: WorkspaceId;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const rootCaller = useAgentModeStore((state) => state.activeRoot?.callerEndpointId);
-  const keepConnected = active || rootCaller === endpointIdForContext({
-    role: "tile", appId: tile.appId, tileId: tile.tileId, instanceId: tile.id, workspace: workspaceId,
-  });
   const launchedFrameRef = useRef<{
     runtimeIdentity: string;
     source: Window;
@@ -123,8 +117,10 @@ export const AppTileFrame = memo(function AppTileFrame({
   }, [active, runtimeIdentity]);
 
   useLayoutEffect(() => {
+    // A visited workspace retains its document and private connection. Hiding
+    // it must not interrupt in-flight work or leave the SDK holding a dead
+    // port. Actual unmounts and authority changes still run this cleanup.
     if (
-      !keepConnected ||
       !frameStarted ||
       !appInstalled ||
       !appInstance ||
@@ -184,7 +180,6 @@ export const AppTileFrame = memo(function AppTileFrame({
     }
     return unregister;
   }, [
-    keepConnected,
     appInstalled,
     frameStarted,
     appGeneration,
@@ -215,11 +210,9 @@ export const AppTileFrame = memo(function AppTileFrame({
       onLoad={() => {
         if (iframeRef.current?.getAttribute("src") !== framePolicy.src) return;
         loadedRuntimeRef.current = runtimeIdentity;
-        if (keepConnected) {
-          markFrameEndpointLoaded(
-            iframeRef.current?.contentWindow ?? null,
-          );
-        }
+        markFrameEndpointLoaded(
+          iframeRef.current?.contentWindow ?? null,
+        );
       }}
       title={tile.title}
       {...CREDENTIALLESS_APP_FRAME_PROPS}

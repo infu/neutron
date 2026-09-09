@@ -107,14 +107,13 @@ The active workspace is mounted first. Another workspace is mounted lazily the
 first time it is visited and remains in a hidden, `aria-hidden`, inert layer for
 the rest of that authorization session. Returning to a visited workspace
 therefore reveals the existing tile iframe and its in-memory state instead of
-reloading its HTML, JavaScript, and initialization queries. Inactive tile
-frames are disconnected from the Kernel message bus and reconnect only when
-their workspace becomes active, so they cannot act as undeclared resident
-processes. The Kernel retains only the latest bounded same-app state
-invalidation per topic and replays it on reconnect, preventing a resumed tile
-from missing a resident update while it was inactive. A retained frame records
-which revision it received, so ordinary workspace reconnects do not replay the
-same invalidation and trigger another query. If an install replaces a hidden
+reloading its HTML, JavaScript, and initialization queries. Once started, tile
+frames retain their private Kernel message-bus connections while hidden. A
+workspace switch does not cancel pending requests, replace sessions, or clear
+session grants. This applies to every tile, including ordinary human-operated
+apps and Agent callers. The Kernel retains only the latest bounded same-app
+state invalidation per topic and replays it after a genuine reconnect if that
+endpoint has not already received it. If an install replaces a hidden
 frame, its new document is deferred until that workspace becomes active; only
 a document that successfully started while active is retained. Authorization
 loss discards the visited-workspace set even if the next session uses the same
@@ -775,9 +774,10 @@ iframe for every installed app declaring `background`, keyed by app id, version,
 frontend registry generation, and background path. The resident container is
 ordered after the visible workspace content so a restored visible tile gets
 the first opportunity to start its asset requests. Switching workspaces hides
-visited tile layers without unmounting their iframe DOM, but disconnects the
-inactive tiles' Kernel endpoints, except for the exact originating tile of a
-live Agent root. That tile and resident frames remain connected.
+visited tile layers without unmounting their iframe DOM or disconnecting their
+Kernel endpoints. Started tile and resident connections remain live regardless
+of the selected workspace; visibility does not grant new authority. Unvisited
+tiles still start only when their workspace is first activated.
 Logout, authorization loss, registry removal, or package replacement unmounts
 or reloads the corresponding background process. Resident frames are also
 unmounted while an activated install is pending and are not mounted at all
@@ -1052,12 +1052,11 @@ cooldown. `move` preserves the active workspace, while `open`, `switch`,
 `focus`, and `expand` bring their target workspace into view. Tray endpoints cannot start Agent Mode or receive delegated agent
 calls.
 
-During a live Agent root, the originating tile keeps its exact endpoint and
-private port when its workspace is hidden through `open`, `switch`, `focus`,
-or `expand`. The root summary binds that caller endpoint for the tile lifecycle.
-The tile must still exist with current installation and runtime authority;
-closing it or replacing its runtime retires the port and cancels the work.
-Other inactive tile endpoints retain their ordinary disconnection behavior.
+Every started tile keeps its exact endpoint and private port when its workspace
+is hidden through `open`, `switch`, `focus`, or `expand`. A live Agent root
+therefore continues without a special tile-connection exception. The tile must
+still exist with current installation and runtime authority; closing it or
+replacing its runtime retires the port and cancels the work.
 
 A provider presentation uses the same exact open-or-focus primitive but cannot
 choose another app: Kernel derives the provider app from the suspended public

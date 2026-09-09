@@ -621,10 +621,12 @@ app endpoints and keeps its active-workspace, exact-reuse behavior. Its optional
 view token and the `open` operation's optional view token share the one
 `neutron:tile:view` delivery path.
 
-Inactive tile frames stay mounted. The exact originating tile of a live Agent
-root keeps its Kernel connection across workspace switches. Closing the tile,
-replacing its endpoint, or losing runtime authority still retires the private
-port and cancels work. Other inactive tiles disconnect from the message bus.
+Inactive tile frames stay mounted and keep their existing Kernel connections
+across workspace switches. Pending requests and session grants survive hiding
+or revealing the workspace, for ordinary callers and Agent roots alike. Closing
+the tile, replacing its endpoint, or losing runtime authority still retires the
+private port and cancels work. An unvisited workspace does not start its tiles
+until first activated.
 
 ## Tray Boundary
 
